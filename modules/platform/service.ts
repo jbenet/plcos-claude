@@ -1,5 +1,5 @@
 import { issues as issueSink } from '@/lib/issues';
-import type { IssueKind, IssuePriority } from '@/lib/issues';
+import type { IssueAttachment, IssueKind, IssuePriority } from '@/lib/issues';
 import { appendAudit, attachIssueRef, insertFeedback } from './repo';
 import type { AppUser } from './types';
 
@@ -10,6 +10,8 @@ export interface FeedbackCommand {
   priority: IssuePriority;
   page: string;
   context: Record<string, unknown>;
+  /** An annotated screenshot, when the reporter chose to include one. */
+  attachment?: IssueAttachment | null;
 }
 
 /**
@@ -44,6 +46,7 @@ export async function fileFeedback(user: AppUser, cmd: FeedbackCommand) {
     page: cmd.page,
     labels: [],
     context,
+    attachment: cmd.attachment ?? null,
   });
 
   await attachIssueRef(row.id, issue.id, issue.location);
@@ -52,7 +55,10 @@ export async function fileFeedback(user: AppUser, cmd: FeedbackCommand) {
     action: 'feedback.filed',
     subjectType: 'issue',
     subjectId: issue.id,
-    detail: { page: cmd.page, priority: cmd.priority, kind: cmd.kind, location: issue.location },
+    detail: {
+      page: cmd.page, priority: cmd.priority, kind: cmd.kind, location: issue.location,
+      attachment: issue.attachment,
+    },
   });
 
   return issue;

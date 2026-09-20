@@ -11,6 +11,18 @@ export type IssueStatus = 'open' | 'triaged' | 'agent-ready' | 'in-progress' | '
 export type IssueKind = 'bug' | 'request' | 'question' | 'chore';
 export type IssuePriority = 'P0' | 'P1' | 'P2' | 'P3';
 
+/**
+ * A file filed with the issue. Today that is one annotated screenshot from the feedback
+ * box; the shape is general because a GitHub sink will upload the same bytes to a
+ * different place, and the caller should not know which.
+ */
+export interface IssueAttachment {
+  /** Suffix only — the sink owns the name, so a caller cannot choose a path. */
+  kind: 'screenshot';
+  contentType: 'image/png';
+  base64: string;
+}
+
 export interface IssueDraft {
   title: string;
   body: string;
@@ -20,14 +32,17 @@ export interface IssueDraft {
   page: string;
   labels: string[];
   context: Record<string, unknown> | null;
+  attachment?: IssueAttachment | null;
 }
 
-export interface Issue extends IssueDraft {
+export interface Issue extends Omit<IssueDraft, 'attachment'> {
   id: string;
   status: IssueStatus;
   created: string;
   /** Where this issue actually lives — a repo path for files, a URL for GitHub. */
   location: string;
+  /** Where the attachment landed, relative to the issue. Null when there is none. */
+  attachment: string | null;
 }
 
 export interface IssueFilter {

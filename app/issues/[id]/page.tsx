@@ -83,6 +83,29 @@ export default async function IssueDetail({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
+      {issue.attachment && (
+        <div className="card">
+          <div className="chead">
+            <h2>The page as it looked</h2>
+            <span className="lbl">{issue.attachment}</span>
+          </div>
+          <div className="cbody">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="issueshot"
+              src={`/issues/shot/${issue.attachment}`}
+              alt={`Screenshot filed with issue ${issue.id}`}
+            />
+          </div>
+          <p className="cover">
+            <b>Captured in the reporter&rsquo;s browser when they pressed the button</b>, before
+            the feedback drawer covered anything, and annotated by them. It is a PNG beside the
+            issue in this repository — so the complaint, the picture and the fix all travel in
+            one pull request, and none of it depends on a service being up.
+          </p>
+        </div>
+      )}
+
       {issue.context && (
         <div className="card">
           <div className="chead">

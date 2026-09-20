@@ -165,6 +165,72 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N8: [
+    { name: '04-issue-with-shot', path: '/issues/0007', fullPage: true },
+    {
+      name: '01-feedback-with-shot',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2500);
+        await page.getByPlaceholder("Guard message doesn't say whose ask is blocking").fill(
+          'The fit score needs a "why this moved" line',
+        );
+        await page.locator('textarea').fill(
+          'Northwood went from 0.62 to 0.60 and nothing on the page says which reading changed. A one-line diff against the last assessment would answer it.',
+        );
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: '02-annotating',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2500);
+        await page.getByRole('button', { name: 'Open the screenshot to annotate it' }).click();
+        await page.waitForTimeout(600);
+        const box = await page.locator('canvas.setcanvas').boundingBox();
+        if (box) {
+          // an arrow at the score
+          await page.mouse.move(box.x + box.width * 0.42, box.y + box.height * 0.34);
+          await page.mouse.down();
+          await page.mouse.move(box.x + box.width * 0.28, box.y + box.height * 0.22, { steps: 12 });
+          await page.mouse.up();
+          // a box around the distribution strip
+          await page.getByRole('button', { name: 'Box it' }).click();
+          await page.mouse.move(box.x + box.width * 0.26, box.y + box.height * 0.245);
+          await page.mouse.down();
+          await page.mouse.move(box.x + box.width * 0.58, box.y + box.height * 0.33, { steps: 12 });
+          await page.mouse.up();
+        }
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: '03-annotated-thumb',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2500);
+        await page.getByRole('button', { name: 'Open the screenshot to annotate it' }).click();
+        await page.waitForTimeout(600);
+        const box = await page.locator('canvas.setcanvas').boundingBox();
+        if (box) {
+          await page.mouse.move(box.x + box.width * 0.42, box.y + box.height * 0.34);
+          await page.mouse.down();
+          await page.mouse.move(box.x + box.width * 0.28, box.y + box.height * 0.22, { steps: 12 });
+          await page.mouse.up();
+        }
+        await page.getByRole('button', { name: 'Done' }).click();
+        await page.waitForTimeout(700);
+        await page.getByPlaceholder("Guard message doesn't say whose ask is blocking").fill(
+          'The fit score needs a "why this moved" line',
+        );
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N7: [
     { name: '01-people-tab', path: '/orgs/g/people', fullPage: true },
     {

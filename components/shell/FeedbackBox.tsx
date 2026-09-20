@@ -1,7 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { ShotEditor } from './ShotEditor';
 
 type Kind = 'bug' | 'request' | 'question' | 'chore';
 type Priority = 'P0' | 'P1' | 'P2' | 'P3';
@@ -13,28 +15,98 @@ const SLA: Record<Priority, string> = {
   P3: 'weekly triage · backlog',
 };
 
+/**
+ * Capture what the reporter is looking at, before the drawer covers it.
+ *
+ * The visible viewport rather than the whole document: a complaint is about what was on
+ * screen, and a 4,000-pixel-tall image of a page they had scrolled past is noise. Rendered
+ * through the browser's own engine via an SVG foreignObject, so shadows, gradients and the
+ * real fonts survive — a screenshot that does not look like the screen is worse than none.
+ */
+async function capture(): Promise<string | null> {
+  try {
+    const { domToPng } = await import('modern-screenshot');
+    // Without this the clone renders in fallback metrics and every heading re-wraps —
+    // a screenshot that does not match the screen is worse than no screenshot.
+    await document.fonts.ready;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    return await domToPng(document.body, {
+      width: w,
+      height: h,
+      // Sharp enough to read, capped so the PNG stays a few megabytes rather than ten.
+      scale: Math.min(2, window.devicePixelRatio || 1, 2000 / w),
+      backgroundColor: getComputedStyle(document.body).backgroundColor,
+      style: {
+        transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
+        transformOrigin: 'top left',
+      },
+      filter: (node: Node) =>
+        !(node instanceof Element && node.classList.contains('nocapture')),
+    });
+  } catch {
+    // A capture that fails must not block the complaint. The box says so and carries on.
+    return null;
+  }
+}
+
 export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }) {
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [shot, setShot] = useState<string | null>(null);
+  const [shotFailed, setShotFailed] = useState(false);
+
+  const start = async () => {
+    setBusy(true);
+    const png = await capture();
+    setShot(png);
+    setShotFailed(png === null);
+    setBusy(false);
+    setOpen(true);
+  };
+
   return (
     <>
       <button
         className={variant === 'rail' ? 'railfeedback' : 'btn'}
-        onClick={() => setOpen(true)}
+        onClick={start}
+        disabled={busy}
+        aria-busy={busy}
       >
+        {/* The label does not change while capturing — it would be in the screenshot.
+            The dot is stripped from the capture by the filter below. */}
         {variant === 'rail' ? (
           <>
             <span aria-hidden>✎</span> Feedback
+            {busy && <span className="capdot nocapture" aria-hidden />}
           </>
         ) : (
-          'Give feedback'
+          <>
+            Give feedback
+            {busy && <span className="capdot nocapture" aria-hidden />}
+          </>
         )}
       </button>
-      {open && <FeedbackDrawer onClose={() => setOpen(false)} />}
+      {open && (
+        <FeedbackDrawer
+          shot={shot}
+          shotFailed={shotFailed}
+          onShot={setShot}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </>
   );
 }
 
-function FeedbackDrawer({ onClose }: { onClose: () => void }) {
+function FeedbackDrawer({
+  shot, shotFailed, onShot, onClose,
+}: {
+  shot: string | null;
+  shotFailed: boolean;
+  onShot: (png: string) => void;
+  onClose: () => void;
+}) {
   const path = usePathname();
   const params = useSearchParams();
   const [title, setTitle] = useState('');
@@ -44,6 +116,20 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'failed'>('idle');
   const [result, setResult] = useState<{ id: string; location: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [includeShot, setIncludeShot] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [annotated, setAnnotated] = useState(false);
+
+  /**
+   * The drawer and the editor are portalled to <body>.
+   *
+   * They are rendered from inside the rail, and `.rail` is `position: sticky`, which makes
+   * its own stacking context — so a z-index of 60 in there still painted underneath the
+   * topbar's z-index of 5. A Playwright click on the editor's Done button found the pane
+   * toggle instead, which is exactly what a person's click would have found.
+   */
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const filters = useMemo(() => Object.fromEntries(params.entries()), [params]);
   const context = useMemo(
@@ -58,7 +144,10 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ title, body, kind, priority, page: path, context }),
+        body: JSON.stringify({
+          title, body, kind, priority, page: path, context,
+          screenshot: includeShot && shot ? shot : undefined,
+        }),
       });
       const json = (await res.json()) as { id?: string; location?: string; error?: string };
       if (!res.ok || !json.id || !json.location) throw new Error(json.error ?? 'Unknown error');
@@ -70,10 +159,17 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
     }
   };
 
-  return (
+  const ui = (
     <>
-      <div className="scrim" onClick={onClose} />
-      <div className="drawer" role="dialog" aria-label="Give feedback">
+      {editing && shot && (
+        <ShotEditor
+          src={shot}
+          onCancel={() => setEditing(false)}
+          onSave={(png) => { onShot(png); setAnnotated(true); setEditing(false); }}
+        />
+      )}
+      <div className="scrim nocapture" onClick={onClose} />
+      <div className="drawer nocapture" role="dialog" aria-label="Give feedback">
         <div className="lbl">Feedback</div>
 
         {state === 'done' && result ? (
@@ -101,6 +197,42 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
 
             <div className="lbl">Captured with it</div>
             <div className="ctx">{JSON.stringify(context, null, 2)}</div>
+
+            <div className="lbl" style={{ marginTop: 14 }}>Screenshot</div>
+            {shotFailed || !shot ? (
+              <p className="note" style={{ marginTop: 6 }}>
+                This browser would not give us an image of the page. The complaint still files
+                without one — a failed capture is not a reason to lose what you were going to say.
+              </p>
+            ) : (
+              <>
+                <div className={`shotthumb${includeShot ? '' : ' off'}`}>
+                  <button
+                    onClick={() => setEditing(true)}
+                    aria-label="Open the screenshot to annotate it"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={shot} alt="The page as it looked when you pressed feedback" />
+                    <span className="pencil" aria-hidden>✎ Annotate</span>
+                  </button>
+                  {annotated && <span className="flag f-ok annotated">annotated</span>}
+                </div>
+                <label className="shotcheck">
+                  <input
+                    type="checkbox"
+                    checked={includeShot}
+                    onChange={(e) => setIncludeShot(e.target.checked)}
+                  />
+                  <span>
+                    Include screenshot
+                    <small>
+                      Filed beside the issue as a PNG in this repository. Click the image to draw
+                      on it — an arrow costs you a second and saves a paragraph.
+                    </small>
+                  </span>
+                </label>
+              </>
+            )}
 
             <label className="field">
               <span className="lbl">Title</span>
@@ -163,4 +295,6 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
       </div>
     </>
   );
+
+  return mounted ? createPortal(ui, document.body) : null;
 }

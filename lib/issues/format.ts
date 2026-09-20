@@ -19,6 +19,8 @@ export interface ParsedIssue {
   labels: string[];
   body: string;
   context: Record<string, unknown> | null;
+  /** Relative to the issues directory. A markdown image link points at the same file. */
+  attachment: string | null;
 }
 
 const COMMENTED = new Set(['status', 'kind', 'priority']);
@@ -47,7 +49,12 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
   }
 
   const str = (k: string, d = ''): string => (typeof fields[k] === 'string' ? (fields[k] as string) : d);
-  const { body, context } = splitContext(rest);
+  const attachment = str('attachment') || null;
+  // The image link in the prose is a rendering of the `attachment` field for anyone
+  // reading the file in an editor. The app shows the picture itself, so it is not prose.
+  const { body, context } = splitContext(
+    attachment ? rest.replace(`![Screenshot](${attachment})`, '') : rest,
+  );
 
   return {
     id: str('id', fallbackId),
@@ -59,6 +66,7 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
     page: str('page', ''),
     created: str('created', ''),
     labels: Array.isArray(fields['labels']) ? (fields['labels'] as string[]) : [],
+    attachment,
     body,
     context,
   };
@@ -99,11 +107,16 @@ export function serializeIssue(issue: ParsedIssue): string {
     `page: ${quote(issue.page)}`,
     `created: ${issue.created}`,
     `labels: [${issue.labels.join(', ')}]`,
+    ...(issue.attachment ? [`attachment: ${quote(issue.attachment)}`] : []),
     '---',
     '',
     issue.body.trim(),
     '',
   ];
+  if (issue.attachment) {
+    lines.push(`![Screenshot](${issue.attachment})`);
+    lines.push('');
+  }
   if (issue.context) {
     lines.push('```json context');
     lines.push(JSON.stringify(issue.context, null, 2));

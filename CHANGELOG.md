@@ -1689,3 +1689,66 @@ New fixture people so the firms are not empty: Gordon Whitcomb, Marisa Tessaro, 
 Iglesias, Curtis Adeyemi, Rachel Kaplan, Hannah Boyle. They are fixtures, not research.
 
 **43 of 43 properties hold.**
+
+---
+
+## N8 — Feedback with a picture on it
+
+**Shipped.** Pressing Feedback screenshots the page *before* the drawer opens, shows it in
+the box with **Include screenshot** already ticked, and lets you draw on it. The annotated
+PNG is filed beside the issue in the repository.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![The box](docs/changelog/shots/n8/01-feedback-with-shot.png) | **The box, with the page in it.** Captured at the moment you pressed the button, before the drawer covered anything. Ticked by default; untick it and nothing is sent. |
+| ![Annotating](docs/changelog/shots/n8/02-annotating.png) | **Clicking the image opens it full size to annotate.** Freehand, arrow, box, text; five colours; undo, clear, cancel, done. |
+| ![Annotated](docs/changelog/shots/n8/03-annotated-thumb.png) | **Back in the box, marked *annotated*.** The annotated image is what gets filed — there is no second copy of the clean one. |
+| ![On the issue](docs/changelog/shots/n8/04-issue-with-shot.png) | **Issue 0007, filed through the box while building this.** The picture is a PNG in `issues/attachments/`, so the complaint, the screenshot and the fix travel in one pull request. |
+
+### How the capture works
+
+`modern-screenshot` renders the DOM through an SVG `foreignObject`, which means the
+browser's own engine draws it — inset shadows, gradients and the real fonts all survive. It
+captures **the visible viewport**, not the whole document: a complaint is about what was on
+screen, and four thousand pixels of a page you had scrolled past is noise.
+
+Three details that were wrong first:
+
+- **Fonts.** Without `await document.fonts.ready` the clone rendered in fallback metrics and
+  every heading re-wrapped. A screenshot that does not match the screen is worse than no
+  screenshot.
+- **The button's own label.** It said *Capturing…* in the first captures, because the label
+  changed before the snapshot. It stays *Feedback* now; the pulse beside it is marked
+  `nocapture` and the capture filter drops it.
+- **Scale.** Capped so a retina viewport produces a few megabytes rather than ten.
+
+If the capture fails, the box says so and files the complaint anyway. A failed screenshot is
+not a reason to lose what somebody was about to say.
+
+### The attachment goes through the seam
+
+`IssueDraft` gained an optional attachment; **the sink names the file**, so a caller cannot
+choose a path. `FileIssueSink` writes `issues/attachments/NNNN-screenshot.png` and records
+the relative path in the frontmatter *and* as a markdown image link, so the file reads
+correctly in an editor and on GitHub. `GitHubIssueSink` will upload the same bytes somewhere
+else without any caller changing.
+
+The API accepts only a `data:image/png;base64,…` payload, keeps only the base64 body, and
+caps the size. The serving route normalises the path, re-roots it under the issues
+directory and serves nothing but PNGs.
+
+### Two bugs found by building it
+
+**The editor painted underneath the topbar.** It is rendered from inside the rail, and
+`.rail` is `position: sticky` — which makes its own stacking context, so `z-index: 60` in
+there still lost to the topbar's `z-index: 5`. A click on **Done** landed on the pane
+toggle. The drawer and the editor are portalled to `<body>` now. A test found it; a person
+would have found it with a mis-click.
+
+**The first text label went missing from the saved image.** Clicking Done blurs the text
+input, which commits the label — and the click handler in that same tick still saw the
+pre-blur state. Marks live in a ref as well as in state, and the export reads the ref.
+
+**43 of 43 properties hold.**

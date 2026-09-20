@@ -1,9 +1,12 @@
-import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseIssue, serializeIssue, slugify, type ParsedIssue } from './format';
 import type { Issue, IssueDraft, IssueFilter, IssueSink } from './index';
 
 const FILE = /^(\d{4})-([a-z0-9-]+)\.md$/;
+
+/** Attachments sit beside the issues so `git log issues/` still shows the whole thing. */
+const ATTACH = 'attachments';
 
 /**
  * Issues are files in the repo. The complaint and its fix travel in one pull request,
@@ -33,6 +36,7 @@ export function fileIssueSink(dir: string): IssueSink {
     id: p.id, title: p.title, status: p.status, kind: p.kind, priority: p.priority,
     reporter: p.reporter, page: p.page, labels: p.labels, body: p.body,
     context: p.context, created: p.created, location: `${dir}/${file}`,
+    attachment: p.attachment,
   });
 
   const find = async (id: string) => (await read()).find((r) => r.issue.id === id) ?? null;
@@ -47,8 +51,22 @@ export function fileIssueSink(dir: string): IssueSink {
         existing.reduce((max, r) => Math.max(max, Number(r.issue.id) || 0), 0) + 1,
       ).padStart(4, '0');
       const file = `${next}-${slugify(draft.title)}.md`;
+
+      // The sink owns the filename. A caller that could choose one could write anywhere.
+      let attachment: string | null = null;
+      if (draft.attachment) {
+        attachment = `${ATTACH}/${next}-screenshot.png`;
+        await mkdir(join(root, ATTACH), { recursive: true });
+        await writeFile(
+          join(root, ATTACH, `${next}-screenshot.png`),
+          Buffer.from(draft.attachment.base64, 'base64'),
+        );
+      }
+
+      const { attachment: _drop, ...rest } = draft;
       const parsed: ParsedIssue = {
-        ...draft,
+        ...rest,
+        attachment,
         id: next,
         status: 'open',
         created: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
