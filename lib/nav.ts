@@ -58,6 +58,7 @@ export const SECTIONS: NavSection[] = [
       m('14', 'Content studio', 'content', 'L12', 'Canonical asset plus audience variants; a changed claim invalidates its derivatives.', true),
       m('15', 'Content performance', 'performance', 'L12', 'Attribution honest about its limits. Views are not commitment, and the UI says so.', true),
       m('16', 'Materials & send gate', 'materials', 'L12', 'SEND approval ticket; wrong-wrap matrix; staleness. Wrong-wrap sends = 0 is a hard KPI.', true),
+      m('17', 'Answer library', 'library', 'L12', 'Approved answers with their own versioning and approval state, plus the coverage-gap backlog.', true),
     ],
   },
   {
@@ -79,8 +80,6 @@ export const PLAYBOOK_ONLY = [
   { num: '02', title: 'Segmentation', why: 'Rule-built audiences from explicit criteria. Earns a screen when a rule set needs editing more than once a week.' },
   { num: '06', title: 'Signals', why: 'Fixture-driven until connectors exist at L13. A screen before then would render invented change detection.' },
   { num: '12', title: 'LP-fit audit', why: 'An output format over the target workspace, not a place to visit.' },
-  { num: '13', title: 'Content calendar', why: 'A backlog generated from audience-coverage gaps. It is a query, not a page.' },
-  { num: '17', title: 'Evidence & answer library', why: 'Approved answers with their own versioning; lives inside the workspaces that cite them.' },
   { num: '23', title: 'Team capacity', why: 'Role × vehicle slots. One person does not need a screen for this yet.' },
 ];
 
