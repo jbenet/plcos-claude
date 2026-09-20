@@ -158,3 +158,76 @@ export function parseInline(src: string): Inline[] {
   if (last < src.length) out.push({ kind: 'text', text: src.slice(last) });
   return out;
 }
+
+export interface Entry {
+  id: string;
+  /** Full heading text, e.g. "L6 — Exposure, the soft/hard split…". */
+  title: string;
+  /** The stage identifier if the title carries one: "L6", "N1", "Module 24". */
+  key: string;
+  /** The part after the em dash, or the whole title when there is no dash. */
+  rest: string;
+  /** A mid-document H1 is a marker between eras, not an entry of its own. */
+  divider: boolean;
+  blocks: Block[];
+}
+
+export interface ChangelogDoc {
+  /** Everything before the first entry: the document title and its preamble. */
+  preamble: Block[];
+  /** In file order — oldest first. Both renderers reverse this. */
+  entries: Entry[];
+}
+
+/**
+ * Group a changelog into entries so it can be rendered in either direction.
+ *
+ * The file stays append-only and chronological, which keeps its diffs clean and matches
+ * how it is written. Reading order is a rendering decision, and both renderers make the
+ * same one: newest first, because the thing you want is almost always the last thing that
+ * happened.
+ */
+export function groupChangelog(blocks: Block[]): ChangelogDoc {
+  const preamble: Block[] = [];
+  const entries: Entry[] = [];
+  let current: Entry | null = null;
+  let seenTitle = false;
+
+  // Returns rather than assigns: TypeScript cannot follow an assignment made inside a
+  // closure, and narrows `current` to never afterwards.
+  const make = (text: string, id: string, divider: boolean): Entry => {
+    const [key, ...tail] = text.split('\u2014');
+    const trimmedKey = (key ?? text).trim();
+    return {
+      id, title: text, key: trimmedKey,
+      rest: tail.join('\u2014').trim() || trimmedKey,
+      divider, blocks: [],
+    };
+  };
+
+  for (const block of blocks) {
+    if (block.kind === 'rule') continue; // entries carry their own separation
+
+    if (block.kind === 'heading' && block.level === 1) {
+      // The first H1 is the document title; a later one divides eras.
+      if (!seenTitle) {
+        seenTitle = true;
+        continue;
+      }
+      current = make(block.text, block.id, true);
+      entries.push(current);
+      continue;
+    }
+
+    if (block.kind === 'heading' && block.level === 2) {
+      current = make(block.text, block.id, false);
+      entries.push(current);
+      continue;
+    }
+
+    if (current) current.blocks.push(block);
+    else preamble.push(block);
+  }
+
+  return { preamble, entries };
+}

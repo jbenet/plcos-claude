@@ -14,7 +14,8 @@
     "shots": "tsx scripts/shots.ts",
     "boundaries": "tsx scripts/boundaries.ts",
     "props": "tsx scripts/properties.ts",
-    "changelog:html": "tsx scripts/changelog-html.ts"
+    "changelog:html": "tsx scripts/changelog-html.ts",
+    "changelog:page": "scripts/changelog-page.sh"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

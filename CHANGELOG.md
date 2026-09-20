@@ -1249,3 +1249,26 @@ The old URL redirects.
 
 38 routes, all 200 from a genuine cold start. `npm run props` at 35 of 35. Production build
 compiles 46 routes.
+
+---
+
+## N2 — Newest first
+
+**Shipped.** The build log reads in reverse: the last thing that happened is at the top, in
+both the in-app page and the standalone one.
+
+![Changelog, newest first](docs/changelog/shots/n2/01-changelog-newest-first.png)
+
+`CHANGELOG.md` itself stays chronological and append-only. That is deliberate: a new entry
+is a clean append at the end of the file rather than an insert at the top, so its diff
+shows only what was added. **Reading order is a rendering decision**, and both renderers
+now make the same one.
+
+`groupChangelog()` in `lib/markdown.ts` splits the document into entries, which is what
+made rendering it in either direction possible at all — previously both pages walked a flat
+block list and could only emit it in file order. The mid-document `# Beyond L13` heading
+became an era marker rather than a heading: reversed, it sits directly above L13, so
+reading downward it correctly announces that everything below it is the L-series.
+
+One shared parser, two renderers, one reading order. The in-app page and the page you read
+on a phone cannot disagree about what happened.

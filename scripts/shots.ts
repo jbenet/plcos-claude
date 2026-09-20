@@ -165,6 +165,9 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N2: [
+    { name: '01-changelog-newest-first', path: '/dev/changelog' },
+  ],
   N1: [
     { name: '01-overview-all', path: '/overview' },
     {

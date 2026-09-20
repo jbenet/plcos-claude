@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
-import { parseInline, parseMarkdown, type Block, type Inline } from '@/lib/markdown';
+import { groupChangelog, parseInline, parseMarkdown, type Block, type Inline } from '@/lib/markdown';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,19 +47,18 @@ function Spans({ src }: { src: string }) {
 function Rendered({ block }: { block: Block }) {
   switch (block.kind) {
     case 'heading': {
-      if (block.level === 1) return null; // the page already has a title
-      const size = block.level === 2 ? 22 : block.level === 3 ? 16 : 14;
+      // Entry headings are rendered by the grouper, which controls reading order.
+      if (block.level <= 2) return null;
       return (
-        <h2
+        <h3
           id={block.id}
           style={{
-            fontFamily: 'var(--display)', fontSize: size, fontWeight: 600,
-            margin: block.level === 2 ? '28px 0 8px' : '18px 0 6px',
-            scrollMarginTop: 60,
+            fontFamily: 'var(--display)', fontSize: block.level === 3 ? 16 : 14,
+            fontWeight: 600, margin: '18px 0 6px', scrollMarginTop: 60,
           }}
         >
           <Spans src={block.text} />
-        </h2>
+        </h3>
       );
     }
     case 'paragraph':
@@ -126,27 +125,27 @@ function Rendered({ block }: { block: Block }) {
 
 export default async function Changelog() {
   const src = await readFile(join(process.cwd(), 'CHANGELOG.md'), 'utf8');
-  const blocks = parseMarkdown(src);
-  const entries = blocks.filter((b) => b.kind === 'heading' && b.level === 2);
+  const doc = groupChangelog(parseMarkdown(src));
+
+  // Newest first, matching the standalone page. CHANGELOG.md stays chronological — the
+  // file is append-only, which keeps its diffs clean; reading order is a rendering choice.
+  const entries = [...doc.entries].reverse();
+  const stages = entries.filter((e) => !e.divider);
 
   return (
     <Page
       crumbs={[{ label: 'Developer' }, { label: 'Changelog' }]}
       inspector={
         <>
-          <div className="lbl">Contents</div>
-          <div className="ihead">{entries.length} entries</div>
-          <div className="imeta">Newest last — it reads as a build log</div>
+          <div className="lbl">Contents · newest first</div>
+          <div className="ihead">{stages.length} entries</div>
+          <div className="imeta">The last thing that happened is at the top</div>
           <div style={{ marginTop: 10 }}>
-            {entries.map((e) => (
-              <a
-                key={e.kind === 'heading' ? e.id : ''}
-                href={`#${e.kind === 'heading' ? e.id : ''}`}
-                className="prov"
-                style={{ display: 'block', color: 'var(--ink)' }}
-              >
+            {stages.map((e) => (
+              <a key={e.id} href={`#${e.id}`} className="prov" style={{ display: 'block', color: 'var(--ink)' }}>
                 <div className="p1" style={{ fontSize: 12 }}>
-                  {e.kind === 'heading' ? e.text : ''}
+                  <span className="mono" style={{ color: 'var(--clay)', marginRight: 6 }}>{e.key}</span>
+                  {e.rest === e.key ? '' : e.rest}
                 </div>
               </a>
             ))}
@@ -163,20 +162,41 @@ export default async function Changelog() {
       <h1>Changelog</h1>
       <p className="sublede">
         What landed at each stage, what was deliberately left out, and where the build disagreed
-        with the plan. Read from <code>CHANGELOG.md</code>, so it cannot drift from the repository.
+        with the plan. Newest first. Read from <code>CHANGELOG.md</code>, so it cannot drift from
+        the repository.
       </p>
 
       <div className="card">
         <div className="cbody" style={{ maxWidth: '88ch' }}>
-          {blocks.map((block, i) => (
-            <Rendered key={i} block={block} />
+          {doc.preamble.map((block, i) => (
+            <Rendered key={`p${i}`} block={block} />
           ))}
         </div>
       </div>
 
+      {entries.map((entry) =>
+        entry.divider ? (
+          <div key={entry.id} id={entry.id} className="lbl" style={{ margin: '26px 0 10px' }}>
+            {entry.title}
+          </div>
+        ) : (
+          <div className="card" key={entry.id} id={entry.id} style={{ scrollMarginTop: 60 }}>
+            <div className="chead">
+              <h2>{entry.rest}</h2>
+              <span className="lbl">{entry.key}</span>
+            </div>
+            <div className="cbody" style={{ maxWidth: '88ch' }}>
+              {entry.blocks.map((block, i) => (
+                <Rendered key={i} block={block} />
+              ))}
+            </div>
+          </div>
+        ),
+      )}
+
       <p className="note">
-        <Link href="/dev/status">Status</Link> shows what is running right now;
-        this is the history of how it got there.
+        <Link href="/dev/status">Status</Link> shows what is running right now; this is the history
+        of how it got there.
       </p>
     </Page>
   );

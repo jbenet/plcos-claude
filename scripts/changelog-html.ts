@@ -9,7 +9,7 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parseInline, parseMarkdown, slugify, type Block } from '../lib/markdown';
+import { groupChangelog, parseInline, parseMarkdown, type Block } from '../lib/markdown';
 
 const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -44,17 +44,7 @@ function inline(src: string): string {
 function render(block: Block): string {
   switch (block.kind) {
     case 'heading': {
-      if (block.level === 1) return '';
-      if (block.level === 2) {
-        // Stage headings carry real sequence information: L1…L13, then what came after.
-        const stage = /^([A-Z]\d+|Module[s]? [\d and]+.*?|Where this got to|Beyond L13)/.exec(block.text);
-        const eyebrow = stage ? stage[1]!.split(' —')[0]! : '';
-        return (
-          `<section class="entry" id="${block.id}">` +
-          (eyebrow ? `<p class="eyebrow">${esc(eyebrow)}</p>` : '') +
-          `<h2>${inline(block.text.replace(/^[^—]*—\s*/, ''))}</h2>`
-        );
-      }
+      if (block.level <= 2) return ''; // entry headings are rendered by the grouper
       return `<h${block.level} id="${block.id}">${inline(block.text)}</h${block.level}>`;
     }
     case 'paragraph': return `<p>${inline(block.text)}</p>`;
@@ -87,32 +77,38 @@ function render(block: Block): string {
 async function main() {
   const out = process.argv[2] ?? 'changelog.html';
   const src = await readFile(join(process.cwd(), 'CHANGELOG.md'), 'utf8');
-  const blocks = parseMarkdown(src);
+  const doc = groupChangelog(parseMarkdown(src));
 
-  const entries = blocks
-    .filter((b): b is Extract<Block, { kind: 'heading' }> => b.kind === 'heading' && b.level === 2)
-    .map((b) => ({ id: b.id, text: b.text }));
+  // Newest first. The file stays chronological; reading order is a rendering decision.
+  const entries = [...doc.entries].reverse();
+  const stages = entries.filter((e) => !e.divider);
 
-  let body = '';
-  let openSection = false;
-  for (const block of blocks) {
-    if (block.kind === 'heading' && block.level === 2) {
-      if (openSection) body += '</section>';
-      openSection = true;
-    }
-    body += render(block);
-  }
-  if (openSection) body += '</section>';
-
-  const nav = entries
+  const body = entries
     .map((e) => {
-      const full = e.text.split(' \u2014')[0]!;
-      // Keep the contents key short: a stage id, or the first two words of a title.
-      const stage = /^[A-Z]\d+$/.test(full) ? full : full.split(/\s+/).slice(0, 2).join(' ');
-      const rest = e.text.slice(full.length).replace(/^\s*\u2014\s*/, '') || full;
-      return `<a href="#${e.id}"><span class="k">${esc(stage)}</span>${rest ? `<span class="t">${esc(rest)}</span>` : ''}</a>`;
+      const content = e.blocks.map(render).join('');
+      if (e.divider) {
+        return `<section class="era" id="${e.id}"><p class="eralabel">${esc(e.title)}</p>${content}</section>`;
+      }
+      return (
+        `<section class="entry" id="${e.id}">` +
+        `<p class="eyebrow">${esc(e.key)}</p>` +
+        `<h2>${inline(e.rest)}</h2>` +
+        content +
+        `</section>`
+      );
     })
     .join('');
+
+  const nav = stages
+    .map(
+      (e) =>
+        `<a href="#${e.id}"><span class="k">${esc(e.key)}</span>` +
+        (e.rest === e.key ? '' : `<span class="t">${esc(e.rest)}</span>`) +
+        `</a>`,
+    )
+    .join('');
+
+  const preamble = doc.preamble.map(render).join('');
 
   const html = `<title>Capital OS Build Log</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -174,6 +170,11 @@ async function main() {
   main .wrap{padding-block:8px 60px}
   .entry{padding-block:34px;border-bottom:1px solid var(--line)}
   .entry:last-child{border-bottom:0}
+  .era{padding-block:26px 6px}
+  .eralabel{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;
+            text-transform:uppercase;color:var(--muted);margin:0 0 8px;
+            padding-top:16px;border-top:1px solid var(--line)}
+  .era p:not(.eralabel){color:var(--muted);font-size:13.5px}
   .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;
            text-transform:uppercase;color:var(--clay);margin:0 0 6px}
   h2{font-family:var(--display);font-size:clamp(22px,4.6vw,27px);font-weight:600;
@@ -225,7 +226,7 @@ async function main() {
     <p class="lede">What landed at each stage, what was deliberately left out, and where the
       build disagreed with the plan. Generated from <code>CHANGELOG.md</code>.</p>
     <div class="facts">
-      <span>${entries.length} entries</span>
+      <span>${stages.length} entries</span>
       <span>L1 to L13 complete</span>
       <span>Local-first</span>
     </div>
@@ -234,12 +235,12 @@ async function main() {
 
 <nav class="toc">
   <div class="wrap">
-    <p>Contents</p>
+    <p>Contents &middot; newest first</p>
     <div class="tocgrid">${nav}</div>
   </div>
 </nav>
 
-<main><div class="wrap">${body}</div></main>
+<main><div class="wrap">${preamble}${body}</div></main>
 
 <footer>
   <div class="wrap">
@@ -250,7 +251,7 @@ async function main() {
 `;
 
   await writeFile(out, html, 'utf8');
-  console.log(`wrote ${out} · ${entries.length} entries · ${(html.length / 1024).toFixed(0)} KB`);
+  console.log(`wrote ${out} · ${stages.length} entries, newest first · ${(html.length / 1024).toFixed(0)} KB`);
 }
 
 main().catch((err: unknown) => {
