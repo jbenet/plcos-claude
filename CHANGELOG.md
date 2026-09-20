@@ -1272,3 +1272,128 @@ reading downward it correctly announces that everything below it is the L-series
 
 One shared parser, two renderers, one reading order. The in-app page and the page you read
 on a phone cannot disagree about what happened.
+
+---
+
+## N3 — Funder–vehicle fit
+
+**Shipped.** A new module, `fit`, and two screens: a roll-up at `/fit` and a page per firm
+× vehicle at `/fit/<entity>`. The question it answers is not "how good is this prospect"
+but **"what is actually stopping this one, and what is the single next move."**
+
+### Screenshots
+
+| | |
+|---|---|
+| ![All vehicles](docs/changelog/shots/n3/01-fit-all-vehicles.png) | **The roll-up, grouped by what is blocking.** Not a funnel — a work queue. Each group's heading says what the job is: an awareness gap needs reach, a conviction gap needs one objection answered, an unanswered gate needs somebody to pick up the phone. |
+| ![One vehicle](docs/changelog/shots/n3/02-fit-one-vehicle.png) | **Scoped to PLC Neurotech I** through the same vehicle selection the rest of the app uses. Same page, one vehicle. Nothing is ever summed across vehicles. |
+| ![Diagnosis and gates](docs/changelog/shots/n3/03-diagnosis-and-gates.png) | **The diagnosis above the fold, hard gates directly beneath it.** Northwood's blocker is conviction — they told us the objection in the room. Two of their six gates are unanswered, and an unanswered gate is not a pass. |
+| ![Dimensions](docs/changelog/shots/n3/04-dimensions-biggest-misses.png) | **Eighteen graded dimensions, three sort orders.** Matters to us, matters to them, and biggest misses. Every reading carries whether it is known, inferred or guessed, and the certainty discounts the number rather than decorating it. |
+| ![Values and perception](docs/changelog/shots/n3/05-value-and-perception.png) | **What they value, and whether they can see it in us.** A match they cannot see is worth nothing at the moment of decision. Below it, familiarity and sentiment as separate columns. |
+| ![Ties](docs/changelog/shots/n3/06-ties-and-decision.png) | **Ties between us, with strength and opinion-weight as different columns.** Hale is a moderate tie to Roos and a **blocker** — she asked not to be introduced through him, and the tie table says so rather than quietly ranking him third. |
+
+### The cards, and what each is for
+
+**Hard gates.** Six, checked before any weighted score is worth reading: cheque band,
+mandate, duration, conflict, accreditation, provenance. Report 4 §4.2 is explicit that
+gates come before weights, and the reason is that a weighted score over a firm that cannot
+participate is an arithmetic exercise. Three states, not two — **an unanswered gate is not
+a pass.**
+
+**Firm–vehicle fit.** Eighteen dimensions, each with a question, a grade, a finding and a
+basis. You asked for check band, thesis fit, industry fit, deployment tempo, liquidity, VC
+exposure and tech-forwardness; the rest come from Report 1 §2.5 and Report 4 §4.1 —
+decision speed, duration tolerance, catalytic capacity, signal value, strategic value,
+referral willingness, domain sympathy, stated motivation, manager-stage permission,
+fund-size alignment, and whether they back funds at all.
+
+Two weights, not one. **`weight_us` is how much it moves our decision to spend a week here;
+`weight_them` is how much it moves theirs.** They disagree often — decision speed is a 5 to
+us and a 2 to them — and collapsing them into one number hides the disagreement that the
+pitch should be built around. The table sorts by either, or by biggest miss.
+
+**What they value.** What they care about, how we match it, **whether that is already clear
+to them**, and the next move to prove it. The "clear to them" column is the one that earns
+its place: Northwood has four value items and three are not yet clear, which is the entire
+content of the next conversation.
+
+**What they think of us.** Familiarity and sentiment, held separately, per subject — the
+firm, the vehicle, the thesis, each GP, the track record. Report 5 §3 is the source: an
+awareness gap and a conviction gap look identical in a pipeline and need opposite work.
+Engagement (follows, event attendance, newsletter) is listed **separately again**, because
+a follow is not an opinion and a quiet feed is not evidence of a quiet reader.
+
+**Ties between us.** Tie strength and opinion-setting weight are different columns on
+purpose. Report 6 §2: moderately weak ties move more than either strangers or close
+friends, and connector credibility is target- and topic-specific — it does not transfer.
+A well-known name is not automatically a good route.
+
+**Who decides, and how long it takes.** Decision architecture as an ordinal with weeks
+attached, who signs, who can kill it, the cheque they write, estimated assets **with its
+basis and certainty printed next to it**, whether an adviser filing exists, and how the
+relationship started. The SEC row says what an absence means: no filing for a single family
+office is the expected answer and usually means a faster decision, which is the diagnostic
+Report 4 §2.1 makes and most systems render as a missing field.
+
+### The diagnosis is a precedence, not a score
+
+```
+gated → conviction → access → evidence → fit → timing → awareness → none
+```
+
+The first condition that applies wins, and the page reports which one. Eight seeded
+assessments produce seven different blockers, which is the whole point: Cedar is closed,
+Tessaro has never heard of us, Northwood knows us and wants the marks verified, Vantage and
+Roos each have one unanswered gate, Sable Point has no route in, Okonjo has gone quiet, and
+Whitcomb is excluded on accreditation.
+
+Two ordering decisions worth naming:
+
+- **Conviction outranks an unanswered gate.** If they have told you why they are not
+  convinced, that is the most specific and most actionable thing you have, and it beats a
+  diligence item nobody has chased.
+- **Access outranks evidence.** You cannot resolve an open gate on a firm you have no way
+  to reach, so "find a route" is the first job, not the fourth.
+
+`accredited` is deliberately excluded from the gates that trigger an *evidence* blocker: it
+is closing mechanics, normal to leave open until subscription, and treating it as a
+qualification blocker would flag almost every live prospect as unqualifiable.
+
+**Awareness is measured against us, not against a thesis they hold independently.** Tessaro
+knows the neuro thesis deeply — they arrived at it on their own — and has never heard of
+Protocol Labs. Scoring their thesis familiarity as familiarity with us would hide exactly
+the gap that matters. There is a property in `npm run props` asserting this, because it is
+the kind of thing a later refactor silently breaks.
+
+### Where the seeded data came back to bite, correctly
+
+**Whitcomb fails the accreditation gate and the compliance registry says the same thing.**
+They self-certified, PLC Neurotech I is 506(c), and self-certification is not reasonable
+steps no matter who signed it. Two modules built weeks apart, one answer. There is a
+property asserting they agree, so a change to either one that breaks the agreement fails
+the build rather than producing a page that quietly contradicts another page.
+
+**Hale appears in Roos's tie table with `blocker` weight.** The non-circumvention
+restriction was recorded in L4 and the fit page reads it as a tie that cannot be used. The
+restriction attaches to the target, so this is the right behaviour — a route table that
+listed him third would be the bug.
+
+### What this does not do
+
+No strategy is generated. Every "next move" on these pages was written by a person against
+a specific finding; nothing is composed, ranked or sent. The one computed recommendation is
+the diagnosis's single `nextMove`, and it is a consequence of the precedence rather than a
+judgement about the firm.
+
+No health inference. Report 4 §6.2 is unambiguous, and in a neurotech raise it is the rule
+most likely to be broken by accident: record only what a person has publicly stated about
+their own interests, attribute it to the source, and never record inferred or third-party
+health detail. Tessaro's stated interest is recorded from a public interview and says so;
+there is nothing else in the schema that could hold anything more, and the coverage line at
+the foot of every fit page says so in as many words.
+
+The assessments are seeded, not derived. `weight_us` and `weight_them` are judgement calls
+in one table in `lib/seed-fit.ts` — the catalogue is the argument, and it is meant to be
+edited rather than trusted.
+
+**43 of 43 properties hold.** Eight of them are new and cover this module.

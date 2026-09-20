@@ -40,6 +40,7 @@ export const VEHICLE_MODULES: NavModule[] = [
   m('04', 'Conversion strategy', 'targets', 'L5', 'The per-target workspace; consent ladder; coverage disclosure.'),
   m('05', 'Warm intro routes', 'routes', 'L4', 'Route ranking by connector credibility; A–D evidence tiers; non-circumvention.'),
   m('03', 'Selection', 'selection', 'L9', 'The capacity/affinity/propensity rubric, with weights visible and editable.'),
+  m('03b', 'Funder–vehicle fit', 'fit', 'L9', 'Hard gates, graded dimensions, what they value, what they think of us, and who we know in common.'),
   m('07', 'Ask coordination', 'asks', 'L3', 'One owner per relationship; frequency guard; conflict cases with a dated follow-up.'),
   m('11', 'Meetings', 'meetings', 'L11', 'Prep brief, objection tagging, and the rung a reply actually justifies.'),
   m('10', 'Decision room', 'decisions', 'L11', 'Diligence questions, objections, evidence gaps, decision timeline.'),

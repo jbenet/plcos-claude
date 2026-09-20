@@ -6,6 +6,7 @@ import { ConfidenceWord, ProvenanceLine } from '@/components/ui/Provenance';
 import { Coverage } from '@/components/ui/Coverage';
 import { getEntity } from '@/modules/identity';
 import { claimsFor, listSourceDocs, notesFor, corpusCoverage } from '@/modules/research';
+import { assessmentsForEntity, BLOCKER_LABEL } from '@/modules/fit';
 import { listSyncSources } from '@/modules/platform';
 import { shortDate } from '@/lib/time';
 
@@ -21,12 +22,13 @@ export default async function Dossier({ params }: { params: Promise<{ id: string
   const entity = await getEntity(id);
   if (!entity) notFound();
 
-  const [claims, docs, notes, coverage, sources] = await Promise.all([
+  const [claims, docs, notes, coverage, sources, fit] = await Promise.all([
     claimsFor(entity.entityId),
     listSourceDocs(),
     notesFor(entity.entityId),
     corpusCoverage(),
     listSyncSources(),
+    assessmentsForEntity(entity.entityId),
   ]);
 
   const docMap = new Map<string, EvidenceDoc>(
@@ -88,6 +90,25 @@ export default async function Dossier({ params }: { params: Promise<{ id: string
                 connector toward the same approach is the failure this prevents.
               </p>
             </div>
+          )}
+
+          {fit.length > 0 && (
+            <>
+              <div className="lbl" style={{ marginTop: 16 }}>Funder–vehicle fit</div>
+              {fit.map((f) => (
+                <Link className="prov" href={`/fit/${entity.entityId}`} key={f.assessmentId}>
+                  <div className="p1">{f.vehicleName}</div>
+                  <div className="p2">
+                    {BLOCKER_LABEL[f.diagnosis.blocker]} · fit {f.weightedFit.toFixed(2)} ·{' '}
+                    {Math.round(f.evidenceCover * 100)}% known
+                  </div>
+                </Link>
+              ))}
+              <div className="note">
+                Assessed per vehicle, never blended. This dossier is what those readings were built
+                from.
+              </div>
+            </>
           )}
 
           <div className="scope">

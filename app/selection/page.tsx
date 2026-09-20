@@ -116,6 +116,9 @@ export default async function Selection() {
                   <Link href={`/research/${r.entityId}`}>
                     <b>{r.entityName}</b>
                   </Link>
+                  <Link className="xref" href={`/fit/${r.entityId}`}>
+                    fit &amp; standing →
+                  </Link>
                   {r.missing.length > 0 ? (
                     <span style={{ color: 'var(--clay)', display: 'block', marginTop: 2 }}>
                       {BAND_LABEL.unscored}: {r.missing.map((d) => DIMENSION_LABEL[d]).join(' and ')}{' '}

@@ -165,6 +165,59 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N3: [
+    { name: '01-fit-all-vehicles', path: '/fit', fullPage: true },
+    {
+      name: '02-fit-one-vehicle',
+      path: '/overview',
+      fullPage: true,
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /PLC Neurotech I/ }).click();
+        await page.waitForTimeout(1400);
+        await page.getByRole('link', { name: 'Funder–vehicle fit' }).first().click();
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    {
+      name: '03-diagnosis-and-gates',
+      path: '/fit',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: 'Northwood Capital' }).click();
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    {
+      name: '04-dimensions-biggest-misses',
+      path: '/fit',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: 'Northwood Capital' }).click();
+        await page.waitForLoadState('networkidle');
+        await page.getByRole('button', { name: 'Biggest misses' }).click();
+        await page.getByRole('heading', { name: 'Firm–vehicle fit' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      },
+    },
+    {
+      name: '05-value-and-perception',
+      path: '/fit',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: 'Northwood Capital' }).click();
+        await page.waitForLoadState('networkidle');
+        await page.getByRole('heading', { name: 'What they think of us' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      },
+    },
+    {
+      name: '06-ties-and-decision',
+      path: '/fit',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: 'Roos Foundation' }).click();
+        await page.waitForLoadState('networkidle');
+        await page.getByRole('heading', { name: 'Ties between us' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      },
+    },
+  ],
   N2: [
     { name: '01-changelog-newest-first', path: '/dev/changelog' },
   ],

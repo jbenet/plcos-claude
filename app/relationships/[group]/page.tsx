@@ -110,7 +110,9 @@ export default async function Relationships({ params }: { params: Promise<{ grou
                     <Link href={`/research/${r.entityId}`}>
                       <b>{r.name}</b>
                     </Link>
-                    <div className="muted" style={{ fontSize: 11.5 }}>{r.entityType}</div>
+                    <div className="muted" style={{ fontSize: 11.5 }}>
+                      {r.entityType} · <Link className="xref" href={`/fit/${r.entityId}`}>fit</Link>
+                    </div>
                   </td>
                   <td>
                     {r.roles.map((role) => (

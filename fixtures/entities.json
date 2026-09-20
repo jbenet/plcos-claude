@@ -112,5 +112,23 @@
     "type": "org",
     "name": "Whitcomb Capital",
     "note": "Soft on Neurotech, hard on the Cortex SPV."
+  },
+  {
+    "key": "sablepoint",
+    "type": "org",
+    "name": "Sable Point Capital",
+    "note": "Emerging-manager seeder. The class whose entire business is underwriting managers like us."
+  },
+  {
+    "key": "mork",
+    "type": "person",
+    "name": "Anneliese Mork",
+    "note": "Founder, sold her company in June. Fresh liquidity, no family-office infrastructure yet."
+  },
+  {
+    "key": "tessaro",
+    "type": "family",
+    "name": "Tessaro Family Office",
+    "note": "Single family office, principal-decided. Neuro interest is publicly stated by the principal."
   }
 ]
