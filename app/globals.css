@@ -309,3 +309,21 @@ button.src{background:none;border:0;padding:0;font-family:var(--mono);font-size:
 .prov{padding:9px 0;border-bottom:1px solid var(--hair)}
 .prov .p1{font-size:12.5px;line-height:1.45}
 .prov .p2{font-size:10.5px;color:var(--muted);margin-top:3px;font-family:var(--mono)}
+
+/* ---------------- sprint strip (design/S1) ---------------- */
+.weeks{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(118px,1fr);padding:15px 15px 16px;overflow-x:auto}
+.wk{border:1px solid var(--line);border-right:0;padding:9px 10px 11px;background:var(--surface);min-width:0}
+.wk:last-child{border-right:1px solid var(--line);border-radius:0 8px 8px 0}
+.wk:first-child{border-radius:8px 0 0 8px}
+.wk.dead{background:#F4F1EA;color:var(--muted)}
+.wk.now{background:#FBF4EF;box-shadow:inset 0 3px 0 var(--clay)}
+.wk .d{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.wk .m{font-size:12.5px;font-weight:500;margin-top:5px;line-height:1.35;overflow-wrap:break-word}
+.wk .s{font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.4}
+.wk .bar{height:3px;border-radius:2px;margin-top:8px;background:var(--line)}
+.wk .bar.on{background:var(--clay)}
+.wk .bar.off{background:repeating-linear-gradient(90deg,var(--line),var(--line) 3px,transparent 3px,transparent 6px)}
+.wk .mil{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--clay);margin-top:6px}
+.weeks.wrap{grid-auto-flow:row;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:8px;overflow:visible}
+.weeks.wrap .wk{border:1px solid var(--line);border-radius:8px}
+.weeks.wrap .wk.now{box-shadow:inset 0 3px 0 var(--clay)}

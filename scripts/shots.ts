@@ -142,6 +142,20 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  L7: [
+    { name: '01-today-all', path: '/today' },
+    {
+      name: '02-today-vehicle',
+      path: '/today',
+      fullPage: true,
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Vehicle/ }).click();
+        await page.getByRole('menu').getByText('PLC Neurotech I').click();
+        await page.waitForTimeout(900);
+      },
+    },
+    { name: '03-calendar', path: '/calendar' },
+  ],
 };
 
 /** The seed mints uuids, so a fixed link is resolved at shot time. */

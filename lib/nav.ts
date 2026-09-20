@@ -68,7 +68,7 @@ export const SECTIONS: NavSection[] = [
       m('19', 'SPV war room', 'spv', 'L8', 'invite → IOI → allocate → wire, with days-to-wire as the headline.'),
       m('20', 'Grants rail', 'grants', 'L13', 'No-unsolicited gate until a funder invitation exists. A state machine guard, not advice.'),
       m('21', 'Forecast', 'forecast', 'L6', 'Conserved capital pool invariant; hard-only headline; code does the arithmetic.', true),
-      m('22', 'Sprint calendar', 'calendar', 'L7', 'Holiday overlay; the post-23-December dead zone suppresses urgency.'),
+      m('22', 'Sprint calendar', 'calendar', 'L7', 'Holiday overlay; the post-23-December dead zone suppresses urgency.', true),
     ],
   },
 ];

@@ -1,0 +1,10 @@
+[
+  { "kind": "sprint",    "label": "Anchor push",        "detail": "Family-office circuit. Two cities, six meetings.", "starts_on": "2026-10-05", "ends_on": "2026-10-16", "vehicle": "neurotech", "suppress_urgency": false },
+  { "kind": "sprint",    "label": "Diligence wave",     "detail": "DDQ pack out to everyone past meeting held.",      "starts_on": "2026-10-19", "ends_on": "2026-10-30", "vehicle": "neurotech", "suppress_urgency": false },
+  { "kind": "milestone", "label": "SPV — Cortex wire",  "detail": "Target days-to-wire: 11 from allocation.",         "starts_on": "2026-11-03", "ends_on": "2026-11-03", "vehicle": "spv-cortex", "suppress_urgency": false },
+  { "kind": "holiday",   "label": "Thanksgiving",       "detail": "US desks thin from the 25th. Nothing chased after Wednesday.", "starts_on": "2026-11-25", "ends_on": "2026-11-29", "vehicle": null, "suppress_urgency": true },
+  { "kind": "sprint",    "label": "Last full week",     "detail": "Papers out by Friday the 18th or they do not land.", "starts_on": "2026-12-07", "ends_on": "2026-12-18", "vehicle": "neurotech", "suppress_urgency": false },
+  { "kind": "milestone", "label": "First close target", "detail": "Neurotech first close. Signed and countersigned by this date.", "starts_on": "2026-12-19", "ends_on": "2026-12-19", "vehicle": "neurotech", "suppress_urgency": false },
+  { "kind": "dead_zone", "label": "December dead zone", "detail": "Nothing is chased after the 23rd. Urgency is suppressed rather than spent on an empty office.", "starts_on": "2026-12-24", "ends_on": "2027-01-04", "vehicle": null, "suppress_urgency": true },
+  { "kind": "sprint",    "label": "Second close prep",  "detail": "Back to it. Re-approach everyone the December dead zone caught.", "starts_on": "2027-01-05", "ends_on": "2027-01-16", "vehicle": "neurotech", "suppress_urgency": false }
+]

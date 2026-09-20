@@ -504,3 +504,52 @@ read as money. I considered dropping it; it is genuinely useful and the label ca
 
 The close room and the SPV war room (L8), the sprint calendar (L7). Cash is recorded but
 there is no wire-tracking screen yet — `recordCash` exists and is only called by tests.
+
+---
+
+## L7 — The daily HUD and the sprint calendar
+
+**Shipped.** Module 22, and the Today page rebuilt on top of everything L2–L6 put in the
+database.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Today, all vehicles](docs/changelog/shots/l7/01-today-all.png) | **Today with no vehicle selected.** Operational counts rather than money, and each vehicle's hard number on its own row. Four decisions, one of them blocked by a conflict. |
+| ![Today, one vehicle](docs/changelog/shots/l7/02-today-vehicle.png) | **Today for PLC Neurotech I.** Hard, soft, gap and coverage — and the sprint strip underneath, so the gap is read against the weeks that are actually left. |
+| ![Sprint calendar](docs/changelog/shots/l7/03-calendar.png) | **Eighteen weeks to the close.** Two of them are not working weeks. Thanksgiving and the December dead zone are grey with a dashed bar and carry no milestone. |
+
+### What the calendar actually changes
+
+Nothing is hidden and nothing is rescheduled. What changes is the tone:
+
+- `urgency()` reports whether today sits inside a suppressing period, and Today's headline
+  and sub-line change accordingly — *"Nothing is being chased this week"* instead of
+  *"4 decisions only you can make"*.
+- A week counts as **dead** when three or more of its five working days are inside a
+  suppressing period. Thanksgiving starts on a Wednesday, and pretending Monday and Tuesday
+  make it a working week is how a plan quietly loses three days.
+- A week that loses one or two days says so on its face — *"2 of 5 days lost"* — rather
+  than being rounded to either extreme.
+
+The arithmetic matters more than it sounds: **16 working weeks, not 18**, between now and
+the January restart. If the gap to first close is $34.0M, that is the number of weeks it has.
+
+### Where I disagreed
+
+**This is the module I would have cut, and the r3 plan says so out loud.** Having built it:
+two days is right and it is not a nicety. The Today page reads differently for roughly a
+third of the remaining days, and the difference is between a queue that people trust and a
+queue that nags into an empty office until they stop reading it.
+
+**The dead-week threshold is a guess and is not in `config/deployment.ts`.** Three of five
+days is a judgement I made while writing it. It should move to the config file with the
+other guesses; I left it in the calendar module because unlike the others it is a property
+of how a week works rather than a number about this raise. Flagging it either way — it is
+the only unlabelled judgement call I have added since L1.
+
+### Still not built
+
+The close room and the SPV war room (L8). The calendar has a first-close milestone on
+19 December and a days-to-wire target on the Cortex SPV; neither has a screen behind it yet.
