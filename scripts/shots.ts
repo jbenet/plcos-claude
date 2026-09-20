@@ -156,6 +156,10 @@ const SHOTS: Record<string, Shot[]> = {
     },
     { name: '03-calendar', path: '/calendar' },
   ],
+  L8: [
+    { name: '01-close-room', path: '/close', fullPage: true },
+    { name: '02-spv-war-room', path: '/spv', fullPage: true },
+  ],
 };
 
 /** The seed mints uuids, so a fixed link is resolved at shot time. */

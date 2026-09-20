@@ -553,3 +553,72 @@ the only unlabelled judgement call I have added since L1.
 
 The close room and the SPV war room (L8). The calendar has a first-close milestone on
 19 December and a days-to-wire target on the Cortex SPV; neither has a screen behind it yet.
+
+---
+
+## L8 — The close room and the SPV war room
+
+**Shipped.** Modules 18 and 19, deliberately built as two different screens because they
+are two different shapes of problem. **Core (L1–L8) is complete.**
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Close room](docs/changelog/shots/l8/01-close-room.png) | **First close, PLC Neurotech I.** Six conditions with owners, dates and evidence — three of them compliance obligations, three already overdue. The subscription pack underneath, sent → returned → countersigned. |
+| ![SPV war room](docs/changelog/shots/l8/02-spv-war-room.png) | **Three SPVs on a days-scale clock.** invite → IOI → allocate → wire as a four-segment bar per seat, days elapsed beside it, and six bandwidth-steal alerts in the inspector. |
+
+### Two rooms, on purpose
+
+A fund close runs on a long clock: a committee, a pack, and a list of conditions that must
+be true before anything signs. An SPV closes in weeks on `invite → IOI → allocate → wire`
+with **days-to-wire** as the number that matters. Giving the SPVs the fund's interface
+would have been a real mistake, and the two pages share nothing but the shell.
+
+### The working-day count
+
+The close room's clock subtracts the sprint calendar. Days to 19 December are not calendar
+days and not business days — they are business days minus Thanksgiving minus the December
+dead zone. That is the number a plan can actually spend.
+
+### The bandwidth-steal alert
+
+Two kinds, both computed rather than configured:
+
+- **Owner** — someone who owns open SPV seats *and* open fund pursuits. Juan has three of
+  each. The SPV clock is shorter, so it wins by default unless somebody decides otherwise.
+- **Investor** — an actor with an open SPV seat who is also in a fund pipeline. Four of
+  them. Their attention is finite and so is their budget, which is the conserved capital
+  pool arriving from a different direction.
+
+Named, not blocked. The system will not stop anyone working an SPV during a fund close; it
+refuses to let that happen without anyone noticing.
+
+### Where I caught myself again
+
+The war room's third KPI was **"$3.5M wired, across 3 SPVs"**, with a note arguing that
+this one was allowed to be a sum. It is not allowed. Rule 1 names the SPVs explicitly, and
+a cross-vehicle total does not become acceptable because the vehicles are small or because
+the label apologises for it. It is now a count — *2 of 7 seats wired* — with the dollar
+amounts shown per SPV.
+
+Second time in three stages that the blended-number rule caught something in my own work.
+It is a good rule.
+
+### Where I disagreed
+
+**`close.pack_item` overlaps `pipeline.exposure.hardened_at`.** Countersigning a
+subscription document is the same real-world event as moving an exposure to the hard track,
+and it is now recorded in two places. I kept both because they answer different questions —
+the pack answers *where is the paperwork*, the exposure answers *what may appear in a
+headline* — but they can drift, and nothing yet stops them. The honest fix is for the
+countersignature to be one event that writes both, gated by the same `MONEY` ticket. That
+is a half-day and I would do it before anyone relies on either number.
+
+### Core is done
+
+L1–L8, the thirty-four days of the plan. What exists now: the shell and the five seams,
+entities with provenance, the approval gate and conflict cases, the route planner with
+evidence tiers, the consent ladder, the two money tracks with a conserved-pool check, the
+daily HUD with a holiday-aware calendar, and both close rooms. `npm run props` covers the
+domain rules that matter with 17 properties and 5 perturbations.
