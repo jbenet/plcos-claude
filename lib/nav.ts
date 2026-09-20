@@ -94,15 +94,27 @@ export interface NavSection {
 }
 
 /** Sections whose contents do not depend on the database. */
+/**
+ * The first section, and the only one that is about *now* rather than about a thing.
+ *
+ * Today, Approvals and Issues used to sit above every heading as three loose rows. They
+ * are the same kind of entry as the standup and the calendar — "what is in front of me" —
+ * so they are one section, at the top, and they collapse with everything else. The three
+ * that carry a count render it; the rest do not.
+ */
+export const OVERVIEW_SECTION: NavSection = {
+  id: 'overview',
+  title: 'Overview',
+  links: [
+    { label: 'Today', href: '/today' },
+    { label: 'Approvals', href: '/approvals' },
+    { label: 'Issues', href: '/issues' },
+    { label: 'Daily standup', href: '/standup' },
+    { label: 'Calendar', href: '/all/calendar' },
+  ],
+};
+
 export const STATIC_SECTIONS: NavSection[] = [
-  {
-    id: 'overview',
-    title: 'Overview',
-    links: [
-      { label: 'Daily standup', href: '/standup' },
-      { label: 'Calendar', href: '/all/calendar' },
-    ],
-  },
   {
     id: 'rnd',
     title: 'PL R&D',

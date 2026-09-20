@@ -621,3 +621,10 @@ table.list tr.past td:first-child{box-shadow:inset 2px 0 0 var(--line)}
 .gmark.alert.g-point{border-color:var(--clay)}
 .gmark.past{opacity:.38}
 .gmark.past.g-span i{color:var(--accent-ink)}
+.sub .pip{font-family:var(--mono);font-size:10px;background:var(--accent);color:var(--accent-ink);
+          border-radius:9px;padding:1px 6px;flex:none}
+button.sec .pip{margin-left:auto;margin-right:7px;font-family:var(--mono);font-size:9.5px;
+                background:var(--accent);color:var(--accent-ink);border-radius:9px;padding:1px 6px}
+.weekrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:0 26px;
+         padding-top:4px;padding-bottom:6px}
+.weekrow .sitem:last-child{border-bottom:1px solid var(--hair)}

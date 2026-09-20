@@ -215,53 +215,62 @@ export default async function Standup({ params }: { params: Promise<{ day: strin
         </div>
       )}
 
-      {/* ---------- the three lists ---------- */}
-      <div className="grid2">
-        <div>
-          <div className="card">
-            <div className="chead">
-              <h2>On today</h2>
-              <span className="lbl">{carried} carried forward</span>
-            </div>
-            <div className="cbody">
-              {s.today.length === 0
-                ? <p className="muted">Nothing on today yet.</p>
-                : s.today.map((i) => <ItemRow key={i.itemId} i={i} />)}
-            </div>
-          </div>
+      {/* ---------- the week, then the two days ---------- */}
+      <div className="card">
+        <div className="chead">
+          <h2>Focus this week</h2>
+          <span className="lbl">
+            {s.week.length} item{s.week.length === 1 ? '' : 's'}
+            {s.week.filter((i) => i.carriedFrom).length > 0
+              ? ` · ${s.week.filter((i) => i.carriedFrom).length} carried`
+              : ''}
+          </span>
+        </div>
+        <div className="cbody weekrow">
+          {s.week.length === 0
+            ? <p className="muted">Nothing set for the week yet.</p>
+            : s.week.map((i) => <ItemRow key={i.itemId} i={i} />)}
+        </div>
+      </div>
 
-          <div className="card">
-            <div className="chead">
-              <h2>Focus this week</h2>
-              <span className="lbl">{s.week.length} item{s.week.length === 1 ? '' : 's'}</span>
-            </div>
-            <div className="cbody">
-              {s.week.map((i) => <ItemRow key={i.itemId} i={i} />)}
-            </div>
+      <div className="grid-even">
+        <div className="card">
+          <div className="chead">
+            <h2>{s.previous ? `Yesterday — ${shortDate(s.previous.day)}` : 'Yesterday'}</h2>
+            <span className="lbl">
+              {s.previous ? `${doneYesterday} done · ${openYesterday.length} still open` : 'no earlier day'}
+            </span>
           </div>
+          <div className="cbody">
+            {!s.previous ? (
+              <p className="muted">This is the earliest day recorded.</p>
+            ) : (
+              s.previous.items.map((i) => <ItemRow key={i.itemId} i={i} />)
+            )}
+          </div>
+          <p className="cover">
+            <b>Read as it was written.</b> Nothing here re-derives its status from today&rsquo;s
+            data, so an item that says <i>open</i> was open when that meeting ended.
+          </p>
         </div>
 
-        <div>
-          <div className="card">
-            <div className="chead">
-              <h2>{s.previous ? `Yesterday — ${shortDate(s.previous.day)}` : 'Yesterday'}</h2>
-              <span className="lbl">
-                {s.previous ? `${doneYesterday} done · ${openYesterday.length} still open` : 'no earlier day'}
-              </span>
-            </div>
-            <div className="cbody">
-              {!s.previous ? (
-                <p className="muted">This is the earliest day recorded.</p>
-              ) : (
-                s.previous.items.map((i) => <ItemRow key={i.itemId} i={i} />)
-              )}
-            </div>
-            <p className="cover">
-              <b>Read as it was written.</b> Yesterday&rsquo;s list is yesterday&rsquo;s — nothing
-              here re-derives its status from today&rsquo;s data, so an item that says{' '}
-              <i>open</i> was open when the meeting ended.
-            </p>
+        <div className="card">
+          <div className="chead">
+            <h2>Today</h2>
+            <span className="lbl">
+              {s.today.length} item{s.today.length === 1 ? '' : 's'}
+              {carried > 0 ? ` · ${carried} carried forward` : ''}
+            </span>
           </div>
+          <div className="cbody">
+            {s.today.length === 0
+              ? <p className="muted">Nothing on today yet.</p>
+              : s.today.map((i) => <ItemRow key={i.itemId} i={i} />)}
+          </div>
+          <p className="cover">
+            <b>Carrying is visible on purpose.</b> An item on its third day is a different
+            conversation from one on its first, and the amber says which.
+          </p>
         </div>
       </div>
 
@@ -323,7 +332,7 @@ export default async function Standup({ params }: { params: Promise<{ day: strin
       </div>
 
       {/* ---------- external ---------- */}
-      <div className="grid2">
+      <div className="grid-even">
         <div className="card">
           <div className="chead">
             <h2>Linear</h2>

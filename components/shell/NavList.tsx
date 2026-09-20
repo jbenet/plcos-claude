@@ -3,7 +3,9 @@
 import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { moduleHref, modulesForKind, STATIC_SECTIONS, type NavSection } from '@/lib/nav';
+import {
+  moduleHref, modulesForKind, OVERVIEW_SECTION, STATIC_SECTIONS, type NavSection,
+} from '@/lib/nav';
 
 /**
  * The rail deliberately does not carry the exemption. 506(b) versus 506(c) decides what
@@ -98,7 +100,14 @@ export function NavList({
     });
   };
 
-  const Section = ({ section, children }: { section: NavSection; children: React.ReactNode }) => {
+  const Section = ({
+    section, badge, children,
+  }: {
+    section: NavSection;
+    /** Shown on the heading while the section is closed, so a count is never hidden. */
+    badge?: number;
+    children: React.ReactNode;
+  }) => {
     const isCollapsed = Boolean(collapsed[section.id]);
     return (
       <div className="navsec">
@@ -109,6 +118,7 @@ export function NavList({
           suppressHydrationWarning
         >
           <span>{section.title}</span>
+          {isCollapsed && badge ? <span className="pip">{badge}</span> : null}
           <span className="caret" suppressHydrationWarning>
             {isCollapsed ? '▸' : '▾'}
           </span>
@@ -160,18 +170,19 @@ export function NavList({
 
   return (
     <div className="nav" data-hydrated={hydrated}>
-      <div className="navsec">
-        <Link className={`nitem${on('/today') ? ' on' : ''}`} href="/today">
-          Today
-        </Link>
-        <Link className={`nitem${on('/approvals') ? ' on' : ''}`} href="/approvals">
-          Approvals
-          {approvals > 0 ? <span className="pip">{approvals}</span> : <span className="ct">0</span>}
-        </Link>
-        <Link className={`nitem${on('/issues') ? ' on' : ''}`} href="/issues">
-          Issues<span className="ct">{issues}</span>
-        </Link>
-      </div>
+      <Section section={OVERVIEW_SECTION} badge={approvals}>
+        {OVERVIEW_SECTION.links.map((l) => (
+          <Link key={l.href} className={`sub${on(l.href) ? ' on' : ''}`} href={l.href}>
+            <span className="nm">{l.label}</span>
+            {l.href === '/approvals' && (
+              approvals > 0
+                ? <span className="pip">{approvals}</span>
+                : <span className="ct">0</span>
+            )}
+            {l.href === '/issues' && <span className="ct">{issues}</span>}
+          </Link>
+        ))}
+      </Section>
 
       <Section section={capital}>
         <Link className={`sub${on('/operations') ? ' on' : ''}`} href="/operations">

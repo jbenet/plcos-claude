@@ -165,6 +165,17 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N10: [
+    { name: '01-overview-section', path: '/today' },
+    {
+      name: '02-overview-collapsed',
+      path: '/today',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: 'Overview' }).click();
+        await page.waitForTimeout(400);
+      },
+    },
+  ],
   N9: [
     { name: '01-standup-today', path: '/standup/2026-09-20', fullPage: true },
     { name: '02-standup-pinned', path: '/standup/2026-09-19', fullPage: true },

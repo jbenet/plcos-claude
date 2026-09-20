@@ -1829,3 +1829,38 @@ bar three pixels wide is unreachable by keyboard, half of what is on the chart i
 day, and the table carries every row including the thirteen outside the window.
 
 **43 of 43 properties hold.** 58 routes return 200 from a cold start.
+
+---
+
+## N10 — Overview first, and the standup reads in order
+
+**Shipped.** Four layout changes, no new capability.
+
+| | |
+|---|---|
+| ![Overview section](docs/changelog/shots/n10/01-overview-section.png) | **Overview is the first section**, and Today, Approvals and Issues are in it. |
+| ![Collapsed](docs/changelog/shots/n10/02-overview-collapsed.png) | **Collapsed, the approvals count moves to the heading** — a signal that disappears when you tidy the nav is a signal you stop trusting. |
+
+### The rail
+
+Today, Approvals and Issues used to float above every heading as three loose rows. They are
+the same kind of entry as the standup and the calendar — *what is in front of me* — so they
+are one **Overview** section at the top, and they collapse with everything else.
+
+Collapsing it would have hidden the open-approvals count, so the pip moves to the section
+heading when the section is closed.
+
+### The standup reads in time order
+
+- **Focus this week** is now a full-width row across the top, two columns of items rather
+  than one narrow list.
+- **Yesterday and today sit side by side underneath it**, left to right in the order they
+  happened. Yesterday is read-only history; today is the one you are about to change.
+- **Every vehicle, side by side** replaced eighteen KPI tiles with one row per vehicle —
+  hard, soft, gap, and what the hard number rests on. Still no total row, and soft still
+  has its own column because it is its own track.
+- **Linear and recent outreach are equal width.** They are two views of the same question —
+  what happened somewhere we are not looking — and one of them being wider implied a
+  precedence that does not exist.
+
+**43 of 43 properties hold.**
