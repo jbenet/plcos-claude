@@ -1,4 +1,5 @@
 import { getDb } from '@/lib/db';
+import { config } from '@/config/deployment';
 import { DIMENSIONS, type Band, type Dimension, type Factor, type Scored, type Weights } from './types';
 
 type WeightRow = {
@@ -101,12 +102,12 @@ export async function ranked(vehicleId: string): Promise<Scored[]> {
 }
 
 /**
- * The band cut-offs. Guesses, and labelled as such — they came from nowhere but judgement
- * and should move once there are outcomes to fit them against.
+ * The band cut-offs live in config/deployment.ts with the other labelled guesses. They
+ * came from nowhere but judgement and should move once there are outcomes to fit them to.
  */
 export function bandFor(score: number): Band {
-  if (score >= 0.7) return 'strong';
-  if (score >= 0.45) return 'worth_a_look';
+  if (score >= config.scoringBands.strong) return 'strong';
+  if (score >= config.scoringBands.worthALook) return 'worth_a_look';
   return 'weak';
 }
 

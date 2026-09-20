@@ -1,0 +1,80 @@
+[
+  {
+    "source_key": "fixture:2026-09-18:northwood-personnel",
+    "entity": "Northwood Capital",
+    "kind": "personnel_change",
+    "headline": "Priya Raman promoted to head of investments",
+    "detail": "Trade press notice. She now signs rather than recommends, which changes who our counterpart is.",
+    "source": "trade_press",
+    "source_ref": "press:2026-09-18",
+    "observed_at": "2026-09-18",
+    "confidence": "medium",
+    "threshold_label": "Decision-maker change",
+    "threshold_detail": "Personnel news is noise unless it touches the person who decides. This one does."
+  },
+  {
+    "source_key": "fixture:2026-09-16:roos-allocation",
+    "entity": "Roos Foundation",
+    "kind": "allocation_announced",
+    "headline": "$6M recoverable grant announced to a competing neuro programme",
+    "detail": "Second deployment this year in our field. Their budget is finite and we do not know its size.",
+    "source": "foundation_press",
+    "source_ref": "press:2026-09-16",
+    "observed_at": "2026-09-16",
+    "confidence": "high",
+    "threshold_label": "Deployment in our field",
+    "threshold_detail": "A grant inside our thesis, from a target whose budget we have not verified. Both halves matter."
+  },
+  {
+    "source_key": "fixture:2026-09-15:cedar-mandate",
+    "entity": "Cedar Trust",
+    "kind": "mandate_change",
+    "headline": "Life-sciences allocation raised from 8% to 12%",
+    "detail": "Published in their annual report. Raises the ceiling on what they can do with us later.",
+    "source": "annual_report",
+    "source_ref": "doc:cedar-ar-2026",
+    "observed_at": "2026-09-15",
+    "confidence": "high",
+    "threshold_label": "Mandate ceiling moved",
+    "threshold_detail": "A stated allocation change from a primary document, not a comment in an interview."
+  },
+  {
+    "source_key": "fixture:2026-09-11:okonjo-event",
+    "entity": "Okonjo Family Office",
+    "kind": "event_attendance",
+    "headline": "Michael Okonjo speaking at a neurotech conference in November",
+    "detail": "Public agenda. A place to be in the room without spending an ask.",
+    "source": "event_agenda",
+    "source_ref": "agenda:nov-2026",
+    "observed_at": "2026-09-11",
+    "confidence": "medium",
+    "threshold_label": "Reachable without an ask",
+    "threshold_detail": "Attendance only counts as a signal when it creates contact that does not cost connector goodwill."
+  },
+  {
+    "source_key": "fixture:2026-08-02:vantage-filing",
+    "entity": "Vantage Partners",
+    "kind": "filing",
+    "headline": "Form D filed for a new $400M vehicle",
+    "detail": "They are raising as well as allocating. Relevant to the conserved-pool question on their budget.",
+    "source": "edgar",
+    "source_ref": "edgar:2026-08-02",
+    "observed_at": "2026-08-02",
+    "confidence": "high",
+    "threshold_label": "Capital-structure change",
+    "threshold_detail": "A filing that changes what an actor can commit, from a primary source."
+  },
+  {
+    "source_key": "fixture:2026-09-19:quill-statement",
+    "entity": "Anne Quill",
+    "kind": "public_statement",
+    "headline": "Quoted as \"looking hard at neuro in 2027\"",
+    "detail": "One sentence in a podcast transcript. Consistent with her asking us to come back in November.",
+    "source": "podcast_transcript",
+    "source_ref": "podcast:2026-09-19",
+    "observed_at": "2026-09-19",
+    "confidence": "low",
+    "threshold_label": "Below the confidence floor",
+    "threshold_detail": "Held deliberately: a low-confidence public statement is chatter. It is recorded so the threshold is visible, not so it is acted on."
+  }
+]

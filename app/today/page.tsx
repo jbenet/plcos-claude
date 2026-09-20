@@ -12,6 +12,8 @@ import { listAsks, listConflicts } from '@/modules/coordination';
 import { listPursuits, RUNG_LABEL } from '@/modules/strategy';
 import { vehicleTotals } from '@/modules/pipeline';
 import { sprintStrip, urgency } from '@/modules/calendar';
+import { actionableSignals, heldBack } from '@/modules/signals';
+import { SignalRow } from '@/components/signals/SignalRow';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +32,7 @@ export default async function Today() {
       sprintStrip(7),
       urgency(),
     ]);
+  const [signals, held] = await Promise.all([actionableSignals(5), heldBack()]);
 
   const open = await sink.list({ status: ['open', 'triaged', 'agent-ready', 'in-progress', 'review'] });
   const focus = selection.current ? totals.find((t) => t.vehicleId === selection.current!.id) ?? null : null;
@@ -204,6 +207,32 @@ export default async function Today() {
             );
           })
         )}
+      </div>
+
+      <div className="card">
+        <div className="chead">
+          <h2>What changed</h2>
+          <span className="lbl">
+            signals above the threshold · {held.length} held back by it
+          </span>
+        </div>
+        {signals.length === 0 ? (
+          <div className="cbody">
+            <p className="muted">
+              Nothing has crossed a threshold inside the freshness window. {held.length} change
+              {held.length === 1 ? ' was' : 's were'} observed and held back — see System &amp;
+              seams for which rule stopped each one.
+            </p>
+          </div>
+        ) : (
+          signals.map((s) => <SignalRow key={s.signalId} signal={s} />)
+        )}
+        <p className="cover">
+          <b>Signals run on fixtures until L13.</b> They arrive through the same
+          <code> Connector</code> contract a real source will use — land raw, normalize
+          separately, idempotent on the source key — so attaching EDGAR later changes the
+          connector and nothing else.
+        </p>
       </div>
 
       <div className="card">

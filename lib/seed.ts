@@ -9,7 +9,7 @@ const fixture = async <T>(name: string): Promise<T[]> =>
  * Enough for every screen to have something in it. Deliberately fictional: real names and
  * amounts should not reach a shared repo (docs/12, "Seeds").
  */
-export async function seed(db: Db): Promise<{ users: number; vehicles: number; sources: number }> {
+export async function seed(db: Db): Promise<Record<string, number>> {
   const users = await fixture<{ handle: string; name: string; initials: string; role: string; email: string }>('users.json');
   const vehicles = await fixture<{ slug: string; name: string; kind: string; exemption: string; target_amount: number | null; sort_order: number }>('vehicles.json');
   const sources = await fixture<{ source: string; label: string; status: string; detail: string }>('sources.json');
@@ -59,9 +59,13 @@ export async function seed(db: Db): Promise<{ users: number; vehicles: number; s
   const close = await seedClose(db);
   const { seedScoring } = await import('./seed-scoring');
   const scoring = await seedScoring(db);
+  // Signals arrive through the Connector seam rather than a seed file, because that is
+  // the code path a real source will use.
+  const { ingestSignals } = await import('@/modules/signals');
+  const signals = await ingestSignals();
   return {
     users: users.length, vehicles: vehicles.length, sources: sources.length,
-    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring,
+    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring, signals: signals.inserted,
   };
 }
 

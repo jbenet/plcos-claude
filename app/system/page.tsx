@@ -6,12 +6,16 @@ import { issues as issueSink } from '@/lib/issues';
 import { agent } from '@/lib/agent';
 import { listSyncSources } from '@/modules/platform';
 import { MODULES } from '@/modules/manifest';
+import { allSignals, heldBack } from '@/modules/signals';
+import { SignalRow } from '@/components/signals/SignalRow';
 import { ago } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
 export default async function System() {
-  const [db, a, sink, ag, sources] = await Promise.all([getDb(), auth(), issueSink(), agent(), listSyncSources()]);
+  const [db, a, sink, ag, sources, signals, held] = await Promise.all([
+    getDb(), auth(), issueSink(), agent(), listSyncSources(), allSignals(), heldBack(),
+  ]);
   const migrations = await db.query<{ id: string; applied_at: Date | string }>(
     'select id, applied_at from platform.migration order by applied_at',
   );
@@ -149,9 +153,9 @@ export default async function System() {
             </div>
           ))}
           <div className="cover">
-            <b>Coverage:</b> this lists the constants explicitly marked as guesses in{' '}
-            <code>config/deployment.ts</code>. It does not certify that every other number in the
-            system came from somewhere solid — only that these three are known not to have.
+            <b>Coverage:</b> this lists every constant explicitly marked as a guess in{' '}
+            <code>config/deployment.ts</code>. It does not certify that other numbers in the system
+            came from somewhere solid — only that these are known not to have.
           </div>
         </div>
 
@@ -173,6 +177,42 @@ export default async function System() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="chead">
+          <h2>Signal thresholds</h2>
+          <span className="lbl">
+            {signals.length} observed · {held.length} held back by a rule
+          </span>
+        </div>
+        <div className="cbody">
+          <div className="fact">
+            <span>Minimum confidence</span>
+            <span>{config.signals.minConfidence} · GUESS</span>
+          </div>
+          <div className="fact">
+            <span>Freshness window</span>
+            <span>{config.signals.freshDays} days · GUESS</span>
+          </div>
+          <div className="fact">
+            <span>Personnel: decision-makers only</span>
+            <span>{config.signals.decisionMakerOnly ? 'yes' : 'no'} · GUESS</span>
+          </div>
+        </div>
+        {held.map((s) => (
+          <div key={s.signalId}>
+            <div className="lbl" style={{ padding: '10px 15px 0', color: 'var(--clay)' }}>
+              Held back by {s.confidence === 'low' ? 'the confidence floor' : 'the freshness window'}
+            </div>
+            <SignalRow signal={s} />
+          </div>
+        ))}
+        <p className="cover">
+          <b>These were observed and not shown on Today.</b> A threshold nobody can see is
+          indistinguishable from a bug, so what it held back is listed here rather than dropped
+          silently.
+        </p>
       </div>
 
       <div className="card">

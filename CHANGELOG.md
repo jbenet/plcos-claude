@@ -685,3 +685,79 @@ order rather than a probability of anything. That is the line I drew; it is wort
 ### Still not built
 
 Signals (L10), meetings and the decision room (L11), materials (L12), agents (L13).
+
+---
+
+## L10 — Signals, through the Connector seam
+
+**Shipped.** Module 06 — and deliberately **no screen for it**. Signals appear where they
+are actionable: on Today, on the target they concern, and on System & seams where the
+thresholds live.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Signals on Today](docs/changelog/shots/l10/01-signals-today.png) | **What changed.** Four signals above the threshold, each showing the rule that made it a signal rather than noise, with Claim and Dismiss. |
+| ![Thresholds](docs/changelog/shots/l10/02-thresholds.png) | **System & seams.** The three signal thresholds, every guessed constant in the system, and the two signals the thresholds held back — each labelled with which rule stopped it. |
+
+### The first real use of the Connector seam
+
+`signalConnector()` is a `Connector<RawSignal>`: it reads `fixtures/signals.json`, but
+through the same four-method contract Affinity and EDGAR will implement at L13.
+`normalize()` produces `CoreRecord`s carrying the provenance tuple, and ingestion is
+idempotent on a source key — the fixture's stand-in for
+`(source, source_id, source_updated_at)`.
+
+The seed no longer writes signals directly. It calls `ingestSignals()`, which pulls from
+the connector. When a real source arrives, that function does not change.
+
+### A signal is a change that crossed a threshold
+
+Every row carries the rule that made it one:
+
+> *Why this is a signal: Decision-maker change — personnel news is noise unless it touches
+> the person who decides. This one does.*
+
+A signal whose threshold cannot be named is a notification, and notifications get ignored.
+
+**And the ones held back are shown too.** Two of the six seeded changes do not appear on
+Today: a low-confidence podcast quote (below the confidence floor) and an August Form D
+(outside the 21-day freshness window). Both are listed on System & seams with the rule that
+stopped them, because a threshold nobody can see is indistinguishable from a bug.
+
+### Every guessed constant is now labelled
+
+While adding the signal thresholds I went back and registered the ones I had let slip:
+
+| Constant | Why it is a guess |
+|---|---|
+| `guard.asksPerConnectorPerQuarter` | v3's unverified 1–5 range |
+| `guard.conflictWindowDays` | v3 default, never checked against our own asks |
+| `agents.correctionBudgetHoursPerWeek` | v3's unverified 10–15 h/week |
+| `guard.asksPerRelationshipPerQuarter` | **same source, and CLAUDE.md does not label it** |
+| `scoringBands.strong` / `worthALook` | my judgement at L9 |
+| `calendarDeadWeekDays` | my judgement at L7 |
+| `signals.freshDays` | my judgement here |
+
+L7 and L9 now read their thresholds from `config/deployment.ts` rather than hardcoding
+them. That closes the two unlabelled judgements I flagged in those entries.
+
+### Where I disagreed
+
+**`guard.asksPerRelationshipPerQuarter: 1` is under-specified, not just unverified.** I
+raised this at L3 and it is now written into the config comment: one ask per relationship
+per quarter **across all four vehicles** makes the conflict case nearly redundant, because
+every cross-vehicle collision also trips the frequency cap. It is almost certainly meant per
+vehicle. Until that is decided, the seeded Roos ask is refused twice for what is really one
+reason.
+
+**Module 06 has no screen and should not get one yet.** The build sequence calls L10
+"signals", and the module map says 06 starts as a playbook. Both are satisfiable at once:
+the model, the thresholds and the ingest path are real, and the output appears in three
+places where someone is already looking. A dedicated signals page before any connector
+exists would be a room full of invented change detection.
+
+### Still not built
+
+Meetings and the decision room (L11), materials (L12), agents (L13).

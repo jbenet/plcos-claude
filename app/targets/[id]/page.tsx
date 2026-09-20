@@ -11,6 +11,8 @@ import { getPursuit, RUNG_LABEL, RUNG_REQUIRES } from '@/modules/strategy';
 import { claimsFor, listSourceDocs, notesFor } from '@/modules/research';
 import { restrictionsFor } from '@/modules/coordination';
 import { planRoutes, VERDICT_LABEL } from '@/modules/network';
+import { signalsFor } from '@/modules/signals';
+import { SignalRow } from '@/components/signals/SignalRow';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,12 +22,13 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
   if (!pursuit) notFound();
 
   const user = await (await auth()).currentUser();
-  const [claims, docs, notes, restrictions, routes] = await Promise.all([
+  const [claims, docs, notes, restrictions, routes, signals] = await Promise.all([
     claimsFor(pursuit.entityId),
     listSourceDocs(),
     notesFor(pursuit.entityId),
     restrictionsFor(pursuit.entityId),
     planRoutes(user.handle, pursuit.entityId),
+    signalsFor(pursuit.entityId),
   ]);
 
   const docMap = new Map<string, EvidenceDoc>(
@@ -156,6 +159,18 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
               />
             )}
           </div>
+
+          {signals.length > 0 && (
+            <div className="card">
+              <div className="chead">
+                <h2>What changed</h2>
+                <span className="lbl">signals concerning this target</span>
+              </div>
+              {signals.map((s) => (
+                <SignalRow key={s.signalId} signal={s} />
+              ))}
+            </div>
+          )}
 
           <div className="card">
             <div className="chead">

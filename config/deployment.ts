@@ -41,6 +41,30 @@ export const config = {
   },
 
   /**
+   * L10. A signal is a change that crossed a threshold; everything else is noise. These
+   * are the thresholds, and every one of them is a judgement rather than a measurement.
+   */
+  signals: {
+    /** Below this, a public statement is chatter rather than a signal. */
+    minConfidence: 'medium' as 'high' | 'medium' | 'low', // GUESS
+    /** A signal older than this is history, and stops appearing in the daily queue. */
+    freshDays: 21, // GUESS
+    /** Personnel changes matter most when they touch the person who decides. */
+    decisionMakerOnly: true, // GUESS
+  },
+
+  /**
+   * L9. Where the rubric bands are cut. Judgement, not measurement.
+   */
+  scoringBands: {
+    strong: 0.7, // GUESS
+    worthALook: 0.45, // GUESS
+  },
+
+  /** L7. How much of a week has to be lost before it stops counting as a working week. */
+  calendarDeadWeekDays: 3, // GUESS
+
+  /**
    * Added during L1. Both are deployment facts rather than domain guesses.
    */
   db: {
@@ -76,5 +100,34 @@ export const GUESSED_CONSTANTS: ReadonlyArray<{ path: string; value: number; why
     path: 'agents.correctionBudgetHoursPerWeek',
     value: config.agents.correctionBudgetHoursPerWeek,
     why: 'v3 said 10–15 h/week, unverified. Circuit-breaker threshold for agent autonomy.',
+  },
+  {
+    path: 'guard.asksPerRelationshipPerQuarter',
+    value: config.guard.asksPerRelationshipPerQuarter,
+    why:
+      'Comes from the same unverified v3 analysis as the two above and was not labelled in ' +
+      'CLAUDE.md. Also under-specified: one ask per relationship per quarter across ALL FOUR ' +
+      'vehicles makes the conflict case nearly redundant, because every collision also trips ' +
+      'this cap. It is probably meant per vehicle.',
+  },
+  {
+    path: 'scoringBands.strong',
+    value: config.scoringBands.strong,
+    why: 'Where the selection rubric calls a target strong. Judgement, with no outcomes behind it yet.',
+  },
+  {
+    path: 'scoringBands.worthALook',
+    value: config.scoringBands.worthALook,
+    why: 'The lower rubric band. Same provenance: none.',
+  },
+  {
+    path: 'calendarDeadWeekDays',
+    value: config.calendarDeadWeekDays,
+    why: 'Working days a week must lose before it stops counting as a working week. My judgement while building L7.',
+  },
+  {
+    path: 'signals.freshDays',
+    value: config.signals.freshDays,
+    why: 'After this a signal is history rather than something to act on. Never measured.',
   },
 ];

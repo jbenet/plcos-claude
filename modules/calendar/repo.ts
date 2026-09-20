@@ -1,4 +1,5 @@
 import { getDb } from '@/lib/db';
+import { config } from '@/config/deployment';
 import type { Period, PeriodKind, UrgencyState, Week } from './types';
 
 type Row = {
@@ -58,7 +59,7 @@ export async function sprintStrip(count = 8, now = new Date()): Promise<Week[]> 
     const lost = workingDays.filter((day) =>
       hits.some((p) => p.suppressUrgency && p.startsOn <= day && p.endsOn >= day),
     ).length;
-    const dead = lost >= 3;
+    const dead = lost >= config.calendarDeadWeekDays;
     return {
       startsOn,
       label: startsOn.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
