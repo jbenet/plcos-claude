@@ -67,9 +67,11 @@ export async function seed(db: Db): Promise<Record<string, number>> {
   const meetings = await seedMeetings(db);
   const { seedContent } = await import('./seed-content');
   const content = await seedContent(db);
+  const { seedAgents } = await import('./seed-agents');
+  const agents = await seedAgents(db);
   return {
     users: users.length, vehicles: vehicles.length, sources: sources.length,
-    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring, signals: signals.inserted, ...meetings, ...content,
+    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring, signals: signals.inserted, ...meetings, ...content, ...agents,
   };
 }
 

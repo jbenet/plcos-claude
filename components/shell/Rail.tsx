@@ -28,6 +28,10 @@ export async function Rail() {
       <NavList approvals={tickets.open} issues={open.length} />
 
       <div className="railfoot">
+        <Link className="sub" href="/agents" style={{ padding: '6px 10px', marginBottom: 2 }}>
+          <span className="nm">Agent quality</span>
+          <span className="ct">L13</span>
+        </Link>
         <Link className="sub" href="/system" style={{ padding: '6px 10px', marginBottom: 6 }}>
           <span className="nm">System &amp; seams</span>
           <span className="ct">L1</span>

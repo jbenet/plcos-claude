@@ -897,3 +897,94 @@ fill it.
 
 Agents (L13) — the work envelope, run pinning, the regression harness, idempotent
 acceptance keys, the trust circuit breaker, and the no-unsolicited grant gate.
+
+---
+
+## L13 — The agent runtime, the protected eval set, and the grants gate
+
+**Shipped.** Module 20 and the agent runtime. **The L-series is complete: L1 through L13.**
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Agent runtime](docs/changelog/shots/l13/01-agent-runtime.png) | **Work envelopes, runs with their pins, refused tool calls, and the protected eval set** — every case traced to a real failure from an earlier stage. |
+| ![Grants gate](docs/changelog/shots/l13/02-grants-gate.png) | **The no-unsolicited gate.** Two funders blocked because no invitation exists, one permitted because a programme officer asked us to submit on 5 September. |
+
+### The authorization unit is the run
+
+`agents.envelope` carries the nine fields from CLAUDE.md, and `createEnvelope` enforces the
+one rule that is easy to write and easy to lose:
+
+> *Delegation cannot increase permission. The child asks for commands the parent does not
+> have (content.send). Nothing was created.*
+
+Checked rather than documented, because "the child inherits the parent's scope" stays true
+until somebody adds one convenient exception.
+
+Every tool call is checked against the envelope **and recorded, including the refusals**.
+A log containing only what was permitted answers no question anybody actually asks.
+
+### Runs are pinned
+
+`config_hash`, `config_snapshot`, `input_hash`, `prompt_hash` — written before the agent is
+asked for anything. Editing a prompt changes what new runs do and changes nothing about
+what old ones meant. The whole config object goes into the row, so a run made under a
+12-hour correction budget still says 12 after somebody changes it to 8.
+
+### Acceptance is a human act, and it is idempotent
+
+`acceptRun` takes an `app_user` id — the agent does not have one — and an idempotency key
+with a unique index behind it. The second click returns `alreadyAccepted` and writes
+nothing. That is a property test now, not a button-state promise.
+
+### The harness reports "not run", not green
+
+There is no API key, so the stub agent refuses every eval case and the harness records
+*not run* against the prompt hash. **A harness that passes because it could not execute is
+worse than no harness.**
+
+The six protected cases are all drawn from real failures found while building L1–L12, and
+each one names the stage:
+
+| Case | From |
+|---|---|
+| refuses a claim with no provenance | L2 |
+| does not upgrade co-attendance into a relationship | L4 — the planner was promoting a reviewed tier-D edge |
+| never blends soft into hard | L6 — **my own first draft** summed convertible soft across four vehicles |
+| refuses a send the wrap matrix blocks | L12 |
+| does not claim a rung the evidence does not support | L11 |
+| blocks unsolicited grants-rail outreach | L13 |
+
+A fixed set overfits, so they are added from things that went wrong rather than invented.
+
+### The circuit breaker measures rather than senses
+
+`agents.correction` records minutes spent fixing agent output, recorded by the people doing
+the correcting. Over `config.agents.correctionBudgetHoursPerWeek`, no new top-level
+envelope may be created — existing runs still work, and a child envelope narrowing an
+existing one is still allowed. The freeze stops new autonomy, not all work.
+
+### The grants gate is the fifth guard, and it is not overridable
+
+`no_unsolicited_grant` joins the four from L3. Like non-circumvention, it takes no override
+reason: it is somebody else's decision, not our policy. An entity with no funder record at
+all is refused for the same reason — permitted-by-omission is how an unsolicited approach
+happens.
+
+An invitation is a reference, a date and a name. An encouraging conversation at a
+conference is not one, and that distinction is the entire rule.
+
+`npm run props` finishes at **29 of 29**.
+
+### Where I disagreed
+
+**`lib/agent/claude.ts` still refuses even with a key present, and I left it that way.**
+The seam resolves to the real agent when `ANTHROPIC_API_KEY` is set, and that
+implementation returns `refused` with a sentence explaining that the envelope policy check,
+run pinning and the regression harness are what make a run auditable. Those now exist —
+`checkToolCall`, `runInEnvelope` and `runEvals` — so the refusal could be lifted. I did not
+lift it, because wiring a live model would mean choosing a prompt, and a prompt that has
+never passed a single protected case should not be the one that ships. The harness needs to
+go green against a real runtime before that file stops refusing, and that is a decision
+with a cost attached rather than a line of code.

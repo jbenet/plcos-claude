@@ -17,6 +17,7 @@ export const RULE_LABEL: Record<GuardBlock['rule'], string> = {
   connector_load: 'Connector load',
   cross_vehicle_conflict: 'Cross-vehicle',
   non_circumvention: 'Non-circumvention',
+  no_unsolicited_grant: 'No unsolicited grant',
 };
 
 export interface Ask {
@@ -74,7 +75,12 @@ export interface Restriction {
 
 /** One block per rule that refused, each carrying what it looked at. */
 export interface GuardBlock {
-  rule: 'relationship_frequency' | 'connector_load' | 'cross_vehicle_conflict' | 'non_circumvention';
+  rule:
+    | 'relationship_frequency'
+    | 'connector_load'
+    | 'cross_vehicle_conflict'
+    | 'non_circumvention'
+    | 'no_unsolicited_grant';
   message: string;
   evidence: string;
   /** A conflict opens a case; the others simply refuse. */

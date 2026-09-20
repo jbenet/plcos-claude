@@ -23,6 +23,27 @@ export async function evaluateGuards(
   const blocks: GuardBlock[] = [];
   const since = quarterAgo();
 
+  // Rule 12. "Sourced, not applied for" is a state machine guard, not advice.
+  const db = q ?? (await getDb());
+  const vehicle = await db.one<{ kind: string; name: string }>(
+    'select kind::text as kind, name from platform.vehicle where id = $1',
+    [args.vehicleId],
+  );
+  if (vehicle?.kind === 'grant_rail') {
+    const { grantGate } = await import('@/modules/grants');
+    const gate = await grantGate(args.entityId, q);
+    if (gate.blocked) {
+      blocks.push({
+        rule: 'no_unsolicited_grant',
+        message: gate.reason ?? 'Grants-rail outreach is blocked.',
+        evidence:
+          'An invitation is a record with a reference and a date. Until one exists, the rail ' +
+          'refuses the approach regardless of how the last conversation went.',
+        opensCase: false,
+      });
+    }
+  }
+
   const priorToTarget = await asksToEntitySince(args.entityId, since, q);
   if (priorToTarget.length >= config.guard.asksPerRelationshipPerQuarter) {
     const last = priorToTarget[0]!;
@@ -209,17 +230,21 @@ export async function makeAsk(
     // The conflict that this ask itself created is not a reason to refuse it.
     const blocking = guard.blocks.filter((b) => !b.opensCase);
 
-    // Rule 8 is not overridable. A do-not-approach instruction changes the plan; there is
-    // no reason string that turns it into a permission.
-    const absolute = blocking.filter((b) => b.rule === 'non_circumvention');
+    // Rule 8 and rule 12 are not overridable. A do-not-approach instruction and a missing
+    // funder invitation are both somebody else's decision, not our policy.
+    const absolute = blocking.filter(
+      (b) => b.rule === 'non_circumvention' || b.rule === 'no_unsolicited_grant',
+    );
     if (absolute.length > 0) {
       throw new Error(
-        `Refused: ${absolute[0]!.message} This restriction cannot be overridden — it is the ` +
-        'target\u2019s instruction, not our policy.',
+        `Refused: ${absolute[0]!.message} This cannot be overridden — it is somebody else's ` +
+        'decision, not our policy.',
       );
     }
 
-    const overridable = blocking.filter((b) => b.rule !== 'non_circumvention');
+    const overridable = blocking.filter(
+      (b) => b.rule !== 'non_circumvention' && b.rule !== 'no_unsolicited_grant',
+    );
     if (overridable.length > 0 && !override?.reason) {
       throw new Error(
         `The ask was approved but a guard now refuses it: ${overridable[0]!.message} ` +
