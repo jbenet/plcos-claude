@@ -224,6 +224,19 @@ async function main() {
     `${unsubstantiated[0]!.n} unsubstantiated claims in use`,
   );
 
+  const disagreeing = await db.query<{ n: string }>(
+    `select count(*)::text as n
+       from close.pack_item p
+       join close.cycle c on c.cycle_id = p.cycle_id
+       join pipeline.exposure x on x.entity_id = p.entity_id and x.vehicle_id = c.vehicle_id
+      where (p.status = 'countersigned') <> (x.track = 'hard')`,
+  );
+  check(
+    'The pack and the exposure never disagree about a countersignature',
+    Number(disagreeing[0]!.n) === 0,
+    `${disagreeing[0]!.n} rows where the paperwork and the headline tell different stories`,
+  );
+
   const unpinnedRuns = await db.query<{ n: string }>(
     `select count(*)::text as n from agents.run
       where config_hash is null or input_hash is null or prompt_hash is null
@@ -365,11 +378,17 @@ async function main() {
 
     const moved = Math.round((after.hard - before.hard) / 1e6);
     const dropped = Math.round((before.soft - after.soft) / 1e6);
+    const pack = await d.one<{ status: string }>(
+      `select p.status::text as status from close.pack_item p
+         join identity.entity e on e.entity_id = p.entity_id
+        where e.display_name = 'Cedar Trust'`,
+    );
     check(
       'Variation — approve the MONEY ticket',
-      moved === 4 && dropped === 4 && after.cash === before.cash,
+      moved === 4 && dropped === 4 && after.cash === before.cash && pack?.status === 'countersigned',
       `hard +$${moved}M, soft -$${dropped}M, cash unchanged at $${Math.round(after.cash / 1e6)}M ` +
-      '(an accepted commitment is not a wire)',
+      `(an accepted commitment is not a wire), and the subscription pack moved to ${pack?.status} ` +
+      'in the same transaction',
     );
     await d.close();
   }

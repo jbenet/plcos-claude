@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getDb, type Queryable } from '@/lib/db';
 import { listPeriods } from '@/modules/calendar';
 import type {
   BandwidthAlert, Condition, ConditionStatus, Cycle, PackItem, PackStatus, SpvRoom, SpvSeat, SpvStage,
@@ -207,4 +207,32 @@ export async function bandwidthAlerts(): Promise<BandwidthAlert[]> {
         'budget are both finite — see the conserved capital pool.',
     })),
   ];
+}
+
+/**
+ * Record the countersignature on the subscription pack.
+ *
+ * `close.pack_item.countersigned_at` and `pipeline.exposure.hardened_at` describe the same
+ * real-world event — a document coming back signed by both sides. They answer different
+ * questions (*where is the paperwork* versus *what may appear in a headline*), so both
+ * tables keep the fact; what they must not do is disagree. This is the one writer, called
+ * from `pipeline.harden` under the same MONEY ticket.
+ */
+export async function syncCountersignature(
+  entityId: string, vehicleId: string, at: Date, q?: Queryable,
+): Promise<number> {
+  const db = q ?? (await getDb());
+  const rows = await db.query<{ item_id: string }>(
+    `update close.pack_item p
+        set status = 'countersigned', countersigned_at = $3,
+            returned_at = coalesce(p.returned_at, $3)
+      from close.cycle c
+      where c.cycle_id = p.cycle_id
+        and c.vehicle_id = $2
+        and p.entity_id = $1
+        and p.status <> 'countersigned'
+      returning p.item_id`,
+    [entityId, vehicleId, at],
+  );
+  return rows.length;
 }

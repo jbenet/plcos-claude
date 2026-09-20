@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/db';
 import { openTicket, requireApprovedTicket } from '@/modules/governance';
 import { accreditationGate } from '@/modules/compliance';
+import { syncCountersignature } from '@/modules/close';
 import { getExposure } from './repo';
 
 /**
@@ -77,19 +78,24 @@ export async function harden(
       );
     }
 
+    const now = new Date();
     await tx.query(
       `update pipeline.exposure
           set track = 'hard', probability = null, evidence_ref = $2,
-              hardened_at = now(), hardened_ticket = $3
+              hardened_at = $4, hardened_ticket = $3
         where exposure_id = $1`,
-      [args.exposureId, args.evidenceRef, args.ticketId],
+      [args.exposureId, args.evidenceRef, args.ticketId, now],
     );
+    // One event, two tables, one writer. The pack and the exposure record the same
+    // countersignature and must not be able to disagree about it.
+    const synced = await syncCountersignature(exposure.entityId, exposure.vehicleId, now, tx);
+
     await tx.query(
       `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
        values ($1, 'exposure.hardened', 'exposure', $2, $3)`,
       [actorId, args.exposureId, JSON.stringify({
         entity: exposure.entityName, vehicle: exposure.vehicleName,
-        amount: exposure.amount, evidence: args.evidenceRef,
+        amount: exposure.amount, evidence: args.evidenceRef, packItemsSynced: synced,
       })],
     );
   });
