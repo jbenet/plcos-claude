@@ -1,4 +1,5 @@
 import { harden } from '@/modules/pipeline';
+import { recordSend } from '@/modules/content';
 import { recordAdvance, type LadderRung } from '@/modules/strategy';
 import type { ApprovalTicket } from '@/modules/governance';
 
@@ -35,6 +36,10 @@ export async function applyApprovedTicket(
         occurredAt: new Date(),
       });
       return { ran: 'strategy.recordAdvance' };
+    }
+    case 'content.recordSend': {
+      await recordSend(actorId, String(apply.args['sendId']), ticket.id);
+      return { ran: 'content.recordSend' };
     }
     default:
       throw new Error(

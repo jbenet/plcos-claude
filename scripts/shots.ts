@@ -160,6 +160,30 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '01-close-room', path: '/close', fullPage: true },
     { name: '02-spv-war-room', path: '/spv', fullPage: true },
   ],
+  L12: [
+    { name: '01-content-studio', path: '/content', fullPage: true },
+    {
+      name: '02-wrap-refusal',
+      path: '/materials',
+      fullPage: true,
+      prepare: async (page) => {
+        const assetValue = await page
+          .locator('select[name="assetId"] option', { hasText: 'Neurotech primer v4 ·' })
+          .first()
+          .getAttribute('value');
+        await page.locator('select[name="assetId"]').selectOption(assetValue!);
+        const vehicleValue = await page
+          .locator('select[name="vehicleId"] option', { hasText: 'SPV — Halo' })
+          .first()
+          .getAttribute('value');
+        await page.locator('select[name="vehicleId"]').selectOption(vehicleValue!);
+        await page.locator('select[name="instrument"]').selectOption('spv');
+        await page.getByRole('button', { name: /Check and request/ }).click();
+        await page.waitForTimeout(1200);
+      },
+    },
+    { name: '03-performance', path: '/performance' },
+  ],
   L11: [
     { name: '01-prep-brief', path: '/meetings', fullPage: true },
     { name: '02-decision-room', path: '/decisions', fullPage: true },

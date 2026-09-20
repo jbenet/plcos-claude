@@ -826,3 +826,74 @@ keeping both half-maintained.
 ### Still not built
 
 Materials (L12) and agents (L13).
+
+---
+
+## L12 — Materials, audience variants, and the wrong-wrap gate
+
+**Shipped.** Modules 14, 15 and 16. One canonical asset with five audience variants,
+lineage invalidation on a changed claim, the wrong-wrap matrix checked before any approval
+is requested, and a performance page whose main job is to say what cannot be measured.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Content studio](docs/changelog/shots/l12/01-content-studio.png) | **`AudienceVariants`.** One canonical asset, five variants side by side, each showing its permitted use and the claims it rests on. |
+| ![Wrap refusal](docs/changelog/shots/l12/02-wrap-refusal.png) | **The gate refusing a send.** The public primer for the 506(b) SPV: two reasons, no ticket opened, and the refusal kept on the record. |
+| ![Performance](docs/changelog/shots/l12/03-performance.png) | **Content performance.** There is no view data, so there are no view metrics — and the ladder is offered as the only attribution this system trusts. |
+
+### The refusal comes before the approval
+
+`requestSend` runs the wrap check *first*. If it fails, a `content.send` row is written
+with status `refused` and the reasons, and **no ticket is opened**. An approval queue full
+of things that may not legally be sent trains people to approve without reading.
+
+The seeded case is the one that matters: the Neurotech primer is genuinely approved and
+genuinely good, and sending it on behalf of the 506(b) Halo SPV would be general
+solicitation. Two rules fail — audience and permitted use — and **both are reported**,
+because fixing one at a time is two round trips.
+
+The matrix is a closed set. A combination no rule covers is refused rather than assumed
+fine; an uncovered case is a gap in the rules, and guessing at it is how an exemption gets
+broken for a whole raise.
+
+### `wrong-wrap sends = 0` is now measurable
+
+Refusals are kept, not discarded. That is what makes the zero checkable rather than an
+assumption, and it is now a property test alongside "a refused send never gets a ticket".
+
+### Lineage, not staleness
+
+`content.claim_ref` records what each asset rests on. `invalidateForClaim` flags every
+asset resting on a changed claim **and their derivatives**, transitively, and a flagged
+asset cannot be sent. A deck goes wrong because a fact underneath it changed, not because
+ninety days passed.
+
+Both are property tests now:
+
+```
+  ok   Variation — public primer for the 506(b) SPV
+       refused with 2 reasons and no ticket opened — audience and permitted-use both fail
+  ok   Variation — a claim changes underneath an approved asset
+       6 assets flagged transitively, and the send is refused
+```
+
+`npm run props` is at **24 of 24**.
+
+### Where I disagreed
+
+**Module 15 barely deserves a page, and I built it as an argument rather than a dashboard.**
+There is no view data and there will not be until DocSend arrives — forward-only through a
+Zapier webhook, no backfill, no signature. A chart of sends-per-week would look like content
+performance and measure nothing. So the page states what is known, what is not, and offers
+the consent ladder as the only attribution the system trusts: a rung was reached, and a
+specific piece of evidence justified it. Nothing claims a document caused it.
+
+If that reads as a page not worth having, the right response is to delete it rather than
+fill it.
+
+### Still not built
+
+Agents (L13) — the work envelope, run pinning, the regression harness, idempotent
+acceptance keys, the trust circuit breaker, and the no-unsolicited grant gate.

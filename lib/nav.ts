@@ -55,9 +55,9 @@ export const SECTIONS: NavSection[] = [
     title: 'Create & substantiate',
     range: '13–17',
     modules: [
-      m('14', 'Content studio', 'content', 'L12', 'Canonical asset plus audience variants; a changed claim invalidates its derivatives.'),
-      m('15', 'Content performance', 'performance', 'L12', 'Attribution honest about its limits. Views are not commitment, and the UI says so.'),
-      m('16', 'Materials & send gate', 'materials', 'L12', 'SEND approval ticket; wrong-wrap matrix; staleness. Wrong-wrap sends = 0 is a hard KPI.'),
+      m('14', 'Content studio', 'content', 'L12', 'Canonical asset plus audience variants; a changed claim invalidates its derivatives.', true),
+      m('15', 'Content performance', 'performance', 'L12', 'Attribution honest about its limits. Views are not commitment, and the UI says so.', true),
+      m('16', 'Materials & send gate', 'materials', 'L12', 'SEND approval ticket; wrong-wrap matrix; staleness. Wrong-wrap sends = 0 is a hard KPI.', true),
     ],
   },
   {

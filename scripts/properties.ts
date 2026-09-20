@@ -178,6 +178,22 @@ async function main() {
     `${badWeights[0]!.n} malformed sets`,
   );
 
+  const { wrongWrapSends } = await import('../modules/content');
+  check(
+    'Wrong-wrap sends = 0',
+    (await wrongWrapSends()) === 0,
+    'nothing has been sent under a wrap that refused it',
+  );
+
+  const ticketedRefusals = await db.query<{ n: string }>(
+    "select count(*)::text as n from content.send where status = 'refused' and ticket_id is not null",
+  );
+  check(
+    'A refused send never gets an approval ticket',
+    Number(ticketedRefusals[0]!.n) === 0,
+    `${ticketedRefusals[0]!.n} refused sends with a ticket`,
+  );
+
   const looseRestrictions = await db.query<{ n: string }>(
     `select count(*)::text as n from coordination.restriction
       where scope = 'connector' and connector_id is null`,
@@ -328,6 +344,63 @@ async function main() {
       (after.score ?? 1) < (before.score ?? 0),
       `Roos Foundation ${before.score?.toFixed(2)} → ${after.score?.toFixed(2)}; its weakest ` +
       'dimension is propensity (no LP positions in seven years), so raising that weight has to lower it',
+    );
+    await d.close();
+  }
+
+  // The wrap matrix, end to end: a genuinely approved public primer, refused for a 506(b)
+  // vehicle before any approval is requested.
+  {
+    const d = await freshDb();
+    const { requestSend } = await import('../modules/content');
+    const asset = (await d.one<{ asset_id: string }>(
+      "select asset_id from content.asset where title = 'Neurotech primer v4'",
+    ))!;
+    const halo = (await d.one<{ id: string }>("select id from platform.vehicle where slug = 'spv-halo'"))!;
+    const target = (await d.one<{ entity_id: string }>(
+      "select entity_id from identity.entity where display_name = 'Kaplan Family Trust'",
+    ))!;
+    const juan = (await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'"))!;
+
+    const out = await requestSend(juan.id, {
+      assetId: asset.asset_id, entityId: target.entity_id, vehicleId: halo.id, instrument: 'spv',
+    });
+    check(
+      'Variation — public primer for the 506(b) SPV',
+      !out.check.allowed && out.ticketId === null && out.check.refusals.length === 2,
+      `refused with ${out.check.refusals.length} reasons and no ticket opened — audience and ` +
+      'permitted-use both fail, and both are reported',
+    );
+    await d.close();
+  }
+
+  // Lineage: superseding a claim flags every derivative, and a flagged asset cannot be sent.
+  {
+    const d = await freshDb();
+    const { invalidateForClaim, requestSend } = await import('../modules/content');
+    const claim = (await d.one<{ claim_id: string }>(
+      `select c.claim_id from research.claim c join content.claim_ref r on r.claim_id = c.claim_id
+        limit 1`,
+    ))!;
+    const flagged = await invalidateForClaim(claim.claim_id, 'The cheque band changed after a call with the trustee.');
+
+    const asset = (await d.one<{ asset_id: string }>(
+      "select asset_id from content.asset where title = 'Neurotech primer v4'",
+    ))!;
+    const neuro = (await d.one<{ id: string }>("select id from platform.vehicle where slug = 'neurotech'"))!;
+    const target = (await d.one<{ entity_id: string }>(
+      "select entity_id from identity.entity where display_name = 'Kaplan Family Trust'",
+    ))!;
+    const juan = (await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'"))!;
+    const out = await requestSend(juan.id, {
+      assetId: asset.asset_id, entityId: target.entity_id, vehicleId: neuro.id, instrument: 'lp_commitment',
+    });
+
+    check(
+      'Variation — a claim changes underneath an approved asset',
+      flagged > 1 && !out.check.allowed,
+      `${flagged} assets flagged transitively, and the send is refused: a deck goes wrong ` +
+      'because a fact changed, not because time passed',
     );
     await d.close();
   }
