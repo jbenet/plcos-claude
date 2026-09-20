@@ -47,8 +47,8 @@ export const SECTIONS: NavSection[] = [
       m('07', 'Ask coordination', 'asks', 'L3', 'One owner per relationship; frequency guard; ConflictCase with a dated follow-up for the loser.', true),
       m('08', 'Soft → Hard', 'soft-hard', 'L6', 'Two separate tracks. Convertible soft is shown and never added to hard.', true),
       m('09', 'Vehicle status', 'vehicles', 'L6', 'Per-vehicle pipeline, velocity, and how the bottleneck moved.', true),
-      m('10', 'Decision room', 'decisions', 'L11', 'Diligence questions, objections, conditions, evidence, decision timeline.'),
-      m('11', 'Meetings', 'meetings', 'L11', 'Prep brief, objection tagging, and the consent-ladder step a reply actually justifies.'),
+      m('10', 'Decision room', 'decisions', 'L11', 'Diligence questions, objections, conditions, evidence, decision timeline.', true),
+      m('11', 'Meetings', 'meetings', 'L11', 'Prep brief, objection tagging, and the consent-ladder step a reply actually justifies.', true),
     ],
   },
   {

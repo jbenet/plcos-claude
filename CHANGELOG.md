@@ -761,3 +761,68 @@ exists would be a room full of invented change detection.
 ### Still not built
 
 Meetings and the decision room (L11), materials (L12), agents (L13).
+
+---
+
+## L11 — Meetings and the decision room
+
+**Shipped.** Modules 10 and 11, sharing a schema because they read the same material two
+ways: *what is still unanswered*, and *what happened and what does it entitle us to claim*.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Prep brief](docs/changelog/shots/l11/01-prep-brief.png) | **The prep brief for Northwood Capital, with zero supported claims.** Both claims on file are low-confidence and unverified, so the brief refuses both and says so by name. |
+| ![Decision room](docs/changelog/shots/l11/02-decision-room.png) | **The decision room.** Objections tagged into eight closed classes, diligence questions with owners and dates, the evidence gap stated as a number, and the decision timeline merging ladder events with meetings. |
+
+### The brief that says nothing
+
+This is the screenshot to look at. `prepBrief()` builds `supported` and `refused` by
+construction: a claim reaches the brief only with a source, an as-of date and a confidence,
+and a low-confidence claim nobody has verified is refused with its reason.
+
+For Northwood, that leaves **nothing**. Its two claims are `$1.4B across nine families`
+(from S11 — a 2021 CSV of unknown provenance) and an emerging-manager programme note, both
+low confidence, neither verified. So the brief is empty, and it explains why:
+
+> *Every claim on file fails the provenance test, so the brief has no content rather than
+> thin content. Walking into a meeting knowing that is very different from walking in with
+> two sentences that sound like facts.*
+
+The refused rows are listed rather than omitted, because a brief with its gaps quietly
+removed reads as complete.
+
+### What a meeting justifies
+
+Every held meeting carries `justifies_rung` and a sentence:
+
+> *A meeting happened. Asking for a DDQ pack is process interest, not an indication — so
+> this justifies meeting held and nothing above it.*
+
+Which is the same judgement the seeded `STAGE` ticket is asking you to override. The prep
+brief shows the next rung and what it would require, and hands you to the ladder rather
+than advancing anything itself.
+
+### Objections are a closed set
+
+Eight classes: team, thesis, track record, terms, timing, structure, liquidity, governance.
+A free-text objection cannot be counted, and an objection you cannot count is one you will
+keep answering from scratch. The tally in the inspector shows raised versus answered per
+class, across every target.
+
+`answer_source` is required in spirit and shown wherever an answer is: an answer with no
+source is an assertion.
+
+### Where I disagreed
+
+**The decision room and the target workspace overlap, and I think that is correct.** Both
+show open questions for a target. The workspace answers *should we pursue this and how*;
+the decision room answers *what is stopping this from closing*. They are different
+questions at different moments, and merging them would produce one screen that is bad at
+both. But it is duplication, and if you only ever use one, delete the other rather than
+keeping both half-maintained.
+
+### Still not built
+
+Materials (L12) and agents (L13).

@@ -63,9 +63,11 @@ export async function seed(db: Db): Promise<Record<string, number>> {
   // the code path a real source will use.
   const { ingestSignals } = await import('@/modules/signals');
   const signals = await ingestSignals();
+  const { seedMeetings } = await import('./seed-meetings');
+  const meetings = await seedMeetings(db);
   return {
     users: users.length, vehicles: vehicles.length, sources: sources.length,
-    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring, signals: signals.inserted,
+    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring, signals: signals.inserted, ...meetings,
   };
 }
 
