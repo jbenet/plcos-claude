@@ -1,0 +1,15 @@
+[
+  { "entity": "roos-fdn", "field": "Mandate",        "value": "Neurodegeneration and longevity biology", "source": "S02", "as_of": "2026-09-14", "confidence": "high",   "verified_by": "ines" },
+  { "entity": "roos-fdn", "field": "Instruments used","value": "Grant, recoverable grant, PRI",          "source": "S02", "as_of": "2026-09-14", "confidence": "high",   "verified_by": "ines" },
+  { "entity": "roos-fdn", "field": "LP positions",   "value": "None in the seven-year export",            "source": "S02", "as_of": "2026-09-14", "confidence": "high",   "verified_by": "ines" },
+  { "entity": "roos-fdn", "field": "Last deployed",  "value": "June 2026 · $3.2M recoverable grant",      "source": "S06", "as_of": "2026-06-18", "confidence": "high",   "verified_by": "ines" },
+  { "entity": "roos",     "field": "Decision role",  "value": "Sole trustee, signs alone",                "source": "S01", "as_of": "2026-09-12", "confidence": "medium", "verified_by": "ines" },
+  { "entity": "roos",     "field": "Cheque band",    "value": "$2–5M for a new relationship",             "source": "S03", "as_of": "2026-08-30", "confidence": "medium", "verified_by": null },
+  { "entity": "roos",     "field": "Co-funder rule", "value": "Will not be first money without a known co-funder", "source": "S03", "as_of": "2026-08-30", "confidence": "medium", "verified_by": null },
+  { "entity": "roos",     "field": "Approach restriction", "value": "Not to be introduced through Jonah Hale", "source": "S05", "as_of": "2026-09-08", "confidence": "high", "verified_by": "juan" },
+  { "entity": "northwood","field": "Assets",         "value": "$1.4B across 9 families",                  "source": "S11", "as_of": "2021-06-01", "confidence": "low",    "verified_by": null },
+  { "entity": "northwood","field": "Emerging manager programme", "value": "Active; 3–5 new managers a year", "source": "S02", "as_of": "2026-09-14", "confidence": "low", "verified_by": null },
+  { "entity": "cedar",    "field": "Gatekeeper",     "value": "Mercer & Bly screens managers first",      "source": "S09", "as_of": "2023-12-31", "confidence": "medium", "verified_by": "mara" },
+  { "entity": "okonjo-fo","field": "Interest since", "value": "Neuro interest dates from 2024",           "source": "S07", "as_of": "2024-11-05", "confidence": "low",    "verified_by": null },
+  { "entity": "halvorsen","field": "Invitation status", "value": "No funder invitation on file",          "source": "S01", "as_of": "2026-09-12", "confidence": "high",   "verified_by": "tomas" }
+]

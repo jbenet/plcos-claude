@@ -112,3 +112,68 @@ npm run check        # tsc --noEmit
 npm run boundaries   # the two structural rules above
 npm run shots -- L1  # changelog screenshots, against a running dev server
 ```
+
+---
+
+## L2 — Entities, provenance, and the corpus
+
+**Shipped.** Two new modules with their own Postgres schemas — `identity` and `research` —
+and the first real screen: module 01, Research & enrichment.
+
+Every externally-sourced field now carries the provenance tuple, and the UI cannot render
+one without it: `ProvenanceLine` returns a **Source unavailable** state rather than a bare
+value when the tuple is incomplete, so forgetting is not an option a caller has.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Research](docs/changelog/shots/l2/01-research.png) | **Research & enrichment.** Fourteen entities, thirteen claims. The two counts that matter are *unverified* and *weakly supported* — both are the kind of number a system normally hides. |
+| ![Dossier](docs/changelog/shots/l2/02-dossier.png) | **A dossier.** Every claim shows source, as-of, confidence and who verified it, in that order, on the same line as the value. Open questions sit beside it, not buried in it. |
+| ![EvidenceRef](docs/changelog/shots/l2/03-evidence-ref.png) | **`EvidenceRef`.** The popover states *what the document can support* — not just where it came from. That sentence is what stops a conference attendee list from becoming a relationship. |
+| ![Corpus](docs/changelog/shots/l2/04-corpus.png) | **The corpus.** Eleven source documents, each labelled strong, moderate or weak, each with its own "supports" line. |
+
+### What landed
+
+- **`identity.entity` / `source_record` / `match_assertion`.** Surrogate ids minted once,
+  merges redirect via `merged_into`, ids are never reused, and `getEntity` follows the
+  redirect so every foreign key keeps working. Human match assertions are a separate table
+  because they must survive a re-run of any probabilistic model.
+- **`research.claim` with the provenance tuple** and `superseded_by` rather than update, so
+  what we used to believe stays legible.
+- **`research.source_doc`** with a `strength` and, more importantly, a `supports` column:
+  one sentence per document saying what it can and cannot establish. Three of the eleven
+  are weak on purpose — a co-attendance list, a public follow, and a CSV of unknown
+  provenance — because a corpus with no weak evidence in it tests nothing.
+- **`research.note` with the promotion rule** written down in `modules/research/README.md`.
+  Open questions live there today with `kind = 'open_question'` and have not earned columns.
+- **`read_cache` versus `snapshot`,** separate tables named by *why the copy exists*. One
+  row of each is seeded so the distinction is visible in the UI rather than only in prose.
+- **Three components that carry a discipline:** `EvidenceRef`, `ProvenanceLine` /
+  `ConfidenceWord` (plain-language status, never a numeric confidence rendered as fact),
+  and `Coverage`, which states the corpus and date range inspected and names what was not.
+
+### The fixture set
+
+`fixtures/source-docs.json` is the `S01`–`S11` set from v4's target-pursuit example,
+rewritten for this domain. It includes the two cases the whole design exists for:
+
+- **S05** — a do-not-approach instruction attached to Delia Roos. It is stored as a claim
+  on the *target*, not as a note on one edge, which is what makes L4's non-circumvention
+  check possible rather than aspirational.
+- **S07/S08** — co-attendance and a mutual public follow, which the route planner at L4
+  must refuse to treat as a relationship.
+
+### Where I disagreed
+
+**The seed name `Mara Okonjo` collided with the fixture universe.** `design/S2` uses
+"M. Okonjo" as a connector and "Okonjo Family Office" as a target, while the staff list had
+a Mara Okonjo on our side. One of those has to give or the conflict-adjudication screens at
+L3 will read as a person conflicting with themselves. Our team member is now **Mara Vance**;
+Michael Okonjo and the Okonjo Family Office are external.
+
+### Still not built
+
+No routes, no scores, no asks, no tickets. The restriction in S05 is *recorded* and
+*displayed*; nothing enforces it yet, and the dossier says so in as many words rather than
+implying a guard that does not exist.

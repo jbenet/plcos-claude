@@ -34,7 +34,7 @@ export const SECTIONS: NavSection[] = [
     title: 'Discover & qualify',
     range: '01–06',
     modules: [
-      m('01', 'Research & enrichment', 'research', 'L2', 'Universe assembly; provenance tuple on every field; refusal to claim without one.'),
+      m('01', 'Research & enrichment', 'research', 'L2', 'Universe assembly; provenance tuple on every field; refusal to claim without one.', true),
       m('03', 'Selection', 'selection', 'L9', 'The capacity/affinity/propensity rubric, with weights visible and editable.'),
       m('04', 'Conversion strategy', 'targets', 'L5', 'The per-target workspace; consent ladder; coverage disclosure.'),
       m('05', 'Warm intro routes', 'routes', 'L4', 'Route ranking by connector credibility; A–D evidence tiers, human review on C and D; non-circumvention.'),

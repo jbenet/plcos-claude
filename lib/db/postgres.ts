@@ -24,7 +24,9 @@ interface PgModule {
 }
 
 export async function openPostgres(url: string): Promise<Db> {
-  const specifier = 'pg';
+  // Opaque on purpose. `pg` is not a dependency until D0, and a literal here makes the
+  // bundler warn about a module it is never supposed to find.
+  const specifier = ['p', 'g'].join('');
   let mod: PgModule;
   try {
     const loaded = (await import(/* @vite-ignore */ specifier)) as { default?: PgModule; Pool?: PgModule['Pool'] };

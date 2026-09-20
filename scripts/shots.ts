@@ -38,7 +38,29 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '05-issue-detail', path: '/issues/0001' },
     { name: '06-system-seams', path: '/system' },
   ],
+  L2: [
+    { name: '01-research', path: '/research' },
+    { name: '02-dossier', path: '/research/__ROOS__' },
+    {
+      name: '03-evidence-ref',
+      path: '/research/__ROOS__',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Source S05/ }).first().hover();
+        await page.waitForTimeout(250);
+      },
+    },
+    { name: '04-corpus', path: '/research/sources' },
+  ],
 };
+
+/** The seed mints uuids, so a fixed link is resolved at shot time. */
+async function resolveTokens(page: Page, base: string, path: string): Promise<string> {
+  if (!path.includes('__ROOS__')) return path;
+  await page.goto(base + '/research', { waitUntil: 'networkidle' });
+  const href = await page.getByRole('link', { name: 'Delia Roos' }).first().getAttribute('href');
+  if (!href) throw new Error('could not resolve the Delia Roos dossier link');
+  return path.replace('/research/__ROOS__', href);
+}
 
 async function main() {
   const version = process.argv[2] ?? 'L1';
@@ -53,7 +75,8 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1440, height: 940 }, deviceScaleFactor: 2 });
 
   for (const shot of shots) {
-    await page.goto(base + shot.path, { waitUntil: 'networkidle' });
+    const path = await resolveTokens(page, base, shot.path);
+    await page.goto(base + path, { waitUntil: 'networkidle' });
     await page.evaluate(() => document.fonts.ready);
     if (shot.prepare) await shot.prepare(page);
     await page.waitForTimeout(150);

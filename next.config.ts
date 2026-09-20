@@ -2,7 +2,7 @@ import type { NextConfig } from 'next';
 
 const config: NextConfig = {
   // PGlite ships a wasm bundle; it must stay outside the bundler and run in Node.
-  serverExternalPackages: ['@electric-sql/pglite'],
+  serverExternalPackages: ['@electric-sql/pglite', 'pg'],
   typedRoutes: false,
   // Next appends its own block to CLAUDE.md otherwise. That file is the handoff for this
   // repo and is not Next's to edit.

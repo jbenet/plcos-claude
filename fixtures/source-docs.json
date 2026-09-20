@@ -1,0 +1,68 @@
+[
+  {
+    "doc_id": "S01", "title": "Roos Foundation staff and governance page", "kind": "public_web",
+    "origin": "roosfoundation.example.org, read by Inés", "as_of": "2026-09-12", "strength": "moderate",
+    "supports": "Who holds which role, and that Roos signs alone. Not what she will fund.",
+    "body": "Governance page lists Delia Roos as sole trustee with signing authority. Two programme staff, no investment committee. Last updated per the page footer: March 2026."
+  },
+  {
+    "doc_id": "S02", "title": "Grants database export, 2019–2026", "kind": "structured_export",
+    "origin": "Public grants database, exported by Inés", "as_of": "2026-09-14", "strength": "strong",
+    "supports": "What the foundation has actually funded, in what instrument, at what size.",
+    "body": "47 grants over seven years. Concentration in neurodegeneration and longevity biology. Instruments used: outright grant (39), recoverable grant (6), programme-related investment (2). No limited-partner positions appear in the export."
+  },
+  {
+    "doc_id": "S03", "title": "Forwarded letter excerpt", "kind": "email_excerpt",
+    "origin": "Forwarded by A. Duettmann to Juan", "as_of": "2026-08-30", "strength": "moderate",
+    "supports": "An indicative cheque band. It is a forwarded excerpt, not a statement to us.",
+    "body": "\"…we have been writing two to five for new relationships, and would not go first-money on anything without a co-funder we know.\" Excerpt only; the surrounding letter was not shared."
+  },
+  {
+    "doc_id": "S04", "title": "Relationship note — Duettmann call", "kind": "relationship_note",
+    "origin": "Juan, after a call", "as_of": "2026-09-14", "strength": "strong",
+    "supports": "That the connector is willing to ask. It supports nothing about the target.",
+    "body": "Duettmann: \"Happy to ask Delia whether she wants an intro.\" Explicitly not a commitment to advocate. She asked to see the primer before sending anything."
+  },
+  {
+    "doc_id": "S05", "title": "Relationship note — do-not-approach", "kind": "relationship_note",
+    "origin": "Mara Vance, from a conversation with Roos' programme lead", "as_of": "2026-09-08", "strength": "strong",
+    "supports": "A restriction on the route, attached to the target. Checked on every candidate path.",
+    "body": "Roos asked Jonah Hale in June not to introduce her to fund managers. The instruction is about being approached at all through that channel, not about Hale personally. It attaches to Roos and must not be routed around by substituting another connector toward the same approach."
+  },
+  {
+    "doc_id": "S06", "title": "Grant announcement, June 2026", "kind": "press",
+    "origin": "Foundation press release", "as_of": "2026-06-18", "strength": "strong",
+    "supports": "That capital was deployed in June and to what. Not what remains uncommitted.",
+    "body": "$3.2M recoverable grant to a translational neuro programme. Announcement names Roos as the decision-maker and describes the instrument as recoverable."
+  },
+  {
+    "doc_id": "S07", "title": "Conference attendee list, 2024 panel", "kind": "attendee_list",
+    "origin": "Event organiser PDF", "as_of": "2024-11-05", "strength": "weak",
+    "supports": "That two people were in the same room. It is a discovery clue, not a relationship.",
+    "body": "Panel roster lists E. Navarro and D. Roos among eleven participants. No indication of interaction."
+  },
+  {
+    "doc_id": "S08", "title": "Public social connection", "kind": "public_web",
+    "origin": "Public profile, observed by Inés", "as_of": "2026-09-15", "strength": "weak",
+    "supports": "A mutual follow. Proves neither acquaintance nor standing to introduce.",
+    "body": "Navarro and Roos follow each other on one public network. No public interaction in the visible history."
+  },
+  {
+    "doc_id": "S09", "title": "Board membership record", "kind": "registry",
+    "origin": "Charity registry extract", "as_of": "2023-12-31", "strength": "moderate",
+    "supports": "A co-membership that ended in 2023. Ageing evidence, not current standing.",
+    "body": "M. Okonjo and D. Roos both served on the board of a research charity until December 2023. Both terms ended at the same meeting."
+  },
+  {
+    "doc_id": "S10", "title": "Counsel note on §4944(c)", "kind": "memo",
+    "origin": "Tomás Reyes, file note", "as_of": "2024-03-11", "strength": "moderate",
+    "supports": "That the question was raised in 2024. It does not support today's position.",
+    "body": "Roos' counsel raised jurisdictional questions about programme-related investment treatment under §4944(c). No resolution recorded. Two years stale."
+  },
+  {
+    "doc_id": "S11", "title": "Co-investor list CSV import", "kind": "csv_import",
+    "origin": "Imported by Sam from a 2021 spreadsheet of unknown provenance", "as_of": "2021-06-01", "strength": "weak",
+    "supports": "Nothing on its own. Flagged because it is the kind of file that quietly becomes a fact.",
+    "body": "312 rows, no column headers describing source or date. Includes Northwood, Cedar and Roos Foundation in a column labelled 'seen'. Nobody can say what 'seen' meant."
+  }
+]
