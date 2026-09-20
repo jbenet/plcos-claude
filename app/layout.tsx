@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { Rail } from '@/components/shell/Rail';
+import { THEME_BOOT } from '@/lib/theme';
 
 export const metadata: Metadata = {
   title: 'Capital OS',
@@ -9,8 +10,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Before first paint. Reading the stored theme in an effect would render the
+            default first and swap, which is a flash of the wrong colour on every load. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link

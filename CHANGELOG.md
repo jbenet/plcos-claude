@@ -1553,3 +1553,70 @@ that hides that is how a rubric turns into a model nobody argues with.
   while the cell stays a label.
 
 **43 of 43 properties hold.** 55 routes return 200 from a genuine cold start.
+
+---
+
+## N6 — A green theme, and preferences of your own
+
+**Shipped.** Two themes, a preferences page separate from Developer → Settings, feedback
+and settings sharing a row in the rail, the grants rail under PL R&D, and the exemption
+moved off the nav and onto the vehicle.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Preferences](docs/changelog/shots/n6/01-preferences.png) | **Preferences.** Theme, the three browser-stored layout preferences named by their keys, and who you are. Configuration lives elsewhere and the page says where. |
+| ![Green theme](docs/changelog/shots/n6/02-green-theme.png) | **Green, applied.** The accent, the ground and the rail move. The four semantic colours do not. |
+| ![Green overview](docs/changelog/shots/n6/03-green-overview.png) | **The vehicle overview in green**, with the exemption banner that replaced the `506(c)` suffix in the rail. Grants rail now sits under PL R&D. |
+| ![Green fit](docs/changelog/shots/n6/04-green-fit.png) | **The fit page in green.** Passing gates are still the semantic green, selection is the accent green, and a blocker is still clay. |
+| ![Grants under R&D](docs/changelog/shots/n6/05-grants-under-rnd.png) | **The grants rail is a vehicle with its own modules**, drawn in the section where the work actually sits. |
+
+### The theme could not be one token
+
+`--clay` was doing two jobs: it was the brand colour *and* it meant refused, blocked,
+needs evidence. Re-pointing it to green would have turned every blocker green, which is
+worse than having no themes.
+
+So the roles are separate tokens now:
+
+```
+--accent   brand, selection, "you are here". This is what a theme changes.
+--clay     refused · blocked · needs evidence.
+--green    passed · hard money.     --amber  needs a look.     --purple  inferred.
+```
+
+**A theme re-points the accent, the ground and the rail. It never re-points the four
+semantic colours.** A palette that meant different things on different themes would be
+worse than one palette, and a reader who learned it on clay would be wrong on green.
+
+The green accent is deliberately brighter than the semantic `--green`, so a selected row
+and a passing gate stay two distinguishable greens — and every state still carries a word
+beside its colour, which is the rule that makes the whole thing safe.
+
+The theme is applied by an inline script in `<head>` before first paint. Read in an effect
+it would render clay first and swap on every navigation.
+
+### Preferences is not Settings
+
+`/settings` holds what a person chooses for themselves. `/dev/settings` holds what the
+system was configured with, including nine constants labelled as guesses. Putting a theme
+picker next to a circuit-breaker threshold would have been a category error, and the kind
+that gets a constant changed by someone who thought they were picking a colour.
+
+Both pages name the three keys in `localStorage` and both can reset them. A preference you
+cannot find is one you cannot undo.
+
+### The rail
+
+Feedback and settings share a row — `✎ Feedback` and a gear — directly above the user.
+
+**The grants rail moved to PL R&D.** It is still a vehicle with its own modules and its own
+gate; it is drawn in the section where its work sits rather than under PL Capital.
+
+**`506(c)` came off the nav rows.** The exemption is not a five-character suffix: it decides
+what may be sent to whom and who must be verified before money is recorded. It is now a
+banner at the top of the vehicle overview that says what it means in a sentence —
+solicitation permitted and verification mandatory for 506(c), no solicitation and a
+pre-existing relationship required for 506(b), invitations rather than subscriptions for
+the grants rail — with links to the send gate and the compliance registry.

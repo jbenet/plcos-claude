@@ -3,8 +3,8 @@
 import { useState } from 'react';
 
 /**
- * The only two preferences this app stores in the browser. They are listed rather than
- * hidden, because a preference you cannot find is one you cannot undo.
+ * Every preference this app stores in the browser, listed rather than hidden — because a
+ * preference you cannot find is one you cannot undo.
  */
 export function PrefsReset() {
   const [done, setDone] = useState(false);
@@ -13,6 +13,7 @@ export function PrefsReset() {
     try {
       window.localStorage.removeItem('capitalos.nav.collapsed');
       window.localStorage.removeItem('capitalos.rightpane');
+      window.localStorage.removeItem('capitalos.theme');
     } catch {
       /* blocked storage — nothing was stored either */
     }
@@ -30,8 +31,12 @@ export function PrefsReset() {
         <span>Right pane open or closed</span>
         <span className="mono" style={{ fontSize: 11 }}>capitalos.rightpane</span>
       </div>
+      <div className="fact">
+        <span>Theme</span>
+        <span className="mono" style={{ fontSize: 11 }}>capitalos.theme</span>
+      </div>
       <button className="btn" onClick={clear} style={{ marginTop: 12 }} disabled={done}>
-        {done ? 'Reset' : 'Reset both to defaults'}
+        {done ? 'Reset' : 'Reset all three to defaults'}
       </button>
       <p className="note" style={{ marginTop: 10 }}>
         Stored in this browser only. They never reach the server, never reach another device, and

@@ -165,6 +165,43 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N6: [
+    { name: '01-preferences', path: '/settings' },
+    {
+      name: '02-green-theme',
+      path: '/settings',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Green/ }).click();
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: '03-green-overview',
+      path: '/settings',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Green/ }).click();
+        await page.waitForTimeout(300);
+        await page.getByRole('button', { name: /PLC Neurotech I/ }).click();
+        await page.waitForTimeout(1500);
+      },
+    },
+    {
+      name: '04-green-fit',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: 'full assessment →' }).nth(2).click();
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    {
+      name: '05-grants-under-rnd',
+      path: '/grants',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Grants rail/ }).click();
+        await page.waitForTimeout(1500);
+      },
+    },
+  ],
   N5: [
     { name: '01-score-and-rank', path: '/neurotech/fit', prepare: async (page) => {
         await page.getByRole('link', { name: 'full assessment →' }).nth(2).click();

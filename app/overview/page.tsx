@@ -102,13 +102,48 @@ export default async function Overview() {
         </>
       }
     >
-      <div className="lbl">{v ? `PL Capital · ${v.exemption}` : 'PL Capital'}</div>
+      <div className="lbl">PL Capital</div>
       <h1>{v ? v.name : 'All vehicles'}</h1>
       <p className="sublede">
         {v
           ? `Everything below is scoped to ${v.name}. The rail carries its modules.`
           : 'Every vehicle side by side, and every module reading across all of them.'}
       </p>
+
+      {v && (
+        <div className="exempt">
+          <div className="ex">
+            <span className="lbl">Exemption</span>
+            <b>{v.exemption}</b>
+          </div>
+          <p>
+            {v.exemption === '506(c)' ? (
+              <>
+                <b>General solicitation is permitted</b> — this vehicle may be discussed publicly.
+                Every investor must be <b>verified</b> as accredited by reasonable steps, and a
+                self-certification never counts, whoever signed it. Verification is a gate on
+                hardening, not a form to file afterwards.
+              </>
+            ) : v.exemption === '506(b)' ? (
+              <>
+                <b>No general solicitation.</b> Nothing public may reference this vehicle, and
+                every investor needs a pre-existing substantive relationship recorded{' '}
+                <i>before</i> the offering conversation. A reasonable belief in accreditation is
+                enough; a public page is not.
+              </>
+            ) : (
+              <>
+                Not a securities offering. The grants rail runs on invitations rather than
+                subscriptions, and outreach is blocked until a funder invitation is on file.
+              </>
+            )}
+          </p>
+          <span className="exrefs">
+            <a href="/materials">Send gate</a>
+            <a href="/compliance">Compliance registry</a>
+          </span>
+        </div>
+      )}
 
       {totalsHere ? (
         <div className="kpis">

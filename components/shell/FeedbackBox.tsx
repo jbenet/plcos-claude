@@ -23,7 +23,7 @@ export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }
       >
         {variant === 'rail' ? (
           <>
-            <span aria-hidden>✎</span> Give feedback
+            <span aria-hidden>✎</span> Feedback
           </>
         ) : (
           'Give feedback'

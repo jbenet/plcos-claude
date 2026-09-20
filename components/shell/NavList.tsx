@@ -5,11 +5,15 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { moduleHref, modulesForKind, STATIC_SECTIONS, type NavSection } from '@/lib/nav';
 
+/**
+ * The rail deliberately does not carry the exemption. 506(b) versus 506(c) decides what
+ * may be sent to whom and who must be verified — it is the first fact on the vehicle's
+ * overview, not a five-character suffix on a nav row.
+ */
 export interface NavVehicle {
   slug: string;
   name: string;
   kind: string;
-  exemption: string;
 }
 
 const STORE_KEY = 'capitalos.nav.collapsed';
@@ -116,6 +120,44 @@ export function NavList({
 
   const capital: NavSection = { id: 'capital', title: 'PL Capital', links: [] };
 
+  /**
+   * The grants rail is a vehicle, but it belongs to PL R&D rather than PL Capital — that
+   * is where the work actually sits. The row behaves identically wherever it is drawn.
+   */
+  const VehicleRow = ({ v }: { v: NavVehicle }) => {
+    const selected = current === v.slug;
+    return (
+      <div>
+        <button
+          className={`sub vehicle${selected ? ' on' : ''}`}
+          onClick={() => selectVehicle(v.slug)}
+        >
+          <span className="nm">{v.name}</span>
+        </button>
+        {selected && (
+          <div className="submods">
+            {modulesForKind(v.kind).map((mod) => {
+              const href = moduleHref(mod, v.slug);
+              return (
+                <Link
+                  key={mod.slug}
+                  href={href}
+                  title={mod.mechanic}
+                  className={`subsub${on(href) ? ' on' : ''}`}
+                >
+                  {mod.title}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const capitalVehicles = vehicles.filter((v) => v.kind !== 'grant_rail');
+  const rndVehicles = vehicles.filter((v) => v.kind === 'grant_rail');
+
   return (
     <div className="nav" data-hydrated={hydrated}>
       <div className="navsec">
@@ -136,37 +178,7 @@ export function NavList({
           <span className="nm">Operations</span>
         </Link>
 
-        {vehicles.map((v) => {
-          const selected = current === v.slug;
-          return (
-            <div key={v.slug}>
-              <button
-                className={`sub vehicle${selected ? ' on' : ''}`}
-                onClick={() => selectVehicle(v.slug)}
-              >
-                <span className="nm">{v.name}</span>
-                <span className="ct">{v.exemption === 'n/a' ? '' : v.exemption}</span>
-              </button>
-              {selected && (
-                <div className="submods">
-                  {modulesForKind(v.kind).map((mod) => {
-                    const href = moduleHref(mod, v.slug);
-                    return (
-                      <Link
-                        key={mod.slug}
-                        href={href}
-                        title={mod.mechanic}
-                        className={`subsub${on(href) ? ' on' : ''}`}
-                      >
-                        {mod.title}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {capitalVehicles.map((v) => <VehicleRow key={v.slug} v={v} />)}
 
         <button
           className={`sub vehicle${current === null ? ' on' : ''}`}
@@ -202,6 +214,7 @@ export function NavList({
               {l.hint && <span className="ct">{l.hint}</span>}
             </Link>
           ))}
+          {section.id === 'rnd' && rndVehicles.map((v) => <VehicleRow key={v.slug} v={v} />)}
         </Section>
       ))}
     </div>

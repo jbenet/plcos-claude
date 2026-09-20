@@ -26,7 +26,7 @@ export async function Rail() {
 
       <NavList
         vehicles={vehicles.all.map((v) => ({
-          slug: v.slug, name: v.name, kind: v.kind, exemption: v.exemption,
+          slug: v.slug, name: v.name, kind: v.kind,
         }))}
         current={vehicles.current?.slug ?? null}
         approvals={tickets.open}
@@ -34,7 +34,12 @@ export async function Rail() {
       />
 
       <div className="railfoot">
-        <FeedbackButton variant="rail" />
+        <div className="railrow">
+          <FeedbackButton variant="rail" />
+          <Link className="railgear" href="/settings" aria-label="Your settings" title="Your settings">
+            <span aria-hidden>⚙</span>
+          </Link>
+        </div>
         <UserSwitcher user={user} users={users} />
       </div>
     </nav>
