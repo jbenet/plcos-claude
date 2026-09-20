@@ -178,6 +178,18 @@ async function main() {
     `${badWeights[0]!.n} malformed sets`,
   );
 
+  // Type, not behaviour. The wrap rules passed every behavioural check while
+  // allowedAudiences was a raw string, because String.includes does substring matching and
+  // no audience value happens to be a substring of another. The rules were right by luck.
+  const { listWrapRules } = await import('../modules/content');
+  const wrapRules = await listWrapRules();
+  check(
+    'Wrap rules deserialize as real arrays, not array literals',
+    wrapRules.length > 0 && wrapRules.every((r) => Array.isArray(r.allowedAudiences)),
+    `${wrapRules.filter((r) => Array.isArray(r.allowedAudiences)).length} of ${wrapRules.length} ` +
+    'parsed — this harness migrates and reads on one connection, which is the shape that breaks',
+  );
+
   const { wrongWrapSends } = await import('../modules/content');
   check(
     'Wrong-wrap sends = 0',

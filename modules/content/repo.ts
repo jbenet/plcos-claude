@@ -1,4 +1,4 @@
-import { getDb, type Queryable } from '@/lib/db';
+import { getDb, pgArray, type Queryable } from '@/lib/db';
 import type { Asset, Audience, AssetStatus, PermittedUse, Send, SendStatus, WrapRule } from './types';
 
 type AssetRow = {
@@ -68,11 +68,20 @@ export async function listWrapRules(): Promise<WrapRule[]> {
   const db = await getDb();
   const rows = await db.query<{
     rule_id: string; exemption: string; instrument: string;
-    allowed_audiences: Audience[]; max_permitted_use: PermittedUse; note: string;
-  }>('select * from content.wrap_rule order by exemption, instrument');
+    // Cast to text[]: a built-in OID the driver always knows how to parse. Reading
+    // content.audience[] directly returns a raw literal on the connection that created
+    // the enum. See pgArray in lib/db.
+    allowed_audiences: unknown; max_permitted_use: PermittedUse; note: string;
+  }>(
+    `select rule_id, exemption, instrument::text as instrument,
+            allowed_audiences::text[] as allowed_audiences,
+            max_permitted_use, note
+       from content.wrap_rule order by exemption, instrument`,
+  );
   return rows.map((r) => ({
     ruleId: r.rule_id, exemption: r.exemption, instrument: r.instrument,
-    allowedAudiences: r.allowed_audiences, maxPermittedUse: r.max_permitted_use, note: r.note,
+    allowedAudiences: pgArray(r.allowed_audiences) as Audience[],
+    maxPermittedUse: r.max_permitted_use, note: r.note,
   }));
 }
 
