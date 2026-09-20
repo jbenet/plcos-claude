@@ -110,12 +110,15 @@ export async function planRoutes(
       }
     }
 
-    if (verdict === 'recommend' && weakestTier === 'C') {
+    // A reviewed C or D hop becomes usable, not good. Human review removes the refusal; it
+    // does not upgrade the evidence, and a route is only as good as its worst hop.
+    if (verdict === 'recommend' && (weakestTier === 'C' || weakestTier === 'D')) {
       verdict = 'hold';
-      const weak = hops.find((h) => h.edge.tier === 'C');
+      const weak = hops.find((h) => h.edge.tier === weakestTier);
       reasons.push(
-        `The weakest hop is tier C${weak ? ` (${weak.edge.fromName} → ${weak.edge.toName})` : ''}. ` +
-        'A human has confirmed it, but a route is only as good as its worst hop.',
+        `The weakest hop is tier ${weakestTier}${weak ? ` (${weak.edge.fromName} → ${weak.edge.toName})` : ''}. ` +
+        'A person has confirmed it, which is what makes it usable at all — but confirming a ' +
+        'shared affiliation does not turn it into a working relationship.',
       );
     }
 

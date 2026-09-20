@@ -12,7 +12,8 @@
     "db:seed": "tsx scripts/seed.ts",
     "demo": "tsx scripts/reset.ts && tsx scripts/seed.ts",
     "shots": "tsx scripts/shots.ts",
-    "boundaries": "tsx scripts/boundaries.ts"
+    "boundaries": "tsx scripts/boundaries.ts",
+    "props": "tsx scripts/properties.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

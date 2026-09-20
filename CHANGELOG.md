@@ -350,3 +350,85 @@ the person is exactly where a consent ladder gets skipped.
 The consent ladder (L5) — the routes page can propose an ask, but nothing yet records
 where a target actually stands. No scoring (L9): the ranking here is evidence and goodwill,
 not a model.
+
+---
+
+## L5 — The target workspace and the consent ladder
+
+**Shipped.** Module 04. Six ladder states with no implicit transitions, a stepper that
+shows the gap between claimed and evidenced, `STAGE`-gated advancement, and a runnable
+properties harness over the whole fixture set.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Pursuits](docs/changelog/shots/l5/01-pursuits.png) | **Six pursuits at five different heights.** The six-segment bar is the ladder; the outlined segment is the next rung, which has nothing on file. |
+| ![Roos workspace](docs/changelog/shots/l5/02-workspace-roos.png) | **Delia Roos.** Sitting at *connector willing* and nowhere else. Routes, plan with a reason per move, claims with their sources, open questions, and the restriction in the inspector. |
+| ![Cedar](docs/changelog/shots/l5/03-ladder-cedar.png) | **Cedar Trust, five rungs up.** Commitment accepted on 18 September. Cash received is empty, and stays empty until a wire confirmation exists. |
+| ![Advance](docs/changelog/shots/l5/04-advance-ticket.png) | **Advancing a rung opens a ticket and writes nothing.** The rung lands only after approval, and the ladder is re-checked at that moment. |
+
+### What the ladder actually enforces
+
+The rung is **derived**, never stored. There is no column anyone can set to "interested" —
+`pursuit.rung` is computed as the highest rung with an evidence record, and each record
+carries an evidence kind, a reference and a note.
+
+Advancing goes through two checks, one before the ticket and one inside the transaction:
+
+- **No skipping.** `requestAdvance` refuses a jump and names the rungs that have no evidence.
+- **The ladder may have moved.** `recordAdvance` re-checks the position after the approval
+  and refuses if it changed. An approval is for a specific transition, not for a target.
+
+`RUNG_REQUIRES` is in code and rendered in the form, so the thing that justifies the step
+is stated before the box rather than left to whoever fills it in:
+
+> *Indication given requires: a number or a range, from them. An expression of enthusiasm
+> is not an indication.*
+
+### The properties harness — `npm run props`
+
+v4's fixture set carried a "Properties to check" section and a "Useful variations" section
+that no package turned into code. Both now run, against a scratch database:
+
+```
+  ok   Every claim carries a complete provenance tuple
+  ok   No route with an unreviewed C or D hop is recommended or held
+  ok   Every path through a restricted party is excluded
+  ok   The consent ladder has no gaps: recorded rungs are always a prefix
+  ok   No cash is recorded without an accepted commitment beneath it
+  ok   Every adjudicated conflict has a winner, a loser, a reason and a dated follow-up
+  ok   Every live ask carries an approval ticket
+  ok   A connector-scoped restriction names the connector
+  ok   Variation — remove the tier-A route
+  ok   Variation — add a blanket do-not-contact
+  ok   Variation — a human reviews the tier-D edge
+  ok   Variation — the connector reaches the cap
+
+  12 of 12 properties hold.
+```
+
+**Writing the third variation found a real bug.** "A human reviews the tier-D edge" should
+make that path *usable but not good*. The planner was promoting it straight to Recommend,
+because the downgrade rule only fired on tier C. Human review removes the refusal; it does
+not upgrade the evidence. Fixed, and the variation now guards it. That is the entire
+argument for the format, demonstrated on its first use.
+
+### Where I disagreed
+
+**The ladder's first rung assumes an intermediary, and not every approach has one.**
+Northwood was approached directly — Raman asked at an event to be contacted. There is no
+connector, so "connector willing" is not a step that can be passed or failed. Rather than
+let the rung be skipped (which would break the no-gaps rule that makes the ladder worth
+having) it is recorded with `evidence_kind = 'not_applicable'` and a note saying why. The
+stepper renders it grey rather than green — it is not an achievement, it is an absence.
+
+I think this is the right shape, but it is a modelling decision that was not in the plan and
+you should look at it. The alternative is a second ladder for direct approaches, which I
+think is worse: two ladders is how two definitions of "opted in" appear.
+
+### Still not built
+
+Money. Cedar Trust shows `commitment accepted` on the ladder and the seeded `MONEY` ticket
+says "$4.0M, cash not received" — but no total exists anywhere yet, hard or soft. That is
+L6, and the reason the headline number is still absent rather than provisional.

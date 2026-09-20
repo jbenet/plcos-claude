@@ -85,6 +85,40 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  L5: [
+    { name: '01-pursuits', path: '/targets' },
+    {
+      name: '02-workspace-roos',
+      path: '/targets',
+      fullPage: true,
+      prepare: async (page) => {
+        await page.getByRole('link', { name: 'Delia Roos' }).first().click();
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    {
+      name: '03-ladder-cedar',
+      path: '/targets',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: 'Cedar Trust' }).first().click();
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    {
+      name: '04-advance-ticket',
+      path: '/targets',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: 'Northwood Capital' }).first().click();
+        await page.waitForLoadState('networkidle');
+        await page.getByPlaceholder('email:2026-09-22').fill('email:2026-09-19');
+        await page
+          .getByPlaceholder('Quote or summarise the part that justifies this rung')
+          .fill('Raman said the DDQ pack looks thorough and they are keen.');
+        await page.getByRole('button', { name: /Request:/ }).click();
+        await page.waitForTimeout(900);
+      },
+    },
+  ],
 };
 
 /** The seed mints uuids, so a fixed link is resolved at shot time. */

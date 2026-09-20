@@ -284,3 +284,28 @@ button.src{background:none;border:0;padding:0;font-family:var(--mono);font-size:
 .tB{background:#F6F0DF;color:var(--amber)}
 .tC{background:#EFEDE7;color:var(--muted)}
 .tD{background:#EFEDE7;color:var(--muted)}
+
+/* ---------------- consent ladder (design/S2) ---------------- */
+.ladder{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 16px 14px;margin-bottom:13px}
+.steps{display:flex;align-items:flex-start;margin-top:12px}
+.step{flex:1;position:relative;padding-right:10px}
+.step .bul{width:13px;height:13px;border-radius:50%;border:2px solid var(--line);background:var(--surface);position:relative;z-index:2}
+.step.done .bul{background:var(--green);border-color:var(--green)}
+.step.na .bul{background:var(--line);border-color:var(--line)}
+.step.here .bul{border-color:var(--clay);background:var(--surface);box-shadow:0 0 0 3px #F6E4DA}
+.step:not(:last-child):after{content:"";position:absolute;left:13px;top:5.5px;right:0;height:2px;background:var(--line);z-index:1}
+.step.done:not(:last-child):after{background:var(--green)}
+.step.na:not(:last-child):after{background:var(--line)}
+.step .nm{font-size:11.5px;margin-top:9px;line-height:1.35;font-weight:500}
+.step .ev{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+.step.pend .nm{color:var(--muted);font-weight:400}
+.step .when{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:3px}
+
+.moves{margin:0;padding-left:17px}
+.moves li{font-size:12.5px;line-height:1.5;margin-bottom:9px}
+.moves small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+.moves .block{display:block;color:var(--clay);font-size:11px;margin-top:3px}
+
+.prov{padding:9px 0;border-bottom:1px solid var(--hair)}
+.prov .p1{font-size:12.5px;line-height:1.45}
+.prov .p2{font-size:10.5px;color:var(--muted);margin-top:3px;font-family:var(--mono)}
