@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { EntityLink } from '@/components/entity/EntityLink';
+import { EntitySummary } from '@/components/entity/EntitySummary';
 import { WeightsForm } from '@/components/scoring/WeightsForm';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { vehicleSelection } from '@/lib/session';
@@ -15,7 +17,12 @@ const BAND_FLAG: Record<string, string> = {
   strong: 'f-ok', worth_a_look: 'f-ev', weak: 'f-mute', unscored: 'f-mute',
 };
 
-export default async function Selection() {
+export default async function Selection({
+  searchParams,
+}: {
+  searchParams: Promise<{ e?: string }>;
+}) {
+  const { e } = await searchParams;
   const selection = await vehicleSelection();
   const vehicle = selection.current ?? selection.all.find((v) => v.slug === 'neurotech') ?? selection.all[0];
   const [weights, history, docs] = await Promise.all([activeWeights(), listWeights(), listSourceDocs()]);
@@ -34,7 +41,7 @@ export default async function Selection() {
     <Page
       crumbs={[{ label: 'Discover & qualify' }, { label: 'Selection' }]}
       inspector={
-        weights ? (
+        e ? <EntitySummary entityId={e} /> : weights ? (
           <>
             <div className="lbl">Weights</div>
             <div className="ihead">The argument, in the open</div>
@@ -113,9 +120,7 @@ export default async function Selection() {
                   </span>
                 </div>
                 <div className="t">
-                  <Link href={`/research/${r.entityId}`}>
-                    <b>{r.entityName}</b>
-                  </Link>
+                  <EntityLink id={r.entityId} name={r.entityName} />
                   <Link className="xref" href={`/fit/${r.entityId}`}>
                     fit &amp; standing →
                   </Link>

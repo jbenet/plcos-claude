@@ -121,7 +121,7 @@ export default async function Operations() {
           <Link className="btn" href="/research" style={{ padding: '7px 12px' }}>
             The universe
           </Link>
-          <Link className="btn" href="/relationships/all" style={{ padding: '7px 12px' }}>
+          <Link className="btn" href="/orgs/g/all" style={{ padding: '7px 12px' }}>
             Relationships
           </Link>
         </div>

@@ -91,7 +91,7 @@ export default async function Compliance() {
             {accreditation.map((r) => (
               <tr key={r.recordId}>
                 <td>
-                  <Link href={`/research/${r.entityId}`}>
+                  <Link href={`/orgs/${r.entityId}`}>
                     <b>{r.entityName}</b>
                   </Link>
                 </td>

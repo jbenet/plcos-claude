@@ -185,6 +185,18 @@ export const BLOCKER_LABEL: Record<Blocker, string> = {
   none: 'Nothing is blocking this',
 };
 
+/** The same eight states, short enough for a table cell. The long form is the heading. */
+export const BLOCKER_SHORT: Record<Blocker, string> = {
+  gated: 'Gate fails',
+  access: 'No route',
+  evidence: 'Unqualified',
+  awareness: 'Unaware of us',
+  conviction: 'Not convinced',
+  fit: 'Weak fit',
+  timing: 'Wrong window',
+  none: 'Clear',
+};
+
 export interface Diagnosis {
   blocker: Blocker;
   statement: string;

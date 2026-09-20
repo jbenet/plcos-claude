@@ -263,7 +263,7 @@ export default async function DecisionRoom({
                   <Link className="btn" href={`/meetings?e=${focus.entityId}`} style={{ display: 'block', textAlign: 'center', padding: 8, marginBottom: 8 }}>
                     Prep brief
                   </Link>
-                  <Link className="btn" href={`/research/${focus.entityId}`} style={{ display: 'block', textAlign: 'center', padding: 8 }}>
+                  <Link className="btn" href={`/orgs/${focus.entityId}`} style={{ display: 'block', textAlign: 'center', padding: 8 }}>
                     Dossier
                   </Link>
                 </div>

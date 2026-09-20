@@ -86,18 +86,19 @@ export const STATIC_SECTIONS: NavSection[] = [
   },
   {
     id: 'relationships',
-    title: 'Relationships',
+    title: 'Orgs & people',
     links: [
-      { label: 'LPs', href: '/relationships/lps' },
-      { label: 'Co-funders', href: '/relationships/co-funders' },
-      { label: 'All', href: '/relationships/all' },
+      { label: 'Everyone', href: '/orgs/g/all' },
+      { label: 'LPs', href: '/orgs/g/lps' },
+      { label: 'Co-funders', href: '/orgs/g/co-funders' },
+      { label: 'Connectors', href: '/orgs/g/connectors' },
     ],
   },
   {
     id: 'other',
     title: 'Other',
     links: [
-      { label: 'Research & enrichment', href: '/research' },
+      { label: 'Research corpus', href: '/research' },
       { label: 'Forecast', href: '/forecast' },
       { label: 'Sprint calendar', href: '/calendar' },
       { label: 'Content studio', href: '/content' },

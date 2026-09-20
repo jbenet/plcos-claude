@@ -128,7 +128,7 @@ export default async function SpvWarRoom() {
               {room.seats.map((s) => (
                 <tr key={s.seatId}>
                   <td>
-                    <Link href={`/research/${s.entityId}`}>
+                    <Link href={`/orgs/${s.entityId}`}>
                       <b>{s.entityName}</b>
                     </Link>
                     <div style={{ marginTop: 4 }}>

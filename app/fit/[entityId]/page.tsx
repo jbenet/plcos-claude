@@ -89,8 +89,8 @@ export default async function FunderVehicleFit({
                 here to be confident about.
               </p>
               <p style={{ marginTop: 10 }}>
-                <Link href={`/research/${entityId}`}>Open the research dossier</Link> — the raw
-                claims and their sources are there, and they are what an assessment would be built
+                <Link href={`/orgs/${entityId}`}>Open their page</Link> — the claims, their sources
+                and the ties on file are there, and they are what an assessment would be built
                 from.
               </p>
             </div>
@@ -192,7 +192,7 @@ export default async function FunderVehicleFit({
           )}
 
           <div className="acts" style={{ marginTop: 14 }}>
-            <Link className="btn" href={`/research/${entityId}`}>Research dossier</Link>
+            <Link className="btn" href={`/orgs/${entityId}`}>Their page</Link>
             <Link className="btn" href="/routes">Route planner</Link>
           </div>
         </>
@@ -460,7 +460,7 @@ export default async function FunderVehicleFit({
                 <tr key={l.linkId}>
                   <td>
                     {l.viaEntityId
-                      ? <Link href={`/research/${l.viaEntityId}`}><b>{l.viaName}</b></Link>
+                      ? <Link href={`/orgs/${l.viaEntityId}`}><b>{l.viaName}</b></Link>
                       : <b>Direct</b>}
                   </td>
                   <td className="muted">{LINK_LABEL[l.kind]}</td>

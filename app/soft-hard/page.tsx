@@ -164,7 +164,7 @@ export default async function SoftHard() {
               {soft.map((x) => (
                 <tr key={x.exposureId}>
                   <td>
-                    <Link href={`/research/${x.entityId}`}>
+                    <Link href={`/orgs/${x.entityId}`}>
                       <b>{x.entityName}</b>
                     </Link>
                   </td>

@@ -382,3 +382,12 @@ a.prov:hover .p1{color:var(--clay)}
 .worknote{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:9px 15px;border-bottom:1px solid var(--line);background:#FAF8F3}
 .list.vals{table-layout:fixed}
 .list.vals td{vertical-align:top}
+.elink{display:inline-flex;gap:5px;align-items:baseline}
+.elink .ego{font-size:10px;color:var(--muted);text-decoration:none;opacity:.55}
+.elink .ego:hover{color:var(--clay);opacity:1}
+.sorter a{font:inherit;font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--muted);text-decoration:none}
+.sorter a:hover{border-color:#CFC8B8;color:var(--ink)}
+.sorter a.on{background:var(--ink);border-color:var(--ink);color:var(--ground)}
+table.list tr.sel td{background:#FBF4EF}
+table.list tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--clay)}
+.list.orgs{table-layout:fixed}

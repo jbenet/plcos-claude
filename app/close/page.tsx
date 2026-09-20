@@ -196,7 +196,7 @@ export default async function CloseRoom() {
             {pack.map((p) => (
               <tr key={p.itemId}>
                 <td>
-                  <Link href={`/research/${p.entityId}`}>
+                  <Link href={`/orgs/${p.entityId}`}>
                     <b>{p.entityName}</b>
                   </Link>
                 </td>

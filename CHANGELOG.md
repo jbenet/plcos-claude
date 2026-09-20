@@ -1397,3 +1397,66 @@ in one table in `lib/seed-fit.ts` — the catalogue is the argument, and it is m
 edited rather than trusted.
 
 **43 of 43 properties hold.** Eight of them are new and cover this module.
+
+---
+
+## N4 — Orgs & people
+
+**Shipped.** Entities get a home page and a summary pane. The dossier that lived inside
+Research & enrichment moved to `/orgs/<id>` and grew the rest of what is known about a
+record; the section it sits in is now **Orgs & people**, because that is what is in it.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Directory](docs/changelog/shots/n4/01-orgs-directory.png) | **The directory.** Everyone, LPs, co-funders and connectors as tabs rather than four routes. Roles are still derived from what happened, and the last column now carries what is in the way for each one. |
+| ![Summary pane](docs/changelog/shots/n4/02-summary-pane.png) | **Clicking a name opens the summary here**, without leaving the list. Money per vehicle, where the conversation is, what is in the way, the ties on file, and what the record rests on. |
+| ![Entity page](docs/changelog/shots/n4/03-org-page.png) | **The entity page.** Restriction first, then where we stand per vehicle, then how we reach them, then what we can support with its provenance, then the open questions. |
+| ![From the fit roll-up](docs/changelog/shots/n4/04-summary-from-fit.png) | **The same pane, from a different list.** One component, so the answer to &ldquo;who is this&rdquo; cannot differ between screens. |
+| ![Connectors](docs/changelog/shots/n4/05-connectors.png) | **Connectors** are a group now. Goodwill is spent per person across every vehicle, so the people carrying asks deserve their own list. |
+
+### Two affordances on a name, on purpose
+
+The name opens the summary in the right pane through a `?e=` search param. The small arrow
+beside it opens their page. **&ldquo;Remind me who this is&rdquo; and &ldquo;take me to
+their record&rdquo; are different intentions**, and collapsing them costs a back button
+every time someone is scanning a list.
+
+The pane is one server component, `EntitySummary`, used on the directory, the fit roll-up
+and selection. Three screens, one answer. A summary assembled per page is three summaries
+that drift.
+
+### What moved, and what still works
+
+- `/research/<id>` → `/orgs/<id>`, redirected. Earlier changelog entries and filed issues
+  link to the old URL, so it keeps working.
+- `/relationships/<group>` → `/orgs/g/<group>`, redirected.
+- Research & enrichment stays, renamed **Research corpus** in the rail, because that is what
+  is left there once the per-entity view moved out: the source documents, the coverage
+  disclosure and the claim counts.
+
+### A person and the institution they sign for are separate records
+
+Delia Roos is a person; Roos Foundation is the funder with the mandate, the cheque band and
+the §4944(c) question. Neither is a field on the other, and the fit assessment sits on the
+foundation.
+
+So her page said *Not assessed* twice and read as "nobody has looked at this", which is
+wrong and worse than the truth. It now says **assessed next door**, names the tied record
+and links to it. The money, the mandate and the restriction do not always attach to the
+same one, and a system that quietly merged them would get the restriction wrong — which is
+the expensive one.
+
+### The pane does not pretend to be a chat box
+
+You asked for the pane to be able to open an LLM for questions and discussion. It does not,
+and the pane says why: the agent runtime refuses until a prompt has passed the protected
+eval set, and it has not. A chat box wired to nothing would answer from nothing, which is
+the failure this whole system is built to avoid. The pane points at `/agents`, where the
+envelope, the eval cases and the refusal are all visible.
+
+That is the one thing in this request I did not build, and it is a decision with a cost
+rather than an omission.
+
+**43 of 43 properties hold.** The production build compiles 50 routes.

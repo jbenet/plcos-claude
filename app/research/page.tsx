@@ -117,7 +117,7 @@ export default async function Research() {
               return (
                 <tr key={e.entityId} className="clickable">
                   <td>
-                    <Link href={`/research/${e.entityId}`}>
+                    <Link href={`/orgs/${e.entityId}`}>
                       <b>{e.displayName}</b>
                     </Link>
                   </td>

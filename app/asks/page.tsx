@@ -154,7 +154,7 @@ export default async function Asks() {
             {asks.map((a) => (
               <tr key={a.askId}>
                 <td>
-                  <Link href={`/research/${a.entityId}`}>
+                  <Link href={`/orgs/${a.entityId}`}>
                     <b>{a.entityName}</b>
                   </Link>
                   <div className="muted" style={{ fontSize: 11.5 }}>

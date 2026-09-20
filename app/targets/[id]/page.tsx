@@ -111,7 +111,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
         Target workspace · owner {pursuit.ownerName} · opened {shortDate(pursuit.openedAt)}
       </div>
       <h1 style={{ marginTop: 4 }}>
-        <Link href={`/research/${pursuit.entityId}`}>{pursuit.entityName}</Link>
+        <Link href={`/orgs/${pursuit.entityId}`}>{pursuit.entityName}</Link>
       </h1>
       <p className="sublede">{pursuit.headline}</p>
 

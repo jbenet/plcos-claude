@@ -165,6 +165,37 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N4: [
+    { name: '01-orgs-directory', path: '/orgs/g/all', fullPage: true },
+    {
+      name: '02-summary-pane',
+      path: '/orgs/g/all',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: /Summarise Whitcomb Capital/ }).click();
+        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: '03-org-page',
+      path: '/orgs/g/all',
+      fullPage: true,
+      prepare: async (page) => {
+        await page.getByRole('link', { name: /Open the page for Delia Roos/ }).click();
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    {
+      name: '04-summary-from-fit',
+      path: '/fit',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: /Summarise Okonjo Family Office/ }).click();
+        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(400);
+      },
+    },
+    { name: '05-connectors', path: '/orgs/g/connectors' },
+  ],
   N3: [
     { name: '01-fit-all-vehicles', path: '/fit', fullPage: true },
     {
@@ -251,7 +282,7 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
     { name: '05-operations', path: '/operations' },
-    { name: '06-relationships', path: '/relationships/all' },
+    { name: '06-relationships', path: '/orgs/g/all' },
     { name: '07-rnd', path: '/rnd' },
     { name: '08-dev-changelog', path: '/dev/changelog' },
     { name: '09-dev-status', path: '/dev/status' },

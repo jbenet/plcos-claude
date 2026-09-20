@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
 import { Meter } from '@/components/fit/marks';
+import { EntityLink } from '@/components/entity/EntityLink';
+import { EntitySummary } from '@/components/entity/EntitySummary';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
 import { listAssessments, BLOCKER_LABEL, type Assessment, type Blocker } from '@/modules/fit';
@@ -34,7 +36,12 @@ const WORK: Record<Blocker, string> = {
 
 const ORDER: Blocker[] = ['none', 'awareness', 'conviction', 'evidence', 'access', 'timing', 'fit', 'gated'];
 
-export default async function FitRollup() {
+export default async function FitRollup({
+  searchParams,
+}: {
+  searchParams: Promise<{ e?: string }>;
+}) {
+  const { e } = await searchParams;
   const selection = await vehicleSelection();
   const rows = await listAssessments(selection.current?.id ?? null);
 
@@ -55,6 +62,7 @@ export default async function FitRollup() {
         { label: 'Funder–vehicle fit' },
       ]}
       inspector={
+        e ? <EntitySummary entityId={e} /> : (
         <>
           <div className="lbl">The shape of it</div>
           <div className="ihead">
@@ -83,6 +91,7 @@ export default async function FitRollup() {
             with different readings, and nothing here is summed across vehicles.
           </div>
         </>
+        )
       }
     >
       <div className="lbl">
@@ -141,7 +150,7 @@ export default async function FitRollup() {
             </div>
             <div className="worknote">{WORK[g.blocker]}</div>
             {g.rows.map((r) => (
-              <div className="row" key={r.assessmentId} style={{ alignItems: 'flex-start' }}>
+              <div className={`row${e === r.entityId ? ' sel' : ''}`} key={r.assessmentId} style={{ alignItems: 'flex-start' }}>
                 <div style={{ width: 66, flex: 'none', textAlign: 'center', marginTop: 2 }}>
                   <div className="mono" style={{ fontSize: 17, fontWeight: 500 }}>
                     {r.weightedFit.toFixed(2)}
@@ -151,7 +160,8 @@ export default async function FitRollup() {
                   </span>
                 </div>
                 <div className="t">
-                  <Link href={`/fit/${r.entityId}`}><b>{r.entityName}</b></Link>
+                  <EntityLink id={r.entityId} name={r.entityName} />
+                  <Link className="xref" href={`/fit/${r.entityId}`}>full assessment →</Link>
                   {!selection.current && (
                     <span className="flag f-mute" style={{ marginLeft: 8 }}>{r.vehicleName}</span>
                   )}
