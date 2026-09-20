@@ -1167,3 +1167,85 @@ plan set, applied rather than quoted.
 No connectors. No auth integration. No graph database, no vector store, no event broker, no
 service mesh, no microfrontends, no plugin framework, no warehouse pipeline, no full event
 sourcing, no durable orchestration. `pg` is not installed. The do-not-build list held.
+
+---
+
+## N1 — Project-oriented navigation
+
+**Shipped.** The rail was organised by function — twenty-four modules in four umbrella
+sections — and the question people actually arrive with is *"what is happening on
+Neurotech"*, not *"where is the soft/hard cockpit"*. So vehicles are now the structure and
+the modules are what you find inside one.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![All vehicles](docs/changelog/shots/n1/01-overview-all.png) | **PL Capital → All vehicles.** Every vehicle side by side, no total row, and a module submenu that reads across all of them. |
+| ![One vehicle](docs/changelog/shots/n1/02-overview-vehicle.png) | **Selecting a vehicle** loads its overview and opens its modules in the rail. Everything below is scoped to it. |
+| ![Pane closed](docs/changelog/shots/n1/03-pane-closed.png) | **The right pane closes.** One button at the top right, and the choice is remembered. |
+| ![Sections collapsed](docs/changelog/shots/n1/04-nav-collapsed.png) | **Sections collapse** and stay collapsed across reloads. Developer starts closed. |
+| ![Operations](docs/changelog/shots/n1/05-operations.png) | **PL Capital → Operations.** The cross-vehicle layer: collisions between vehicles, connector goodwill spent across all of them, the shared calendar. |
+| ![Relationships](docs/changelog/shots/n1/06-relationships.png) | **Relationships.** LPs, co-funders and everyone — with roles *derived* from what happened rather than typed into a field. |
+| ![PL R&D](docs/changelog/shots/n1/07-rnd.png) | **PL R&D.** In the navigation because it is in the organisation; not in the data model, and the page says so plainly. |
+| ![Changelog](docs/changelog/shots/n1/08-dev-changelog.png) | **Developer → Changelog**, rendered from `CHANGELOG.md` with its screenshots, so it cannot drift from the repository. |
+| ![Status](docs/changelog/shots/n1/09-dev-status.png) | **Developer → Status.** What is running, and a problems list computed from the hard rules rather than maintained by hand. |
+| ![Modules](docs/changelog/shots/n1/10-dev-modules.png) | **Developer → Modules.** All twenty-four: vehicle-scoped, cross-cutting, or a capability with no screen. |
+| ![Settings](docs/changelog/shots/n1/11-dev-settings.png) | **Developer → Settings.** Nine guessed constants, each saying why it is a guess. |
+
+### The rail
+
+- **Today, Approvals, Issues** stay at the top, ungrouped — three entry points, not a
+  section worth a heading.
+- **PL Capital** holds Operations, then every vehicle, then All vehicles. Clicking a
+  vehicle changes scope *and* opens its modules underneath. SPVs get the war room, funds
+  get the close room, the grants rail gets the gate — `modulesForKind` decides.
+- **PL R&D**, **Relationships**, **Other**, **Developer**. Developer starts collapsed so a
+  first-time user is not handed the plumbing.
+- Collapse state is remembered. A preference that resets on every reload is not a
+  preference.
+- **Give feedback** is a button in the rail above the user, where the spec asked for it, and
+  no longer competes with the breadcrumb bar.
+- The vehicle dropdown is gone. It was a control that changed what every number on the page
+  meant, and it looked like a filter.
+
+### The right pane
+
+The inspector is now a pane that closes, with one small button at the top right and the
+state remembered. It was always-on scaffolding; it is now something you open when you want
+to drill into one thing.
+
+Its accessible name was the glyph `⟩` until a test tried to find it by name — which is
+exactly the bug a screen reader user would have hit first. It has a real label now.
+
+### Roles are derived, not declared
+
+`relationshipRoles()` works out what someone is to us from what actually happened: an LP
+because hard money is on file, a connector because asks have gone through them, a funder
+because they appear on the grants rail, a co-funder from a coinvestor edge. A role *field*
+is a second copy of the truth, and the second copy is the one that goes stale.
+
+### Where I disagreed
+
+**The vehicle is in a cookie, not the URL.** `/soft-hard` means "the soft/hard cockpit for
+whatever vehicle you have selected". The alternative — `/v/neurotech/soft-hard` — is better
+and I did not do it, because it means either moving twenty route files or rewriting every
+internal link to be vehicle-aware, and neither is a navigation change.
+
+The cost is real and worth stating: **you cannot share a link to a vehicle-scoped page.**
+Send someone `/soft-hard` and they see whatever vehicle *they* last picked. If people start
+sending each other links, that is the thing to fix, and the fix is the route restructure.
+
+**PL R&D has no data and I did not invent any.** Two pages that say what is not modelled,
+what would carry over if it were (identity, research, the answer library) and what would
+not (exposure, the consent ladder, the close rooms). A furnished room where none of the
+furniture takes weight is worse than an empty one.
+
+**`/system` became two pages.** Status answers *is anything wrong*, Connectors answers
+*what is attached and what does it swap to*. They were one page doing both jobs badly.
+The old URL redirects.
+
+### Verification
+
+38 routes, all 200 from a genuine cold start. `npm run props` at 35 of 35. Production build
+compiles 46 routes.

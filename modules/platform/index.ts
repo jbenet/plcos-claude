@@ -6,8 +6,9 @@ export type {
   AppUser, AuditEntry, Feedback, FeedbackInput, FeedbackKind, FeedbackPriority,
   FeedbackStatus, SourceSync, SyncStatus, Vehicle, VehicleKind,
 } from './types';
+export type { AuditRow, FeedbackRow } from './repo';
 export {
-  appendAudit, attachIssueRef, getUserByHandle, insertFeedback, listSyncSources,
-  listUsers, listVehicles, recentAudit,
+  appendAudit, attachIssueRef, auditLog, getUserByHandle, insertFeedback, listFeedback,
+  listSyncSources, listUsers, listVehicles, recentAudit,
 } from './repo';
 export { fileFeedback, type FeedbackCommand } from './service';

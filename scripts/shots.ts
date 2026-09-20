@@ -165,6 +165,43 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N1: [
+    { name: '01-overview-all', path: '/overview' },
+    {
+      name: '02-overview-vehicle',
+      path: '/overview',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /PLC Neurotech I/ }).click();
+        await page.waitForTimeout(1400);
+      },
+    },
+    {
+      name: '03-pane-closed',
+      path: '/overview',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Hide the detail pane/ }).click();
+        await page.waitForTimeout(500);
+      },
+    },
+    {
+      name: '04-nav-collapsed',
+      path: '/overview',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Show the detail pane/ }).click();
+        await page.getByRole('button', { name: 'PL Capital' }).click();
+        await page.getByRole('button', { name: 'Relationships' }).click();
+        await page.getByRole('button', { name: 'Developer' }).click();
+        await page.waitForTimeout(500);
+      },
+    },
+    { name: '05-operations', path: '/operations' },
+    { name: '06-relationships', path: '/relationships/all' },
+    { name: '07-rnd', path: '/rnd' },
+    { name: '08-dev-changelog', path: '/dev/changelog' },
+    { name: '09-dev-status', path: '/dev/status' },
+    { name: '10-dev-modules', path: '/dev/modules' },
+    { name: '11-dev-settings', path: '/dev/settings' },
+  ],
   M17: [
     { name: '01-answer-library', path: '/library', fullPage: true },
   ],

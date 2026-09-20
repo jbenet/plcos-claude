@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
-import { findModule, findPlaybook, sectionOf, PLAYBOOK_ONLY } from '@/lib/nav';
+import { findModule, findPlaybook, PLAYBOOK_ONLY } from '@/lib/nav';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,17 +69,14 @@ export default async function ModulePage({ params }: { params: Promise<{ slug: s
     );
   }
 
-  const section = sectionOf(slug);
   return (
     <Page
-      crumbs={[{ label: section?.title ?? 'Modules' }, { label: mod!.title }]}
+      crumbs={[{ label: 'Modules' }, { label: mod!.title }]}
       inspector={
         <>
           <div className="lbl">Module {mod!.num}</div>
           <div className="ihead">{mod!.title}</div>
-          <div className="imeta">
-            {section?.title} · {section?.range}
-          </div>
+          <div className="imeta">Module {mod!.num}</div>
           <div className="kv">
             <span>Lands at</span>
             <span>{mod!.stage}</span>
@@ -91,9 +88,7 @@ export default async function ModulePage({ params }: { params: Promise<{ slug: s
         </>
       }
     >
-      <div className="lbl">
-        {section?.title} · module {mod!.num}
-      </div>
+      <div className="lbl">Module {mod!.num}</div>
       <h1>{mod!.title}</h1>
       <p className="sublede">{mod!.mechanic}</p>
 

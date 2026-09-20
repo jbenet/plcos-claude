@@ -91,3 +91,71 @@ export async function recentAudit(limit = 20) {
     [limit],
   );
 }
+
+export interface FeedbackRow {
+  id: string;
+  issueRef: string | null;
+  issuePath: string | null;
+  title: string;
+  body: string;
+  kind: string;
+  priority: string;
+  status: string;
+  reporterName: string;
+  page: string;
+  context: Record<string, unknown>;
+  createdAt: Date;
+}
+
+/**
+ * The feedback rows, which are not the same thing as the issue files.
+ *
+ * The row is the record that somebody complained, with the context captured at that
+ * moment. The file is the tracker. They are written together and can be read apart — the
+ * row survives `git checkout`, the file survives `npm run db:reset`.
+ */
+export async function listFeedback(): Promise<FeedbackRow[]> {
+  const db = await getDb();
+  const rows = await db.query<{
+    id: string; issue_ref: string | null; issue_path: string | null; title: string;
+    body: string; kind: string; priority: string; status: string; reporter_name: string;
+    page: string; context: Record<string, unknown>; created_at: Date | string;
+  }>(
+    `select f.id, f.issue_ref, f.issue_path, f.title, f.body, f.kind::text as kind,
+            f.priority::text as priority, f.status::text as status, u.name as reporter_name,
+            f.page, f.context, f.created_at
+       from platform.feedback f join platform.app_user u on u.id = f.reporter_id
+      order by f.created_at desc`,
+  );
+  return rows.map((r) => ({
+    id: r.id, issueRef: r.issue_ref, issuePath: r.issue_path, title: r.title, body: r.body,
+    kind: r.kind, priority: r.priority, status: r.status, reporterName: r.reporter_name,
+    page: r.page, context: r.context ?? {}, createdAt: new Date(r.created_at),
+  }));
+}
+
+export interface AuditRow {
+  at: Date;
+  action: string;
+  subjectType: string;
+  subjectId: string | null;
+  actor: string | null;
+  detail: Record<string, unknown>;
+}
+
+export async function auditLog(limit = 200): Promise<AuditRow[]> {
+  const db = await getDb();
+  const rows = await db.query<{
+    at: Date | string; action: string; subject_type: string; subject_id: string | null;
+    name: string | null; detail: Record<string, unknown>;
+  }>(
+    `select a.at, a.action, a.subject_type, a.subject_id, u.name, a.detail
+       from platform.audit_log a left join platform.app_user u on u.id = a.actor_id
+      order by a.at desc limit $1`,
+    [limit],
+  );
+  return rows.map((r) => ({
+    at: new Date(r.at), action: r.action, subjectType: r.subject_type,
+    subjectId: r.subject_id, actor: r.name, detail: r.detail ?? {},
+  }));
+}

@@ -13,12 +13,21 @@ const SLA: Record<Priority, string> = {
   P3: 'weekly triage · backlog',
 };
 
-export function FeedbackButton() {
+export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button className="btn" onClick={() => setOpen(true)}>
-        Give feedback
+      <button
+        className={variant === 'rail' ? 'railfeedback' : 'btn'}
+        onClick={() => setOpen(true)}
+      >
+        {variant === 'rail' ? (
+          <>
+            <span aria-hidden>✎</span> Give feedback
+          </>
+        ) : (
+          'Give feedback'
+        )}
       </button>
       {open && <FeedbackDrawer onClose={() => setOpen(false)} />}
     </>

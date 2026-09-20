@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { syncSummary } from '@/lib/sync';
-import { FeedbackButton } from './FeedbackBox';
+import { PageFrame } from './PageFrame';
 
 export interface Crumb {
   label: string;
@@ -8,16 +8,11 @@ export interface Crumb {
 }
 
 /**
- * Every screen sits in this frame: breadcrumb with a visible last-sync line, the work
- * area, and the right-hand inspector slot. A page that has nothing selected passes no
- * inspector and the column collapses — it never renders an empty panel.
+ * Every screen sits in this frame. The queue column is for queue-shaped screens; the
+ * inspector becomes the right pane, which the reader can close.
  */
 export async function Page({
-  crumbs,
-  actions,
-  queue,
-  inspector,
-  children,
+  crumbs, actions, queue, inspector, children,
 }: {
   crumbs: Crumb[];
   actions?: ReactNode;
@@ -27,33 +22,24 @@ export async function Page({
   children: ReactNode;
 }) {
   const sync = await syncSummary();
-  const last = crumbs[crumbs.length - 1];
 
   return (
-    <>
-      <div className="topbar">
-        <div className="crumb">
-          {crumbs.slice(0, -1).map((c) => (
-            <span key={c.label}>
-              {c.label}
-              {' / '}
-            </span>
-          ))}
-          <b>{last?.label}</b>
+    <PageFrame
+      crumbs={crumbs.map((c) => ({ label: c.label }))}
+      syncTone={sync.tone}
+      syncLine={sync.line}
+      syncTitle={sync.sources.map((s) => `${s.label}: ${s.status}`).join('\n')}
+      actions={actions}
+      inspector={inspector}
+    >
+      {queue ? (
+        <div style={{ display: 'flex', minHeight: 0, alignItems: 'stretch', margin: '-22px -24px' }}>
+          <div className="queue">{queue}</div>
+          <div style={{ flex: 1, minWidth: 0, padding: '22px 24px' }}>{children}</div>
         </div>
-        <div className="sync" title={sync.sources.map((s) => `${s.label}: ${s.status}`).join('\n')}>
-          <span className={`dot ${sync.tone}`} />
-          {sync.line}
-        </div>
-        {actions}
-        <FeedbackButton />
-      </div>
-
-      <div className="body">
-        {queue ? <div className="queue">{queue}</div> : null}
-        <div className="work">{children}</div>
-        {inspector ? <aside className="insp">{inspector}</aside> : null}
-      </div>
-    </>
+      ) : (
+        children
+      )}
+    </PageFrame>
   );
 }
