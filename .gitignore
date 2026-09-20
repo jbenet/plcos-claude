@@ -6,3 +6,7 @@ node_modules/
 .DS_Store
 design/_full-export.zip
 pgdata/
+local/
+next-env.d.ts
+.tsbuildinfo
+tsconfig.tsbuildinfo

@@ -1,0 +1,99 @@
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { Page } from '@/components/shell/Page';
+import { issues as issueSink, SLA } from '@/lib/issues';
+import { shortDate } from '@/lib/time';
+
+export const dynamic = 'force-dynamic';
+
+export default async function IssueDetail({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const sink = await issueSink();
+  const issue = await sink.get(id);
+  if (!issue) notFound();
+
+  return (
+    <Page
+      crumbs={[{ label: 'Issues', href: '/issues' }, { label: `${issue.id} · ${issue.title}` }]}
+      inspector={
+        <>
+          <div className="lbl">Issue {issue.id}</div>
+          <div className="ihead">{issue.title}</div>
+          <div className="imeta">
+            {issue.reporter} · {issue.created ? shortDate(new Date(issue.created)) : 'undated'}
+          </div>
+          <div className="kv">
+            <span>Status</span>
+            <span>{issue.status}</span>
+          </div>
+          <div className="kv">
+            <span>Kind</span>
+            <span>{issue.kind}</span>
+          </div>
+          <div className="kv">
+            <span>Priority</span>
+            <span>{issue.priority}</span>
+          </div>
+          <div className="kv">
+            <span>Page</span>
+            <span className="mono" style={{ fontSize: 11 }}>
+              {issue.page || '—'}
+            </span>
+          </div>
+          <div className="kv">
+            <span>File</span>
+            <span className="mono" style={{ fontSize: 11 }}>
+              {issue.location}
+            </span>
+          </div>
+          <div className="scope">
+            <div className="lbl">Service level</div>
+            <p>
+              Triaged {SLA[issue.priority].triage}, fixed {SLA[issue.priority].fix}.
+            </p>
+          </div>
+          <div className="note" style={{ marginTop: 0 }}>
+            Status is edited in the file, not here. A write path lands with the triage view; until
+            then the editor and <code>git</code> are the interface, which is the point of keeping
+            issues as files.
+          </div>
+        </>
+      }
+    >
+      <div className="lbl">
+        <Link href="/issues">← All issues</Link>
+      </div>
+      <h1 style={{ marginTop: 8 }}>{issue.title}</h1>
+      <p className="sublede">
+        <span className={`kind k-${issue.kind}`}>{issue.kind}</span>{' '}
+        <span className="flag f-mute">{issue.priority}</span>{' '}
+        <span className="flag f-mute">{issue.status}</span>
+      </p>
+
+      <div className="card">
+        <div className="chead">
+          <h2>What happened</h2>
+        </div>
+        <div className="cbody">
+          <div className="prose">
+            {issue.body.split(/\n{2,}/).map((p, i) => (
+              <p key={i}>{p}</p>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {issue.context && (
+        <div className="card">
+          <div className="chead">
+            <h2>Context at the moment it was filed</h2>
+            <span className="lbl">captured, not reconstructed</span>
+          </div>
+          <div className="cbody">
+            <pre className="block">{JSON.stringify(issue.context, null, 2)}</pre>
+          </div>
+        </div>
+      )}
+    </Page>
+  );
+}

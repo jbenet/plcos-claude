@@ -1,0 +1,8 @@
+[
+  { "slug": "neurotech",  "name": "PLC Neurotech I",   "kind": "fund",       "exemption": "506(c)", "target_amount": 90000000, "sort_order": 1 },
+  { "slug": "rails",      "name": "PLC Crypto/Rails",  "kind": "fund",       "exemption": "506(c)", "target_amount": 60000000, "sort_order": 2 },
+  { "slug": "spv-cortex", "name": "SPV — Cortex",      "kind": "spv",        "exemption": "506(c)", "target_amount": 8000000,  "sort_order": 3 },
+  { "slug": "spv-lattice","name": "SPV — Lattice",     "kind": "spv",        "exemption": "506(c)", "target_amount": 6000000,  "sort_order": 4 },
+  { "slug": "spv-halo",   "name": "SPV — Halo",        "kind": "spv",        "exemption": "506(b)", "target_amount": 5000000,  "sort_order": 5 },
+  { "slug": "grants",     "name": "Grants rail",       "kind": "grant_rail", "exemption": "n/a",    "target_amount": null,     "sort_order": 6 }
+]

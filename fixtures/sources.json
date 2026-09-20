@@ -1,0 +1,7 @@
+[
+  { "source": "seed",     "label": "Seed data",        "status": "ok",            "detail": "Fixtures in fixtures/. Not a source of truth about anyone real." },
+  { "source": "affinity", "label": "Affinity",         "status": "not_connected", "detail": "Plan tier undecided — Data Share versus poll-first. Open question 1." },
+  { "source": "linear",   "label": "Linear",           "status": "not_connected", "detail": "Custom fields UNVERIFIED in all three design packages. Nothing depends on it." },
+  { "source": "drive",    "label": "Google Drive",     "status": "not_connected", "detail": "Lands at L13 with the rest of the connectors." },
+  { "source": "docsend",  "label": "DocSend",          "status": "not_connected", "detail": "Forward-only via Zapier when it lands. Metrics will be marked partial." }
+]

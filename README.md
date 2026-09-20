@@ -3,7 +3,12 @@
 Fundraising strategy and operations across PLC Neurotech I, PLC Crypto/Rails, the SPVs and
 the grants rail.
 
-Nothing is built yet. This repo currently holds the research, the design and the plan.
+L1 is built: the console shell, the five seams, PGlite, the user switcher, the feedback box
+and markdown issues. See `CHANGELOG.md` for what landed at each stage and why.
+
+```bash
+npm install && npm run dev     # migrates, seeds and serves on :3000
+```
 
 ## Where to start
 
@@ -22,17 +27,23 @@ cd ~/git/plc-os/plcos-claude
 claude
 ```
 
-Then: *"Read CLAUDE.md and docs/13-synthesis-r3.md, then build L1."*
+Then: *"Read CLAUDE.md and CHANGELOG.md, then build the next stage."*
 
-L1 is the console shell, PGlite, a user switcher, the feedback box, markdown issues, the
-issues page and seed data. Roughly four days. Nothing else.
+`/system` in the running app shows which seam is running which implementation, and which
+constants are still guesses.
 
 ## Layout
 
 ```
 CLAUDE.md          the handoff — decisions, rules, what not to build
+CHANGELOG.md       what landed at each stage, with screenshots
 docs/              13 research and design documents
 design/            33 UI boards; S1–S3 are current, the rest is exploration
 issues/            markdown issues; the in-app feedback box writes here
+config/            deployment.ts — every deferred decision, one file
+lib/               the five seams, each with a local implementation
+modules/           schema-per-module; platform is the only one so far
+app/               Next.js routes
+scripts/           reset · seed · shots · boundaries
 .claude/           project-scoped Claude Code settings
 ```
