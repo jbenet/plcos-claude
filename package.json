@@ -13,7 +13,8 @@
     "demo": "tsx scripts/reset.ts && tsx scripts/seed.ts",
     "shots": "tsx scripts/shots.ts",
     "boundaries": "tsx scripts/boundaries.ts",
-    "props": "tsx scripts/properties.ts"
+    "props": "tsx scripts/properties.ts",
+    "changelog:html": "tsx scripts/changelog-html.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

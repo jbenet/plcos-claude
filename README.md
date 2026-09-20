@@ -31,7 +31,11 @@ npm run props        # the properties harness: 34 domain rules and perturbations
 npm run boundaries   # no db driver outside lib/db; modules imported through index.ts
 npm run db:reset     # drop local/, rebuild, reseed. Issues are files and survive it.
 npm run shots -- L7  # changelog screenshots against a running dev server
+npm run changelog:html out.html   # the changelog as a standalone page, for reading off-repo
 ```
+
+The changelog is also readable inside the app at **Developer → Changelog**, rendered from
+`CHANGELOG.md` with its screenshots so it cannot drift from the repository.
 
 `npm run props` is the one to run after any change. It asserts the rules this system exists
 to keep — soft never blends into hard, a tier-D edge nobody reviewed cannot carry a route,
