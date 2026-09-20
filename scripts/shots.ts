@@ -51,6 +51,28 @@ const SHOTS: Record<string, Shot[]> = {
     },
     { name: '04-corpus', path: '/research/sources' },
   ],
+  L3: [
+    {
+      name: '01-approvals-conflict',
+      path: '/approvals',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: /Route to Delia Roos/ }).click();
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    {
+      name: '02-adjudication',
+      path: '/approvals',
+      fullPage: true,
+      prepare: async (page) => {
+        await page.getByRole('link', { name: /Route to Delia Roos/ }).click();
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    { name: '03-approvals-money', path: '/approvals' },
+    { name: '04-ask-log', path: '/asks' },
+    { name: '05-today-queue', path: '/today' },
+  ],
 };
 
 /** The seed mints uuids, so a fixed link is resolved at shot time. */

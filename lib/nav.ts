@@ -44,7 +44,7 @@ export const SECTIONS: NavSection[] = [
     title: 'Convert & coordinate',
     range: '07–12',
     modules: [
-      m('07', 'Ask coordination', 'asks', 'L3', 'One owner per relationship; frequency guard; ConflictCase with a dated follow-up for the loser.'),
+      m('07', 'Ask coordination', 'asks', 'L3', 'One owner per relationship; frequency guard; ConflictCase with a dated follow-up for the loser.', true),
       m('08', 'Soft → Hard', 'soft-hard', 'L6', 'Two separate tracks. Convertible soft is shown and never added to hard.'),
       m('09', 'Vehicle status', 'vehicles', 'L6', 'Per-vehicle pipeline, velocity, and how the bottleneck moved.'),
       m('10', 'Decision room', 'decisions', 'L11', 'Diligence questions, objections, conditions, evidence, decision timeline.'),

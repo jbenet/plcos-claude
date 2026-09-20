@@ -42,6 +42,7 @@ async function main() {
       }
     }
 
+    // `client.ts` is a deliberate second entrance: types and constants, no data access.
     const deep = text.match(/from '@\/modules\/([a-z-]+)\/(repo|service|types|schema)[^']*'/g) ?? [];
     for (const hit of deep) {
       const owner = /@\/modules\/([a-z-]+)\//.exec(hit)?.[1];

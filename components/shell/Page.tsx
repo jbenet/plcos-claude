@@ -15,11 +15,14 @@ export interface Crumb {
 export async function Page({
   crumbs,
   actions,
+  queue,
   inspector,
   children,
 }: {
   crumbs: Crumb[];
   actions?: ReactNode;
+  /** A fixed left column inside the main area, for queue-shaped screens. */
+  queue?: ReactNode;
   inspector?: ReactNode;
   children: ReactNode;
 }) {
@@ -47,6 +50,7 @@ export async function Page({
       </div>
 
       <div className="body">
+        {queue ? <div className="queue">{queue}</div> : null}
         <div className="work">{children}</div>
         {inspector ? <aside className="insp">{inspector}</aside> : null}
       </div>

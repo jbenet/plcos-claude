@@ -6,6 +6,8 @@ import { listSyncSources, listVehicles, recentAudit } from '@/modules/platform';
 import { vehicleSelection } from '@/lib/session';
 import { ago, dateLabel } from '@/lib/time';
 import { ALL_MODULES } from '@/lib/nav';
+import { KIND_CLASS, listOpenTickets } from '@/modules/governance';
+import { listConflicts } from '@/modules/coordination';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +21,7 @@ export default async function Today() {
     recentAudit(8),
   ]);
   const open = await sink.list({ status: ['open', 'triaged', 'agent-ready', 'in-progress', 'review'] });
+  const [tickets, conflicts] = await Promise.all([listOpenTickets(), listConflicts('open')]);
   const connected = sources.filter((s) => s.status === 'ok' && s.source !== 'seed').length;
   const built = ALL_MODULES.filter((m) => m.built).length;
 
@@ -71,36 +74,64 @@ export default async function Today() {
       <div className="card">
         <div className="chead">
           <h2>Needs a decision</h2>
-          <span className="lbl">approval tickets · lands at L3</span>
+          <span className="lbl">
+            {tickets.length} open ticket{tickets.length === 1 ? '' : 's'}
+            {tickets.length > 0 ? ` \u00b7 oldest ${ago(tickets[0]!.createdAt)}` : ''}
+          </span>
         </div>
-        <div className="cbody">
-          <div className="empty">
-            <span className="stat unavailable">
-              <i />
-              Not built yet
-            </span>
-            <h3>There is no approval queue because nothing can request one yet.</h3>
-            <p>
-              The five ticket kinds — <code>SEND</code>, <code>INTRO_ASK</code>, <code>MONEY</code>,{' '}
-              <code>STAGE</code>, <code>ALLOCATION_EXCEPTION</code> — gate mutations before the
-              fact. They arrive at L3 together with the ask log and conflict cases, because a gate
-              without something to gate is decoration.
-            </p>
-            <dl>
-              <dt>What is known</dt>
-              <dd>Zero tickets exist. This is an empty table, not a failed read.</dd>
-              <dt>Who can act</dt>
-              <dd>Nobody yet. {user.name}, you are looking at the shell.</dd>
-              <dt>Safe next step</dt>
-              <dd>
-                <Link href="/approvals" style={{ borderBottom: '1px dotted var(--clay)', color: 'var(--clay)' }}>
-                  Read what each ticket kind will gate
-                </Link>
-                .
-              </dd>
-            </dl>
+        {tickets.length === 0 ? (
+          <div className="cbody">
+            <div className="empty">
+              <span className="stat unavailable">
+                <i />
+                Nothing pending
+              </span>
+              <h3>No mutating command is waiting on an approval.</h3>
+              <p>
+                This is an empty table, not a failed read. The five ticket kinds gate mutations
+                before the fact; none has been proposed since the last decision.
+              </p>
+              <dl>
+                <dt>What is known</dt>
+                <dd>Zero open tickets.</dd>
+                <dt>Who can act</dt>
+                <dd>{user.name}, when something is proposed.</dd>
+                <dt>Safe next step</dt>
+                <dd>
+                  <Link href="/approvals" style={{ borderBottom: '1px dotted var(--clay)', color: 'var(--clay)' }}>
+                    Read what each ticket kind gates
+                  </Link>
+                  .
+                </dd>
+              </dl>
+            </div>
           </div>
-        </div>
+        ) : (
+          tickets.map((t) => {
+            const conflict = conflicts.find(
+              (c) => c.claimantA.ticketId === t.id || c.claimantB.ticketId === t.id,
+            );
+            return (
+              <Link key={t.id} href={`/approvals?t=${t.id}`} className="row">
+                <span className={`kind ${KIND_CLASS[t.kind]}`} style={{ width: 150 }}>
+                  {t.kind}
+                </span>
+                <div className="t">
+                  <b>{t.subjectLabel}</b>
+                  <span>
+                    {conflict
+                      ? `Conflict: ${conflict.claimantA.vehicleName} opened an ask on the same actor ${ago(conflict.claimantA.madeAt ?? conflict.claimantA.createdAt)}`
+                      : t.scope.authorizes}
+                  </span>
+                </div>
+                <div className="state">
+                  <b>{conflict ? 'Blocked' : t.kind === 'STAGE' ? 'Needs evidence' : 'Ready'}</b>
+                  {conflict ? 'Adjudication required' : `Requested by ${t.requestedByName}`}
+                </div>
+              </Link>
+            );
+          })
+        )}
       </div>
 
       <div className="grid-even">

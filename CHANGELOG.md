@@ -177,3 +177,91 @@ Michael Okonjo and the Okonjo Family Office are external.
 No routes, no scores, no asks, no tickets. The restriction in S05 is *recorded* and
 *displayed*; nothing enforces it yet, and the dossier says so in as many words rather than
 implying a guard that does not exist.
+
+---
+
+## L3 — Tickets, the ask log, and conflict cases
+
+**Shipped.** The governance layer. Two more modules — `governance` and `coordination` —
+plus the live approvals queue and module 07.
+
+This is the stage where the system starts refusing things. Four guards run *before* an ask
+is made, an approval is a gate rather than a record, and a collision between two vehicles
+produces a case with a dated follow-up instead of a silent block.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Conflict ticket](docs/changelog/shots/l3/01-approvals-conflict.png) | **A blocked INTRO_ASK.** The scope says what the approval authorizes *and what it does not*. Below it, both guards that refused, each showing what it looked at. |
+| ![Adjudication](docs/changelog/shots/l3/02-adjudication.png) | **Adjudicating the conflict.** Two claimants side by side, a reason code, and a follow-up date for the loser that the form will not submit without. |
+| ![MONEY ticket](docs/changelog/shots/l3/03-approvals-money.png) | **A MONEY ticket.** "Cash received — No, a separate state" is on the face of the approval, because that is the line this system exists to keep. |
+| ![Ask log](docs/changelog/shots/l3/04-ask-log.png) | **Module 07.** Every ask, made or not, with connector load in the inspector: Duettmann is at 2 of 3 this quarter. |
+| ![Today](docs/changelog/shots/l3/05-today-queue.png) | **Today,** now showing the real queue. |
+
+### The gate
+
+`requireApprovedTicket` is the whole point. It takes a transaction, a kind, a subject and a
+ticket id, and throws `TicketRequired` in five distinguishable situations — `missing`,
+`wrong_subject`, `undecided`, `rejected`, `expired`. They are different situations with
+different next steps, so they are different errors rather than one boolean.
+
+`makeAsk` calls it and then **re-runs the guards**. An approval from four days ago does not
+license an ask that a newer conflict has since blocked.
+
+### The four guards
+
+| Rule | Refuses when | Overridable |
+|---|---|---|
+| `relationship_frequency` | more asks to this target this quarter than the cap | yes, with a recorded reason |
+| `connector_load` | the connector has been asked more than `asksPerConnectorPerQuarter` | yes, with a recorded reason |
+| `cross_vehicle_conflict` | another vehicle has an open ask inside the window | opens a case rather than refusing |
+| `non_circumvention` | the target has a restriction covering this route | **no** |
+
+The last row is the one that matters. A do-not-approach instruction is the target's
+instruction, not our policy, so there is no reason string that turns it into a permission —
+`makeAsk` refuses it before it even considers the override path.
+
+Every guard report carries an `inspected` line, so an empty block list reads as "nothing in
+the material available refused this" rather than "this is safe".
+
+### The dated follow-up
+
+`coordination.conflict_case` has a check constraint: a row cannot be `adjudicated` without
+a winner, a loser, a reason code **and** `loser_followup_at`. The service refuses it too,
+and the form will not submit without it. Three layers for one rule, because blocking
+without the follow-up is the exact failure the table was added to prevent — it protects the
+relationship and loses the opportunity silently.
+
+### A promotion, on the record
+
+`coordination.restriction` was promoted out of `research.note` during this stage, under
+test 3 of the promotion rule: *a tool needs a precise input*. The guard cannot substring-match
+prose for a connector name. The note is still there; the structured row is what the guard reads.
+
+### Where I disagreed
+
+1. **Two guards refuse the seeded Roos ask, not one.** The design board shows the conflict
+   as the blocker. In fact `asksPerRelationshipPerQuarter: 1` also refuses it, because Rails
+   already asked her six days ago. I left both showing. If one ask per relationship per
+   quarter is genuinely the intended cap across *all four vehicles*, then the conflict case
+   is nearly redundant — every cross-vehicle collision will also trip the frequency guard.
+   I think the frequency cap is meant per vehicle and the constant is under-specified. It is
+   a guess either way; this is the first thing real data should settle.
+
+2. **Tickets whose subjects do not exist yet.** `SEND`, `MONEY` and `STAGE` gate mutations
+   in modules that land at L6, L8 and L12. Rather than wait, `approval_ticket` carries a
+   `subject_label` next to the `subject_id`, so the queue is legible now and the foreign key
+   stays honest when those modules arrive. It is a small compromise and it is visible in the
+   schema comment.
+
+3. **A client/server split inside each module.** A `'use client'` component importing a
+   module's `index.ts` drags the repository, and with it `node:fs`, into the browser bundle —
+   Turbopack panics rather than failing gracefully. Each module now has a `client.ts` with
+   types and constants only. The boundary checker knows about it.
+
+### Still not built
+
+Routes and the A–D evidence tiers (L4), the consent ladder (L5), and any notion of money
+moving (L6). `MONEY` tickets can be approved; nothing yet records a commitment, which is
+why the seeded one says so on its face.

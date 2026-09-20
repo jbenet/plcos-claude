@@ -34,35 +34,33 @@ type Global = typeof globalThis & { __capitalOsDb?: Promise<Db> };
 const g = globalThis as Global;
 
 /**
- * Resolve the Db for this process and apply migrations exactly once.
- * Cached on globalThis so Next's dev-mode module reloading does not open a second handle.
+ * Resolve the Db for this process, apply migrations, and seed if the database is empty.
+ * Cached on globalThis so Next's dev-mode module reloading does not open a second handle —
+ * PGlite is single-process, and a second handle on the same directory deadlocks.
  */
 export function getDb(): Promise<Db> {
-  if (!g.__capitalOsDb) {
-    g.__capitalOsDb = open();
-  }
+  if (!g.__capitalOsDb) g.__capitalOsDb = boot();
   return g.__capitalOsDb;
 }
 
-async function open(): Promise<Db> {
-  const db = config.db.url
-    ? await (await import('./postgres')).openPostgres(config.db.url)
-    : await (await import('./pglite')).openPglite(config.db.localDir);
-  const { migrate } = await import('./migrate');
-  await migrate(db);
-  const { seedIfEmpty } = await import('../seed');
-  await seedIfEmpty(db);
-  return db;
-}
-
-/** Test/script helper: open a database without the global cache. */
-export async function openFresh(dir?: string): Promise<Db> {
+async function boot(dir?: string): Promise<Db> {
   const db = config.db.url
     ? await (await import('./postgres')).openPostgres(config.db.url)
     : await (await import('./pglite')).openPglite(dir ?? config.db.localDir);
   const { migrate } = await import('./migrate');
   await migrate(db);
+
+  // Publish the handle before seeding. The seed calls module services, those services call
+  // getDb(), and without this line that call would await the promise it is running inside.
+  g.__capitalOsDb = Promise.resolve(db);
+
   const { seedIfEmpty } = await import('../seed');
   await seedIfEmpty(db);
   return db;
+}
+
+/** Script entry point. Same handle, same lifecycle, explicit about the directory. */
+export async function openFresh(dir?: string): Promise<Db> {
+  if (!g.__capitalOsDb) g.__capitalOsDb = boot(dir);
+  return g.__capitalOsDb;
 }
