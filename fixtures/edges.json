@@ -1,0 +1,46 @@
+[
+  { "from": "juan", "to": "duettmann", "kind": "connector", "tier": "A", "strength": 0.78, "tie_band": "moderate", "valid_from": "2021-03-01",
+    "evidence": [{ "note": "Delivered two of two prior introductions for us. Co-authored a 2025 funding memo with us." }] },
+  { "from": "duettmann", "to": "roos", "kind": "connector", "tier": "A", "strength": 0.62, "tie_band": "moderate", "valid_from": "2022-05-01",
+    "evidence": [{ "doc": "S06", "note": "Roos publicly cited a memo Duettmann co-authored." }, { "doc": "S04", "note": "Duettmann offered to ask her directly." }] },
+
+  { "from": "juan", "to": "okonjo", "kind": "colleague", "tier": "A", "strength": 0.70, "tie_band": "strong", "valid_from": "2019-02-01",
+    "evidence": [{ "note": "Co-invested twice. Regular contact through 2026." }] },
+  { "from": "okonjo", "to": "roos", "kind": "board", "tier": "C", "strength": 0.25, "tie_band": "weak", "valid_from": "2019-01-01",
+    "reviewed_by": "mara", "review_note": "Co-membership confirmed from the registry. No evidence they interacted, and the term ended in December 2023. Affiliation only.",
+    "evidence": [{ "doc": "S09", "note": "Both served on a research charity board until December 2023." }] },
+
+  { "from": "juan", "to": "navarro", "kind": "colleague", "tier": "B", "strength": 0.40, "tie_band": "moderate", "valid_from": "2022-09-01",
+    "evidence": [{ "note": "Served on a programme committee together in 2022." }] },
+  { "from": "navarro", "to": "roos", "kind": "event_coattendee", "tier": "D", "strength": 0.10, "tie_band": "weak", "valid_from": "2024-11-05",
+    "evidence": [{ "doc": "S07", "note": "Both on an eleven-person panel roster in 2024." }, { "doc": "S08", "note": "Mutual follow on one public network." }] },
+
+  { "from": "juan", "to": "hale", "kind": "advisor", "tier": "A", "strength": 0.60, "tie_band": "moderate", "valid_from": "2020-06-01",
+    "evidence": [{ "note": "Hale has advised us on two placements." }] },
+  { "from": "hale", "to": "roos", "kind": "connector", "tier": "B", "strength": 0.50, "tie_band": "moderate", "valid_from": "2021-01-01",
+    "evidence": [{ "note": "Hale introduced Roos to two managers in 2023." }] },
+
+  { "from": "mara", "to": "mercer", "kind": "connector", "tier": "A", "strength": 0.66, "tie_band": "moderate", "valid_from": "2020-01-01",
+    "evidence": [{ "note": "Mercer & Bly have screened two of our managers." }] },
+  { "from": "mercer", "to": "lindqvist", "kind": "advisor", "tier": "B", "strength": 0.55, "tie_band": "moderate", "valid_from": "2019-06-01",
+    "evidence": [{ "doc": "S09", "note": "Mercer & Bly screen managers for Cedar Trust." }] },
+  { "from": "lindqvist", "to": "cedar", "kind": "colleague", "tier": "A", "strength": 1.0, "tie_band": "strong", "valid_from": "2017-01-01",
+    "evidence": [{ "note": "Chief investment officer." }] },
+
+  { "from": "juan", "to": "raman", "kind": "colleague", "tier": "B", "strength": 0.45, "tie_band": "moderate", "valid_from": "2026-08-01",
+    "evidence": [{ "note": "Met at the Q3 event. She asked to be contacted directly." }] },
+  { "from": "raman", "to": "northwood", "kind": "colleague", "tier": "A", "strength": 0.95, "tie_band": "strong", "valid_from": "2018-01-01",
+    "evidence": [{ "note": "Head of private markets." }] },
+
+  { "from": "duettmann", "to": "quill", "kind": "colleague", "tier": "B", "strength": 0.50, "tie_band": "moderate", "valid_from": "2018-01-01",
+    "evidence": [{ "note": "Former colleagues at the same institute." }] },
+  { "from": "quill", "to": "northwood", "kind": "coinvestor", "tier": "D", "strength": 0.20, "tie_band": "weak", "valid_from": "2021-06-01",
+    "evidence": [{ "doc": "S11", "note": "Appears alongside Northwood in a 2021 CSV nobody can vouch for." }] },
+
+  { "from": "okonjo", "to": "okonjo-fo", "kind": "family", "tier": "A", "strength": 1.0, "tie_band": "strong", "valid_from": "2015-01-01",
+    "evidence": [{ "note": "Principal of the family office." }] },
+  { "from": "roos", "to": "roos-fdn", "kind": "family", "tier": "A", "strength": 1.0, "tie_band": "strong", "valid_from": "2011-01-01",
+    "evidence": [{ "doc": "S01", "note": "Sole trustee with signing authority." }] },
+  { "from": "mara", "to": "duettmann", "kind": "colleague", "tier": "B", "strength": 0.40, "tie_band": "moderate", "valid_from": "2023-01-01",
+    "evidence": [{ "note": "Have met twice at conferences; correspond occasionally." }] }
+]

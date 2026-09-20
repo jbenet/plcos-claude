@@ -267,3 +267,20 @@ button.src{background:none;border:0;padding:0;font-family:var(--mono);font-size:
 .guardlist .row{align-items:flex-start}
 .gr{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;padding:3px 7px;border-radius:4px;flex:none;width:150px;text-align:center;background:#F5EAE4;color:var(--clay)}
 .gr.info{background:#EDEAE2;color:var(--muted)}
+
+/* ---------------- routes (design/S2) ---------------- */
+.route{display:flex;gap:13px;align-items:flex-start;padding:12px 15px;border-bottom:1px solid var(--hair)}
+.route:last-of-type{border-bottom:0}
+.route:hover{background:#FCFBF7}
+.route.best{background:#FBF9F4;box-shadow:inset 3px 0 0 var(--clay)}
+.route .rt{flex:1;min-width:0}
+.route .rt b{font-size:13.5px;font-weight:500;display:block;margin-bottom:5px}
+.route .rt p{margin:0 0 5px;font-size:11.5px;color:var(--muted);line-height:1.5}
+.verdict{flex:none;width:118px;text-align:right;font-size:11px;line-height:1.45;color:var(--muted)}
+.verdict b{display:block;color:var(--ink);font-weight:500;font-size:11.5px;margin-bottom:2px}
+.verdict b.stop{color:var(--clay)}
+.tier{font-family:var(--mono);font-size:10px;font-weight:500;width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px}
+.tA{background:#E6F2EC;color:var(--green)}
+.tB{background:#F6F0DF;color:var(--amber)}
+.tC{background:#EFEDE7;color:var(--muted)}
+.tD{background:#EFEDE7;color:var(--muted)}

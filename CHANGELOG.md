@@ -265,3 +265,88 @@ prose for a connector name. The note is still there; the structured row is what 
 Routes and the A–D evidence tiers (L4), the consent ladder (L5), and any notion of money
 moving (L6). `MONEY` tickets can be approved; nothing yet records a commitment, which is
 why the seeded one says so on its face.
+
+---
+
+## L4 — The relationship graph and the route planner
+
+**Shipped.** Module 05. A persistent edge table, three-hop enumeration by recursive CTE,
+A–D evidence tiers with human review required on C and D, non-circumvention checked on
+every candidate path, connector ask-load in the ranking, and a coverage disclosure on every
+search.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Routes](docs/changelog/shots/l4/01-routes.png) | **Four paths to Delia Roos, ranked.** Recommend, Hold, Not a route, Excluded — each with the reason, the tier of every hop, and the evidence behind it. |
+| ![Full page](docs/changelog/shots/l4/02-routes-full.png) | **The list and the drawing.** The path list is the primary view; the graph adds shape and nothing else. Dashed lines are paths that cannot be used. |
+| ![No route](docs/changelog/shots/l4/03-no-route.png) | **The state this whole rule exists for.** "No path exists in the material available" — said in those words, with the corpus, the hop limit, and what was not inspected. |
+
+### The four paths, and why each got its verdict
+
+| Path | Verdict | Because |
+|---|---|---|
+| Juan → Duettmann → Roos | **Recommend** | Both hops tier A with interaction evidence. Duettmann has 1 of 3 asks left this quarter. |
+| Juan → Okonjo → Roos | **Hold** | Second hop is tier C — a board co-membership that ended in 2023, confirmed by Mara as affiliation only. A route is only as good as its worst hop. |
+| Juan → Navarro → Roos | **Not a route** | Second hop is tier D and nobody has reviewed it. Co-attendance and a mutual public follow are discovery clues, not a relationship. |
+| Juan → Hale → Roos | **Excluded** | Roos asked not to be introduced through Hale. |
+
+The fourth row is the one worth staring at. The path is *good* — tier A then tier B, a
+connector who has introduced her to two managers before. It is excluded anyway, and the
+reason text says explicitly that finding a different connector toward the same approach
+does not satisfy the instruction. `makeAsk` refuses that substitution too, and unlike the
+frequency and load guards, it cannot be overridden with a reason.
+
+### What the tiers actually mean
+
+v3 said "tier it"; v4 said what the tiers mean. Both are in the schema and in
+`TIER_MEANING`, so the words and the enum cannot drift apart:
+
+- **A** — documented working relationship, with evidence of interaction.
+- **B** — documented association, one strong source, some interaction.
+- **C** — shared affiliation only. Same board, same firm, *no evidence they ever spoke.*
+- **D** — proximity only. Co-attendance, a public follow.
+
+C and D carry nothing until a person reviews them. The planner does not drop those paths —
+it enumerates them and labels them, because a planner that silently discards its weak
+candidates returns an empty list, and an empty list reads as "no route exists".
+
+### The canvas has a list equivalent, and the list came first
+
+The path list carries every hop's tier, kind, validity date, evidence reference and verdict
+reasoning, and each path is a link. The SVG is a second presentation of the same data.
+That ordering is deliberate: the list was built first, and the drawing adds shape.
+
+### From a route to an ask
+
+A recommended or held route has a **Propose the ask** control. It writes the ask, runs the
+four guards from L3, opens an `INTRO_ASK` ticket with a stated scope, opens a conflict case
+if another vehicle is already in the way, and drops you in the approvals queue. It contacts
+nobody — the button says "propose", because the gap between asking the system and asking
+the person is exactly where a consent ladder gets skipped.
+
+### Where I disagreed
+
+1. **The `strength` numeric is stored and never rendered.** Affinity will supply
+   `interactionScore` later and the column is there for it. But a 0.62 on a relationship is
+   not 62% of anything, and showing it would be precisely the "numeric confidence rendered
+   as fact" the frontend contract forbids. The UI shows the tier, the kind, the date and the
+   evidence. `tie_band` exists for the moderate-band routing preference when there is enough
+   outcome data to tune it; right now it is seeded and unused rather than pretended-upon.
+
+2. **Team members exist twice, and that is correct.** `platform.app_user` is who logs in;
+   `identity.entity` is a node in the graph. `identity.source_record` joins them with
+   `source = 'app_user'`. Without this, the graph has no origin node and "routes from Juan"
+   has no meaning. It also means switching user in the rail genuinely recomputes the page —
+   Mara can reach Ivo Lindqvist through Mercer & Bly and Juan cannot.
+
+3. **Edges are stored directed and traversed undirected,** through a `network.link` view
+   that unions both readings. Storing each relationship twice would double the maintenance
+   surface for no gain.
+
+### Still not built
+
+The consent ladder (L5) — the routes page can propose an ask, but nothing yet records
+where a target actually stands. No scoring (L9): the ranking here is evidence and goodwill,
+not a model.
