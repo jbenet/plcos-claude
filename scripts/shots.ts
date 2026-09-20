@@ -160,6 +160,25 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '01-close-room', path: '/close', fullPage: true },
     { name: '02-spv-war-room', path: '/spv', fullPage: true },
   ],
+  L9: [
+    { name: '01-selection', path: '/selection', fullPage: true },
+    {
+      name: '02-reweighted',
+      path: '/selection',
+      fullPage: true,
+      prepare: async (page) => {
+        // Push propensity up and capacity down; the order should change and say why.
+        const capacity = page.locator('input[name="capacity"]');
+        const propensity = page.locator('input[name="propensity"]');
+        await capacity.fill('10');
+        await propensity.fill('40');
+        await page.getByPlaceholder('Propensity matters more than capacity this quarter')
+          .fill('Propensity matters more than capacity this quarter');
+        await page.getByRole('button', { name: /Apply and re-rank/ }).click();
+        await page.waitForTimeout(1200);
+      },
+    },
+  ],
 };
 
 /** The seed mints uuids, so a fixed link is resolved at shot time. */

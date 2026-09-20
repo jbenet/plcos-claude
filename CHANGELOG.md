@@ -622,3 +622,66 @@ entities with provenance, the approval gate and conflict cases, the route planne
 evidence tiers, the consent ladder, the two money tracks with a conserved-pool check, the
 daily HUD with a holiday-aware calendar, and both close rooms. `npm run props` covers the
 domain rules that matter with 17 properties and 5 perturbations.
+
+---
+
+## L9 — The selection rubric
+
+**Shipped.** Module 03. Four dimensions, weights that are visible and editable on the page,
+and a sentence under every number saying where it came from.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Selection](docs/changelog/shots/l9/01-selection.png) | **Ranked for PLC Neurotech I.** Four scored, two unscored. Every factor shows its basis, its source and who recorded it. |
+| ![Reweighted](docs/changelog/shots/l9/02-reweighted.png) | **The same list after moving capacity to 10% and propensity to 40%.** The order changes, the old weight set is kept, and an audit row records who changed it and why. |
+
+### A rubric, not a model
+
+Nothing here is learned and nothing is inferred. `scoring.factor` requires a `basis` — a
+factor without a reason is a guess with a decimal point — and carries a source reference
+and an as-of date like every other externally-sourced field in this system.
+
+**A target missing any factor is returned unscored.** Northwood has no propensity factor
+because nobody has looked it up; Okonjo is missing two. They rank last and say why:
+
+> *Not scored: Propensity and Time to decision have no factor on file. Three quarters of a
+> rubric is not a score.*
+
+That is the case a ranking is most likely to be wrong about, so it gets the loudest
+treatment rather than a quiet default of 0.5.
+
+### The weights are the argument
+
+They live on the page as four sliders, not in a config file. Changing them re-ranks
+immediately, keeps the previous set, and writes an audit row with the reason you typed.
+A ranking you cannot reproduce is not a ranking; a ranking whose weights you cannot see is
+one you cannot disagree with.
+
+New property test:
+
+```
+  ok   Variation — reweight toward propensity
+       Roos Foundation 0.54 → 0.47; its weakest dimension is propensity (no LP positions in
+       seven years), so raising that weight has to lower it
+```
+
+`npm run props` is at **20 of 20**.
+
+### Where I disagreed
+
+**The band cut-offs are a guess and are not in `config/deployment.ts`.** 0.70 and 0.45 came
+from judgement, same as L7's dead-week threshold. The page says so in the cover line
+underneath the list. Both belong in the config file with the other labelled guesses, and I
+would rather flag the inconsistency than quietly launder two more estimates.
+
+**The score is rendered as a number, which brushes against the frontend contract.** The
+rule is *never a numeric confidence rendered as fact*. A rubric total is not a confidence —
+it is a weighted sum of four things a person wrote down — so it is shown with the band word
+beside it, all four inputs underneath, and a sentence saying it is a way of arguing about an
+order rather than a probability of anything. That is the line I drew; it is worth checking.
+
+### Still not built
+
+Signals (L10), meetings and the decision room (L11), materials (L12), agents (L13).

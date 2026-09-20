@@ -57,9 +57,11 @@ export async function seed(db: Db): Promise<{ users: number; vehicles: number; s
   const calendar = await seedCalendar(db);
   const { seedClose } = await import('./seed-close');
   const close = await seedClose(db);
+  const { seedScoring } = await import('./seed-scoring');
+  const scoring = await seedScoring(db);
   return {
     users: users.length, vehicles: vehicles.length, sources: sources.length,
-    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close,
+    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring,
   };
 }
 
