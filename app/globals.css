@@ -519,3 +519,10 @@ table.list tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
                 font-size:9.5px;letter-spacing:.06em;text-transform:uppercase}
 .exempt .exrefs a{color:var(--muted);border-bottom:1px solid var(--line)}
 .exempt .exrefs a:hover{color:var(--accent);border-color:var(--accent)}
+table.list tr.past td{opacity:.72}
+table.list tr.past td:first-child{box-shadow:inset 2px 0 0 var(--line)}
+.affline{font-size:10.5px;line-height:1.45;margin-top:3px;color:var(--muted)}
+.affline a{border-bottom:1px solid var(--line)}
+.affline a:hover{color:var(--accent);border-color:var(--accent)}
+.affline.dim{opacity:.6;font-style:italic}
+.list.affil{table-layout:fixed}

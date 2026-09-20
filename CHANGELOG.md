@@ -1620,3 +1620,72 @@ banner at the top of the vehicle overview that says what it means in a sentence 
 solicitation permitted and verification mandatory for 506(c), no solicitation and a
 pre-existing relationship required for 506(b), invitations rather than subscriptions for
 the grants rail — with links to the send gate and the compliance registry.
+
+---
+
+## N7 — People, firms, and the fact that they are different records
+
+**Shipped.** `identity.affiliation` — who acts for which organisation, in what capacity,
+between which dates. A person can act for several, which is normal rather than an error.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![People](docs/changelog/shots/n7/01-people-tab.png) | **The directory lists everyone**, and now has *People* and *Firms & institutions* tabs. Each row says who somebody acts for, or how many people a firm has on file. |
+| ![Firm people](docs/changelog/shots/n7/02-firm-people.png) | **A firm page carries its people.** Northwood's decision-maker, her capacity, the dates she has held it, and the other firm she also appears at. |
+| ![Two firms](docs/changelog/shots/n7/03-person-two-firms.png) | **A person page leads with where they sit.** Raman decides at Northwood and worked at Vantage until August — and Vantage is already an LP in both of our vehicles. |
+| ![Summary pane](docs/changelog/shots/n7/04-summary-acts-for.png) | **The summary pane carries it too.** Hale advises at Mercer & Bly and formerly advised Roos, where a do-not-approach instruction is on file. |
+| ![Firms](docs/changelog/shots/n7/05-firms-tab.png) | **Firms & institutions** — the records that hold a mandate, a cheque band and a restriction. |
+
+### Why this is not `network.edge`
+
+An edge says two people have a relationship we might route through. **An affiliation says a
+person acts for an organisation.** Conflating them means a CIO's employment reads as a warm
+tie to their own employer, which is not a tie at all and would rank as one.
+
+So affiliations are their own table, many-to-many and dated:
+
+```
+principal · decides · our contact · adviser · board · works there
+```
+
+**Capacity is recorded, not inferred from a title.** "Decides" means somebody confirmed
+they sign. A head-of-investments nobody has asked is *works there*. Adeyemi at Brenner is
+marked `inferred` from an annual report with the word on the row, because nobody has
+confirmed it with him.
+
+### Former roles stay visible
+
+`ended_on` makes a row former, and former rows render greyed with a **former** flag rather
+than disappearing. A route planned through a seat somebody left eighteen months ago is the
+quiet way a relationship graph goes wrong, and hiding the leaving is what makes it quiet.
+
+Two of the seeded rows exist to make that legible: Roos and Okonjo both left the Halvorsen
+Institute board in December 2023, which is exactly the "shared affiliation, no evidence
+they ever spoke" tier-C edge the route planner already refuses to trust.
+
+### What the seed surfaced
+
+**Priya Raman decides at Northwood and was an investment director at Vantage Partners until
+31 August.** Vantage is an LP in *both* of our vehicles, has never been asked for a
+reference, and Report 6 is blunt that under-asking existing LPs is the most common mistake
+managers make. That route did not exist in the system an hour ago and it is the best one on
+the Northwood page.
+
+**Jonah Hale advises at Mercer & Bly and formerly advised the Roos Foundation.** The
+do-not-approach instruction attaches to Delia Roos, not to the Mercer seat — so the second
+row is marked former and restricted, and the first is untouched. Two capacities, one
+person, and only one of them is blocked.
+
+### The directory
+
+Six tabs: everyone, people, firms & institutions, LPs, co-funders, connectors. The
+person/firm split is the one that earns its place — **a firm is assessed and a person is
+approached**, which is why a principal can read *not assessed* while their foundation is,
+and why the org page says so and links across.
+
+New fixture people so the firms are not empty: Gordon Whitcomb, Marisa Tessaro, Rosa
+Iglesias, Curtis Adeyemi, Rachel Kaplan, Hannah Boyle. They are fixtures, not research.
+
+**43 of 43 properties hold.**

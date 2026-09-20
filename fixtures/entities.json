@@ -51,7 +51,7 @@
     "key": "raman",
     "type": "person",
     "name": "Priya Raman",
-    "note": "Head of private markets, Northwood Capital."
+    "note": "Head of investments at Northwood Capital since September 2026. Asked to be contacted directly."
   },
   {
     "key": "cedar",
@@ -69,7 +69,7 @@
     "key": "halvorsen",
     "type": "foundation",
     "name": "Halvorsen Institute",
-    "note": "Grants funder. No invitation on file \u2014 outreach is gated."
+    "note": "Grants funder. No invitation on file — outreach is gated."
   },
   {
     "key": "mercer",
@@ -130,5 +130,41 @@
     "type": "family",
     "name": "Tessaro Family Office",
     "note": "Single family office, principal-decided. Neuro interest is publicly stated by the principal."
+  },
+  {
+    "key": "whitcomb-p",
+    "type": "person",
+    "name": "Gordon Whitcomb",
+    "note": "Principal of Whitcomb Capital. Decides alone and moves in days."
+  },
+  {
+    "key": "tessaro-p",
+    "type": "person",
+    "name": "Marisa Tessaro",
+    "note": "Principal of the Tessaro Family Office. Has spoken publicly about wanting more exposure to frontier neuroscience."
+  },
+  {
+    "key": "iglesias",
+    "type": "person",
+    "name": "Rosa Iglesias",
+    "note": "CIO at Vantage Partners. Signed both of our vehicles inside one year."
+  },
+  {
+    "key": "adeyemi",
+    "type": "person",
+    "name": "Curtis Adeyemi",
+    "note": "Head of investments at the Brenner Endowment."
+  },
+  {
+    "key": "kaplan-p",
+    "type": "person",
+    "name": "Rachel Kaplan",
+    "note": "Principal of the Kaplan Family Trust."
+  },
+  {
+    "key": "boyle",
+    "type": "person",
+    "name": "Hannah Boyle",
+    "note": "Investment operations at Cedar Trust. Our counterpart for everything after the decision."
   }
 ]

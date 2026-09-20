@@ -1,0 +1,68 @@
+[
+  { "person": "roos", "org": "roos-fdn", "kind": "principal", "role": "Sole trustee",
+    "primary": true, "started": "2016-04-01", "as_of": "2026-09-12", "certainty": "known",
+    "source": "S01", "note": "Signs alone. Her counsel can stop it on the §4944(c) question and nobody else can." },
+  { "person": "roos", "org": "halvorsen", "kind": "board", "role": "Trustee",
+    "started": "2019-02-01", "ended": "2023-12-31", "as_of": "2023-12-31", "certainty": "known",
+    "source": "S09", "note": "Former. The overlap with Okonjo is co-service on this board and nothing more." },
+
+  { "person": "okonjo", "org": "okonjo-fo", "kind": "principal", "role": "Principal",
+    "primary": true, "started": "2014-01-01", "as_of": "2026-08-21", "certainty": "known",
+    "note": "Decides alone, two to eight weeks when he engages." },
+  { "person": "okonjo", "org": "halvorsen", "kind": "board", "role": "Trustee",
+    "started": "2020-06-01", "ended": "2023-12-31", "as_of": "2023-12-31", "certainty": "known",
+    "source": "S09", "note": "Former. Left the same month Roos did; no evidence they ever spoke." },
+
+  { "person": "raman", "org": "northwood", "kind": "decision_maker", "role": "Head of investments",
+    "primary": true, "started": "2026-09-01", "as_of": "2026-09-08", "certainty": "known",
+    "note": "Three weeks in post. She asked to be contacted; the emerging-manager programme is hers." },
+  { "person": "raman", "org": "vantage", "kind": "staff", "role": "Investment director",
+    "started": "2021-03-01", "ended": "2026-08-31", "as_of": "2026-09-08", "certainty": "inferred",
+    "note": "Former, and the most useful fact on this page: Vantage is already an LP in both of our vehicles and has never been asked for a reference." },
+
+  { "person": "lindqvist", "org": "cedar", "kind": "decision_maker", "role": "Chief investment officer",
+    "primary": true, "started": "2018-09-01", "as_of": "2026-09-18", "certainty": "known",
+    "note": "Signed the $4.0M. The committee can stop him quarterly; on this one it did not." },
+  { "person": "boyle", "org": "cedar", "kind": "contact", "role": "Investment operations",
+    "primary": true, "started": "2022-01-01", "as_of": "2026-09-18", "certainty": "known",
+    "note": "Everything after the decision goes through her. Capacity to decide: none recorded, and none claimed." },
+
+  { "person": "whitcomb-p", "org": "whitcomb", "kind": "principal", "role": "Principal",
+    "primary": true, "started": "2009-01-01", "as_of": "2026-09-09", "certainty": "known",
+    "note": "The accreditation gate is his to clear, and only a CPA letter clears it." },
+
+  { "person": "tessaro-p", "org": "tessaro", "kind": "principal", "role": "Principal",
+    "primary": true, "started": "2011-01-01", "as_of": "2026-09-02", "certainty": "inferred",
+    "note": "Recorded from a public interview. Only what she said about her own interests; nothing else belongs here." },
+
+  { "person": "iglesias", "org": "vantage", "kind": "decision_maker", "role": "Chief investment officer",
+    "primary": true, "started": "2019-05-01", "as_of": "2026-07-08", "certainty": "known",
+    "note": "Committed to both vehicles. The MFN she negotiated is now triggered and she has not been told." },
+
+  { "person": "adeyemi", "org": "brenner", "kind": "decision_maker", "role": "Head of investments",
+    "primary": true, "started": "2023-02-01", "as_of": "2026-06-15", "certainty": "inferred",
+    "note": "Inferred from the endowment's annual report. Nobody has confirmed it with him." },
+
+  { "person": "kaplan-p", "org": "kaplan", "kind": "principal", "role": "Principal",
+    "primary": true, "as_of": "2026-05-02", "certainty": "inferred",
+    "note": "Inferred from the subscription signature. Never confirmed in conversation." },
+
+  { "person": "hale", "org": "mercer", "kind": "adviser", "role": "Senior adviser",
+    "primary": true, "started": "2022-01-01", "as_of": "2026-09-08", "certainty": "known",
+    "source": "S09", "note": "Mercer & Bly screen for several endowments, which is why this matters more than his own book." },
+  { "person": "hale", "org": "roos-fdn", "kind": "adviser", "role": "Introduced two managers, 2023",
+    "started": "2023-01-01", "ended": "2024-06-30", "as_of": "2026-09-08", "certainty": "known",
+    "source": "S05", "note": "Former, and restricted: Roos asked not to be introduced through him. The restriction attaches to her, not to this row." },
+
+  { "person": "navarro", "org": "mercer", "kind": "staff", "role": "Analyst",
+    "primary": true, "started": "2024-09-01", "as_of": "2026-09-01", "certainty": "guess",
+    "note": "A guess from a conference badge. This is exactly the kind of row that should not carry a route." },
+
+  { "person": "quill", "org": "mercer", "kind": "adviser", "role": "Adviser, crypto mandates",
+    "primary": true, "started": "2025-04-01", "as_of": "2026-07-20", "certainty": "inferred",
+    "note": "Co-funder on the Lattice SPV and adviser here. Two capacities, one person — worth knowing before an ask goes either way." },
+
+  { "person": "duettmann", "org": "halvorsen", "kind": "adviser", "role": "Scientific adviser",
+    "primary": true, "started": "2021-09-01", "as_of": "2026-09-14", "certainty": "inferred",
+    "source": "S06", "note": "Her standing in this field is why she is a tier-A route to Roos. Credibility is topic-specific and this is the topic." }
+]

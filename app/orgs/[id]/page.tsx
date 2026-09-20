@@ -12,7 +12,8 @@ import { listExposures } from '@/modules/pipeline';
 import { listPursuits, RUNG_LABEL, RUNGS, rungIndex } from '@/modules/strategy';
 import { listEdges, TIER_MEANING } from '@/modules/network';
 import { restrictionsFor, listAsks } from '@/modules/coordination';
-import { ROLE_LABEL, relationshipRoles, type RelationshipRole } from '@/modules/identity';
+import { ROLE_LABEL, relationshipRoles, listAffiliations, orgsFor, peopleAt, type RelationshipRole } from '@/modules/identity';
+import { OrgsFor, PeopleAt } from '@/components/entity/People';
 import { EntityLink } from '@/components/entity/EntityLink';
 import { usdM } from '@/lib/money';
 import { shortDate } from '@/lib/time';
@@ -54,7 +55,13 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
     relationshipRoles(),
     listAsks(null),
   ]);
-  const allFit = await listAssessments(null);
+  const [allFit, people, sits, everyAffiliation] = await Promise.all([
+    listAssessments(null),
+    peopleAt(entity.entityId),
+    orgsFor(entity.entityId),
+    listAffiliations(),
+  ]);
+  const isPerson = entity.entityType === 'person';
 
   const mine = exposures.filter((x) => x.entityId === entity.entityId);
   const theirs = pursuits.filter((p) => p.entityId === entity.entityId);
@@ -219,6 +226,9 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
         </div>
       )}
 
+      {isPerson ? (
+        <>
+          <OrgsFor affiliations={sits} personName={entity.displayName} />
       <div className="card">
         <div className="chead">
           <h2>Where we stand, per vehicle</h2>
@@ -309,6 +319,104 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
           adds them.
         </p>
       </div>
+
+        </>
+      ) : (
+        <>
+      <div className="card">
+        <div className="chead">
+          <h2>Where we stand, per vehicle</h2>
+          <span className="lbl">{standing.length} vehicle{standing.length === 1 ? '' : 's'} · never summed</span>
+        </div>
+        {standing.length === 0 ? (
+          <div className="cbody">
+            <div className="empty">
+              <span className="stat unavailable"><i />No vehicle</span>
+              <h3>Nothing connects {entity.displayName} to a vehicle yet.</h3>
+              <p>
+                No exposure, no pursuit, no fit assessment. They are in the record because someone
+                wrote them down, and nothing has been decided about them.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <table className="list">
+            <thead>
+              <tr>
+                <th style={{ width: 190 }}>Vehicle</th>
+                <th style={{ width: 150 }}>Money on file</th>
+                <th style={{ width: 190 }}>Consent ladder</th>
+                <th>What is in the way</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standing.map((s) => (
+                <tr key={s.vehicleId}>
+                  <td><b>{s.vehicleName}</b></td>
+                  <td className="mono">
+                    {s.exposures.length === 0 ? <span className="muted">—</span> : s.exposures.map((x) => (
+                      <div key={x.exposureId} style={{ color: x.track === 'hard' ? 'var(--green)' : 'var(--muted)' }}>
+                        {usdM(x.amount)} {x.track}
+                      </div>
+                    ))}
+                  </td>
+                  <td>
+                    {s.pursuit
+                      ? <>
+                          {s.pursuit.rung ? RUNG_LABEL[s.pursuit.rung] : 'No rung evidenced'}
+                          <div className="muted" style={{ fontSize: 11 }}>
+                            {s.pursuit.rung
+                              ? `${rungIndex(s.pursuit.rung) + 1} of ${RUNGS.length}`
+                              : 'the first rung needs an evidence record'}
+                          </div>
+                        </>
+                      : <span className="muted">No pursuit open</span>}
+                  </td>
+                  <td>
+                    {s.assessment ? (
+                      <>
+                        <Link href={`/${s.assessment.vehicleSlug}/fit/${entity.entityId}`}>
+                          <span className={`flag ${BLOCKER_FLAG[s.assessment.diagnosis.blocker]}`}>
+                            {BLOCKER_LABEL[s.assessment.diagnosis.blocker]}
+                          </span>
+                        </Link>
+                        <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
+                          {s.assessment.diagnosis.nextMove}
+                        </div>
+                      </>
+                    ) : (
+                      <span className="muted">Not assessed</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {fit.length === 0 && nearby.length > 0 && (
+          <p className="cover">
+            <b>Assessed next door.</b> Nobody has assessed {entity.displayName} directly, but{' '}
+            {nearby.map((f, i) => (
+              <span key={f.assessmentId}>
+                {i > 0 && ', '}
+                <Link href={`/${f.vehicleSlug}/fit/${f.entityId}`}>{f.entityName}</Link> is,
+                against {f.vehicleName}
+              </span>
+            ))}
+            . A person and the institution they sign for are separate records on purpose — the
+            money, the mandate and the restriction do not always attach to the same one.
+          </p>
+        )}
+        <p className="cover">
+          <b>One row per vehicle, and no total row.</b> Soft and hard are separate columns within a
+          row and separate rows across vehicles. There is no figure anywhere in this system that
+          adds them.
+        </p>
+      </div>
+
+          <PeopleAt people={people} orgName={entity.displayName} elsewhere={everyAffiliation} />
+        </>
+      )}
 
       {(ties.length > 0 || askedOf.length > 0 || carried.length > 0) && (
         <div className="card">

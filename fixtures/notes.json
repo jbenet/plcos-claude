@@ -1,9 +1,82 @@
 [
-  { "entity": "roos", "kind": "open_question", "author": "juan",  "body": "Does the foundation have authority to take a fund LP position at all? The grants export shows none in seven years, which is evidence of practice, not of the trust deed.", "tags": ["authority"], "data": { "status": "unknown" } },
-  { "entity": "roos", "kind": "open_question", "author": "ines",  "body": "Is the 2027 budget set? Nothing public since the March 2026 page update.", "tags": ["timing"], "data": { "status": "unknown" } },
-  { "entity": "roos", "kind": "open_question", "author": "tomas", "body": "Where did counsel land on §4944(c)? The only note we have is two years old.", "tags": ["legal"], "data": { "status": "stale", "stale_since": "2024-03-11", "source": "S10" } },
-  { "entity": "roos", "kind": "note", "author": "mara", "body": "Programme lead was warm but careful on the phone. Reading between the lines, the foundation has been approached a lot this year.", "tags": ["colour"], "data": {} },
-  { "entity": "northwood", "kind": "open_question", "author": "mara", "body": "Is Priya Raman still head of private markets? The only source is a 2021 CSV nobody can vouch for.", "tags": ["staffing"], "data": { "status": "unknown" } },
-  { "entity": "okonjo-fo", "kind": "note", "author": "juan", "body": "Michael Okonjo is both a possible connector to Roos and a prospect in his own right. Those two roles should not be resolved by whoever gets there first.", "tags": ["conflict"], "data": {} },
-  { "entity": "halvorsen", "kind": "note", "author": "tomas", "body": "Sourced, not applied for. Any outreach on the grants rail stays blocked until an invitation exists — that is a state machine guard at L13, not a reminder.", "tags": ["gate"], "data": {} }
+  {
+    "entity": "roos",
+    "kind": "open_question",
+    "author": "juan",
+    "body": "Does the foundation have authority to take a fund LP position at all? The grants export shows none in seven years, which is evidence of practice, not of the trust deed.",
+    "tags": [
+      "authority"
+    ],
+    "data": {
+      "status": "unknown"
+    }
+  },
+  {
+    "entity": "roos",
+    "kind": "open_question",
+    "author": "ines",
+    "body": "Is the 2027 budget set? Nothing public since the March 2026 page update.",
+    "tags": [
+      "timing"
+    ],
+    "data": {
+      "status": "unknown"
+    }
+  },
+  {
+    "entity": "roos",
+    "kind": "open_question",
+    "author": "tomas",
+    "body": "Where did counsel land on §4944(c)? The only note we have is two years old.",
+    "tags": [
+      "legal"
+    ],
+    "data": {
+      "status": "stale",
+      "stale_since": "2024-03-11",
+      "source": "S10"
+    }
+  },
+  {
+    "entity": "roos",
+    "kind": "note",
+    "author": "mara",
+    "body": "Programme lead was warm but careful on the phone. Reading between the lines, the foundation has been approached a lot this year.",
+    "tags": [
+      "colour"
+    ],
+    "data": {}
+  },
+  {
+    "entity": "northwood",
+    "kind": "open_question",
+    "author": "mara",
+    "body": "Is Priya Raman's emerging-manager programme open for 2026? She has held the seat three weeks; the only figures we have for Northwood come from a 2021 CSV nobody can vouch for.",
+    "tags": [
+      "staffing"
+    ],
+    "data": {
+      "status": "unknown"
+    }
+  },
+  {
+    "entity": "okonjo-fo",
+    "kind": "note",
+    "author": "juan",
+    "body": "Michael Okonjo is both a possible connector to Roos and a prospect in his own right. Those two roles should not be resolved by whoever gets there first.",
+    "tags": [
+      "conflict"
+    ],
+    "data": {}
+  },
+  {
+    "entity": "halvorsen",
+    "kind": "note",
+    "author": "tomas",
+    "body": "Sourced, not applied for. Any outreach on the grants rail stays blocked until an invitation exists — that is a state machine guard at L13, not a reminder.",
+    "tags": [
+      "gate"
+    ],
+    "data": {}
+  }
 ]

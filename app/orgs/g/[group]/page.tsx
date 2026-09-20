@@ -4,29 +4,47 @@ import { Page } from '@/components/shell/Page';
 import { EntityLink } from '@/components/entity/EntityLink';
 import { EntitySummary } from '@/components/entity/EntitySummary';
 import { usdM } from '@/lib/money';
-import { relationshipRoles, ROLE_LABEL, type RelationshipRole } from '@/modules/identity';
+import {
+  AFFIL_LABEL, listAffiliations, relationshipRoles, ROLE_LABEL, type RelationshipRole,
+} from '@/modules/identity';
 import { RUNG_LABEL, type LadderRung } from '@/modules/strategy';
 import { listAssessments, BLOCKER_SHORT, type Blocker } from '@/modules/fit';
 
 export const dynamic = 'force-dynamic';
 
-const GROUPS: Record<string, { title: string; lede: string; keep: (roles: RelationshipRole[]) => boolean; note: string }> = {
+interface Row { roles: RelationshipRole[]; entityType: string }
+
+const GROUPS: Record<string, {
+  title: string; lede: string; keep: (r: Row) => boolean; note: string;
+}> = {
+  people: {
+    title: 'People',
+    lede: 'Everyone who is a person rather than an institution — principals, the people who decide, our counterparts, and the connectors who carry asks.',
+    keep: (r) => r.entityType === 'person',
+    note: 'An ask lands on a person. The mandate, the cheque band and the do-not-approach instruction land on an institution. The two are separate records here for exactly that reason.',
+  },
+  firms: {
+    title: 'Firms & institutions',
+    lede: 'Funds, family offices, foundations and endowments — the records that hold a mandate, a cheque band and a restriction.',
+    keep: (r) => r.entityType !== 'person',
+    note: 'A firm is assessed; a person is approached. The funder–vehicle fit reading sits on the institution, which is why a principal can show "not assessed" while their foundation is.',
+  },
   lps: {
     title: 'LPs',
     lede: 'Everyone with money on file, across every vehicle. Derived from the exposure table rather than a field somebody maintains.',
-    keep: (roles) => roles.includes('lp'),
+    keep: (r) => r.roles.includes('lp'),
     note: 'Being an LP here means a hard commitment exists. Someone on the soft track is a prospect until the MONEY ticket is approved.',
   },
   'co-funders': {
     title: 'Co-funders',
     lede: 'Co-investors and grant funders — the people who show up beside us rather than behind us.',
-    keep: (roles) => roles.includes('co_funder') || roles.includes('funder'),
+    keep: (r) => r.roles.includes('co_funder') || r.roles.includes('funder'),
     note: 'Derived from coinvestor edges and the grants rail. A co-investment recorded only in a CSV nobody can vouch for still shows, and the edge tier says so.',
   },
   connectors: {
     title: 'Connectors',
     lede: 'The people who have actually carried an ask. Goodwill is finite and spent per person, not per vehicle.',
-    keep: (roles) => roles.includes('connector'),
+    keep: (r) => r.roles.includes('connector'),
     note: 'A connector is a connector because asks have gone through them. Willingness to ask is the first rung of the consent ladder and nothing more.',
   },
   all: {
@@ -37,7 +55,7 @@ const GROUPS: Record<string, { title: string; lede: string; keep: (roles: Relati
   },
 };
 
-const ORDER = ['all', 'lps', 'co-funders', 'connectors'];
+const ORDER = ['all', 'people', 'firms', 'lps', 'co-funders', 'connectors'];
 
 const ROLE_FLAG: Record<RelationshipRole, string> = {
   lp: 'f-ok', co_funder: 'f-ev', connector: 'f-mute',
@@ -60,9 +78,13 @@ export default async function Orgs({
   const spec = GROUPS[group];
   if (!spec) notFound();
 
-  const [all, fit] = await Promise.all([relationshipRoles(), listAssessments(null)]);
-  const rows = all.filter((r) => !r.roles.includes('team') && spec.keep(r.roles));
+  const [all, fit, affiliations] = await Promise.all([
+    relationshipRoles(), listAssessments(null), listAffiliations(),
+  ]);
+  const rows = all.filter((r) => !r.roles.includes('team') && spec.keep(r));
   const tally = (role: RelationshipRole) => all.filter((r) => r.roles.includes(role)).length;
+  const peopleCount = all.filter((r) => !r.roles.includes('team') && r.entityType === 'person').length;
+  const firmCount = all.filter((r) => !r.roles.includes('team') && r.entityType !== 'person').length;
 
   return (
     <Page
@@ -75,6 +97,8 @@ export default async function Orgs({
             <div className="lbl">Roles, derived</div>
             <div className="ihead">What someone is to us</div>
             <div className="imeta">Worked out from the record, never declared</div>
+            <div className="kv"><span>People</span><span>{peopleCount}</span></div>
+            <div className="kv"><span>Firms &amp; institutions</span><span>{firmCount}</span></div>
             {(['lp', 'co_funder', 'connector', 'funder', 'prospect'] as RelationshipRole[]).map((role) => (
               <div className="kv" key={role}>
                 <span>{ROLE_LABEL[role]}</span>
@@ -149,6 +173,35 @@ export default async function Orgs({
                         {r.entityType}
                         {r.vehicles.length > 0 ? ` · ${r.vehicles.join(', ')}` : ''}
                       </div>
+                      {(() => {
+                        const acts = affiliations.filter(
+                          (a) => a.personId === r.entityId && a.current,
+                        );
+                        const staff = affiliations.filter(
+                          (a) => a.orgId === r.entityId && a.current,
+                        );
+                        if (acts.length > 0) {
+                          return (
+                            <div className="affline">
+                              {acts.map((a, i) => (
+                                <span key={a.affiliationId}>
+                                  {i > 0 && ' · '}
+                                  {AFFIL_LABEL[a.kind].toLowerCase()} at{' '}
+                                  <Link href={`/orgs/${a.orgId}`}>{a.orgName}</Link>
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        }
+                        if (staff.length > 0) {
+                          return (
+                            <div className="affline">
+                              {staff.length} {staff.length === 1 ? 'person' : 'people'} on file
+                            </div>
+                          );
+                        }
+                        return <div className="affline dim">nobody on file</div>;
+                      })()}
                     </td>
                     <td>
                       {r.roles.map((role) => (

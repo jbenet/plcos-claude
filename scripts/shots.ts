@@ -165,6 +165,38 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N7: [
+    { name: '01-people-tab', path: '/orgs/g/people', fullPage: true },
+    {
+      name: '02-firm-people',
+      path: '/orgs/g/firms',
+      fullPage: true,
+      prepare: async (page) => {
+        await page.getByRole('link', { name: /Open the page for Northwood Capital/ }).click();
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    {
+      name: '03-person-two-firms',
+      path: '/orgs/g/people',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: /Open the page for Priya Raman/ }).click();
+        await page.waitForLoadState('networkidle');
+        await page.getByRole('heading', { name: 'Where they sit' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '04-summary-acts-for',
+      path: '/orgs/g/people',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: /Summarise Jonah Hale/ }).click();
+        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(400);
+      },
+    },
+    { name: '05-firms-tab', path: '/orgs/g/firms' },
+  ],
   N6: [
     { name: '01-preferences', path: '/settings' },
     {

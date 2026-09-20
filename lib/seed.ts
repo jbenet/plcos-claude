@@ -95,6 +95,12 @@ interface NoteFixture {
   data: Record<string, unknown>;
 }
 
+interface AffiliationFixture {
+  person: string; org: string; kind: string; role: string;
+  started?: string; ended?: string; primary?: boolean;
+  source?: string; as_of: string; certainty: string; note?: string;
+}
+
 /**
  * L2 seed: the target-pursuit corpus. Eleven source documents of deliberately varying
  * evidentiary strength — including a do-not-approach restriction and a co-attendance-only
@@ -105,10 +111,11 @@ async function seedResearch(db: Db) {
   const docs = await fixture<DocFixture>('source-docs.json');
   const claims = await fixture<ClaimFixture>('claims.json');
   const notes = await fixture<NoteFixture>('notes.json');
+  const affiliations = await fixture<AffiliationFixture>('affiliations.json');
 
   const existing = await db.one<{ n: string }>('select count(*)::text as n from identity.entity');
   if (existing && Number(existing.n) > 0) {
-    return { entities: 0, docs: 0, claims: 0, notes: 0 };
+    return { entities: 0, docs: 0, claims: 0, notes: 0, affiliations: 0 };
   }
 
   const users = await db.query<{ id: string; handle: string }>('select id, handle from platform.app_user');
@@ -135,6 +142,20 @@ async function seedResearch(db: Db) {
           [id, e.note],
         );
       }
+    }
+
+    for (const a of affiliations) {
+      const person = ids.get(a.person);
+      const org = ids.get(a.org);
+      if (!person || !org) continue;
+      await tx.query(
+        `insert into identity.affiliation
+           (person_entity, org_entity, kind, role, started_on, ended_on, is_primary,
+            source, as_of, certainty, note)
+         values ($1,$2,$3::identity.affil_kind,$4,$5::date,$6::date,$7,$8,$9::date,$10,$11)`,
+        [person, org, a.kind, a.role, a.started ?? null, a.ended ?? null, a.primary ?? false,
+         a.source ?? null, a.as_of, a.certainty, a.note ?? null],
+      );
     }
 
     for (const d of docs) {
@@ -183,7 +204,10 @@ async function seedResearch(db: Db) {
     );
   });
 
-  return { entities: entities.length, docs: docs.length, claims: claims.length, notes: notes.length };
+  return {
+    entities: entities.length, docs: docs.length, claims: claims.length,
+    notes: notes.length, affiliations: affiliations.length,
+  };
 }
 
 /** Called on boot so `npm run dev` on a fresh clone lands on a populated screen. */

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { usdM } from '@/lib/money';
 import { shortDate } from '@/lib/time';
 import { getEntity } from '@/modules/identity';
-import { ROLE_LABEL, relationshipRoles, type RelationshipRole } from '@/modules/identity';
+import { AFFIL_LABEL, ROLE_LABEL, orgsFor, peopleAt, relationshipRoles, type RelationshipRole } from '@/modules/identity';
 import { listExposures } from '@/modules/pipeline';
 import { listEdges, TIER_MEANING } from '@/modules/network';
 import { restrictionsFor } from '@/modules/coordination';
@@ -53,6 +53,10 @@ export async function EntitySummary({ entityId }: { entityId: string }) {
     listSourceDocs(),
     listPursuits(null),
   ]);
+  const [sits, staff] = await Promise.all([
+    entity.entityType === 'person' ? orgsFor(entityId) : Promise.resolve([]),
+    entity.entityType === 'person' ? Promise.resolve([]) : peopleAt(entityId),
+  ]);
 
   const row = roles.find((r) => r.entityId === entityId) ?? null;
   const mine = exposures.filter((x) => x.entityId === entityId);
@@ -95,6 +99,36 @@ export async function EntitySummary({ entityId }: { entityId: string }) {
             It attaches to them, not to one route. Every candidate path is checked against it.
           </p>
         </div>
+      )}
+
+      {sits.length > 0 && (
+        <>
+          <div className="lbl" style={{ marginTop: 16 }}>Acts for</div>
+          {sits.map((a) => (
+            <Link className="prov" href={`/orgs/${a.orgId}`} key={a.affiliationId}>
+              <div className="p1">{a.orgName}{a.current ? '' : ' (former)'}</div>
+              <div className="p2">{AFFIL_LABEL[a.kind]} · {a.role}</div>
+            </Link>
+          ))}
+          {sits.length > 1 && (
+            <div className="note">
+              More than one, which is normal. An ask lands on a person; the mandate and the
+              restriction land on an institution.
+            </div>
+          )}
+        </>
+      )}
+
+      {staff.filter((a) => a.current).length > 0 && (
+        <>
+          <div className="lbl" style={{ marginTop: 16 }}>Who acts for them</div>
+          {staff.filter((a) => a.current).map((a) => (
+            <Link className="prov" href={`/orgs/${a.personId}`} key={a.affiliationId}>
+              <div className="p1">{a.personName}</div>
+              <div className="p2">{AFFIL_LABEL[a.kind]} · {a.role}</div>
+            </Link>
+          ))}
+        </>
       )}
 
       {mine.length > 0 && (
