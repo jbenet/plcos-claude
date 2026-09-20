@@ -173,7 +173,7 @@ export default async function Orgs({
                       ) : (
                         theirs.map((f) => (
                           <div key={f.assessmentId} style={{ marginBottom: 3 }}>
-                            <Link href={`/fit/${r.entityId}`}>
+                            <Link href={`/${f.vehicleSlug}/fit/${r.entityId}`}>
                               <span className={`flag ${BLOCKER_FLAG[f.diagnosis.blocker]}`}>
                                 {BLOCKER_SHORT[f.diagnosis.blocker]}
                               </span>

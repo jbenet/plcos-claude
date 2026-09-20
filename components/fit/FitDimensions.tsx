@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { GRADE_SCORE, type Certainty, type Grade } from '@/modules/fit/client';
-import { CertaintyMark, GradeMark, Weight } from './marks';
+import { CertaintyMark, Reading, Weight } from './marks';
 
 export interface DimRow {
   code: string;
@@ -21,9 +21,9 @@ export interface DimRow {
 type Order = 'us' | 'them' | 'miss';
 
 const ORDERS: Array<{ id: Order; label: string; hint: string }> = [
-  { id: 'us', label: 'Matters to us', hint: 'Heaviest first by how much it moves our decision to spend time here.' },
-  { id: 'them', label: 'Matters to them', hint: 'Heaviest first by how much it moves their decision to write the cheque.' },
-  { id: 'miss', label: 'Biggest misses', hint: 'Weak readings on heavy dimensions first — the shortest list of things to fix.' },
+  { id: 'us', label: 'What matters to us', hint: 'Heaviest first by how much it moves our decision to spend time here.' },
+  { id: 'them', label: 'What matters to them', hint: 'Heaviest first by how much it moves their decision to write the cheque.' },
+  { id: 'miss', label: 'Biggest misses', hint: 'Readings against us on heavy dimensions first — the shortest list of things to fix.' },
 ];
 
 /**
@@ -67,12 +67,12 @@ export function FitDimensions({ rows, docs }: { rows: DimRow[]; docs: Record<str
       <table className="list dims">
         <thead>
           <tr>
-            <th style={{ width: 176 }}>Dimension</th>
-            <th style={{ width: 74 }}>Reading</th>
-            <th style={{ width: 66 }}>Basis</th>
+            <th style={{ width: 172 }}>Dimension</th>
+            <th style={{ width: 124 }}>How it reads for us</th>
+            <th style={{ width: 64 }}>Basis</th>
             <th>What we found</th>
-            <th style={{ width: 58 }} className="right">Us</th>
-            <th style={{ width: 58 }} className="right">Them</th>
+            <th style={{ width: 78 }} className="right">Matters to us</th>
+            <th style={{ width: 78 }} className="right">Matters to them</th>
           </tr>
         </thead>
         <tbody>
@@ -82,7 +82,7 @@ export function FitDimensions({ rows, docs }: { rows: DimRow[]; docs: Record<str
                 <b>{r.label}</b>
                 <div className="muted qn">{r.question}</div>
               </td>
-              <td><GradeMark grade={r.grade} /></td>
+              <td><Reading grade={r.grade} /></td>
               <td><CertaintyMark certainty={r.certainty} /></td>
               <td>
                 {r.finding}

@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { modulesForKind, STATIC_SECTIONS, type NavSection } from '@/lib/nav';
+import { moduleHref, modulesForKind, STATIC_SECTIONS, type NavSection } from '@/lib/nav';
 
 export interface NavVehicle {
   slug: string;
@@ -22,7 +22,7 @@ const STORE_KEY = 'capitalos.nav.collapsed';
  * preference that resets on every reload is not a preference.
  */
 export function NavList({
-  vehicles, current, approvals, issues,
+  vehicles, current: cookieVehicle, approvals, issues,
 }: {
   vehicles: NavVehicle[];
   current: string | null;
@@ -31,6 +31,18 @@ export function NavList({
 }) {
   const path = usePathname();
   const router = useRouter();
+
+  /**
+   * A scoped module carries the vehicle in the URL, so the URL wins over the cookie. Left
+   * to the cookie the rail would say "All vehicles" while the page said Neurotech, which
+   * is the kind of quiet disagreement that makes a reader stop trusting the chrome.
+   */
+  const [, seg1, seg2] = path.split('/');
+  const fromPath =
+    seg2 && modulesForKind('fund').some((mod) => mod.scoped && mod.slug === seg2)
+      ? (seg1 === 'all' ? null : seg1 ?? null)
+      : undefined;
+  const current = fromPath === undefined ? cookieVehicle : fromPath;
   const [, start] = useTransition();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(STATIC_SECTIONS.filter((s) => s.defaultCollapsed).map((s) => [s.id, true])),
@@ -63,14 +75,21 @@ export function NavList({
 
   const on = (href: string) => path === href || path.startsWith(href + '/');
 
+  /**
+   * Selecting a vehicle keeps you on the same module rather than throwing you back to the
+   * overview. For a scoped module the slug is in the path, so switching vehicles is a
+   * navigation; for the rest it is still the cookie, so it is a POST and a refresh.
+   */
   const selectVehicle = (slug: string) => {
+    const segment = path.split('/')[2];
+    const scoped = modulesForKind('fund').find((mod) => mod.scoped && mod.slug === segment);
     start(async () => {
       await fetch('/api/session', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ vehicleSlug: slug }),
       });
-      router.push('/overview');
+      router.push(scoped ? `/${slug}/${scoped.slug}` : '/overview');
       router.refresh();
     });
   };
@@ -130,16 +149,19 @@ export function NavList({
               </button>
               {selected && (
                 <div className="submods">
-                  {modulesForKind(v.kind).map((mod) => (
-                    <Link
-                      key={mod.slug}
-                      href={mod.href}
-                      title={mod.mechanic}
-                      className={`subsub${on(mod.href) ? ' on' : ''}`}
-                    >
-                      {mod.title}
-                    </Link>
-                  ))}
+                  {modulesForKind(v.kind).map((mod) => {
+                    const href = moduleHref(mod, v.slug);
+                    return (
+                      <Link
+                        key={mod.slug}
+                        href={href}
+                        title={mod.mechanic}
+                        className={`subsub${on(href) ? ' on' : ''}`}
+                      >
+                        {mod.title}
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -155,16 +177,19 @@ export function NavList({
         </button>
         {current === null && (
           <div className="submods">
-            {modulesForKind('fund').map((mod) => (
-              <Link
-                key={mod.slug}
-                href={mod.href}
-                title={mod.mechanic}
-                className={`subsub${on(mod.href) ? ' on' : ''}`}
-              >
-                {mod.title}
-              </Link>
-            ))}
+            {modulesForKind('fund').map((mod) => {
+              const href = moduleHref(mod, null);
+              return (
+                <Link
+                  key={mod.slug}
+                  href={href}
+                  title={mod.mechanic}
+                  className={`subsub${on(href) ? ' on' : ''}`}
+                >
+                  {mod.title}
+                </Link>
+              );
+            })}
           </div>
         )}
       </Section>

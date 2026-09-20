@@ -80,7 +80,9 @@ export async function EntitySummary({ entityId }: { entityId: string }) {
 
       <div className="acts" style={{ margin: '12px 0 4px' }}>
         <Link className="btn p" href={`/orgs/${entityId}`}>Open their page</Link>
-        <Link className="btn" href={`/fit/${entityId}`}>Fit</Link>
+        {fit.length > 0 && (
+          <Link className="btn" href={`/${fit[0]!.vehicleSlug}/fit/${entityId}`}>Fit</Link>
+        )}
       </div>
 
       {restrictions.length > 0 && (
@@ -128,7 +130,7 @@ export async function EntitySummary({ entityId }: { entityId: string }) {
         <>
           <div className="lbl" style={{ marginTop: 16 }}>What is in the way</div>
           {fit.map((f) => (
-            <Link className="prov" href={`/fit/${entityId}`} key={f.assessmentId}>
+            <Link className="prov" href={`/${f.vehicleSlug}/fit/${entityId}`} key={f.assessmentId}>
               <div className="p1">{f.vehicleName}</div>
               <div className="p2">
                 {BLOCKER_LABEL[f.diagnosis.blocker]} · fit {f.weightedFit.toFixed(2)} ·{' '}

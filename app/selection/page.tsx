@@ -121,7 +121,7 @@ export default async function Selection({
                 </div>
                 <div className="t">
                   <EntityLink id={r.entityId} name={r.entityName} />
-                  <Link className="xref" href={`/fit/${r.entityId}`}>
+                  <Link className="xref" href={`/${vehicle?.slug ?? 'all'}/fit/${r.entityId}`}>
                     fit &amp; standing →
                   </Link>
                   {r.missing.length > 0 ? (

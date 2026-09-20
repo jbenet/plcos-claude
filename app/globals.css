@@ -22,7 +22,10 @@ button{font-family:inherit}
 .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 
 /* ---------------- shell ---------------- */
-.app{min-height:100vh;display:flex;background:var(--ground)}
+/* The rail is sticky at 100vh, so the column behind it is painted here — otherwise a
+   long page shows ground colour beside the content once you scroll past the first screen. */
+.app{min-height:100vh;display:flex;background:var(--ground);
+     background-image:linear-gradient(to right,var(--rail) 0 244px,var(--ground) 244px)}
 .rail{width:244px;flex:none;background:var(--rail);color:var(--rail-ink);display:flex;flex-direction:column;padding:0 0 12px;position:sticky;top:0;height:100vh}
 /* 46px exactly, so this rule lines up with the one under the breadcrumbs. */
 .brand{height:46px;flex:none;padding:0 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--rail-line)}
@@ -112,6 +115,7 @@ h2{font-family:var(--display)}
 
 /* ---------------- cards, kpis ---------------- */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:20px}
+.kpis.five{grid-template-columns:repeat(5,minmax(0,1fr))}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 15px}
 .kpi.soft{background:repeating-linear-gradient(135deg,#FFF,#FFF 6px,#FAF8F3 6px,#FAF8F3 12px);border-style:dashed}
 .kpi .n{font-family:var(--display);font-size:25px;font-weight:600;margin:5px 0 3px;letter-spacing:-.01em}
@@ -356,12 +360,29 @@ input[type=range]{accent-color:var(--clay);width:100%;height:18px}
 .c-known{color:var(--ink);border-color:var(--line);background:#F2EFE7}
 .c-inferred{color:var(--purple);border-color:#D6CEE8;background:#F6F3FB}
 .c-guess{color:var(--amber);border-color:#E0D2AE;background:#FDF8EC}
-.wts{display:inline-flex;gap:2px;vertical-align:middle}
-.wts i{display:block;width:4px;height:11px;border-radius:1px;background:var(--line)}
-.wts i.on{background:var(--muted)}
+/* Importance is a number. Pips at this size read as signal strength, which is a different
+   quantity pointing a different way, and two ambiguous bars in one row is one too many. */
+.wt{display:inline-flex;align-items:baseline;gap:1px;white-space:nowrap}
+.wt b{font-size:13px;font-weight:500}
+.wt .wof{font-size:9.5px;color:var(--muted)}
+
+/* One reading. Up is good for this raise, on every row in this module. */
+.reading{display:block;min-width:92px}
+.reading .rbar{display:block;height:5px;border-radius:3px;background:#EDEAE2;overflow:hidden}
+.reading .rbar i{display:block;height:100%;border-radius:3px;background:currentColor}
+.reading .rword{display:flex;align-items:baseline;gap:5px;margin-top:4px;
+                font-size:11px;line-height:1.3;white-space:nowrap}
+.reading .rsign{font-family:var(--mono);font-size:10px;width:11px;flex:none;text-align:center}
+.r-strong{color:var(--green)}
+.r-good{color:var(--green)}
+.r-good .rbar i{opacity:.62}
+.r-neutral{color:var(--muted)}
+.r-weak{color:var(--amber)}
+.r-blocker{color:var(--clay)}
 .meter{display:inline-block;width:52px;height:6px;border-radius:3px;background:#EDEAE2;vertical-align:middle;overflow:hidden}
 .meter i{display:block;height:100%;border-radius:3px}
-.famrow{display:inline-flex;gap:7px;align-items:center;font-size:11.5px}
+.famrow{font-size:11.5px;line-height:1.35}
+.famrow .meter{display:block;margin-top:5px}
 .asof{font-size:9.5px;color:var(--muted);margin-left:6px;white-space:nowrap}
 .qn{font-size:10.5px;line-height:1.4;margin-top:2px}
 .dims td{vertical-align:top}
@@ -370,7 +391,9 @@ input[type=range]{accent-color:var(--clay);width:100%;height:18px}
 .sorter button:hover{border-color:#CFC8B8;color:var(--ink)}
 .sorter button.on{background:var(--ink);border-color:var(--ink);color:var(--ground)}
 .sorter .muted{font-size:11px;margin-left:4px}
-.diag .diagst{font-size:15px;line-height:1.5;margin:0 0 4px}
+.diag .diagst{font-size:15px;line-height:1.5;margin:0 0 14px}
+.themove{border-top:1px solid var(--hair);padding-top:11px}
+.themove p{margin:4px 0 0;font-size:13px;line-height:1.55;max-width:74ch}
 .diag.gated{box-shadow:inset 3px 0 0 var(--clay)}
 .diag.conviction,.diag.access,.diag.evidence,.diag.fit{box-shadow:inset 3px 0 0 var(--amber)}
 .diag.timing,.diag.awareness{box-shadow:inset 3px 0 0 var(--purple)}
@@ -391,3 +414,47 @@ a.prov:hover .p1{color:var(--clay)}
 table.list tr.sel td{background:#FBF4EF}
 table.list tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--clay)}
 .list.orgs{table-layout:fixed}
+
+/* the score strip */
+.scorecard{overflow:hidden}
+.scoregrid{display:grid;grid-template-columns:118px minmax(0,1fr) 250px;gap:22px;padding:16px 16px 18px;align-items:start}
+.scorenum{text-align:center}
+.bignum{font-family:var(--display);font-size:46px;line-height:1;font-weight:600;letter-spacing:-.02em}
+.bignum.b-strong{color:var(--green)}
+.bignum.b-workable{color:var(--amber)}
+.bignum.b-weak{color:var(--muted)}
+.bignum.b-blocked{color:var(--clay)}
+.scorenum .lbl{margin-top:8px}
+.scorenum .flag{margin-top:8px;display:inline-block}
+.rankline{font-size:15px;line-height:1.3}
+.rankline b{font-family:var(--display);font-size:19px;font-weight:600}
+.scorerank .muted{font-size:12px;line-height:1.5;margin-top:4px;max-width:58ch}
+.dist{position:relative;height:52px;margin-top:16px}
+.dist .axis{position:absolute;left:0;right:0;top:13px;height:3px;border-radius:2px;background:#EDEAE2}
+.dist .dot{position:absolute;top:8px;width:13px;height:13px;margin-left:-6.5px;border-radius:50%;
+           background:#FFF;border:2px solid #C8C1B2}
+.dist .dot.blocked{border-color:#E4C6B6;border-style:dashed}
+.dist .dot.me{background:var(--clay);border-color:var(--clay);width:17px;height:17px;top:6px;margin-left:-8.5px;z-index:2}
+.dist .medmark{position:absolute;top:26px;transform:translateX(-50%);display:flex;
+               flex-direction:column;align-items:center;gap:2px;pointer-events:none}
+.dist .medmark i{display:block;width:1px;height:6px;background:var(--muted);opacity:.55}
+.dist .medmark em{font-family:var(--mono);font-size:9px;font-style:normal;color:var(--muted);
+                  white-space:nowrap}
+.dist .ends{position:absolute;left:0;right:0;top:27px;display:flex;justify-content:space-between;
+            font-family:var(--mono);font-size:9.5px;color:var(--muted)}
+.scorewhat{border-left:1px solid var(--line);padding-left:18px}
+.scorewhat .kv{padding:5px 0}
+.scorewhat .kv:first-child{padding-top:0}
+
+/* the rank + score block in a roll-up row */
+.scorecell{width:74px;flex:none;text-align:center;margin-top:1px}
+.scorecell .rk{font-size:10px;color:var(--muted);letter-spacing:.06em}
+.scorecell .sc{font-size:21px;font-weight:500;line-height:1.1;margin-top:1px}
+.scorecell .sc.b-strong{color:var(--green)}
+.scorecell .sc.b-workable{color:var(--amber)}
+.scorecell .sc.b-weak{color:var(--muted)}
+.scorecell .sc.b-blocked{color:var(--clay)}
+.scorecell .flag{font-size:9.5px;margin-top:5px;display:inline-block}
+.rowmeta{margin-top:7px;font-size:11.5px;color:var(--muted);display:flex;gap:16px;
+         align-items:center;flex-wrap:wrap}
+.rowmeta .mline{display:inline-flex;gap:6px;align-items:center}

@@ -165,6 +165,27 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N5: [
+    { name: '01-score-and-rank', path: '/neurotech/fit', prepare: async (page) => {
+        await page.getByRole('link', { name: 'full assessment →' }).nth(2).click();
+        await page.waitForLoadState('networkidle');
+      } },
+    { name: '02-readings', path: '/neurotech/fit', prepare: async (page) => {
+        await page.getByRole('link', { name: 'full assessment →' }).nth(2).click();
+        await page.waitForLoadState('networkidle');
+        await page.getByRole('heading', { name: 'Firm–vehicle fit' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '03-rollup-ranked', path: '/neurotech/fit', fullPage: true },
+    { name: '04-top-of-pool', path: '/neurotech/fit', prepare: async (page) => {
+        await page.getByRole('link', { name: 'full assessment →' }).first().click();
+        await page.waitForLoadState('networkidle');
+      } },
+    { name: '05-blocked-last', path: '/neurotech/fit', prepare: async (page) => {
+        await page.getByRole('link', { name: 'full assessment →' }).last().click();
+        await page.waitForLoadState('networkidle');
+      } },
+  ],
   N4: [
     { name: '01-orgs-directory', path: '/orgs/g/all', fullPage: true },
     {
@@ -197,31 +218,21 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '05-connectors', path: '/orgs/g/connectors' },
   ],
   N3: [
-    { name: '01-fit-all-vehicles', path: '/fit', fullPage: true },
-    {
-      name: '02-fit-one-vehicle',
-      path: '/overview',
-      fullPage: true,
-      prepare: async (page) => {
-        await page.getByRole('button', { name: /PLC Neurotech I/ }).click();
-        await page.waitForTimeout(1400);
-        await page.getByRole('link', { name: 'Funder–vehicle fit' }).first().click();
-        await page.waitForLoadState('networkidle');
-      },
-    },
+    { name: '01-fit-all-vehicles', path: '/all/fit', fullPage: true },
+    { name: '02-fit-one-vehicle', path: '/neurotech/fit', fullPage: true },
     {
       name: '03-diagnosis-and-gates',
-      path: '/fit',
+      path: '/neurotech/fit',
       prepare: async (page) => {
-        await page.getByRole('link', { name: 'Northwood Capital' }).click();
+        await page.getByRole('link', { name: 'full assessment →' }).nth(2).click();
         await page.waitForLoadState('networkidle');
       },
     },
     {
       name: '04-dimensions-biggest-misses',
-      path: '/fit',
+      path: '/neurotech/fit',
       prepare: async (page) => {
-        await page.getByRole('link', { name: 'Northwood Capital' }).click();
+        await page.getByRole('link', { name: 'full assessment →' }).nth(2).click();
         await page.waitForLoadState('networkidle');
         await page.getByRole('button', { name: 'Biggest misses' }).click();
         await page.getByRole('heading', { name: 'Firm–vehicle fit' }).scrollIntoViewIfNeeded();
@@ -230,9 +241,9 @@ const SHOTS: Record<string, Shot[]> = {
     },
     {
       name: '05-value-and-perception',
-      path: '/fit',
+      path: '/neurotech/fit',
       prepare: async (page) => {
-        await page.getByRole('link', { name: 'Northwood Capital' }).click();
+        await page.getByRole('link', { name: 'full assessment →' }).nth(2).click();
         await page.waitForLoadState('networkidle');
         await page.getByRole('heading', { name: 'What they think of us' }).scrollIntoViewIfNeeded();
         await page.waitForTimeout(350);
@@ -240,9 +251,9 @@ const SHOTS: Record<string, Shot[]> = {
     },
     {
       name: '06-ties-and-decision',
-      path: '/fit',
+      path: '/neurotech/fit',
       prepare: async (page) => {
-        await page.getByRole('link', { name: 'Roos Foundation' }).click();
+        await page.getByRole('link', { name: 'full assessment →' }).nth(3).click();
         await page.waitForLoadState('networkidle');
         await page.getByRole('heading', { name: 'Ties between us' }).scrollIntoViewIfNeeded();
         await page.waitForTimeout(350);

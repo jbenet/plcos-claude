@@ -25,12 +25,26 @@ export interface NavModule {
   mechanic: string;
   /** Which vehicle kinds this module makes sense for. Empty = all of them. */
   kinds?: Array<'fund' | 'spv' | 'grant_rail'>;
+  /**
+   * True when the vehicle is in the URL rather than the cookie. A scoped module lives at
+   * `/<vehicle>/<slug>`, so a link to it can be sent to somebody and mean the same thing.
+   * The rest still read the cookie — see the N1 entry, this is the first module moved.
+   */
+  scoped?: boolean;
 }
 
 const m = (
   num: string, title: string, slug: string, stage: Stage, mechanic: string,
-  built = true, kinds?: NavModule['kinds'],
-): NavModule => ({ num, title, slug, stage, mechanic, built, href: built ? `/${slug}` : `/m/${slug}`, kinds });
+  built = true, kinds?: NavModule['kinds'], scoped = false,
+): NavModule => ({
+  num, title, slug, stage, mechanic, built,
+  href: built ? `/${slug}` : `/m/${slug}`, kinds, scoped,
+});
+
+/** Where a module lives for one vehicle. Scoped modules carry it in the path. */
+export function moduleHref(mod: NavModule, vehicleSlug: string | null): string {
+  return mod.scoped ? `/${vehicleSlug ?? 'all'}/${mod.slug}` : mod.href;
+}
 
 /**
  * The modules that answer a question about one vehicle. These appear as a submenu under
@@ -40,7 +54,9 @@ export const VEHICLE_MODULES: NavModule[] = [
   m('04', 'Conversion strategy', 'targets', 'L5', 'The per-target workspace; consent ladder; coverage disclosure.'),
   m('05', 'Warm intro routes', 'routes', 'L4', 'Route ranking by connector credibility; A–D evidence tiers; non-circumvention.'),
   m('03', 'Selection', 'selection', 'L9', 'The capacity/affinity/propensity rubric, with weights visible and editable.'),
-  m('03b', 'Funder–vehicle fit', 'fit', 'L9', 'Hard gates, graded dimensions, what they value, what they think of us, and who we know in common.'),
+  m('03b', 'Funder–vehicle fit', 'fit', 'L9',
+    'Hard gates, graded dimensions, what they value, what they think of us, and who we know in common.',
+    true, undefined, true),
   m('07', 'Ask coordination', 'asks', 'L3', 'One owner per relationship; frequency guard; conflict cases with a dated follow-up.'),
   m('11', 'Meetings', 'meetings', 'L11', 'Prep brief, objection tagging, and the rung a reply actually justifies.'),
   m('10', 'Decision room', 'decisions', 'L11', 'Diligence questions, objections, evidence gaps, decision timeline.'),

@@ -209,7 +209,8 @@ function diagnose(args: {
 
 async function assemble(rows: Array<{
   assessment_id: string; entity_id: string; entity_name: string; vehicle_id: string;
-  vehicle_name: string; exemption: string; owner_name: string | null; headline: string;
+  vehicle_name: string; vehicle_slug: string; exemption: string; owner_name: string | null;
+  headline: string;
   updated_at: Date | string;
 }>): Promise<Assessment[]> {
   if (rows.length === 0) return [];
@@ -286,7 +287,8 @@ async function assemble(rows: Array<{
 
     return {
       assessmentId: r.assessment_id, entityId: r.entity_id, entityName: r.entity_name,
-      vehicleId: r.vehicle_id, vehicleName: r.vehicle_name, exemption: r.exemption,
+      vehicleId: r.vehicle_id, vehicleName: r.vehicle_name, vehicleSlug: r.vehicle_slug,
+      exemption: r.exemption,
       ownerName: r.owner_name, headline: r.headline, updatedAt: d(r.updated_at),
       profile, gates: myGates, dimensions: myDims,
       values: values
@@ -320,7 +322,8 @@ async function assemble(rows: Array<{
 
 const ASSESSMENT_SELECT = `
   select a.assessment_id, a.entity_id, e.display_name as entity_name, a.vehicle_id,
-         v.name as vehicle_name, v.exemption, u.name as owner_name, a.headline, a.updated_at
+         v.name as vehicle_name, v.slug as vehicle_slug, v.exemption,
+         u.name as owner_name, a.headline, a.updated_at
     from fit.assessment a
     join identity.entity e on e.entity_id = a.entity_id
     join platform.vehicle v on v.id = a.vehicle_id

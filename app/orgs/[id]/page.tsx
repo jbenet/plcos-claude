@@ -271,7 +271,7 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
                   <td>
                     {s.assessment ? (
                       <>
-                        <Link href={`/fit/${entity.entityId}`}>
+                        <Link href={`/${s.assessment.vehicleSlug}/fit/${entity.entityId}`}>
                           <span className={`flag ${BLOCKER_FLAG[s.assessment.diagnosis.blocker]}`}>
                             {BLOCKER_LABEL[s.assessment.diagnosis.blocker]}
                           </span>
@@ -295,7 +295,8 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
             {nearby.map((f, i) => (
               <span key={f.assessmentId}>
                 {i > 0 && ', '}
-                <Link href={`/fit/${f.entityId}`}>{f.entityName}</Link> is, against {f.vehicleName}
+                <Link href={`/${f.vehicleSlug}/fit/${f.entityId}`}>{f.entityName}</Link> is,
+                against {f.vehicleName}
               </span>
             ))}
             . A person and the institution they sign for are separate records on purpose — the

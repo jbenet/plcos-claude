@@ -41,6 +41,26 @@ export const GRADE_LABEL: Record<Grade, string> = {
   strong: 'Strong', good: 'Good', neutral: 'Neutral', weak: 'Weak', blocker: 'Blocker',
 };
 
+/**
+ * The same five grades, said as a verdict *for us*.
+ *
+ * "Neuro exposure: weak" makes a reader work out the polarity before they know whether it
+ * is good news — and half of them will get it wrong on a table of eighteen rows. Every
+ * reading in this module points the same way: up is good for this raise.
+ */
+export const GRADE_VERDICT: Record<Grade, string> = {
+  strong: 'Strong for us',
+  good: 'In our favour',
+  neutral: 'Neither way',
+  weak: 'Against us',
+  blocker: 'Blocks this',
+};
+
+/** A glyph that carries the direction without relying on colour. */
+export const GRADE_SIGN: Record<Grade, string> = {
+  strong: '++', good: '+', neutral: '·', weak: '−', blocker: '✕',
+};
+
 export const FAMILIARITY_LABEL: Record<Familiarity, string> = {
   unaware: 'Never heard of us',
   heard_of: 'Heard of us',
@@ -210,6 +230,7 @@ export interface Assessment {
   entityName: string;
   vehicleId: string;
   vehicleName: string;
+  vehicleSlug: string;
   exemption: string;
   ownerName: string | null;
   headline: string;

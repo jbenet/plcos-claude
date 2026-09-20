@@ -1460,3 +1460,96 @@ That is the one thing in this request I did not build, and it is a decision with
 rather than an omission.
 
 **43 of 43 properties hold.** The production build compiles 50 routes.
+
+---
+
+## N5 — The vehicle is in the URL, and the readings point one way
+
+**Shipped.** Four changes you asked for, plus the alignment bugs the N3 screenshots showed.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Score and rank](docs/changelog/shots/n5/01-score-and-rank.png) | **A score, a rank, and the pool it sits in.** 60 out of 100, 5th of 7 for this vehicle, ahead of 2 of the other 6, pool 56–84 with the median marked. The URL is `/neurotech/fit/<target>`. |
+| ![Readings](docs/changelog/shots/n5/02-readings.png) | **Every reading points the same way: up is good for this raise.** A bar for strength, a sign for direction, and words that say whose side it is on. Importance is a number now, not pips. |
+| ![Ranked roll-up](docs/changelog/shots/n5/03-rollup-ranked.png) | **The roll-up carries rank and score per row**, so the grouping by blocker no longer hides where each one sits in the pool. |
+| ![Top of the pool](docs/changelog/shots/n5/04-top-of-pool.png) | **Cedar at 84, 1st of 7** — and the distribution shows how narrow the top of this pool actually is. |
+| ![Blocked, ranked last](docs/changelog/shots/n5/05-blocked-last.png) | **Whitcomb scores 80 and ranks 7th of 7.** The strip says why in the same breath: a failed hard gate is not a ranking question. |
+
+### `/<vehicle>/fit/<target>`
+
+Fit was the first module where the vehicle belonged in the path rather than the cookie, so
+it moved: `/neurotech/fit`, `/rails/fit`, `/all/fit`, and `/neurotech/fit/<target>`. **A
+link to a fit page now means the same thing to whoever you send it to.** `/fit` and
+`/fit/<id>` redirect to whatever vehicle is selected, so nothing that already linked to
+them breaks.
+
+The rail takes the vehicle from the URL when the URL has one. Left to the cookie it would
+have said *All vehicles* while the page said Neurotech, which is the kind of quiet
+disagreement that makes a reader stop trusting the chrome. Switching vehicles from the rail
+while on a scoped module keeps you on that module rather than throwing you back to the
+overview.
+
+This is the trade-off I flagged in N1 — the vehicle lives in a cookie, and the fix is a
+route restructure — applied to one module. `NavModule.scoped` marks it, `moduleHref()`
+builds it, and the other twelve are unchanged until they earn it.
+
+### The readings now point one way
+
+`Neuro exposure — Weak` made you work out the polarity of the dimension before you knew
+whether it was good news, and on eighteen rows that is a mistake waiting to happen. Every
+reading in the module now says the same thing in the same direction:
+
+```
+++  Strong for us      ·  In our favour   ·  Neither way   −  Against us   ✕  Blocks this
+```
+
+A bar carries the strength, the sign carries the direction without relying on colour, and
+the words say whose side it is on. The same component does value-item matches and
+tie-weights, so nothing in the module grades on a different axis from anything else.
+
+### Importance is a number, not a signal-strength bar
+
+You were right that the pips read as signal strength, which is a different quantity
+pointing a different way — and two ambiguous bars in one row is one too many. They are
+`5/5` and `3/5` now, under headings that say *matters to us* and *matters to them*.
+
+### An aggregate score, a rank, and the distribution behind both
+
+A 0–100 score where the decimal used to be, and never on its own:
+
+- **Rank in the pool** — "5th of 7 assessed for PLC Neurotech I", with "ahead of 2 of the
+  other 6" spelled out.
+- **The whole distribution** on one strip: a dot per assessment, this one filled, blocked
+  ones dashed, the median ticked and the range labelled. 0.60 is meaningless until you know
+  whether the rest of the list is at 0.3 or 0.9.
+- **The ordering stated:** anything failing a hard gate ranks last however well it scores.
+  Whitcomb scores 80 and comes 7th, which looks wrong until you read the sentence that says
+  why — so that sentence is on the strip rather than in a footnote.
+- The roll-up carries `#rank` and the score on every row, and the median and range are in
+  the KPI strip.
+
+I kept the caveat prominent: the pool is seven, the weights are judgement, and a rank over
+seven hand-graded records is a conversation starter rather than a verdict. A leaderboard
+that hides that is how a rubric turns into a model nobody argues with.
+
+### The alignment bugs
+
+- **The rail stopped at the first screen.** It is `position: sticky; height: 100vh`, so on a
+  long page everything below the fold showed ground colour where the rail should be. The
+  column is painted on `.app` now, which is what the full-page screenshots in N3 and N4 were
+  showing.
+- **The diagnosis "move" was right-aligned prose.** Ragged-left body text in a two-column
+  fact row. It is a labelled block now, reading left to right like everything else.
+- **Familiarity wrapped around its meter** — "Never heard / of us" beside a bar. The words
+  go on top, the bar underneath, both left-aligned.
+- **`.row.sel` painted a clay bar on every cell** rather than one down the left edge.
+- **The values table squeezed "how we match it" to a sliver** because auto layout gave the
+  space to the last column. Fixed layout, explicit widths.
+- **Five KPIs wrapped 4 + 1**, leaving one tile alone on a second line.
+- **`Nothing blocking` wrapped inside its own chip** in the directory table. The short
+  blocker vocabulary is a separate map from the long one, so the heading can stay a sentence
+  while the cell stays a label.
+
+**43 of 43 properties hold.** 55 routes return 200 from a genuine cold start.
