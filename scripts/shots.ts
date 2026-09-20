@@ -160,6 +160,11 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '01-close-room', path: '/close', fullPage: true },
     { name: '02-spv-war-room', path: '/spv', fullPage: true },
   ],
+  FINAL: [
+    { name: '01-today', path: '/today', fullPage: true },
+    { name: '02-issues', path: '/issues' },
+    { name: '03-capability-without-screen', path: '/m/lp-fit' },
+  ],
   M17: [
     { name: '01-answer-library', path: '/library', fullPage: true },
   ],

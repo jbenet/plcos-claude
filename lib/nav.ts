@@ -75,13 +75,37 @@ export const SECTIONS: NavSection[] = [
   },
 ];
 
-/** Modules that start as a playbook against the shared workspace rather than a screen. */
-export const PLAYBOOK_ONLY = [
-  { num: '02', title: 'Segmentation', why: 'Rule-built audiences from explicit criteria. Earns a screen when a rule set needs editing more than once a week.' },
-  { num: '06', title: 'Signals', why: 'Fixture-driven until connectors exist at L13. A screen before then would render invented change detection.' },
-  { num: '12', title: 'LP-fit audit', why: 'An output format over the target workspace, not a place to visit.' },
-  { num: '23', title: 'Team capacity', why: 'Role × vehicle slots. One person does not need a screen for this yet.' },
+/**
+ * Modules that are a capability rather than a screen. They are reachable at /m/<slug>,
+ * where the page explains what the capability is and where its output already appears —
+ * which is more useful than a 404 and more honest than a placeholder table.
+ */
+export const PLAYBOOK_ONLY: Array<{ num: string; title: string; slug: string; why: string; where: string }> = [
+  {
+    num: '02', title: 'Segmentation', slug: 'segmentation',
+    why: 'Rule-built audiences from explicit criteria, not clustering. It earns a screen when a rule set needs editing more than once a week.',
+    where: 'Selection ranks the universe for one vehicle, which is the only segment anybody has asked for so far.',
+  },
+  {
+    num: '06', title: 'Signals', slug: 'signals',
+    why: 'External change detection. The model, the thresholds and the ingest path are real; a dedicated page before a connector exists would render invented change detection.',
+    where: 'Today, the target workspace, and System & seams — where the thresholds and everything they held back are listed.',
+  },
+  {
+    num: '12', title: 'LP-fit audit', slug: 'lp-fit',
+    why: 'Per-vehicle legibility gaps: what makes this hard for an LP to evaluate. It is an output format over material that already exists.',
+    where: 'The prep brief already names every claim it refuses to make, which is the audit for one target at a time.',
+  },
+  {
+    num: '23', title: 'Team capacity', slug: 'capacity',
+    why: 'Role × vehicle slots and a principal-time floor. One person does not need a screen for this yet.',
+    where: 'The SPV war room names who is split between an SPV clock and the fund close, which is the part that currently bites.',
+  },
 ];
+
+export function findPlaybook(slug: string) {
+  return PLAYBOOK_ONLY.find((p) => p.slug === slug);
+}
 
 export const ALL_MODULES: NavModule[] = SECTIONS.flatMap((s) => s.modules);
 

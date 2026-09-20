@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
 import { config, GUESSED_CONSTANTS } from '@/config/deployment';
 import { getDb } from '@/lib/db';
@@ -6,6 +7,7 @@ import { issues as issueSink } from '@/lib/issues';
 import { agent } from '@/lib/agent';
 import { listSyncSources } from '@/modules/platform';
 import { MODULES } from '@/modules/manifest';
+import { ALL_MODULES, PLAYBOOK_ONLY } from '@/lib/nav';
 import { allSignals, heldBack } from '@/modules/signals';
 import { SignalRow } from '@/components/signals/SignalRow';
 import { ago } from '@/lib/time';
@@ -177,6 +179,35 @@ export default async function System() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="chead">
+          <h2>Capabilities without a screen</h2>
+          <span className="lbl">
+            {ALL_MODULES.length} modules with screens · {PLAYBOOK_ONLY.length} without
+          </span>
+        </div>
+        {PLAYBOOK_ONLY.map((p) => (
+          <Link className="row" key={p.num} href={`/m/${p.slug}`}>
+            <span className="kind k-chore" style={{ width: 34 }}>
+              {p.num}
+            </span>
+            <div className="t">
+              <b>{p.title}</b>
+              <span>{p.why}</span>
+            </div>
+            <div className="state" style={{ width: 120 }}>
+              <b>No screen</b>
+              by design
+            </div>
+          </Link>
+        ))}
+        <p className="cover">
+          A module may begin as a playbook plus an output format. Two have since earned screens —
+          the coverage-gap backlog and the answer library — because in both cases there was
+          something that needed somewhere to live. These four have not.
+        </p>
       </div>
 
       <div className="card">

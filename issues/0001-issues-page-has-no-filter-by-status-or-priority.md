@@ -1,7 +1,7 @@
 ---
 id: "0001"
 title: Issues page has no filter by status or priority
-status: open          # open | triaged | agent-ready | in-progress | review | done
+status: triaged       # open | triaged | agent-ready | in-progress | review | done
 kind: request         # bug | request | question | chore
 priority: P2          # P0 | P1 | P2 | P3 — see issues/README.md for the SLA ladder
 reporter: juan
