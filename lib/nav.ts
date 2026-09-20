@@ -69,6 +69,7 @@ export const SECTIONS: NavSection[] = [
       m('20', 'Grants rail', 'grants', 'L13', 'No-unsolicited gate until a funder invitation exists. A state machine guard, not advice.', true),
       m('21', 'Forecast', 'forecast', 'L6', 'Conserved capital pool invariant; hard-only headline; code does the arithmetic.', true),
       m('22', 'Sprint calendar', 'calendar', 'L7', 'Holiday overlay; the post-23-December dead zone suppresses urgency.', true),
+      m('24', 'Compliance registry', 'compliance', 'L13', 'Accreditation verification, the public-claims registry, the solicitation log and side-letter risk.', true),
     ],
   },
 ];

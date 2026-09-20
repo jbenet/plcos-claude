@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
 import { openTicket, requireApprovedTicket } from '@/modules/governance';
+import { accreditationGate } from '@/modules/compliance';
 import { getExposure } from './repo';
 
 /**
@@ -19,6 +20,12 @@ export async function requestHardening(
       'A hard commitment needs the document that makes it hard. Signed and countersigned, ' +
       'with a reference — not a recollection.',
     );
+  }
+
+  // 506(c) verification is an obligation, not a formality. Refuse before the ticket exists.
+  const gate = await accreditationGate(exposure.entityId, exposure.vehicleId);
+  if (!gate.ok) {
+    throw new Error(`Refused: ${gate.reason}`);
   }
 
   return openTicket(actorId, {
@@ -59,6 +66,16 @@ export async function harden(
     const exposure = await getExposure(args.exposureId, tx);
     if (!exposure) throw new Error(`No exposure ${args.exposureId}`);
     if (exposure.track === 'hard') return; // idempotent
+
+    // Re-checked inside the transaction: an approval from three days ago does not survive
+    // a verification that expired yesterday.
+    const gate = await accreditationGate(exposure.entityId, exposure.vehicleId, tx);
+    if (!gate.ok) {
+      throw new Error(
+        `Refused: ${gate.reason} Nothing was recorded, and the ticket stays approved — the ` +
+        'blocker is the verification, not the decision.',
+      );
+    }
 
     await tx.query(
       `update pipeline.exposure
