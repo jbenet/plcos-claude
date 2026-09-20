@@ -165,6 +165,16 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N9: [
+    { name: '01-standup-today', path: '/standup/2026-09-20', fullPage: true },
+    { name: '02-standup-pinned', path: '/standup/2026-09-19', fullPage: true },
+    { name: '03-standup-actions', path: '/standup/2026-09-20', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'What to do, in order' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(300);
+      } },
+    { name: '04-calendar-all', path: '/all/calendar' },
+    { name: '05-calendar-vehicle', path: '/neurotech/calendar', fullPage: true },
+  ],
   N8: [
     { name: '04-issue-with-shot', path: '/issues/0007', fullPage: true },
     {

@@ -54,6 +54,9 @@ export const VEHICLE_MODULES: NavModule[] = [
   m('04', 'Conversion strategy', 'targets', 'L5', 'The per-target workspace; consent ladder; coverage disclosure.'),
   m('05', 'Warm intro routes', 'routes', 'L4', 'Route ranking by connector credibility; A–D evidence tiers; non-circumvention.'),
   m('03', 'Selection', 'selection', 'L9', 'The capacity/affinity/propensity rubric, with weights visible and editable.'),
+  m('22', 'Calendar', 'calendar', 'L7',
+    'Everything dated for this vehicle on one compressed timeline, projected from the records that own it.',
+    true, undefined, true),
   m('03b', 'Funder–vehicle fit', 'fit', 'L9',
     'Hard gates, graded dimensions, what they value, what they think of us, and who we know in common.',
     true, undefined, true),
@@ -93,6 +96,14 @@ export interface NavSection {
 /** Sections whose contents do not depend on the database. */
 export const STATIC_SECTIONS: NavSection[] = [
   {
+    id: 'overview',
+    title: 'Overview',
+    links: [
+      { label: 'Daily standup', href: '/standup' },
+      { label: 'Calendar', href: '/all/calendar' },
+    ],
+  },
+  {
     id: 'rnd',
     title: 'PL R&D',
     links: [
@@ -116,7 +127,6 @@ export const STATIC_SECTIONS: NavSection[] = [
     links: [
       { label: 'Research corpus', href: '/research' },
       { label: 'Forecast', href: '/forecast' },
-      { label: 'Sprint calendar', href: '/calendar' },
       { label: 'Content studio', href: '/content' },
       { label: 'Content performance', href: '/performance' },
       { label: 'Answer library', href: '/library' },

@@ -1752,3 +1752,80 @@ input, which commits the label — and the click handler in that same tick still
 pre-blur state. Marks live in a ref as well as in state, and the export reads the ref.
 
 **43 of 43 properties hold.**
+
+---
+
+## N9 — The daily standup, and a calendar that keeps nothing
+
+**Shipped.** Two pages under a new **Overview** section: a standup whose past days do not
+move, and a compressed timeline across every vehicle with a per-vehicle version under each.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Standup](docs/changelog/shots/n9/01-standup-today.png) | **Today.** Every vehicle side by side with no total row, counts that are counts, this week, today, yesterday, and an ordered action list. The numbers are live and the bar says so. |
+| ![Pinned](docs/changelog/shots/n9/02-standup-pinned.png) | **Saturday the 19th, pinned at 08:05.** Two vehicles, $56.0M hard, four approvals — the numbers as they read that morning. Opening it today does not recompute a thing. |
+| ![Actions](docs/changelog/shots/n9/03-standup-actions.png) | **What to do, in order** — with why it is on the list, a *suggested* owner, what is blocking it, and the ticket kind it will need. |
+| ![Calendar](docs/changelog/shots/n9/04-calendar-all.png) | **Sixteen weeks across every vehicle.** Bars are spans, diamonds are deadlines, dots are days. Today is the vertical line. |
+| ![Per vehicle](docs/changelog/shots/n9/05-calendar-vehicle.png) | **The same calendar scoped to one vehicle**, at `/neurotech/calendar`, in the vehicle's own submenu. |
+
+### A past day must read the way it read that morning
+
+This is the whole design of the standup. A page that recalculates its numbers when you
+open it in November is **a new opinion wearing an old date** — and it makes "we agreed this
+on the 19th" unfalsifiable.
+
+So `standup.day` carries a `metrics` snapshot, pinned when the day is captured, and a past
+day never recomputes. The 18th says $52.0M hard; the 19th says $56.0M; today is live,
+labelled *live*, and offers to be pinned. The label and the unit travel with each number,
+so a day rendered next year still says what the number meant even if the code that
+produced it has been rewritten.
+
+Pinning is one-way: the update only writes where `captured_at is null`, so a second press
+cannot quietly rewrite what the team met on. It is not a gated command — it records what
+the numbers were; it does not send, promise or move anything.
+
+Yesterday's list is shown as it was written. Nothing on it re-derives its status from
+today's data, so an item that says *open* was open when that meeting ended.
+
+### Three things the actions list refuses to do
+
+- **It does not assign.** The owner column says *suggested* under every name, and nothing
+  on the page writes to anybody's queue.
+- **It names the gate.** Where an action would need an approval, the ticket kind is on the
+  row — so the standup cannot propose something that would fail closed at the command.
+- **It says why.** An action with no reason is a task somebody wrote down, and `why` is a
+  not-null column.
+
+Carrying is visible: an item on its third day says so in amber. Adjudicating the Roos
+collision has been open since the 18th, and the page makes that uncomfortable on purpose.
+
+### Linear and Affinity are mocked, and say so
+
+Both panes are fixture rows in `standup.external`, labelled **mocked — no connector before
+L13** in the card header and again in the cover line. Linear's custom-field schema is still
+UNVERIFIED in all three design packages, which is one of the four open questions in
+CLAUDE.md; Affinity is not attached. The panes show the shape the summary will take.
+
+The outreach pane's right-hand column is **the consent ladder rung, not a CRM status** —
+when Affinity is attached it will fill the same shape through the Connector seam and the
+rung will still be what a piece of evidence justifies.
+
+### The calendar keeps nothing
+
+Not one row on the calendar is stored for it. Every bar is a dated record that already
+exists somewhere else: a close target, a condition due date, an SPV seat from invite to
+wire, an ask, a meeting, a ticket expiry, an accreditation letter, a funder invitation, a
+sprint period. **A second copy of the plan is the copy that goes stale**, so `lib/timeline.ts`
+reads each module's public API and merges.
+
+The cost is stated on the page: **anything nobody has dated does not appear**, and an empty
+lane means "nothing scheduled here" rather than "nothing happening here".
+
+Bars are packed greedily into sub-rows so two never overlap — an unreadable gantt is a
+decorative one. And per CLAUDE.md the chart has a **list equivalent, not a fallback**: a
+bar three pixels wide is unreachable by keyboard, half of what is on the chart is a single
+day, and the table carries every row including the thirteen outside the window.
+
+**43 of 43 properties hold.** 58 routes return 200 from a cold start.

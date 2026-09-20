@@ -17,3 +17,15 @@ export function dateLabel(d: Date): string {
 export function shortDate(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
+
+/** "Saturday 19 September" — the heading of a day, not a field in a table. */
+export function longDate(d: Date): string {
+  return d.toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC',
+  });
+}
+
+/** "08:05" — shown beside a pinned number so the freeze has a time, not just a date. */
+export function timeOfDay(d: Date): string {
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+}
