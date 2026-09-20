@@ -9,6 +9,11 @@ export interface TicketScope {
   excludes: string[];
   /** Named facts the approver should weigh, each with where it came from. */
   basis?: Array<{ label: string; value: string; source?: string }>;
+  /**
+   * The bounded action as data. Approving the ticket runs exactly this and nothing else,
+   * which is what makes "a specific bounded action" checkable rather than a promise.
+   */
+  apply?: { command: string; args: Record<string, unknown> };
 }
 
 export interface ApprovalTicket {

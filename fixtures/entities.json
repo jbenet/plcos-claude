@@ -1,16 +1,116 @@
 [
-  { "key": "roos",        "type": "person",     "name": "Delia Roos",            "note": "Sole principal of the Roos Foundation." },
-  { "key": "roos-fdn",    "type": "foundation", "name": "Roos Foundation",       "note": "Dual mandate: PRI-capable philanthropy and direct fund commitments." },
-  { "key": "duettmann",   "type": "person",     "name": "Allison Duettmann",     "note": "Connector. Has delivered two of two prior introductions for us." },
-  { "key": "okonjo",      "type": "person",     "name": "Michael Okonjo",        "note": "Principal, Okonjo Family Office. Connector and prospect at once." },
-  { "key": "okonjo-fo",   "type": "family",     "name": "Okonjo Family Office",  "note": "Single family office, generalist with a neuro interest since 2024." },
-  { "key": "navarro",     "type": "person",     "name": "Elena Navarro",         "note": "Same 2024 panel as Roos. Nothing more than that is on file." },
-  { "key": "hale",        "type": "person",     "name": "Jonah Hale",            "note": "Placement adviser. Roos asked not to be introduced through him." },
-  { "key": "northwood",   "type": "org",        "name": "Northwood Capital",     "note": "Multi-family office, $1.4B, allocates to emerging managers." },
-  { "key": "raman",       "type": "person",     "name": "Priya Raman",           "note": "Head of private markets, Northwood Capital." },
-  { "key": "cedar",       "type": "org",        "name": "Cedar Trust",           "note": "Endowment. Countersigned 18 Sep." },
-  { "key": "lindqvist",   "type": "person",     "name": "Ivo Lindqvist",         "note": "Chief investment officer, Cedar Trust." },
-  { "key": "halvorsen",   "type": "foundation", "name": "Halvorsen Institute",   "note": "Grants funder. No invitation on file — outreach is gated." },
-  { "key": "mercer",      "type": "org",        "name": "Mercer & Bly",          "note": "Consultant. Gatekeeper for two of the endowments above." },
-  { "key": "quill",       "type": "person",     "name": "Anne Quill",            "note": "Former colleague of Duettmann. Unverified link to Northwood." }
+  {
+    "key": "roos",
+    "type": "person",
+    "name": "Delia Roos",
+    "note": "Sole principal of the Roos Foundation."
+  },
+  {
+    "key": "roos-fdn",
+    "type": "foundation",
+    "name": "Roos Foundation",
+    "note": "Dual mandate: PRI-capable philanthropy and direct fund commitments."
+  },
+  {
+    "key": "duettmann",
+    "type": "person",
+    "name": "Allison Duettmann",
+    "note": "Connector. Has delivered two of two prior introductions for us."
+  },
+  {
+    "key": "okonjo",
+    "type": "person",
+    "name": "Michael Okonjo",
+    "note": "Principal, Okonjo Family Office. Connector and prospect at once."
+  },
+  {
+    "key": "okonjo-fo",
+    "type": "family",
+    "name": "Okonjo Family Office",
+    "note": "Single family office, generalist with a neuro interest since 2024."
+  },
+  {
+    "key": "navarro",
+    "type": "person",
+    "name": "Elena Navarro",
+    "note": "Same 2024 panel as Roos. Nothing more than that is on file."
+  },
+  {
+    "key": "hale",
+    "type": "person",
+    "name": "Jonah Hale",
+    "note": "Placement adviser. Roos asked not to be introduced through him."
+  },
+  {
+    "key": "northwood",
+    "type": "org",
+    "name": "Northwood Capital",
+    "note": "Multi-family office, $1.4B, allocates to emerging managers."
+  },
+  {
+    "key": "raman",
+    "type": "person",
+    "name": "Priya Raman",
+    "note": "Head of private markets, Northwood Capital."
+  },
+  {
+    "key": "cedar",
+    "type": "org",
+    "name": "Cedar Trust",
+    "note": "Endowment. Countersigned 18 Sep."
+  },
+  {
+    "key": "lindqvist",
+    "type": "person",
+    "name": "Ivo Lindqvist",
+    "note": "Chief investment officer, Cedar Trust."
+  },
+  {
+    "key": "halvorsen",
+    "type": "foundation",
+    "name": "Halvorsen Institute",
+    "note": "Grants funder. No invitation on file \u2014 outreach is gated."
+  },
+  {
+    "key": "mercer",
+    "type": "org",
+    "name": "Mercer & Bly",
+    "note": "Consultant. Gatekeeper for two of the endowments above."
+  },
+  {
+    "key": "quill",
+    "type": "person",
+    "name": "Anne Quill",
+    "note": "Former colleague of Duettmann. Unverified link to Northwood."
+  },
+  {
+    "key": "brenner",
+    "type": "foundation",
+    "name": "Brenner Endowment",
+    "note": "First close anchor. Wired in July."
+  },
+  {
+    "key": "kaplan",
+    "type": "family",
+    "name": "Kaplan Family Trust",
+    "note": "Two vehicles, one budget. Watch the pool."
+  },
+  {
+    "key": "vantage",
+    "type": "org",
+    "name": "Vantage Partners",
+    "note": "Committed to both funds. The conserved-pool check has something to say about this."
+  },
+  {
+    "key": "orsini",
+    "type": "foundation",
+    "name": "Orsini Foundation",
+    "note": "Wired in August."
+  },
+  {
+    "key": "whitcomb",
+    "type": "org",
+    "name": "Whitcomb Capital",
+    "note": "Soft on Neurotech, hard on the Cortex SPV."
+  }
 ]

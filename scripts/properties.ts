@@ -119,6 +119,46 @@ async function main() {
     `${ungatedAsks[0]!.n} live asks with no ticket`,
   );
 
+  const softCash = await db.query<{ n: string }>(
+    "select count(*)::text as n from pipeline.exposure where track = 'soft' and cash_received_at is not null",
+  );
+  check(
+    'No cash is recorded against a soft commitment',
+    Number(softCash[0]!.n) === 0,
+    `${softCash[0]!.n} soft rows with cash`,
+  );
+
+  const hardNoEvidence = await db.query<{ n: string }>(
+    "select count(*)::text as n from pipeline.exposure where track = 'hard' and (evidence_ref is null or hardened_at is null)",
+  );
+  check(
+    'Every hard commitment names the document that makes it hard',
+    Number(hardNoEvidence[0]!.n) === 0,
+    `${hardNoEvidence[0]!.n} hard rows without evidence or a date`,
+  );
+
+  const { vehicleTotals } = await import('../modules/pipeline');
+  const totals = await vehicleTotals();
+  check(
+    'Convertible soft never exceeds soft',
+    totals.every((t) => t.convertibleSoft <= t.soft + 0.0001),
+    totals.map((t) => `${t.vehicleSlug} ${Math.round(t.convertibleSoft / 1e6)}≤${Math.round(t.soft / 1e6)}`).join(', '),
+  );
+
+  const danglingApply = await db.query<{ n: string }>(
+    `select count(*)::text as n from governance.approval_ticket t
+      where t.scope ? 'apply'
+        and t.scope->'apply'->>'command' = 'pipeline.harden'
+        and not exists (
+          select 1 from pipeline.exposure x
+           where x.exposure_id::text = t.scope->'apply'->'args'->>'exposureId')`,
+  );
+  check(
+    'Every MONEY ticket points at an exposure that exists',
+    Number(danglingApply[0]!.n) === 0,
+    `${danglingApply[0]!.n} tickets with a dangling subject`,
+  );
+
   const looseRestrictions = await db.query<{ n: string }>(
     `select count(*)::text as n from coordination.restriction
       where scope = 'connector' and connector_id is null`,
@@ -219,6 +259,35 @@ async function main() {
       },
     },
   ];
+
+  // The gate-to-action chain, end to end: approving the Cedar MONEY ticket is the only
+  // thing in this system that can move the headline.
+  {
+    const d = await freshDb();
+    const { vehicleTotals: vt } = await import('../modules/pipeline');
+    const { getTicket, decideTicket } = await import('../modules/governance');
+    const { applyApprovedTicket } = await import('../app/approvals/apply');
+
+    const before = (await vt()).find((t) => t.vehicleSlug === 'neurotech')!;
+    const t = await d.one<{ id: string }>(
+      "select id from governance.approval_ticket where kind = 'MONEY' and decision is null",
+    );
+    const juan = await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'");
+    await decideTicket(juan!.id, t!.id, 'approve', 'Countersigned copy on file.');
+    const ticket = await getTicket(t!.id);
+    await applyApprovedTicket(juan!.id, ticket!);
+    const after = (await vt()).find((t2) => t2.vehicleSlug === 'neurotech')!;
+
+    const moved = Math.round((after.hard - before.hard) / 1e6);
+    const dropped = Math.round((before.soft - after.soft) / 1e6);
+    check(
+      'Variation — approve the MONEY ticket',
+      moved === 4 && dropped === 4 && after.cash === before.cash,
+      `hard +$${moved}M, soft -$${dropped}M, cash unchanged at $${Math.round(after.cash / 1e6)}M ` +
+      '(an accepted commitment is not a wire)',
+    );
+    await d.close();
+  }
 
   for (const v of variations) {
     const d = await freshDb();

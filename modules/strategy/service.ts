@@ -60,6 +60,13 @@ export async function requestAdvance(
         { label: 'This rung requires', value: RUNG_REQUIRES[args.rung] },
         { label: 'Evidence offered', value: `${args.evidenceKind} ${args.evidenceRef} — ${args.evidenceNote}` },
       ],
+      apply: {
+        command: 'strategy.recordAdvance',
+        args: {
+          pursuitId: args.pursuitId, rung: args.rung, evidenceKind: args.evidenceKind,
+          evidenceRef: args.evidenceRef, evidenceNote: args.evidenceNote,
+        },
+      },
     },
     vehicleId: pursuit.vehicleId,
     expiresInDays: 14,

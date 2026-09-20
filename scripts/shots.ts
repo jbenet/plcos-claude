@@ -119,6 +119,29 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  L6: [
+    // A fresh browser has no vehicle cookie, so this one is genuinely "All vehicles".
+    { name: '01-soft-hard-all', path: '/soft-hard' },
+    {
+      name: '02-soft-hard-vehicle',
+      path: '/soft-hard',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Vehicle/ }).click();
+        await page.getByRole('menu').getByText('PLC Neurotech I').click();
+        await page.waitForTimeout(900);
+      },
+    },
+    { name: '03-forecast', path: '/forecast', fullPage: true },
+    { name: '04-vehicles', path: '/vehicles' },
+    {
+      name: '05-money-ticket',
+      path: '/approvals',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: /Record \$4.0M hard/ }).click();
+        await page.waitForLoadState('networkidle');
+      },
+    },
+  ],
 };
 
 /** The seed mints uuids, so a fixed link is resolved at shot time. */

@@ -9,13 +9,16 @@ import { decide } from '@/app/approvals/actions';
  */
 export function DecideForm({ ticketId, blocked }: { ticketId: string; blocked: boolean }) {
   const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <form
       action={async (fd) => {
         setPending(String(fd.get('decision')));
-        await decide(fd);
+        setError(null);
+        const res = await decide(fd);
         setPending(null);
+        if (res?.error) setError(res.error);
       }}
     >
       <input type="hidden" name="ticketId" value={ticketId} />
@@ -34,6 +37,14 @@ export function DecideForm({ ticketId, blocked }: { ticketId: string; blocked: b
           Reject
         </button>
       </div>
+      {error && (
+        <div className="warn" style={{ marginTop: 12 }}>
+          <div className="lbl" style={{ color: 'var(--clay)' }}>
+            Decision recorded, action not run
+          </div>
+          <p>{error}</p>
+        </div>
+      )}
       {blocked && (
         <p className="note" style={{ marginTop: 10 }}>
           Approval is disabled while a guard refuses this ask. Clear the block first — an approval

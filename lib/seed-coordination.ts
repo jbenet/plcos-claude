@@ -84,7 +84,7 @@ export async function seedCoordination(db: Db): Promise<{ asks: number; tickets:
     // Tickets whose subjects belong to modules that do not exist yet. The subject_label
     // keeps the queue legible; the uuid keeps the foreign key honest when they land.
     const pending: Array<{
-      kind: 'SEND' | 'MONEY' | 'STAGE'; label: string; subjectType: string;
+      kind: 'SEND' | 'STAGE'; label: string; subjectType: string;
       by: string; vehicle: string; authorizes: string; excludes: string[];
       basis: Array<{ label: string; value: string; source?: string }>;
     }> = [
@@ -97,17 +97,6 @@ export async function seedCoordination(db: Db): Promise<{ asks: number; tickets:
           { label: 'Wrap check', value: 'Passed — 506(c) fund, primer scope' },
           { label: 'Claims changed since last send', value: '2' },
           { label: 'Last verified', value: 'Mara Vance, 18 Sep' },
-        ],
-      },
-      {
-        kind: 'MONEY', label: 'Record $4.0M hard — Cedar Trust', subjectType: 'commitment',
-        by: 'sam', vehicle: 'neurotech',
-        authorizes: 'Recording a hard commitment of $4.0M from Cedar Trust, countersigned 18 September.',
-        excludes: ['Any change to the soft track', 'Any announcement', 'Recognising cash — the wire has not landed'],
-        basis: [
-          { label: 'Countersigned', value: '18 Sep 2026' },
-          { label: 'Moves', value: 'soft → hard' },
-          { label: 'Cash received', value: 'No — a separate state' },
         ],
       },
       {

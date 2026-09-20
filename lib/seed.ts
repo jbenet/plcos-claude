@@ -51,9 +51,11 @@ export async function seed(db: Db): Promise<{ users: number; vehicles: number; s
   const coordination = await seedCoordination(db);
   const { seedStrategy } = await import('./seed-strategy');
   const strategy = await seedStrategy(db);
+  const { seedPipeline } = await import('./seed-pipeline');
+  const pipeline = await seedPipeline(db);
   return {
     users: users.length, vehicles: vehicles.length, sources: sources.length,
-    ...research, ...network, ...coordination, ...strategy,
+    ...research, ...network, ...coordination, ...strategy, ...pipeline,
   };
 }
 

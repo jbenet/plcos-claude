@@ -432,3 +432,75 @@ think is worse: two ladders is how two definitions of "opted in" appear.
 Money. Cedar Trust shows `commitment accepted` on the ladder and the seeded `MONEY` ticket
 says "$4.0M, cash not received" — but no total exists anywhere yet, hard or soft. That is
 L6, and the reason the headline number is still absent rather than provisional.
+
+---
+
+## L6 — Exposure, the soft/hard split, and the conserved capital pool
+
+**Shipped.** Modules 08, 09 and 21. Two tracks that never meet, a hard-only headline per
+vehicle, a deterministic check that the same dollar has not been counted twice, and the
+first ticket in this system whose approval actually *does* something.
+
+### Screenshots
+
+| | |
+|---|---|
+| ![Soft to hard, all vehicles](docs/changelog/shots/l6/01-soft-hard-all.png) | **With no vehicle selected there is no headline.** Four raises side by side, no total row, and a sentence saying why. |
+| ![Soft to hard](docs/changelog/shots/l6/02-soft-hard-vehicle.png) | **Pick a vehicle and the headline means something.** $56.0M hard, $22.5M soft in a hatched card, convertible soft shown and never summed in. |
+| ![Forecast](docs/changelog/shots/l6/03-forecast.png) | **The conserved capital pool.** Two actors are over a verified budget by $3.5M between them. The page says which vehicles, and refuses to pick. |
+| ![Vehicles](docs/changelog/shots/l6/04-vehicles.png) | **Vehicle status.** Per vehicle, hard, soft, cash, gap, coverage — and a cover line explaining why there is no total. |
+| ![MONEY ticket](docs/changelog/shots/l6/05-money-ticket.png) | **The MONEY ticket for Cedar Trust,** carrying its bounded action as data. Approving it is the only thing in this system that can move the headline. |
+
+### Approving a ticket now runs exactly what it says
+
+`TicketScope` gained an `apply` field: `{ command, args }`. Approving a ticket runs that
+command and nothing else, and an unrecognised command is refused rather than approximated:
+
+> *"Ticket … names an unknown command. Nothing was run — an approval that cannot be
+> executed exactly is not executed approximately."*
+
+The dispatcher lives in `app/approvals/apply.ts`, in the app layer, because it is the only
+place allowed to know about more than one module. If the action fails after the decision is
+recorded, the UI says **"Approved, but the action did not run"** rather than implying both
+or neither happened.
+
+Two commands so far: `pipeline.harden` and `strategy.recordAdvance`.
+
+### The arithmetic that is refused
+
+The seeded Cedar Trust commitment sits on the **soft** track with $4.0M against it and a
+`MONEY` ticket waiting. Approving that ticket moves Neurotech's headline from $56.0M to
+$60.0M and the gap from $34.0M to $30.0M — and leaves cash received unchanged, because a
+countersignature is not a wire. That whole chain is now a property test:
+
+```
+  ok   Variation — approve the MONEY ticket
+       hard +$4M, soft -$4M, cash unchanged at $56M (an accepted commitment is not a wire)
+```
+
+`npm run props` is up to **17 of 17**.
+
+### Where I disagreed — and where I caught myself
+
+**The first version of the Soft → Hard page was quietly wrong.** With "All vehicles"
+selected it showed a headline KPI strip computed from one vehicle, above a table listing
+every vehicle's rows, with a footer summing convertible soft *across all four*. Every
+individual number was right and the page as a whole told a lie. I rewrote it: no vehicle
+selected means no headline, a side-by-side table instead, and a sentence explaining that
+adding those columns down would produce the one figure CLAUDE.md says must never exist.
+
+Worth recording because it is exactly the failure mode the rule exists for, and it got
+into my own first draft of the page that enforces it.
+
+**`lib/money.ts` deliberately contains no sum helper.** There is a formatter, a percentage
+and a multiple. Anything that adds must be written out where a reader can see what it is
+adding.
+
+**Coverage is the one place two tracks appear in one expression.** `(hard + soft) ÷ target`
+is a measure of pipeline depth, and the page says so on the row rather than leaving it to be
+read as money. I considered dropping it; it is genuinely useful and the label carries it.
+
+### Still not built
+
+The close room and the SPV war room (L8), the sprint calendar (L7). Cash is recorded but
+there is no wire-tracking screen yet — `recordCash` exists and is only called by tests.
