@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shell &amp; Today</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#F5F3EE; --surface:#FFFFFF; --ink:#1A1917; --muted:#5E5A52; --line:#E4E0D6;
+  --clay:#BF4A16; --green:#0E7F55; --purple:#5F4B9E; --amber:#8A6410;
+  --rail:#1A1917; --rail-ink:#EFEBE2; --rail-muted:#9C968A; --rail-line:#332F2A;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:'IBM Plex Mono',monospace}
+.lbl{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.app{width:1440px;height:940px;display:flex;background:var(--ground)}
+
+/* ---------- rail ---------- */
+.rail{width:236px;flex:none;background:var(--rail);color:var(--rail-ink);display:flex;flex-direction:column;padding:18px 0 14px}
+.brand{padding:0 18px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--rail-line)}
+.mark{width:26px;height:26px;border-radius:7px;background:var(--clay);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:#fff;flex:none}
+.brand b{font-family:'Fraunces',serif;font-size:15px;font-weight:600;letter-spacing:.01em}
+.vsw{margin:14px 12px 4px;padding:9px 11px;border:1px solid var(--rail-line);border-radius:8px;background:#211E1A;cursor:pointer}
+.vsw .lbl{color:var(--rail-muted);font-size:9px}
+.vsw .v{display:flex;align-items:center;justify-content:space-between;margin-top:4px;font-size:13px;font-weight:500}
+.vsw .v span:last-child{color:var(--rail-muted);font-size:11px}
+.nav{flex:1;overflow:hidden;padding:12px 10px 0}
+.nitem{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;font-size:13.5px;color:var(--rail-ink);cursor:pointer;position:relative}
+.nitem.on{background:#2C2823}
+.nitem.on:before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--clay)}
+.nitem .ct{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--rail-muted)}
+.nitem .pip{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:10px;background:var(--clay);color:#fff;border-radius:9px;padding:1px 6px}
+.sec{margin:16px 0 5px;padding:0 10px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--rail-muted);display:flex;justify-content:space-between}
+.sub{padding:6px 10px 6px 30px;font-size:12.5px;color:#C6C0B4;cursor:pointer;border-radius:6px;display:flex;justify-content:space-between}
+.sub:hover{background:#252119}
+.who{margin:0 12px;padding-top:12px;border-top:1px solid var(--rail-line);display:flex;align-items:center;gap:9px}
+.av{width:26px;height:26px;border-radius:50%;background:#3D3831;color:var(--rail-ink);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex:none}
+.who div{font-size:12.5px;line-height:1.3}
+.who small{display:block;color:var(--rail-muted);font-size:10.5px}
+
+/* ---------- main ---------- */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{height:46px;flex:none;border-bottom:1px solid var(--line);background:var(--surface);display:flex;align-items:center;padding:0 20px;gap:14px}
+.crumb{font-size:12.5px;color:var(--muted)}
+.crumb b{color:var(--ink);font-weight:500}
+.sync{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.btn{font-family:inherit;font-size:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:5px 11px;cursor:pointer}
+.btn.p{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+.body{flex:1;display:flex;min-height:0}
+.work{flex:1;overflow:hidden;padding:22px 24px}
+.insp{width:328px;flex:none;border-left:1px solid var(--line);background:var(--surface);padding:20px;overflow:hidden}
+
+h1{font-family:'Fraunces',serif;font-size:28px;font-weight:600;margin:6px 0 4px}
+.sublede{color:var(--muted);font-size:13.5px;margin:0 0 18px}
+
+/* kpi */
+.kpis{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 15px}
+.kpi.soft{background:repeating-linear-gradient(135deg,#FFF,#FFF 6px,#FAF8F3 6px,#FAF8F3 12px);border-style:dashed}
+.kpi .n{font-family:'Fraunces',serif;font-size:25px;font-weight:600;margin:5px 0 3px;letter-spacing:-.01em}
+.kpi .n.g{color:var(--green)}
+.kpi .f{font-size:11px;color:var(--muted);line-height:1.4}
+.tag{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:2px 6px;border-radius:4px;border:1px solid}
+.t-soft{color:var(--amber);border-color:#E0D2AE;background:#FDF8EC}
+.t-hard{color:var(--green);border-color:#BFE0D0;background:#EDF7F2}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:16px}
+.chead{padding:12px 15px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+.chead h2{font-family:'Fraunces',serif;font-size:16px;font-weight:600;margin:0}
+.row{padding:11px 15px;border-bottom:1px solid #F0EDE5;display:flex;align-items:center;gap:13px;cursor:pointer}
+.row:last-child{border-bottom:0}
+.row.sel{background:#FBF9F4;box-shadow:inset 3px 0 0 var(--clay)}
+.kind{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;padding:3px 7px;border-radius:4px;flex:none;width:112px;text-align:center}
+.k-send{background:#F5EAE4;color:var(--clay)}
+.k-intro{background:#EAE6F4;color:var(--purple)}
+.k-money{background:#E6F2EC;color:var(--green)}
+.k-stage{background:#F6F0DF;color:var(--amber)}
+.row .t{flex:1;min-width:0}
+.row .t b{display:block;font-size:13.5px;font-weight:500;margin-bottom:2px}
+.row .t span{font-size:11.5px;color:var(--muted)}
+.state{font-size:11px;color:var(--muted);flex:none;text-align:right;line-height:1.45}
+.state b{display:block;color:var(--ink);font-weight:500}
+
+/* sprint strip */
+.weeks{display:grid;grid-template-columns:repeat(7,1fr);gap:0;padding:15px;padding-top:13px}
+.wk{border:1px solid var(--line);border-right:0;padding:9px 10px 11px;background:var(--surface)}
+.wk:last-child{border-right:1px solid var(--line);border-radius:0 8px 8px 0}
+.wk:first-child{border-radius:8px 0 0 8px}
+.wk.dead{background:#F4F1EA;color:var(--muted)}
+.wk.now{background:#FBF4EF;box-shadow:inset 0 3px 0 var(--clay)}
+.wk .d{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.wk .m{font-size:12.5px;font-weight:500;margin-top:5px;line-height:1.35}
+.wk .s{font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.35}
+.wk .bar{height:3px;border-radius:2px;margin-top:8px;background:var(--line)}
+.wk .bar.on{background:var(--clay)}
+.wk .bar.off{background:repeating-linear-gradient(90deg,var(--line),var(--line) 3px,transparent 3px,transparent 6px)}
+
+/* inspector */
+.ihead{font-family:'Fraunces',serif;font-size:18px;font-weight:600;margin:7px 0 3px;line-height:1.25}
+.imeta{font-size:12px;color:var(--muted);margin-bottom:15px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #F0EDE5;font-size:12.5px}
+.kv span:first-child{color:var(--muted)}
+.kv span:last-child{text-align:right;font-weight:500}
+.scope{margin:15px 0;padding:12px 13px;border:1px solid var(--line);border-radius:8px;background:#FBF9F4}
+.scope p{margin:6px 0 0;font-size:12.5px;line-height:1.5}
+.acts{display:flex;gap:8px;margin-top:15px}
+.acts .btn{flex:1;text-align:center;padding:8px}
+.note{margin-top:14px;font-size:11.5px;color:var(--muted);line-height:1.55;padding-top:13px;border-top:1px solid var(--line)}
+.ref{color:var(--clay);border-bottom:1px dotted var(--clay);cursor:help}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ RAIL ============ -->
+  <nav class="rail">
+    <div class="brand"><div class="mark">C</div><b>Capital&nbsp;OS</b></div>
+
+    <div class="vsw">
+      <div class="lbl">Vehicle</div>
+      <div class="v"><span>PLC Neurotech I</span><span>▾</span></div>
+    </div>
+
+    <div class="nav">
+      <div class="nitem on">Today<span class="ct">7</span></div>
+      <div class="nitem">Approvals<span class="pip">4</span></div>
+
+      <div class="sec"><span>Discover &amp; qualify</span><span>01–06</span></div>
+      <div class="sub"><span>Research &amp; enrichment</span></div>
+      <div class="sub"><span>Selection</span><span class="ct">28</span></div>
+      <div class="sub"><span>Conversion strategy</span><span class="ct">12</span></div>
+      <div class="sub"><span>Warm intro routes</span></div>
+
+      <div class="sec"><span>Convert &amp; coordinate</span><span>07–12</span></div>
+      <div class="sub"><span>Ask coordination</span><span class="ct">2</span></div>
+      <div class="sub"><span>Soft → Hard</span></div>
+      <div class="sub"><span>Vehicle status</span></div>
+      <div class="sub"><span>Meetings</span><span class="ct">5</span></div>
+
+      <div class="sec"><span>Create &amp; substantiate</span><span>13–17</span></div>
+      <div class="sub"><span>Content studio</span></div>
+      <div class="sub"><span>Materials &amp; send gate</span></div>
+
+      <div class="sec"><span>Execute &amp; govern</span><span>18–24</span></div>
+      <div class="sub"><span>Close room</span></div>
+      <div class="sub"><span>SPV war room</span><span class="ct">3</span></div>
+      <div class="sub"><span>Forecast</span></div>
+    </div>
+
+    <div class="who">
+      <div class="av">J</div>
+      <div>Juan<small>General Partner</small></div>
+    </div>
+  </nav>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <div class="top">
+      <div class="crumb">PLC Neurotech I &nbsp;/&nbsp; <b>Today</b></div>
+      <div class="sync"><span class="dot"></span> All sources synced · 4 min ago</div>
+      <button class="btn">Give feedback</button>
+    </div>
+
+    <div class="body">
+      <div class="work">
+        <div class="lbl">Saturday 20 September</div>
+        <h1>Four decisions only you can make.</h1>
+        <p class="sublede">Everything else on the board is moving without you.</p>
+
+        <div class="kpis">
+          <div class="kpi">
+            <span class="tag t-hard">Hard</span>
+            <div class="n g">$60.0M</div>
+            <div class="f">Signed and countersigned. The only number that appears in a headline.</div>
+          </div>
+          <div class="kpi soft">
+            <span class="tag t-soft">Soft</span>
+            <div class="n">$18.5M</div>
+            <div class="f">Nine indications. <b>Never added to hard.</b> Convertible estimate $11.2M.</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Gap to first close</div>
+            <div class="n">$30.0M</div>
+            <div class="f">Hard-only basis. 14 weeks, less the December dead zone.</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">Coverage</div>
+            <div class="n">2.4×</div>
+            <div class="f">Below the 3–4× band this market wants. 28 in qualified pipeline.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="chead">
+            <h2>Needs a decision</h2>
+            <span class="lbl">4 open tickets · oldest 2 days</span>
+          </div>
+          <div class="row sel">
+            <span class="kind k-intro">INTRO_ASK</span>
+            <div class="t"><b>Route to Delia Roos via A. Duettmann</b><span>Conflict: Rails opened an ask on the same actor 6 days ago</span></div>
+            <div class="state"><b>Blocked</b>Adjudication required</div>
+          </div>
+          <div class="row">
+            <span class="kind k-send">SEND</span>
+            <div class="t"><b>Neurotech primer → Okonjo Family Office</b><span>Wrap check passed · 2 claims changed since last send</span></div>
+            <div class="state"><b>Ready</b>Requested by Mara</div>
+          </div>
+          <div class="row">
+            <span class="kind k-money">MONEY</span>
+            <div class="t"><b>Record $4.0M hard — Cedar Trust</b><span>Countersigned 18 Sep · moves soft → hard</span></div>
+            <div class="state"><b>Ready</b>Requested by Ops</div>
+          </div>
+          <div class="row">
+            <span class="kind k-stage">STAGE</span>
+            <div class="t"><b>Advance Northwood to Diligence</b><span>Consent ladder sits at <i>meeting held</i>; no indication on file</span></div>
+            <div class="state"><b>Needs evidence</b>Requested by Sam</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:0">
+          <div class="chead">
+            <h2>The run to first close</h2>
+            <span class="lbl">Sprint calendar · holiday overlay on</span>
+          </div>
+          <div class="weeks">
+            <div class="wk now"><div class="d">Sep 22</div><div class="m">This week</div><div class="s">6 decision meetings</div><div class="bar on"></div></div>
+            <div class="wk"><div class="d">Oct 06</div><div class="m">Anchor push</div><div class="s">FO circuit</div><div class="bar on"></div></div>
+            <div class="wk"><div class="d">Oct 20</div><div class="m">Diligence</div><div class="s">DDQ wave</div><div class="bar on"></div></div>
+            <div class="wk"><div class="d">Nov 03</div><div class="m">SPV 2 wire</div><div class="s">days-to-wire 11</div><div class="bar on"></div></div>
+            <div class="wk dead"><div class="d">Nov 24</div><div class="m">Thanksgiving</div><div class="s">US desks thin from 26th</div><div class="bar off"></div></div>
+            <div class="wk"><div class="d">Dec 08</div><div class="m">Last full week</div><div class="s">Papers out by the 19th</div><div class="bar on"></div></div>
+            <div class="wk dead"><div class="d">Dec 22</div><div class="m">Dead zone</div><div class="s">Urgency suppressed. Nothing is chased after the 23rd.</div><div class="bar off"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ INSPECTOR ============ -->
+      <aside class="insp">
+        <div class="lbl">Approval ticket · INTRO_ASK</div>
+        <div class="ihead">Route to Delia Roos via A. Duettmann</div>
+        <div class="imeta">Requested by Juan · 2 days ago · expires 27 Sep</div>
+
+        <div class="kv"><span>Target</span><span>Delia Roos · Roos Foundation</span></div>
+        <div class="kv"><span>Vehicle</span><span>PLC Neurotech I</span></div>
+        <div class="kv"><span>Connector</span><span>A. Duettmann</span></div>
+        <div class="kv"><span>Route evidence</span><span>Tier B · two sources</span></div>
+        <div class="kv"><span>Connector load</span><span>2 of 3 this quarter</span></div>
+        <div class="kv"><span>Consent ladder</span><span>Not yet asked</span></div>
+
+        <div class="scope">
+          <div class="lbl">This approval authorizes</div>
+          <p>One opt-in request to A. Duettmann regarding Delia Roos, carrying the approved
+          Neurotech primer (v4) and nothing else. It does not authorize contacting the target,
+          and it does not move her to any pipeline stage.</p>
+        </div>
+
+        <div class="scope" style="border-color:#E4D3C6;background:#FCF6F2">
+          <div class="lbl" style="color:var(--clay)">Blocking — conflict case #31</div>
+          <p>PLC Crypto/Rails opened an <span class="ref">INTRO_ASK</span> on the same actor
+          six days ago, inside the 14-day window. One vehicle proceeds; the other receives a
+          dated follow-up rather than a silent loss.</p>
+        </div>
+
+        <div class="acts">
+          <button class="btn p">Adjudicate</button>
+          <button class="btn">Defer</button>
+        </div>
+
+        <div class="note">
+          Approving a ticket never means the same thing twice here. An agent finishing its run,
+          a teammate accepting a task, an LP approving terms, counsel closing, and cash landing
+          are five different states and never share one check mark.
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+</body>
+</html>

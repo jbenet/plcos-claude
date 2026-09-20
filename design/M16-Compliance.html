@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Module 16 — Vehicle &amp; compliance registry</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F5F3EE;color:#1A1917;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#BF4A16}a:hover{color:#8E3610}
+button{font-family:inherit}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1100px; height: 760px; box-sizing: border-box; padding: 34px 36px 30px; background: #F5F3EE; display: flex; flex-direction: column; gap: 18px;">
+
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;">
+    <div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #5E5A52;">Module 16</div>
+      <h2 style="margin: 7px 0 0; font-family: 'Fraunces', serif; font-size: 27px; font-weight: 600;">Vehicle &amp; compliance registry</h2>
+      <div style="margin-top: 5px; font-size: 13.5px; color: #5E5A52;">Posture, owner counts, integration exposure and the MFN register &#8212; checked at prioritisation, not at closing.</div>
+    </div>
+    <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 7px; background: #F9EAE3; color: #BF4A16; font-size: 12px; font-weight: 500;">not legal advice</span>
+  </div>
+
+  <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 16px 20px;">
+    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #5E5A52;">Vehicles</div>
+    <table style="width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 12.5px;">
+      <thead>
+        <tr>
+          <th scope="col" style="text-align: left; padding: 6px 8px 9px 0; font-size: 11px; font-weight: 500; color: #5E5A52; border-bottom: 1px solid #E4E0D6;">Vehicle</th>
+          <th scope="col" style="text-align: left; padding: 6px 8px 9px; font-size: 11px; font-weight: 500; color: #5E5A52; border-bottom: 1px solid #E4E0D6;">Exemption</th>
+          <th scope="col" style="text-align: left; padding: 6px 8px 9px; font-size: 11px; font-weight: 500; color: #5E5A52; border-bottom: 1px solid #E4E0D6;">ICA</th>
+          <th scope="col" style="text-align: right; padding: 6px 8px 9px; font-size: 11px; font-weight: 500; color: #5E5A52; border-bottom: 1px solid #E4E0D6;">Owners</th>
+          <th scope="col" style="text-align: left; padding: 6px 8px 9px; font-size: 11px; font-weight: 500; color: #5E5A52; border-bottom: 1px solid #E4E0D6;">Form D</th>
+          <th scope="col" style="text-align: left; padding: 6px 0 9px 8px; font-size: 11px; font-weight: 500; color: #5E5A52; border-bottom: 1px solid #E4E0D6;">Flags</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding: 10px 8px 10px 0; border-bottom: 1px solid #F0EDE5; font-weight: 600;">Neurotech I</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">506(c)</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">3(c)(1)</td><td style="padding: 10px 8px; text-align: right; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">34 / 100</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; color: #0E7F55;">filed</td><td style="padding: 10px 0 10px 8px; border-bottom: 1px solid #F0EDE5; color: #0E7F55;">clear</td></tr>
+        <tr><td style="padding: 10px 8px 10px 0; border-bottom: 1px solid #F0EDE5; font-weight: 600;">Crypto / Rails</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">506(c)</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">3(c)(1)</td><td style="padding: 10px 8px; text-align: right; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">41 / 100</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; color: #0E7F55;">filed</td><td style="padding: 10px 0 10px 8px; border-bottom: 1px solid #F0EDE5; color: #0E7F55;">clear</td></tr>
+        <tr><td style="padding: 10px 8px 10px 0; border-bottom: 1px solid #F0EDE5; font-weight: 600;">SPV &#183; Axon Ridge</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">506(c)</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">3(c)(1)</td><td style="padding: 10px 8px; text-align: right; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">19 / 100</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; color: #0E7F55;">filed</td><td style="padding: 10px 0 10px 8px; border-bottom: 1px solid #F0EDE5; color: #8A6410;">look-through: 1 pooled LP</td></tr>
+        <tr><td style="padding: 10px 8px 10px 0; border-bottom: 1px solid #F0EDE5; font-weight: 600;">SPV &#183; Halcyon Bio</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">506(c)</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">3(c)(1)</td><td style="padding: 10px 8px; text-align: right; border-bottom: 1px solid #F0EDE5; font-family: 'IBM Plex Mono', monospace;">7 / 100</td><td style="padding: 10px 8px; border-bottom: 1px solid #F0EDE5; color: #8A6410;">due in 4d</td><td style="padding: 10px 0 10px 8px; border-bottom: 1px solid #F0EDE5; color: #0E7F55;">clear</td></tr>
+        <tr style="background: #F7F0DE;"><td style="padding: 10px 8px 10px 10px; font-weight: 600;">SPV &#183; Tessera</td><td style="padding: 10px 8px; font-family: 'IBM Plex Mono', monospace; color: #8A6410; font-weight: 500;">506(b)</td><td style="padding: 10px 8px; font-family: 'IBM Plex Mono', monospace;">3(c)(1)</td><td style="padding: 10px 8px; text-align: right; font-family: 'IBM Plex Mono', monospace;">4 / 100</td><td style="padding: 10px 8px; color: #0E7F55;">filed</td><td style="padding: 10px 0 10px 8px; color: #8A6410; font-weight: 500;">integration exposure</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex; gap: 16px;">
+
+    <div style="flex-grow: 1; background: #F7F0DE; border: 1px solid #E0CFA0; border-radius: 12px; padding: 18px 20px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #8A6410;">One flag, worth acting on</div>
+      <div style="margin-top: 10px; font-size: 14px; font-weight: 600; line-height: 1.4;">Tessera is the only 506(b) vehicle while four others are generally soliciting.</div>
+      <div style="margin-top: 9px; font-size: 12.5px; line-height: 1.55;">The 2020 adopting release is explicit that an issuer may not run a 506(c) general solicitation in order to identify investors for a 506(b) offering. With an overlapping LP base and a visible public raise, demonstrating that each Tessera investor came from a pre-existing substantive relationship is an evidentiary burden that is easy to lose.</div>
+      <div style="margin-top: 12px; font-size: 12.5px; line-height: 1.5; color: #5E5A52;">Two of Tessera's four investors also appear in Neurotech I pipeline touched by public content. Either convert Tessera to 506(c), or wall it off with documented relationship provenance per investor.</div>
+      <button type="button" style="margin-top: 14px; height: 32px; padding: 0 14px; border-radius: 7px; border: 1px solid #8A6410; background: #FFFFFF; color: #8A6410; font-size: 12.5px; font-weight: 500; cursor: pointer;">Flag for counsel</button>
+    </div>
+
+    <div style="width: 340px; flex-shrink: 0; background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #5E5A52;">Side letters &amp; MFN register</div>
+      <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="padding-bottom: 10px; border-bottom: 1px solid #F0EDE5;"><div style="font-size: 12.5px; font-weight: 600;">Purpose-clause amendment</div><div style="margin-top: 3px; font-size: 11.5px; color: #5E5A52;">Neurotech I &#183; non-neuro capacity &#183; MFN: carved out</div></div>
+        <div style="padding-bottom: 10px; border-bottom: 1px solid #F0EDE5;"><div style="font-size: 12.5px; font-weight: 600;">Fee break &#183; 1.75%</div><div style="margin-top: 3px; font-size: 11.5px; color: #8A6410;">MFN open &#183; 3 LPs could elect</div></div>
+        <div><div style="font-size: 12.5px; font-weight: 600;">Co-invest rights</div><div style="margin-top: 3px; font-size: 11.5px; color: #5E5A52;">2 LPs &#183; pro-rata &#183; MFN: carved out</div></div>
+      </div>
+      <div style="margin-top: auto; padding: 11px 13px; border-radius: 8px; background: #F5F3EE; font-size: 11.5px; line-height: 1.45; color: #5E5A52;">Before conceding a term, the register computes its cost if every eligible LP elects it.</div>
+    </div>
+
+  </div>
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":760}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

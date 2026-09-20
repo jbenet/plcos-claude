@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Version A — Cockpit architecture</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F5F3EE;color:#1A1917;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#BF4A16}a:hover{color:#8E3610}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1200px; height: 840px; box-sizing: border-box; padding: 44px 48px 40px; background: #F5F3EE; display: flex; flex-direction: column; gap: 22px;">
+
+  <div style="display: flex; align-items: flex-end; gap: 32px;">
+    <div style="flex-grow: 1;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #BF4A16;">Version A · architecture</div>
+      <h2 style="margin: 10px 0 0; font-family: 'Fraunces', serif; font-size: 36px; font-weight: 600; letter-spacing: -0.01em;">Cockpit — the CRM is the centre</h2>
+    </div>
+    <div style="flex-shrink: 0; text-align: right; font-size: 13px; line-height: 1.5; color: #5E5A52;">Buy the hard parts.<br>Build only the thin layer no vendor has.</div>
+  </div>
+
+  <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 14px; padding: 26px 28px 22px; flex-grow: 1;">
+    <svg viewBox="0 0 1044 520" width="100%" height="100%" role="img" aria-label="Layered diagram: team and agents use the Cockpit app, which calls a thin service for scoring, ask guarding and scheduled agents, which reads and writes Attio as the system of record, which is fed by enrichment, filings, signals, transcripts and SPV admin sources.">
+      <defs>
+        <marker id="aArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#8F8A7E"></path>
+        </marker>
+      </defs>
+
+      <text x="0" y="14" font-family="'IBM Plex Mono', monospace" font-size="11" letter-spacing="1.4" fill="#5E5A52">PEOPLE</text>
+      <rect x="0" y="26" width="248" height="56" rx="9" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.5"></rect>
+      <text x="18" y="50" font-family="'IBM Plex Sans', sans-serif" font-size="14" font-weight="600" fill="#1A1917">GP &amp; partners</text>
+      <text x="18" y="69" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">relationship owners</text>
+
+      <rect x="264" y="26" width="248" height="56" rx="9" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.5"></rect>
+      <text x="282" y="50" font-family="'IBM Plex Sans', sans-serif" font-size="14" font-weight="600" fill="#1A1917">Capital formation</text>
+      <text x="282" y="69" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">pipeline &amp; materials</text>
+
+      <rect x="528" y="26" width="248" height="56" rx="9" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.5"></rect>
+      <text x="546" y="50" font-family="'IBM Plex Sans', sans-serif" font-size="14" font-weight="600" fill="#1A1917">PL Neuro &amp; analysts</text>
+      <text x="546" y="69" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">research &amp; grants</text>
+
+      <rect x="792" y="26" width="252" height="56" rx="9" fill="#E6F1EC" stroke="#0E7F55" stroke-width="1.5" stroke-dasharray="5 4"></rect>
+      <text x="810" y="50" font-family="'IBM Plex Sans', sans-serif" font-size="14" font-weight="600" fill="#0E7F55">Personal agents</text>
+      <text x="810" y="69" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">chat, ad hoc, unmanaged</text>
+
+      <line x1="522" y1="86" x2="522" y2="112" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#aArrow)"></line>
+
+      <text x="0" y="130" font-family="'IBM Plex Mono', monospace" font-size="11" letter-spacing="1.4" fill="#5E5A52">SURFACE</text>
+      <rect x="0" y="142" width="1044" height="62" rx="9" fill="#FFFFFF" stroke="#1A1917" stroke-width="1.75"></rect>
+      <text x="20" y="168" font-family="'IBM Plex Sans', sans-serif" font-size="15" font-weight="600" fill="#1A1917">Cockpit — one web app</text>
+      <text x="20" y="189" font-family="'IBM Plex Sans', sans-serif" font-size="12.5" fill="#5E5A52">Today &#183; Pipeline &#183; Relationship &#183; Ask log &#183; Briefs</text>
+      <text x="1024" y="180" text-anchor="end" font-family="'IBM Plex Mono', monospace" font-size="11.5" fill="#5E5A52">Next.js</text>
+
+      <line x1="522" y1="208" x2="522" y2="234" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#aArrow)"></line>
+
+      <text x="0" y="252" font-family="'IBM Plex Mono', monospace" font-size="11" letter-spacing="1.4" fill="#5E5A52">BUILT — THE THIN LAYER</text>
+      <rect x="0" y="264" width="336" height="70" rx="9" fill="#E6F1EC" stroke="#0E7F55" stroke-width="1.5"></rect>
+      <text x="18" y="290" font-family="'IBM Plex Sans', sans-serif" font-size="14" font-weight="600" fill="#1A1917">Scoring service</text>
+      <text x="18" y="310" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">capacity &#183; affinity &#183; propensity</text>
+      <text x="18" y="326" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">time-to-decision, decayed nightly</text>
+
+      <rect x="354" y="264" width="336" height="70" rx="9" fill="#F9EAE3" stroke="#BF4A16" stroke-width="1.5"></rect>
+      <text x="372" y="290" font-family="'IBM Plex Sans', sans-serif" font-size="14" font-weight="600" fill="#1A1917">Ask guard</text>
+      <text x="372" y="310" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">one owner per relationship</text>
+      <text x="372" y="326" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">frequency cap across vehicles</text>
+
+      <rect x="708" y="264" width="336" height="70" rx="9" fill="#E6F1EC" stroke="#0E7F55" stroke-width="1.5"></rect>
+      <text x="726" y="290" font-family="'IBM Plex Sans', sans-serif" font-size="14" font-weight="600" fill="#1A1917">Agent runner</text>
+      <text x="726" y="310" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">nightly cron + on-demand</text>
+      <text x="726" y="326" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">dossiers, briefs, drafts</text>
+
+      <line x1="522" y1="338" x2="522" y2="364" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#aArrow)" marker-start="url(#aArrow)"></line>
+
+      <text x="0" y="382" font-family="'IBM Plex Mono', monospace" font-size="11" letter-spacing="1.4" fill="#BF4A16">SYSTEM OF RECORD — BOUGHT</text>
+      <rect x="0" y="394" width="1044" height="60" rx="9" fill="#F9EAE3" stroke="#BF4A16" stroke-width="2.5"></rect>
+      <text x="20" y="420" font-family="'IBM Plex Sans', sans-serif" font-size="15" font-weight="600" fill="#1A1917">Attio</text>
+      <text x="20" y="440" font-family="'IBM Plex Sans', sans-serif" font-size="12.5" fill="#5E5A52">people &#183; orgs &#183; interactions &#183; pipelines (vehicles as lists) &#183; email + calendar capture</text>
+
+      <line x1="522" y1="458" x2="522" y2="478" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#aArrow)" marker-start="url(#aArrow)"></line>
+
+      <rect x="0" y="482" width="196" height="36" rx="7" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="16" y="505" font-family="'IBM Plex Sans', sans-serif" font-size="12.5" fill="#1A1917">Clay enrichment</text>
+
+      <rect x="212" y="482" width="196" height="36" rx="7" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="228" y="505" font-family="'IBM Plex Sans', sans-serif" font-size="12.5" fill="#1A1917">EDGAR &#183; Form D</text>
+
+      <rect x="424" y="482" width="196" height="36" rx="7" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="440" y="505" font-family="'IBM Plex Sans', sans-serif" font-size="12.5" fill="#1A1917">Jobs &#183; liquidity &#183; 990-PF</text>
+
+      <rect x="636" y="482" width="196" height="36" rx="7" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="652" y="505" font-family="'IBM Plex Sans', sans-serif" font-size="12.5" fill="#1A1917">Meeting transcripts</text>
+
+      <rect x="848" y="482" width="196" height="36" rx="7" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="864" y="505" font-family="'IBM Plex Sans', sans-serif" font-size="12.5" fill="#1A1917">Sydecar &#183; AngelList</text>
+    </svg>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px;">
+    <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #0E7F55;">What you build</div>
+      <div style="margin-top: 8px; font-size: 13px; line-height: 1.5; color: #1A1917;">Four things: the scoring service, the ask guard, the agent runner, and one app with four views. Roughly 4,000 lines.</div>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #BF4A16;">What you buy</div>
+      <div style="margin-top: 8px; font-size: 13px; line-height: 1.5; color: #1A1917;">The genuinely hard, sensitive part — firm-wide mailbox and calendar ingestion, normalised into a relationship record.</div>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8A6410;">What you accept</div>
+      <div style="margin-top: 8px; font-size: 13px; line-height: 1.5; color: #1A1917;">Vehicles are lists, not first-class. History is mutable, so replay is impossible. Personal agents stay outside the system.</div>
+    </div>
+  </div>
+
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":840}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

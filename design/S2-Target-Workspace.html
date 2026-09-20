@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Target workspace</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#F5F3EE; --surface:#FFFFFF; --ink:#1A1917; --muted:#5E5A52; --line:#E4E0D6;
+  --clay:#BF4A16; --green:#0E7F55; --purple:#5F4B9E; --amber:#8A6410;
+  --rail:#1A1917; --rail-ink:#EFEBE2; --rail-muted:#9C968A; --rail-line:#332F2A;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.lbl{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.app{width:1440px;height:940px;display:flex;background:var(--ground)}
+
+.rail{width:236px;flex:none;background:var(--rail);color:var(--rail-ink);display:flex;flex-direction:column;padding:18px 0 14px}
+.brand{padding:0 18px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--rail-line)}
+.mark{width:26px;height:26px;border-radius:7px;background:var(--clay);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:#fff;flex:none}
+.brand b{font-family:'Fraunces',serif;font-size:15px;font-weight:600}
+.vsw{margin:14px 12px 4px;padding:9px 11px;border:1px solid var(--rail-line);border-radius:8px;background:#211E1A}
+.vsw .lbl{color:var(--rail-muted);font-size:9px}
+.vsw .v{display:flex;align-items:center;justify-content:space-between;margin-top:4px;font-size:13px;font-weight:500}
+.vsw .v span:last-child{color:var(--rail-muted);font-size:11px}
+.nav{flex:1;padding:12px 10px 0;overflow:hidden}
+.nitem{display:flex;align-items:center;padding:8px 10px;border-radius:7px;font-size:13.5px;color:var(--rail-ink);position:relative}
+.nitem .pip{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:10px;background:var(--clay);color:#fff;border-radius:9px;padding:1px 6px}
+.sec{margin:16px 0 5px;padding:0 10px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--rail-muted);display:flex;justify-content:space-between}
+.sub{padding:6px 10px 6px 30px;font-size:12.5px;color:#C6C0B4;border-radius:6px;display:flex;justify-content:space-between;position:relative}
+.sub.on{background:#2C2823;color:var(--rail-ink)}
+.sub.on:before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:0 3px 3px 0;background:var(--clay)}
+.sub .ct{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--rail-muted)}
+.who{margin:0 12px;padding-top:12px;border-top:1px solid var(--rail-line);display:flex;align-items:center;gap:9px}
+.av{width:26px;height:26px;border-radius:50%;background:#3D3831;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex:none}
+.who div{font-size:12.5px;line-height:1.3}
+.who small{display:block;color:var(--rail-muted);font-size:10.5px}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{height:46px;flex:none;border-bottom:1px solid var(--line);background:var(--surface);display:flex;align-items:center;padding:0 20px;gap:14px}
+.crumb{font-size:12.5px;color:var(--muted)}
+.crumb b{color:var(--ink);font-weight:500}
+.sync{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.btn{font-family:inherit;font-size:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:5px 11px;cursor:pointer}
+.btn.p{background:var(--ink);color:#fff;border-color:var(--ink)}
+.body{flex:1;display:flex;min-height:0}
+.work{flex:1;padding:20px 24px;overflow:hidden}
+.insp{width:330px;flex:none;border-left:1px solid var(--line);background:var(--surface);padding:19px;overflow:hidden}
+
+h1{font-family:'Fraunces',serif;font-size:26px;font-weight:600;margin:5px 0 3px}
+.sublede{color:var(--muted);font-size:13px;margin:0 0 13px}
+
+/* consent ladder */
+.ladder{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 16px 13px;margin-bottom:13px}
+.steps{display:flex;align-items:flex-start;margin-top:12px}
+.step{flex:1;position:relative;padding-right:8px}
+.step .bul{width:13px;height:13px;border-radius:50%;border:2px solid var(--line);background:var(--surface);position:relative;z-index:2}
+.step.done .bul{background:var(--green);border-color:var(--green)}
+.step.here .bul{border-color:var(--clay);background:var(--surface);box-shadow:0 0 0 3px #F6E4DA}
+.step:not(:last-child):after{content:"";position:absolute;left:13px;top:5.5px;right:0;height:2px;background:var(--line);z-index:1}
+.step.done:not(:last-child):after{background:var(--green)}
+.step .nm{font-size:11.5px;margin-top:9px;line-height:1.35;font-weight:500}
+.step .ev{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.35}
+.step.pend .nm{color:var(--muted);font-weight:400}
+
+.grid{display:grid;grid-template-columns:1fr 292px;gap:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:13px}
+.chead{padding:11px 15px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+.chead h2{font-family:'Fraunces',serif;font-size:15.5px;font-weight:600;margin:0}
+.cbody{padding:13px 15px}
+
+/* route cards */
+.route{padding:12px 15px;border-bottom:1px solid #F0EDE5;display:flex;gap:13px;align-items:flex-start}
+.route:last-child{border-bottom:0}
+.route.best{background:#FBF9F4;box-shadow:inset 3px 0 0 var(--clay)}
+.tier{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px}
+.tA{background:#E6F2EC;color:var(--green)}
+.tB{background:#F6F0DF;color:var(--amber)}
+.tD{background:#EFEDE7;color:var(--muted)}
+.route .rt{flex:1;min-width:0}
+.route .rt b{font-size:13.5px;font-weight:500;display:block;margin-bottom:3px}
+.route .rt p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.5}
+.verdict{flex:none;width:112px;text-align:right;font-size:11px;line-height:1.45;color:var(--muted)}
+.verdict b{display:block;color:var(--ink);font-weight:500;font-size:11.5px}
+.verdict b.stop{color:var(--clay)}
+
+.cover{margin:0;padding:11px 15px;background:#FAF8F3;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.55}
+.cover b{color:var(--ink);font-weight:500}
+
+.fact{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #F0EDE5;font-size:12.5px}
+.fact:last-child{border-bottom:0}
+.fact span:first-child{color:var(--muted)}
+.fact span:last-child{text-align:right;font-weight:500}
+.src{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--clay);border-bottom:1px dotted var(--clay);margin-left:5px;cursor:help;font-weight:400}
+
+.warn{border:1px solid #E4D3C6;background:#FCF6F2;border-radius:8px;padding:12px 13px;margin-top:14px}
+.warn p{margin:6px 0 0;font-size:12.5px;line-height:1.5}
+
+.moves li{font-size:12.5px;line-height:1.5;margin-bottom:8px;padding-left:2px}
+.moves{margin:0;padding-left:17px}
+.moves small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+
+.ihead{font-family:'Fraunces',serif;font-size:17px;font-weight:600;margin:7px 0 3px;line-height:1.25}
+.imeta{font-size:12px;color:var(--muted);margin-bottom:14px}
+.prov{padding:9px 0;border-bottom:1px solid #F0EDE5}
+.prov .p1{font-size:12.5px;line-height:1.45}
+.prov .p2{font-size:10.5px;color:var(--muted);margin-top:3px;font-family:'IBM Plex Mono',monospace}
+.stat{display:inline-flex;align-items:center;gap:5px;font-size:11px;border:1px solid var(--line);border-radius:20px;padding:3px 9px;color:var(--muted);margin-top:13px}
+.stat i{width:6px;height:6px;border-radius:50%;background:var(--amber);display:block}
+.note{margin-top:14px;font-size:11.5px;color:var(--muted);line-height:1.55;padding-top:13px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <nav class="rail">
+    <div class="brand"><div class="mark">C</div><b>Capital&nbsp;OS</b></div>
+    <div class="vsw"><div class="lbl">Vehicle</div><div class="v"><span>PLC Neurotech I</span><span>▾</span></div></div>
+    <div class="nav">
+      <div class="nitem">Today</div>
+      <div class="nitem">Approvals<span class="pip">4</span></div>
+      <div class="sec"><span>Discover &amp; qualify</span><span>01–06</span></div>
+      <div class="sub"><span>Research &amp; enrichment</span></div>
+      <div class="sub"><span>Selection</span><span class="ct">28</span></div>
+      <div class="sub on"><span>Conversion strategy</span><span class="ct">12</span></div>
+      <div class="sub"><span>Warm intro routes</span></div>
+      <div class="sec"><span>Convert &amp; coordinate</span><span>07–12</span></div>
+      <div class="sub"><span>Ask coordination</span><span class="ct">2</span></div>
+      <div class="sub"><span>Soft → Hard</span></div>
+      <div class="sub"><span>Meetings</span><span class="ct">5</span></div>
+      <div class="sec"><span>Create &amp; substantiate</span><span>13–17</span></div>
+      <div class="sub"><span>Content studio</span></div>
+      <div class="sub"><span>Materials &amp; send gate</span></div>
+      <div class="sec"><span>Execute &amp; govern</span><span>18–24</span></div>
+      <div class="sub"><span>SPV war room</span><span class="ct">3</span></div>
+      <div class="sub"><span>Forecast</span></div>
+    </div>
+    <div class="who"><div class="av">J</div><div>Juan<small>General Partner</small></div></div>
+  </nav>
+
+  <div class="main">
+    <div class="top">
+      <div class="crumb">Conversion strategy &nbsp;/&nbsp; <b>Delia Roos · Roos Foundation</b></div>
+      <div class="sync"><span class="dot"></span> Sources read 12 min ago</div>
+      <button class="btn">Run follow-through</button>
+      <button class="btn p">Request the intro</button>
+    </div>
+
+    <div class="body">
+      <div class="work">
+        <div class="lbl">Target workspace · owner Juan · opened 2 Sep</div>
+        <h1 style="margin:4px 0 3px">Delia Roos</h1>
+        <p class="sublede">Roos Foundation · dual-mandate: PRI-capable philanthropy and direct fund commitments · $2–5M band</p>
+
+        <div class="ladder">
+          <div class="lbl">Where this actually stands</div>
+          <div class="steps">
+            <div class="step done"><div class="bul"></div><div class="nm">Connector willing</div><div class="ev">Duettmann, 14 Sep — “happy to ask”</div></div>
+            <div class="step here"><div class="bul"></div><div class="nm">Target opted in</div><div class="ev">Not yet. No reply on file.</div></div>
+            <div class="step pend"><div class="bul"></div><div class="nm">Meeting held</div><div class="ev">—</div></div>
+            <div class="step pend"><div class="bul"></div><div class="nm">Indication given</div><div class="ev">—</div></div>
+            <div class="step pend"><div class="bul"></div><div class="nm">Commitment accepted</div><div class="ev">—</div></div>
+            <div class="step pend"><div class="bul"></div><div class="nm">Cash received</div><div class="ev">—</div></div>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div>
+            <div class="card">
+              <div class="chead"><h2>Routes in</h2><span class="lbl">ranked by connector credibility here</span></div>
+
+              <div class="route best">
+                <span class="tier tA">A</span>
+                <div class="rt">
+                  <b>Juan → A. Duettmann → Delia Roos</b>
+                  <p>Co-authored a 2025 funding memo Roos cited publicly. Has delivered 2 of 2 prior introductions for us.</p>
+                </div>
+                <div class="verdict"><b>Recommend</b>Goodwill 78% left<br>2 of 3 asks used</div>
+              </div>
+
+              <div class="route">
+                <span class="tier tB">B</span>
+                <div class="rt">
+                  <b>Juan → M. Okonjo → Delia Roos</b>
+                  <p>Strong tie to us, but the link to Roos rests on one board co-membership ending 2023.</p>
+                </div>
+                <div class="verdict"><b>Hold</b>Goodwill 22% left<br>3 of 3 asks used</div>
+              </div>
+
+              <div class="route">
+                <span class="tier tD">D</span>
+                <div class="rt">
+                  <b>Juan → E. Navarro → Delia Roos</b>
+                  <p>Same 2024 panel; a mutual follow on one public network. Co-attendance and shared affiliation are discovery clues, not evidence of a relationship.</p>
+                </div>
+                <div class="verdict"><b class="stop">Not a route</b>Needs a human<br>to confirm first</div>
+              </div>
+
+              <p class="cover"><b>What was searched:</b> 4,120 relationship notes, the Sep 2026 census, and two imported CSVs — covering 2019 to 18 Sep 2026. Affinity is not connected, so co-investor history and email recency were not inspected. <b>This says no supported route exists in the material available, not that no route exists.</b></p>
+            </div>
+
+            <div class="card" style="margin-bottom:0">
+              <div class="chead"><h2>Next moves</h2><span class="lbl">plan · last revised 18 Sep</span></div>
+              <div class="cbody">
+                <ol class="moves">
+                  <li>Ask Duettmann for an opt-in, carrying the primer and the PRI structure note.
+                    <small>Blocked on conflict case #31 — Rails has an open ask on the same actor.</small></li>
+                  <li>If she opts in, lead with the PRI path rather than the LP path.
+                    <small>Her last three commitments were recoverable-grant structures, not fund LP positions.</small></li>
+                  <li>Have the §4944(c) memo ready before the first call, not after.
+                    <small>Her counsel raised jurisdictional questions in 2024.</small></li>
+                </ol>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="card">
+              <div class="chead"><h2>What we know</h2></div>
+              <div class="cbody">
+                <div class="fact"><span>Mandate</span><span>Neuro + longevity<span class="src">S02</span></span></div>
+                <div class="fact"><span>Instrument</span><span>PRI, grant, LP<span class="src">S02</span></span></div>
+                <div class="fact"><span>Band</span><span>$2–5M<span class="src">S03</span></span></div>
+                <div class="fact"><span>Decision role</span><span>Sole principal<span class="src">S01</span></span></div>
+                <div class="fact"><span>Cycle</span><span>Rolling<span class="src">S02</span></span></div>
+                <div class="fact"><span>Last deployed</span><span>Jun 2026<span class="src">S06</span></span></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="chead"><h2>Open questions</h2></div>
+              <div class="cbody">
+                <div class="fact"><span>Fund LP authority?</span><span>Unknown</span></div>
+                <div class="fact"><span>2027 budget set?</span><span>Unknown</span></div>
+                <div class="fact"><span>Counsel on §4944(c)</span><span>Stale · Mar 2024</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="insp">
+        <div class="lbl">Evidence · S05</div>
+        <div class="ihead">Restriction on file</div>
+        <div class="imeta">Recorded by Mara · 8 Sep 2026</div>
+
+        <div class="warn" style="margin-top:0">
+          <div class="lbl" style="color:var(--clay)">Do not approach via J. Hale</div>
+          <p>Roos asked Hale in June not to be introduced to fund managers through him. The route
+          planner excludes every path through Hale and will not quietly substitute another
+          connector toward the same approach.</p>
+        </div>
+
+        <div style="margin-top:18px">
+          <div class="lbl">Provenance</div>
+          <div class="prov">
+            <div class="p1">Relationship note, Mara Okonjo</div>
+            <div class="p2">as of 08 Sep 2026 · high · verified by Juan</div>
+          </div>
+          <div class="prov">
+            <div class="p1">Forwarded email excerpt</div>
+            <div class="p2">as of 21 Jun 2026 · high · verified by Mara</div>
+          </div>
+        </div>
+
+        <div class="stat"><i></i> Waiting on counterpart</div>
+
+        <div class="note">
+          The connector said he was happy to ask. That is the first rung and nothing more —
+          it is not target interest, not a meeting, and not a commitment. The ladder above
+          will not advance until a reply from Roos herself is on file.
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+</body>
+</html>

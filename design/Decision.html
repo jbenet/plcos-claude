@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Choosing — recommendation and build sequence</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F5F3EE;color:#1A1917;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#BF4A16}a:hover{color:#8E3610}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1440px; height: 980px; box-sizing: border-box; padding: 52px 56px 44px; background: #F5F3EE; display: flex; flex-direction: column; gap: 22px;">
+
+  <div style="display: flex; gap: 40px; align-items: flex-start;">
+    <div style="flex-grow: 1;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #BF4A16;">Choosing</div>
+      <h2 style="margin: 10px 0 0; font-family: 'Fraunces', serif; font-size: 40px; line-height: 1.08; font-weight: 600; letter-spacing: -0.015em;">Pick B. Ship A's screen in week three.</h2>
+    </div>
+    <div style="width: 660px; flex-shrink: 0; font-size: 15px; line-height: 1.6; color: #5E5A52;">The three designs are not really equal-weight alternatives, and it would be evasive to present them that way. <strong style="color: #1A1917; font-weight: 600;">A alone means rebuilding in a year and losing the history</strong> — Attio mutates records, so replay is impossible and the learning loop never exists. <strong style="color: #1A1917; font-weight: 600;">C alone formalises a process you have not run yet</strong>, which encodes guesses the team then routes around. B's event log is the one thing that is cheap to start now and impossible to backfill later.</div>
+  </div>
+
+  <div style="background: #FFFFFF; border: 1px solid #0E7F55; border-radius: 14px; padding: 24px 28px; display: flex; gap: 32px; align-items: center;">
+    <div style="flex-shrink: 0; width: 200px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #0E7F55;">The single path</div>
+      <div style="margin-top: 8px; font-family: 'Fraunces', serif; font-size: 22px; font-weight: 600; line-height: 1.2;">One build,<br>three phases</div>
+    </div>
+    <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+      <div style="border-left: 3px solid #BF4A16; padding-left: 16px;">
+        <div style="font-size: 14px; font-weight: 600;">Now &#8594; week 3</div>
+        <div style="margin-top: 5px; font-size: 13px; line-height: 1.5; color: #5E5A52;">A's surface, reading from Attio. Four tables and one screen. It carries the December close.</div>
+      </div>
+      <div style="border-left: 3px solid #0E7F55; padding-left: 16px;">
+        <div style="font-size: 14px; font-weight: 600;">Week 1 &#8594; Q1</div>
+        <div style="margin-top: 5px; font-size: 13px; line-height: 1.5; color: #5E5A52;">B's event log starts recording in week one, behind the scenes, while A's screen is what people use.</div>
+      </div>
+      <div style="border-left: 3px solid #5F4B9E; padding-left: 16px;">
+        <div style="font-size: 14px; font-weight: 600;">2027</div>
+        <div style="margin-top: 5px; font-size: 13px; line-height: 1.5; color: #5E5A52;">C's play engine arrives as modules 14 and 15 — written from what the log says the plays actually were.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; flex-grow: 1; min-height: 0;">
+
+    <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 14px; padding: 24px 26px; display: flex; flex-direction: column;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #BF4A16;">Whichever you pick &#183; week one</div>
+      <div style="margin-top: 6px; font-size: 13.5px; line-height: 1.5; color: #5E5A52;">About a week of work. None of it is wasted under any of the three designs.</div>
+      <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; gap: 14px;">
+          <span style="flex-shrink: 0; width: 24px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #BF4A16;">01</span>
+          <div><div style="font-size: 14px; font-weight: 600;">Master relationship table</div><div style="margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #5E5A52;">One row per relationship: owner, exposure across vehicles, scores, decision architecture, warm paths.</div></div>
+        </div>
+        <div style="display: flex; gap: 14px;">
+          <span style="flex-shrink: 0; width: 24px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #BF4A16;">02</span>
+          <div><div style="font-size: 14px; font-weight: 600;">The ask log</div><div style="margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #5E5A52;">Date, vehicle, asker, outcome. The highest-value table you will build, because it is the one that stops four raises colliding.</div></div>
+        </div>
+        <div style="display: flex; gap: 14px;">
+          <span style="flex-shrink: 0; width: 24px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #BF4A16;">03</span>
+          <div><div style="font-size: 14px; font-weight: 600;">Meeting capture</div><div style="margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #5E5A52;">Local-first transcription with a real DPA, flowing into the relationship record. Ends the &#8220;what did we tell them in June&#8221; problem.</div></div>
+        </div>
+        <div style="display: flex; gap: 14px;">
+          <span style="flex-shrink: 0; width: 24px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #BF4A16;">04</span>
+          <div><div style="font-size: 14px; font-weight: 600;">Warm-path map</div><div style="margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #5E5A52;">The existing-relationship census, with connector goodwill scored from memory before the first new ask goes out.</div></div>
+        </div>
+        <div style="display: flex; gap: 14px; padding-top: 14px; border-top: 1px solid #E4E0D6;">
+          <span style="flex-shrink: 0; width: 24px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #0E7F55;">05</span>
+          <div><div style="font-size: 14px; font-weight: 600;">Start writing events</div><div style="margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #5E5A52;">Append-only, from day one, even with no UI over it. First-touch and ask history are free today and unreconstructable in 2028.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; min-height: 0;">
+
+      <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 14px; padding: 22px 26px;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #5E5A52;">Seven people, and what their agents do</div>
+        <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 9px;">
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="flex-shrink: 0; width: 148px; font-size: 13px; font-weight: 600;">GP</span><span style="flex-grow: 1; font-size: 12.5px; color: #5E5A52;">Anchors, terms, thesis. Agents: research, briefs, drafts.</span></div>
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="flex-shrink: 0; width: 148px; font-size: 13px; font-weight: 600;">Capital formation</span><span style="flex-grow: 1; font-size: 12.5px; color: #5E5A52;">Pipeline, coverage, materials, close mechanics. Agents: DDQ answers, pipeline analysis.</span></div>
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="flex-shrink: 0; width: 148px; font-size: 13px; font-weight: 600;">PL Neuro lead</span><span style="flex-grow: 1; font-size: 12.5px; color: #5E5A52;">Program officers, science credibility. Agents: RFA monitoring, proposal drafts.</span></div>
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="flex-shrink: 0; width: 148px; font-size: 13px; font-weight: 600;">Two analysts</span><span style="flex-grow: 1; font-size: 12.5px; color: #5E5A52;">Prospect work, dossier review, enrichment QA. Agents: the research fleet.</span></div>
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="flex-shrink: 0; width: 148px; font-size: 13px; font-weight: 600;">Ops / fund admin</span><span style="flex-grow: 1; font-size: 12.5px; color: #5E5A52;">Vehicles, subs, verification providers, side letters. Agents: compliance checks.</span></div>
+          <div style="display: flex; gap: 14px; align-items: baseline;"><span style="flex-shrink: 0; width: 148px; font-size: 13px; font-weight: 600;">Comms</span><span style="flex-grow: 1; font-size: 12.5px; color: #5E5A52;">The primer, podcast, convenings. Agents: research, editing, engagement tracking.</span></div>
+        </div>
+      </div>
+
+      <div style="flex-grow: 1; background: #1A1917; border-radius: 14px; padding: 22px 26px; color: #F5F3EE;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #E0A282;">Do not build before December</div>
+        <div style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px;">
+          <span style="padding: 6px 12px; border-radius: 7px; border: 1px solid #4A4842; font-size: 12.5px;">Predictive ML scoring</span>
+          <span style="padding: 6px 12px; border-radius: 7px; border: 1px solid #4A4842; font-size: 12.5px;">A custom graph database</span>
+          <span style="padding: 6px 12px; border-radius: 7px; border: 1px solid #4A4842; font-size: 12.5px;">Multi-source entity resolution</span>
+          <span style="padding: 6px 12px; border-radius: 7px; border: 1px solid #4A4842; font-size: 12.5px;">An agent framework</span>
+          <span style="padding: 6px 12px; border-radius: 7px; border: 1px solid #4A4842; font-size: 12.5px;">AI outbound</span>
+          <span style="padding: 6px 12px; border-radius: 7px; border: 1px solid #4A4842; font-size: 12.5px;">A play DSL</span>
+        </div>
+        <div style="margin-top: 16px; font-size: 13px; line-height: 1.55; color: #C9C4B8;">Build velocity during a close is stolen from raise velocity. The useful test for any feature between now and December: <strong style="color: #F5F3EE; font-weight: 600;">does it change what someone does this week?</strong> If not, it belongs in the Q1 plan.</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

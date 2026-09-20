@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Version C — Mission Control architecture</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F5F3EE;color:#1A1917;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#BF4A16}a:hover{color:#8E3610}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1200px; height: 840px; box-sizing: border-box; padding: 44px 48px 40px; background: #F5F3EE; display: flex; flex-direction: column; gap: 22px;">
+
+  <div style="display: flex; align-items: flex-end; gap: 32px;">
+    <div style="flex-grow: 1;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #5F4B9E;">Version C &#183; architecture</div>
+      <h2 style="margin: 10px 0 0; font-family: 'Fraunces', serif; font-size: 36px; font-weight: 600; letter-spacing: -0.01em;">Mission Control — the play is the centre</h2>
+    </div>
+    <div style="flex-shrink: 0; text-align: right; font-size: 13px; line-height: 1.5; color: #5E5A52;">You declare an outcome.<br>The system decides who does each step.</div>
+  </div>
+
+  <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 14px; padding: 26px 28px 22px; flex-grow: 1;">
+    <svg viewBox="0 0 1044 478" width="100%" height="100%" role="img" aria-label="Cycle diagram: declared plays are decomposed by a planner into a run engine, whose steps enter a dispatcher that routes each to either a human inbox or an agent worker; effects land in the data layer, which feeds run state back to the engine.">
+      <defs>
+        <marker id="cArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#8F8A7E"></path>
+        </marker>
+        <marker id="cArrowP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#5F4B9E"></path>
+        </marker>
+      </defs>
+
+      <text x="0" y="14" font-family="'IBM Plex Mono', monospace" font-size="11" letter-spacing="1.4" fill="#5E5A52">DECLARE &#183; VERSIONED, REVIEWABLE, REUSABLE</text>
+      <rect x="0" y="26" width="1044" height="64" rx="9" fill="#FFFFFF" stroke="#1A1917" stroke-width="1.75"></rect>
+      <text x="18" y="50" font-family="'IBM Plex Sans', sans-serif" font-size="15" font-weight="600" fill="#1A1917">Play library</text>
+      <text x="18" y="76" font-family="'IBM Plex Mono', monospace" font-size="11.5" fill="#5E5A52">close-fund &#183; run-spv &#183; work-a-signal &#183; prep-meeting &#183; quarterly-update &#183; grant-cycle &#183; reactivate-cold</text>
+
+      <line x1="522" y1="94" x2="522" y2="116" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#cArrow)"></line>
+
+      <rect x="128" y="120" width="330" height="52" rx="9" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.5"></rect>
+      <text x="146" y="144" font-family="'IBM Plex Sans', sans-serif" font-size="13.5" font-weight="600" fill="#1A1917">Planner</text>
+      <text x="146" y="162" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">decomposes a goal into steps + owners</text>
+
+      <line x1="462" y1="146" x2="500" y2="146" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#cArrow)"></line>
+
+      <rect x="504" y="120" width="330" height="52" rx="9" fill="#EEEBF5" stroke="#5F4B9E" stroke-width="1.75"></rect>
+      <text x="522" y="144" font-family="'IBM Plex Sans', sans-serif" font-size="13.5" font-weight="600" fill="#1A1917">Run engine</text>
+      <text x="522" y="162" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">plays in flight &#183; state, retries, deadlines</text>
+
+      <line x1="669" y1="176" x2="669" y2="198" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#cArrow)"></line>
+
+      <rect x="0" y="202" width="1044" height="58" rx="9" fill="#EEEBF5" stroke="#5F4B9E" stroke-width="2.5"></rect>
+      <text x="18" y="226" font-family="'IBM Plex Sans', sans-serif" font-size="15" font-weight="600" fill="#1A1917">Dispatcher</text>
+      <text x="18" y="246" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">routes each step by its allocation policy &#183; enforces approval gates, agent budgets and the ask-frequency guard</text>
+
+      <line x1="260" y1="264" x2="260" y2="290" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#cArrow)"></line>
+      <line x1="784" y1="264" x2="784" y2="290" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#cArrow)"></line>
+
+      <rect x="0" y="294" width="512" height="104" rx="9" fill="#F9EAE3" stroke="#BF4A16" stroke-width="1.75"></rect>
+      <text x="18" y="318" font-family="'IBM Plex Sans', sans-serif" font-size="13.5" font-weight="600" fill="#1A1917">Human inbox &#183; 7 people</text>
+      <text x="18" y="338" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">every conversation, ask, concession and judgement call</text>
+      <rect x="18" y="350" width="146" height="30" rx="6" fill="#FFFFFF" stroke="#BF4A16" stroke-width="1"></rect>
+      <text x="30" y="370" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#1A1917">Decide</text>
+      <rect x="176" y="350" width="146" height="30" rx="6" fill="#FFFFFF" stroke="#BF4A16" stroke-width="1"></rect>
+      <text x="188" y="370" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#1A1917">Approve &amp; send</text>
+      <rect x="334" y="350" width="160" height="30" rx="6" fill="#FFFFFF" stroke="#BF4A16" stroke-width="1"></rect>
+      <text x="346" y="370" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#1A1917">Meet</text>
+
+      <rect x="532" y="294" width="512" height="104" rx="9" fill="#E6F1EC" stroke="#0E7F55" stroke-width="1.75"></rect>
+      <text x="550" y="318" font-family="'IBM Plex Sans', sans-serif" font-size="13.5" font-weight="600" fill="#1A1917">Agent fleet</text>
+      <text x="550" y="338" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">tool loops with budgets, evals and a hard stop before any send</text>
+      <rect x="550" y="350" width="146" height="30" rx="6" fill="#FFFFFF" stroke="#0E7F55" stroke-width="1"></rect>
+      <text x="562" y="370" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#1A1917">Research</text>
+      <rect x="708" y="350" width="146" height="30" rx="6" fill="#FFFFFF" stroke="#0E7F55" stroke-width="1"></rect>
+      <text x="720" y="370" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#1A1917">Draft</text>
+      <rect x="866" y="350" width="160" height="30" rx="6" fill="#FFFFFF" stroke="#0E7F55" stroke-width="1"></rect>
+      <text x="878" y="370" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#1A1917">Monitor &amp; brief</text>
+
+      <line x1="260" y1="402" x2="260" y2="424" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#cArrow)"></line>
+      <line x1="784" y1="402" x2="784" y2="424" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#cArrow)"></line>
+
+      <rect x="0" y="428" width="1004" height="46" rx="9" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.5"></rect>
+      <text x="18" y="456" font-family="'IBM Plex Sans', sans-serif" font-size="13" fill="#1A1917"><tspan font-weight="600">Data layer</tspan>  &#183;  graph, records, materials, event history  &#8212;  every step writes its effect here</text>
+
+      <path d="M 1010 451 L 1034 451 L 1034 146 L 842 146" fill="none" stroke="#5F4B9E" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#cArrowP)"></path>
+      <text x="1038" y="300" font-family="'IBM Plex Mono', monospace" font-size="10.5" fill="#5F4B9E" transform="rotate(-90 1038 300)" text-anchor="middle">run state</text>
+    </svg>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px;">
+    <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #5F4B9E;">What a play is</div>
+      <div style="margin-top: 8px; font-size: 13px; line-height: 1.5; color: #1A1917;">A versioned file: goal, steps, who may own each, guardrails, done-conditions. Reviewable in a pull request, improvable after every run.</div>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #BF4A16;">Why it fits seven people</div>
+      <div style="margin-top: 8px; font-size: 13px; line-height: 1.5; color: #1A1917;">Coordination stops being a meeting. Each person opens one inbox of steps already scoped, briefed and sequenced against everyone else's.</div>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8A6410;">What you accept</div>
+      <div style="margin-top: 8px; font-size: 13px; line-height: 1.5; color: #1A1917;">You are formalising a process you have not run yet. Written too early, plays encode guesses and the team routes around them.</div>
+    </div>
+  </div>
+
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":840}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

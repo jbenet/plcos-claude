@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Module 09 — LP-fit audit</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F5F3EE;color:#1A1917;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#BF4A16}a:hover{color:#8E3610}
+button{font-family:inherit}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1100px; height: 760px; box-sizing: border-box; padding: 34px 36px 30px; background: #F5F3EE; display: flex; flex-direction: column; gap: 18px;">
+
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;">
+    <div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #5E5A52;">Module 09</div>
+      <h2 style="margin: 7px 0 0; font-family: 'Fraunces', serif; font-size: 27px; font-weight: 600;">LP-fit audit</h2>
+      <div style="margin-top: 5px; font-size: 13.5px; color: #5E5A52;">Per vehicle: how legible it is to an allocator, what keeps coming back as a problem, and what would fix it.</div>
+    </div>
+    <div style="flex-shrink: 0; text-align: right;"><div style="font-size: 11.5px; color: #5E5A52;">Neurotech I &#183; overall</div><div style="margin-top: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 26px; font-weight: 500; color: #8A6410;">B&#8722;</div></div>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex; gap: 16px;">
+
+    <div style="width: 420px; flex-shrink: 0; background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #5E5A52;">Legibility scorecard</div>
+      <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 13px;">
+        <div>
+          <div style="display: flex; justify-content: space-between; font-size: 12.5px;"><span>Thesis clarity</span><span style="font-family: 'IBM Plex Mono', monospace; color: #0E7F55;">strong</span></div>
+          <div style="margin-top: 5px; height: 6px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 90%; height: 100%; background: #0E7F55;"></div></div>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; font-size: 12.5px;"><span>Proof of edge is inspectable</span><span style="font-family: 'IBM Plex Mono', monospace; color: #0E7F55;">strong</span></div>
+          <div style="margin-top: 5px; height: 6px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 84%; height: 100%; background: #0E7F55;"></div></div>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; font-size: 12.5px;"><span>Track record attribution</span><span style="font-family: 'IBM Plex Mono', monospace; color: #8A6410;">partial</span></div>
+          <div style="margin-top: 5px; height: 6px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 52%; height: 100%; background: #8A6410;"></div></div>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; font-size: 12.5px;"><span>Duration &amp; liquidity story</span><span style="font-family: 'IBM Plex Mono', monospace; color: #BF4A16;">weak</span></div>
+          <div style="margin-top: 5px; height: 6px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 28%; height: 100%; background: #BF4A16;"></div></div>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; font-size: 12.5px;"><span>Exit-path honesty</span><span style="font-family: 'IBM Plex Mono', monospace; color: #8A6410;">partial</span></div>
+          <div style="margin-top: 5px; height: 6px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 55%; height: 100%; background: #8A6410;"></div></div>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; font-size: 12.5px;"><span>Conflicts &amp; allocation policy</span><span style="font-family: 'IBM Plex Mono', monospace; color: #BF4A16;">weak</span></div>
+          <div style="margin-top: 5px; height: 6px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 25%; height: 100%; background: #BF4A16;"></div></div>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; font-size: 12.5px;"><span>Back office &amp; ODD readiness</span><span style="font-family: 'IBM Plex Mono', monospace; color: #0E7F55;">strong</span></div>
+          <div style="margin-top: 5px; height: 6px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 88%; height: 100%; background: #0E7F55;"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
+
+      <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 16px 20px;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #5E5A52;">What LPs actually said &#183; last 20 conversations</div>
+        <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; gap: 11px; align-items: flex-start;"><span style="flex-shrink: 0; margin-top: 4px; width: 7px; height: 7px; border-radius: 2px; background: #BF4A16;"></span><div><div style="font-size: 12.5px; line-height: 1.45;">&#8220;Twelve years is past our committee's horizon.&#8221;</div><div style="margin-top: 2px; font-size: 11px; color: #5E5A52;">duration &#183; 5 mentions &#183; 2 became passes</div></div></div>
+          <div style="display: flex; gap: 11px; align-items: flex-start;"><span style="flex-shrink: 0; margin-top: 4px; width: 7px; height: 7px; border-radius: 2px; background: #BF4A16;"></span><div><div style="font-size: 12.5px; line-height: 1.45;">&#8220;Who has actually exited in this sector?&#8221;</div><div style="margin-top: 2px; font-size: 11px; color: #5E5A52;">exit comps &#183; 3 mentions</div></div></div>
+          <div style="display: flex; gap: 11px; align-items: flex-start;"><span style="flex-shrink: 0; margin-top: 4px; width: 7px; height: 7px; border-radius: 2px; background: #8A6410;"></span><div><div style="font-size: 12.5px; line-height: 1.45;">&#8220;How do PL and the fund split a spinout?&#8221;</div><div style="margin-top: 2px; font-size: 11px; color: #5E5A52;">conflicts &#183; 2 mentions &#183; both stalled diligence</div></div></div>
+          <div style="display: flex; gap: 11px; align-items: flex-start;"><span style="flex-shrink: 0; margin-top: 4px; width: 7px; height: 7px; border-radius: 2px; background: #8A6410;"></span><div><div style="font-size: 12.5px; line-height: 1.45;">&#8220;Is the angel record documented anywhere?&#8221;</div><div style="margin-top: 2px; font-size: 11px; color: #5E5A52;">track record &#183; 2 mentions</div></div></div>
+        </div>
+      </div>
+
+      <div style="flex-grow: 1; background: #1A1917; border-radius: 12px; padding: 18px 20px; color: #F5F3EE;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #E0A282;">Fix, in order of cost</div>
+        <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; gap: 12px;"><span style="flex-shrink: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #E0A282;">01</span><div><div style="font-size: 13px; font-weight: 600;">Write the allocation policy</div><div style="margin-top: 2px; font-size: 12px; color: #C9C4B8;">Half a day. Unblocks two stalled diligences and pre-empts the question entirely.</div></div></div>
+          <div style="display: flex; gap: 12px;"><span style="flex-shrink: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #E0A282;">02</span><div><div style="font-size: 13px; font-weight: 600;">Add a duration and liquidity slide, early</div><div style="margin-top: 2px; font-size: 12px; color: #C9C4B8;">Term, extensions, recycling, secondaries path. Raise it before they do.</div></div></div>
+          <div style="display: flex; gap: 12px;"><span style="flex-shrink: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #E0A282;">03</span><div><div style="font-size: 13px; font-weight: 600;">Document the attribution schedule</div><div style="margin-top: 2px; font-size: 12px; color: #C9C4B8;">Entry valuations, role, follow-ons. Undocumented angel record reads as unverifiable.</div></div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":760}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

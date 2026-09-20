@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Version B — relationship dossier</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F5F3EE;color:#1A1917;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#BF4A16}a:hover{color:#8E3610}
+button{font-family:inherit}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1440px; height: 920px; box-sizing: border-box; background: #F5F3EE; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #E4E0D6;">
+
+  <div style="height: 56px; flex-shrink: 0; background: #FFFFFF; border-bottom: 1px solid #E4E0D6; display: flex; align-items: center; gap: 20px; padding: 0 20px;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <span style="display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: #0E7F55;"></span>
+      <span style="font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600;">Capital OS</span>
+    </div>
+    <nav aria-label="Primary" style="display: flex; gap: 2px; padding-left: 12px; border-left: 1px solid #E4E0D6;">
+      <a href="#graph" style="padding: 7px 12px; border-radius: 7px; color: #5E5A52; font-size: 13px; text-decoration: none;">Graph</a>
+      <a href="#dossier" style="padding: 7px 12px; border-radius: 7px; background: #E6F1EC; color: #1A1917; font-size: 13px; font-weight: 600; text-decoration: none;">Dossiers</a>
+      <a href="#pipelines" style="padding: 7px 12px; border-radius: 7px; color: #5E5A52; font-size: 13px; text-decoration: none;">Pipelines</a>
+      <a href="#asks" style="padding: 7px 12px; border-radius: 7px; color: #5E5A52; font-size: 13px; text-decoration: none;">Asks</a>
+      <a href="#grants" style="padding: 7px 12px; border-radius: 7px; color: #5E5A52; font-size: 13px; text-decoration: none;">Grants</a>
+      <a href="#replay" style="padding: 7px 12px; border-radius: 7px; color: #5E5A52; font-size: 13px; text-decoration: none;">Replay</a>
+    </nav>
+    <div style="flex-grow: 1;"></div>
+    <div style="width: 300px;">
+      <label for="b-search" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;">Search the graph</label>
+      <input id="b-search" type="search" placeholder="Search the graph" style="width: 100%; height: 32px; box-sizing: border-box; padding: 0 12px; border: 1px solid #E4E0D6; border-radius: 8px; background: #F5F3EE; font-size: 12.5px; color: #1A1917;">
+    </div>
+    <span style="display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #1A1917; color: #FFFFFF; font-size: 12px; font-weight: 600;">JB</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0; padding: 22px 24px; gap: 20px;">
+
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
+
+      <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 20px 22px;">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;">
+          <div>
+            <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #5E5A52;">Funder family</div>
+            <h2 style="margin: 7px 0 0; font-family: 'Fraunces', serif; font-size: 30px; font-weight: 600;">Hartwell</h2>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 12px; color: #5E5A52;">Relationship owner</div>
+            <div style="margin-top: 4px; font-size: 14px; font-weight: 600;">Juan</div>
+            <div style="margin-top: 3px; font-size: 11.5px; color: #5E5A52;">since Mar 2024</div>
+          </div>
+        </div>
+        <div style="margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
+          <span style="display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 7px; background: #F5F3EE; border: 1px solid #E4E0D6; font-size: 12.5px;"><strong style="font-weight: 600;">Hartwell Holdings LLC</strong><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #5E5A52;">SFO &#183; no ADV</span></span>
+          <span style="display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 7px; background: #F5F3EE; border: 1px solid #E4E0D6; font-size: 12.5px;"><strong style="font-weight: 600;">Hartwell Foundation</strong><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #5E5A52;">990-PF &#183; payout short</span></span>
+          <span style="display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 7px; background: #F5F3EE; border: 1px solid #E4E0D6; font-size: 12.5px;"><strong style="font-weight: 600;">DAF &#183; SVCF</strong></span>
+        </div>
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #E4E0D6; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;">
+          <div><div style="font-size: 11.5px; color: #5E5A52;">Neurotech I</div><div style="margin-top: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 500;">$4.0M</div><div style="font-size: 11px; color: #0E7F55;">committed &#183; LP</div></div>
+          <div><div style="font-size: 11.5px; color: #5E5A52;">Crypto / Rails</div><div style="margin-top: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 500;">&#8212;</div><div style="font-size: 11px; color: #5E5A52;">declined, mandate</div></div>
+          <div><div style="font-size: 11.5px; color: #5E5A52;">SPV &#183; Axon Ridge</div><div style="margin-top: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 500;">$750K</div><div style="font-size: 11px; color: #BF4A16;">soft-circled</div></div>
+          <div><div style="font-size: 11.5px; color: #5E5A52;">PL Neuro</div><div style="margin-top: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 500;">PRI?</div><div style="font-size: 11px; color: #5F4B9E;">instrument fit 4/5</div></div>
+        </div>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 22px; display: flex; flex-direction: column;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+          <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #0E7F55;">Event log &#183; append only</div>
+          <div style="display: flex; gap: 4px;">
+            <button type="button" style="height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid #1A1917; background: #1A1917; color: #FFFFFF; font-size: 11.5px; cursor: pointer;">All</button>
+            <button type="button" style="height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid #E4E0D6; background: #FFFFFF; color: #5E5A52; font-size: 11.5px; cursor: pointer;">Asks</button>
+            <button type="button" style="height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid #E4E0D6; background: #FFFFFF; color: #5E5A52; font-size: 11.5px; cursor: pointer;">Agent</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 16px; flex-grow: 1; overflow: hidden; display: flex; flex-direction: column; gap: 0;">
+
+          <div style="display: flex; gap: 14px; padding: 11px 0; border-bottom: 1px solid #F0EDE5;">
+            <div style="width: 66px; flex-shrink: 0; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #5E5A52;">18 Sep</div>
+            <div style="width: 3px; flex-shrink: 0; border-radius: 2px; background: #0E7F55;"></div>
+            <div style="flex-grow: 1; min-width: 0;"><div style="font-size: 13px;"><strong style="font-weight: 600;">propensity.rescored</strong> 74 &#8594; 88</div><div style="margin-top: 2px; font-size: 11.5px; color: #5E5A52;">agent:signal-watcher &#183; cause: foundation payout shortfall detected in FY25 990-PF</div></div>
+          </div>
+
+          <div style="display: flex; gap: 14px; padding: 11px 0; border-bottom: 1px solid #F0EDE5;">
+            <div style="width: 66px; flex-shrink: 0; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #5E5A52;">12 Sep</div>
+            <div style="width: 3px; flex-shrink: 0; border-radius: 2px; background: #BF4A16;"></div>
+            <div style="flex-grow: 1; min-width: 0;"><div style="font-size: 13px;"><strong style="font-weight: 600;">ask.made</strong> &#183; SPV Axon Ridge &#183; $1M</div><div style="margin-top: 2px; font-size: 11.5px; color: #5E5A52;">by Juan &#183; outcome: soft-circled at $750K &#183; no fee break requested</div></div>
+          </div>
+
+          <div style="display: flex; gap: 14px; padding: 11px 0; border-bottom: 1px solid #F0EDE5;">
+            <div style="width: 66px; flex-shrink: 0; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #5E5A52;">12 Sep</div>
+            <div style="width: 3px; flex-shrink: 0; border-radius: 2px; background: #5F4B9E;"></div>
+            <div style="flex-grow: 1; min-width: 0;"><div style="font-size: 13px;"><strong style="font-weight: 600;">objection.raised</strong> &#183; duration</div><div style="margin-top: 2px; font-size: 11.5px; color: #5E5A52;">extracted from transcript &#183; &#8220;twelve years is past our committee&#8217;s horizon&#8221;</div></div>
+          </div>
+
+          <div style="display: flex; gap: 14px; padding: 11px 0; border-bottom: 1px solid #F0EDE5;">
+            <div style="width: 66px; flex-shrink: 0; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #5E5A52;">29 Aug</div>
+            <div style="width: 3px; flex-shrink: 0; border-radius: 2px; background: #C9C4B8;"></div>
+            <div style="flex-grow: 1; min-width: 0;"><div style="font-size: 13px;"><strong style="font-weight: 600;">content.engaged</strong> &#183; The Neurotech Stack, v1</div><div style="margin-top: 2px; font-size: 11.5px; color: #5E5A52;">opened twice, forwarded once &#183; first content touch on this relationship</div></div>
+          </div>
+
+          <div style="display: flex; gap: 14px; padding: 11px 0; border-bottom: 1px solid #F0EDE5;">
+            <div style="width: 66px; flex-shrink: 0; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #5E5A52;">14 Aug</div>
+            <div style="width: 3px; flex-shrink: 0; border-radius: 2px; background: #C9C4B8;"></div>
+            <div style="flex-grow: 1; min-width: 0;"><div style="font-size: 13px;"><strong style="font-weight: 600;">edge.formed</strong> &#183; connector &#8594; A. Duettmann</div><div style="margin-top: 2px; font-size: 11.5px; color: #5E5A52;">co-attended Vision Weekend &#183; tie band: moderate</div></div>
+          </div>
+
+          <div style="display: flex; gap: 14px; padding: 11px 0;">
+            <div style="width: 66px; flex-shrink: 0; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #5E5A52;">02 Mar</div>
+            <div style="width: 3px; flex-shrink: 0; border-radius: 2px; background: #C9C4B8;"></div>
+            <div style="flex-grow: 1; min-width: 0;"><div style="font-size: 13px;"><strong style="font-weight: 600;">relationship.opened</strong> &#183; first touch</div><div style="margin-top: 2px; font-size: 11.5px; color: #5E5A52;">podcast guest introduction &#183; 18 months to first commitment</div></div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <div style="width: 400px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px;">
+
+      <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between;">
+          <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #5E5A52;">Score</div>
+          <div style="font-family: 'IBM Plex Mono', monospace; font-size: 26px; font-weight: 500;">91</div>
+        </div>
+        <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 11px;">
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 12.5px;"><span>Capacity</span><span style="font-family: 'IBM Plex Mono', monospace; color: #5E5A52;">84 &#183; 12mo old</span></div>
+            <div style="margin-top: 5px; height: 6px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 84%; height: 100%; background: #0E7F55;"></div></div>
+          </div>
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 12.5px;"><span>Affinity</span><span style="font-family: 'IBM Plex Mono', monospace; color: #5E5A52;">96 &#183; 3wk old</span></div>
+            <div style="margin-top: 5px; height: 6px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 96%; height: 100%; background: #0E7F55;"></div></div>
+          </div>
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 12.5px;"><span>Propensity</span><span style="font-family: 'IBM Plex Mono', monospace; color: #5E5A52;">88 &#183; 1d old</span></div>
+            <div style="margin-top: 5px; height: 6px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 88%; height: 100%; background: #0E7F55;"></div></div>
+          </div>
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 12.5px;"><span>Time-to-decision</span><span style="font-family: 'IBM Plex Mono', monospace; color: #5E5A52;">2&#8211;4 weeks</span></div>
+            <div style="margin-top: 5px; height: 6px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 92%; height: 100%; background: #0E7F55;"></div></div>
+          </div>
+        </div>
+        <a href="#evidence" style="display: inline-block; margin-top: 14px; font-size: 12.5px;">See the evidence behind each &#8594;</a>
+      </div>
+
+      <div style="flex-grow: 1; background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #5E5A52;">Warm paths to the principal</div>
+
+        <div style="margin-top: 14px; padding: 13px 14px; border: 1px solid #0E7F55; border-radius: 9px; background: #E6F1EC;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <div style="font-size: 13.5px; font-weight: 600;">via A. Duettmann</div>
+            <span style="padding: 2px 8px; border-radius: 5px; background: #FFFFFF; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #0E7F55;">moderate tie</span>
+          </div>
+          <div style="margin-top: 7px; font-size: 12px; line-height: 1.45; color: #5E5A52;">Credible in neuro and philanthropy. 2 intros delivered, both converted to meetings. Last asked 4 months ago.</div>
+          <div style="margin-top: 9px; display: flex; align-items: center; gap: 10px;">
+            <div style="flex-grow: 1;"><div style="font-size: 11px; color: #5E5A52;">Goodwill remaining</div><div style="margin-top: 4px; height: 5px; border-radius: 3px; background: #D5E5DE; overflow: hidden;"><div style="width: 78%; height: 100%; background: #0E7F55;"></div></div></div>
+            <button type="button" style="flex-shrink: 0; height: 30px; padding: 0 13px; border-radius: 7px; border: 1px solid #0E7F55; background: #0E7F55; color: #FFFFFF; font-size: 12px; font-weight: 500; cursor: pointer;">Request</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 10px; padding: 13px 14px; border: 1px solid #E4E0D6; border-radius: 9px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <div style="font-size: 13.5px; font-weight: 600;">via M. Okonjo</div>
+            <span style="padding: 2px 8px; border-radius: 5px; background: #F5F3EE; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #5E5A52;">strong tie</span>
+          </div>
+          <div style="margin-top: 7px; font-size: 12px; line-height: 1.45; color: #5E5A52;">Closest route, but asked three times this quarter. Hold for a higher-stakes introduction.</div>
+          <div style="margin-top: 9px;"><div style="font-size: 11px; color: #5E5A52;">Goodwill remaining</div><div style="margin-top: 4px; height: 5px; border-radius: 3px; background: #EAE7DE; overflow: hidden;"><div style="width: 22%; height: 100%; background: #8A6410;"></div></div></div>
+        </div>
+
+        <div style="margin-top: 10px; padding: 13px 14px; border: 1px solid #E4E0D6; border-radius: 9px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <div style="font-size: 13.5px; font-weight: 600;">via fund counsel</div>
+            <span style="padding: 2px 8px; border-radius: 5px; background: #F5F3EE; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #5E5A52;">service provider</span>
+          </div>
+          <div style="margin-top: 7px; font-size: 12px; line-height: 1.45; color: #5E5A52;">Slow but high trust. Untested route &#8212; no prior intro on record.</div>
+        </div>
+
+        <div style="margin-top: auto; padding-top: 14px; font-size: 11.5px; line-height: 1.45; color: #5E5A52;">Paths are ranked by connector credibility <em>with this target</em>, tie band, and goodwill remaining &#8212; not by hop count.</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":920}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

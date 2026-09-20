@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Module 08 — Agent workflows</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F5F3EE;color:#1A1917;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#BF4A16}a:hover{color:#8E3610}
+button{font-family:inherit}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1100px; height: 760px; box-sizing: border-box; padding: 34px 36px 30px; background: #F5F3EE; display: flex; flex-direction: column; gap: 18px;">
+
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;">
+    <div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #5E5A52;">Module 08</div>
+      <h2 style="margin: 7px 0 0; font-family: 'Fraunces', serif; font-size: 27px; font-weight: 600;">Agent workflows</h2>
+      <div style="margin-top: 5px; font-size: 13.5px; color: #5E5A52;">Composable steps with an explicit human gate. Simple chains beat autonomous loops in every account we could find.</div>
+    </div>
+    <button type="button" style="flex-shrink: 0; height: 32px; padding: 0 14px; border-radius: 7px; border: 1px solid #0E7F55; background: #0E7F55; color: #FFFFFF; font-size: 12.5px; font-weight: 500; cursor: pointer;">New workflow</button>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex; gap: 16px;">
+
+    <div style="width: 240px; flex-shrink: 0; background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 14px 16px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #5E5A52;">Workflows</div>
+      <div style="margin-top: 11px; display: flex; flex-direction: column; gap: 3px;">
+        <div style="padding: 9px 11px; border-radius: 8px; background: #E6F1EC;"><div style="font-size: 12.5px; font-weight: 600;">work-a-signal</div><div style="margin-top: 2px; font-size: 11px; color: #5E5A52;">ran 6&#215; today</div></div>
+        <div style="padding: 9px 11px; border-radius: 8px;"><div style="font-size: 12.5px;">nightly-rescore</div><div style="margin-top: 2px; font-size: 11px; color: #5E5A52;">ran 1&#215;</div></div>
+        <div style="padding: 9px 11px; border-radius: 8px;"><div style="font-size: 12.5px;">prep-meeting</div><div style="margin-top: 2px; font-size: 11px; color: #5E5A52;">ran 9&#215;</div></div>
+        <div style="padding: 9px 11px; border-radius: 8px;"><div style="font-size: 12.5px;">answer-ddq</div><div style="margin-top: 2px; font-size: 11px; color: #5E5A52;">ran 3&#215;</div></div>
+        <div style="padding: 9px 11px; border-radius: 8px;"><div style="font-size: 12.5px;">cluster-objections</div><div style="margin-top: 2px; font-size: 11px; color: #5E5A52;">weekly</div></div>
+        <div style="padding: 9px 11px; border-radius: 8px;"><div style="font-size: 12.5px;">watch-rfas</div><div style="margin-top: 2px; font-size: 11px; color: #5E5A52;">daily</div></div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 22px; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between;">
+        <div><span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 500;">work-a-signal</span><span style="margin-left: 9px; padding: 2px 8px; border-radius: 5px; background: #F5F3EE; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #5E5A52;">v7</span></div>
+        <span style="font-size: 12px; color: #5E5A52;">trigger: signal.detected &#183; priority &#8805; 70</span>
+      </div>
+
+      <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 0;">
+
+        <div style="display: flex; gap: 14px; align-items: flex-start;">
+          <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center;"><span style="width: 26px; height: 26px; border-radius: 7px; background: #E6F1EC; border: 1px solid #0E7F55; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #0E7F55;">1</span><span style="width: 2px; height: 34px; background: #E4E0D6;"></span></div>
+          <div style="padding-top: 2px;"><div style="font-size: 13.5px; font-weight: 600;">Resolve entity</div><div style="margin-top: 2px; font-size: 12px; color: #5E5A52;">Match the filing to a person or org already in the graph, or create one.</div></div>
+        </div>
+
+        <div style="display: flex; gap: 14px; align-items: flex-start;">
+          <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center;"><span style="width: 26px; height: 26px; border-radius: 7px; background: #E6F1EC; border: 1px solid #0E7F55; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #0E7F55;">2</span><span style="width: 2px; height: 34px; background: #E4E0D6;"></span></div>
+          <div style="padding-top: 2px;"><div style="font-size: 13.5px; font-weight: 600;">Build dossier</div><div style="margin-top: 2px; font-size: 12px; color: #5E5A52;">Orchestrator&#8211;worker loop. Every claim carries a source link. Budget: 60 credits.</div></div>
+        </div>
+
+        <div style="display: flex; gap: 14px; align-items: flex-start;">
+          <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center;"><span style="width: 26px; height: 26px; border-radius: 7px; background: #E6F1EC; border: 1px solid #0E7F55; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #0E7F55;">3</span><span style="width: 2px; height: 34px; background: #E4E0D6;"></span></div>
+          <div style="padding-top: 2px;"><div style="font-size: 13.5px; font-weight: 600;">Score &amp; compute paths</div><div style="margin-top: 2px; font-size: 12px; color: #5E5A52;">Capacity, affinity, propensity, time-to-decision. Rank warm routes.</div></div>
+        </div>
+
+        <div style="display: flex; gap: 14px; align-items: flex-start;">
+          <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center;"><span style="width: 26px; height: 26px; border-radius: 7px; background: #F9EAE3; border: 1.5px solid #BF4A16; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #BF4A16;">4</span><span style="width: 2px; height: 34px; background: #E4E0D6;"></span></div>
+          <div style="padding-top: 2px;"><div style="font-size: 13.5px; font-weight: 600; color: #BF4A16;">Human gate &#183; claim or discard</div><div style="margin-top: 2px; font-size: 12px; color: #5E5A52;">Nothing proceeds without an owner. Unclaimed after 5 days &#8594; back to the pool.</div></div>
+        </div>
+
+        <div style="display: flex; gap: 14px; align-items: flex-start;">
+          <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center;"><span style="width: 26px; height: 26px; border-radius: 7px; background: #E6F1EC; border: 1px solid #0E7F55; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #0E7F55;">5</span><span style="width: 2px; height: 34px; background: #E4E0D6;"></span></div>
+          <div style="padding-top: 2px;"><div style="font-size: 13.5px; font-weight: 600;">Draft the opt-in ask</div><div style="margin-top: 2px; font-size: 12px; color: #5E5A52;">Written for the connector to forward. Never sent by the agent.</div></div>
+        </div>
+
+        <div style="display: flex; gap: 14px; align-items: flex-start;">
+          <div style="flex-shrink: 0;"><span style="display: flex; width: 26px; height: 26px; border-radius: 7px; background: #F9EAE3; border: 1.5px solid #BF4A16; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #BF4A16;">6</span></div>
+          <div style="padding-top: 2px;"><div style="font-size: 13.5px; font-weight: 600; color: #BF4A16;">Human gate &#183; approve and send</div><div style="margin-top: 2px; font-size: 12px; color: #5E5A52;">Ask-frequency guard checked here. Blocked if the quarterly cap is hit.</div></div>
+        </div>
+
+      </div>
+
+      <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid #E4E0D6; display: flex; gap: 26px; align-items: center;">
+        <div><div style="font-size: 11px; color: #5E5A52;">Runs this week</div><div style="margin-top: 2px; font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 500;">23</div></div>
+        <div><div style="font-size: 11px; color: #5E5A52;">Reached a gate</div><div style="margin-top: 2px; font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 500;">23</div></div>
+        <div><div style="font-size: 11px; color: #5E5A52;">Claimed by a person</div><div style="margin-top: 2px; font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 500;">14</div></div>
+        <div><div style="font-size: 11px; color: #5E5A52;">Median cost</div><div style="margin-top: 2px; font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 500;">83 cr</div></div>
+        <div style="flex-grow: 1;"></div>
+        <button type="button" style="height: 30px; padding: 0 13px; border-radius: 7px; border: 1px solid #1A1917; background: #FFFFFF; font-size: 12px; cursor: pointer;">Run history</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":760}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

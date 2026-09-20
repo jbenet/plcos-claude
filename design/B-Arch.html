@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Version B — Graph architecture</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F5F3EE;color:#1A1917;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#BF4A16}a:hover{color:#8E3610}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1200px; height: 840px; box-sizing: border-box; padding: 44px 48px 40px; background: #F5F3EE; display: flex; flex-direction: column; gap: 22px;">
+
+  <div style="display: flex; align-items: flex-end; gap: 32px;">
+    <div style="flex-grow: 1;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #0E7F55;">Version B &#183; architecture</div>
+      <h2 style="margin: 10px 0 0; font-family: 'Fraunces', serif; font-size: 36px; font-weight: 600; letter-spacing: -0.01em;">Graph — the relationship is the centre</h2>
+    </div>
+    <div style="flex-shrink: 0; text-align: right; font-size: 13px; line-height: 1.5; color: #5E5A52;">Own the history. Everything else<br>is a view over it, and can be rebuilt.</div>
+  </div>
+
+  <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 14px; padding: 26px 28px 22px; flex-grow: 1;">
+    <svg viewBox="0 0 1044 462" width="100%" height="100%" role="img" aria-label="Diagram: surfaces read from projections, projections are derived from an append-only event log with entity resolution and a graph store, the log is fed by ingestors, and agent workers subscribe to events and write effects back.">
+      <defs>
+        <marker id="bArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#8F8A7E"></path>
+        </marker>
+        <marker id="bArrowG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#0E7F55"></path>
+        </marker>
+      </defs>
+
+      <text x="0" y="14" font-family="'IBM Plex Mono', monospace" font-size="11" letter-spacing="1.4" fill="#5E5A52">SURFACES</text>
+      <rect x="0" y="26" width="196" height="58" rx="9" fill="#FFFFFF" stroke="#1A1917" stroke-width="1.5"></rect>
+      <text x="16" y="50" font-family="'IBM Plex Sans', sans-serif" font-size="13.5" font-weight="600" fill="#1A1917">Graph explorer</text>
+      <text x="16" y="68" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">paths, clusters</text>
+
+      <rect x="208" y="26" width="196" height="58" rx="9" fill="#FFFFFF" stroke="#1A1917" stroke-width="1.5"></rect>
+      <text x="224" y="50" font-family="'IBM Plex Sans', sans-serif" font-size="13.5" font-weight="600" fill="#1A1917">Dossier</text>
+      <text x="224" y="68" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">one page per entity</text>
+
+      <rect x="416" y="26" width="196" height="58" rx="9" fill="#FFFFFF" stroke="#1A1917" stroke-width="1.5"></rect>
+      <text x="432" y="50" font-family="'IBM Plex Sans', sans-serif" font-size="13.5" font-weight="600" fill="#1A1917">Pipelines</text>
+      <text x="432" y="68" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">per vehicle + rollup</text>
+
+      <rect x="624" y="26" width="196" height="58" rx="9" fill="#FFFFFF" stroke="#1A1917" stroke-width="1.5"></rect>
+      <text x="640" y="50" font-family="'IBM Plex Sans', sans-serif" font-size="13.5" font-weight="600" fill="#1A1917">Ask log &amp; grants</text>
+      <text x="640" y="68" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">separate clocks</text>
+
+      <line x1="410" y1="88" x2="410" y2="112" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#bArrow)"></line>
+
+      <text x="0" y="128" font-family="'IBM Plex Mono', monospace" font-size="11" letter-spacing="1.4" fill="#5E5A52">READ MODELS &#183; REBUILDABLE FROM THE LOG</text>
+      <rect x="0" y="140" width="196" height="46" rx="8" fill="#F5F3EE" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="16" y="168" font-family="'IBM Plex Sans', sans-serif" font-size="12.5" fill="#1A1917">Coverage &amp; forecast</text>
+
+      <rect x="208" y="140" width="196" height="46" rx="8" fill="#F5F3EE" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="224" y="168" font-family="'IBM Plex Sans', sans-serif" font-size="12.5" fill="#1A1917">Path index</text>
+
+      <rect x="416" y="140" width="196" height="46" rx="8" fill="#F5F3EE" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="432" y="168" font-family="'IBM Plex Sans', sans-serif" font-size="12.5" fill="#1A1917">Score index</text>
+
+      <rect x="624" y="140" width="196" height="46" rx="8" fill="#F5F3EE" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="640" y="168" font-family="'IBM Plex Sans', sans-serif" font-size="12.5" fill="#1A1917">Ask &amp; conflict view</text>
+
+      <line x1="410" y1="190" x2="410" y2="216" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#bArrow)" marker-start="url(#bArrow)"></line>
+
+      <text x="0" y="232" font-family="'IBM Plex Mono', monospace" font-size="11" letter-spacing="1.4" fill="#0E7F55">CORE &#183; YOURS</text>
+      <rect x="0" y="244" width="820" height="56" rx="9" fill="#E6F1EC" stroke="#0E7F55" stroke-width="2.5"></rect>
+      <text x="18" y="270" font-family="'IBM Plex Sans', sans-serif" font-size="15" font-weight="600" fill="#1A1917">Append-only event log</text>
+      <text x="18" y="290" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#5E5A52">every touch, ask, signal, score change, commitment &#183; time-bounded, replayable, never mutated</text>
+
+      <rect x="0" y="312" width="404" height="50" rx="8" fill="#FFFFFF" stroke="#0E7F55" stroke-width="1.5"></rect>
+      <text x="18" y="334" font-family="'IBM Plex Sans', sans-serif" font-size="13" font-weight="600" fill="#1A1917">Entity resolution</text>
+      <text x="18" y="352" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">probabilistic + graph matching, not generative</text>
+
+      <rect x="416" y="312" width="404" height="50" rx="8" fill="#FFFFFF" stroke="#0E7F55" stroke-width="1.5"></rect>
+      <text x="434" y="334" font-family="'IBM Plex Sans', sans-serif" font-size="13" font-weight="600" fill="#1A1917">Graph store</text>
+      <text x="434" y="352" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">people primary &#183; edges carry start and end dates</text>
+
+      <line x1="410" y1="366" x2="410" y2="392" stroke="#8F8A7E" stroke-width="1.5" marker-end="url(#bArrow)" marker-start="url(#bArrow)"></line>
+
+      <text x="0" y="408" font-family="'IBM Plex Mono', monospace" font-size="11" letter-spacing="1.4" fill="#5E5A52">INGEST &#183; ONE SOURCE AMONG MANY</text>
+      <rect x="0" y="418" width="196" height="40" rx="7" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="16" y="443" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#1A1917">Attio / Affinity sync</text>
+
+      <rect x="208" y="418" width="196" height="40" rx="7" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="224" y="443" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#1A1917">Filings &amp; signals</text>
+
+      <rect x="416" y="418" width="196" height="40" rx="7" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="432" y="443" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#1A1917">Transcripts &amp; email</text>
+
+      <rect x="624" y="418" width="196" height="40" rx="7" fill="#FFFFFF" stroke="#C9C4B8" stroke-width="1.25"></rect>
+      <text x="640" y="443" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#1A1917">SPV admin &amp; content</text>
+
+      <rect x="848" y="26" width="196" height="432" rx="9" fill="#E6F1EC" stroke="#0E7F55" stroke-width="1.5" stroke-dasharray="5 4"></rect>
+      <text x="866" y="50" font-family="'IBM Plex Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0E7F55">Agent workers</text>
+      <text x="866" y="70" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">subscribe to events</text>
+      <line x1="866" y1="86" x2="1026" y2="86" stroke="#0E7F55" stroke-width="1" opacity="0.45"></line>
+      <text x="866" y="112" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#1A1917">Researcher</text>
+      <text x="866" y="140" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#1A1917">Signal watcher</text>
+      <text x="866" y="168" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#1A1917">Brief writer</text>
+      <text x="866" y="196" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#1A1917">Answer librarian</text>
+      <text x="866" y="224" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#1A1917">Pipeline analyst</text>
+      <text x="866" y="252" font-family="'IBM Plex Sans', sans-serif" font-size="12" fill="#1A1917">Path scorer</text>
+      <line x1="866" y1="272" x2="1026" y2="272" stroke="#0E7F55" stroke-width="1" opacity="0.45"></line>
+      <text x="866" y="296" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">Each reads the graph,</text>
+      <text x="866" y="314" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">writes events back, and</text>
+      <text x="866" y="332" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#5E5A52">stops at a human gate.</text>
+      <rect x="866" y="352" width="160" height="34" rx="6" fill="#FFFFFF" stroke="#0E7F55" stroke-width="1.25"></rect>
+      <text x="880" y="374" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#1A1917">Public research plane</text>
+      <rect x="866" y="394" width="160" height="34" rx="6" fill="#F9EAE3" stroke="#BF4A16" stroke-width="1.25"></rect>
+      <text x="880" y="416" font-family="'IBM Plex Sans', sans-serif" font-size="11.5" fill="#1A1917">Confidential &#183; scoped</text>
+
+      <line x1="822" y1="272" x2="844" y2="272" stroke="#0E7F55" stroke-width="1.5" marker-end="url(#bArrowG)" marker-start="url(#bArrowG)"></line>
+    </svg>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px;">
+    <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #0E7F55;">Why the log matters</div>
+      <div style="margin-top: 8px; font-size: 13px; line-height: 1.5; color: #1A1917;">Because it is the only structure that can answer, in 2028, which connectors and sequences actually produced capital. Cheap to write now; impossible to reconstruct later.</div>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #BF4A16;">The two planes</div>
+      <div style="margin-top: 8px; font-size: 13px; line-height: 1.5; color: #1A1917;">Research agents may roam public data. LP financials, side letters and portfolio material sit behind a permission boundary no general-purpose agent crosses.</div>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E4E0D6; border-radius: 12px; padding: 18px 20px;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8A6410;">What you accept</div>
+      <div style="margin-top: 8px; font-size: 13px; line-height: 1.5; color: #1A1917;">Entity resolution is unglamorous and takes longer than anyone budgets. Ten to fourteen weeks before it is better than a spreadsheet.</div>
+    </div>
+  </div>
+
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":840}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
