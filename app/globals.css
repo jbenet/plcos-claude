@@ -858,20 +858,28 @@ th.sortable:hover{color:var(--ink)}
 th.sortable.on{color:var(--accent)}
 th.sortable .caret{font-size:7px;margin-left:4px}
 th.w84{width:84px} th.w86{width:86px} th.w90{width:84px} th.w120{width:120px}
-.list.enrich{table-layout:fixed;min-width:840px}
+th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px}
+.list.enrich{table-layout:fixed;min-width:800px}
 .enrich th,.enrich td{padding-left:11px;padding-right:11px}
 .enrich td{vertical-align:top}
-.enrich td:nth-child(2){word-break:normal;overflow-wrap:anywhere}
-.enrich .mdet{font-size:11.5px;line-height:1.5;margin-top:3px}
+.enrich .mnum td{padding-bottom:4px;border-bottom:0}
+.enrich .mname{font-size:13px;font-weight:500;line-height:1.35;overflow-wrap:anywhere}
+/* The prose row: one column, the whole table wide. Nothing here has to line up with a
+   number, so nothing here should be shaped by a numeric column's width. */
+.enrich .mdetrow td{padding-top:0;padding-bottom:11px}
+.enrich .mdetrow .mchips{margin:0 0 5px}
+.enrich .mdet{font-size:11.5px;line-height:1.55;margin-top:3px;max-width:96ch}
+.enrich .mdet.dim{opacity:.75}
 .enrich .mchips{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
-.enrich .mlimit{font-size:11px;line-height:1.5;margin-top:6px}
-.enrich .mblock{font-size:11px;line-height:1.5;margin-top:5px;color:var(--clay)}
+.enrich .mlimit{font-size:11px;line-height:1.5;margin-top:5px;max-width:96ch}
+.enrich .mblock{font-size:11px;line-height:1.5;margin-top:5px;color:var(--clay);max-width:96ch}
 .enrich .mblock b{font-weight:500}
 .enrich .num{font-size:14px;font-weight:500;line-height:1.15}
 .enrich .num.big{font-size:17px}
-.enrich .sub{font-size:9.5px;color:var(--muted);line-height:1.4;margin-top:2px}
+.enrich .sub{font-size:9.5px;color:var(--muted);line-height:1.4;margin-top:2px;white-space:nowrap}
 .enrich .sub.dim{opacity:.7}
-.enrich .mwhy{font-size:10.5px;line-height:1.45;margin-top:4px}
+.enrich .mwhy{font-size:11px;line-height:1.5;margin-top:5px;max-width:96ch}
+.enrich .mwhy b{font-weight:500;color:var(--ink)}
 .enrich input[type=checkbox]{accent-color:var(--accent);margin-top:3px}
 
 /* the target picker */

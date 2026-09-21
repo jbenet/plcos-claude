@@ -2676,3 +2676,42 @@ version of this that stays correct when the panes change width again.
 
 **43 of 43 properties hold.** `npm run shots` takes a `width` now, so the narrow layout is
 captured by the same script as everything else rather than by hand.
+
+---
+
+## N25 — Data enrichment: numbers on one line, prose on the next
+
+**Shipped.** Same complaint as N24, a different table. The method's description was living in
+a 150px column while four numeric columns sat half empty beside it.
+
+| | |
+|---|---|
+| ![Two-row rows](docs/changelog/shots/n25/01-rows.png) | **One line of numbers, one line of prose.** Rows are about half as tall and the sentences are sentences. |
+| ![Sorted by cost](docs/changelog/shots/n25/02-sorted-by-cost.png) | **Sorted by cost.** The sub-labels under each number stay on one line now. |
+
+### A row is two rows
+
+Every method carries a number set — value, cost, priority — and two or three sentences
+explaining itself. Those want opposite things: the numbers want narrow aligned columns, the
+prose wants width. Sharing one row, each gets the wrong one.
+
+So each method is two table rows now. The first is the numbers, with the name, the kind and
+the verdict. The second spans the whole table and holds the chips, the description, the cost
+basis, the limits and the reason for the verdict. **The row is roughly half as tall as it
+was** and nothing was dropped.
+
+The number sub-labels — `12 gaps · tier A`, `$1,200 · 0.5d you · 6h AI`, `value ÷ cost × 1.4`
+— no longer wrap; their columns were widened to fit them on one line, which is cheap because
+they are the only things in those columns.
+
+### A message that disagreed with the counter above it
+
+Holding a method said *"The human queue is full."* while the counter at the top of the page
+read **0 of 5**. Both were rendered from the same state. The queue was not full — five
+higher-priority methods simply rank above it, which is a different sentence:
+
+> 5 human-run methods rank above it, which is the whole queue. Finish those before starting this.
+
+A page that says two contradictory things about the same number teaches you to trust neither.
+
+**43 of 43 properties hold.**

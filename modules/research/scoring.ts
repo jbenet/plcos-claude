@@ -204,8 +204,12 @@ export function scoreMethods<T extends Omit<Method, 'score'>>(
       if (m.automatable) aiSlots -= 1; else humanSlots -= 1;
     } else {
       m.score.verdict = 'hold';
-      m.score.why = `The ${m.automatable ? 'agent' : 'human'} queue is full. `
-        + 'Finishing what is running beats starting this.';
+      /* Not "the queue is full" — nothing may be chosen yet, and saying full next to a
+         counter reading 0 of 5 is the page disagreeing with itself. What is true is that
+         the whole queue's worth of methods rank above this one. */
+      const cap = m.automatable ? params.aiWip : params.humanWip;
+      m.score.why = `${cap} ${m.automatable ? 'agent' : 'human'}-run method${cap === 1 ? '' : 's'} `
+        + `rank above it, which is the whole queue. Finish those before starting this.`;
     }
   }
 

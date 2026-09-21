@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { Fragment, useMemo, useState, useTransition } from 'react';
 import { choose } from '@/app/orgs/enrichment/select';
 import {
   DEFAULT_PARAMS, METHOD_KIND_LABEL, METHOD_KIND_MEANS, METHOD_STATUS_LABEL,
@@ -205,74 +205,83 @@ export function EnrichmentTable({ methods }: { methods: Method[] }) {
             <tr>
               <th style={{ width: 30 }} />
               {head('name', 'Method')}
-              {head('kind', 'Kind', 'w90')}
-              {head('value', 'Value', 'w86 right')}
-              {head('cost', 'Cost', 'w120 right')}
-              {head('priority', 'Priority', 'w84 right')}
-              <th style={{ width: 150 }}>Do it?</th>
+              {head('kind', 'Kind', 'w80')}
+              {head('value', 'Value', 'w104 right')}
+              {head('cost', 'Cost', 'w144 right')}
+              {head('priority', 'Priority', 'w108 right')}
+              <th style={{ width: 100 }}>Do it?</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((m) => (
-              <tr key={m.methodId} className={m.selected ? 'sel' : undefined}>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={m.selected}
-                    disabled={pending || m.status === 'rejected' || m.status === 'blocked'}
-                    aria-label={`Put ${m.name} in the queue`}
-                    onChange={(e) => {
-                      const on = e.target.checked;
-                      setOptimistic((prev) => ({ ...prev, [m.methodId]: on }));
-                      start(async () => {
-                        await choose(m.methodId, on);
-                        setOptimistic((prev) => {
-                          const next = { ...prev };
-                          delete next[m.methodId];
-                          return next;
+              /* Two rows per method: the numbers on one line, and the prose on a line of
+                 its own underneath. A sentence in a 150px column is four words a line with
+                 a column of white space beside every number. */
+              <Fragment key={m.methodId}>
+                <tr className={`mnum${m.selected ? ' sel' : ''}`}>
+                  <td rowSpan={2}>
+                    <input
+                      type="checkbox"
+                      checked={m.selected}
+                      disabled={pending || m.status === 'rejected' || m.status === 'blocked'}
+                      aria-label={`Put ${m.name} in the queue`}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setOptimistic((prev) => ({ ...prev, [m.methodId]: on }));
+                        start(async () => {
+                          await choose(m.methodId, on);
+                          setOptimistic((prev) => {
+                            const next = { ...prev };
+                            delete next[m.methodId];
+                            return next;
+                          });
                         });
-                      });
-                    }}
-                  />
-                </td>
-                <td>
-                  <b>{m.name}</b>
-                  <div className="muted mdet">{m.detail}</div>
-                  <div className="mchips">
-                    <span className={`flag ${TIER_FLAG[m.producesTier] ?? 'f-mute'}`}>
-                      tier {m.producesTier}
+                      }}
+                    />
+                  </td>
+                  <td><b className="mname">{m.name}</b></td>
+                  <td><span className="lever">{METHOD_KIND_LABEL[m.kind]}</span></td>
+                  <td className="right">
+                    <div className="mono num">{m.score.value.toFixed(1)}</div>
+                    <div className="sub">{m.fills} gaps · tier {m.producesTier}</div>
+                  </td>
+                  <td className="right">
+                    <div className="mono num">{m.score.cost.toFixed(1)}</div>
+                    <div className="sub">
+                      ${(m.costUsd ?? 0).toLocaleString('en-GB')} · {m.humanDays}d you · {m.aiHours}h AI
+                    </div>
+                  </td>
+                  <td className="right">
+                    <div className="mono num big">{m.score.priority.toFixed(2)}</div>
+                    <div className="sub">value ÷ cost{m.automatable ? ` × ${params.aiBias}` : ''}</div>
+                  </td>
+                  <td>
+                    <span className={`flag ${VERDICT_FLAG[m.score.verdict]}`}>
+                      {METHOD_VERDICT_LABEL[m.score.verdict]}
                     </span>
-                    {m.automatable && <span className="lever hot">agent can run it</span>}
-                    <span className="lever">{m.coverage}</span>
-                    <span className={`flag ${STATUS_FLAG[m.status]}`}>{METHOD_STATUS_LABEL[m.status]}</span>
-                    <span className={`cert c-${m.certainty}`}>{m.certainty}</span>
-                  </div>
-                  {m.limits && <div className="mlimit">{m.limits}</div>}
-                  {m.blockedBy && <div className="mblock"><b>Blocked.</b> {m.blockedBy}</div>}
-                </td>
-                <td><span className="lever">{METHOD_KIND_LABEL[m.kind]}</span></td>
-                <td className="right">
-                  <div className="mono num">{m.score.value.toFixed(1)}</div>
-                  <div className="sub">{m.fills} gaps × tier {m.producesTier}</div>
-                </td>
-                <td className="right">
-                  <div className="mono num">{m.score.cost.toFixed(1)}</div>
-                  <div className="sub">
-                    ${(m.costUsd ?? 0).toLocaleString('en-GB')} · {m.humanDays}d you · {m.aiHours}h AI
-                  </div>
-                  {m.costBasis && <div className="sub dim">{m.costBasis}</div>}
-                </td>
-                <td className="right">
-                  <div className="mono num big">{m.score.priority.toFixed(2)}</div>
-                  <div className="sub">value ÷ cost{m.automatable ? ` × ${params.aiBias}` : ''}</div>
-                </td>
-                <td>
-                  <span className={`flag ${VERDICT_FLAG[m.score.verdict]}`}>
-                    {METHOD_VERDICT_LABEL[m.score.verdict]}
-                  </span>
-                  <div className="muted mwhy">{m.score.why}</div>
-                </td>
-              </tr>
+                  </td>
+                </tr>
+                <tr className={`mdetrow${m.selected ? ' sel' : ''}`}>
+                  <td colSpan={6}>
+                    <div className="mchips">
+                      <span className={`flag ${TIER_FLAG[m.producesTier] ?? 'f-mute'}`}>
+                        tier {m.producesTier}
+                      </span>
+                      {m.automatable && <span className="lever hot">agent can run it</span>}
+                      <span className="lever">{m.coverage}</span>
+                      <span className={`flag ${STATUS_FLAG[m.status]}`}>{METHOD_STATUS_LABEL[m.status]}</span>
+                      <span className={`cert c-${m.certainty}`}>{m.certainty}</span>
+                    </div>
+                    <div className="muted mdet">{m.detail}</div>
+                    {m.costBasis && <div className="mdet dim">{m.costBasis}</div>}
+                    {m.limits && <div className="mlimit">{m.limits}</div>}
+                    {m.blockedBy && <div className="mblock"><b>Blocked.</b> {m.blockedBy}</div>}
+                    <div className="muted mwhy">
+                      <b>{METHOD_VERDICT_LABEL[m.score.verdict]}.</b> {m.score.why}
+                    </div>
+                  </td>
+                </tr>
+              </Fragment>
             ))}
           </tbody>
         </table>

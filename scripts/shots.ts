@@ -167,6 +167,22 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N25: [
+    { name: '01-rows', path: '/orgs/enrichment', prepare: async (page) => {
+        await page.getByRole('button', { name: 'Agent can run it' }).click();
+        await page.waitForTimeout(400);
+        await page.getByRole('heading', { name: 'Every way we could find out' })
+          .scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '02-sorted-by-cost', path: '/orgs/enrichment', prepare: async (page) => {
+        await page.getByRole('columnheader', { name: /Cost/ }).click();
+        await page.waitForTimeout(400);
+        await page.getByRole('heading', { name: 'Every way we could find out' })
+          .scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+  ],
   N24: [
     { name: '01-wide', path: '/routes', prepare: async (page) => {
         await page.getByText('How much weight this carries').first().scrollIntoViewIfNeeded();
