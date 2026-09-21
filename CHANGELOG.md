@@ -2440,3 +2440,27 @@ Escape inside the field cancels the label; Escape outside it still closes the ed
 from.
 
 **43 of 43 properties hold.**
+
+---
+
+## N20 — Screenshots that use the window
+
+**Shipped.** Changelog images grow with the window and open full size on click, in both
+renderers.
+
+![Wide](docs/changelog/shots/n20/01-changelog-wide.png)
+
+The prose stays at a readable measure — about 66 characters — because that is what makes
+text readable. **The screenshots do not**, because the reason somebody widens the window is
+to see the screenshot, and a picture pinned to the width of a paragraph defeats that.
+
+So figures break out of the prose column to `min(1560px, 100vw − 40px)`, centred on the
+same axis. At 1680px the image is 1560 wide beside a 594-wide paragraph; at 900px it is 860
+wide with no horizontal scroll.
+
+Clicking opens the original. In the app that is a new tab; on the standalone page it is a
+lightbox in twenty lines of vanilla JavaScript rather than a dependency — **that page has
+to open from a `file://` URL with nothing installed**, which is most of the reason it exists.
+
+The web-sized copies went from 1400px to 2000px across. A 1560-wide slot showing a
+1400-wide image is a soft image, and the resize was tuned before the images had room.
