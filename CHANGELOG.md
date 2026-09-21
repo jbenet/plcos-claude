@@ -2464,3 +2464,81 @@ to open from a `file://` URL with nothing installed**, which is most of the reas
 
 The web-sized copies went from 1400px to 2000px across. A 1560-wide slot showing a
 1400-wide image is a soft image, and the resize was tuned before the images had room.
+
+---
+
+## N21 — Data enrichment as a priority queue
+
+**Shipped.** Renamed, moved under **Orgs & people**, and rebuilt: one sortable table
+instead of seven, a ranking you can re-weight on the page, and a queue with a limit.
+
+| | |
+|---|---|
+| ![Queue and table](docs/changelog/shots/n21/01-queue-and-table.png) | **The queue above the table.** Human and agent limits, and what the gaps actually are. |
+| ![Weights](docs/changelog/shots/n21/02-weights.png) | **Six sliders**, each with what raising it does. Every default is a guess about this team at this moment, which is why they are on the page. |
+| ![Filters](docs/changelog/shots/n21/03-filters.png) | **Filter and sort.** *Agent can run it* is the filter that matters most. |
+| ![Chosen](docs/changelog/shots/n21/04-chosen.png) | **Chosen, and counted.** The queue says 1 of 5, and the row says who chose it. |
+
+### Seven tables could not answer the question
+
+The catalogue was grouped by kind, which made *"what should we do next?"* — the only
+question anybody actually has — impossible to answer without reading all seven. Kind is a
+column now.
+
+### Cost is three numbers, because time is not free
+
+`effort_days` conflated a person-day with an hour of model time, and those behave nothing
+alike. The row shows all three:
+
+```
+3.5   ← the rating
+$0 · 0.25d you · 2h AI
+```
+
+Money, person-days and model-hours land in one unit through weights on the page. **A
+person-day is the scarcest thing this team has**; an AI hour is nearly free and still not
+free, because somebody reads the output and decides whether to believe it.
+
+**Nothing is free, and the floor says so.** A question asked inside a meeting you were
+already having still costs the decision to ask it and the minutes spent writing down the
+answer. Without a floor, anything recorded as zero divides by nothing and lands on top with
+a number nobody can read — which is how a ranking stops being read at all.
+
+### Priority is value ÷ cost, with a thumb on the scale
+
+Value is **how many open gaps it would close, weighted by the best evidence tier it can
+justify**. Four gaps at tier D is worth less than two at tier A, and a number that ignored
+the tier would rank the bulk scraper first every single time.
+
+The **bias toward agent-run methods** defaults to 1.4× and is a slider. It is a bet on
+*repeatability* rather than on magic: a search an agent can run is worth more than its cost
+suggests, because it can be run again next quarter on a universe twice the size.
+
+The result reads the way the reports argue it should: *ask them directly what they have
+backed* (14.0) and *the four questions for a first meeting* (12.0) sit above the paid
+database (2.8), because they are nearly free and produce tier A.
+
+### The queue has a limit because finishing beats starting
+
+Five human-run, twelve agent-run, both adjustable. Choosing something counts against its
+limit; past it, everything else reads **hold** with the reason on its own row. Nothing is
+hard-blocked — the counts just stop pretending. The agent limit is larger because agents
+wait rather than work, and it is still a limit because **every run has to be read**.
+
+That last point is why `docs/14-linear-integration-points.md` grew a section proposing **a
+dedicated Linear board for agent runs**: one issue per run, the work envelope in the
+description, a *needs review* column that is a real queue with real people in it, and a
+thread where "this looks wrong because…" can live. Three things stay on our side — the
+envelope the policy check reads, acceptance (`acceptRun` takes a user id and an idempotency
+key; closing an issue is a signal, not an authorisation), and the config and input hashes,
+because a tracker cannot promise that editing a prompt does not retroactively change what a
+completed run meant.
+
+### Also
+
+The scorer moved to `modules/research/scoring.ts` with no database import, so the table
+re-ranks in the browser as the sliders move. **A scoring rule that only runs on the server
+is a rule nobody plays with**, and playing with it is how anyone finds out whether they
+believe it.
+
+**43 of 43 properties hold.**

@@ -1,5 +1,9 @@
 import { getDb } from '@/lib/db';
 import { listAssessments } from '@/modules/fit';
+import {
+  DEFAULT_PARAMS, scoreMethods, type Gap, type Method, type MethodKind, type MethodStatus,
+  type ScoreParams,
+} from './scoring';
 
 /**
  * The enrichment catalogue, and the gaps it could fill.
@@ -8,65 +12,6 @@ import { listAssessments } from '@/modules/fit';
  * has answered, a claim with low confidence. Storing it would mean maintaining a second
  * copy of what we do not know, and the second copy is the one that goes stale.
  */
-
-export type MethodKind =
-  | 'buy' | 'integrate' | 'query' | 'ask' | 'observe' | 'interview' | 'infer';
-export type MethodStatus = 'available' | 'blocked' | 'in_use' | 'rejected';
-
-export const METHOD_KIND_LABEL: Record<MethodKind, string> = {
-  buy: 'Buy', integrate: 'Integrate', query: 'Query', ask: 'Ask',
-  observe: 'Observe', interview: 'Interview', infer: 'Infer',
-};
-
-export const METHOD_KIND_MEANS: Record<MethodKind, string> = {
-  buy: 'A dataset or a subscription. Costs money once and covers the whole universe.',
-  integrate: 'A service we query programmatically. Costs engineering, then costs nothing.',
-  query: 'A search somebody runs, by hand or with a model. Cheap, slow, and only as good as the reader.',
-  ask: 'A direct question to somebody who would know. The highest-yield method and the one that spends goodwill.',
-  observe: 'Something public, watched over time. Free, and produces clues rather than facts.',
-  interview: 'A question put in a meeting or a first email. Free, and only available once.',
-  infer: 'Derived from data we already hold. Free, instant, and never better than tier C.',
-};
-
-export const STATUS_LABEL: Record<MethodStatus, string> = {
-  available: 'Available', blocked: 'Blocked', in_use: 'In use', rejected: 'Rejected',
-};
-
-export interface Method {
-  methodId: string;
-  kind: MethodKind;
-  name: string;
-  detail: string;
-  yields: string[];
-  producesTier: string;
-  costUsd: number | null;
-  costBasis: string | null;
-  effortDays: number;
-  latencyDays: number | null;
-  coverage: string;
-  status: MethodStatus;
-  blockedBy: string | null;
-  limits: string | null;
-  certainty: string;
-  source: string | null;
-  asOf: Date;
-  /** Derived: how many open gaps in the current universe this method would touch. */
-  fills: number;
-}
-
-export interface Gap {
-  /** The dimension or gate code. */
-  code: string;
-  label: string;
-  /** 'dimension' | 'gate' */
-  kind: 'dimension' | 'gate';
-  /** How many assessed targets have this open. */
-  count: number;
-  /** Named targets, for the per-target view. */
-  entities: string[];
-  /** Why it is a gap: guessed, inferred, or unanswered. */
-  why: string;
-}
 
 function parseArray(v: string[] | string | null): string[] {
   if (Array.isArray(v)) return v;
@@ -114,7 +59,9 @@ export async function gapsFor(vehicleId: string | null): Promise<Gap[]> {
   return [...byCode.values()].sort((x, y) => y.count - x.count || x.label.localeCompare(y.label));
 }
 
-export async function listMethods(gaps: Gap[] = []): Promise<Method[]> {
+export async function listMethods(
+  gaps: Gap[] = [], params: ScoreParams = DEFAULT_PARAMS,
+): Promise<Method[]> {
   const db = await getDb();
   const rows = await db.query<{
     method_id: string; kind: MethodKind; name: string; detail: string;
@@ -122,16 +69,22 @@ export async function listMethods(gaps: Gap[] = []): Promise<Method[]> {
     cost_basis: string | null; effort_days: string; latency_days: number | null;
     coverage: string; status: MethodStatus; blocked_by: string | null; limits: string | null;
     certainty: string; source: string | null; as_of: Date | string;
+    human_days: string; ai_hours: string; automatable: boolean;
+    selected: boolean; selected_by_name: string | null;
   }>(
-    `select method_id, kind::text as kind, name, detail, yields::text[] as yields,
-            produces_tier, cost_usd, cost_basis, effort_days, latency_days, coverage,
-            status::text as status, blocked_by, limits, certainty, source, as_of
-       from research.method order by sort`,
+    `select m.method_id, m.kind::text as kind, m.name, m.detail, m.yields::text[] as yields,
+            m.produces_tier, m.cost_usd, m.cost_basis, m.effort_days, m.latency_days,
+            m.coverage, m.status::text as status, m.blocked_by, m.limits, m.certainty,
+            m.source, m.as_of, m.human_days, m.ai_hours, m.automatable, m.selected,
+            u.name as selected_by_name
+       from research.method m
+       left join platform.app_user u on u.id = m.selected_by
+      order by m.sort`,
   );
 
   const open = new Map(gaps.map((g) => [g.code, g.count]));
 
-  return rows.map((r) => {
+  const base = rows.map((r) => {
     const yields = parseArray(r.yields);
     return {
       methodId: r.method_id, kind: r.kind, name: r.name, detail: r.detail, yields,
@@ -141,9 +94,14 @@ export async function listMethods(gaps: Gap[] = []): Promise<Method[]> {
       latencyDays: r.latency_days, coverage: r.coverage, status: r.status,
       blockedBy: r.blocked_by, limits: r.limits, certainty: r.certainty,
       source: r.source, asOf: new Date(r.as_of),
+      humanDays: Number(r.human_days), aiHours: Number(r.ai_hours),
+      automatable: r.automatable, selected: r.selected,
+      selectedByName: r.selected_by_name,
       fills: yields.reduce((s, y) => s + (open.get(y) ?? 0), 0),
     };
-  }).sort((x, y) => y.fills - x.fills || x.effortDays - y.effortDays);
+  });
+
+  return scoreMethods(base, params);
 }
 
 /** The gaps on one target, and the methods that would close them. */
@@ -181,4 +139,19 @@ export async function gapsForTarget(
   const methods = (await listMethods(gaps))
     .filter((m) => m.status !== 'rejected' && m.yields.some((y) => codes.has(y)));
   return { gaps, methods };
+}
+
+/** Choose, or unchoose, a method. A queue is a decision, so it carries a name and a time. */
+export async function selectMethod(
+  methodId: string, on: boolean, userId: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.query(
+    `update research.method
+        set selected = $2,
+            selected_at = case when $2 then now() else null end,
+            selected_by = case when $2 then $3::uuid else null end
+      where method_id = $1`,
+    [methodId, on, userId],
+  );
 }

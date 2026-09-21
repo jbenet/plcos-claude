@@ -88,7 +88,48 @@ Four operations, in the order they matter:
 
 ---
 
-## 4. Where the seams already are
+## 4. A board for observable agent runs
+
+The enrichment queue makes this concrete. Several methods are marked `automatable`, the
+agent queue limit is twelve rather than five, and the reason the limit exists at all is that
+**every run still has to be read** — somebody decides whether to believe the output.
+
+That needs task-management UX: what the task was, what the run actually did, what came back,
+and a thread to argue about it in. We are not building that.
+
+**Proposal: a dedicated Linear board for agent runs.** One issue per run.
+
+| | |
+|---|---|
+| Title | the method and the scope: *"Model-assisted search — Tessaro Family Office"* |
+| Description | the work envelope: task, scope, allowed evidence, allowed commands, budget, deadline, output schema, acceptance criteria, escalation owner |
+| Labels | `agent-run`, `method:<kind>`, `tier:<A–D>` — the evidence ceiling matters to the reader |
+| State | queued → running → **needs review** → accepted / rejected / failed |
+| Comments | the run's own log, then the human's judgement |
+| Link back | `agents.run.id`, so the pinned config and input hashes are one click away |
+
+What this buys that a table would not: the **needs review** column is a real queue with real
+people in it, the thread is where "this looks wrong because…" lives, and a failed run can be
+retried or reverted by somebody who was not there when it ran.
+
+Three things that must stay on our side:
+
+- **The envelope.** Linear holds a copy for reading; `agents.envelope` is the one the policy
+  check reads. A permission that can be edited in a comment is not a permission.
+- **Acceptance.** `acceptRun` takes an `app_user` id and an idempotency key. Closing the
+  Linear issue is a signal, not an acceptance — otherwise the tracker becomes an
+  authorisation surface.
+- **The pins.** `config_hash`, `input_hash` and `prompt_hash` never leave. Editing a prompt
+  must not retroactively change what a completed run meant, and a tracker cannot promise
+  that.
+
+Open: whether agent runs share the team with the work board (one token, noisy) or get their
+own (cleaner, two configurations). Leaning toward their own, because the review queue has a
+different audience from the fundraising board.
+
+---
+
+## 5. Where the seams already are
 
 | Place | What it does today | What it does with Linear |
 |---|---|---|
@@ -96,6 +137,7 @@ Four operations, in the order they matter:
 | `modules/plays/service.ts` · `commit` | writes a `pending` handoff | same |
 | `app/[vehicle]/strategy` · Committed | renders the payload under a disclosure | renders a link to the issue |
 | `app/standup/[day]` · Linear pane | fixtures from `standup.external` | polled issues |
+| `app/orgs/enrichment` · queue | a checkbox and a WIP limit | a chosen method opens its issue on the agent board |
 | `lib/issues/github.ts` | refuses with a sentence | unrelated — that seam is for *issues about this app*, not for work tracking. **Do not merge the two.** |
 
 The last row is the one to be careful about. `IssueSink` is where a complaint about this

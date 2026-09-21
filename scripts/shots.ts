@@ -165,6 +165,33 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N21: [
+    { name: '01-queue-and-table', path: '/orgs/enrichment', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'The queue' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '02-weights', path: '/orgs/enrichment', prepare: async (page) => {
+        await page.getByRole('button', { name: 'Adjust the weights' }).click();
+        await page.waitForTimeout(400);
+        await page.getByRole('heading', { name: 'The queue' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(300);
+      } },
+    { name: '03-filters', path: '/orgs/enrichment', prepare: async (page) => {
+        await page.getByRole('button', { name: 'Agent can run it' }).click();
+        await page.waitForTimeout(400);
+        await page.getByRole('heading', { name: 'Every way we could find out' })
+          .scrollIntoViewIfNeeded();
+        await page.waitForTimeout(300);
+      } },
+    { name: '04-chosen', path: '/orgs/enrichment', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'Every way we could find out' })
+          .scrollIntoViewIfNeeded();
+        await page.getByRole('checkbox').nth(1).check();
+        await page.waitForTimeout(1600);
+        await page.getByRole('heading', { name: 'The queue' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(400);
+      } },
+  ],
   N20: [
     { name: '01-changelog-wide', path: '/dev/changelog' },
   ],

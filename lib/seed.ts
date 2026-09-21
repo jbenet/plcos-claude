@@ -104,6 +104,7 @@ interface MethodFixture {
   cost: number | null; cost_basis?: string | null; effort: number; latency: number | null;
   coverage: string; status: string; blocked_by?: string; limits?: string;
   certainty: string; source?: string; as_of: string;
+  human_days: number; ai_hours: number; automatable: boolean;
 }
 
 interface StandingFixture {
@@ -181,12 +182,14 @@ async function seedResearch(db: Db) {
       await tx.query(
         `insert into research.method
            (kind, name, detail, yields, produces_tier, cost_usd, cost_basis, effort_days,
-            latency_days, coverage, status, blocked_by, limits, certainty, source, as_of, sort)
+            latency_days, coverage, status, blocked_by, limits, certainty, source, as_of, sort,
+            human_days, ai_hours, automatable)
          values ($1::research.method_kind,$2,$3,$4::text[],$5,$6,$7,$8,$9,$10,
-                 $11::research.method_status,$12,$13,$14,$15,$16::date,$17)`,
+                 $11::research.method_status,$12,$13,$14,$15,$16::date,$17,$18,$19,$20)`,
         [m.kind, m.name, m.detail, `{${m.yields.map((y) => `"${y}"`).join(',')}}`, m.tier,
          m.cost, m.cost_basis ?? null, m.effort, m.latency, m.coverage, m.status,
-         m.blocked_by ?? null, m.limits ?? null, m.certainty, m.source ?? null, m.as_of, msort++],
+         m.blocked_by ?? null, m.limits ?? null, m.certainty, m.source ?? null, m.as_of, msort++,
+         m.human_days, m.ai_hours, m.automatable],
       );
     }
 

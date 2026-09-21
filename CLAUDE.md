@@ -269,7 +269,8 @@ needs a precise input, or performance becomes a demonstrated problem.
 3. **Linear custom fields.** UNVERIFIED in all three design packages. Check the live
    GraphQL schema before anything depends on it. The integration points the product
    already assumes are written down in `docs/14-linear-integration-points.md`, including
-   the outbox (`plays.handoff`) that records what would be sent.
+   the outbox (`plays.handoff`) that records what would be sent, and the proposal for a
+   dedicated board for observable agent runs.
 4. **Integration risk.** One 506(b) SPV among four 506(c) vehicles — a conversation for
    counsel, not a data model.
 

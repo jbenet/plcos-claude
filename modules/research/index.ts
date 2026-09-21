@@ -3,8 +3,12 @@ export {
   claimCounts, claimsFor, corpusCoverage, getSourceDoc, listSourceDocs, noteKindCounts,
   notesFor, snapshotCount, unverifiedCount, weaklySupportedCount,
 } from './repo';
-export type { Gap, Method, MethodKind, MethodStatus } from './enrichment';
+export type {
+  Gap, Method, MethodKind, MethodStatus, Score, ScoreParams, Verdict as MethodVerdict,
+} from './scoring';
 export {
-  METHOD_KIND_LABEL, METHOD_KIND_MEANS, STATUS_LABEL as METHOD_STATUS_LABEL,
-  gapsFor, gapsForTarget, listMethods,
-} from './enrichment';
+  DEFAULT_PARAMS, METHOD_KIND_LABEL, METHOD_KIND_MEANS,
+  STATUS_LABEL as METHOD_STATUS_LABEL, TIER_VALUE, VERDICT_LABEL as METHOD_VERDICT_LABEL,
+  scoreMethods,
+} from './scoring';
+export { gapsFor, gapsForTarget, listMethods, selectMethod } from './enrichment';

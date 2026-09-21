@@ -134,6 +134,7 @@ export const STATIC_SECTIONS: NavSection[] = [
       { label: 'LPs', href: '/orgs/g/lps' },
       { label: 'Co-funders', href: '/orgs/g/co-funders' },
       { label: 'Connectors', href: '/orgs/g/connectors' },
+      { label: 'Data enrichment', href: '/orgs/enrichment' },
     ],
   },
   {
@@ -141,7 +142,6 @@ export const STATIC_SECTIONS: NavSection[] = [
     title: 'Other',
     links: [
       { label: 'Research corpus', href: '/research' },
-      { label: 'Enrichment', href: '/research/enrichment' },
       { label: 'Forecast', href: '/forecast' },
       { label: 'Sprint calendar', href: '/calendar' },
       { label: 'Content studio', href: '/content' },
