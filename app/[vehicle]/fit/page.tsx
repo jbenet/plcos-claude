@@ -178,6 +178,7 @@ export default async function FitRollup({
                 <div className="t">
                   <EntityLink id={r.entityId} name={r.entityName} />
                   <Link className="xref" href={`/${slug}/fit/${r.entityId}`}>full assessment →</Link>
+                  <Link className="xref" href={`/${slug}/strategy/${r.entityId}`}>what to do →</Link>
                   {!vehicle && (
                     <span className="flag f-mute" style={{ marginLeft: 8 }}>{r.vehicleName}</span>
                   )}

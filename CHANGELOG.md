@@ -2114,3 +2114,66 @@ an audit row is written inside the transaction it describes. An audit entry that
 survive a rollback of its own event is the one thing an append-only log must never do.
 
 **43 of 43 properties hold.**
+
+---
+
+## N15 — Strategy for one funder
+
+**Shipped.** `/<vehicle>/strategy/<target>` — the same board, aimed at one name, with the
+thing in between: **what that funder needs before they can say yes.**
+
+| | |
+|---|---|
+| ![State of play](docs/changelog/shots/n15/01-state-of-play.png) | **Where we actually are** — fit, rung, money, ties, who we deal with, last touch. None of it stored here. |
+| ![Needs](docs/changelog/shots/n15/02-needs.png) | **What they need**, with what each need calls for. Northwood has three: two unmet, one nobody has established. |
+| ![Options](docs/changelog/shots/n15/03-option-space.png) | **The option space**, ranked, plus whole-vehicle plays matched to this target's unmet needs. |
+| ![Tessaro](docs/changelog/shots/n15/04-tessaro.png) | **Tessaro, for contrast.** They already understand the field — that need is *met* — and have never heard of us. Opposite work from Northwood. |
+
+### The needs table is the whole point
+
+Two funders can both read as *not convinced* and need completely opposite work. Northwood
+has met us and wants somebody other than us confirming the marks. Tessaro has never heard
+of us and already holds the thesis — their domain need is **met**, and nothing we could
+write about neuroscience would help.
+
+So `plays.need` sits between the diagnosis and the board:
+
+```
+know_domain · know_us · believe_returns · believe_access
+validation · mechanics · timing · permission
+```
+
+Each row carries **what they need in their terms**, **how we know**, and a `met` that can
+be true, false, or null — *nobody has established it* is a third state and the most common
+one. Each kind carries what it calls for: validation needs a person they already trust
+saying it, and nothing we write substitutes.
+
+A play aimed at the wrong need converts nothing and costs exactly the same as one aimed at
+the right one.
+
+### Lateral moves are on the board on purpose
+
+The highest-converting move is often not another email. An LP joined this fund after
+finding a podcast episode, learning the domain and hearing the thesis argued — nobody sent
+them anything. Another relationship was built by a seat at a workshop.
+
+That is why `convene` and `reach` are levers rather than marketing activities, and why
+Tessaro's board carries *prime with the podcast episode before the introduction* at
+certainty **guess** — one instance is not a pattern, and the row says so rather than
+quietly treating it as one.
+
+### Whole-vehicle plays that would help here
+
+Below the target's own board, the page lists vehicle-level plays whose lever answers one of
+*this* target's unmet needs — matched through a small table from need kind to levers. Work
+that fixes the same problem for several funders at once is usually the better week, and it
+would otherwise never appear on a page about one name.
+
+### What is not stored here
+
+The fit reading, the rung, the money, the ties, the affiliations and the restriction all
+come from the modules that own them. The page cannot disagree with the pages they come
+from, and a do-not-approach instruction appears at the top of this one because it attaches
+to the target rather than to a route.
+
+**43 of 43 properties hold.**

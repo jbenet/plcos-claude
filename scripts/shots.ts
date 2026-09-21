@@ -165,6 +165,32 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N15: [
+    { name: '01-state-of-play', path: '/neurotech/fit', prepare: async (page) => {
+        await page.getByRole('link', { name: 'what to do →' }).nth(2).click();
+        await page.waitForLoadState('networkidle');
+      } },
+    { name: '02-needs', path: '/neurotech/fit', prepare: async (page) => {
+        await page.getByRole('link', { name: 'what to do →' }).nth(2).click();
+        await page.waitForLoadState('networkidle');
+        await page.getByRole('heading', { name: 'What they need before they can say yes' })
+          .scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '03-option-space', path: '/neurotech/fit', prepare: async (page) => {
+        await page.getByRole('link', { name: 'what to do →' }).nth(2).click();
+        await page.waitForLoadState('networkidle');
+        await page.getByRole('heading', { name: 'What we could do' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '04-tessaro', path: '/neurotech/fit', prepare: async (page) => {
+        await page.getByRole('link', { name: 'what to do →' }).nth(1).click();
+        await page.waitForLoadState('networkidle');
+        await page.getByRole('heading', { name: 'What they need before they can say yes' })
+          .scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+  ],
   N14: [
     { name: '01-assessment', path: '/neurotech/strategy' },
     { name: '02-board', path: '/neurotech/strategy', prepare: async (page) => {

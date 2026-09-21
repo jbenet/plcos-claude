@@ -78,7 +78,9 @@ function Board({
                 {p.detail}
               </div>
               <div style={{ marginTop: 5, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                {p.entityName && <span className="flag f-mute">{p.entityName}</span>}
+                {p.entityName && p.entityId && (
+                <Link className="flag f-mute" href={`${path}/${p.entityId}`}>{p.entityName}</Link>
+              )}
                 {p.gate && <span className="flag f-ev">needs {p.gate}</span>}
                 <span className={`cert c-${p.certainty}`}>{p.certainty}</span>
               </div>

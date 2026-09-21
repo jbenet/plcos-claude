@@ -208,8 +208,8 @@ export default async function FunderVehicleFit({
           )}
 
           <div className="acts" style={{ marginTop: 14 }}>
+            <Link className="btn p" href={`/${slug}/strategy/${entityId}`}>What to do</Link>
             <Link className="btn" href={`/orgs/${entityId}`}>Their page</Link>
-            <Link className="btn" href="/routes">Route planner</Link>
           </div>
         </>
       }
