@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
+import { ShotLightbox } from '@/components/dev/ShotLightbox';
 import { groupChangelog, parseInline, parseMarkdown, type Block, type Inline } from '@/lib/markdown';
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,7 @@ function Spans({ src }: { src: string }) {
               href={imageSrc(s.href ?? '')}
               target="_blank"
               rel="noreferrer"
-              title="Open full size"
+              title="Expand here · ⌘-click for a new tab"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img className="clshot" src={imageSrc(s.href ?? '')} alt={s.text} loading="lazy" />
@@ -169,6 +170,7 @@ export default async function Changelog() {
         </>
       }
     >
+      <ShotLightbox />
       <div className="lbl">Developer</div>
       <h1>Changelog</h1>
       <p className="sublede">

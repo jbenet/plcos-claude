@@ -165,6 +165,19 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N23: [
+    { name: '01-bars', path: '/routes', prepare: async (page) => {
+        await page.getByText('How much weight this carries').first().scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '02-routes-full', path: '/routes', fullPage: true },
+    { name: '03-lightbox', path: '/dev/changelog', prepare: async (page) => {
+        await page.locator('img.clshot').first().scrollIntoViewIfNeeded();
+        await page.waitForTimeout(600);
+        await page.locator('img.clshot').first().click();
+        await page.waitForTimeout(700);
+      } },
+  ],
   N22: [
     { name: '01-picker-and-bars', path: '/routes' },
     { name: '02-search', path: '/routes', prepare: async (page) => {

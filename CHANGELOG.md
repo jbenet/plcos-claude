@@ -2601,3 +2601,42 @@ ticket is approved**, and the owner is who the approval authorises to make it.
 is an ask that waits for somebody to feel responsible.
 
 **43 of 43 properties hold.**
+
+---
+
+## N23 — Bars under their labels, screenshots in the page
+
+**Shipped.** Two things that were wasting space: the influence bars, and the changelog's
+habit of throwing you into a new window.
+
+| | |
+|---|---|
+| ![Influence bars](docs/changelog/shots/n23/01-bars.png) | **Label, bar under it, reason beside both.** Same five components, about 200px less height. |
+| ![Lightbox](docs/changelog/shots/n23/03-lightbox.png) | **A screenshot expands here.** Esc, the ×, or a click anywhere closes it. |
+
+### The reason is the part with words in it
+
+The four-column row — label, bar, number, reason — gave the reason a 150px column and the
+bar a 76px one. So every row was as tall as its sentence needed, with a column of empty
+space sitting under the bar, and the sentence itself came out five words wide.
+
+The label and the bar are now stacked in one 190px column with the number on the label's
+line, and the reason takes the rest. **Nothing was cut** — the same five components, the
+same numbers, the same weights. The block is about 200px shorter and the sentences read at
+a normal width.
+
+### Clicking a screenshot no longer leaves the page
+
+It opened the PNG in a new tab, which means losing your place in a page of 138 images to
+look at one of them. A click now expands it in place. **Esc closes it, so does the ×, so
+does a click anywhere** — three ways out, because a dialog with one is a trap if you miss it.
+
+⌘-click and middle-click still open the file in a tab: the anchor is still an anchor, and
+only a plain left click is intercepted. The overlay is portalled to `<body>`, because the
+rail is `position: sticky` and therefore its own stacking context — an overlay rendered
+inside it paints under the topbar, which is the same bug the annotation editor hit.
+
+The standalone build log already worked this way. The in-app page now matches it.
+
+**43 of 43 properties hold.** Verified in a browser: click opens, Esc closes, the × closes,
+the backdrop closes, and no tab is opened.

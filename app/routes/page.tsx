@@ -268,23 +268,25 @@ export default async function Routes({
                         <span className="lbl">How much weight this carries</span>
                         <span className="inflscore">{Math.round(route.influence.score * 100)}</span>
                       </div>
-                      {/* Bar and reason on one line. Bars in one block with their reasons
-                          underneath makes the reader hold five numbers in their head and
-                          then match them up, which nobody does. */}
+                      {/* The label with its number, the bar under it, the reason beside
+                          both. Reading a bar and then hunting for its sentence somewhere
+                          below is work nobody does. */}
                       <table className="inflt">
                         <tbody>
                           {route.influence.components.map((c) => (
                             <tr key={c.key}>
-                              <th scope="row">{c.label}</th>
-                              <td className="ibar">
+                              <th scope="row">
+                                <span className="ilab">
+                                  {c.label}
+                                  <span className="inum mono">
+                                    {Math.round(c.score * 100)}
+                                    <small>w{Math.round(c.weight * 100)}</small>
+                                  </span>
+                                </span>
                                 <span className="ib">
                                   <i style={{ width: `${Math.round(c.score * 100)}%` }} />
                                 </span>
-                              </td>
-                              <td className="inum mono">
-                                {Math.round(c.score * 100)}
-                                <small>w{Math.round(c.weight * 100)}</small>
-                              </td>
+                              </th>
                               <td className="iwhy">{c.basis}</td>
                             </tr>
                           ))}

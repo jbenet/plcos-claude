@@ -389,11 +389,24 @@ input[type=range]{accent-color:var(--accent);width:100%;height:18px}
 .clshot{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:8px;
         background:var(--surface)}
 .clshotlink:hover .clshot{border-color:var(--accent)}
-.clshotlink::after{content:"Open full size";position:absolute;right:9px;bottom:9px;
+.clshotlink::after{content:"Expand";position:absolute;right:9px;bottom:9px;
                    font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;
                    text-transform:uppercase;background:var(--ink);color:var(--ground);
                    border-radius:5px;padding:3px 7px;opacity:0;transition:opacity .12s}
 .clshotlink:hover::after{opacity:.92}
+
+/* the changelog lightbox — expands in place, not in a new window */
+.lbx{position:fixed;inset:0;z-index:80;background:rgba(10,10,9,.93);display:flex;
+     align-items:center;justify-content:center;padding:26px;cursor:zoom-out;
+     animation:lbxin .12s ease-out}
+@keyframes lbxin{from{opacity:0}to{opacity:1}}
+.lbx img{max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.lbx .lbxclose{position:fixed;top:14px;right:16px;width:32px;height:32px;border-radius:16px;
+               border:1px solid rgba(239,235,226,.28);background:rgba(26,25,23,.6);
+               color:#EFEBE2;font-size:19px;line-height:1;cursor:pointer;padding:0}
+.lbx .lbxclose:hover{background:rgba(26,25,23,.9)}
+.lbx .lbxhint{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);
+              font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;color:#B9B4A8}
 
 /* funder–vehicle fit */
 .cert{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;padding:2px 5px;border-radius:3px;border:1px solid;white-space:nowrap}
@@ -741,18 +754,19 @@ button.sec .pip{margin-left:auto;margin-right:7px;font-family:var(--mono);font-s
 .infl{border-top:1px solid var(--hair);margin-top:10px;padding-top:9px}
 .inflhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 .inflscore{font-family:var(--mono);font-size:17px;font-weight:500}
-/* One row per component: label, bar, number, reason. Reading a bar and then hunting for
-   its sentence somewhere below is work nobody does. */
-.inflt{width:100%;border-collapse:collapse;margin-top:8px}
-.inflt th{text-align:left;font-size:11px;font-weight:400;color:var(--muted);
-          padding:5px 10px 5px 0;white-space:nowrap;vertical-align:top;width:132px}
-.inflt td{padding:5px 0;vertical-align:top}
-.inflt .ibar{width:76px;padding-right:10px}
-.inflt .ib{display:block;height:6px;border-radius:3px;background:#EDEAE2;overflow:hidden;margin-top:4px}
-.inflt .ib i{display:block;height:100%;border-radius:3px;background:var(--accent)}
-.inflt .inum{width:56px;font-size:12px;text-align:right;padding-right:12px;white-space:nowrap}
+/* Label and bar stacked in one narrow column, the reason beside them in a wide one.
+   The reason is the part with words in it; giving it a 150px column produced a tall
+   cramped paragraph next to a column of empty space under a 76px bar. */
+.inflt{width:100%;border-collapse:collapse;margin-top:9px}
+.inflt th{width:190px;text-align:left;font-weight:400;padding:7px 18px 7px 0;vertical-align:top}
+.inflt td{padding:7px 0;vertical-align:top}
+.inflt .ilab{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+             font-size:11.5px;color:var(--muted);line-height:1.3}
+.inflt .inum{font-size:12.5px;color:var(--ink);white-space:nowrap}
 .inflt .inum small{color:var(--muted);font-size:9px;margin-left:4px}
-.inflt .iwhy{font-size:11.5px;line-height:1.5;color:var(--muted)}
+.inflt .ib{display:block;height:6px;border-radius:3px;background:#EDEAE2;overflow:hidden;margin-top:6px}
+.inflt .ib i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+.inflt .iwhy{font-size:12.5px;line-height:1.55;color:var(--muted)}
 .theask{margin:9px 0 0;font-size:12px;line-height:1.55;background:var(--accent-soft);
         border:1px solid var(--accent-line);border-radius:7px;padding:8px 11px}
 .vscore{margin-bottom:5px}
