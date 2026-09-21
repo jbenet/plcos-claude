@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getDb, type Queryable } from '@/lib/db';
 import type { AppUser, AuditEntry, Feedback, FeedbackInput, SourceSync, Vehicle } from './types';
 
 type UserRow = {
@@ -73,8 +73,16 @@ export async function attachIssueRef(id: string, ref: string, path: string): Pro
   await db.query('update platform.feedback set issue_ref = $2, issue_path = $3 where id = $1', [id, ref, path]);
 }
 
-export async function appendAudit(entry: AuditEntry): Promise<void> {
-  const db = await getDb();
+/**
+ * Append one audit row.
+ *
+ * Takes an optional `Queryable` so a caller can write the row inside the same transaction
+ * as the thing it describes. An audit entry committed separately from its own event is an
+ * audit entry that can survive a rollback, which is the one thing an append-only log must
+ * never do.
+ */
+export async function appendAudit(entry: AuditEntry, q?: Queryable): Promise<void> {
+  const db = q ?? (await getDb());
   await db.query(
     `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
      values ($1,$2,$3,$4,$5)`,

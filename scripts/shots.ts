@@ -165,6 +165,33 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N14: [
+    { name: '01-assessment', path: '/neurotech/strategy' },
+    { name: '02-board', path: '/neurotech/strategy', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'What to do next' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '03-compounding', path: '/neurotech/strategy', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'What compounds' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '04-commit', path: '/neurotech/strategy', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'Propose and commit' }).scrollIntoViewIfNeeded();
+        await page.locator('.mdfield textarea').fill(
+          '- @mara books the third-party verification this week, letter by 2026-10-02\n'
+          + '- @juan asks Vantage for a reference call and a note to Raman\n'
+          + '- @ines writes the CPA-letter note for Whitcomb by 2026-09-24\n',
+        );
+        await page.waitForTimeout(400);
+      } },
+    { name: '05-assigned', path: '/neurotech/strategy', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'What to do next' }).scrollIntoViewIfNeeded();
+        await page.getByRole('button', { name: 'Assign' }).first().click();
+        await page.waitForTimeout(1800);
+        await page.getByRole('heading', { name: 'What to do next' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(400);
+      } },
+  ],
   N13: [
     {
       name: '01-markdown-write',

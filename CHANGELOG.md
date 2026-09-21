@@ -2022,3 +2022,95 @@ editor renumbering itself every time the checkbox moves — the text you wrote s
 change because you changed your mind about a screenshot.
 
 **43 of 43 properties hold.**
+
+---
+
+## N14 — The strategy board
+
+**Shipped.** A new module, `plays`, and a page per vehicle at `/<vehicle>/strategy`. It
+answers a question no other screen does: **given everything we know, what is the next best
+use of a week?**
+
+| | |
+|---|---|
+| ![Assessment](docs/changelog/shots/n14/01-assessment.png) | **Where the raise stands** — nineteen readings across six groups, each with a verdict, what it means, and what it does not. |
+| ![Board](docs/changelog/shots/n14/02-board.png) | **The option space, ranked.** Every play cites the finding that put it there, and plays whose lever answers a weak reading float to the top. |
+| ![Compounding](docs/changelog/shots/n14/03-compounding.png) | **What compounds**, kept as a separate horizon rather than a low priority. |
+| ![Commit](docs/changelog/shots/n14/04-commit.png) | **Propose and commit** in your own words. Lines, @handles and dates are pulled out and kept beside the text. |
+| ![Assigned](docs/changelog/shots/n14/05-assigned.png) | **Assignment is a second press**, and it queues a Linear ticket. |
+
+### Three disciplines in the schema
+
+**1. A play must cite what put it on the list.** `because` is not null. An action with no
+finding behind it is a task somebody thought of in the shower, and a board full of those is
+a to-do list wearing a strategy's clothes. Every seeded play points at something real in
+this database — a fit diagnosis, a failed gate, a claim the registry could not substantiate,
+an edge nobody reviewed.
+
+**2. Suggesting an owner is not assigning one.** A play stays `proposed` until a person
+presses Assign, and that press is what writes the handoff. A board that assigned as it
+ranked would fill somebody's week with whatever the arithmetic liked this morning.
+
+**3. Long-horizon work is a separate horizon, not a low priority.** Ranked against
+short-term work it always loses, which is exactly how compounding effort starves. When the
+close is inside six weeks the section says so and tells you to read it as next-vehicle
+planning — rather than hiding it, which is how it gets forgotten.
+
+### The assessment reads other modules; it stores nothing
+
+Nineteen readings, each from the module that owns the fact: pipeline depth and gap from
+`pipeline`, blocker mix and evidence coverage from `fit`, ladder progress from `strategy`,
+approved-and-current material from `content`, unanswered questions from `library`, edge
+tiers and connector goodwill from `network` and `coordination`.
+
+Each reading carries a verdict and **the levers that would move it** — which is what turns a
+dashboard into a strategy. The board marks any play whose lever answers something that came
+back weak.
+
+### Leverage, and why all three inputs are on the row
+
+```
+leverage = (likelihood ÷ 5) × targets touched ÷ person-days
+```
+
+A rate: expected movement per day of somebody's life. It puts *"get the operating-company
+marks independently verified"* — five days, four targets — above four separate emails,
+which is the judgement the page exists to make.
+
+It is shown as `3.20` with `4/5 · 0.5d · ×2` underneath, because **a score nobody can
+decompose is a score nobody can argue with**, and arguing with it is the point. The
+likelihood and the effort are judgement written by a person, and they are meant to be
+challenged on the page rather than trusted.
+
+### Eleven levers
+
+`source · enrich · segment · materials · reach · route · convince · validate · convene ·
+process · ask`
+
+A closed set, so the board can be counted by lever and a weak reading can name the ones
+that would move it. Each carries a sentence about what it is for — *convince* is useless
+before somebody has stated an objection; *reach* is the slowest lever and the only one that
+works while nobody is working.
+
+### Linear, written down rather than pretended
+
+Assigning a play or writing a commitment inserts a row in `plays.handoff` with the exact
+payload that *would* be sent, `state = 'pending'`, and a note saying no connector is
+attached. The strategy board renders that payload verbatim under a disclosure.
+
+**That is the difference between a stub and a lie.** A stub that claimed to have created a
+ticket would be indistinguishable from one that had, right up until somebody went looking
+for it.
+
+Every integration point is now in **`docs/14-linear-integration-points.md`**: the outbox,
+the payload shape, the four things a connector must do, and the five decisions that are not
+made yet — including the one CLAUDE.md already flags as unverified. It also names the trap:
+`IssueSink` is where a complaint about *this software* goes and `plays.handoff` is where
+work on the fundraise goes, they look similar, and merging them would put product bugs into
+the fundraising board.
+
+One small correctness fix on the way: `appendAudit` now takes an optional `Queryable`, so
+an audit row is written inside the transaction it describes. An audit entry that can
+survive a rollback of its own event is the one thing an append-only log must never do.
+
+**43 of 43 properties hold.**

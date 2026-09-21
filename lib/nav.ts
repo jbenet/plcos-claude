@@ -51,6 +51,9 @@ export function moduleHref(mod: NavModule, vehicleSlug: string | null): string {
  * whichever vehicle is selected.
  */
 export const VEHICLE_MODULES: NavModule[] = [
+  m('S', 'Strategy', 'strategy', 'L9',
+    'Where the raise stands, the option space against it, and a place to commit.',
+    true, undefined, true),
   m('04', 'Conversion strategy', 'targets', 'L5', 'The per-target workspace; consent ladder; coverage disclosure.'),
   m('05', 'Warm intro routes', 'routes', 'L4', 'Route ranking by connector credibility; A–D evidence tiers; non-circumvention.'),
   m('03', 'Selection', 'selection', 'L9', 'The capacity/affinity/propensity rubric, with weights visible and editable.'),
