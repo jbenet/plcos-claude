@@ -2243,3 +2243,67 @@ An LP gets asked to say why *they* committed; a topic authority gets asked for a
 with the paragraph already written.
 
 **43 of 43 properties hold.**
+
+---
+
+## N17 — How we could find out what we do not know
+
+**Shipped.** An enrichment catalogue at `/research/enrichment`, and a section on every
+target's strategy page listing what is missing about *them* and what would close it.
+
+| | |
+|---|---|
+| ![Gaps](docs/changelog/shots/n17/01-gaps.png) | **What is missing across the universe**, derived from the fit board rather than stored. A guess and an unanswered gate are different failures, and both are labelled. |
+| ![Catalogue](docs/changelog/shots/n17/02-catalogue.png) | **Seventeen methods in seven kinds** — buy, integrate, query, ask, observe, interview, infer — each with what it yields, its cost, and the line it must not cross. |
+| ![Rejected](docs/changelog/shots/n17/03-rejected.png) | **A rejected method stays on the page**, with the reason. |
+| ![Per target](docs/changelog/shots/n17/04-target-gaps.png) | **Northwood's ten open fields**, each matched to the methods that would close it. |
+
+### Three columns a list of tools would not have
+
+**`produces_tier` — the ceiling, not the hope.** A scraped follow graph is tier D however
+much of it there is. A 990-PF grant history is tier A because it is a filing. Recording the
+ceiling is what stops a bulk source being mistaken for proof six months later, when nobody
+remembers where it came from.
+
+**`blocked_by` — in a sentence.** Affinity is listed and blocked: no connector before L13,
+and the plan tier decides whether it is Data Share or polling, which is CLAUDE.md's open
+question 1. A method nobody can run is still worth listing, because **the blocker is often
+the cheaper thing to fix.**
+
+**`limits` — the line.** Model-assisted search carries the one that matters in this raise:
+*never infer health information about a person or their family; record only what somebody
+has publicly stated about their own interests, and attribute it.* Report 4 §6.2. In a
+neurotech context that drift is one careless sentence away, so it is written on the row
+rather than in a policy document nobody opens.
+
+### A rejected method stays on the page
+
+Bulk people data from LinkedIn is listed, marked **rejected**, with the reason: there is no
+sanctioned API at the tier we would need and scraping breaches their terms.
+
+Recording the refusal is the point. Delete it and somebody proposes it again in six months
+thinking it was an oversight, and the reasoning gets reconstructed from memory. It is also
+excluded from the per-target suggestions, because offering a rejected method as *what would
+close this* is how a decision gets quietly relitigated by somebody who never saw why it was
+made.
+
+### The gaps are derived
+
+A dimension graded on a guess, a dimension inferred on something that carries weight, a
+hard gate nobody answered. Computed from the fit board every time the page loads, never
+stored — a second copy of what we do not know is the copy that goes stale.
+
+Which also means the page can say **"no method covers this"**, and that is the most useful
+row on it: a field nothing in the catalogue can fill is a field that has to be asked.
+
+### The seven kinds are ordered by what they actually cost
+
+`ask` and `interview` come first because they are free, produce tier A, and are the ones
+people skip. *Ask the connector what they actually know* takes fifteen minutes, prevents
+the reluctant-connector failure, and is skipped constantly. *The four questions for a first
+meeting* fills six dimensions at once and is available exactly once per target.
+
+Then the things that cost money, then the things that cost engineering, and `infer` last —
+free, instant, and never better than tier C.
+
+**43 of 43 properties hold.**

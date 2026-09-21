@@ -141,6 +141,7 @@ export const STATIC_SECTIONS: NavSection[] = [
     title: 'Other',
     links: [
       { label: 'Research corpus', href: '/research' },
+      { label: 'Enrichment', href: '/research/enrichment' },
       { label: 'Forecast', href: '/forecast' },
       { label: 'Sprint calendar', href: '/calendar' },
       { label: 'Content studio', href: '/content' },

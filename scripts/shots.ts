@@ -165,6 +165,24 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N17: [
+    { name: '01-gaps', path: '/research/enrichment' },
+    { name: '02-catalogue', path: '/research/enrichment', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'Buy', exact: true }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '03-rejected', path: '/research/enrichment', prepare: async (page) => {
+        await page.getByText('bulk people data', { exact: false }).first().scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '04-target-gaps', path: '/neurotech/fit', prepare: async (page) => {
+        await page.getByRole('link', { name: 'what to do →' }).nth(2).click();
+        await page.waitForLoadState('networkidle');
+        await page.getByRole('heading', { name: 'What we do not know about them' })
+          .scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+  ],
   N16: [
     { name: '01-routes-influence', path: '/routes', fullPage: true },
     { name: '02-decomposition', path: '/routes', prepare: async (page) => {

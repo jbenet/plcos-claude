@@ -99,6 +99,13 @@ interface NoteFixture {
   data: Record<string, unknown>;
 }
 
+interface MethodFixture {
+  kind: string; name: string; detail: string; yields: string[]; tier: string;
+  cost: number | null; cost_basis?: string | null; effort: number; latency: number | null;
+  coverage: string; status: string; blocked_by?: string; limits?: string;
+  certainty: string; source?: string; as_of: string;
+}
+
 interface StandingFixture {
   entity: string; domain: string; strength: number; basis: string;
   source?: string; as_of: string; certainty: string;
@@ -122,10 +129,11 @@ async function seedResearch(db: Db) {
   const notes = await fixture<NoteFixture>('notes.json');
   const affiliations = await fixture<AffiliationFixture>('affiliations.json');
   const standings = await fixture<StandingFixture>('standings.json');
+  const methods = await fixture<MethodFixture>('methods.json');
 
   const existing = await db.one<{ n: string }>('select count(*)::text as n from identity.entity');
   if (existing && Number(existing.n) > 0) {
-    return { entities: 0, docs: 0, claims: 0, notes: 0, affiliations: 0, standings: 0 };
+    return { entities: 0, docs: 0, claims: 0, notes: 0, affiliations: 0, standings: 0, methods: 0 };
   }
 
   const users = await db.query<{ id: string; handle: string }>('select id, handle from platform.app_user');
@@ -165,6 +173,20 @@ async function seedResearch(db: Db) {
          values ($1,$2,$3::identity.affil_kind,$4,$5::date,$6::date,$7,$8,$9::date,$10,$11)`,
         [person, org, a.kind, a.role, a.started ?? null, a.ended ?? null, a.primary ?? false,
          a.source ?? null, a.as_of, a.certainty, a.note ?? null],
+      );
+    }
+
+    let msort = 0;
+    for (const m of methods) {
+      await tx.query(
+        `insert into research.method
+           (kind, name, detail, yields, produces_tier, cost_usd, cost_basis, effort_days,
+            latency_days, coverage, status, blocked_by, limits, certainty, source, as_of, sort)
+         values ($1::research.method_kind,$2,$3,$4::text[],$5,$6,$7,$8,$9,$10,
+                 $11::research.method_status,$12,$13,$14,$15,$16::date,$17)`,
+        [m.kind, m.name, m.detail, `{${m.yields.map((y) => `"${y}"`).join(',')}}`, m.tier,
+         m.cost, m.cost_basis ?? null, m.effort, m.latency, m.coverage, m.status,
+         m.blocked_by ?? null, m.limits ?? null, m.certainty, m.source ?? null, m.as_of, msort++],
       );
     }
 
@@ -227,6 +249,7 @@ async function seedResearch(db: Db) {
   return {
     entities: entities.length, docs: docs.length, claims: claims.length,
     notes: notes.length, affiliations: affiliations.length, standings: standings.length,
+    methods: methods.length,
   };
 }
 

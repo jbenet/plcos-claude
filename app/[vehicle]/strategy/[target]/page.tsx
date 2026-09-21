@@ -10,6 +10,7 @@ import { vehicleSelection } from '@/lib/session';
 import { ago, shortDate } from '@/lib/time';
 import { getEntity, orgsFor, peopleAt, AFFIL_LABEL } from '@/modules/identity';
 import { assessmentFor, BLOCKER_LABEL, LINK_LABEL } from '@/modules/fit';
+import { gapsForTarget, METHOD_KIND_LABEL } from '@/modules/research';
 import { listExposures } from '@/modules/pipeline';
 import { listPursuits, RUNG_LABEL, RUNG_REQUIRES, RUNGS, rungIndex } from '@/modules/strategy';
 import { listAsks, restrictionsFor } from '@/modules/coordination';
@@ -115,6 +116,7 @@ export default async function TargetStrategy({
     peopleAt(target),
     orgsFor(target),
   ]);
+  const enrich = await gapsForTarget(vehicle.id, target);
 
   const weak = new Set(assessment?.weakLevers ?? []);
   const mark = (p: Play) => ({ ...p, answersWeakness: weak.has(p.lever) });
@@ -416,6 +418,78 @@ export default async function TargetStrategy({
             better week.
           </div>
           <Board plays={alsoRelevant} users={users} path={path} />
+        </div>
+      )}
+
+      {/* ---------- 3b. what we do not know about them ---------- */}
+      {enrich.gaps.length > 0 && (
+        <div className="card">
+          <div className="chead">
+            <h2>What we do not know about them</h2>
+            <span className="lbl">
+              {enrich.gaps.length} open · {enrich.methods.length} method
+              {enrich.methods.length === 1 ? '' : 's'} would close some of it
+            </span>
+          </div>
+          <div className="worknote">
+            {a && a.evidenceCover < 0.8
+              ? `Only ${Math.round(a.evidenceCover * 100)}% of this reading rests on things we know. `
+                + 'Enrichment is usually the cheapest play on the page, and it is the one that '
+                + 'decides whether the rest of it can be trusted.'
+              : 'Each of these is a guess or a question nobody asked. Closing one is usually an '
+                + 'hour, and it changes what the rest of this page is worth.'}
+          </div>
+          <table className="list fixed">
+            <thead>
+              <tr>
+                <th style={{ width: 182 }}>What is missing</th>
+                <th style={{ width: 92 }}>Kind</th>
+                <th>Why it is a gap</th>
+                <th style={{ width: 300 }}>What would close it</th>
+              </tr>
+            </thead>
+            <tbody>
+              {enrich.gaps.map((g) => {
+                const fills = enrich.methods.filter((m) => m.yields.includes(g.code));
+                return (
+                  <tr key={`${g.kind}:${g.code}`}>
+                    <td><b>{g.label}</b></td>
+                    <td>
+                      <span className={`flag ${g.kind === 'gate' ? 'f-ev' : 'f-mute'}`}>
+                        {g.kind === 'gate' ? 'hard gate' : 'dimension'}
+                      </span>
+                    </td>
+                    <td className="muted">{g.why}</td>
+                    <td>
+                      {fills.length === 0 ? (
+                        <span className="muted">
+                          Nothing in the catalogue covers this. It will have to be asked.
+                        </span>
+                      ) : (
+                        fills.slice(0, 3).map((m) => (
+                          <div key={m.methodId} style={{ marginBottom: 4 }}>
+                            <span className="lever">{METHOD_KIND_LABEL[m.kind]}</span>{' '}
+                            <span style={{ fontSize: 11.5 }}>{m.name}</span>
+                            <div className="muted" style={{ fontSize: 10.5 }}>
+                              tier {m.producesTier} ceiling
+                              {m.effortDays > 0 ? ` · ${m.effortDays}d` : ' · free'}
+                              {m.status !== 'available' ? ` · ${m.status}` : ''}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="cover">
+            <b>Tier is a ceiling, not a hope.</b> A method that produces tier D produces tier D
+            however much of it there is — a follow graph is a discovery clue and never a
+            relationship. The full catalogue, with costs and the methods we have rejected, is on{' '}
+            <Link href="/research/enrichment">Research corpus → Enrichment</Link>.
+          </p>
         </div>
       )}
 
