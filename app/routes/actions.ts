@@ -16,6 +16,7 @@ export async function proposeFromRoute(formData: FormData): Promise<void> {
   const targetId = String(formData.get('targetId'));
   const connectorId = String(formData.get('connectorId') || '') || null;
   const vehicleSlug = String(formData.get('vehicleSlug'));
+  const ownerId = String(formData.get('ownerId') || '') || user.id;
 
   const [target, connector, vehicles] = await Promise.all([
     getEntity(targetId),
@@ -39,6 +40,7 @@ export async function proposeFromRoute(formData: FormData): Promise<void> {
       ? `One opt-in request to ${connector.displayName} regarding ${target.displayName}, carrying ` +
         `the approved ${vehicle.name} material and nothing else.`
       : `One direct approach to ${target.displayName} on behalf of ${vehicle.name}.`,
+    ownerId,
   });
 
   redirect(`/approvals?t=${ticketId}`);

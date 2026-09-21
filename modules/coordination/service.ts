@@ -127,6 +127,12 @@ export interface ProposeAskCommand {
   purpose: string;
   /** What the approval will and will not authorize. Written by the proposer, not inferred. */
   carries: string;
+  /**
+   * Who carries this ask. Defaults to whoever proposed it — but the person best placed to
+   * make it is often not the person who spotted the route, and an ask with no owner is an
+   * ask that waits for somebody to feel responsible.
+   */
+  ownerId?: string;
 }
 
 /**
@@ -146,7 +152,7 @@ export async function proposeAsk(actorId: string, cmd: ProposeAskCommand) {
     const rows = await tx.query<{ ask_id: string }>(
       `insert into coordination.ask (entity_id, connector_id, vehicle_id, status, owner_id, purpose)
        values ($1,$2,$3,$4::coordination.ask_status,$5,$6) returning ask_id`,
-      [cmd.entityId, cmd.connectorId, cmd.vehicleId, status, actorId, cmd.purpose],
+      [cmd.entityId, cmd.connectorId, cmd.vehicleId, status, cmd.ownerId ?? actorId, cmd.purpose],
     );
     const askId = rows[0]!.ask_id;
 

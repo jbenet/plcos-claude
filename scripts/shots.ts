@@ -165,6 +165,21 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N22: [
+    { name: '01-picker-and-bars', path: '/routes' },
+    { name: '02-search', path: '/routes', prepare: async (page) => {
+        await page.getByLabel('Search targets').fill('Kaplan');
+        await page.waitForTimeout(400);
+      } },
+    { name: '03-score-filter', path: '/routes', prepare: async (page) => {
+        await page.getByRole('button', { name: '75+' }).click();
+        await page.waitForTimeout(400);
+      } },
+    { name: '04-propose', path: '/routes', prepare: async (page) => {
+        await page.getByText('The ask to make.').first().scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+  ],
   N21: [
     { name: '01-queue-and-table', path: '/orgs/enrichment', prepare: async (page) => {
         await page.getByRole('heading', { name: 'The queue' }).scrollIntoViewIfNeeded();

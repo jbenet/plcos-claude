@@ -8,7 +8,10 @@ import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { Coverage } from '@/components/ui/Coverage';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
-import { listEntities } from '@/modules/identity';
+import { listAffiliations, listEntities } from '@/modules/identity';
+import { listAsks } from '@/modules/coordination';
+import { listAssessments, BLOCKER_SHORT } from '@/modules/fit';
+import { TargetPicker, type TargetRow } from '@/components/routes/TargetPicker';
 import { listSourceDocs } from '@/modules/research';
 import { listVehicles } from '@/modules/platform';
 import { planRoutes, tierCounts, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
@@ -29,16 +32,88 @@ export default async function Routes({
   const selection = await vehicleSelection();
   const { target, r } = await searchParams;
   const user = await (await auth()).currentUser();
-  const [entities, docs, tiers, vehicles] = await Promise.all([
+  const [entities, docs, tiers, vehicles, affiliations, fit, asks, team] = await Promise.all([
     listEntities(), listSourceDocs(), tierCounts(), listVehicles(),
+    listAffiliations(), listAssessments(selection.current?.id ?? null),
+    listAsks(null), (await auth()).listUsers(),
   ]);
 
   // Targets worth showing: everyone who is not a member of the team.
   const teamNames = new Set(['Juan', 'Mara Vance', 'Sam Ferreira', 'Inés Duarte', 'Tomás Reyes']);
   const targets = entities.filter((e) => !teamNames.has(e.displayName));
   const targetId = target ?? targets.find((t) => t.displayName === 'Delia Roos')?.entityId ?? targets[0]?.entityId;
-  const search = targetId ? await planRoutes(user.handle, targetId) : null;
+  const search = targetId
+    ? await planRoutes(user.handle, targetId, 3, selection.current?.kind ?? 'fund')
+    : null;
+
+  /**
+   * The picker carries the fit score, because there is no point finding a beautiful route
+   * to somebody nobody has qualified — and the records around each name, so searching
+   * "Kaplan" turns up the trust and the person who signs for it.
+   */
+  const best = new Map<string, { score: number; blocker: string }>();
+  for (const a of fit) {
+    const hit = best.get(a.entityId);
+    const score = Math.round(a.weightedFit * 100);
+    if (!hit || score > hit.score) {
+      best.set(a.entityId, { score, blocker: BLOCKER_SHORT[a.diagnosis.blocker] });
+    }
+  }
+  const rows: TargetRow[] = targets.map((t) => {
+    const related = [
+      ...affiliations.filter((x) => x.personId === t.entityId && x.current).map((x) => x.orgName),
+      ...affiliations.filter((x) => x.orgId === t.entityId && x.current).map((x) => x.personName),
+    ];
+    /**
+     * You route to a person; the fit reading sits on the institution they sign for. So a
+     * person with no reading of their own borrows the best one from an organisation they
+     * currently act for, and the row marks it as borrowed rather than passing it off.
+     */
+    const own = best.get(t.entityId) ?? null;
+    const borrowedFrom = own ? null : affiliations
+      .filter((x) => x.personId === t.entityId && x.current && best.has(x.orgId))
+      .map((x) => ({ org: x.orgName, ...best.get(x.orgId)! }))
+      .sort((a, b) => b.score - a.score)[0] ?? null;
+    const reading = own ?? borrowedFrom;
+    return {
+      entityId: t.entityId,
+      name: t.displayName,
+      isPerson: t.entityType === 'person',
+      score: reading?.score ?? null,
+      borrowedFrom: borrowedFrom?.org ?? null,
+      blocker: reading?.blocker ?? null,
+      related: [...new Set(related)].slice(0, 3),
+    };
+  });
   const selected = Math.min(Math.max(0, Number(r ?? 0)), Math.max(0, (search?.routes.length ?? 1) - 1));
+
+  /**
+   * Who should carry the ask.
+   *
+   * Whoever already deals with this connector, because a second person asking the same
+   * favour spends the relationship twice. Then whoever already owns an ask on this target.
+   * Then you — and the row says which of the three it is, because a suggestion with no
+   * reason is just a default in disguise.
+   */
+  const suggestOwner = (connectorId: string | null) => {
+    const viaConnector = connectorId
+      ? asks.find((a) => a.connectorId === connectorId && a.ownerName)
+      : undefined;
+    if (viaConnector) {
+      const who = team.find((u) => u.name === viaConnector.ownerName);
+      if (who) {
+        return { id: who.id, why: `${who.name} already carries an ask through this connector, and a second person asking the same favour spends the relationship twice.` };
+      }
+    }
+    const onTarget = asks.find((a) => a.entityId === targetId && a.ownerName);
+    if (onTarget) {
+      const who = team.find((u) => u.name === onTarget.ownerName);
+      if (who) {
+        return { id: who.id, why: `${who.name} already owns an ask on this target.` };
+      }
+    }
+    return { id: user.id, why: `Nobody here has dealt with this connector or this target before, so it falls to whoever found the route — ${user.name}.` };
+  };
 
   const docMap = new Map<string, EvidenceDoc>(
     docs.map((d) => [
@@ -50,28 +125,7 @@ export default async function Routes({
   return (
     <Page
       crumbs={moduleCrumbs('routes', selection.current?.name ?? null)}
-      queue={
-        <>
-          <div className="qhead">
-            <div className="lbl">Module 05 · route to whom</div>
-            <h2>{targets.length} in the universe</h2>
-            <p>
-              Routes are computed from {user.name}. Switching user in the rail changes every
-              answer on this page, because the graph is asymmetric.
-            </p>
-          </div>
-          {targets.map((t) => (
-            <Link
-              key={t.entityId}
-              href={`/routes?target=${t.entityId}`}
-              className={`tix${t.entityId === targetId ? ' on' : ''}`}
-            >
-              <b>{t.displayName}</b>
-              <p>{t.entityType}</p>
-            </Link>
-          ))}
-        </>
-      }
+      queue={<TargetPicker targets={rows} current={targetId} total={targets.length} />}
       inspector={
         <>
           <div className="lbl">Evidence tiers</div>
@@ -214,38 +268,49 @@ export default async function Routes({
                         <span className="lbl">How much weight this carries</span>
                         <span className="inflscore">{Math.round(route.influence.score * 100)}</span>
                       </div>
-                      <div className="inflrow">
-                        {route.influence.components.map((c) => (
-                          <div className="inflbar" key={c.key} title={c.basis}>
-                            <span className="ib">
-                              <i style={{ width: `${Math.round(c.score * 100)}%` }} />
-                            </span>
-                            <span className="ibl">{c.label}</span>
-                            <span className="ibv mono">
-                              {Math.round(c.score * 100)} · w{Math.round(c.weight * 100)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                      <dl className="inflwhy">
-                        {route.influence.components.map((c) => (
-                          <div key={c.key}>
-                            <dt>{c.label}</dt>
-                            <dd>{c.basis}</dd>
-                          </div>
-                        ))}
-                      </dl>
+                      {/* Bar and reason on one line. Bars in one block with their reasons
+                          underneath makes the reader hold five numbers in their head and
+                          then match them up, which nobody does. */}
+                      <table className="inflt">
+                        <tbody>
+                          {route.influence.components.map((c) => (
+                            <tr key={c.key}>
+                              <th scope="row">{c.label}</th>
+                              <td className="ibar">
+                                <span className="ib">
+                                  <i style={{ width: `${Math.round(c.score * 100)}%` }} />
+                                </span>
+                              </td>
+                              <td className="inum mono">
+                                {Math.round(c.score * 100)}
+                                <small>w{Math.round(c.weight * 100)}</small>
+                              </td>
+                              <td className="iwhy">{c.basis}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                       <p className="theask">
                         <b>The ask to make.</b> {route.influence.theAsk}
                       </p>
                     </div>
                   )}
                   {(route.verdict === 'recommend' || route.verdict === 'hold') && (
-                    <ProposeButton
-                      targetId={search.targetId}
-                      connectorId={route.connectorIds[route.connectorIds.length - 1] ?? null}
-                      vehicles={vehicles.filter((v) => v.kind !== 'grant_rail').map((v) => ({ slug: v.slug, name: v.name }))}
-                    />
+                    (() => {
+                      const carrier = route.connectorIds[route.connectorIds.length - 1] ?? null;
+                      const suggested = suggestOwner(carrier);
+                      return (
+                        <ProposeButton
+                          targetId={search.targetId}
+                          connectorId={carrier}
+                          vehicles={vehicles.filter((v) => v.kind !== 'grant_rail')
+                            .map((v) => ({ slug: v.slug, name: v.name }))}
+                          owners={team.map((u) => ({ id: u.id, name: u.name }))}
+                          suggestedOwnerId={suggested.id}
+                          suggestion={suggested.why}
+                        />
+                      );
+                    })()
                   )}
                 </div>
                 <div className="verdict">

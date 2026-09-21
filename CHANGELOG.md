@@ -2542,3 +2542,62 @@ is a rule nobody plays with**, and playing with it is how anyone finds out wheth
 believe it.
 
 **43 of 43 properties hold.**
+
+---
+
+## N22 — Routes: who to route to, and who carries it
+
+**Shipped.** The target list became a working column, the influence bars got their reasons
+back beside them, and proposing an ask now names an owner.
+
+| | |
+|---|---|
+| ![Picker and bars](docs/changelog/shots/n22/01-picker-and-bars.png) | **Score in the list**, sorted by it, with the records around each name underneath. Both side panes are narrower. |
+| ![Search](docs/changelog/shots/n22/02-search.png) | **Typing "Kaplan"** finds the trust *and* the person who signs for it. |
+| ![Filter](docs/changelog/shots/n22/03-score-filter.png) | **Score ≥ 75**, in the browser, instantly. |
+| ![Propose](docs/changelog/shots/n22/04-propose.png) | **Who carries it**, with why that person is suggested and where the ask actually goes. |
+
+### The list you scan before spending a week
+
+It used to be a name and a type, which is not enough to choose with. There is **no point
+finding a beautiful route to somebody nobody has qualified**, so the row carries the fit
+score, sorts by it, and filters on it.
+
+Search covers the name *and the records around it* — the organisations a person acts for,
+the people who act for an organisation. Typing "Kaplan" turns up the trust and Rachel
+Kaplan. It runs in the browser, because this list is small and a round trip per keystroke
+would make it feel slower than it is.
+
+**A person borrows their organisation's score, marked with an asterisk.** You route to a
+person; the fit reading sits on the institution they sign for. Showing them as unscored
+would have been true and useless, and showing the number unmarked would have been a lie.
+
+Both side columns are narrower — the queue from 330 to 258, the inspector from 328 to 296
+— because the middle pane is where the work is.
+
+### Bars and reasons, on the same line
+
+Five bars in one block with five sentences underneath asks the reader to hold five numbers
+in their head and then match them up, which nobody does. It is one row per component now:
+label, bar, number with its weight, and the reason, across.
+
+**Goodwill left** is one of the five, so it gets a bar like everything else — a connector at
+their cap is not a route, whatever the graph says.
+
+### "Where does that go? Who owns it?"
+
+Both were fair questions the page did not answer.
+
+**Who owns it** is a field now, with a suggestion and the reason for it: whoever already
+carries an ask through this connector — *because a second person asking the same favour
+spends the relationship twice* — then whoever owns an ask on this target, then you. The
+reason is shown, because a suggestion with no reason is a default in disguise.
+
+**Where it goes** is stated under the button: it writes the ask, runs the four guards, and
+opens an `INTRO_ASK` ticket in Approvals with its scope. **Nobody is contacted until that
+ticket is approved**, and the owner is who the approval authorises to make it.
+
+`ProposeAskCommand` gained an `ownerId` that defaults to the proposer. An ask with no owner
+is an ask that waits for somebody to feel responsible.
+
+**43 of 43 properties hold.**
