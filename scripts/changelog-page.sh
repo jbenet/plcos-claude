@@ -4,8 +4,9 @@
 #   scripts/changelog-page.sh <outdir>
 #
 # The output directory is ready to publish as-is: changelog.html references shots/<stage>/…
-# relative to itself. Screenshots are captured at 2880px for the changelog; 1400px is
-# plenty for reading and cuts the payload roughly in half.
+# relative to itself. Screenshots are captured at 2880px; 2000px keeps them sharp on a
+# wide window — which is the whole reason for widening the window — and still cuts the
+# payload substantially.
 set -euo pipefail
 
 OUT="${1:?usage: scripts/changelog-page.sh <outdir>}"
@@ -19,7 +20,7 @@ while IFS= read -r f; do
   rel="${f#"$SRC"/}"
   mkdir -p "$OUT/shots/$(dirname "$rel")"
   if command -v sips >/dev/null 2>&1; then
-    sips -Z 1400 "$f" --out "$OUT/shots/$rel" >/dev/null
+    sips -Z 2000 "$f" --out "$OUT/shots/$rel" >/dev/null
   else
     cp "$f" "$OUT/shots/$rel"   # no resizer available; full size still renders
   fi

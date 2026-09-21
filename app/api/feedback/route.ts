@@ -7,7 +7,7 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {
       title?: string; body?: string; kind?: IssueKind; priority?: IssuePriority;
-      page?: string; context?: Record<string, unknown>; screenshot?: string;
+      page?: string; context?: Record<string, unknown>; screenshots?: string[];
       images?: Array<{ name?: string; dataUrl?: string }>;
       imageOffset?: number;
     };
@@ -26,13 +26,13 @@ export async function POST(req: Request) {
     const MAX_B64 = 12_000_000;
     const attachments: IssueAttachment[] = [];
 
-    if (body.screenshot) {
-      const m = TYPES.exec(body.screenshot);
+    for (const shot of body.screenshots ?? []) {
+      const m = TYPES.exec(shot);
       if (!m || m[1] !== 'image/png') {
-        return NextResponse.json({ error: 'The screenshot was not a PNG.' }, { status: 400 });
+        return NextResponse.json({ error: 'A screenshot was not a PNG.' }, { status: 400 });
       }
       if (m[2]!.length > MAX_B64) {
-        return NextResponse.json({ error: 'The screenshot is too large.' }, { status: 413 });
+        return NextResponse.json({ error: 'A screenshot is too large.' }, { status: 413 });
       }
       attachments.push({ kind: 'screenshot', contentType: 'image/png', base64: m[2]! });
     }

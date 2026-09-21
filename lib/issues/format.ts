@@ -19,8 +19,8 @@ export interface ParsedIssue {
   labels: string[];
   body: string;
   context: Record<string, unknown> | null;
-  /** The screenshot, when one was filed. Rendered separately from the prose. */
-  screenshot: string | null;
+  /** Screenshots, when any were filed. Rendered separately from the prose. */
+  screenshots: string[];
   /** Every file filed with this issue, relative to the issues directory. */
   attachments: string[];
 }
@@ -51,15 +51,19 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
   }
 
   const str = (k: string, d = ''): string => (typeof fields[k] === 'string' ? (fields[k] as string) : d);
-  const screenshot = str('screenshot') || str('attachment') || null;
+  // `screenshot:` (singular) and `attachment:` are the earlier spellings, still read.
+  const legacy = str('screenshot') || str('attachment');
+  const screenshots = Array.isArray(fields['screenshots'])
+    ? (fields['screenshots'] as string[])
+    : legacy ? [legacy] : [];
   const attachments = Array.isArray(fields['attachments'])
     ? (fields['attachments'] as string[])
-    : screenshot ? [screenshot] : [];
-  // The screenshot link in the prose is a rendering of the `screenshot` field for anyone
-  // reading the file in an editor. The app shows the picture itself, so it is not prose.
-  const { body, context } = splitContext(
-    screenshot ? rest.replace(`![Screenshot](${screenshot})`, '') : rest,
-  );
+    : [...screenshots];
+  // The screenshot links in the prose render the `screenshots` field for anybody reading
+  // the file in an editor. The app shows the pictures themselves, so they are not prose.
+  let trimmed = rest;
+  for (const shot of screenshots) trimmed = trimmed.replace(`![Screenshot](${shot})`, '');
+  const { body, context } = splitContext(trimmed);
 
   return {
     id: str('id', fallbackId),
@@ -71,7 +75,7 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
     page: str('page', ''),
     created: str('created', ''),
     labels: Array.isArray(fields['labels']) ? (fields['labels'] as string[]) : [],
-    screenshot,
+    screenshots,
     attachments,
     body,
     context,
@@ -113,15 +117,15 @@ export function serializeIssue(issue: ParsedIssue): string {
     `page: ${quote(issue.page)}`,
     `created: ${issue.created}`,
     `labels: [${issue.labels.join(', ')}]`,
-    ...(issue.screenshot ? [`screenshot: ${quote(issue.screenshot)}`] : []),
+    ...(issue.screenshots.length > 0 ? [`screenshots: [${issue.screenshots.join(', ')}]`] : []),
     ...(issue.attachments.length > 0 ? [`attachments: [${issue.attachments.join(', ')}]`] : []),
     '---',
     '',
     issue.body.trim(),
     '',
   ];
-  if (issue.screenshot) {
-    lines.push(`![Screenshot](${issue.screenshot})`);
+  for (const shot of issue.screenshots) {
+    lines.push(`![Screenshot](${shot})`);
     lines.push('');
   }
   if (issue.context) {

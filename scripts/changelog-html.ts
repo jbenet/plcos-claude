@@ -28,7 +28,9 @@ function inline(src: string): string {
         case 'strong': return `<strong>${esc(s.text)}</strong>`;
         case 'em': return `<em>${esc(s.text)}</em>`;
         case 'image':
-          return `<img src="${esc(imageSrc(s.href ?? ''))}" alt="${esc(s.text)}" loading="lazy" decoding="async">`;
+          // A standalone image gets the wide wrapper too — several entries carry one
+          // outside a figure table, and those are the ones worth widening the window for.
+          return `<span class="shotwide"><img src="${esc(imageSrc(s.href ?? ''))}" alt="${esc(s.text)}" loading="lazy" decoding="async"></span>`;
         case 'link': {
           const href = s.href ?? '';
           return href.startsWith('http')
@@ -207,7 +209,21 @@ async function main() {
   td{padding:11px 14px;border-bottom:1px solid var(--hair);vertical-align:top}
   tr:last-child td{border-bottom:0}
 
-  .figures{display:grid;gap:26px;margin:4px 0 22px}
+  /* Prose stays at a readable measure; screenshots break out of it, because the reason
+     somebody widens the window is to see the screenshot. */
+  .figures{display:grid;gap:26px;margin:4px 0 22px;
+           width:min(1560px,calc(100vw - 40px));
+           margin-inline:calc(50% - min(780px,calc(100vw - 40px))/2 - (min(1560px,calc(100vw - 40px)) - min(780px,calc(100vw - 40px)))/2)}
+  .shotwide{width:min(1560px,calc(100vw - 40px));
+            margin-inline:calc(50% - min(780px,calc(100vw - 40px))/2 - (min(1560px,calc(100vw - 40px)) - min(780px,calc(100vw - 40px)))/2)}
+  figure img,.shotwide img{cursor:zoom-in}
+  /* the lightbox */
+  #lb{position:fixed;inset:0;background:rgba(10,10,9,.92);display:none;
+      align-items:center;justify-content:center;padding:20px;z-index:50;cursor:zoom-out}
+  #lb.on{display:flex}
+  #lb img{max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  #lb .hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);color:#B9B4A8;
+            font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
   figure{margin:0}
   figure img{display:block;width:100%;height:auto;border:1px solid var(--line);
              border-radius:8px;background:var(--surface)}
@@ -248,6 +264,34 @@ async function main() {
     Screenshots are the ones captured at each stage.
   </div>
 </footer>
+
+<div id="lb" role="dialog" aria-label="Full size screenshot" aria-hidden="true">
+  <img alt="">
+  <span class="hint">Click anywhere or press Esc to close</span>
+</div>
+<script>
+/* Click a screenshot to see it full size. Twenty lines rather than a dependency: this
+   page has to open from a file:// URL with nothing installed. */
+(function () {
+  var lb = document.getElementById('lb');
+  var big = lb.querySelector('img');
+  function open(src, alt) {
+    big.src = src; big.alt = alt || '';
+    lb.classList.add('on'); lb.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+  function close() {
+    lb.classList.remove('on'); lb.setAttribute('aria-hidden', 'true');
+    big.removeAttribute('src'); document.body.style.overflow = '';
+  }
+  document.addEventListener('click', function (e) {
+    var img = e.target.closest('figure img, .shotwide img');
+    if (img) { open(img.currentSrc || img.src, img.alt); return; }
+    if (lb.classList.contains('on')) close();
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+})();
+</script>
 `;
 
   await writeFile(out, html, 'utf8');

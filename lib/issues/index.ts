@@ -51,8 +51,8 @@ export interface Issue extends Omit<IssueDraft, 'attachments'> {
   created: string;
   /** Where this issue actually lives — a repo path for files, a URL for GitHub. */
   location: string;
-  /** The screenshot, if one was filed. Rendered in its own card rather than inline. */
-  screenshot: string | null;
+  /** Screenshots, if any were filed. Rendered in their own card rather than inline. */
+  screenshots: string[];
   /** Every file filed with this issue, relative to the issues directory. */
   attachments: string[];
 }

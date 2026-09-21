@@ -29,6 +29,23 @@ export interface Capture {
 
 const MAX_WIDTH = 2000;
 
+/**
+ * A hard ceiling on a capture.
+ *
+ * `domToPng` inlines every image it can see, and the in-app changelog has a hundred and
+ * twenty-five screenshots on one page. It did not fail there — it ran until nobody was
+ * waiting any more, which left the feedback drawer hidden behind a capture that was never
+ * coming back. Anything that can hang has to be able to give up.
+ */
+const CAPTURE_TIMEOUT_MS = 12_000;
+
+function withTimeout<T>(work: Promise<T>, ms = CAPTURE_TIMEOUT_MS): Promise<T | null> {
+  return Promise.race([
+    work.catch(() => null),
+    new Promise<null>((resolve) => { setTimeout(() => resolve(null), ms); }),
+  ]);
+}
+
 function toPng(source: CanvasImageSource, w: number, h: number): string {
   const scale = Math.min(1, MAX_WIDTH / w);
   const canvas = document.createElement('canvas');
@@ -46,6 +63,7 @@ function toPng(source: CanvasImageSource, w: number, h: number): string {
 async function captureScreen(): Promise<string | null> {
   const md = navigator.mediaDevices;
   if (!md?.getDisplayMedia) return null;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 
   let stream: MediaStream | null = null;
   try {
@@ -89,6 +107,10 @@ export interface Region { x: number; y: number; w: number; h: number }
  * to draw the page and cut the rectangle out of it.
  */
 export async function captureRender(region?: Region): Promise<string | null> {
+  return withTimeout(renderNow(region));
+}
+
+async function renderNow(region?: Region): Promise<string | null> {
   try {
     const { domToPng } = await import('modern-screenshot');
     // Without this the clone renders in fallback metrics and every heading re-wraps.
@@ -105,8 +127,18 @@ export async function captureRender(region?: Region): Promise<string | null> {
         transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
         transformOrigin: 'top left',
       },
-      filter: (node: Node) =>
-        !(node instanceof Element && node.classList.contains('nocapture')),
+      timeout: 6000,
+      filter: (node: Node) => {
+        if (!(node instanceof Element)) return true;
+        if (node.classList.contains('nocapture')) return false;
+        // An image outside the viewport is not in the picture, and inlining it costs the
+        // same as one that is. This is what made the changelog page uncapturable.
+        if (node.tagName === 'IMG') {
+          const r = node.getBoundingClientRect();
+          if (r.bottom < 0 || r.top > h || r.right < 0 || r.left > w) return false;
+        }
+        return true;
+      },
     });
     if (!region) return full;
     return await crop(full, region, scale);
@@ -146,11 +178,32 @@ export async function capturePage(region?: Region): Promise<Capture | null> {
   };
 }
 
-/** Exact pixels, and a permission dialog. Only when somebody asks for it by name. */
-export async function capturePageExact(): Promise<Capture | null> {
-  const screen = await captureScreen();
-  if (screen) return { dataUrl: screen, method: 'screen', note: null };
-  return capturePage();
+/**
+ * Exact pixels, and a permission dialog.
+ *
+ * This is what the retake buttons use. The automatic capture is a redraw and can get the
+ * layout subtly wrong; this is the composited frame, so it cannot. It cannot redact either,
+ * which is the trade the person is making when they press the button.
+ */
+export async function capturePageExact(region?: Region): Promise<Capture | null> {
+  const screen = await withTimeout(captureScreen());
+  if (screen) {
+    /**
+     * The captured frame is already scaled to at most MAX_WIDTH across, and the region was
+     * drawn in CSS pixels — so the crop has to use the frame's own ratio rather than the
+     * device's.
+     */
+    const ratio = Math.min(1, MAX_WIDTH / window.innerWidth) * (window.devicePixelRatio || 1);
+    const cropped = region ? await withTimeout(crop(screen, region, ratio), 5000) : screen;
+    return {
+      dataUrl: cropped ?? screen,
+      method: 'screen',
+      note: 'The frame your browser composited. Exactly what was on the screen, including '
+        + 'anything the automatic capture leaves out.',
+    };
+  }
+  // Declined, unsupported, or too slow. Fall back rather than leaving them with nothing.
+  return capturePage(region);
 }
 
 export const METHOD_LABEL: Record<CaptureMethod, string> = {

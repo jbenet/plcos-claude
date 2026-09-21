@@ -40,7 +40,7 @@ export function fileIssueSink(dir: string): IssueSink {
     id: p.id, title: p.title, status: p.status, kind: p.kind, priority: p.priority,
     reporter: p.reporter, page: p.page, labels: p.labels, body: p.body,
     context: p.context, created: p.created, location: `${dir}/${file}`,
-    screenshot: p.screenshot, attachments: p.attachments,
+    screenshots: p.screenshots, attachments: p.attachments,
   });
 
   const find = async (id: string) => (await read()).find((r) => r.issue.id === id) ?? null;
@@ -63,19 +63,20 @@ export function fileIssueSink(dir: string): IssueSink {
        */
       const incoming = draft.attachments ?? [];
       const paths: string[] = [];
-      let screenshot: string | null = null;
+      const screenshots: string[] = [];
       if (incoming.length > 0) await mkdir(join(root, ATTACH), { recursive: true });
       // Images are numbered among images, so `0008-image-1.png` is the first one somebody
       // dropped rather than its index in an array they never see.
       let imageNo = 0;
+      let shotNo = 0;
       for (const a of incoming) {
         const name = a.kind === 'screenshot'
-          ? `${next}-screenshot.${EXT[a.contentType]}`
+          ? `${next}-screenshot${(shotNo += 1) === 1 ? '' : `-${shotNo}`}.${EXT[a.contentType]}`
           : `${next}-image-${(imageNo += 1)}.${EXT[a.contentType]}`;
         await writeFile(join(root, ATTACH, name), Buffer.from(a.base64, 'base64'));
         const rel = `${ATTACH}/${name}`;
         paths.push(rel);
-        if (a.kind === 'screenshot' && !screenshot) screenshot = rel;
+        if (a.kind === 'screenshot') screenshots.push(rel);
       }
 
       const offset = draft.tokenOffset ?? 0;
@@ -91,7 +92,7 @@ export function fileIssueSink(dir: string): IssueSink {
       const parsed: ParsedIssue = {
         ...rest,
         body,
-        screenshot,
+        screenshots,
         attachments: paths,
         id: next,
         status: 'open',

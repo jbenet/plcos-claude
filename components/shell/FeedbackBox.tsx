@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ShotEditor } from './ShotEditor';
-import { capturePage, METHOD_LABEL, type CaptureMethod, type Region } from '@/lib/capture';
+import {
+  capturePage, capturePageExact, METHOD_LABEL, type CaptureMethod, type Region,
+} from '@/lib/capture';
 import { RegionPicker } from './RegionPicker';
 import { MarkdownField, type DroppedImage } from '@/components/ui/MarkdownField';
 
@@ -40,32 +42,69 @@ export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }
   );
 }
 
+interface Shot {
+  id: string;
+  dataUrl: string;
+  method: CaptureMethod;
+  annotated: boolean;
+}
+
 function FeedbackDrawer({ onClose }: { onClose: () => void }) {
-  const [shot, setShot] = useState<string | null>(null);
-  const [method, setMethod] = useState<CaptureMethod | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  /**
+   * Screenshots are a list.
+   *
+   * The first is taken automatically when the box opens — a redraw, no dialog, and the
+   * feedback panel redacted out of it. The buttons **add** rather than replace, because a
+   * second shot of a different part of the page is a second piece of evidence, and one
+   * somebody has already annotated must not vanish because they pressed the button again.
+   */
+  const [shots, setShots] = useState<Shot[]>([]);
   const [shooting, setShooting] = useState(false);
   const [picking, setPicking] = useState(false);
-  const onShot = setShot;
+  const [failed, setFailed] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const seeded = useRef(false);
+
+  const add = (dataUrl: string, method: CaptureMethod) => {
+    setShots((prev) => [
+      ...prev,
+      { id: `${Date.now()}-${prev.length}`, dataUrl, method, annotated: false },
+    ]);
+  };
+
+  /** The automatic one. Runs once, and its failure is silent — it was never asked for. */
+  useEffect(() => {
+    if (seeded.current) return;
+    seeded.current = true;
+    void capturePage().then((c) => { if (c) add(c.dataUrl, c.method); });
+  }, []);
 
   /**
-   * Take the picture with the drawer hidden, so the panel is not in its own screenshot.
-   * The `nocapture` filter already drops it, and hiding it also lets the reporter see the
-   * page they are drawing a box on.
+   * A retake, using the browser's own screen capture. It shows a permission dialog and it
+   * cannot redact — which is exactly the trade somebody makes when the automatic redraw has
+   * got the layout wrong.
    */
   const take = (region?: Region) => {
     setShooting(true);
     setPicking(false);
-    // One frame for the hidden class to land before the clone is made.
+    setFailed(false);
     requestAnimationFrame(() => {
-      void capturePage(region).then((c) => {
-        setShot(c?.dataUrl ?? null);
-        setMethod(c?.method ?? null);
-        setNote(c?.note ?? null);
-        setShooting(false);
-      });
+      void capturePageExact(region)
+        .then((c) => {
+          if (c) add(c.dataUrl, c.method);
+          else setFailed(true);
+        })
+        .catch(() => setFailed(true))
+        // Whatever happens, the drawer comes back. A capture that can hang has to be able
+        // to give up, and the panel must never be left hidden behind one.
+        .finally(() => setShooting(false));
     });
   };
+
+  const drop = (id: string) => setShots((prev) => prev.filter((x) => x.id !== id));
+  const replace = (id: string, dataUrl: string) =>
+    setShots((prev) => prev.map((x) => (x.id === id ? { ...x, dataUrl, annotated: true } : x)));
+
   const path = usePathname();
   const params = useSearchParams();
   const [title, setTitle] = useState('');
@@ -76,17 +115,14 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
   const [result, setResult] = useState<{ id: string; location: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [includeShot, setIncludeShot] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [annotated, setAnnotated] = useState(false);
   const [images, setImages] = useState<DroppedImage[]>([]);
 
   /**
    * The drawer and the editor are portalled to <body>.
    *
    * They are rendered from inside the rail, and `.rail` is `position: sticky`, which makes
-   * its own stacking context — so a z-index of 60 in there still painted underneath the
-   * topbar's z-index of 5. A Playwright click on the editor's Done button found the pane
-   * toggle instead, which is exactly what a person's click would have found.
+   * its own stacking context — so a z-index of 60 in there painted underneath the topbar's
+   * z-index of 5.
    */
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -106,14 +142,14 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           title, body, kind, priority, page: path, context,
-          screenshot: includeShot && shot ? shot : undefined,
+          screenshots: includeShot ? shots.map((x) => x.dataUrl) : [],
           images: images.map((i) => ({ name: i.name, dataUrl: i.dataUrl })),
           /**
            * The server numbers attachments with the screenshot first, so a body written
            * against `attachment:1` would point at the screenshot once the box is ticked.
            * The offset is applied here rather than renumbering as the checkbox moves.
            */
-          imageOffset: includeShot && shot ? 1 : 0,
+          imageOffset: includeShot ? shots.length : 0,
         }),
       });
       const json = (await res.json()) as { id?: string; location?: string; error?: string };
@@ -128,11 +164,11 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
 
   const ui = (
     <>
-      {editing && shot && (
+      {editingId && (
         <ShotEditor
-          src={shot}
-          onCancel={() => setEditing(false)}
-          onSave={(png) => { onShot(png); setAnnotated(true); setEditing(false); }}
+          src={shots.find((x) => x.id === editingId)!.dataUrl}
+          onCancel={() => setEditingId(null)}
+          onSave={(png) => { replace(editingId, png); setEditingId(null); }}
         />
       )}
       {picking && (
@@ -173,57 +209,95 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
             <div className="ctx">{JSON.stringify(context, null, 2)}</div>
 
             <div className="lbl" style={{ marginTop: 14 }}>
-              {shot ? 'Screenshot' : 'Add a screenshot'}
+              Screenshots{shots.length > 0 ? ` · ${shots.length}` : ''}
             </div>
-            {!shot ? (
-              <>
-                <div className="shotpick">
-                  <button className="btn" onClick={() => take()} disabled={shooting}>
-                    <span className="gl" aria-hidden>▢</span>
-                    {shooting ? 'Drawing…' : 'Whole page'}
-                  </button>
-                  <button className="btn" onClick={() => setPicking(true)} disabled={shooting}>
-                    <span className="gl" aria-hidden>⌖</span>
-                    Pick a part
-                  </button>
-                </div>
-                <p className="mdhint" style={{ border: 0, padding: '7px 0 0' }}>
-                  No permission prompt: your browser draws the page from its own markup, and this
-                  panel is left out of it. Optional — the complaint files without one.
-                </p>
-              </>
-            ) : (
-              <>
-                <div className={`shotthumb${includeShot ? '' : ' off'}`}>
+
+            <div className={`shotlist${includeShot ? '' : ' off'}`}>
+              {shots.map((x, i) => (
+                <div className="shotthumb" key={x.id}>
                   <button
-                    onClick={() => setEditing(true)}
-                    aria-label="Open the screenshot to annotate it"
+                    className="shotopen"
+                    onClick={() => setEditingId(x.id)}
+                    aria-label={`Annotate screenshot ${i + 1}`}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={shot} alt="The page as it looked when you pressed feedback" />
+                    <img src={x.dataUrl} alt={`Screenshot ${i + 1}`} />
                     <span className="pencil" aria-hidden>✎ Annotate</span>
                   </button>
-                  {annotated && <span className="flag f-ok annotated">annotated</span>}
+                  <button
+                    className="shotx"
+                    onClick={() => drop(x.id)}
+                    aria-label={`Remove screenshot ${i + 1}`}
+                    title="Remove"
+                  >
+                    ×
+                  </button>
+                  <div className="shotmeta">
+                    <span className={`flag ${x.method === 'screen' ? 'f-ok' : 'f-mute'}`}>
+                      {METHOD_LABEL[x.method]}
+                    </span>
+                    {x.annotated && <span className="flag f-ok">annotated</span>}
+                    {x.method === 'render' && (
+                      <span
+                        className="misaligned"
+                        tabIndex={0}
+                        title={
+                          'The automatic capture is your browser redrawing the page from its own '
+                          + 'markup. It needs no permission and it leaves this panel out — but it '
+                          + 'can get spacing, wrapping or a form control subtly wrong.\n\n'
+                          + 'If it looks wrong, press Whole page or Pick a part below. Those use '
+                          + "your browser's own screen capture, so they are exactly what you see. "
+                          + 'Your browser will ask permission first, and that capture cannot leave '
+                          + 'this panel out.'
+                        }
+                      >
+                        Mis-aligned?
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <label className="shotcheck">
-                  <input
-                    type="checkbox"
-                    checked={includeShot}
-                    onChange={(e) => setIncludeShot(e.target.checked)}
-                  />
-                  <span>
-                    Include screenshot
-                    <small>
-                      <b>{method ? METHOD_LABEL[method] : 'Captured'}.</b>{' '}
-                      {note ?? 'Exactly the pixels that were on your screen.'} Click it to draw on
-                      it.{' '}
-                      <button className="linkish" onClick={(e) => { e.preventDefault(); setShot(null); }}>
-                        Take another
-                      </button>
-                    </small>
-                  </span>
-                </label>
-              </>
+              ))}
+            </div>
+
+            <div className="shotpick">
+              <button className="btn" onClick={() => take()} disabled={shooting}>
+                <span className="gl" aria-hidden>▢</span>
+                {shooting ? 'Capturing…' : 'Whole page'}
+              </button>
+              <button className="btn" onClick={() => setPicking(true)} disabled={shooting}>
+                <span className="gl" aria-hidden>⌖</span>
+                Pick a part
+              </button>
+            </div>
+            <p className="mdhint" style={{ border: 0, padding: '7px 0 0' }}>
+              {shots.length === 0
+                ? 'Optional — the complaint files without one.'
+                : 'Adds another; it does not replace what is already here.'}
+              {' '}Both buttons use your browser&rsquo;s screen capture for exact pixels, and it
+              will ask permission.
+            </p>
+            {failed && (
+              <p className="mdhint refused">
+                No capture came back — declined, unsupported, or it took too long. Everything else
+                still files.
+              </p>
+            )}
+
+            {shots.length > 0 && (
+              <label className="shotcheck">
+                <input
+                  type="checkbox"
+                  checked={includeShot}
+                  onChange={(e) => setIncludeShot(e.target.checked)}
+                />
+                <span>
+                  Include {shots.length === 1 ? 'the screenshot' : `all ${shots.length} screenshots`}
+                  <small>
+                    Filed beside the issue as PNGs in this repository. Click one to draw on it;
+                    the × removes it.
+                  </small>
+                </span>
+              </label>
             )}
 
             <label className="field">

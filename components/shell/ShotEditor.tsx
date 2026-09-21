@@ -7,7 +7,10 @@ type Tool = 'pen' | 'arrow' | 'box' | 'text';
 interface Stroke { tool: 'pen'; colour: string; width: number; points: Array<[number, number]> }
 interface Arrow { tool: 'arrow'; colour: string; width: number; from: [number, number]; to: [number, number] }
 interface Box { tool: 'box'; colour: string; width: number; from: [number, number]; to: [number, number] }
-interface Label { tool: 'text'; colour: string; size: number; at: [number, number]; text: string }
+interface Label {
+  tool: 'text'; colour: string; size: number; at: [number, number]; text: string;
+  bold: boolean;
+}
 type Mark = Stroke | Arrow | Box | Label;
 
 const COLOURS = [
@@ -23,6 +26,13 @@ const TOOLS: Array<{ id: Tool; glyph: string; name: string }> = [
   { id: 'arrow', glyph: '↗', name: 'Point at something' },
   { id: 'box', glyph: '▢', name: 'Box it' },
   { id: 'text', glyph: 'T', name: 'Add a label' },
+];
+
+const SIZES: Array<{ label: string; title: string; scale: number }> = [
+  { label: 'S', title: 'Small', scale: 0.7 },
+  { label: 'M', title: 'Medium', scale: 1 },
+  { label: 'L', title: 'Large', scale: 1.5 },
+  { label: 'XL', title: 'Extra large', scale: 2.2 },
 ];
 
 const isUndo = (e: KeyboardEvent) =>
@@ -98,6 +108,9 @@ export function ShotEditor({
   const [colour, setColour] = useState(COLOURS[0]!.id);
   const [drawing, setDrawing] = useState<Mark | null>(null);
   const [typing, setTyping] = useState<{ at: [number, number]; text: string } | null>(null);
+  /** Text settings live outside the draft so they survive between labels. */
+  const [textScale, setTextScale] = useState(1);
+  const [bold, setBold] = useState(true);
   const [ready, setReady] = useState(false);
 
   // Load the base image once; every redraw paints it first.
@@ -151,7 +164,7 @@ export function ShotEditor({
         ctx.closePath();
         ctx.fill();
       } else {
-        ctx.font = `600 ${m.size}px "IBM Plex Sans", system-ui, sans-serif`;
+        ctx.font = `${m.bold ? 600 : 400} ${m.size}px "IBM Plex Sans", system-ui, sans-serif`;
         ctx.textBaseline = 'top';
         const w = ctx.measureText(m.text).width;
         ctx.fillStyle = 'rgba(255,255,255,.92)';
@@ -178,7 +191,16 @@ export function ShotEditor({
   };
 
   const width = () => Math.max(3, Math.round((canvasRef.current?.width ?? 1400) / 420));
-  const fontSize = () => Math.max(16, Math.round((canvasRef.current?.width ?? 1400) / 58));
+  /** Base size scales with the image so a label reads the same on any capture. */
+  const baseSize = () => Math.max(14, Math.round((canvasRef.current?.width ?? 1400) / 58));
+  const fontSize = () => Math.round(baseSize() * textScale);
+  /** The same size in screen pixels, so the floating field matches what will be drawn. */
+  const screenFontSize = () => {
+    const c = canvasRef.current;
+    if (!c) return 15;
+    const shown = c.getBoundingClientRect().width || c.width;
+    return Math.max(11, Math.round(fontSize() * (shown / c.width)));
+  };
 
   const down = (e: React.PointerEvent) => {
     if (!ready) return;
@@ -207,7 +229,10 @@ export function ShotEditor({
 
   const commitText = () => {
     if (typing && typing.text.trim()) {
-      addMark({ tool: 'text', colour, size: fontSize(), at: typing.at, text: typing.text.trim() });
+      addMark({
+        tool: 'text', colour, size: fontSize(), at: typing.at,
+        text: typing.text.trim(), bold,
+      });
     }
     setTyping(null);
   };
@@ -219,7 +244,11 @@ export function ShotEditor({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const inText = e.target instanceof HTMLInputElement;
-      if (e.key === 'Escape' && !inText) { onCancel(); return; }
+      if (e.key === 'Escape') {
+        // Escape inside the text field cancels the label; outside it closes the editor.
+        if (!inText) onCancel();
+        return;
+      }
       if (inText) return;
       if (isUndo(e)) { e.preventDefault(); undo(); }
       else if (isRedo(e)) { e.preventDefault(); redo(); }
@@ -295,23 +324,71 @@ export function ShotEditor({
             onPointerCancel={up}
           />
           {typing && (
-            <input
-              className="settext"
-              autoFocus
-              value={typing.text}
-              placeholder="Type, then Enter"
+            <div
+              className="settextbox"
               style={{
                 left: `${(typing.at[0] / (canvasRef.current?.width ?? 1)) * 100}%`,
                 top: `${(typing.at[1] / (canvasRef.current?.height ?? 1)) * 100}%`,
-                color: colour,
               }}
-              onChange={(e) => setTyping({ ...typing, text: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitText();
-                if (e.key === 'Escape') setTyping(null);
-              }}
-              onBlur={commitText}
-            />
+            >
+              {/* The field looks like the label it is about to become: same colour, same
+                  weight, same size on screen. A text tool you have to imagine is a text
+                  tool people place twice. */}
+              <input
+                className="settext"
+                autoFocus
+                value={typing.text}
+                placeholder="Type, then Enter"
+                style={{ color: colour, fontWeight: bold ? 600 : 400, fontSize: screenFontSize() }}
+                onChange={(e) => setTyping({ ...typing, text: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitText();
+                  if (e.key === 'Escape') setTyping(null);
+                }}
+              />
+              <div
+                className="settextbar"
+                // Keeps the field focused while the controls are pressed.
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {SIZES.map((sz) => (
+                  <button
+                    key={sz.label}
+                    className={textScale === sz.scale ? 'on' : ''}
+                    onClick={() => setTextScale(sz.scale)}
+                    aria-pressed={textScale === sz.scale}
+                    title={`${sz.title} text`}
+                  >
+                    {sz.label}
+                  </button>
+                ))}
+                <button
+                  className={bold ? 'on' : ''}
+                  onClick={() => setBold(!bold)}
+                  aria-pressed={bold}
+                  title="Bold"
+                  style={{ fontWeight: 700 }}
+                >
+                  B
+                </button>
+                <span className="sep" />
+                {COLOURS.map((c) => (
+                  <button
+                    key={c.id}
+                    className={`swatch${c.id === colour ? ' on' : ''}`}
+                    style={{ background: c.id }}
+                    onClick={() => setColour(c.id)}
+                    aria-pressed={c.id === colour}
+                    title={c.name}
+                    aria-label={c.name}
+                  />
+                ))}
+                <span className="sep" />
+                <button onClick={commitText} aria-label="Place the label" title="Place it">
+                  Place
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

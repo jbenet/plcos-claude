@@ -2369,3 +2369,74 @@ the picture while you type and swaps them back when it serialises, so the stored
 contains a data URL and **the sink still owns every filename.**
 
 **43 of 43 properties hold.** 48 routes return 200 from a cold start.
+
+---
+
+## N19 — The capture that never came back
+
+**Shipped.** The hang is fixed, the automatic screenshot is back, screenshots are a list,
+and the text tool has a floating field with size, weight and colour.
+
+| | |
+|---|---|
+| ![Seeded](docs/changelog/shots/n19/01-seeded-and-buttons.png) | **One screenshot already there** when the box opens, with **Mis-aligned?** beside it and two buttons to retake. |
+| ![Two](docs/changelog/shots/n19/02-two-screenshots.png) | **Screenshots add up.** A whole-page redraw and a picked region, each with its own × and its own Annotate. |
+| ![Text tool](docs/changelog/shots/n19/03-text-tool.png) | **The label looks like the label.** Same colour, same weight, same size on screen as the one about to be drawn. |
+| ![Placed](docs/changelog/shots/n19/04-placed-label.png) | **Placed, at size L, with an arrow.** |
+
+### The bug
+
+`/dev/changelog` has a hundred and twenty-five screenshots on one page. `domToPng` inlines
+every image it can reach, so it did not fail there — **it ran until nobody was waiting any
+more.** The drawer hides itself during a capture so it stays out of its own picture, and
+that hidden state was only ever cleared by a promise that never resolved.
+
+Three fixes, and the first one is the one that matters:
+
+1. **Every capture has a hard ceiling and a `finally`.** Twelve seconds, then it gives up.
+   Anything that can hang has to be able to give up, and the panel must never be left
+   hidden behind one. The box says so rather than sitting there.
+2. **Images outside the viewport are skipped.** They are not in the picture and inlining
+   one costs the same as inlining one that is. This is what made the changelog page
+   uncapturable rather than merely slow.
+3. **A capture that comes back empty is reported.** Declined, unsupported, or too slow —
+   the complaint still files, and the box says what happened.
+
+### The automatic screenshot is back, and the buttons do something different
+
+Taking nothing on open made the buttons easy to miss, and you were right that it is the
+wrong default. So:
+
+- **On open**, the redraw runs. No dialog, the panel redacted out of it, one screenshot
+  already in the box.
+- **The buttons retake with the browser's own screen capture** — exact pixels, and a
+  permission prompt. That is the trade, and it is now something somebody chooses rather
+  than something that happens to them.
+
+Beside every automatic capture sits **Mis-aligned?**, which on hover explains that the
+redraw can get spacing, wrapping or a form control subtly wrong, and that the buttons below
+fix it with a real capture that will ask permission and cannot leave the panel out.
+
+### Screenshots are a list
+
+They **add**; they never replace. A second shot of a different part of the page is a second
+piece of evidence, and one somebody has already annotated must not vanish because they
+pressed the button again. Each carries its own × and its own annotate button, and the
+frontmatter grew from `screenshot:` to `screenshots: [...]` — the singular spelling is still
+read, so issues 0007 and 0008 still render.
+
+### A text tool you can see
+
+The label now floats with its own bar: **S · M · L · XL**, a bold toggle, the colour swatches
+and **Place**. The field renders at the size, weight and colour of the label it is about to
+become, because a text tool you have to imagine is a text tool people place twice.
+
+Escape inside the field cancels the label; Escape outside it still closes the editor.
+
+### Also
+
+`npm run dev` binds `0.0.0.0`, so a phone or another laptop on the same network can open it
+— `allowedDevOrigins` lists the private ranges, which is the only place this is ever served
+from.
+
+**43 of 43 properties hold.**

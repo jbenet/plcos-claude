@@ -24,7 +24,17 @@ function Spans({ src }: { src: string }) {
         if (s.kind === 'image') {
           return (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} className="clshot" src={imageSrc(s.href ?? '')} alt={s.text} loading="lazy" />
+            <a
+              key={i}
+              className="clshotlink"
+              href={imageSrc(s.href ?? '')}
+              target="_blank"
+              rel="noreferrer"
+              title="Open full size"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="clshot" src={imageSrc(s.href ?? '')} alt={s.text} loading="lazy" />
+            </a>
           );
         }
         if (s.kind === 'link') {

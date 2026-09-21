@@ -165,6 +165,83 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N20: [
+    { name: '01-changelog-wide', path: '/dev/changelog' },
+  ],
+  N19: [
+    {
+      name: '01-seeded-and-buttons',
+      path: '/neurotech/strategy',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        await page.getByPlaceholder("Guard message doesn't say whose ask is blocking").fill(
+          'Leverage should say what it would be if the effort estimate is wrong',
+        );
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: '02-two-screenshots',
+      path: '/neurotech/strategy',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        await page.getByRole('button', { name: 'Pick a part' }).click();
+        await page.waitForTimeout(500);
+        await page.mouse.move(420, 300);
+        await page.mouse.down();
+        await page.mouse.move(1180, 560, { steps: 14 });
+        await page.mouse.up();
+        await page.waitForTimeout(3200);
+      },
+    },
+    {
+      name: '03-text-tool',
+      path: '/neurotech/strategy',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        await page.getByRole('button', { name: 'Annotate screenshot 1' }).click();
+        await page.waitForTimeout(700);
+        await page.getByRole('button', { name: 'Add a label' }).click();
+        const box = await page.locator('canvas.setcanvas').boundingBox();
+        if (box) await page.mouse.click(box.x + box.width * 0.30, box.y + box.height * 0.42);
+        await page.waitForTimeout(400);
+        await page.getByRole('button', { name: /^L$/ }).click();
+        await page.locator('input.settext').click();
+        await page.keyboard.type('what if this is 5 days?');
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: '04-placed-label',
+      path: '/neurotech/strategy',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        await page.getByRole('button', { name: 'Annotate screenshot 1' }).click();
+        await page.waitForTimeout(700);
+        await page.getByRole('button', { name: 'Add a label' }).click();
+        const box = await page.locator('canvas.setcanvas').boundingBox();
+        if (box) {
+          await page.mouse.click(box.x + box.width * 0.30, box.y + box.height * 0.42);
+          await page.waitForTimeout(400);
+          await page.getByRole('button', { name: /^L$/ }).click();
+          await page.locator('input.settext').click();
+          await page.keyboard.type('what if this is 5 days?');
+          await page.getByRole('button', { name: 'Place the label' }).click();
+          await page.waitForTimeout(300);
+          await page.getByRole('button', { name: 'Point at something' }).click();
+          await page.mouse.move(box.x + box.width * 0.44, box.y + box.height * 0.44);
+          await page.mouse.down();
+          await page.mouse.move(box.x + box.width * 0.62, box.y + box.height * 0.36, { steps: 10 });
+          await page.mouse.up();
+        }
+        await page.waitForTimeout(400);
+      },
+    },
+  ],
   N18: [
     {
       name: '01-no-screenshot-yet',

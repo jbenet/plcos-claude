@@ -91,19 +91,24 @@ export default async function IssueDetail({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      {issue.screenshot && (
+      {issue.screenshots.length > 0 && (
         <div className="card">
           <div className="chead">
             <h2>The page as it looked</h2>
-            <span className="lbl">{issue.screenshot}</span>
+            <span className="lbl">
+              {issue.screenshots.length} screenshot{issue.screenshots.length === 1 ? '' : 's'}
+            </span>
           </div>
           <div className="cbody">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              className="issueshot"
-              src={`/issues/shot/${issue.screenshot}`}
-              alt={`Screenshot filed with issue ${issue.id}`}
-            />
+            {issue.screenshots.map((shot, i) => (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                key={shot}
+                className="issueshot"
+                src={`/issues/shot/${shot}`}
+                alt={`Screenshot ${i + 1} filed with issue ${issue.id}`}
+              />
+            ))}
           </div>
           <p className="cover">
             <b>Captured in the reporter&rsquo;s browser when they pressed the button</b>, before
