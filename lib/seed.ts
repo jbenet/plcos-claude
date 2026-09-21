@@ -79,9 +79,12 @@ export async function seed(db: Db): Promise<Record<string, number>> {
   const standup = await seedStandup(db);
   const { seedPlays } = await import('./seed-plays');
   const plays = await seedPlays(db);
+  /* Last, because it leans on every table above it. */
+  const { seedFloor } = await import('./seed-floor');
+  const floor = await seedFloor(db);
   return {
     users: users.length, vehicles: vehicles.length, sources: sources.length,
-    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring, signals: signals.inserted, ...meetings, ...content, ...agents, ...compliance, ...library, ...fit, ...standup, ...plays,
+    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring, signals: signals.inserted, ...meetings, ...content, ...agents, ...compliance, ...library, ...fit, ...standup, ...plays, ...floor,
   };
 }
 

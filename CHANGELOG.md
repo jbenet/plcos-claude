@@ -2780,3 +2780,88 @@ wants cash arriving to be a recorded event rather than a column. **0002**, **000
 
 **43 of 43 properties hold.**
 
+
+---
+
+## N28 — The factory floor
+
+**Shipped.** One view of everything trying to happen, drawn five different ways, for every
+vehicle and for all of PL Capital at once.
+
+| | |
+|---|---|
+| ![The line](docs/changelog/shots/n28/01-the-line.png) | **The line.** Seven stations, work sitting in each, lanes by vehicle. |
+| ![The load](docs/changelog/shots/n28/02-the-load.png) | **The load.** Who is carrying what, and who is over their limit. |
+| ![The flow](docs/changelog/shots/n28/03-the-flow.png) | **The flow.** Where work stops moving, with the drop-off drawn. |
+| ![The clock](docs/changelog/shots/n28/04-the-clock.png) | **The clock.** The fortnight ahead, and the pile with no date on it. |
+| ![The room](docs/changelog/shots/n28/05-the-room.png) | **The room.** Instruments. The one you could read from across a room. |
+| ![One vehicle](docs/changelog/shots/n28/06-one-vehicle.png) | **Per vehicle**, lanes become people instead of raises. |
+
+### Five, on purpose
+
+They are experiments, and they are not variations on a theme. Each answers a question the
+other four answer badly, and the tab strip states the question rather than naming a chart
+type, because **a picture nobody can state the question for is decoration**.
+
+- **The line** — the literal factory. Seven columns: the six rungs of the consent ladder plus
+  one in front of them for work that is sourced and has no rung yet. Lanes are vehicles
+  across PL Capital and people inside one vehicle, because at that point the question stops
+  being "which raise" and starts being "who".
+- **The load** — stage ignored entirely, sorted by person. A column per owner, hard and soft
+  side by side and never stacked. It marks anyone over six things in flight, and counts
+  what is stalled underneath, because a person holding eleven stalled items is not busy,
+  they are stuck, and a list makes those look identical.
+- **The flow** — the ladder as a funnel with the drop-off drawn as a pool hanging under each
+  station. Currently 20 → 10 → 5 → 2, then a disconnected 10 and 8 at the end, which the
+  page explains rather than hides: those closed before any of this existed and their early
+  rungs were never written down.
+- **The clock** — three weeks forward, one mark per dated record, and beside it the count of
+  work with **no date at all**. That number is the point of the view. Late things get
+  noticed; unscheduled things do not.
+- **The room** — a card per vehicle, the same eight numbers on each. Nothing here encodes
+  anything a number could not, which is why it is the one that is hardest to misread.
+
+### One vocabulary across all five
+
+Switching tabs must not mean relearning the colours, so the encoding is shared and stated in
+the inspector: **size is money at stake** on a square-root scale, **fill strength is how
+recently anything was recorded**, and **hue is reserved for exceptions** — clay for blocked,
+amber for dated-soon, green for cash in the bank. A floor with nothing wrong on it has almost
+no colour on it. Every one of those also appears as a word or a glyph on the mark, because
+colour is never the only signal.
+
+Two rules shaped it more than any design decision:
+
+- **An item nobody has a number for is drawn at the minimum width with a `?`.** Nine of the
+  thirty-three are in that state. Sizing them by a guess would have made the picture prettier
+  and the page a liar.
+- **Hard and soft never share a bar, a stack or a total.** The load view puts them in two
+  columns rather than stacking them, because a stack is a blended total drawn instead of
+  written, and it is the same lie either way.
+
+### The list is not a fallback
+
+Under every tab is the same floor as a sortable table, where every dimension the canvases
+encode is a column in words — including the *basis* for each one. `$18M · hard · Signed:
+sub-doc:brenner-v2`. `69d · Wired · cash landed 69 days ago, finished, not stalled`. It is
+the version you can copy into an email, and it is the version that survives being wrong
+about colour.
+
+### Nothing is stored
+
+`lib/floor.ts` reads eleven modules at request time and keeps nothing. A wall display with
+its own copy of the state is a wall display that disagrees with the pages people act on. The
+cost is stated on the page: anything nobody wrote down is not on the floor, and **the floor
+looking calm is not evidence that it is**.
+
+### More synthetic work to look at
+
+The earlier seeds are teaching fixtures — six pursuits, each making one rule visible. That is
+too few to design a wall display against, so `lib/seed-floor.ts` adds fourteen more pursuits
+across every vehicle, eight scheduled meetings, four agent runs in flight and two more
+capital-pool budgets. Its dates are **relative to when the database is seeded**, unlike every
+other seed here: a floor whose newest record is four months old looks calm, and calm is the
+one reading these views must never give by accident.
+
+**43 of 43 properties hold** on the richer data, including the conserved capital pool and
+every soft/hard separation.

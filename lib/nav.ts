@@ -51,6 +51,9 @@ export function moduleHref(mod: NavModule, vehicleSlug: string | null): string {
  * whichever vehicle is selected.
  */
 export const VEHICLE_MODULES: NavModule[] = [
+  m('F', 'Factory floor', 'floor', 'L9',
+    'Everything trying to happen at once, drawn five ways: stations, people, drop-off, the fortnight ahead, instruments.',
+    true, undefined, true),
   m('S', 'Strategy', 'strategy', 'L9',
     'Where the raise stands, the option space against it, and a place to commit.',
     true, undefined, true),
@@ -110,6 +113,7 @@ export const OVERVIEW_SECTION: NavSection = {
   title: 'Overview',
   links: [
     { label: 'Today', href: '/today' },
+    { label: 'Factory floor', href: '/all/floor' },
     { label: 'Approvals', href: '/approvals' },
     { label: 'Issues', href: '/issues' },
     { label: 'Daily standup', href: '/standup' },
