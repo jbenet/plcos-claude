@@ -2865,3 +2865,80 @@ one reading these views must never give by accident.
 
 **43 of 43 properties hold** on the richer data, including the conserved capital pool and
 every soft/hard separation.
+
+---
+
+## N29 — Five more, about the space rather than the state
+
+**Shipped.** The first five views draw what is happening. These five draw the ground it
+happens on, the machine it moves through, the moves available and what they cost.
+
+| | |
+|---|---|
+| ![The map](docs/changelog/shots/n29/01-the-map.png) | **The map.** Every name placed by capacity and fit — and 22 of 28 held back in the fog, because nobody has scored them. |
+| ![The plant](docs/changelog/shots/n29/02-the-plant.png) | **The plant.** The whole machine with a gauge at every station and a valve at every approval. |
+| ![The moves](docs/changelog/shots/n29/03-the-moves.png) | **The moves.** A build menu: what each move needs, costs and buys, locked entries included. |
+| ![The grid](docs/changelog/shots/n29/04-the-grid.png) | **The grid.** Targets against levers. A row with no open cell is the finding. |
+| ![The economy](docs/changelog/shots/n29/05-the-economy.png) | **The economy.** What is about to run out. It is almost never money. |
+
+### The fog is the feature
+
+The map places every name on two axes from the selection rubric — **can they write it** and
+**does the mandate match** — with the cheque as the size. Six of twenty-eight can be placed.
+The other twenty-two sit in a strip underneath, labelled, because placing an unscored name
+anywhere at all would turn *"we have not looked"* into *"we looked and it was mediocre"*.
+Those are opposite facts and an RTS minimap already has the right idiom for the difference.
+
+Inside the fog, `researched` and `name only` are drawn apart too. One is a name with a firm
+profile behind it; the other is a row in a list.
+
+### Gauges at every station, valves between them
+
+The plant is the assembly line end to end: eight stations, and under each one what is sitting
+in it, what arrived in the last month, what left, the median dwell, and what is jammed.
+Between stations sit the **valves** — the approval kind that gates that step and how many
+tickets are open on it. A valve with nothing in it is not a bottleneck; it is a closed valve
+nobody has asked to open.
+
+**Dwell is the honest half of a cycle time**, and the view says so: it measures the gap
+between two evidence records on one pursuit, so it is how long *we* took to learn the next
+thing, not how long they took to decide. A station with a long dwell and nothing jammed is
+usually a recording habit.
+
+### A build menu with the locked entries left in
+
+Nine moves in four families, left to right in prerequisite order. Each carries what it
+**needs**, what it **costs**, what it **buys**, how many things it is available on right
+now, and whether a person or an agent runs it — the same clay-and-green pair as the
+enrichment table. Gated moves say so.
+
+The one with no prerequisite at all is *enrich a name we have not scored*, available on 22.
+That is the same 22 as the fog, seen from the other end.
+
+### Blocked and not-yet are different colours
+
+The grid is targets against eight levers — route, ask, meet, material, answer, structure,
+number, close — with four states per cell. It exists to separate **blocked** from **not
+yet**: a lever we are forbidden to pull and one that is simply out of reach look identical
+on a status list and demand opposite responses. A row with no open cell at all is not a
+target going badly; it is a target we have run out of legal moves on, which is a different
+conversation with a different person.
+
+### What actually runs out
+
+Person-time first: **11 items in flight against a working limit of six**, and the card says
+the six is a guess rather than a measurement. Then connector goodwill, open approvals, the
+agent correction budget, materials that go stale when a claim underneath them moves, and the
+conserved capital pool — where two actors are already over the budget they told us they had,
+counted across every vehicle.
+
+Every cap names its source, and the ones marked GUESS in `config/deployment.ts` say so on the
+card. A capacity line nobody can source gets planned around anyway.
+
+### Same vocabulary, second projection
+
+`lib/board.ts` takes the floor as an input rather than rebuilding it — one projection of
+state, two readings. Size, fill and hue mean exactly what they mean on the first five tabs,
+and the tab strip is grouped so it is clear which question each half answers.
+
+**43 of 43 properties hold.**

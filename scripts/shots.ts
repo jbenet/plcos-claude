@@ -167,6 +167,31 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N29: [
+    { name: '01-the-map', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The map/ }).click();
+        await page.waitForTimeout(500);
+      } },
+    { name: '02-the-plant', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The plant/ }).click();
+        await page.waitForTimeout(500);
+      } },
+    { name: '03-the-moves', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The moves/ }).click();
+        await page.waitForTimeout(500);
+      } },
+    { name: '04-the-grid', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The grid/ }).click();
+        await page.waitForTimeout(500);
+      } },
+    { name: '05-the-economy', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The economy/ }).click();
+        await page.waitForTimeout(500);
+      } },
+    { name: '06-ten-tabs', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.waitForTimeout(400);
+      } },
+  ],
   N28: [
     { name: '01-the-line', path: '/all/floor', width: 1600, prepare: async (page) => {
         await page.waitForTimeout(500);
