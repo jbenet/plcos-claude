@@ -1025,6 +1025,14 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
 .fps{font-size:8px;fill:var(--clay)}
 .fpl{font-size:8px;fill:var(--muted);letter-spacing:.06em}
 /* the note under the flow */
+/* what moves the fit score (issue 0007) */
+.movetable{table-layout:fixed;min-width:640px}
+.movetable .mvsub{font-size:10px;margin-top:2px}
+.movetable .mvdown{color:var(--clay)}
+
+/* one collision, printed once (issue 0004) */
+.guardlist .row.same{opacity:.78}
+.samecoll{display:block;font-size:10.5px;color:var(--muted);margin-top:3px;font-style:italic}
 .fwhy{margin-top:0}
 .fstalls{display:flex;gap:10px;flex-wrap:wrap;padding:6px 15px 4px}
 .fstall{flex:1 1 300px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--ground)}

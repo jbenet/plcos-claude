@@ -175,18 +175,32 @@ export default async function Approvals({
           {guard && (
             <div className="card">
               <div className="chead">
-                <h2>{guard.ok ? 'No guard refused this' : `${guard.blocks.length} guard${guard.blocks.length === 1 ? '' : 's'} refusing`}</h2>
+                <h2>
+                  {guard.ok
+                    ? 'No guard refused this'
+                    : (() => {
+                        const distinct = guard.blocks.filter((b) => !b.subsumedBy).length;
+                        const dupes = guard.blocks.length - distinct;
+                        return `${distinct} guard${distinct === 1 ? '' : 's'} refusing`
+                          + (dupes ? ` · ${dupes} more is the same collision` : '');
+                      })()}
+                </h2>
                 <span className="lbl">checked now, not when the ticket was opened</span>
               </div>
               <div className="guardlist">
                 {guard.blocks.map((b) => (
-                  <div className="row" key={b.rule}>
+                  <div className={`row${b.subsumedBy ? ' same' : ''}`} key={b.rule}>
                     <span className={`gr${b.rule === 'cross_vehicle_conflict' ? ' info' : ''}`}>
                       {RULE_LABEL[b.rule].toUpperCase()}
                     </span>
                     <div className="t">
                       <b>{b.message}</b>
                       <span>{b.evidence}</span>
+                      {b.subsumedBy && (
+                        <span className="samecoll">
+                          Same collision as {RULE_LABEL[b.subsumedBy]} — one problem, counted once.
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}

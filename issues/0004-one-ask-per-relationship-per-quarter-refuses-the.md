@@ -25,3 +25,14 @@ This needs a decision before the number means anything.
   "user": "juan"
 }
 ```
+
+**Half done (N30), and the half that matters is still yours.** The report no longer prints
+the same collision twice: when every ask the frequency guard counted is one of the competing
+asks, the frequency block is marked as subsumed by the conflict, the heading reads
+`1 guard refusing · 1 more is the same collision`, and the row says so in words.
+
+**The decision is untouched and still needed.** `guard.asksPerRelationshipPerQuarter` is 1
+across all four vehicles, and it cannot be both a per-vehicle cap and a cross-vehicle one.
+Per vehicle: the conflict case does the real work and the frequency guard stops firing on
+every collision. Across vehicles: the conflict case is nearly redundant. The constant is a
+guess either way — this change only stops the ambiguity from being reported as two problems.

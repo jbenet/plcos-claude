@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
+import { CashForm } from '@/components/pipeline/CashForm';
 import { HardenForm } from '@/components/pipeline/HardenForm';
 import { vehicleSelection } from '@/lib/session';
 import { usdM, pct } from '@/lib/money';
@@ -208,7 +209,7 @@ export default async function SoftHard() {
               </th>
               <th style={{ width: 170 }}>Evidence</th>
               <th style={{ width: 110 }}>Countersigned</th>
-              <th style={{ width: 130 }}>Cash</th>
+              <th style={{ width: 200 }}>Cash</th>
             </tr>
           </thead>
           <tbody>
@@ -227,7 +228,12 @@ export default async function SoftHard() {
                   {x.cashReceivedAt ? (
                     <span className="flag f-ok">received {shortDate(x.cashReceivedAt)}</span>
                   ) : (
-                    <span className="flag f-ev">not yet wired</span>
+                    <>
+                      <span className="flag f-ev">not yet wired</span>
+                      <div style={{ marginTop: 5 }}>
+                        <CashForm exposureId={x.exposureId} entityName={x.entityName} />
+                      </div>
+                    </>
                   )}
                 </td>
               </tr>

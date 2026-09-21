@@ -1,7 +1,7 @@
 ---
 id: "0002"
 title: Vehicle switcher persists per browser, not per user
-status: open          # open | triaged | agent-ready | in-progress | review | done
+status: done          # open | triaged | agent-ready | in-progress | review | done
 kind: question        # bug | request | question | chore
 priority: P3          # P0 | P1 | P2 | P3 — see issues/README.md for the SLA ladder
 reporter: juan
@@ -21,3 +21,8 @@ Harmless at L1 with one person. Worth deciding before D1, because it is the kind
   "user": "juan"
 }
 ```
+
+**Done (N30).** The cookie holds a map of handle → slug rather than one slug, so switching
+user switches back to that person's own vehicle. It is still a cookie and still per browser
+— what it is not any more is shared between the people using that browser. A cookie written
+before the change is read as belonging to whoever is signed in when it is first seen.

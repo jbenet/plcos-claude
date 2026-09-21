@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { appendAudit } from '@/modules/platform';
-import { VEHICLE_COOKIE } from '@/lib/session';
+import { parseSelections, VEHICLE_COOKIE } from '@/lib/session';
 
 /**
  * Who am I, and which vehicle am I looking at. Both are local-only presentation state,
@@ -12,8 +12,12 @@ export async function POST(req: Request) {
   const body = (await req.json()) as { userHandle?: string; vehicleSlug?: string };
 
   if (body.vehicleSlug) {
+    // Keyed by handle, so two people sharing a laptop do not share a vehicle (issue 0002).
     const jar = await cookies();
-    jar.set(VEHICLE_COOKIE, body.vehicleSlug, { httpOnly: true, sameSite: 'lax', path: '/' });
+    const who = await (await auth()).currentUser();
+    const map = parseSelections(jar.get(VEHICLE_COOKIE)?.value, who.handle);
+    map[who.handle] = body.vehicleSlug;
+    jar.set(VEHICLE_COOKIE, JSON.stringify(map), { httpOnly: true, sameSite: 'lax', path: '/' });
   }
 
   if (body.userHandle) {

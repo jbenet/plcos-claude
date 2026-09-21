@@ -7,4 +7,6 @@ export {
   BLOCKER_LABEL, BLOCKER_SHORT, CERTAINTY_LABEL, CERTAINTY_WEIGHT, DECISION_LABEL, FAMILIARITY_LABEL,
   FIRM_CLASS_LABEL, GRADE_LABEL, GRADE_SIGN, GRADE_VERDICT, GRADE_SCORE, LINK_LABEL, SENTIMENT_LABEL,
 } from './types';
+export type { Contribution } from './contribution';
+export { contributions } from './contribution';
 export { assessmentFor, assessmentsForEntity, firmProfile, listAssessments, listFirmProfiles } from './repo';

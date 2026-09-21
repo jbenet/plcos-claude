@@ -90,8 +90,31 @@ export async function coverageGaps(): Promise<CoverageGap[]> {
        from meetings.diligence_question q join identity.entity e on e.entity_id = q.entity_id`,
   );
 
-  const words = (s: string) =>
-    new Set(s.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter((w) => w.length > 4));
+  /**
+   * Issue 0006. The old matcher wanted two shared words over four characters, so "fee load"
+   * and "fee terms" shared nothing and an answered question was reported as uncovered.
+   *
+   * This one stems crudely (plurals and a few endings), drops stopwords, and keeps short
+   * domain words like fee, lock and term that the length filter was throwing away. It still
+   * over-reports rather than under-reports, deliberately: a gap listed twice wastes a
+   * minute, a gap hidden is the question you keep being asked and never write down.
+   */
+  const STOP = new Set([
+    'about', 'above', 'after', 'again', 'their', 'there', 'these', 'those', 'which', 'would',
+    'could', 'should', 'being', 'where', 'while', 'other', 'against', 'because', 'before',
+    'what', 'with', 'that', 'this', 'from', 'have', 'they', 'your', 'ours', 'than', 'into',
+  ]);
+  const stem = (w: string) => w
+    .replace(/(ies)$/, 'y')
+    .replace(/(sses|ches|shes|xes)$/, '')
+    .replace(/([^s])s$/, '$1')
+    .replace(/(ing|ed|ly)$/, '');
+  const words = (s: string) => new Set(
+    s.toLowerCase().replace(/[^a-z\s-]/g, ' ').split(/[\s-]+/)
+      .filter((w) => w.length > 2 && !STOP.has(w))
+      .map(stem)
+      .filter((w) => w.length > 2),
+  );
 
   const byText = new Map<string, CoverageGap>();
   for (const r of raised) {
@@ -106,7 +129,9 @@ export async function coverageGaps(): Promise<CoverageGap[]> {
     for (const a of answers) {
       const aw = words(a.question);
       const overlap = [...rw].filter((w) => aw.has(w)).length;
-      if (overlap >= 2 && (!best || overlap > best.overlap)) {
+      // Two shared stems, or one shared stem that is rare enough to be the subject itself.
+      const rare = [...rw].filter((w) => aw.has(w) && w.length >= 6).length;
+      if ((overlap >= 2 || rare >= 1) && (!best || overlap > best.overlap)) {
         best = { answerId: a.answer_id, question: a.question, status: a.status, overlap };
       }
     }

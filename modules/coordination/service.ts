@@ -45,16 +45,18 @@ export async function evaluateGuards(
   }
 
   const priorToTarget = await asksToEntitySince(args.entityId, since, q);
+  let frequencyBlock: GuardBlock | null = null;
   if (priorToTarget.length >= config.guard.asksPerRelationshipPerQuarter) {
     const last = priorToTarget[0]!;
-    blocks.push({
+    frequencyBlock = {
       rule: 'relationship_frequency',
       message:
         `${priorToTarget.length} ask${priorToTarget.length === 1 ? '' : 's'} already made to ` +
         `${last.entityName} this quarter; the cap is ${config.guard.asksPerRelationshipPerQuarter}.`,
       evidence: `Most recent: ${last.vehicleName}, owned by ${last.ownerName}.`,
       opensCase: false,
-    });
+    };
+    blocks.push(frequencyBlock);
   }
 
   if (args.connectorId) {
@@ -95,6 +97,19 @@ export async function evaluateGuards(
   const competing = await competingAsks(args.entityId, args.vehicleId, windowStart(), q);
   if (competing.length > 0) {
     const other = competing[0]!;
+    /**
+     * Issue 0004. The frequency cap counts across vehicles, so a cross-vehicle collision
+     * always trips it too. When every ask the frequency guard counted is one of the
+     * competing asks, they are one collision and the report says so — rather than printing
+     * two refusals and leaving the reader to work out they are the same event.
+     */
+    const competingIds = new Set(competing.map((a) => a.askId));
+    if (frequencyBlock && priorToTarget.every((a) => competingIds.has(a.askId))) {
+      frequencyBlock.subsumedBy = 'cross_vehicle_conflict';
+      frequencyBlock.evidence +=
+        ' This is the same collision as the cross-vehicle case below, not a second one: the '
+        + 'frequency cap is counted across vehicles, so every collision trips it.';
+    }
     blocks.push({
       rule: 'cross_vehicle_conflict',
       message:

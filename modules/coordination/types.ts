@@ -85,6 +85,13 @@ export interface GuardBlock {
   evidence: string;
   /** A conflict opens a case; the others simply refuse. */
   opensCase: boolean;
+  /**
+   * Set when this block is the same collision as another one, counted twice (issue 0004).
+   * The frequency cap is across vehicles, so every cross-vehicle conflict also trips it —
+   * listing both makes one problem look like two and makes the report read as worse than
+   * the situation is.
+   */
+  subsumedBy?: GuardBlock['rule'];
 }
 
 export interface GuardReport {

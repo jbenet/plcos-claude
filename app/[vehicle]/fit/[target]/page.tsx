@@ -12,8 +12,9 @@ import { shortDate } from '@/lib/time';
 import { getEntity } from '@/modules/identity';
 import { listSourceDocs } from '@/modules/research';
 import {
-  assessmentFor, assessmentsForEntity, listAssessments,
-  BLOCKER_LABEL, DECISION_LABEL, FAMILIARITY_LABEL, FIRM_CLASS_LABEL, LINK_LABEL, SENTIMENT_LABEL,
+  assessmentFor, assessmentsForEntity, contributions, listAssessments,
+  BLOCKER_LABEL, CERTAINTY_LABEL, DECISION_LABEL, FAMILIARITY_LABEL, FIRM_CLASS_LABEL,
+  GRADE_LABEL, GRADE_SIGN, LINK_LABEL, SENTIMENT_LABEL,
   type Assessment, type Blocker, type Familiarity, type Sentiment,
 } from '@/modules/fit';
 
@@ -127,6 +128,7 @@ export default async function FunderVehicleFit({
   }
 
   const p = a.profile;
+  const moves = contributions(a.dimensions);
   const dims: DimRow[] = a.dimensions.map((x) => ({
     code: x.code, label: x.label, question: x.question, grade: x.grade, certainty: x.certainty,
     finding: x.finding, source: x.source, asOf: shortDate(x.asOf),
@@ -300,6 +302,77 @@ export default async function FunderVehicleFit({
           with what matters to us.
         </p>
       </div>
+
+      {/* ---------- what moves this number (issue 0007) ---------- */}
+      {moves.length > 0 && (
+        <div className="card">
+          <div className="chead">
+            <h2>What moves this number</h2>
+            <span className="lbl">score {Math.round(a.weightedFit * 100)} · sorted by how far each reading could move it</span>
+          </div>
+          <div className="scroller">
+            <table className="list movetable">
+              <thead>
+                <tr>
+                  <th>Reading</th>
+                  <th style={{ width: 96 }}>Today</th>
+                  <th style={{ width: 92 }} className="right">Supplies</th>
+                  <th style={{ width: 128 }} className="right">If it went strong</th>
+                  <th style={{ width: 136 }} className="right">If we verified it</th>
+                </tr>
+              </thead>
+              <tbody>
+                {moves.map((c) => (
+                  <tr key={c.code}>
+                    <td>
+                      <b>{c.label}</b>
+                      <div className="muted mvsub">importance to us {c.weightUs}/5</div>
+                    </td>
+                    <td>
+                      <span className={`flag ${GRADE_SIGN[c.grade] === 'for' ? 'f-ok' : GRADE_SIGN[c.grade] === 'against' ? 'f-block' : 'f-mute'}`}>
+                        {GRADE_LABEL[c.grade]}
+                      </span>
+                      <div className="muted mvsub">{CERTAINTY_LABEL[c.certainty].toLowerCase()}</div>
+                    </td>
+                    <td className="right mono">{Math.round(c.supplies * 100)}</td>
+                    <td className="right mono">
+                      {c.headroom <= 0.0005 ? '—' : `+${Math.round(c.headroom * 100)}`}
+                    </td>
+                    <td className={`right mono${c.verifying <= -0.005 ? ' mvdown' : ''}`}>
+                      {c.certainty === 'known'
+                        ? <span className="muted">already verified</span>
+                        : Math.abs(c.verifying) < 0.005
+                          ? '±0'
+                          : `${c.verifying > 0 ? '+' : '−'}${Math.abs(Math.round(c.verifying * 100))}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="cover">
+            <b>Two different ways to move a score.</b> The fourth column is the finding getting
+            better. The fifth is the same finding being <i>verified</i> — and it can go either
+            way. Verifying a guess that is better than the average pulls the score up; verifying
+            a weak one pulls it down, because the certainty discount was flattering it. Research
+            can deliver the fifth column. Only the counterparty can deliver the fourth.
+          </p>
+          {moves[0] && moves[0].headroom < 0.035 && (
+            <p className="cover">
+              <b>No single reading moves this much.</b> The largest available change is{' '}
+              {Math.round(moves[0].headroom * 100)} points, which means this score is not one
+              argument away from anything — it is the shape of the whole assessment, and a
+              conversation that fixes one reading will not move the ranking.
+            </p>
+          )}
+          <p className="cover">
+            <b>This is not a diff.</b> Issue 0007 asked which reading moved the score since the
+            last assessment, and this system keeps one assessment per firm and vehicle — there is
+            no earlier version to subtract. Until an assessment is versioned, the honest answer is
+            what each reading is worth now, which is this table.
+          </p>
+        </div>
+      )}
 
       {/* ---------- what they value ---------- */}
       <div className="card">

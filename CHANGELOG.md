@@ -2942,3 +2942,80 @@ state, two readings. Size, fill and hue mean exactly what they mean on the first
 and the tab strip is grouped so it is clear which question each half answers.
 
 **43 of 43 properties hold.**
+
+---
+
+## N30 — The rest of the feedback queue
+
+**Shipped.** Four of the five remaining issues, and the fifth is now a decision waiting on
+Juan rather than a bug waiting on me.
+
+| | |
+|---|---|
+| ![Record the wire](docs/changelog/shots/n30/01-record-the-wire.png) | **0005.** Cash received was a state nobody could reach. It has a control now. |
+| ![What moves this number](docs/changelog/shots/n30/02-what-moves-the-score.png) | **0007.** Every reading, what it supplies, and what would move it. |
+| ![One collision](docs/changelog/shots/n30/03-one-collision.png) | **0004.** Two refusals that were the same collision, printed once. |
+
+### 0005 — nothing records cash arriving
+
+`pipeline.recordCash` existed, was tested, and was called by no screen. The hard track now
+has **Record the wire** on every row that is countersigned and not yet received: a date, a
+bank reference, and a refusal without the reference, because "it landed" with no receipt is
+a recollection.
+
+It is deliberately **not** gated by a MONEY ticket, and that is worth stating rather than
+sliding past. The five approval kinds authorise things we are about to do. A wire is
+something that has already been done to us, and **a system that refuses to record money it
+has received is lying about its own bank account.** The audit log carries the actor, the
+reference and the date.
+
+### 0007 — the fit score does not say which reading moved it
+
+The firm page has a *What moves this number* table: each reading, the points of the final
+score it supplies, what it would add if the finding went to strong, and what it would do if
+the same finding were **verified** rather than guessed.
+
+That last column can be negative, which is the interesting part. Verifying a weak guess
+*lowers* the score, because the certainty discount was flattering it. Research can deliver
+that column; only the counterparty can deliver the other one.
+
+On Cedar Trust the table also says the thing worth knowing: the largest single change
+available is two points, so that score is not one conversation away from anything.
+
+**The diff is still missing and the issue stays open for it.** This system keeps one
+assessment per firm and vehicle, so there is no earlier reading to subtract. It needs an
+`fit.assessment_revision` table written on every change — at which point "which reading
+moved it since August" becomes a query rather than a feature.
+
+### 0004 — one collision, counted twice
+
+The frequency cap counts across vehicles, so every cross-vehicle collision also trips it and
+the approvals page printed two refusals for one event. When every ask the frequency guard
+counted is one of the competing asks, that block is now marked subsumed, the heading reads
+**1 guard refusing · 1 more is the same collision**, and the row says so in words.
+
+**The decision underneath it is untouched and still needed.**
+`guard.asksPerRelationshipPerQuarter` cannot be both a per-vehicle cap and a cross-vehicle
+one. Per vehicle, the conflict case does the real work; across vehicles, the conflict case is
+nearly redundant. This change only stops one ambiguity from being reported as two problems.
+
+### 0006 — the coverage-gap matcher
+
+It wanted two shared words over four characters, so *fee load* and *fee terms* shared nothing
+and an answered question was reported as uncovered. It now stems crudely, drops stopwords,
+and keeps the short domain words — *fee*, *term*, *lock* — that the length filter was
+throwing away. Two shared stems, or one of six characters or more.
+
+Still biased toward over-reporting: a gap listed twice wastes a minute, a gap hidden is the
+question you keep being asked and never write down.
+
+### 0002 — the vehicle switcher
+
+The cookie holds a map of handle → slug rather than a single slug, so switching to Mara,
+changing vehicle and switching back leaves Juan looking at Juan's choice. Still a cookie,
+still per browser — what it is not any more is *shared between the people using that
+browser*. A cookie written before the change is read as belonging to whoever is signed in
+when it is first seen.
+
+**43 of 43 properties hold.** Two issues stay open on purpose, each with the specific thing
+it is waiting for written into the file.

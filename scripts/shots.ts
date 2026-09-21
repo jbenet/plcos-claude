@@ -167,6 +167,25 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N30: [
+    { name: '01-record-the-wire', path: '/soft-hard', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'The hard track' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(300);
+        const btn = page.getByRole('button', { name: 'Record the wire' }).first();
+        if (await btn.count()) await btn.click();
+        await page.waitForTimeout(300);
+      } },
+    { name: '02-what-moves-the-score', path: '/neurotech/fit/__CEDAR_FIT__', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'What moves this number' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '03-one-collision', path: '/approvals', prepare: async (page) => {
+        await page.getByRole('link', { name: /Route to Delia Roos/ }).click();
+        await page.waitForLoadState('networkidle');
+        await page.getByText(/guard.*refusing/i).first().scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+  ],
   N29: [
     { name: '01-the-map', path: '/all/floor', width: 1600, prepare: async (page) => {
         await page.getByRole('tab', { name: /The map/ }).click();
@@ -1021,6 +1040,12 @@ const SHOTS: Record<string, Shot[]> = {
 
 /** The seed mints uuids, so a fixed link is resolved at shot time. */
 async function resolveTokens(page: Page, base: string, path: string): Promise<string> {
+  if (path.includes('__CEDAR_FIT__')) {
+    await page.goto(`${base}/neurotech/fit`, { waitUntil: 'networkidle' });
+    const href = await page.locator('a.xref[href^="/neurotech/fit/"]').first().getAttribute('href');
+    if (!href) throw new Error('could not resolve a fit assessment link');
+    return href;
+  }
   if (!path.includes('__ROOS__')) return path;
   await page.goto(base + '/research', { waitUntil: 'networkidle' });
   const href = await page.getByRole('link', { name: 'Delia Roos' }).first().getAttribute('href');
