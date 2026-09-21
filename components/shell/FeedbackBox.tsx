@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ShotEditor } from './ShotEditor';
-import { capturePage, METHOD_LABEL, type CaptureMethod } from '@/lib/capture';
+import { capturePage, METHOD_LABEL, type CaptureMethod, type Region } from '@/lib/capture';
+import { RegionPicker } from './RegionPicker';
 import { MarkdownField, type DroppedImage } from '@/components/ui/MarkdownField';
 
 type Kind = 'bug' | 'request' | 'question' | 'chore';
@@ -19,70 +20,52 @@ const SLA: Record<Priority, string> = {
 
 export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }) {
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [shot, setShot] = useState<string | null>(null);
-  const [method, setMethod] = useState<CaptureMethod | null>(null);
-  const [note, setNote] = useState<string | null>(null);
 
   /**
-   * `capturePage` asks for a screen capture first, and that API needs the click's own
-   * user activation — so nothing may be awaited before it. The busy flag is set after.
+   * Opening the box takes no screenshot.
+   *
+   * It used to ask for one on every press, which meant a browser permission dialog before
+   * the reporter had typed a word. A screenshot is now something you ask for.
    */
-  const start = () => {
-    setBusy(true);
-    void capturePage().then((c) => {
-      setShot(c?.dataUrl ?? null);
-      setMethod(c?.method ?? null);
-      setNote(c?.note ?? null);
-      setBusy(false);
-      setOpen(true);
-    });
-  };
-
   return (
     <>
       <button
         className={variant === 'rail' ? 'railfeedback' : 'btn'}
-        onClick={start}
-        disabled={busy}
-        aria-busy={busy}
+        onClick={() => setOpen(true)}
       >
-        {/* The label does not change while capturing — it would be in the screenshot.
-            The dot is stripped from the capture by the filter below. */}
-        {variant === 'rail' ? (
-          <>
-            <span aria-hidden>✎</span> Feedback
-            {busy && <span className="capdot nocapture" aria-hidden />}
-          </>
-        ) : (
-          <>
-            Give feedback
-            {busy && <span className="capdot nocapture" aria-hidden />}
-          </>
-        )}
+        {variant === 'rail' ? <><span aria-hidden>✎</span> Feedback</> : 'Give feedback'}
       </button>
-      {open && (
-        <FeedbackDrawer
-          shot={shot}
-          method={method}
-          note={note}
-          onShot={setShot}
-          onClose={() => setOpen(false)}
-        />
-      )}
+      {open && <FeedbackDrawer onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-function FeedbackDrawer({
-  shot, method, note, onShot, onClose,
-}: {
-  shot: string | null;
-  method: CaptureMethod | null;
-  note: string | null;
-  onShot: (png: string) => void;
-  onClose: () => void;
-}) {
+function FeedbackDrawer({ onClose }: { onClose: () => void }) {
+  const [shot, setShot] = useState<string | null>(null);
+  const [method, setMethod] = useState<CaptureMethod | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [shooting, setShooting] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const onShot = setShot;
+
+  /**
+   * Take the picture with the drawer hidden, so the panel is not in its own screenshot.
+   * The `nocapture` filter already drops it, and hiding it also lets the reporter see the
+   * page they are drawing a box on.
+   */
+  const take = (region?: Region) => {
+    setShooting(true);
+    setPicking(false);
+    // One frame for the hidden class to land before the clone is made.
+    requestAnimationFrame(() => {
+      void capturePage(region).then((c) => {
+        setShot(c?.dataUrl ?? null);
+        setMethod(c?.method ?? null);
+        setNote(c?.note ?? null);
+        setShooting(false);
+      });
+    });
+  };
   const path = usePathname();
   const params = useSearchParams();
   const [title, setTitle] = useState('');
@@ -152,8 +135,15 @@ function FeedbackDrawer({
           onSave={(png) => { onShot(png); setAnnotated(true); setEditing(false); }}
         />
       )}
-      <div className="scrim nocapture" onClick={onClose} />
-      <div className="drawer nocapture" role="dialog" aria-label="Give feedback">
+      {picking && (
+        <RegionPicker onPick={(r) => take(r)} onCancel={() => setPicking(false)} />
+      )}
+      <div className={`scrim nocapture${picking || shooting ? ' away' : ''}`} onClick={onClose} />
+      <div
+        className={`drawer nocapture${picking || shooting ? ' away' : ''}`}
+        role="dialog"
+        aria-label="Give feedback"
+      >
         <div className="lbl">Feedback</div>
 
         {state === 'done' && result ? (
@@ -182,12 +172,26 @@ function FeedbackDrawer({
             <div className="lbl">Captured with it</div>
             <div className="ctx">{JSON.stringify(context, null, 2)}</div>
 
-            <div className="lbl" style={{ marginTop: 14 }}>Screenshot</div>
+            <div className="lbl" style={{ marginTop: 14 }}>
+              {shot ? 'Screenshot' : 'Add a screenshot'}
+            </div>
             {!shot ? (
-              <p className="note" style={{ marginTop: 6 }}>
-                This browser would not give us an image of the page. The complaint still files
-                without one — a failed capture is not a reason to lose what you were going to say.
-              </p>
+              <>
+                <div className="shotpick">
+                  <button className="btn" onClick={() => take()} disabled={shooting}>
+                    <span className="gl" aria-hidden>▢</span>
+                    {shooting ? 'Drawing…' : 'Whole page'}
+                  </button>
+                  <button className="btn" onClick={() => setPicking(true)} disabled={shooting}>
+                    <span className="gl" aria-hidden>⌖</span>
+                    Pick a part
+                  </button>
+                </div>
+                <p className="mdhint" style={{ border: 0, padding: '7px 0 0' }}>
+                  No permission prompt: your browser draws the page from its own markup, and this
+                  panel is left out of it. Optional — the complaint files without one.
+                </p>
+              </>
             ) : (
               <>
                 <div className={`shotthumb${includeShot ? '' : ' off'}`}>
@@ -211,8 +215,11 @@ function FeedbackDrawer({
                     Include screenshot
                     <small>
                       <b>{method ? METHOD_LABEL[method] : 'Captured'}.</b>{' '}
-                      {note ?? 'Exactly the pixels that were on your screen.'} Filed beside the
-                      issue as a PNG in this repository — click it to draw on it.
+                      {note ?? 'Exactly the pixels that were on your screen.'} Click it to draw on
+                      it.{' '}
+                      <button className="linkish" onClick={(e) => { e.preventDefault(); setShot(null); }}>
+                        Take another
+                      </button>
                     </small>
                   </span>
                 </label>

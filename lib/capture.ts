@@ -1,19 +1,21 @@
 /**
- * Capturing what the reporter is actually looking at.
+ * Capturing what the reporter is looking at, without asking for permission.
  *
  * Two ways, and they are not equivalent:
  *
- *   screen  — `getDisplayMedia` with `preferCurrentTab`. The browser hands back the frames
- *             it composited, so this is *the pixels on the screen*: real font rasterisation,
- *             real scrollbars, real everything. It needs a permission prompt.
- *   render  — the DOM re-drawn through an SVG foreignObject. Close, and not the same. Text
- *             re-wraps at sub-pixel boundaries, form controls draw differently, and anything
- *             the engine does at paint time is approximated.
+ *   render  — the DOM re-drawn through an SVG foreignObject, by the browser's own engine.
+ *             No permission prompt, and it **can redact**: anything marked `nocapture` is
+ *             dropped, which is how the feedback drawer stays out of its own screenshot.
+ *   screen  — `getDisplayMedia`. Literally the composited frame, and therefore exact — but
+ *             it shows a permission dialog every single time and it cannot redact anything,
+ *             because by then the pixels are just pixels.
  *
- * The screen path is tried first because a feedback screenshot that is subtly not what the
- * person saw is worse than useless — they report the thing they saw and the picture
- * disagrees. The renderer is the fallback for a declined prompt or a browser without the
- * API, and the box says which one it got rather than letting them assume.
+ * **Render is the default.** Once the clone waits for `document.fonts.ready` the difference
+ * is small enough that it is not worth a dialog on every complaint, and the redaction is
+ * worth more than the last few per cent of fidelity. The screen path stays available for
+ * somebody who explicitly wants exact pixels and will accept the prompt.
+ *
+ * Nothing is captured when the box opens. A screenshot is taken when somebody asks for one.
  */
 
 export type CaptureMethod = 'screen' | 'render';
@@ -77,17 +79,27 @@ async function captureScreen(): Promise<string | null> {
   }
 }
 
-async function captureRender(): Promise<string | null> {
+export interface Region { x: number; y: number; w: number; h: number }
+
+/**
+ * The page, redrawn. Optionally cropped to a region the reporter drew.
+ *
+ * Cropping happens after the render rather than by rendering a sub-tree: a region is a
+ * rectangle on the screen and usually cuts across several elements, so the honest thing is
+ * to draw the page and cut the rectangle out of it.
+ */
+export async function captureRender(region?: Region): Promise<string | null> {
   try {
     const { domToPng } = await import('modern-screenshot');
     // Without this the clone renders in fallback metrics and every heading re-wraps.
     await document.fonts.ready;
     const w = window.innerWidth;
     const h = window.innerHeight;
-    return await domToPng(document.body, {
+    const scale = Math.min(2, window.devicePixelRatio || 1, MAX_WIDTH / w);
+    const full = await domToPng(document.body, {
       width: w,
       height: h,
-      scale: Math.min(2, window.devicePixelRatio || 1, MAX_WIDTH / w),
+      scale,
       backgroundColor: getComputedStyle(document.body).backgroundColor,
       style: {
         transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
@@ -96,30 +108,52 @@ async function captureRender(): Promise<string | null> {
       filter: (node: Node) =>
         !(node instanceof Element && node.classList.contains('nocapture')),
     });
+    if (!region) return full;
+    return await crop(full, region, scale);
   } catch {
     return null;
   }
 }
 
-export async function capturePage(): Promise<Capture | null> {
+function crop(dataUrl: string, r: Region, scale: number): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(r.w * scale));
+      c.height = Math.max(1, Math.round(r.h * scale));
+      c.getContext('2d')!.drawImage(
+        img, r.x * scale, r.y * scale, r.w * scale, r.h * scale,
+        0, 0, c.width, c.height,
+      );
+      resolve(c.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/** The default: no dialog, and the feedback drawer is redacted out of its own picture. */
+export async function capturePage(region?: Region): Promise<Capture | null> {
+  const rendered = await captureRender(region);
+  if (!rendered) return null;
+  return {
+    dataUrl: rendered,
+    method: 'render',
+    note:
+      'Drawn by your browser from the page itself, with no permission prompt. Anything marked '
+      + 'as not-for-capture — the feedback panel included — is left out.',
+  };
+}
+
+/** Exact pixels, and a permission dialog. Only when somebody asks for it by name. */
+export async function capturePageExact(): Promise<Capture | null> {
   const screen = await captureScreen();
   if (screen) return { dataUrl: screen, method: 'screen', note: null };
-
-  const rendered = await captureRender();
-  if (rendered) {
-    return {
-      dataUrl: rendered,
-      method: 'render',
-      note:
-        'Your browser did not hand over a screen capture, so this is the page redrawn from '
-        + 'its own markup. It is close, and small things — text wrapping, form controls, '
-        + 'scrollbars — can differ from what you saw.',
-    };
-  }
-  return null;
+  return capturePage();
 }
 
 export const METHOD_LABEL: Record<CaptureMethod, string> = {
   screen: 'Captured from your screen',
-  render: 'Redrawn from the page',
+  render: 'Drawn from the page',
 };

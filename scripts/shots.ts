@@ -165,6 +165,72 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N18: [
+    {
+      name: '01-no-screenshot-yet',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(700);
+        await page.getByPlaceholder("Guard message doesn't say whose ask is blocking").fill(
+          'Blocked actions should name the ticket that would unblock them',
+        );
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '02-rich-editor',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(700);
+        await page.getByRole('button', { name: 'Markdown' }).click();
+        await page.locator('.mdfield textarea').fill('### What I expected\n\nThe score to say **which reading** moved it, not just the total. On `/approvals` there are four open tickets and two are for the same target.\n\n- link the row to the ticket when one exists\n- say "no ticket yet" when one does not\n');
+        await page.getByRole('button', { name: 'Rich' }).click();
+        await page.waitForTimeout(500);
+      },
+    },
+    {
+      name: '03-source-view',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(700);
+        await page.getByRole('button', { name: 'Markdown' }).click();
+        await page.locator('.mdfield textarea').fill('### What I expected\n\nThe score to say **which reading** moved it, not just the total. On `/approvals` there are four open tickets and two are for the same target.\n\n- link the row to the ticket when one exists\n- say "no ticket yet" when one does not\n');
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: '04-region-picker',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(700);
+        await page.getByRole('button', { name: 'Pick a part' }).click();
+        await page.waitForTimeout(400);
+        await page.mouse.move(400, 260);
+        await page.mouse.down();
+        await page.mouse.move(980, 470, { steps: 14 });
+        await page.waitForTimeout(350);
+      },
+    },
+    {
+      name: '05-cropped',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(700);
+        await page.getByRole('button', { name: 'Pick a part' }).click();
+        await page.waitForTimeout(400);
+        await page.mouse.move(400, 260);
+        await page.mouse.down();
+        await page.mouse.move(980, 470, { steps: 14 });
+        await page.mouse.up();
+        await page.waitForTimeout(3500);
+      },
+    },
+  ],
   N17: [
     { name: '01-gaps', path: '/research/enrichment' },
     { name: '02-catalogue', path: '/research/enrichment', prepare: async (page) => {

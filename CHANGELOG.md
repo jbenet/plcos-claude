@@ -2307,3 +2307,65 @@ Then the things that cost money, then the things that cost engineering, and `inf
 free, instant, and never better than tier C.
 
 **43 of 43 properties hold.**
+
+---
+
+## N18 — No permission prompt, and an editor you write in
+
+**Shipped.** Opening the feedback box takes no screenshot and shows no dialog. You ask for
+one, with two buttons. And the body is a rich editor whose source is one click away.
+
+| | |
+|---|---|
+| ![No screenshot yet](docs/changelog/shots/n18/01-no-screenshot-yet.png) | **The box opens instantly.** *Add a screenshot: Whole page · Pick a part.* Optional, and the complaint files without one. |
+| ![Rich](docs/changelog/shots/n18/02-rich-editor.png) | **Rich by default.** Headings, bold, inline code and lists, stored as markdown. |
+| ![Source](docs/changelog/shots/n18/03-source-view.png) | **Markdown, one click away** — and it is the document rather than an export of it. |
+| ![Region](docs/changelog/shots/n18/04-region-picker.png) | **Pick a part.** The drawer hides so you can see the page you are drawing a box on. |
+| ![Cropped](docs/changelog/shots/n18/05-cropped.png) | **Just that region**, in the box, ready to annotate. |
+
+### Redaction beat fidelity
+
+N11 switched to `getDisplayMedia` for exact pixels. You hit the permission dialog, which is
+the cost I had waved through — and it is not a one-off cost, it is **every complaint,
+before anybody has typed a word.**
+
+Worse, exact pixels cannot be redacted. By the time the compositor is finished they are
+just pixels, so the feedback panel is in its own screenshot and anything sensitive on
+screen goes with it.
+
+The DOM renderer can redact: anything marked `nocapture` is dropped. And the N11 fix —
+waiting for `document.fonts.ready` before cloning — closed most of the fidelity gap that
+sent me to `getDisplayMedia` in the first place. So **the renderer is the default, with no
+prompt**, and the exact-pixels path stays in `lib/capture.ts` as `capturePageExact` for
+anybody who wants it and will accept the dialog.
+
+### Two buttons, and nothing on open
+
+```
+Add a screenshot:  [▢ Whole page]  [⌖ Pick a part]
+```
+
+*Pick a part* hides the drawer, puts a crosshair overlay on the live page, and lets you drag
+a rectangle — Escape cancels, and a drag under eight pixels counts as a mis-click rather
+than an empty selection. The page is then drawn and **cropped to the rectangle**, because a
+region usually cuts across several elements and the honest thing is to draw the page and
+cut the rectangle out of it.
+
+The drawer hides during both, which is now belt and braces: the `nocapture` filter already
+drops it, and hiding it also means you can see what you are selecting.
+
+### An editor rather than a textarea
+
+TipTap with `tiptap-markdown`. **Rich is the default**, because most feedback is prose and
+asking somebody to remember asterisks in order to file a bug is a tax on the complaint.
+
+**Markdown is one click away and it is the real thing.** The body of an issue is a file in
+this repository and somebody will read it in a diff, so the source view is the document
+rather than an export of it. A round trip through both views is lossless — heading, bold,
+inline code and list all survive in each direction, which is checked rather than assumed.
+
+Images keep the `attachment:N` discipline from N13. The rich view swaps those tokens for
+the picture while you type and swaps them back when it serialises, so the stored body never
+contains a data URL and **the sink still owns every filename.**
+
+**43 of 43 properties hold.** 48 routes return 200 from a cold start.
