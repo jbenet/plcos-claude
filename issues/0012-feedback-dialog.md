@@ -1,7 +1,7 @@
 ---
 id: "0012"
 title: Feedback dialog
-status: open          # open | triaged | agent-ready | in-progress | review | done
+status: done          # open | triaged | agent-ready | in-progress | review | done
 kind: bug             # bug | request | question | chore
 priority: P2          # P0 | P1 | P2 | P3 — see issues/README.md for the SLA ladder
 reporter: juan
@@ -26,3 +26,16 @@ labels: []
   "user": "juan"
 }
 ```
+
+**Done (N31 and N33).**
+
+- `⌘↵` files the report. `esc` closes one level at a time. `tab` moves between fields, which
+  is the answer to "how do I leave the text box" — and it is now printed under the buttons
+  rather than left to be guessed.
+- `?` opens a card of shortcuts with this dialog's at the top. It is the contextual version
+  you described; it is not yet global, and the card says so.
+- The title is optional and intake writes one from the first line.
+- Priorities read *Blocking · Serious · Normal · Someday* with what each means, in the
+  dropdown and on the issues page.
+- **No priority promises a date any more.** "P0: fixed in 1–2 days" was invented by a
+  dropdown. How fast the queue moves is a fact about the queue.

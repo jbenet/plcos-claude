@@ -51,8 +51,8 @@ export function moduleHref(mod: NavModule, vehicleSlug: string | null): string {
  * whichever vehicle is selected.
  */
 export const VEHICLE_MODULES: NavModule[] = [
-  m('F', 'Factory floor', 'floor', 'L9',
-    'Everything trying to happen at once, drawn five ways: stations, people, drop-off, the fortnight ahead, instruments.',
+  m('V', 'Visualizations', 'visualizations', 'L9',
+    'Everything trying to happen at once, drawn ten ways: stations, people, drop-off, the fortnight ahead, instruments, the map, the plant, the moves, the grid, the economy.',
     true, undefined, true),
   m('S', 'Strategy', 'strategy', 'L9',
     'Where the raise stands, the option space against it, and a place to commit.',
@@ -113,11 +113,12 @@ export const OVERVIEW_SECTION: NavSection = {
   title: 'Overview',
   links: [
     { label: 'Today', href: '/today' },
-    { label: 'Factory floor', href: '/all/floor' },
     { label: 'Approvals', href: '/approvals' },
-    { label: 'Issues', href: '/issues' },
     { label: 'Daily standup', href: '/standup' },
     { label: 'Calendar', href: '/all/calendar' },
+    /* Last, and organisation-wide: this one includes PL R&D, which the PL Capital entry
+       of the same name does not (issue 0013). */
+    { label: 'Visualizations', href: '/everything/visualizations', hint: 'all of PLC + R&D' },
   ],
 };
 
@@ -159,6 +160,8 @@ export const STATIC_SECTIONS: NavSection[] = [
     title: 'Developer',
     defaultCollapsed: true,
     links: [
+      /* Issues are development, so they live with the rest of it (issue 0011). */
+      { label: 'Issues', href: '/issues' },
       { label: 'Changelog', href: '/dev/changelog' },
       { label: 'Status', href: '/dev/status' },
       { label: 'Settings', href: '/dev/settings' },

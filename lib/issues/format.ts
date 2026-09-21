@@ -23,6 +23,8 @@ export interface ParsedIssue {
   screenshots: string[];
   /** Every file filed with this issue, relative to the issues directory. */
   attachments: string[];
+  /** The version that closed it, from `fixed_in:` or the closing note (issue 0011). */
+  fixedIn: string | null;
 }
 
 const COMMENTED = new Set(['status', 'kind', 'priority']);
@@ -65,7 +67,11 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
   for (const shot of screenshots) trimmed = trimmed.replace(`![Screenshot](${shot})`, '');
   const { body, context } = splitContext(trimmed);
 
+  /** `**Done (N30).**`, `**Half done (N30)…`, `**Partly done (N30)…` — all of them. */
+  const fromBody = /\*\*[^*]*?\((N\d+)\)/.exec(body);
+
   return {
+    fixedIn: str('fixed_in') || fromBody?.[1] || null,
     id: str('id', fallbackId),
     title: str('title', '(untitled)'),
     status: (str('status', 'open') as IssueStatus),

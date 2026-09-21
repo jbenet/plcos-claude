@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
 import { Markdown } from '@/components/ui/Markdown';
 import { SECTION } from '@/lib/nav';
+import { changelogEntry } from '@/lib/changelog';
 import { issues as issueSink, PRIORITY } from '@/lib/issues';
 import { shortDate } from '@/lib/time';
 
@@ -12,12 +13,13 @@ export default async function IssueDetail({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const sink = await issueSink();
   const issue = await sink.get(id);
+  const fixedIn = issue?.fixedIn ? await changelogEntry(issue.fixedIn) : null;
   if (!issue) notFound();
 
   return (
     <Page
       crumbs={[
-        { label: SECTION.overview },
+        { label: SECTION.developer },
         { label: 'Issues', href: '/issues' },
         { label: `${issue.id} · ${issue.title}` },
       ]}
@@ -52,6 +54,18 @@ export default async function IssueDetail({ params }: { params: Promise<{ id: st
               {issue.location}
             </span>
           </div>
+          {issue.fixedIn && (
+            <div className="scope">
+              <div className="lbl">Fixed in {issue.fixedIn}</div>
+              <p>
+                {fixedIn
+                  ? <><b>{fixedIn.title}.</b>{' '}
+                      <Link href={`/dev/changelog#${fixedIn.id}`}>Read what changed →</Link></>
+                  : <>Recorded against {issue.fixedIn}, which is not in the changelog. One of the
+                      two is wrong and the file is the one to trust.</>}
+              </p>
+            </div>
+          )}
           <div className="scope">
             <div className="lbl">Priority · {issue.priority}</div>
             <p>

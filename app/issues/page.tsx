@@ -15,7 +15,7 @@ export default async function Issues() {
 
   return (
     <Page
-      crumbs={[{ label: SECTION.overview }, { label: 'Issues' }]}
+      crumbs={[{ label: SECTION.developer }, { label: 'Issues' }]}
       inspector={
         <>
           <div className="lbl">Priority</div>

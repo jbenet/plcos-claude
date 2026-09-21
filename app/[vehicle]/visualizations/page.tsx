@@ -9,21 +9,31 @@ import { shortDate } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Floor({ params }: { params: Promise<{ vehicle: string }> }) {
+/**
+ * Three scopes, not two (issue 0013).
+ *
+ * `/everything/visualizations` is the whole organisation, the grants rail included.
+ * `/all/visualizations` is PL Capital's vehicles. `/<vehicle>/visualizations` is one raise.
+ * The rail used to point two different entries at the same URL, which meant one of the two
+ * labels was wrong.
+ */
+export default async function Visualizations({ params }: { params: Promise<{ vehicle: string }> }) {
   const { vehicle: slug } = await params;
   const { all } = await vehicleSelection();
-  const vehicle = slug === 'all' ? null : all.find((v) => v.slug === slug);
-  if (slug !== 'all' && !vehicle) notFound();
+  const everything = slug === 'everything';
+  const vehicle = slug === 'all' || everything ? null : all.find((v) => v.slug === slug);
+  if (!vehicle && !everything && slug !== 'all') notFound();
 
-  const state = await floorState(vehicle?.slug ?? null);
+  const state = await floorState(vehicle?.slug ?? null, { includeGrants: everything });
   const board = await boardState(vehicle?.slug ?? null, state);
+  const scopeName = vehicle ? vehicle.name : everything ? 'PL Capital and PL R&D' : 'All of PL Capital';
   const blocked = state.items.filter((i) => i.blocked || i.restricted || i.conflict).length;
   const stalled = state.items.filter((i) => i.stalled).length;
   const unsized = state.items.filter((i) => i.amount === null).length;
 
   return (
     <Page
-      crumbs={moduleCrumbs('floor', vehicle?.name ?? null)}
+      crumbs={moduleCrumbs('visualizations', vehicle?.name ?? null)}
       inspector={
         <>
           <div className="lbl">How to read all ten</div>
@@ -50,11 +60,11 @@ export default async function Floor({ params }: { params: Promise<{ vehicle: str
           </div>
 
           <div className="warn" style={{ marginTop: 14 }}>
-            <div className="lbl" style={{ color: 'var(--clay)' }}>What is not on the floor</div>
+            <div className="lbl" style={{ color: 'var(--clay)' }}>What is not on any of these</div>
             <p>
               Anything nobody wrote down. No connector is attached, so no mailbox, CRM or
               calendar feeds this — a conversation that happened and was not recorded does not
-              appear, and the floor looking calm is not evidence that it is.
+              appear, and a calm picture is not evidence of a calm quarter.
             </p>
           </div>
 
@@ -65,9 +75,12 @@ export default async function Floor({ params }: { params: Promise<{ vehicle: str
         </>
       }
     >
-      <div className="lbl">{vehicle ? vehicle.name : 'All of PL Capital'} · Factory floor</div>
+      <div className="lbl">{scopeName} · Visualizations</div>
       <h1>Everything trying to happen</h1>
       <p className="sublede">
+        {everything
+          ? 'Every vehicle on file, the grants rail included. '
+          : vehicle ? 'One raise. ' : 'PL Capital’s vehicles. The grants rail is on the organisation-wide page. '}
         Ten drawings, one vocabulary. The first five read what is happening; the second five
         read the ground it happens on, the machine it moves through and the moves available.
         Size is money at stake, fill is how recently anything was recorded, and colour is

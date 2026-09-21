@@ -167,6 +167,18 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N33: [
+    { name: '01-issues-fixed-in', path: '/issues', prepare: async (page) => {
+        await page.getByRole('button', { name: 'Any status' }).click();
+        await page.waitForTimeout(350);
+      } },
+    { name: '02-fix-history', path: '/issues/0014', prepare: async (page) => {
+        await page.waitForTimeout(300);
+      } },
+    { name: '03-everything', path: '/everything/visualizations', width: 1600, prepare: async (page) => {
+        await page.waitForTimeout(500);
+      } },
+  ],
   N32: [
     { name: '01-typing', path: '/today', prepare: async (page) => {
         await page.getByRole('button', { name: /Feedback/ }).click();
@@ -246,54 +258,54 @@ const SHOTS: Record<string, Shot[]> = {
       } },
   ],
   N29: [
-    { name: '01-the-map', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '01-the-map', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.getByRole('tab', { name: /The map/ }).click();
         await page.waitForTimeout(500);
       } },
-    { name: '02-the-plant', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '02-the-plant', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.getByRole('tab', { name: /The plant/ }).click();
         await page.waitForTimeout(500);
       } },
-    { name: '03-the-moves', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '03-the-moves', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.getByRole('tab', { name: /The moves/ }).click();
         await page.waitForTimeout(500);
       } },
-    { name: '04-the-grid', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '04-the-grid', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.getByRole('tab', { name: /The grid/ }).click();
         await page.waitForTimeout(500);
       } },
-    { name: '05-the-economy', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '05-the-economy', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.getByRole('tab', { name: /The economy/ }).click();
         await page.waitForTimeout(500);
       } },
-    { name: '06-ten-tabs', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '06-ten-tabs', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.waitForTimeout(400);
       } },
   ],
   N28: [
-    { name: '01-the-line', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '01-the-line', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.waitForTimeout(500);
       } },
-    { name: '02-the-load', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '02-the-load', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.getByRole('tab', { name: /The load/ }).click();
         await page.waitForTimeout(450);
       } },
-    { name: '03-the-flow', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '03-the-flow', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.getByRole('tab', { name: /The flow/ }).click();
         await page.waitForTimeout(450);
       } },
-    { name: '04-the-clock', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '04-the-clock', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.getByRole('tab', { name: /The clock/ }).click();
         await page.waitForTimeout(450);
       } },
-    { name: '05-the-room', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '05-the-room', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.getByRole('tab', { name: /The room/ }).click();
         await page.waitForTimeout(450);
       } },
-    { name: '06-one-vehicle', path: '/neurotech/floor', width: 1600, prepare: async (page) => {
+    { name: '06-one-vehicle', path: '/neurotech/visualizations', width: 1600, prepare: async (page) => {
         await page.waitForTimeout(500);
       } },
-    { name: '07-the-list', path: '/all/floor', width: 1600, prepare: async (page) => {
+    { name: '07-the-list', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.getByRole('heading', { name: 'The same floor, as a list' }).scrollIntoViewIfNeeded();
         await page.waitForTimeout(400);
       } },

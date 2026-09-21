@@ -55,6 +55,14 @@ export interface Issue extends Omit<IssueDraft, 'attachments'> {
   screenshots: string[];
   /** Every file filed with this issue, relative to the issues directory. */
   attachments: string[];
+  /**
+   * The version that closed it, e.g. `N30` (issue 0011).
+   *
+   * Read from a `fixed_in:` field when one is written, and otherwise from the closing note
+   * in the body — which is where it has actually been recorded up to now. Derived rather
+   * than tracked, because a second place to write it is a second place for it to be wrong.
+   */
+  fixedIn: string | null;
 }
 
 export interface IssueFilter {

@@ -41,7 +41,7 @@ export async function recordWire(formData: FormData): Promise<{ error?: string; 
     await recordCash(user.id, { exposureId: String(formData.get('exposureId')), receivedAt, reference });
     revalidatePath('/soft-hard');
     revalidatePath('/close');
-    revalidatePath('/all/floor');
+    revalidatePath('/all/visualizations');
     return { ok: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Unknown error' };

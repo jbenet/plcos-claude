@@ -40,7 +40,7 @@ export function fileIssueSink(dir: string): IssueSink {
     id: p.id, title: p.title, status: p.status, kind: p.kind, priority: p.priority,
     reporter: p.reporter, page: p.page, labels: p.labels, body: p.body,
     context: p.context, created: p.created, location: `${dir}/${file}`,
-    screenshots: p.screenshots, attachments: p.attachments,
+    screenshots: p.screenshots, attachments: p.attachments, fixedIn: p.fixedIn,
   });
 
   const find = async (id: string) => (await read()).find((r) => r.issue.id === id) ?? null;
@@ -96,6 +96,7 @@ export function fileIssueSink(dir: string): IssueSink {
         attachments: paths,
         id: next,
         status: 'open',
+        fixedIn: null,
         created: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
       };
       await writeFile(join(root, file), serializeIssue(parsed), 'utf8');

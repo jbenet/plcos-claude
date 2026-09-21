@@ -3120,3 +3120,55 @@ when the drag starts, so the moves arrived at the label while the handler was on
 marks, not of states, and a drag edits a mark in place. Said here rather than discovered.
 
 **43 of 43 properties hold.**
+
+---
+
+## N33 — Issues move in with the developers, and the floor becomes Visualizations
+
+**Shipped.** Issues 0011, 0013 and the rest of 0012.
+
+| | |
+|---|---|
+| ![Fixed in](docs/changelog/shots/n33/01-issues-fixed-in.png) | **A Fixed in column**, linking to the changelog entry that closed it. |
+| ![Fix history](docs/changelog/shots/n33/02-fix-history.png) | **On the issue**, the version, what it changed and a link to the paragraph. |
+| ![Everything](docs/changelog/shots/n33/03-everything.png) | **Three scopes, three URLs.** This one includes PL R&D. |
+
+### Where a fix went
+
+Every issue now carries the version that closed it. The list has a column; the issue page
+names what that version changed and links to the paragraph in the changelog.
+
+It is **derived, not tracked**: the closing note in the file already said `**Done (N30).**`,
+so that is what is read, with a `fixed_in:` field taking precedence when somebody wants to be
+explicit. A second place to write the same fact is a second place for it to be wrong, and the
+lookup goes through the changelog heading, so renaming an entry moves the link rather than
+breaking it.
+
+Issues also moved under **Developer**, in the rail and in the breadcrumb. They are a
+development queue that happens to be filed from inside the product.
+
+### One name, two labels, and one of them was wrong
+
+*Factory floor* appeared twice in the rail — once under Overview and once under All vehicles
+— pointing at the same URL. Two entries claiming different scopes and serving the same page
+means one of them is lying to you.
+
+Three scopes now, and the grants rail is the difference between the first two:
+
+- **`/everything/visualizations`** — every vehicle on file, PL R&D included. In Overview, at
+  the bottom, under Calendar.
+- **`/all/visualizations`** — PL Capital's vehicles. Under *All vehicles*.
+- **`/<vehicle>/visualizations`** — one raise.
+
+A rail that cannot be approached until a funder invites us does not belong in a capital
+roll-up, which is why the middle one leaves it out and says so on the page.
+
+And the name: **Visualizations**. "Factory floor" was the brief, not the label.
+
+### The rest of 0012
+
+`tab` moves between fields — the answer to *"what is the shortcut to unselect the textbox"* —
+and the hint line under the buttons says so rather than leaving it to be found. `?` opens the
+contextual card. It is not global yet and the card admits it.
+
+**43 of 43 properties hold.**

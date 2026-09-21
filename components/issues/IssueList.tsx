@@ -86,6 +86,7 @@ export function IssueList({ issues }: { issues: Issue[] }) {
               <th style={{ width: 90 }}>Kind</th>
               <th style={{ width: 62 }}>Priority</th>
               <th style={{ width: 110 }}>Status</th>
+              <th style={{ width: 88 }}>Fixed in</th>
               <th style={{ width: 96 }}>Filed</th>
             </tr>
           </thead>
@@ -100,6 +101,11 @@ export function IssueList({ issues }: { issues: Issue[] }) {
                 <td><span className={`kind k-${i.kind}`}>{i.kind}</span></td>
                 <td className="mono">{i.priority}</td>
                 <td><span className="flag f-mute">{i.status}</span></td>
+                <td className="mono">
+                  {i.fixedIn
+                    ? <a href={`/dev/changelog#${i.fixedIn.toLowerCase()}`} title="Open the changelog entry">{i.fixedIn}</a>
+                    : <span className="muted">—</span>}
+                </td>
                 <td className="muted nowrap">{i.created ? ago(new Date(i.created)) : '—'}</td>
               </tr>
             ))}

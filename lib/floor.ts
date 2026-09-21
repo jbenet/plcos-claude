@@ -37,7 +37,10 @@ function temperature(last: Date | null, now: Date): { temp: Temp; basis: string 
   return { temp: 'cold', basis: `Nothing for ${d} days.` };
 }
 
-export async function floorState(scopeSlug: string | null): Promise<FloorState> {
+export async function floorState(
+  scopeSlug: string | null,
+  opts: { includeGrants?: boolean } = {},
+): Promise<FloorState> {
   const now = new Date();
   const [
     vehicles, pursuits, exposures, asks, conflicts, restrictions,
@@ -49,7 +52,15 @@ export async function floorState(scopeSlug: string | null): Promise<FloorState> 
   ]);
 
   const vehicleBySlug = new Map(vehicles.map((v) => [v.slug, v]));
-  const inScope = (slug: string) => scopeSlug === null || slug === scopeSlug;
+  /**
+   * The grants rail is part of PL R&D, not of PL Capital (issue 0013). The organisation-wide
+   * page asks for it; the "all vehicles" page under PL Capital does not, because a rail that
+   * cannot be approached until a funder invites us does not belong in a capital roll-up.
+   */
+  const grantRails = new Set(vehicles.filter((v) => v.kind === 'grant_rail').map((v) => v.slug));
+  const inScope = (slug: string) => (scopeSlug === null
+    ? opts.includeGrants === true || !grantRails.has(slug)
+    : slug === scopeSlug);
 
   const restrictedEntities = new Set(restrictions.map((r) => r.entityId));
   const conflictedEntities = new Set(conflicts.map((c) => c.entityId));

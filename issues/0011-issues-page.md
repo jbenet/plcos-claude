@@ -1,7 +1,7 @@
 ---
 id: "0011"
 title: Issues Page
-status: open          # open | triaged | agent-ready | in-progress | review | done
+status: done          # open | triaged | agent-ready | in-progress | review | done
 kind: bug             # bug | request | question | chore
 priority: P2          # P0 | P1 | P2 | P3 — see issues/README.md for the SLA ladder
 reporter: juan
@@ -25,3 +25,15 @@ attachments: [attachments/0011-screenshot.png]
   "user": "juan"
 }
 ```
+
+**Done (N33).**
+
+- The issues pages live under **Developer** now, in the rail and in the breadcrumb.
+- Every issue carries the version that closed it. The list has a **Fixed in** column linking
+  to the changelog entry, and the issue page names what that version changed with a link to
+  the paragraph. It is read from the closing note in the file rather than tracked separately
+  — a second place to write it is a second place for it to be wrong.
+- `fixed_in:` in the frontmatter takes precedence when somebody wants to be explicit.
+
+On intake staying in the app: agreed, and it is why the sink is an interface. `GitHubIssueSink`
+can take over the storage without the feedback box changing at all.
