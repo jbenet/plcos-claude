@@ -1,4 +1,5 @@
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { listSyncSources } from '@/modules/platform';
 import { listAssets, listSends } from '@/modules/content';
 import { listPursuits, RUNG_LABEL } from '@/modules/strategy';
@@ -14,7 +15,7 @@ export default async function Performance() {
 
   return (
     <Page
-      crumbs={[{ label: 'Create & substantiate' }, { label: 'Content performance' }]}
+      crumbs={[{ label: SECTION.other }, { label: 'Content performance' }]}
       inspector={
         <>
           <div className="lbl">What can be attributed</div>

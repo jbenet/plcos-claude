@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { shortDate } from '@/lib/time';
 import { listFeedback } from '@/modules/platform';
 import { issues as issueSink } from '@/lib/issues';
@@ -13,7 +14,7 @@ export default async function DevFeedback() {
 
   return (
     <Page
-      crumbs={[{ label: 'Developer' }, { label: 'Feedback' }]}
+      crumbs={[{ label: SECTION.developer }, { label: 'Feedback' }]}
       inspector={
         <>
           <div className="lbl">Two records, one complaint</div>

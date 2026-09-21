@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { groupChangelog, parseInline, parseMarkdown, type Block, type Inline } from '@/lib/markdown';
 
 export const dynamic = 'force-dynamic';
@@ -134,7 +135,7 @@ export default async function Changelog() {
 
   return (
     <Page
-      crumbs={[{ label: 'Developer' }, { label: 'Changelog' }]}
+      crumbs={[{ label: SECTION.developer }, { label: 'Changelog' }]}
       inspector={
         <>
           <div className="lbl">Contents · newest first</div>

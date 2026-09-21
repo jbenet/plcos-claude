@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { LadderStepper } from '@/components/strategy/LadderStepper';
 import { AdvanceForm } from '@/components/strategy/AdvanceForm';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
@@ -43,8 +44,9 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
   return (
     <Page
       crumbs={[
+        { label: pursuit.vehicleName, href: '/overview' },
         { label: 'Conversion strategy', href: '/targets' },
-        { label: `${pursuit.entityName} · ${pursuit.vehicleName}` },
+        { label: pursuit.entityName },
       ]}
       inspector={
         <>

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { PLAYBOOK_ONLY, VEHICLE_MODULES } from '@/lib/nav';
 import { MODULES } from '@/modules/manifest';
 import { getDb } from '@/lib/db';
@@ -30,7 +31,7 @@ export default async function Modules() {
 
   return (
     <Page
-      crumbs={[{ label: 'Developer' }, { label: 'Modules' }]}
+      crumbs={[{ label: SECTION.developer }, { label: 'Modules' }]}
       inspector={
         <>
           <div className="lbl">Module registry</div>

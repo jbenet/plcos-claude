@@ -1,4 +1,5 @@
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
 import { shortDate, ago } from '@/lib/time';
 import { agent } from '@/lib/agent';
@@ -19,7 +20,7 @@ export default async function Agents() {
 
   return (
     <Page
-      crumbs={[{ label: 'Learning & agent quality' }]}
+      crumbs={[{ label: SECTION.developer }, { label: 'Agents' }]}
       inspector={
         <>
           <div className="lbl">Circuit breaker</div>

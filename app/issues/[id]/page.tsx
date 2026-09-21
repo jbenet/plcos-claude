@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { issues as issueSink, SLA } from '@/lib/issues';
 import { shortDate } from '@/lib/time';
 
@@ -14,7 +15,11 @@ export default async function IssueDetail({ params }: { params: Promise<{ id: st
 
   return (
     <Page
-      crumbs={[{ label: 'Issues', href: '/issues' }, { label: `${issue.id} · ${issue.title}` }]}
+      crumbs={[
+        { label: SECTION.overview },
+        { label: 'Issues', href: '/issues' },
+        { label: `${issue.id} · ${issue.title}` },
+      ]}
       inspector={
         <>
           <div className="lbl">Issue {issue.id}</div>

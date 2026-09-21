@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { Coverage } from '@/components/ui/Coverage';
 import { listEntities } from '@/modules/identity';
 import { claimCounts, corpusCoverage, listSourceDocs, unverifiedCount, weaklySupportedCount } from '@/modules/research';
@@ -30,7 +31,7 @@ export default async function Research() {
 
   return (
     <Page
-      crumbs={[{ label: 'Discover & qualify' }, { label: 'Research & enrichment' }]}
+      crumbs={[{ label: SECTION.other }, { label: 'Research corpus' }]}
       inspector={
         <>
           <div className="lbl">Corpus</div>

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 
 const STORE_KEY = 'capitalos.rightpane';
@@ -15,7 +16,7 @@ const STORE_KEY = 'capitalos.rightpane';
 export function PageFrame({
   crumbs, syncTone, syncLine, syncTitle, actions, inspector, children,
 }: {
-  crumbs: Array<{ label: string }>;
+  crumbs: Array<{ label: string; href?: string }>;
   syncTone: string;
   syncLine: string;
   syncTitle: string;

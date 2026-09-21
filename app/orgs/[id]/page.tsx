@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { ConfidenceWord, ProvenanceLine } from '@/components/ui/Provenance';
 import { Coverage } from '@/components/ui/Coverage';
@@ -112,7 +113,7 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
   return (
     <Page
       crumbs={[
-        { label: 'Orgs & people', href: '/orgs/g/all' },
+        { label: SECTION.orgs, href: '/orgs/g/all' },
         { label: entity.displayName },
       ]}
       inspector={

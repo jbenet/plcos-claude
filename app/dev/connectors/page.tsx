@@ -1,4 +1,5 @@
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { auth } from '@/lib/auth';
@@ -69,7 +70,7 @@ export default async function Connectors() {
 
   return (
     <Page
-      crumbs={[{ label: 'Developer' }, { label: 'Connectors' }]}
+      crumbs={[{ label: SECTION.developer }, { label: 'Connectors' }]}
       inspector={
         <>
           <div className="lbl">Open questions</div>

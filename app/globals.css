@@ -545,7 +545,10 @@ table.list tr.past td:first-child{box-shadow:inset 2px 0 0 var(--line)}
 /* the annotation editor */
 .shotedit{position:fixed;inset:0;z-index:60;background:rgba(20,19,18,.93);display:flex;
           flex-direction:column;padding:14px 18px 10px}
-.setop{display:flex;gap:14px;align-items:center;flex-wrap:wrap;flex:none}
+/* Sits directly on top of the image rather than at the top of the overlay, because a
+   toolbar a screen away from the thing it edits is a toolbar nobody finds. */
+.setop{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;
+       background:#1F1C18;border:1px solid #3B3630;border-radius:9px;padding:7px 9px}
 .setop .lbl{color:#9C968A}
 .settools,.setcols,.setacts{display:flex;gap:6px;align-items:center}
 .setacts{margin-left:auto}
@@ -555,9 +558,9 @@ table.list tr.past td:first-child{box-shadow:inset 2px 0 0 var(--line)}
 .settools button.on{background:#EFEBE2;color:#1A1917;border-color:#EFEBE2}
 .swatch{width:22px;height:22px;border-radius:50%;border:2px solid #3B3630;cursor:pointer;padding:0}
 .swatch.on{border-color:#EFEBE2;box-shadow:0 0 0 2px rgba(239,235,226,.35)}
-.setstage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:12px 0}
-.setwrap{position:relative;max-width:100%;max-height:100%;display:inline-block}
-.setcanvas{display:block;max-width:100%;max-height:78vh;border-radius:8px;
+.setstage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:8px 0}
+.setwrap{position:relative;max-width:100%;max-height:100%;display:flex;flex-direction:column;align-items:stretch}
+.setcanvas{display:block;max-width:100%;max-height:74vh;margin:0 auto;border-radius:8px;
            box-shadow:0 12px 44px rgba(0,0,0,.5);background:#fff;touch-action:none}
 .setcanvas.t-pen,.setcanvas.t-arrow,.setcanvas.t-box{cursor:crosshair}
 .setcanvas.t-text{cursor:text}
@@ -628,3 +631,5 @@ button.sec .pip{margin-left:auto;margin-right:7px;font-family:var(--mono);font-s
 .weekrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:0 26px;
          padding-top:4px;padding-bottom:6px}
 .weekrow .sitem:last-child{border-bottom:1px solid var(--hair)}
+.crumb .cx{color:var(--muted);border-bottom:1px solid transparent}
+.crumb .cx:hover{color:var(--accent);border-bottom-color:var(--accent)}

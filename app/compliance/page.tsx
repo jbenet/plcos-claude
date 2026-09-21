@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { moduleCrumbs } from '@/lib/nav';
+import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
 import {
   listAccreditation, listPublicClaims, listSideLetters, listSolicitations,
@@ -9,6 +11,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 export default async function Compliance() {
+  const selection = await vehicleSelection();
   const [accreditation, claims, solicitations, letters] = await Promise.all([
     listAccreditation(), listPublicClaims(), listSolicitations(), listSideLetters(),
   ]);
@@ -19,7 +22,7 @@ export default async function Compliance() {
 
   return (
     <Page
-      crumbs={[{ label: 'Execute & govern' }, { label: 'Claims & solicitation registry' }]}
+      crumbs={moduleCrumbs('compliance', selection.current?.name ?? null)}
       inspector={
         <>
           <div className="lbl">Why this exists</div>

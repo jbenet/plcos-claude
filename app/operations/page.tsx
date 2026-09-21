@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
 import { ago, shortDate } from '@/lib/time';
 import { usdM } from '@/lib/money';
@@ -31,7 +32,7 @@ export default async function Operations() {
 
   return (
     <Page
-      crumbs={[{ label: 'PL Capital' }, { label: 'Operations' }]}
+      crumbs={[{ label: SECTION.capital }, { label: 'Operations' }]}
       inspector={
         <>
           <div className="lbl">Connector load</div>

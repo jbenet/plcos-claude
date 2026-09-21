@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { usdM, multiple } from '@/lib/money';
 import { ago, shortDate } from '@/lib/time';
@@ -38,7 +39,7 @@ export default async function Overview() {
 
   return (
     <Page
-      crumbs={[{ label: 'PL Capital' }, { label: v ? v.name : 'All vehicles' }]}
+      crumbs={[{ label: SECTION.capital }, { label: v ? v.name : 'All vehicles' }]}
       inspector={
         <>
           <div className="lbl">{v ? 'This vehicle' : 'Every vehicle'}</div>

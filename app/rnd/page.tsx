@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export default async function RnD() {
   return (
     <Page
-      crumbs={[{ label: 'PL R&D' }, { label: 'Operations' }]}
+      crumbs={[{ label: SECTION.rnd }, { label: 'Operations' }]}
       inspector={
         <>
           <div className="lbl">Not modelled</div>

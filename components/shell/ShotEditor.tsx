@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 type Tool = 'pen' | 'arrow' | 'box' | 'text';
 
@@ -24,6 +24,13 @@ const TOOLS: Array<{ id: Tool; glyph: string; name: string }> = [
   { id: 'box', glyph: '▢', name: 'Box it' },
   { id: 'text', glyph: 'T', name: 'Add a label' },
 ];
+
+const isUndo = (e: KeyboardEvent) =>
+  (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z';
+const isRedo = (e: KeyboardEvent) =>
+  (e.metaKey || e.ctrlKey) && (
+    (e.shiftKey && e.key.toLowerCase() === 'z') || (!e.shiftKey && e.key.toLowerCase() === 'y')
+  );
 
 /**
  * Annotating a screenshot.
@@ -54,7 +61,40 @@ export function ShotEditor({
     marksRef.current = typeof next === 'function' ? next(marksRef.current) : next;
     setMarksState(marksRef.current);
   };
-  const [tool, setTool] = useState<Tool>('arrow');
+
+  /** A new mark ends the redo branch, the way every editor behaves. */
+  const addMark = (m: Mark) => {
+    redoRef.current = [];
+    setRedoDepth(0);
+    setMarks((prev) => [...prev, m]);
+  };
+
+  const undo = useCallback(() => {
+    const last = marksRef.current.at(-1);
+    if (!last) return;
+    redoRef.current = [...redoRef.current, last];
+    setRedoDepth(redoRef.current.length);
+    setMarks((prev) => prev.slice(0, -1));
+  }, []);
+
+  const redo = useCallback(() => {
+    const next = redoRef.current.at(-1);
+    if (!next) return;
+    redoRef.current = redoRef.current.slice(0, -1);
+    setRedoDepth(redoRef.current.length);
+    setMarks((prev) => [...prev, next]);
+  }, []);
+
+  const clearAll = () => {
+    redoRef.current = [...redoRef.current, ...marksRef.current];
+    setRedoDepth(redoRef.current.length);
+    setMarks([]);
+  };
+  // Freehand first: it is what people reach for, and every other tool is a refinement of
+  // "point at the thing".
+  const [tool, setTool] = useState<Tool>('pen');
+  const redoRef = useRef<Mark[]>([]);
+  const [redoDepth, setRedoDepth] = useState(0);
   const [colour, setColour] = useState(COLOURS[0]!.id);
   const [drawing, setDrawing] = useState<Mark | null>(null);
   const [typing, setTyping] = useState<{ at: [number, number]; text: string } | null>(null);
@@ -161,16 +201,32 @@ export function ShotEditor({
 
   const up = () => {
     if (!drawing) return;
-    setMarks((m) => [...m, drawing]);
+    addMark(drawing);
     setDrawing(null);
   };
 
   const commitText = () => {
     if (typing && typing.text.trim()) {
-      setMarks((m) => [...m, { tool: 'text', colour, size: fontSize(), at: typing.at, text: typing.text.trim() }]);
+      addMark({ tool: 'text', colour, size: fontSize(), at: typing.at, text: typing.text.trim() });
     }
     setTyping(null);
   };
+
+  /**
+   * The shortcuts people already have in their fingers. Suppressed while a label is being
+   * typed, where the browser's own undo belongs to the input.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const inText = e.target instanceof HTMLInputElement;
+      if (e.key === 'Escape' && !inText) { onCancel(); return; }
+      if (inText) return;
+      if (isUndo(e)) { e.preventDefault(); undo(); }
+      else if (isRedo(e)) { e.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo, onCancel]);
 
   const save = () => {
     const out = document.createElement('canvas');
@@ -183,49 +239,53 @@ export function ShotEditor({
 
   return (
     <div className="shotedit" role="dialog" aria-label="Annotate the screenshot">
-      <div className="setop">
-        <div className="lbl">Annotate</div>
-        <div className="settools" role="group" aria-label="Tool">
-          {TOOLS.map((t) => (
-            <button
-              key={t.id}
-              className={t.id === tool ? 'on' : ''}
-              onClick={() => { commitText(); setTool(t.id); }}
-              aria-pressed={t.id === tool}
-              title={t.name}
-              aria-label={t.name}
-            >
-              <span aria-hidden>{t.glyph}</span>
-            </button>
-          ))}
-        </div>
-        <div className="setcols" role="group" aria-label="Colour">
-          {COLOURS.map((c) => (
-            <button
-              key={c.id}
-              className={`swatch${c.id === colour ? ' on' : ''}`}
-              style={{ background: c.id }}
-              onClick={() => setColour(c.id)}
-              aria-pressed={c.id === colour}
-              title={c.name}
-              aria-label={c.name}
-            />
-          ))}
-        </div>
-        <div className="setacts">
-          <button className="btn" onClick={() => setMarks((m) => m.slice(0, -1))} disabled={marks.length === 0}>
-            Undo
-          </button>
-          <button className="btn" onClick={() => setMarks([])} disabled={marks.length === 0}>
-            Clear
-          </button>
-          <button className="btn" onClick={onCancel}>Cancel</button>
-          <button className="btn p" onClick={save}>Done</button>
-        </div>
-      </div>
-
       <div className="setstage">
         <div className="setwrap">
+          {/* Directly above the image: a toolbar at the top of a dark overlay, with the
+              picture centred below it, is a toolbar nobody finds. */}
+          <div className="setop">
+            <div className="settools" role="group" aria-label="Tool">
+              {TOOLS.map((t) => (
+                <button
+                  key={t.id}
+                  className={t.id === tool ? 'on' : ''}
+                  onClick={() => { commitText(); setTool(t.id); }}
+                  aria-pressed={t.id === tool}
+                  title={t.name}
+                  aria-label={t.name}
+                >
+                  <span aria-hidden>{t.glyph}</span>
+                </button>
+              ))}
+            </div>
+            <div className="setcols" role="group" aria-label="Colour">
+              {COLOURS.map((c) => (
+                <button
+                  key={c.id}
+                  className={`swatch${c.id === colour ? ' on' : ''}`}
+                  style={{ background: c.id }}
+                  onClick={() => setColour(c.id)}
+                  aria-pressed={c.id === colour}
+                  title={c.name}
+                  aria-label={c.name}
+                />
+              ))}
+            </div>
+            <div className="setacts">
+              <button className="btn" onClick={undo} disabled={marks.length === 0} title="⌘Z">
+                Undo
+              </button>
+              <button className="btn" onClick={redo} disabled={redoDepth === 0} title="⌘⇧Z">
+                Redo
+              </button>
+              <button className="btn" onClick={clearAll} disabled={marks.length === 0}>
+                Clear
+              </button>
+              <button className="btn" onClick={onCancel} title="Esc">Cancel</button>
+              <button className="btn p" onClick={save}>Done</button>
+            </div>
+          </div>
+
           <canvas
             ref={canvasRef}
             className={`setcanvas t-${tool}`}
@@ -257,9 +317,9 @@ export function ShotEditor({
       </div>
 
       <p className="setnote">
-        {marks.length} mark{marks.length === 1 ? '' : 's'}. The annotated image is what gets
-        filed — the original is not kept separately, so circle the thing rather than describing
-        where it was.
+        {marks.length} mark{marks.length === 1 ? '' : 's'} · <b>⌘Z</b> undo · <b>⌘⇧Z</b> redo ·{' '}
+        <b>Esc</b> cancel. The annotated image is what gets filed — the original is not kept
+        separately, so circle the thing rather than describing where it was.
       </p>
     </div>
   );

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { findModule, findPlaybook, PLAYBOOK_ONLY } from '@/lib/nav';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,11 @@ export default async function ModulePage({ params }: { params: Promise<{ slug: s
   if (playbook) {
     return (
       <Page
-        crumbs={[{ label: 'Modules' }, { label: playbook.title }]}
+        crumbs={[
+          { label: SECTION.developer },
+          { label: 'Modules', href: '/dev/modules' },
+          { label: playbook.title },
+        ]}
         inspector={
           <>
             <div className="lbl">Module {playbook.num}</div>
@@ -71,7 +76,11 @@ export default async function ModulePage({ params }: { params: Promise<{ slug: s
 
   return (
     <Page
-      crumbs={[{ label: 'Modules' }, { label: mod!.title }]}
+      crumbs={[
+        { label: SECTION.developer },
+        { label: 'Modules', href: '/dev/modules' },
+        { label: mod!.title },
+      ]}
       inspector={
         <>
           <div className="lbl">Module {mod!.num}</div>

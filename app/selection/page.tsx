@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { moduleCrumbs } from '@/lib/nav';
 import { EntityLink } from '@/components/entity/EntityLink';
 import { EntitySummary } from '@/components/entity/EntitySummary';
 import { WeightsForm } from '@/components/scoring/WeightsForm';
@@ -39,7 +40,7 @@ export default async function Selection({
 
   return (
     <Page
-      crumbs={[{ label: 'Discover & qualify' }, { label: 'Selection' }]}
+      crumbs={moduleCrumbs('selection', selection.current?.name ?? null)}
       inspector={
         e ? <EntitySummary entityId={e} /> : weights ? (
           <>

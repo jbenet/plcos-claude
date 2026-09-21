@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { Meter } from '@/components/fit/marks';
 import { EntityLink } from '@/components/entity/EntityLink';
 import { EntitySummary } from '@/components/entity/EntitySummary';
@@ -70,7 +71,7 @@ export default async function FitRollup({
   return (
     <Page
       crumbs={[
-        { label: vehicle ? vehicle.name : 'All vehicles' },
+        { label: vehicle ? vehicle.name : 'All vehicles', href: '/overview' },
         { label: 'Funder–vehicle fit' },
       ]}
       inspector={

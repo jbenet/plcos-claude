@@ -139,6 +139,7 @@ export const STATIC_SECTIONS: NavSection[] = [
     links: [
       { label: 'Research corpus', href: '/research' },
       { label: 'Forecast', href: '/forecast' },
+      { label: 'Sprint calendar', href: '/calendar' },
       { label: 'Content studio', href: '/content' },
       { label: 'Content performance', href: '/performance' },
       { label: 'Answer library', href: '/library' },
@@ -197,4 +198,31 @@ export const ALL_MODULES = VEHICLE_MODULES;
 
 export function findModule(slug: string): NavModule | undefined {
   return VEHICLE_MODULES.find((x) => x.slug === slug);
+}
+
+/** The rail's own section names, so a breadcrumb cannot describe a section that is gone. */
+export const SECTION = {
+  overview: 'Overview',
+  capital: 'PL Capital',
+  rnd: 'PL R&D',
+  orgs: 'Orgs & people',
+  other: 'Other',
+  developer: 'Developer',
+} as const;
+
+/**
+ * The breadcrumb for a vehicle-scoped module: where you are in the rail, then which module.
+ *
+ * Taking the title from `VEHICLE_MODULES` rather than retyping it is the point — the four
+ * L-series umbrella headings ("Discover & qualify" and friends) survived in breadcrumbs for
+ * two versions after the rail stopped having them, because each page carried its own copy.
+ */
+export function moduleCrumbs(
+  slug: string, vehicleName: string | null,
+): Array<{ label: string; href?: string }> {
+  const mod = findModule(slug);
+  return [
+    { label: vehicleName ?? 'All vehicles', href: '/overview' },
+    { label: mod?.title ?? slug },
+  ];
 }

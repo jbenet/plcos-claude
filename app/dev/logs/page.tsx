@@ -1,4 +1,5 @@
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { ago, shortDate } from '@/lib/time';
 import { auditLog } from '@/modules/platform';
 
@@ -12,7 +13,7 @@ export default async function Logs() {
 
   return (
     <Page
-      crumbs={[{ label: 'Developer' }, { label: 'Logs' }]}
+      crumbs={[{ label: SECTION.developer }, { label: 'Logs' }]}
       inspector={
         <>
           <div className="lbl">Append-only</div>

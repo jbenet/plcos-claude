@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { moduleCrumbs } from '@/lib/nav';
+import { vehicleSelection } from '@/lib/session';
 import { usdM, multiple } from '@/lib/money';
 import { shortDate } from '@/lib/time';
 import { INSTRUMENT_LABEL, listExposures, vehicleTotals } from '@/modules/pipeline';
@@ -10,13 +12,14 @@ export const dynamic = 'force-dynamic';
 const KIND_LABEL: Record<string, string> = { fund: 'Fund', spv: 'SPV', grant_rail: 'Grants rail' };
 
 export default async function Vehicles() {
+  const selection = await vehicleSelection();
   const [totals, exposures, pursuits] = await Promise.all([
     vehicleTotals(), listExposures(), listPursuits(),
   ]);
 
   return (
     <Page
-      crumbs={[{ label: 'Convert & coordinate' }, { label: 'Vehicle status' }]}
+      crumbs={moduleCrumbs('vehicles', selection.current?.name ?? null)}
       inspector={
         <>
           <div className="lbl">Why there is no total</div>

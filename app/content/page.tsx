@@ -1,4 +1,5 @@
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { AudienceVariants } from '@/components/content/AudienceVariants';
 import { shortDate } from '@/lib/time';
 import { AUDIENCE_LABEL, listAssets, USE_LABEL } from '@/modules/content';
@@ -12,7 +13,7 @@ export default async function ContentStudio() {
 
   return (
     <Page
-      crumbs={[{ label: 'Create & substantiate' }, { label: 'Content studio' }]}
+      crumbs={[{ label: SECTION.other }, { label: 'Content studio' }]}
       inspector={
         <>
           <div className="lbl">Lineage</div>

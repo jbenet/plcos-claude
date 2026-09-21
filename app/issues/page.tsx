@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { issues as issueSink, SLA, type IssuePriority } from '@/lib/issues';
 import { ago } from '@/lib/time';
 
@@ -15,7 +16,7 @@ export default async function Issues() {
 
   return (
     <Page
-      crumbs={[{ label: 'Issues' }]}
+      crumbs={[{ label: SECTION.overview }, { label: 'Issues' }]}
       inspector={
         <>
           <div className="lbl">Triage ladder</div>

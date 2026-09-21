@@ -1,4 +1,5 @@
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { usdM, multiple } from '@/lib/money';
 import { shortDate } from '@/lib/time';
 import { poolChecks, vehicleTotals } from '@/modules/pipeline';
@@ -14,7 +15,7 @@ export default async function Forecast() {
 
   return (
     <Page
-      crumbs={[{ label: 'Execute & govern' }, { label: 'Forecast' }]}
+      crumbs={[{ label: SECTION.other }, { label: 'Forecast' }]}
       inspector={
         <>
           <div className="lbl">Conserved capital pool</div>

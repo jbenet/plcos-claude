@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
 import { timeline, LANE_LABEL, LANE_MEANS, type Lane, type Mark } from '@/lib/timeline';
@@ -92,7 +93,7 @@ export default async function Calendar({ params }: { params: Promise<{ vehicle: 
   return (
     <Page
       crumbs={[
-        { label: vehicle ? vehicle.name : 'Overview' },
+        { label: vehicle ? vehicle.name : SECTION.overview, href: vehicle ? '/overview' : undefined },
         { label: 'Calendar' },
       ]}
       inspector={

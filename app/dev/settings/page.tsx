@@ -1,4 +1,5 @@
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { PrefsReset } from '@/components/shell/PrefsReset';
 import { config, GUESSED_CONSTANTS } from '@/config/deployment';
 import { auth } from '@/lib/auth';
@@ -11,7 +12,7 @@ export default async function Settings() {
 
   return (
     <Page
-      crumbs={[{ label: 'Developer' }, { label: 'Settings' }]}
+      crumbs={[{ label: SECTION.developer }, { label: 'Settings' }]}
       inspector={
         <>
           <div className="lbl">Who you are</div>

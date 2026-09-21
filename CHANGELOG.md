@@ -1864,3 +1864,56 @@ heading when the section is closed.
   precedence that does not exist.
 
 **43 of 43 properties hold.**
+
+---
+
+## N11 — The screenshot is now the screen
+
+**Shipped.** The feedback capture asks the browser for the actual composited frame instead
+of redrawing the page, and the annotator's toolbar sits on the image.
+
+| | |
+|---|---|
+| ![Real capture](docs/changelog/shots/n11/01-real-capture.png) | **"Captured from your screen."** The box says which path it got, because the two are not equivalent and you should not have to guess. |
+| ![Toolbar](docs/changelog/shots/n11/02-toolbar-on-the-image.png) | **The toolbar is directly above the image**, and **freehand is the default tool** — this circle was drawn without selecting anything. |
+| ![Undo](docs/changelog/shots/n11/03-undo-redo.png) | **⌘Z and ⌘⇧Z work**, with buttons that disable when there is nothing to undo or redo. Esc cancels. |
+
+### Redrawing the page was not the same as photographing it
+
+You were right that it looked like a different rendering, because it was one.
+`modern-screenshot` re-draws the DOM through an SVG `foreignObject` — the browser's own
+engine, but a second pass. Text re-wraps at sub-pixel boundaries, form controls draw
+differently, scrollbars vanish, and anything the compositor does at paint time is
+approximated. **A feedback screenshot that is subtly not what the person saw is worse than
+useless**: they describe the thing they saw and the picture quietly disagrees.
+
+`getDisplayMedia` with `preferCurrentTab` asks the browser for the frames it actually
+composited. One frame, then the track is stopped. That is the screen.
+
+Two consequences, both real:
+
+- **It needs a permission prompt.** That is the price of exact pixels, and it is worth it.
+- **It cannot filter anything out.** The DOM path dropped elements marked `nocapture`; a
+  screen capture takes what is on the screen, including the feedback button's own busy
+  pulse. That is honest, so it stays.
+
+The renderer remains as the fallback for a declined prompt or a browser without the API,
+and the box labels which one produced the image — **"Captured from your screen"** or
+**"Redrawn from the page"**, the latter with a sentence on what can differ.
+
+The API needs the click's own user activation, so nothing may be awaited before it. The
+busy flag is now set *after* the call rather than before.
+
+### The annotator
+
+- **The toolbar floats directly above the image.** It was pinned to the top of a full-screen
+  overlay while the picture was centred below it — which is a toolbar nobody finds.
+- **Freehand is the default.** It is what people reach for; every other tool is a refinement
+  of "point at the thing".
+- **⌘Z / Ctrl+Z undoes, ⌘⇧Z / Ctrl+Y redoes, Esc cancels.** A new mark ends the redo branch,
+  the way every editor behaves, and **Clear is undoable** — it pushes everything onto the
+  redo stack rather than destroying it. The shortcuts are suppressed while a label is being
+  typed, where the browser's own undo belongs to the input.
+
+The changelog screenshots above are themselves real screen captures: the shot browser
+launches with tab capture auto-accepted, so this page shows the path it is describing.

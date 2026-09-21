@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { moduleCrumbs } from '@/lib/nav';
+import { vehicleSelection } from '@/lib/session';
 import { usdM } from '@/lib/money';
 import { shortDate } from '@/lib/time';
 import { bandwidthAlerts, spvRooms, SPV_STAGES, SPV_STAGE_LABEL } from '@/modules/close';
@@ -11,6 +13,7 @@ const STAGE_FLAG: Record<string, string> = {
 };
 
 export default async function SpvWarRoom() {
+  const selection = await vehicleSelection();
   const [rooms, alerts] = await Promise.all([spvRooms(), bandwidthAlerts()]);
   const wiredDays = rooms.map((r) => r.daysToWire).filter((d): d is number => d !== null);
   const headline = wiredDays.length ? Math.round(wiredDays.reduce((a, b) => a + b, 0) / wiredDays.length) : null;
@@ -18,7 +21,7 @@ export default async function SpvWarRoom() {
 
   return (
     <Page
-      crumbs={[{ label: 'Execute & govern' }, { label: 'SPV war room' }]}
+      crumbs={moduleCrumbs('spv', selection.current?.name ?? null)}
       inspector={
         <>
           <div className="lbl">Bandwidth</div>

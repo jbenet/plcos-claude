@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { corpusCoverage, listSourceDocs, snapshotCount } from '@/modules/research';
 import { shortDate } from '@/lib/time';
 
@@ -10,7 +11,11 @@ export default async function Sources() {
 
   return (
     <Page
-      crumbs={[{ label: 'Research & enrichment', href: '/research' }, { label: 'The corpus' }]}
+      crumbs={[
+        { label: SECTION.other },
+        { label: 'Research corpus', href: '/research' },
+        { label: 'Every source document' },
+      ]}
       inspector={
         <>
           <div className="lbl">Two kinds of copy</div>

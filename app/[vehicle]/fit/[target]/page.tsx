@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { CertaintyMark, Reading, Meter, certaintyMeans } from '@/components/fit/marks';
 import { FitDimensions, type DimRow } from '@/components/fit/FitDimensions';
@@ -69,7 +70,7 @@ export default async function FunderVehicleFit({
   );
 
   const crumbs = [
-    { label: vehicle ? vehicle.name : 'All vehicles' },
+    { label: vehicle ? vehicle.name : 'All vehicles', href: '/overview' },
     { label: 'Funder–vehicle fit', href: `/${slug}/fit` },
     { label: entity.displayName },
   ];

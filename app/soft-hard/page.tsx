@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { HardenForm } from '@/components/pipeline/HardenForm';
 import { vehicleSelection } from '@/lib/session';
 import { usdM, pct } from '@/lib/money';
@@ -26,7 +27,7 @@ export default async function SoftHard() {
   return (
     <Page
       crumbs={[
-        { label: selection.current ? selection.current.name : 'All vehicles' },
+        { label: selection.current?.name ?? 'All vehicles', href: '/overview' },
         { label: 'Soft → Hard' },
       ]}
       inspector={

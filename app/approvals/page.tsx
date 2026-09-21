@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { DecideForm } from '@/components/approvals/DecideForm';
 import { AdjudicateForm } from '@/components/approvals/AdjudicateForm';
 import { config } from '@/config/deployment';
@@ -44,7 +45,7 @@ export default async function Approvals({
 
   return (
     <Page
-      crumbs={[{ label: 'Approvals' }]}
+      crumbs={[{ label: SECTION.overview }, { label: 'Approvals' }]}
       queue={
         <>
           <div className="qhead">

@@ -165,6 +165,78 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N12: [
+    { name: '01-deep-crumb', path: '/neurotech/fit', prepare: async (page) => {
+        await page.getByRole('link', { name: 'full assessment →' }).nth(2).click();
+        await page.waitForLoadState('networkidle');
+      } },
+    { name: '02-crumb-hover', path: '/research/sources' },
+  ],
+  N11: [
+    {
+      name: '01-real-capture',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(3000);
+        await page.getByPlaceholder("Guard message doesn't say whose ask is blocking").fill(
+          'Ranks jump around when a gate is answered',
+        );
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '02-toolbar-on-the-image',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(3000);
+        await page.getByRole('button', { name: 'Open the screenshot to annotate it' }).click();
+        await page.waitForTimeout(700);
+        const box = await page.locator('canvas.setcanvas').boundingBox();
+        if (box) {
+          // freehand is the default tool now — no click needed
+          await page.mouse.move(box.x + box.width * 0.30, box.y + box.height * 0.30);
+          await page.mouse.down();
+          for (let i = 0; i <= 22; i += 1) {
+            const t = i / 22;
+            await page.mouse.move(
+              box.x + box.width * (0.30 + 0.16 * Math.sin(t * Math.PI * 2)),
+              box.y + box.height * (0.30 + 0.07 * Math.cos(t * Math.PI * 2)),
+            );
+          }
+          await page.mouse.up();
+        }
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: '03-undo-redo',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(3000);
+        await page.getByRole('button', { name: 'Open the screenshot to annotate it' }).click();
+        await page.waitForTimeout(700);
+        const box = await page.locator('canvas.setcanvas').boundingBox();
+        if (box) {
+          await page.getByRole('button', { name: 'Point at something' }).click();
+          await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.55);
+          await page.mouse.down();
+          await page.mouse.move(box.x + box.width * 0.33, box.y + box.height * 0.3, { steps: 10 });
+          await page.mouse.up();
+          await page.getByRole('button', { name: 'Box it' }).click();
+          await page.mouse.move(box.x + box.width * 0.24, box.y + box.height * 0.24);
+          await page.mouse.down();
+          await page.mouse.move(box.x + box.width * 0.62, box.y + box.height * 0.33, { steps: 10 });
+          await page.mouse.up();
+          await page.keyboard.press('Meta+z');
+          await page.waitForTimeout(250);
+        }
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N10: [
     { name: '01-overview-section', path: '/today' },
     {
@@ -537,7 +609,18 @@ async function main() {
   const dir = join(process.cwd(), 'docs/changelog/shots', version.toLowerCase());
   await mkdir(dir, { recursive: true });
 
-  const browser = await chromium.launch();
+  /**
+   * The feedback box asks for a real screen capture first. Headless Chromium will not grant
+   * that without these flags, and without them the changelog would only ever show the
+   * fallback renderer — which is the path we are trying to demonstrate away from.
+   */
+  const browser = await chromium.launch({
+    args: [
+      '--auto-accept-this-tab-capture',
+      '--auto-select-desktop-capture-source=Capital OS',
+      '--use-fake-ui-for-media-stream',
+    ],
+  });
   const page = await browser.newPage({ viewport: { width: 1440, height: 940 }, deviceScaleFactor: 2 });
 
   for (const shot of shots) {

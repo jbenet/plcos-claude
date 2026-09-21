@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ShotEditor } from './ShotEditor';
+import { capturePage, METHOD_LABEL, type CaptureMethod } from '@/lib/capture';
 
 type Kind = 'bug' | 'request' | 'question' | 'chore';
 type Priority = 'P0' | 'P1' | 'P2' | 'P3';
@@ -15,54 +16,26 @@ const SLA: Record<Priority, string> = {
   P3: 'weekly triage · backlog',
 };
 
-/**
- * Capture what the reporter is looking at, before the drawer covers it.
- *
- * The visible viewport rather than the whole document: a complaint is about what was on
- * screen, and a 4,000-pixel-tall image of a page they had scrolled past is noise. Rendered
- * through the browser's own engine via an SVG foreignObject, so shadows, gradients and the
- * real fonts survive — a screenshot that does not look like the screen is worse than none.
- */
-async function capture(): Promise<string | null> {
-  try {
-    const { domToPng } = await import('modern-screenshot');
-    // Without this the clone renders in fallback metrics and every heading re-wraps —
-    // a screenshot that does not match the screen is worse than no screenshot.
-    await document.fonts.ready;
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    return await domToPng(document.body, {
-      width: w,
-      height: h,
-      // Sharp enough to read, capped so the PNG stays a few megabytes rather than ten.
-      scale: Math.min(2, window.devicePixelRatio || 1, 2000 / w),
-      backgroundColor: getComputedStyle(document.body).backgroundColor,
-      style: {
-        transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
-        transformOrigin: 'top left',
-      },
-      filter: (node: Node) =>
-        !(node instanceof Element && node.classList.contains('nocapture')),
-    });
-  } catch {
-    // A capture that fails must not block the complaint. The box says so and carries on.
-    return null;
-  }
-}
-
 export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [shot, setShot] = useState<string | null>(null);
-  const [shotFailed, setShotFailed] = useState(false);
+  const [method, setMethod] = useState<CaptureMethod | null>(null);
+  const [note, setNote] = useState<string | null>(null);
 
-  const start = async () => {
+  /**
+   * `capturePage` asks for a screen capture first, and that API needs the click's own
+   * user activation — so nothing may be awaited before it. The busy flag is set after.
+   */
+  const start = () => {
     setBusy(true);
-    const png = await capture();
-    setShot(png);
-    setShotFailed(png === null);
-    setBusy(false);
-    setOpen(true);
+    void capturePage().then((c) => {
+      setShot(c?.dataUrl ?? null);
+      setMethod(c?.method ?? null);
+      setNote(c?.note ?? null);
+      setBusy(false);
+      setOpen(true);
+    });
   };
 
   return (
@@ -90,7 +63,8 @@ export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }
       {open && (
         <FeedbackDrawer
           shot={shot}
-          shotFailed={shotFailed}
+          method={method}
+          note={note}
           onShot={setShot}
           onClose={() => setOpen(false)}
         />
@@ -100,10 +74,11 @@ export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }
 }
 
 function FeedbackDrawer({
-  shot, shotFailed, onShot, onClose,
+  shot, method, note, onShot, onClose,
 }: {
   shot: string | null;
-  shotFailed: boolean;
+  method: CaptureMethod | null;
+  note: string | null;
   onShot: (png: string) => void;
   onClose: () => void;
 }) {
@@ -199,7 +174,7 @@ function FeedbackDrawer({
             <div className="ctx">{JSON.stringify(context, null, 2)}</div>
 
             <div className="lbl" style={{ marginTop: 14 }}>Screenshot</div>
-            {shotFailed || !shot ? (
+            {!shot ? (
               <p className="note" style={{ marginTop: 6 }}>
                 This browser would not give us an image of the page. The complaint still files
                 without one — a failed capture is not a reason to lose what you were going to say.
@@ -226,8 +201,9 @@ function FeedbackDrawer({
                   <span>
                     Include screenshot
                     <small>
-                      Filed beside the issue as a PNG in this repository. Click the image to draw
-                      on it — an arrow costs you a second and saves a paragraph.
+                      <b>{method ? METHOD_LABEL[method] : 'Captured'}.</b>{' '}
+                      {note ?? 'Exactly the pixels that were on your screen.'} Filed beside the
+                      issue as a PNG in this repository — click it to draw on it.
                     </small>
                   </span>
                 </label>

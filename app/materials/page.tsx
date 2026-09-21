@@ -1,4 +1,6 @@
 import { Page } from '@/components/shell/Page';
+import { moduleCrumbs } from '@/lib/nav';
+import { vehicleSelection } from '@/lib/session';
 import { SendGate } from '@/components/content/SendGate';
 import { shortDate } from '@/lib/time';
 import { listEntities } from '@/modules/identity';
@@ -16,6 +18,7 @@ const SEND_FLAG: Record<string, string> = {
 };
 
 export default async function Materials() {
+  const selection = await vehicleSelection();
   const [assets, rules, sends, entities, vehicles, wrongWrap] = await Promise.all([
     listAssets(), listWrapRules(), listSends(), listEntities(), listVehicles(), wrongWrapSends(),
   ]);
@@ -24,7 +27,7 @@ export default async function Materials() {
 
   return (
     <Page
-      crumbs={[{ label: 'Create & substantiate' }, { label: 'Materials & send gate' }]}
+      crumbs={moduleCrumbs('materials', selection.current?.name ?? null)}
       inspector={
         <>
           <div className="lbl">Hard KPI</div>

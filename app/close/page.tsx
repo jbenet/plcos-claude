@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { moduleCrumbs } from '@/lib/nav';
+import { vehicleSelection } from '@/lib/session';
 import { usdM } from '@/lib/money';
 import { shortDate } from '@/lib/time';
 import { conditionsFor, listCycles, packFor, PACK_LABEL } from '@/modules/close';
@@ -15,11 +17,12 @@ const PACK_FLAG: Record<string, string> = {
 };
 
 export default async function CloseRoom() {
+  const selection = await vehicleSelection();
   const cycles = await listCycles();
   const cycle = cycles[0];
   if (!cycle) {
     return (
-      <Page crumbs={[{ label: 'Execute & govern' }, { label: 'Close room' }]}>
+      <Page crumbs={moduleCrumbs('close', selection.current?.name ?? null)}>
         <h1>No close cycle is open.</h1>
         <p className="sublede">A close room exists once someone opens a cycle with a target date.</p>
       </Page>
@@ -37,7 +40,7 @@ export default async function CloseRoom() {
 
   return (
     <Page
-      crumbs={[{ label: 'Execute & govern' }, { label: 'Close room' }]}
+      crumbs={moduleCrumbs('close', selection.current?.name ?? null)}
       inspector={
         <>
           <div className="lbl">Committee clock</div>

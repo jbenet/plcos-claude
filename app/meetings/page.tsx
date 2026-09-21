@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { moduleCrumbs } from '@/lib/nav';
+import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
 import { listPursuits, RUNG_LABEL, RUNG_REQUIRES } from '@/modules/strategy';
 import {
@@ -13,6 +15,7 @@ export default async function Meetings({
 }: {
   searchParams: Promise<{ e?: string }>;
 }) {
+  const selection = await vehicleSelection();
   const { e } = await searchParams;
   const [all, upcoming, pursuits] = await Promise.all([
     listMeetings(), upcomingMeetings(), listPursuits(),
@@ -24,7 +27,7 @@ export default async function Meetings({
 
   return (
     <Page
-      crumbs={[{ label: 'Convert & coordinate' }, { label: 'Meetings' }]}
+      crumbs={moduleCrumbs('meetings', selection.current?.name ?? null)}
       queue={
         <>
           <div className="qhead">

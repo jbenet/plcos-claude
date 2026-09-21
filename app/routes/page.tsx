@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { moduleCrumbs } from '@/lib/nav';
+import { vehicleSelection } from '@/lib/session';
 import { RouteGraph } from '@/components/routes/RouteGraph';
 import { ProposeButton } from '@/components/routes/ProposeButton';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
@@ -24,6 +26,7 @@ export default async function Routes({
 }: {
   searchParams: Promise<{ target?: string; r?: string }>;
 }) {
+  const selection = await vehicleSelection();
   const { target, r } = await searchParams;
   const user = await (await auth()).currentUser();
   const [entities, docs, tiers, vehicles] = await Promise.all([
@@ -46,7 +49,7 @@ export default async function Routes({
 
   return (
     <Page
-      crumbs={[{ label: 'Discover & qualify' }, { label: 'Warm intro routes' }]}
+      crumbs={moduleCrumbs('routes', selection.current?.name ?? null)}
       queue={
         <>
           <div className="qhead">

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { auth } from '@/lib/auth';
@@ -47,7 +48,7 @@ export default async function Status() {
 
   return (
     <Page
-      crumbs={[{ label: 'Developer' }, { label: 'Status' }]}
+      crumbs={[{ label: SECTION.developer }, { label: 'Status' }]}
       inspector={
         <>
           <div className="lbl">Right now</div>

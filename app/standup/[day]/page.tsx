@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { PinButton } from '@/components/standup/PinButton';
 import { EntityLink } from '@/components/entity/EntityLink';
 import { usdM } from '@/lib/money';
@@ -79,7 +80,11 @@ export default async function Standup({ params }: { params: Promise<{ day: strin
 
   return (
     <Page
-      crumbs={[{ label: 'Overview' }, { label: 'Daily standup' }, { label: longDate(s.day) }]}
+      crumbs={[
+        { label: SECTION.overview },
+        { label: 'Daily standup', href: '/standup' },
+        { label: longDate(s.day) },
+      ]}
       inspector={
         <>
           <div className="lbl">This day</div>

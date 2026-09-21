@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { EntityLink } from '@/components/entity/EntityLink';
 import { EntitySummary } from '@/components/entity/EntitySummary';
 import { usdM } from '@/lib/money';
@@ -88,7 +89,7 @@ export default async function Orgs({
 
   return (
     <Page
-      crumbs={[{ label: 'Orgs & people' }, { label: spec.title }]}
+      crumbs={[{ label: SECTION.orgs }, { label: spec.title }]}
       inspector={
         e ? (
           <EntitySummary entityId={e} />

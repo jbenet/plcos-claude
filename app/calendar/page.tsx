@@ -1,4 +1,5 @@
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { SprintStrip } from '@/components/calendar/SprintStrip';
 import { listPeriods, sprintStrip, urgency } from '@/modules/calendar';
 import { shortDate } from '@/lib/time';
@@ -18,7 +19,7 @@ export default async function Calendar() {
 
   return (
     <Page
-      crumbs={[{ label: 'Execute & govern' }, { label: 'Sprint calendar' }]}
+      crumbs={[{ label: SECTION.other }, { label: 'Sprint calendar' }]}
       inspector={
         <>
           <div className="lbl">Today</div>

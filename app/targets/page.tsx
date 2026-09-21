@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
 import { listPursuits, RUNGS, RUNG_LABEL, rungIndex } from '@/modules/strategy';
@@ -15,7 +16,7 @@ export default async function Targets() {
   return (
     <Page
       crumbs={[
-        { label: selection.current ? selection.current.name : 'All vehicles' },
+        { label: selection.current?.name ?? 'All vehicles', href: '/overview' },
         { label: 'Conversion strategy' },
       ]}
       inspector={

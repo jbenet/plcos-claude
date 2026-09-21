@@ -25,7 +25,7 @@ export async function Page({
 
   return (
     <PageFrame
-      crumbs={crumbs.map((c) => ({ label: c.label }))}
+      crumbs={crumbs.map((c) => ({ label: c.label, href: c.href }))}
       syncTone={sync.tone}
       syncLine={sync.line}
       syncTitle={sync.sources.map((s) => `${s.label}: ${s.status}`).join('\n')}

@@ -1,4 +1,5 @@
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { InvitationForm } from '@/components/grants/InvitationForm';
 import { shortDate } from '@/lib/time';
 import { FUNDER_STATUS_LABEL, listFunders } from '@/modules/grants';
@@ -15,7 +16,7 @@ export default async function Grants() {
 
   return (
     <Page
-      crumbs={[{ label: 'Execute & govern' }, { label: 'Grants rail' }]}
+      crumbs={[{ label: SECTION.rnd }, { label: 'Grants rail' }]}
       inspector={
         <>
           <div className="lbl">The gate</div>

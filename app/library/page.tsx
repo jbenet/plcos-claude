@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { shortDate } from '@/lib/time';
 import { ANSWER_STATUS_LABEL, coverageGaps, listAnswers } from '@/modules/library';
 
@@ -18,7 +19,7 @@ export default async function Library() {
 
   return (
     <Page
-      crumbs={[{ label: 'Create & substantiate' }, { label: 'Evidence & answer library' }]}
+      crumbs={[{ label: SECTION.other }, { label: 'Answer library' }]}
       inspector={
         <>
           <div className="lbl">Why answers have their own approval</div>

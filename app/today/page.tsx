@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
+import { SECTION } from '@/lib/nav';
 import { SprintStrip } from '@/components/calendar/SprintStrip';
 import { auth } from '@/lib/auth';
 import { issues as issueSink, SLA } from '@/lib/issues';
@@ -52,7 +53,7 @@ export default async function Today() {
       : 'No mutating command is waiting on an approval. That is an empty queue, not a failed read.';
 
   return (
-    <Page crumbs={[{ label: selection.current ? selection.current.name : 'All vehicles' }, { label: 'Today' }]}>
+    <Page crumbs={[{ label: SECTION.overview }, { label: 'Today' }]}>
       <div className="lbl">{dateLabel(new Date())}</div>
       <h1>{headline}</h1>
       <p className="sublede">{sublede}</p>
