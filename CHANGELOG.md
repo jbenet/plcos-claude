@@ -1917,3 +1917,56 @@ busy flag is now set *after* the call rather than before.
 
 The changelog screenshots above are themselves real screen captures: the shot browser
 launches with tab capture auto-accepted, so this page shows the path it is describing.
+
+---
+
+## N12 — Breadcrumbs that match the rail
+
+**Shipped.** Every breadcrumb in the app now names a section that actually exists, and the
+middle ones are links.
+
+| | |
+|---|---|
+| ![Deep crumb](docs/changelog/shots/n12/01-deep-crumb.png) | **`PLC Neurotech I / Funder–vehicle fit / Northwood Capital`** — three levels, and the middle two go back where they say. |
+| ![Corpus](docs/changelog/shots/n12/02-crumb-hover.png) | **`Other / Research corpus / Every source document`.** The section, the page, the thing. |
+
+### What was wrong
+
+Twenty pages still said **Discover & qualify**, **Convert & coordinate**, **Create &
+substantiate**, **Execute & govern** or **Learning & agent quality**. Those were the four
+L-series umbrella sections, and the rail stopped having them at N1 — two months of
+versions ago in changelog time. Every page carried its own hand-typed copy, so nothing
+broke and nothing noticed.
+
+**`href` on a breadcrumb was being thrown away.** `Page` mapped crumbs to `{label}` and
+dropped the link, so `Issues / 0007 · …` looked like a path and behaved like text. Deep
+pages were one-way.
+
+### What it is now
+
+Breadcrumbs mirror the rail, because the rail is the map:
+
+```
+Overview / Today · Approvals · Issues · Daily standup / <date> · Calendar
+PL Capital / <vehicle> / <module> / <target>
+PL R&D / Operations · PL Neuro · Grants rail
+Orgs & people / <group or person>
+Other / Research corpus / Every source document
+Developer / Modules / <module>
+```
+
+A vehicle-scoped module gets its crumb from `moduleCrumbs(slug, vehicleName)`, which reads
+the title straight out of `VEHICLE_MODULES`. **That is the fix, not the relabelling** — the
+stale headings survived for two versions precisely because each page kept its own copy of
+the nav's structure.
+
+Section names come from one exported `SECTION` map for the same reason.
+
+A crumb carries an `href` when it is a page and none when it is a section heading, so a
+link goes somewhere and a non-link is honestly inert.
+
+### One orphan found
+
+`/calendar` — the sprint strip with the dead weeks — lost its rail entry when the new
+Calendar went in at N9, and became reachable only from a timeline bar. It is back under
+**Other**, where a page that computes working days against holidays belongs.
