@@ -51,7 +51,7 @@ export function EnrichmentTable({ methods }: { methods: Method[] }) {
   const [params, setParams] = useState<ScoreParams>(DEFAULT_PARAMS);
   const [showKnobs, setShowKnobs] = useState(false);
   const [kind, setKind] = useState<MethodKind | 'all'>('all');
-  const [only, setOnly] = useState<'all' | 'runnable' | 'automatable' | 'queued'>('runnable');
+  const [only, setOnly] = useState<'all' | 'runnable' | 'automatable' | 'human' | 'queued'>('runnable');
   const [sort, setSort] = useState<SortKey>('priority');
   const [asc, setAsc] = useState(false);
   const [pending, start] = useTransition();
@@ -76,6 +76,7 @@ export function EnrichmentTable({ methods }: { methods: Method[] }) {
       if (kind !== 'all' && m.kind !== kind) return false;
       if (only === 'runnable') return m.status === 'available' || m.status === 'in_use';
       if (only === 'automatable') return m.automatable;
+      if (only === 'human') return !m.automatable;
       if (only === 'queued') return m.selected;
       return true;
     });
@@ -119,8 +120,8 @@ export function EnrichmentTable({ methods }: { methods: Method[] }) {
           </span>
         </div>
         <div className="qbar">
-          <div className={`qslot${overHuman ? ' over' : ''}`}>
-            <span className="lbl">Human</span>
+          <div className={`qslot human${overHuman ? ' over' : ''}`}>
+            <span className="lbl">Human · the slow one</span>
             <b>{queuedHuman} of {params.humanWip}</b>
             <span className="muted">
               {overHuman
@@ -128,8 +129,8 @@ export function EnrichmentTable({ methods }: { methods: Method[] }) {
                 : 'Person-time. The scarce one.'}
             </span>
           </div>
-          <div className={`qslot${overAi ? ' over' : ''}`}>
-            <span className="lbl">Agent</span>
+          <div className={`qslot agent${overAi ? ' over' : ''}`}>
+            <span className="lbl">Agent · the fast one</span>
             <b>{queuedAi} of {params.aiWip}</b>
             <span className="muted">
               {overAi
@@ -178,9 +179,10 @@ export function EnrichmentTable({ methods }: { methods: Method[] }) {
         </div>
 
         <div className="sorter" style={{ padding: '10px 15px 0' }}>
-          {(['runnable', 'automatable', 'queued', 'all'] as const).map((o) => (
+          {(['runnable', 'automatable', 'human', 'queued', 'all'] as const).map((o) => (
             <button key={o} className={only === o ? 'on' : ''} onClick={() => setOnly(o)} aria-pressed={only === o}>
-              {o === 'runnable' ? 'Runnable' : o === 'automatable' ? 'Agent can run it'
+              {o === 'runnable' ? 'Runnable' : o === 'automatable' ? 'Agent runs it'
+                : o === 'human' ? 'A person runs it'
                 : o === 'queued' ? 'In the queue' : 'Everything'}
             </button>
           ))}
@@ -267,7 +269,11 @@ export function EnrichmentTable({ methods }: { methods: Method[] }) {
                       <span className={`flag ${TIER_FLAG[m.producesTier] ?? 'f-mute'}`}>
                         tier {m.producesTier}
                       </span>
-                      {m.automatable && <span className="lever hot">agent can run it</span>}
+                      {/* Both cases get a label. One side labelled and the other silent
+                          reads as an oversight rather than as "a person does this". */}
+                      {m.automatable
+                        ? <span className="lever agent">agent runs it</span>
+                        : <span className="lever human">a person runs it</span>}
                       <span className="lever">{m.coverage}</span>
                       <span className={`flag ${STATUS_FLAG[m.status]}`}>{METHOD_STATUS_LABEL[m.status]}</span>
                       <span className={`cert c-${m.certainty}`}>{m.certainty}</span>
@@ -275,7 +281,11 @@ export function EnrichmentTable({ methods }: { methods: Method[] }) {
                     <div className="muted mdet">{m.detail}</div>
                     {m.costBasis && <div className="mdet dim">{m.costBasis}</div>}
                     {m.limits && <div className="mlimit">{m.limits}</div>}
-                    {m.blockedBy && <div className="mblock"><b>Blocked.</b> {m.blockedBy}</div>}
+                    {/* The verdict line below already carries this sentence when the
+                        verdict came from it. Printing both reads as two findings. */}
+                    {m.blockedBy && m.score.why !== m.blockedBy && (
+                      <div className="mblock"><b>Blocked.</b> {m.blockedBy}</div>
+                    )}
                     <div className="muted mwhy">
                       <b>{METHOD_VERDICT_LABEL[m.score.verdict]}.</b> {m.score.why}
                     </div>

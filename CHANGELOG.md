@@ -2715,3 +2715,39 @@ higher-priority methods simply rank above it, which is a different sentence:
 A page that says two contradictory things about the same number teaches you to trust neither.
 
 **43 of 43 properties hold.**
+
+---
+
+## N26 — Who runs it, said on every row
+
+**Shipped.** One side was labelled and the other was silent.
+
+| | |
+|---|---|
+| ![Both labelled](docs/changelog/shots/n26/01-both-labelled.png) | **Every method now says who runs it.** Clay for a person, green for an agent. |
+| ![A person runs it](docs/changelog/shots/n26/02-person-runs-it.png) | **A person runs it** — a filter as well as a label. |
+| ![Agent runs it](docs/changelog/shots/n26/03-agent-runs-it.png) | **Agent runs it.** Cheap, repeatable, and still needs reading. |
+| ![The queue](docs/changelog/shots/n26/04-queue.png) | **The two queues** carry the same two colours. |
+
+### An absent label is not a label
+
+`agent can run it` appeared on the methods an agent can run, and nothing appeared on the
+rest. That reads as an oversight — a row somebody forgot to tag — rather than as *a person
+does this one*. Both cases are labelled now: **a person runs it** and **agent runs it**.
+
+**Clay for a person, green for an agent**, because the agent is the faster one and person-time
+is the scarce thing being spent. The words say it too — the colour is a second reading of the
+label, never the only one, which is why these are not two shades of the same dot.
+
+The two queue counters carry the same pair: *Human · the slow one*, *Agent · the fast one*.
+Same colours, same meaning, so the row and the counter teach each other.
+
+`A person runs it` is also a filter now, beside `Agent runs it`. Asking "what does this cost
+me personally this week" was previously only answerable by reading every row.
+
+### While in there
+
+A rejected method printed its reason twice — once as **Blocked.** and again as the verdict's
+reason, from the same string. One finding, printed once.
+
+**43 of 43 properties hold.**

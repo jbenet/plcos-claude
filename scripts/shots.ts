@@ -167,9 +167,34 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N26: [
+    { name: '01-both-labelled', path: '/orgs/enrichment', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'Every way we could find out' })
+          .scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '02-person-runs-it', path: '/orgs/enrichment', prepare: async (page) => {
+        await page.getByRole('button', { name: 'A person runs it' }).click();
+        await page.waitForTimeout(400);
+        await page.getByRole('heading', { name: 'Every way we could find out' })
+          .scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '03-agent-runs-it', path: '/orgs/enrichment', prepare: async (page) => {
+        await page.getByRole('button', { name: 'Agent runs it' }).click();
+        await page.waitForTimeout(400);
+        await page.getByRole('heading', { name: 'Every way we could find out' })
+          .scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '04-queue', path: '/orgs/enrichment', prepare: async (page) => {
+        await page.getByRole('heading', { name: 'The queue' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+  ],
   N25: [
     { name: '01-rows', path: '/orgs/enrichment', prepare: async (page) => {
-        await page.getByRole('button', { name: 'Agent can run it' }).click();
+        await page.getByRole('button', { name: 'Agent runs it' }).click();
         await page.waitForTimeout(400);
         await page.getByRole('heading', { name: 'Every way we could find out' })
           .scrollIntoViewIfNeeded();
@@ -233,7 +258,7 @@ const SHOTS: Record<string, Shot[]> = {
         await page.waitForTimeout(300);
       } },
     { name: '03-filters', path: '/orgs/enrichment', prepare: async (page) => {
-        await page.getByRole('button', { name: 'Agent can run it' }).click();
+        await page.getByRole('button', { name: 'Agent runs it' }).click();
         await page.waitForTimeout(400);
         await page.getByRole('heading', { name: 'Every way we could find out' })
           .scrollIntoViewIfNeeded();
