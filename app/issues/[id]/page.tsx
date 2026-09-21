@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
 import { Markdown } from '@/components/ui/Markdown';
 import { SECTION } from '@/lib/nav';
-import { issues as issueSink, SLA } from '@/lib/issues';
+import { issues as issueSink, PRIORITY } from '@/lib/issues';
 import { shortDate } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
@@ -53,9 +53,10 @@ export default async function IssueDetail({ params }: { params: Promise<{ id: st
             </span>
           </div>
           <div className="scope">
-            <div className="lbl">Service level</div>
+            <div className="lbl">Priority · {issue.priority}</div>
             <p>
-              Triaged {SLA[issue.priority].triage}, fixed {SLA[issue.priority].fix}.
+              <b>{PRIORITY[issue.priority].means}.</b> {PRIORITY[issue.priority].detail} No date
+              is promised against it — how fast the queue moves is a fact about the queue.
             </p>
           </div>
           <div className="note" style={{ marginTop: 0 }}>

@@ -3,6 +3,27 @@ import { auth } from '@/lib/auth';
 import { fileFeedback } from '@/modules/platform';
 import type { IssueAttachment, IssueKind, IssuePriority } from '@/lib/issues';
 
+/**
+ * The first real sentence of the body, cleaned of markdown furniture and cut to a length a
+ * list can show. Returns an empty string when there is nothing to name — the caller refuses
+ * rather than filing "Feedback on /approvals" as if it meant something.
+ */
+function titleFrom(body: string, page: string): string {
+  const line = body
+    .split(/\n/)
+    .map((l) => l.replace(/^\s*(?:[-*+]|\d+[.)]|>|#{1,6})\s*/, '').trim())
+    .find((l) => l.length > 0 && !l.startsWith('```') && !l.startsWith('!['));
+  if (!line) return '';
+  const plain = line
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[*_`]/g, '')
+    .trim();
+  if (!plain) return '';
+  const cut = plain.length <= 72 ? plain : `${plain.slice(0, 71).replace(/\s+\S*$/, '')}…`;
+  return page && cut.length < 18 ? `${cut} (${page})` : cut;
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {
@@ -11,8 +32,20 @@ export async function POST(req: Request) {
       images?: Array<{ name?: string; dataUrl?: string }>;
       imageOffset?: number;
     };
-    if (!body.title?.trim()) {
-      return NextResponse.json({ error: 'A title is required.' }, { status: 400 });
+    /**
+     * Intake writes the title when the reporter did not (issue 0012).
+     *
+     * Making somebody name a bug before they can describe it is a tax on the complaint, and
+     * the name they invent under that pressure is usually worse than the first line of what
+     * they actually wrote. What intake cannot do is invent the *complaint* — a report with
+     * neither a title nor a body is still refused.
+     */
+    const title = body.title?.trim() || titleFrom(body.body ?? '', body.page ?? '/');
+    if (!title) {
+      return NextResponse.json(
+        { error: 'Say what happened. A title or a description — either is enough, neither is not.' },
+        { status: 400 },
+      );
     }
     /**
      * Everything arrives as a data URL from the reporter's own browser. Only the four
@@ -57,7 +90,7 @@ export async function POST(req: Request) {
 
     const user = await (await auth()).currentUser();
     const issue = await fileFeedback(user, {
-      title: body.title,
+      title,
       body: body.body ?? '',
       kind: body.kind ?? 'bug',
       priority: body.priority ?? 'P2',

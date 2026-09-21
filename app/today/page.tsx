@@ -3,7 +3,7 @@ import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { SprintStrip } from '@/components/calendar/SprintStrip';
 import { auth } from '@/lib/auth';
-import { issues as issueSink, SLA } from '@/lib/issues';
+import { issues as issueSink } from '@/lib/issues';
 import { recentAudit } from '@/modules/platform';
 import { vehicleSelection } from '@/lib/session';
 import { ago, dateLabel, shortDate } from '@/lib/time';
@@ -299,8 +299,8 @@ export default async function Today() {
           {open.length > 0 && (
             <p className="cover">
               {open.length} open issue{open.length === 1 ? '' : 's'} filed through the feedback box ·{' '}
-              {open.filter((i) => i.priority === 'P0' || i.priority === 'P1').length} at P0 or P1,
-              fixed within {SLA.P1.fix}. <Link href="/issues">Open the list</Link>.
+              {open.filter((i) => i.priority === 'P0' || i.priority === 'P1').length} blocking or
+              serious. <Link href="/issues">Open the list</Link>.
             </p>
           )}
         </div>

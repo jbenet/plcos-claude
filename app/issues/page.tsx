@@ -1,7 +1,7 @@
 import { IssueList } from '@/components/issues/IssueList';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
-import { issues as issueSink, SLA, type IssuePriority } from '@/lib/issues';
+import { issues as issueSink, PRIORITY, type IssuePriority } from '@/lib/issues';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,17 +18,17 @@ export default async function Issues() {
       crumbs={[{ label: SECTION.overview }, { label: 'Issues' }]}
       inspector={
         <>
-          <div className="lbl">Triage ladder</div>
-          <div className="ihead">What each priority promises</div>
-          <div className="imeta">issues/README.md · the same four rows the frontmatter uses</div>
+          <div className="lbl">Priority</div>
+          <div className="ihead">What each one means</div>
+          <div className="imeta">An order, not a delivery date — the queue decides the date</div>
           {ORDER.map((p) => (
             <div className="kv" key={p}>
               <span>{p}</span>
               <span>
-                {SLA[p].triage}
+                {PRIORITY[p].means}
                 <br />
                 <span className="muted" style={{ fontWeight: 400 }}>
-                  fix: {SLA[p].fix}
+                  {PRIORITY[p].detail}
                 </span>
               </span>
             </div>
@@ -58,9 +58,7 @@ export default async function Issues() {
           <div className="kpi" key={p}>
             <span className={`tag ${p === 'P0' || p === 'P1' ? 't-clay' : 't-plain'}`}>{p}</span>
             <div className="n">{n}</div>
-            <div className="f">
-              Triaged {SLA[p].triage}. Fixed {SLA[p].fix}.
-            </div>
+            <div className="f">{PRIORITY[p].means}. {PRIORITY[p].detail}</div>
           </div>
         ))}
       </div>

@@ -3019,3 +3019,59 @@ when it is first seen.
 
 **43 of 43 properties hold.** Two issues stay open on purpose, each with the specific thing
 it is waiting for written into the file.
+
+---
+
+## N31 — The feedback box stops arguing with the reporter
+
+**Shipped.** Issues 0009, 0010 and most of 0012 — everything about the dialog itself.
+
+| | |
+|---|---|
+| ![No title needed](docs/changelog/shots/n31/01-no-title-needed.png) | **The title is optional.** Intake writes one from your first line. |
+| ![Markdown source](docs/changelog/shots/n31/02-markdown-source.png) | **The Markdown tab stopped fighting.** Fenced blocks and double spaces survive. |
+| ![Shortcuts](docs/changelog/shots/n31/03-shortcuts.png) | **`?` lists the shortcuts**, this dialog's first. |
+
+### The Markdown tab was unusable and the reason was a loop
+
+The textarea was controlled by the same `value` the rich editor writes. Every keystroke went
+out to the parent, came back through TipTap's serialiser — which trims trailing whitespace
+and escapes backticks — and was handed back as a *different string*. So a trailing space
+vanished as you typed it, the cursor jumped to the end of the box, and a fenced code block
+could not be written at all.
+
+**While the Markdown tab is open the textarea is the document.** Nothing round-trips until
+Rich is asked for, and the hand-off back into the editor no longer emits an update. Typing
+` ```json ` into the box and getting ` ```json ` back is a low bar and it was not being met.
+
+### Nothing is required except the complaint
+
+The title is optional: intake takes the first real line of the body, strips the markdown
+furniture and cuts it to 72 characters. **Making somebody name a bug before they can describe
+it is a tax on the complaint**, and the name invented under that pressure is usually worse
+than the sentence they actually wrote.
+
+A report with neither a title nor a description is still refused, because intake can invent a
+name and cannot invent the complaint.
+
+### Keys
+
+`esc` closes — the shortcut card first, then the annotation editor, then the box, one level
+at a time. `⌘↵` files it. `?` opens a card listing them, this dialog's first, with a line
+under the buttons so nobody has to guess the card exists.
+
+### Priorities stopped promising dates
+
+P0 used to say *"triaged same business day · fixed in 1–2 days"*. Nothing here knows how long
+a fix takes, that date was invented by a dropdown, and **a promise the queue cannot keep
+teaches everybody to file at P0.** The four now read *Blocking · Serious · Normal · Someday*
+with what each means, and the page says plainly that no date is promised against a priority —
+how fast the queue moves is a fact about the queue.
+
+### And the confirmation stopped lecturing
+
+*"Written to `issues/0009-….md`. It is a file in this repository, so it travels in the same
+pull request as its fix and survives `npm run db:reset`."* → *"Thanks — it is in the queue
+with this page, your filters and any screenshots attached."*
+
+**43 of 43 properties hold.**

@@ -50,6 +50,16 @@ export function MarkdownField({
   rows?: number;
 }) {
   const [mode, setMode] = useState<Mode>('rich');
+  /**
+   * While the Markdown tab is open, **the textarea is the document** (issue 0009).
+   *
+   * It used to be controlled by the same `value` the rich editor writes. Typing a space at
+   * the end pushed the text through TipTap, which trimmed it, escaped backticks and handed
+   * back a different string — so the field fought the typist, the cursor jumped to the end
+   * and a fenced block could not be written at all. Source text now lives here until the
+   * Rich tab is asked for.
+   */
+  const [source, setSource] = useState<string | null>(null);
   const [over, setOver] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   const area = useRef<HTMLTextAreaElement | null>(null);
@@ -94,13 +104,24 @@ export function MarkdownField({
     },
   }, []);
 
-  // A change from outside (the Source tab, a reset after filing) goes back into the editor.
+  // A change from outside (a reset after filing) goes back into the editor. Never while the
+  // Markdown tab is open, and never in a way that emits an update — that round trip is the
+  // bug in issue 0009.
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || mode === 'source') return;
     if (ours.current) { ours.current = false; return; }
     const current = toStored(serialise(editor));
-    if (current !== value) editor.commands.setContent(toDisplay(value));
-  }, [value, editor]);
+    if (current !== value) editor.commands.setContent(toDisplay(value), { emitUpdate: false });
+  }, [value, editor, mode]);
+
+  const showSource = () => { setSource(value); setMode('source'); };
+  const showRich = () => {
+    const next = source ?? value;
+    if (next !== value) onChange(next);
+    editor?.commands.setContent(toDisplay(next), { emitUpdate: false });
+    setSource(null);
+    setMode('rich');
+  };
 
   const accept = async (files: File[]) => {
     setRefused(null);
@@ -164,10 +185,10 @@ export function MarkdownField({
     <div className={`mdfield${over ? ' over' : ''}`}>
       <div className="mdbar">
         <div className="mdtabs" role="group" aria-label="Rich text or markdown source">
-          <button className={mode === 'rich' ? 'on' : ''} onClick={() => setMode('rich')} aria-pressed={mode === 'rich'}>
+          <button className={mode === 'rich' ? 'on' : ''} onClick={showRich} aria-pressed={mode === 'rich'}>
             Rich
           </button>
-          <button className={mode === 'source' ? 'on' : ''} onClick={() => setMode('source')} aria-pressed={mode === 'source'}>
+          <button className={mode === 'source' ? 'on' : ''} onClick={showSource} aria-pressed={mode === 'source'}>
             Markdown
           </button>
         </div>
@@ -186,9 +207,13 @@ export function MarkdownField({
           <textarea
             ref={area}
             rows={rows}
-            value={value}
+            value={source ?? value}
             placeholder={placeholder}
-            onChange={(e) => onChange(e.target.value)}
+            spellCheck={false}
+            onChange={(e) => {
+              setSource(e.target.value);
+              onChange(e.target.value);
+            }}
           />
         )}
       </div>

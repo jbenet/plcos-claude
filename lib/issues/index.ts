@@ -82,10 +82,17 @@ export async function issues(): Promise<IssueSink> {
   return unbuiltIssueSink(config.issues.provider);
 }
 
-/** The SLA ladder from issues/README.md, in code so the UI can show it next to the issue. */
-export const SLA: Record<IssuePriority, { triage: string; fix: string }> = {
-  P0: { triage: 'same business day', fix: '1–2 days' },
-  P1: { triage: '1 business day', fix: '1 week' },
-  P2: { triage: '2 business days', fix: 'next version slice' },
-  P3: { triage: 'weekly triage', fix: 'backlog' },
+/**
+ * What a priority means. Not when it will be fixed (issue 0012).
+ *
+ * There used to be a delivery date against each one — "P0: fixed in 1–2 days". Nothing in
+ * this system knows how long a fix takes, the dates were invented by a dropdown, and a
+ * promise the queue cannot keep teaches everybody to file at P0. What a priority does is
+ * order the queue; how fast the queue moves is a fact about the queue, shown on the page.
+ */
+export const PRIORITY: Record<IssuePriority, { means: string; detail: string }> = {
+  P0: { means: 'Blocking', detail: 'Nobody can work around this. It goes to the front.' },
+  P1: { means: 'Serious', detail: 'There is a workaround and it hurts to use.' },
+  P2: { means: 'Normal', detail: 'Worth doing. Ordered against everything else at P2.' },
+  P3: { means: 'Someday', detail: 'A good idea with no clock on it.' },
 };

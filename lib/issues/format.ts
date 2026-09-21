@@ -112,7 +112,7 @@ export function serializeIssue(issue: ParsedIssue): string {
     `title: ${quote(issue.title)}`,
     `status: ${issue.status.padEnd(14)}# open | triaged | agent-ready | in-progress | review | done`,
     `kind: ${issue.kind.padEnd(16)}# bug | request | question | chore`,
-    `priority: ${issue.priority.padEnd(12)}# P0 | P1 | P2 | P3 — see issues/README.md for the SLA ladder`,
+    `priority: ${issue.priority.padEnd(12)}# P0 blocking | P1 serious | P2 normal | P3 someday`,
     `reporter: ${quote(issue.reporter)}`,
     `page: ${quote(issue.page)}`,
     `created: ${issue.created}`,

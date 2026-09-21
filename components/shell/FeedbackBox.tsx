@@ -13,11 +13,18 @@ import { MarkdownField, type DroppedImage } from '@/components/ui/MarkdownField'
 type Kind = 'bug' | 'request' | 'question' | 'chore';
 type Priority = 'P0' | 'P1' | 'P2' | 'P3';
 
-const SLA: Record<Priority, string> = {
-  P0: 'triaged same business day · fixed in 1–2 days',
-  P1: 'triaged in 1 business day · fixed within a week',
-  P2: 'triaged in 2 business days · next version slice',
-  P3: 'weekly triage · backlog',
+/**
+ * What a priority *means*, not when it will be fixed (issue 0012).
+ *
+ * The old list promised "fixed in 1–2 days" against P0, which is a delivery date invented by
+ * a dropdown. How fast anything gets fixed is a function of how full the queue is, and a
+ * promise the queue cannot keep teaches people to file everything as P0.
+ */
+const PRIORITY_MEANS: Record<Priority, string> = {
+  P0: 'Blocking — nobody can work around this',
+  P1: 'Serious — there is a workaround and it hurts',
+  P2: 'Normal — worth doing, not urgent',
+  P3: 'Someday — a good idea with no clock on it',
 };
 
 export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }) {
@@ -126,6 +133,37 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
    */
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  const [showKeys, setShowKeys] = useState(false);
+
+  /**
+   * Escape closes the box, and ⌘/Ctrl+Enter files it (issues 0009, 0012).
+   *
+   * Escape is handled here and not in the editors: the annotation editor and the region
+   * picker take it first when they are open, so the drawer only sees it when it is the
+   * outermost thing on screen. That is the level people expect it to act at.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (editingId || picking) return;
+      if (e.key === 'Escape') {
+        if (showKeys) { setShowKeys(false); return; }
+        e.preventDefault();
+        onClose();
+      }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        void submitRef.current?.();
+      }
+      if (e.key === '?' && (e.target as HTMLElement | null)?.tagName !== 'TEXTAREA'
+          && (e.target as HTMLElement | null)?.tagName !== 'INPUT'
+          && !(e.target as HTMLElement | null)?.isContentEditable) {
+        e.preventDefault();
+        setShowKeys((v) => !v);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [editingId, picking, showKeys, onClose]);
 
   const filters = useMemo(() => Object.fromEntries(params.entries()), [params]);
   const context = useMemo(
@@ -133,7 +171,11 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
     [path, filters],
   );
 
+  const submitRef = useRef<(() => Promise<void>) | null>(null);
+
   const submit = async () => {
+    if (!title.trim() && !body.trim()) return;
+    if (state === 'sending' || state === 'done') return;
     setState('sending');
     setError(null);
     try {
@@ -161,6 +203,7 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
       setState('failed');
     }
   };
+  submitRef.current = submit;
 
   const ui = (
     <>
@@ -174,6 +217,22 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
       {picking && (
         <RegionPicker onPick={(r) => take(r)} onCancel={() => setPicking(false)} />
       )}
+      {showKeys && (
+        <div className="keycard nocapture" role="dialog" aria-label="Keyboard shortcuts">
+          <div className="lbl">Keyboard · this dialog first</div>
+          <dl>
+            <div><dt><kbd>⌘</kbd><kbd>↵</kbd></dt><dd>File the report</dd></div>
+            <div><dt><kbd>esc</kbd></dt><dd>Close this card, then the annotation editor, then the box</dd></div>
+            <div><dt><kbd>tab</kbd> / <kbd>⇧</kbd><kbd>tab</kbd></dt><dd>Next and previous field — this is how you leave a text box</dd></div>
+            <div><dt><kbd>?</kbd></dt><dd>This card, when the cursor is not in a text box</dd></div>
+          </dl>
+          <div className="lbl" style={{ marginTop: 10 }}>Anywhere</div>
+          <dl>
+            <div><dt><kbd>⌘</kbd><kbd>k</kbd></dt><dd>Not built yet — say so and it will be</dd></div>
+          </dl>
+          <button className="btn" onClick={() => setShowKeys(false)}>Close</button>
+        </div>
+      )}
       <div className={`scrim nocapture${picking || shooting ? ' away' : ''}`} onClick={onClose} />
       <div
         className={`drawer nocapture${picking || shooting ? ' away' : ''}`}
@@ -186,8 +245,8 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
           <>
             <h2>Filed as issue {result.id}</h2>
             <p className="sublede">
-              Written to <code>{result.location}</code>. It is a file in this repository, so it
-              travels in the same pull request as its fix and survives <code>npm run db:reset</code>.
+              Thanks — it is in the queue with this page, your filters and any screenshots
+              attached.
             </p>
             <div className="acts">
               <a className="btn p" href={`/issues/${result.id}`} style={{ textAlign: 'center', padding: 8 }}>
@@ -202,7 +261,8 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
           <>
             <h2>What went wrong?</h2>
             <p className="sublede" style={{ marginBottom: 14 }}>
-              This writes a markdown file into <code>issues/</code>. No API token, no webhook.
+              A description is enough. The title, the page you are on and your filters are
+              filled in for you.
             </p>
 
             <div className="lbl">Captured with it</div>
@@ -301,11 +361,11 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
             )}
 
             <label className="field">
-              <span className="lbl">Title</span>
+              <span className="lbl">Title · optional</span>
               <input
                 type="text"
                 value={title}
-                placeholder="Guard message doesn't say whose ask is blocking"
+                placeholder="Left blank, intake names it from your first line"
                 onChange={(e) => setTitle(e.target.value)}
               />
             </label>
@@ -337,15 +397,16 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
               <label className="field">
                 <span className="lbl">Priority</span>
                 <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
-                  <option value="P0">P0</option>
-                  <option value="P1">P1</option>
-                  <option value="P2">P2</option>
-                  <option value="P3">P3</option>
+                  {(Object.keys(PRIORITY_MEANS) as Priority[]).map((p) => (
+                    <option key={p} value={p}>{p} — {PRIORITY_MEANS[p]}</option>
+                  ))}
                 </select>
               </label>
             </div>
             <p className="note" style={{ marginTop: 0 }}>
-              {priority}: {SLA[priority]}.
+              {PRIORITY_MEANS[priority]}. <b>No date is promised against a priority</b> — how
+              fast anything is fixed depends on how full the queue is, which the issues page
+              shows.
             </p>
 
             {state === 'failed' && (
@@ -358,11 +419,23 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
             )}
 
             <div className="acts">
-              <button className="btn p" disabled={!title.trim() || state === 'sending'} onClick={submit}>
+              <button
+                className="btn p"
+                disabled={(!title.trim() && !body.trim()) || state === 'sending'}
+                onClick={submit}
+              >
                 {state === 'sending' ? 'Filing…' : 'File it'}
               </button>
               <button className="btn" onClick={onClose}>
                 Cancel
+              </button>
+            </div>
+            <div className="keyhint">
+              <span><kbd>⌘</kbd><kbd>↵</kbd> file</span>
+              <span><kbd>esc</kbd> close</span>
+              <span><kbd>tab</kbd> next field</span>
+              <button type="button" onClick={() => setShowKeys(true)}>
+                <kbd>?</kbd> all shortcuts
               </button>
             </div>
           </>

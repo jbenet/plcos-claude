@@ -167,6 +167,30 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N31: [
+    { name: '01-no-title-needed', path: '/today', prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        await page.locator('.mdrich').click();
+        await page.locator('.mdrich').type('The rail scroll position jumps to the top when I switch user.', { delay: 4 });
+        await page.waitForTimeout(400);
+      } },
+    { name: '02-markdown-source', path: '/today', prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        await page.getByRole('button', { name: 'Markdown' }).click();
+        const ta = page.locator('.mdfield textarea');
+        await ta.click();
+        await ta.type('```json\n{ "route": "/approvals" }\n```\n\nTyping this used to be impossible.', { delay: 6 });
+        await page.waitForTimeout(400);
+      } },
+    { name: '03-shortcuts', path: '/today', prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        await page.getByRole('button', { name: /all shortcuts/ }).click();
+        await page.waitForTimeout(350);
+      } },
+  ],
   N30: [
     { name: '01-record-the-wire', path: '/soft-hard', prepare: async (page) => {
         await page.getByRole('heading', { name: 'The hard track' }).scrollIntoViewIfNeeded();
