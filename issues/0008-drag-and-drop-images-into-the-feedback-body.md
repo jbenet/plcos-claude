@@ -1,7 +1,7 @@
 ---
 id: "0008"
 title: Drag-and-drop images into the feedback body
-status: open          # open | triaged | agent-ready | in-progress | review | done
+status: done                 # open | triaged | agent-ready | in-progress | review | done
 kind: request         # bug | request | question | chore
 priority: P2          # P0 | P1 | P2 | P3 — see issues/README.md for the SLA ladder
 reporter: juan
@@ -30,3 +30,6 @@ Dropped a PNG straight into the box. It should end up **beside the issue** and b
   "user": "juan"
 }
 ```
+
+**Done (N18).** Dropping or pasting an image writes it to `issues/attachments/` and leaves an
+`attachment:N` reference in the body. The attachments on this issue were filed that way.

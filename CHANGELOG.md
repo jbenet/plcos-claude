@@ -2751,3 +2751,32 @@ A rejected method printed its reason twice — once as **Blocked.** and again as
 reason, from the same string. One finding, printed once.
 
 **43 of 43 properties hold.**
+
+---
+
+## N27 — A pass through the feedback queue
+
+**Shipped.** Two issues off the board: one because the feature landed three versions ago and
+nobody closed the file, one because it was a ten-minute fix that had been sitting at P2.
+
+| | |
+|---|---|
+| ![Issue filters](docs/changelog/shots/n27/01-issue-filters.png) | **Filter by status, priority and kind.** Defaults to hiding `done`, and says how many rows that hid. |
+
+**0001 — the issues page has no filter.** It does now: status, priority and kind, in the
+browser, because the list is one markdown file per issue and a round trip per chip would
+cost more than the filtering. It defaults to **not done**, since the open queue is the
+question people arrive with, and the header says `N shown · M filtered out · K on file` so a
+filter can never quietly become a smaller world.
+
+**0008 — drag-and-drop images into the feedback body.** Closed as already done in N18. The
+attachments on that issue were themselves filed by dropping them into the box, which is a
+reasonable standard of proof.
+
+The remaining open issues are real work: **0007** wants the fit score to say which of the
+eighteen readings moved it, which needs assessment history nothing currently keeps. **0005**
+wants cash arriving to be a recorded event rather than a column. **0002**, **0004** and
+**0006** are still worth the argument they will start.
+
+**43 of 43 properties hold.**
+

@@ -167,6 +167,40 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N28: [
+    { name: '01-the-line', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.waitForTimeout(500);
+      } },
+    { name: '02-the-load', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The load/ }).click();
+        await page.waitForTimeout(450);
+      } },
+    { name: '03-the-flow', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The flow/ }).click();
+        await page.waitForTimeout(450);
+      } },
+    { name: '04-the-clock', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The clock/ }).click();
+        await page.waitForTimeout(450);
+      } },
+    { name: '05-the-room', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The room/ }).click();
+        await page.waitForTimeout(450);
+      } },
+    { name: '06-one-vehicle', path: '/neurotech/floor', width: 1600, prepare: async (page) => {
+        await page.waitForTimeout(500);
+      } },
+    { name: '07-the-list', path: '/all/floor', width: 1600, prepare: async (page) => {
+        await page.getByRole('heading', { name: 'The same floor, as a list' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(400);
+      } },
+  ],
+  N27: [
+    { name: '01-issue-filters', path: '/issues', prepare: async (page) => {
+        await page.getByRole('button', { name: 'P2' }).click();
+        await page.waitForTimeout(350);
+      } },
+  ],
   N26: [
     { name: '01-both-labelled', path: '/orgs/enrichment', prepare: async (page) => {
         await page.getByRole('heading', { name: 'Every way we could find out' })
@@ -993,7 +1027,7 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1440, height: 940 }, deviceScaleFactor: 2 });
 
   for (const shot of shots) {
-    await page.setViewportSize({ width: shot.width ?? 1440, height: 940 });
+    await page.setViewportSize({ width: shot.width ?? 1440, height: shot.width && shot.width > 1500 ? 1150 : 940 });
     const path = await resolveTokens(page, base, shot.path);
     await page.goto(base + path, { waitUntil: 'networkidle' });
     await page.evaluate(() => document.fonts.ready);

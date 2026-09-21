@@ -1,8 +1,7 @@
-import Link from 'next/link';
+import { IssueList } from '@/components/issues/IssueList';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { issues as issueSink, SLA, type IssuePriority } from '@/lib/issues';
-import { ago } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,14 +65,8 @@ export default async function Issues() {
         ))}
       </div>
 
-      <div className="card">
-        <div className="chead">
-          <h2>All issues</h2>
-          <span className="lbl">
-            {all.length} file{all.length === 1 ? '' : 's'} · {open.length} open
-          </span>
-        </div>
-        {all.length === 0 ? (
+      {all.length === 0 ? (
+        <div className="card">
           <div className="cbody">
             <div className="empty">
               <span className="stat unavailable">
@@ -88,44 +81,11 @@ export default async function Issues() {
               </p>
             </div>
           </div>
-        ) : (
-          <table className="list">
-            <thead>
-              <tr>
-                <th style={{ width: 52 }}>Id</th>
-                <th>Title</th>
-                <th style={{ width: 90 }}>Kind</th>
-                <th style={{ width: 62 }}>Priority</th>
-                <th style={{ width: 110 }}>Status</th>
-                <th style={{ width: 96 }}>Filed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {all.map((i) => (
-                <tr key={i.id} className="clickable">
-                  <td className="mono muted">{i.id}</td>
-                  <td>
-                    <Link href={`/issues/${i.id}`}>
-                      <b>{i.title}</b>
-                    </Link>
-                    <div className="muted" style={{ fontSize: 11.5 }}>
-                      {i.reporter} · {i.page}
-                    </div>
-                  </td>
-                  <td>
-                    <span className={`kind k-${i.kind}`}>{i.kind}</span>
-                  </td>
-                  <td className="mono">{i.priority}</td>
-                  <td>
-                    <span className="flag f-mute">{i.status}</span>
-                  </td>
-                  <td className="muted nowrap">{i.created ? ago(new Date(i.created)) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+        </div>
+      ) : (
+        <IssueList issues={all} />
+      )}
+
     </Page>
   );
 }

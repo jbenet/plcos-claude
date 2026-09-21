@@ -1,7 +1,7 @@
 ---
 id: "0001"
 title: Issues page has no filter by status or priority
-status: triaged       # open | triaged | agent-ready | in-progress | review | done
+status: done              # open | triaged | agent-ready | in-progress | review | done
 kind: request         # bug | request | question | chore
 priority: P2          # P0 | P1 | P2 | P3 — see issues/README.md for the SLA ladder
 reporter: juan
@@ -22,3 +22,6 @@ The IssueSink already takes an IssueFilter, so this is a UI gap rather than a da
   "user": "juan"
 }
 ```
+
+**Done (N27).** The list filters by status, priority and kind in the browser, defaults to
+hiding `done`, and says how many rows a filter hid.
