@@ -12,6 +12,8 @@ interface Shot {
   path: string;
   prepare?: (page: Page) => Promise<void>;
   fullPage?: boolean;
+  /** Narrower than the design boards, for the layouts that have to survive a small window. */
+  width?: number;
 }
 
 const SHOTS: Record<string, Shot[]> = {
@@ -164,6 +166,16 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '01-today', path: '/today', fullPage: true },
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
+  ],
+  N24: [
+    { name: '01-wide', path: '/routes', prepare: async (page) => {
+        await page.getByText('How much weight this carries').first().scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+    { name: '02-narrow', path: '/routes', width: 1180, prepare: async (page) => {
+        await page.getByText('How much weight this carries').first().scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
   ],
   N23: [
     { name: '01-bars', path: '/routes', prepare: async (page) => {
@@ -940,6 +952,7 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1440, height: 940 }, deviceScaleFactor: 2 });
 
   for (const shot of shots) {
+    await page.setViewportSize({ width: shot.width ?? 1440, height: 940 });
     const path = await resolveTokens(page, base, shot.path);
     await page.goto(base + path, { waitUntil: 'networkidle' });
     await page.evaluate(() => document.fonts.ready);

@@ -322,11 +322,19 @@ button.src{background:none;border:0;padding:0;font-family:var(--mono);font-size:
 .gr.info{background:#EDEAE2;color:var(--muted)}
 
 /* ---------------- routes (design/S2) ---------------- */
-.route{display:flex;gap:13px;align-items:flex-start;padding:12px 15px;border-bottom:1px solid var(--hair)}
+/* Three columns, two rows: the tier badge, the path, the verdict — and then a full
+   width row underneath for the influence table and the ask, which need the room the
+   verdict column was reserving and not using. */
+.route{display:grid;grid-template-columns:auto minmax(0,1fr) 118px;column-gap:13px;
+       align-items:start;padding:12px 15px;border-bottom:1px solid var(--hair);
+       container-type:inline-size;container-name:route}
+.route > .tier{grid-column:1;grid-row:1}
+.route > .verdict{grid-column:3;grid-row:1}
+.route > .rwide{grid-column:2 / -1;grid-row:2;min-width:0}
 .route:last-of-type{border-bottom:0}
 .route:hover{background:#FCFBF7}
 .route.best{background:var(--accent-wash);box-shadow:inset 3px 0 0 var(--accent)}
-.route .rt{flex:1;min-width:0}
+.route > .rt{grid-column:2;grid-row:1;min-width:0}
 .route .rt b{font-size:13.5px;font-weight:500;display:block;margin-bottom:5px}
 .route .rt p{margin:0 0 5px;font-size:11.5px;color:var(--muted);line-height:1.5}
 .verdict{flex:none;width:118px;text-align:right;font-size:11px;line-height:1.45;color:var(--muted)}
@@ -758,7 +766,7 @@ button.sec .pip{margin-left:auto;margin-right:7px;font-family:var(--mono);font-s
    The reason is the part with words in it; giving it a 150px column produced a tall
    cramped paragraph next to a column of empty space under a 76px bar. */
 .inflt{width:100%;border-collapse:collapse;margin-top:9px}
-.inflt th{width:190px;text-align:left;font-weight:400;padding:7px 18px 7px 0;vertical-align:top}
+.inflt th{width:196px;text-align:left;font-weight:400;padding:7px 18px 7px 0;vertical-align:top}
 .inflt td{padding:7px 0;vertical-align:top}
 .inflt .ilab{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
              font-size:11.5px;color:var(--muted);line-height:1.3}
@@ -767,6 +775,17 @@ button.sec .pip{margin-left:auto;margin-right:7px;font-family:var(--mono);font-s
 .inflt .ib{display:block;height:6px;border-radius:3px;background:#EDEAE2;overflow:hidden;margin-top:6px}
 .inflt .ib i{display:block;height:100%;border-radius:3px;background:var(--accent)}
 .inflt .iwhy{font-size:12.5px;line-height:1.55;color:var(--muted)}
+/* The three panes are fixed widths, so on a small screen the middle one can get narrow
+   enough that a reason beside its bar is four words a line. Below that width the reason
+   goes under the bar and takes the whole row — measured on the card, not the window,
+   because the window is not what is squeezing it. */
+@container route (max-width: 560px){
+  .inflt,.inflt tbody,.inflt tr,.inflt th,.inflt td{display:block;width:auto}
+  .inflt tr{padding:8px 0;border-bottom:1px solid var(--hair)}
+  .inflt tr:last-child{border-bottom:0}
+  .inflt th,.inflt td{padding:0}
+  .inflt .iwhy{padding-top:5px}
+}
 .theask{margin:9px 0 0;font-size:12px;line-height:1.55;background:var(--accent-soft);
         border:1px solid var(--accent-line);border-radius:7px;padding:8px 11px}
 .vscore{margin-bottom:5px}

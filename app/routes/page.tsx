@@ -262,6 +262,35 @@ export default async function Routes({
                       {reason}
                     </p>
                   ))}
+                </div>
+                <div className="verdict">
+                  <b className={route.verdict === 'excluded' || route.verdict === 'not_a_route' ? 'stop' : ''}>
+                    {VERDICT_LABEL[route.verdict]}
+                  </b>
+                  {route.influence && (
+                    <div className="vscore">
+                      <span className="mono">{Math.round(route.influence.score * 100)}</span>
+                      <small>influence</small>
+                    </div>
+                  )}
+                  {route.askLoad ? (
+                    <>
+                      {route.askLoad.used} of {route.askLoad.cap} asks
+                      <br />
+                      used this quarter
+                    </>
+                  ) : (
+                    'direct'
+                  )}
+                  {route.influence && (
+                    <div className="vstanding">{route.influence.standingWithUs}</div>
+                  )}
+                </div>
+                {/* The influence table and the ask span the verdict column too. That
+                    column has four short lines in it and then nothing, and reserving
+                    its width down the whole card was squeezing the sentences that
+                    actually need the room. */}
+                <div className="rwide">
                   {route.influence && (
                     <div className="infl">
                       <div className="inflhead">
@@ -313,29 +342,6 @@ export default async function Routes({
                         />
                       );
                     })()
-                  )}
-                </div>
-                <div className="verdict">
-                  <b className={route.verdict === 'excluded' || route.verdict === 'not_a_route' ? 'stop' : ''}>
-                    {VERDICT_LABEL[route.verdict]}
-                  </b>
-                  {route.influence && (
-                    <div className="vscore">
-                      <span className="mono">{Math.round(route.influence.score * 100)}</span>
-                      <small>influence</small>
-                    </div>
-                  )}
-                  {route.askLoad ? (
-                    <>
-                      {route.askLoad.used} of {route.askLoad.cap} asks
-                      <br />
-                      used this quarter
-                    </>
-                  ) : (
-                    'direct'
-                  )}
-                  {route.influence && (
-                    <div className="vstanding">{route.influence.standingWithUs}</div>
                   )}
                 </div>
               </div>

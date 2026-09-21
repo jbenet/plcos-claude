@@ -2640,3 +2640,39 @@ The standalone build log already worked this way. The in-app page now matches it
 
 **43 of 43 properties hold.** Verified in a browser: click opens, Esc closes, the × closes,
 the backdrop closes, and no tab is opened.
+
+---
+
+## N24 — The sentences get the whole card
+
+**Shipped.** The reason column was still four words wide, because a 118px verdict column
+was reserving space down the entire height of the card.
+
+| | |
+|---|---|
+| ![Full width](docs/changelog/shots/n24/01-wide.png) | **The influence block spans the verdict column now.** Two lines a reason instead of five. |
+| ![Narrow window](docs/changelog/shots/n24/02-narrow.png) | **In a small window** the reason goes under its bar rather than beside it. |
+
+### A column reserved for four short lines
+
+`Recommend · 71 influence · 2 of 3 asks · Connector · 3 carried` is about 80px of content.
+The column holding it is 118px wide and, being a flex child, it was that wide for the whole
+route — past the influence table, past the ask, past the propose form. Everything with
+words in it was squeezed into what was left.
+
+The card is a grid now: tier, path and verdict on the first row, and **the influence table,
+the ask and the propose form on a second row spanning to the card's right edge**. The
+reasons went from five lines to two.
+
+### Narrow windows get the stacked form
+
+The three panes are fixed widths, so the middle one can be about 300px on a 1180px window,
+and a reason beside its bar is then four words a line. Below **560px of card**, the reason
+goes under the bar and takes the whole row.
+
+It is a container query, not a media query: the window is not what is squeezing that
+column, the two side panes are. Measuring the thing that is actually short is the only
+version of this that stays correct when the panes change width again.
+
+**43 of 43 properties hold.** `npm run shots` takes a `width` now, so the narrow layout is
+captured by the same script as everything else rather than by hand.
