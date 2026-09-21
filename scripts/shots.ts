@@ -167,6 +167,41 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N32: [
+    { name: '01-typing', path: '/today', prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2800);
+        await page.getByRole('button', { name: /Annotate screenshot 1/ }).click();
+        await page.waitForTimeout(500);
+        await page.getByRole('button', { name: 'Add a label' }).click();
+        const box = (await page.locator('.setcanvas').boundingBox())!;
+        await page.mouse.click(box.x + box.width * 0.28, box.y + box.height * 0.26);
+        await page.waitForTimeout(500);
+        await page.keyboard.type('This number is wrong, and the label wraps instead of running off the edge.', { delay: 3 });
+        await page.keyboard.press('Enter');
+        await page.keyboard.type('Return makes a line break.', { delay: 3 });
+        await page.waitForTimeout(350);
+      } },
+    { name: '02-placed-and-movable', path: '/today', prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2800);
+        await page.getByRole('button', { name: /Annotate screenshot 1/ }).click();
+        await page.waitForTimeout(500);
+        await page.getByRole('button', { name: 'Add a label' }).click();
+        const box = (await page.locator('.setcanvas').boundingBox())!;
+        await page.mouse.click(box.x + box.width * 0.26, box.y + box.height * 0.22);
+        await page.waitForTimeout(500);
+        await page.keyboard.type('Placed, then dragged here and narrowed by its corner.', { delay: 3 });
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+        const before = (await page.locator('.setlabel').first().boundingBox())!;
+        await page.mouse.move(before.x + 40, before.y + 10);
+        await page.mouse.down();
+        await page.mouse.move(before.x + 150, before.y + 220, { steps: 12 });
+        await page.mouse.up();
+        await page.waitForTimeout(400);
+      } },
+  ],
   N31: [
     { name: '01-no-title-needed', path: '/today', prepare: async (page) => {
         await page.getByRole('button', { name: /Feedback/ }).click();

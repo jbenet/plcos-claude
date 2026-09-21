@@ -1,7 +1,7 @@
 ---
 id: "0014"
 title: Annotating feedback screenshots
-status: open          # open | triaged | agent-ready | in-progress | review | done
+status: done          # open | triaged | agent-ready | in-progress | review | done
 kind: bug             # bug | request | question | chore
 priority: P2          # P0 | P1 | P2 | P3 — see issues/README.md for the SLA ladder
 reporter: juan
@@ -22,3 +22,19 @@ labels: []
   "user": "juan"
 }
 ```
+
+**Done (N32).** A label is an object now, not a one-shot stamp.
+
+- The field is a **transparent floating textarea**. Return makes a line break; ⌘↵ or Escape
+  leaves it.
+- It **wraps** at its own width, and that width is a corner you drag.
+- After placing: drag to move, drag the corner to resize, double-click to type in it again,
+  and the floating bar changes size, weight and colour of the label you have selected rather
+  than of the next one you place.
+- **Escape keeps the text.** It leaves the field, then the selection, then the editor — one
+  level per press. It used to throw the label away, which is why three of them went missing.
+- Placed labels live as DOM elements while you edit and are composited onto the image once,
+  at export, wrapped the same way they were on screen.
+
+One thing that is not there: undo does not step back through a move or a resize. The undo
+stack is a stack of marks, not of states, and a drag edits a mark in place.

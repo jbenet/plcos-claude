@@ -3075,3 +3075,48 @@ pull request as its fix and survives `npm run db:reset`."* → *"Thanks — it i
 with this page, your filters and any screenshots attached."*
 
 **43 of 43 properties hold.**
+
+---
+
+## N32 — An annotation you can change your mind about
+
+**Shipped.** Issue 0014. The text tool put a label down and that was the end of it: one
+line, on a white card, in a field that Escape emptied.
+
+| | |
+|---|---|
+| ![Typing](docs/changelog/shots/n32/01-typing.png) | **A transparent, multi-line field** that wraps at its own width. |
+| ![Placed and movable](docs/changelog/shots/n32/02-placed-and-movable.png) | **After placing:** drag it, resize it by the corner, double-click to retype. |
+
+### Escape was destroying work
+
+> "i lost 3 annotations accidentally by trying to exit the text field by reflex."
+
+Escape is how people leave a text field. It was wired to *cancel the label*, so the reflex
+that means "stop typing" meant "throw away what I typed". It now leaves the field and
+**keeps the text**, then the selection, then the editor — one level per press. The only
+label that disappears is an empty one, and it disappears because it is empty.
+
+### A label is an object, not a stamp
+
+The field is a transparent textarea, so the label reads against the screenshot instead of
+sitting on a white card. **Return is a line break.** It wraps at a width you set by dragging
+the corner, and after it is placed you can move it, resize it, double-click into it, and
+change its size, weight and colour — the floating bar now edits *the selected label* rather
+than presetting the next one.
+
+Placed labels live as DOM elements while you work and are composited onto the image once, at
+export, wrapped the same way they were on screen.
+
+### The one that took the longest was two lines
+
+The text tool looked like it did nothing: you clicked, a field appeared, and typing went
+nowhere. Focusing the field inside the click that created it lost the focus again when the
+browser finished handling that same click on the canvas underneath. One `preventDefault`,
+one `requestAnimationFrame`. And dragging did nothing because the label captures the pointer
+when the drag starts, so the moves arrived at the label while the handler was on the canvas.
+
+**Undo still does not step back through a move or a resize** — the undo stack is a stack of
+marks, not of states, and a drag edits a mark in place. Said here rather than discovered.
+
+**43 of 43 properties hold.**

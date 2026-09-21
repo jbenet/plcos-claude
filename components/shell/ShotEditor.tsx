@@ -8,7 +8,16 @@ interface Stroke { tool: 'pen'; colour: string; width: number; points: Array<[nu
 interface Arrow { tool: 'arrow'; colour: string; width: number; from: [number, number]; to: [number, number] }
 interface Box { tool: 'box'; colour: string; width: number; from: [number, number]; to: [number, number] }
 interface Label {
-  tool: 'text'; colour: string; size: number; at: [number, number]; text: string;
+  tool: 'text';
+  /** Labels are editable after they are placed, so they need identity (issue 0014). */
+  id: string;
+  colour: string;
+  size: number;
+  at: [number, number];
+  /** Wrap width in image pixels. Dragging the corner changes this, not the font. */
+  width: number;
+  /** Newlines are kept. A one-line-only annotation tool makes people write captions. */
+  text: string;
   bold: boolean;
 }
 type Mark = Stroke | Arrow | Box | Label;
@@ -107,7 +116,18 @@ export function ShotEditor({
   const [redoDepth, setRedoDepth] = useState(0);
   const [colour, setColour] = useState(COLOURS[0]!.id);
   const [drawing, setDrawing] = useState<Mark | null>(null);
-  const [typing, setTyping] = useState<{ at: [number, number]; text: string } | null>(null);
+  /** The label currently being typed or selected, by id (issue 0014). */
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const dragRef = useRef<{ id: string; mode: 'move' | 'size'; ox: number; oy: number } | null>(null);
+  /** Read inside the key handler, which must not be rebuilt on every selection change. */
+  const activeIdRef = useRef<string | null>(null);
+  /**
+   * Focus is put on the field explicitly rather than with `autoFocus`: the label list
+   * re-renders on every keystroke, and a field that loses focus mid-sentence is worse than
+   * no text tool at all.
+   */
+  const fieldRef = useRef<HTMLTextAreaElement | null>(null);
   /** Text settings live outside the draft so they survive between labels. */
   const [textScale, setTextScale] = useState(1);
   const [bold, setBold] = useState(true);
@@ -128,7 +148,35 @@ export function ShotEditor({
     img.src = src;
   }, [src]);
 
-  const paint = (target: HTMLCanvasElement, all: Mark[]) => {
+  /**
+   * Wrap a label the way the export will draw it: explicit newlines first, then greedy
+   * wrapping inside each paragraph at the label's own width.
+   */
+  const wrapLines = (ctx: CanvasRenderingContext2D, text: string, width: number): string[] => {
+    const out: string[] = [];
+    for (const para of text.split('\n')) {
+      if (para === '') { out.push(''); continue; }
+      let line = '';
+      for (const word of para.split(/\s+/)) {
+        const next = line ? `${line} ${word}` : word;
+        if (ctx.measureText(next).width > width && line) {
+          out.push(line);
+          line = word;
+        } else {
+          line = next;
+        }
+      }
+      out.push(line);
+    }
+    return out;
+  };
+
+  /**
+   * `withText` is false while editing: placed labels are real DOM elements in the editor so
+   * they can be moved, resized and retyped, and they are composited onto the canvas once, at
+   * export. Painting them in both places would double them.
+   */
+  const paint = (target: HTMLCanvasElement, all: Mark[], withText = false) => {
     const img = imgRef.current;
     const ctx = target.getContext('2d');
     if (!ctx || !img) return;
@@ -163,21 +211,20 @@ export function ShotEditor({
         ctx.lineTo(x2 - head * Math.cos(a + Math.PI / 7), y2 - head * Math.sin(a + Math.PI / 7));
         ctx.closePath();
         ctx.fill();
-      } else {
+      } else if (withText) {
         ctx.font = `${m.bold ? 600 : 400} ${m.size}px "IBM Plex Sans", system-ui, sans-serif`;
         ctx.textBaseline = 'top';
-        const w = ctx.measureText(m.text).width;
-        ctx.fillStyle = 'rgba(255,255,255,.92)';
-        ctx.fillRect(m.at[0] - 5, m.at[1] - 4, w + 10, m.size + 8);
+        const lines = wrapLines(ctx, m.text, m.width);
+        const lh = Math.round(m.size * 1.3);
         ctx.fillStyle = m.colour;
-        ctx.fillText(m.text, m.at[0], m.at[1]);
+        lines.forEach((line, i) => ctx.fillText(line, m.at[0], m.at[1] + i * lh));
       }
     }
   };
 
   useEffect(() => {
     const c = canvasRef.current;
-    if (c && ready) paint(c, drawing ? [...marks, drawing] : marks);
+    if (c && ready) paint(c, drawing ? [...marks, drawing] : marks, false);
   }, [marks, drawing, ready]);
 
   /** Pointer position in image pixels, whatever size the canvas is displayed at. */
@@ -204,9 +251,20 @@ export function ShotEditor({
 
   const down = (e: React.PointerEvent) => {
     if (!ready) return;
+    if (editingId) stopEditing();
+    setActiveId(null);
     const p = at(e);
     if (tool === 'text') {
-      setTyping({ at: p, text: '' });
+      // Stops the browser moving focus out of the field we are about to create.
+      e.preventDefault();
+      const id = `l${Date.now()}`;
+      addMark({
+        tool: 'text', id, colour, size: fontSize(), at: p,
+        width: Math.round((canvasRef.current?.width ?? 1400) * 0.34),
+        text: '', bold,
+      });
+      setActiveId(id);
+      setEditingId(id);
       return;
     }
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -215,6 +273,13 @@ export function ShotEditor({
   };
 
   const move = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (d) {
+      const p = at(e);
+      if (d.mode === 'move') patch(d.id, { at: [p[0] - d.ox, p[1] - d.oy] });
+      else patch(d.id, { width: Math.max(40, p[0] - d.ox) });
+      return;
+    }
     if (!drawing) return;
     const p = at(e);
     if (drawing.tool === 'pen') setDrawing({ ...drawing, points: [...drawing.points, p] });
@@ -222,19 +287,60 @@ export function ShotEditor({
   };
 
   const up = () => {
+    if (dragRef.current) { dragRef.current = null; return; }
     if (!drawing) return;
     addMark(drawing);
     setDrawing(null);
   };
 
-  const commitText = () => {
-    if (typing && typing.text.trim()) {
-      addMark({
-        tool: 'text', colour, size: fontSize(), at: typing.at,
-        text: typing.text.trim(), bold,
+  activeIdRef.current = activeId;
+
+  /**
+   * Focus the field the moment it attaches, not in an effect — the label list re-renders on
+   * every keystroke and an effect keyed on the id fires before anything useful exists.
+   */
+  const focusedField = useRef<HTMLTextAreaElement | null>(null);
+  const attachField = (el: HTMLTextAreaElement | null) => {
+    fieldRef.current = el;
+    if (el && focusedField.current !== el) {
+      focusedField.current = el;
+      /**
+       * Deferred by a frame. Focusing inside the click that created the field loses the
+       * focus again when the browser finishes handling that same click on the canvas
+       * underneath — which is why the text tool looked like it did nothing at all.
+       */
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
       });
     }
-    setTyping(null);
+    if (!el) focusedField.current = null;
+  };
+
+  const labels = () => marksRef.current.filter((m): m is Label => m.tool === 'text');
+  const labelOf = (id: string | null) => (id ? labels().find((l) => l.id === id) ?? null : null);
+
+  const patch = (id: string, next: Partial<Label>) => {
+    setMarks((prev) => prev.map((m) => (m.tool === 'text' && m.id === id ? { ...m, ...next } : m)));
+  };
+
+  const dropLabel = (id: string) => {
+    setMarks((prev) => prev.filter((m) => !(m.tool === 'text' && m.id === id)));
+    if (activeId === id) setActiveId(null);
+    if (editingId === id) setEditingId(null);
+  };
+
+  /**
+   * Leaving the text field keeps what was typed (issue 0014).
+   *
+   * Escape used to throw the label away, and because Escape is also how people leave a text
+   * field by reflex, it threw away work they thought they were saving. An empty label is the
+   * only one that disappears, and it disappears because it is empty.
+   */
+  const stopEditing = () => {
+    const l = labelOf(editingId);
+    if (l && !l.text.trim()) dropLabel(l.id);
+    setEditingId(null);
   };
 
   /**
@@ -243,10 +349,16 @@ export function ShotEditor({
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const inText = e.target instanceof HTMLInputElement;
+      const inText = e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement;
       if (e.key === 'Escape') {
-        // Escape inside the text field cancels the label; outside it closes the editor.
-        if (!inText) onCancel();
+        /**
+         * One level at a time (issue 0014). In a label: keep the text and leave the field.
+         * With a label selected: deselect. Otherwise: close the editor. Escape used to jump
+         * straight out and take the label with it.
+         */
+        if (inText || editingId) { stopEditing(); return; }
+        if (activeIdRef.current) { setActiveId(null); return; }
+        onCancel();
         return;
       }
       if (inText) return;
@@ -255,14 +367,14 @@ export function ShotEditor({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo, onCancel]);
+  }, [undo, redo, onCancel, editingId]);
 
   const save = () => {
     const out = document.createElement('canvas');
     const c = canvasRef.current!;
     out.width = c.width;
     out.height = c.height;
-    paint(out, marksRef.current);
+    paint(out, marksRef.current, true);
     onSave(out.toDataURL('image/png'));
   };
 
@@ -278,7 +390,7 @@ export function ShotEditor({
                 <button
                   key={t.id}
                   className={t.id === tool ? 'on' : ''}
-                  onClick={() => { commitText(); setTool(t.id); }}
+                  onClick={() => { stopEditing(); setTool(t.id); }}
                   aria-pressed={t.id === tool}
                   title={t.name}
                   aria-label={t.name}
@@ -323,71 +435,118 @@ export function ShotEditor({
             onPointerUp={up}
             onPointerCancel={up}
           />
-          {typing && (
-            <div
-              className="settextbox"
-              style={{
-                left: `${(typing.at[0] / (canvasRef.current?.width ?? 1)) * 100}%`,
-                top: `${(typing.at[1] / (canvasRef.current?.height ?? 1)) * 100}%`,
-              }}
-            >
-              {/* The field looks like the label it is about to become: same colour, same
-                  weight, same size on screen. A text tool you have to imagine is a text
-                  tool people place twice. */}
-              <input
-                className="settext"
-                autoFocus
-                value={typing.text}
-                placeholder="Type, then Enter"
-                style={{ color: colour, fontWeight: bold ? 600 : 400, fontSize: screenFontSize() }}
-                onChange={(e) => setTyping({ ...typing, text: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitText();
-                  if (e.key === 'Escape') setTyping(null);
-                }}
-              />
+          {/* Placed labels are DOM objects: move them, resize them, type in them again.
+              They are composited onto the image at export. */}
+          {marks.filter((m): m is Label => m.tool === 'text').map((l) => {
+            const c = canvasRef.current;
+            const shown = c ? (c.getBoundingClientRect().width || c.width) : 1;
+            const scale = c ? shown / c.width : 1;
+            const editing = editingId === l.id;
+            return (
               <div
-                className="settextbar"
-                // Keeps the field focused while the controls are pressed.
-                onMouseDown={(e) => e.preventDefault()}
+                key={l.id}
+                className={`setlabel${activeId === l.id ? ' on' : ''}${editing ? ' editing' : ''}`}
+                style={{
+                  left: `${(l.at[0] / (c?.width ?? 1)) * 100}%`,
+                  top: `${(l.at[1] / (c?.height ?? 1)) * 100}%`,
+                  width: `${(l.width / (c?.width ?? 1)) * 100}%`,
+                  color: l.colour,
+                  fontWeight: l.bold ? 600 : 400,
+                  fontSize: Math.max(9, Math.round(l.size * scale)),
+                  lineHeight: 1.3,
+                }}
+                onPointerDown={(e) => {
+                  if (editing) return;
+                  e.stopPropagation();
+                  setActiveId(l.id);
+                  const p = at(e);
+                  dragRef.current = { id: l.id, mode: 'move', ox: p[0] - l.at[0], oy: p[1] - l.at[1] };
+                  (e.target as Element).setPointerCapture(e.pointerId);
+                }}
+                /* The label captures the pointer when a drag starts, so the moves arrive
+                   here rather than on the canvas underneath. */
+                onPointerMove={move}
+                onPointerUp={up}
+                onDoubleClick={(e) => { e.stopPropagation(); setActiveId(l.id); setEditingId(l.id); }}
               >
-                {SIZES.map((sz) => (
-                  <button
-                    key={sz.label}
-                    className={textScale === sz.scale ? 'on' : ''}
-                    onClick={() => setTextScale(sz.scale)}
-                    aria-pressed={textScale === sz.scale}
-                    title={`${sz.title} text`}
-                  >
-                    {sz.label}
-                  </button>
-                ))}
-                <button
-                  className={bold ? 'on' : ''}
-                  onClick={() => setBold(!bold)}
-                  aria-pressed={bold}
-                  title="Bold"
-                  style={{ fontWeight: 700 }}
-                >
-                  B
-                </button>
-                <span className="sep" />
-                {COLOURS.map((c) => (
-                  <button
-                    key={c.id}
-                    className={`swatch${c.id === colour ? ' on' : ''}`}
-                    style={{ background: c.id }}
-                    onClick={() => setColour(c.id)}
-                    aria-pressed={c.id === colour}
-                    title={c.name}
-                    aria-label={c.name}
+                {editing ? (
+                  <textarea
+                    ref={attachField}
+                    className="settext"
+                    value={l.text}
+                    placeholder="Type. Return makes a new line."
+                    style={{ color: l.colour, fontWeight: l.bold ? 600 : 400, fontSize: 'inherit' }}
+                    onChange={(e) => patch(l.id, { text: e.target.value })}
+                    onKeyDown={(e) => {
+                      // Return is a line break. Escape leaves the field and keeps the text.
+                      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopEditing(); }
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); stopEditing(); }
+                    }}
                   />
-                ))}
-                <span className="sep" />
-                <button onClick={commitText} aria-label="Place the label" title="Place it">
-                  Place
-                </button>
+                ) : (
+                  <div className="settextview">{l.text || 'Empty label'}</div>
+                )}
+                {activeId === l.id && (
+                  <span
+                    className="setgrip"
+                    title="Drag to set the wrapping width"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      const p = at(e);
+                      dragRef.current = { id: l.id, mode: 'size', ox: p[0] - l.width, oy: 0 };
+                      (e.target as Element).setPointerCapture(e.pointerId);
+                    }}
+                  />
+                )}
               </div>
+            );
+          })}
+
+          {labelOf(activeId) && (
+            <div
+              className="settextbar floating"
+              style={{
+                left: `${((labelOf(activeId)!.at[0]) / (canvasRef.current?.width ?? 1)) * 100}%`,
+                top: `${((labelOf(activeId)!.at[1]) / (canvasRef.current?.height ?? 1)) * 100}%`,
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {SIZES.map((sz) => (
+                <button
+                  key={sz.label}
+                  className={Math.abs(labelOf(activeId)!.size - Math.round(baseSize() * sz.scale)) < 2 ? 'on' : ''}
+                  onClick={() => { setTextScale(sz.scale); patch(activeId!, { size: Math.round(baseSize() * sz.scale) }); }}
+                  title={`${sz.title} text`}
+                >
+                  {sz.label}
+                </button>
+              ))}
+              <button
+                className={labelOf(activeId)!.bold ? 'on' : ''}
+                onClick={() => { const b = !labelOf(activeId)!.bold; setBold(b); patch(activeId!, { bold: b }); }}
+                title="Bold"
+                style={{ fontWeight: 700 }}
+              >
+                B
+              </button>
+              <span className="sep" />
+              {COLOURS.map((c) => (
+                <button
+                  key={c.id}
+                  className={`swatch${c.id === labelOf(activeId)!.colour ? ' on' : ''}`}
+                  style={{ background: c.id }}
+                  onClick={() => { setColour(c.id); patch(activeId!, { colour: c.id }); }}
+                  title={c.name}
+                  aria-label={c.name}
+                />
+              ))}
+              <span className="sep" />
+              {editingId === activeId ? (
+                <button onClick={stopEditing} title="Keep it and stop typing">Done</button>
+              ) : (
+                <button onClick={() => setEditingId(activeId)} title="Type in it again">Edit</button>
+              )}
+              <button onClick={() => dropLabel(activeId!)} title="Delete this label">×</button>
             </div>
           )}
         </div>
@@ -395,7 +554,9 @@ export function ShotEditor({
 
       <p className="setnote">
         {marks.length} mark{marks.length === 1 ? '' : 's'} · <b>⌘Z</b> undo · <b>⌘⇧Z</b> redo ·{' '}
-        <b>Esc</b> cancel. The annotated image is what gets filed — the original is not kept
+        <b>Esc</b> leaves the text field, then the selection, then the editor. A label can be
+        dragged, retyped and resized by its corner after it is placed; <b>Return</b> inside one
+        is a line break. The annotated image is what gets filed — the original is not kept
         separately, so circle the thing rather than describing where it was.
       </p>
     </div>

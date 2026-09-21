@@ -606,10 +606,21 @@ table.list tr.past td:first-child{box-shadow:inset 2px 0 0 var(--line)}
            box-shadow:0 12px 44px rgba(0,0,0,.5);background:#fff;touch-action:none}
 .setcanvas.t-pen,.setcanvas.t-arrow,.setcanvas.t-box{cursor:crosshair}
 .setcanvas.t-text{cursor:text}
-.settextbox{position:absolute;transform:translate(-5px,-5px);z-index:2}
-.settext{display:block;font-family:var(--sans);line-height:1.25;
-         background:rgba(255,255,255,.95);border:1px solid var(--accent);border-radius:5px;
-         padding:3px 7px;min-width:190px;outline:none}
+/* A placed label is a real object: drag it, resize it, type in it again (issue 0014). */
+.setlabel{position:absolute;transform:translate(-4px,-4px);z-index:2;font-family:var(--sans);
+  padding:2px 3px;border:1px solid transparent;border-radius:3px;cursor:move;min-height:1em}
+.setlabel.on{border-color:rgba(239,235,226,.55);background:rgba(26,25,23,.12)}
+.setlabel.editing{cursor:text;border-style:dashed}
+.settextview{white-space:pre-wrap;word-break:break-word;user-select:none}
+.setlabel:not(.on) .settextview:empty::after{content:'Empty label';opacity:.5}
+.setgrip{position:absolute;right:-5px;bottom:-5px;width:11px;height:11px;border-radius:2px;
+  background:#EFEBE2;border:1px solid #1A1917;cursor:nwse-resize}
+/* Transparent, so the label reads against the screenshot rather than on a white card. */
+.settext{display:block;width:100%;background:transparent;border:0;outline:none;resize:none;
+  font-family:var(--sans);line-height:1.3;padding:0;overflow:hidden;min-height:2.6em;
+  white-space:pre-wrap;word-break:break-word}
+.settext::placeholder{color:currentColor;opacity:.45}
+.settextbar.floating{position:absolute;transform:translate(-6px,-42px);z-index:4}
 .settextbar{display:flex;gap:3px;align-items:center;margin-top:6px;padding:4px 5px;
             background:#1F1C18;border:1px solid #3B3630;border-radius:7px;width:max-content}
 .settextbar button{min-width:22px;height:22px;padding:0 5px;border:1px solid transparent;
