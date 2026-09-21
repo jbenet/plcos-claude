@@ -165,6 +165,13 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N16: [
+    { name: '01-routes-influence', path: '/routes', fullPage: true },
+    { name: '02-decomposition', path: '/routes', prepare: async (page) => {
+        await page.getByText('How much weight this carries').first().scrollIntoViewIfNeeded();
+        await page.waitForTimeout(350);
+      } },
+  ],
   N15: [
     { name: '01-state-of-play', path: '/neurotech/fit', prepare: async (page) => {
         await page.getByRole('link', { name: 'what to do →' }).nth(2).click();

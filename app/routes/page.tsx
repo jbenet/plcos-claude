@@ -118,13 +118,13 @@ export default async function Routes({
         </>
       }
     >
-      <div className="lbl">Module 05 · Discover &amp; qualify</div>
+      <div className="lbl">Module 05 · Warm intro routes</div>
       <h1>Routes to {search?.targetName ?? '—'}</h1>
       <p className="sublede">
-        Ranked by what the evidence can actually carry, from {search?.fromName ?? user.name}. A
-        route is only as good as its worst hop, a tier C or D hop that nobody has confirmed cannot
-        carry a route at all, and a restriction on the target excludes every path through the
-        restricted party rather than one.
+        Two questions, answered in order. <b>May this route be used?</b> — a route is only as good
+        as its worst hop, an unconfirmed tier C or D hop cannot carry one at all, and a restriction
+        on the target excludes every path through the restricted party. Then, among the routes that
+        may be used: <b>how much weight does it actually carry?</b>
       </p>
 
       {!search || search.routes.length === 0 ? (
@@ -175,7 +175,7 @@ export default async function Routes({
             <div className="chead">
               <h2>Routes in</h2>
               <span className="lbl">
-                {search.routes.length} path{search.routes.length === 1 ? '' : 's'} · ranked by evidence, then hops
+                {search.routes.length} path{search.routes.length === 1 ? '' : 's'} · ranked by evidence, then influence
               </span>
             </div>
             {search.routes.map((route, i) => (
@@ -208,6 +208,38 @@ export default async function Routes({
                       {reason}
                     </p>
                   ))}
+                  {route.influence && (
+                    <div className="infl">
+                      <div className="inflhead">
+                        <span className="lbl">How much weight this carries</span>
+                        <span className="inflscore">{Math.round(route.influence.score * 100)}</span>
+                      </div>
+                      <div className="inflrow">
+                        {route.influence.components.map((c) => (
+                          <div className="inflbar" key={c.key} title={c.basis}>
+                            <span className="ib">
+                              <i style={{ width: `${Math.round(c.score * 100)}%` }} />
+                            </span>
+                            <span className="ibl">{c.label}</span>
+                            <span className="ibv mono">
+                              {Math.round(c.score * 100)} · w{Math.round(c.weight * 100)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <dl className="inflwhy">
+                        {route.influence.components.map((c) => (
+                          <div key={c.key}>
+                            <dt>{c.label}</dt>
+                            <dd>{c.basis}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                      <p className="theask">
+                        <b>The ask to make.</b> {route.influence.theAsk}
+                      </p>
+                    </div>
+                  )}
                   {(route.verdict === 'recommend' || route.verdict === 'hold') && (
                     <ProposeButton
                       targetId={search.targetId}
@@ -220,6 +252,12 @@ export default async function Routes({
                   <b className={route.verdict === 'excluded' || route.verdict === 'not_a_route' ? 'stop' : ''}>
                     {VERDICT_LABEL[route.verdict]}
                   </b>
+                  {route.influence && (
+                    <div className="vscore">
+                      <span className="mono">{Math.round(route.influence.score * 100)}</span>
+                      <small>influence</small>
+                    </div>
+                  )}
                   {route.askLoad ? (
                     <>
                       {route.askLoad.used} of {route.askLoad.cap} asks
@@ -228,6 +266,9 @@ export default async function Routes({
                     </>
                   ) : (
                     'direct'
+                  )}
+                  {route.influence && (
+                    <div className="vstanding">{route.influence.standingWithUs}</div>
                   )}
                 </div>
               </div>

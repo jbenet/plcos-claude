@@ -61,6 +61,20 @@ export const config = {
     worthALook: 0.45, // GUESS
   },
 
+  /**
+   * L4. How a warm-introduction route is weighted for influence, once it has passed the
+   * safety rules. Every one of these is judgement — there are no outcomes behind them —
+   * and they are here rather than in the scorer so that arguing with them is a config
+   * change and not a code change.
+   */
+  routeInfluence: {
+    withUs: 0.28,     // GUESS — skin in the game: an LP asking carries more than an acquaintance
+    withTarget: 0.30, // GUESS — standing with *this* target, which is the scarce thing
+    topic: 0.18,      // GUESS — credibility does not transfer between domains (Report 6 §2)
+    tie: 0.14,        // GUESS — tie strength, on an inverted U
+    willing: 0.10,    // GUESS — goodwill left, and whether they have delivered before
+  },
+
   /** L7. How much of a week has to be lost before it stops counting as a working week. */
   calendarDeadWeekDays: 3, // GUESS
 
@@ -109,6 +123,16 @@ export const GUESSED_CONSTANTS: ReadonlyArray<{ path: string; value: number; why
       'CLAUDE.md. Also under-specified: one ask per relationship per quarter across ALL FOUR ' +
       'vehicles makes the conflict case nearly redundant, because every collision also trips ' +
       'this cap. It is probably meant per vehicle.',
+  },
+  {
+    path: 'routeInfluence.withTarget',
+    value: config.routeInfluence.withTarget,
+    why: 'The heaviest route-influence weight. Report 6 says standing with the specific target is what matters; how much more than the others is my judgement.',
+  },
+  {
+    path: 'routeInfluence.topic',
+    value: config.routeInfluence.topic,
+    why: 'How much a domain mismatch should cost a route. The direction is from Report 6; the size is a guess.',
   },
   {
     path: 'scoringBands.strong',

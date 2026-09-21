@@ -99,6 +99,11 @@ interface NoteFixture {
   data: Record<string, unknown>;
 }
 
+interface StandingFixture {
+  entity: string; domain: string; strength: number; basis: string;
+  source?: string; as_of: string; certainty: string;
+}
+
 interface AffiliationFixture {
   person: string; org: string; kind: string; role: string;
   started?: string; ended?: string; primary?: boolean;
@@ -116,10 +121,11 @@ async function seedResearch(db: Db) {
   const claims = await fixture<ClaimFixture>('claims.json');
   const notes = await fixture<NoteFixture>('notes.json');
   const affiliations = await fixture<AffiliationFixture>('affiliations.json');
+  const standings = await fixture<StandingFixture>('standings.json');
 
   const existing = await db.one<{ n: string }>('select count(*)::text as n from identity.entity');
   if (existing && Number(existing.n) > 0) {
-    return { entities: 0, docs: 0, claims: 0, notes: 0, affiliations: 0 };
+    return { entities: 0, docs: 0, claims: 0, notes: 0, affiliations: 0, standings: 0 };
   }
 
   const users = await db.query<{ id: string; handle: string }>('select id, handle from platform.app_user');
@@ -159,6 +165,16 @@ async function seedResearch(db: Db) {
          values ($1,$2,$3::identity.affil_kind,$4,$5::date,$6::date,$7,$8,$9::date,$10,$11)`,
         [person, org, a.kind, a.role, a.started ?? null, a.ended ?? null, a.primary ?? false,
          a.source ?? null, a.as_of, a.certainty, a.note ?? null],
+      );
+    }
+
+    for (const st of standings) {
+      const id = ids.get(st.entity);
+      if (!id) continue;
+      await tx.query(
+        `insert into network.standing (entity_id, domain, strength, basis, source, as_of, certainty)
+         values ($1,$2::network.standing_domain,$3,$4,$5,$6::date,$7)`,
+        [id, st.domain, st.strength, st.basis, st.source ?? null, st.as_of, st.certainty],
       );
     }
 
@@ -210,7 +226,7 @@ async function seedResearch(db: Db) {
 
   return {
     entities: entities.length, docs: docs.length, claims: claims.length,
-    notes: notes.length, affiliations: affiliations.length,
+    notes: notes.length, affiliations: affiliations.length, standings: standings.length,
   };
 }
 

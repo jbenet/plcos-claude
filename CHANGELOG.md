@@ -2177,3 +2177,69 @@ from, and a do-not-approach instruction appears at the top of this one because i
 to the target rather than to a route.
 
 **43 of 43 properties hold.**
+
+---
+
+## N16 — Warm introductions, weighted by influence
+
+**Shipped.** The route planner now answers two questions in order: **may this route be
+used**, and then, among the ones that may — **how much weight does it actually carry?**
+
+| | |
+|---|---|
+| ![Routes](docs/changelog/shots/n16/01-routes-influence.png) | **Four paths to the same person**, ordered by verdict and then by influence. |
+| ![Decomposition](docs/changelog/shots/n16/02-decomposition.png) | **Five components, each with its weight and its reason.** Duettmann scores 71: perfect on topic, moderate on standing with us, and the basis for every bar is a sentence rather than a number. |
+
+### Influence runs after the rules, never instead of them
+
+This is the important structural point. `planRoutes` decides admissibility — worst hop,
+unreviewed tier C/D, restrictions, goodwill cap. **Only then** are the survivors scored.
+Scoring first would let a well-connected name promote a path a restriction excludes, which
+is the exact failure rule 8 exists to prevent.
+
+Hale scores 39 and sorts last, below a route scoring 32, because he is excluded. The
+ordering is `verdict, then influence` and it cannot be the other way round.
+
+### Five components, from Report 6
+
+| | what it measures | why |
+|---|---|---|
+| **Standing with us** | skin in the game | An LP with money already wired is making a different statement from an acquaintance. Larger cheque, louder — on a flattening curve, because *being* an LP is most of the signal. |
+| **Standing with them** | what this target thinks of them | The scarce thing, and the one most systems substitute fame for. |
+| **Credible on this topic** | domain match | **Credibility does not transfer.** Report 6 §2. |
+| **Tie strength** | the inverted U | Moderate 1.0, weak 0.78, close 0.62. A close tie mostly knows the people we already know (Rajkumar et al., *Science* 377:6612). |
+| **Goodwill left** | capacity and track record | The resource you cannot buy back. |
+
+Every component renders with its 0–1 score, its weight, and **a sentence saying why** — not
+"standing 4/5" but *"co-authored the memo Delia Roos publicly cited"*. The weights live in
+`config.routeInfluence` and two of them are registered as guesses, so arguing with them is a
+config change rather than a code change.
+
+### `network.standing` — credibility is per domain
+
+Anne Quill is the case that makes the point: **crypto 4/5, neuro 1/5.** A strong name in
+the wrong field is a weak route, and a single "influence" scalar would have ranked her as a
+good way into a neuroscience foundation.
+
+Five domains — neuro, crypto, allocators, science, operating — and each vehicle kind
+declares which ones it is judged on. Every row carries a basis, because a strength with no
+basis is a number somebody liked.
+
+### A person and the institution they sign for
+
+Duettmann initially scored 46 with *"nothing on file about what this target thinks of
+them"* — while the record plainly said Roos publicly cited her memo. That link is recorded
+against **Roos Foundation**; the route target is **Delia Roos**, the person.
+
+So the standing lookup now widens through `identity.affiliation`: a link on the foundation
+is evidence about its sole trustee. It counts at 0.9 of a direct reading and the basis says
+which record it came from. Duettmann went to 71.
+
+### The ask to make
+
+Each route carries a composed, **bounded** ask, because Report 6 is clear that "can you
+introduce me" converts worse than a specific request somebody can answer in two sentences.
+An LP gets asked to say why *they* committed; a topic authority gets asked for a forward
+with the paragraph already written.
+
+**43 of 43 properties hold.**

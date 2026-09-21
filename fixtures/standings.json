@@ -1,0 +1,55 @@
+[
+  { "entity": "duettmann", "domain": "neuro", "strength": 5,
+    "basis": "Co-authored the memo Delia Roos publicly cited. Her standing in this field is why she is a tier-A route to a foundation that has never heard of us.",
+    "source": "S06", "as_of": "2026-09-14", "certainty": "known" },
+  { "entity": "duettmann", "domain": "science", "strength": 4,
+    "basis": "Scientific adviser to the Halvorsen Institute since 2021. Reads as a scientist to scientists rather than as a fundraiser.",
+    "as_of": "2026-09-14", "certainty": "inferred" },
+  { "entity": "duettmann", "domain": "allocators", "strength": 2,
+    "basis": "Known to two family offices through the convening programme. Not a name an endowment committee would recognise.",
+    "as_of": "2026-09-14", "certainty": "guess" },
+
+  { "entity": "mercer", "domain": "allocators", "strength": 5,
+    "basis": "Screen managers for several endowments, including Cedar. When they put a name in front of a committee, the committee reads it.",
+    "source": "S09", "as_of": "2026-08-05", "certainty": "known" },
+  { "entity": "mercer", "domain": "neuro", "strength": 1,
+    "basis": "No science standing at all. They are trusted on process and on managers, and on nothing about the field.",
+    "as_of": "2026-08-05", "certainty": "inferred" },
+
+  { "entity": "hale", "domain": "allocators", "strength": 3,
+    "basis": "Introduced Roos to two managers in 2023. She has since asked not to be introduced through him — which is a fact about this target, not about his standing generally.",
+    "source": "S05", "as_of": "2026-09-08", "certainty": "known" },
+
+  { "entity": "quill", "domain": "crypto", "strength": 4,
+    "basis": "Adviser on crypto mandates at Mercer & Bly and a co-funder on the Lattice SPV. Credible on digital-asset infrastructure and on nothing else.",
+    "as_of": "2026-07-20", "certainty": "inferred" },
+  { "entity": "quill", "domain": "neuro", "strength": 1,
+    "basis": "None. A strong name in the wrong field is a weak route, and this is the case that makes the point.",
+    "as_of": "2026-07-20", "certainty": "inferred" },
+
+  { "entity": "okonjo", "domain": "science", "strength": 3,
+    "basis": "Trustee of a research charity until December 2023, and speaking at a neurotech conference in November.",
+    "source": "S09", "as_of": "2026-09-11", "certainty": "inferred" },
+  { "entity": "okonjo", "domain": "allocators", "strength": 2,
+    "basis": "A single family office principal. Carries weight with peers of the same size and none above it.",
+    "as_of": "2026-09-11", "certainty": "guess" },
+
+  { "entity": "lindqvist", "domain": "allocators", "strength": 5,
+    "basis": "CIO of Cedar Trust and the first institution to countersign. An endowment CIO vouching to another endowment is the strongest allocator signal available to us.",
+    "as_of": "2026-09-18", "certainty": "known" },
+
+  { "entity": "iglesias", "domain": "allocators", "strength": 5,
+    "basis": "CIO of a $2B multi-family office that committed to both vehicles inside a year. Has never been asked for anything.",
+    "as_of": "2026-07-08", "certainty": "known" },
+  { "entity": "iglesias", "domain": "crypto", "strength": 3,
+    "basis": "Underwrote the Rails vehicle, so the mandate is real. Not a technologist.",
+    "as_of": "2026-06-02", "certainty": "inferred" },
+
+  { "entity": "raman", "domain": "allocators", "strength": 3,
+    "basis": "Head of investments at Northwood for three weeks, and an investment director at Vantage for five years before that. The standing is borrowed from the previous seat.",
+    "as_of": "2026-09-08", "certainty": "inferred" },
+
+  { "entity": "navarro", "domain": "neuro", "strength": 1,
+    "basis": "An analyst placed at Mercer & Bly by a conference badge. This row exists to be visibly weak — it is the kind of record that should never carry a route.",
+    "as_of": "2026-09-01", "certainty": "guess" }
+]

@@ -79,6 +79,14 @@ export interface Route {
   /** The weakest tier along the path — a route is only as good as its worst hop. */
   weakestTier: EvidenceTier;
   askLoad: { connector: string; used: number; cap: number } | null;
+  /**
+   * How much weight this route carries, once it has passed the safety rules above.
+   *
+   * Deliberately separate from `verdict`: influence orders the usable routes and can never
+   * promote a restricted or unreviewed one. The scorer runs after the rules, not instead
+   * of them.
+   */
+  influence: import('./influence').Influence | null;
 }
 
 export interface RouteSearch {

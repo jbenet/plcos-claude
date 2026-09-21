@@ -3,6 +3,7 @@ import { listEntities } from '@/modules/identity';
 import { connectorLoad, restrictionsFor } from '@/modules/coordination';
 import { listSyncSources } from '@/modules/platform';
 import { edgeCoverage, edgesByIds, entityForUser, enumeratePaths } from './repo';
+import { influenceFor } from './influence';
 import { CLUE_KINDS, type Edge, type Route, type RouteHop, type RouteSearch, type RouteVerdict } from './types';
 
 const TIER_ORDER = { A: 0, B: 1, C: 2, D: 3 } as const;
@@ -26,7 +27,7 @@ const CLUE_REASON: Record<string, string> = {
  *    the exclusion is reported rather than silently dropped.
  */
 export async function planRoutes(
-  fromHandle: string, targetId: string, maxHops = 3,
+  fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund',
 ): Promise<RouteSearch | null> {
   const me = await entityForUser(fromHandle);
   if (!me) return null;
@@ -150,13 +151,33 @@ export async function planRoutes(
       );
     }
 
-    routes.push({ hops, connectorNames, connectorIds, verdict, reasons, weakestTier, askLoad });
+    routes.push({
+      hops, connectorNames, connectorIds, verdict, reasons, weakestTier, askLoad,
+      influence: null,
+    });
+  }
+
+  /**
+   * Influence is scored after the rules, on the connector who actually carries the ask —
+   * the last one before the target. Scoring it first would let a well-connected name
+   * promote a path a restriction excludes.
+   */
+  const carriers = [...new Set(
+    routes.map((r) => r.connectorIds[r.connectorIds.length - 1]).filter(Boolean) as string[],
+  )];
+  if (carriers.length > 0) {
+    const influence = await influenceFor(carriers, targetId, vehicleKind);
+    for (const r of routes) {
+      const carrier = r.connectorIds[r.connectorIds.length - 1];
+      r.influence = carrier ? influence.get(carrier) ?? null : null;
+    }
   }
 
   const rank: Record<RouteVerdict, number> = { recommend: 0, hold: 1, not_a_route: 2, excluded: 3 };
   routes.sort(
     (a, b) =>
       rank[a.verdict] - rank[b.verdict] ||
+      (b.influence?.score ?? 0) - (a.influence?.score ?? 0) ||
       a.hops.length - b.hops.length ||
       TIER_ORDER[a.weakestTier] - TIER_ORDER[b.weakestTier],
   );

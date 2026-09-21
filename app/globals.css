@@ -704,3 +704,23 @@ button.sec .pip{margin-left:auto;margin-right:7px;font-family:var(--mono);font-s
          white-space:pre-wrap;word-break:break-word;margin:6px 0 0}
 .needrow td{vertical-align:top}
 .list.fixed{table-layout:fixed}
+
+/* route influence */
+.infl{border-top:1px solid var(--hair);margin-top:10px;padding-top:9px}
+.inflhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.inflscore{font-family:var(--mono);font-size:17px;font-weight:500}
+.inflrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;margin-top:7px}
+.inflbar .ib{display:block;height:5px;border-radius:3px;background:#EDEAE2;overflow:hidden}
+.inflbar .ib i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+.inflbar .ibl{display:block;font-size:10px;color:var(--muted);margin-top:4px;line-height:1.3}
+.inflbar .ibv{display:block;font-size:9px;color:var(--muted);opacity:.8}
+.inflwhy{margin:9px 0 0;display:grid;gap:4px}
+.inflwhy dt{font-size:10px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;
+            color:var(--muted)}
+.inflwhy dd{margin:0 0 4px;font-size:11.5px;line-height:1.5;color:var(--muted)}
+.theask{margin:9px 0 0;font-size:12px;line-height:1.55;background:var(--accent-soft);
+        border:1px solid var(--accent-line);border-radius:7px;padding:8px 11px}
+.vscore{margin-bottom:5px}
+.vscore .mono{font-size:17px;font-weight:500;display:block;line-height:1.1}
+.vscore small{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.vstanding{margin-top:6px;font-size:10px;line-height:1.35;color:var(--muted)}
