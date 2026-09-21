@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
+import { Markdown } from '@/components/ui/Markdown';
 import { SECTION } from '@/lib/nav';
 import { issues as issueSink, SLA } from '@/lib/issues';
 import { shortDate } from '@/lib/time';
@@ -80,25 +81,27 @@ export default async function IssueDetail({ params }: { params: Promise<{ id: st
           <h2>What happened</h2>
         </div>
         <div className="cbody">
-          <div className="prose">
-            {issue.body.split(/\n{2,}/).map((p, i) => (
-              <p key={i}>{p}</p>
-            ))}
-          </div>
+          {/* Rendered with the same component the feedback box previews with, so what the
+              reporter saw before filing is what the issue shows afterwards. */}
+          <Markdown
+            source={issue.body}
+            resolveImage={(href) =>
+              href.startsWith('attachments/') ? `/issues/shot/${href}` : href}
+          />
         </div>
       </div>
 
-      {issue.attachment && (
+      {issue.screenshot && (
         <div className="card">
           <div className="chead">
             <h2>The page as it looked</h2>
-            <span className="lbl">{issue.attachment}</span>
+            <span className="lbl">{issue.screenshot}</span>
           </div>
           <div className="cbody">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="issueshot"
-              src={`/issues/shot/${issue.attachment}`}
+              src={`/issues/shot/${issue.screenshot}`}
               alt={`Screenshot filed with issue ${issue.id}`}
             />
           </div>

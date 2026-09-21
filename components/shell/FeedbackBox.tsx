@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ShotEditor } from './ShotEditor';
 import { capturePage, METHOD_LABEL, type CaptureMethod } from '@/lib/capture';
+import { MarkdownField, type DroppedImage } from '@/components/ui/MarkdownField';
 
 type Kind = 'bug' | 'request' | 'question' | 'chore';
 type Priority = 'P0' | 'P1' | 'P2' | 'P3';
@@ -94,6 +95,7 @@ function FeedbackDrawer({
   const [includeShot, setIncludeShot] = useState(true);
   const [editing, setEditing] = useState(false);
   const [annotated, setAnnotated] = useState(false);
+  const [images, setImages] = useState<DroppedImage[]>([]);
 
   /**
    * The drawer and the editor are portalled to <body>.
@@ -122,6 +124,13 @@ function FeedbackDrawer({
         body: JSON.stringify({
           title, body, kind, priority, page: path, context,
           screenshot: includeShot && shot ? shot : undefined,
+          images: images.map((i) => ({ name: i.name, dataUrl: i.dataUrl })),
+          /**
+           * The server numbers attachments with the screenshot first, so a body written
+           * against `attachment:1` would point at the screenshot once the box is ticked.
+           * The offset is applied here rather than renumbering as the checkbox moves.
+           */
+          imageOffset: includeShot && shot ? 1 : 0,
         }),
       });
       const json = (await res.json()) as { id?: string; location?: string; error?: string };
@@ -220,10 +229,19 @@ function FeedbackDrawer({
               />
             </label>
 
-            <label className="field">
+            <div className="field">
               <span className="lbl">What happened</span>
-              <textarea value={body} onChange={(e) => setBody(e.target.value)} />
-            </label>
+              <MarkdownField
+                value={body}
+                onChange={setBody}
+                images={images}
+                onImages={setImages}
+                placeholder={
+                  'What you expected, what happened instead.\n\n'
+                  + 'Markdown works. Drop a screenshot from somewhere else in here if you have one.'
+                }
+              />
+            </div>
 
             <div className="fieldrow">
               <label className="field">

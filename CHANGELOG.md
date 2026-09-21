@@ -1970,3 +1970,55 @@ link goes somewhere and a non-link is honestly inert.
 `/calendar` — the sprint strip with the dead weeks — lost its rail entry when the new
 Calendar went in at N9, and became reachable only from a timeline bar. It is back under
 **Other**, where a page that computes working days against holidays belongs.
+
+---
+
+## N13 — A markdown editor in the feedback box
+
+**Shipped.** The body of a piece of feedback is a markdown field with **Write** and
+**Preview**, and you can drop or paste images into it.
+
+| | |
+|---|---|
+| ![Write](docs/changelog/shots/n13/01-markdown-write.png) | **Write.** Monospace source, a small formatting bar, and the file it is going to become. |
+| ![Preview](docs/changelog/shots/n13/02-markdown-preview.png) | **Preview**, rendered with the same component the issue page uses — so what you check before filing is what appears afterwards. |
+| ![On the issue](docs/changelog/shots/n13/03-issue-rendered.png) | **Issue 0008, filed through the box while building this** — heading, bold, inline code, a list, and a dropped PNG sitting beside the issue in the repository. |
+
+### Not a WYSIWYG surface, on purpose
+
+The body of an issue is **a markdown file in this repository**, and somebody will open it
+in an editor or read it in a diff. So the thing you type is the thing that gets stored, and
+Preview is a second tab rather than the only view.
+
+Both tabs use one renderer, `components/ui/Markdown.tsx`, shared with the issue page. **A
+preview that can disagree with the page is a preview nobody checks twice** — and the issue
+page was previously splitting the body on blank lines into paragraphs, so markdown someone
+wrote was shown raw.
+
+### Dropping an image
+
+Drop or paste anywhere in the box. PNG, JPEG, GIF and WebP up to 8 MB; anything else is
+refused with a line saying what was skipped and that the rest went in.
+
+The interesting part is what goes into the text. The editor inserts
+`![name](attachment:2)` — **a token, not a path**, because the sink owns the filenames.
+Writing a path in the browser would mean a caller could choose where a file lands, and the
+whole point of `IssueSink` is that it decides. `FileIssueSink` writes
+`issues/attachments/NNNN-image-1.png`, rewrites the tokens, and stores the list in the
+frontmatter:
+
+```yaml
+screenshot: attachments/0008-screenshot.png
+attachments: [attachments/0008-screenshot.png, attachments/0008-image-1.png]
+```
+
+The screenshot stays out of the prose and renders in its own card; dropped images render
+inline where they were written. The preview resolves `attachment:N` to the data URL still
+sitting in the browser, so you see the picture before anything is filed.
+
+One thing that needed care: the screenshot takes attachment slot 1 when the box is ticked,
+so the body's tokens shift by one. The offset travels with the request rather than the
+editor renumbering itself every time the checkbox moves — the text you wrote should not
+change because you changed your mind about a screenshot.
+
+**43 of 43 properties hold.**

@@ -10,8 +10,13 @@ export interface FeedbackCommand {
   priority: IssuePriority;
   page: string;
   context: Record<string, unknown>;
-  /** An annotated screenshot, when the reporter chose to include one. */
-  attachment?: IssueAttachment | null;
+  /** The annotated screenshot and anything dropped into the body, in token order. */
+  attachments?: IssueAttachment[];
+  /**
+   * How many attachments come before the dropped images. The body numbers its own images
+   * from 1; the screenshot, when included, takes slot 1 — so the tokens shift by one.
+   */
+  imageOffset?: number;
 }
 
 /**
@@ -46,7 +51,8 @@ export async function fileFeedback(user: AppUser, cmd: FeedbackCommand) {
     page: cmd.page,
     labels: [],
     context,
-    attachment: cmd.attachment ?? null,
+    attachments: cmd.attachments ?? [],
+    tokenOffset: cmd.imageOffset ?? 0,
   });
 
   await attachIssueRef(row.id, issue.id, issue.location);
@@ -57,7 +63,7 @@ export async function fileFeedback(user: AppUser, cmd: FeedbackCommand) {
     subjectId: issue.id,
     detail: {
       page: cmd.page, priority: cmd.priority, kind: cmd.kind, location: issue.location,
-      attachment: issue.attachment,
+      attachments: issue.attachments,
     },
   });
 

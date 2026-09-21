@@ -12,15 +12,20 @@ export type IssueKind = 'bug' | 'request' | 'question' | 'chore';
 export type IssuePriority = 'P0' | 'P1' | 'P2' | 'P3';
 
 /**
- * A file filed with the issue. Today that is one annotated screenshot from the feedback
- * box; the shape is general because a GitHub sink will upload the same bytes to a
- * different place, and the caller should not know which.
+ * A file filed with the issue: the annotated screenshot, and any image dropped into the
+ * body. The sink owns the name, so a caller cannot choose a path — it says what kind of
+ * thing this is and hands over bytes.
+ *
+ * The body refers to these as `attachment:1`, `attachment:2` … and the sink rewrites those
+ * tokens once it has named the files. That is the only way the markdown can point at a
+ * real path without the caller inventing one.
  */
 export interface IssueAttachment {
-  /** Suffix only — the sink owns the name, so a caller cannot choose a path. */
-  kind: 'screenshot';
-  contentType: 'image/png';
+  kind: 'screenshot' | 'image';
+  contentType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
   base64: string;
+  /** What the reporter's file was called, for the alt text and nothing else. */
+  name?: string;
 }
 
 export interface IssueDraft {
@@ -32,17 +37,24 @@ export interface IssueDraft {
   page: string;
   labels: string[];
   context: Record<string, unknown> | null;
-  attachment?: IssueAttachment | null;
+  attachments?: IssueAttachment[];
+  /**
+   * How far the body's `attachment:N` tokens are from the attachment array. The screenshot
+   * takes slot 1 when there is one, and the body counts its own images from 1.
+   */
+  tokenOffset?: number;
 }
 
-export interface Issue extends Omit<IssueDraft, 'attachment'> {
+export interface Issue extends Omit<IssueDraft, 'attachments'> {
   id: string;
   status: IssueStatus;
   created: string;
   /** Where this issue actually lives — a repo path for files, a URL for GitHub. */
   location: string;
-  /** Where the attachment landed, relative to the issue. Null when there is none. */
-  attachment: string | null;
+  /** The screenshot, if one was filed. Rendered in its own card rather than inline. */
+  screenshot: string | null;
+  /** Every file filed with this issue, relative to the issues directory. */
+  attachments: string[];
 }
 
 export interface IssueFilter {

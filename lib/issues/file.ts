@@ -8,6 +8,10 @@ const FILE = /^(\d{4})-([a-z0-9-]+)\.md$/;
 /** Attachments sit beside the issues so `git log issues/` still shows the whole thing. */
 const ATTACH = 'attachments';
 
+const EXT: Record<string, string> = {
+  'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp',
+};
+
 /**
  * Issues are files in the repo. The complaint and its fix travel in one pull request,
  * they survive `npm run db:reset`, and `git log issues/` is free triage history.
@@ -36,7 +40,7 @@ export function fileIssueSink(dir: string): IssueSink {
     id: p.id, title: p.title, status: p.status, kind: p.kind, priority: p.priority,
     reporter: p.reporter, page: p.page, labels: p.labels, body: p.body,
     context: p.context, created: p.created, location: `${dir}/${file}`,
-    attachment: p.attachment,
+    screenshot: p.screenshot, attachments: p.attachments,
   });
 
   const find = async (id: string) => (await read()).find((r) => r.issue.id === id) ?? null;
@@ -52,21 +56,43 @@ export function fileIssueSink(dir: string): IssueSink {
       ).padStart(4, '0');
       const file = `${next}-${slugify(draft.title)}.md`;
 
-      // The sink owns the filename. A caller that could choose one could write anywhere.
-      let attachment: string | null = null;
-      if (draft.attachment) {
-        attachment = `${ATTACH}/${next}-screenshot.png`;
-        await mkdir(join(root, ATTACH), { recursive: true });
-        await writeFile(
-          join(root, ATTACH, `${next}-screenshot.png`),
-          Buffer.from(draft.attachment.base64, 'base64'),
-        );
+      /**
+       * The sink owns every filename. A caller that could choose one could write anywhere,
+       * so the body refers to images as `attachment:N` and those tokens are rewritten here
+       * once the files have names.
+       */
+      const incoming = draft.attachments ?? [];
+      const paths: string[] = [];
+      let screenshot: string | null = null;
+      if (incoming.length > 0) await mkdir(join(root, ATTACH), { recursive: true });
+      // Images are numbered among images, so `0008-image-1.png` is the first one somebody
+      // dropped rather than its index in an array they never see.
+      let imageNo = 0;
+      for (const a of incoming) {
+        const name = a.kind === 'screenshot'
+          ? `${next}-screenshot.${EXT[a.contentType]}`
+          : `${next}-image-${(imageNo += 1)}.${EXT[a.contentType]}`;
+        await writeFile(join(root, ATTACH, name), Buffer.from(a.base64, 'base64'));
+        const rel = `${ATTACH}/${name}`;
+        paths.push(rel);
+        if (a.kind === 'screenshot' && !screenshot) screenshot = rel;
       }
 
-      const { attachment: _drop, ...rest } = draft;
+      const offset = draft.tokenOffset ?? 0;
+      const body = draft.body.replace(
+        /\(attachment:(\d+)\)/g,
+        (whole, n: string) => {
+          const hit = paths[Number(n) - 1 + offset];
+          return hit ? `(${hit})` : whole;
+        },
+      );
+
+      const { attachments: _drop, tokenOffset: _offset, ...rest } = draft;
       const parsed: ParsedIssue = {
         ...rest,
-        attachment,
+        body,
+        screenshot,
+        attachments: paths,
         id: next,
         status: 'open',
         created: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),

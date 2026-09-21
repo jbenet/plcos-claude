@@ -19,8 +19,10 @@ export interface ParsedIssue {
   labels: string[];
   body: string;
   context: Record<string, unknown> | null;
-  /** Relative to the issues directory. A markdown image link points at the same file. */
-  attachment: string | null;
+  /** The screenshot, when one was filed. Rendered separately from the prose. */
+  screenshot: string | null;
+  /** Every file filed with this issue, relative to the issues directory. */
+  attachments: string[];
 }
 
 const COMMENTED = new Set(['status', 'kind', 'priority']);
@@ -49,11 +51,14 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
   }
 
   const str = (k: string, d = ''): string => (typeof fields[k] === 'string' ? (fields[k] as string) : d);
-  const attachment = str('attachment') || null;
-  // The image link in the prose is a rendering of the `attachment` field for anyone
+  const screenshot = str('screenshot') || str('attachment') || null;
+  const attachments = Array.isArray(fields['attachments'])
+    ? (fields['attachments'] as string[])
+    : screenshot ? [screenshot] : [];
+  // The screenshot link in the prose is a rendering of the `screenshot` field for anyone
   // reading the file in an editor. The app shows the picture itself, so it is not prose.
   const { body, context } = splitContext(
-    attachment ? rest.replace(`![Screenshot](${attachment})`, '') : rest,
+    screenshot ? rest.replace(`![Screenshot](${screenshot})`, '') : rest,
   );
 
   return {
@@ -66,7 +71,8 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
     page: str('page', ''),
     created: str('created', ''),
     labels: Array.isArray(fields['labels']) ? (fields['labels'] as string[]) : [],
-    attachment,
+    screenshot,
+    attachments,
     body,
     context,
   };
@@ -107,14 +113,15 @@ export function serializeIssue(issue: ParsedIssue): string {
     `page: ${quote(issue.page)}`,
     `created: ${issue.created}`,
     `labels: [${issue.labels.join(', ')}]`,
-    ...(issue.attachment ? [`attachment: ${quote(issue.attachment)}`] : []),
+    ...(issue.screenshot ? [`screenshot: ${quote(issue.screenshot)}`] : []),
+    ...(issue.attachments.length > 0 ? [`attachments: [${issue.attachments.join(', ')}]`] : []),
     '---',
     '',
     issue.body.trim(),
     '',
   ];
-  if (issue.attachment) {
-    lines.push(`![Screenshot](${issue.attachment})`);
+  if (issue.screenshot) {
+    lines.push(`![Screenshot](${issue.screenshot})`);
     lines.push('');
   }
   if (issue.context) {

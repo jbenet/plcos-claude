@@ -165,6 +165,46 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N13: [
+    {
+      name: '01-markdown-write',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(3000);
+        await page.getByPlaceholder("Guard message doesn't say whose ask is blocking").fill(
+          'Blocked actions should carry the ticket that would unblock them',
+        );
+        await page.locator('.mdfield textarea').fill(
+          '### What I expected\n\n'
+          + 'The standup names the **ticket kind** an action needs, but not *which* open ticket '
+          + 'would satisfy it. On `/approvals` there are four, and two of them are for the same '
+          + 'target.\n\n'
+          + '- link the row to the ticket when one already exists\n'
+          + '- say "no ticket yet" when one does not\n',
+        );
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: '02-markdown-preview',
+      path: '/neurotech/fit',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(3000);
+        await page.locator('.mdfield textarea').fill(
+          '### What I expected\n\n'
+          + 'The standup names the **ticket kind** an action needs, but not *which* open ticket '
+          + 'would satisfy it.\n\n'
+          + '- link the row to the ticket when one already exists\n'
+          + '- say "no ticket yet" when one does not\n',
+        );
+        await page.getByRole('button', { name: 'Preview' }).click();
+        await page.waitForTimeout(400);
+      },
+    },
+    { name: '03-issue-rendered', path: '/issues/0008', fullPage: true },
+  ],
   N12: [
     { name: '01-deep-crumb', path: '/neurotech/fit', prepare: async (page) => {
         await page.getByRole('link', { name: 'full assessment →' }).nth(2).click();
