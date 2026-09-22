@@ -3172,3 +3172,89 @@ and the hint line under the buttons says so rather than leaving it to be found. 
 contextual card. It is not global yet and the card admits it.
 
 **43 of 43 properties hold.**
+
+---
+
+## N34 — Five more, and everything becomes clickable
+
+**Shipped.** Fifteen views now, one filter bar over all of them, and a context console that
+opens when you point at anything. The design brief for this slice was a set of reference
+boards whose best idea was not any single chart but the discipline underneath them: every
+mark is a record, every record can be opened, and every claim about a person says what it
+rests on.
+
+| | |
+|---|---|
+| ![The network](docs/changelog/shots/n34/01-the-network.png) | **The network.** Us, the people who could carry an ask, the money — and only recorded lines between them. |
+| ![The leverage](docs/changelog/shots/n34/02-the-leverage.png) | **The leverage.** One recorded thing on the left, everything waiting behind it on the right. |
+| ![The coverage](docs/changelog/shots/n34/03-the-coverage.png) | **The coverage.** Six kinds of record per pursuit, least recorded first. |
+| ![The radar](docs/changelog/shots/n34/04-the-radar.png) | **The radar.** Distance is time since a dated exchange; the list beside it is everyone nobody has spoken to. |
+| ![The strip](docs/changelog/shots/n34/05-the-strip.png) | **The strip.** A month of operations per vehicle, with the undated pile counted beside it. |
+| ![Console](docs/changelog/shots/n34/06-console.png) | **Click anything.** The console shows what is recorded, its basis, and where to act. |
+| ![Filter](docs/changelog/shots/n34/07-filter.png) | **One filter, every tab.** Signal: blocked — and the bar says what it hid. |
+
+### Everything is a record, so everything opens
+
+Two things landed before any new drawing. A **filter bar** — find, owner, signal, rung —
+that narrows the projection before any view sees it, so a search for "Roos" reshapes the
+line, the load, the map, the grid and the list at once rather than being reimplemented
+fifteen times with fifteen sets of bugs. The count beside it says how many pursuits the
+filter hid, because a filtered picture that looks like an unfiltered one is the most
+expensive mistake this page could make.
+
+And a **context console**. Pointing at a mark opens a panel with the record behind it —
+rung and what the next rung needs, the figure and its basis, the last record and how old it
+is, the blocker in full — with links to the screens where it can actually be changed. A
+panel that explains but cannot hand off is a dead end.
+
+### The network — who can move whom
+
+Three columns: the team, the people who could carry an ask, the targets. A line is a
+**recorded** relationship edge or an ask somebody actually carried. Tier A and B draw solid;
+C and D draw dashed until a person confirms them; a restriction draws clay. Being in the
+address book is not being an advocate, and two people at the same conference are not a
+path — the drawing refuses to imply reach it cannot evidence, because somebody would plan a
+quarter around it.
+
+### The leverage — what one piece of work releases
+
+The only view that ranks work by how many other things it unblocks. Open tickets, questions
+the library has no answer for, assets carrying a refresh flag, collisions, restrictions,
+actors over their budget, connectors at their cap — each with the pursuits waiting behind it.
+The SEND ticket on the Neurotech primer holds two pursuits; the INTRO_ASK on Delia Roos holds
+two more. **Releasing a prerequisite does not advance anything; it lets somebody try.**
+
+### The coverage — what we do not know
+
+Six kinds of recorded context per pursuit: a figure, an assessment, confirmed access, a dated
+exchange, an open action, a dated entry to its rung. Least recorded first. It is the only
+view that draws what is *not* there, and it turned up something worth seeing: the wired
+commitments — Brenner, Vantage, Kaplan — show a cheque and nothing else. They closed before
+the ladder existed and nobody wrote the rest down. That is not a bug; it is exactly what the
+view is for.
+
+### The radar — when anybody last spoke to them
+
+Rings are days since a **dated exchange**: a meeting that happened, an ask that was made, a
+rung above "connector willing", which by definition needs a reply. Not since we wrote a note
+to ourselves. The list beside it is every pursuit with no dated exchange at all — they cannot
+be placed on a recency chart, and putting them on the outer ring would turn *nobody has
+spoken to them* into *they have gone cold*, which is a different and more flattering claim.
+
+### The strip — a month of operations
+
+The fortnight behind, today, the fortnight ahead; one lane per vehicle, three tracks in each:
+exchanges, work due, agent run updates. The columns on the right hold what falls outside the
+window and, more usefully, what has **no date at all** — the pile that never appears on a
+calendar and never gets chased, because undated is not the same as late. Agent runs that name
+no target get a lane of their own rather than vanishing.
+
+### What broke and why
+
+Two hydration failures, both the same lesson. SVG tooltips built from several template
+strings render as one text node on the server and several on the client; they are one
+string now. Dates formatted with the machine's locale and timezone differ between server
+and browser; every date on these views is UTC and hand-formatted. And `.lev` was already the
+leverage number on the strategy page, so the new cards inherited its monospace — renamed.
+
+**43 of 43 properties hold.**

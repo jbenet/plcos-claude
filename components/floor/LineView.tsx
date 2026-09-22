@@ -59,13 +59,7 @@ export function LineView({ state }: { state: FloorState }) {
       : 'var(--fl-ink)';
     return (
       <g key={item.key} className="flblk">
-        <title>
-          {`${item.entityName} · ${item.vehicleName} · ${item.ownerName}\n`}
-          {`${item.rung ? RUNG_LABEL[item.rung] : 'No rung with evidence yet'}\n`}
-          {`${compactUsd(item.amount)}${item.track ? ` ${item.track}` : ''} — ${item.sizeBasis}\n`}
-          {`${item.tempBasis}${item.blocked ? `\nBlocked: ${item.blocked}` : ''}`}
-          {item.urgent ? `\n${item.urgent}` : ''}
-        </title>
+        <title>{[(`${item.entityName} · ${item.vehicleName} · ${item.ownerName}\n`), (`${item.rung ? RUNG_LABEL[item.rung] : 'No rung with evidence yet'}\n`), (`${compactUsd(item.amount)}${item.track ? ` ${item.track}` : ''} — ${item.sizeBasis}\n`), (`${item.tempBasis}${item.blocked ? `\nBlocked: ${item.blocked}` : ''}`), (item.urgent ? `\n${item.urgent}` : '')].join('')}</title>
         <rect
           x={x} y={top} width={bw} height={ROW_H - 5} rx={3}
           fill={fill} fillOpacity={TEMP_ALPHA[item.temp]}

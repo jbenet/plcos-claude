@@ -167,6 +167,38 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N34: [
+    { name: '01-the-network', path: '/all/visualizations', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The network/ }).click();
+        await page.waitForTimeout(500);
+      } },
+    { name: '02-the-leverage', path: '/all/visualizations', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The leverage/ }).click();
+        await page.waitForTimeout(500);
+      } },
+    { name: '03-the-coverage', path: '/all/visualizations', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The coverage/ }).click();
+        await page.waitForTimeout(500);
+      } },
+    { name: '04-the-radar', path: '/all/visualizations', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The radar/ }).click();
+        await page.waitForTimeout(500);
+      } },
+    { name: '05-the-strip', path: '/all/visualizations', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The strip/ }).click();
+        await page.waitForTimeout(500);
+      } },
+    { name: '06-console', path: '/all/visualizations', width: 1600, prepare: async (page) => {
+        await page.getByRole('tab', { name: /The network/ }).click();
+        await page.waitForTimeout(400);
+        await page.locator('.netnode').last().click();
+        await page.waitForTimeout(400);
+      } },
+    { name: '07-filter', path: '/all/visualizations', width: 1600, prepare: async (page) => {
+        await page.locator('.filterbar select').nth(1).selectOption('blocked');
+        await page.waitForTimeout(400);
+      } },
+  ],
   N33: [
     { name: '01-issues-fixed-in', path: '/issues', prepare: async (page) => {
         await page.getByRole('button', { name: 'Any status' }).click();

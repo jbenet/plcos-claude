@@ -3,6 +3,7 @@ import { FloorTabs } from '@/components/floor/FloorTabs';
 import { Page } from '@/components/shell/Page';
 import { boardState } from '@/lib/board';
 import { floorState } from '@/lib/floor';
+import { lenses } from '@/lib/lenses';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
@@ -26,6 +27,7 @@ export default async function Visualizations({ params }: { params: Promise<{ veh
 
   const state = await floorState(vehicle?.slug ?? null, { includeGrants: everything });
   const board = await boardState(vehicle?.slug ?? null, state);
+  const lens = await lenses(vehicle?.slug ?? null, state);
   const scopeName = vehicle ? vehicle.name : everything ? 'PL Capital and PL R&D' : 'All of PL Capital';
   const blocked = state.items.filter((i) => i.blocked || i.restricted || i.conflict).length;
   const stalled = state.items.filter((i) => i.stalled).length;
@@ -36,8 +38,8 @@ export default async function Visualizations({ params }: { params: Promise<{ veh
       crumbs={moduleCrumbs('visualizations', vehicle?.name ?? null)}
       inspector={
         <>
-          <div className="lbl">How to read all ten</div>
-          <div className="ihead">One vocabulary, ten layouts</div>
+          <div className="lbl">How to read all fifteen</div>
+          <div className="ihead">One vocabulary, fifteen layouts</div>
           <div className="imeta">Switching tabs should not mean relearning the colours</div>
 
           <div className="kv"><span>Size</span><span>Money at stake, square-root scale</span></div>
@@ -81,8 +83,9 @@ export default async function Visualizations({ params }: { params: Promise<{ veh
         {everything
           ? 'Every vehicle on file, the grants rail included. '
           : vehicle ? 'One raise. ' : 'PL Capital’s vehicles. The grants rail is on the organisation-wide page. '}
-        Ten drawings, one vocabulary. The first five read what is happening; the second five
-        read the ground it happens on, the machine it moves through and the moves available.
+        Fifteen drawings, one vocabulary. The first five read what is happening; the second five
+        read the ground it happens on and the moves available; the third five read who can reach
+        whom, what to unblock, and what is simply not on file. Click anything to open it.
         Size is money at stake, fill is how recently anything was recorded, and colour is
         reserved for the exceptions — so a floor with nothing wrong has almost no colour on it.
       </p>
@@ -115,7 +118,7 @@ export default async function Visualizations({ params }: { params: Promise<{ veh
         </div>
       </div>
 
-      <FloorTabs state={state} board={board} />
+      <FloorTabs state={state} board={board} lenses={lens} />
 
       <p className="note">
         Read as of {shortDate(state.asOf)}. {state.coverage.corpus}.

@@ -99,7 +99,7 @@ export function ClockView({ state }: { state: FloorState }) {
                   const cx = LEFT + d * colW + colW / 2;
                   return (
                     <g key={m.key} className={`cmark k-${m.kind}`}>
-                      <title>{`${KIND_LABEL[m.kind]} · ${new Date(m.at).toDateString()}\n${m.label}`}</title>
+                      <title>{`${KIND_LABEL[m.kind]} · ${new Date(m.at).toISOString().slice(0, 10)}\n${m.label}`}</title>
                       <text x={cx} y={y + 16 + (k % 2) * 11} textAnchor="middle" className="cglyph">
                         {KIND_MARK[m.kind]}
                       </text>

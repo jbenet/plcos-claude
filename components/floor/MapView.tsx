@@ -61,13 +61,7 @@ export function MapView({ board }: { board: BoardState }) {
 
         {placed.map((t) => (
           <g key={t.entityId} className="mdot">
-            <title>
-              {`${t.name} · ${t.segment}\n`}
-              {`Capacity ${t.capacity} · affinity ${t.affinity} · propensity ${t.propensity ?? '—'} · time ${t.timeToDecision ?? '—'}\n`}
-              {`${t.band}. ${t.scoreBasis}\n`}
-              {`${compactUsd(t.cheque)} — ${t.chequeBasis}\n`}
-              {`${HOLDING_LABEL[t.holding]}${t.ownerName ? `, ${t.ownerName}` : ''} · ${t.edges} edges on file`}
-            </title>
+            <title>{[(`${t.name} · ${t.segment}\n`), (`Capacity ${t.capacity} · affinity ${t.affinity} · propensity ${t.propensity ?? '—'} · time ${t.timeToDecision ?? '—'}\n`), (`${t.band}. ${t.scoreBasis}\n`), (`${compactUsd(t.cheque)} — ${t.chequeBasis}\n`), (`${HOLDING_LABEL[t.holding]}${t.ownerName ? `, ${t.ownerName}` : ''} · ${t.edges} edges on file`)].join('')}</title>
             <circle
               cx={x(t.affinity!)} cy={y(t.capacity!)} r={r(t)}
               fill={HOLD_FILL[t.holding]} fillOpacity={t.holding === 'open' ? 0.18 : 0.42}

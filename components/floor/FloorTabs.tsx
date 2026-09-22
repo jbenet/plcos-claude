@@ -1,8 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { BoardState } from '@/lib/board-client';
 import type { FloorState } from '@/lib/floor-client';
+import type { Lenses } from '@/lib/lenses-client';
+import { Console } from './Console';
+import { CoverageView } from './CoverageView';
+import { FilterBar } from './FilterBar';
+import { EMPTY_FILTER, FloorProvider, matches, type FloorFilter, type Selected } from './FloorContext';
+import { LeverageView } from './LeverageView';
+import { NetworkView } from './NetworkView';
+import { RadarView } from './RadarView';
+import { StripView } from './StripView';
 import { ClockView } from './ClockView';
 import { FlowView } from './FlowView';
 import { FloorList } from './FloorList';
@@ -79,21 +88,95 @@ const TABS = [
     asks: 'What is about to run out?',
     learn: 'Person-time, goodwill, approvals, agent budget, materials, their own budget. Best before promising anyone anything.',
   },
+  {
+    id: 'network', title: 'The network',
+    asks: 'Who can carry an ask to whom, and which paths are actually confirmed?',
+    learn: 'Us, the people who could carry it, the money — and only recorded lines between them. Best before promising an introduction.',
+  },
+  {
+    id: 'leverage', title: 'The leverage',
+    asks: 'What one piece of work would release several next moves?',
+    learn: 'A prerequisite on the left, everything waiting behind it on the right. Best when there is an hour and six things want it.',
+  },
+  {
+    id: 'coverage', title: 'The coverage',
+    asks: 'What do we actually have on file, and where are we flying blind?',
+    learn: 'Six kinds of record per pursuit, least recorded first. Best before writing a brief that sounds confident.',
+  },
+  {
+    id: 'radar', title: 'The radar',
+    asks: 'When did anybody last actually speak to them?',
+    learn: 'Distance is time since a dated exchange, and the list beside it is everyone nobody has spoken to. Best on a Friday.',
+  },
+  {
+    id: 'strip', title: 'The strip',
+    asks: 'What happened in the last fortnight, and what is dated in the next?',
+    learn: 'A month of operations per vehicle, with the undated pile counted beside it. Best for the weekly review.',
+  },
 ] as const;
 
 const GROUPS: Array<{ title: string; note: string; ids: TabId[] }> = [
   { title: 'State of play', note: 'what is happening', ids: ['line', 'load', 'flow', 'clock', 'room'] },
   { title: 'The space and the moves', note: 'what could happen, and at what cost', ids: ['map', 'plant', 'moves', 'grid', 'economy'] },
+  { title: 'Reach, leverage and blind spots', note: 'who can move whom, what to unblock, what is not recorded', ids: ['network', 'leverage', 'coverage', 'radar', 'strip'] },
 ];
 
 type TabId = typeof TABS[number]['id'];
 
-export function FloorTabs({ state, board }: { state: FloorState; board: BoardState }) {
+export function FloorTabs({ state, board, lenses }: { state: FloorState; board: BoardState; lenses: Lenses }) {
   const [tab, setTab] = useState<TabId>('line');
+  const [filter, setFilter] = useState<FloorFilter>(EMPTY_FILTER);
+  const [selected, setSelected] = useState<Selected>(null);
   const active = TABS.find((t) => t.id === tab)!;
 
+  /**
+   * One filter, applied to the projection before any view sees it. The board's rows and
+   * the lenses are narrowed by the same item keys, so a search reshapes every tab at once
+   * — and the count in the bar says how many were hidden.
+   */
+  const view = useMemo(() => {
+    const items = state.items.filter((i) => matches(i, filter));
+    const keep = new Set(items.map((i) => i.key));
+    const entities = new Set(items.map((i) => i.entityId));
+    const money = state.money.map((m) => ({
+      ...m,
+      hard: items.filter((i) => i.vehicleSlug === m.slug && i.track === 'hard').reduce((n, i) => n + (i.amount ?? 0), 0),
+      soft: items.filter((i) => i.vehicleSlug === m.slug && i.track === 'soft').reduce((n, i) => n + (i.amount ?? 0), 0),
+      items: items.filter((i) => i.vehicleSlug === m.slug).length,
+    })).filter((m) => m.items > 0);
+    const filteredState: FloorState = { ...state, items, money };
+    const filteredBoard: BoardState = {
+      ...board,
+      rows: board.rows.filter((r) => keep.has(`${r.entityId}:${state.items.find((i) => i.entityId === r.entityId && i.vehicleName === r.vehicleName)?.vehicleSlug ?? ''}`)),
+      territories: filter.find.trim() || filter.owner !== 'everyone' || filter.signal !== 'all' || filter.stage !== 'all'
+        ? board.territories.filter((t) => entities.has(t.entityId))
+        : board.territories,
+    };
+    const filteredLenses: Lenses = {
+      ...lenses,
+      network: {
+        ...lenses.network,
+        nodes: lenses.network.nodes.filter((n) => n.role !== 'target' || keep.has(n.id.slice(2))),
+        links: lenses.network.links.filter((l) => !l.to.startsWith('t:') || keep.has(l.to.slice(2))),
+      },
+      leverage: {
+        ...lenses.leverage,
+        prerequisites: lenses.leverage.prerequisites
+          .map((p) => ({ ...p, dependents: p.dependents.filter((d) => keep.has(d.key)) }))
+          .filter((p) => p.dependents.length > 0),
+      },
+      coverage: { ...lenses.coverage, rows: lenses.coverage.rows.filter((r) => keep.has(r.key)) },
+      radar: {
+        ...lenses.radar,
+        dots: lenses.radar.dots.filter((d) => keep.has(d.key)),
+        offRadar: lenses.radar.offRadar.filter((d) => keep.has(d.key)),
+      },
+    };
+    return { state: filteredState, board: filteredBoard, lenses: filteredLenses };
+  }, [state, board, lenses, filter]);
+
   return (
-    <>
+    <FloorProvider value={{ selected, select: setSelected, filter }}>
       {GROUPS.map((g) => (
         <div key={g.title}>
           <div className="floorgroup">
@@ -120,27 +203,37 @@ export function FloorTabs({ state, board }: { state: FloorState; board: BoardSta
         </div>
       ))}
 
-      <div className="card floorcard">
-        <div className="chead">
-          <h2>{active.title}</h2>
-          <span className="lbl">{state.items.length} items · {state.scopeName}</span>
+      <FilterBar state={state} filter={filter} onChange={setFilter} shown={view.state.items.length} />
+
+      <div className={`floorsplit${selected ? ' open' : ''}`}>
+        <div className="card floorcard">
+          <div className="chead">
+            <h2>{active.title}</h2>
+            <span className="lbl">{view.state.items.length} items · {state.scopeName}</span>
+          </div>
+          <div className="floorbody">
+            {tab === 'line' && <LineView state={view.state} />}
+            {tab === 'load' && <LoadView state={view.state} />}
+            {tab === 'flow' && <FlowView state={view.state} />}
+            {tab === 'clock' && <ClockView state={view.state} />}
+            {tab === 'room' && <RoomView state={view.state} />}
+            {tab === 'map' && <MapView board={view.board} />}
+            {tab === 'plant' && <PlantView board={view.board} floor={view.state} />}
+            {tab === 'moves' && <MovesView board={view.board} />}
+            {tab === 'grid' && <GridView board={view.board} />}
+            {tab === 'economy' && <EconomyView board={view.board} />}
+            {tab === 'network' && <NetworkView network={view.lenses.network} />}
+            {tab === 'leverage' && <LeverageView leverage={view.lenses.leverage} />}
+            {tab === 'coverage' && <CoverageView coverage={view.lenses.coverage} />}
+            {tab === 'radar' && <RadarView radar={view.lenses.radar} />}
+            {tab === 'strip' && <StripView strip={view.lenses.strip} />}
+          </div>
+          <p className="cover"><b>What this one is for.</b> {active.learn}</p>
         </div>
-        <div className="floorbody">
-          {tab === 'line' && <LineView state={state} />}
-          {tab === 'load' && <LoadView state={state} />}
-          {tab === 'flow' && <FlowView state={state} />}
-          {tab === 'clock' && <ClockView state={state} />}
-          {tab === 'room' && <RoomView state={state} />}
-          {tab === 'map' && <MapView board={board} />}
-          {tab === 'plant' && <PlantView board={board} floor={state} />}
-          {tab === 'moves' && <MovesView board={board} />}
-          {tab === 'grid' && <GridView board={board} />}
-          {tab === 'economy' && <EconomyView board={board} />}
-        </div>
-        <p className="cover"><b>What this one is for.</b> {active.learn}</p>
+        {selected && <Console state={state} board={board} />}
       </div>
 
-      <FloorList state={state} />
-    </>
+      <FloorList state={view.state} />
+    </FloorProvider>
   );
 }
