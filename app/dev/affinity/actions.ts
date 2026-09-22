@@ -11,3 +11,12 @@ export async function runConnectionTest(): Promise<void> {
   revalidatePath('/dev/affinity');
   revalidatePath('/dev/connectors');
 }
+
+/** One request per list, plus a few: lists, their fields, the account's users. No entries. */
+export async function runDiscovery(): Promise<void> {
+  const { discoverLists } = await import('@/lib/connectors/affinity/discover');
+  const user = await (await auth()).currentUser();
+  await discoverLists(user.id);
+  revalidatePath('/dev/affinity');
+  revalidatePath('/dev/affinity/lists');
+}

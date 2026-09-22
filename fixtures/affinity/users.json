@@ -1,0 +1,36 @@
+{
+ "data": [
+  {
+   "id": 90001,
+   "firstName": "Juan",
+   "lastName": null,
+   "primaryEmailAddress": "juan@example.com",
+   "status": "active"
+  },
+  {
+   "id": 90002,
+   "firstName": "Mara",
+   "lastName": "Vance",
+   "primaryEmailAddress": "mara@example.com",
+   "status": "active"
+  },
+  {
+   "id": 90003,
+   "firstName": "Sam",
+   "lastName": "Ferreira",
+   "primaryEmailAddress": "sam@example.com",
+   "status": "active"
+  },
+  {
+   "id": 90004,
+   "firstName": "In\u00e9s",
+   "lastName": "Duarte",
+   "primaryEmailAddress": "ines@example.com",
+   "status": "invited"
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}

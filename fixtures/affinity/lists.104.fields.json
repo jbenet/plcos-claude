@@ -1,0 +1,32 @@
+{
+ "data": [
+  {
+   "id": "field-5301",
+   "name": "Stage",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "dropdown",
+   "createdAt": "2025-11-03T16:20:00Z"
+  },
+  {
+   "id": "field-5302",
+   "name": "Allocation",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "number",
+   "createdAt": "2025-11-03T16:20:00Z"
+  },
+  {
+   "id": "field-5303",
+   "name": "Lead",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "person",
+   "createdAt": "2025-11-03T16:20:00Z"
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}

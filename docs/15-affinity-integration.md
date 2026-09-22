@@ -138,16 +138,22 @@ minute; at most 25% of the account's monthly quota; and a stop when the account 
 
 ---
 
-## 6. List discovery (N40)
+## 6. List discovery (N41)
 
-Every Affinity list the key can see, with its type and fields, landed raw. The page matches
-them against the init file's list names, allowing for dashes and case, so a wrong name shows
-up as unmatched instead of an empty import. It also points out the lists with "SPV" in their
-names as candidate vehicles.
+Every Affinity list the key can see, with its type and fields, and the account's users,
+landed raw. No list entries, so nothing about a single LP. The page matches the lists against
+the init file's names, setting aside case, spacing and the kind of dash, so a wrong name
+shows up as unmatched instead of as an empty import. A near miss is shown as a suggestion and
+never used. Lists with "SPV" in their names that no vehicle claims are listed as candidates.
+Team members are matched to Affinity users by `affinityEmail`, or marked *probably* when only
+their `email` matches.
+
+Version numbers for the steps below are assigned when they land. Planned ones kept moving
+whenever something else, like the screenshot work in N40, came first.
 
 ---
 
-## 7. First slice (N41)
+## 7. First slice (next)
 
 - The Neurotech lists' entries, their organizations and people, and the fields on each list.
 - Meeting and email metadata only: dates, participants, counts. No bodies.
@@ -159,7 +165,7 @@ Before running, estimate the request cost from list sizes and show it.
 
 ---
 
-## 8. Inventory and gaps (N42)
+## 8. Inventory and gaps
 
 A generated report in `data/real/reports/`, plus a page:
 
@@ -174,7 +180,7 @@ is amount, whether anything means *signed*.
 
 ---
 
-## 9. Translation into our model (N43)
+## 9. Translation into our model
 
 The claims-not-evidence rule, applied:
 
@@ -190,7 +196,7 @@ The claims-not-evidence rule, applied:
 
 ---
 
-## 10. Sources and freshness in the views (N44), then a tour (N45)
+## 10. Sources and freshness in the views, then a tour
 
 The "Seed data · no connector" line becomes a real last-sync time, and every view that shows
 an Affinity-sourced figure says where it came from and when.

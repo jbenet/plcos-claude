@@ -27,10 +27,16 @@ export const ALLOWED: readonly Endpoint[] = [
   { template: '/v2/users', purpose: 'The account’s users, to match owners and note authors to our team.', beta: true },
 ];
 
+/**
+ * What may stand in each id position. Affinity's ids are integers, except a field's, which
+ * is a slug like `field-1234` or `affinity-data-location` (OpenAPI, 2026-07-15). Anything
+ * else — a slash, a dot, a percent sign — is not a path we asked for.
+ */
+const ID: Record<string, string> = { fieldId: '[a-z][a-z0-9-]*' };
+
 const compiled = ALLOWED.map((e) => ({
   endpoint: e,
-  // Affinity ids are integers. Anything else in an id position is not a path we asked for.
-  re: new RegExp(`^${e.template.replace(/\{[a-zA-Z]+\}/g, '\\d+')}$`),
+  re: new RegExp(`^${e.template.replace(/\{([a-zA-Z]+)\}/g, (_m, name: string) => ID[name] ?? '\\d+')}$`),
 }));
 
 /** The allowlisted endpoint a path matches, or null. The path is without its query. */

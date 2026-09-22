@@ -1,0 +1,53 @@
+{
+ "data": [
+  {
+   "id": 101,
+   "name": "PLC Neurotech I \u2014 LP pipeline",
+   "creatorId": 90001,
+   "ownerId": 90001,
+   "isPublic": true,
+   "type": "opportunity",
+   "createdAt": "2025-11-03T16:20:00Z"
+  },
+  {
+   "id": 102,
+   "name": "PLC Crypto/Rails \u2013 LPs",
+   "creatorId": 90002,
+   "ownerId": 90002,
+   "isPublic": true,
+   "type": "company",
+   "createdAt": "2025-12-01T10:05:00Z"
+  },
+  {
+   "id": 103,
+   "name": "SPV \u2013 Cortex",
+   "creatorId": 90002,
+   "ownerId": 90002,
+   "isPublic": false,
+   "type": "opportunity",
+   "createdAt": "2026-03-14T09:00:00Z"
+  },
+  {
+   "id": 104,
+   "name": "SPV \u2014 Lattice",
+   "creatorId": 90002,
+   "ownerId": 90003,
+   "isPublic": false,
+   "type": "opportunity",
+   "createdAt": "2026-04-02T09:00:00Z"
+  },
+  {
+   "id": 105,
+   "name": "Halo SPV (506b)",
+   "creatorId": 90003,
+   "ownerId": 90003,
+   "isPublic": false,
+   "type": "opportunity",
+   "createdAt": "2026-05-20T09:00:00Z"
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": "https://api.affinity.co/v2/lists?cursor=p2"
+ }
+}

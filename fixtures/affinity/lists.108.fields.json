@@ -1,0 +1,24 @@
+{
+ "data": [
+  {
+   "id": "field-5801",
+   "name": "Role",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "text",
+   "createdAt": "2025-11-03T16:20:00Z"
+  },
+  {
+   "id": "interaction-first-email",
+   "name": "First email",
+   "type": "relationship-intelligence",
+   "enrichmentSource": null,
+   "valueType": "interaction",
+   "createdAt": null
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}

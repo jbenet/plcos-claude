@@ -48,3 +48,17 @@ export interface RawRecordInput {
   sourceUpdatedAt: Date | null;
   payload: unknown;
 }
+
+export interface SyncRun {
+  id: number;
+  source: string;
+  kind: string;
+  startedAt: Date;
+  finishedAt: Date | null;
+  status: 'running' | 'ok' | 'failed';
+  runByName: string | null;
+  requests: number;
+  records: number;
+  newRecords: number;
+  note: string | null;
+}

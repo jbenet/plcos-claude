@@ -1,0 +1,32 @@
+{
+ "data": [
+  {
+   "id": "field-5201",
+   "name": "Relationship owner",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "person",
+   "createdAt": "2025-11-03T16:20:00Z"
+  },
+  {
+   "id": "field-5202",
+   "name": "Tier",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "dropdown",
+   "createdAt": "2025-11-03T16:20:00Z"
+  },
+  {
+   "id": "affinity-data-industry",
+   "name": "Industry",
+   "type": "enriched",
+   "enrichmentSource": "affinity-data",
+   "valueType": "dropdown-multi",
+   "createdAt": null
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}

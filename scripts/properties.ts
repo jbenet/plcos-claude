@@ -827,6 +827,39 @@ async function main() {
       t?.ok ? `fixture account: "${t.tier}"` : `test failed: ${t?.error}`,
     );
   }
+  {
+    const disc = await import('../lib/connectors/affinity/discover');
+    const first = await disc.discoverLists(null);
+    const rows1 = await adb.one<{ n: string }>(`select count(*)::text as n from sources.raw_record`);
+    const second = await disc.discoverLists(null);
+    const rows2 = await adb.one<{ n: string }>(`select count(*)::text as n from sources.raw_record`);
+    check(
+      'Discovery lands raw once: running it again stores nothing new',
+      first?.status === 'ok' && second?.status === 'ok' && first.newRecords > 0 && second.newRecords === 0 && rows1!.n === rows2!.n,
+      `first run: ${first?.newRecords} new of ${first?.records}; second: ${second?.newRecords} new; raw rows ${rows1!.n} → ${rows2!.n}`,
+    );
+
+    const match = await import('../lib/connectors/affinity/match');
+    const found = await disc.discovered();
+    const init = await disc.initForMatching();
+    const m = match.matchLists(init!, found.lists);
+    const got = (slug: string) => m.find((x) => x.vehicleSlug === slug)!;
+    check(
+      'A list name matches across dashes and case; a near miss is a suggestion, never a match',
+      got('neurotech').list?.id === 101 && got('spv-cortex').list?.id === 103 &&
+        got('rails').list === null && got('rails').closest?.list.id === 102,
+      `hyphen for em dash: ${got('neurotech').list ? 'matched' : 'missed'}; en for em dash: ${got('spv-cortex').list ? 'matched' : 'missed'}; a word left out: ${got('rails').list ? 'MATCHED' : `suggests "${got('rails').closest?.list.name}"`}`,
+    );
+
+    const slug = aff.allowed('/v2/lists/12/fields/field-1234/dropdown-options');
+    const sneaky = ['/v2/lists/12/fields/field.1/dropdown-options', '/v2/lists/12/fields/Field-1/dropdown-options', '/v2/lists/x1/fields'].filter((p) => aff.allowed(p));
+    check(
+      'A field id may be a slug, and nothing else passes in an id position',
+      slug !== null && sneaky.length === 0,
+      `field-1234 allowed: ${slug !== null}; odd ids let through: ${sneaky.length ? sneaky.join(', ') : 'none'}`,
+    );
+  }
+
   await adb.close();
 
   await rm(join(process.cwd(), SCRATCH), { recursive: true, force: true });

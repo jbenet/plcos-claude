@@ -1,0 +1,72 @@
+{
+ "data": [
+  {
+   "id": "field-5101",
+   "name": "Status",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "ranked-dropdown",
+   "createdAt": "2025-11-03T16:20:00Z"
+  },
+  {
+   "id": "field-5102",
+   "name": "Owners",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "person-multi",
+   "createdAt": "2025-11-03T16:20:00Z"
+  },
+  {
+   "id": "field-5103",
+   "name": "Indicated amount",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "number",
+   "createdAt": "2025-11-03T16:20:00Z"
+  },
+  {
+   "id": "field-5104",
+   "name": "Target close",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "datetime",
+   "createdAt": "2025-11-03T16:20:00Z"
+  },
+  {
+   "id": "field-5105",
+   "name": "Source",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "dropdown",
+   "createdAt": "2025-11-03T16:20:00Z"
+  },
+  {
+   "id": "affinity-data-location",
+   "name": "Location",
+   "type": "enriched",
+   "enrichmentSource": "affinity-data",
+   "valueType": "location",
+   "createdAt": null
+  },
+  {
+   "id": "interaction-last-email",
+   "name": "Last email",
+   "type": "relationship-intelligence",
+   "enrichmentSource": null,
+   "valueType": "interaction",
+   "createdAt": null
+  },
+  {
+   "id": "interaction-last-meeting",
+   "name": "Last meeting",
+   "type": "relationship-intelligence",
+   "enrichmentSource": null,
+   "valueType": "interaction",
+   "createdAt": null
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}

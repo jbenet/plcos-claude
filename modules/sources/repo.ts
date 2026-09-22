@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { getDb } from '@/lib/db';
-import type { ConnectionTest, LoggedRequest, RawRecordInput, RequestLogEntry } from './types';
+import type { ConnectionTest, LoggedRequest, RawRecordInput, RequestLogEntry, SyncRun } from './types';
 
 export async function logRequest(e: RequestLogEntry): Promise<void> {
   const db = await getDb();
@@ -115,3 +115,45 @@ export async function latestRaw<T>(source: string, kind: string): Promise<Array<
 }
 
 const json = (v: unknown) => (v === null || v === undefined ? null : JSON.stringify(v));
+
+export async function startRun(source: string, kind: string, runBy: string | null): Promise<number> {
+  const db = await getDb();
+  const row = await db.one<{ id: string }>(
+    `insert into sources.sync_run (source, kind, run_by) values ($1,$2,$3) returning id::text`,
+    [source, kind, runBy],
+  );
+  return Number(row!.id);
+}
+
+export async function finishRun(
+  id: number,
+  r: { status: 'ok' | 'failed'; requests: number; records: number; newRecords: number; note: string | null },
+): Promise<void> {
+  const db = await getDb();
+  await db.query(
+    `update sources.sync_run set finished_at = now(), status = $2, requests = $3, records = $4,
+            new_records = $5, note = $6 where id = $1`,
+    [id, r.status, r.requests, r.records, r.newRecords, r.note],
+  );
+}
+
+export async function latestRun(source: string, kind: string): Promise<SyncRun | null> {
+  const db = await getDb();
+  const r = await db.one<{
+    id: string; source: string; kind: string; started_at: Date | string; finished_at: Date | string | null;
+    status: SyncRun['status']; run_by_name: string | null; requests: number; records: number;
+    new_records: number; note: string | null;
+  }>(
+    `select r.id::text, r.source, r.kind, r.started_at, r.finished_at, r.status, u.name as run_by_name,
+            r.requests, r.records, r.new_records, r.note
+       from sources.sync_run r left join platform.app_user u on u.id = r.run_by
+      where r.source = $1 and r.kind = $2 order by r.started_at desc, r.id desc limit 1`,
+    [source, kind],
+  );
+  if (!r) return null;
+  return {
+    id: Number(r.id), source: r.source, kind: r.kind, startedAt: new Date(r.started_at),
+    finishedAt: r.finished_at ? new Date(r.finished_at) : null, status: r.status,
+    runByName: r.run_by_name, requests: r.requests, records: r.records, newRecords: r.new_records, note: r.note,
+  };
+}

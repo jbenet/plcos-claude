@@ -170,6 +170,24 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N41: [
+    {
+      name: '01-lists-discovered',
+      path: '/dev/affinity/lists',
+      fullPage: true,
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Discover/ }).click();
+        await page.getByText('matched').first().waitFor();
+        await page.waitForLoadState('networkidle');
+        await page.locator('tr', { hasText: 'LP pipeline' }).locator('details summary').click();
+        // Opening it scrolls the page, and a full-page capture draws the sticky bars wherever
+        // the scroll left them.
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.waitForTimeout(200);
+      },
+    },
+    { name: '02-from-the-affinity-page', path: '/dev/affinity' },
+  ],
   N40: [
     { name: '01-changelog-webp', path: '/dev/changelog' },
     { name: '02-issue-0021', path: '/issues/0021' },

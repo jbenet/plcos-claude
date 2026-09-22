@@ -3,9 +3,9 @@
  * The HTTP clients live in lib/connectors/; this is where what they did is written down.
  */
 export type {
-  ConnectionTest, LoggedRequest, RateWindow, RawRecordInput, RequestLogEntry, RequestOutcome,
+  ConnectionTest, LoggedRequest, RateWindow, RawRecordInput, RequestLogEntry, RequestOutcome, SyncRun,
 } from './types';
 export {
-  landRaw, latestConnectionTest, latestRaw, logRequest, recentRequests, recordConnectionTest,
-  requestsThisMonth,
+  finishRun, landRaw, latestConnectionTest, latestRaw, latestRun, logRequest, recentRequests,
+  recordConnectionTest, requestsThisMonth, startRun,
 } from './repo';

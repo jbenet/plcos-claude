@@ -1,8 +1,10 @@
+import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
 import { ago } from '@/lib/time';
 import { ALLOWED, affinityReady, readScopes } from '@/lib/connectors/affinity';
+import { discovered } from '@/lib/connectors/affinity/discover';
 import { latestConnectionTest, recentRequests, requestsThisMonth, type RateWindow } from '@/modules/sources';
 import { runConnectionTest } from './actions';
 
@@ -35,10 +37,11 @@ function Window({ label, w, unit }: { label: string; w: RateWindow; unit: string
 export default async function AffinityPage() {
   const demo = config.data.profile === 'demo';
   const ready = affinityReady();
-  const [test, log, ours] = await Promise.all([
+  const [test, log, ours, lists] = await Promise.all([
     latestConnectionTest('affinity'),
     recentRequests('affinity', 40),
     requestsThisMonth('affinity'),
+    discovered().then((d) => ({ run: d.run, count: d.lists.length })),
   ]);
   const month = test?.perMonth ?? null;
   const share = month ? Math.floor(month.limit * config.affinity.monthlyShare) : null;
@@ -138,6 +141,21 @@ export default async function AffinityPage() {
 
       <div className="card">
         <div className="chead">
+          <h2><Link href="/dev/affinity/lists">Lists</Link></h2>
+          <span className="lbl">{lists.run ? `discovered ${ago(lists.run.startedAt)}` : 'not discovered yet'}</span>
+        </div>
+        <div className="cbody">
+          <p style={{ margin: 0, fontSize: 13 }}>
+            {lists.run
+              ? `${lists.count} lists this key can see. `
+              : 'Which lists the key can see, their fields, and how they match the init file. '}
+            <Link href="/dev/affinity/lists">Open the lists →</Link>
+          </p>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="chead">
           <h2>Budget</h2>
           <span className="lbl">{test?.ok ? `as read ${ago(test.at)}` : 'not read yet'}</span>
         </div>
@@ -188,7 +206,7 @@ export default async function AffinityPage() {
         <p className="cover">
           <b>Anything else is refused before it leaves the machine</b>, and the refusal is logged
           below. The paths come from Affinity&rsquo;s OpenAPI description (v2, 2026-07-15). The
-          lists, their entries and notes are added in the versions that read them.
+          entries on a list, and notes, are added in the versions that read them.
         </p>
       </div>
 

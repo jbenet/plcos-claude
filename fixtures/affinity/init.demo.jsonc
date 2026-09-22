@@ -1,0 +1,21 @@
+// The demo's stand-in for data/real/init.jsonc: fictional people, and list names written
+// the way people write them — a hyphen where Affinity has a dash, a word left out — so the
+// matching on Developer → Affinity → Lists has something to do.
+{
+  "team": [
+    { "handle": "juan", "name": "Juan", "initials": "J", "role": "General Partner", "email": "juan@example.com", "affinityEmail": "juan@example.com" },
+    { "handle": "mara", "name": "Mara Vance", "initials": "MV", "role": "Head of LP relations", "email": "mara@example.com", "affinityEmail": null },
+    { "handle": "tomas", "name": "Tomás Reyes", "initials": "TR", "role": "Counsel (fractional)", "email": "tomas@example.com", "affinityEmail": null }
+  ],
+  "vehicles": [
+    { "slug": "neurotech", "name": "PLC Neurotech I", "kind": "fund", "exemption": "506(c)", "target": 90000000, "firstClose": "2026-12-15",
+      "affinityLists": ["PLC Neurotech I - LP pipeline"], "importNotes": true },
+    { "slug": "rails", "name": "PLC Crypto/Rails", "kind": "fund", "exemption": "506(c)", "target": 60000000, "firstClose": null,
+      "affinityLists": ["PLC Crypto/Rails LPs"], "importNotes": false },
+    { "slug": "spv-cortex", "name": "SPV — Cortex", "kind": "spv", "exemption": "506(c)", "target": 8000000, "firstClose": null,
+      "affinityLists": ["SPV — Cortex"], "importNotes": false },
+    { "slug": "grants", "name": "Grants rail", "kind": "grant_rail", "exemption": "n/a", "target": null, "firstClose": null,
+      "affinityLists": [], "importNotes": false }
+  ],
+  "answers": {}
+}

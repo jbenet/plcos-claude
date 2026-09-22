@@ -3618,3 +3618,49 @@ elements rather than HTML, so the characters themselves are safe to store. They'
 as typed now, and a literal `&gt;` that somebody types still survives.
 
 **54 of 54 properties hold.**
+
+---
+
+## N41 — Which lists, by name
+
+**Shipped.** List discovery. It's the first read that will tell us something about the real
+account, and it's built so that nothing it reads is about a single LP. It reads every list the
+key can see, each list's fields, and the account's users, and lands them all raw. It reads
+no list entries. It's tested against the fake Affinity in the demo, and waits for the key
+in the real profile.
+
+| | |
+|---|---|
+| ![Lists discovered](docs/changelog/shots/n41/01-lists-discovered.webp) | **Developer → Affinity → Lists**, in the demo, on its second run. 9 lists, 30 fields and 4 users seen, and *0 new or changed*, because landing is idempotent. Below that: what the init file asked for and what matched, two SPV lists nobody claims yet, the team matched to Affinity users, and every list with its fields folded away. |
+| ![From the Affinity page](docs/changelog/shots/n41/02-from-the-affinity-page.webp) | **Developer → Affinity** now has a *Lists* card between the connection and the budget, saying how many lists the key can see and when discovery last ran. |
+
+### Matched means matched
+
+The init file's list names are matched to Affinity's with case, spacing and the kind of dash
+set aside. People type a hyphen where Affinity shows an em dash, and that isn't a different
+list. Anything looser is shown as a suggestion ("Closest: …") and imports nothing until the
+file gives the exact name. An import that quietly read the wrong list would be worse than one
+that refuses to start. The coverage line says what an empty match can and can't mean: a list
+the key's owner can't see reads as *no list by that name*, not as *no such list*.
+
+Team members are matched to Affinity users by `affinityEmail`. When only their ordinary
+`email` matches, it's marked **probably**, and the page says how to confirm it.
+
+### Found on the way
+
+- **Field ids aren't numbers.** Affinity's are slugs like `field-1234`, but the allowlist
+  accepted only digits in every id position. The dropdown-values path, which the stage
+  questions will need, could never have been asked. Field ids now accept slugs, and a
+  property checks that nothing else, a dot or a capital letter, gets through.
+- **Runs are records.** A new table, `sources.sync_run`, in a *new* migration file, per the
+  append-only rule. A run that stops halfway still records what it got, because "we have 40
+  of 60 lists" is different from "we have the lists".
+
+Three new properties: discovery run twice stores nothing the second time; dash-insensitive
+matching, where a near miss is only a suggestion; and slug field ids. **57 of 57 properties
+hold.**
+
+**Next, once the key works:** press *Discover lists* in the real profile. The init file's
+Neurotech names will match or they won't, and the SPV candidates will show which lists to
+add. Then the first slice: entries on the matched lists, their organizations and people,
+and note text for Neurotech only.

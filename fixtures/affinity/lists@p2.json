@@ -1,0 +1,44 @@
+{
+ "data": [
+  {
+   "id": 106,
+   "name": "Co-investors",
+   "creatorId": 90001,
+   "ownerId": 90001,
+   "isPublic": true,
+   "type": "company",
+   "createdAt": "2024-06-11T12:00:00Z"
+  },
+  {
+   "id": 107,
+   "name": "Grant funders",
+   "creatorId": 90004,
+   "ownerId": 90004,
+   "isPublic": true,
+   "type": "company",
+   "createdAt": "2026-01-08T12:00:00Z"
+  },
+  {
+   "id": 108,
+   "name": "Portfolio founders",
+   "creatorId": 90001,
+   "ownerId": 90001,
+   "isPublic": true,
+   "type": "person",
+   "createdAt": "2023-02-01T12:00:00Z"
+  },
+  {
+   "id": 109,
+   "name": "Events 2026",
+   "creatorId": 90003,
+   "ownerId": 90003,
+   "isPublic": true,
+   "type": "person",
+   "createdAt": "2026-01-02T12:00:00Z"
+  }
+ ],
+ "pagination": {
+  "prevUrl": "https://api.affinity.co/v2/lists",
+  "nextUrl": null
+ }
+}
