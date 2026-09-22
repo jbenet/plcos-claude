@@ -2,7 +2,7 @@
 
 One entry per stage of the L-series. Each entry says what landed, what was deliberately
 left out, and where I disagreed with the plan. Screenshots live in
-`docs/changelog/shots/<stage>/`.
+`docs/changelog/shots/<stage>/`, as 2000 px WebP since N40 (CLAUDE.md, *Working notes*).
 
 ---
 
@@ -20,12 +20,12 @@ account.
 
 | | |
 |---|---|
-| ![Today](docs/changelog/shots/l1/01-today.png) | **Today.** The shell: dark rail with four umbrella sections, breadcrumb with a visible last-sync line, KPI strip, and the empty approval queue rendered as a designed state rather than a blank panel. |
-| ![Approvals](docs/changelog/shots/l1/02-approvals.png) | **Approvals.** The five ticket kinds and what each will gate, plus the five-states-five-check-marks rule as a live component rather than a paragraph. |
-| ![Feedback box](docs/changelog/shots/l1/03-feedback-box.png) | **The feedback box.** Shows the context it is about to capture before you press the button. Writes `issues/NNNN-slug.md`. |
-| ![Issues](docs/changelog/shots/l1/04-issues.png) | **Issues.** Read straight off the filesystem through the `IssueSink` seam. The SLA ladder sits in the inspector. |
-| ![Issue detail](docs/changelog/shots/l1/05-issue-detail.png) | **Issue detail.** Prose, plus the `json context` block exactly as captured. |
-| ![System and seams](docs/changelog/shots/l1/06-system-seams.png) | **System & seams.** What each seam is running now, what it swaps to, and why the swap stays cheap. Plus every constant that is a guess, named as one. |
+| ![Today](docs/changelog/shots/l1/01-today.webp) | **Today.** The shell: dark rail with four umbrella sections, breadcrumb with a visible last-sync line, KPI strip, and the empty approval queue rendered as a designed state rather than a blank panel. |
+| ![Approvals](docs/changelog/shots/l1/02-approvals.webp) | **Approvals.** The five ticket kinds and what each will gate, plus the five-states-five-check-marks rule as a live component rather than a paragraph. |
+| ![Feedback box](docs/changelog/shots/l1/03-feedback-box.webp) | **The feedback box.** Shows the context it is about to capture before you press the button. Writes `issues/NNNN-slug.md`. |
+| ![Issues](docs/changelog/shots/l1/04-issues.webp) | **Issues.** Read straight off the filesystem through the `IssueSink` seam. The SLA ladder sits in the inspector. |
+| ![Issue detail](docs/changelog/shots/l1/05-issue-detail.webp) | **Issue detail.** Prose, plus the `json context` block exactly as captured. |
+| ![System and seams](docs/changelog/shots/l1/06-system-seams.webp) | **System & seams.** What each seam is running now, what it swaps to, and why the swap stays cheap. Plus every constant that is a guess, named as one. |
 
 ### The four things I would have asked you to approve first
 
@@ -128,10 +128,10 @@ value when the tuple is incomplete, so forgetting is not an option a caller has.
 
 | | |
 |---|---|
-| ![Research](docs/changelog/shots/l2/01-research.png) | **Research & enrichment.** Fourteen entities, thirteen claims. The two counts that matter are *unverified* and *weakly supported* — both are the kind of number a system normally hides. |
-| ![Dossier](docs/changelog/shots/l2/02-dossier.png) | **A dossier.** Every claim shows source, as-of, confidence and who verified it, in that order, on the same line as the value. Open questions sit beside it, not buried in it. |
-| ![EvidenceRef](docs/changelog/shots/l2/03-evidence-ref.png) | **`EvidenceRef`.** The popover states *what the document can support* — not just where it came from. That sentence is what stops a conference attendee list from becoming a relationship. |
-| ![Corpus](docs/changelog/shots/l2/04-corpus.png) | **The corpus.** Eleven source documents, each labelled strong, moderate or weak, each with its own "supports" line. |
+| ![Research](docs/changelog/shots/l2/01-research.webp) | **Research & enrichment.** Fourteen entities, thirteen claims. The two counts that matter are *unverified* and *weakly supported* — both are the kind of number a system normally hides. |
+| ![Dossier](docs/changelog/shots/l2/02-dossier.webp) | **A dossier.** Every claim shows source, as-of, confidence and who verified it, in that order, on the same line as the value. Open questions sit beside it, not buried in it. |
+| ![EvidenceRef](docs/changelog/shots/l2/03-evidence-ref.webp) | **`EvidenceRef`.** The popover states *what the document can support* — not just where it came from. That sentence is what stops a conference attendee list from becoming a relationship. |
+| ![Corpus](docs/changelog/shots/l2/04-corpus.webp) | **The corpus.** Eleven source documents, each labelled strong, moderate or weak, each with its own "supports" line. |
 
 ### What landed
 
@@ -193,11 +193,11 @@ produces a case with a dated follow-up instead of a silent block.
 
 | | |
 |---|---|
-| ![Conflict ticket](docs/changelog/shots/l3/01-approvals-conflict.png) | **A blocked INTRO_ASK.** The scope says what the approval authorizes *and what it does not*. Below it, both guards that refused, each showing what it looked at. |
-| ![Adjudication](docs/changelog/shots/l3/02-adjudication.png) | **Adjudicating the conflict.** Two claimants side by side, a reason code, and a follow-up date for the loser that the form will not submit without. |
-| ![MONEY ticket](docs/changelog/shots/l3/03-approvals-money.png) | **A MONEY ticket.** "Cash received — No, a separate state" is on the face of the approval, because that is the line this system exists to keep. |
-| ![Ask log](docs/changelog/shots/l3/04-ask-log.png) | **Module 07.** Every ask, made or not, with connector load in the inspector: Duettmann is at 2 of 3 this quarter. |
-| ![Today](docs/changelog/shots/l3/05-today-queue.png) | **Today,** now showing the real queue. |
+| ![Conflict ticket](docs/changelog/shots/l3/01-approvals-conflict.webp) | **A blocked INTRO_ASK.** The scope says what the approval authorizes *and what it does not*. Below it, both guards that refused, each showing what it looked at. |
+| ![Adjudication](docs/changelog/shots/l3/02-adjudication.webp) | **Adjudicating the conflict.** Two claimants side by side, a reason code, and a follow-up date for the loser that the form will not submit without. |
+| ![MONEY ticket](docs/changelog/shots/l3/03-approvals-money.webp) | **A MONEY ticket.** "Cash received — No, a separate state" is on the face of the approval, because that is the line this system exists to keep. |
+| ![Ask log](docs/changelog/shots/l3/04-ask-log.webp) | **Module 07.** Every ask, made or not, with connector load in the inspector: Duettmann is at 2 of 3 this quarter. |
+| ![Today](docs/changelog/shots/l3/05-today-queue.webp) | **Today,** now showing the real queue. |
 
 ### The gate
 
@@ -279,9 +279,9 @@ search.
 
 | | |
 |---|---|
-| ![Routes](docs/changelog/shots/l4/01-routes.png) | **Four paths to Delia Roos, ranked.** Recommend, Hold, Not a route, Excluded — each with the reason, the tier of every hop, and the evidence behind it. |
-| ![Full page](docs/changelog/shots/l4/02-routes-full.png) | **The list and the drawing.** The path list is the primary view; the graph adds shape and nothing else. Dashed lines are paths that cannot be used. |
-| ![No route](docs/changelog/shots/l4/03-no-route.png) | **The state this whole rule exists for.** "No path exists in the material available" — said in those words, with the corpus, the hop limit, and what was not inspected. |
+| ![Routes](docs/changelog/shots/l4/01-routes.webp) | **Four paths to Delia Roos, ranked.** Recommend, Hold, Not a route, Excluded — each with the reason, the tier of every hop, and the evidence behind it. |
+| ![Full page](docs/changelog/shots/l4/02-routes-full.webp) | **The list and the drawing.** The path list is the primary view; the graph adds shape and nothing else. Dashed lines are paths that cannot be used. |
+| ![No route](docs/changelog/shots/l4/03-no-route.webp) | **The state this whole rule exists for.** "No path exists in the material available" — said in those words, with the corpus, the hop limit, and what was not inspected. |
 
 ### The four paths, and why each got its verdict
 
@@ -363,10 +363,10 @@ properties harness over the whole fixture set.
 
 | | |
 |---|---|
-| ![Pursuits](docs/changelog/shots/l5/01-pursuits.png) | **Six pursuits at five different heights.** The six-segment bar is the ladder; the outlined segment is the next rung, which has nothing on file. |
-| ![Roos workspace](docs/changelog/shots/l5/02-workspace-roos.png) | **Delia Roos.** Sitting at *connector willing* and nowhere else. Routes, plan with a reason per move, claims with their sources, open questions, and the restriction in the inspector. |
-| ![Cedar](docs/changelog/shots/l5/03-ladder-cedar.png) | **Cedar Trust, five rungs up.** Commitment accepted on 18 September. Cash received is empty, and stays empty until a wire confirmation exists. |
-| ![Advance](docs/changelog/shots/l5/04-advance-ticket.png) | **Advancing a rung opens a ticket and writes nothing.** The rung lands only after approval, and the ladder is re-checked at that moment. |
+| ![Pursuits](docs/changelog/shots/l5/01-pursuits.webp) | **Six pursuits at five different heights.** The six-segment bar is the ladder; the outlined segment is the next rung, which has nothing on file. |
+| ![Roos workspace](docs/changelog/shots/l5/02-workspace-roos.webp) | **Delia Roos.** Sitting at *connector willing* and nowhere else. Routes, plan with a reason per move, claims with their sources, open questions, and the restriction in the inspector. |
+| ![Cedar](docs/changelog/shots/l5/03-ladder-cedar.webp) | **Cedar Trust, five rungs up.** Commitment accepted on 18 September. Cash received is empty, and stays empty until a wire confirmation exists. |
+| ![Advance](docs/changelog/shots/l5/04-advance-ticket.webp) | **Advancing a rung opens a ticket and writes nothing.** The rung lands only after approval, and the ladder is re-checked at that moment. |
 
 ### What the ladder actually enforces
 
@@ -445,11 +445,11 @@ first ticket in this system whose approval actually *does* something.
 
 | | |
 |---|---|
-| ![Soft to hard, all vehicles](docs/changelog/shots/l6/01-soft-hard-all.png) | **With no vehicle selected there is no headline.** Four raises side by side, no total row, and a sentence saying why. |
-| ![Soft to hard](docs/changelog/shots/l6/02-soft-hard-vehicle.png) | **Pick a vehicle and the headline means something.** $56.0M hard, $22.5M soft in a hatched card, convertible soft shown and never summed in. |
-| ![Forecast](docs/changelog/shots/l6/03-forecast.png) | **The conserved capital pool.** Two actors are over a verified budget by $3.5M between them. The page says which vehicles, and refuses to pick. |
-| ![Vehicles](docs/changelog/shots/l6/04-vehicles.png) | **Vehicle status.** Per vehicle, hard, soft, cash, gap, coverage — and a cover line explaining why there is no total. |
-| ![MONEY ticket](docs/changelog/shots/l6/05-money-ticket.png) | **The MONEY ticket for Cedar Trust,** carrying its bounded action as data. Approving it is the only thing in this system that can move the headline. |
+| ![Soft to hard, all vehicles](docs/changelog/shots/l6/01-soft-hard-all.webp) | **With no vehicle selected there is no headline.** Four raises side by side, no total row, and a sentence saying why. |
+| ![Soft to hard](docs/changelog/shots/l6/02-soft-hard-vehicle.webp) | **Pick a vehicle and the headline means something.** $56.0M hard, $22.5M soft in a hatched card, convertible soft shown and never summed in. |
+| ![Forecast](docs/changelog/shots/l6/03-forecast.webp) | **The conserved capital pool.** Two actors are over a verified budget by $3.5M between them. The page says which vehicles, and refuses to pick. |
+| ![Vehicles](docs/changelog/shots/l6/04-vehicles.webp) | **Vehicle status.** Per vehicle, hard, soft, cash, gap, coverage — and a cover line explaining why there is no total. |
+| ![MONEY ticket](docs/changelog/shots/l6/05-money-ticket.webp) | **The MONEY ticket for Cedar Trust,** carrying its bounded action as data. Approving it is the only thing in this system that can move the headline. |
 
 ### Approving a ticket now runs exactly what it says
 
@@ -516,9 +516,9 @@ database.
 
 | | |
 |---|---|
-| ![Today, all vehicles](docs/changelog/shots/l7/01-today-all.png) | **Today with no vehicle selected.** Operational counts rather than money, and each vehicle's hard number on its own row. Four decisions, one of them blocked by a conflict. |
-| ![Today, one vehicle](docs/changelog/shots/l7/02-today-vehicle.png) | **Today for PLC Neurotech I.** Hard, soft, gap and coverage — and the sprint strip underneath, so the gap is read against the weeks that are actually left. |
-| ![Sprint calendar](docs/changelog/shots/l7/03-calendar.png) | **Eighteen weeks to the close.** Two of them are not working weeks. Thanksgiving and the December dead zone are grey with a dashed bar and carry no milestone. |
+| ![Today, all vehicles](docs/changelog/shots/l7/01-today-all.webp) | **Today with no vehicle selected.** Operational counts rather than money, and each vehicle's hard number on its own row. Four decisions, one of them blocked by a conflict. |
+| ![Today, one vehicle](docs/changelog/shots/l7/02-today-vehicle.webp) | **Today for PLC Neurotech I.** Hard, soft, gap and coverage — and the sprint strip underneath, so the gap is read against the weeks that are actually left. |
+| ![Sprint calendar](docs/changelog/shots/l7/03-calendar.webp) | **Eighteen weeks to the close.** Two of them are not working weeks. Thanksgiving and the December dead zone are grey with a dashed bar and carry no milestone. |
 
 ### What the calendar actually changes
 
@@ -565,8 +565,8 @@ are two different shapes of problem. **Core (L1–L8) is complete.**
 
 | | |
 |---|---|
-| ![Close room](docs/changelog/shots/l8/01-close-room.png) | **First close, PLC Neurotech I.** Six conditions with owners, dates and evidence — three of them compliance obligations, three already overdue. The subscription pack underneath, sent → returned → countersigned. |
-| ![SPV war room](docs/changelog/shots/l8/02-spv-war-room.png) | **Three SPVs on a days-scale clock.** invite → IOI → allocate → wire as a four-segment bar per seat, days elapsed beside it, and six bandwidth-steal alerts in the inspector. |
+| ![Close room](docs/changelog/shots/l8/01-close-room.webp) | **First close, PLC Neurotech I.** Six conditions with owners, dates and evidence — three of them compliance obligations, three already overdue. The subscription pack underneath, sent → returned → countersigned. |
+| ![SPV war room](docs/changelog/shots/l8/02-spv-war-room.webp) | **Three SPVs on a days-scale clock.** invite → IOI → allocate → wire as a four-segment bar per seat, days elapsed beside it, and six bandwidth-steal alerts in the inspector. |
 
 ### Two rooms, on purpose
 
@@ -634,8 +634,8 @@ and a sentence under every number saying where it came from.
 
 | | |
 |---|---|
-| ![Selection](docs/changelog/shots/l9/01-selection.png) | **Ranked for PLC Neurotech I.** Four scored, two unscored. Every factor shows its basis, its source and who recorded it. |
-| ![Reweighted](docs/changelog/shots/l9/02-reweighted.png) | **The same list after moving capacity to 10% and propensity to 40%.** The order changes, the old weight set is kept, and an audit row records who changed it and why. |
+| ![Selection](docs/changelog/shots/l9/01-selection.webp) | **Ranked for PLC Neurotech I.** Four scored, two unscored. Every factor shows its basis, its source and who recorded it. |
+| ![Reweighted](docs/changelog/shots/l9/02-reweighted.webp) | **The same list after moving capacity to 10% and propensity to 40%.** The order changes, the old weight set is kept, and an audit row records who changed it and why. |
 
 ### A rubric, not a model
 
@@ -698,8 +698,8 @@ thresholds live.
 
 | | |
 |---|---|
-| ![Signals on Today](docs/changelog/shots/l10/01-signals-today.png) | **What changed.** Four signals above the threshold, each showing the rule that made it a signal rather than noise, with Claim and Dismiss. |
-| ![Thresholds](docs/changelog/shots/l10/02-thresholds.png) | **System & seams.** The three signal thresholds, every guessed constant in the system, and the two signals the thresholds held back — each labelled with which rule stopped it. |
+| ![Signals on Today](docs/changelog/shots/l10/01-signals-today.webp) | **What changed.** Four signals above the threshold, each showing the rule that made it a signal rather than noise, with Claim and Dismiss. |
+| ![Thresholds](docs/changelog/shots/l10/02-thresholds.webp) | **System & seams.** The three signal thresholds, every guessed constant in the system, and the two signals the thresholds held back — each labelled with which rule stopped it. |
 
 ### The first real use of the Connector seam
 
@@ -773,8 +773,8 @@ ways: *what is still unanswered*, and *what happened and what does it entitle us
 
 | | |
 |---|---|
-| ![Prep brief](docs/changelog/shots/l11/01-prep-brief.png) | **The prep brief for Northwood Capital, with zero supported claims.** Both claims on file are low-confidence and unverified, so the brief refuses both and says so by name. |
-| ![Decision room](docs/changelog/shots/l11/02-decision-room.png) | **The decision room.** Objections tagged into eight closed classes, diligence questions with owners and dates, the evidence gap stated as a number, and the decision timeline merging ladder events with meetings. |
+| ![Prep brief](docs/changelog/shots/l11/01-prep-brief.webp) | **The prep brief for Northwood Capital, with zero supported claims.** Both claims on file are low-confidence and unverified, so the brief refuses both and says so by name. |
+| ![Decision room](docs/changelog/shots/l11/02-decision-room.webp) | **The decision room.** Objections tagged into eight closed classes, diligence questions with owners and dates, the evidence gap stated as a number, and the decision timeline merging ladder events with meetings. |
 
 ### The brief that says nothing
 
@@ -839,9 +839,9 @@ is requested, and a performance page whose main job is to say what cannot be mea
 
 | | |
 |---|---|
-| ![Content studio](docs/changelog/shots/l12/01-content-studio.png) | **`AudienceVariants`.** One canonical asset, five variants side by side, each showing its permitted use and the claims it rests on. |
-| ![Wrap refusal](docs/changelog/shots/l12/02-wrap-refusal.png) | **The gate refusing a send.** The public primer for the 506(b) SPV: two reasons, no ticket opened, and the refusal kept on the record. |
-| ![Performance](docs/changelog/shots/l12/03-performance.png) | **Content performance.** There is no view data, so there are no view metrics — and the ladder is offered as the only attribution this system trusts. |
+| ![Content studio](docs/changelog/shots/l12/01-content-studio.webp) | **`AudienceVariants`.** One canonical asset, five variants side by side, each showing its permitted use and the claims it rests on. |
+| ![Wrap refusal](docs/changelog/shots/l12/02-wrap-refusal.webp) | **The gate refusing a send.** The public primer for the 506(b) SPV: two reasons, no ticket opened, and the refusal kept on the record. |
+| ![Performance](docs/changelog/shots/l12/03-performance.webp) | **Content performance.** There is no view data, so there are no view metrics — and the ladder is offered as the only attribution this system trusts. |
 
 ### The refusal comes before the approval
 
@@ -908,8 +908,8 @@ acceptance keys, the trust circuit breaker, and the no-unsolicited grant gate.
 
 | | |
 |---|---|
-| ![Agent runtime](docs/changelog/shots/l13/01-agent-runtime.png) | **Work envelopes, runs with their pins, refused tool calls, and the protected eval set** — every case traced to a real failure from an earlier stage. |
-| ![Grants gate](docs/changelog/shots/l13/02-grants-gate.png) | **The no-unsolicited gate.** Two funders blocked because no invitation exists, one permitted because a programme officer asked us to submit on 5 September. |
+| ![Agent runtime](docs/changelog/shots/l13/01-agent-runtime.webp) | **Work envelopes, runs with their pins, refused tool calls, and the protected eval set** — every case traced to a real failure from an earlier stage. |
+| ![Grants gate](docs/changelog/shots/l13/02-grants-gate.webp) | **The no-unsolicited gate.** Two funders blocked because no invitation exists, one permitted because a programme officer asked us to submit on 5 September. |
 
 ### The authorization unit is the run
 
@@ -1006,7 +1006,7 @@ explicitly: *"Across twenty modules and six architecture documents there is no
 accredited-investor handling, no jurisdictional restriction, no solicitation record. For
 506(c) vehicles that is not a simplification, it is a hole."*
 
-![Compliance registry](docs/changelog/shots/m24/01-compliance.png)
+![Compliance registry](docs/changelog/shots/m24/01-compliance.webp)
 
 ### It is a gate, not a report
 
@@ -1065,7 +1065,7 @@ inside L6, next to the money it guards.
 **Shipped.** Approved answers with their own versioning and approval state, and the
 coverage-gap analysis that module 13 describes — as a query rather than a page of its own.
 
-![Answer library](docs/changelog/shots/m17/01-answer-library.png)
+![Answer library](docs/changelog/shots/m17/01-answer-library.webp)
 
 ### Why an answer needs its own approval
 
@@ -1112,7 +1112,7 @@ the "twenty-four screens before anything is proven" the plan refuses.
 
 ## Where this got to
 
-![Today](docs/changelog/shots/final/01-today.png)
+![Today](docs/changelog/shots/final/01-today.webp)
 
 **L1 through L13, plus module 24's compliance half and modules 17 and 13.** Eighteen
 Postgres schemas, thirty screens, 16,700 lines of TypeScript. It runs on a laptop with no
@@ -1128,7 +1128,7 @@ npm run build         32 routes, compiled successfully
 
 ### The feedback loop is closed
 
-![Issues](docs/changelog/shots/final/02-issues.png)
+![Issues](docs/changelog/shots/final/02-issues.webp)
 
 Six issues in `issues/`, all filed through the in-app box, one of them marked **done**
 because the thing it complained about got fixed during the build. Three were filed at the
@@ -1142,7 +1142,7 @@ end about gaps I know are there:
 
 ### Four modules still have no screen, on purpose
 
-![A capability without a screen](docs/changelog/shots/final/03-capability-without-screen.png)
+![A capability without a screen](docs/changelog/shots/final/03-capability-without-screen.webp)
 
 Segmentation, signals, the LP-fit audit and team capacity are reachable at `/m/<slug>`,
 where the page says what the capability is and where its output already appears. That is
@@ -1181,17 +1181,17 @@ the modules are what you find inside one.
 
 | | |
 |---|---|
-| ![All vehicles](docs/changelog/shots/n1/01-overview-all.png) | **PL Capital → All vehicles.** Every vehicle side by side, no total row, and a module submenu that reads across all of them. |
-| ![One vehicle](docs/changelog/shots/n1/02-overview-vehicle.png) | **Selecting a vehicle** loads its overview and opens its modules in the rail. Everything below is scoped to it. |
-| ![Pane closed](docs/changelog/shots/n1/03-pane-closed.png) | **The right pane closes.** One button at the top right, and the choice is remembered. |
-| ![Sections collapsed](docs/changelog/shots/n1/04-nav-collapsed.png) | **Sections collapse** and stay collapsed across reloads. Developer starts closed. |
-| ![Operations](docs/changelog/shots/n1/05-operations.png) | **PL Capital → Operations.** The cross-vehicle layer: collisions between vehicles, connector goodwill spent across all of them, the shared calendar. |
-| ![Relationships](docs/changelog/shots/n1/06-relationships.png) | **Relationships.** LPs, co-funders and everyone — with roles *derived* from what happened rather than typed into a field. |
-| ![PL R&D](docs/changelog/shots/n1/07-rnd.png) | **PL R&D.** In the navigation because it is in the organisation; not in the data model, and the page says so plainly. |
-| ![Changelog](docs/changelog/shots/n1/08-dev-changelog.png) | **Developer → Changelog**, rendered from `CHANGELOG.md` with its screenshots, so it cannot drift from the repository. |
-| ![Status](docs/changelog/shots/n1/09-dev-status.png) | **Developer → Status.** What is running, and a problems list computed from the hard rules rather than maintained by hand. |
-| ![Modules](docs/changelog/shots/n1/10-dev-modules.png) | **Developer → Modules.** All twenty-four: vehicle-scoped, cross-cutting, or a capability with no screen. |
-| ![Settings](docs/changelog/shots/n1/11-dev-settings.png) | **Developer → Settings.** Nine guessed constants, each saying why it is a guess. |
+| ![All vehicles](docs/changelog/shots/n1/01-overview-all.webp) | **PL Capital → All vehicles.** Every vehicle side by side, no total row, and a module submenu that reads across all of them. |
+| ![One vehicle](docs/changelog/shots/n1/02-overview-vehicle.webp) | **Selecting a vehicle** loads its overview and opens its modules in the rail. Everything below is scoped to it. |
+| ![Pane closed](docs/changelog/shots/n1/03-pane-closed.webp) | **The right pane closes.** One button at the top right, and the choice is remembered. |
+| ![Sections collapsed](docs/changelog/shots/n1/04-nav-collapsed.webp) | **Sections collapse** and stay collapsed across reloads. Developer starts closed. |
+| ![Operations](docs/changelog/shots/n1/05-operations.webp) | **PL Capital → Operations.** The cross-vehicle layer: collisions between vehicles, connector goodwill spent across all of them, the shared calendar. |
+| ![Relationships](docs/changelog/shots/n1/06-relationships.webp) | **Relationships.** LPs, co-funders and everyone — with roles *derived* from what happened rather than typed into a field. |
+| ![PL R&D](docs/changelog/shots/n1/07-rnd.webp) | **PL R&D.** In the navigation because it is in the organisation; not in the data model, and the page says so plainly. |
+| ![Changelog](docs/changelog/shots/n1/08-dev-changelog.webp) | **Developer → Changelog**, rendered from `CHANGELOG.md` with its screenshots, so it cannot drift from the repository. |
+| ![Status](docs/changelog/shots/n1/09-dev-status.webp) | **Developer → Status.** What is running, and a problems list computed from the hard rules rather than maintained by hand. |
+| ![Modules](docs/changelog/shots/n1/10-dev-modules.webp) | **Developer → Modules.** All twenty-four: vehicle-scoped, cross-cutting, or a capability with no screen. |
+| ![Settings](docs/changelog/shots/n1/11-dev-settings.webp) | **Developer → Settings.** Nine guessed constants, each saying why it is a guess. |
 
 ### The rail
 
@@ -1257,7 +1257,7 @@ compiles 46 routes.
 **Shipped.** The build log reads in reverse: the last thing that happened is at the top, in
 both the in-app page and the standalone one.
 
-![Changelog, newest first](docs/changelog/shots/n2/01-changelog-newest-first.png)
+![Changelog, newest first](docs/changelog/shots/n2/01-changelog-newest-first.webp)
 
 `CHANGELOG.md` itself stays chronological and append-only. That is deliberate: a new entry
 is a clean append at the end of the file rather than an insert at the top, so its diff
@@ -1285,12 +1285,12 @@ but **"what is actually stopping this one, and what is the single next move."**
 
 | | |
 |---|---|
-| ![All vehicles](docs/changelog/shots/n3/01-fit-all-vehicles.png) | **The roll-up, grouped by what is blocking.** Not a funnel — a work queue. Each group's heading says what the job is: an awareness gap needs reach, a conviction gap needs one objection answered, an unanswered gate needs somebody to pick up the phone. |
-| ![One vehicle](docs/changelog/shots/n3/02-fit-one-vehicle.png) | **Scoped to PLC Neurotech I** through the same vehicle selection the rest of the app uses. Same page, one vehicle. Nothing is ever summed across vehicles. |
-| ![Diagnosis and gates](docs/changelog/shots/n3/03-diagnosis-and-gates.png) | **The diagnosis above the fold, hard gates directly beneath it.** Northwood's blocker is conviction — they told us the objection in the room. Two of their six gates are unanswered, and an unanswered gate is not a pass. |
-| ![Dimensions](docs/changelog/shots/n3/04-dimensions-biggest-misses.png) | **Eighteen graded dimensions, three sort orders.** Matters to us, matters to them, and biggest misses. Every reading carries whether it is known, inferred or guessed, and the certainty discounts the number rather than decorating it. |
-| ![Values and perception](docs/changelog/shots/n3/05-value-and-perception.png) | **What they value, and whether they can see it in us.** A match they cannot see is worth nothing at the moment of decision. Below it, familiarity and sentiment as separate columns. |
-| ![Ties](docs/changelog/shots/n3/06-ties-and-decision.png) | **Ties between us, with strength and opinion-weight as different columns.** Hale is a moderate tie to Roos and a **blocker** — she asked not to be introduced through him, and the tie table says so rather than quietly ranking him third. |
+| ![All vehicles](docs/changelog/shots/n3/01-fit-all-vehicles.webp) | **The roll-up, grouped by what is blocking.** Not a funnel — a work queue. Each group's heading says what the job is: an awareness gap needs reach, a conviction gap needs one objection answered, an unanswered gate needs somebody to pick up the phone. |
+| ![One vehicle](docs/changelog/shots/n3/02-fit-one-vehicle.webp) | **Scoped to PLC Neurotech I** through the same vehicle selection the rest of the app uses. Same page, one vehicle. Nothing is ever summed across vehicles. |
+| ![Diagnosis and gates](docs/changelog/shots/n3/03-diagnosis-and-gates.webp) | **The diagnosis above the fold, hard gates directly beneath it.** Northwood's blocker is conviction — they told us the objection in the room. Two of their six gates are unanswered, and an unanswered gate is not a pass. |
+| ![Dimensions](docs/changelog/shots/n3/04-dimensions-biggest-misses.webp) | **Eighteen graded dimensions, three sort orders.** Matters to us, matters to them, and biggest misses. Every reading carries whether it is known, inferred or guessed, and the certainty discounts the number rather than decorating it. |
+| ![Values and perception](docs/changelog/shots/n3/05-value-and-perception.webp) | **What they value, and whether they can see it in us.** A match they cannot see is worth nothing at the moment of decision. Below it, familiarity and sentiment as separate columns. |
+| ![Ties](docs/changelog/shots/n3/06-ties-and-decision.webp) | **Ties between us, with strength and opinion-weight as different columns.** Hale is a moderate tie to Roos and a **blocker** — she asked not to be introduced through him, and the tie table says so rather than quietly ranking him third. |
 
 ### The cards, and what each is for
 
@@ -1410,11 +1410,11 @@ record; the section it sits in is now **Orgs & people**, because that is what is
 
 | | |
 |---|---|
-| ![Directory](docs/changelog/shots/n4/01-orgs-directory.png) | **The directory.** Everyone, LPs, co-funders and connectors as tabs rather than four routes. Roles are still derived from what happened, and the last column now carries what is in the way for each one. |
-| ![Summary pane](docs/changelog/shots/n4/02-summary-pane.png) | **Clicking a name opens the summary here**, without leaving the list. Money per vehicle, where the conversation is, what is in the way, the ties on file, and what the record rests on. |
-| ![Entity page](docs/changelog/shots/n4/03-org-page.png) | **The entity page.** Restriction first, then where we stand per vehicle, then how we reach them, then what we can support with its provenance, then the open questions. |
-| ![From the fit roll-up](docs/changelog/shots/n4/04-summary-from-fit.png) | **The same pane, from a different list.** One component, so the answer to &ldquo;who is this&rdquo; cannot differ between screens. |
-| ![Connectors](docs/changelog/shots/n4/05-connectors.png) | **Connectors** are a group now. Goodwill is spent per person across every vehicle, so the people carrying asks deserve their own list. |
+| ![Directory](docs/changelog/shots/n4/01-orgs-directory.webp) | **The directory.** Everyone, LPs, co-funders and connectors as tabs rather than four routes. Roles are still derived from what happened, and the last column now carries what is in the way for each one. |
+| ![Summary pane](docs/changelog/shots/n4/02-summary-pane.webp) | **Clicking a name opens the summary here**, without leaving the list. Money per vehicle, where the conversation is, what is in the way, the ties on file, and what the record rests on. |
+| ![Entity page](docs/changelog/shots/n4/03-org-page.webp) | **The entity page.** Restriction first, then where we stand per vehicle, then how we reach them, then what we can support with its provenance, then the open questions. |
+| ![From the fit roll-up](docs/changelog/shots/n4/04-summary-from-fit.webp) | **The same pane, from a different list.** One component, so the answer to &ldquo;who is this&rdquo; cannot differ between screens. |
+| ![Connectors](docs/changelog/shots/n4/05-connectors.webp) | **Connectors** are a group now. Goodwill is spent per person across every vehicle, so the people carrying asks deserve their own list. |
 
 ### Two affordances on a name, on purpose
 
@@ -1471,11 +1471,11 @@ rather than an omission.
 
 | | |
 |---|---|
-| ![Score and rank](docs/changelog/shots/n5/01-score-and-rank.png) | **A score, a rank, and the pool it sits in.** 60 out of 100, 5th of 7 for this vehicle, ahead of 2 of the other 6, pool 56–84 with the median marked. The URL is `/neurotech/fit/<target>`. |
-| ![Readings](docs/changelog/shots/n5/02-readings.png) | **Every reading points the same way: up is good for this raise.** A bar for strength, a sign for direction, and words that say whose side it is on. Importance is a number now, not pips. |
-| ![Ranked roll-up](docs/changelog/shots/n5/03-rollup-ranked.png) | **The roll-up carries rank and score per row**, so the grouping by blocker no longer hides where each one sits in the pool. |
-| ![Top of the pool](docs/changelog/shots/n5/04-top-of-pool.png) | **Cedar at 84, 1st of 7** — and the distribution shows how narrow the top of this pool actually is. |
-| ![Blocked, ranked last](docs/changelog/shots/n5/05-blocked-last.png) | **Whitcomb scores 80 and ranks 7th of 7.** The strip says why in the same breath: a failed hard gate is not a ranking question. |
+| ![Score and rank](docs/changelog/shots/n5/01-score-and-rank.webp) | **A score, a rank, and the pool it sits in.** 60 out of 100, 5th of 7 for this vehicle, ahead of 2 of the other 6, pool 56–84 with the median marked. The URL is `/neurotech/fit/<target>`. |
+| ![Readings](docs/changelog/shots/n5/02-readings.webp) | **Every reading points the same way: up is good for this raise.** A bar for strength, a sign for direction, and words that say whose side it is on. Importance is a number now, not pips. |
+| ![Ranked roll-up](docs/changelog/shots/n5/03-rollup-ranked.webp) | **The roll-up carries rank and score per row**, so the grouping by blocker no longer hides where each one sits in the pool. |
+| ![Top of the pool](docs/changelog/shots/n5/04-top-of-pool.webp) | **Cedar at 84, 1st of 7** — and the distribution shows how narrow the top of this pool actually is. |
+| ![Blocked, ranked last](docs/changelog/shots/n5/05-blocked-last.webp) | **Whitcomb scores 80 and ranks 7th of 7.** The strip says why in the same breath: a failed hard gate is not a ranking question. |
 
 ### `/<vehicle>/fit/<target>`
 
@@ -1566,11 +1566,11 @@ moved off the nav and onto the vehicle.
 
 | | |
 |---|---|
-| ![Preferences](docs/changelog/shots/n6/01-preferences.png) | **Preferences.** Theme, the three browser-stored layout preferences named by their keys, and who you are. Configuration lives elsewhere and the page says where. |
-| ![Green theme](docs/changelog/shots/n6/02-green-theme.png) | **Green, applied.** The accent, the ground and the rail move. The four semantic colours do not. |
-| ![Green overview](docs/changelog/shots/n6/03-green-overview.png) | **The vehicle overview in green**, with the exemption banner that replaced the `506(c)` suffix in the rail. Grants rail now sits under PL R&D. |
-| ![Green fit](docs/changelog/shots/n6/04-green-fit.png) | **The fit page in green.** Passing gates are still the semantic green, selection is the accent green, and a blocker is still clay. |
-| ![Grants under R&D](docs/changelog/shots/n6/05-grants-under-rnd.png) | **The grants rail is a vehicle with its own modules**, drawn in the section where the work actually sits. |
+| ![Preferences](docs/changelog/shots/n6/01-preferences.webp) | **Preferences.** Theme, the three browser-stored layout preferences named by their keys, and who you are. Configuration lives elsewhere and the page says where. |
+| ![Green theme](docs/changelog/shots/n6/02-green-theme.webp) | **Green, applied.** The accent, the ground and the rail move. The four semantic colours do not. |
+| ![Green overview](docs/changelog/shots/n6/03-green-overview.webp) | **The vehicle overview in green**, with the exemption banner that replaced the `506(c)` suffix in the rail. Grants rail now sits under PL R&D. |
+| ![Green fit](docs/changelog/shots/n6/04-green-fit.webp) | **The fit page in green.** Passing gates are still the semantic green, selection is the accent green, and a blocker is still clay. |
+| ![Grants under R&D](docs/changelog/shots/n6/05-grants-under-rnd.webp) | **The grants rail is a vehicle with its own modules**, drawn in the section where the work actually sits. |
 
 ### The theme could not be one token
 
@@ -1632,11 +1632,11 @@ between which dates. A person can act for several, which is normal rather than a
 
 | | |
 |---|---|
-| ![People](docs/changelog/shots/n7/01-people-tab.png) | **The directory lists everyone**, and now has *People* and *Firms & institutions* tabs. Each row says who somebody acts for, or how many people a firm has on file. |
-| ![Firm people](docs/changelog/shots/n7/02-firm-people.png) | **A firm page carries its people.** Northwood's decision-maker, her capacity, the dates she has held it, and the other firm she also appears at. |
-| ![Two firms](docs/changelog/shots/n7/03-person-two-firms.png) | **A person page leads with where they sit.** Raman decides at Northwood and worked at Vantage until August — and Vantage is already an LP in both of our vehicles. |
-| ![Summary pane](docs/changelog/shots/n7/04-summary-acts-for.png) | **The summary pane carries it too.** Hale advises at Mercer & Bly and formerly advised Roos, where a do-not-approach instruction is on file. |
-| ![Firms](docs/changelog/shots/n7/05-firms-tab.png) | **Firms & institutions** — the records that hold a mandate, a cheque band and a restriction. |
+| ![People](docs/changelog/shots/n7/01-people-tab.webp) | **The directory lists everyone**, and now has *People* and *Firms & institutions* tabs. Each row says who somebody acts for, or how many people a firm has on file. |
+| ![Firm people](docs/changelog/shots/n7/02-firm-people.webp) | **A firm page carries its people.** Northwood's decision-maker, her capacity, the dates she has held it, and the other firm she also appears at. |
+| ![Two firms](docs/changelog/shots/n7/03-person-two-firms.webp) | **A person page leads with where they sit.** Raman decides at Northwood and worked at Vantage until August — and Vantage is already an LP in both of our vehicles. |
+| ![Summary pane](docs/changelog/shots/n7/04-summary-acts-for.webp) | **The summary pane carries it too.** Hale advises at Mercer & Bly and formerly advised Roos, where a do-not-approach instruction is on file. |
+| ![Firms](docs/changelog/shots/n7/05-firms-tab.webp) | **Firms & institutions** — the records that hold a mandate, a cheque band and a restriction. |
 
 ### Why this is not `network.edge`
 
@@ -1702,10 +1702,10 @@ PNG is filed beside the issue in the repository.
 
 | | |
 |---|---|
-| ![The box](docs/changelog/shots/n8/01-feedback-with-shot.png) | **The box, with the page in it.** Captured at the moment you pressed the button, before the drawer covered anything. Ticked by default; untick it and nothing is sent. |
-| ![Annotating](docs/changelog/shots/n8/02-annotating.png) | **Clicking the image opens it full size to annotate.** Freehand, arrow, box, text; five colours; undo, clear, cancel, done. |
-| ![Annotated](docs/changelog/shots/n8/03-annotated-thumb.png) | **Back in the box, marked *annotated*.** The annotated image is what gets filed — there is no second copy of the clean one. |
-| ![On the issue](docs/changelog/shots/n8/04-issue-with-shot.png) | **Issue 0007, filed through the box while building this.** The picture is a PNG in `issues/attachments/`, so the complaint, the screenshot and the fix travel in one pull request. |
+| ![The box](docs/changelog/shots/n8/01-feedback-with-shot.webp) | **The box, with the page in it.** Captured at the moment you pressed the button, before the drawer covered anything. Ticked by default; untick it and nothing is sent. |
+| ![Annotating](docs/changelog/shots/n8/02-annotating.webp) | **Clicking the image opens it full size to annotate.** Freehand, arrow, box, text; five colours; undo, clear, cancel, done. |
+| ![Annotated](docs/changelog/shots/n8/03-annotated-thumb.webp) | **Back in the box, marked *annotated*.** The annotated image is what gets filed — there is no second copy of the clean one. |
+| ![On the issue](docs/changelog/shots/n8/04-issue-with-shot.webp) | **Issue 0007, filed through the box while building this.** The picture is a PNG in `issues/attachments/`, so the complaint, the screenshot and the fix travel in one pull request. |
 
 ### How the capture works
 
@@ -1764,11 +1764,11 @@ move, and a compressed timeline across every vehicle with a per-vehicle version 
 
 | | |
 |---|---|
-| ![Standup](docs/changelog/shots/n9/01-standup-today.png) | **Today.** Every vehicle side by side with no total row, counts that are counts, this week, today, yesterday, and an ordered action list. The numbers are live and the bar says so. |
-| ![Pinned](docs/changelog/shots/n9/02-standup-pinned.png) | **Saturday the 19th, pinned at 08:05.** Two vehicles, $56.0M hard, four approvals — the numbers as they read that morning. Opening it today does not recompute a thing. |
-| ![Actions](docs/changelog/shots/n9/03-standup-actions.png) | **What to do, in order** — with why it is on the list, a *suggested* owner, what is blocking it, and the ticket kind it will need. |
-| ![Calendar](docs/changelog/shots/n9/04-calendar-all.png) | **Sixteen weeks across every vehicle.** Bars are spans, diamonds are deadlines, dots are days. Today is the vertical line. |
-| ![Per vehicle](docs/changelog/shots/n9/05-calendar-vehicle.png) | **The same calendar scoped to one vehicle**, at `/neurotech/calendar`, in the vehicle's own submenu. |
+| ![Standup](docs/changelog/shots/n9/01-standup-today.webp) | **Today.** Every vehicle side by side with no total row, counts that are counts, this week, today, yesterday, and an ordered action list. The numbers are live and the bar says so. |
+| ![Pinned](docs/changelog/shots/n9/02-standup-pinned.webp) | **Saturday the 19th, pinned at 08:05.** Two vehicles, $56.0M hard, four approvals — the numbers as they read that morning. Opening it today does not recompute a thing. |
+| ![Actions](docs/changelog/shots/n9/03-standup-actions.webp) | **What to do, in order** — with why it is on the list, a *suggested* owner, what is blocking it, and the ticket kind it will need. |
+| ![Calendar](docs/changelog/shots/n9/04-calendar-all.webp) | **Sixteen weeks across every vehicle.** Bars are spans, diamonds are deadlines, dots are days. Today is the vertical line. |
+| ![Per vehicle](docs/changelog/shots/n9/05-calendar-vehicle.webp) | **The same calendar scoped to one vehicle**, at `/neurotech/calendar`, in the vehicle's own submenu. |
 
 ### A past day must read the way it read that morning
 
@@ -1838,8 +1838,8 @@ day, and the table carries every row including the thirteen outside the window.
 
 | | |
 |---|---|
-| ![Overview section](docs/changelog/shots/n10/01-overview-section.png) | **Overview is the first section**, and Today, Approvals and Issues are in it. |
-| ![Collapsed](docs/changelog/shots/n10/02-overview-collapsed.png) | **Collapsed, the approvals count moves to the heading** — a signal that disappears when you tidy the nav is a signal you stop trusting. |
+| ![Overview section](docs/changelog/shots/n10/01-overview-section.webp) | **Overview is the first section**, and Today, Approvals and Issues are in it. |
+| ![Collapsed](docs/changelog/shots/n10/02-overview-collapsed.webp) | **Collapsed, the approvals count moves to the heading** — a signal that disappears when you tidy the nav is a signal you stop trusting. |
 
 ### The rail
 
@@ -1874,9 +1874,9 @@ of redrawing the page, and the annotator's toolbar sits on the image.
 
 | | |
 |---|---|
-| ![Real capture](docs/changelog/shots/n11/01-real-capture.png) | **"Captured from your screen."** The box says which path it got, because the two are not equivalent and you should not have to guess. |
-| ![Toolbar](docs/changelog/shots/n11/02-toolbar-on-the-image.png) | **The toolbar is directly above the image**, and **freehand is the default tool** — this circle was drawn without selecting anything. |
-| ![Undo](docs/changelog/shots/n11/03-undo-redo.png) | **⌘Z and ⌘⇧Z work**, with buttons that disable when there is nothing to undo or redo. Esc cancels. |
+| ![Real capture](docs/changelog/shots/n11/01-real-capture.webp) | **"Captured from your screen."** The box says which path it got, because the two are not equivalent and you should not have to guess. |
+| ![Toolbar](docs/changelog/shots/n11/02-toolbar-on-the-image.webp) | **The toolbar is directly above the image**, and **freehand is the default tool** — this circle was drawn without selecting anything. |
+| ![Undo](docs/changelog/shots/n11/03-undo-redo.webp) | **⌘Z and ⌘⇧Z work**, with buttons that disable when there is nothing to undo or redo. Esc cancels. |
 
 ### Redrawing the page was not the same as photographing it
 
@@ -1927,8 +1927,8 @@ middle ones are links.
 
 | | |
 |---|---|
-| ![Deep crumb](docs/changelog/shots/n12/01-deep-crumb.png) | **`PLC Neurotech I / Funder–vehicle fit / Northwood Capital`** — three levels, and the middle two go back where they say. |
-| ![Corpus](docs/changelog/shots/n12/02-crumb-hover.png) | **`Other / Research corpus / Every source document`.** The section, the page, the thing. |
+| ![Deep crumb](docs/changelog/shots/n12/01-deep-crumb.webp) | **`PLC Neurotech I / Funder–vehicle fit / Northwood Capital`** — three levels, and the middle two go back where they say. |
+| ![Corpus](docs/changelog/shots/n12/02-crumb-hover.webp) | **`Other / Research corpus / Every source document`.** The section, the page, the thing. |
 
 ### What was wrong
 
@@ -1980,9 +1980,9 @@ Calendar went in at N9, and became reachable only from a timeline bar. It is bac
 
 | | |
 |---|---|
-| ![Write](docs/changelog/shots/n13/01-markdown-write.png) | **Write.** Monospace source, a small formatting bar, and the file it is going to become. |
-| ![Preview](docs/changelog/shots/n13/02-markdown-preview.png) | **Preview**, rendered with the same component the issue page uses — so what you check before filing is what appears afterwards. |
-| ![On the issue](docs/changelog/shots/n13/03-issue-rendered.png) | **Issue 0008, filed through the box while building this** — heading, bold, inline code, a list, and a dropped PNG sitting beside the issue in the repository. |
+| ![Write](docs/changelog/shots/n13/01-markdown-write.webp) | **Write.** Monospace source, a small formatting bar, and the file it is going to become. |
+| ![Preview](docs/changelog/shots/n13/02-markdown-preview.webp) | **Preview**, rendered with the same component the issue page uses — so what you check before filing is what appears afterwards. |
+| ![On the issue](docs/changelog/shots/n13/03-issue-rendered.webp) | **Issue 0008, filed through the box while building this** — heading, bold, inline code, a list, and a dropped PNG sitting beside the issue in the repository. |
 
 ### Not a WYSIWYG surface, on purpose
 
@@ -2033,11 +2033,11 @@ use of a week?**
 
 | | |
 |---|---|
-| ![Assessment](docs/changelog/shots/n14/01-assessment.png) | **Where the raise stands** — nineteen readings across six groups, each with a verdict, what it means, and what it does not. |
-| ![Board](docs/changelog/shots/n14/02-board.png) | **The option space, ranked.** Every play cites the finding that put it there, and plays whose lever answers a weak reading float to the top. |
-| ![Compounding](docs/changelog/shots/n14/03-compounding.png) | **What compounds**, kept as a separate horizon rather than a low priority. |
-| ![Commit](docs/changelog/shots/n14/04-commit.png) | **Propose and commit** in your own words. Lines, @handles and dates are pulled out and kept beside the text. |
-| ![Assigned](docs/changelog/shots/n14/05-assigned.png) | **Assignment is a second press**, and it queues a Linear ticket. |
+| ![Assessment](docs/changelog/shots/n14/01-assessment.webp) | **Where the raise stands** — nineteen readings across six groups, each with a verdict, what it means, and what it does not. |
+| ![Board](docs/changelog/shots/n14/02-board.webp) | **The option space, ranked.** Every play cites the finding that put it there, and plays whose lever answers a weak reading float to the top. |
+| ![Compounding](docs/changelog/shots/n14/03-compounding.webp) | **What compounds**, kept as a separate horizon rather than a low priority. |
+| ![Commit](docs/changelog/shots/n14/04-commit.webp) | **Propose and commit** in your own words. Lines, @handles and dates are pulled out and kept beside the text. |
+| ![Assigned](docs/changelog/shots/n14/05-assigned.webp) | **Assignment is a second press**, and it queues a Linear ticket. |
 
 ### Three disciplines in the schema
 
@@ -2124,10 +2124,10 @@ thing in between: **what that funder needs before they can say yes.**
 
 | | |
 |---|---|
-| ![State of play](docs/changelog/shots/n15/01-state-of-play.png) | **Where we actually are** — fit, rung, money, ties, who we deal with, last touch. None of it stored here. |
-| ![Needs](docs/changelog/shots/n15/02-needs.png) | **What they need**, with what each need calls for. Northwood has three: two unmet, one nobody has established. |
-| ![Options](docs/changelog/shots/n15/03-option-space.png) | **The option space**, ranked, plus whole-vehicle plays matched to this target's unmet needs. |
-| ![Tessaro](docs/changelog/shots/n15/04-tessaro.png) | **Tessaro, for contrast.** They already understand the field — that need is *met* — and have never heard of us. Opposite work from Northwood. |
+| ![State of play](docs/changelog/shots/n15/01-state-of-play.webp) | **Where we actually are** — fit, rung, money, ties, who we deal with, last touch. None of it stored here. |
+| ![Needs](docs/changelog/shots/n15/02-needs.webp) | **What they need**, with what each need calls for. Northwood has three: two unmet, one nobody has established. |
+| ![Options](docs/changelog/shots/n15/03-option-space.webp) | **The option space**, ranked, plus whole-vehicle plays matched to this target's unmet needs. |
+| ![Tessaro](docs/changelog/shots/n15/04-tessaro.webp) | **Tessaro, for contrast.** They already understand the field — that need is *met* — and have never heard of us. Opposite work from Northwood. |
 
 ### The needs table is the whole point
 
@@ -2187,8 +2187,8 @@ used**, and then, among the ones that may — **how much weight does it actually
 
 | | |
 |---|---|
-| ![Routes](docs/changelog/shots/n16/01-routes-influence.png) | **Four paths to the same person**, ordered by verdict and then by influence. |
-| ![Decomposition](docs/changelog/shots/n16/02-decomposition.png) | **Five components, each with its weight and its reason.** Duettmann scores 71: perfect on topic, moderate on standing with us, and the basis for every bar is a sentence rather than a number. |
+| ![Routes](docs/changelog/shots/n16/01-routes-influence.webp) | **Four paths to the same person**, ordered by verdict and then by influence. |
+| ![Decomposition](docs/changelog/shots/n16/02-decomposition.webp) | **Five components, each with its weight and its reason.** Duettmann scores 71: perfect on topic, moderate on standing with us, and the basis for every bar is a sentence rather than a number. |
 
 ### Influence runs after the rules, never instead of them
 
@@ -2253,10 +2253,10 @@ target's strategy page listing what is missing about *them* and what would close
 
 | | |
 |---|---|
-| ![Gaps](docs/changelog/shots/n17/01-gaps.png) | **What is missing across the universe**, derived from the fit board rather than stored. A guess and an unanswered gate are different failures, and both are labelled. |
-| ![Catalogue](docs/changelog/shots/n17/02-catalogue.png) | **Seventeen methods in seven kinds** — buy, integrate, query, ask, observe, interview, infer — each with what it yields, its cost, and the line it must not cross. |
-| ![Rejected](docs/changelog/shots/n17/03-rejected.png) | **A rejected method stays on the page**, with the reason. |
-| ![Per target](docs/changelog/shots/n17/04-target-gaps.png) | **Northwood's ten open fields**, each matched to the methods that would close it. |
+| ![Gaps](docs/changelog/shots/n17/01-gaps.webp) | **What is missing across the universe**, derived from the fit board rather than stored. A guess and an unanswered gate are different failures, and both are labelled. |
+| ![Catalogue](docs/changelog/shots/n17/02-catalogue.webp) | **Seventeen methods in seven kinds** — buy, integrate, query, ask, observe, interview, infer — each with what it yields, its cost, and the line it must not cross. |
+| ![Rejected](docs/changelog/shots/n17/03-rejected.webp) | **A rejected method stays on the page**, with the reason. |
+| ![Per target](docs/changelog/shots/n17/04-target-gaps.webp) | **Northwood's ten open fields**, each matched to the methods that would close it. |
 
 ### Three columns a list of tools would not have
 
@@ -2317,11 +2317,11 @@ one, with two buttons. And the body is a rich editor whose source is one click a
 
 | | |
 |---|---|
-| ![No screenshot yet](docs/changelog/shots/n18/01-no-screenshot-yet.png) | **The box opens instantly.** *Add a screenshot: Whole page · Pick a part.* Optional, and the complaint files without one. |
-| ![Rich](docs/changelog/shots/n18/02-rich-editor.png) | **Rich by default.** Headings, bold, inline code and lists, stored as markdown. |
-| ![Source](docs/changelog/shots/n18/03-source-view.png) | **Markdown, one click away** — and it is the document rather than an export of it. |
-| ![Region](docs/changelog/shots/n18/04-region-picker.png) | **Pick a part.** The drawer hides so you can see the page you are drawing a box on. |
-| ![Cropped](docs/changelog/shots/n18/05-cropped.png) | **Just that region**, in the box, ready to annotate. |
+| ![No screenshot yet](docs/changelog/shots/n18/01-no-screenshot-yet.webp) | **The box opens instantly.** *Add a screenshot: Whole page · Pick a part.* Optional, and the complaint files without one. |
+| ![Rich](docs/changelog/shots/n18/02-rich-editor.webp) | **Rich by default.** Headings, bold, inline code and lists, stored as markdown. |
+| ![Source](docs/changelog/shots/n18/03-source-view.webp) | **Markdown, one click away** — and it is the document rather than an export of it. |
+| ![Region](docs/changelog/shots/n18/04-region-picker.webp) | **Pick a part.** The drawer hides so you can see the page you are drawing a box on. |
+| ![Cropped](docs/changelog/shots/n18/05-cropped.webp) | **Just that region**, in the box, ready to annotate. |
 
 ### Redaction beat fidelity
 
@@ -2379,10 +2379,10 @@ and the text tool has a floating field with size, weight and colour.
 
 | | |
 |---|---|
-| ![Seeded](docs/changelog/shots/n19/01-seeded-and-buttons.png) | **One screenshot already there** when the box opens, with **Mis-aligned?** beside it and two buttons to retake. |
-| ![Two](docs/changelog/shots/n19/02-two-screenshots.png) | **Screenshots add up.** A whole-page redraw and a picked region, each with its own × and its own Annotate. |
-| ![Text tool](docs/changelog/shots/n19/03-text-tool.png) | **The label looks like the label.** Same colour, same weight, same size on screen as the one about to be drawn. |
-| ![Placed](docs/changelog/shots/n19/04-placed-label.png) | **Placed, at size L, with an arrow.** |
+| ![Seeded](docs/changelog/shots/n19/01-seeded-and-buttons.webp) | **One screenshot already there** when the box opens, with **Mis-aligned?** beside it and two buttons to retake. |
+| ![Two](docs/changelog/shots/n19/02-two-screenshots.webp) | **Screenshots add up.** A whole-page redraw and a picked region, each with its own × and its own Annotate. |
+| ![Text tool](docs/changelog/shots/n19/03-text-tool.webp) | **The label looks like the label.** Same colour, same weight, same size on screen as the one about to be drawn. |
+| ![Placed](docs/changelog/shots/n19/04-placed-label.webp) | **Placed, at size L, with an arrow.** |
 
 ### The bug
 
@@ -2448,7 +2448,7 @@ from.
 **Shipped.** Changelog images grow with the window and open full size on click, in both
 renderers.
 
-![Wide](docs/changelog/shots/n20/01-changelog-wide.png)
+![Wide](docs/changelog/shots/n20/01-changelog-wide.webp)
 
 The prose stays at a readable measure — about 66 characters — because that is what makes
 text readable. **The screenshots do not**, because the reason somebody widens the window is
@@ -2474,10 +2474,10 @@ instead of seven, a ranking you can re-weight on the page, and a queue with a li
 
 | | |
 |---|---|
-| ![Queue and table](docs/changelog/shots/n21/01-queue-and-table.png) | **The queue above the table.** Human and agent limits, and what the gaps actually are. |
-| ![Weights](docs/changelog/shots/n21/02-weights.png) | **Six sliders**, each with what raising it does. Every default is a guess about this team at this moment, which is why they are on the page. |
-| ![Filters](docs/changelog/shots/n21/03-filters.png) | **Filter and sort.** *Agent can run it* is the filter that matters most. |
-| ![Chosen](docs/changelog/shots/n21/04-chosen.png) | **Chosen, and counted.** The queue says 1 of 5, and the row says who chose it. |
+| ![Queue and table](docs/changelog/shots/n21/01-queue-and-table.webp) | **The queue above the table.** Human and agent limits, and what the gaps actually are. |
+| ![Weights](docs/changelog/shots/n21/02-weights.webp) | **Six sliders**, each with what raising it does. Every default is a guess about this team at this moment, which is why they are on the page. |
+| ![Filters](docs/changelog/shots/n21/03-filters.webp) | **Filter and sort.** *Agent can run it* is the filter that matters most. |
+| ![Chosen](docs/changelog/shots/n21/04-chosen.webp) | **Chosen, and counted.** The queue says 1 of 5, and the row says who chose it. |
 
 ### Seven tables could not answer the question
 
@@ -2552,10 +2552,10 @@ back beside them, and proposing an ask now names an owner.
 
 | | |
 |---|---|
-| ![Picker and bars](docs/changelog/shots/n22/01-picker-and-bars.png) | **Score in the list**, sorted by it, with the records around each name underneath. Both side panes are narrower. |
-| ![Search](docs/changelog/shots/n22/02-search.png) | **Typing "Kaplan"** finds the trust *and* the person who signs for it. |
-| ![Filter](docs/changelog/shots/n22/03-score-filter.png) | **Score ≥ 75**, in the browser, instantly. |
-| ![Propose](docs/changelog/shots/n22/04-propose.png) | **Who carries it**, with why that person is suggested and where the ask actually goes. |
+| ![Picker and bars](docs/changelog/shots/n22/01-picker-and-bars.webp) | **Score in the list**, sorted by it, with the records around each name underneath. Both side panes are narrower. |
+| ![Search](docs/changelog/shots/n22/02-search.webp) | **Typing "Kaplan"** finds the trust *and* the person who signs for it. |
+| ![Filter](docs/changelog/shots/n22/03-score-filter.webp) | **Score ≥ 75**, in the browser, instantly. |
+| ![Propose](docs/changelog/shots/n22/04-propose.webp) | **Who carries it**, with why that person is suggested and where the ask actually goes. |
 
 ### The list you scan before spending a week
 
@@ -2611,8 +2611,8 @@ habit of throwing you into a new window.
 
 | | |
 |---|---|
-| ![Influence bars](docs/changelog/shots/n23/01-bars.png) | **Label, bar under it, reason beside both.** Same five components, about 200px less height. |
-| ![Lightbox](docs/changelog/shots/n23/03-lightbox.png) | **A screenshot expands here.** Esc, the ×, or a click anywhere closes it. |
+| ![Influence bars](docs/changelog/shots/n23/01-bars.webp) | **Label, bar under it, reason beside both.** Same five components, about 200px less height. |
+| ![Lightbox](docs/changelog/shots/n23/03-lightbox.webp) | **A screenshot expands here.** Esc, the ×, or a click anywhere closes it. |
 
 ### The reason is the part with words in it
 
@@ -2650,8 +2650,8 @@ was reserving space down the entire height of the card.
 
 | | |
 |---|---|
-| ![Full width](docs/changelog/shots/n24/01-wide.png) | **The influence block spans the verdict column now.** Two lines a reason instead of five. |
-| ![Narrow window](docs/changelog/shots/n24/02-narrow.png) | **In a small window** the reason goes under its bar rather than beside it. |
+| ![Full width](docs/changelog/shots/n24/01-wide.webp) | **The influence block spans the verdict column now.** Two lines a reason instead of five. |
+| ![Narrow window](docs/changelog/shots/n24/02-narrow.webp) | **In a small window** the reason goes under its bar rather than beside it. |
 
 ### A column reserved for four short lines
 
@@ -2686,8 +2686,8 @@ a 150px column while four numeric columns sat half empty beside it.
 
 | | |
 |---|---|
-| ![Two-row rows](docs/changelog/shots/n25/01-rows.png) | **One line of numbers, one line of prose.** Rows are about half as tall and the sentences are sentences. |
-| ![Sorted by cost](docs/changelog/shots/n25/02-sorted-by-cost.png) | **Sorted by cost.** The sub-labels under each number stay on one line now. |
+| ![Two-row rows](docs/changelog/shots/n25/01-rows.webp) | **One line of numbers, one line of prose.** Rows are about half as tall and the sentences are sentences. |
+| ![Sorted by cost](docs/changelog/shots/n25/02-sorted-by-cost.webp) | **Sorted by cost.** The sub-labels under each number stay on one line now. |
 
 ### A row is two rows
 
@@ -2724,10 +2724,10 @@ A page that says two contradictory things about the same number teaches you to t
 
 | | |
 |---|---|
-| ![Both labelled](docs/changelog/shots/n26/01-both-labelled.png) | **Every method now says who runs it.** Clay for a person, green for an agent. |
-| ![A person runs it](docs/changelog/shots/n26/02-person-runs-it.png) | **A person runs it** — a filter as well as a label. |
-| ![Agent runs it](docs/changelog/shots/n26/03-agent-runs-it.png) | **Agent runs it.** Cheap, repeatable, and still needs reading. |
-| ![The queue](docs/changelog/shots/n26/04-queue.png) | **The two queues** carry the same two colours. |
+| ![Both labelled](docs/changelog/shots/n26/01-both-labelled.webp) | **Every method now says who runs it.** Clay for a person, green for an agent. |
+| ![A person runs it](docs/changelog/shots/n26/02-person-runs-it.webp) | **A person runs it** — a filter as well as a label. |
+| ![Agent runs it](docs/changelog/shots/n26/03-agent-runs-it.webp) | **Agent runs it.** Cheap, repeatable, and still needs reading. |
+| ![The queue](docs/changelog/shots/n26/04-queue.webp) | **The two queues** carry the same two colours. |
 
 ### An absent label is not a label
 
@@ -2761,7 +2761,7 @@ nobody closed the file, one because it was a ten-minute fix that had been sittin
 
 | | |
 |---|---|
-| ![Issue filters](docs/changelog/shots/n27/01-issue-filters.png) | **Filter by status, priority and kind.** Defaults to hiding `done`, and says how many rows that hid. |
+| ![Issue filters](docs/changelog/shots/n27/01-issue-filters.webp) | **Filter by status, priority and kind.** Defaults to hiding `done`, and says how many rows that hid. |
 
 **0001 — the issues page has no filter.** It does now: status, priority and kind, in the
 browser, because the list is one markdown file per issue and a round trip per chip would
@@ -2790,12 +2790,12 @@ vehicle and for all of PL Capital at once.
 
 | | |
 |---|---|
-| ![The line](docs/changelog/shots/n28/01-the-line.png) | **The line.** Seven stations, work sitting in each, lanes by vehicle. |
-| ![The load](docs/changelog/shots/n28/02-the-load.png) | **The load.** Who is carrying what, and who is over their limit. |
-| ![The flow](docs/changelog/shots/n28/03-the-flow.png) | **The flow.** Where work stops moving, with the drop-off drawn. |
-| ![The clock](docs/changelog/shots/n28/04-the-clock.png) | **The clock.** The fortnight ahead, and the pile with no date on it. |
-| ![The room](docs/changelog/shots/n28/05-the-room.png) | **The room.** Instruments. The one you could read from across a room. |
-| ![One vehicle](docs/changelog/shots/n28/06-one-vehicle.png) | **Per vehicle**, lanes become people instead of raises. |
+| ![The line](docs/changelog/shots/n28/01-the-line.webp) | **The line.** Seven stations, work sitting in each, lanes by vehicle. |
+| ![The load](docs/changelog/shots/n28/02-the-load.webp) | **The load.** Who is carrying what, and who is over their limit. |
+| ![The flow](docs/changelog/shots/n28/03-the-flow.webp) | **The flow.** Where work stops moving, with the drop-off drawn. |
+| ![The clock](docs/changelog/shots/n28/04-the-clock.webp) | **The clock.** The fortnight ahead, and the pile with no date on it. |
+| ![The room](docs/changelog/shots/n28/05-the-room.webp) | **The room.** Instruments. The one you could read from across a room. |
+| ![One vehicle](docs/changelog/shots/n28/06-one-vehicle.webp) | **Per vehicle**, lanes become people instead of raises. |
 
 ### Five, on purpose
 
@@ -2875,11 +2875,11 @@ happens on, the machine it moves through, the moves available and what they cost
 
 | | |
 |---|---|
-| ![The map](docs/changelog/shots/n29/01-the-map.png) | **The map.** Every name placed by capacity and fit — and 22 of 28 held back in the fog, because nobody has scored them. |
-| ![The plant](docs/changelog/shots/n29/02-the-plant.png) | **The plant.** The whole machine with a gauge at every station and a valve at every approval. |
-| ![The moves](docs/changelog/shots/n29/03-the-moves.png) | **The moves.** A build menu: what each move needs, costs and buys, locked entries included. |
-| ![The grid](docs/changelog/shots/n29/04-the-grid.png) | **The grid.** Targets against levers. A row with no open cell is the finding. |
-| ![The economy](docs/changelog/shots/n29/05-the-economy.png) | **The economy.** What is about to run out. It is almost never money. |
+| ![The map](docs/changelog/shots/n29/01-the-map.webp) | **The map.** Every name placed by capacity and fit — and 22 of 28 held back in the fog, because nobody has scored them. |
+| ![The plant](docs/changelog/shots/n29/02-the-plant.webp) | **The plant.** The whole machine with a gauge at every station and a valve at every approval. |
+| ![The moves](docs/changelog/shots/n29/03-the-moves.webp) | **The moves.** A build menu: what each move needs, costs and buys, locked entries included. |
+| ![The grid](docs/changelog/shots/n29/04-the-grid.webp) | **The grid.** Targets against levers. A row with no open cell is the finding. |
+| ![The economy](docs/changelog/shots/n29/05-the-economy.webp) | **The economy.** What is about to run out. It is almost never money. |
 
 ### The fog is the feature
 
@@ -2952,9 +2952,9 @@ Juan rather than a bug waiting on me.
 
 | | |
 |---|---|
-| ![Record the wire](docs/changelog/shots/n30/01-record-the-wire.png) | **0005.** Cash received was a state nobody could reach. It has a control now. |
-| ![What moves this number](docs/changelog/shots/n30/02-what-moves-the-score.png) | **0007.** Every reading, what it supplies, and what would move it. |
-| ![One collision](docs/changelog/shots/n30/03-one-collision.png) | **0004.** Two refusals that were the same collision, printed once. |
+| ![Record the wire](docs/changelog/shots/n30/01-record-the-wire.webp) | **0005.** Cash received was a state nobody could reach. It has a control now. |
+| ![What moves this number](docs/changelog/shots/n30/02-what-moves-the-score.webp) | **0007.** Every reading, what it supplies, and what would move it. |
+| ![One collision](docs/changelog/shots/n30/03-one-collision.webp) | **0004.** Two refusals that were the same collision, printed once. |
 
 ### 0005 — nothing records cash arriving
 
@@ -3028,9 +3028,9 @@ it is waiting for written into the file.
 
 | | |
 |---|---|
-| ![No title needed](docs/changelog/shots/n31/01-no-title-needed.png) | **The title is optional.** Intake writes one from your first line. |
-| ![Markdown source](docs/changelog/shots/n31/02-markdown-source.png) | **The Markdown tab stopped fighting.** Fenced blocks and double spaces survive. |
-| ![Shortcuts](docs/changelog/shots/n31/03-shortcuts.png) | **`?` lists the shortcuts**, this dialog's first. |
+| ![No title needed](docs/changelog/shots/n31/01-no-title-needed.webp) | **The title is optional.** Intake writes one from your first line. |
+| ![Markdown source](docs/changelog/shots/n31/02-markdown-source.webp) | **The Markdown tab stopped fighting.** Fenced blocks and double spaces survive. |
+| ![Shortcuts](docs/changelog/shots/n31/03-shortcuts.webp) | **`?` lists the shortcuts**, this dialog's first. |
 
 ### The Markdown tab was unusable and the reason was a loop
 
@@ -3085,8 +3085,8 @@ line, on a white card, in a field that Escape emptied.
 
 | | |
 |---|---|
-| ![Typing](docs/changelog/shots/n32/01-typing.png) | **A transparent, multi-line field** that wraps at its own width. |
-| ![Placed and movable](docs/changelog/shots/n32/02-placed-and-movable.png) | **After placing:** drag it, resize it by the corner, double-click to retype. |
+| ![Typing](docs/changelog/shots/n32/01-typing.webp) | **A transparent, multi-line field** that wraps at its own width. |
+| ![Placed and movable](docs/changelog/shots/n32/02-placed-and-movable.webp) | **After placing:** drag it, resize it by the corner, double-click to retype. |
 
 ### Escape was destroying work
 
@@ -3129,9 +3129,9 @@ marks, not of states, and a drag edits a mark in place. Said here rather than di
 
 | | |
 |---|---|
-| ![Fixed in](docs/changelog/shots/n33/01-issues-fixed-in.png) | **A Fixed in column**, linking to the changelog entry that closed it. |
-| ![Fix history](docs/changelog/shots/n33/02-fix-history.png) | **On the issue**, the version, what it changed and a link to the paragraph. |
-| ![Everything](docs/changelog/shots/n33/03-everything.png) | **Three scopes, three URLs.** This one includes PL R&D. |
+| ![Fixed in](docs/changelog/shots/n33/01-issues-fixed-in.webp) | **A Fixed in column**, linking to the changelog entry that closed it. |
+| ![Fix history](docs/changelog/shots/n33/02-fix-history.webp) | **On the issue**, the version, what it changed and a link to the paragraph. |
+| ![Everything](docs/changelog/shots/n33/03-everything.webp) | **Three scopes, three URLs.** This one includes PL R&D. |
 
 ### Where a fix went
 
@@ -3185,13 +3185,13 @@ rests on.
 
 | | |
 |---|---|
-| ![The network](docs/changelog/shots/n34/01-the-network.png) | **The network.** Us, the people who could carry an ask, the money — and only recorded lines between them. |
-| ![The leverage](docs/changelog/shots/n34/02-the-leverage.png) | **The leverage.** One recorded thing on the left, everything waiting behind it on the right. |
-| ![The coverage](docs/changelog/shots/n34/03-the-coverage.png) | **The coverage.** Six kinds of record per pursuit, least recorded first. |
-| ![The radar](docs/changelog/shots/n34/04-the-radar.png) | **The radar.** Distance is time since a dated exchange; the list beside it is everyone nobody has spoken to. |
-| ![The strip](docs/changelog/shots/n34/05-the-strip.png) | **The strip.** A month of operations per vehicle, with the undated pile counted beside it. |
-| ![Console](docs/changelog/shots/n34/06-console.png) | **Click anything.** The console shows what is recorded, its basis, and where to act. |
-| ![Filter](docs/changelog/shots/n34/07-filter.png) | **One filter, every tab.** Signal: blocked — and the bar says what it hid. |
+| ![The network](docs/changelog/shots/n34/01-the-network.webp) | **The network.** Us, the people who could carry an ask, the money — and only recorded lines between them. |
+| ![The leverage](docs/changelog/shots/n34/02-the-leverage.webp) | **The leverage.** One recorded thing on the left, everything waiting behind it on the right. |
+| ![The coverage](docs/changelog/shots/n34/03-the-coverage.webp) | **The coverage.** Six kinds of record per pursuit, least recorded first. |
+| ![The radar](docs/changelog/shots/n34/04-the-radar.webp) | **The radar.** Distance is time since a dated exchange; the list beside it is everyone nobody has spoken to. |
+| ![The strip](docs/changelog/shots/n34/05-the-strip.webp) | **The strip.** A month of operations per vehicle, with the undated pile counted beside it. |
+| ![Console](docs/changelog/shots/n34/06-console.webp) | **Click anything.** The console shows what is recorded, its basis, and where to act. |
+| ![Filter](docs/changelog/shots/n34/07-filter.webp) | **One filter, every tab.** Signal: blocked — and the bar says what it hid. |
 
 ### Everything is a record, so everything opens
 
@@ -3268,9 +3268,9 @@ turned up.
 
 | | |
 |---|---|
-| ![Pick a part](docs/changelog/shots/n35/01-pick-a-part.png) | **Pick a part captures what you picked**, edge to edge, at 2×. |
-| ![Dropped image annotated](docs/changelog/shots/n35/02-dropped-image-annotated.png) | **Pictures dropped into the description can be drawn on** — and stay where they sit in the text. |
-| ![Give more feedback](docs/changelog/shots/n35/03-give-more-feedback.png) | **Give more feedback**, and a list of everything filed while the box was open. |
+| ![Pick a part](docs/changelog/shots/n35/01-pick-a-part.webp) | **Pick a part captures what you picked**, edge to edge, at 2×. |
+| ![Dropped image annotated](docs/changelog/shots/n35/02-dropped-image-annotated.webp) | **Pictures dropped into the description can be drawn on** — and stay where they sit in the text. |
+| ![Give more feedback](docs/changelog/shots/n35/03-give-more-feedback.webp) | **Give more feedback**, and a list of everything filed while the box was open. |
 
 ### 0015 — the crop was off, and the arithmetic says exactly how far
 
@@ -3334,9 +3334,9 @@ with literal backslashes in it. They are read with `JSON.parse` now.
 
 | | |
 |---|---|
-| ![Section headings](docs/changelog/shots/n36/01-section-headings.png) | **The tab groups are headings**, and every small label is a step darker and heavier. |
-| ![Labels](docs/changelog/shots/n36/02-labels.png) | **Everywhere, not just here** — the same change on every page that uses a label. |
-| ![The name](docs/changelog/shots/n36/03-the-name.png) | **PLC Raise Tools**, from one constant. |
+| ![Section headings](docs/changelog/shots/n36/01-section-headings.webp) | **The tab groups are headings**, and every small label is a step darker and heavier. |
+| ![Labels](docs/changelog/shots/n36/02-labels.webp) | **Everywhere, not just here** — the same change on every page that uses a label. |
+| ![The name](docs/changelog/shots/n36/03-the-name.webp) | **PLC Raise Tools**, from one constant. |
 
 ### 0016 — two jobs, two fixes
 
@@ -3375,8 +3375,8 @@ name, and a stale name quietly falls back to the other capture path.
 
 | | |
 |---|---|
-| ![Annotate from the picture](docs/changelog/shots/n37/01-annotate-from-the-picture.png) | **Annotate and × live on the picture.** The strip that repeated every image is gone. |
-| ![Wider](docs/changelog/shots/n37/02-wider.png) | **⇤ Wider**: most of the page, the words on the left and the pictures on the right. |
+| ![Annotate from the picture](docs/changelog/shots/n37/01-annotate-from-the-picture.webp) | **Annotate and × live on the picture.** The strip that repeated every image is gone. |
+| ![Wider](docs/changelog/shots/n37/02-wider.webp) | **⇤ Wider**: most of the page, the words on the left and the pictures on the right. |
 
 ### On the picture, not beside it
 
@@ -3425,9 +3425,9 @@ shouldn't go now refuses to. The plan for the rest, with your decisions, is
 
 | | |
 |---|---|
-| ![Data](docs/changelog/shots/n38/01-data-page.png) | **Developer → Data.** Which profile this server is, where it keeps things, the two profiles side by side, and the ten guards, each with the file that enforces it. |
-| ![Demo badge](docs/changelog/shots/n38/02-demo-badge.png) | **The badge.** Every page says *Demo data* or *Real data* next to the sync line. The real one is clay, with a clay strip across the top of the window and *Real ·* in the tab title. |
-| ![Strategy, all vehicles](docs/changelog/shots/n38/03-strategy-all-vehicles.png) | **Found on the way.** With *All vehicles* selected, the rail's Strategy link was a 404 in both profiles. A strategy is a reading of one raise, so it now asks which. |
+| ![Data](docs/changelog/shots/n38/01-data-page.webp) | **Developer → Data.** Which profile this server is, where it keeps things, the two profiles side by side, and the ten guards, each with the file that enforces it. |
+| ![Demo badge](docs/changelog/shots/n38/02-demo-badge.webp) | **The badge.** Every page says *Demo data* or *Real data* next to the sync line. The real one is clay, with a clay strip across the top of the window and *Real ·* in the tab title. |
+| ![Strategy, all vehicles](docs/changelog/shots/n38/03-strategy-all-vehicles.webp) | **Found on the way.** With *All vehicles* selected, the rail's Strategy link was a 404 in both profiles. A strategy is a reading of one raise, so it now asks which. |
 
 There is no screenshot of the real profile, and there won't be one. The screenshot script
 asks the server which data it's showing and stops unless the answer is demo.
@@ -3510,8 +3510,8 @@ fake Affinity in the demo, and against scripted answers in the property harness.
 
 | | |
 |---|---|
-| ![Connection tested](docs/changelog/shots/n39/01-connection-tested.png) | **Developer → Affinity**, in the demo, after *Test the connection*: the account, whose key it is, what its grant allows, the plan tier the limits imply, the budget, the eight allowed paths and the request log. The account is invented; the page says so. |
-| ![Guesses](docs/changelog/shots/n39/02-guesses.png) | **Three new guesses**, labelled as such on Developer → Settings: this tool's pace, its share of the account's month, and the floor it leaves for everything else. The count in the sentence above the list is computed now; it had said "nine" for a while after there were ten. |
+| ![Connection tested](docs/changelog/shots/n39/01-connection-tested.webp) | **Developer → Affinity**, in the demo, after *Test the connection*: the account, whose key it is, what its grant allows, the plan tier the limits imply, the budget, the eight allowed paths and the request log. The account is invented; the page says so. |
+| ![Guesses](docs/changelog/shots/n39/02-guesses.webp) | **Three new guesses**, labelled as such on Developer → Settings: this tool's pace, its share of the account's month, and the floor it leaves for everything else. The count in the sentence above the list is computed now; it had said "nine" for a while after there were ten. |
 
 ### Read-only, in code
 
@@ -3569,3 +3569,52 @@ database can't be reset, so an applied migration file must never change.
 **To use it:** `brew install 1password-cli`, then in the 1Password app turn on Settings →
 Developer → *Integrate with 1Password CLI*. Restart `npm run dev:real`, open Developer →
 Affinity, and press *Test the connection*.
+
+---
+
+## N40 — Smaller pictures
+
+**Shipped.** Issue 0021: the repository had grown past 100 MB, and 119 MB of the working
+tree was changelog screenshots. They're 26 MB now, and the tools keep them that way.
+
+| | |
+|---|---|
+| ![The changelog, in WebP](docs/changelog/shots/n40/01-changelog-webp.webp) | **Developer → Changelog**, every picture now a WebP. The route that serves them accepts WebP, and still accepts PNG so an older checkout renders. |
+| ![Issue 0021](docs/changelog/shots/n40/02-issue-0021.webp) | **The issue, answered.** Its title shows *(>100MB)* again. It had arrived as `(&gt;100MB)`. |
+
+### Smaller
+
+Captures are taken at 2× and were committed as 2880 px PNGs, 620 KB on average, the
+longest at 1.8 MB. They're 2000 px WebP at quality 80 now. That's plenty sharp on a wide
+screen, the lightbox never shows more, and it can't be told from the PNG at reading size. I
+compared crops before choosing: PNG reduced to 256 colours was 2.5× smaller, JPEG at 85
+barely smaller at all, and WebP 4–5× smaller. Across all 194 files: **119 MB → 26 MB**. The
+191 links in this file point at the new names.
+
+### In the tools, not just a note
+
+- `npm run shots` writes WebP straight from the capture and prints each file's size.
+- `npm run shots:compress` converts anything that arrives as a PNG and fixes its links.
+  It's how these 194 were converted.
+- `npm run boundaries` fails on a PNG in the screenshot folder, or on any file over 512 KB.
+- CLAUDE.md, *Working notes*, says all of it for the next agent. The encoding lives in one
+  place, `scripts/shot-image.ts`, so capture and conversion can't drift apart.
+- The build-log page copies the WebP files as they are, instead of resizing each PNG with
+  `sips`, which only exists on a Mac.
+
+### Not yet: the history
+
+The old PNGs are **131 MB of the 138 MB** in `.git`. Until they're gone, converting makes the
+repository about 26 MB *bigger*: the WebP copies are added and the PNGs stay in every earlier
+commit. Dropping them from history would take `.git` from about 141 MB to about 33 MB.
+N37 and everything before it are already on GitHub, so this means a force-push, and every
+commit gets a new hash. That's for you to say yes to, and it hasn't been done.
+
+### Also
+
+The `>` in the issue's title had become `&gt;`. The editor wrote `<`, `>` and `&` in text as
+HTML entities, and the body carried them into the title. The issue renderer builds React
+elements rather than HTML, so the characters themselves are safe to store. They're stored
+as typed now, and a literal `&gt;` that somebody types still survives.
+
+**54 of 54 properties hold.**

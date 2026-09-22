@@ -1,12 +1,14 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import { config } from '../config/deployment';
+import { encodeShot, SHOT } from './shot-image';
 
 /**
  * Changelog screenshots. `npm run shots -- L1` against a running dev server.
  * The viewport matches the design boards (1440 × 940) so a shot can be held up next to
- * design/S1-Shell-Today.html without rescaling.
+ * design/S1-Shell-Today.html without rescaling. Each is stored as a 2000 px WebP
+ * (scripts/shot-image.ts, issue 0021) and referenced from CHANGELOG.md by that name.
  */
 interface Shot {
   name: string;
@@ -167,6 +169,10 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '01-today', path: '/today', fullPage: true },
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
+  ],
+  N40: [
+    { name: '01-changelog-webp', path: '/dev/changelog' },
+    { name: '02-issue-0021', path: '/issues/0021' },
   ],
   N39: [
     {
@@ -1353,8 +1359,12 @@ async function main() {
     await page.evaluate(() => document.fonts.ready);
     if (shot.prepare) await shot.prepare(page);
     await page.waitForTimeout(150);
-    await page.screenshot({ path: join(dir, `${shot.name}.png`), fullPage: shot.fullPage ?? false });
-    console.log(`shot · ${version}/${shot.name}.png`);
+    const png = await page.screenshot({ fullPage: shot.fullPage ?? false });
+    const image = await encodeShot(png);
+    await writeFile(join(dir, `${shot.name}${SHOT.ext}`), image);
+    // A capture from before issue 0021 would otherwise sit beside its replacement.
+    await rm(join(dir, `${shot.name}.png`), { force: true });
+    console.log(`shot · ${version.toLowerCase()}/${shot.name}${SHOT.ext} · ${Math.round(image.length / 1024)} KB`);
   }
 
   await browser.close();

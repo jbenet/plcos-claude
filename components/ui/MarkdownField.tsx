@@ -140,9 +140,21 @@ export function packAttachments(body: string, images: DroppedImage[]): { body: s
   };
 }
 
-/** `tiptap-markdown` adds this to the editor's storage; its types do not declare it. */
+/**
+ * `tiptap-markdown` adds this to the editor's storage; its types do not declare it.
+ *
+ * With `html: false` it writes `<`, `>` and `&` in text as entities, so "(>100MB)" was filed
+ * as "(&gt;100MB)" in issue 0021 — in the body and, through it, the title. The body is a
+ * markdown file that people read in diffs, and the renderer builds React elements rather
+ * than HTML, so the characters themselves are both safe and what was typed. `&amp;` goes
+ * last, so a literal "&gt;" somebody typed survives as "&gt;".
+ */
 const serialise = (e: Editor): string =>
-  (e.storage as unknown as { markdown: { getMarkdown(): string } }).markdown.getMarkdown();
+  (e.storage as unknown as { markdown: { getMarkdown(): string } }).markdown
+    .getMarkdown()
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 
 /**
  * A markdown field you write in rather than at.

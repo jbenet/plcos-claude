@@ -16,13 +16,15 @@ export async function GET(
 ) {
   const { path } = await params;
   const rel = normalize(path.join('/'));
-  if (rel.startsWith('..') || rel.includes('\0') || !/\.png$/i.test(rel)) {
+  // WebP since issue 0021; PNG so a checkout of an older commit still renders its changelog.
+  const type = /\.webp$/i.test(rel) ? 'image/webp' : /\.png$/i.test(rel) ? 'image/png' : null;
+  if (rel.startsWith('..') || rel.includes('\0') || !type) {
     return new Response('Not found', { status: 404 });
   }
   try {
     const bytes = await readFile(join(process.cwd(), ROOT, rel));
     return new Response(new Uint8Array(bytes), {
-      headers: { 'content-type': 'image/png', 'cache-control': 'no-store' },
+      headers: { 'content-type': type, 'cache-control': 'no-store' },
     });
   } catch {
     return new Response('Not found', { status: 404 });

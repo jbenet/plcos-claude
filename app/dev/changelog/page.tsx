@@ -164,8 +164,8 @@ export default async function Changelog() {
           </div>
           <div className="note">
             Rendered from <code>CHANGELOG.md</code> in this repository. The screenshots come from{' '}
-            <code>docs/changelog/shots/</code> through a route that only serves PNGs from that
-            directory.
+            <code>docs/changelog/shots/</code> through a route that only serves images from that
+            directory — 2000 px WebP since issue 0021.
           </div>
         </>
       }

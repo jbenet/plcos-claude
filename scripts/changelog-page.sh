@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Build the standalone build-log page: HTML plus web-sized copies of every screenshot.
+# Build the standalone build-log page: HTML plus a copy of every screenshot.
 #
 #   scripts/changelog-page.sh <outdir>
 #
 # The output directory is ready to publish as-is: changelog.html references shots/<stage>/…
-# relative to itself. Screenshots are captured at 2880px; 2000px keeps them sharp on a
-# wide window — which is the whole reason for widening the window — and still cuts the
-# payload substantially.
+# relative to itself. The screenshots are already stored web-sized (2000 px WebP, issue
+# 0021), so they are copied rather than resized.
 set -euo pipefail
 
 OUT="${1:?usage: scripts/changelog-page.sh <outdir>}"
@@ -19,13 +18,9 @@ count=0
 while IFS= read -r f; do
   rel="${f#"$SRC"/}"
   mkdir -p "$OUT/shots/$(dirname "$rel")"
-  if command -v sips >/dev/null 2>&1; then
-    sips -Z 2000 "$f" --out "$OUT/shots/$rel" >/dev/null
-  else
-    cp "$f" "$OUT/shots/$rel"   # no resizer available; full size still renders
-  fi
+  cp "$f" "$OUT/shots/$rel"
   count=$((count + 1))
-done < <(find "$SRC" -name '*.png' | sort)
+done < <(find "$SRC" -name '*.webp' | sort)
 
 npx tsx scripts/changelog-html.ts "$OUT/changelog.html"
 echo "shots · $count images in $OUT/shots"

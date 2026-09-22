@@ -310,6 +310,13 @@ Sydecar and AngelList API access is gated with a long lead time. Nothing depends
 
 ## Working notes
 
+- **Changelog screenshots** are 2000 px WebP at quality 80 (`scripts/shot-image.ts`).
+  `npm run shots -- <version>` captures against the running demo server, writes
+  `docs/changelog/shots/<version>/NN-name.webp`, and prints each file's size. Link them from
+  CHANGELOG.md with the `.webp` name. Never commit a PNG there: `npm run boundaries` fails
+  on one, and on any file over 512 KB. `npm run shots:compress` converts a stray capture and
+  fixes its links. Git keeps every image forever, so size is paid on every clone.
+
 - Prose in docs and UI copy: plain, specific, no hype. Say the number or say you don't know
   it.
 - When a constant is a guess, say so in the comment. Do not launder an estimate into a fact.
