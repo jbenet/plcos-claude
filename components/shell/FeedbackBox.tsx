@@ -70,6 +70,12 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
   const [picking, setPicking] = useState(false);
   const [failed, setFailed] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** A picture dropped into the description, being drawn on (issue 0018). */
+  const [editingImage, setEditingImage] = useState<number | null>(null);
+  /** Everything filed while this box has been open — reports come in batches (issue 0017). */
+  const [filed, setFiled] = useState<Array<{ id: string; title: string }>>([]);
+  /** Bumped per report, so the description field starts from nothing rather than from a reset. */
+  const [generation, setGeneration] = useState(0);
   const seeded = useRef(false);
 
   const add = (dataUrl: string, method: CaptureMethod) => {
@@ -79,11 +85,12 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
     ]);
   };
 
-  /** The automatic one. Runs once, and its failure is silent — it was never asked for. */
+  /** The automatic one. Its failure is silent — it was never asked for. */
+  const seedShot = () => { void capturePage().then((c) => { if (c) add(c.dataUrl, c.method); }); };
   useEffect(() => {
     if (seeded.current) return;
     seeded.current = true;
-    void capturePage().then((c) => { if (c) add(c.dataUrl, c.method); });
+    seedShot();
   }, []);
 
   /**
@@ -144,7 +151,7 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (editingId || picking) return;
+      if (editingId || editingImage !== null || picking) return;
       if (e.key === 'Escape') {
         if (showKeys) { setShowKeys(false); return; }
         e.preventDefault();
@@ -152,7 +159,9 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
       }
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        void submitRef.current?.();
+        // On the confirmation, the same keys start the next one — reports come in batches.
+        if (doneRef.current) againRef.current?.();
+        else void submitRef.current?.();
       }
       if (e.key === '?' && (e.target as HTMLElement | null)?.tagName !== 'TEXTAREA'
           && (e.target as HTMLElement | null)?.tagName !== 'INPUT'
@@ -163,7 +172,7 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [editingId, picking, showKeys, onClose]);
+  }, [editingId, editingImage, picking, showKeys, onClose]);
 
   const filters = useMemo(() => Object.fromEntries(params.entries()), [params]);
   const context = useMemo(
@@ -194,9 +203,10 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
           imageOffset: includeShot ? shots.length : 0,
         }),
       });
-      const json = (await res.json()) as { id?: string; location?: string; error?: string };
+      const json = (await res.json()) as { id?: string; location?: string; title?: string; error?: string };
       if (!res.ok || !json.id || !json.location) throw new Error(json.error ?? 'Unknown error');
       setResult({ id: json.id, location: json.location });
+      setFiled((prev) => [...prev, { id: json.id!, title: json.title ?? title }]);
       setState('done');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -205,6 +215,33 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
   };
   submitRef.current = submit;
 
+  /**
+   * Start the next report without closing the box (issue 0017).
+   *
+   * Everything specific to the last one goes — its words, its pictures, its kind and
+   * priority — and a fresh automatic screenshot is taken, because the one that was attached
+   * belongs to the issue it was filed with. The page and filters are captured again anyway.
+   */
+  const again = () => {
+    setTitle('');
+    setBody('');
+    setImages([]);
+    setShots([]);
+    setIncludeShot(true);
+    setFailed(false);
+    setKind('bug');
+    setPriority('P2');
+    setError(null);
+    setResult(null);
+    setState('idle');
+    setGeneration((g) => g + 1);
+    seedShot();
+  };
+  const againRef = useRef<(() => void) | null>(null);
+  againRef.current = again;
+  const doneRef = useRef(false);
+  doneRef.current = state === 'done';
+
   const ui = (
     <>
       {editingId && (
@@ -212,6 +249,19 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
           src={shots.find((x) => x.id === editingId)!.dataUrl}
           onCancel={() => setEditingId(null)}
           onSave={(png) => { replace(editingId, png); setEditingId(null); }}
+        />
+      )}
+      {editingImage !== null && images.some((i) => i.index === editingImage) && (
+        <ShotEditor
+          src={images.find((i) => i.index === editingImage)!.dataUrl}
+          onCancel={() => setEditingImage(null)}
+          onSave={(png) => {
+            const which = editingImage;
+            setImages((prev) => prev.map((i) => (i.index === which
+              ? { ...i, dataUrl: png, contentType: 'image/png', annotated: true }
+              : i)));
+            setEditingImage(null);
+          }}
         />
       )}
       {picking && (
@@ -248,14 +298,32 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
               Thanks — it is in the queue with this page, your filters and any screenshots
               attached.
             </p>
-            <div className="acts">
-              <a className="btn p" href={`/issues/${result.id}`} style={{ textAlign: 'center', padding: 8 }}>
+            <div className="acts three">
+              <button className="btn p" onClick={again} autoFocus>
+                Give more feedback
+              </button>
+              <a className="btn" href={`/issues/${result.id}`} style={{ textAlign: 'center' }}>
                 Open the issue
               </a>
               <button className="btn" onClick={onClose}>
                 Close
               </button>
             </div>
+            <div className="keyhint">
+              <span><kbd>⌘</kbd><kbd>↵</kbd> another</span>
+              <span><kbd>esc</kbd> close</span>
+            </div>
+            {filed.length > 0 && (
+              <div className="filedlist">
+                <div className="lbl">Filed while this was open · {filed.length}</div>
+                {filed.map((f) => (
+                  <a key={f.id} href={`/issues/${f.id}`} className="filedrow">
+                    <span className="mono">{f.id}</span>
+                    <span>{f.title || 'Untitled'}</span>
+                  </a>
+                ))}
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -373,6 +441,7 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
             <div className="field">
               <span className="lbl">What happened</span>
               <MarkdownField
+                key={generation}
                 value={body}
                 onChange={setBody}
                 images={images}
@@ -383,6 +452,38 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
                 }
               />
             </div>
+
+            {images.length > 0 && (
+              <div className="dropstrip">
+                <div className="lbl">
+                  In the description · {images.length} image{images.length === 1 ? '' : 's'}
+                </div>
+                <div className="shotlist">
+                  {images.map((img) => (
+                    <div className="shotthumb" key={img.index}>
+                      <button
+                        className="shotopen"
+                        onClick={() => setEditingImage(img.index)}
+                        aria-label={`Annotate ${img.name}`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={img.dataUrl} alt={img.name} />
+                        <span className="pencil" aria-hidden>✎ Annotate</span>
+                      </button>
+                      <div className="shotmeta">
+                        <span className="flag f-mute" title={img.name}>
+                          {img.name.length > 18 ? `${img.name.slice(0, 17)}…` : img.name}
+                        </span>
+                        {img.annotated && <span className="flag f-ok">annotated</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="mdhint" style={{ border: 0, padding: '5px 0 0' }}>
+                  Drawing on one replaces it where it sits in the text — the reference does not move.
+                </p>
+              </div>
+            )}
 
             <div className="fieldrow">
               <label className="field">

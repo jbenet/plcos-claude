@@ -2,27 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { fileFeedback } from '@/modules/platform';
 import type { IssueAttachment, IssueKind, IssuePriority } from '@/lib/issues';
-
-/**
- * The first real sentence of the body, cleaned of markdown furniture and cut to a length a
- * list can show. Returns an empty string when there is nothing to name — the caller refuses
- * rather than filing "Feedback on /approvals" as if it meant something.
- */
-function titleFrom(body: string, page: string): string {
-  const line = body
-    .split(/\n/)
-    .map((l) => l.replace(/^\s*(?:[-*+]|\d+[.)]|>|#{1,6})\s*/, '').trim())
-    .find((l) => l.length > 0 && !l.startsWith('```') && !l.startsWith('!['));
-  if (!line) return '';
-  const plain = line
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/[*_`]/g, '')
-    .trim();
-  if (!plain) return '';
-  const cut = plain.length <= 72 ? plain : `${plain.slice(0, 71).replace(/\s+\S*$/, '')}…`;
-  return page && cut.length < 18 ? `${cut} (${page})` : cut;
-}
+import { titleFrom } from '@/lib/issues/title';
 
 export async function POST(req: Request) {
   try {
@@ -40,7 +20,7 @@ export async function POST(req: Request) {
      * they actually wrote. What intake cannot do is invent the *complaint* — a report with
      * neither a title nor a body is still refused.
      */
-    const title = body.title?.trim() || titleFrom(body.body ?? '', body.page ?? '/');
+    const title = body.title?.trim() || titleFrom(body.body ?? '');
     if (!title) {
       return NextResponse.json(
         { error: 'Say what happened. A title or a description — either is enough, neither is not.' },
@@ -100,7 +80,7 @@ export async function POST(req: Request) {
       imageOffset: body.imageOffset ?? 0,
     });
     return NextResponse.json({
-      id: issue.id, location: issue.location, attachments: issue.attachments,
+      id: issue.id, title: issue.title, location: issue.location, attachments: issue.attachments,
     });
   } catch (err) {
     return NextResponse.json(

@@ -14,12 +14,37 @@ export interface DroppedImage {
   contentType: string;
   /** Data URL, for the preview here and for the POST. */
   dataUrl: string;
+  /** Drawn on after it was dropped in (issue 0018). */
+  annotated?: boolean;
 }
 
 const ACCEPT = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const MAX_BYTES = 8 * 1024 * 1024;
 
 type Mode = 'rich' | 'source';
+
+/** The bits of prosemirror-markdown's serializer state this file uses. */
+interface MdState { write(s: string): void; closeBlock(node: unknown): void; esc(s: string): string }
+
+/**
+ * An image is a block here, so it has to close its block when it is written out. The stock
+ * serializer is prosemirror-markdown's inline one, which wrote the next paragraph straight
+ * onto the image's line — `![shot](attachment:1)More words.` — and two dropped images onto
+ * adjacent lines, so the issue file read back as a different document from the one typed.
+ */
+const BlockImage = Image.extend({
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: MdState, node: { attrs: { alt?: string | null; src: string } }) {
+          state.write(`![${state.esc(node.attrs.alt ?? '')}](${node.attrs.src.replace(/[()]/g, '\\$&')})`);
+          state.closeBlock(node);
+        },
+        parse: {},
+      },
+    };
+  },
+});
 
 /** `tiptap-markdown` adds this to the editor's storage; its types do not declare it. */
 const serialise = (e: Editor): string =>
@@ -86,7 +111,11 @@ export function MarkdownField({
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({ heading: { levels: [3, 4] } }),
-      Image.configure({ inline: false }),
+      /* allowBase64: the pictures in the rich view are data URLs swapped in for the stored
+         `attachment:N` tokens. With the default (false) TipTap refuses to parse them, so any
+         rebuild from markdown — the Markdown→Rich toggle, or redrawing after an annotation —
+         silently dropped every dropped-in image from the view while keeping it in the text. */
+      BlockImage.configure({ inline: false, allowBase64: true }),
       Link.configure({ openOnClick: false }),
       Markdown.configure({ html: false, transformPastedText: true, breaks: true }),
     ],
@@ -113,6 +142,26 @@ export function MarkdownField({
     const current = toStored(serialise(editor));
     if (current !== value) editor.commands.setContent(toDisplay(value), { emitUpdate: false });
   }, [value, editor, mode]);
+
+  /**
+   * An image that was annotated after it was dropped in has a new data URL (issue 0018).
+   * The rich view still shows the old one, and worse, would serialise it as a raw data URL
+   * the next time anybody types — the old picture pasted straight into the markdown. So when
+   * an image that already existed changes, the editor is redrawn from the stored text.
+   * Adding an image does not trigger this: the editor already inserted it, and redrawing
+   * would throw the cursor to the end.
+   */
+  const seen = useRef(new Map<number, string>());
+  useEffect(() => {
+    const changed = images.some((img) => {
+      const before = seen.current.get(img.index);
+      return before !== undefined && before !== img.dataUrl;
+    });
+    seen.current = new Map(images.map((img) => [img.index, img.dataUrl]));
+    if (changed && editor && mode === 'rich') {
+      editor.commands.setContent(toDisplay(source ?? value), { emitUpdate: false });
+    }
+  }, [images, editor, mode]);
 
   const showSource = () => { setSource(value); setMode('source'); };
   const showRich = () => {
@@ -156,15 +205,27 @@ export function MarkdownField({
     onImages(imagesRef.current);
 
     if (mode === 'rich' && editor) {
-      for (const img of numbered) {
-        editor.chain().focus().setImage({ src: img.dataUrl, alt: img.name }).run();
-      }
+      /**
+       * Each picture goes in followed by an empty paragraph, and the cursor ends up in it.
+       * `setImage` left the new image *selected*, so the next picture dropped — or the second
+       * file of a two-file drop — replaced it, and the first was gone from the report.
+       */
+      editor.chain().focus().insertContent(numbered.flatMap((img) => [
+        { type: 'image', attrs: { src: img.dataUrl, alt: img.name } },
+        { type: 'paragraph' },
+      ])).run();
     } else {
+      // While the Markdown tab is open the textarea is the document, so the snippet has to
+      // go into it — writing only the parent's copy left it invisible, and switching back to
+      // Rich then overwrote the parent with the text that did not have it.
       const el = area.current;
+      const current = source ?? value;
       const snippet = numbered.map((x) => `\n![${x.name}](attachment:${x.index})\n`).join('');
-      if (!el) { onChange(value + snippet); return; }
-      const at = el.selectionStart;
-      onChange(value.slice(0, at) + snippet + value.slice(el.selectionEnd));
+      const next = el
+        ? current.slice(0, el.selectionStart) + snippet + current.slice(el.selectionEnd)
+        : current + snippet;
+      setSource(next);
+      onChange(next);
     }
   };
 

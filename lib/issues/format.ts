@@ -101,10 +101,20 @@ function splitContext(rest: string): { body: string; context: Record<string, unk
   return { body: rest.replace(fence[0], '').trim(), context };
 }
 
+/**
+ * The writer quotes with `JSON.stringify`, so the reader has to unescape with `JSON.parse`.
+ * Stripping the outer quotes alone left a title like `Fix: the "rail"` reading back with
+ * literal backslashes in it — invisible until intake started writing titles from prose.
+ */
 function unquote(s: string): string {
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+    try {
+      const v: unknown = JSON.parse(s);
+      if (typeof v === 'string') return v;
+    } catch { /* not JSON — fall through to the plain strip */ }
     return s.slice(1, -1);
   }
+  if (s.length >= 2 && s.startsWith("'") && s.endsWith("'")) return s.slice(1, -1);
   return s;
 }
 

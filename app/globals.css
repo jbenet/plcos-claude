@@ -1466,3 +1466,14 @@ th.stripoff{font-size:6.5px;letter-spacing:.03em;text-transform:uppercase;border
 .stripmark.t-done{border-color:var(--fl-green)}
 .stripmark:hover{filter:brightness(1.3)}
 .cover.dark{color:var(--fl-muted);border-top:1px solid var(--fl-line);background:none;padding:10px 2px 12px}
+
+/* the confirmation and the second report (issue 0017) */
+.drawer .acts.three{display:grid;grid-template-columns:1.4fr 1fr .7fr}
+.drawer .acts.three .btn{justify-content:center;text-align:center;padding:8px 10px}
+.filedlist{margin-top:14px;border-top:1px solid var(--hair);padding-top:10px}
+.filedrow{display:grid;grid-template-columns:42px 1fr;gap:8px;padding:5px 0;font-size:12px;
+  border-bottom:1px solid var(--hair);color:var(--ink)}
+.filedrow .mono{font-size:11px;color:var(--muted)}
+.filedrow:hover span:last-child{color:var(--accent)}
+/* images dropped into the description (issue 0018) */
+.dropstrip{margin:10px 0 12px}

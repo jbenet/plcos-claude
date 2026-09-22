@@ -3258,3 +3258,70 @@ and browser; every date on these views is UTC and hand-formatted. And `.lev` was
 leverage number on the strategy page, so the new cards inherited its monospace — renamed.
 
 **43 of 43 properties hold.**
+
+---
+
+## N35 — The feedback box, second pass: the crop, the batch, the pictures
+
+**Shipped.** Issues 0015, 0017 and 0018 — and four older bugs in the same box that fixing them
+turned up.
+
+| | |
+|---|---|
+| ![Pick a part](docs/changelog/shots/n35/01-pick-a-part.png) | **Pick a part captures what you picked**, edge to edge, at 2×. |
+| ![Dropped image annotated](docs/changelog/shots/n35/02-dropped-image-annotated.png) | **Pictures dropped into the description can be drawn on** — and stay where they sit in the text. |
+| ![Give more feedback](docs/changelog/shots/n35/03-give-more-feedback.png) | **Give more feedback**, and a list of everything filed while the box was open. |
+
+### 0015 — the crop was off, and the arithmetic says exactly how far
+
+The screen capture shrank the frame to 2000px wide *first*, then cropped it using
+`devicePixelRatio` as though nothing had been shrunk. On a 2× screen that multiplied every
+coordinate by 2 where the true factor was about 1.4 — the rectangle landed 44% further right
+and further down than the one drawn, and came out bigger. It was off in y too; x just has
+further to drift across a wide page.
+
+The crop now happens on the full-resolution frame, and the scale is **measured** — frame
+pixels ÷ viewport pixels, per axis — not assumed. Tested with a red box dragged corner to
+corner at 2×: the old code cut a rectangle with **0%** of the box in it, the new one **100%**.
+If somebody shares a window or a whole screen instead of the tab, the frame is the wrong shape
+for viewport coordinates, so the part is drawn from the page instead and the thumbnail says so.
+
+### 0017 — reports come in batches
+
+Five issues in five minutes is how feedback actually arrives. The confirmation now leads with
+**Give more feedback**, and `⌘↵` does the same thing there, so the rhythm is type, `⌘↵`, `⌘↵`,
+type. It clears the words, pictures, kind and priority, and takes a fresh screenshot — the last
+one belongs to the issue it was filed with. Everything filed while the box has been open is
+listed under the buttons.
+
+### 0018 — pictures in the description can be annotated
+
+Images dropped into the description get a strip of their own under it, each with **Annotate**,
+and drawing on one replaces it where it sits in the text. Getting there turned up three older
+bugs in the same editor:
+
+- **Rebuilding the rich view dropped every dropped-in picture from the view** — including the
+  plain Markdown → Rich toggle, since N18. TipTap refuses `data:` URLs when it parses unless
+  told otherwise; dropping only ever worked because it inserts the node directly.
+- **The second picture replaced the first.** An inserted image was left selected, so the next
+  drop — or the second file of a two-file drop — overwrote it.
+- **Text after a picture was glued onto its line** — `![shot](attachment:1)More words.` — so the
+  issue file read back as a different document from the one typed. Images close their block now.
+
+Plus one I introduced in N31: dropping a picture while the **Markdown** tab was open wrote the
+reference only into a copy of the text the tab was not showing, and switching back to Rich
+then overwrote it.
+
+### And the titles
+
+Every one of these five issues had an intake title cut mid-clause — *"…are hard to see (in
+this…"* — because intake took the first *line* and cut it at 72 characters. It now takes the
+first **sentence**, drops parenthetical asides before cutting anything, prefers a clause
+boundary to a word boundary, and only then reaches for an ellipsis. The five were retitled
+with it; a title somebody typed is never touched.
+
+Checking that exposed a round-trip bug in the issue files themselves: titles are written with
+`JSON.stringify` and were read back by stripping the quotes, so `Fix: the "rail"` came back
+with literal backslashes in it. They are read with `JSON.parse` now.
+
+**43 of 43 properties hold.**

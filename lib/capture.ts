@@ -57,13 +57,22 @@ function toPng(source: CanvasImageSource, w: number, h: number): string {
 }
 
 /**
- * One frame of the current tab. Must be called from the click handler itself — the API
- * needs transient user activation, so anything awaited before it loses the gesture.
+ * One frame of the current tab, optionally cut down to a region the reporter drew.
+ *
+ * Must be called from the click handler itself — the API needs transient user activation,
+ * so anything awaited before it loses the gesture.
+ *
+ * The crop happens here, on the full-resolution video frame, and it measures the frame
+ * rather than assuming it (issue 0015). The old version shrank the frame to 2000px first
+ * and then cropped with `devicePixelRatio` as though nothing had been shrunk — on a 2×
+ * screen that put the rectangle 44% too far right and down, which is the "off in x" in the
+ * report. The ratio is now simply frame pixels ÷ viewport pixels, per axis.
  */
-async function captureScreen(): Promise<string | null> {
+type ScreenFrame = { dataUrl: string } | { mismatch: true } | null;
+
+async function captureScreen(region?: Region): Promise<ScreenFrame> {
   const md = navigator.mediaDevices;
   if (!md?.getDisplayMedia) return null;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 
   let stream: MediaStream | null = null;
   try {
@@ -89,7 +98,27 @@ async function captureScreen(): Promise<string | null> {
     const w = video.videoWidth;
     const h = video.videoHeight;
     if (!w || !h) return null;
-    return toPng(video, w, h);
+    if (!region) return { dataUrl: toPng(video, w, h) };
+
+    const sx = w / window.innerWidth;
+    const sy = h / window.innerHeight;
+    /**
+     * If the frame is not the shape of this tab's viewport, somebody shared a window or a
+     * whole screen instead, and viewport coordinates mean nothing in it. Say so rather than
+     * cutting a confident rectangle out of the wrong picture.
+     */
+    if (Math.abs(sx - sy) / Math.max(sx, sy) > 0.04) return { mismatch: true };
+
+    const srcW = region.w * sx;
+    const srcH = region.h * sy;
+    const cap = Math.min(1, MAX_WIDTH / srcW);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(srcW * cap));
+    canvas.height = Math.max(1, Math.round(srcH * cap));
+    canvas.getContext('2d')!.drawImage(
+      video, region.x * sx, region.y * sy, srcW, srcH, 0, 0, canvas.width, canvas.height,
+    );
+    return { dataUrl: canvas.toDataURL('image/png') };
   } catch {
     return null;
   } finally {
@@ -186,20 +215,22 @@ export async function capturePage(region?: Region): Promise<Capture | null> {
  * which is the trade the person is making when they press the button.
  */
 export async function capturePageExact(region?: Region): Promise<Capture | null> {
-  const screen = await withTimeout(captureScreen());
-  if (screen) {
-    /**
-     * The captured frame is already scaled to at most MAX_WIDTH across, and the region was
-     * drawn in CSS pixels — so the crop has to use the frame's own ratio rather than the
-     * device's.
-     */
-    const ratio = Math.min(1, MAX_WIDTH / window.innerWidth) * (window.devicePixelRatio || 1);
-    const cropped = region ? await withTimeout(crop(screen, region, ratio), 5000) : screen;
+  const screen = await withTimeout(captureScreen(region));
+  if (screen && 'dataUrl' in screen) {
     return {
-      dataUrl: cropped ?? screen,
+      dataUrl: screen.dataUrl,
       method: 'screen',
       note: 'The frame your browser composited. Exactly what was on the screen, including '
         + 'anything the automatic capture leaves out.',
+    };
+  }
+  if (screen && 'mismatch' in screen && region) {
+    // A different surface was shared. The redraw can still cut the right rectangle.
+    const drawn = await capturePage(region);
+    return drawn && {
+      ...drawn,
+      note: 'You shared something other than this tab, so the part you picked was drawn from '
+        + 'the page instead of cut from the shared picture.',
     };
   }
   // Declined, unsupported, or too slow. Fall back rather than leaving them with nothing.
