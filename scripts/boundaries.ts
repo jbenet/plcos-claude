@@ -7,9 +7,12 @@ import { join, relative } from 'node:path';
  *
  *   1. No database driver is imported outside lib/db/.
  *   2. A module is imported through its index.ts, never its repo.ts or service.ts.
+ *   3. Nothing outside lib/connectors/affinity/ names Affinity's host or the variable that
+ *      holds its key (N39). The client there is read-only; a second way in would not be.
  */
 const ROOTS = ['app', 'components', 'lib', 'modules', 'config', 'scripts'];
 const DRIVERS = ['@electric-sql/pglite', "from 'pg'", 'from "pg"'];
+const AFFINITY = ['api.affinity.co', 'AFFINITY_API_KEY'];
 
 async function walk(dir: string, out: string[] = []): Promise<string[]> {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -39,6 +42,13 @@ async function main() {
     if (!rel.startsWith('lib/db') && rel !== 'scripts/boundaries.ts') {
       for (const d of DRIVERS) {
         if (text.includes(d)) violations.push(`${rel}: imports a database driver (${d}) outside lib/db/`);
+      }
+    }
+
+    // The property harness is the one exception: it has to aim at the guard to test it.
+    if (!rel.startsWith(join('lib', 'connectors', 'affinity')) && rel !== 'scripts/boundaries.ts' && rel !== 'scripts/properties.ts') {
+      for (const needle of AFFINITY) {
+        if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/affinity/ talks to Affinity`);
       }
     }
 

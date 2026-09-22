@@ -25,6 +25,7 @@ export const MODULES = [
   { name: 'fit', schema: 'fit', title: 'Funder-vehicle fit', plane: 'confidential' },
   { name: 'standup', schema: 'standup', title: 'Daily standup', plane: 'confidential' },
   { name: 'plays', schema: 'plays', title: 'Strategy board', plane: 'confidential' },
+  { name: 'sources', schema: 'sources', title: 'External sources, raw', plane: 'confidential' },
 ] as const;
 
 export type ModuleName = (typeof MODULES)[number]['name'];

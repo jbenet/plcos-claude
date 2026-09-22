@@ -3498,3 +3498,74 @@ from an empty database. Read a zero there as *not loaded*, not as a fact about t
 
 **Next, N39:** the GET-only Affinity client, the key through 1Password, and a connection
 test that settles the plan tier with the API's own answers.
+
+---
+
+## N39 — A key that can write, and a client that won't
+
+**Shipped.** The client that will read Affinity, and the page that shows what it may ask
+and what it has asked. The real profile has no key yet: the 1Password CLI isn't installed on
+this machine, so it starts without one and says so. Everything here was exercised against a
+fake Affinity in the demo, and against scripted answers in the property harness.
+
+| | |
+|---|---|
+| ![Connection tested](docs/changelog/shots/n39/01-connection-tested.png) | **Developer → Affinity**, in the demo, after *Test the connection*: the account, whose key it is, what its grant allows, the plan tier the limits imply, the budget, the eight allowed paths and the request log. The account is invented; the page says so. |
+| ![Guesses](docs/changelog/shots/n39/02-guesses.png) | **Three new guesses**, labelled as such on Developer → Settings: this tool's pace, its share of the account's month, and the floor it leaves for everything else. The count in the sentence above the list is computed now; it had said "nine" for a while after there were ten. |
+
+### Read-only, in code
+
+Affinity keys aren't scoped, and yours can write. So read-only lives in one function,
+`guardedFetch`. It refuses any method but GET, any body, any host but `api.affinity.co`, and
+any redirect, before `fetch` is called. Nothing outside `lib/connectors/affinity/` may name
+Affinity's host or the key's variable, and `npm run boundaries` fails if anything does.
+
+The paths come from Affinity's own OpenAPI description (v2, 2026-07-15), not memory. Eight
+are allowed so far: whoami, the rate-limit endpoint, lists and their fields, a field's
+dropdown values, saved views, and users. List entries and notes join the list in the
+versions that read them, so each addition shows up in a diff and on the page.
+
+Eight new properties test the rules on the client itself, with a scripted transport where
+the network would be:
+
+- POST, PUT, PATCH and DELETE are refused, and none of them reaches `fetch`.
+- A path that isn't on the list is refused and logged.
+- A next-page link to another host is refused, so the key never goes there.
+- The key appears in no error and no log line, even when the answer quotes it back.
+- A 429 waits as long as Affinity says, tries again, and gives up after four tries.
+- Under the monthly floor, the client stops before sending.
+- The demo profile can't build a transport that reaches Affinity. It doesn't read the key,
+  even when the shell has it set.
+- The connection test reads the tier from the account's limits.
+
+**54 of 54 properties hold.**
+
+### The plan tier, measured
+
+Affinity leaves out the monthly-quota headers when the account has no monthly cap, and only
+Enterprise has none. Scale and Advanced both get 100,000 requests a month. So the test can
+say *Enterprise*, or *Scale or Advanced*, and no more than that. The difference between those
+two is Data Share, which the API can't see.
+
+One finding from the spec: Affinity's OAuth has an `api.read` scope, a token that Affinity
+itself refuses to write with. If we can register an OAuth client for this tool, read-only
+holds on their side too. Worth asking Affinity.
+
+### The key
+
+`npm run dev:real` now runs through `scripts/with-affinity-key.sh`. It reads the 1Password
+item *"Affinity API - App: plcos-claude"* and hands the key to the server's environment. The
+key is never on disk, never echoed, and never on a command line where `ps` would show it.
+Without the CLI it starts anyway and the page says what's missing.
+
+### Found on the way
+
+The first screenshot showed *"1 of 4 connectors synced"* after the test. A connection test
+fetches no records, so marking the source synced was wrong. On real data, it would also have
+removed the *nothing imported yet* notice. The test now changes only the source's
+description. And migrations are append-only from here on, noted in CLAUDE.md: the real
+database can't be reset, so an applied migration file must never change.
+
+**To use it:** `brew install 1password-cli`, then in the 1Password app turn on Settings →
+Developer → *Integrate with 1Password CLI*. Restart `npm run dev:real`, open Developer →
+Affinity, and press *Test the connection*.

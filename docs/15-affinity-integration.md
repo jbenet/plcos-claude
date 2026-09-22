@@ -114,20 +114,40 @@ first slice. The connector seam lets it replace polling later without touching t
 
 ## 5. The connector (N39)
 
-- **One client**, `lib/connectors/affinity/`. It sends GET only, to allowlisted paths. It
-  tracks the per-minute and monthly budgets from the response headers, backs off when
-  limited, and logs each request: path, status, duration, never a body.
-- **The key** is read from the environment, which `op run` fills from 1Password. It stays
-  server-side and is redacted from every log and error.
-- **Test connection** on Developer → Connectors calls `whoami` and reads the rate-limit
-  headers. That shows whose key it is, which account, and the real limits, and settles the
-  tier question with data instead of memory.
-- **List discovery** lists every Affinity list with its size and fields, so the init file's
-  list names can be checked and the SPV lists found.
+- **One client**, `lib/connectors/affinity/`. It sends GET only, to allowlisted paths taken
+  from Affinity's OpenAPI description (v2, 2026-07-15). It tracks the per-minute and monthly
+  budgets from the response headers, waits out a 429, and logs each request: path, status,
+  duration, never a body or a header.
+- **The key** comes from 1Password through `scripts/with-affinity-key.sh`, which `npm run
+  dev:real` runs. It lives in the real server's environment only. It is redacted from every
+  log and error, and the demo profile never reads it.
+- **Test the connection** on Developer → Affinity calls `/v2/auth/whoami` and
+  `/v2/rate-limit`. That shows whose key it is, which account, what the grant's scopes allow,
+  and the real limits.
+- **What the limits say about the tier.** Affinity omits the monthly headers when the
+  account has no monthly cap, which only Enterprise has. Scale and Advanced both get 100,000
+  a month, so the API can narrow it to "one of those two" and no further. Data Share,
+  Advanced's difference, can't be seen from the API.
+- **A better credential.** Affinity's OAuth offers an `api.read` scope, a token Affinity
+  itself refuses to write with. If an OAuth client can be registered for this tool, read-only
+  holds on Affinity's side as well as ours. Worth asking Affinity.
+
+**Budget guesses** (`config/deployment.ts`, all marked GUESS): at most 300 requests a
+minute; at most 25% of the account's monthly quota; and a stop when the account has under
+10% of its month left, because the quota is shared with every other integration.
 
 ---
 
-## 6. First slice (N40)
+## 6. List discovery (N40)
+
+Every Affinity list the key can see, with its type and fields, landed raw. The page matches
+them against the init file's list names, allowing for dashes and case, so a wrong name shows
+up as unmatched instead of an empty import. It also points out the lists with "SPV" in their
+names as candidate vehicles.
+
+---
+
+## 7. First slice (N41)
 
 - The Neurotech lists' entries, their organizations and people, and the fields on each list.
 - Meeting and email metadata only: dates, participants, counts. No bodies.
@@ -139,7 +159,7 @@ Before running, estimate the request cost from list sizes and show it.
 
 ---
 
-## 7. Inventory and gaps (N41)
+## 8. Inventory and gaps (N42)
 
 A generated report in `data/real/reports/`, plus a page:
 
@@ -154,7 +174,7 @@ is amount, whether anything means *signed*.
 
 ---
 
-## 8. Translation into our model (N42)
+## 9. Translation into our model (N43)
 
 The claims-not-evidence rule, applied:
 
@@ -170,7 +190,7 @@ The claims-not-evidence rule, applied:
 
 ---
 
-## 9. Sources and freshness in the views (N43), then a tour (N44)
+## 10. Sources and freshness in the views (N44), then a tour (N45)
 
 The "Seed data · no connector" line becomes a real last-sync time, and every view that shows
 an Affinity-sourced figure says where it came from and when.

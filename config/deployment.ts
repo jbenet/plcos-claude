@@ -70,8 +70,23 @@ export const config = {
     cookiePrefix: PROFILE === 'real' ? 'capitalos_real_' : 'capitalos_',
   },
   affinity: {
+    /**
+     * Juan doesn't know the tier (22 Sep). Developer → Affinity → Test the connection reads
+     * it from the account's own limits; set it here once that has answered.
+     */
     tier: null as AffinityTier,
     syncMode: 'deferred' as AffinitySyncMode,
+    /** Read-only, enforced by the client (docs/15). Writing back is a later decision. */
+    readOnly: true,
+    /** Our own ceiling per rolling minute. Affinity allows 900 per user; we need nowhere near it. */
+    maxPerMinute: 300, // GUESS
+    /**
+     * The monthly quota belongs to the whole account and every other integration on it, so
+     * this tool takes a share of it and no more.
+     */
+    monthlyShare: 0.25, // GUESS
+    /** Below this fraction of the account's month, stop asking altogether. */
+    monthlyFloor: 0.1, // GUESS
   },
   warehouse: {
     enabled: false,
@@ -213,6 +228,21 @@ export const GUESSED_CONSTANTS: ReadonlyArray<{ path: string; value: number; why
     path: 'calendarDeadWeekDays',
     value: config.calendarDeadWeekDays,
     why: 'Working days a week must lose before it stops counting as a working week. My judgement while building L7.',
+  },
+  {
+    path: 'affinity.monthlyShare',
+    value: config.affinity.monthlyShare,
+    why: 'How much of the Affinity account’s monthly requests this tool may use. Nobody has said what else draws on that quota.',
+  },
+  {
+    path: 'affinity.monthlyFloor',
+    value: config.affinity.monthlyFloor,
+    why: 'The share of the account’s month kept untouched for everything else that uses Affinity. My judgement.',
+  },
+  {
+    path: 'affinity.maxPerMinute',
+    value: config.affinity.maxPerMinute,
+    why: 'Our own pace, a third of Affinity’s published 900 per user per minute. Chosen to be polite, not measured.',
   },
   {
     path: 'signals.freshDays',

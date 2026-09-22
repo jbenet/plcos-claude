@@ -44,6 +44,11 @@ only. `DATA_PROFILE` picks one, in `config/deployment.ts`.
   edge.
 - Seeding, `db:reset`, `npm run demo` and `npm run shots` refuse the real profile. Keep it
   that way. Writes to the real database happen inside the real server's process.
+- **Migrations are append-only from N38.** The real database cannot be reset, and the
+  migration runner refuses a file whose checksum changed after it was applied. So an applied
+  migration is never edited; a change is a new `NNN_…sql` file in the same module.
+- Only `lib/connectors/affinity/` talks to Affinity (`npm run boundaries` enforces it). The
+  key comes from 1Password through `scripts/with-affinity-key.sh` and is never printed.
 
 ---
 

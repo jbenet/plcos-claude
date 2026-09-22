@@ -146,6 +146,13 @@ table.profiles th.here{color:var(--ink);font-weight:500}
 table.profiles td.here{background:var(--accent-wash)}
 ol.asks{margin:0;padding-left:20px;font-size:12.5px;line-height:1.5}
 ol.asks li{margin:0 0 5px}
+/* N39: a budget is a number and a bar; the number carries it. */
+.budgetrow{margin:0 0 12px}
+.budgetrow .bt{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;margin-bottom:5px}
+.budgetrow .bt span:first-child{color:var(--muted)}
+.budgetrow .bt .mono{font-size:11.5px}
+.bbar{height:6px;border-radius:3px;background:var(--hair);overflow:hidden}
+.bbar i{display:block;height:100%;background:var(--ink)}
 
 .btn{font-family:inherit;font-size:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:5px 11px;cursor:pointer}
 .btn:hover{background:var(--accent-wash)}

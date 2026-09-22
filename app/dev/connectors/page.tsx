@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
@@ -79,8 +80,9 @@ export default async function Connectors() {
           <div className="prov">
             <div className="p1">Affinity plan tier</div>
             <div className="p2" style={{ fontFamily: 'var(--sans)', fontSize: 11.5, lineHeight: 1.5 }}>
-              Data Share (Enterprise) versus poll-first. Currently{' '}
-              <code>{config.affinity.syncMode}</code>, tier {String(config.affinity.tier)}.
+              Data Share (Advanced or Enterprise) versus poll-first. Currently{' '}
+              <code>{config.affinity.syncMode}</code>, tier {String(config.affinity.tier)}.{' '}
+              <Link href="/dev/affinity">Test the connection</Link> to read it from the account.
             </div>
           </div>
           <div className="prov">
@@ -169,7 +171,7 @@ export default async function Connectors() {
               {s.status.replace('_', ' ')}
             </span>
             <div className="t">
-              <b>{s.label}</b>
+              <b>{s.source === 'affinity' ? <Link href="/dev/affinity">{s.label}</Link> : s.label}</b>
               <span>{s.detail}</span>
             </div>
             <div className="state">{s.lastSyncAt ? ago(s.lastSyncAt) : 'never'}</div>

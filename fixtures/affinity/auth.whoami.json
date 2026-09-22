@@ -1,0 +1,5 @@
+{
+  "tenant": { "id": 4242, "name": "Demo Capital Partners", "subdomain": "democapital" },
+  "user": { "id": 90001, "firstName": "Juan", "lastName": null, "emailAddress": "juan@example.com" },
+  "grant": { "type": "api-key", "scopes": ["api"], "createdAt": "2026-09-22T18:00:00Z" }
+}

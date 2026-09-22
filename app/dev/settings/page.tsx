@@ -47,8 +47,8 @@ export default async function Settings() {
       <div className="lbl">Developer</div>
       <h1>Settings</h1>
       <p className="sublede">
-        Every deferred decision lives in one file. Nine of these values are guesses and every one
-        of them says so — none should survive two weeks of real data.
+        Every deferred decision lives in one file. {GUESSED_CONSTANTS.length} of these values are
+        guesses and every one of them says so — none should survive two weeks of real data.
       </p>
 
       <div className="card">

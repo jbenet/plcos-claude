@@ -168,6 +168,19 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N39: [
+    {
+      name: '01-connection-tested',
+      path: '/dev/affinity',
+      fullPage: true,
+      prepare: async (page) => {
+        await page.getByRole('button', { name: 'Test the connection' }).click();
+        await page.getByText('Scale or Advanced').first().waitFor();
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    { name: '02-guesses', path: '/dev/settings' },
+  ],
   // Demo only, like every entry here: refuseReal() stops the run on anything else.
   N38: [
     { name: '01-data-page', path: '/dev/data', fullPage: true },

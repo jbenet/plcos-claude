@@ -168,6 +168,7 @@ export const STATIC_SECTIONS: NavSection[] = [
       { label: 'Modules', href: '/dev/modules' },
       { label: 'Agents', href: '/agents' },
       { label: 'Data', href: '/dev/data' },
+      { label: 'Affinity', href: '/dev/affinity' },
       { label: 'Connectors', href: '/dev/connectors' },
       { label: 'Logs', href: '/dev/logs' },
       { label: 'Feedback', href: '/dev/feedback' },
