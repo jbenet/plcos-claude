@@ -1,7 +1,7 @@
 /**
  * A title from the first thing somebody wrote (issues 0012, 0015–0019).
  *
- * The first version took the first *line* and cut it at 72 characters, so every report
+ * The first version took the first *line* and cut it at 72 characters (now 80), so every report
  * written as two sentences on one line came out as the first sentence plus half of the
  * second and an ellipsis — "…are hard to see (in this…". This takes the first **sentence**,
  * drops parenthetical asides before it cuts anything, then prefers a clause boundary to a
@@ -10,7 +10,8 @@
  * It returns an empty string when there is nothing to name: intake can invent a title, and
  * it cannot invent a complaint.
  */
-const MAX = 72;
+/** Room for most first sentences; a list column and a GitHub title both take this comfortably. */
+const MAX = 80;
 
 export function titleFrom(body: string): string {
   const line = body

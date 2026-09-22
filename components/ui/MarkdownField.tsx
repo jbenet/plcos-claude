@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
-import { EditorContent, useEditor, type Editor } from '@tiptap/react';
+import {
+  EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor,
+  type Editor, type ReactNodeViewProps,
+} from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
-import Link from '@tiptap/extension-link';
 import { Markdown } from 'tiptap-markdown';
 
 export interface DroppedImage {
@@ -26,18 +28,88 @@ type Mode = 'rich' | 'source';
 /** The bits of prosemirror-markdown's serializer state this file uses. */
 interface MdState { write(s: string): void; closeBlock(node: unknown): void; esc(s: string): string }
 
+/** What the embed asks of the field around it. Refs, so the editor can be built once. */
+interface EmbedActions {
+  onAnnotate?: (index: number) => void;
+  isAnnotated?: (index: number) => boolean;
+}
+
+/**
+ * Which attachment an image in the rich view is.
+ *
+ * The rich view shows a data URL, and two identical pictures dropped twice have the same
+ * one — so the data URL cannot say which `attachment:N` a node came from. The number rides
+ * along in the image's title (`"attachment:2"`), which markdown carries through a parse and
+ * a serialise untouched, and it is stripped back out before anything is stored.
+ */
+const TOKEN = /^attachment:(\d+)$/;
+const indexOf = (title: unknown): number | null => {
+  const m = typeof title === 'string' ? TOKEN.exec(title) : null;
+  return m ? Number(m[1]) : null;
+};
+
+/**
+ * A picture in the description, with its own Annotate and Remove (issue 0020).
+ *
+ * Annotating used to happen in a separate strip below the box that repeated every image —
+ * one more thing to scroll past, and a list that went on showing a picture after it had
+ * been deleted from the text. The buttons live on the picture now, where the eye already is.
+ */
+function Embed({ node, selected, deleteNode, extension }: ReactNodeViewProps) {
+  const actions = extension.options as EmbedActions;
+  const index = indexOf(node.attrs.title);
+  const annotated = index !== null && actions.isAnnotated?.(index) === true;
+  return (
+    <NodeViewWrapper className={`mdembed${selected ? ' on' : ''}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={node.attrs.src as string} alt={(node.attrs.alt as string | null) ?? ''} draggable={false} />
+      {index !== null && (
+        <div className="mdembedbar" contentEditable={false}>
+          {annotated && <span className="mdembedflag">annotated</span>}
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => actions.onAnnotate?.(index)}
+            title="Draw on this picture"
+          >
+            ✎ Annotate
+          </button>
+          <button
+            type="button"
+            className="x"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => deleteNode()}
+            aria-label="Remove this picture"
+            title="Remove it from the text — it will not be sent"
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </NodeViewWrapper>
+  );
+}
+
 /**
  * An image is a block here, so it has to close its block when it is written out. The stock
  * serializer is prosemirror-markdown's inline one, which wrote the next paragraph straight
  * onto the image's line — `![shot](attachment:1)More words.` — and two dropped images onto
  * adjacent lines, so the issue file read back as a different document from the one typed.
  */
-const BlockImage = Image.extend({
+const BlockImage = Image.extend<EmbedActions & Record<string, unknown>>({
+  addOptions() {
+    return { ...this.parent?.(), onAnnotate: undefined, isAnnotated: undefined };
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(Embed);
+  },
   addStorage() {
     return {
       markdown: {
-        serialize(state: MdState, node: { attrs: { alt?: string | null; src: string } }) {
-          state.write(`![${state.esc(node.attrs.alt ?? '')}](${node.attrs.src.replace(/[()]/g, '\\$&')})`);
+        serialize(state: MdState, node: { attrs: { alt?: string | null; src: string; title?: string | null } }) {
+          const src = node.attrs.src.replace(/[()]/g, '\\$&');
+          const title = node.attrs.title ? ` "${node.attrs.title.replace(/"/g, '\\"')}"` : '';
+          state.write(`![${state.esc(node.attrs.alt ?? '')}](${src}${title})`);
           state.closeBlock(node);
         },
         parse: {},
@@ -45,6 +117,28 @@ const BlockImage = Image.extend({
     };
   },
 });
+
+/**
+ * Only the pictures still in the text are sent (issue 0020).
+ *
+ * Deleting an image from the description used to leave it in the upload — so dragging in the
+ * wrong picture and deleting it still filed it. This keeps the pictures the text refers to,
+ * in the order it refers to them, and renumbers the references to match, because the server
+ * resolves `attachment:N` by position.
+ */
+export function packAttachments(body: string, images: DroppedImage[]): { body: string; images: DroppedImage[] } {
+  const order: number[] = [];
+  for (const m of body.matchAll(/\(attachment:(\d+)\)/g)) {
+    const n = Number(m[1]);
+    if (!order.includes(n) && images.some((i) => i.index === n)) order.push(n);
+  }
+  const renumber = new Map(order.map((n, k) => [n, k + 1]));
+  return {
+    body: body.replace(/\(attachment:(\d+)\)/g, (whole, n: string) =>
+      (renumber.has(Number(n)) ? `(attachment:${renumber.get(Number(n))})` : whole)),
+    images: order.map((n, k) => ({ ...images.find((i) => i.index === n)!, index: k + 1 })),
+  };
+}
 
 /** `tiptap-markdown` adds this to the editor's storage; its types do not declare it. */
 const serialise = (e: Editor): string =>
@@ -65,12 +159,14 @@ const serialise = (e: Editor): string =>
  * serialises.
  */
 export function MarkdownField({
-  value, onChange, images, onImages, placeholder, rows = 7,
+  value, onChange, images, onImages, onAnnotate, placeholder, rows = 7,
 }: {
   value: string;
   onChange: (next: string) => void;
   images: DroppedImage[];
   onImages: (next: DroppedImage[]) => void;
+  /** Open the annotation editor on attachment N. The embed's button calls this. */
+  onAnnotate?: (index: number) => void;
   placeholder?: string;
   rows?: number;
 }) {
@@ -92,17 +188,21 @@ export function MarkdownField({
   const ours = useRef(false);
   const imagesRef = useRef(images);
   imagesRef.current = images;
+  const annotateRef = useRef(onAnnotate);
+  annotateRef.current = onAnnotate;
 
   /** `attachment:2` → the data URL sitting in this browser, and back again. */
   const toDisplay = (md: string) =>
     md.replace(/\(attachment:(\d+)\)/g, (whole, n: string) => {
       const hit = imagesRef.current.find((x) => x.index === Number(n));
-      return hit ? `(${hit.dataUrl})` : whole;
+      return hit ? `(${hit.dataUrl} "attachment:${hit.index}")` : whole;
     });
   const toStored = (md: string) => {
     let out = md;
     for (const img of imagesRef.current) {
-      out = out.split(`(${img.dataUrl})`).join(`(attachment:${img.index})`);
+      out = out
+        .split(`(${img.dataUrl} "attachment:${img.index}")`).join(`(attachment:${img.index})`)
+        .split(`(${img.dataUrl})`).join(`(attachment:${img.index})`);
     }
     return out;
   };
@@ -110,13 +210,18 @@ export function MarkdownField({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ heading: { levels: [3, 4] } }),
+      // StarterKit carries Link in v3; adding it again registered two and warned about it.
+      StarterKit.configure({ heading: { levels: [3, 4] }, link: { openOnClick: false } }),
       /* allowBase64: the pictures in the rich view are data URLs swapped in for the stored
          `attachment:N` tokens. With the default (false) TipTap refuses to parse them, so any
          rebuild from markdown — the Markdown→Rich toggle, or redrawing after an annotation —
          silently dropped every dropped-in image from the view while keeping it in the text. */
-      BlockImage.configure({ inline: false, allowBase64: true }),
-      Link.configure({ openOnClick: false }),
+      BlockImage.configure({
+        inline: false,
+        allowBase64: true,
+        onAnnotate: (i: number) => annotateRef.current?.(i),
+        isAnnotated: (i: number) => imagesRef.current.find((x) => x.index === i)?.annotated === true,
+      }),
       Markdown.configure({ html: false, transformPastedText: true, breaks: true }),
     ],
     content: toDisplay(value),
@@ -162,6 +267,8 @@ export function MarkdownField({
       editor.commands.setContent(toDisplay(source ?? value), { emitUpdate: false });
     }
   }, [images, editor, mode]);
+
+  const inText = new Set([...(source ?? value).matchAll(/\(attachment:(\d+)\)/g)].map((m) => m[1])).size;
 
   const showSource = () => { setSource(value); setMode('source'); };
   const showRich = () => {
@@ -211,7 +318,7 @@ export function MarkdownField({
        * file of a two-file drop — replaced it, and the first was gone from the report.
        */
       editor.chain().focus().insertContent(numbered.flatMap((img) => [
-        { type: 'image', attrs: { src: img.dataUrl, alt: img.name } },
+        { type: 'image', attrs: { src: img.dataUrl, alt: img.name, title: `attachment:${img.index}` } },
         { type: 'paragraph' },
       ])).run();
     } else {
@@ -284,7 +391,7 @@ export function MarkdownField({
           ? <>Rich text, stored as markdown. <b>Markdown</b> shows the file it becomes.</>
           : <>The markdown that gets written to <code>issues/</code>. <b>Rich</b> renders it.</>}
         {' '}<b>Drop or paste images</b> anywhere in this box.
-        {images.length > 0 && ` ${images.length} attached.`}
+        {inText > 0 && ` ${inText} in the text — only those are sent.`}
       </p>
       {refused && <p className="mdhint refused">Not attached: {refused}. Everything else went in.</p>}
     </div>

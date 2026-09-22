@@ -1487,5 +1487,31 @@ th.stripoff{font-size:6.5px;letter-spacing:.03em;text-transform:uppercase;border
   border-bottom:1px solid var(--hair);color:var(--ink)}
 .filedrow .mono{font-size:11px;color:var(--muted)}
 .filedrow:hover span:last-child{color:var(--accent)}
-/* images dropped into the description (issue 0018) */
-.dropstrip{margin:10px 0 12px}
+
+/* issue 0020 — a picture in the description carries its own buttons */
+.mdembed{position:relative;display:block;width:fit-content;max-width:100%;min-width:170px;margin:8px 0}
+.mdembed img{display:block;max-width:100%;height:auto;border-radius:6px;border:1px solid var(--line)}
+.mdembed.on img{outline:2px solid var(--accent);outline-offset:2px}
+/* Always visible, not on hover: a button nobody can see is the complaint that started this. */
+.mdembedbar{position:absolute;top:8px;right:8px;display:flex;gap:4px;align-items:center}
+.mdembedbar button{background:rgba(26,25,23,.86);color:#EFEBE2;border:0;border-radius:5px;cursor:pointer;
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:5px 8px;line-height:1}
+.mdembedbar button:hover{background:#1A1917}
+.mdembedbar button.x{font-size:14px;letter-spacing:0;padding:3px 8px}
+.mdembedbar button.x:hover{background:var(--clay)}
+.mdembedflag{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--green);background:#EDF7F2;border:1px solid #BFE0D0;border-radius:4px;padding:3px 6px}
+
+/* issue 0020 — a wider drawer for a long report */
+.drawer{transition:width .18s ease}
+.drawerhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.drawerwide{background:none;border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer;
+  font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--label)}
+.drawerwide:hover{border-color:var(--accent);color:var(--accent)}
+.drawer.wide{width:min(1120px, 80vw)}
+.drawer.wide .fbcols{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(300px,1fr);gap:28px;align-items:start}
+.drawer.wide .fbtext{grid-column:1;grid-row:1}
+.drawer.wide .fbshots{grid-column:2;grid-row:1}
+/* The editor sets its own height inline when it is built, so the wide one has to insist. */
+.drawer.wide .mdrich{min-height:380px !important}
+.keycard.overdrawer{right:34px;top:72px;z-index:96}

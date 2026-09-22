@@ -168,6 +168,50 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N37: [
+    { name: '01-annotate-from-the-picture', path: '/today', prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        await page.locator('.mdrich').click();
+        await page.keyboard.type('The owner column is wrong on the ask log:', { delay: 2 });
+        await page.evaluate(async () => {
+          const c = document.createElement('canvas'); c.width = 520; c.height = 260;
+          const g = c.getContext('2d')!;
+          g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, 520, 260);
+          g.fillStyle = '#1A1917'; g.font = '600 22px sans-serif'; g.fillText('Ask log · owner', 24, 44);
+          g.fillStyle = '#E4E0D6'; for (let i = 0; i < 4; i++) g.fillRect(24, 72 + i * 44, 472, 1);
+          g.fillStyle = '#5E5A52'; g.font = '16px sans-serif';
+          ['Delia Roos · Mara Vance', 'Northwood · Juan', 'Cedar Trust · Juan'].forEach((t, i) => g.fillText(t, 24, 100 + i * 44));
+          const blob: Blob = await new Promise((r) => c.toBlob((x) => r(x!), 'image/png'));
+          const dt = new DataTransfer(); dt.items.add(new File([blob], 'ask-log.png', { type: 'image/png' }));
+          document.querySelector('.mdfield > div:nth-of-type(2)')!
+            .dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+        });
+        await page.waitForTimeout(700);
+        await page.locator('.mdembed').first().getByRole('button', { name: /Annotate/ }).click();
+        await page.waitForTimeout(500);
+        const box = (await page.locator('.setcanvas').boundingBox())!;
+        await page.getByRole('button', { name: 'Box it' }).click();
+        await page.mouse.move(box.x + box.width * 0.03, box.y + box.height * 0.26);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width * 0.62, box.y + box.height * 0.43, { steps: 8 });
+        await page.mouse.up();
+        await page.getByRole('button', { name: 'Done' }).last().click();
+        await page.waitForTimeout(700);
+        await page.locator('.mdembed').first().scrollIntoViewIfNeeded();
+        await page.waitForTimeout(300);
+      } },
+    { name: '02-wider', path: '/today', width: 1600, prepare: async (page) => {
+        await page.evaluate(() => { try { localStorage.removeItem('capitalos.feedback.wide'); } catch { /* */ } });
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        await page.getByRole('button', { name: /Wider/ }).click();
+        await page.waitForTimeout(500);
+        await page.locator('.mdrich').click();
+        await page.keyboard.type('A long report gets the room it needs. The words sit on the left and the pictures on the right, and the choice is remembered in this browser.', { delay: 1 });
+        await page.waitForTimeout(300);
+      } },
+  ],
   N36: [
     { name: '01-section-headings', path: '/all/visualizations', width: 1600, prepare: async (page) => {
         await page.getByText('State of play').first().scrollIntoViewIfNeeded();

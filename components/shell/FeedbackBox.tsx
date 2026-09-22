@@ -8,7 +8,7 @@ import {
   capturePage, capturePageExact, METHOD_LABEL, type CaptureMethod, type Region,
 } from '@/lib/capture';
 import { RegionPicker } from './RegionPicker';
-import { MarkdownField, type DroppedImage } from '@/components/ui/MarkdownField';
+import { MarkdownField, packAttachments, type DroppedImage } from '@/components/ui/MarkdownField';
 
 type Kind = 'bug' | 'request' | 'question' | 'chore';
 type Priority = 'P0' | 'P1' | 'P2' | 'P3';
@@ -26,6 +26,8 @@ const PRIORITY_MEANS: Record<Priority, string> = {
   P2: 'Normal — worth doing, not urgent',
   P3: 'Someday — a good idea with no clock on it',
 };
+
+const WIDE_KEY = 'capitalos.feedback.wide';
 
 export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }) {
   const [open, setOpen] = useState(false);
@@ -141,6 +143,18 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const [showKeys, setShowKeys] = useState(false);
+  /**
+   * Wider, for a report that has got long (issue 0020). Remembered in this browser only — it
+   * is a preference about the screen, not something anybody else needs to see.
+   */
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    try { setWide(window.localStorage.getItem(WIDE_KEY) === '1'); } catch { /* private window */ }
+  }, []);
+  const toggleWide = () => setWide((w) => {
+    try { window.localStorage.setItem(WIDE_KEY, w ? '0' : '1'); } catch { /* private window */ }
+    return !w;
+  });
 
   /**
    * Escape closes the box, and ⌘/Ctrl+Enter files it (issues 0009, 0012).
@@ -187,14 +201,16 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
     if (state === 'sending' || state === 'done') return;
     setState('sending');
     setError(null);
+    // A picture deleted from the text is not sent (issue 0020) — it may be the wrong one.
+    const packed = packAttachments(body, images);
     try {
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          title, body, kind, priority, page: path, context,
+          title, body: packed.body, kind, priority, page: path, context,
           screenshots: includeShot ? shots.map((x) => x.dataUrl) : [],
-          images: images.map((i) => ({ name: i.name, dataUrl: i.dataUrl })),
+          images: packed.images.map((i) => ({ name: i.name, dataUrl: i.dataUrl })),
           /**
            * The server numbers attachments with the screenshot first, so a body written
            * against `attachment:1` would point at the screenshot once the box is ticked.
@@ -268,7 +284,7 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
         <RegionPicker onPick={(r) => take(r)} onCancel={() => setPicking(false)} />
       )}
       {showKeys && (
-        <div className="keycard nocapture" role="dialog" aria-label="Keyboard shortcuts">
+        <div className={`keycard nocapture${wide ? ' overdrawer' : ''}`} role="dialog" aria-label="Keyboard shortcuts">
           <div className="lbl">Keyboard · this dialog first</div>
           <dl>
             <div><dt><kbd>⌘</kbd><kbd>↵</kbd></dt><dd>File the report</dd></div>
@@ -285,11 +301,22 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
       )}
       <div className={`scrim nocapture${picking || shooting ? ' away' : ''}`} onClick={onClose} />
       <div
-        className={`drawer nocapture${picking || shooting ? ' away' : ''}`}
+        className={`drawer nocapture${wide ? ' wide' : ''}${picking || shooting ? ' away' : ''}`}
         role="dialog"
         aria-label="Give feedback"
       >
-        <div className="lbl">Feedback</div>
+        <div className="drawerhead">
+          <div className="lbl">Feedback</div>
+          <button
+            type="button"
+            className="drawerwide"
+            onClick={toggleWide}
+            aria-pressed={wide}
+            title={wide ? 'Back to the narrow panel' : 'Use more of the page for a long report'}
+          >
+            {wide ? '⇥ Narrower' : '⇤ Wider'}
+          </button>
+        </div>
 
         {state === 'done' && result ? (
           <>
@@ -333,6 +360,8 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
               filled in for you.
             </p>
 
+            <div className="fbcols">
+            <div className="fbshots">
             <div className="lbl">Captured with it</div>
             <div className="ctx">{JSON.stringify(context, null, 2)}</div>
 
@@ -428,6 +457,9 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
               </label>
             )}
 
+            </div>
+
+            <div className="fbtext">
             <label className="field">
               <span className="lbl">Title · optional</span>
               <input
@@ -446,44 +478,13 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
                 onChange={setBody}
                 images={images}
                 onImages={setImages}
+                onAnnotate={(i) => setEditingImage(i)}
                 placeholder={
                   'What you expected, what happened instead.\n\n'
                   + 'Markdown works. Drop a screenshot from somewhere else in here if you have one.'
                 }
               />
             </div>
-
-            {images.length > 0 && (
-              <div className="dropstrip">
-                <div className="lbl">
-                  In the description · {images.length} image{images.length === 1 ? '' : 's'}
-                </div>
-                <div className="shotlist">
-                  {images.map((img) => (
-                    <div className="shotthumb" key={img.index}>
-                      <button
-                        className="shotopen"
-                        onClick={() => setEditingImage(img.index)}
-                        aria-label={`Annotate ${img.name}`}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={img.dataUrl} alt={img.name} />
-                        <span className="pencil" aria-hidden>✎ Annotate</span>
-                      </button>
-                      <div className="shotmeta">
-                        <span className="flag f-mute" title={img.name}>
-                          {img.name.length > 18 ? `${img.name.slice(0, 17)}…` : img.name}
-                        </span>
-                        {img.annotated && <span className="flag f-ok">annotated</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <p className="mdhint" style={{ border: 0, padding: '5px 0 0' }}>
-                  Drawing on one replaces it where it sits in the text — the reference does not move.
-                </p>
-              </div>
-            )}
 
             <div className="fieldrow">
               <label className="field">
@@ -518,6 +519,8 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
                 <p>{error} — nothing was written. Your text is still in the box.</p>
               </div>
             )}
+            </div>
+            </div>
 
             <div className="acts">
               <button

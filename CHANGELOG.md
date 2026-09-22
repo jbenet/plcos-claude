@@ -3366,3 +3366,48 @@ The screenshot script's capture flag had to change with the title — it auto-se
 name, and a stale name quietly falls back to the other capture path.
 
 **43 of 43 properties hold.**
+
+---
+
+## N37 — Pictures you can point at, and a box that can grow
+
+**Shipped.** Issue 0020, three asks in one.
+
+| | |
+|---|---|
+| ![Annotate from the picture](docs/changelog/shots/n37/01-annotate-from-the-picture.png) | **Annotate and × live on the picture.** The strip that repeated every image is gone. |
+| ![Wider](docs/changelog/shots/n37/02-wider.png) | **⇤ Wider**: most of the page, the words on the left and the pictures on the right. |
+
+### On the picture, not beside it
+
+N35 put an Annotate button on each dropped-in picture — in a strip under the box that showed
+every image a second time. One more thing to scroll past, and it went on showing a picture
+after it had been deleted from the text. Every picture in the description now carries
+**✎ Annotate** and **×** on its own corner, with an *annotated* mark once it has been drawn on.
+
+It is a real node view, not an overlay guessing at positions. And the picture carries its
+**own number** through the editor now — in the image's title, which markdown carries through
+a parse and a serialise and which is stripped before anything is stored. Before, the editor
+only knew a picture by its data URL, so two identical pictures were indistinguishable and
+annotating the second could have changed the first.
+
+### Deleted means not sent
+
+Deleting a picture from the text left it in the upload. This issue is its own evidence:
+`0020-image-1.png` is attached and nothing in its text points at it — the wrong picture, dragged
+in, deleted, and filed anyway. Now only the pictures the text still refers to are sent, in the
+order the text refers to them, and the references are renumbered to match, because the server
+resolves `attachment:N` by position. The hint under the box says *"2 in the text — only those
+are sent"*.
+
+### A box that can grow
+
+**⇤ Wider** in the corner takes the drawer to most of the page: the description on the left
+with a taller editor, the captured context and screenshots on the right. It is remembered in
+this browser — a preference about a screen, not something anybody else needs.
+
+Also: StarterKit ships a Link extension in TipTap 3 and the editor was adding a second one,
+which is what the console's *"Duplicate extension names found"* warning was about. And intake
+titles may run to 80 characters now, which fits this issue's first sentence whole.
+
+**43 of 43 properties hold.**
