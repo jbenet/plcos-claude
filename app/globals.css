@@ -19,6 +19,8 @@
   --rail-hover:#2C2823; --rail-raise:#211E1A; --rail-edge:#443E36;
   --rail-soft:#252119; --rail-text:#C6C0B4; --rail-dim:#8A8478; --rail-av:#3D3831;
   --hair:#F0EDE5;
+  /* Labels: darker than --muted, because small caps in a light weight read as texture. */
+  --label:#46423B;
   --accent:#BF4A16; --accent-ink:#FFFFFF; --accent-soft:#FCF6F2;
   --accent-line:#E4D3C6; --accent-wash:#FBF9F4; --accent-halo:#F6E4DA;
   --display:'Fraunces',Georgia,serif;
@@ -36,6 +38,7 @@
   --rail-hover:#1B3427; --rail-raise:#162C22; --rail-edge:#2E5040;
   --rail-soft:#17301F; --rail-text:#BCCDC2; --rail-dim:#7D9187; --rail-av:#2A4A3A;
   --hair:#EAF0EA;
+  --label:#3A4740;
   --accent:#1E8F5E; --accent-ink:#FFFFFF; --accent-soft:#EFF8F3;
   --accent-line:#BFE0CE; --accent-wash:#F4F9F5; --accent-halo:#D8EEE2;
 }
@@ -47,7 +50,11 @@ a{color:inherit;text-decoration:none}
 button{font-family:inherit}
 
 .mono{font-family:var(--mono)}
-.lbl{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+/* Issue 0016. Muted grey, 10px, regular weight, wide tracking: it passed the contrast ratio
+   and was still hard to see, because small uppercase mono in a light weight reads as a
+   texture rather than as words. One step darker, one step heavier, a half-point larger. */
+.lbl{font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--label)}
+.floordark .lbl{color:var(--fl-muted)}
 
 /* ---------------- shell ---------------- */
 /* The rail is sticky at 100vh, so the column behind it is painted here — otherwise a
@@ -1125,8 +1132,13 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
 
 
 /* ── the board: map, plant, moves, grid, economy ─────────────────────────── */
-.floorgroup{display:flex;align-items:baseline;gap:8px;margin:14px 0 5px}
-.floorgroup .muted{font-size:11px}
+/* The three groups of tabs are sections, so they read as section headings rather than as
+   another small label (issue 0016). */
+.floorgroup{display:flex;align-items:baseline;gap:10px;margin:20px 0 8px;padding-top:12px;
+  border-top:1px solid var(--line)}
+.floorgroup .lbl{font-family:var(--display);font-size:16px;font-weight:600;letter-spacing:0;
+  text-transform:none;color:var(--ink)}
+.floorgroup .muted{font-size:12.5px}
 .kpi .n .of{font-size:15px;color:var(--muted);font-weight:400}
 
 /* 6 · the map */

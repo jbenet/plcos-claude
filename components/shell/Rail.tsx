@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { config } from '@/config/deployment';
 import { auth } from '@/lib/auth';
 import { issues as issueSink } from '@/lib/issues';
 import { vehicleSelection } from '@/lib/session';
@@ -20,8 +21,8 @@ export async function Rail() {
   return (
     <nav className="rail">
       <Link className="brand" href="/today">
-        <div className="mark">C</div>
-        <b>Capital&nbsp;OS</b>
+        <div className="mark">{config.product.mark}</div>
+        <b>{config.product.name}</b>
       </Link>
 
       <NavList

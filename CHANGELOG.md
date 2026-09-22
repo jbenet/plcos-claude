@@ -3325,3 +3325,44 @@ Checking that exposed a round-trip bug in the issue files themselves: titles are
 with literal backslashes in it. They are read with `JSON.parse` now.
 
 **43 of 43 properties hold.**
+
+---
+
+## N36 — Labels you can read, and a new name on the door
+
+**Shipped.** Issues 0016 and 0019.
+
+| | |
+|---|---|
+| ![Section headings](docs/changelog/shots/n36/01-section-headings.png) | **The tab groups are headings**, and every small label is a step darker and heavier. |
+| ![Labels](docs/changelog/shots/n36/02-labels.png) | **Everywhere, not just here** — the same change on every page that uses a label. |
+| ![The name](docs/changelog/shots/n36/03-the-name.png) | **PLC Raise Tools**, from one constant. |
+
+### 0016 — two jobs, two fixes
+
+The faint text was doing two different jobs, so it got two different fixes.
+
+**The tab groups are sections**, so they are headings now — *State of play*, *The space and
+the moves*, *Reach, leverage and blind spots* — in the display face with a rule above each,
+instead of a third tiny line of uppercase between two rows of cards.
+
+**Every small uppercase label is one step darker and one step heavier**, on every page: a new
+`--label` colour between ink and muted, weight 500, half a point larger. They passed the
+contrast ratio before and were still hard to see, because small caps in a light weight with
+wide tracking read as a texture rather than as words. Each theme has its own shade, and labels
+on the dark canvases keep theirs.
+
+### 0019 — PLC Raise Tools
+
+The rail, the browser tab, the R&D page, the published build log and the label on anything
+handed to Linear all say **PLC Raise Tools**. It is one constant — `config/deployment.ts` →
+`product` — because the request said *for now*, and going back should be one block rather than
+a search.
+
+*Capital OS* stays as the codename: in the code, the docs, the design history, and in the
+storage keys and cookie names. Those last two cannot be renamed without signing everybody out
+and resetting their theme and layout, which is a lot to spend on a name that might change back.
+The screenshot script's capture flag had to change with the title — it auto-selects the tab by
+name, and a stale name quietly falls back to the other capture path.
+
+**43 of 43 properties hold.**

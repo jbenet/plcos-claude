@@ -1,3 +1,4 @@
+import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { appendAudit } from '@/modules/platform';
 import { getPlay } from './repo';
@@ -76,7 +77,7 @@ export async function assignPlay(
       title: play.title,
       description: describe(play),
       assigneeHandle: assignee.handle,
-      labels: ['capital-os', `lever:${play.lever}`, `horizon:${play.horizon}`,
+      labels: [config.product.slug, `lever:${play.lever}`, `horizon:${play.horizon}`,
         ...(play.gate ? [`gate:${play.gate}`] : [])],
       sourceRef: playId,
       sourceKind: 'play',
@@ -154,7 +155,7 @@ export async function commit(
         parsed.dates.length > 0 ? `Dates mentioned: ${parsed.dates.join(', ')}.` : '',
       ].filter(Boolean).join('\n'),
       assigneeHandle: parsed.owners[0] ?? null,
-      labels: ['capital-os', 'commitment'],
+      labels: [config.product.slug, 'commitment'],
       sourceRef: commitmentId,
       sourceKind: 'commitment',
     };

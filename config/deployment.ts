@@ -13,6 +13,20 @@ export type IssueProvider = 'file' | 'linear' | 'github';
 export type AuthKind = 'local' | 'labos';
 
 export const config = {
+  /**
+   * What the tool is called on screen (issue 0019). "Capital OS" stays as the codename — in
+   * the code, the docs, the design history and the storage keys, which cannot be renamed
+   * without signing everybody out and resetting their preferences. This is the name people
+   * see, and going back to the old one is this block.
+   */
+  product: {
+    name: 'PLC Raise Tools',
+    /** The letter in the square. */
+    mark: 'P',
+    /** For labels on things that leave the system, like a Linear ticket. */
+    slug: 'plc-raise-tools',
+    codename: 'Capital OS',
+  },
   affinity: {
     tier: null as AffinityTier,
     syncMode: 'deferred' as AffinitySyncMode,

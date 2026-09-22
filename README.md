@@ -1,4 +1,7 @@
-# Capital OS
+# PLC Raise Tools
+
+*Codename Capital OS — the name in the code, the docs and the history. The name on screen
+lives in `config/deployment.ts` → `product`, so it can go back in one line.*
 
 Fundraising strategy and operations across PLC Neurotech I, PLC Crypto/Rails, the SPVs and
 the grants rail.

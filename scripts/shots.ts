@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
+import { config } from '../config/deployment';
 
 /**
  * Changelog screenshots. `npm run shots -- L1` against a running dev server.
@@ -166,6 +167,90 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '01-today', path: '/today', fullPage: true },
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
+  ],
+  N36: [
+    { name: '01-section-headings', path: '/all/visualizations', width: 1600, prepare: async (page) => {
+        await page.getByText('State of play').first().scrollIntoViewIfNeeded();
+        await page.waitForTimeout(400);
+      } },
+    { name: '02-labels', path: '/approvals', prepare: async (page) => {
+        await page.waitForTimeout(300);
+      } },
+    { name: '03-the-name', path: '/today', prepare: async (page) => {
+        await page.waitForTimeout(300);
+      } },
+  ],
+  N35: [
+    { name: '01-pick-a-part', path: '/today', prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        await page.getByRole('button', { name: /Pick a part/ }).click();
+        await page.waitForTimeout(300);
+        // The four headline cards, dragged corner to corner.
+        const cards = await page.locator('.kpis').first().boundingBox();
+        await page.mouse.move(cards!.x - 6, cards!.y - 6);
+        await page.mouse.down();
+        await page.mouse.move(cards!.x + cards!.width + 6, cards!.y + cards!.height + 6, { steps: 8 });
+        await page.mouse.up();
+        await page.waitForTimeout(3500);
+        await page.locator('.shotlist .shotopen').last().click();
+        await page.waitForTimeout(600);
+      } },
+    { name: '02-dropped-image-annotated', path: '/today', prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        await page.locator('.mdrich').click();
+        await page.keyboard.type('The ask log shows the wrong owner. See the picture:', { delay: 2 });
+        await page.evaluate(async () => {
+          const c = document.createElement('canvas'); c.width = 520; c.height = 300;
+          const g = c.getContext('2d')!;
+          g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, 520, 300);
+          g.fillStyle = '#1A1917'; g.font = '600 22px sans-serif'; g.fillText('Ask log · owner', 24, 48);
+          g.fillStyle = '#E4E0D6'; for (let i = 0; i < 5; i++) g.fillRect(24, 80 + i * 40, 472, 1);
+          g.fillStyle = '#5E5A52'; g.font = '16px sans-serif';
+          ['Delia Roos · Mara Vance', 'Northwood · Juan', 'Cedar Trust · Juan', 'Okonjo · Sam'].forEach((t, i) => g.fillText(t, 24, 108 + i * 40));
+          const blob: Blob = await new Promise((r) => c.toBlob((x) => r(x!), 'image/png'));
+          const dt = new DataTransfer(); dt.items.add(new File([blob], 'ask-log.png', { type: 'image/png' }));
+          document.querySelector('.mdfield > div:nth-of-type(2)')!
+            .dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+        });
+        await page.waitForTimeout(700);
+        await page.locator('.dropstrip .shotopen').first().click();
+        await page.waitForTimeout(500);
+        const box = (await page.locator('.setcanvas').boundingBox())!;
+        await page.getByRole('button', { name: 'Box it' }).click();
+        await page.mouse.move(box.x + box.width * 0.03, box.y + box.height * 0.3);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width * 0.62, box.y + box.height * 0.44, { steps: 8 });
+        await page.mouse.up();
+        await page.getByRole('button', { name: 'Done' }).last().click();
+        await page.waitForTimeout(700);
+        await page.locator('.dropstrip').scrollIntoViewIfNeeded();
+        await page.waitForTimeout(300);
+      } },
+    { name: '03-give-more-feedback', path: '/today', prepare: async (page) => {
+        // Never write a real issue from a screenshot run: intake is answered here.
+        let n = 41;
+        await page.route('**/api/feedback', async (route) => {
+          n += 1;
+          const body = route.request().postDataJSON() as { body?: string };
+          const title = (body.body ?? '').split('.')[0]!.trim();
+          await route.fulfill({ json: { id: `00${n}`, title, location: `issues/00${n}.md` } });
+        });
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2600);
+        for (const text of ['The rail loses its scroll position when I switch user.', 'Approvals should say who is waiting on whom.']) {
+          await page.locator('.mdrich').click();
+          await page.keyboard.type(text, { delay: 2 });
+          await page.keyboard.press('Meta+Enter');
+          await page.waitForTimeout(1200);
+          if (text.startsWith('The rail')) {
+            await page.getByRole('button', { name: 'Give more feedback' }).click();
+            await page.waitForTimeout(2600);
+          }
+        }
+        await page.waitForTimeout(400);
+      } },
   ],
   N34: [
     { name: '01-the-network', path: '/all/visualizations', width: 1600, prepare: async (page) => {
@@ -1173,7 +1258,8 @@ async function main() {
   const browser = await chromium.launch({
     args: [
       '--auto-accept-this-tab-capture',
-      '--auto-select-desktop-capture-source=Capital OS',
+      // Must match the page title, or the auto-select never finds the tab.
+      `--auto-select-desktop-capture-source=${config.product.name}`,
       '--use-fake-ui-for-media-stream',
     ],
   });

@@ -1,3 +1,4 @@
+import { config } from '../config/deployment';
 /**
  * Render CHANGELOG.md to a standalone HTML page for reading away from the repo.
  *
@@ -112,7 +113,7 @@ async function main() {
 
   const preamble = doc.preamble.map(render).join('');
 
-  const html = `<title>Capital OS Build Log</title>
+  const html = `<title>${config.product.name} Build Log</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -237,7 +238,7 @@ async function main() {
 
 <header class="masthead">
   <div class="wrap">
-    <span class="mark"><i>C</i><b>Capital&nbsp;OS</b></span>
+    <span class="mark"><i>${config.product.mark}</i><b>${config.product.name}</b></span>
     <h1>Build log</h1>
     <p class="lede">What landed at each stage, what was deliberately left out, and where the
       build disagreed with the plan. Generated from <code>CHANGELOG.md</code>.</p>

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { config } from '@/config/deployment';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 
@@ -48,7 +49,7 @@ export default async function RnD() {
         <h3>Nothing about PL R&amp;D is recorded in this system.</h3>
         <p>
           There is no schema, no seed, and no screen behind this beyond what you are reading.
-          Capital OS models a raise: vehicles, LPs, commitments, closes. An R&amp;D programme is a
+          {config.product.name} models a raise: vehicles, LPs, commitments, closes. An R&amp;D programme is a
           different shape — it spends rather than raises, and its counterparties are funders and
           collaborators.
         </p>

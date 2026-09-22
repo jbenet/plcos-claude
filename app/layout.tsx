@@ -2,9 +2,10 @@ import './globals.css';
 import type { Metadata } from 'next';
 import { Rail } from '@/components/shell/Rail';
 import { THEME_BOOT } from '@/lib/theme';
+import { config } from '@/config/deployment';
 
 export const metadata: Metadata = {
-  title: 'Capital OS',
+  title: config.product.name,
   description: 'Fundraising strategy and operations for PLC Neurotech I, PLC Crypto/Rails, the SPVs and the grants rail.',
 };
 
