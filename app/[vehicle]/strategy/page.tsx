@@ -122,6 +122,31 @@ function Board({
   );
 }
 
+function ChooseVehicle({ vehicles }: { vehicles: Array<{ slug: string; name: string; exemption: string }> }) {
+  return (
+    <Page crumbs={[{ label: 'All vehicles' }, { label: 'Strategy' }]}>
+      <div className="lbl">All vehicles</div>
+      <h1>Strategy is read one raise at a time</h1>
+      <p className="sublede">
+        Each vehicle has its own readings, levers and plays, and adding them up across vehicles
+        would blend raises that must stay separate. Choose one.
+      </p>
+      <div className="card">
+        <table className="list">
+          <tbody>
+            {vehicles.map((v) => (
+              <tr key={v.slug}>
+                <td><Link href={`/${v.slug}/strategy`}><b>{v.name}</b></Link></td>
+                <td className="muted mono" style={{ fontSize: 11.5 }}>{v.exemption}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Page>
+  );
+}
+
 export default async function VehicleStrategy({
   params,
 }: {
@@ -129,6 +154,9 @@ export default async function VehicleStrategy({
 }) {
   const { vehicle: slug } = await params;
   const { all } = await vehicleSelection();
+  // A strategy is a reading of one raise. With every vehicle selected the rail still links
+  // here, and a 404 is the wrong answer to a reasonable click.
+  if (slug === 'all') return <ChooseVehicle vehicles={all} />;
   const vehicle = all.find((v) => v.slug === slug);
   if (!vehicle) notFound();
 

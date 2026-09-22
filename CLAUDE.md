@@ -25,6 +25,28 @@ Seven-plus people plus their agents will eventually use this. Right now, one per
 
 ---
 
+## Real data — read before touching `data/real/`
+
+Two data profiles since N38 (`docs/15-affinity-integration.md`). `npm run dev` serves
+**demo**: fictional, port 3000, safe to reset, screenshot and publish. `npm run dev:real`
+serves **real**: the Affinity replica and everything written about it, on `127.0.0.1:3100`
+only. `DATA_PROFILE` picks one, in `config/deployment.ts`.
+
+- Everything real lives under `data/real/`, which git ignores. None of it goes into a commit,
+  the changelog, a screenshot, the published build log, `issues/`, a web search or a
+  sub-agent prompt. Changelog entries about real-data work use counts and invented examples.
+  Juan is fine with Claude reading real records while working; that is the only exception.
+- **Affinity is read-only.** The key can write and cannot be scoped, so read-only is
+  enforced in the client: GET only, allowlisted paths, a property test that a write throws.
+  Writing back is a later decision, and would go through approval tickets.
+- Affinity fields are claims, not evidence. A stage is not a ladder rung. An amount is soft
+  unless a field has been designated as meaning signed. Relationship strength is a tier-C
+  edge.
+- Seeding, `db:reset`, `npm run demo` and `npm run shots` refuse the real profile. Keep it
+  that way. Writes to the real database happen inside the real server's process.
+
+---
+
 ## Stack — settled, do not relitigate
 
 - **TypeScript**, **Next.js** with SSR. No separate API service.
@@ -239,8 +261,10 @@ there.
 
 Half of what went wrong in the alternate designs was building the wrong layer first.
 
-- **No connectors before L13.** No Affinity, no Linear, no Drive, no DocSend. Everything
-  runs on seed data and fixtures until the product shape is proven.
+- **No connectors before L13.** No Linear, no Drive, no DocSend. Everything else runs on
+  seed data and fixtures until the product shape is proven. **Exception, decided
+  22 Sep 2026:** Affinity, read-only, from N38 (`docs/15`). Writes to Affinity are still
+  prohibited.
 - **No auth integration.** Local user switcher only. LabOS comes later.
 - **No graph database.** Recursive CTEs in Postgres handle two- and three-hop enumeration
   at this scale.
@@ -264,7 +288,8 @@ needs a precise input, or performance becomes a demonstrated problem.
 ## Open questions — get answers before the code depends on them
 
 1. **Affinity plan tier.** Data Share (Enterprise) versus poll-first. This one changes the
-   connector design, not just the schedule.
+   connector design, not just the schedule. Juan doesn't know the tier; the connection test
+   reads it from the API (docs/15 §5). Poll-first until then.
 2. **Warehouse access.** Own schema with write permission for canon tables?
 3. **Linear custom fields.** UNVERIFIED in all three design packages. Check the live
    GraphQL schema before anything depends on it. The integration points the product

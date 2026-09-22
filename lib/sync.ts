@@ -1,5 +1,9 @@
 import { listSyncSources, type SourceSync } from '@/modules/platform';
+import { config } from '@/config/deployment';
 import { ago } from './time';
+
+/** Where rows came from that are not a connector: the demo's fixtures, the real profile's init file. */
+const LOCAL = new Set(['seed', 'init']);
 
 export interface SyncSummary {
   tone: 'ok' | 'amber' | 'grey' | 'clay';
@@ -15,7 +19,7 @@ export async function syncSummary(): Promise<SyncSummary> {
   }
   const failed = sources.filter((s) => s.status === 'failed');
   const stale = sources.filter((s) => s.status === 'stale');
-  const connectors = sources.filter((s) => s.source !== 'seed');
+  const connectors = sources.filter((s) => !LOCAL.has(s.source));
   const liveConnectors = connectors.filter((s) => s.status === 'ok');
   const newest = sources
     .map((s) => s.lastSyncAt)
@@ -29,6 +33,14 @@ export async function syncSummary(): Promise<SyncSummary> {
     return { tone: 'amber', line: `${stale.length} source${stale.length > 1 ? 's' : ''} stale${newest ? ` · read ${ago(newest)}` : ''}`, sources };
   }
   if (liveConnectors.length === 0) {
+    if (config.data.profile === 'real') {
+      const init = sources.find((s) => s.source === 'init');
+      return {
+        tone: 'grey',
+        line: `Nothing imported yet${init?.lastSyncAt ? ` · init file loaded ${ago(init.lastSyncAt)}` : ' · init file not loaded'}`,
+        sources,
+      };
+    }
     return {
       tone: 'grey',
       line: `Seed data · no connector attached${newest ? ` · loaded ${ago(newest)}` : ''}`,

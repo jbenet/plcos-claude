@@ -66,9 +66,10 @@ type Global = typeof globalThis & { __capitalOsDb?: Promise<Db> };
 const g = globalThis as Global;
 
 /**
- * Resolve the Db for this process, apply migrations, and seed if the database is empty.
- * Cached on globalThis so Next's dev-mode module reloading does not open a second handle —
- * PGlite is single-process, and a second handle on the same directory deadlocks.
+ * Resolve the Db for this process, apply migrations, then give it its first rows: the
+ * fictional seed for the demo profile, the init file for the real one — never the other way
+ * round. Cached on globalThis so Next's dev-mode module reloading does not open a second
+ * handle — PGlite is single-process, and a second handle on the same directory corrupts it.
  */
 export function getDb(): Promise<Db> {
   if (!g.__capitalOsDb) g.__capitalOsDb = boot();
@@ -86,8 +87,13 @@ async function boot(dir?: string): Promise<Db> {
   // getDb(), and without this line that call would await the promise it is running inside.
   g.__capitalOsDb = Promise.resolve(db);
 
-  const { seedIfEmpty } = await import('../seed');
-  await seedIfEmpty(db);
+  if (config.data.profile === 'real') {
+    const { loadInit } = await import('../real/init');
+    await loadInit(db);
+  } else {
+    const { seedIfEmpty } = await import('../seed');
+    await seedIfEmpty(db);
+  }
   return db;
 }
 

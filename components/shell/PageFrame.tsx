@@ -13,9 +13,23 @@ const STORE_KEY = 'capitalos.rightpane';
  * material behind it, a conversation about it. It is not scaffolding, so it closes, and
  * the choice is remembered.
  */
+const PROFILE = {
+  demo: {
+    label: 'Demo data',
+    title: 'Fictional people and amounts. Safe to reset, screenshot and publish.',
+  },
+  real: {
+    label: 'Real data',
+    title: 'The real raise. This machine only: never committed, screenshotted or published (docs/15).',
+  },
+} as const;
+
 export function PageFrame({
-  crumbs, syncTone, syncLine, syncTitle, actions, inspector, children,
+  profile, notice, crumbs, syncTone, syncLine, syncTitle, actions, inspector, children,
 }: {
+  /** Passed in rather than read from config, which only knows the answer on the server. */
+  profile: 'demo' | 'real';
+  notice?: string;
   crumbs: Array<{ label: string; href?: string }>;
   syncTone: string;
   syncLine: string;
@@ -61,6 +75,9 @@ export function PageFrame({
           <b>{last?.label}</b>
         </div>
         <div className="sync" title={syncTitle}>
+          <Link href="/dev/data" className={`profile p-${profile}`} title={PROFILE[profile].title}>
+            {PROFILE[profile].label}
+          </Link>
           <span className={`dot ${syncTone}`} />
           {syncLine}
         </div>
@@ -79,6 +96,12 @@ export function PageFrame({
           </button>
         )}
       </div>
+
+      {notice && (
+        <div className="pnotice" role="status">
+          <b>Real data, nothing imported.</b> {notice}
+        </div>
+      )}
 
       <div className="body">
         <div className="work">{children}</div>

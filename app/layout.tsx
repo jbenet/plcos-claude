@@ -5,7 +5,8 @@ import { THEME_BOOT } from '@/lib/theme';
 import { config } from '@/config/deployment';
 
 export const metadata: Metadata = {
-  title: config.product.name,
+  // The tab says which data it holds, so two windows side by side cannot be confused.
+  title: config.data.profile === 'real' ? `Real · ${config.product.name}` : config.product.name,
   description: 'Fundraising strategy and operations for PLC Neurotech I, PLC Crypto/Rails, the SPVs and the grants rail.',
 };
 
@@ -23,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>
+      <body className={config.data.profile === 'real' ? 'real' : undefined}>
         <div className="app">
           <Rail />
           <div className="main">{children}</div>

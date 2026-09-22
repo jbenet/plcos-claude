@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Db } from './db';
+import { config } from '@/config/deployment';
 
 const fixture = async <T>(name: string): Promise<T[]> =>
   JSON.parse(await readFile(join(process.cwd(), 'fixtures', name), 'utf8')) as T[];
@@ -10,6 +11,12 @@ const fixture = async <T>(name: string): Promise<T[]> =>
  * amounts should not reach a shared repo (docs/12, "Seeds").
  */
 export async function seed(db: Db): Promise<Record<string, number>> {
+  // Checked here rather than only in the scripts, so no caller can get it wrong: invented
+  // people with invented commitments, mixed into the replica of the real raise, would be
+  // indistinguishable from it afterwards.
+  if (config.data.profile === 'real') {
+    throw new Error('Refusing to seed fictional data into the real profile.');
+  }
   const users = await fixture<{ handle: string; name: string; initials: string; role: string; email: string }>('users.json');
   const vehicles = await fixture<{ slug: string; name: string; kind: string; exemption: string; target_amount: number | null; sort_order: number }>('vehicles.json');
   const sources = await fixture<{ source: string; label: string; status: string; detail: string }>('sources.json');

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
+import { config } from '@/config/deployment';
 import { Markdown } from '@/components/ui/Markdown';
 import { SECTION } from '@/lib/nav';
 import { changelogEntry } from '@/lib/changelog';
@@ -127,9 +128,10 @@ export default async function IssueDetail({ params }: { params: Promise<{ id: st
           </div>
           <p className="cover">
             <b>Captured in the reporter&rsquo;s browser when they pressed the button</b>, before
-            the feedback drawer covered anything, and annotated by them. It is a PNG beside the
-            issue in this repository — so the complaint, the picture and the fix all travel in
-            one pull request, and none of it depends on a service being up.
+            the feedback drawer covered anything, and annotated by them.{' '}
+            {config.data.profile === 'real'
+              ? 'It is a PNG beside the issue in data/real/issues/, with the real data it may show, and is never committed.'
+              : 'It is a PNG beside the issue in this repository — so the complaint, the picture and the fix all travel in one pull request, and none of it depends on a service being up.'}
           </p>
         </div>
       )}

@@ -36,7 +36,7 @@ export async function Rail() {
 
       <div className="railfoot">
         <div className="railrow">
-          <FeedbackButton variant="rail" />
+          <FeedbackButton variant="rail" profile={config.data.profile} />
           <Link className="railgear" href="/settings" aria-label="Your settings" title="Your settings">
             <span aria-hidden>⚙</span>
           </Link>

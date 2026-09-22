@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { config } from '@/config/deployment';
 import { parseIssue, serializeIssue, slugify, type ParsedIssue } from './format';
 import type { Issue, IssueDraft, IssueFilter, IssueSink } from './index';
 
@@ -47,7 +48,9 @@ export function fileIssueSink(dir: string): IssueSink {
 
   return {
     kind: 'file',
-    destination: `${dir}/NNNN-slug.md in this repository`,
+    destination: config.data.profile === 'real'
+      ? `${dir}/NNNN-slug.md, with the real data — never committed`
+      : `${dir}/NNNN-slug.md in this repository`,
 
     async create(draft: IssueDraft): Promise<Issue> {
       const existing = await read();

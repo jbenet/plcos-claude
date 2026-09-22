@@ -1,5 +1,6 @@
 import { IssueList } from '@/components/issues/IssueList';
 import { Page } from '@/components/shell/Page';
+import { config } from '@/config/deployment';
 import { SECTION } from '@/lib/nav';
 import { issues as issueSink, PRIORITY, type IssuePriority } from '@/lib/issues';
 
@@ -47,11 +48,19 @@ export default async function Issues() {
     >
       <div className="lbl">Feedback loop</div>
       <h1>Issues</h1>
-      <p className="sublede">
-        One markdown file per issue, git-tracked, written by the feedback box. The complaint and
-        its fix travel in the same pull request, and <code>git log issues/</code> is free triage
-        history.
-      </p>
+      {config.data.profile === 'real' ? (
+        <p className="sublede">
+          One markdown file per issue, written by the feedback box. These were filed from the real
+          profile, so they can quote real data: they stay in <code>data/real/issues/</code> and are
+          never committed. The demo&rsquo;s queue is <code>issues/</code> in the repository.
+        </p>
+      ) : (
+        <p className="sublede">
+          One markdown file per issue, git-tracked, written by the feedback box. The complaint and
+          its fix travel in the same pull request, and <code>git log issues/</code> is free triage
+          history.
+        </p>
+      )}
 
       <div className="kpis">
         {byPriority.map(({ p, n }) => (

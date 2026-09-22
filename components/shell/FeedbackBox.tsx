@@ -29,7 +29,13 @@ const PRIORITY_MEANS: Record<Priority, string> = {
 
 const WIDE_KEY = 'capitalos.feedback.wide';
 
-export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }) {
+export function FeedbackButton({
+  variant = 'bar', profile = 'demo',
+}: {
+  variant?: 'bar' | 'rail';
+  /** Where the issue is filed differs by profile, and the box says so (docs/15). */
+  profile?: 'demo' | 'real';
+}) {
   const [open, setOpen] = useState(false);
 
   /**
@@ -46,7 +52,7 @@ export function FeedbackButton({ variant = 'bar' }: { variant?: 'bar' | 'rail' }
       >
         {variant === 'rail' ? <><span aria-hidden>✎</span> Feedback</> : 'Give feedback'}
       </button>
-      {open && <FeedbackDrawer onClose={() => setOpen(false)} />}
+      {open && <FeedbackDrawer profile={profile} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -58,7 +64,7 @@ interface Shot {
   annotated: boolean;
 }
 
-function FeedbackDrawer({ onClose }: { onClose: () => void }) {
+function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClose: () => void }) {
   /**
    * Screenshots are a list.
    *
@@ -450,8 +456,10 @@ function FeedbackDrawer({ onClose }: { onClose: () => void }) {
                 <span>
                   Include {shots.length === 1 ? 'the screenshot' : `all ${shots.length} screenshots`}
                   <small>
-                    Filed beside the issue as PNGs in this repository. Click one to draw on it;
-                    the × removes it.
+                    {profile === 'real'
+                      ? 'Filed beside the issue as PNGs in data/real/issues/, with the real data — never committed.'
+                      : 'Filed beside the issue as PNGs in this repository.'}{' '}
+                    Click one to draw on it; the × removes it.
                   </small>
                 </span>
               </label>

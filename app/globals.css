@@ -132,6 +132,20 @@ button.sec .caret{font-size:9px;opacity:.8}
 .dot.amber{background:var(--amber)}
 .dot.grey{background:#B8B2A6}
 .dot.clay{background:var(--clay)}
+/* Which data this is (N38). The words carry it; the colour and the strip only repeat it. */
+.profile{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 7px;border-radius:4px;border:1px solid var(--line);color:var(--label);text-decoration:none;margin-right:4px;white-space:nowrap}
+.profile:hover{border-color:var(--muted)}
+.profile.p-real{background:var(--clay);border-color:var(--clay);color:#fff}
+body.real::before{content:'';position:fixed;top:0;left:0;right:0;height:3px;background:var(--clay);z-index:60;pointer-events:none}
+.pnotice{flex:none;padding:8px 20px;font-size:12.5px;line-height:1.45;color:var(--ink);background:#F6EBD9;border-bottom:1px solid #E7D3B0}
+.pnotice b{color:var(--amber);font-weight:600}
+table.profiles td{width:40%}
+table.profiles td:first-child{width:20%}
+table.profiles th.here{color:var(--ink);font-weight:500}
+table.profiles td.here{background:var(--accent-wash)}
+ol.asks{margin:0;padding-left:20px;font-size:12.5px;line-height:1.5}
+ol.asks li{margin:0 0 5px}
 
 .btn{font-family:inherit;font-size:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:5px 11px;cursor:pointer}
 .btn:hover{background:var(--accent-wash)}

@@ -168,6 +168,12 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  // Demo only, like every entry here: refuseReal() stops the run on anything else.
+  N38: [
+    { name: '01-data-page', path: '/dev/data', fullPage: true },
+    { name: '02-demo-badge', path: '/today' },
+    { name: '03-strategy-all-vehicles', path: '/all/strategy' },
+  ],
   N37: [
     { name: '01-annotate-from-the-picture', path: '/today', prepare: async (page) => {
         await page.getByRole('button', { name: /Feedback/ }).click();
@@ -1285,11 +1291,29 @@ async function resolveTokens(page: Page, base: string, path: string): Promise<st
   return path.replace('/research/__ROOS__', href);
 }
 
+/**
+ * Screenshots are committed and published in the build log, so they are only ever of the
+ * demo. Asking the server, rather than trusting the environment of this script, catches
+ * BASE_URL pointed at the real server as well as DATA_PROFILE=real in this shell.
+ */
+async function refuseReal(base: string) {
+  if (config.data.profile === 'real') {
+    throw new Error('Refusing to take screenshots in the real profile. Screenshots are committed and published.');
+  }
+  const res = await fetch(`${base}/api/profile`).catch(() => null);
+  if (!res || !res.ok) throw new Error(`${base}/api/profile did not answer — is the demo server running?`);
+  const { profile } = (await res.json()) as { profile?: string };
+  if (profile !== 'demo') {
+    throw new Error(`${base} is serving the ${profile ?? 'unknown'} profile. Screenshots only ever show the demo.`);
+  }
+}
+
 async function main() {
   const version = process.argv[2] ?? 'L1';
   const base = process.env.BASE_URL ?? 'http://localhost:3000';
   const shots = SHOTS[version];
   if (!shots) throw new Error(`No shots defined for ${version}`);
+  await refuseReal(base);
 
   const dir = join(process.cwd(), 'docs/changelog/shots', version.toLowerCase());
   await mkdir(dir, { recursive: true });

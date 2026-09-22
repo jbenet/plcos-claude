@@ -1,12 +1,17 @@
 node_modules/
 .next/
+.next-real/
 .env
 .env.local
 *.log
 .DS_Store
 design/_full-export.zip
 pgdata/
-local/
 next-env.d.ts
 .tsbuildinfo
 tsconfig.tsbuildinfo
+
+# Data, all of it: the demo database, and under data/real/ the replica of Affinity and
+# everything written about it. Only the README that explains the layout is tracked.
+data/*
+!data/README.md

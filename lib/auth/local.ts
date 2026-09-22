@@ -1,8 +1,9 @@
 import { cookies } from 'next/headers';
 import { getUserByHandle, listUsers } from '@/modules/platform';
+import { config } from '@/config/deployment';
 import type { AppUser, AuthProvider } from './index';
 
-export const USER_COOKIE = 'capitalos_user';
+export const USER_COOKIE = `${config.data.cookiePrefix}user`;
 
 /**
  * The local provider. Identity is a cookie holding a handle; the dropdown in the rail
@@ -23,7 +24,11 @@ export function localAuth(): AuthProvider {
       }
       const all = await listUsers();
       if (all.length === 0) {
-        throw new Error('No users in platform.app_user. Run `npm run demo` to seed.');
+        throw new Error(
+          config.data.profile === 'real'
+            ? 'No users in platform.app_user. The real profile loads its team from data/real/init.jsonc.'
+            : 'No users in platform.app_user. Run `npm run demo` to seed.',
+        );
       }
       return all[0]!;
     },

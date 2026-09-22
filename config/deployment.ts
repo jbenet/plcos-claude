@@ -11,6 +11,38 @@ export type AffinitySyncMode = 'deferred' | 'poll' | 'dataShare';
 export type CanonMode = 'inProcess' | 'warehouse';
 export type IssueProvider = 'file' | 'linear' | 'github';
 export type AuthKind = 'local' | 'labos';
+export type DataProfile = 'demo' | 'real';
+
+/**
+ * Which data this process serves (N38). One environment variable, read here and nowhere
+ * else.
+ *
+ * `demo` is fictional. It can be reset, screenshotted and published. `real` is the replica of
+ * Affinity and everything we write about it, and none of it leaves `data/real/`: not into git,
+ * not into the build log, not onto the office network (docs/15).
+ *
+ * A typo fails loudly rather than falling back, so `DATA_PROFILE=rael` cannot show the demo
+ * to somebody who believes they are looking at the raise.
+ */
+function dataProfile(): DataProfile {
+  const v = process.env.DATA_PROFILE;
+  if (v === undefined || v === '' || v === 'demo') return 'demo';
+  if (v === 'real') return 'real';
+  throw new Error(`DATA_PROFILE must be "demo" or "real", not "${v}".`);
+}
+const PROFILE = dataProfile();
+
+/**
+ * The real profile is this machine only until a deployment is chosen, so a connection string
+ * pointing somewhere else is refused rather than quietly obeyed.
+ */
+function databaseUrl(): string | null {
+  const url = process.env.DATABASE_URL ?? null;
+  if (url && PROFILE === 'real') {
+    throw new Error('DATABASE_URL is set in the real profile. Real data stays in data/real/ until deployment is decided (docs/15).');
+  }
+  return url;
+}
 
 export const config = {
   /**
@@ -27,6 +59,16 @@ export const config = {
     slug: 'plc-raise-tools',
     codename: 'Capital OS',
   },
+  data: {
+    profile: PROFILE,
+    /** Everything this profile keeps on disk is under here, and git ignores all of it. */
+    root: `data/${PROFILE}`,
+    /**
+     * Cookies belong to a host, not a port, so the two servers would share who you are and
+     * which vehicle you had open. Local storage is per port already.
+     */
+    cookiePrefix: PROFILE === 'real' ? 'capitalos_real_' : 'capitalos_',
+  },
   affinity: {
     tier: null as AffinityTier,
     syncMode: 'deferred' as AffinitySyncMode,
@@ -37,7 +79,12 @@ export const config = {
   },
   issues: {
     provider: 'file' as IssueProvider,
-    dir: 'issues',
+    /**
+     * Demo feedback is part of the repository, so the complaint and its fix travel in one
+     * pull request. Feedback filed while looking at real data can quote it, or carry a
+     * screenshot of it, so it stays with the data instead.
+     */
+    dir: PROFILE === 'real' ? 'data/real/issues' : 'issues',
   },
   auth: {
     provider: 'local' as AuthKind,
@@ -96,10 +143,14 @@ export const config = {
    * Added during L1. Both are deployment facts rather than domain guesses.
    */
   db: {
-    /** PGlite data directory when DATABASE_URL is unset. */
-    localDir: process.env.PGLITE_DIR ?? './local/capital',
+    /**
+     * PGlite data directory when DATABASE_URL is unset. PGLITE_DIR is how the property
+     * harness points at a scratch copy; the real profile ignores it, so its data cannot be
+     * redirected out of data/real/.
+     */
+    localDir: PROFILE === 'real' ? './data/real/database' : (process.env.PGLITE_DIR ?? './data/demo/database'),
     /** Set DATABASE_URL and the Db seam resolves to node-postgres instead. */
-    url: process.env.DATABASE_URL ?? null,
+    url: databaseUrl(),
   },
   agentRuntime: {
     /** No key present → the Agent seam is a no-op that refuses rather than guesses. */

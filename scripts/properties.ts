@@ -8,10 +8,14 @@
  *
  *   npm run props
  */
+import { spawnSync } from 'node:child_process';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const SCRATCH = join('local', 'props');
+// Always the demo profile, whatever the shell says: the harness deletes and rebuilds its
+// database on every run, and the fixtures it checks against are the fictional ones.
+process.env.DATA_PROFILE = 'demo';
+const SCRATCH = join('data', 'demo', 'props');
 process.env.PGLITE_DIR = `./${SCRATCH}`;
 delete process.env.DATABASE_URL;
 
@@ -681,6 +685,52 @@ async function main() {
   }
 
   await rm(join(process.cwd(), SCRATCH), { recursive: true, force: true });
+
+  // ---------------------------------------------------------------- the real profile (N38)
+  //
+  // This process is pinned to the demo, so each of these asks a child process started in
+  // the real profile. None of them opens the real database.
+
+  const inReal = (code: string, env: Record<string, string> = {}) => {
+    const r = spawnSync('npx', ['tsx', '-e', code], {
+      env: { ...process.env, DATA_PROFILE: 'real', PGLITE_DIR: '', DATABASE_URL: '', ...env },
+      encoding: 'utf8',
+    });
+    return { status: r.status, out: `${r.stdout}${r.stderr}` };
+  };
+
+  const paths = inReal(
+    `import('./config/deployment.ts').then(({ config: c }) => console.log(JSON.stringify([c.data.root, c.db.localDir, c.issues.dir])))`,
+    { PGLITE_DIR: './somewhere-else' },
+  );
+  const where = (() => { try { return JSON.parse(paths.out.trim().split('\n').pop()!) as string[]; } catch { return []; } })();
+  check(
+    'The real profile keeps every path under data/real, even when PGLITE_DIR says otherwise',
+    where.length === 3 && where.every((p) => p.replace(/^\.\//, '').startsWith('data/real')),
+    where.length ? where.join(' · ') : `could not read the config: ${paths.out.slice(0, 200)}`,
+  );
+
+  const remote = inReal(`import('./config/deployment.ts').then(() => console.log('opened'))`, {
+    DATABASE_URL: 'postgres://example.invalid/raise',
+  });
+  check(
+    'The real profile refuses a remote database',
+    remote.status !== 0 && remote.out.includes('DATABASE_URL is set in the real profile'),
+    remote.status !== 0 ? 'refused at config load' : 'a DATABASE_URL was accepted',
+  );
+
+  const seeding = inReal(
+    `import('./lib/seed.ts').then(async ({ seed }) => {
+       let touched = 0;
+       const db = new Proxy({}, { get: () => { touched++; return async () => []; } });
+       try { await seed(db); console.log('seeded'); } catch (e) { console.log('refused', touched, e.message); }
+     })`,
+  );
+  check(
+    'Seeding refuses the real profile before it touches the database',
+    /refused 0 Refusing to seed/.test(seeding.out),
+    seeding.out.includes('refused') ? 'refused, with no call on the database' : `not refused: ${seeding.out.slice(0, 200)}`,
+  );
 
   // ---------------------------------------------------------------- report
 

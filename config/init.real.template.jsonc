@@ -1,0 +1,75 @@
+// PLC Raise Tools — the real profile starts from this file (docs/15).
+//
+// The real profile copies this template to data/real/init.jsonc the first time it starts.
+// Edit that copy, not this template. Git ignores everything under data/, and nothing in
+// this tool sends the file anywhere.
+//
+// After an edit, press "Load the file again" on Developer → Data, or restart `npm run dev:real`.
+// Loading adds and updates. It never deletes, because a person removed from this file may
+// still be the author of a review or the owner of an ask.
+//
+// Leave a value null when you do not know it. The Data page lists every null that is still
+// a question, so an unknown stays visibly unknown instead of becoming a default.
+{
+  // Who uses the tool. The handle is short and lowercase. It appears in URLs and on anything
+  // a person files. affinityEmail is the address they sign in to Affinity with, which is how
+  // an Affinity owner or note author is matched to a person here.
+  "team": [
+    { "handle": "juan", "name": "Juan", "initials": "J", "role": null, "email": null, "affinityEmail": null }
+  ],
+
+  // One entry per vehicle.
+  //   kind         fund | spv | grant_rail
+  //   exemption    506(c) | 506(b) | n/a. Required, and never defaulted: it decides what
+  //                may be said in public material.
+  //   target       dollars, or null
+  //   firstClose   YYYY-MM-DD, or null
+  //   affinityLists  the exact names of the Affinity lists that track this raise
+  //   importNotes  note *text* is imported only where this is true
+  "vehicles": [
+    {
+      "slug": "neurotech", "name": "PLC Neurotech I", "kind": "fund", "exemption": "506(c)",
+      "target": null, "firstClose": null,
+      "affinityLists": [],
+      "importNotes": false
+    },
+    {
+      "slug": "rails", "name": "PLC Crypto/Rails", "kind": "fund", "exemption": "506(c)",
+      "target": null, "firstClose": null,
+      "affinityLists": [],
+      "importNotes": false
+    },
+    // SPVs go here once the connection test has listed what is in Affinity. One of them may
+    // be 506(b). See answers.spv506b below.
+    {
+      "slug": "grants", "name": "Grants rail", "kind": "grant_rail", "exemption": "n/a",
+      "target": null, "firstClose": null,
+      "affinityLists": [],
+      "importNotes": false
+    }
+  ],
+
+  // Questions that are not about one person or one vehicle. Answer in words; the answers
+  // decide how Affinity's fields are read, so a wrong guess here is worse than a null.
+  "answers": {
+    // Where is "signed and countersigned" recorded today? An Affinity field, the fund
+    // administrator, DocuSign, a spreadsheet? The headline number can only come from there.
+    "hardCommitmentRecord": null,
+    // Which Affinity field holds an amount, if any? Does it mean indicated (soft) or signed (hard)?
+    "affinityAmountField": null,
+    // Which Affinity field holds the stage of a pursuit? The connection test lists the fields.
+    "affinityStageField": null,
+    // Who besides you owns LP relationships in Affinity? Add them to "team" above.
+    "relationshipOwners": null,
+    // Anyone who must not be approached, or only by one named person? Every route is checked
+    // against this (CLAUDE.md, rule 8).
+    "doNotApproach": null,
+    // Which SPV is 506(b), if any? (CLAUDE.md, open question 4.)
+    "spv506b": null,
+    // Are grants and their funders tracked in Affinity?
+    "grantsInAffinity": null,
+    // Real numbers for any guessed constant? Asks per connector per quarter (now 3), the
+    // conflict window (now 14 days), the correction budget (now 12 h/week).
+    "guessedConstants": null
+  }
+}

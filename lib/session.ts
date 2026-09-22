@@ -1,8 +1,9 @@
 import { cookies } from 'next/headers';
 import { currentUser } from '@/lib/auth';
 import { listVehicles, type Vehicle } from '@/modules/platform';
+import { config } from '@/config/deployment';
 
-export const VEHICLE_COOKIE = 'capitalos_vehicle';
+export const VEHICLE_COOKIE = `${config.data.cookiePrefix}vehicle`;
 
 export interface VehicleSelection {
   /** null means "all vehicles" — a real choice, not an absence. */

@@ -1,5 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
 import { TooManyRows, type Db, type Queryable } from './index';
+import { lock } from './lock';
 
 function wrap(run: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>): Queryable {
   const query = async <T>(sql: string, params: unknown[] = []): Promise<T[]> => {
@@ -20,6 +21,7 @@ function wrap(run: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[
 }
 
 export async function openPglite(dir: string): Promise<Db> {
+  const release = await lock(dir);
   const pg = await PGlite.create(dir);
   const base = wrap((sql, params) =>
     params && params.length ? pg.query(sql, params as never[]) : pg.exec(sql).then((r) => r[r.length - 1] ?? { rows: [] }),
@@ -42,6 +44,7 @@ export async function openPglite(dir: string): Promise<Db> {
     },
     async close() {
       await pg.close();
+      await release();
     },
   };
 }

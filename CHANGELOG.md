@@ -3411,3 +3411,90 @@ which is what the console's *"Duplicate extension names found"* warning was abou
 titles may run to 80 characters now, which fits this issue's first sentence whole.
 
 **43 of 43 properties hold.**
+
+---
+
+## N38 — Two kinds of data, and a wall between them
+
+**Shipped.** The first step toward real Affinity data, and nothing contacts Affinity yet. The
+tool now runs in one of two profiles. **Demo** is the fictional data every earlier entry was
+built on. **Real** is where the raise will live. They never share a database, a folder, a
+port, a build directory or a cookie. Everything that could move real data somewhere it
+shouldn't go now refuses to. The plan for the rest, with your decisions, is
+`docs/15-affinity-integration.md`.
+
+| | |
+|---|---|
+| ![Data](docs/changelog/shots/n38/01-data-page.png) | **Developer → Data.** Which profile this server is, where it keeps things, the two profiles side by side, and the ten guards, each with the file that enforces it. |
+| ![Demo badge](docs/changelog/shots/n38/02-demo-badge.png) | **The badge.** Every page says *Demo data* or *Real data* next to the sync line. The real one is clay, with a clay strip across the top of the window and *Real ·* in the tab title. |
+| ![Strategy, all vehicles](docs/changelog/shots/n38/03-strategy-all-vehicles.png) | **Found on the way.** With *All vehicles* selected, the rail's Strategy link was a 404 in both profiles. A strategy is a reading of one raise, so it now asks which. |
+
+There is no screenshot of the real profile, and there won't be one. The screenshot script
+asks the server which data it's showing and stops unless the answer is demo.
+
+### Two profiles
+
+`npm run dev` is the demo, as before: port 3000, reachable from the local network, and
+its database moved from `local/capital` to `data/demo/database`. `npm run dev:real` is the
+real profile: `127.0.0.1:3100`, so nothing else on the network can reach it, and all of it
+lives in `data/real/`. Git ignores everything under `data/` except a README.
+`DATA_PROFILE` decides which, read once in `config/deployment.ts`. A typo like `rael`
+throws rather than quietly showing the demo to somebody who thinks they're looking at the
+raise.
+
+The plan said to keep real data outside the repo, in `~/Library`. You preferred the repo,
+so other tools on the machine don't poke at it, which is where it is. The plan also said to
+separate the two servers' cookies with a `real.localhost` hostname. That needs either a
+hosts-file entry or a browser that special-cases `*.localhost`. Profile-specific cookie
+names do the same job in any browser.
+
+### What refuses
+
+- `seed()` refuses the real profile. The check is in the seed itself, so no future caller
+  can forget it.
+- `db:reset`, `db:seed` and `npm run demo` refuse the real profile. The real database will
+  hold reviews, adjudications and confirmed evidence, and those exist nowhere else.
+- In the real profile, `DATABASE_URL` is refused and `PGLITE_DIR` is ignored.
+- Feedback filed from the real profile goes to `data/real/issues/`, pictures included. It
+  may quote real data, so it never reaches `issues/` or a commit. The feedback box and the
+  issue pages say where they're writing.
+- A **lock file** beside each database stops a second process opening it. When that
+  happens PGlite doesn't fail; it corrupts the directory. `db:reset` while the dev server
+  was running used to be a way to do that. Now the second opener refuses by name: *"open in
+  pid 68178 — stop the dev server first."*
+
+Three new properties hold those guards in place. Each one runs in a child process started
+in the real profile: every path stays under `data/real` even when `PGLITE_DIR` points
+elsewhere, a remote database is refused, and seeding refuses before it touches the
+database. **46 of 46 properties hold.**
+
+### The init file
+
+The demo starts from fixtures. The real profile starts from `data/real/init.jsonc`, which
+the tool copies from `config/init.real.template.jsonc` the first time it starts. It holds
+who is on the team, which vehicles exist, and which Affinity lists track each one. It's
+JSON with comments, because the comments are the questions. Every null in it is an unknown
+that stays visibly unknown: the Data page lists each one as a question, instead of the tool
+filling in a default. Besides people and vehicles, it asks eight things. Among them: where
+"signed and countersigned" is recorded today, which Affinity field (if any) means an
+amount, whether anyone must not be approached, and which SPV is 506(b). A vehicle's
+exemption is required and never defaulted, because it decides what may be said in public.
+
+Loading is all or nothing, and it adds and updates but never deletes. A person removed from
+the file may still be the author of a review. The plan had this as its own version (N39).
+It moved into this one because the real profile can't open without somebody on the team.
+I've prefilled your copy with what you told me: the two Neurotech list names, notes for
+Neurotech only, and that the SPV lists have "SPV" in their names.
+
+Until a connector has delivered, every real page carries a notice that its figures come
+from an empty database. Read a zero there as *not loaded*, not as a fact about the raise.
+
+### Also
+
+- CLAUDE.md has a new section, *Real data*, and the "no connectors before L13" rule has one
+  exception: Affinity, read-only.
+- The sync line in the real profile reads *"Nothing imported yet · init file loaded 2 min
+  ago"*. Before, it would have said *"Seed data"*, which would have been false.
+
+**Next, N39:** the GET-only Affinity client, the key through 1Password, and a connection
+test that settles the plan tier with the API's own answers.

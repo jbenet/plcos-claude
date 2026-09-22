@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { syncSummary } from '@/lib/sync';
+import { config } from '@/config/deployment';
 import { PageFrame } from './PageFrame';
 
 export interface Crumb {
@@ -22,9 +23,19 @@ export async function Page({
   children: ReactNode;
 }) {
   const sync = await syncSummary();
+  const profile = config.data.profile;
+  // Until a connector has delivered, a real page computes its figures from an empty
+  // database, and an empty database says $0 with complete confidence.
+  const empty = profile === 'real' && !sync.sources.some((s) => s.source !== 'init' && s.status === 'ok');
 
   return (
     <PageFrame
+      profile={profile}
+      notice={
+        empty
+          ? 'Nothing has been imported yet. Figures on this page come from an empty database: read a zero as not loaded, not as a fact about the raise.'
+          : undefined
+      }
       crumbs={crumbs.map((c) => ({ label: c.label, href: c.href }))}
       syncTone={sync.tone}
       syncLine={sync.line}
