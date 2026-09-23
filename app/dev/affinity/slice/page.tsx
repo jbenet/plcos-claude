@@ -7,7 +7,7 @@ import { ago } from '@/lib/time';
 import { affinityReady } from '@/lib/connectors/affinity';
 import { sliceRunning, sliceTargets } from '@/lib/connectors/affinity/slice';
 import { latestRun, rawCounts } from '@/modules/sources';
-import { runSliceAction } from '../actions';
+import { countNotesAction, runSliceAction } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +28,10 @@ const n = (x: number) => x.toLocaleString('en-US');
 export default async function Slice() {
   const demo = config.data.profile === 'demo';
   const ready = affinityReady();
-  const [targets, run, counts] = await Promise.all([sliceTargets(), latestRun('affinity', 'slice'), rawCounts('affinity')]);
+  const [targets, run, counts, noteCount] = await Promise.all([
+    sliceTargets(), latestRun('affinity', 'slice'), rawCounts('affinity'), latestRun('affinity', 'count-notes'),
+  ]);
+  const nc = (noteCount?.detail ?? {}) as { total?: number | null; bulkRequests?: number | null };
   const running = sliceRunning();
   // A run the database calls running that this process is not running was cut off by a
   // restart. Saying "running" about it would be staleness rendered as progress.
@@ -183,6 +186,35 @@ export default async function Slice() {
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="chead">
+          <h2>Notes, the cheaper way?</h2>
+          <span className="lbl">{noteCount ? `counted ${ago(noteCount.startedAt)}` : 'not counted'}</span>
+        </div>
+        <div className="cbody">
+          <p style={{ margin: '0 0 10px', fontSize: 13 }}>
+            Reading notes entry by entry costs a request per entry. Affinity can also page through
+            every note in the account a hundred at a time; the text of notes on other lists would
+            pass through and be dropped, never stored. Which costs less depends on how many notes
+            the account holds — one request finds out, and returns none of them.
+          </p>
+          {noteCount?.status === 'ok' && typeof nc.total === 'number' && (
+            <>
+              <div className="fact"><span>Notes in the account</span><span>{n(nc.total)}</span></div>
+              <div className="fact"><span>Read in bulk</span><span>about {n(nc.bulkRequests ?? 0)} requests, then filtered to Neurotech</span></div>
+              {typeof d.notesFor === 'number' && (
+                <div className="fact"><span>Read entry by entry</span><span>at least {n(d.notesFor)} requests, Neurotech only</span></div>
+              )}
+            </>
+          )}
+          {noteCount?.status === 'failed' && <div className="warn" style={{ fontSize: 12.5 }}><b>{noteCount.note}</b></div>}
+          <form action={countNotesAction} style={{ marginTop: 10 }}>
+            <button className="btn" type="submit" disabled={!ready.ready}>{noteCount ? 'Count again' : 'Count the notes'}</button>
+            <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>One request. No note is read.</span>
+          </form>
         </div>
       </div>
 

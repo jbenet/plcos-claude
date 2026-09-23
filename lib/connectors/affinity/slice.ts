@@ -202,3 +202,25 @@ export function startSlice(runBy: string | null, opts: SliceOptions = {}): 'star
 }
 
 export const sliceRunning = () => Boolean(g.__affinitySlice);
+
+/**
+ * How many notes the account holds, from one request that returns none of them (N48). The
+ * per-entry way costs a request per entry; the bulk way costs one per hundred notes in the
+ * whole account, and would read every note in transit to keep only Neurotech's. Which is
+ * better depends on this number, so it is measured rather than guessed.
+ */
+export async function countNotes(runBy: string | null): Promise<SyncRun | null> {
+  const run = await startRun(SOURCE, 'count-notes', runBy);
+  try {
+    const page = await affinity().get<{ pagination?: { totalCount?: number } }>('/v2/notes', { limit: 0, totalCount: 'true' });
+    const total = page.pagination?.totalCount ?? null;
+    await finishRun(run, {
+      status: total === null ? 'failed' : 'ok', requests: 1, records: 0, newRecords: 0,
+      note: total === null ? 'Affinity did not return a count.' : `${total} notes in the account`,
+      detail: { total, bulkRequests: total === null ? null : Math.ceil(total / 100) },
+    });
+  } catch (err) {
+    await finishRun(run, { status: 'failed', requests: 1, records: 0, newRecords: 0, note: err instanceof Error ? err.message : 'unknown error' });
+  }
+  return latestRun(SOURCE, 'count-notes');
+}

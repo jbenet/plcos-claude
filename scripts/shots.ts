@@ -196,6 +196,28 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N48: [
+    {
+      name: '01-notes-counted',
+      path: '/dev/affinity/slice',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Count the notes|Count again/ }).click();
+        await page.getByText('Notes in the account').waitFor();
+        await page.getByRole('heading', { name: 'Notes, the cheaper way?' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '02-allowlist',
+      path: '/dev/affinity',
+      prepare: async (page) => {
+        await page.getByRole('heading', { name: 'What this server may ask' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N47: [
     {
       name: '01-translated',

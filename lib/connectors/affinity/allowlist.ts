@@ -32,6 +32,8 @@ export const ALLOWED: readonly Endpoint[] = [
   { template: '/v2/opportunities/{opportunityId}/notes', purpose: 'Notes on an opportunity — only for a vehicle whose init entry imports notes.' },
   { template: '/v2/companies/{companyId}/notes', purpose: 'Notes about an organization — only for a vehicle whose init entry imports notes.' },
   { template: '/v2/persons/{personId}/relationships', purpose: 'How strongly a person is connected to our team: Affinity’s interaction score. A claim, never proof.' },
+  // N48: counting the account's notes — limit=0 returns none of them — to price a bulk read.
+  { template: '/v2/notes', purpose: 'How many notes the account holds (limit=0 returns none). The bulk read, if it is ever chosen, pages through them a hundred at a time.' },
 ];
 
 /**

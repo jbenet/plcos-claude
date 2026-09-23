@@ -74,3 +74,11 @@ export async function translateAction(): Promise<void> {
   await translate(user.id);
   revalidatePath('/', 'layout');
 }
+
+/** One request: how many notes the account holds, to price reading them in bulk. */
+export async function countNotesAction(): Promise<void> {
+  const { countNotes } = await import('@/lib/connectors/affinity/slice');
+  const user = await (await auth()).currentUser();
+  await countNotes(user.id);
+  revalidatePath('/dev/affinity/slice');
+}

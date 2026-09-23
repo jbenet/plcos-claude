@@ -3982,3 +3982,28 @@ were fixed:
 The fake Affinity's people shared names with the demo's seed. Translated into the demo, they
 would have become a second person of the same name. They've been renamed, so the demo shows
 one of each.
+
+---
+
+## N48 — Pricing the notes before reading them
+
+**Shipped.** You asked whether notes could be fetched in fewer requests. This version measures
+the cheaper way without reading a single note.
+
+| | |
+|---|---|
+| ![Notes counted](docs/changelog/shots/n48/01-notes-counted.webp) | **Notes, the cheaper way?** on the First slice page. One request asks Affinity how many notes the account holds (`limit=0`, so none come back), and the card sets reading them in bulk against reading them entry by entry. |
+| ![Allowlist](docs/changelog/shots/n48/02-allowlist.webp) | **`GET /v2/notes`** joins the allowlist, saying what it's for. Only the count uses it so far. |
+
+Per entry, notes cost a request for every entry on a list that imports them. In bulk, they
+cost one request per hundred notes *in the whole account*, and every note would pass through
+in transit, to be kept only if it belongs to a Neurotech entry. **On the real account**, the
+count makes the bulk read cheaper by more than an order of magnitude. Whether it's acceptable
+for notes on other lists to pass through and be dropped is your call, and nothing reads a note
+until you make it.
+
+Relationships have no bulk endpoint; each person is one request. The cheaper version of that
+is to read them only for the pursuits that have got somewhere.
+
+A property checks that the count costs one request and lands no note. **76 of 76 properties
+hold.**

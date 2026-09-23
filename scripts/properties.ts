@@ -1052,6 +1052,19 @@ async function main() {
         );
       }
 
+      {
+        const sl2 = await import('../lib/connectors/affinity/slice');
+        const notesBefore = await adb.one<{ n: string }>(`select count(*)::text as n from sources.raw_record where kind = 'note'`);
+        const counted = await sl2.countNotes(null);
+        const notesAfter = await adb.one<{ n: string }>(`select count(*)::text as n from sources.raw_record where kind = 'note'`);
+        const d = counted?.detail as { total?: number; bulkRequests?: number };
+        check(
+          'Counting the notes costs one request and lands none of them',
+          counted?.status === 'ok' && d.total === 412 && d.bulkRequests === 5 && counted.requests === 1 && notesBefore!.n === notesAfter!.n,
+          `${d.total} notes counted, a bulk read would be ${d.bulkRequests} requests; notes landed ${notesBefore!.n} → ${notesAfter!.n}`,
+        );
+      }
+
       const s8 = scripted(() => ok());
       await aff.affinity({ transport: s8.transport, key: KEY, sleep }).get('/v2/lists/1/list-entries', { limit: 100, fieldTypes: ['list', 'global'] });
       const sentTypes = s8.calls[0]?.searchParams.getAll('fieldTypes') ?? [];
