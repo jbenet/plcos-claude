@@ -111,3 +111,13 @@ export async function closeTrackAction(formData: FormData): Promise<{ error?: st
     return { error: err instanceof Error ? err.message : 'Unknown error' };
   }
 }
+
+/** Confirm a read suggested from a note, or say it is wrong (N55). Either way, a person decided. */
+export async function decideReadingAction(formData: FormData): Promise<void> {
+  const { decideReading } = await import('@/lib/connectors/affinity/readings');
+  const user = await (await auth()).currentUser();
+  const decision = String(formData.get('decision')) === 'confirm' ? 'confirm' : 'dismiss';
+  await decideReading(user.id, String(formData.get('noteId')), decision);
+  revalidatePath(`/targets/${String(formData.get('pursuitId'))}`);
+  revalidatePath('/targets');
+}

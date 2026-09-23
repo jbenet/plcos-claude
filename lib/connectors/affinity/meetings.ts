@@ -1,9 +1,10 @@
+import { getDb } from '@/lib/db';
 import { finishRun, landRaw, latestRaw, latestRun, progressRun, startRun, type SyncRun } from '@/modules/sources';
 import { AffinityRefused, type Query } from './client';
 import { affinity } from './index';
 
 /**
- * Every meeting on the team's calendars, from Affinity's calendar sync (N54). Juan, 24 Sep: "if
+ * Every meeting on the team's calendars, from Affinity's calendar sync (N54). Juan, 23 Sep: "if
  * you can do it in bulk in less than 100 requests, sure give it a shot."
  *
  * `GET /v2/meetings` pages through every meeting a hundred at a time, each with its title, start
@@ -42,7 +43,7 @@ const KIND = 'meetings';
 const PAGE = 100;
 /** Where the first read starts: the raise's working years. A GUESS at the useful window. */
 export const WINDOW = '2024-01-01T00:00:00Z';
-/** Juan's bound, 24 Sep: under a hundred requests. */
+/** Juan's bound, 23 Sep: under a hundred requests. */
 export const MEETINGS_CAP = 99;
 const MARGIN_MS = 86_400_000;
 const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -157,3 +158,17 @@ export async function meetingsInventory(): Promise<null | {
     external, ahead, manual, truncated,
   };
 }
+
+/** The titles of these meetings, as landed — read when a page shows a touchpoint, never copied. */
+export async function meetingTitles(ids: string[]): Promise<Map<string, string>> {
+  if (!ids.length) return new Map();
+  const db = await getDb();
+  const rows = await db.query<{ source_id: string; title: string | null }>(
+    `select distinct on (source_id) source_id, payload->>'title' as title from sources.raw_record
+      where source = 'affinity' and kind = 'meeting' and source_id = any($1::text[])
+      order by source_id, fetched_at desc, id desc`,
+    [ids],
+  );
+  return new Map(rows.filter((r) => r.title).map((r) => [r.source_id, r.title!]));
+}
+

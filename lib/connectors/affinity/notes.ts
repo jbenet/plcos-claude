@@ -226,6 +226,14 @@ export const noteText = (html: string | null | undefined): string =>
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
+/** A note's first sentence, for a one-line view where nobody has summarized it. */
+export function firstSentence(text: string, max = 180): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  const m = /^(.{12,}?[.!?])(\s|$)/.exec(flat);
+  const one = m ? m[1]! : flat;
+  return one.length > max ? `${one.slice(0, max).replace(/\s+\S*$/, '')}…` : one;
+}
+
 const personName = (p: { firstName?: string | null; lastName?: string | null }) =>
   [p.firstName, p.lastName].filter(Boolean).join(' ') || 'unnamed';
 
@@ -267,6 +275,10 @@ export const noteKind = (n: AffinityNote) =>
 
 export interface NoteView {
   noteId: number;
+  /** The meeting, call or email the note is on, when Affinity ties it to one. */
+  interaction: { type: string; id: number } | null;
+  /** What the note says in a sentence, and their read, if someone read it (N55). */
+  reading: { summary: string | null; read: string | null; basis: string | null; suggested: boolean; by: string; confirmedByName: string | null; dismissed: boolean } | null;
   /** Attached to the LP themselves, or to the organization they are affiliated with. */
   via: { kind: 'self' } | { kind: 'organization'; name: string };
   kind: string;
@@ -314,8 +326,11 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
   if (!persons.length && !companies.length) return [];
   // The newest version of each note first, then the filter: an older version attached to this
   // entity must not show a note that has since been moved off it.
-  const rows = await db.query<{ fetched_at: Date | string; payload: AffinityNote }>(
-    `select fetched_at, payload from (
+  const rows = await db.query<{ fetched_at: Date | string; payload: AffinityNote; summary: string | null; read: string | null; basis: string | null; read_by: string | null; confirmed_at: Date | string | null; confirmed_by_name: string | null; dismissed_at: Date | string | null }>(
+    `select n.fetched_at, n.payload, nr.summary, nr.read::text as read, nr.basis, nr.read_by, nr.confirmed_at,
+            cu.name as confirmed_by_name, nr.dismissed_at
+       from (
+       select fetched_at, payload from (
        select distinct on (source_id) source_id, fetched_at, payload
          from sources.raw_record where source = $1 and kind = 'note'
         order by source_id, fetched_at desc, id desc
@@ -324,17 +339,27 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
                     where (n.payload->'personsPreview'->'data') @> jsonb_build_array(p))
         or exists (select 1 from jsonb_array_elements($3::jsonb) c
                     where (n.payload->'companiesPreview'->'data') @> jsonb_build_array(c))
+       ) n
+       left join meetings.note_reading nr on nr.source = 'affinity' and nr.note_id = (n.payload->>'id')
+       left join platform.app_user cu on cu.id = nr.confirmed_by
      order by (n.payload->>'createdAt') desc`,
     [SOURCE, JSON.stringify(persons), JSON.stringify(companies)],
   );
   const mine = new Set(own);
   const orgName = new Map(orgs.map((o) => [o.source_id, o.name]));
-  return rows.map(({ payload: n, fetched_at }) => {
+  return rows.map((r) => {
+    const { payload: n, fetched_at } = r;
     const html = n.content?.html ?? '';
     const keys = attachedKeys(n);
     const viaOrg = keys.some((k) => mine.has(k)) ? null : keys.find((k) => orgName.has(k));
+    const health = mentionsHealth(html);
     return {
       noteId: n.id,
+      interaction: n.type === 'ai-notetaker' && n.interaction ? { type: 'meeting', id: n.interaction.id } : n.interaction ? { type: n.interaction.type, id: n.interaction.id } : null,
+      // Health detail is never read into anything, so a reading of such a note is not shown either.
+      reading: r.read_by && !health
+        ? { summary: r.summary, read: r.read, basis: r.basis, suggested: !r.confirmed_at, by: r.read_by, confirmedByName: r.confirmed_by_name, dismissed: Boolean(r.dismissed_at) }
+        : null,
       via: viaOrg ? { kind: 'organization', name: orgName.get(viaOrg)! } : { kind: 'self' },
       kind: noteKind(n),
       kindLabel: NOTE_KIND_LABEL[noteKind(n)] ?? n.type,
@@ -343,7 +368,7 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
       author: n.creator ? personName(n.creator) : 'unknown',
       authorOnTeam: n.creator?.type === 'internal',
       text: noteText(html),
-      health: mentionsHealth(html),
+      health,
       alsoAttached: keys.filter((k) => !mine.has(k) && k !== viaOrg).length,
       replies: n.repliesCount ?? 0,
       fetchedAt: new Date(fetched_at),

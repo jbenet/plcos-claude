@@ -134,7 +134,7 @@ button.sec .caret{font-size:9px;opacity:.8}
 .dot.clay{background:var(--clay)}
 /* Which data this is (N38). The words carry it; the colour and the strip only repeat it. Since N53
    the strip marks the demo, not the real data: the people who use this every day are on real
-   data, and it is the fictional copy that should look unusual (Juan, 24 Sep). */
+   data, and it is the fictional copy that should look unusual (Juan, 23 Sep). */
 .profile{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;
   padding:3px 7px;border-radius:4px;border:1px solid var(--line);color:var(--label);text-decoration:none;margin-right:4px;white-space:nowrap}
 .profile:hover{border-color:var(--muted)}
@@ -1621,3 +1621,17 @@ table.list.pipeline tr.clickable{cursor:pointer}
 table.list.pipeline tr.clickable:focus-visible td{background:var(--accent-wash);outline:none}
 .suggested{border-bottom:1px dashed var(--muted)}
 kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--surface)}
+
+/* N55: a touchpoint's note, closed like a message in a thread */
+details.thread{margin-top:2px}
+details.thread>summary{cursor:pointer;list-style:none;font-size:12.5px;line-height:1.5}
+details.thread>summary::-webkit-details-marker{display:none}
+details.thread>summary .byline{font-family:var(--mono);font-size:10px;color:var(--muted)}
+details.thread>summary .open{margin-left:8px;font-size:11.5px;color:var(--clay);white-space:nowrap}
+details.thread>summary .open::before{content:'▸ '}
+details.thread[open]>summary .open::before{content:'▾ '}
+details.thread .full{margin:6px 0 2px;padding:9px 11px;background:var(--ground);border:1px solid var(--line);border-radius:7px;white-space:pre-line;font-size:12.5px;line-height:1.55}
+details.thread .warnline{font-size:12px;color:var(--amber)}
+.readacts{display:inline-flex;gap:6px;margin-left:8px;vertical-align:middle}
+.readacts form{display:inline}
+.readacts .btn{padding:2px 8px;font-size:11px}

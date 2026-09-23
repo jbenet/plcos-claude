@@ -131,7 +131,7 @@ export function proposeValue(value: string): ValueMap | null {
   if (/introducer|non.?lp|not an lp/.test(v)) return { skip: true };
   if (/on hold|paused/.test(v)) {
     const inner = proposeValue(v.replace(/on hold|paused/, '').replace(/^[\s\-–—:]+/, '').replace(/[\s\-–—:]+$/, ''));
-    // On its own, "On Hold" was the team's do-not-contact (Juan, 24 Sep): we stopped.
+    // On its own, "On Hold" was the team's do-not-contact (Juan, 23 Sep): we stopped.
     if (!inner || inner.skip) return { status: 'passed', passedBy: 'us', reason: 'do_not_contact' };
     return { ...inner, next: 'On hold' };
   }

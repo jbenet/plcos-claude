@@ -38,7 +38,7 @@ any more than before, and a status never moves it (rule 2).
 
 - **No "paused".** "Come back after the new year" is Discussing with a dated **next step**. A
   status that means "not now" hides the date that makes it true or false.
-- **Silence is not a pass** (N53, Juan, 24 Sep). An LP who never replied is still Selected; the
+- **Silence is not a pass** (N53, Juan, 23 Sep). An LP who never replied is still Selected; the
   log says "waiting on them" and since when, and the pipeline filters on it. Passed is for a
   decision, theirs or ours. The team's "On Hold" was its do-not-contact, so it reads as Passed:
   we stopped, do not contact — as does every entry marked do-not-contact.
@@ -97,6 +97,21 @@ the tool shows the facts beside it (reply time, meetings, documents asked for), 
 may *suggest* a read from notes, labelled as a suggestion until a person confirms it.
 A numeric interest score would be a confidence rendered as fact, which this tool doesn't do.
 
+**Suggestions from the notes (N55).** Each note can have a reading: a one-sentence summary,
+the read if the note gives one, and the few words the read rests on. Readings are written to
+`data/<profile>/readings.jsonc` by whoever read the notes (the first set by Claude, in a working
+session) and the next translation loads them into `meetings.note_reading`. On the pages:
+
+- A suggestion shows only when it is newer than every read a person recorded; it is marked
+  "suggested", dated by its note, and counts for nothing a person hasn't confirmed.
+- **Confirm** makes it the person's read, attributed to them and to the note. **Not right**
+  dismisses it, and the next newest suggestion, if any, shows instead. A later file never
+  re-suggests a read a person has decided; it can still replace a summary.
+- A note that mentions a person's or a family's health is never read: the importer refuses its
+  line whatever the file says (Report 4 §6.2).
+- A touchpoint that Affinity ties to a note shows the summary, with the note itself one click
+  away; a note with no reading shows its first sentence instead.
+
 ---
 
 ## What Affinity's words become
@@ -110,7 +125,7 @@ unless it passed.
 
 A status set here is never overwritten by the next translation. When Affinity's word changes
 after that, the LP page says so: "Affinity now says *Soft circle*; set to Discussing here on
-24 Sep".
+23 Sep".
 
 ## What was deliberately not built
 

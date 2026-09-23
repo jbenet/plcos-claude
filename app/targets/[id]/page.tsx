@@ -25,7 +25,11 @@ import { planRoutes, VERDICT_LABEL } from '@/modules/network';
 import { signalsFor } from '@/modules/signals';
 import { SignalRow } from '@/components/signals/SignalRow';
 import { AffinityNotes } from '@/components/affinity/AffinityNotes';
-import { notesAbout } from '@/lib/connectors/affinity/notes';
+import { firstSentence, notesAbout } from '@/lib/connectors/affinity/notes';
+import { meetingTitles } from '@/lib/connectors/affinity/meetings';
+import { readingsFor } from '@/lib/connectors/affinity/readings';
+import { shownRead } from '@/lib/reads';
+import type { TouchContext } from '@/components/strategy/Touchpoints';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +43,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
   if (!pursuit) notFound();
 
   const user = await (await auth()).currentUser();
-  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches, tracks, calendar] = await Promise.all([
+  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches, tracks, calendar, readings] = await Promise.all([
     claimsFor(pursuit.entityId),
     listSourceDocs(),
     notesFor(pursuit.entityId),
@@ -50,8 +54,31 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     touchpointsFor(pursuit.entityId, pursuit.vehicleId),
     closeTracksFor(pursuit.entityId, pursuit.vehicleId),
     latestRun('affinity', 'meetings'),
+    readingsFor([pursuit.entityId]),
   ]);
   const touchSummary = summarize(touches);
+  const theirRead = shownRead(touchSummary.read, readings);
+  // What each touchpoint was about: the meeting's title from the calendar, and the note Affinity
+  // ties to the same interaction — its summary, and all of it a click away.
+  const interactionOf = (ref: string | null) => {
+    const m = /^interaction:([a-z-]+):(\d+):/.exec(ref ?? '');
+    return m ? { type: m[1]!, id: m[2]! } : null;
+  };
+  const titles = await meetingTitles(touches.map((t) => interactionOf(t.sourceRef)).filter((x) => x?.type === 'meeting').map((x) => x!.id));
+  const noteOn = new Map(affinityNotes.filter((x) => x.interaction).map((x) => [`${x.interaction!.type}:${x.interaction!.id}`, x]));
+  const context: Record<string, TouchContext> = {};
+  for (const t of touches) {
+    const i = interactionOf(t.sourceRef);
+    if (!i) continue;
+    const note = noteOn.get(`${i.type}:${i.id}`);
+    context[t.touchpointId] = {
+      title: i.type === 'meeting' ? titles.get(i.id) ?? null : null,
+      text: note?.text ?? null,
+      health: note?.health ?? false,
+      summary: note ? note.reading?.summary ?? firstSentence(note.text) : null,
+      summaryBy: note?.reading?.summary ? note.reading.by : null,
+    };
+  }
 
   const docMap = new Map<string, EvidenceDoc>(
     docs.map((d) => [
@@ -180,7 +207,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
               {p.implied.includes('met_twice') && touchSummary.meetingDates.length < 2 ? ' · Affinity says two or more' : ''}
               {p.implied.includes('met') && !p.implied.includes('met_twice') && touchSummary.meetingDates.length < 1 ? ' · Affinity says one was held' : ''}
               {touchSummary.lastTouch ? ` · last touch ${shortDate(touchSummary.lastTouch)}` : ''}
-              {touchSummary.read ? ` · their read: ${READ_LABEL[touchSummary.read.read].toLowerCase()}${touchSummary.read.on ? ` (${shortDate(touchSummary.read.on)})` : ''}` : ''}
+              {theirRead ? ` · their read: ${READ_LABEL[theirRead.read].toLowerCase()}${theirRead.on ? ` (${shortDate(theirRead.on)})` : ''}${theirRead.suggested ? ', suggested from a note' : ''}` : ''}
             </div>
             {p.stageSaid && p.source !== 'us' && (
               <div className={`said${differs ? ' differs' : ''}`}>
@@ -222,6 +249,8 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
             vehicleId={pursuit.vehicleId}
             vehicleName={pursuit.vehicleName}
             calendarPartial={Boolean((calendar?.detail as { stoppedAtCap?: boolean } | undefined)?.stoppedAtCap)}
+            context={context}
+            read={theirRead}
           />
 
           <div className="card">

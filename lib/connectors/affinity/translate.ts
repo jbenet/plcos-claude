@@ -8,6 +8,7 @@ import { normName } from './match';
 import { sliceTargets } from './slice';
 import type { AffinityNote } from './notes';
 import type { AffinityMeeting } from './meetings';
+import { importReadings } from './readings';
 import type { PursuitStatus } from '@/modules/strategy';
 
 /**
@@ -80,6 +81,8 @@ export interface TranslationCounts {
   unreviewedLists: string[];
   /** Touchpoints added this run (N51); one already there is not counted again. */
   touchpoints: number;
+  /** Readings of notes loaded from data/<profile>/readings.jsonc (N55). */
+  readings: number;
 }
 
 async function entityFor(tx: Queryable, kind: 'person' | 'org', sourceId: string, name: string, counts: TranslationCounts): Promise<string> {
@@ -107,7 +110,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
   const run = await startRun(SOURCE, 'translate', runBy);
   const counts: TranslationCounts = {
     people: 0, organizations: 0, affiliations: 0, pursuits: 0, byVehicle: {}, byStatus: {}, keptOurs: 0, unplaced: 0, skipped: 0,
-    exposures: 0, readyToHarden: 0, claims: 0, restrictions: 0, ownersNotOnTeam: 0, unreviewedLists: [], touchpoints: 0,
+    exposures: 0, readyToHarden: 0, claims: 0, restrictions: 0, ownersNotOnTeam: 0, unreviewedLists: [], touchpoints: 0, readings: 0,
   };
   try {
     const [inv, init, found, targets, rawEntries, rawNotes, rawMeetings] = await Promise.all([
@@ -194,7 +197,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
           const amount = committed ?? low ?? high;
           let status: PursuitStatus | null = map?.status ?? null;
           if (amount && status !== 'passed') status = 'committed';
-          // Marked do-not-contact: we stopped, whatever the word says (N53, Juan, 24 Sep).
+          // Marked do-not-contact: we stopped, whatever the word says (N53, Juan, 23 Sep).
           const dnc = /^(yes|true|y)$/i.test(text(field(m.doNotContact)) ?? '');
           if (dnc) status = 'passed';
           if (!status) counts.unplaced++;
@@ -326,6 +329,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
         tx, rawEntries.map((r) => r.payload), rawNotes.map((r) => r.payload), rawMeetings.map((r) => r.payload),
         init.team, users, users.get(PLACEHOLDER)!,
       );
+      counts.readings = (await importReadings(tx, rawNotes.map((r) => r.payload))).loaded;
 
       await tx.query(
         `update platform.source_sync set status = 'ok', last_sync_at = now(), detail = $1 where source = 'affinity'`,
@@ -335,7 +339,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
 
     await finishRun(run, {
       status: 'ok', requests: 0, records: counts.pursuits, newRecords: counts.people + counts.organizations,
-      note: `${counts.pursuits} pursuits · ${counts.exposures} soft commitments · ${counts.claims} claims · ${counts.restrictions} do-not-approach · ${counts.touchpoints} new touchpoints${counts.unplaced ? ` · ${counts.unplaced} with no status` : ''}`,
+      note: `${counts.pursuits} pursuits · ${counts.exposures} soft commitments · ${counts.claims} claims · ${counts.restrictions} do-not-approach · ${counts.touchpoints} new touchpoints${counts.readings ? ` · ${counts.readings} note readings` : ''}${counts.unplaced ? ` · ${counts.unplaced} with no status` : ''}`,
       detail: { ...counts, profile: config.data.profile },
     });
   } catch (err) {

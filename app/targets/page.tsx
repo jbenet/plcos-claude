@@ -9,6 +9,8 @@ import {
 import { READ_LABEL, touchpointSummaries, type TouchpointSummary } from '@/modules/meetings';
 import { CLOSE_STATE_LABEL, closeStates } from '@/modules/pipeline';
 import { blanketRestricted } from '@/modules/coordination';
+import { readingsFor, type NoteReading } from '@/lib/connectors/affinity/readings';
+import { shownRead } from '@/lib/reads';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,9 +35,12 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
   const onHistory = all.length - pursuits.length;
 
   const pairs = pursuits.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
-  const [sums, closes, restricted] = await Promise.all([
-    touchpointSummaries(pairs), closeStates(pairs), blanketRestricted([...new Set(pursuits.map((p) => p.entityId))]),
+  const entityIds = [...new Set(pursuits.map((p) => p.entityId))];
+  const [sums, closes, restricted, readings] = await Promise.all([
+    touchpointSummaries(pairs), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
   ]);
+  const readsOf = new Map<string, NoteReading[]>();
+  for (const r of readings) readsOf.set(r.entityId, [...(readsOf.get(r.entityId) ?? []), r]);
   const sum = (p: Pursuit) => sums.get(`${p.entityId}:${p.vehicleId}`)!;
 
   // Furthest along first: by evidence, then meetings held, then what the source's word says
@@ -51,6 +56,7 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
 
   const rows: PipelineRow[] = pursuits.map((p) => {
     const s = sum(p);
+    const read = shownRead(s.read, readsOf.get(p.entityId) ?? []);
     const c = closes.get(`${p.entityId}:${p.vehicleId}`);
     return {
       id: p.pursuitId,
@@ -81,9 +87,9 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
       lastMeeting: iso(s.meetingDates[s.meetingDates.length - 1]),
       lastTouch: iso(s.lastTouch),
       waitingSince: iso(s.awaitingSince),
-      read: s.read ? READ_LABEL[s.read.read] : null,
-      readOn: iso(s.read?.on),
-      readSuggested: false,
+      read: read ? READ_LABEL[read.read] : null,
+      readOn: iso(read?.on),
+      readSuggested: Boolean(read?.suggested),
       rung: rungIndex(p.rung),
       rungs: RUNGS.map((r) => {
         const ev = p.events.find((e) => e.rung === r);

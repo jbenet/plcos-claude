@@ -142,7 +142,7 @@ export interface TouchpointSummary {
   /**
    * Their firm's touchpoints, counted apart (N55): a meeting with a colleague at the same firm is
    * not a meeting with this LP, and counting it as one invented next meetings and second
-   * meetings that were someone else's (Juan, 24 Sep).
+   * meetings that were someone else's (Juan, 23 Sep).
    */
   withFirm: { total: number; lastTouch: Date | null; nextMeeting: Date | null };
 }

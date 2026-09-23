@@ -4182,3 +4182,38 @@ it's finished.
 
 To finish the window, either raise the cap for one read or read only the last year; both are
 your call. 91 of 91 properties hold.
+
+## N55 — The notes, read: a sentence each, and a suggested read
+
+**Shipped.** You asked for more on each touchpoint from its note — a one-sentence summary, with
+the whole text there if needed — and whether the notes could start filling in their reads:
+"give it a shot to see what it looks like."
+
+| | |
+|---|---|
+| ![A thread opened](docs/changelog/shots/n55/01-a-thread-opened.webp) | **A touchpoint with its note.** The meeting's title from the calendar, a one-sentence summary, and the note itself one click away, opening in place like a message in a thread. The summary is marked as Claude's; the note is Affinity's text, unchanged. A note with no summary shows its first sentence. |
+| ![The notes, read](docs/changelog/shots/n55/02-notes-read.webp) | **The notes panel, read.** Each note leads with its summary; the full text is behind "the note". The status line says where the read came from: "suggested from a note". |
+| ![Suggested reads](docs/changelog/shots/n55/03-suggested-reads.webp) | **Their read, suggested.** Dated by its note and marked *suggested*. It counts for nothing until a person confirms it, and a read someone took in the room outranks any suggestion older than it. |
+| ![Confirmed](docs/changelog/shots/n55/04-confirmed.webp) | **Confirm or Not right.** Confirmed, it's the person's read, attributed to them and to the note. Not right dismisses it, and a dismissed suggestion stays dismissed when the notes are read again. |
+
+**How the readings are made.** A reading is a summary, a read only where the note gives one
+("asked for the data room", "not looking for new allocations"), and those words kept as its
+basis. Nothing is scored. The readings sit in one file in `data/<profile>/`, written in a
+working session, and the next translation loads them (docs/17 §4). To scratch and re-map, write
+a new file: it replaces the summary and suggested read of every note it covers, and never
+overrides a read a person has decided.
+
+**Health.** A note that mentions someone's health is never read, whatever the file says. Before
+reading, I widened the filter to catch tumour names, leave for a birth, and bereavement phrasing,
+after one note got past the first version.
+
+**On the real account**, I read every note attached to a pipeline LP or their firm: 406 now
+have a summary. 38 give a read — 8 very interested, 17 interested, 13 not very interested. Most
+of the rest are portfolio updates and DocSend views, which say nothing about an LP's interest.
+120 emails are only a subject line, so they're shown as they are, and 2 notes were withheld for
+health. 21 LPs now show a suggested read: 10 at Discussing, 6 Committed, 4 Passed, 1 Sourcing. A
+suggestion can be stale: a note from before a commitment can still say "not very interested",
+and that's what Not right is for.
+
+Also fixed: comments from N53 and N54 dated your review 24 Sep; it was 23 Sep. 92 of 92
+properties hold.

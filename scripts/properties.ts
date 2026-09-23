@@ -1233,6 +1233,32 @@ async function main() {
           `research with no corpus: ${noCorpus ? 'refused' : 'ALLOWED'}; a read before it happened: ${readAhead ? 'refused' : 'ALLOWED'}; meetings ${logged.meetingDates.length}; read ${logged.read?.read}; waiting since ${logged.awaitingSince?.toISOString().slice(0, 10)}; ladder ${ladderT0} → ${ladderT1}`,
         );
 
+        // Readings of the notes (N55): suggestions, never over a person's read, never of health.
+        {
+          const rd = await import('../lib/connectors/affinity/readings');
+          const { shownRead } = await import('../lib/reads');
+          const entityOf = async (key: string) => (await adb.one<{ entity_id: string }>(`select entity_id from identity.source_record where source = 'affinity' and source_id = $1`, [key]))!.entity_id;
+          const loaded = await n(`select count(*)::text as n from meetings.note_reading`);
+          const health = await n(`select count(*)::text as n from meetings.note_reading where note_id = '30002'`);
+          const nadiaE = await entityOf('person:7001');
+          const anaE = await entityOf('person:7004');
+          const nadiaShown = shownRead(mt.summarize(await mt.touchpointsFor(nadiaE, null)).read, await rd.readingsFor([nadiaE]));
+          const anaFirst = shownRead(null, await rd.readingsFor([anaE]));
+          await rd.decideReading(juanId, '30003', 'dismiss');
+          await tr.translate(null, { mappingPath: file });
+          const anaAfter = shownRead(null, await rd.readingsFor([anaE]));
+          const stillDismissed = await n(`select count(*)::text as n from meetings.note_reading where note_id = '30003' and dismissed_at is not null`);
+          await rd.decideReading(juanId, '30008', 'confirm');
+          const anaConfirmed = shownRead(null, await rd.readingsFor([anaE]));
+          check(
+            'A read suggested from a note never outranks a newer one a person took, never reads health, and a dismissal lasts',
+            loaded === 13 && health === 0 && nadiaShown?.suggested === false && nadiaShown.read === 'very_interested' &&
+              anaFirst?.suggested === true && anaFirst.noteId === '30003' && anaAfter?.noteId === '30008' && stillDismissed === 1 &&
+              anaConfirmed?.suggested === false && anaConfirmed.byName === 'Juan',
+            `loaded ${loaded} (health line refused: ${health === 0}); Nadia shows ${nadiaShown?.read} by ${nadiaShown?.byName}; Ana suggested ${anaFirst?.noteId} → after dismissing, ${anaAfter?.noteId}, still dismissed after translating again: ${stillDismissed === 1}; confirmed → ${anaConfirmed?.read} by ${anaConfirmed?.byName}`,
+          );
+        }
+
         // A person sets a status; the next translation keeps it, and keeps Affinity's word beside it.
         const st = await import('../modules/strategy');
         const juan = (await adb.one<{ id: string }>(`select id from platform.app_user where handle = 'juan'`))!.id;

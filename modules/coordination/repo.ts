@@ -118,7 +118,7 @@ const toRestriction = (r: RestrictionRow): Restriction => ({
  * Every restriction on file — except, unless asked for, the do-not-contact marks read from a
  * CRM list (N53). Those are shown where the person comes up: their page, their row in the
  * pipeline, a route or an ask toward them. An overview that lists every one of them turns a
- * quiet instruction into a banner (Juan, 24 Sep). Enforcement does not read this: the route
+ * quiet instruction into a banner (Juan, 23 Sep). Enforcement does not read this: the route
  * planner and the ask guard check `restrictionsFor`, which returns every restriction.
  */
 export async function listRestrictions(opts: { includeListMarks?: boolean } = {}): Promise<Restriction[]> {

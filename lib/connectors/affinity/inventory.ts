@@ -120,7 +120,9 @@ const top = (m: Map<string, number>, k = 40) =>
 // Deliberately absent: "treatment", "condition" and "recovery", which in a fundraising note
 // mostly mean tax treatment, closing conditions and fee recovery. "Recovering from surgery"
 // is still caught, by "surgery".
-const HEALTH = /\b(surger(y|ies)|hospital\w*|illness|sick|diagnos\w*|cancer|chemo\w*|tumou?r|therapy|therapist|pregnan\w*|miscarriage|passed away|died|death|funeral|bereave\w*|recovering|medical|disease|depress\w*|anxiety|mental health|rehab\w*|stroke|heart attack|injur\w*|accident|dementia|alzheimer\w*|hospice|icu)\b/i;
+// N55 added tumour names, leave for a birth and bereavement phrasing, after the first version
+// missed a note.
+const HEALTH = /\b(surger(y|ies)|hospital\w*|illness|sick|diagnos\w*|cancer|chemo\w*|tumou?r|therapy|therapist|pregnan\w*|miscarriage|passed away|died|death|funeral|bereave\w*|recovering|medical|disease|depress\w*|anxiety|mental health|rehab\w*|stroke|heart attack|injur\w*|accident|dementia|alzheimer\w*|hospice|icu|oncolog\w*|carcinoma|sarcoma|lymphoma|leuka?emia|melanoma|glioma|glioblastoma|metasta\w*|(maternity|paternity|parental) leave|unwell|terminal(ly)? ill|health (issues?|scare|problems?|reasons|condition)|family emergency|lost (his|her|their|my|our) (mom|mum|mother|dad|father|wife|husband|partner|son|daughter|brother|sister|child|baby|parents?|grand\w+)|passing of (his|her|their|my|our))\b/i;
 
 /**
  * Whether a dropdown's values are names rather than a vocabulary. A vocabulary is small and

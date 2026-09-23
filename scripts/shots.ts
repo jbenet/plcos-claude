@@ -196,6 +196,47 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N55: [
+    {
+      name: '01-a-thread-opened',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.locator('details.thread summary').first().click();
+        await page.getByRole('heading', { name: 'Touchpoints' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '02-notes-read',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.waitForTimeout(200);
+      },
+    },
+    { name: '03-suggested-reads', path: '/targets?status=committed' },
+    {
+      name: '04-confirmed',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        const confirm = page.getByRole('button', { name: 'Confirm' });
+        if (await confirm.count()) {
+          await confirm.first().click();
+          await page.waitForFunction(() => ![...document.querySelectorAll('button')].some((b) => b.textContent === 'Confirm'), undefined, { timeout: 20_000 });
+          await page.waitForLoadState('networkidle');
+        }
+        await page.getByRole('heading', { name: 'Touchpoints' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N54: [
     {
       name: '01-the-calendar',

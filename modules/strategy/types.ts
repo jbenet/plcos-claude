@@ -54,7 +54,7 @@ export const STATUSES: StatusInfo[] = [
 export const STATUS_LABEL = Object.fromEntries(STATUSES.map((s) => [s.id, s.label])) as Record<PursuitStatus, string>;
 
 /**
- * Who ended it: they declined, or we stopped. Silence is not an ending (N53, Juan, 24 Sep): an
+ * Who ended it: they declined, or we stopped. Silence is not an ending (N53, Juan, 23 Sep): an
  * LP who never replied is still Selected, and the log says how long we have been waiting.
  * 'quiet' is still read, for a pursuit that was set that way before; it is no longer offered.
  */

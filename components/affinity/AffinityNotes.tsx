@@ -29,6 +29,22 @@ function One({ note }: { note: NoteView }) {
       </div>
     );
   }
+  // Read by someone (N55): the sentence first, and all of it a click away, like a thread.
+  if (note.reading?.summary) {
+    return (
+      <div className="anote">
+        {head}
+        <details className="thread">
+          <summary>
+            <span className="t">{note.reading.summary}</span>
+            {note.reading.by === 'claude' && <span className="byline"> · summary by Claude</span>}
+            <span className="open">the note</span>
+          </summary>
+          <div className="t full">{note.text}</div>
+        </details>
+      </div>
+    );
+  }
   const long = note.text.length > CLIP;
   return (
     <div className="anote">

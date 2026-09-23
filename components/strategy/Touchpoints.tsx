@@ -2,7 +2,18 @@ import { shortDate } from '@/lib/time';
 import {
   CHANNEL_LABEL, DIRECTION_LABEL, READ_LABEL, type Touchpoint, type TouchpointSummary,
 } from '@/modules/meetings';
+import type { ShownRead } from '@/lib/reads';
+import { decideReadingAction } from '@/app/targets/actions';
 import { TouchpointForm } from './TouchpointForm';
+
+/** What a touchpoint was about, read when the page is shown: the meeting's title, its note. */
+export interface TouchContext {
+  title?: string | null;
+  summary?: string | null;
+  summaryBy?: string | null;
+  text?: string | null;
+  health?: boolean;
+}
 
 const SHOWN = 10;
 const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth'];
@@ -21,8 +32,9 @@ function source(t: Touchpoint): string {
   return t.source;
 }
 
-function Row({ t }: { t: Touchpoint }) {
+function Row({ t, c }: { t: Touchpoint; c?: TouchContext }) {
   const on = t.on ?? t.scheduledFor;
+  const who = t.attendees.length ? `With ${t.attendees.join(', ')}` : t.ownerName === 'Not on the team' ? 'Who from our side: not recorded' : t.ownerName;
   return (
     <div className="anote">
       <div className="p2">
@@ -30,15 +42,59 @@ function Row({ t }: { t: Touchpoint }) {
         {t.direction ? ` · ${DIRECTION_LABEL[t.direction]}` : ''} · {t.vehicleName ?? 'no vehicle in particular'}
         {t.viaOrganization ? ` · with ${t.viaOrganization}` : ''} · {source(t)}
       </div>
-      <div className="t">
-        {t.summary ?? (
-          <span className="muted">
-            {t.attendees.length ? `With ${t.attendees.join(', ')}` : t.ownerName === 'Not on the team' ? 'Who from our side: not recorded' : t.ownerName}
-          </span>
-        )}
-        {t.read && <span className="flag f-mute" style={{ marginLeft: 8 }}>{READ_LABEL[t.read]}{t.readByName ? ` — ${t.readByName}` : ''}</span>}
-      </div>
+      {c?.title && <div className="t"><b>{c.title}</b></div>}
+      {c?.text ? (
+        // The note behind it, closed like a message in a thread: a sentence, then all of it.
+        c.health ? (
+          <details className="thread">
+            <summary><span className="warnline">Its note mentions someone&rsquo;s health — open to read</span></summary>
+            <div className="t full">{c.text}</div>
+          </details>
+        ) : (
+          <details className="thread">
+            <summary>
+              <span className="t">{c.summary}</span>
+              {c.summaryBy === 'claude' && <span className="byline"> · summary by Claude</span>}
+              <span className="open">the note</span>
+            </summary>
+            <div className="t full">{c.text}</div>
+          </details>
+        )
+      ) : (
+        <div className="t"><span className="muted">{t.summary ?? who}</span></div>
+      )}
+      {c?.text && <div className="p2" style={{ marginTop: 3 }}>{who}</div>}
+      {t.read && <span className="flag f-mute" style={{ marginTop: 4, display: 'inline-block' }}>{READ_LABEL[t.read]}{t.readByName ? ` — ${t.readByName}` : ''}</span>}
     </div>
+  );
+}
+
+/** Their read, a person's or a suggestion from a note — and, for a suggestion, the two answers. */
+function TheirRead({ r, pursuitId }: { r: ShownRead | null; pursuitId: string }) {
+  if (!r) return <>nobody has recorded one</>;
+  if (!r.suggested && r.noteId) {
+    return <>{READ_LABEL[r.read]} — confirmed by {r.byName ?? 'someone'} from a note of {r.on ? shortDate(r.on) : 'an unknown date'}{r.basis ? `: “${r.basis}”` : ''}</>;
+  }
+  if (!r.suggested) return <>{READ_LABEL[r.read]} — {r.byName ?? 'unattributed'}{r.on ? `, ${shortDate(r.on)}` : ''}</>;
+  return (
+    <span>
+      <span className="suggested">{READ_LABEL[r.read]}</span>
+      <span className="muted"> — suggested by {r.byName} from a note of {r.on ? shortDate(r.on) : 'an unknown date'}{r.basis ? `: “${r.basis}”` : ''}. Not confirmed.</span>
+      <span className="readacts">
+        <form action={decideReadingAction}>
+          <input type="hidden" name="noteId" value={r.noteId ?? ''} />
+          <input type="hidden" name="pursuitId" value={pursuitId} />
+          <input type="hidden" name="decision" value="confirm" />
+          <button className="btn" type="submit">Confirm</button>
+        </form>
+        <form action={decideReadingAction}>
+          <input type="hidden" name="noteId" value={r.noteId ?? ''} />
+          <input type="hidden" name="pursuitId" value={pursuitId} />
+          <input type="hidden" name="decision" value="dismiss" />
+          <button className="btn" type="submit">Not right</button>
+        </form>
+      </span>
+    </span>
   );
 }
 
@@ -51,6 +107,8 @@ export function Touchpoints(props: {
   pursuitId: string; entityId: string; vehicleId: string; vehicleName: string;
   /** The last calendar read stopped at its cap: some meetings are not here yet (rule 7). */
   calendarPartial?: boolean;
+  context?: Record<string, TouchContext>;
+  read?: ShownRead | null;
 }) {
   const { touches, summary: s } = props;
   return (
@@ -69,7 +127,7 @@ export function Touchpoints(props: {
         {s.nextMeeting && <div className="fact"><span>Next meeting</span><span>{shortDate(s.nextMeeting)}</span></div>}
         <div className="fact">
           <span>Their read</span>
-          <span>{s.read ? `${READ_LABEL[s.read.read]} — ${s.read.byName ?? 'unattributed'}${s.read.on ? `, ${shortDate(s.read.on)}` : ''}` : 'nobody has recorded one'}</span>
+          <span><TheirRead r={props.read ?? (s.read ? { ...s.read, suggested: false, basis: null, noteId: null } : null)} pursuitId={props.pursuitId} /></span>
         </div>
         {s.lastResearched && <div className="fact"><span>Last researched</span><span>{shortDate(s.lastResearched)}</span></div>}
         {s.withFirm.total > 0 && (
@@ -82,11 +140,11 @@ export function Touchpoints(props: {
           </div>
         )}
         <div style={{ marginTop: 10 }}>
-          {touches.slice(0, SHOWN).map((t) => <Row key={t.touchpointId} t={t} />)}
+          {touches.slice(0, SHOWN).map((t) => <Row key={t.touchpointId} t={t} c={props.context?.[t.touchpointId]} />)}
           {touches.length > SHOWN && (
             <details className="more">
               <summary>{touches.length - SHOWN} older</summary>
-              {touches.slice(SHOWN).map((t) => <Row key={t.touchpointId} t={t} />)}
+              {touches.slice(SHOWN).map((t) => <Row key={t.touchpointId} t={t} c={props.context?.[t.touchpointId]} />)}
             </details>
           )}
         </div>
