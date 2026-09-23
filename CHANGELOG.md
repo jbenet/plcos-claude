@@ -4108,3 +4108,31 @@ the useful version, and a stale one looks stale.
 
 A logged touchpoint is a record, not a claim. The ladder moves when someone asks for "meeting
 held" with it as evidence, through the STAGE ticket as before. 87 of 87 properties hold.
+
+## N52 — The close track: signed, hard, closed, and wires as amounts
+
+**Shipped.** The money part of your sketch: soft → hard → closed, with when they signed
+(including re-signing) and the wires, dated, to reconcile against.
+
+| | |
+|---|---|
+| ![Committed](docs/changelog/shots/n52/01-committed.webp) | **Committed, with where the money is**: soft or signed (and whose claim the signature is), hard, closed, and how much has wired. The status says they said yes; this says how far it has got. |
+| ![Signed per Affinity](docs/changelog/shots/n52/02-signed-per-affinity.webp) | **"Signed", per Affinity**: an undated signature, marked as Affinity's claim. The money stays soft. The team's note beside it says the documents came back countersigned, which is exactly the kind of thing the countersignature step exists to record properly rather than infer. |
+| ![Signed again](docs/changelog/shots/n52/03-signed-again.webp) | **Signed, then signed again**: the second signature needs its reason ("their holding entity changed its name"), and the latest one counts. |
+
+**The one change to your sketch.** You had hard commit "after signed". Here it's after
+*countersigned*: their signature and our acceptance are two events, and CLAUDE.md rule 1
+already puts the headline on countersignature, because a GP can cut back or decline until it
+accepts. So the steps are soft → signed → hard → closed, with wires beside them rather than as
+a step. A fund is called in parts, so wires are dated amounts, several to a commitment, never
+more in total than it. Partial calls now count in part in the cash figure; before, a
+commitment was all cash or none.
+
+Most of this already existed — the soft and hard tracks, the close room's pack, the SPV room —
+and the close track reads it. What's new is the event record for signatures, closings and
+wires, and the forms on the LP page. Countersignature is still only the MONEY ticket on Soft →
+Hard; it now writes its event in the same transaction. Also fixed: that ticket's label printed
+dollars as millions ("Record $4000000.0M hard"); it's the text an approver reads, so it matters.
+
+**On the real account**, the Committed LPs read as soft, or as signed per Affinity; nothing is
+hard until countersigned here. 90 of 90 properties hold.

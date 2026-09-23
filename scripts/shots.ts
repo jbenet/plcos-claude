@@ -196,6 +196,45 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N52: [
+    { name: '01-committed', path: '/targets?status=committed' },
+    {
+      name: '02-signed-per-affinity',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Yuki Tanaka/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.getByText('Record what happened').click();
+        await page.getByRole('heading', { name: 'Close track' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -90));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '03-signed-again',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        // Recorded here, once: a signature, then a second one with its reason.
+        if (!(await page.getByText('Subscription agreement, v2').count())) {
+          for (const [on, doc, reason] of [['2026-09-19', 'Subscription agreement, v1', ''], ['2026-09-22', 'Subscription agreement, v2', 'Their holding entity changed its name']] as const) {
+            const card = page.locator('.card', { hasText: 'Close track' }).first();
+            await card.getByText('Record what happened').click();
+            await card.locator('input[name=on]').fill(on);
+            await card.locator('input[name=document]').fill(doc);
+            if (reason) await card.locator('input[name=reason]').fill(reason);
+            await card.getByRole('button', { name: 'Record it' }).click();
+            await card.getByText('Recorded').waitFor({ timeout: 10_000 });
+            await page.reload({ waitUntil: 'networkidle' });
+          }
+        }
+        await page.getByRole('heading', { name: 'Close track' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -90));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N51: [
     { name: '01-pipeline-with-the-log', path: '/targets?status=selected' },
     {

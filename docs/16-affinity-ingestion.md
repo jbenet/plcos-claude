@@ -122,7 +122,9 @@ and running twice changes nothing (a property checks it). Each run is a `sync_ru
   colleague — is kept by name in `owner_said`, and the pursuit goes to a placeholder owner who
   doesn't appear in the user switcher.
 - **Money**: the commitment field becomes a **soft** exposure, always. A word implying *signed*
-  marks it ready to harden; only the close room's countersignature makes it hard (rule 1). On a
+  marks it ready to harden, and becomes an undated *signed* event on the close track marked as
+  Affinity's claim (N52, docs/17 §3); *wired* likewise. Such a claim is removed again if Affinity
+  stops saying it. Only the close room's countersignature makes money hard (rule 1). On a
   historical vehicle, or once the pursuit passed, the exposure is closed, so no current figure
   counts it.
 - **Check size and AUM** become research claims on the LP, with the list as their source

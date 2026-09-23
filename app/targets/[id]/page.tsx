@@ -14,6 +14,9 @@ import {
 import { StatusForm } from '@/components/strategy/StatusForm';
 import { Touchpoints, meetingLine } from '@/components/strategy/Touchpoints';
 import { READ_LABEL, summarize, touchpointsFor } from '@/modules/meetings';
+import { CLOSE_STATE_LABEL, closeTracksFor } from '@/modules/pipeline';
+import { CloseTrack } from '@/components/strategy/CloseTrack';
+import { usdM } from '@/lib/money';
 import { claimLabel, claimsFor, listSourceDocs, notesFor } from '@/modules/research';
 import { usdCompact } from '@/lib/money';
 import { restrictionsFor } from '@/modules/coordination';
@@ -35,7 +38,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
   if (!pursuit) notFound();
 
   const user = await (await auth()).currentUser();
-  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches] = await Promise.all([
+  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches, tracks] = await Promise.all([
     claimsFor(pursuit.entityId),
     listSourceDocs(),
     notesFor(pursuit.entityId),
@@ -44,6 +47,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     signalsFor(pursuit.entityId),
     notesAbout(pursuit.entityId),
     touchpointsFor(pursuit.entityId, pursuit.vehicleId),
+    closeTracksFor(pursuit.entityId, pursuit.vehicleId),
   ]);
   const touchSummary = summarize(touches);
 
@@ -162,6 +166,13 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
                 A meeting is on record, and the status is still {STATUS_LABEL[p.status]} — Discussing? It is yours to set; nothing moves it for you.
               </div>
             )}
+            {tracks[0] && (
+              <div className="said">
+                <b>Close track:</b> {CLOSE_STATE_LABEL[tracks[0].state]} · {usdM(tracks[0].exposure.amount)}
+                {tracks[0].signature && tracks[0].state === 'signed' ? ` · signed ${tracks[0].signature.on ? shortDate(tracks[0].signature.on) : `per ${tracks[0].signature.bySource === 'affinity' ? 'Affinity' : tracks[0].signature.bySource}, undated`}` : ''}
+                {tracks[0].exposure.track === 'hard' ? ` · ${usdM(tracks[0].wired)} wired` : ''}
+              </div>
+            )}
             <div className="said">
               {meetingLine(touchSummary)}
               {p.implied.includes('met_twice') && touchSummary.meetingDates.length < 2 ? ' · Affinity says two or more' : ''}
@@ -199,6 +210,8 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
 
       <div className="grid2">
         <div>
+          {tracks.map((t) => <CloseTrack key={t.exposure.exposureId} track={t} pursuitId={pursuit.pursuitId} />)}
+
           <Touchpoints
             touches={touches}
             summary={touchSummary}

@@ -482,6 +482,41 @@ async function main() {
       `(an accepted commitment is not a wire), and the subscription pack moved to ${pack?.status} ` +
       'in the same transaction',
     );
+
+    // The close track (N52), on the commitment that just hardened and on one still soft.
+    const pl = await import('../modules/pipeline');
+    const attempt = async (fn: () => Promise<unknown>) => {
+      try { await fn(); return null; } catch (e) { return e as Error; }
+    };
+    const expOf = async (name: string) => (await d.one<{ exposure_id: string; entity_id: string; vehicle_id: string }>(
+      `select x.exposure_id, x.entity_id, x.vehicle_id from pipeline.exposure x join identity.entity e on e.entity_id = x.entity_id
+        where e.display_name = $1 and x.closed_at is null order by x.amount desc limit 1`, [name]))!;
+    const cedar = await expOf('Cedar Trust');
+    const counter = await d.one<{ n: string }>(`select count(*)::text as n from pipeline.commitment_event where exposure_id = $1 and step = 'countersigned'`, [cedar.exposure_id]);
+    await pl.recordWire(juan!.id, cedar.exposure_id, { on: new Date('2026-09-20T12:00:00Z'), amount: 1_500_000, reference: 'wire-0917' });
+    const over = await attempt(() => pl.recordWire(juan!.id, cedar.exposure_id, { on: new Date('2026-09-21T12:00:00Z'), amount: 3_000_000, reference: 'wire-0918' }));
+    await pl.recordClosing(juan!.id, cedar.exposure_id, { on: new Date('2026-09-22T12:00:00Z'), closing: 'First close' });
+    const [ct] = await pl.closeTracksFor(cedar.entity_id, cedar.vehicle_id);
+    const cash = (await vt()).find((t2) => t2.vehicleSlug === 'neurotech')!.cash;
+    check(
+      'A wire is an amount: a call in part counts in part, never past the commitment, and closing needs it hard',
+      Number(counter!.n) === 1 && ct?.state === 'closed' && ct.wired === 1_500_000 && ct.outstanding === 2_500_000 &&
+        over instanceof pl.CloseRefused && Math.round((cash - after.cash) / 1e5) === 15,
+      `countersigned events ${counter!.n}; state ${ct?.state}; wired ${ct?.wired} of ${ct?.exposure.amount}, outstanding ${ct?.outstanding}; over-wire ${over ? 'refused' : 'ALLOWED'}; cash +$${((cash - after.cash) / 1e6).toFixed(1)}M`,
+    );
+
+    const northwood = await expOf('Northwood Capital');
+    const wireSoft = await attempt(() => pl.recordWire(juan!.id, northwood.exposure_id, { on: new Date('2026-09-20T12:00:00Z'), amount: 100, reference: 'x' }));
+    await pl.recordSignature(juan!.id, northwood.exposure_id, { on: new Date('2026-09-18T12:00:00Z'), document: 'Subscription agreement v1' });
+    const noReason = await attempt(() => pl.recordSignature(juan!.id, northwood.exposure_id, { on: new Date('2026-09-21T12:00:00Z'), document: 'Subscription agreement v2' }));
+    await pl.recordSignature(juan!.id, northwood.exposure_id, { on: new Date('2026-09-21T12:00:00Z'), document: 'Subscription agreement v2', reason: 'Their holding entity changed its name' });
+    const [nt] = await pl.closeTracksFor(northwood.entity_id, northwood.vehicle_id);
+    check(
+      'Signing moves no money; signing again needs its reason; cash cannot land on a soft commitment',
+      nt?.state === 'signed' && nt.exposure.track === 'soft' && nt.resigned === 1 && nt.signature?.document === 'Subscription agreement v2' &&
+        noReason instanceof pl.CloseRefused && wireSoft instanceof pl.CloseRefused,
+      `state ${nt?.state} on the ${nt?.exposure.track} track; re-signed ${nt?.resigned}; latest ${nt?.signature?.document}; second signature with no reason ${noReason ? 'refused' : 'ALLOWED'}; a wire on soft ${wireSoft ? 'refused' : 'ALLOWED'}`,
+    );
     await d.close();
   }
 
@@ -1069,6 +1104,17 @@ async function main() {
           'A signed stage stays soft, marked ready to harden once countersigned',
           signed?.track === 'soft' && /ready to harden once countersigned/.test(signed.claim ?? ''),
           `track ${signed?.track}; "${signed?.claim}"`,
+        );
+
+        const claimSig = await adb.one<{ step: string; occurred_on: string | null; source: string; track: string }>(
+          `select ce.step::text as step, ce.occurred_on::text as occurred_on, ce.source, x.track::text as track
+             from pipeline.commitment_event ce join pipeline.exposure x on x.exposure_id = ce.exposure_id
+             join identity.source_record r on r.entity_id = x.entity_id and r.source = 'affinity' and r.source_id = 'person:7006'`,
+        );
+        check(
+          'Affinity’s “Signed” is an undated signature claimed by Affinity, and the money stays soft',
+          claimSig?.step === 'signed' && claimSig.occurred_on === null && claimSig.source === 'affinity' && claimSig.track === 'soft',
+          `${claimSig?.step}, dated ${claimSig?.occurred_on ?? 'never'}, by ${claimSig?.source}; track ${claimSig?.track}`,
         );
 
         const dnc = await n(

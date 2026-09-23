@@ -245,14 +245,15 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
               place.said ? `Affinity says “${place.said}”` : null,
               signed ? 'ready to harden once countersigned' : null,
             ].filter(Boolean).join(' · ');
-            await tx.query(
+            const xrow = await tx.one<{ exposure_id: string }>(
               `insert into pipeline.exposure
                  (entity_id, vehicle_id, instrument, track, amount, owner_id, source, source_ref, source_as_of, claim, closed_at)
                values ($1,$2,$3::pipeline.instrument,'soft',$4,$5,'affinity',$6,$7,$8,$9)
                on conflict (entity_id, vehicle_id, instrument) do update set
                  amount = excluded.amount, owner_id = excluded.owner_id, source_ref = excluded.source_ref,
                  source_as_of = excluded.source_as_of, claim = excluded.claim, closed_at = excluded.closed_at
-               where pipeline.exposure.source = 'affinity' and pipeline.exposure.track = 'soft'`,
+               where pipeline.exposure.source = 'affinity' and pipeline.exposure.track = 'soft'
+               returning exposure_id`,
               [
                 entity, vehicle.id, vehicle.kind === 'spv' ? 'spv' : 'lp_commitment', amount, owner ?? users.get(PLACEHOLDER)!,
                 `list:${t.list.id}:entry:${e.id}`, fetchedAt, `Affinity: ${claim}`,
@@ -261,6 +262,23 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
               ],
             );
             counts.exposures++;
+            // The close track (N52): what the word says happened to the money, as Affinity's
+            // undated claim — kept while Affinity still says it, and moving nothing.
+            if (xrow) {
+              const claimed = (['signed', 'wired'] as const).filter((step) => implied.includes(step));
+              await tx.query(
+                `delete from pipeline.commitment_event where exposure_id = $1 and source = 'affinity' and not (step::text = any($2::text[]))`,
+                [xrow.exposure_id, claimed],
+              );
+              for (const step of claimed) {
+                await tx.query(
+                  `insert into pipeline.commitment_event (exposure_id, step, occurred_on, document, source, source_ref)
+                   values ($1, $2::pipeline.commitment_step, null, $3, 'affinity', $4)
+                   on conflict (source, source_ref) where source_ref is not null do nothing`,
+                  [xrow.exposure_id, step, `Affinity: “${place.said}”`, `list:${t.list.id}:entry:${e.id}:${step}`],
+                );
+              }
+            }
           }
 
           // Claims about them, with the list as the source: kept once, superseded on change.

@@ -1593,3 +1593,13 @@ details.more>summary{cursor:pointer;font-size:12px;color:var(--muted);padding:6p
 .statuspanel .said.differs{color:var(--amber)}
 .statuspanel details{margin-top:10px}
 .statuspanel details>summary{cursor:pointer;font-size:12.5px;color:var(--clay)}
+
+/* N52: the close track's four steps */
+.closesteps{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:2px 0 12px;position:relative}
+.closesteps .cs{display:flex;flex-direction:column;gap:3px;padding-top:16px;position:relative;font-size:12px}
+.closesteps .cs i{position:absolute;top:0;left:0;width:11px;height:11px;border-radius:50%;border:1.5px solid var(--line);background:var(--surface)}
+.closesteps .cs::before{content:'';position:absolute;top:5px;left:14px;right:4px;height:1.5px;background:var(--line)}
+.closesteps .cs:last-child::before{display:none}
+.closesteps .cs.on i{background:var(--green);border-color:var(--green)}
+.closesteps .cs.now i{box-shadow:0 0 0 3px var(--accent-wash)}
+.closesteps .cs span{color:var(--muted);font-family:var(--mono);font-size:10.5px}

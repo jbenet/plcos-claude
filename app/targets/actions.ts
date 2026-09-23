@@ -7,6 +7,7 @@ import {
   type LadderRung, type PassedBy, type PursuitStatus,
 } from '@/modules/strategy';
 import { logTouchpoint, TouchpointRefused, type Channel, type Direction, type Read } from '@/modules/meetings';
+import { CloseRefused, recordClosing, recordSignature, recordWire, reviseSoft, withdraw } from '@/modules/pipeline';
 
 export async function requestLadderAdvance(
   formData: FormData,
@@ -76,6 +77,37 @@ export async function logTouchpointAction(formData: FormData): Promise<{ error?:
     return { ok: true };
   } catch (err) {
     if (err instanceof TouchpointRefused) return { error: err.message };
+    return { error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
+/**
+ * The close track (N52): a signature, a closing, a wire, a revised soft amount, a withdrawal.
+ * Hardening is not here — it is a MONEY ticket, on Soft → Hard (rule 1).
+ */
+export async function closeTrackAction(formData: FormData): Promise<{ error?: string; ok?: boolean }> {
+  const user = await (await auth()).currentUser();
+  const exposureId = String(formData.get('exposureId'));
+  const pursuitId = String(formData.get('pursuitId'));
+  const onRaw = String(formData.get('on') ?? '').trim();
+  const on = onRaw ? new Date(`${onRaw}T12:00:00Z`) : new Date(NaN);
+  const text = (k: string) => String(formData.get(k) ?? '').trim();
+  const money = (k: string) => Number(text(k).replace(/[$,\s]/g, '')) * (/m$/i.test(text(k)) ? 1_000_000 : 1);
+  try {
+    switch (text('op')) {
+      case 'sign': await recordSignature(user.id, exposureId, { on, document: text('document'), reason: text('reason') || null }); break;
+      case 'close': await recordClosing(user.id, exposureId, { on, closing: text('closing') }); break;
+      case 'wire': await recordWire(user.id, exposureId, { on, amount: money('amount'), reference: text('reference') }); break;
+      case 'soft': await reviseSoft(user.id, exposureId, { on, amount: money('amount') }); break;
+      case 'withdraw': await withdraw(user.id, exposureId, { on, reason: text('reason') }); break;
+      default: return { error: 'Nothing to record.' };
+    }
+    revalidatePath(`/targets/${pursuitId}`);
+    revalidatePath('/targets');
+    revalidatePath('/soft-hard');
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof CloseRefused) return { error: err.message };
     return { error: err instanceof Error ? err.message : 'Unknown error' };
   }
 }

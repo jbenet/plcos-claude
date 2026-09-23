@@ -72,3 +72,54 @@ export interface PoolCheck {
   over: number;
   status: 'ok' | 'over' | 'unverified' | 'no_budget';
 }
+
+// ---------------------------------------------------------------- the close track (N52)
+
+export type CommitmentStep = 'soft' | 'signed' | 'resigned' | 'countersigned' | 'closed' | 'wired' | 'withdrawn';
+
+export const STEP_LABEL: Record<CommitmentStep, string> = {
+  soft: 'Soft commitment', signed: 'Signed', resigned: 'Signed again', countersigned: 'Countersigned — hard',
+  closed: 'Closed', wired: 'Wired', withdrawn: 'Withdrawn',
+};
+
+export interface CommitmentEvent {
+  eventId: string;
+  exposureId: string;
+  step: CommitmentStep;
+  /** Null when the source did not say. */
+  on: Date | null;
+  amount: number | null;
+  document: string | null;
+  reason: string | null;
+  reference: string | null;
+  /** 'us' when recorded here; otherwise the source whose claim it is. */
+  source: string;
+  recordedByName: string | null;
+  recordedAt: Date;
+}
+
+/** Derived from the events, never stored: soft → signed → hard → closed, or withdrawn. */
+export type CloseState = 'soft' | 'signed' | 'hard' | 'closed' | 'withdrawn';
+
+export const CLOSE_STATES: CloseState[] = ['soft', 'signed', 'hard', 'closed'];
+export const CLOSE_STATE_LABEL: Record<CloseState, string> = {
+  soft: 'Soft', signed: 'Signed', hard: 'Hard', closed: 'Closed', withdrawn: 'Withdrawn',
+};
+
+export interface CloseTrack {
+  exposure: Exposure;
+  state: CloseState;
+  /** Oldest first. */
+  events: CommitmentEvent[];
+  /** The latest signature: when (null if undated), and whether it is only a source's claim. */
+  signature: { on: Date | null; bySource: string; document: string | null } | null;
+  /** Signatures after the first: re-signed documents, each with its reason. */
+  resigned: number;
+  closedOn: Date | null;
+  /** Wires recorded here, and their total. A source's "wired" is a claim, listed apart. */
+  wires: Array<{ on: Date | null; amount: number }>;
+  wired: number;
+  wiredPerSource: boolean;
+  /** Commitment less what has wired, once hard. */
+  outstanding: number | null;
+}

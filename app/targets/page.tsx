@@ -7,6 +7,8 @@ import {
   impliedRung, listPursuits, rungIndex, statusCounts, type Pursuit, type PursuitStatus,
 } from '@/modules/strategy';
 import { READ_LABEL, touchpointSummaries, type TouchpointSummary } from '@/modules/meetings';
+import { CLOSE_STATE_LABEL, closeStates, type CloseTrack } from '@/modules/pipeline';
+import { usdM } from '@/lib/money';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +43,7 @@ function Ladder({ p }: { p: Pursuit }) {
 }
 
 /** What else is known about where they are: why it ended, what's next, what the source said. */
-function Where({ p, s }: { p: Pursuit; s: TouchpointSummary }) {
+function Where({ p, s, c }: { p: Pursuit; s: TouchpointSummary; c: CloseTrack | undefined }) {
   const bits: string[] = [];
   if (p.status === 'passed') {
     bits.push([p.passedBy ? PASSED_BY_LABEL[p.passedBy] : 'Passed', p.statusReason?.replace('_', ' ')].filter(Boolean).join(' · '));
@@ -49,6 +51,13 @@ function Where({ p, s }: { p: Pursuit; s: TouchpointSummary }) {
   if (p.nextStep) bits.push(`Next: ${p.nextStep}${p.nextStepOn ? `, ${shortDate(p.nextStepOn)}` : ''}`);
   return (
     <div style={{ fontSize: 12 }}>
+      {c && (
+        <div>
+          {CLOSE_STATE_LABEL[c.state]} {usdM(c.exposure.amount)}
+          {c.state === 'signed' && c.signature ? <span className="muted"> · signed {c.signature.on ? shortDate(c.signature.on) : `per ${c.signature.bySource === 'affinity' ? 'Affinity' : c.signature.bySource}`}</span> : null}
+          {c.exposure.track === 'hard' ? <span className="muted"> · {usdM(c.wired)} wired</span> : null}
+        </div>
+      )}
       {bits.length > 0 && <div>{bits.join(' — ')}</div>}
       {aheadOfStatus(p, s) && (
         <div style={{ fontSize: 11.5, color: 'var(--amber)' }}>
@@ -112,6 +121,8 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
   const rows = (await listPursuits(current?.id ?? null, { status })).filter((p) => inScope(p.vehicleId));
   const sums = await touchpointSummaries(rows.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId })));
   const sum = (p: Pursuit) => sums.get(`${p.entityId}:${p.vehicleId}`)!;
+  // The money's state, for the rows that have any: every committed one, and a few others.
+  const closes = await closeStates(rows.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId })));
   // Furthest along first: by evidence, then by meetings held, then by what the source says
   // happened; then the most recently in touch, then the name.
   rows.sort(
@@ -221,7 +232,7 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
                   </td>
                   {!current && <td className="muted">{p.vehicleName}</td>}
                   <td className="muted">{p.ownerSaid ?? p.ownerName}</td>
-                  <td><Where p={p} s={sum(p)} /></td>
+                  <td><Where p={p} s={sum(p)} c={closes.get(`${p.entityId}:${p.vehicleId}`)} /></td>
                   <Touch s={sum(p)} />
                   <td><Ladder p={p} /></td>
                 </tr>
