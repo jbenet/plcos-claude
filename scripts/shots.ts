@@ -196,6 +196,10 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N43: [
+    { name: '01-inventory', path: '/dev/affinity/inventory', fullPage: true },
+    { name: '02-questions', path: '/dev/affinity/inventory' },
+  ],
   N41: [
     {
       name: '01-lists-discovered',

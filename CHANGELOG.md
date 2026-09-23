@@ -3730,3 +3730,54 @@ own secret store.
 Four new properties: over the ceiling nothing per-entry is asked; note text only where the
 init file allows, never on an SPV list; a second run stores nothing new; and repeated
 parameters. **62 of 62 properties hold.**
+
+---
+
+## N43 — What's in the slice, and what only you can answer
+
+**Shipped.** The inventory: what the slice landed, described field by field, with the
+second round of questions generated from it. It names nobody outside the team.
+
+| | |
+|---|---|
+| ![Inventory](docs/changelog/shots/n43/01-inventory.webp) | **Developer → Affinity → Inventory**, on the fake Affinity. Questions first, then notes (1 of 5 mentions health: flagged, not shown), relationships in Affinity's own bands, and every list field by field: how full it is, every dropdown value with its count, date ranges, amounts described but not summed, and how recently people were in touch. |
+| ![Questions](docs/changelog/shots/n43/02-questions.webp) | **The questions** are written from the data: which dropdown is the stage, and which rung of the ladder each of its values actually evidences; which amount, if any, means signed; who owns the rows; team members the init file is missing; which vehicle each SPV list is. |
+
+### Counts, not people
+
+The page and its report (*Write it to data/…/reports/*) list a dropdown's values, because
+those are the words a stage is written in. They list the team's names, because the team owns
+the rows. They list nobody else: no LP, no text field's contents, no note's words. A property
+checks it on the fake Affinity by looking for invented LPs' names and for words from the
+invented notes.
+
+**Amounts are described and never summed.** Nobody has said yet whether a field holds an
+indication or a signature. Adding up an unknown is how a "committed" figure gets invented
+(rule 1).
+
+**Health detail is counted and flagged, never shown**, and it's never copied into anything
+derived from the note (Report 4 §6.2). The pattern errs toward flagging. It leaves out
+*treatment*, *condition* and *recovery*, which in fundraising notes usually mean tax
+treatment, closing conditions and fee recovery.
+
+### On the real account
+
+It ran on the entries the slice has landed so far; notes and relationships wait for the
+go-ahead. It produced **18 questions**. Besides the stage and amount questions for each list,
+they include:
+
+- team members who own most of the rows but aren't in the init file;
+- entries already marked do-not-contact, which should become do-not-approach instructions
+  before any route is suggested (rule 8);
+- people on both a Neurotech list and an SPV list, where cross-vehicle conflicts will come
+  from;
+- a clue to where Rails might be tracked.
+
+They're in the report at `data/real/reports/inventory-2026-09-23.md`, which never leaves this
+machine.
+
+**63 of 63 properties hold.**
+
+**Next:** your answers. They decide how each list's words are read: which values count as
+which rung, and whether any amount is hard. Translation into the model comes after them, so it
+doesn't have to guess.

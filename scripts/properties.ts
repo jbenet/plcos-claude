@@ -904,6 +904,19 @@ async function main() {
         `second run: ${again?.records} seen, ${again?.newRecords} new`,
       );
 
+      const inv = await import('../lib/connectors/affinity/inventory');
+      const flagged = ['Her husband is recovering from surgery.', 'Mentioned a death in the family.'].every(inv.mentionsHealth);
+      const clean = ['Wants the data room before the IC.', 'Prefers the tax treatment of a feeder.', 'Closing conditions are met.'].every((t) => !inv.mentionsHealth(t));
+      const report = await inv.inventory();
+      const text = JSON.stringify(report);
+      const outsiders = ['Delia', 'Roos', 'Lindqvist', 'Tanaka', 'Obi', 'surgery', 'data-room'].filter((w) => text.includes(w));
+      const notes = report.notes;
+      check(
+        'The inventory flags health detail, names nobody outside the team, and sums no amount',
+        flagged && clean && outsiders.length === 0 && notes?.health === 1 && !/"sum"|"total"/.test(text),
+        `flagged ${flagged}; false alarms ${!clean}; outside names or note words in it: ${outsiders.join(', ') || 'none'}; health-flagged notes ${notes?.health}`,
+      );
+
       const s8 = scripted(() => ok());
       await aff.affinity({ transport: s8.transport, key: KEY, sleep }).get('/v2/lists/1/list-entries', { limit: 100, fieldTypes: ['list', 'global'] });
       const sentTypes = s8.calls[0]?.searchParams.getAll('fieldTypes') ?? [];

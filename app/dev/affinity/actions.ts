@@ -36,3 +36,9 @@ export async function runSliceAction(formData: FormData): Promise<void> {
   revalidatePath('/dev/affinity/slice');
 }
 
+/** Writes the inventory to data/<profile>/reports/ — aggregates only, like the page. */
+export async function writeInventoryReport(): Promise<void> {
+  const { inventory, writeReport } = await import('@/lib/connectors/affinity/inventory');
+  await writeReport(await inventory());
+  revalidatePath('/dev/affinity/inventory');
+}

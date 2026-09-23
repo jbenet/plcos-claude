@@ -68,7 +68,7 @@ export default async function Slice() {
       }
     >
       {running && <AutoRefresh seconds={3} />}
-      <div className="lbl"><Link href="/dev/affinity">Affinity</Link></div>
+      <div className="lbl"><Link href="/dev/affinity">Affinity</Link> · <Link href="/dev/affinity/inventory">Inventory →</Link></div>
       <h1>The first slice</h1>
       <p className="sublede">
         What is on the lists we care about, read once and landed raw. A stage here is still a word

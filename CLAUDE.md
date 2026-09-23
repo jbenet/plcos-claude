@@ -296,8 +296,9 @@ needs a precise input, or performance becomes a demonstrated problem.
 ## Open questions — get answers before the code depends on them
 
 1. **Affinity plan tier.** Data Share (Enterprise) versus poll-first. This one changes the
-   connector design, not just the schedule. Juan doesn't know the tier; the connection test
-   reads it from the API (docs/15 §5). Poll-first until then.
+   connector design, not just the schedule. Measured 23 Sep 2026 by the connection test: the
+   account has the 100,000-a-month cap, so it is Scale or Advanced — the API can't tell which,
+   and only Advanced has Data Share. Poll-first until someone checks the plan.
 2. **Warehouse access.** Own schema with write permission for canon tables?
 3. **Linear custom fields.** UNVERIFIED in all three design packages. Check the live
    GraphQL schema before anything depends on it. The integration points the product

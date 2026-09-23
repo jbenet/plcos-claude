@@ -150,7 +150,8 @@ export default async function AffinityPage() {
               ? `${lists.count} lists this key can see. `
               : 'Which lists the key can see, their fields, and how they match the init file. '}
             <Link href="/dev/affinity/lists">Open the lists →</Link>{' '}
-            <Link href="/dev/affinity/slice">The first slice →</Link>
+            <Link href="/dev/affinity/slice">The first slice →</Link>{' '}
+            <Link href="/dev/affinity/inventory">Inventory →</Link>
           </p>
         </div>
       </div>

@@ -37,7 +37,7 @@ shape both.
 |---|---|
 | Where real data lives | Inside this repository, under `data/real/`, gitignored — not in `~/Library`, so other tools on the machine don't poke at it. All data lives under `data/<demo\|real>/`. |
 | The API key | **The macOS Keychain**, one item (`plcos-claude` / `affinity-api-key`) trusted to no app, so every read asks. Never printed, never in a file. First choice was 1Password (item "Affinity API - App: plcos-claude"); dropped on 23 Sep because its CLI authorizes a whole account — any process running `op` while it is unlocked could read any secret. Deployment gets its own secret store when the infrastructure is chosen. |
-| Plan tier | Unknown. The connection test finds out from the API's own answers. |
+| Plan tier | Juan didn't know. The connection test (23 Sep) found the 100,000-a-month cap: Scale or Advanced. Only Advanced has Data Share, and the API can't tell the two apart. |
 | Lists | Juan named the list that probably tracks Neurotech, and a second that may. Both are in `data/real/init.jsonc`, not here: list names describe the real pipeline, so they stay with the real data. Rails' list is unknown; ask someone later. Several SPV lists exist, each with "SPV" in the name. |
 | A view-only key | Not possible — the key is read-write and cannot be changed. Hence rule 1. |
 | Notes | Import note **text** for Neurotech only, so the strategy side has something to reason with. Health detail about a person or their family is flagged and never copied into a derived record (Report 4 §6.2). |
@@ -156,32 +156,45 @@ whenever something else, like the screenshot work in N40, came first.
 
 ---
 
-## 7. First slice (next)
+## 7. First slice (N42)
 
-- The Neurotech lists' entries, their organizations and people, and the fields on each list.
-- Meeting and email metadata only: dates, participants, counts. No bodies.
-- Relationship strengths to our team.
-- Notes: text for Neurotech (Juan's decision), metadata elsewhere.
-- The SPV lists, without notes.
+The lists the init file names, and the lists that say SPV. For each:
 
-Before running, estimate the request cost from list sizes and show it.
+- every entry, with its field values (`fieldTypes` = all four kinds), a hundred to a request;
+- note text for each entry, only where the vehicle's init entry says `importNotes` (Neurotech),
+  and never on an SPV list;
+- relationship strengths to the team, the strongest hundred per person, only on a People list
+  that a vehicle claims.
 
----
+Meeting and email metadata is not read separately: the lists' relationship-intelligence fields
+(*Last email*, *Last meeting*, …) already carry when someone was last in touch, and the
+account-wide email and meeting endpoints can't be filtered by person.
 
-## 8. Inventory and gaps
+**Estimated before it is spent.** Entries come first, because they are cheap and they are how
+the number of people becomes known. Notes and relationships are a request per entry, so that
+part is estimated, and a run over `config.affinity.sliceCeiling` (3,000, a guess) **holds**.
+A person approves the estimate — notes only, or notes and relationships — and the run proceeds
+within that number and a quarter more. An agent does not approve its own run.
 
-A generated report in `data/real/reports/`, plus a page:
+The first real run read every entry on the four lists in 24 requests and held: its per-entry
+reads came to more than the ceiling. It waits for Juan.
 
-- counts, and how often each field is filled in
-- how pursuits spread across stages, and how many have an owner
-- how recent the last interaction is
-- duplicates
-- a table of Affinity field → our concept, and what does not map
+## 8. Inventory and gaps (N43)
 
-The report is where the second round of questions comes from — which field is stage, which
-is amount, whether anything means *signed*.
+Developer → Affinity → Inventory, and a report in `data/real/reports/`. Aggregates only: fill
+rates for every field; every value of every dropdown, with its count (the stage vocabulary);
+the team's names on person fields; date ranges; amounts described (count, median, range) and
+**never summed**; how recently people were in touch, from the interaction fields; overlap
+between lists, which is where cross-vehicle conflicts will come from; and, once notes land,
+how many mention health (counted, never shown).
 
----
+It names nobody outside the team, and quotes no text field and no note.
+
+**The second round of questions** comes out of it, generated from the data rather than written
+in advance: which field is each list's stage, and which rung of the ladder each of its values
+actually evidences; which amount field, if any, means signed; who the owner field is; team
+members who own rows but aren't in the init file; entries marked do-not-contact; which vehicle
+each SPV list is, and its exemption; and where Rails lives.
 
 ## 9. Translation into our model
 
