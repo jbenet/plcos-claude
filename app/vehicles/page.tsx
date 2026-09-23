@@ -5,7 +5,7 @@ import { vehicleSelection } from '@/lib/session';
 import { usdM, multiple } from '@/lib/money';
 import { shortDate } from '@/lib/time';
 import { INSTRUMENT_LABEL, listExposures, vehicleTotals } from '@/modules/pipeline';
-import { listPursuits, RUNG_LABEL } from '@/modules/strategy';
+import { listPursuits, RUNG_LABEL, STAGES } from '@/modules/strategy';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +16,13 @@ export default async function Vehicles() {
   const [totals, exposures, pursuits] = await Promise.all([
     vehicleTotals(), listExposures(), listPursuits(),
   ]);
+  // Two thousand rows help nobody: the ones furthest along, by stage and then by evidence.
+  const stageRank = (p: (typeof pursuits)[number]) => (p.stage ? STAGES.findIndex((s) => s.id === p.stage) : -1);
+  const open = pursuits.filter((p) => !p.closedAt);
+  const openCount = open.length;
+  const furthest = [...open]
+    .sort((a, b) => stageRank(b) - stageRank(a) || (b.rung ? 1 : 0) - (a.rung ? 1 : 0) || a.entityName.localeCompare(b.entityName))
+    .slice(0, 25);
 
   return (
     <Page
@@ -89,7 +96,13 @@ export default async function Vehicles() {
                   <b>{t.vehicleName}</b>
                   <div className="muted" style={{ fontSize: 11.5 }}>
                     target {t.target ? usdM(t.target, 0) : 'none set'} ·{' '}
-                    {pursuits.filter((p) => p.vehicleId === t.vehicleId).length} pursuits open
+                    {(() => {
+                      const mine = pursuits.filter((p) => p.vehicleId === t.vehicleId);
+                      // A historical vehicle's pursuits are history, not work in progress.
+                      return t.historical
+                        ? `history · ${mine.length} pursuits`
+                        : `${mine.filter((p) => !p.closedAt).length} pursuits open`;
+                    })()}
                   </div>
                 </td>
                 <td className="muted">{KIND_LABEL[t.kind]}</td>
@@ -118,20 +131,27 @@ export default async function Vehicles() {
             <h2>Where the pursuits stand</h2>
             <span className="lbl">consent ladder, per vehicle</span>
           </div>
-          {pursuits.map((p) => (
+          {furthest.map((p) => (
             <Link className="row" key={p.pursuitId} href={`/targets/${p.pursuitId}`}>
               <div className="t">
                 <b>{p.entityName}</b>
                 <span>
-                  {p.vehicleName} · owner {p.ownerName}
+                  {p.vehicleName} · owner {p.ownerSaid ?? p.ownerName}
                 </span>
               </div>
               <div className="state">
                 <b>{p.rung ? RUNG_LABEL[p.rung] : 'Nothing on file'}</b>
-                opened {shortDate(p.openedAt)}
+                {p.stage ? <>{p.source === 'us' ? '' : 'Affinity: '}{STAGES.find((s) => s.id === p.stage)!.label}</> : <>opened {shortDate(p.openedAt)}</>}
               </div>
             </Link>
           ))}
+          {openCount > furthest.length && (
+            <p className="cover">
+              The {furthest.length} furthest along of {openCount.toLocaleString('en-US')} open pursuits,
+              by stage. The ladder column is what is evidenced; the stage beside it is what the
+              source says, and the gap between them is work to do.
+            </p>
+          )}
         </div>
 
         <div className="card">

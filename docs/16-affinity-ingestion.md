@@ -82,10 +82,13 @@ ladder and never written into it: the ladder moves on evidence.
 If we later decide our model is right and Affinity's should change to match, that's a write to
 Affinity. It's a separate decision, and it would go through approval tickets.
 
-## 4. Translation (N47)
+## 4. Translation (N47, → Mapping → Translate into the tool)
 
-Reads raw plus the mapping, and writes the tool's own tables. It can be re-run at any time; a
-mapping edit takes effect on the next run.
+Reads raw plus the mapping, and writes the tool's own tables, in one transaction and without a
+request to Affinity. It can be re-run at any time: a mapping edit takes effect on the next run,
+and running twice changes nothing (a property checks it). Each run is a `sync_run` of kind
+`translate`, with its counts in `detail`. Pursuits and exposures the tool created itself
+(`source = 'us'`) are never overwritten by a translation.
 
 - **People and organizations** → `identity.entity`, linked to Affinity through
   `identity.source_record` (`affinity`, `person:<id>` / `company:<id>`).

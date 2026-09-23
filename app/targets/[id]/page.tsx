@@ -8,7 +8,7 @@ import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { Coverage } from '@/components/ui/Coverage';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
-import { getPursuit, RUNG_LABEL, RUNG_REQUIRES } from '@/modules/strategy';
+import { getPursuit, OUTCOME_LABEL, RUNG_LABEL, RUNG_REQUIRES, STAGES } from '@/modules/strategy';
 import { claimsFor, listSourceDocs, notesFor } from '@/modules/research';
 import { restrictionsFor } from '@/modules/coordination';
 import { planRoutes, VERDICT_LABEL } from '@/modules/network';
@@ -110,12 +110,33 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
       }
     >
       <div className="lbl">
-        Target workspace · owner {pursuit.ownerName} · opened {shortDate(pursuit.openedAt)}
+        Target workspace · owner {pursuit.ownerSaid ? `${pursuit.ownerSaid} (not on the team)` : pursuit.ownerName} · opened {shortDate(pursuit.openedAt)}
+        {pursuit.historical ? ' · a vehicle kept for its history' : ''}
       </div>
       <h1 style={{ marginTop: 4 }}>
         <Link href={`/orgs/${pursuit.entityId}`}>{pursuit.entityName}</Link>
       </h1>
       <p className="sublede">{pursuit.headline}</p>
+
+      {pursuit.stage || pursuit.stageSaid ? (() => {
+        const st = STAGES.find((s) => s.id === pursuit.stage);
+        return (
+          <div className="stageclaim">
+            <span className="lbl">{pursuit.source === 'us' ? 'Stage' : 'Affinity says'}</span>
+            {pursuit.stageSaid && pursuit.source !== 'us' && <b>&ldquo;{pursuit.stageSaid}&rdquo;</b>}
+            <span>
+              {st ? <>→ {st.label}</> : <>→ no stage of ours yet</>}
+              {pursuit.outcome !== 'open' ? ` · ${OUTCOME_LABEL[pursuit.outcome]}${pursuit.outcomeReason ? ` (${pursuit.outcomeReason.replace('_', ' ')})` : ''}` : ''}
+            </span>
+            {st?.claims && (
+              <span className="muted">
+                claims {RUNG_LABEL[st.claims]} — {pursuit.rung && RUNG_LABEL[pursuit.rung] ? `the ladder has ${RUNG_LABEL[pursuit.rung]} on file` : 'nothing on the ladder is evidenced yet'}
+              </span>
+            )}
+            {pursuit.sourceAsOf && <span className="muted">read {shortDate(pursuit.sourceAsOf)}</span>}
+          </div>
+        );
+      })() : null}
 
       <LadderStepper pursuit={pursuit} />
 

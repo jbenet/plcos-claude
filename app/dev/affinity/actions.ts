@@ -66,3 +66,11 @@ export async function writeComparisonAction(): Promise<void> {
   await writeComparison(await compareLists());
   revalidatePath('/dev/affinity/inventory');
 }
+
+/** Reads the landed copy through the mapping into the tool's own tables. Not one request to Affinity. */
+export async function translateAction(): Promise<void> {
+  const { translate } = await import('@/lib/connectors/affinity/translate');
+  const user = await (await auth()).currentUser();
+  await translate(user.id);
+  revalidatePath('/', 'layout');
+}

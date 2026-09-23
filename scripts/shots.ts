@@ -196,6 +196,29 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N47: [
+    {
+      name: '01-translated',
+      path: '/dev/affinity/mapping',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /^Translate( again)?$/ }).click();
+        await page.getByText('Pursuits by vehicle').waitFor();
+        await page.getByRole('heading', { name: 'Translate into the tool' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+        await page.waitForTimeout(200);
+      },
+    },
+    { name: '02-claim-beside-evidence', path: '/vehicles' },
+    {
+      name: '03-a-translated-pursuit',
+      path: '/vehicles',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Yuki Tanaka/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N46: [
     {
       name: '01-our-stages',

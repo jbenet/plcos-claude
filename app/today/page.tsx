@@ -11,7 +11,7 @@ import { usdM, multiple } from '@/lib/money';
 import { KIND_CLASS, listOpenTickets } from '@/modules/governance';
 import { listAsks, listConflicts } from '@/modules/coordination';
 import { listPursuits, RUNG_LABEL } from '@/modules/strategy';
-import { vehicleTotals } from '@/modules/pipeline';
+import { listExposures, vehicleTotals } from '@/modules/pipeline';
 import { sprintStrip, urgency } from '@/modules/calendar';
 import { actionableSignals, heldBack } from '@/modules/signals';
 import { SignalRow } from '@/components/signals/SignalRow';
@@ -33,7 +33,15 @@ export default async function Today() {
       sprintStrip(7),
       urgency(),
     ]);
-  const [signals, held] = await Promise.all([actionableSignals(5), heldBack()]);
+  const [signals, held, exposures] = await Promise.all([actionableSignals(5), heldBack(), listExposures()]);
+  // A $0 hard headline beside a soft track read from a source says why, in the same place,
+  // rather than reading as "nothing committed" (rule 1 keeps it $0; it does not keep it silent).
+  const whyZero = totals
+    .filter((t) => t.hard === 0 && exposures.some((x) => x.vehicleId === t.vehicleId && x.source !== 'us'))
+    .map((t) => ({
+      name: t.vehicleName,
+      signed: exposures.filter((x) => x.vehicleId === t.vehicleId && /ready to harden/.test(x.claim ?? '')).length,
+    }));
 
   const open = await sink.list({ status: ['open', 'triaged', 'agent-ready', 'in-progress', 'review'] });
   const focus = selection.current ? totals.find((t) => t.vehicleId === selection.current!.id) ?? null : null;
@@ -85,7 +93,7 @@ export default async function Today() {
             <div className="lbl">Coverage</div>
             <div className="n">{focus.coverage === null ? '—' : multiple(focus.coverage)}</div>
             <div className="f">
-              Pipeline depth, not money. {pursuits.filter((p) => p.vehicleId === focus.vehicleId).length}{' '}
+              Pipeline depth, not money. {pursuits.filter((p) => p.vehicleId === focus.vehicleId && !p.closedAt).length}{' '}
               pursuits open.
             </div>
           </div>
@@ -147,6 +155,17 @@ export default async function Today() {
                 ))}
             </tbody>
           </table>
+          {whyZero.length > 0 && (
+            <p className="cover">
+              {whyZero.map((w) => (
+                <span key={w.name}>
+                  <b>{w.name}: hard is {usdM(0)} because no countersignature is recorded in this tool yet.</b>{' '}
+                  {w.signed ? `${w.signed} ${w.signed === 1 ? 'commitment is' : 'commitments are'} signed per Affinity and ready to harden — ` : ''}
+                  <Link href="/soft-hard">Soft → Hard</Link>.{' '}
+                </span>
+              ))}
+            </p>
+          )}
         </div>
       )}
 

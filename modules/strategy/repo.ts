@@ -1,10 +1,14 @@
 import { getDb, type Queryable } from '@/lib/db';
-import { RUNGS, rungIndex, type LadderEvent, type LadderRung, type PlanStep, type Pursuit } from './types';
+import {
+  RUNGS, rungIndex, type LadderEvent, type LadderRung, type PlanStep, type Pursuit, type PursuitOutcome, type PursuitStage,
+} from './types';
 
 type PursuitRow = {
   pursuit_id: string; entity_id: string; entity_name: string; vehicle_id: string;
   vehicle_name: string; owner_name: string; headline: string | null;
   plan: PlanStep[]; opened_at: Date | string; closed_at: Date | string | null;
+  stage: PursuitStage | null; outcome: PursuitOutcome; outcome_reason: string | null; source: string;
+  source_as_of: Date | string | null; stage_said: string | null; owner_said: string | null; vehicle_phase: string;
 };
 
 type EventRow = {
@@ -16,7 +20,8 @@ type EventRow = {
 const PURSUIT_SELECT = `
   select p.pursuit_id, p.entity_id, e.display_name as entity_name, p.vehicle_id,
          v.name as vehicle_name, u.name as owner_name, p.headline, p.plan,
-         p.opened_at, p.closed_at
+         p.opened_at, p.closed_at, p.stage::text as stage, p.outcome::text as outcome, p.outcome_reason,
+         p.source, p.source_as_of, p.stage_said, p.owner_said, v.phase as vehicle_phase
     from strategy.pursuit p
     join identity.entity e on e.entity_id = p.entity_id
     join platform.vehicle v on v.id = p.vehicle_id
@@ -38,6 +43,9 @@ function assemble(row: PursuitRow, events: LadderEvent[]): Pursuit {
     headline: row.headline, plan: row.plan ?? [], openedAt: new Date(row.opened_at),
     closedAt: row.closed_at ? new Date(row.closed_at) : null,
     events: sorted, rung, nextRung: nextIdx < RUNGS.length ? RUNGS[nextIdx]! : null,
+    stage: row.stage, outcome: row.outcome, outcomeReason: row.outcome_reason, source: row.source,
+    sourceAsOf: row.source_as_of ? new Date(row.source_as_of) : null, stageSaid: row.stage_said,
+    ownerSaid: row.owner_said, historical: row.vehicle_phase === 'historical',
   };
 }
 

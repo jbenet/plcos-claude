@@ -3,9 +3,9 @@
   {
    "person1": {
     "id": 7001,
-    "firstName": "Delia",
-    "lastName": "Roos",
-    "primaryEmailAddress": "delia@roos-family.example"
+    "firstName": "Nadia",
+    "lastName": "Brandt",
+    "primaryEmailAddress": "nadia@brandt-family.example"
    },
    "person2": {
     "id": 90001,
@@ -19,9 +19,9 @@
   {
    "person1": {
     "id": 7001,
-    "firstName": "Delia",
-    "lastName": "Roos",
-    "primaryEmailAddress": "delia@roos-family.example"
+    "firstName": "Nadia",
+    "lastName": "Brandt",
+    "primaryEmailAddress": "nadia@brandt-family.example"
    },
    "person2": {
     "id": 90002,

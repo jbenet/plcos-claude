@@ -26,6 +26,10 @@ export interface Exposure {
   hardenedAt: Date | null;
   cashReceivedAt: Date | null;
   openedAt: Date;
+  /** 'us', or the system the amount was read from, with when and what it said (rule 9). */
+  source: string;
+  sourceAsOf: Date | null;
+  claim: string | null;
 }
 
 /**
@@ -38,6 +42,8 @@ export interface VehicleTotals {
   vehicleName: string;
   kind: string;
   exemption: string;
+  /** Kept for its history (N45): its numbers are the past, not the raise. */
+  historical: boolean;
   target: number | null;
   /** Signed and countersigned. The only number that appears in a headline. */
   hard: number;

@@ -9,7 +9,8 @@ import { normName } from '@/lib/connectors/affinity/match';
 import {
   OUTCOME_LABEL, RUNG_LABEL, STAGES, STAGE_GROUP_LABEL, type PursuitStage,
 } from '@/modules/strategy';
-import { writeMappingAction } from '../actions';
+import { latestRun } from '@/modules/sources';
+import { translateAction, writeMappingAction } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,8 @@ export default async function Mapping() {
   const demo = config.data.profile === 'demo';
   const inv = await inventory();
   const map = await readMapping(inv);
+  const translated = await latestRun('affinity', 'translate');
+  const tc = (translated?.detail ?? {}) as { byVehicle?: Record<string, number>; unreviewedLists?: string[]; ownersNotOnTeam?: number; readyToHarden?: number; affiliations?: number; people?: number; organizations?: number; skipped?: number };
   const lists = inv.lists.filter((l) => l.why === 'init' && l.entries > 0);
 
   return (
@@ -184,6 +187,46 @@ export default async function Mapping() {
             </div>
           );
         })
+      )}
+
+      {map.exists && (
+        <div className="card">
+          <div className="chead">
+            <h2>Translate into the tool</h2>
+            <span className="lbl">{translated ? `${translated.status} · ${translated.startedAt.toISOString().slice(0, 16).replace('T', ' ')} UTC` : 'never run'}</span>
+          </div>
+          <div className="cbody">
+            <p style={{ margin: '0 0 10px', fontSize: 13 }}>
+              The landed copy, read through this mapping, into pursuits, soft commitments, claims and
+              do-not-approach instructions. Local — not one request to Affinity — and safe to run
+              again: a mapping edit takes effect the next time.
+            </p>
+            <form action={translateAction}>
+              <button className="btn p" type="submit" disabled={map.problems.length > 0}>
+                {translated ? 'Translate again' : 'Translate'}
+              </button>
+              {map.problems.length > 0 && <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>Fix the mapping&rsquo;s problems first.</span>}
+            </form>
+            {translated && (
+              <div style={{ marginTop: 14 }}>
+                <div className="fact"><span>Result</span><span>{translated.note}</span></div>
+                {tc.byVehicle && (
+                  <div className="fact">
+                    <span>Pursuits by vehicle</span>
+                    <span>{Object.entries(tc.byVehicle).map(([v, k]) => `${v} ${n(k)}`).join(' · ')}</span>
+                  </div>
+                )}
+                <div className="fact"><span>New people and organizations</span><span>{n(tc.people ?? 0)} · {n(tc.organizations ?? 0)}{tc.affiliations ? ` · ${n(tc.affiliations)} affiliations` : ''}</span></div>
+                {!!tc.readyToHarden && <div className="fact"><span>Signed, per Affinity</span><span>{n(tc.readyToHarden)} ready to harden once countersigned — still soft</span></div>}
+                {!!tc.ownersNotOnTeam && <div className="fact"><span>Owner not on the team</span><span>{n(tc.ownersNotOnTeam)} pursuits, kept under their name</span></div>}
+                {!!tc.skipped && <div className="fact"><span>Not translated</span><span>{n(tc.skipped)} — not an LP, or an opportunity row</span></div>}
+                {!!tc.unreviewedLists?.length && (
+                  <p className="cover"><b>Read through a mapping nobody has reviewed yet:</b> {tc.unreviewedLists.join(', ')}. The pursuits say so.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {map.exists && (

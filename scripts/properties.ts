@@ -916,7 +916,7 @@ async function main() {
       );
       const report = await inv.inventory();
       const text = JSON.stringify(report);
-      const outsiders = ['Delia', 'Roos', 'Lindqvist', 'Tanaka', 'Obi', 'surgery', 'data-room'].filter((w) => text.includes(w));
+      const outsiders = ['Nadia', 'Brandt', 'Vidal', 'Tanaka', 'Obi', 'surgery', 'data-room'].filter((w) => text.includes(w));
       const notes = report.notes;
       check(
         'The inventory flags health detail, names nobody outside the team, and sums no amount',
@@ -969,6 +969,76 @@ async function main() {
           wrong.problems.some((p) => /stage "won" is not one this tool has/.test(p)),
           wrong.problems[0] ?? 'no problem reported',
         );
+        await rm(join(process.cwd(), file), { force: true });
+      }
+
+      {
+        // Translation (N47), on the fake Affinity, through a mapping of its own.
+        const map = await import('../lib/connectors/affinity/mapping');
+        const tr = await import('../lib/connectors/affinity/translate');
+        const { readFile: rf, writeFile: wf } = await import('node:fs/promises');
+        const file = join('data', 'demo', 'props-translate.jsonc');
+        await rm(join(process.cwd(), file), { force: true });
+        await map.writeMapping(report, {}, file);
+        const n = async (sql: string, params: unknown[] = []) => Number((await adb.one<{ n: string }>(sql, params))!.n);
+        const ladderBefore = await n(`select count(*)::text as n from strategy.ladder_event`);
+        const first = await tr.translate(null, { mappingPath: file });
+        const hard = await n(`select count(*)::text as n from pipeline.exposure where source = 'affinity' and track = 'hard'`);
+        const soft = await n(`select count(*)::text as n from pipeline.exposure where source = 'affinity' and track = 'soft'`);
+        const ladderAfter = await n(`select count(*)::text as n from strategy.ladder_event`);
+        check(
+          'Translation makes nothing hard and writes nothing onto the ladder',
+          first?.status === 'ok' && hard === 0 && soft > 0 && ladderBefore === ladderAfter,
+          `${first?.status}: ${first?.note}; hard from Affinity ${hard}; ladder events ${ladderBefore} → ${ladderAfter}`,
+        );
+
+        const signed = await adb.one<{ track: string; claim: string }>(
+          `select x.track::text as track, x.claim from pipeline.exposure x
+             join identity.source_record r on r.entity_id = x.entity_id and r.source = 'affinity' and r.source_id = 'person:7006'`,
+        );
+        check(
+          'A signed stage stays soft, marked ready to harden once countersigned',
+          signed?.track === 'soft' && /ready to harden once countersigned/.test(signed.claim ?? ''),
+          `track ${signed?.track}; "${signed?.claim}"`,
+        );
+
+        const dnc = await n(
+          `select count(*)::text as n from coordination.restriction c join identity.source_record r
+             on r.entity_id = c.entity_id and r.source = 'affinity' and r.source_id = 'person:7005' where c.scope = 'blanket'`,
+        );
+        check('A do-not-contact mark becomes a do-not-approach restriction on the target', dnc === 1, `restrictions on the marked person: ${dnc}`);
+
+        const counted = async () => [
+          await n(`select count(*)::text as n from strategy.pursuit where source = 'affinity'`),
+          await n(`select count(*)::text as n from pipeline.exposure where source = 'affinity'`),
+          await n(`select count(*)::text as n from research.claim where source like 'affinity:%'`),
+          await n(`select count(*)::text as n from coordination.restriction where source like 'affinity:%'`),
+          await n(`select count(*)::text as n from identity.source_record where source = 'affinity'`),
+        ].join(',');
+        const before = await counted();
+        await tr.translate(null, { mappingPath: file });
+        const after = await counted();
+        check('Translating twice adds nothing the second time', before === after, `pursuits, exposures, claims, restrictions, people: ${before} → ${after}`);
+
+        const stageOf = () => adb.one<{ stage: string | null }>(
+          `select p.stage::text as stage from strategy.pursuit p join identity.source_record r
+             on r.entity_id = p.entity_id and r.source = 'affinity' and r.source_id = 'person:7005'`,
+        );
+        const was = (await stageOf())?.stage;
+        await wf(join(process.cwd(), file), (await rf(join(process.cwd(), file), 'utf8')).replace(/("Contacted":\s*)\{"stage":"contacted"\}/, '$1{"stage":"responded"}'));
+        await tr.translate(null, { mappingPath: file });
+        const now = (await stageOf())?.stage;
+        check('A mapping edit takes effect the next time it is translated — no request to Affinity', was === 'contacted' && now === 'responded', `"Contacted" was ${was}, is ${now}`);
+
+        await adb.query(`update platform.vehicle set phase = 'historical' where slug = 'neurotech'`);
+        await tr.translate(null, { mappingPath: file });
+        const open = await n(
+          `select count(*)::text as n from pipeline.exposure x join platform.vehicle v on v.id = x.vehicle_id
+            where v.slug = 'neurotech' and x.source = 'affinity' and x.closed_at is null`,
+        );
+        await adb.query(`update platform.vehicle set phase = 'active' where slug = 'neurotech'`);
+        await tr.translate(null, { mappingPath: file });
+        check('On a historical vehicle, translated money is closed and counts in no current figure', open === 0, `open Affinity exposures on the vehicle while historical: ${open}`);
         await rm(join(process.cwd(), file), { force: true });
       }
 

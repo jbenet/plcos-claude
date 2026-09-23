@@ -7,13 +7,14 @@ type Row = {
   amount: string; probability: string | null; owner_name: string;
   evidence_ref: string | null; hardened_at: Date | string | null;
   cash_received_at: Date | string | null; opened_at: Date | string;
+  source: string; source_as_of: Date | string | null; claim: string | null;
 };
 
 const SELECT = `
   select x.exposure_id, x.entity_id, e.display_name as entity_name, x.vehicle_id,
          v.name as vehicle_name, v.slug as vehicle_slug, x.instrument, x.track, x.amount,
          x.probability, u.name as owner_name, x.evidence_ref, x.hardened_at,
-         x.cash_received_at, x.opened_at
+         x.cash_received_at, x.opened_at, x.source, x.source_as_of, x.claim
     from pipeline.exposure x
     join identity.entity e on e.entity_id = x.entity_id
     join platform.vehicle v on v.id = x.vehicle_id
@@ -29,6 +30,7 @@ const toExposure = (r: Row): Exposure => ({
   hardenedAt: r.hardened_at ? new Date(r.hardened_at) : null,
   cashReceivedAt: r.cash_received_at ? new Date(r.cash_received_at) : null,
   openedAt: new Date(r.opened_at),
+  source: r.source, sourceAsOf: r.source_as_of ? new Date(r.source_as_of) : null, claim: r.claim,
 });
 
 export async function listExposures(vehicleId?: string | null): Promise<Exposure[]> {
@@ -55,9 +57,9 @@ export async function vehicleTotals(): Promise<VehicleTotals[]> {
   const rows = await db.query<{
     id: string; slug: string; name: string; kind: string; exemption: string;
     target_amount: string | null; hard: string; cash: string; soft: string;
-    convertible: string; soft_count: string; hard_count: string;
+    convertible: string; soft_count: string; hard_count: string; phase: string;
   }>(
-    `select v.id, v.slug, v.name, v.kind::text as kind, v.exemption, v.target_amount,
+    `select v.id, v.slug, v.name, v.kind::text as kind, v.exemption, v.target_amount, v.phase,
             coalesce(sum(x.amount) filter (where x.track = 'hard'), 0)::text as hard,
             coalesce(sum(x.amount) filter (where x.track = 'hard' and x.cash_received_at is not null), 0)::text as cash,
             coalesce(sum(x.amount) filter (where x.track = 'soft'), 0)::text as soft,
@@ -66,7 +68,7 @@ export async function vehicleTotals(): Promise<VehicleTotals[]> {
             count(*) filter (where x.track = 'hard')::text as hard_count
        from platform.vehicle v
        left join pipeline.exposure x on x.vehicle_id = v.id and x.closed_at is null
-      group by v.id, v.slug, v.name, v.kind, v.exemption, v.target_amount, v.sort_order
+      group by v.id, v.slug, v.name, v.kind, v.exemption, v.target_amount, v.sort_order, v.phase
       order by v.sort_order`,
   );
 
@@ -76,7 +78,7 @@ export async function vehicleTotals(): Promise<VehicleTotals[]> {
     const soft = Number(r.soft);
     return {
       vehicleId: r.id, vehicleSlug: r.slug, vehicleName: r.name, kind: r.kind,
-      exemption: r.exemption, target, hard, cash: Number(r.cash), soft,
+      exemption: r.exemption, target, hard, cash: Number(r.cash), soft, historical: r.phase === 'historical',
       convertibleSoft: Number(r.convertible),
       softCount: Number(r.soft_count), hardCount: Number(r.hard_count),
       coverage: target && target > 0 ? (hard + soft) / target : null,

@@ -3926,3 +3926,59 @@ request to count every note in the account, then a hundred notes to a request, f
 Neurotech before anything is stored.
 
 **69 of 69 properties hold.**
+
+---
+
+## N47 — The landed copy, translated into the tool
+
+**Shipped.** Translation: the local copy of Affinity, read through the mapping, into the
+tool's own tables. It makes no request to Affinity and can be re-run safely. For the first
+time, the real profile's pages show the raise instead of an empty database.
+
+| | |
+|---|---|
+| ![Translated](docs/changelog/shots/n47/01-translated.webp) | **Translate into the tool**, on the Mapping page: pursuits by vehicle, new people and organizations, soft commitments, claims, do-not-approach instructions, what's ready to harden, and which lists were read through a mapping nobody has reviewed. |
+| ![Claim beside evidence](docs/changelog/shots/n47/02-claim-beside-evidence.webp) | **Where the pursuits stand**, on Vehicle status: the 25 furthest along, not all of them. The ladder column shows what's evidenced ("Nothing on file"); beside it, what Affinity says ("Affinity: Signed"). The gap between them is the work. |
+| ![A translated pursuit](docs/changelog/shots/n47/03-a-translated-pursuit.webp) | **One pursuit.** *Affinity says "Signed" → Signed · claims Commitment accepted — nothing on the ladder is evidenced yet.* The owner is kept by name because they aren't on the team. The check size and AUM are claims with their list, date and confidence. |
+
+### What it writes, and the rule each follows
+
+- **People and organizations**, joined to Affinity by source record. A person's current
+  organization becomes an affiliation whose capacity isn't established: a CRM row doesn't say
+  who decides.
+- **Pursuits**, one per entry on a pipeline list, with our stage, outcome and reason, and what
+  Affinity said and when. **The ladder isn't touched**, because no stage is evidence. An owner
+  who isn't on the team keeps their name on the pursuit, under a placeholder nobody signs in
+  as.
+- **Commitments are soft, always.** A *signed* stage marks one ready to harden once
+  countersigned. It doesn't harden it: that takes the close room's evidence and a MONEY ticket
+  (rule 1). On a historical vehicle the money is closed, so no current figure counts it.
+- **Check size and AUM** become research claims, with the list as their source document. AUM is
+  low confidence and unverified (issue 0022).
+- **Do not contact**: a yes becomes a blanket do-not-approach restriction on the person, which
+  every route is checked against (rule 8).
+
+Six properties hold it to that: nothing becomes hard and the ladder doesn't move; a signed
+stage stays soft and is marked ready; do-not-contact becomes a restriction; a second run adds
+nothing; a mapping edit takes effect on the next run; and a historical vehicle's money is
+closed. **75 of 75 properties hold.**
+
+### On the real account
+
+The real translation produced about two thousand pursuits across Neurotech and the two
+historical SPVs, a few dozen soft commitments, a few hundred claims, and two do-not-approach
+instructions. Every page renders with the data in it. Two things the real data showed at once
+were fixed:
+
+- **"Pursuits open" counted every pursuit**, closed and historical ones included. It counts
+  open ones now, and a historical vehicle says *history · N pursuits*.
+- **A hard figure of $0 on its own reads as "nothing committed".** It stays $0: no
+  countersignature is recorded in the tool yet, and the headline is hard-only. Today now says
+  exactly that beside it, and how many commitments are signed per Affinity and waiting on
+  Soft → Hard.
+
+### Found on the way
+
+The fake Affinity's people shared names with the demo's seed. Translated into the demo, they
+would have become a second person of the same name. They've been renamed, so the demo shows
+one of each.

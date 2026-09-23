@@ -114,6 +114,18 @@ export interface Pursuit {
   rung: LadderRung | null;
   /** The next rung up, and what it would need. */
   nextRung: LadderRung | null;
+  /** Where the work is (N46) — a claim beside the ladder, from `source`, never evidence. */
+  stage: PursuitStage | null;
+  outcome: PursuitOutcome;
+  outcomeReason: string | null;
+  /** 'us', or the system it was read from — 'affinity' — with what that system said and when. */
+  source: string;
+  sourceAsOf: Date | null;
+  stageSaid: string | null;
+  /** The owner as the source names them, when that person is not on the team. */
+  ownerSaid: string | null;
+  /** On a vehicle kept for its history. */
+  historical: boolean;
 }
 
 export function rungIndex(rung: LadderRung | null): number {
