@@ -4160,3 +4160,25 @@ calling a meeting upcoming once its time has passed.
 **On the real account**, all 44 of Affinity's words have a meaning. Neurotech reads Sourcing
 1,604 · Selected 296 · Discussing 58 · Committed 14 · Passed 23: the no-reply entries moved
 back to Selected, and the on-hold ones moved to Passed. 90 of 90 properties hold.
+
+## N54 — The calendar: every meeting, dated
+
+**Shipped.** You said to read Affinity's calendar if it could be done in bulk in under a hundred
+requests. It can be read in bulk — a hundred meetings to a request, each with its attendees —
+but not in under a hundred requests.
+
+| | |
+|---|---|
+| ![The calendar](docs/changelog/shots/n54/01-the-calendar.webp) | **Developer → Affinity → Meetings.** There's no count for meetings, so a read has a hard cap (99 requests) and says when it stops there. The first read starts in 2024, so the cap isn't spent on the oldest years; after that, only what changed. |
+| ![Dated meetings](docs/changelog/shots/n54/02-dated-meetings.webp) | **An LP's meetings, dated**: the first, the second, the next one, with who from the team was there. A meeting that a note and a "Next Event" field also name is one row, keyed by the meeting. The title and outside attendees stay in the landed copy; nothing else copies them. |
+
+**On the real account**, the read stopped at the cap with 9,900 meetings, and there are more.
+Affinity doesn't return them in date order, so those 9,900 cover every quarter since 2024 but
+lean to the older ones. I stopped rather than go past your number. The ones read are true, so
+they're translated: about 1,100 touchpoints, 900 of them meetings that include someone on our
+lists. About two in three Discussing LPs now have a meeting on record, a third have had two or
+more, and 22 LPs still at Selected have met. LP pages say the calendar read is incomplete until
+it's finished.
+
+To finish the window, either raise the cap for one read or read only the last year; both are
+your call. 91 of 91 properties hold.

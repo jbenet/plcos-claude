@@ -14,6 +14,7 @@ import {
 import { StatusForm } from '@/components/strategy/StatusForm';
 import { Touchpoints, meetingLine } from '@/components/strategy/Touchpoints';
 import { READ_LABEL, summarize, touchpointsFor } from '@/modules/meetings';
+import { latestRun } from '@/modules/sources';
 import { CLOSE_STATE_LABEL, closeTracksFor } from '@/modules/pipeline';
 import { CloseTrack } from '@/components/strategy/CloseTrack';
 import { usdM } from '@/lib/money';
@@ -38,7 +39,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
   if (!pursuit) notFound();
 
   const user = await (await auth()).currentUser();
-  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches, tracks] = await Promise.all([
+  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches, tracks, calendar] = await Promise.all([
     claimsFor(pursuit.entityId),
     listSourceDocs(),
     notesFor(pursuit.entityId),
@@ -48,6 +49,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     notesAbout(pursuit.entityId),
     touchpointsFor(pursuit.entityId, pursuit.vehicleId),
     closeTracksFor(pursuit.entityId, pursuit.vehicleId),
+    latestRun('affinity', 'meetings'),
   ]);
   const touchSummary = summarize(touches);
 
@@ -219,6 +221,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
             entityId={pursuit.entityId}
             vehicleId={pursuit.vehicleId}
             vehicleName={pursuit.vehicleName}
+            calendarPartial={Boolean((calendar?.detail as { stoppedAtCap?: boolean } | undefined)?.stoppedAtCap)}
           />
 
           <div className="card">

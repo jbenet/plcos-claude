@@ -32,6 +32,8 @@ export const ALLOWED: readonly Endpoint[] = [
   // N49: every note, a hundred to a request, with what each is attached to. It replaced the
   // per-entry note endpoints (/v2/persons/{id}/notes and the rest), which are no longer allowed.
   { template: '/v2/notes', purpose: 'Every note in the account but replies, a hundred at a time, each with the people, organizations and opportunities it is attached to. limit=0 counts them and returns none.' },
+  // N54: the calendar, in bulk, under a cap Juan set (fewer than a hundred requests).
+  { template: '/v2/meetings', purpose: 'Every meeting on the team’s calendars since 2024, a hundred at a time, with its time and attendees — dated meetings for each LP. No count exists, so a read is capped.' },
 ];
 
 /**

@@ -196,6 +196,35 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N54: [
+    {
+      name: '01-the-calendar',
+      path: '/dev/affinity/meetings',
+      prepare: async (page) => {
+        const read = page.getByRole('button', { name: /Read the calendar|Read the window again/ });
+        await read.first().click();
+        await page.waitForFunction(() => !/reading now/i.test(document.body.innerText) && /Last complete read/.test(document.body.innerText), undefined, { timeout: 60_000 });
+        await page.waitForLoadState('networkidle');
+        const tr = page.getByRole('button', { name: /Translate: turn the meetings/ });
+        if (await tr.count()) {
+          await tr.click();
+          await page.waitForLoadState('networkidle');
+        }
+        await page.goto(page.url(), { waitUntil: 'networkidle' });
+      },
+    },
+    {
+      name: '02-dated-meetings',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.getByRole('heading', { name: 'Touchpoints' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N53: [
     {
       name: '01-search-and-filter',

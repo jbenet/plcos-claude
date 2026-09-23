@@ -1,0 +1,588 @@
+{
+ "data": [
+  {
+   "id": 55001,
+   "loggingType": "automated",
+   "title": "Intro: PLC Neurotech I",
+   "startTime": "2026-06-18T16:00:00Z",
+   "endTime": "2026-06-18T16:45:00Z",
+   "allDay": false,
+   "creator": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "organizer": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "createdAt": "2026-06-10T09:00:00Z",
+   "updatedAt": null,
+   "attendeesPreview": {
+    "data": [
+     {
+      "emailAddress": "juan@example.com",
+      "person": {
+       "id": 90001,
+       "firstName": "Juan",
+       "lastName": null,
+       "primaryEmailAddress": "juan@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "nadia@brandt-family.example",
+      "person": {
+       "id": 7001,
+       "firstName": "Nadia",
+       "lastName": "Brandt",
+       "primaryEmailAddress": "nadia@brandt-family.example",
+       "type": "external"
+      }
+     }
+    ],
+    "totalCount": 2
+   }
+  },
+  {
+   "id": 55004,
+   "loggingType": "automated",
+   "title": "Neurotech I — first meeting at their office",
+   "startTime": "2026-08-21T15:30:00Z",
+   "endTime": "2026-08-21T16:30:00Z",
+   "allDay": false,
+   "creator": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "organizer": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "createdAt": "2026-08-15T09:00:00Z",
+   "updatedAt": null,
+   "attendeesPreview": {
+    "data": [
+     {
+      "emailAddress": "juan@example.com",
+      "person": {
+       "id": 90001,
+       "firstName": "Juan",
+       "lastName": null,
+       "primaryEmailAddress": "juan@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "nadia@brandt-family.example",
+      "person": {
+       "id": 7001,
+       "firstName": "Nadia",
+       "lastName": "Brandt",
+       "primaryEmailAddress": "nadia@brandt-family.example",
+       "type": "external"
+      }
+     }
+    ],
+    "totalCount": 2
+   }
+  },
+  {
+   "id": 20260911,
+   "loggingType": "automated",
+   "title": "Follow-up: pipeline of portfolio companies",
+   "startTime": "2026-09-10T17:00:00Z",
+   "endTime": "2026-09-10T17:45:00Z",
+   "allDay": false,
+   "creator": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "organizer": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "createdAt": "2026-09-01T09:00:00Z",
+   "updatedAt": null,
+   "attendeesPreview": {
+    "data": [
+     {
+      "emailAddress": "juan@example.com",
+      "person": {
+       "id": 90001,
+       "firstName": "Juan",
+       "lastName": null,
+       "primaryEmailAddress": "juan@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "mara@example.com",
+      "person": {
+       "id": 90002,
+       "firstName": "Mara",
+       "lastName": "Vance",
+       "primaryEmailAddress": "mara@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "nadia@brandt-family.example",
+      "person": {
+       "id": 7001,
+       "firstName": "Nadia",
+       "lastName": "Brandt",
+       "primaryEmailAddress": "nadia@brandt-family.example",
+       "type": "external"
+      }
+     }
+    ],
+    "totalCount": 3
+   }
+  },
+  {
+   "id": 55012,
+   "loggingType": "automated",
+   "title": "Fund terms walkthrough",
+   "startTime": "2026-09-05T16:00:00Z",
+   "endTime": "2026-09-05T17:00:00Z",
+   "allDay": false,
+   "creator": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "organizer": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "createdAt": "2026-08-30T09:00:00Z",
+   "updatedAt": null,
+   "attendeesPreview": {
+    "data": [
+     {
+      "emailAddress": "juan@example.com",
+      "person": {
+       "id": 90001,
+       "firstName": "Juan",
+       "lastName": null,
+       "primaryEmailAddress": "juan@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "ana@vidal.example",
+      "person": {
+       "id": 7004,
+       "firstName": "Ana",
+       "lastName": "Vidal",
+       "primaryEmailAddress": "ana@vidal.example",
+       "type": "external"
+      }
+     }
+    ],
+    "totalCount": 2
+   }
+  },
+  {
+   "id": 55013,
+   "loggingType": "automated",
+   "title": "Side letter: reporting",
+   "startTime": "2026-09-16T15:00:00Z",
+   "endTime": "2026-09-16T15:30:00Z",
+   "allDay": false,
+   "creator": {
+    "emailAddress": "mara@example.com",
+    "person": {
+     "id": 90002,
+     "firstName": "Mara",
+     "lastName": "Vance",
+     "primaryEmailAddress": "mara@example.com",
+     "type": "internal"
+    }
+   },
+   "organizer": {
+    "emailAddress": "mara@example.com",
+    "person": {
+     "id": 90002,
+     "firstName": "Mara",
+     "lastName": "Vance",
+     "primaryEmailAddress": "mara@example.com",
+     "type": "internal"
+    }
+   },
+   "createdAt": "2026-09-12T09:00:00Z",
+   "updatedAt": null,
+   "attendeesPreview": {
+    "data": [
+     {
+      "emailAddress": "mara@example.com",
+      "person": {
+       "id": 90002,
+       "firstName": "Mara",
+       "lastName": "Vance",
+       "primaryEmailAddress": "mara@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "ana@vidal.example",
+      "person": {
+       "id": 7004,
+       "firstName": "Ana",
+       "lastName": "Vidal",
+       "primaryEmailAddress": "ana@vidal.example",
+       "type": "external"
+      }
+     }
+    ],
+    "totalCount": 2
+   }
+  },
+  {
+   "id": 55009,
+   "loggingType": "automated",
+   "title": "Intro call",
+   "startTime": "2026-09-02T13:00:00Z",
+   "endTime": "2026-09-02T13:30:00Z",
+   "allDay": false,
+   "creator": {
+    "emailAddress": "mara@example.com",
+    "person": {
+     "id": 90002,
+     "firstName": "Mara",
+     "lastName": "Vance",
+     "primaryEmailAddress": "mara@example.com",
+     "type": "internal"
+    }
+   },
+   "organizer": {
+    "emailAddress": "mara@example.com",
+    "person": {
+     "id": 90002,
+     "firstName": "Mara",
+     "lastName": "Vance",
+     "primaryEmailAddress": "mara@example.com",
+     "type": "internal"
+    }
+   },
+   "createdAt": "2026-08-28T09:00:00Z",
+   "updatedAt": null,
+   "attendeesPreview": {
+    "data": [
+     {
+      "emailAddress": "mara@example.com",
+      "person": {
+       "id": 90002,
+       "firstName": "Mara",
+       "lastName": "Vance",
+       "primaryEmailAddress": "mara@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "omar@haddad.example",
+      "person": {
+       "id": 7002,
+       "firstName": "Omar",
+       "lastName": "Haddad",
+       "primaryEmailAddress": "omar@haddad.example",
+       "type": "external"
+      }
+     }
+    ],
+    "totalCount": 2
+   }
+  },
+  {
+   "id": 55020,
+   "loggingType": "automated",
+   "title": "Data room walkthrough",
+   "startTime": "2026-10-06T16:00:00Z",
+   "endTime": "2026-10-06T17:00:00Z",
+   "allDay": false,
+   "creator": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "organizer": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "createdAt": "2026-09-20T09:00:00Z",
+   "updatedAt": null,
+   "attendeesPreview": {
+    "data": [
+     {
+      "emailAddress": "juan@example.com",
+      "person": {
+       "id": 90001,
+       "firstName": "Juan",
+       "lastName": null,
+       "primaryEmailAddress": "juan@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "sam@example.com",
+      "person": {
+       "id": 90003,
+       "firstName": "Sam",
+       "lastName": "Ferreira",
+       "primaryEmailAddress": "sam@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "nadia@brandt-family.example",
+      "person": {
+       "id": 7001,
+       "firstName": "Nadia",
+       "lastName": "Brandt",
+       "primaryEmailAddress": "nadia@brandt-family.example",
+       "type": "external"
+      }
+     }
+    ],
+    "totalCount": 3
+   }
+  },
+  {
+   "id": 55021,
+   "loggingType": "automated",
+   "title": "Closing checklist",
+   "startTime": "2026-09-11T18:00:00Z",
+   "endTime": "2026-09-11T18:30:00Z",
+   "allDay": false,
+   "creator": {
+    "emailAddress": "sam@example.com",
+    "person": {
+     "id": 90003,
+     "firstName": "Sam",
+     "lastName": "Ferreira",
+     "primaryEmailAddress": "sam@example.com",
+     "type": "internal"
+    }
+   },
+   "organizer": {
+    "emailAddress": "sam@example.com",
+    "person": {
+     "id": 90003,
+     "firstName": "Sam",
+     "lastName": "Ferreira",
+     "primaryEmailAddress": "sam@example.com",
+     "type": "internal"
+    }
+   },
+   "createdAt": "2026-09-05T09:00:00Z",
+   "updatedAt": null,
+   "attendeesPreview": {
+    "data": [
+     {
+      "emailAddress": "sam@example.com",
+      "person": {
+       "id": 90003,
+       "firstName": "Sam",
+       "lastName": "Ferreira",
+       "primaryEmailAddress": "sam@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "yuki@tanaka.example",
+      "person": {
+       "id": 7006,
+       "firstName": "Yuki",
+       "lastName": "Tanaka",
+       "primaryEmailAddress": "yuki@tanaka.example",
+       "type": "external"
+      }
+     }
+    ],
+    "totalCount": 2
+   }
+  },
+  {
+   "id": 55022,
+   "loggingType": "manual",
+   "title": "Neurotech symposium: coffee",
+   "startTime": "2026-03-15T14:00:00Z",
+   "endTime": "2026-03-15T15:00:00Z",
+   "allDay": false,
+   "creator": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "organizer": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "createdAt": "2026-03-10T09:00:00Z",
+   "updatedAt": null,
+   "attendeesPreview": {
+    "data": [
+     {
+      "emailAddress": "juan@example.com",
+      "person": {
+       "id": 90001,
+       "firstName": "Juan",
+       "lastName": null,
+       "primaryEmailAddress": "juan@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "leila@foundation.example",
+      "person": {
+       "id": 7101,
+       "firstName": "Leila",
+       "lastName": "Haddou",
+       "primaryEmailAddress": "leila@foundation.example",
+       "type": "external"
+      }
+     }
+    ],
+    "totalCount": 2
+   }
+  },
+  {
+   "id": 55023,
+   "loggingType": "automated",
+   "title": "Team offsite planning",
+   "startTime": "2026-07-01T10:00:00Z",
+   "endTime": "2026-07-01T11:00:00Z",
+   "allDay": false,
+   "creator": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "organizer": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "createdAt": "2026-06-20T09:00:00Z",
+   "updatedAt": null,
+   "attendeesPreview": {
+    "data": [
+     {
+      "emailAddress": "juan@example.com",
+      "person": {
+       "id": 90001,
+       "firstName": "Juan",
+       "lastName": null,
+       "primaryEmailAddress": "juan@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "mara@example.com",
+      "person": {
+       "id": 90002,
+       "firstName": "Mara",
+       "lastName": "Vance",
+       "primaryEmailAddress": "mara@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "sam@example.com",
+      "person": {
+       "id": 90003,
+       "firstName": "Sam",
+       "lastName": "Ferreira",
+       "primaryEmailAddress": "sam@example.com",
+       "type": "internal"
+      }
+     }
+    ],
+    "totalCount": 3
+   }
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}

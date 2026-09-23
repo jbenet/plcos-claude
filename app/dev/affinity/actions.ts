@@ -95,3 +95,14 @@ export async function readNotesAction(formData: FormData): Promise<void> {
   });
   revalidatePath('/dev/affinity/notes');
 }
+
+/**
+ * The calendar in bulk (N54), capped under a hundred requests (Juan, 24 Sep). Runs in this
+ * server's process while the page watches. After a complete read, only what changed.
+ */
+export async function readMeetingsAction(formData: FormData): Promise<void> {
+  const { startMeetings } = await import('@/lib/connectors/affinity/meetings');
+  const user = await (await auth()).currentUser();
+  startMeetings(user.id, { full: formData.get('mode') === 'full' });
+  revalidatePath('/dev/affinity/meetings');
+}

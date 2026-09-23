@@ -49,6 +49,8 @@ function Row({ t }: { t: Touchpoint }) {
 export function Touchpoints(props: {
   touches: Touchpoint[]; summary: TouchpointSummary;
   pursuitId: string; entityId: string; vehicleId: string; vehicleName: string;
+  /** The last calendar read stopped at its cap: some meetings are not here yet (rule 7). */
+  calendarPartial?: boolean;
 }) {
   const { touches, summary: s } = props;
   return (
@@ -98,6 +100,7 @@ export function Touchpoints(props: {
         entry&rsquo;s last email and meetings, and meeting, call and email notes — as of the last
         translation. One tied to no vehicle counts for every open pursuit of this LP. A meeting
         nobody logged and no calendar saw is not here.
+        {props.calendarPartial && <> <b>The calendar read stopped at its cap,</b> so some meetings Affinity has are not here yet.</>}
       </p>
     </div>
   );

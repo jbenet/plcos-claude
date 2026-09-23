@@ -7,6 +7,7 @@ import { placeEntry, readMapping, reasonOf, type ListMapping } from './mapping';
 import { normName } from './match';
 import { sliceTargets } from './slice';
 import type { AffinityNote } from './notes';
+import type { AffinityMeeting } from './meetings';
 import type { PursuitStatus } from '@/modules/strategy';
 
 /**
@@ -109,9 +110,9 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
     exposures: 0, readyToHarden: 0, claims: 0, restrictions: 0, ownersNotOnTeam: 0, unreviewedLists: [], touchpoints: 0,
   };
   try {
-    const [inv, init, found, targets, rawEntries, rawNotes] = await Promise.all([
+    const [inv, init, found, targets, rawEntries, rawNotes, rawMeetings] = await Promise.all([
       inventory(), initForMatching(), discovered(), sliceTargets(), latestRaw<E>(SOURCE, 'list_entry'),
-      latestRaw<AffinityNote>(SOURCE, 'note'),
+      latestRaw<AffinityNote>(SOURCE, 'note'), latestRaw<AffinityMeeting>(SOURCE, 'meeting'),
     ]);
     const mapping = await readMapping(inv, opts.mappingPath);
     if (!init) throw new Error('The init file does not load; translation needs its team and vehicles.');
@@ -321,7 +322,10 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
         }
       }
 
-      counts.touchpoints = await touchpoints(tx, rawEntries.map((r) => r.payload), rawNotes.map((r) => r.payload), init.team, users, users.get(PLACEHOLDER)!);
+      counts.touchpoints = await touchpoints(
+        tx, rawEntries.map((r) => r.payload), rawNotes.map((r) => r.payload), rawMeetings.map((r) => r.payload),
+        init.team, users, users.get(PLACEHOLDER)!,
+      );
 
       await tx.query(
         `update platform.source_sync set status = 'ok', last_sync_at = now(), detail = $1 where source = 'affinity'`,
@@ -365,7 +369,8 @@ const CHANNEL_OF: Record<Interaction['type'], string> = { email: 'email', meetin
  * Affinity's interactions are not; it counts for every open pursuit of that LP, and says so.
  */
 async function touchpoints(
-  tx: Queryable, entries: E[], notes: AffinityNote[], team: Array<{ handle: string; email?: string | null; affinityEmail?: string | null }>,
+  tx: Queryable, entries: E[], notes: AffinityNote[], meetings: AffinityMeeting[],
+  team: Array<{ handle: string; email?: string | null; affinityEmail?: string | null }>,
   users: Map<string, string>, placeholder: string,
 ): Promise<number> {
   const ours = new Map((await tx.query<{ source_id: string; entity_id: string }>(
@@ -420,6 +425,26 @@ async function touchpoints(
           : 'both',
         owner: who(d.from?.person, d.from?.emailAddress) ?? internal.map((p) => who(p)).find(Boolean) ?? placeholder,
         attendees: internal.map((p) => [p.firstName, p.lastName].filter(Boolean).join(' ')).filter(Boolean),
+      });
+    }
+  }
+
+  // The calendar itself (N54): every meeting with someone in the tool among the attendees, dated
+  // exactly, with who from the team was there. Keyed as above, so a meeting also named by a
+  // "Next Event" field or by a note is one touchpoint. No title is copied: the LP page reads it
+  // from the landed meeting when it shows the row.
+  for (const mt of meetings) {
+    const people = (mt.attendeesPreview?.data ?? []).map((a) => a.person).filter((p): p is NonNullable<typeof p> => !!p);
+    const internal = people.filter((p) => p.type === 'internal');
+    for (const p of people) {
+      if (p.type === 'internal') continue;
+      const key = `person:${p.id}`;
+      const entity = ours.get(key);
+      if (!entity) continue;
+      await put({
+        entity, ref: `interaction:meeting:${mt.id}:${key}`, channel: 'meeting', at: mt.startTime, exact: true,
+        direction: 'both', owner: internal.map((x) => who(x)).find(Boolean) ?? placeholder,
+        attendees: internal.map((x) => [x.firstName, x.lastName].filter(Boolean).join(' ')).filter(Boolean),
       });
     }
   }

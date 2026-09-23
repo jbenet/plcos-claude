@@ -986,6 +986,22 @@ async function main() {
           `status ${capped?.status}; ${capped?.requests} requests of 4 approved; ${pages.length} pages, includes on each: ${withIncludes}`,
         );
         await adb.query(`delete from sources.raw_record where kind = 'note' and source_id like '91%'`);
+
+        // The calendar (N54): read in bulk under a cap, since the window, then only what changed.
+        const mt = await import('../lib/connectors/affinity/meetings');
+        const cal = await mt.readMeetings(null);
+        const cal2 = await mt.readMeetings(null);
+        const s11 = scripted((u, i) => ok({ data: [{ id: 92000 + i, title: null, startTime: '2026-01-01T00:00:00Z', endTime: null, createdAt: '2026-01-01T00:00:00Z', updatedAt: null, attendeesPreview: { data: [], totalCount: 0 } }], pagination: { nextUrl: `https://api.affinity.co/v2/meetings?cursor=m${i}` } }));
+        const capped2 = await mt.readMeetings(null, { full: true, cap: 3, overrides: { transport: s11.transport, key: KEY, sleep } });
+        const windowed = s11.calls[0]?.searchParams.get('filter') ?? '';
+        check(
+          'The calendar is read in bulk from its window, then only what changed, and stops at its cap',
+          cal?.status === 'ok' && cal.records === 10 && cal.requests === 1 && cal2?.status === 'ok' && cal2.newRecords === 0 &&
+            (cal2.detail as { mode?: string }).mode === 'since' && capped2?.status === 'failed' && capped2.requests === 3 &&
+            (capped2.detail as { stoppedAtCap?: boolean }).stoppedAtCap === true && windowed.startsWith('startTime>='),
+          `first read ${cal?.records} meetings in ${cal?.requests} request; second ${cal2?.newRecords} new (${(cal2?.detail as { mode?: string })?.mode}); capped read ${capped2?.status} at ${capped2?.requests} requests; window filter "${windowed}"`,
+        );
+        await adb.query(`delete from sources.raw_record where kind = 'meeting' and source_id like '92%'`);
       }
 
       const inv = await import('../lib/connectors/affinity/inventory');
@@ -1187,15 +1203,16 @@ async function main() {
         // notes, one per interaction, the calendar's date over the note's.
         const mt = await import('../modules/meetings');
         const nadiaLog = await mt.touchpointsFor(nadia!.pursuit_id ? (await adb.one<{ entity_id: string }>(`select entity_id from strategy.pursuit where pursuit_id = $1`, [nadia!.pursuit_id]))!.entity_id : '', null);
-        const nadiaSum = mt.summarize(nadiaLog);
+        const nadiaSum = mt.summarize(nadiaLog, new Date('2026-09-23T00:00:00Z'));
         const touchBefore = await n(`select count(*)::text as n from meetings.meeting where source = 'affinity'`);
         await tr.translate(null, { mappingPath: file });
         const touchAfter = await n(`select count(*)::text as n from meetings.meeting where source = 'affinity'`);
         check(
           'Affinity’s interactions become dated touchpoints, one each, and translating again adds none',
-          nadiaSum.meetingDates.map((d) => d.toISOString().slice(0, 10)).join(',') === '2026-08-21,2026-09-10' &&
+          nadiaSum.meetingDates.map((d) => d.toISOString().slice(0, 10)).join(',') === '2026-06-18,2026-08-21,2026-09-10' &&
+            nadiaSum.nextMeeting?.toISOString().slice(0, 10) === '2026-10-06' &&
             nadiaLog.every((t) => t.vehicleId === null && t.summary === null) && touchBefore > 0 && touchBefore === touchAfter,
-          `meetings ${nadiaSum.meetingDates.map((d) => d.toISOString().slice(0, 10)).join(', ')}; ${nadiaLog.length} touchpoints, none tied to a vehicle, no text copied; Affinity touchpoints ${touchBefore} → ${touchAfter}`,
+          `meetings ${nadiaSum.meetingDates.map((d) => d.toISOString().slice(0, 10)).join(', ')}, next ${nadiaSum.nextMeeting?.toISOString().slice(0, 10)}; ${nadiaLog.length} touchpoints, none tied to a vehicle, no text copied; Affinity touchpoints ${touchBefore} → ${touchAfter}`,
         );
 
         // Logged here: rules at the door, and nothing reaches the ladder.
@@ -1211,7 +1228,7 @@ async function main() {
         check(
           'A logged touchpoint counts, carries their read, and waits on their reply — and touches no rung',
           noCorpus instanceof mt.TouchpointRefused && readAhead instanceof mt.TouchpointRefused &&
-            logged.meetingDates.length === 3 && logged.read?.read === 'very_interested' &&
+            logged.meetingDates.length === 4 && logged.read?.read === 'very_interested' &&
             logged.awaitingSince?.toISOString().slice(0, 10) === '2026-09-21' && ladderT0 === ladderT1,
           `research with no corpus: ${noCorpus ? 'refused' : 'ALLOWED'}; a read before it happened: ${readAhead ? 'refused' : 'ALLOWED'}; meetings ${logged.meetingDates.length}; read ${logged.read?.read}; waiting since ${logged.awaitingSince?.toISOString().slice(0, 10)}; ladder ${ladderT0} → ${ladderT1}`,
         );
