@@ -6,6 +6,6 @@ export type {
   ConnectionTest, LoggedRequest, RateWindow, RawRecordInput, RequestLogEntry, RequestOutcome, SyncRun,
 } from './types';
 export {
-  finishRun, landRaw, latestConnectionTest, latestRaw, latestRun, logRequest, recentRequests,
-  recordConnectionTest, requestsThisMonth, startRun,
+  finishRun, landRaw, latestConnectionTest, latestRaw, latestRun, logRequest, progressRun,
+  rawCounts, recentRequests, recordConnectionTest, requestsThisMonth, startRun,
 } from './repo';

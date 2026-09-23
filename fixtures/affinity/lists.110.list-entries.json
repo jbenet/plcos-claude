@@ -1,0 +1,209 @@
+{
+ "data": [
+  {
+   "id": 6601,
+   "type": "opportunity",
+   "listId": 110,
+   "createdAt": "2026-04-10T12:00:00Z",
+   "creatorId": 90001,
+   "entity": {
+    "id": 8101,
+    "name": "Roos family office \u2014 Neurotech I",
+    "listId": 110,
+    "fields": [
+     {
+      "id": "field-6101",
+      "name": "Stage",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": {
+        "dropdownOptionId": 9200,
+        "text": "Diligence"
+       }
+      }
+     },
+     {
+      "id": "field-6102",
+      "name": "Amount",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": 5000000
+      }
+     },
+     {
+      "id": "field-6103",
+      "name": "Expected close",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "datetime",
+       "data": "2026-10-30T00:00:00Z"
+      }
+     },
+     {
+      "id": "field-6104",
+      "name": "People",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person-multi",
+       "data": [
+        {
+         "id": 7001,
+         "firstName": null,
+         "lastName": null,
+         "primaryEmailAddress": null,
+         "type": "external"
+        }
+       ]
+      }
+     }
+    ],
+    "isRestricted": false,
+    "isRedacted": false
+   }
+  },
+  {
+   "id": 6602,
+   "type": "opportunity",
+   "listId": 110,
+   "createdAt": "2026-04-10T12:00:00Z",
+   "creatorId": 90001,
+   "entity": {
+    "id": 8102,
+    "name": "Lindqvist \u2014 Neurotech I",
+    "listId": 110,
+    "fields": [
+     {
+      "id": "field-6101",
+      "name": "Stage",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": {
+        "dropdownOptionId": 9200,
+        "text": "Soft commit"
+       }
+      }
+     },
+     {
+      "id": "field-6102",
+      "name": "Amount",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": 2500000
+      }
+     },
+     {
+      "id": "field-6103",
+      "name": "Expected close",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "datetime",
+       "data": "2026-11-15T00:00:00Z"
+      }
+     },
+     {
+      "id": "field-6104",
+      "name": "People",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person-multi",
+       "data": [
+        {
+         "id": 7004,
+         "firstName": null,
+         "lastName": null,
+         "primaryEmailAddress": null,
+         "type": "external"
+        }
+       ]
+      }
+     }
+    ],
+    "isRestricted": false,
+    "isRedacted": false
+   }
+  },
+  {
+   "id": 6603,
+   "type": "opportunity",
+   "listId": 110,
+   "createdAt": "2026-04-10T12:00:00Z",
+   "creatorId": 90001,
+   "entity": {
+    "id": 8103,
+    "name": "Tanaka \u2014 Neurotech I",
+    "listId": 110,
+    "fields": [
+     {
+      "id": "field-6101",
+      "name": "Stage",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": {
+        "dropdownOptionId": 9200,
+        "text": "Closed won"
+       }
+      }
+     },
+     {
+      "id": "field-6102",
+      "name": "Amount",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": 1000000
+      }
+     },
+     {
+      "id": "field-6103",
+      "name": "Expected close",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "datetime",
+       "data": "2026-09-12T00:00:00Z"
+      }
+     },
+     {
+      "id": "field-6104",
+      "name": "People",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person-multi",
+       "data": [
+        {
+         "id": 7006,
+         "firstName": null,
+         "lastName": null,
+         "primaryEmailAddress": null,
+         "type": "external"
+        }
+       ]
+      }
+     }
+    ],
+    "isRestricted": false,
+    "isRedacted": false
+   }
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}

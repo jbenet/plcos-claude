@@ -1,0 +1,48 @@
+{
+ "data": [
+  {
+   "id": "field-6101",
+   "name": "Stage",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "dropdown",
+   "createdAt": "2026-04-06T12:00:00Z"
+  },
+  {
+   "id": "field-6102",
+   "name": "Amount",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "number",
+   "createdAt": "2026-04-06T12:00:00Z"
+  },
+  {
+   "id": "field-6103",
+   "name": "Expected close",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "datetime",
+   "createdAt": "2026-04-06T12:00:00Z"
+  },
+  {
+   "id": "field-6104",
+   "name": "People",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "person-multi",
+   "createdAt": "2026-04-06T12:00:00Z"
+  },
+  {
+   "id": "field-6105",
+   "name": "Organization",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "company",
+   "createdAt": "2026-04-06T12:00:00Z"
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}

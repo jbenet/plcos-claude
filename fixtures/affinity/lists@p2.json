@@ -35,6 +35,15 @@
    "isPublic": true,
    "type": "person",
    "createdAt": "2026-01-02T12:00:00Z"
+  },
+  {
+   "id": 110,
+   "name": "PLC Neurotech I \u2014 Fundraising",
+   "creatorId": 90001,
+   "ownerId": 90001,
+   "isPublic": true,
+   "type": "opportunity",
+   "createdAt": "2026-04-06T12:00:00Z"
   }
  ],
  "pagination": {

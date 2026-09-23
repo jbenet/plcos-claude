@@ -125,15 +125,27 @@ export async function startRun(source: string, kind: string, runBy: string | nul
   return Number(row!.id);
 }
 
+/** While a long run is going: what it has done so far, so the page can say so. */
+export async function progressRun(id: number, r: { requests: number; records: number; newRecords: number; note: string | null }): Promise<void> {
+  const db = await getDb();
+  await db.query(
+    `update sources.sync_run set requests = $2, records = $3, new_records = $4, note = $5 where id = $1 and status = 'running'`,
+    [id, r.requests, r.records, r.newRecords, r.note],
+  );
+}
+
 export async function finishRun(
   id: number,
-  r: { status: 'ok' | 'failed'; requests: number; records: number; newRecords: number; note: string | null },
+  r: {
+    status: 'ok' | 'failed' | 'held'; requests: number; records: number; newRecords: number;
+    note: string | null; detail?: Record<string, unknown>;
+  },
 ): Promise<void> {
   const db = await getDb();
   await db.query(
     `update sources.sync_run set finished_at = now(), status = $2, requests = $3, records = $4,
-            new_records = $5, note = $6 where id = $1`,
-    [id, r.status, r.requests, r.records, r.newRecords, r.note],
+            new_records = $5, note = $6, detail = $7 where id = $1`,
+    [id, r.status, r.requests, r.records, r.newRecords, r.note, JSON.stringify(r.detail ?? {})],
   );
 }
 
@@ -142,10 +154,10 @@ export async function latestRun(source: string, kind: string): Promise<SyncRun |
   const r = await db.one<{
     id: string; source: string; kind: string; started_at: Date | string; finished_at: Date | string | null;
     status: SyncRun['status']; run_by_name: string | null; requests: number; records: number;
-    new_records: number; note: string | null;
+    new_records: number; note: string | null; detail: Record<string, unknown>;
   }>(
     `select r.id::text, r.source, r.kind, r.started_at, r.finished_at, r.status, u.name as run_by_name,
-            r.requests, r.records, r.new_records, r.note
+            r.requests, r.records, r.new_records, r.note, r.detail
        from sources.sync_run r left join platform.app_user u on u.id = r.run_by
       where r.source = $1 and r.kind = $2 order by r.started_at desc, r.id desc limit 1`,
     [source, kind],
@@ -155,5 +167,17 @@ export async function latestRun(source: string, kind: string): Promise<SyncRun |
     id: Number(r.id), source: r.source, kind: r.kind, startedAt: new Date(r.started_at),
     finishedAt: r.finished_at ? new Date(r.finished_at) : null, status: r.status,
     runByName: r.run_by_name, requests: r.requests, records: r.records, newRecords: r.new_records, note: r.note,
+    detail: r.detail ?? {},
   };
+}
+
+/** What has landed, by kind: records (distinct ids) and versions (every change kept). */
+export async function rawCounts(source: string): Promise<Array<{ kind: string; records: number; versions: number; lastAt: Date }>> {
+  const db = await getDb();
+  const rows = await db.query<{ kind: string; records: string; versions: string; last_at: Date | string }>(
+    `select kind, count(distinct source_id)::text as records, count(*)::text as versions, max(fetched_at) as last_at
+       from sources.raw_record where source = $1 group by kind order by kind`,
+    [source],
+  );
+  return rows.map((r) => ({ kind: r.kind, records: Number(r.records), versions: Number(r.versions), lastAt: new Date(r.last_at) }));
 }

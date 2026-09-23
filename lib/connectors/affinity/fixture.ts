@@ -34,8 +34,13 @@ export function fixtureTransport(): Transport {
       try {
         body = await readFile(join(process.cwd(), 'fixtures', 'affinity', file), 'utf8');
       } catch {
-        status = 404;
-        body = JSON.stringify({ errors: [{ code: 'not-found', message: `No fixture for ${url.pathname}` }] });
+        // Somebody with no notes, or no relationships, answers an empty page in Affinity too.
+        if (/\/(notes|relationships)$/.test(url.pathname)) {
+          body = JSON.stringify({ data: [], pagination: { prevUrl: null, nextUrl: null } });
+        } else {
+          status = 404;
+          body = JSON.stringify({ errors: [{ code: 'not-found', message: `No fixture for ${url.pathname}` }] });
+        }
       }
       return { status, headers, text: async () => body };
     },

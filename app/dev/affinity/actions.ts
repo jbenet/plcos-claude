@@ -20,3 +20,19 @@ export async function runDiscovery(): Promise<void> {
   revalidatePath('/dev/affinity');
   revalidatePath('/dev/affinity/lists');
 }
+
+/** Starts the first slice in this server's process and returns at once; the page watches it. */
+export async function runSliceAction(formData: FormData): Promise<void> {
+  const { startSlice } = await import('@/lib/connectors/affinity/slice');
+  const user = await (await auth()).currentUser();
+  // A go-ahead on a held run carries the estimate it was shown, and the run proceeds only
+  // within that estimate plus a quarter — an approval of a number, not of whatever it costs.
+  const approved = Number(formData.get('approvedEstimate') ?? 0);
+  const skipRelationships = formData.get('scope') === 'notes';
+  startSlice(user.id, {
+    ...(approved > 0 ? { approvedUpTo: Math.ceil(approved * 1.25) } : {}),
+    skipRelationships,
+  });
+  revalidatePath('/dev/affinity/slice');
+}
+

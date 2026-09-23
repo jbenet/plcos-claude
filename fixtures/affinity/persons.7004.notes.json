@@ -1,0 +1,26 @@
+{
+ "data": [
+  {
+   "id": 30003,
+   "type": "entities",
+   "content": {
+    "html": "<p>Soft circle at 2.5M, pending her partner's sign-off. Prefers a side letter on reporting.</p>"
+   },
+   "creator": {
+    "id": 90001,
+    "firstName": "Juan",
+    "lastName": null,
+    "primaryEmailAddress": "juan@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-09-19T15:00:00Z",
+   "updatedAt": "2026-09-20T09:00:00Z",
+   "repliesCount": 0
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}

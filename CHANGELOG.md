@@ -3664,3 +3664,69 @@ hold.**
 Neurotech names will match or they won't, and the SPV candidates will show which lists to
 add. Then the first slice: entries on the matched lists, their organizations and people,
 and note text for Neurotech only.
+
+---
+
+## N42 — The first slice, and a run that waits to be told
+
+**Shipped.** The first read of what's actually on the lists. It covers the two lists the init
+file names for Neurotech, and the lists that say SPV. Everything lands raw, and nothing is
+translated yet. Along the way, the Affinity key moved from 1Password to the macOS Keychain.
+
+| | |
+|---|---|
+| ![Held](docs/changelog/shots/n42/01-held.webp) | **Developer → Affinity → First slice**, held. It read the entries (13 in the fake Affinity), counted what the rest would cost, and stopped: about 15 requests, over the demo's ceiling of 10. Two ways on: notes only, or notes and relationships. Each approves its number and a quarter more. |
+| ![Read](docs/changelog/shots/n42/02-read.webp) | **After the go-ahead.** 5 notes for 9 entries, 6 relationship sets, and what landed, by kind. *11 versions* of 10 lists: one list changed since discovery, and the old version was kept beside the new one. |
+
+### What the slice reads
+
+- **Every entry** on each list, with all four kinds of field value, a hundred to a request.
+- **Note text**, only where the vehicle's init entry says `importNotes`. That's Neurotech,
+  as you decided, and never an SPV list.
+- **Relationship strengths to the team**: the strongest hundred per person, only on a People
+  list a vehicle claims.
+
+Meeting and email metadata isn't read on its own. The lists' *Last email* and *Last meeting*
+fields already say when someone was last in touch, and the account-wide email and meeting
+endpoints can't be filtered by person. Five more paths are on the allowlist, and each one
+says what it's for.
+
+### Estimated before it is spent
+
+Entries are cheap, and reading them is how the number of people becomes known. Notes and
+relationships cost a request per entry, so that part is estimated first. A run whose estimate
+is over `config.affinity.sliceCeiling` (3,000, a guess) holds. Approving it approves a number,
+not whatever the run turns out to cost. And the approver is a person: CLAUDE.md says no tool
+accepts its own proposed task, so I don't press the button myself.
+
+**On the real account**, the slice read every entry on the four lists in 24 requests and held.
+Its per-entry reads came to more than 3,000, so it's waiting for you. It's well inside this
+tool's monthly share either way.
+
+### The key, in the Keychain
+
+1Password's CLI integration authorizes a whole account. While it's unlocked, any process that
+runs `op`, me included, could read any secret in it. The key is now one macOS Keychain item,
+stored with no app trusted to read it, so every read asks you about that one item.
+`npm run key:store` creates it, prompting for the key without echoing it, and `key:status`
+and `key:forget` do what they say. This is for local development only. A deployment gets its
+own secret store.
+
+### Found on the way
+
+- **A repeated parameter.** Affinity takes several field types as
+  `?fieldTypes=list&fieldTypes=global`, and the client could only set one value per name. It
+  sends lists as repeated parameters now, and a property checks the URL.
+- **One refused list no longer ends a discovery run.** A 403 on a list's fields is now a gap
+  that's recorded, and every other list is still described. Running out of budget still
+  stops the run.
+- **Runs keep what they knew.** Migration `003` adds a *held* state and a `detail` record: the
+  estimate, the lists read, the gaps. The go-ahead is bounded by the stored estimate, not by a
+  number parsed out of a sentence.
+- **Runs happen in the background.** A slice can take minutes, so it runs in the real
+  server's process and the page refreshes itself while it does. A run cut off by a restart
+  says *interrupted*, not *running*.
+
+Four new properties: over the ceiling nothing per-entry is asked; note text only where the
+init file allows, never on an SPV list; a second run stores nothing new; and repeated
+parameters. **62 of 62 properties hold.**

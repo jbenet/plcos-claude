@@ -1,0 +1,518 @@
+{
+ "data": [
+  {
+   "id": 5500,
+   "type": "person",
+   "listId": 101,
+   "createdAt": "2026-06-01T12:00:00Z",
+   "creatorId": 90001,
+   "entity": {
+    "id": 7001,
+    "firstName": "Delia",
+    "lastName": "Roos",
+    "primaryEmailAddress": "delia@roos-family.example",
+    "emailAddresses": [
+     "delia@roos-family.example"
+    ],
+    "type": "external",
+    "fields": [
+     {
+      "id": "field-5101",
+      "name": "Status",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "ranked-dropdown",
+       "data": {
+        "dropdownOptionId": 9003,
+        "text": "Diligence",
+        "rank": 3,
+        "color": null
+       }
+      }
+     },
+     {
+      "id": "field-5102",
+      "name": "Owners",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person-multi",
+       "data": [
+        {
+         "id": 90001,
+         "firstName": "Juan",
+         "lastName": null,
+         "primaryEmailAddress": "juan@example.com",
+         "type": "internal"
+        }
+       ]
+      }
+     },
+     {
+      "id": "field-5103",
+      "name": "Indicated amount",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": 5000000
+      }
+     },
+     {
+      "id": "field-5104",
+      "name": "Target close",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "datetime",
+       "data": "2026-10-30T00:00:00Z"
+      }
+     },
+     {
+      "id": "field-5105",
+      "name": "Source",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": {
+        "dropdownOptionId": 9101,
+        "text": "Warm intro"
+       }
+      }
+     },
+     {
+      "id": "affinity-data-location",
+      "name": "Location",
+      "type": "enriched",
+      "enrichmentSource": "affinity-data",
+      "value": {
+       "type": "location",
+       "data": null
+      }
+     },
+     {
+      "id": "interaction-last-email",
+      "name": "Last email",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "interaction",
+       "data": {
+        "type": "email",
+        "id": 20260918,
+        "subject": "********",
+        "sentAt": "2026-09-18T15:02:00Z",
+        "from": null,
+        "to": [],
+        "cc": []
+       }
+      }
+     },
+     {
+      "id": "interaction-last-meeting",
+      "name": "Last meeting",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "interaction",
+       "data": {
+        "type": "meeting",
+        "id": 20260911,
+        "title": null,
+        "allDay": false,
+        "startTime": "2026-09-10T17:00:00Z",
+        "endTime": null,
+        "attendees": []
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": 5501,
+   "type": "person",
+   "listId": 101,
+   "createdAt": "2026-06-01T12:00:00Z",
+   "creatorId": 90001,
+   "entity": {
+    "id": 7002,
+    "firstName": "Priya",
+    "lastName": "Raman",
+    "primaryEmailAddress": "priya@northwood.example",
+    "emailAddresses": [
+     "priya@northwood.example"
+    ],
+    "type": "external",
+    "fields": [
+     {
+      "id": "field-5101",
+      "name": "Status",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "ranked-dropdown",
+       "data": {
+        "dropdownOptionId": 9002,
+        "text": "Intro made",
+        "rank": 2,
+        "color": null
+       }
+      }
+     },
+     {
+      "id": "field-5102",
+      "name": "Owners",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person-multi",
+       "data": [
+        {
+         "id": 90002,
+         "firstName": "Mara",
+         "lastName": "Vance",
+         "primaryEmailAddress": "mara@example.com",
+         "type": "internal"
+        }
+       ]
+      }
+     },
+     {
+      "id": "field-5103",
+      "name": "Indicated amount",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": null
+      }
+     },
+     {
+      "id": "field-5104",
+      "name": "Target close",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "datetime",
+       "data": null
+      }
+     },
+     {
+      "id": "field-5105",
+      "name": "Source",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": null
+      }
+     },
+     {
+      "id": "affinity-data-location",
+      "name": "Location",
+      "type": "enriched",
+      "enrichmentSource": "affinity-data",
+      "value": {
+       "type": "location",
+       "data": null
+      }
+     },
+     {
+      "id": "interaction-last-email",
+      "name": "Last email",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "interaction",
+       "data": {
+        "type": "email",
+        "id": 20260902,
+        "subject": "********",
+        "sentAt": "2026-09-02T09:30:00Z",
+        "from": null,
+        "to": [],
+        "cc": []
+       }
+      }
+     },
+     {
+      "id": "interaction-last-meeting",
+      "name": "Last meeting",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "interaction",
+       "data": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": 5502,
+   "type": "person",
+   "listId": 101,
+   "createdAt": "2026-06-01T12:00:00Z",
+   "creatorId": 90001,
+   "entity": {
+    "id": 7003,
+    "firstName": "Tobias",
+    "lastName": "Hale",
+    "primaryEmailAddress": "tobias@mercerbly.example",
+    "emailAddresses": [
+     "tobias@mercerbly.example"
+    ],
+    "type": "external",
+    "fields": [
+     {
+      "id": "field-5101",
+      "name": "Status",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "ranked-dropdown",
+       "data": {
+        "dropdownOptionId": 9006,
+        "text": "Declined",
+        "rank": 6,
+        "color": null
+       }
+      }
+     },
+     {
+      "id": "field-5102",
+      "name": "Owners",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person-multi",
+       "data": [
+        {
+         "id": 90002,
+         "firstName": "Mara",
+         "lastName": "Vance",
+         "primaryEmailAddress": "mara@example.com",
+         "type": "internal"
+        }
+       ]
+      }
+     },
+     {
+      "id": "field-5103",
+      "name": "Indicated amount",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": null
+      }
+     },
+     {
+      "id": "field-5104",
+      "name": "Target close",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "datetime",
+       "data": null
+      }
+     },
+     {
+      "id": "field-5105",
+      "name": "Source",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": {
+        "dropdownOptionId": 9101,
+        "text": "Warm intro"
+       }
+      }
+     },
+     {
+      "id": "affinity-data-location",
+      "name": "Location",
+      "type": "enriched",
+      "enrichmentSource": "affinity-data",
+      "value": {
+       "type": "location",
+       "data": null
+      }
+     },
+     {
+      "id": "interaction-last-email",
+      "name": "Last email",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "interaction",
+       "data": {
+        "type": "email",
+        "id": 20260714,
+        "subject": "********",
+        "sentAt": "2026-07-14T11:00:00Z",
+        "from": null,
+        "to": [],
+        "cc": []
+       }
+      }
+     },
+     {
+      "id": "interaction-last-meeting",
+      "name": "Last meeting",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "interaction",
+       "data": {
+        "type": "meeting",
+        "id": 20260631,
+        "title": null,
+        "allDay": false,
+        "startTime": "2026-06-30T16:00:00Z",
+        "endTime": null,
+        "attendees": []
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": 5503,
+   "type": "person",
+   "listId": 101,
+   "createdAt": "2026-06-01T12:00:00Z",
+   "creatorId": 90001,
+   "entity": {
+    "id": 7004,
+    "firstName": "Ana",
+    "lastName": "Lindqvist",
+    "primaryEmailAddress": "ana@lindqvist.example",
+    "emailAddresses": [
+     "ana@lindqvist.example"
+    ],
+    "type": "external",
+    "fields": [
+     {
+      "id": "field-5101",
+      "name": "Status",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "ranked-dropdown",
+       "data": {
+        "dropdownOptionId": 9004,
+        "text": "Soft circle",
+        "rank": 4,
+        "color": null
+       }
+      }
+     },
+     {
+      "id": "field-5102",
+      "name": "Owners",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person-multi",
+       "data": [
+        {
+         "id": 90001,
+         "firstName": "Juan",
+         "lastName": null,
+         "primaryEmailAddress": "juan@example.com",
+         "type": "internal"
+        }
+       ]
+      }
+     },
+     {
+      "id": "field-5103",
+      "name": "Indicated amount",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": 2500000
+      }
+     },
+     {
+      "id": "field-5104",
+      "name": "Target close",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "datetime",
+       "data": "2026-11-15T00:00:00Z"
+      }
+     },
+     {
+      "id": "field-5105",
+      "name": "Source",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": null
+      }
+     },
+     {
+      "id": "affinity-data-location",
+      "name": "Location",
+      "type": "enriched",
+      "enrichmentSource": "affinity-data",
+      "value": {
+       "type": "location",
+       "data": null
+      }
+     },
+     {
+      "id": "interaction-last-email",
+      "name": "Last email",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "interaction",
+       "data": {
+        "type": "email",
+        "id": 20260920,
+        "subject": "********",
+        "sentAt": "2026-09-20T08:45:00Z",
+        "from": null,
+        "to": [],
+        "cc": []
+       }
+      }
+     },
+     {
+      "id": "interaction-last-meeting",
+      "name": "Last meeting",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "interaction",
+       "data": {
+        "type": "meeting",
+        "id": 20260920,
+        "title": null,
+        "allDay": false,
+        "startTime": "2026-09-19T14:00:00Z",
+        "endTime": null,
+        "attendees": []
+       }
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": "https://api.affinity.co/v2/lists/101/list-entries?cursor=e2"
+ }
+}

@@ -55,10 +55,11 @@ export interface SyncRun {
   kind: string;
   startedAt: Date;
   finishedAt: Date | null;
-  status: 'running' | 'ok' | 'failed';
+  status: 'running' | 'ok' | 'failed' | 'held';
   runByName: string | null;
   requests: number;
   records: number;
   newRecords: number;
   note: string | null;
+  detail: Record<string, unknown>;
 }

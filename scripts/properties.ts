@@ -741,12 +741,12 @@ async function main() {
     const s1 = scripted(() => ok());
     const c = aff.affinity({ transport: s1.transport, key: KEY, sleep });
     const hook = await attempt(() => c.get('/v2/webhooks'));
-    const entries = await attempt(() => c.get('/v2/lists/12/list-entries'));
+    const entries = await attempt(() => c.get('/v2/transcripts/12'));
     const logged = await adb.query<{ n: string }>(`select count(*)::text as n from sources.request_log where outcome = 'refused' and endpoint = '(not allowlisted)'`);
     check(
       'Only allowlisted paths are asked for, and a refusal is logged',
       hook instanceof aff.AffinityRefused && entries instanceof aff.AffinityRefused && s1.calls.length === 0 && Number(logged[0]!.n) === 2,
-      `webhooks refused: ${hook instanceof aff.AffinityRefused}; list entries (not yet allowed) refused: ${entries instanceof aff.AffinityRefused}; sent: ${s1.calls.length}; refusals logged: ${logged[0]!.n}`,
+      `webhooks refused: ${hook instanceof aff.AffinityRefused}; transcripts (never read) refused: ${entries instanceof aff.AffinityRefused}; sent: ${s1.calls.length}; refusals logged: ${logged[0]!.n}`,
     );
   }
 
@@ -866,6 +866,51 @@ async function main() {
         'A list Affinity will not describe is reported, and the rest are still read',
         run?.status === 'ok' && /fields unavailable for 1 \(Guarded: 403\)/.test(run.note ?? '') && /1 fields/.test(run.note ?? ''),
         `status ${run?.status}; ${run?.note}`,
+      );
+    }
+
+    {
+      // The first slice (N42), on the fake Affinity, after the discovery above.
+      const sl = await import('../lib/connectors/affinity/slice');
+      const held = await sl.runSlice(null, { ceiling: 1 });
+      const heldAsked = await adb.one<{ n: string }>(
+        `select count(*)::text as n from sources.request_log where outcome = 'sent' and (endpoint like '%/notes' or endpoint like '%/relationships')`,
+      );
+      const estimate = Number((held?.detail as { estimate?: number }).estimate ?? 0);
+      check(
+        'Over the ceiling, the slice reads entries and holds the per-entry reads for a go-ahead',
+        held?.status === 'held' && estimate > 0 && Number(heldAsked!.n) === 0,
+        `status ${held?.status}; estimate ${estimate}; notes or relationships asked while held: ${heldAsked!.n}`,
+      );
+
+      const done = await sl.runSlice(null, { ceiling: 1, approvedUpTo: Math.ceil(estimate * 1.25) });
+      const linked = await adb.query<{ t: string }>(
+        `select distinct payload->>'entityType' || ':' || (payload->>'entityId') as t from sources.raw_record where kind = 'note_link'`,
+      );
+      const spvAsked = await adb.one<{ n: string }>(
+        `select count(*)::text as n from sources.request_log where path ~ '^/v2/opportunities/8(3|4|5)[0-9]{2}/notes$'`,
+      );
+      const neuro = new Set(['person:7001', 'person:7003', 'person:7004', 'opportunity:8103']);
+      check(
+        'Note text is read only where the init file says so, and never on an SPV list',
+        done?.status === 'ok' && linked.length === 4 && linked.every((r) => neuro.has(r.t)) && Number(spvAsked!.n) === 0,
+        `approved run: ${done?.status}; notes landed for ${linked.map((r) => r.t).join(', ')}; notes asked on SPV lists: ${spvAsked!.n}`,
+      );
+
+      const again = await sl.runSlice(null, { approvedUpTo: 1000 });
+      check(
+        'A second slice stores nothing it already has',
+        again?.status === 'ok' && again.newRecords === 0 && again.records > 0,
+        `second run: ${again?.records} seen, ${again?.newRecords} new`,
+      );
+
+      const s8 = scripted(() => ok());
+      await aff.affinity({ transport: s8.transport, key: KEY, sleep }).get('/v2/lists/1/list-entries', { limit: 100, fieldTypes: ['list', 'global'] });
+      const sentTypes = s8.calls[0]?.searchParams.getAll('fieldTypes') ?? [];
+      check(
+        'A list parameter goes out repeated, the way Affinity asks for several field types',
+        sentTypes.join(',') === 'list,global',
+        `fieldTypes sent as: ${s8.calls[0]?.search ?? 'nothing'}`,
       );
     }
 

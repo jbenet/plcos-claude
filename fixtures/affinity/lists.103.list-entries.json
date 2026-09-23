@@ -1,0 +1,142 @@
+{
+ "data": [
+  {
+   "id": 6701,
+   "type": "opportunity",
+   "listId": 103,
+   "createdAt": "2026-04-10T12:00:00Z",
+   "creatorId": 90001,
+   "entity": {
+    "id": 8301,
+    "name": "Obi Capital \u2014 Cortex",
+    "listId": 103,
+    "fields": [
+     {
+      "id": "field-6101",
+      "name": "Stage",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": {
+        "dropdownOptionId": 9200,
+        "text": "Interested"
+       }
+      }
+     },
+     {
+      "id": "field-6102",
+      "name": "Amount",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": 250000
+      }
+     },
+     {
+      "id": "field-6103",
+      "name": "Expected close",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "datetime",
+       "data": null
+      }
+     },
+     {
+      "id": "field-6104",
+      "name": "People",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person-multi",
+       "data": [
+        {
+         "id": 7005,
+         "firstName": null,
+         "lastName": null,
+         "primaryEmailAddress": null,
+         "type": "external"
+        }
+       ]
+      }
+     }
+    ],
+    "isRestricted": false,
+    "isRedacted": false
+   }
+  },
+  {
+   "id": 6702,
+   "type": "opportunity",
+   "listId": 103,
+   "createdAt": "2026-04-10T12:00:00Z",
+   "creatorId": 90001,
+   "entity": {
+    "id": 8302,
+    "name": "Hale \u2014 Cortex",
+    "listId": 103,
+    "fields": [
+     {
+      "id": "field-6101",
+      "name": "Stage",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": {
+        "dropdownOptionId": 9200,
+        "text": "Passed"
+       }
+      }
+     },
+     {
+      "id": "field-6102",
+      "name": "Amount",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": null
+      }
+     },
+     {
+      "id": "field-6103",
+      "name": "Expected close",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "datetime",
+       "data": null
+      }
+     },
+     {
+      "id": "field-6104",
+      "name": "People",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person-multi",
+       "data": [
+        {
+         "id": 7003,
+         "firstName": null,
+         "lastName": null,
+         "primaryEmailAddress": null,
+         "type": "external"
+        }
+       ]
+      }
+     }
+    ],
+    "isRestricted": false,
+    "isRedacted": false
+   }
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}

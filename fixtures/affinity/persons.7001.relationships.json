@@ -1,0 +1,40 @@
+{
+ "data": [
+  {
+   "person1": {
+    "id": 7001,
+    "firstName": "Delia",
+    "lastName": "Roos",
+    "primaryEmailAddress": "delia@roos-family.example"
+   },
+   "person2": {
+    "id": 90001,
+    "firstName": "Juan",
+    "lastName": null,
+    "primaryEmailAddress": "juan@example.com"
+   },
+   "interactionScore": 0.82,
+   "linkedIn": null
+  },
+  {
+   "person1": {
+    "id": 7001,
+    "firstName": "Delia",
+    "lastName": "Roos",
+    "primaryEmailAddress": "delia@roos-family.example"
+   },
+   "person2": {
+    "id": 90002,
+    "firstName": "Mara",
+    "lastName": "Vance",
+    "primaryEmailAddress": "mara@example.com"
+   },
+   "interactionScore": 0.31,
+   "linkedIn": null
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}

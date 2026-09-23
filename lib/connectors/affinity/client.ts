@@ -80,10 +80,16 @@ export interface ClientOptions {
 
 export interface AffinityClient {
   readonly transportKind: Transport['kind'];
-  get<T>(pathOrUrl: string, query?: Record<string, string | number | undefined>): Promise<T>;
-  pages<T>(path: string, query?: Record<string, string | number | undefined>): AsyncIterable<T[]>;
+  get<T>(pathOrUrl: string, query?: Query): Promise<T>;
+  pages<T>(path: string, query?: Query): AsyncIterable<T[]>;
   budget(): Budget;
 }
+
+/**
+ * A list value is sent as the parameter repeated — `?fieldTypes=list&fieldTypes=global` — which
+ * is how Affinity asks for more than one (OpenAPI, list entries).
+ */
+export type Query = Record<string, string | number | readonly string[] | undefined>;
 
 const SOURCE = 'affinity';
 const MAX_TRIES = 4;
@@ -158,14 +164,18 @@ export function affinityClient(opts: ClientOptions): AffinityClient {
     }
   };
 
-  async function get<T>(pathOrUrl: string, query?: Record<string, string | number | undefined>): Promise<T> {
+  async function get<T>(pathOrUrl: string, query?: Query): Promise<T> {
     let url: URL;
     try {
       url = new URL(pathOrUrl, AFFINITY_ORIGIN);
     } catch {
       return refuse('(unparseable)', '(unparseable)', 'not a URL');
     }
-    for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v));
+    for (const [k, v] of Object.entries(query ?? {})) {
+      if (v === undefined) continue;
+      if (Array.isArray(v)) for (const x of v) url.searchParams.append(k, x);
+      else url.searchParams.set(k, String(v));
+    }
     const path = url.pathname;
     if (url.origin !== AFFINITY_ORIGIN) return refuse('(another host)', `${url.origin}${path}`, `not Affinity's host — the key only ever goes to ${AFFINITY_ORIGIN}`);
     const endpoint = allowed(path);
@@ -221,7 +231,7 @@ export function affinityClient(opts: ClientOptions): AffinityClient {
     }
   }
 
-  async function* pages<T>(path: string, query?: Record<string, string | number | undefined>): AsyncIterable<T[]> {
+  async function* pages<T>(path: string, query?: Query): AsyncIterable<T[]> {
     let next: string | null = path;
     let q = query;
     for (let n = 0; next; n++) {

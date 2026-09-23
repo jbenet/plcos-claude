@@ -87,6 +87,12 @@ export const config = {
     monthlyShare: 0.25, // GUESS
     /** Below this fraction of the account's month, stop asking altogether. */
     monthlyFloor: 0.1, // GUESS
+    /**
+     * The most one slice may spend on per-entity reads (notes, relationships) before a person
+     * has seen the estimate. Over it, the run holds and waits for a go-ahead (N42). The demo's
+     * fake Affinity is tiny, so its ceiling is too — otherwise the hold would never be seen.
+     */
+    sliceCeiling: PROFILE === 'demo' ? 10 : 3000, // GUESS (the real one)
   },
   warehouse: {
     enabled: false,
@@ -238,6 +244,11 @@ export const GUESSED_CONSTANTS: ReadonlyArray<{ path: string; value: number; why
     path: 'affinity.monthlyFloor',
     value: config.affinity.monthlyFloor,
     why: 'The share of the account’s month kept untouched for everything else that uses Affinity. My judgement.',
+  },
+  {
+    path: 'affinity.sliceCeiling',
+    value: config.affinity.sliceCeiling,
+    why: 'Requests one slice may spend on notes and relationships without someone approving the estimate first. A round number under this tool’s monthly share.',
   },
   {
     path: 'affinity.maxPerMinute',

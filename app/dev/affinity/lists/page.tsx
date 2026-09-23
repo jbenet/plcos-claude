@@ -52,7 +52,7 @@ export default async function AffinityLists() {
         </>
       }
     >
-      <div className="lbl"><Link href="/dev/affinity">Affinity</Link></div>
+      <div className="lbl"><Link href="/dev/affinity">Affinity</Link> · <Link href="/dev/affinity/slice">First slice →</Link></div>
       <h1>Lists in Affinity</h1>
       <p className="sublede">
         What the key can see, against what the init file asks for. The questions about which

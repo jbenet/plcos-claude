@@ -170,6 +170,32 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-issues', path: '/issues' },
     { name: '03-capability-without-screen', path: '/m/lp-fit' },
   ],
+  N42: [
+    {
+      name: '01-held',
+      path: '/dev/affinity/lists',
+      prepare: async (page) => {
+        // The fixtures changed shape in this version; discovery lands the new lists first.
+        await page.getByRole('button', { name: /Discover/ }).click();
+        await page.getByText('matched').first().waitFor();
+        await page.goto(page.url().replace('/lists', '/slice'), { waitUntil: 'networkidle' });
+        await page.getByRole('button', { name: /Read the/ }).click();
+        await page.getByRole('button', { name: /Notes only/ }).waitFor({ timeout: 30_000 });
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    {
+      name: '02-read',
+      path: '/dev/affinity/slice',
+      fullPage: true,
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Notes and relationships/ }).click();
+        await page.getByText(/relationship sets/).first().waitFor({ timeout: 30_000 });
+        await page.waitForLoadState('networkidle');
+        await page.evaluate(() => window.scrollTo(0, 0));
+      },
+    },
+  ],
   N41: [
     {
       name: '01-lists-discovered',

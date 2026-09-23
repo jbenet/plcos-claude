@@ -1,0 +1,24 @@
+{
+ "data": [
+  {
+   "person1": {
+    "id": 7004,
+    "firstName": "Ana",
+    "lastName": "Lindqvist",
+    "primaryEmailAddress": "ana@lindqvist.example"
+   },
+   "person2": {
+    "id": 90001,
+    "firstName": "Juan",
+    "lastName": null,
+    "primaryEmailAddress": "juan@example.com"
+   },
+   "interactionScore": 0.64,
+   "linkedIn": null
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null
+ }
+}
