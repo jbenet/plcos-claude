@@ -5,7 +5,7 @@ import { vehicleSelection } from '@/lib/session';
 import { usdM, multiple } from '@/lib/money';
 import { shortDate } from '@/lib/time';
 import { INSTRUMENT_LABEL, listExposures, vehicleTotals } from '@/modules/pipeline';
-import { listPursuits, RUNG_LABEL, STAGES } from '@/modules/strategy';
+import { STATUSES, STATUS_LABEL, impliedRung, listPursuits, RUNG_LABEL, rungIndex } from '@/modules/strategy';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,12 +16,15 @@ export default async function Vehicles() {
   const [totals, exposures, pursuits] = await Promise.all([
     vehicleTotals(), listExposures(), listPursuits(),
   ]);
-  // Two thousand rows help nobody: the ones furthest along, by stage and then by evidence.
-  const stageRank = (p: (typeof pursuits)[number]) => (p.stage ? STAGES.findIndex((s) => s.id === p.stage) : -1);
+  // Two thousand rows help nobody: the ones furthest along — by status, then by evidence, then
+  // by what the source's word says happened.
+  const statusRank = (p: (typeof pursuits)[number]) => STATUSES.findIndex((s) => s.id === p.status);
   const open = pursuits.filter((p) => !p.closedAt);
   const openCount = open.length;
   const furthest = [...open]
-    .sort((a, b) => stageRank(b) - stageRank(a) || (b.rung ? 1 : 0) - (a.rung ? 1 : 0) || a.entityName.localeCompare(b.entityName))
+    .sort((a, b) =>
+      statusRank(b) - statusRank(a) || rungIndex(b.rung) - rungIndex(a.rung) ||
+      rungIndex(impliedRung(b.implied)) - rungIndex(impliedRung(a.implied)) || a.entityName.localeCompare(b.entityName))
     .slice(0, 25);
 
   return (
@@ -141,15 +144,16 @@ export default async function Vehicles() {
               </div>
               <div className="state">
                 <b>{p.rung ? RUNG_LABEL[p.rung] : 'Nothing on file'}</b>
-                {p.stage ? <>{p.source === 'us' ? '' : 'Affinity: '}{STAGES.find((s) => s.id === p.stage)!.label}</> : <>opened {shortDate(p.openedAt)}</>}
+                {STATUS_LABEL[p.status]}
+                {p.stageSaid && p.source !== 'us' ? <> · Affinity: {p.stageSaid}</> : <> · opened {shortDate(p.openedAt)}</>}
               </div>
             </Link>
           ))}
           {openCount > furthest.length && (
             <p className="cover">
               The {furthest.length} furthest along of {openCount.toLocaleString('en-US')} open pursuits,
-              by stage. The ladder column is what is evidenced; the stage beside it is what the
-              source says, and the gap between them is work to do.
+              by status. The ladder is what is evidenced; the status is our plan, and the word beside
+              it is what the source says. The gap between them is work to do.
             </p>
           )}
         </div>

@@ -67,7 +67,7 @@ const DAYS: DaySeed[] = [
       ['tickets', 'Approvals waiting', 3, 'count', null, 'Open tickets across every vehicle.'],
       ['conflicts', 'Open conflicts', 1, 'count', null, 'Cross-vehicle collisions awaiting adjudication.'],
       ['asks', 'Asks on file', 3, 'count', null, 'Every ask recorded, at any stage.'],
-      ['pursuits', 'Pursuits open', 4, 'count', null, 'Open target workspaces.'],
+      ['pursuits', 'Pursuits open', 4, 'count', null, 'Open LP workspaces.'],
     ],
     items: [
       { horizon: 'week', title: 'Get Cedar from accepted to countersigned', owner: 'juan', vehicle: 'neurotech', status: 'done', detail: 'Signed on the 18th. $4.0M, fee break documented in the side letter.' },
@@ -102,7 +102,7 @@ const DAYS: DaySeed[] = [
       ['tickets', 'Approvals waiting', 4, 'count', null, 'Open tickets across every vehicle.'],
       ['conflicts', 'Open conflicts', 1, 'count', null, 'Cross-vehicle collisions awaiting adjudication.'],
       ['asks', 'Asks on file', 4, 'count', null, 'Every ask recorded, at any stage.'],
-      ['pursuits', 'Pursuits open', 4, 'count', null, 'Open target workspaces.'],
+      ['pursuits', 'Pursuits open', 4, 'count', null, 'Open LP workspaces.'],
     ],
     items: [
       { horizon: 'week', title: 'Independent verification of the operating-company marks', owner: 'mara', vehicle: 'neurotech', status: 'open', carried: '2026-09-18' },

@@ -196,6 +196,46 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N50: [
+    { name: '01-pipeline', path: '/targets', fullPage: true },
+    {
+      name: '02-read-from-affinity',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.getByText('Change the status').click();
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '03-set-here',
+      path: '/targets?status=passed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Ruth Kessler/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        // Set by a person, through the form: who ended it, why, and when to try again.
+        await page.getByText('Change the status').click();
+        await page.getByRole('radio', { name: 'Passed' }).click();
+        await page.locator('select[name=passedBy]').selectOption('them');
+        await page.locator('select[name=reason]').selectOption('timing');
+        await page.locator('input[name=nextStep]').fill('Ask again after their Q1 allocation meeting');
+        await page.locator('input[name=nextStepOn]').fill('2027-01-20');
+        await page.getByRole('button', { name: 'Save status' }).click();
+        await page.getByText('Saved').waitFor({ timeout: 10_000 });
+        await page.reload({ waitUntil: 'networkidle' });
+      },
+    },
+    {
+      name: '04-mapping',
+      path: '/dev/affinity/mapping',
+      prepare: async (page) => {
+        await page.getByRole('heading', { name: 'Our statuses' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N49: [
     {
       name: '01-every-note',

@@ -261,7 +261,7 @@ export default async function DecisionRoom({
                 </div>
                 <div className="cbody">
                   <Link className="btn" href={`/targets/${focus.pursuitId}`} style={{ display: 'block', textAlign: 'center', padding: 8, marginBottom: 8 }}>
-                    Target workspace
+                    LP workspace
                   </Link>
                   <Link className="btn" href={`/meetings?e=${focus.entityId}`} style={{ display: 'block', textAlign: 'center', padding: 8, marginBottom: 8 }}>
                     Prep brief

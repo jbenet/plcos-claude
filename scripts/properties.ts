@@ -975,7 +975,7 @@ async function main() {
 
       {
         const map = await import('../lib/connectors/affinity/mapping');
-        const { STAGES, RUNGS } = await import('../modules/strategy');
+        const { impliedRung } = await import('../modules/strategy');
         const { readFile: rf, writeFile: wf } = await import('node:fs/promises');
         const file = join('data', 'demo', 'props-mapping.jsonc');
         await rm(join(process.cwd(), file), { force: true });
@@ -984,39 +984,59 @@ async function main() {
         const lists = Object.values(fresh.lists);
         check(
           'The proposed mapping places what it can, leaves the rest a question, and says nobody has reviewed it',
-          fresh.exists && fresh.problems.length === 0 && fresh.mapped > 0 && lists.every((l) => !l.reviewed) && lists.some((l) => l.stage.length > 0),
+          fresh.exists && fresh.problems.length === 0 && fresh.mapped > 0 && lists.every((l) => !l.reviewed) && lists.some((l) => l.status.length > 0),
           `${fresh.mapped} of ${fresh.values} values placed; ${lists.length} lists, none reviewed; problems ${fresh.problems.length}`,
         );
 
-        // What a stage claims only ever rises with the stage: no later stage claims less.
-        const claims = STAGES.map((s) => (s.claims ? RUNGS.indexOf(s.claims) : -1));
-        const rising = claims.every((c, i) => i === 0 || c >= claims[i - 1]!);
+        // One field, taken apart (N50): a status, who and why where it ended, and what the word
+        // says happened — which claims a rung and is never a ladder event.
+        const pv = map.proposeValue;
+        const twice = pv('Second meeting done');
+        const signedWord = pv('Subscription signed');
+        const quiet = pv('Lost: went dark');
+        const held = pv('Paused — verbal yes');
+        const contacted = pv('Contacted');
         check(
-          'Our stages claim ladder rungs that only rise with the stage',
-          rising && STAGES.find((s) => s.id === 'signed')!.claims === 'commitment_accepted' && STAGES.find((s) => s.id === 'contacted')!.claims === null,
-          `claims in stage order: ${STAGES.map((s) => `${s.id}→${s.claims ?? '—'}`).join(' ')}`,
+          'A status word becomes a status and what it says happened; only the latter claims a rung',
+          twice?.status === 'discussing' && !!twice.implies?.includes('met_twice') && impliedRung(twice.implies ?? []) === 'meeting_held' &&
+            signedWord?.status === 'committed' && impliedRung(signedWord.implies ?? []) === 'commitment_accepted' &&
+            quiet?.status === 'passed' && quiet.passedBy === 'quiet' && quiet.reason === 'no_response' &&
+            held?.status === 'committed' && held.next === 'On hold' &&
+            contacted?.status === 'selected' && impliedRung(contacted.implies ?? []) === null,
+          `second meeting → ${twice?.status} (${twice?.implies}); signed → ${signedWord?.status}, claims ${impliedRung(signedWord?.implies ?? [])}; lost, went dark → ${quiet?.status} by ${quiet?.passedBy}; paused, verbal → ${held?.status}, next "${held?.next}"; contacted claims ${impliedRung(contacted?.implies ?? []) ?? 'nothing'}`,
         );
 
         // A person edits it — marks a list reviewed, takes a meaning away — and it is regenerated.
         const text0 = await rf(join(process.cwd(), file), 'utf8');
-        const edited = text0.replace('"reviewed": false', '"reviewed": true').replace(/("Signed":\s*)\{"stage":"signed"\}/, '$1null');
+        const edited = text0.replace('"reviewed": false', '"reviewed": true').replace(/("Signed":\s*)\{[^}]*\}/, '$1null');
         await wf(join(process.cwd(), file), edited);
         await map.writeMapping(report, {}, file);
         const kept = await map.readMapping(report, file);
         const first = Object.values(kept.lists)[0]!;
-        const signed = first.stage.flatMap((s) => Object.entries(s.values)).find(([k]) => k === 'Signed');
+        const signed = first.status.flatMap((s) => Object.entries(s.values)).find(([k]) => k === 'Signed');
         check(
           'Regenerating the mapping keeps every edit, a null a person wrote included',
           first.reviewed && !!signed && signed[1] === null,
           `reviewed ${first.reviewed}; "Signed" → ${JSON.stringify(signed?.[1])}`,
         );
 
-        await wf(join(process.cwd(), file), edited.replace('{"stage":"soft_commit"}', '{"stage":"won"}'));
+        await wf(join(process.cwd(), file), edited.replace('"status":"committed"', '"status":"won"'));
         const wrong = await map.readMapping(report, file);
         check(
-          'A stage that is not one of ours is refused by name, and left unplaced',
-          wrong.problems.some((p) => /stage "won" is not one this tool has/.test(p)),
+          'A status that is not one of ours is refused by name, and left unplaced',
+          wrong.problems.some((p) => /status "won" is not one this tool has/.test(p)),
           wrong.problems[0] ?? 'no problem reported',
+        );
+
+        // A file written in stages (before N50) still reads: as statuses, the unreviewed lists
+        // re-proposed when it is next written.
+        await wf(join(process.cwd(), file), text0.replace(/"status": \[/, '"stage": [').replace(/\{"status":"selected","implies":\["reached_out"\]\}/g, '{"stage":"contacted"}'));
+        const old = await map.readMapping(report, file);
+        const oldContacted = Object.values(old.lists).flatMap((l) => l.status.flatMap((src) => Object.entries(src.values))).find(([k]) => k === 'Contacted');
+        check(
+          'A mapping written in stages reads as statuses',
+          old.problems.length === 0 && Object.values(old.lists).some((l) => l.legacy) && oldContacted?.[1]?.status === 'selected',
+          `legacy lists ${Object.values(old.lists).filter((l) => l.legacy).length}; "Contacted" → ${JSON.stringify(oldContacted?.[1])}; problems ${old.problems.length}`,
         );
         await rm(join(process.cwd(), file), { force: true });
       }
@@ -1082,15 +1102,42 @@ async function main() {
         const after = await counted();
         check('Translating twice adds nothing the second time', before === after, `pursuits, exposures, claims, restrictions, people: ${before} → ${after}`);
 
-        const stageOf = () => adb.one<{ stage: string | null }>(
-          `select p.stage::text as stage from strategy.pursuit p join identity.source_record r
-             on r.entity_id = p.entity_id and r.source = 'affinity' and r.source_id = 'person:7005'`,
+        const statusOf = (who: string) => adb.one<{ pursuit_id: string; status: string; status_said: string | null; stage_said: string | null; implied: string[]; status_source: string }>(
+          `select p.pursuit_id, p.status::text as status, p.status_said::text as status_said, p.stage_said, p.implied, p.status_source
+             from strategy.pursuit p join identity.source_record r
+               on r.entity_id = p.entity_id and r.source = 'affinity' and r.source_id = $1`, [who],
         );
-        const was = (await stageOf())?.stage;
-        await wf(join(process.cwd(), file), (await rf(join(process.cwd(), file), 'utf8')).replace(/("Contacted":\s*)\{"stage":"contacted"\}/, '$1{"stage":"responded"}'));
+        const was = (await statusOf('person:7005'))?.status;
+        await wf(join(process.cwd(), file), (await rf(join(process.cwd(), file), 'utf8')).replace(/("Contacted":\s*)\{[^}]*\}/, '$1{"status":"discussing","implies":["replied"]}'));
         await tr.translate(null, { mappingPath: file });
-        const now = (await stageOf())?.stage;
-        check('A mapping edit takes effect the next time it is translated — no request to Affinity', was === 'contacted' && now === 'responded', `"Contacted" was ${was}, is ${now}`);
+        const now = (await statusOf('person:7005'))?.status;
+        check('A mapping edit takes effect the next time it is translated — no request to Affinity', was === 'selected' && now === 'discussing', `"Contacted" was ${was}, is ${now}`);
+
+        // Money says yes: an amount on the commitment field makes an entry Committed, whatever the
+        // word — here "Diligence", with a committed amount beside it.
+        const nadia = await statusOf('person:7001');
+        check(
+          'An amount on the commitment field makes an entry Committed, and the word is kept beside it',
+          nadia?.status === 'committed' && nadia.stage_said === 'Diligence' && nadia.implied.includes('soft') && nadia.implied.includes('diligence'),
+          `status ${nadia?.status}; Affinity said "${nadia?.stage_said}", implying ${nadia?.implied.join(', ')}`,
+        );
+
+        // A person sets a status; the next translation keeps it, and keeps Affinity's word beside it.
+        const st = await import('../modules/strategy');
+        const juan = (await adb.one<{ id: string }>(`select id from platform.app_user where handle = 'juan'`))!.id;
+        const ruth = (await statusOf('person:7003'))!;
+        const refused = await attempt(() => st.setStatus(juan, ruth.pursuit_id, { status: 'passed' }));
+        const ladder0 = await n(`select count(*)::text as n from strategy.ladder_event`);
+        await st.setStatus(juan, nadia!.pursuit_id, { status: 'discussing', reason: 'Committed amount is their ask, not a yes', nextStep: 'IC on 14 Oct', nextStepOn: new Date('2026-10-14T00:00:00Z') });
+        await tr.translate(null, { mappingPath: file });
+        const kept2 = await statusOf('person:7001');
+        const ladder1 = await n(`select count(*)::text as n from strategy.ladder_event`);
+        check(
+          'A status set here survives the next translation; Affinity’s reading stays beside it; the ladder is untouched',
+          refused instanceof st.StatusRefused && kept2?.status === 'discussing' && kept2.status_source === 'us' &&
+            kept2.status_said === 'committed' && kept2.stage_said === 'Diligence' && ladder0 === ladder1,
+          `passed with nobody said to end it: ${refused ? 'refused' : 'ALLOWED'}; after translating again: ${kept2?.status} (set ${kept2?.status_source}), Affinity reads ${kept2?.status_said}; ladder events ${ladder0} → ${ladder1}`,
+        );
 
         await adb.query(`update platform.vehicle set phase = 'historical' where slug = 'neurotech'`);
         await tr.translate(null, { mappingPath: file });

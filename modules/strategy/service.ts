@@ -1,7 +1,10 @@
 import { getDb } from '@/lib/db';
 import { openTicket, requireApprovedTicket } from '@/modules/governance';
 import { getPursuit } from './repo';
-import { RUNGS, RUNG_LABEL, RUNG_REQUIRES, rungIndex, type LadderRung } from './types';
+import {
+  PASSED_BY_LABEL, REASONS, RUNGS, RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_LABEL, rungIndex,
+  type LadderRung, type PassedBy, type PursuitStatus,
+} from './types';
 
 export class LadderRefused extends Error {
   constructor(readonly reason: 'skipped' | 'already_recorded' | 'no_evidence', message: string) {
@@ -115,3 +118,73 @@ export async function recordAdvance(
     );
   });
 }
+
+export class StatusRefused extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StatusRefused';
+  }
+}
+
+export interface StatusChange {
+  status: PursuitStatus;
+  /** Required when it passed: a decline, our own call, and a silence are different endings. */
+  passedBy?: PassedBy | null;
+  /** When it passed, one of REASONS; otherwise a line about the status, or nothing. */
+  reason?: string | null;
+  nextStep?: string | null;
+  nextStepOn?: Date | null;
+}
+
+/**
+ * Set where our effort is with an LP (N50, docs/17). Any status to any status: a process that
+ * goes backwards is recorded as going backwards, and the audit log keeps the history.
+ *
+ * No ticket, deliberately. A status is our plan and claims nothing about the LP — it never
+ * writes to the ladder, which keeps its STAGE tickets, and never touches money, which keeps its
+ * MONEY tickets. A status set here is never overwritten by a translation from Affinity.
+ */
+export async function setStatus(actorId: string, pursuitId: string, change: StatusChange): Promise<void> {
+  if (!STATUSES.some((s) => s.id === change.status)) throw new StatusRefused(`"${change.status}" is not a status this tool has.`);
+  const passed = change.status === 'passed';
+  if (passed && !change.passedBy) {
+    throw new StatusRefused(`Say who ended it: ${Object.values(PASSED_BY_LABEL).join(', ').toLowerCase()}. They are different endings, and only one of them can be reopened by asking again.`);
+  }
+  if (change.passedBy && !(change.passedBy in PASSED_BY_LABEL)) throw new StatusRefused(`"${change.passedBy}" is not who can end a pursuit.`);
+  const reason = change.reason?.trim() || null;
+  if (passed && reason && !(REASONS as readonly string[]).includes(reason)) {
+    throw new StatusRefused(`A pass reason is one of: ${REASONS.join(', ')}.`);
+  }
+  const nextStep = change.nextStep?.trim() || null;
+  if (change.nextStepOn && !nextStep) throw new StatusRefused('A date needs a next step to be the date of.');
+
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    const pursuit = await getPursuit(pursuitId, tx);
+    if (!pursuit) throw new Error(`No pursuit ${pursuitId}`);
+    await tx.query(
+      `update strategy.pursuit set
+         status = $2::strategy.pursuit_status, passed_by = $3, status_reason = $4,
+         status_source = 'us', status_set_at = now(), status_set_by = $5,
+         next_step = $6, next_step_on = $7,
+         -- A pass ends the pursuit; reopening one un-ends it — unless its vehicle is history.
+         closed_at = case when $2 = 'passed' then coalesce(closed_at, now())
+                          when $8 then closed_at else null end,
+         close_reason = case when $2 = 'passed' then coalesce($4, 'passed')
+                             when $8 then close_reason else null end
+       where pursuit_id = $1`,
+      [pursuitId, change.status, passed ? change.passedBy : null, reason, actorId, nextStep,
+       change.nextStepOn ?? null, pursuit.historical],
+    );
+    await tx.query(
+      `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
+       values ($1, 'pursuit.status_set', 'pursuit', $2, $3)`,
+      [actorId, pursuitId, JSON.stringify({
+        entity: pursuit.entityName, vehicle: pursuit.vehicleName,
+        from: STATUS_LABEL[pursuit.status], to: STATUS_LABEL[change.status],
+        ...(passed ? { passedBy: change.passedBy, reason } : {}), ...(nextStep ? { nextStep } : {}),
+      })],
+    );
+  });
+}
+

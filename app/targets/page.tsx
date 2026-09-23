@@ -1,132 +1,198 @@
 import Link from 'next/link';
 import { Page } from '@/components/shell/Page';
-import { SECTION } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
-import { listPursuits, RUNGS, RUNG_LABEL, rungIndex } from '@/modules/strategy';
+import {
+  IMPLIED_LABEL, PASSED_BY_LABEL, RUNGS, RUNG_LABEL, STATUSES, STATUS_LABEL,
+  impliedRung, listPursuits, rungIndex, statusCounts, type Pursuit, type PursuitStatus,
+} from '@/modules/strategy';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Targets() {
-  const selection = await vehicleSelection();
-  const pursuits = await listPursuits(selection.current?.id ?? null);
+/** Where a board opens: the first column with somebody in it, most advanced first. */
+const OPEN_ON: PursuitStatus[] = ['discussing', 'committed', 'selected', 'sourcing', 'new', 'passed'];
+const SHOWN = 150;
 
-  const atRung = (i: number) => pursuits.filter((p) => rungIndex(p.rung) === i).length;
+function Ladder({ p }: { p: Pursuit }) {
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+        {RUNGS.map((r, i) => {
+          const ev = p.events.find((e) => e.rung === r);
+          const na = ev?.evidenceKind === 'not_applicable';
+          return (
+            <span
+              key={r}
+              title={RUNG_LABEL[r]}
+              style={{
+                width: 22, height: 6, borderRadius: 3,
+                background: ev ? (na ? 'var(--line)' : 'var(--green)') : '#EDEAE2',
+                outline: i === rungIndex(p.rung) + 1 ? '1.5px solid var(--clay)' : undefined,
+                outlineOffset: 1,
+              }}
+            />
+          );
+        })}
+      </div>
+      <div className="muted" style={{ fontSize: 11, marginTop: 5 }}>{p.rung ? RUNG_LABEL[p.rung] : 'Nothing on file'}</div>
+    </>
+  );
+}
+
+/** What else is known about where they are: why it ended, what's next, what the source said. */
+function Where({ p }: { p: Pursuit }) {
+  const bits: string[] = [];
+  if (p.status === 'passed') {
+    bits.push([p.passedBy ? PASSED_BY_LABEL[p.passedBy] : 'Passed', p.statusReason?.replace('_', ' ')].filter(Boolean).join(' · '));
+  }
+  if (p.nextStep) bits.push(`Next: ${p.nextStep}${p.nextStepOn ? `, ${shortDate(p.nextStepOn)}` : ''}`);
+  return (
+    <div style={{ fontSize: 12 }}>
+      {bits.length > 0 && <div>{bits.join(' — ')}</div>}
+      {p.stageSaid && p.source !== 'us' && (
+        <div className="muted" style={{ fontSize: 11.5 }}>
+          Affinity: &ldquo;{p.stageSaid}&rdquo;
+          {p.implied.length > 0 && ` — ${p.implied.map((i) => IMPLIED_LABEL[i]).join(', ')}`}
+        </div>
+      )}
+      {p.statusSource === 'us' && p.statusSetAt && (
+        <div className="muted" style={{ fontSize: 11.5 }}>set here {shortDate(p.statusSetAt)}{p.statusSetByName ? ` by ${p.statusSetByName}` : ''}</div>
+      )}
+    </div>
+  );
+}
+
+export default async function Pipeline({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  const [{ status: asked }, selection, counts] = await Promise.all([searchParams, vehicleSelection(), statusCounts()]);
+  const current = selection.current;
+  // All vehicles means the ones being raised: a vehicle kept for its history is shown when it
+  // is the one selected, and counted, not mixed in.
+  const history = new Set(selection.all.filter((v) => v.phase === 'historical').map((v) => v.id));
+  const inScope = (vehicleId: string) => (current ? vehicleId === current.id : !history.has(vehicleId));
+  const count = (s: PursuitStatus) => counts.filter((c) => c.status === s && inScope(c.vehicleId)).reduce((a, c) => a + c.n, 0);
+  const onHistory = current ? 0 : counts.filter((c) => history.has(c.vehicleId)).reduce((a, c) => a + c.n, 0);
+  const status: PursuitStatus =
+    STATUSES.some((s) => s.id === asked) ? (asked as PursuitStatus) : OPEN_ON.find((s) => count(s) > 0) ?? 'discussing';
+
+  const rows = (await listPursuits(current?.id ?? null, { status })).filter((p) => inScope(p.vehicleId));
+  // Furthest along first — by evidence, then by what the source says happened — then the
+  // nearest next step, then the name.
+  rows.sort(
+    (a, b) =>
+      rungIndex(b.rung) - rungIndex(a.rung) ||
+      rungIndex(impliedRung(b.implied)) - rungIndex(impliedRung(a.implied)) ||
+      (a.nextStepOn?.getTime() ?? Infinity) - (b.nextStepOn?.getTime() ?? Infinity) ||
+      a.entityName.localeCompare(b.entityName),
+  );
+  const total = STATUSES.reduce((a, s) => a + count(s.id), 0);
+  const info = STATUSES.find((s) => s.id === status)!;
 
   return (
     <Page
       crumbs={[
-        { label: selection.current?.name ?? 'All vehicles', href: '/overview' },
-        { label: 'Conversion strategy' },
+        { label: current?.name ?? 'All vehicles', href: '/overview' },
+        { label: 'Pipeline' },
       ]}
       inspector={
         <>
-          <div className="lbl">The ladder</div>
-          <div className="ihead">Six states, no implicit transitions</div>
-          <div className="imeta">Each step up requires a specific evidence record</div>
-          {RUNGS.map((r, i) => (
-            <div className="kv" key={r}>
-              <span>{RUNG_LABEL[r]}</span>
-              <span>{atRung(i)}</span>
+          <div className="lbl">Six statuses</div>
+          <div className="ihead">Where our effort is</div>
+          <div className="imeta">Our plan, set by a person, any direction</div>
+          {STATUSES.map((s) => (
+            <div className="kv" key={s.id} title={s.means}>
+              <span>{s.label}</span>
+              <span>{count(s.id).toLocaleString('en-US')}</span>
             </div>
           ))}
           <div className="scope">
-            <div className="lbl">The failure it prevents</div>
+            <div className="lbl">What a status is not</div>
             <p>
-              A connector replying &ldquo;happy to ask&rdquo; becomes, three hops of summarising
-              later, &ldquo;the target is interested&rdquo;. The first rung is a statement about
-              the connector and nothing else.
+              Not evidence. The ladder under each name is what the records support — a reply, a
+              meeting, a number, a countersignature, a wire — and a status never moves it. What
+              happened is in the log on each LP&rsquo;s page; how far the money has got is the close
+              track.
             </p>
           </div>
           <div className="note">
-            The rung is derived from the evidence records, not stored. There is no column anyone
-            can set to &ldquo;interested&rdquo;.
+            Read from Affinity until someone sets one here; after that, Affinity&rsquo;s word is kept
+            beside ours, never over it (docs/17).
           </div>
         </>
       }
     >
       <div className="lbl">Module 04 · Discover &amp; qualify</div>
-      <h1>Conversion strategy</h1>
+      <h1>Pipeline</h1>
       <p className="sublede">
-        One workspace per target per vehicle. The ladder below each name is what the evidence
-        supports — not what anyone hopes, and not what a summary said.
+        Every LP for {current ? current.name : 'the vehicles being raised'}, by where our effort is.
+        The ladder beside each is what the evidence supports, which is not the same thing.
       </p>
+
+      <div className="statusboard" role="tablist" aria-label="Status">
+        {STATUSES.map((s) => (
+          <Link
+            key={s.id}
+            href={`/targets?status=${s.id}`}
+            className={`sb${s.id === status ? ' on' : ''}${s.id === 'passed' ? ' ended' : ''}`}
+            role="tab"
+            aria-selected={s.id === status}
+          >
+            <span className="lbl">{s.label}</span>
+            <span className="n">{count(s.id).toLocaleString('en-US')}</span>
+          </Link>
+        ))}
+      </div>
 
       <div className="card">
         <div className="chead">
-          <h2>Pursuits</h2>
+          <h2>{STATUS_LABEL[status]}</h2>
           <span className="lbl">
-            {pursuits.length} open · {selection.current ? selection.current.name : 'all vehicles'}
+            {rows.length.toLocaleString('en-US')} of {total.toLocaleString('en-US')} · {current ? current.name : 'all vehicles'}
           </span>
         </div>
-        {pursuits.length === 0 ? (
+        <div className="cbody" style={{ paddingBottom: 4 }}>
+          <p className="muted" style={{ margin: 0, fontSize: 12.5 }}>{info.means}</p>
+        </div>
+        {rows.length === 0 ? (
           <div className="cbody">
             <div className="empty">
-              <span className="stat unavailable">
-                <i />
-                Nothing open
-              </span>
-              <h3>No pursuit is open for this vehicle.</h3>
-              <p>A pursuit opens when someone decides to work a target. Nothing has been decided here.</p>
+              <span className="stat unavailable"><i />Nobody here</span>
+              <h3>No LP is at {STATUS_LABEL[status]}{current ? ` for ${current.name}` : ''}.</h3>
+              <p>An empty column, not a failed read.</p>
             </div>
           </div>
         ) : (
           <table className="list">
             <thead>
               <tr>
-                <th>Target</th>
-                <th style={{ width: 140 }}>Vehicle</th>
-                <th style={{ width: 100 }}>Owner</th>
-                <th style={{ width: 300 }}>Ladder</th>
-                <th style={{ width: 100 }}>Opened</th>
+                <th>LP</th>
+                {!current && <th style={{ width: 130 }}>Vehicle</th>}
+                <th style={{ width: 110 }}>Owner</th>
+                <th>Where</th>
+                <th style={{ width: 176 }}>Ladder</th>
               </tr>
             </thead>
             <tbody>
-              {pursuits.map((p) => (
+              {rows.slice(0, SHOWN).map((p) => (
                 <tr key={p.pursuitId} className="clickable">
                   <td>
-                    <Link href={`/targets/${p.pursuitId}`}>
-                      <b>{p.entityName}</b>
-                    </Link>
-                    <div className="muted" style={{ fontSize: 11.5 }}>
-                      {p.headline}
-                    </div>
+                    <Link href={`/targets/${p.pursuitId}`}><b>{p.entityName}</b></Link>
+                    {p.headline && <div className="muted" style={{ fontSize: 11.5 }}>{p.headline}</div>}
                   </td>
-                  <td className="muted">{p.vehicleName}</td>
-                  <td className="muted">{p.ownerName}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                      {RUNGS.map((r, i) => {
-                        const ev = p.events.find((e) => e.rung === r);
-                        const na = ev?.evidenceKind === 'not_applicable';
-                        return (
-                          <span
-                            key={r}
-                            title={RUNG_LABEL[r]}
-                            style={{
-                              width: 26, height: 6, borderRadius: 3,
-                              background: ev ? (na ? 'var(--line)' : 'var(--green)') : '#EDEAE2',
-                              outline: i === rungIndex(p.rung) + 1 ? '1.5px solid var(--clay)' : undefined,
-                              outlineOffset: 1,
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-                    <div className="muted" style={{ fontSize: 11, marginTop: 5 }}>
-                      {p.rung ? RUNG_LABEL[p.rung] : 'Nothing on file'}
-                    </div>
-                  </td>
-                  <td className="muted nowrap">{shortDate(p.openedAt)}</td>
+                  {!current && <td className="muted">{p.vehicleName}</td>}
+                  <td className="muted">{p.ownerSaid ?? p.ownerName}</td>
+                  <td><Where p={p} /></td>
+                  <td><Ladder p={p} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
         <p className="cover">
-          <b>What this covers:</b> pursuits recorded in this system. A target that somebody is
-          working without opening a pursuit does not appear here, which is a gap in the record
-          rather than an absence of activity.
+          {rows.length > SHOWN && <><b>The first {SHOWN} of {rows.length.toLocaleString('en-US')}</b>, furthest along first. </>}
+          {onHistory > 0 && <>{onHistory.toLocaleString('en-US')} pursuits on vehicles kept for their history are not counted here; select one in the rail to see them. </>}
+          <b>What this covers:</b> pursuits recorded in this system, including those read from
+          Affinity. Someone being worked without a pursuit does not appear, which is a gap in the
+          record rather than an absence of activity.
         </p>
       </div>
     </Page>

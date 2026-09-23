@@ -1568,3 +1568,28 @@ th.stripoff{font-size:6.5px;letter-spacing:.03em;text-transform:uppercase;border
 .anote details[open] summary:not(.t){font-size:12px;color:var(--muted);margin-bottom:4px}
 details.more{margin-top:6px}
 details.more>summary{cursor:pointer;font-size:12px;color:var(--muted);padding:6px 0}
+
+/* N50: the pipeline's six statuses, as column heads over one list */
+.statusboard{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.statusboard .sb{display:flex;flex-direction:column;gap:4px;padding:10px 12px;background:var(--surface);border:1px solid var(--line);
+  border-radius:9px;text-decoration:none;color:var(--ink)}
+.statusboard .sb:hover{background:var(--accent-wash)}
+.statusboard .sb .n{font-family:var(--display);font-size:22px;font-weight:600;letter-spacing:-.01em}
+.statusboard .sb.on{border-color:var(--ink);box-shadow:inset 0 -3px 0 var(--ink)}
+.statusboard .sb.ended .n{color:var(--muted)}
+@media (max-width:900px){.statusboard{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.statusform .choices{display:flex;flex-wrap:wrap;gap:6px}
+.statusform .choices button{font-family:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:999px;padding:5px 12px;cursor:pointer}
+.statusform .choices button:hover{background:var(--accent-wash)}
+.statusform .choices button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.statusform .fieldrow{display:flex;gap:10px;margin-top:8px}
+.statusform .field{display:flex;flex-direction:column;gap:4px;flex:1;margin-top:8px}
+.statusform .field input,.statusform .field select{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.statuspanel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin:12px 0 14px}
+.statuspanel .now{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.statuspanel .now b{font-family:var(--display);font-size:20px;font-weight:600}
+.statuspanel .said{font-size:12.5px;margin-top:6px}
+.statuspanel .said.differs{color:var(--amber)}
+.statuspanel details{margin-top:10px}
+.statuspanel details>summary{cursor:pointer;font-size:12.5px;color:var(--clay)}

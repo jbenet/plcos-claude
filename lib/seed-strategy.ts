@@ -200,3 +200,29 @@ export async function seedStrategy(db: Db): Promise<{ pursuits: number; ladderEv
 
   return { pursuits: seeded.length, ladderEvents };
 }
+
+/**
+ * The seed's pursuits get a status from their evidence (N50): the ladder is what they have, so
+ * the status says no more than it does. The same reading migration 003 gave pursuits that
+ * existed before statuses did. Run last, after every seed that opens pursuits.
+ */
+export async function statusFromEvidence(db: Db): Promise<{ statuses: number }> {
+  const rows = await db.query<{ pursuit_id: string }>(
+    `update strategy.pursuit p set status = (case
+         when p.closed_at is not null and v.phase <> 'historical' then 'passed'
+         when r.top in ('indication_given', 'commitment_accepted', 'cash_received') then 'committed'
+         when r.top in ('target_opted_in', 'meeting_held') then 'discussing'
+         when r.top = 'connector_willing' then 'selected'
+         else 'sourcing' end)::strategy.pursuit_status,
+       passed_by = case when p.closed_at is not null and v.phase <> 'historical' then 'them' end
+       from platform.vehicle v,
+            (select pp.pursuit_id,
+                    (select l.rung::text from strategy.ladder_event l
+                      where l.pursuit_id = pp.pursuit_id order by l.rung desc limit 1) as top
+               from strategy.pursuit pp) r
+      where v.id = p.vehicle_id and r.pursuit_id = p.pursuit_id and p.source = 'us' and p.status_source = 'us'
+        and p.status_set_at is null
+      returning p.pursuit_id`,
+  );
+  return { statuses: rows.length };
+}

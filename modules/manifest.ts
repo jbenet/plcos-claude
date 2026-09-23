@@ -10,7 +10,7 @@ export const MODULES = [
   { name: 'governance', schema: 'governance', title: 'Approvals & compliance', plane: 'confidential' },
   { name: 'coordination', schema: 'coordination', title: 'Ask coordination', plane: 'confidential' },
   { name: 'network', schema: 'network', title: 'Warm intro routes', plane: 'confidential' },
-  { name: 'strategy', schema: 'strategy', title: 'Conversion strategy', plane: 'confidential' },
+  { name: 'strategy', schema: 'strategy', title: 'Pipeline', plane: 'confidential' },
   { name: 'pipeline', schema: 'pipeline', title: 'Vehicles, exposure and forecast', plane: 'confidential' },
   { name: 'calendar', schema: 'calendar', title: 'Sprint calendar', plane: 'confidential' },
   { name: 'close', schema: 'close', title: 'Close room and SPV war room', plane: 'confidential' },

@@ -6,6 +6,7 @@ import { inventory } from './inventory';
 import { placeEntry, readMapping, reasonOf, type ListMapping } from './mapping';
 import { normName } from './match';
 import { sliceTargets } from './slice';
+import type { PursuitStatus } from '@/modules/strategy';
 
 /**
  * Translation (N47, docs/16 §4): the landed copy, read through the mapping, into the tool's
@@ -14,9 +15,12 @@ import { sliceTargets } from './slice';
  *
  * What it writes, and the rule each follows:
  *   people and organizations   identity.entity, joined to Affinity by source_record
- *   pursuits                   our stage, outcome and reason, and what Affinity itself said —
- *                              a claim beside the ladder, never a ladder event (rule 2)
- *   commitments                soft, always; "signed" marks one ready to harden (rule 1)
+ *   pursuits                   our status (N50, docs/17), who and why where it passed, and
+ *                              what Affinity itself said and implied — claims beside the
+ *                              ladder, never ladder events (rule 2). A status a person set
+ *                              here is never overwritten; Affinity's word is kept beside it.
+ *   commitments                soft, always; a word implying "signed" marks one ready to
+ *                              harden (rule 1), and any amount makes the entry Committed
  *   check size, AUM            research claims with the list as their source (rule 9)
  *   do not contact             a blanket do-not-approach restriction (rule 8)
  *
@@ -58,6 +62,9 @@ export interface TranslationCounts {
   affiliations: number;
   pursuits: number;
   byVehicle: Record<string, number>;
+  byStatus: Record<string, number>;
+  /** Pursuits whose status a person set here, so this run kept theirs. */
+  keptOurs: number;
   unplaced: number;
   skipped: number;
   exposures: number;
@@ -92,7 +99,7 @@ async function entityFor(tx: Queryable, kind: 'person' | 'org', sourceId: string
 export async function translate(runBy: string | null, opts: { mappingPath?: string } = {}): Promise<SyncRun | null> {
   const run = await startRun(SOURCE, 'translate', runBy);
   const counts: TranslationCounts = {
-    people: 0, organizations: 0, affiliations: 0, pursuits: 0, byVehicle: {}, unplaced: 0, skipped: 0,
+    people: 0, organizations: 0, affiliations: 0, pursuits: 0, byVehicle: {}, byStatus: {}, keptOurs: 0, unplaced: 0, skipped: 0,
     exposures: 0, readyToHarden: 0, claims: 0, restrictions: 0, ownersNotOnTeam: 0, unreviewedLists: [],
   };
   try {
@@ -172,46 +179,63 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
           }
 
           const map = place.map;
-          if (!map) counts.unplaced++;
-          const outcome = map?.outcome ?? 'open';
-          const passed = text(field(m.passReason));
-          const reason = outcome === 'passed' || outcome === 'lost' ? (passed ? reasonOf(passed) ?? map?.reason ?? 'other' : map?.reason ?? null) : null;
-          const ownerRef = people(field(m.owner)).find((p) => p.type === 'internal');
-          const owner = ownerRef ? teamByAffinity.get(ownerRef.id) : undefined;
-          const ownerSaid = ownerRef ? nameOf(ownerRef) : null;
-          if (ownerRef && !owner) counts.ownersNotOnTeam++;
-          await tx.query(
-            `insert into strategy.pursuit
-               (entity_id, vehicle_id, owner_id, headline, stage, outcome, outcome_reason, source, source_ref,
-                source_as_of, stage_said, owner_said, closed_at, close_reason)
-             values ($1,$2,$3,$4,$5::strategy.pursuit_stage,$6::strategy.pursuit_outcome,$7,'affinity',$8,$9,$10,$11,$12,$13)
-             on conflict (entity_id, vehicle_id) do update set
-               owner_id = excluded.owner_id, stage = excluded.stage, outcome = excluded.outcome,
-               outcome_reason = excluded.outcome_reason, source_ref = excluded.source_ref,
-               source_as_of = excluded.source_as_of, stage_said = excluded.stage_said,
-               owner_said = excluded.owner_said, closed_at = excluded.closed_at, close_reason = excluded.close_reason
-             where strategy.pursuit.source = 'affinity'`,
-            [
-              entity, vehicle.id, owner ?? users.get(PLACEHOLDER)!, null, map?.stage ?? null, outcome, reason,
-              `list:${t.list.id}:entry:${e.id}`, fetchedAt, place.said, owner ? null : ownerSaid,
-              historical || outcome === 'passed' || outcome === 'lost' ? fetchedAt : null,
-              historical ? 'The vehicle did not close.' : outcome === 'passed' || outcome === 'lost' ? `Affinity: ${place.said}` : null,
-            ],
-          );
-          counts.pursuits++;
-          counts.byVehicle[vehicle.slug] = (counts.byVehicle[vehicle.slug] ?? 0) + 1;
-
-          // Money. Soft, always: the source is the team's record of what an LP said.
+          // Money first: an amount on the commitment field is a yes, unless the entry passed.
           const committed = num(field(m.commitment));
           const low = m.softRange ? num(field(m.softRange[0])) : null;
           const high = m.softRange ? num(field(m.softRange[1])) : null;
           const amount = committed ?? low ?? high;
+          let status: PursuitStatus | null = map?.status ?? null;
+          if (amount && status !== 'passed') status = 'committed';
+          if (!status) counts.unplaced++;
+          const passed = status === 'passed';
+          const passReason = text(field(m.passReason));
+          const reason = passed ? (passReason ? reasonOf(passReason) ?? map?.reason ?? 'other' : map?.reason ?? 'other') : null;
+          const implied = [...new Set([...(map?.implies ?? []), ...(amount ? ['soft'] : [])])];
+          const ownerRef = people(field(m.owner)).find((p) => p.type === 'internal');
+          const owner = ownerRef ? teamByAffinity.get(ownerRef.id) : undefined;
+          const ownerSaid = ownerRef ? nameOf(ownerRef) : null;
+          if (ownerRef && !owner) counts.ownersNotOnTeam++;
+          const ended = historical || passed;
+          const saved = await tx.one<{ ours: boolean; closed: boolean }>(
+            `insert into strategy.pursuit
+               (entity_id, vehicle_id, owner_id, headline, status, passed_by, status_reason, status_source, implied,
+                next_step, source, source_ref, source_as_of, stage_said, owner_said, closed_at, close_reason, status_said)
+             values ($1,$2,$3,$4,coalesce($5, 'new')::strategy.pursuit_status,$6,$7,'affinity',$8::text[],$9,
+                     'affinity',$10,$11,$12,$13,$14,$15,$5::strategy.pursuit_status)
+             on conflict (entity_id, vehicle_id) do update set
+               owner_id = excluded.owner_id, source_ref = excluded.source_ref, source_as_of = excluded.source_as_of,
+               stage_said = excluded.stage_said, owner_said = excluded.owner_said, implied = excluded.implied,
+               status_said = excluded.status_said,
+               -- A status a person set here is theirs: Affinity's word is kept beside it, not over it.
+               status = case when strategy.pursuit.status_source = 'affinity' and $5::text is not null then excluded.status else strategy.pursuit.status end,
+               passed_by = case when strategy.pursuit.status_source = 'affinity' then excluded.passed_by else strategy.pursuit.passed_by end,
+               status_reason = case when strategy.pursuit.status_source = 'affinity' then excluded.status_reason else strategy.pursuit.status_reason end,
+               next_step = case when strategy.pursuit.status_source = 'affinity' then excluded.next_step else strategy.pursuit.next_step end,
+               closed_at = case when strategy.pursuit.status_source = 'affinity' or $16 then excluded.closed_at else strategy.pursuit.closed_at end,
+               close_reason = case when strategy.pursuit.status_source = 'affinity' or $16 then excluded.close_reason else strategy.pursuit.close_reason end
+             where strategy.pursuit.source = 'affinity'
+             returning (status_source = 'us') as ours, closed_at is not null as closed`,
+            [
+              entity, vehicle.id, owner ?? users.get(PLACEHOLDER)!, null, status, passed ? map?.passedBy ?? 'them' : null, reason,
+              implied, map?.next ? `${map.next} (Affinity)` : null,
+              `list:${t.list.id}:entry:${e.id}`, fetchedAt, place.said, owner ? null : ownerSaid,
+              ended ? fetchedAt : null,
+              historical ? 'The vehicle did not close.' : passed ? `Affinity: ${place.said}` : null,
+              historical,
+            ],
+          );
+          if (saved?.ours) counts.keptOurs++;
+          counts.byStatus[status ?? 'unplaced'] = (counts.byStatus[status ?? 'unplaced'] ?? 0) + 1;
+          counts.pursuits++;
+          counts.byVehicle[vehicle.slug] = (counts.byVehicle[vehicle.slug] ?? 0) + 1;
+
+          // Money. Soft, always: the source is the team's record of what an LP said.
           if (amount) {
-            const signed = map?.stage === 'signed';
+            const signed = implied.includes('signed');
             if (signed) counts.readyToHarden++;
             const claim = [
               committed ? `${m.commitment}` : `soft circle ${low ?? '?'}–${high ?? '?'} (the lower end counted)`,
-              place.said ? `stage said “${place.said}”` : null,
+              place.said ? `Affinity says “${place.said}”` : null,
               signed ? 'ready to harden once countersigned' : null,
             ].filter(Boolean).join(' · ');
             await tx.query(
@@ -225,7 +249,8 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
               [
                 entity, vehicle.id, vehicle.kind === 'spv' ? 'spv' : 'lp_commitment', amount, owner ?? users.get(PLACEHOLDER)!,
                 `list:${t.list.id}:entry:${e.id}`, fetchedAt, `Affinity: ${claim}`,
-                historical || outcome === 'passed' || outcome === 'lost' ? fetchedAt : null,
+                // Closed with the pursuit: on history, or passed — by Affinity's word or ours.
+                (saved ? saved.closed : ended) ? fetchedAt : null,
               ],
             );
             counts.exposures++;

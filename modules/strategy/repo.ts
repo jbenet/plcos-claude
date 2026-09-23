@@ -1,13 +1,17 @@
 import { getDb, type Queryable } from '@/lib/db';
 import {
-  RUNGS, rungIndex, type LadderEvent, type LadderRung, type PlanStep, type Pursuit, type PursuitOutcome, type PursuitStage,
+  RUNGS, rungIndex, type Implied, type LadderEvent, type LadderRung, type PassedBy, type PlanStep, type Pursuit,
+  type PursuitStatus,
 } from './types';
 
 type PursuitRow = {
   pursuit_id: string; entity_id: string; entity_name: string; vehicle_id: string;
   vehicle_name: string; owner_name: string; headline: string | null;
   plan: PlanStep[]; opened_at: Date | string; closed_at: Date | string | null;
-  stage: PursuitStage | null; outcome: PursuitOutcome; outcome_reason: string | null; source: string;
+  status: PursuitStatus; status_reason: string | null; passed_by: PassedBy | null; status_source: string;
+  status_said: PursuitStatus | null;
+  status_set_at: Date | string | null; status_set_by_name: string | null; implied: string[] | null;
+  next_step: string | null; next_step_on: Date | string | null; source: string;
   source_as_of: Date | string | null; stage_said: string | null; owner_said: string | null; vehicle_phase: string;
 };
 
@@ -20,12 +24,15 @@ type EventRow = {
 const PURSUIT_SELECT = `
   select p.pursuit_id, p.entity_id, e.display_name as entity_name, p.vehicle_id,
          v.name as vehicle_name, u.name as owner_name, p.headline, p.plan,
-         p.opened_at, p.closed_at, p.stage::text as stage, p.outcome::text as outcome, p.outcome_reason,
+         p.opened_at, p.closed_at, p.status::text as status, p.status_reason, p.passed_by, p.status_source,
+         p.status_said::text as status_said,
+         p.status_set_at, su.name as status_set_by_name, p.implied, p.next_step, p.next_step_on,
          p.source, p.source_as_of, p.stage_said, p.owner_said, v.phase as vehicle_phase
     from strategy.pursuit p
     join identity.entity e on e.entity_id = p.entity_id
     join platform.vehicle v on v.id = p.vehicle_id
-    join platform.app_user u on u.id = p.owner_id`;
+    join platform.app_user u on u.id = p.owner_id
+    left join platform.app_user su on su.id = p.status_set_by`;
 
 const toEvent = (r: EventRow): LadderEvent => ({
   eventId: r.event_id, rung: r.rung, evidenceKind: r.evidence_kind,
@@ -43,7 +50,11 @@ function assemble(row: PursuitRow, events: LadderEvent[]): Pursuit {
     headline: row.headline, plan: row.plan ?? [], openedAt: new Date(row.opened_at),
     closedAt: row.closed_at ? new Date(row.closed_at) : null,
     events: sorted, rung, nextRung: nextIdx < RUNGS.length ? RUNGS[nextIdx]! : null,
-    stage: row.stage, outcome: row.outcome, outcomeReason: row.outcome_reason, source: row.source,
+    status: row.status, statusReason: row.status_reason, passedBy: row.passed_by, statusSource: row.status_source,
+    statusSaid: row.status_said,
+    statusSetAt: row.status_set_at ? new Date(row.status_set_at) : null, statusSetByName: row.status_set_by_name,
+    implied: (row.implied ?? []) as Implied[], nextStep: row.next_step,
+    nextStepOn: row.next_step_on ? new Date(row.next_step_on) : null, source: row.source,
     sourceAsOf: row.source_as_of ? new Date(row.source_as_of) : null, stageSaid: row.stage_said,
     ownerSaid: row.owner_said, historical: row.vehicle_phase === 'historical',
   };
@@ -69,13 +80,26 @@ async function eventsFor(ids: string[], q?: Queryable): Promise<Map<string, Ladd
   return out;
 }
 
-export async function listPursuits(vehicleId?: string | null): Promise<Pursuit[]> {
+export async function listPursuits(vehicleId?: string | null, opts: { status?: PursuitStatus } = {}): Promise<Pursuit[]> {
   const db = await getDb();
-  const rows = vehicleId
-    ? await db.query<PursuitRow>(`${PURSUIT_SELECT} where p.vehicle_id = $1 order by p.opened_at`, [vehicleId])
-    : await db.query<PursuitRow>(`${PURSUIT_SELECT} order by p.opened_at`);
+  const where: string[] = [];
+  const params: unknown[] = [];
+  if (vehicleId) { params.push(vehicleId); where.push(`p.vehicle_id = $${params.length}`); }
+  if (opts.status) { params.push(opts.status); where.push(`p.status = $${params.length}::strategy.pursuit_status`); }
+  const rows = await db.query<PursuitRow>(
+    `${PURSUIT_SELECT}${where.length ? ` where ${where.join(' and ')}` : ''} order by p.opened_at`, params,
+  );
   const events = await eventsFor(rows.map((r) => r.pursuit_id));
   return rows.map((r) => assemble(r, events.get(r.pursuit_id) ?? []));
+}
+
+/** How many pursuits sit at each status, per vehicle — the board's column heads. */
+export async function statusCounts(): Promise<Array<{ vehicleId: string; status: PursuitStatus; n: number }>> {
+  const db = await getDb();
+  const rows = await db.query<{ vehicle_id: string; status: PursuitStatus; n: string }>(
+    `select vehicle_id, status::text as status, count(*)::text as n from strategy.pursuit group by vehicle_id, status`,
+  );
+  return rows.map((r) => ({ vehicleId: r.vehicle_id, status: r.status, n: Number(r.n) }));
 }
 
 export async function getPursuit(pursuitId: string, q?: Queryable): Promise<Pursuit | null> {

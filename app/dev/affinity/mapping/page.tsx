@@ -7,7 +7,7 @@ import { inventory } from '@/lib/connectors/affinity/inventory';
 import { readMapping, type ValueMap } from '@/lib/connectors/affinity/mapping';
 import { normName } from '@/lib/connectors/affinity/match';
 import {
-  OUTCOME_LABEL, RUNG_LABEL, STAGES, STAGE_GROUP_LABEL, type PursuitStage,
+  IMPLIED, IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUSES, STATUS_LABEL, impliedRung,
 } from '@/modules/strategy';
 import { latestRun } from '@/modules/sources';
 import { translateAction, writeMappingAction } from '../actions';
@@ -15,17 +15,17 @@ import { translateAction, writeMappingAction } from '../actions';
 export const dynamic = 'force-dynamic';
 
 const n = (x: number) => x.toLocaleString('en-US');
-const stageOf = (id: PursuitStage | null | undefined) => (id ? STAGES.find((s) => s.id === id) ?? null : null);
-
 function Meaning({ m }: { m: ValueMap | null }) {
   if (!m) return <span className="flag f-block">needs a meaning</span>;
   if (m.skip) return <span className="muted">not an LP — not translated</span>;
-  const s = stageOf(m.stage);
   return (
     <span>
-      {s ? <b>{s.label}</b> : <span className="muted">stage unknown</span>}
-      {m.outcome && m.outcome !== 'open' && <span className="flag f-mute" style={{ marginLeft: 6 }}>{OUTCOME_LABEL[m.outcome]}</span>}
-      {m.reason && <span className="muted"> · {m.reason.replace('_', ' ')}</span>}
+      {m.status ? <b>{STATUS_LABEL[m.status]}</b> : <span className="flag f-block">status unknown</span>}
+      {m.status === 'passed' && (
+        <span className="muted"> · {[m.passedBy ? PASSED_BY_LABEL[m.passedBy].toLowerCase() : null, m.reason?.replace('_', ' ')].filter(Boolean).join(', ')}</span>
+      )}
+      {m.next && <span className="flag f-mute" style={{ marginLeft: 6 }}>next step: {m.next}</span>}
+      {!!m.implies?.length && <div className="muted" style={{ fontSize: 11.5 }}>says {m.implies.map((i) => IMPLIED_LABEL[i]).join(', ')}</div>}
     </span>
   );
 }
@@ -35,7 +35,7 @@ export default async function Mapping() {
   const inv = await inventory();
   const map = await readMapping(inv);
   const translated = await latestRun('affinity', 'translate');
-  const tc = (translated?.detail ?? {}) as { byVehicle?: Record<string, number>; unreviewedLists?: string[]; ownersNotOnTeam?: number; readyToHarden?: number; affiliations?: number; people?: number; organizations?: number; skipped?: number };
+  const tc = (translated?.detail ?? {}) as { byVehicle?: Record<string, number>; byStatus?: Record<string, number>; keptOurs?: number; unreviewedLists?: string[]; ownersNotOnTeam?: number; readyToHarden?: number; affiliations?: number; people?: number; organizations?: number; skipped?: number };
   const lists = inv.lists.filter((l) => l.why === 'init' && l.entries > 0);
 
   return (
@@ -43,23 +43,24 @@ export default async function Mapping() {
       crumbs={[{ label: SECTION.developer }, { label: 'Affinity', href: '/dev/affinity' }, { label: 'Mapping' }]}
       inspector={
         <>
-          <div className="lbl">Stage, outcome, reason</div>
-          <div className="ihead">Three things one field was holding</div>
-          <div className="imeta">Affinity&rsquo;s status, taken apart</div>
+          <div className="lbl">Status, and what the word says happened</div>
+          <div className="ihead">One field, taken apart</div>
+          <div className="imeta">Affinity&rsquo;s status, read into ours (docs/17)</div>
           <div className="scope">
             <div className="lbl">Why apart</div>
             <p>
-              The team used one status to slice a board, so it carries where the work is, whether
-              it ended, and why — &ldquo;Passed – Timing&rdquo; is an outcome and a reason. Here
-              those are three columns, so a board can still group them however it likes.
+              The team used one status to slice a board, so it carries where the effort is, what
+              has happened, whether it ended, and why. Here the effort is one of six statuses;
+              what happened is kept as the word&rsquo;s claim, beside the dated log; an ending keeps
+              who and why.
             </p>
           </div>
           <div className="scope">
-            <div className="lbl">A stage claims; it does not prove</div>
+            <div className="lbl">A word claims; it does not prove</div>
             <p>
-              Each stage claims a rung of the consent ladder. The ladder moves only on evidence,
-              and the stepper shows the claim beside it. A &ldquo;Signed&rdquo; stage marks money
-              as ready to harden; only the close room&rsquo;s countersignature hardens it.
+              &ldquo;Two meetings held&rdquo; claims a meeting was held. The ladder moves only on
+              evidence, and the LP&rsquo;s page shows the claim beside it. A word that says signed
+              marks money ready to harden; only the close room&rsquo;s countersignature hardens it.
             </p>
           </div>
           <div className="note">
@@ -74,7 +75,7 @@ export default async function Mapping() {
       </div>
       <h1>How Affinity is read</h1>
       <p className="sublede">
-        Our pipeline stages, and what each of Affinity&rsquo;s status words means in them. The
+        Our six statuses, and what each of Affinity&rsquo;s status words means in them. The
         mapping is a file you can edit; every translation re-reads it, so a correction is an
         edit and a re-run, never another request to Affinity.
       </p>
@@ -86,28 +87,48 @@ export default async function Mapping() {
         </div>
       )}
 
-      <div className="card">
-        <div className="chead">
-          <h2>Our stages</h2>
-          <span className="lbl">{STAGES.length} stages in 5 groups · outcome and reason kept apart</span>
+      <div className="grid-even">
+        <div className="card">
+          <div className="chead">
+            <h2>Our statuses</h2>
+            <span className="lbl">six · where our effort is</span>
+          </div>
+          <table className="list">
+            <tbody>
+              {STATUSES.map((s) => (
+                <tr key={s.id}>
+                  <td style={{ width: 110 }}><b>{s.label}</b></td>
+                  <td style={{ fontSize: 12.5 }}>{s.means}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="cover">
+            <b>Passed</b> keeps who ended it — they declined, we stopped, it went quiet — and why:
+            thesis, timing, valuation, structure, concentration, diligence, mandate, no response,
+            other. <b>On hold</b> is not a status: it is a next step on one.
+          </p>
         </div>
-        <table className="list">
-          <thead><tr><th>Group</th><th>Stage</th><th>What it means</th><th>Claims</th></tr></thead>
-          <tbody>
-            {STAGES.map((s, i) => (
-              <tr key={s.id}>
-                <td className="muted">{i === 0 || STAGES[i - 1]!.group !== s.group ? STAGE_GROUP_LABEL[s.group] : ''}</td>
-                <td><b>{s.label}</b> <span className="muted mono" style={{ fontSize: 11 }}>{s.id}</span></td>
-                <td style={{ fontSize: 12.5 }}>{s.means}</td>
-                <td className="muted" style={{ fontSize: 12 }}>{s.claims ? RUNG_LABEL[s.claims] : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="cover">
-          <b>Outcomes:</b> open, on hold, passed, lost — at any stage. <b>Reasons</b> for an ending:
-          thesis, timing, valuation, structure, concentration, diligence, mandate, no response, other.
-        </p>
+        <div className="card">
+          <div className="chead">
+            <h2>What a word can say happened</h2>
+            <span className="lbl">undated · a claim</span>
+          </div>
+          <table className="list">
+            <thead><tr><th>Says</th><th>Would be evidence for</th></tr></thead>
+            <tbody>
+              {IMPLIED.map((x) => (
+                <tr key={x.id}>
+                  <td>{x.label} <span className="muted mono" style={{ fontSize: 11 }}>{x.id}</span></td>
+                  <td className="muted" style={{ fontSize: 12 }}>{x.claims ? RUNG_LABEL[x.claims] : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="cover">
+            Shown beside the LP&rsquo;s dated log and the ladder, and written into neither.
+          </p>
+        </div>
       </div>
 
       {!map.exists ? (
@@ -138,13 +159,13 @@ export default async function Mapping() {
                   {m.reviewed ? 'reviewed' : 'not reviewed yet'}
                 </span>
               </div>
-              {m.stage.length === 0 ? (
+              {m.status.length === 0 ? (
                 <div className="cbody">No stage or status field found on this list.</div>
               ) : (
                 <table className="list">
-                  <thead><tr><th>Affinity says</th><th>Entries</th><th>Means here</th><th>Claims</th></tr></thead>
+                  <thead><tr><th>Affinity says</th><th>Entries</th><th>Means here</th><th>Claims, at most</th></tr></thead>
                   <tbody>
-                    {m.stage.map((src, si) => (
+                    {m.status.map((src, si) => (
                       <Fragment key={src.field}>
                         <tr>
                           <td colSpan={4} className="lbl" style={{ paddingTop: 12 }}>
@@ -152,13 +173,13 @@ export default async function Mapping() {
                           </td>
                         </tr>
                         {Object.entries(src.values).map(([value, vm]) => {
-                          const st = stageOf(vm?.stage);
+                          const claims = impliedRung(vm?.implies ?? []);
                           return (
                             <tr key={`${src.field}:${value}`}>
                               <td>{value}</td>
                               <td className="mono">{n(count(src.field, value))}</td>
                               <td><Meaning m={vm} /></td>
-                              <td className="muted" style={{ fontSize: 12 }}>{st?.claims ? RUNG_LABEL[st.claims] : '—'}</td>
+                              <td className="muted" style={{ fontSize: 12 }}>{claims ? RUNG_LABEL[claims] : '—'}</td>
                             </tr>
                           );
                         })}
@@ -216,6 +237,13 @@ export default async function Mapping() {
                     <span>{Object.entries(tc.byVehicle).map(([v, k]) => `${v} ${n(k)}`).join(' · ')}</span>
                   </div>
                 )}
+                {tc.byStatus && (
+                  <div className="fact">
+                    <span>By status</span>
+                    <span>{[...STATUSES.map((s) => s.id), 'unplaced'].filter((k) => tc.byStatus![k]).map((k) => `${k === 'unplaced' ? 'no status yet' : STATUS_LABEL[k as keyof typeof STATUS_LABEL]} ${n(tc.byStatus![k]!)}`).join(' · ')}</span>
+                  </div>
+                )}
+                {!!tc.keptOurs && <div className="fact"><span>Set here, kept</span><span>{n(tc.keptOurs)} pursuits whose status a person set here — Affinity&rsquo;s word is beside it, not over it</span></div>}
                 <div className="fact"><span>New people and organizations</span><span>{n(tc.people ?? 0)} · {n(tc.organizations ?? 0)}{tc.affiliations ? ` · ${n(tc.affiliations)} affiliations` : ''}</span></div>
                 {!!tc.readyToHarden && <div className="fact"><span>Signed, per Affinity</span><span>{n(tc.readyToHarden)} ready to harden once countersigned — still soft</span></div>}
                 {!!tc.ownersNotOnTeam && <div className="fact"><span>Owner not on the team</span><span>{n(tc.ownersNotOnTeam)} pursuits, kept under their name</span></div>}

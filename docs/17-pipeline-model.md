@@ -1,0 +1,114 @@
+# 17 — One LP, four records: status, touchpoints, the close track, and their read
+
+**Status:** proposed 23 Sep 2026 (N50–N52), from Juan's sketch the same night. It replaces the
+twelve stages of N46, which put what happened (a first meeting, a second) into the status,
+and so never fit a process that doesn't run in a line.
+
+Juan's question was whether this is overkill. It isn't: it's less than what it replaces. The
+twelve stages tried to say in one field what the log, the close room and the ladder each say
+better. Separating them is what lets a messy process be recorded as it happened.
+
+---
+
+## The four records
+
+For each LP and each vehicle — a *pursuit* in the code, a row on the pipeline in the product:
+
+| Record | The question it answers | Who sets it | Moves |
+|---|---|---|---|
+| **Status** | Where is our effort with them? | A person (or Affinity's word, until a person sets it) | Any direction, any time |
+| **Touchpoints** | What has happened with them? | Logged here, or read from Affinity's notes and calendar | Append-only, dated |
+| **Close track** | How far has the money got? | The close room and Soft → Hard | Events, each with its evidence |
+| **Their read** | How keen are they? | Whoever was in the room, on that touchpoint | Dated, one per touchpoint |
+
+The **consent ladder** stays. It's the evidence view: each rung is a specific record — a
+reply, a meeting, a number from them, a countersignature, a wire. Nobody maintains it by hand
+any more than before, and a status never moves it (rule 2).
+
+## 1. Status: six values
+
+| Status | Means |
+|---|---|
+| **New** | On the list. Nobody has researched them or reached out. |
+| **Sourcing** | Picked to research, enrich, or find a way in. Research can happen at any status; this one says it's the work right now. |
+| **Selected** | We've decided to approach. Outreach is next, or under way with no reply yet. |
+| **Discussing** | They've engaged: a reply, a call being set, any number of meetings. |
+| **Committed** | They said yes, with an amount. How far the money has got is the close track's job, not this one's. |
+| **Passed** | Off, for now. **Who** (they declined · we stopped · it went quiet) and **why** are kept, and it can reopen. |
+
+- **No "paused".** "Come back after the new year" is Discussing with a dated **next step**. A
+  status that means "not now" hides the date that makes it true or false.
+- **No enforced order.** Committed can go back to Discussing when they cut back; Passed can
+  reopen. Each change is in the audit log, so the history is there.
+- **Do not contact** is not a status. It's a restriction on the person, across every vehicle,
+  and every route checks it (rule 8).
+- **Not ticket-gated.** A status is our plan and claims nothing about the LP. The ladder is
+  where claims are made, and it keeps its STAGE tickets.
+- **"Target" is retired as a word for an LP.** The whole set is the *pipeline*, each row an
+  *LP*, and "target" means only the fund's size goal. The ladder's second rung reads
+  "LP opted in".
+
+## 2. Touchpoints: the dated log
+
+Meetings, calls, emails, intros, events — each with a date, which vehicle it was about (or
+none), who from our side, who reached out, a line of what happened, and where the record came
+from. From these, derived rather than set: how many meetings, the first and the second, the
+last touch, and "waiting on their reply since…".
+
+- **From Affinity, without asking anyone to re-type it:** meeting, call and email notes carry
+  the interaction and a date (N49), and every list entry carries Affinity's first and last
+  email and meeting dates. A note about the LP's firm counts for the LP. A meeting that
+  covered two vehicles counts for both; one tied to no vehicle counts for every open pursuit
+  of that LP, labelled as such.
+- **Research is a touchpoint too**, of its own kind: what was looked at, and the date range
+  (rule 7). "Last researched" is derived, at any status.
+- What Affinity's status word implies but can't date ("Two meetings held") is kept as a claim
+  beside the log: "2 meetings on record · Affinity says 2 or more".
+
+## 3. The close track: events, not a state
+
+Most of this already exists: soft and hard exposures (L6), the close room's pack with its
+returned and countersigned dates (L8), and the SPV room's wires. What was missing is added:
+
+- **Signatures as events.** They signed on a date; they re-signed on another, with the reason
+  (the entity changed, the documents were amended). The latest one counts.
+- **Countersignature** stays the only thing that makes money hard, through the MONEY ticket
+  (rule 1). It now also writes the event, in the same transaction.
+- **Closing.** Admitted at a closing — the first close, or the SPV's.
+- **Wires as amounts, many per LP.** A fund's commitment is called in parts. Each wire is a
+  dated amount, reconciled against what was called: "wired $1.2M of $1.5M called".
+
+The state is derived from the events: **soft → signed → hard → closed**, with wires beside it.
+From Affinity, a word like "Signed" becomes a *signed* event with no date, marked as Affinity's
+claim; it's still soft until countersigned here.
+
+## 4. Their read: recorded, never computed
+
+**Very interested · interested · not very interested**, recorded on a touchpoint by whoever
+was there, dated and attributed. The pipeline shows the latest read with its date, so a
+stale one looks stale. It's not a separate field somebody maintains, and it's never computed:
+the tool shows the facts beside it (reply time, meetings, documents asked for), and an agent
+may *suggest* a read from notes, labelled as a suggestion until a person confirms it.
+A numeric interest score would be a confidence rendered as fact, which this tool doesn't do.
+
+---
+
+## What Affinity's words become
+
+The mapping (`data/<profile>/mapping.jsonc`, docs/16 §3) now gives each status word a
+**status**, a reason and who passed where it ended, and what the word **implies** happened:
+reached out, replied, meeting agreed, met, met twice, diligence, documents sent, soft, signed,
+wired. The implied facts are claims: shown beside the log and the ladder, never written into
+either. Translation also applies one rule: an entry with a committed amount is Committed,
+unless it passed.
+
+A status set here is never overwritten by the next translation. When Affinity's word changes
+after that, the LP page says so: "Affinity now says *Soft circle*; set to Discussing here on
+24 Sep".
+
+## What was deliberately not built
+
+- An interest score, a stage-transition graph, or a ticket for changing a status.
+- Undated touchpoints invented from a status word.
+- A write back to Affinity. If the team adopts these six values, Affinity's status field could
+  be changed to match — a later decision, through approval tickets (docs/15).

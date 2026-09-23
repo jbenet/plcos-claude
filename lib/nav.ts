@@ -57,7 +57,7 @@ export const VEHICLE_MODULES: NavModule[] = [
   m('S', 'Strategy', 'strategy', 'L9',
     'Where the raise stands, the option space against it, and a place to commit.',
     true, undefined, true),
-  m('04', 'Conversion strategy', 'targets', 'L5', 'The per-target workspace; consent ladder; coverage disclosure.'),
+  m('04', 'Pipeline', 'targets', 'L5', 'Every LP by status; the per-LP workspace; consent ladder; coverage disclosure.'),
   m('05', 'Warm intro routes', 'routes', 'L4', 'Route ranking by connector credibility; A–D evidence tiers; non-circumvention.'),
   m('03', 'Selection', 'selection', 'L9', 'The capacity/affinity/propensity rubric, with weights visible and editable.'),
   m('22', 'Calendar', 'calendar', 'L7',
@@ -189,7 +189,7 @@ export const PLAYBOOK_ONLY: Array<{ num: string; title: string; slug: string; wh
   {
     num: '06', title: 'Signals', slug: 'signals',
     why: 'External change detection. The model, the thresholds and the ingest path are real; a dedicated page before a connector exists would render invented change detection.',
-    where: 'Today, the target workspace, and Developer → Status, where the thresholds and everything they held back are listed.',
+    where: 'Today, the LP workspace, and Developer → Status, where the thresholds and everything they held back are listed.',
   },
   {
     num: '12', title: 'LP-fit audit', slug: 'lp-fit',

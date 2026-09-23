@@ -80,9 +80,13 @@ How each list's words become this tool's. Per list:
 
 - **role**: `pipeline` becomes pursuits; `history` is kept raw and not translated. A vehicle's
   first list is its pipeline; its others are history.
-- **stage**: the fields that say where an entry is, tried in order. For each of their values:
-  our stage, an outcome (open, paused, passed, lost), and a reason. The team's status field held
-  all three at once — "Passed – Timing" — so they are taken apart here.
+- **status**: the fields that say where an entry is, tried in order. For each of their values
+  (N50, docs/17): our **status** (new, sourcing, selected, discussing, committed, passed); where
+  it passed, **who** ended it (they declined, we stopped, it went quiet) and **why**; what the word
+  **implies** happened, undated (reached out, replied, met, met twice, signed…); and a **next**
+  step for words like "On Hold", which say nothing about where the effort is. The team's status
+  field held all of these at once, so they are taken apart here. A file written in N46's stages
+  still reads; an unreviewed list in one is re-proposed when the file is next written.
 - **commitment**, **softRange**, **checkSize**, **aum**, **owner**, **introducer**,
   **doNotContact**, **passReason**: which field holds each, or null.
 
@@ -90,12 +94,11 @@ The first version is **proposed** from the words, and each list says `reviewed: 
 person sets it true. A word the proposer can't place stays null: a question, not a guess.
 Regenerating (after a new read) proposes only what is new and keeps every edit.
 
-**Our stages** (`modules/strategy/types.ts`, `STAGES`): twelve, in five groups — prospecting
-(to research, targeted), outreach (contacted, responded, scheduling), engaged (first meeting,
-two or more meetings, diligence), closing (documents sent, soft commit, signed), funded. They
-adopt the granularity the team already used in Affinity. Each stage **claims** a ladder rung,
-and the claims only rise with the stage (a property checks it). A claim is shown beside the
-ladder and never written into it: the ladder moves on evidence.
+**Our statuses** (`modules/strategy/types.ts`, `STATUSES`, docs/17): six, for where our effort
+is. What happened is the dated log and the close track, not the status. A word's implied facts
+each **claim** a ladder rung ("met" claims *meeting held*), shown beside the ladder and never
+written into it: the ladder moves on evidence. N46's twelve stages are retired; their columns
+stay in the database, unread (migrations are append-only).
 
 If we later decide our model is right and Affinity's should change to match, that's a write to
 Affinity. It's a separate decision, and it would go through approval tickets.
@@ -110,19 +113,24 @@ and running twice changes nothing (a property checks it). Each run is a `sync_ru
 
 - **People and organizations** → `identity.entity`, linked to Affinity through
   `identity.source_record` (`affinity`, `person:<id>` / `company:<id>`).
-- **Pursuits**: one per entry on a pipeline list, per vehicle, with our stage, outcome, reason,
-  what Affinity said, and when (`strategy.pursuit.source`, `stage_said`, `source_as_of`). The
+- **Pursuits**: one per entry on a pipeline list, per vehicle, with our status, who and why where
+  it passed, what Affinity said, what that implies, and when (`status`, `stage_said`, `implied`,
+  `source_as_of`). An entry with an amount on the commitment field is Committed unless it passed.
+  **A status a person set here is never overwritten**; Affinity's reading of its word is kept
+  beside it (`status_said`), so the LP page can say when the two differ. The
   owner is matched to the team by Affinity email. Someone who isn't on the team — a former
   colleague — is kept by name in `owner_said`, and the pursuit goes to a placeholder owner who
   doesn't appear in the user switcher.
-- **Money**: the commitment field becomes a **soft** exposure, always. A *signed* stage marks
-  it ready to harden; only the close room's countersignature makes it hard (rule 1). On a
-  historical vehicle the exposure is closed, so no current figure counts it.
+- **Money**: the commitment field becomes a **soft** exposure, always. A word implying *signed*
+  marks it ready to harden; only the close room's countersignature makes it hard (rule 1). On a
+  historical vehicle, or once the pursuit passed, the exposure is closed, so no current figure
+  counts it.
 - **Check size and AUM** become research claims on the LP, with the list as their source
   document. AUM is low confidence and unverified (issue 0022).
 - **Do not contact**: a "yes" becomes a blanket do-not-approach restriction on the person
   (rule 8).
-- **The ladder is not touched.** No stage creates a ladder event; evidence does.
+- **The ladder is not touched.** No status and no implied fact creates a ladder event; evidence
+  does.
 
 ## When something is wrong
 

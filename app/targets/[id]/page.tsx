@@ -8,7 +8,10 @@ import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { Coverage } from '@/components/ui/Coverage';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
-import { getPursuit, OUTCOME_LABEL, RUNG_LABEL, RUNG_REQUIRES, STAGES } from '@/modules/strategy';
+import {
+  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, RUNG_REQUIRES, STATUS_LABEL, getPursuit, impliedRung,
+} from '@/modules/strategy';
+import { StatusForm } from '@/components/strategy/StatusForm';
 import { claimLabel, claimsFor, listSourceDocs, notesFor } from '@/modules/research';
 import { usdCompact } from '@/lib/money';
 import { restrictionsFor } from '@/modules/coordination';
@@ -53,7 +56,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     <Page
       crumbs={[
         { label: pursuit.vehicleName, href: '/overview' },
-        { label: 'Conversion strategy', href: '/targets' },
+        { label: 'Pipeline', href: `/targets?status=${pursuit.status}` },
         { label: pursuit.entityName },
       ]}
       inspector={
@@ -118,7 +121,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
       }
     >
       <div className="lbl">
-        Target workspace · owner {pursuit.ownerSaid ? `${pursuit.ownerSaid} (not on the team)` : pursuit.ownerName} · opened {shortDate(pursuit.openedAt)}
+        LP workspace · owner {pursuit.ownerSaid ? `${pursuit.ownerSaid} (not on the team)` : pursuit.ownerName} · opened {shortDate(pursuit.openedAt)}
         {pursuit.historical ? ' · a vehicle kept for its history' : ''}
       </div>
       <h1 style={{ marginTop: 4 }}>
@@ -126,25 +129,55 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
       </h1>
       <p className="sublede">{pursuit.headline}</p>
 
-      {pursuit.stage || pursuit.stageSaid ? (() => {
-        const st = STAGES.find((s) => s.id === pursuit.stage);
+      {(() => {
+        const p = pursuit;
+        const claimed = impliedRung(p.implied);
+        const differs = p.statusSource === 'us' && p.statusSaid && p.statusSaid !== p.status;
         return (
-          <div className="stageclaim">
-            <span className="lbl">{pursuit.source === 'us' ? 'Stage' : 'Affinity says'}</span>
-            {pursuit.stageSaid && pursuit.source !== 'us' && <b>&ldquo;{pursuit.stageSaid}&rdquo;</b>}
-            <span>
-              {st ? <>→ {st.label}</> : <>→ no stage of ours yet</>}
-              {pursuit.outcome !== 'open' ? ` · ${OUTCOME_LABEL[pursuit.outcome]}${pursuit.outcomeReason ? ` (${pursuit.outcomeReason.replace('_', ' ')})` : ''}` : ''}
-            </span>
-            {st?.claims && (
-              <span className="muted">
-                claims {RUNG_LABEL[st.claims]} — {pursuit.rung && RUNG_LABEL[pursuit.rung] ? `the ladder has ${RUNG_LABEL[pursuit.rung]} on file` : 'nothing on the ladder is evidenced yet'}
+          <div className="statuspanel">
+            <div className="now">
+              <span className="lbl">Status</span>
+              <b>{STATUS_LABEL[p.status]}</b>
+              {p.status === 'passed' && (
+                <span>{[p.passedBy ? PASSED_BY_LABEL[p.passedBy] : null, p.statusReason?.replace('_', ' ')].filter(Boolean).join(' · ')}</span>
+              )}
+              {p.status !== 'passed' && p.statusReason && <span>{p.statusReason}</span>}
+              <span className="muted" style={{ fontSize: 12 }}>
+                {p.statusSource === 'us'
+                  ? p.statusSetAt ? `set here ${shortDate(p.statusSetAt)}${p.statusSetByName ? ` by ${p.statusSetByName}` : ''}` : 'set here'
+                  : `read from Affinity${p.sourceAsOf ? ` ${shortDate(p.sourceAsOf)}` : ''} — nobody has set one here yet`}
               </span>
+            </div>
+            {p.nextStep && (
+              <div className="said">
+                <b>Next:</b> {p.nextStep}{p.nextStepOn ? ` — by ${shortDate(p.nextStepOn)}` : ''}
+              </div>
             )}
-            {pursuit.sourceAsOf && <span className="muted">read {shortDate(pursuit.sourceAsOf)}</span>}
+            {p.stageSaid && p.source !== 'us' && (
+              <div className={`said${differs ? ' differs' : ''}`}>
+                {differs ? <>Affinity now says &ldquo;{p.stageSaid}&rdquo;, which reads as {STATUS_LABEL[p.statusSaid!]}. </> : <>Affinity says &ldquo;{p.stageSaid}&rdquo;. </>}
+                {p.implied.length > 0 && (
+                  <span className="muted">
+                    Its record implies {p.implied.map((i) => IMPLIED_LABEL[i]).join(', ')}
+                    {claimed ? ` — a claim of ${RUNG_LABEL[claimed]}; ${p.rung ? `the ladder has ${RUNG_LABEL[p.rung]} on file` : 'nothing on the ladder is evidenced yet'}` : ''}.
+                  </span>
+                )}
+              </div>
+            )}
+            <details>
+              <summary>Change the status</summary>
+              <StatusForm
+                pursuitId={p.pursuitId}
+                status={p.status}
+                passedBy={p.passedBy}
+                reason={p.statusReason}
+                nextStep={p.nextStep}
+                nextStepOn={p.nextStepOn ? p.nextStepOn.toISOString().slice(0, 10) : null}
+              />
+            </details>
           </div>
         );
-      })() : null}
+      })()}
 
       <LadderStepper pursuit={pursuit} />
 

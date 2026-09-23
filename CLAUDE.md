@@ -125,6 +125,11 @@ Each step up requires a specific evidence record. A connector saying "happy to a
 first rung and nothing more — it is not target interest, not a meeting, not a commitment.
 Render it as a stepper so the gap between claimed and evidenced state is visible.
 
+The ladder is not the pipeline status (N50, `docs/17-pipeline-model.md`). The status — new,
+sourcing, selected, discussing, committed, passed — is our plan: set by a person, any
+direction, no ticket, and it never writes a rung. The second rung displays as "LP opted in";
+"target" means only a vehicle's size goal.
+
 **3. Five approval-ticket kinds gate mutations, before the fact.**
 
 `SEND` · `INTRO_ASK` · `MONEY` · `STAGE` · `ALLOCATION_EXCEPTION`

@@ -1,8 +1,9 @@
 export type {
-  LadderEvent, LadderRung, OutcomeReason, PlanStep, Pursuit, PursuitOutcome, PursuitStage, StageGroup, StageInfo,
+  Implied, LadderEvent, LadderRung, OutcomeReason, PassedBy, PlanStep, Pursuit, PursuitStatus, StatusInfo,
 } from './types';
 export {
-  OUTCOME_LABEL, REASONS, RUNGS, RUNG_LABEL, RUNG_REQUIRES, STAGES, STAGE_GROUP_LABEL, rungIndex,
+  IMPLIED, IMPLIED_LABEL, PASSED_BY_LABEL, REASONS, RUNGS, RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_LABEL,
+  impliedRung, rungIndex,
 } from './types';
-export { getPursuit, listPursuits, pursuitFor } from './repo';
-export { LadderRefused, recordAdvance, requestAdvance } from './service';
+export { getPursuit, listPursuits, pursuitFor, statusCounts } from './repo';
+export { LadderRefused, recordAdvance, requestAdvance, setStatus, StatusRefused } from './service';

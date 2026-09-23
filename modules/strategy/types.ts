@@ -10,7 +10,7 @@ export const RUNGS: LadderRung[] = [
 
 export const RUNG_LABEL: Record<LadderRung, string> = {
   connector_willing: 'Connector willing',
-  target_opted_in: 'Target opted in',
+  target_opted_in: 'LP opted in',
   meeting_held: 'Meeting held',
   indication_given: 'Indication given',
   commitment_accepted: 'Commitment accepted',
@@ -20,7 +20,7 @@ export const RUNG_LABEL: Record<LadderRung, string> = {
 /** What evidence a rung requires. Stated so nobody has to infer it from a screenshot. */
 export const RUNG_REQUIRES: Record<LadderRung, string> = {
   connector_willing: 'A record of the connector agreeing to ask. This says nothing about the target.',
-  target_opted_in: 'A reply from the target, or from someone speaking for them. Not a connector relaying optimism.',
+  target_opted_in: 'A reply from the LP, or from someone speaking for them. Not a connector relaying optimism.',
   meeting_held: 'A meeting that happened, with a date and who was in it.',
   indication_given: 'A number or a range, from them. An expression of enthusiasm is not an indication.',
   commitment_accepted: 'Signed and countersigned. This is the only step that moves a number from soft to hard.',
@@ -28,59 +28,72 @@ export const RUNG_REQUIRES: Record<LadderRung, string> = {
 };
 
 /**
- * Our pipeline stages (N46). Where the work is, finer than the ladder — adopted from how the
- * team already tracked the LP pipeline in Affinity, where the granularity earned its place.
- * Grouped, because a board wants five columns and a report wants twelve.
- *
- * `claims` is the ladder rung a stage implies. It is a claim: the ladder moves only on
- * evidence (RUNG_REQUIRES), and the stepper shows the two side by side.
+ * The pipeline status (N50, docs/17): where our effort is with an LP, on one vehicle. Six
+ * values, set by a person, able to move in any direction — the history is in the audit log.
+ * What happened lives elsewhere: the dated touchpoints, the close track, and the ladder, which
+ * is still the only place a claim about the LP is made. A status claims nothing, so it moves
+ * the ladder never and needs no ticket.
  */
-export type PursuitStage =
-  | 'research' | 'targeted' | 'contacted' | 'responded' | 'scheduling'
-  | 'first_meeting' | 'follow_up' | 'diligence' | 'docs_out'
-  | 'soft_commit' | 'signed' | 'funded';
+export type PursuitStatus = 'new' | 'sourcing' | 'selected' | 'discussing' | 'committed' | 'passed';
 
-export type StageGroup = 'prospecting' | 'outreach' | 'engaged' | 'closing' | 'funded';
-
-export interface StageInfo {
-  id: PursuitStage;
+export interface StatusInfo {
+  id: PursuitStatus;
   label: string;
-  group: StageGroup;
   means: string;
-  claims: LadderRung | null;
 }
 
-export const STAGES: StageInfo[] = [
-  { id: 'research', label: 'To research', group: 'prospecting', means: 'On the list; not looked into yet.', claims: null },
-  { id: 'targeted', label: 'Targeted', group: 'prospecting', means: 'Looked into, and worth approaching.', claims: null },
-  { id: 'contacted', label: 'Contacted', group: 'outreach', means: 'We reached out. Nothing back from them yet.', claims: null },
-  { id: 'responded', label: 'Responded', group: 'outreach', means: 'They wrote back and want to keep talking.', claims: 'target_opted_in' },
-  { id: 'scheduling', label: 'Scheduling a first call', group: 'outreach', means: 'They agreed to talk; a time is being found.', claims: 'target_opted_in' },
-  { id: 'first_meeting', label: 'First meeting held', group: 'engaged', means: 'One meeting has happened.', claims: 'meeting_held' },
-  { id: 'follow_up', label: 'Two or more meetings', group: 'engaged', means: 'The conversation has continued past the first meeting.', claims: 'meeting_held' },
-  { id: 'diligence', label: 'In diligence', group: 'engaged', means: 'They are working through the materials.', claims: 'meeting_held' },
-  { id: 'docs_out', label: 'Documents sent', group: 'closing', means: 'Subscription documents are with them.', claims: 'meeting_held' },
-  { id: 'soft_commit', label: 'Soft commit', group: 'closing', means: 'They named a number or a range. Soft until signed and countersigned.', claims: 'indication_given' },
-  { id: 'signed', label: 'Signed', group: 'closing', means: 'They signed. Countersignature is for the close room to confirm; until then the money is soft.', claims: 'commitment_accepted' },
-  { id: 'funded', label: 'Funded', group: 'funded', means: 'The wire landed.', claims: 'cash_received' },
+export const STATUSES: StatusInfo[] = [
+  { id: 'new', label: 'New', means: 'On the list. Nobody has researched them or reached out.' },
+  { id: 'sourcing', label: 'Sourcing', means: 'Picked to research, enrich, or find a way in. Research can happen at any status; this one says it is the work right now.' },
+  { id: 'selected', label: 'Selected', means: 'We have decided to approach. Outreach is next, or under way with no reply yet.' },
+  { id: 'discussing', label: 'Discussing', means: 'They have engaged: a reply, a call being set, any number of meetings.' },
+  { id: 'committed', label: 'Committed', means: 'They said yes, with an amount. How far the money has got is the close track, not this.' },
+  { id: 'passed', label: 'Passed', means: 'Off, for now. Who ended it and why are kept, and it can reopen.' },
 ];
 
-export const STAGE_GROUP_LABEL: Record<StageGroup, string> = {
-  prospecting: 'Prospecting', outreach: 'Outreach', engaged: 'Engaged', closing: 'Closing', funded: 'Funded',
+export const STATUS_LABEL = Object.fromEntries(STATUSES.map((s) => [s.id, s.label])) as Record<PursuitStatus, string>;
+
+/** Who ended it. A decline and a silence are different, and so is our own call. */
+export type PassedBy = 'them' | 'us' | 'quiet';
+export const PASSED_BY_LABEL: Record<PassedBy, string> = {
+  them: 'They declined', us: 'We stopped', quiet: 'It went quiet',
 };
 
-/** How it ended, or that it has not. Separate from the stage: a pass can happen at any stage. */
-export type PursuitOutcome = 'open' | 'paused' | 'passed' | 'lost';
-
-export const OUTCOME_LABEL: Record<PursuitOutcome, string> = {
-  open: 'Open', paused: 'On hold', passed: 'Passed', lost: 'Lost',
-};
-
-/** Why, when it ended. Words from the lists, normalized so they can be counted. */
+/** Why, when it passed. Words from the lists, normalized so they can be counted. */
 export const REASONS = [
   'thesis', 'timing', 'valuation', 'structure', 'concentration', 'diligence', 'mandate', 'no_response', 'other',
 ] as const;
 export type OutcomeReason = (typeof REASONS)[number];
+
+/**
+ * What a source's status word says happened, with no date: "Two meetings held" is met_twice.
+ * Kept beside the log and the ladder as a claim — the rung it would be evidence for, if it
+ * were evidence — and never written into either (docs/17).
+ */
+export type Implied =
+  | 'reached_out' | 'replied' | 'meeting_agreed' | 'met' | 'met_twice' | 'diligence'
+  | 'docs_sent' | 'soft' | 'signed' | 'wired';
+
+export const IMPLIED: Array<{ id: Implied; label: string; claims: LadderRung | null }> = [
+  { id: 'reached_out', label: 'we reached out', claims: null },
+  { id: 'replied', label: 'they replied', claims: 'target_opted_in' },
+  { id: 'meeting_agreed', label: 'a meeting was agreed', claims: 'target_opted_in' },
+  { id: 'met', label: 'a meeting was held', claims: 'meeting_held' },
+  { id: 'met_twice', label: 'two or more meetings', claims: 'meeting_held' },
+  { id: 'diligence', label: 'in diligence', claims: 'meeting_held' },
+  { id: 'docs_sent', label: 'documents sent', claims: 'meeting_held' },
+  { id: 'soft', label: 'a soft commitment', claims: 'indication_given' },
+  { id: 'signed', label: 'signed', claims: 'commitment_accepted' },
+  { id: 'wired', label: 'wired', claims: 'cash_received' },
+];
+export const IMPLIED_LABEL = Object.fromEntries(IMPLIED.map((x) => [x.id, x.label])) as Record<Implied, string>;
+
+/** The highest rung a set of implied facts would claim, if any of them were evidence. */
+export function impliedRung(implied: readonly string[]): LadderRung | null {
+  let best: LadderRung | null = null;
+  for (const x of IMPLIED) if (implied.includes(x.id) && x.claims && rungIndex(x.claims) > rungIndex(best)) best = x.claims;
+  return best;
+}
 
 export interface LadderEvent {
   eventId: string;
@@ -114,13 +127,25 @@ export interface Pursuit {
   rung: LadderRung | null;
   /** The next rung up, and what it would need. */
   nextRung: LadderRung | null;
-  /** Where the work is (N46) — a claim beside the ladder, from `source`, never evidence. */
-  stage: PursuitStage | null;
-  outcome: PursuitOutcome;
-  outcomeReason: string | null;
-  /** 'us', or the system it was read from — 'affinity' — with what that system said and when. */
+  /** Where our effort is (N50). Set by a person, or read from a source until one does. */
+  status: PursuitStatus;
+  /** Why it passed, or a line about the status. */
+  statusReason: string | null;
+  passedBy: PassedBy | null;
+  /** 'us' once a person set it here; otherwise the source it was read from. */
+  statusSource: string;
+  /** What the source's word reads as, kept after a person sets the status — so they can differ. */
+  statusSaid: PursuitStatus | null;
+  statusSetAt: Date | null;
+  statusSetByName: string | null;
+  /** What the source's word says happened, undated — claims, never evidence. */
+  implied: Implied[];
+  nextStep: string | null;
+  nextStepOn: Date | null;
+  /** 'us', or the system the pursuit was read from — 'affinity' — with what it said and when. */
   source: string;
   sourceAsOf: Date | null;
+  /** The source's own word for where they are ("Two meetings held"). */
   stageSaid: string | null;
   /** The owner as the source names them, when that person is not on the team. */
   ownerSaid: string | null;

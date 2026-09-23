@@ -247,7 +247,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
     },
     {
       key: 'meet', family: 'Advance', label: 'Hold a meeting',
-      requires: 'The target opted in themselves. A connector relaying optimism is not an opt-in.',
+      requires: 'The LP opted in themselves. A connector relaying optimism is not an opt-in.',
       available: meetable.length,
       blocked: 0, blockedWhy: null, gate: null,
       cost: `${meetings.filter((m) => m.scheduledFor && m.scheduledFor > now).length} already on the calendar`,

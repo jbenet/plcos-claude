@@ -4047,3 +4047,34 @@ second), so a network failure is now tried twice more before it counts, and the 
 failure it was.
 
 **82 of 82 properties hold.**
+
+## N50 — Six statuses, and "target" retired as a word for an LP
+
+**Shipped.** You said the twelve stages weren't landing, and proposed six statuses with
+meetings, research, the money and interest each kept apart. This is the status part of that,
+and `docs/17-pipeline-model.md` is the model as a whole. My view on whether it's overkill:
+it's less than what it replaces. The twelve stages were trying to say in one field what the
+log, the close room and the ladder each say better.
+
+| | |
+|---|---|
+| ![Pipeline](docs/changelog/shots/n50/01-pipeline.webp) | **Pipeline**, which replaces Conversion strategy: six columns — New, Sourcing, Selected, Discussing, Committed, Passed — over one list. The ladder stays beside each LP, because a status is our plan and the ladder is the evidence, and the two are allowed to disagree. |
+| ![Read from Affinity](docs/changelog/shots/n50/02-read-from-affinity.webp) | **An LP read from Affinity.** The status, where it came from, Affinity's own word, and what that word implies happened ("a meeting was held, in diligence") as a claim beside the ladder. An amount on the commitment field makes an entry Committed, whatever the word. |
+| ![Set here](docs/changelog/shots/n50/03-set-here.webp) | **Set here, through the form.** Passed keeps who ended it (they declined, we stopped, it went quiet) and why. "Not now" is a dated next step rather than a status. The next translation keeps what a person set; if Affinity's word later reads differently, the page says so. |
+| ![Mapping](docs/changelog/shots/n50/04-mapping.webp) | **The mapping**, in the new terms: each Affinity word gets a status, who and why where it ended, and what it implies. Unreviewed lists written in the old stages were proposed afresh; a reviewed one would have been converted, edit by edit. |
+
+**Where I pushed back on the sketch, lightly.** Three changes. There's no "paused": on hold is
+a dated next step on a status. A status change needs no ticket: it claims nothing, so it moves
+neither the ladder nor the money, which keep theirs. And "LP opted in" replaces "target opted
+in" on the ladder, so that "target" now means only a vehicle's size goal.
+
+**On the real account**, 42 of the 44 words placed. About four in five of the Neurotech
+list are Sourcing; the rest spread across Selected, Discussing, Committed and Passed roughly as
+the old stages did. Committed is larger than the count of soft-commit and signed entries, because a handful of
+others carry a committed amount; that rule is worth your look.
+The two left are "On Hold" on its own, which says nothing about where the effort is; they're
+flagged on the mapping page, and those entries fall through to the list's next status field.
+
+The 12-stage columns stay in the database, unread: migrations are append-only. 85 of 85
+properties hold, including that a status set here survives the next translation and that
+setting one writes nothing to the ladder.

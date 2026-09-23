@@ -359,7 +359,7 @@ function questions(
     if (stageish.length) {
       const s = stageish[0]!;
       q.push(
-        `${name}: is “${s.name}” the stage? It is filled on ${s.filled} of ${s.of}, with the values ${(s.values ?? []).map((v) => `“${v.text}” (${v.n})`).join(', ')}. For each value, which rung of the ladder has actually been evidenced — connector willing, target opted in, meeting held, indication given, commitment accepted, cash received — or none?` +
+        `${name}: is “${s.name}” the stage? It is filled on ${s.filled} of ${s.of}, with the values ${(s.values ?? []).map((v) => `“${v.text}” (${v.n})`).join(', ')}. For each value, which rung of the ladder has actually been evidenced — connector willing, LP opted in, meeting held, indication given, commitment accepted, cash received — or none?` +
           (stageish.length > 1 ? ` Other dropdowns on the list: ${stageish.slice(1).map((f) => `“${f.name}”`).join(', ')}.` : ''),
       );
     }
