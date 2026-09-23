@@ -51,7 +51,7 @@
      },
      {
       "id": "field-5103",
-      "name": "Indicated amount",
+      "name": "Committed Amount (USD)",
       "type": "list",
       "enrichmentSource": null,
       "value": {
@@ -127,6 +127,52 @@
         "attendees": []
        }
       }
+     },
+     {
+      "id": "field-5106",
+      "name": "Est. Check Size (USD)",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": 5000000
+      }
+     },
+     {
+      "id": "field-5107",
+      "name": "AUM (USD)",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": 2400000000
+      }
+     },
+     {
+      "id": "field-5108",
+      "name": "Do Not Contact?",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": null
+      }
+     },
+     {
+      "id": "source-of-introduction",
+      "name": "Source of Introduction",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person",
+       "data": {
+        "id": 90003,
+        "firstName": "Sam",
+        "lastName": "Ferreira",
+        "primaryEmailAddress": null,
+        "type": "internal"
+       }
+      }
      }
     ]
    }
@@ -182,7 +228,7 @@
      },
      {
       "id": "field-5103",
-      "name": "Indicated amount",
+      "name": "Committed Amount (USD)",
       "type": "list",
       "enrichmentSource": null,
       "value": {
@@ -247,6 +293,52 @@
        "type": "interaction",
        "data": null
       }
+     },
+     {
+      "id": "field-5106",
+      "name": "Est. Check Size (USD)",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": 1000000
+      }
+     },
+     {
+      "id": "field-5107",
+      "name": "AUM (USD)",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": null
+      }
+     },
+     {
+      "id": "field-5108",
+      "name": "Do Not Contact?",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": null
+      }
+     },
+     {
+      "id": "source-of-introduction",
+      "name": "Source of Introduction",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person",
+       "data": {
+        "id": 90001,
+        "firstName": "Juan",
+        "lastName": null,
+        "primaryEmailAddress": null,
+        "type": "internal"
+       }
+      }
      }
     ]
    }
@@ -302,7 +394,7 @@
      },
      {
       "id": "field-5103",
-      "name": "Indicated amount",
+      "name": "Committed Amount (USD)",
       "type": "list",
       "enrichmentSource": null,
       "value": {
@@ -378,6 +470,46 @@
         "attendees": []
        }
       }
+     },
+     {
+      "id": "field-5106",
+      "name": "Est. Check Size (USD)",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": null
+      }
+     },
+     {
+      "id": "field-5107",
+      "name": "AUM (USD)",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": 800000000
+      }
+     },
+     {
+      "id": "field-5108",
+      "name": "Do Not Contact?",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": null
+      }
+     },
+     {
+      "id": "source-of-introduction",
+      "name": "Source of Introduction",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person",
+       "data": null
+      }
      }
     ]
    }
@@ -433,7 +565,7 @@
      },
      {
       "id": "field-5103",
-      "name": "Indicated amount",
+      "name": "Committed Amount (USD)",
       "type": "list",
       "enrichmentSource": null,
       "value": {
@@ -504,6 +636,52 @@
         "startTime": "2026-09-19T14:00:00Z",
         "endTime": null,
         "attendees": []
+       }
+      }
+     },
+     {
+      "id": "field-5106",
+      "name": "Est. Check Size (USD)",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": 2500000
+      }
+     },
+     {
+      "id": "field-5107",
+      "name": "AUM (USD)",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "number",
+       "data": null
+      }
+     },
+     {
+      "id": "field-5108",
+      "name": "Do Not Contact?",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": null
+      }
+     },
+     {
+      "id": "source-of-introduction",
+      "name": "Source of Introduction",
+      "type": "relationship-intelligence",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person",
+       "data": {
+        "id": 90002,
+        "firstName": "Mara",
+        "lastName": "Vance",
+        "primaryEmailAddress": null,
+        "type": "internal"
        }
       }
      }

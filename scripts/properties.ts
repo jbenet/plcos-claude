@@ -925,41 +925,51 @@ async function main() {
       );
 
       {
-        const ans = await import('../lib/connectors/affinity/answers');
+        const map = await import('../lib/connectors/affinity/mapping');
+        const { STAGES, RUNGS } = await import('../modules/strategy');
         const { readFile: rf, writeFile: wf } = await import('node:fs/promises');
-        const sheet = join('data', 'demo', 'props-answers.jsonc');
-        await rm(join(process.cwd(), sheet), { force: true });
-        await ans.writeAnswerSheet(report, sheet);
-        const fresh = await ans.readAnswers(report, sheet);
-        const text0 = await rf(join(process.cwd(), sheet), 'utf8');
+        const file = join('data', 'demo', 'props-mapping.jsonc');
+        await rm(join(process.cwd(), file), { force: true });
+        await map.writeMapping(report, {}, file);
+        const fresh = await map.readMapping(report, file);
+        const lists = Object.values(fresh.lists);
         check(
-          'A fresh answer sheet answers nothing: every value is null, the suggestions are comments',
-          fresh.exists && fresh.asked > 0 && fresh.answered === 0 && fresh.problems.length === 0 && /the words suggest/.test(text0),
-          `${fresh.answered} of ${fresh.asked} answered; problems ${fresh.problems.length}`,
+          'The proposed mapping places what it can, leaves the rest a question, and says nobody has reviewed it',
+          fresh.exists && fresh.problems.length === 0 && fresh.mapped > 0 && lists.every((l) => !l.reviewed) && lists.some((l) => l.stage.length > 0),
+          `${fresh.mapped} of ${fresh.values} values placed; ${lists.length} lists, none reviewed; problems ${fresh.problems.length}`,
         );
-        // Answer two things by hand, the way a person would, and regenerate.
-        const answered = text0
-          .replace(/"stage": null/, '"stage": "Status"')
-          .replace(/("Signed":\s*)null/, '$1"commitment_accepted"');
-        await wf(join(process.cwd(), sheet), answered);
-        await ans.writeAnswerSheet(report, sheet);
-        const kept = await ans.readAnswers(report, sheet);
-        const pipeline = Object.values(kept.lists)[0]!;
+
+        // What a stage claims only ever rises with the stage: no later stage claims less.
+        const claims = STAGES.map((s) => (s.claims ? RUNGS.indexOf(s.claims) : -1));
+        const rising = claims.every((c, i) => i === 0 || c >= claims[i - 1]!);
         check(
-          'Regenerating the answer sheet keeps every answer given',
-          pipeline.stage === 'Status' && pipeline.rungs['Signed'] === 'commitment_accepted' && kept.answered === 2,
-          `stage ${pipeline.stage}; "Signed" → ${pipeline.rungs['Signed']}; answered ${kept.answered}`,
+          'Our stages claim ladder rungs that only rise with the stage',
+          rising && STAGES.find((s) => s.id === 'signed')!.claims === 'commitment_accepted' && STAGES.find((s) => s.id === 'contacted')!.claims === null,
+          `claims in stage order: ${STAGES.map((s) => `${s.id}→${s.claims ?? '—'}`).join(' ')}`,
         );
-        await wf(join(process.cwd(), sheet), answered.replace('"commitment_accepted"', '"signed"'));
-        const wrong = await ans.readAnswers(report, sheet);
-        await ans.writeAnswerSheet(report, sheet);
-        const survived = /"Signed":\s*"signed"/.test(await rf(join(process.cwd(), sheet), 'utf8'));
+
+        // A person edits it — marks a list reviewed, takes a meaning away — and it is regenerated.
+        const text0 = await rf(join(process.cwd(), file), 'utf8');
+        const edited = text0.replace('"reviewed": false', '"reviewed": true').replace(/("Signed":\s*)\{"stage":"signed"\}/, '$1null');
+        await wf(join(process.cwd(), file), edited);
+        await map.writeMapping(report, {}, file);
+        const kept = await map.readMapping(report, file);
+        const first = Object.values(kept.lists)[0]!;
+        const signed = first.stage.flatMap((s) => Object.entries(s.values)).find(([k]) => k === 'Signed');
         check(
-          'A rung that is not a rung is refused by name, counts as unanswered, and survives regeneration for its author to fix',
-          wrong.problems.some((p) => /"signed" is not a rung/.test(p)) && Object.values(wrong.lists)[0]!.rungs['Signed'] === null && survived,
-          `${wrong.problems[0] ?? 'no problem reported'}; still in the file after regenerating: ${survived}`,
+          'Regenerating the mapping keeps every edit, a null a person wrote included',
+          first.reviewed && !!signed && signed[1] === null,
+          `reviewed ${first.reviewed}; "Signed" → ${JSON.stringify(signed?.[1])}`,
         );
-        await rm(join(process.cwd(), sheet), { force: true });
+
+        await wf(join(process.cwd(), file), edited.replace('{"stage":"soft_commit"}', '{"stage":"won"}'));
+        const wrong = await map.readMapping(report, file);
+        check(
+          'A stage that is not one of ours is refused by name, and left unplaced',
+          wrong.problems.some((p) => /stage "won" is not one this tool has/.test(p)),
+          wrong.problems[0] ?? 'no problem reported',
+        );
+        await rm(join(process.cwd(), file), { force: true });
       }
 
       {

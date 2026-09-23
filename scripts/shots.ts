@@ -196,6 +196,36 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N46: [
+    {
+      name: '01-our-stages',
+      path: '/dev/affinity/lists',
+      prepare: async (page) => {
+        // The demo fixtures gained fields in this version: land them, then write the mapping.
+        await page.getByRole('button', { name: /Discover/ }).click();
+        await page.getByText('matched').first().waitFor();
+        await page.goto(page.url().replace('/lists', '/slice'), { waitUntil: 'networkidle' });
+        await page.getByRole('button', { name: /Read the/ }).click();
+        await page.getByRole('button', { name: /Notes and relationships/ }).click({ timeout: 30_000 });
+        await page.getByText(/relationship sets/).first().waitFor({ timeout: 30_000 });
+        await page.goto(page.url().replace('/slice', '/mapping'), { waitUntil: 'networkidle' });
+        await page.getByRole('button', { name: /Write the proposed mapping|Regenerate, keeping your edits/ }).click();
+        await page.getByText('Status words with a meaning').waitFor();
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '02-a-list-mapped',
+      path: '/dev/affinity/mapping',
+      prepare: async (page) => {
+        // Not scrollIntoViewIfNeeded: the heading sits on the fold, which counts as visible.
+        await page.getByRole('heading', { name: 'PLC Neurotech I — LP pipeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N45: [
     {
       name: '01-lists-compared',

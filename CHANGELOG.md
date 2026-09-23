@@ -3872,3 +3872,57 @@ are now counted and not listed. A property holds both sides: names withheld, a s
 vocabulary and a yes/no shown.
 
 **68 of 68 properties hold.**
+
+---
+
+## N46 — Our stages, and what Affinity's words mean in them
+
+**Shipped.** The pipeline statuses on our side, and a mapping from each Affinity list's status
+words into them. The mapping is proposed, marked unreviewed, and kept in a file you can edit.
+
+| | |
+|---|---|
+| ![Our stages](docs/changelog/shots/n46/01-our-stages.webp) | **Developer → Affinity → Mapping.** Our twelve stages in five groups, what each means, and the ladder rung each one *claims*. Outcome and reason are kept apart from the stage. |
+| ![A list, mapped](docs/changelog/shots/n46/02-a-list-mapped.webp) | **One list, mapped.** Every status word with how often it's used, what it means here, and what that claims. Below: which field holds the commitment, the typical check, the AUM, the owner, the introducer and a do-not-contact mark. |
+
+### Twelve stages, and three things one field was holding
+
+You said the team used the LP Pipeline's status to slice a project board, so one field carried
+several things. Here they're three: a **stage** (where the work is), an **outcome** (open, on
+hold, passed, lost) and a **reason** (thesis, timing, valuation, and so on). "Passed – Timing"
+is an outcome and a reason, and "On Hold – Soft Commit" is a stage with an outcome. The stages
+adopt the granularity the team already found useful: prospecting, outreach, engaged, closing,
+funded, twelve stages in all, and easy to group back into five for a board.
+
+Each stage **claims** a ladder rung: *scheduling a first call* claims the target opted in,
+*soft commit* claims an indication, *signed* claims a commitment. A claim is shown beside the
+ladder and never written into it; the ladder still moves only on evidence. A property checks
+that no later stage claims less than an earlier one.
+
+### The mapping
+
+`data/<profile>/mapping.jsonc`, one block per list. You asked for a proposal, so each status word
+gets a meaning from the word itself, and each list says `reviewed: false` until someone sets it
+true. A word the proposer can't place stays null. Regenerating after a new read proposes only
+what's new and keeps every edit, a deliberate null included. A stage that isn't ours is refused
+by name.
+
+**On the real account**, the proposer placed all but one of the status words across the four
+lists, and I proposed the last one by hand in your local file for you to confirm. The old
+Fundraising list is marked *history*, so it isn't translated. The SPV lists read their richer
+board-stage field first and fall back to the plainer ones.
+
+Your answers on the amounts are in the mapping. The committed amount is the commitment: soft
+until countersigned, with a *signed* stage marking it ready to harden. The typical check size
+is kept, as their own figure or our guess. AUM is a claim to verify later, filed as **issue
+0022**. The do-not-contact field is the one the inventory found.
+
+### Written down
+
+`docs/16-affinity-ingestion.md` records the whole path, as you asked: read, inventory,
+mapping, translation. It says what each step costs, what it keeps, and what to re-run when
+something is wrong. It also sets out the cheaper way to read notes when the time comes: one
+request to count every note in the account, then a hundred notes to a request, filtered to
+Neurotech before anything is stored.
+
+**69 of 69 properties hold.**

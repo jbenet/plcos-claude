@@ -43,13 +43,21 @@ export async function writeInventoryReport(): Promise<void> {
   revalidatePath('/dev/affinity/inventory');
 }
 
-/** Writes data/<profile>/answers.jsonc from the inventory, keeping every answer already in it. */
-export async function writeAnswerSheetAction(): Promise<void> {
+/**
+ * Writes data/<profile>/mapping.jsonc — proposed where it is new, kept where a person edited it.
+ * The first list the init file names for a vehicle is its pipeline; any other is history.
+ */
+export async function writeMappingAction(): Promise<void> {
   const { inventory } = await import('@/lib/connectors/affinity/inventory');
-  const { writeAnswerSheet } = await import('@/lib/connectors/affinity/answers');
-  await writeAnswerSheet(await inventory());
+  const { writeMapping } = await import('@/lib/connectors/affinity/mapping');
+  const { sliceTargets } = await import('@/lib/connectors/affinity/slice');
+  const targets = await sliceTargets();
+  const firstOf = new Map<string, number>();
+  for (const t of targets) if (t.vehicleSlug && !firstOf.has(t.vehicleSlug)) firstOf.set(t.vehicleSlug, t.list.id);
+  const roles = Object.fromEntries(targets.map((t) => [t.list.id, t.vehicleSlug && firstOf.get(t.vehicleSlug) !== t.list.id ? 'history' : 'pipeline'])) as Record<number, 'pipeline' | 'history'>;
+  await writeMapping(await inventory(), roles);
+  revalidatePath('/dev/affinity/mapping');
   revalidatePath('/dev/affinity/inventory');
-  revalidatePath('/dev/data');
 }
 
 /** Compares each vehicle's older lists with the one in use, and writes the names to a report. */

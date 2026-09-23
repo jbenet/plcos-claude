@@ -18,7 +18,7 @@
   },
   {
    "id": "field-5103",
-   "name": "Indicated amount",
+   "name": "Committed Amount (USD)",
    "type": "list",
    "enrichmentSource": null,
    "valueType": "number",
@@ -62,6 +62,38 @@
    "type": "relationship-intelligence",
    "enrichmentSource": null,
    "valueType": "interaction",
+   "createdAt": null
+  },
+  {
+   "id": "field-5106",
+   "name": "Est. Check Size (USD)",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "number",
+   "createdAt": null
+  },
+  {
+   "id": "field-5107",
+   "name": "AUM (USD)",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "number",
+   "createdAt": null
+  },
+  {
+   "id": "field-5108",
+   "name": "Do Not Contact?",
+   "type": "list",
+   "enrichmentSource": null,
+   "valueType": "dropdown",
+   "createdAt": null
+  },
+  {
+   "id": "source-of-introduction",
+   "name": "Source of Introduction",
+   "type": "relationship-intelligence",
+   "enrichmentSource": null,
+   "valueType": "person",
    "createdAt": null
   }
  ],

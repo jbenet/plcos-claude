@@ -1,0 +1,114 @@
+# 16 — How Affinity gets in, and how it is read
+
+**Status:** living document, started 23 Sep 2026 (N46). Juan asked for "how we do all the
+ingestion and mapping" to be kept track of. `docs/15-affinity-integration.md` is the plan and
+the decisions; this is the machinery, step by step, and what to do when a step is wrong.
+
+The principle, in Juan's words: first get a local copy we can query and reprocess. Every
+step below reads the step before it from the local database and never goes back to Affinity to
+fix a mistake. A wrong mapping is an edit and a re-run.
+
+```
+Affinity ──GET──▶ raw ──────▶ inventory ──▶ mapping ──▶ translation ──▶ the views
+         (read-only)  sources.   aggregates    a file you    the tool's own    pursuits, money,
+                      raw_record  and questions  edit          tables            people, routes
+```
+
+Everything real lives under `data/real/`, which git ignores: the database, `init.jsonc`,
+`mapping.jsonc` and `reports/`. The demo runs every step against a fake Affinity in
+`fixtures/affinity/`.
+
+---
+
+## 1. Read (lib/connectors/affinity/)
+
+One client, GET only, allowlisted paths (`allowlist.ts`), a budget that follows Affinity's
+rate-limit headers, and a log of every request without bodies (docs/15 §5).
+
+| Step | Page | Reads | Cost |
+|---|---|---|---|
+| Connection test | Developer → Affinity | whoami, rate limit | 2 requests |
+| Discovery (N41) | → Lists | every list, its fields, the account's users | one per list, plus a few |
+| First slice (N42) | → First slice | the entries on each list the init file names, plus SPV lists | one per hundred entries |
+| Notes and relationships | → First slice, after a go-ahead | per entry | one or more per entry — **held** |
+
+Everything lands in `sources.raw_record` keyed by source id and a hash of the payload, so a
+second read stores only what changed, and an old version is kept beside a new one. Each run is a
+row in `sources.sync_run` with its counts, its gaps and, for a held run, its estimate.
+
+**Notes and relationships are deliberately not read yet** (Juan, 23 Sep): get the entries wired
+in first. When they are, per-entry reads are the expensive way. Affinity's `GET /v2/notes` pages
+through every note in the account a hundred at a time. Its count comes back from a single request
+(`limit=0&totalCount=true`), so the bulk cost is known before spending it. The bulk read would be
+filtered to Neurotech entries before anything is stored: note text is imported for Neurotech only.
+Relationships have no bulk endpoint; they stay per person, which is why they're a separate choice.
+
+## 2. Inventory (→ Inventory)
+
+Aggregates over the landed entries: fill rates, every dropdown value with its count, the team's
+names on person fields, date ranges, amounts described but never summed, and recency from the
+interaction fields. It names nobody outside the team. A dropdown whose values look like names is
+counted and not listed. It generates the questions only a person can answer, and a report in
+`data/real/reports/`.
+
+**Lists compared** (N45): for a vehicle with more than one list, the first list the init file
+names is the one in use, and each older list is checked against it by person, then by
+organization. The names of entries that would be lost go to a report, as candidates to move
+across. Nothing is moved.
+
+## 3. Mapping (→ Mapping, `data/<profile>/mapping.jsonc`)
+
+How each list's words become this tool's. Per list:
+
+- **role**: `pipeline` becomes pursuits; `history` is kept raw and not translated. A vehicle's
+  first list is its pipeline; its others are history.
+- **stage**: the fields that say where an entry is, tried in order. For each of their values:
+  our stage, an outcome (open, paused, passed, lost), and a reason. The team's status field held
+  all three at once — "Passed – Timing" — so they are taken apart here.
+- **commitment**, **softRange**, **checkSize**, **aum**, **owner**, **introducer**,
+  **doNotContact**, **passReason**: which field holds each, or null.
+
+The first version is **proposed** from the words, and each list says `reviewed: false` until a
+person sets it true. A word the proposer can't place stays null: a question, not a guess.
+Regenerating (after a new read) proposes only what is new and keeps every edit.
+
+**Our stages** (`modules/strategy/types.ts`, `STAGES`): twelve, in five groups — prospecting
+(to research, targeted), outreach (contacted, responded, scheduling), engaged (first meeting,
+two or more meetings, diligence), closing (documents sent, soft commit, signed), funded. They
+adopt the granularity the team already used in Affinity. Each stage **claims** a ladder rung,
+and the claims only rise with the stage (a property checks it). A claim is shown beside the
+ladder and never written into it: the ladder moves on evidence.
+
+If we later decide our model is right and Affinity's should change to match, that's a write to
+Affinity. It's a separate decision, and it would go through approval tickets.
+
+## 4. Translation (N47)
+
+Reads raw plus the mapping, and writes the tool's own tables. It can be re-run at any time; a
+mapping edit takes effect on the next run.
+
+- **People and organizations** → `identity.entity`, linked to Affinity through
+  `identity.source_record` (`affinity`, `person:<id>` / `company:<id>`).
+- **Pursuits**: one per entry on a pipeline list, per vehicle, with our stage, outcome, reason,
+  what Affinity said, and when (`strategy.pursuit.source`, `stage_said`, `source_as_of`). The
+  owner is matched to the team by Affinity email. Someone who isn't on the team — a former
+  colleague — is kept by name in `owner_said`, and the pursuit goes to a placeholder owner who
+  doesn't appear in the user switcher.
+- **Money**: the commitment field becomes a **soft** exposure, always. A *signed* stage marks
+  it ready to harden; only the close room's countersignature makes it hard (rule 1). On a
+  historical vehicle the exposure is closed, so no current figure counts it.
+- **Check size and AUM** become research claims on the LP, with the list as their source
+  document. AUM is low confidence and unverified (issue 0022).
+- **Do not contact**: a "yes" becomes a blanket do-not-approach restriction on the person
+  (rule 8).
+- **The ladder is not touched.** No stage creates a ladder event; evidence does.
+
+## When something is wrong
+
+| What | Fix | Re-run |
+|---|---|---|
+| A status means something else | edit `mapping.jsonc` | translation |
+| A new status appeared | regenerate the mapping (it is proposed, marked) | translation |
+| A list is missing or named wrong | edit `init.jsonc`, reload it | discovery, slice |
+| A field was read wrongly | fix the code; the raw copy is untouched | translation |
+| Affinity changed | read the slice again (only changes are stored) | inventory, translation |

@@ -1,4 +1,8 @@
-export type { LadderEvent, LadderRung, PlanStep, Pursuit } from './types';
-export { RUNGS, RUNG_LABEL, RUNG_REQUIRES, rungIndex } from './types';
+export type {
+  LadderEvent, LadderRung, OutcomeReason, PlanStep, Pursuit, PursuitOutcome, PursuitStage, StageGroup, StageInfo,
+} from './types';
+export {
+  OUTCOME_LABEL, REASONS, RUNGS, RUNG_LABEL, RUNG_REQUIRES, STAGES, STAGE_GROUP_LABEL, rungIndex,
+} from './types';
 export { getPursuit, listPursuits, pursuitFor } from './repo';
 export { LadderRefused, recordAdvance, requestAdvance } from './service';
