@@ -5,6 +5,7 @@ import { parseJsonc } from '@/lib/jsonc';
 import { readInit, validate, type RealInit } from '@/lib/real/init';
 import { finishRun, landRaw, latestRaw, latestRun, startRun, type SyncRun } from '@/modules/sources';
 import { affinity } from './index';
+import { AffinityError, AffinityRefused } from './client';
 
 /**
  * List discovery (N41, docs/15): every list the key can see, each list's fields, and the
@@ -47,7 +48,8 @@ export interface AffinityUser {
 
 const SOURCE = 'affinity';
 
-export async function discoverLists(runBy: string | null): Promise<SyncRun | null> {
+/** `overrides` is for the property harness, which scripts the transport; the app never passes it. */
+export async function discoverLists(runBy: string | null, overrides?: Parameters<typeof affinity>[0]): Promise<SyncRun | null> {
   const run = await startRun(SOURCE, 'discover', runBy);
   let pages = 0;
   let records = 0;
@@ -58,7 +60,7 @@ export async function discoverLists(runBy: string | null): Promise<SyncRun | nul
   };
   const notes: string[] = [];
   try {
-    const client = affinity();
+    const client = affinity(overrides);
     const lists: AffinityList[] = [];
     for await (const page of client.pages<AffinityList>('/v2/lists', { limit: 100 })) {
       pages++;
@@ -68,16 +70,26 @@ export async function discoverLists(runBy: string | null): Promise<SyncRun | nul
       }
     }
     let fields = 0;
+    const refused: string[] = [];
     for (const l of lists) {
-      for await (const page of client.pages<Omit<AffinityField, 'listId'>>(`/v2/lists/${l.id}/fields`, { limit: 100 })) {
-        pages++;
-        for (const f of page) {
-          fields++;
-          await land('list_field', `${l.id}:${f.id}`, { listId: l.id, ...f });
+      try {
+        for await (const page of client.pages<Omit<AffinityField, 'listId'>>(`/v2/lists/${l.id}/fields`, { limit: 100 })) {
+          pages++;
+          for (const f of page) {
+            fields++;
+            await land('list_field', `${l.id}:${f.id}`, { listId: l.id, ...f });
+          }
         }
+      } catch (err) {
+        // One list Affinity will not describe — a permission it wants, usually — is a gap to
+        // report, not a reason to leave every other list undescribed. The budget refusing is
+        // different: that stops the run, because every later request would be refused too.
+        if (err instanceof AffinityRefused) throw err;
+        refused.push(`${l.name}: ${err instanceof AffinityError ? err.status : '?'}`);
       }
     }
     notes.push(`${lists.length} lists`, `${fields} fields`);
+    if (refused.length) notes.push(`fields unavailable for ${refused.length} (${refused.slice(0, 3).join('; ')}${refused.length > 3 ? '; …' : ''})`);
     try {
       let users = 0;
       for await (const page of client.pages<AffinityUser>('/v2/users', { limit: 100 })) {

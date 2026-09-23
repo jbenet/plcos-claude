@@ -851,6 +851,24 @@ async function main() {
       `hyphen for em dash: ${got('neurotech').list ? 'matched' : 'missed'}; en for em dash: ${got('spv-cortex').list ? 'matched' : 'missed'}; a word left out: ${got('rails').list ? 'MATCHED' : `suggests "${got('rails').closest?.list.name}"`}`,
     );
 
+    {
+      // One list whose fields Affinity refuses must not leave every other list undescribed.
+      const lists = [{ id: 1, name: 'Open', creatorId: 1, ownerId: 1, isPublic: true, type: 'company', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 2, name: 'Guarded', creatorId: 1, ownerId: 1, isPublic: false, type: 'company', createdAt: '2026-01-01T00:00:00Z' }];
+      const s7 = scripted((u) => {
+        if (u.pathname === '/v2/lists') return ok({ data: lists, pagination: { nextUrl: null } });
+        if (u.pathname === '/v2/lists/2/fields') return { status: 403, body: { errors: [{ message: 'Forbidden' }] } };
+        if (u.pathname === '/v2/lists/1/fields') return ok({ data: [{ id: 'field-1', name: 'Stage', type: 'list', enrichmentSource: null, valueType: 'dropdown', createdAt: null }], pagination: { nextUrl: null } });
+        return ok();
+      });
+      const run = await disc.discoverLists(null, { transport: s7.transport, key: KEY, sleep });
+      check(
+        'A list Affinity will not describe is reported, and the rest are still read',
+        run?.status === 'ok' && /fields unavailable for 1 \(Guarded: 403\)/.test(run.note ?? '') && /1 fields/.test(run.note ?? ''),
+        `status ${run?.status}; ${run?.note}`,
+      );
+    }
+
     const slug = aff.allowed('/v2/lists/12/fields/field-1234/dropdown-options');
     const sneaky = ['/v2/lists/12/fields/field.1/dropdown-options', '/v2/lists/12/fields/Field-1/dropdown-options', '/v2/lists/x1/fields'].filter((p) => aff.allowed(p));
     check(
