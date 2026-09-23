@@ -200,6 +200,82 @@
     "isRestricted": false,
     "isRedacted": false
    }
+  },
+  {
+   "id": 6604,
+   "type": "opportunity",
+   "listId": 110,
+   "createdAt": "2026-04-12T12:00:00Z",
+   "creatorId": 90001,
+   "entity": {
+    "id": 8104,
+    "name": "Idris family office \u2014 Neurotech I",
+    "listId": 110,
+    "isRestricted": false,
+    "isRedacted": false,
+    "fields": [
+     {
+      "id": "field-6101",
+      "name": "Stage",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": {
+        "dropdownOptionId": 9201,
+        "text": "To Research"
+       }
+      }
+     },
+     {
+      "id": "field-6104",
+      "name": "People",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "person-multi",
+       "data": [
+        {
+         "id": 7010,
+         "firstName": "Farah",
+         "lastName": "Idris",
+         "primaryEmailAddress": null,
+         "type": "external"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": 6605,
+   "type": "opportunity",
+   "listId": 110,
+   "createdAt": "2026-04-14T12:00:00Z",
+   "creatorId": 90002,
+   "entity": {
+    "id": 8105,
+    "name": "Harbor Row prospect",
+    "listId": 110,
+    "isRestricted": false,
+    "isRedacted": false,
+    "fields": [
+     {
+      "id": "field-6101",
+      "name": "Stage",
+      "type": "list",
+      "enrichmentSource": null,
+      "value": {
+       "type": "dropdown",
+       "data": {
+        "dropdownOptionId": 9202,
+        "text": "Contacted"
+       }
+      }
+     }
+    ]
+   }
   }
  ],
  "pagination": {

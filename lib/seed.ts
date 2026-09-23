@@ -18,7 +18,7 @@ export async function seed(db: Db): Promise<Record<string, number>> {
     throw new Error('Refusing to seed fictional data into the real profile.');
   }
   const users = await fixture<{ handle: string; name: string; initials: string; role: string; email: string }>('users.json');
-  const vehicles = await fixture<{ slug: string; name: string; kind: string; exemption: string; target_amount: number | null; sort_order: number }>('vehicles.json');
+  const vehicles = await fixture<{ slug: string; name: string; kind: string; exemption: string; target_amount: number | null; sort_order: number; phase?: string }>('vehicles.json');
   const sources = await fixture<{ source: string; label: string; status: string; detail: string }>('sources.json');
 
   await db.transaction(async (tx) => {
@@ -31,9 +31,9 @@ export async function seed(db: Db): Promise<Record<string, number>> {
     }
     for (const v of vehicles) {
       await tx.query(
-        `insert into platform.vehicle (slug, name, kind, exemption, target_amount, sort_order)
-         values ($1,$2,$3::platform.vehicle_kind,$4,$5,$6) on conflict (slug) do nothing`,
-        [v.slug, v.name, v.kind, v.exemption, v.target_amount, v.sort_order],
+        `insert into platform.vehicle (slug, name, kind, exemption, target_amount, sort_order, phase)
+         values ($1,$2,$3::platform.vehicle_kind,$4,$5,$6,$7) on conflict (slug) do nothing`,
+        [v.slug, v.name, v.kind, v.exemption, v.target_amount, v.sort_order, v.phase ?? 'active'],
       );
     }
     for (const s of sources) {

@@ -96,7 +96,9 @@ export async function accreditationGate(
     const vehicle = await db.one<{ name: string; exemption: string }>(
       'select name, exemption from platform.vehicle where id = $1', [vehicleId],
     );
-    if (!vehicle || vehicle.exemption !== '506(c)') return { ok: true, reason: null };
+    // An unknown exemption is read as 506(c), the strictest: a historical vehicle nobody
+    // classified must not become the one place money moves unverified.
+    if (!vehicle || (vehicle.exemption !== '506(c)' && vehicle.exemption !== 'unknown')) return { ok: true, reason: null };
     return {
       ok: false,
       reason:

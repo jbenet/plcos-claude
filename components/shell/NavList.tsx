@@ -16,6 +16,8 @@ export interface NavVehicle {
   slug: string;
   name: string;
   kind: string;
+  /** A vehicle that did not close, kept for its history. */
+  historical?: boolean;
 }
 
 const STORE_KEY = 'capitalos.nav.collapsed';
@@ -143,6 +145,7 @@ export function NavList({
           onClick={() => selectVehicle(v.slug)}
         >
           <span className="nm">{v.name}</span>
+          {v.historical && <span className="hist" title="Did not close. Kept for its history: who was approached, and how far each got.">history</span>}
         </button>
         {selected && (
           <div className="submods">

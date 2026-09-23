@@ -4,7 +4,8 @@ import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
 import { inventory, type FieldStat } from '@/lib/connectors/affinity/inventory';
 import { readAnswers } from '@/lib/connectors/affinity/answers';
-import { writeAnswerSheetAction, writeInventoryReport } from '../actions';
+import { compareLists } from '@/lib/connectors/affinity/compare';
+import { writeAnswerSheetAction, writeComparisonAction, writeInventoryReport } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,9 @@ const n = (x: number) => x.toLocaleString('en-US');
 const TYPE: Record<string, string> = { company: 'organizations', opportunity: 'opportunities', person: 'people' };
 
 function What({ f }: { f: FieldStat }) {
+  if (f.withheld) {
+    return <span className="muted">{n(f.withheld.distinct)} distinct values that look like names — not shown here</span>;
+  }
   if (f.values) {
     const shown = f.values.slice(0, 12);
     return (
@@ -50,7 +54,7 @@ function What({ f }: { f: FieldStat }) {
 export default async function Inventory() {
   const demo = config.data.profile === 'demo';
   const inv = await inventory();
-  const answers = await readAnswers(inv);
+  const [answers, compared] = await Promise.all([readAnswers(inv), compareLists()]);
   const landed = inv.lists.reduce((a, l) => a + l.entries, 0);
 
   return (
@@ -156,11 +160,38 @@ export default async function Inventory() {
         </div>
       </div>
 
+      {compared.length > 0 && (
+        <div className="card">
+          <div className="chead">
+            <h2>Older lists, against the one in use</h2>
+            <span className="lbl">who would be lost if the old list were retired</span>
+          </div>
+          <div className="cbody">
+            {compared.map((c) => (
+              <div key={c.secondary} style={{ marginBottom: 12 }}>
+                <div className="fact">
+                  <span>“{c.secondary}” against “{c.primary}”</span>
+                  <span>{n(c.total)} entries</span>
+                </div>
+                <div className="fact"><span>Already there — the same person</span><span>{n(c.byPerson)}</span></div>
+                <div className="fact"><span>Already there — the same organization</span><span>{n(c.byOrganization)}</span></div>
+                <div className="fact"><span><b>Not on the list in use</b></span><span><b>{n(c.missing.length)}</b>{c.missing.length ? ` · ${Object.entries(c.missing.reduce((m: Record<string, number>, u) => ((m[u.status ?? '—'] = (m[u.status ?? '—'] ?? 0) + 1), m), {})).map(([s, k]) => `${s} ${k}`).join(' · ')}` : ''}</span></div>
+                <div className="fact"><span>Linked to nobody — to match by hand</span><span>{n(c.unlinked.length)}</span></div>
+              </div>
+            ))}
+            <form action={writeComparisonAction}>
+              <button className="btn" type="submit">Write the names to {config.data.root}/reports/</button>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>Candidates to move across. Nothing is moved.</span>
+            </form>
+          </div>
+        </div>
+      )}
+
       {inv.overlap.length > 0 && (
         <div className="card">
           <div className="chead">
             <h2>On more than one list</h2>
-            <span className="lbl">where cross-vehicle conflicts will come from</span>
+            <span className="lbl">to coordinate across vehicles, not to compete over</span>
           </div>
           <div className="cbody">
             {inv.overlap.map((o) => (

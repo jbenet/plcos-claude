@@ -39,6 +39,11 @@ export interface FieldStat {
   of: number;
   /** Dropdowns: every value, most used first. */
   values?: Array<{ text: string; n: number }>;
+  /**
+   * A dropdown whose values look like names rather than a vocabulary — an "Organization (LP)"
+   * dropdown lists LPs. Counted, never listed.
+   */
+  withheld?: { distinct: number };
   /** People fields: the team's names (internal users), and how many outside people. */
   team?: Array<{ name: string; n: number }>;
   outside?: number;
@@ -108,6 +113,19 @@ const top = (m: Map<string, number>, k = 40) =>
 // is still caught, by "surgery".
 const HEALTH = /\b(surger(y|ies)|hospital\w*|illness|sick|diagnos\w*|cancer|chemo\w*|tumou?r|therapy|therapist|pregnan\w*|miscarriage|passed away|died|death|funeral|bereave\w*|recovering|medical|disease|depress\w*|anxiety|mental health|rehab\w*|stroke|heart attack|injur\w*|accident|dementia|alzheimer\w*|hospice|icu)\b/i;
 
+/**
+ * Whether a dropdown's values are names rather than a vocabulary. A vocabulary is small and
+ * reused; a list of names is large and nearly unique, or sits in a field named for an entity
+ * with more values than a yes/no or a short scale. Either test withholds, because listing LPs
+ * is the one thing the inventory must not do, and a vocabulary withheld by mistake costs only
+ * a look at Affinity.
+ */
+export function looksLikeNames(field: string, distinct: number, filled: number): boolean {
+  const named = /organi[sz]ation(?! type)|company|\bfirm\b|\bname\b/i.test(field) && distinct > 8;
+  const unique = distinct > 12 && distinct / Math.max(1, filled) > 0.25;
+  return named || unique;
+}
+
 export function mentionsHealth(html: string): boolean {
   return HEALTH.test(html.replace(/<[^>]+>/g, ' '));
 }
@@ -136,7 +154,8 @@ function fieldStats(entries: RawEntry[], now: number): FieldStat[] {
           if (t) m.set(t, (m.get(t) ?? 0) + 1);
         }
       }
-      stat.values = top(m);
+      if (looksLikeNames(f.name, m.size, filled)) stat.withheld = { distinct: m.size };
+      else stat.values = top(m);
     } else if (/^person/.test(valueType)) {
       const team = new Map<string, number>();
       let outside = 0;
@@ -205,8 +224,9 @@ export async function inventory(now = Date.now()): Promise<Inventory> {
     });
   }
 
-  // The same person or organization on two lists: across vehicles, that is where rule 5's
-  // collisions will come from.
+  // The same person or organization on two lists. Across vehicles that is coordination to
+  // do, not a conflict to win: another opportunity is good for the LP and for us, as long as
+  // the asks are sequenced (Juan, 23 Sep; rule 5 records it and blocks nothing).
   const overlap: Inventory['overlap'] = [];
   for (let i = 0; i < lists.length; i++) {
     for (let j = i + 1; j < lists.length; j++) {
@@ -337,7 +357,7 @@ function questions(
     q.push(`“${l.list.name}” says SPV and no vehicle claims it. Which vehicle is it, is it 506(b) or 506(c), and should it be added to the init file?`);
   }
   for (const o of overlap) {
-    q.push(`${o.n} ${o.kind === 'person' ? 'people are' : 'entries are'} on both “${o.a}” and “${o.b}”. When they are on lists for different vehicles, each will open a conflict case (rule 5). Is that what you expect?`);
+    q.push(`${o.n} ${o.kind === 'person' ? 'people are' : 'entries are'} on both “${o.a}” and “${o.b}”. More than one opportunity is good for them and for us; it needs sequencing. Each will be flagged for coordination between the two vehicles' owners — recorded, nothing blocked.`);
   }
   if (!all.some((l) => /rail|crypto/i.test(l.name))) {
     const clues = lists.flatMap((l) => l.fields.filter((f) => /rail|crypto/i.test(f.name) && f.filled > 0).map((f) => `“${f.name}” on “${l.list.name}” (filled on ${f.filled})`));
@@ -366,7 +386,8 @@ export async function writeReport(inv: Inventory): Promise<string> {
     lines.push(`## ${l.list.name}`, '', `${l.vehicleName ?? 'No vehicle (says SPV)'} · ${l.list.type} list · ${n(l.entries)} entries${l.repeated ? ` · ${l.repeated} repeated` : ''}`, '');
     lines.push('| Field | Kind | Filled | What is in it |', '|---|---|---|---|');
     for (const f of l.fields) {
-      const what = f.values ? f.values.map((v) => `${v.text} (${v.n})`).join(', ')
+      const what = f.withheld ? `${f.withheld.distinct} distinct values that look like names — withheld`
+        : f.values ? f.values.map((v) => `${v.text} (${v.n})`).join(', ')
         : f.team ? `team: ${f.team.map((t) => `${t.name} (${t.n})`).join(', ')}${f.outside ? `; ${f.outside} outside people` : ''}`
         : f.range ? `${f.range.from} → ${f.range.to}; ${f.range.future} in the future`
         : f.numbers ? `${n(f.numbers.n)} values; median ${n(f.numbers.median)}, ${n(f.numbers.min)}–${n(f.numbers.max)}; not summed`

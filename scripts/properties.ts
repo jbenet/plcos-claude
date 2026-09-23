@@ -907,6 +907,13 @@ async function main() {
       const inv = await import('../lib/connectors/affinity/inventory');
       const flagged = ['Her husband is recovering from surgery.', 'Mentioned a death in the family.'].every(inv.mentionsHealth);
       const clean = ['Wants the data room before the IC.', 'Prefers the tax treatment of a feeder.', 'Closing conditions are met.'].every((t) => !inv.mentionsHealth(t));
+      const namesHeld = inv.looksLikeNames('Organization (LP)', 30, 40) && inv.looksLikeNames('Referrer', 60, 70);
+      const vocabShown = !inv.looksLikeNames('Pipeline stage', 14, 2000) && !inv.looksLikeNames('Do not contact', 1, 2) && !inv.looksLikeNames('Main contact at the firm?', 2, 50);
+      check(
+        'A dropdown of names is withheld from the inventory; a vocabulary is shown',
+        namesHeld && vocabShown,
+        `names withheld: ${namesHeld}; stage, do-not-contact and yes/no fields shown: ${vocabShown}`,
+      );
       const report = await inv.inventory();
       const text = JSON.stringify(report);
       const outsiders = ['Delia', 'Roos', 'Lindqvist', 'Tanaka', 'Obi', 'surgery', 'data-room'].filter((w) => text.includes(w));
@@ -953,6 +960,16 @@ async function main() {
           `${wrong.problems[0] ?? 'no problem reported'}; still in the file after regenerating: ${survived}`,
         );
         await rm(join(process.cwd(), sheet), { force: true });
+      }
+
+      {
+        const cmp = await import('../lib/connectors/affinity/compare');
+        const [c] = await cmp.compareLists();
+        check(
+          'An older list is checked against the one in use: who is covered, and who would be lost',
+          !!c && c.total === 5 && c.byPerson === 3 && c.missing.length === 1 && c.missing[0]!.status === 'To Research' && c.unlinked.length === 1,
+          c ? `${c.total} on the old list: ${c.byPerson} by person, ${c.byOrganization} by organization, ${c.missing.length} missing, ${c.unlinked.length} linked to nobody` : 'no comparison',
+        );
       }
 
       const s8 = scripted(() => ok());

@@ -162,6 +162,9 @@ details summary{cursor:pointer}
 .valchip{display:inline-block;font-size:11.5px;border:1px solid var(--line);border-radius:4px;padding:0 6px;margin:0 4px 4px 0;background:var(--surface);white-space:nowrap}
 .valchip i{font-style:normal;color:var(--muted);font-family:var(--mono);font-size:10.5px}
 table.list.inv td{padding-top:8px;padding-bottom:8px}
+/* N45: a vehicle kept for its history. The word says it; the dimming only repeats it. */
+.sub.vehicle .hist{margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--rail-muted, #9A958B);border:1px solid rgba(239,235,226,.18);border-radius:3px;padding:0 4px}
 /* N44: the answer sheet, as the file reads. */
 details.sheet{margin-top:12px}
 details.sheet pre{margin:8px 0 0;max-height:520px;overflow:auto;background:var(--ground);border:1px solid var(--line);border-radius:6px;

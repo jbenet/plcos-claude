@@ -4,5 +4,6 @@
   { "slug": "spv-cortex", "name": "SPV — Cortex",      "kind": "spv",        "exemption": "506(c)", "target_amount": 8000000,  "sort_order": 3 },
   { "slug": "spv-lattice","name": "SPV — Lattice",     "kind": "spv",        "exemption": "506(c)", "target_amount": 6000000,  "sort_order": 4 },
   { "slug": "spv-halo",   "name": "SPV — Halo",        "kind": "spv",        "exemption": "506(b)", "target_amount": 5000000,  "sort_order": 5 },
-  { "slug": "grants",     "name": "Grants rail",       "kind": "grant_rail", "exemption": "n/a",    "target_amount": null,     "sort_order": 6 }
+  { "slug": "spv-meridian", "name": "SPV — Meridian (2025)", "kind": "spv",        "exemption": "unknown", "target_amount": 4000000,  "sort_order": 6, "phase": "historical" },
+  { "slug": "grants",     "name": "Grants rail",       "kind": "grant_rail", "exemption": "n/a",    "target_amount": null,     "sort_order": 7 }
 ]

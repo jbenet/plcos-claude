@@ -196,6 +196,26 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N45: [
+    {
+      name: '01-lists-compared',
+      path: '/dev/affinity/lists',
+      prepare: async (page) => {
+        // The demo database was rebuilt in this version; land the fake Affinity again first.
+        await page.getByRole('button', { name: /Discover/ }).click();
+        await page.getByText('matched').first().waitFor();
+        await page.goto(page.url().replace('/lists', '/slice'), { waitUntil: 'networkidle' });
+        await page.getByRole('button', { name: /Read the/ }).click();
+        await page.getByRole('button', { name: /Notes and relationships/ }).click({ timeout: 30_000 });
+        await page.getByText(/relationship sets/).first().waitFor({ timeout: 30_000 });
+        await page.goto(page.url().replace('/slice', '/inventory'), { waitUntil: 'networkidle' });
+        await page.getByText('Older lists, against the one in use').scrollIntoViewIfNeeded();
+        await page.evaluate(() => window.scrollBy(0, -60));
+        await page.waitForTimeout(200);
+      },
+    },
+    { name: '02-history-tag', path: '/today' },
+  ],
   N44: [
     {
       name: '01-answer-sheet',

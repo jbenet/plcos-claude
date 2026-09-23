@@ -34,8 +34,13 @@ export interface VehicleInit {
   slug: string;
   name: string;
   kind: 'fund' | 'spv' | 'grant_rail';
-  /** Required. It decides what may be said in public material, so it is never defaulted. */
-  exemption: '506(b)' | '506(c)' | 'n/a';
+  /**
+   * Required. It decides what may be said in public material, so it is never defaulted.
+   * "unknown" is allowed only on a historical vehicle, and the gates read it as 506(c).
+   */
+  exemption: '506(b)' | '506(c)' | 'n/a' | 'unknown';
+  /** "historical": it did not close, and is kept for its history. Default "active". */
+  phase: 'active' | 'historical';
   target: number | null;
   firstClose: string | null;
   /** Exact Affinity list names. Matched loosely later — dashes and case vary. */
@@ -89,7 +94,8 @@ const HANDLE = /^[a-z][a-z0-9-]{0,23}$/;
 const SLUG = /^[a-z][a-z0-9-]{0,39}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const KINDS = ['fund', 'spv', 'grant_rail'] as const;
-const EXEMPTIONS = ['506(b)', '506(c)', 'n/a'] as const;
+const EXEMPTIONS = ['506(b)', '506(c)', 'n/a', 'unknown'] as const;
+const PHASES = ['active', 'historical'] as const;
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
 const initialsOf = (name: string) =>
@@ -141,8 +147,12 @@ export function validate(raw: unknown): { init: RealInit | null; problems: strin
       else seen.add(slug);
       if (!name) problems.push(`${at}.name is required.`);
       if (!KINDS.includes(kind)) problems.push(`${at}.kind must be one of ${KINDS.join(', ')}.`);
+      const phase = (v?.phase ?? 'active') as VehicleInit['phase'];
+      if (!PHASES.includes(phase)) problems.push(`${at}.phase must be "active" or "historical".`);
       if (!EXEMPTIONS.includes(exemption)) {
-        problems.push(`${at}.exemption must be one of ${EXEMPTIONS.join(', ')}. It is never defaulted — it decides what may be said in public.`);
+        problems.push(`${at}.exemption must be one of 506(b), 506(c), n/a — or "unknown" on a historical vehicle. It is never defaulted: it decides what may be said in public.`);
+      } else if (exemption === 'unknown' && phase !== 'historical') {
+        problems.push(`${at}.exemption is "unknown", which only a historical vehicle may be. An active one needs 506(b), 506(c) or n/a.`);
       }
       const target = v?.target ?? null;
       if (target !== null && (typeof target !== 'number' || !(target > 0))) problems.push(`${at}.target must be a positive number of dollars, or null.`);
@@ -151,9 +161,9 @@ export function validate(raw: unknown): { init: RealInit | null; problems: strin
       const lists = v?.affinityLists ?? [];
       if (!Array.isArray(lists) || lists.some((l) => typeof l !== 'string')) problems.push(`${at}.affinityLists must be a list of list names.`);
       if (v?.importNotes !== undefined && typeof v.importNotes !== 'boolean') problems.push(`${at}.importNotes must be true or false.`);
-      if (slug && name && KINDS.includes(kind) && EXEMPTIONS.includes(exemption)) {
+      if (slug && name && KINDS.includes(kind) && EXEMPTIONS.includes(exemption) && PHASES.includes((v?.phase ?? 'active') as VehicleInit['phase'])) {
         vehicles.push({
-          slug, name, kind, exemption,
+          slug, name, kind, exemption, phase: (v?.phase ?? 'active') as VehicleInit['phase'],
           target: typeof target === 'number' ? target : null,
           firstClose: typeof firstClose === 'string' ? firstClose : null,
           affinityLists: Array.isArray(lists) ? (lists as string[]).map((l) => l.trim()).filter(Boolean) : [],
@@ -181,8 +191,10 @@ export function openQuestions(init: RealInit): InitReport['open'] {
     if (!t.affinityEmail) open.push({ where: `team.${t.handle}.affinityEmail`, ask: `Which email does ${t.name} sign in to Affinity with?` });
   }
   for (const v of init.vehicles) {
-    if (v.kind !== 'grant_rail' && v.target === null) open.push({ where: `vehicles.${v.slug}.target`, ask: `What is the target for ${v.name}, in dollars?` });
-    if (v.kind !== 'grant_rail' && v.firstClose === null) open.push({ where: `vehicles.${v.slug}.firstClose`, ask: `When is the first close for ${v.name}?` });
+    // A historical vehicle has no target to reach and no close to come.
+    if (v.phase === 'active' && v.kind !== 'grant_rail' && v.target === null) open.push({ where: `vehicles.${v.slug}.target`, ask: `What is the target for ${v.name}, in dollars?` });
+    if (v.phase === 'active' && v.kind !== 'grant_rail' && v.firstClose === null) open.push({ where: `vehicles.${v.slug}.firstClose`, ask: `When is the first close for ${v.name}?` });
+    if (v.exemption === 'unknown') open.push({ where: `vehicles.${v.slug}.exemption`, ask: `Was ${v.name} 506(b) or 506(c)? Until you say, it is treated as 506(c).` });
     if (v.kind !== 'grant_rail' && v.affinityLists.length === 0) open.push({ where: `vehicles.${v.slug}.affinityLists`, ask: `Which Affinity list tracks ${v.name}?` });
   }
   for (const [key, ask] of Object.entries(QUESTIONS)) {
@@ -247,12 +259,12 @@ export async function loadInit(db: Db): Promise<InitReport> {
     }
     for (const [i, v] of vehicles.entries()) {
       await tx.query(
-        `insert into platform.vehicle (slug, name, kind, exemption, target_amount, sort_order)
-         values ($1,$2,$3::platform.vehicle_kind,$4,$5,$6)
+        `insert into platform.vehicle (slug, name, kind, exemption, target_amount, sort_order, phase)
+         values ($1,$2,$3::platform.vehicle_kind,$4,$5,$6,$7)
          on conflict (slug) do update set name = excluded.name, kind = excluded.kind,
            exemption = excluded.exemption, target_amount = excluded.target_amount,
-           sort_order = excluded.sort_order`,
-        [v.slug, v.name, v.kind, v.exemption, v.target, i + 1],
+           sort_order = excluded.sort_order, phase = excluded.phase`,
+        [v.slug, v.name, v.kind, v.exemption, v.target, i + 1, v.phase],
       );
     }
     await tx.query(

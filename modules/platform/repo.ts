@@ -25,18 +25,18 @@ export async function getUserByHandle(handle: string): Promise<AppUser | null> {
 
 type VehicleRow = {
   id: string; slug: string; name: string; kind: Vehicle['kind'];
-  exemption: string; target_amount: string | null; sort_order: number;
+  exemption: string; target_amount: string | null; sort_order: number; phase: Vehicle['phase'];
 };
 
 export async function listVehicles(): Promise<Vehicle[]> {
   const db = await getDb();
   const rows = await db.query<VehicleRow>(
-    'select id, slug, name, kind, exemption, target_amount, sort_order from platform.vehicle order by sort_order',
+    'select id, slug, name, kind, exemption, target_amount, sort_order, phase from platform.vehicle order by sort_order',
   );
   return rows.map((r) => ({
     id: r.id, slug: r.slug, name: r.name, kind: r.kind, exemption: r.exemption,
     targetAmount: r.target_amount === null ? null : Number(r.target_amount),
-    sortOrder: r.sort_order,
+    sortOrder: r.sort_order, phase: r.phase,
   }));
 }
 

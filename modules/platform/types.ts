@@ -14,10 +14,15 @@ export interface Vehicle {
   slug: string;
   name: string;
   kind: VehicleKind;
-  /** '506(c)' or '506(b)'. Decides what may be said in public material. */
+  /**
+   * '506(c)', '506(b)', 'n/a' (grants), or 'unknown' on a historical vehicle. Decides what may
+   * be said in public material; the compliance gate reads 'unknown' as 506(c).
+   */
   exemption: string;
   targetAmount: number | null;
   sortOrder: number;
+  /** 'historical': it did not close, and is kept for what it shows about people and routes. */
+  phase: 'active' | 'historical';
 }
 
 export type SyncStatus = 'ok' | 'stale' | 'failed' | 'not_connected';

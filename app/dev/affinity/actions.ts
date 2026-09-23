@@ -51,3 +51,10 @@ export async function writeAnswerSheetAction(): Promise<void> {
   revalidatePath('/dev/affinity/inventory');
   revalidatePath('/dev/data');
 }
+
+/** Compares each vehicle's older lists with the one in use, and writes the names to a report. */
+export async function writeComparisonAction(): Promise<void> {
+  const { compareLists, writeComparison } = await import('@/lib/connectors/affinity/compare');
+  await writeComparison(await compareLists());
+  revalidatePath('/dev/affinity/inventory');
+}

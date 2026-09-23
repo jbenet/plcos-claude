@@ -140,6 +140,9 @@ never share one check mark.** Five different states, five different affordances.
 open opportunity in a different vehicle inside `conflictWindowDays`, open a `ConflictCase`.
 Adjudication writes winner, loser, reason code, **and a dated follow-up for the loser**.
 Blocking without the dated follow-up loses the opportunity silently — that is the bug.
+*Juan, 23 Sep 2026:* an LP on two vehicles' lists is usually good for them and for us; it
+needs coordinating, not winning. Say "coordinate" in copy where the case is only an overlap,
+and keep "conflict" for two asks that would actually collide.
 
 **6. Evidence tiers A–D on relationship edges. C and D always require a human** before the
 edge is trusted for routing. Co-attendance, shared affiliation and a public social

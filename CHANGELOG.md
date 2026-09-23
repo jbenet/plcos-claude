@@ -3817,3 +3817,58 @@ mistyped rung is reported and left in place for its author, not erased by the to
 
 Three new properties: a fresh sheet answers nothing; regenerating keeps answers; and a rung
 that isn't a rung is refused by name and survives regeneration. **66 of 66 properties hold.**
+
+---
+
+## N45 — The team, the old list, and SPVs kept for their history
+
+**Shipped.** Your answers from the inventory, put to work: the team prefilled from Affinity,
+the old Fundraising list checked against the LP Pipeline, the SPVs brought in as history, and
+overlaps across vehicles described as something to coordinate.
+
+| | |
+|---|---|
+| ![Lists compared](docs/changelog/shots/n45/01-lists-compared.webp) | **Older lists, against the one in use.** For each vehicle with more than one list: entries already covered by the same person, covered by the same organization, missing from the list in use, and linked to nobody. The page counts. The names go to a report in `data/<profile>/reports/`. |
+| ![History](docs/changelog/shots/n45/02-history-tag.webp) | **A vehicle kept for its history**, tagged in the rail. The demo gained one, *SPV — Meridian (2025)*, so the tag can be seen here. |
+
+### The old list
+
+You said the Neurotech Fundraising list is old and unused. Before it's treated as history, the
+comparison finds its entries whose people, and failing that organizations, aren't on the LP
+Pipeline, so they can be moved across rather than lost. The first list the init file names
+for a vehicle is the one in use; each other list is compared against it. **On the real
+account**, most of the old list is already covered. The rest, mostly entries still at the
+first stage, are listed by name in the report.
+
+### SPVs kept for their history
+
+Vehicles have a **phase** now, `active` or `historical`, in a new migration. The two SPVs in
+Affinity didn't go through, but they show who was approached, how far each got, and the people
+they touched. They're historical vehicles: in the rail, tagged, and kept out of every current
+figure. Their exemption is **unknown**, which only a historical vehicle may be. It's not a
+default: the accreditation gate used to check only vehicles marked 506(c), so an unknown
+would have let money through unverified. It now reads unknown as 506(c).
+
+### The team
+
+You asked for the init file to be prefilled with the team members Affinity shows, leaving out
+someone who has left. It now has eight more people: those who own entries, and the team's own
+introducers. People across the PL network who appear only as the source of an introduction
+weren't added; they're connectors, and they become people with relationships when the network
+is translated.
+
+### Coordinate, not compete
+
+An LP on two vehicles' lists is usually good for them and for us; it needs sequencing, not a
+winner. The inventory says *coordinate* now. CLAUDE.md, under rule 5, records the distinction:
+"coordinate" for an overlap, "conflict" only for two asks that would actually collide.
+
+### Found on the way
+
+The inventory promised to name nobody outside the team, and it listed every dropdown value.
+An SPV list has an "Organization (LP)" dropdown, and its values are LP names. Values that look
+like names — many distinct values, or a field named for an entity with more than a handful —
+are now counted and not listed. A property holds both sides: names withheld, a stage
+vocabulary and a yes/no shown.
+
+**68 of 68 properties hold.**

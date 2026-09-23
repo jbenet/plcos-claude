@@ -27,7 +27,7 @@ export async function Rail() {
 
       <NavList
         vehicles={vehicles.all.map((v) => ({
-          slug: v.slug, name: v.name, kind: v.kind,
+          slug: v.slug, name: v.name, kind: v.kind, historical: v.phase === 'historical',
         }))}
         current={vehicles.current?.slug ?? null}
         approvals={tickets.open}
