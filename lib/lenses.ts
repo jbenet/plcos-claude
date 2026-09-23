@@ -453,8 +453,8 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
       };
 
       for (const m of meetings.filter((x) => x.vehicleName === v.name)) {
-        if (m.heldOn) place('exchange', m.heldOn, `${m.kind.replace('_', ' ')} held · ${m.entityName}`, 'done');
-        else if (m.scheduledFor) place('due', m.scheduledFor, `${m.kind.replace('_', ' ')} · ${m.entityName}`, 'plain');
+        if (m.heldOn) place('exchange', m.heldOn, `${(m.kind ?? 'meeting').replace('_', ' ')} held · ${m.entityName}`, 'done');
+        else if (m.scheduledFor) place('due', m.scheduledFor, `${(m.kind ?? 'meeting').replace('_', ' ')} · ${m.entityName}`, 'plain');
       }
       for (const a of asks.filter((x) => x.vehicleName === v.name)) {
         if (a.madeAt) place('exchange', a.madeAt, `Ask made · ${a.entityName}`, 'done');

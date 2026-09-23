@@ -1,9 +1,12 @@
 export type {
-  DiligenceQuestion, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
-  PrepBrief, QuestionStatus,
+  Channel, DiligenceQuestion, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
+  PrepBrief, QuestionStatus, Read, Touchpoint, TouchpointSummary,
 } from './types';
-export { MEETING_LABEL, OBJECTION_LABEL } from './types';
 export {
-  listMeetings, listObjections, listQuestions, objectionTally, upcomingMeetings,
+  CHANNELS, CHANNEL_LABEL, DIRECTION_LABEL, MEETING_LABEL, OBJECTION_LABEL, READS, READ_LABEL,
+} from './types';
+export {
+  listMeetings, listObjections, listQuestions, objectionTally, summarize, touchpointSummaries, touchpointsFor,
+  upcomingMeetings,
 } from './repo';
-export { prepBrief } from './service';
+export { logTouchpoint, prepBrief, TouchpointRefused, type NewTouchpoint } from './service';

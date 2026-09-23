@@ -1122,6 +1122,39 @@ async function main() {
           `status ${nadia?.status}; Affinity said "${nadia?.stage_said}", implying ${nadia?.implied.join(', ')}`,
         );
 
+        // Touchpoints (N51): from each entry's interaction dates and from meeting, call and email
+        // notes, one per interaction, the calendar's date over the note's.
+        const mt = await import('../modules/meetings');
+        const nadiaLog = await mt.touchpointsFor(nadia!.pursuit_id ? (await adb.one<{ entity_id: string }>(`select entity_id from strategy.pursuit where pursuit_id = $1`, [nadia!.pursuit_id]))!.entity_id : '', null);
+        const nadiaSum = mt.summarize(nadiaLog);
+        const touchBefore = await n(`select count(*)::text as n from meetings.meeting where source = 'affinity'`);
+        await tr.translate(null, { mappingPath: file });
+        const touchAfter = await n(`select count(*)::text as n from meetings.meeting where source = 'affinity'`);
+        check(
+          'Affinity’s interactions become dated touchpoints, one each, and translating again adds none',
+          nadiaSum.meetingDates.map((d) => d.toISOString().slice(0, 10)).join(',') === '2026-08-21,2026-09-10' &&
+            nadiaLog.every((t) => t.vehicleId === null && t.summary === null) && touchBefore > 0 && touchBefore === touchAfter,
+          `meetings ${nadiaSum.meetingDates.map((d) => d.toISOString().slice(0, 10)).join(', ')}; ${nadiaLog.length} touchpoints, none tied to a vehicle, no text copied; Affinity touchpoints ${touchBefore} → ${touchAfter}`,
+        );
+
+        // Logged here: rules at the door, and nothing reaches the ladder.
+        const juanId = (await adb.one<{ id: string }>(`select id from platform.app_user where handle = 'juan'`))!.id;
+        const ent = (await adb.one<{ entity_id: string; vehicle_id: string }>(`select entity_id, vehicle_id from strategy.pursuit where pursuit_id = $1`, [nadia!.pursuit_id]))!;
+        const ladderT0 = await n(`select count(*)::text as n from strategy.ladder_event`);
+        const noCorpus = await attempt(() => mt.logTouchpoint(juanId, { entityId: ent.entity_id, vehicleId: ent.vehicle_id, channel: 'research', on: new Date() }));
+        const readAhead = await attempt(() => mt.logTouchpoint(juanId, { entityId: ent.entity_id, vehicleId: ent.vehicle_id, channel: 'meeting', on: new Date(Date.now() + 5 * 86_400_000), read: 'interested' }));
+        await mt.logTouchpoint(juanId, { entityId: ent.entity_id, vehicleId: ent.vehicle_id, channel: 'meeting', on: new Date('2026-09-20T12:00:00Z'), direction: 'both', read: 'very_interested', summary: 'Third meeting: the data room walkthrough' });
+        await mt.logTouchpoint(juanId, { entityId: ent.entity_id, vehicleId: ent.vehicle_id, channel: 'email', on: new Date('2026-09-21T12:00:00Z'), direction: 'ours', summary: 'Sent the side letter draft' });
+        const logged = mt.summarize(await mt.touchpointsFor(ent.entity_id, ent.vehicle_id), new Date('2026-09-23T00:00:00Z'));
+        const ladderT1 = await n(`select count(*)::text as n from strategy.ladder_event`);
+        check(
+          'A logged touchpoint counts, carries their read, and waits on their reply — and touches no rung',
+          noCorpus instanceof mt.TouchpointRefused && readAhead instanceof mt.TouchpointRefused &&
+            logged.meetingDates.length === 3 && logged.read?.read === 'very_interested' &&
+            logged.awaitingSince?.toISOString().slice(0, 10) === '2026-09-21' && ladderT0 === ladderT1,
+          `research with no corpus: ${noCorpus ? 'refused' : 'ALLOWED'}; a read before it happened: ${readAhead ? 'refused' : 'ALLOWED'}; meetings ${logged.meetingDates.length}; read ${logged.read?.read}; waiting since ${logged.awaitingSince?.toISOString().slice(0, 10)}; ladder ${ladderT0} → ${ladderT1}`,
+        );
+
         // A person sets a status; the next translation keeps it, and keeps Affinity's word beside it.
         const st = await import('../modules/strategy');
         const juan = (await adb.one<{ id: string }>(`select id from platform.app_user where handle = 'juan'`))!.id;

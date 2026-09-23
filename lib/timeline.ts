@@ -139,7 +139,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
     if (!when) continue;
     push({
       id: `meet:${m.meetingId}`, lane: 'meetings', kind: 'point',
-      label: `${m.entityName} — ${m.kind.replace(/_/g, ' ')}`,
+      label: `${m.entityName} — ${(m.kind ?? 'meeting').replace(/_/g, ' ')}`,
       detail: m.heldOn ? (m.justification ?? 'Held.') : 'Scheduled. An intention, not a fact.',
       from: day(when), to: day(when), vehicleName: m.vehicleName,
       alert: false, past: Boolean(m.heldOn), href: '/meetings',

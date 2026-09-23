@@ -4078,3 +4078,33 @@ flagged on the mapping page, and those entries fall through to the list's next s
 The 12-stage columns stay in the database, unread: migrations are append-only. 85 of 85
 properties hold, including that a status set here survives the next translation and that
 setting one writes nothing to the ladder.
+
+## N51 — The log: meetings, calls and emails, dated
+
+**Shipped.** The second part of your sketch: meetings and touchpoints tracked apart from the
+status, dated, so that "first meeting" and "second meeting" are counted rather than set.
+
+| | |
+|---|---|
+| ![Pipeline with the log](docs/changelog/shots/n51/01-pipeline-with-the-log.webp) | **The pipeline, with the log added up**: meetings held, the last touch, "waiting on them" when our outreach is the last thing on record, and their latest read. Where the log has run ahead of the status — a meeting on record for someone still at Selected — it asks "Discussing?" rather than moving it. |
+| ![The log](docs/changelog/shots/n51/02-the-log.webp) | **An LP's touchpoints**: the dated rows, and what they add up to — "3 meetings on record — first 21 Aug, second 10 Sep, third 20 Sep", the last touch, and their read with who recorded it and when. Rows read from Affinity say so and are tied to no vehicle, because Affinity's interactions aren't; logged ones name the vehicle. |
+| ![The form](docs/changelog/shots/n51/03-form.webp) | **Logging one**: a meeting, a call, an email, an intro, an event, or a research pass, which has to say what it looked at and over what dates (rule 7). A read can only be recorded for something that has happened. |
+
+**Where the rows come from.** Affinity already knows most of this. Each list entry carries its
+last email and its last and next meeting, and the notes read in N49 include meeting, call and
+email notes tied to an interaction. Translation turns both into touchpoints, keyed by the
+interaction, so a meeting with a calendar entry and a note is one row, dated by the calendar.
+No subject line, note text or outside attendee's name is copied. The meeting pages still show
+only meetings and calls.
+
+**On the real account**, about 1,800 touchpoints. About two in three Discussing LPs have a
+meeting on record. So do some still marked "Contacted" in Affinity: their status is behind
+their calendar, and the pipeline now says so. The last-email field gives most Selected LPs a
+"waiting on them" date.
+
+**Their read** is on the touchpoint, recorded by whoever was there. I recommended against a
+standalone interest field and against computing one: the latest read, dated and attributed, is
+the useful version, and a stale one looks stale.
+
+A logged touchpoint is a record, not a claim. The ladder moves when someone asks for "meeting
+held" with it as evidence, through the STAGE ticket as before. 87 of 87 properties hold.

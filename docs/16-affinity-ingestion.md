@@ -129,8 +129,15 @@ and running twice changes nothing (a property checks it). Each run is a `sync_ru
   document. AUM is low confidence and unverified (issue 0022).
 - **Do not contact**: a "yes" becomes a blanket do-not-approach restriction on the person
   (rule 8).
-- **The ladder is not touched.** No status and no implied fact creates a ladder event; evidence
-  does.
+- **Touchpoints** (N51, docs/17 §2): each list entry's interaction dates — the last email, the
+  last and next meeting — and every meeting, call and email note attached to someone in the
+  tool, including notes on their firm, become dated rows in `meetings.meeting`, keyed by the
+  interaction so that a meeting with both a calendar entry and a note is one row (the
+  calendar's date wins). No subject line, note text or outside attendee's name is copied. They
+  are tied to no vehicle, because Affinity's interactions are not; each counts for every open
+  pursuit of that LP. Translating again adds none.
+- **The ladder is not touched.** No status, no implied fact and no touchpoint creates a ladder
+  event; a person asks for a rung, with the evidence, through a STAGE ticket.
 
 ## When something is wrong
 

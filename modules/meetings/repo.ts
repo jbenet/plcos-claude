@@ -1,12 +1,13 @@
 import { getDb } from '@/lib/db';
 import type { LadderRung } from '@/modules/strategy/client';
 import type {
-  DiligenceQuestion, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus, QuestionStatus,
+  Channel, DiligenceQuestion, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
+  QuestionStatus, Read, Touchpoint, TouchpointSummary,
 } from './types';
 
 type MeetingRow = {
   meeting_id: string; pursuit_id: string | null; entity_id: string; entity_name: string;
-  vehicle_name: string; kind: MeetingKind; scheduled_for: Date | string | null;
+  vehicle_name: string | null; kind: MeetingKind | null; scheduled_for: Date | string | null;
   held_on: Date | string | null; attendees: string[]; owner_name: string;
   summary: string | null; justifies_rung: LadderRung | null; justification: string | null;
 };
@@ -17,8 +18,11 @@ const MEETING_SELECT = `
          u.name as owner_name, m.summary, m.justifies_rung, m.justification
     from meetings.meeting m
     join identity.entity e on e.entity_id = m.entity_id
-    join platform.vehicle v on v.id = m.vehicle_id
+    left join platform.vehicle v on v.id = m.vehicle_id
     join platform.app_user u on u.id = m.owner_id`;
+
+/** The meeting pages read meetings and calls; an email is a touchpoint, not a meeting (N51). */
+const MEETINGS_ONLY = `m.channel in ('meeting', 'call')`;
 
 const toMeeting = (r: MeetingRow): Meeting => ({
   meetingId: r.meeting_id, pursuitId: r.pursuit_id, entityId: r.entity_id,
@@ -33,7 +37,7 @@ export async function listMeetings(): Promise<Meeting[]> {
   const db = await getDb();
   return (
     await db.query<MeetingRow>(
-      `${MEETING_SELECT} order by coalesce(m.scheduled_for, m.held_on::timestamptz) desc nulls last`,
+      `${MEETING_SELECT} where ${MEETINGS_ONLY} order by coalesce(m.scheduled_for, m.held_on::timestamptz) desc nulls last`,
     )
   ).map(toMeeting);
 }
@@ -42,7 +46,7 @@ export async function upcomingMeetings(): Promise<Meeting[]> {
   const db = await getDb();
   return (
     await db.query<MeetingRow>(
-      `${MEETING_SELECT} where m.held_on is null and m.scheduled_for is not null
+      `${MEETING_SELECT} where ${MEETINGS_ONLY} and m.held_on is null and m.scheduled_for is not null
         order by m.scheduled_for`,
     )
   ).map(toMeeting);
@@ -119,3 +123,110 @@ export async function listQuestions(entityId?: string): Promise<DiligenceQuestio
     : await db.query<QuestionRow>(`${QUESTION_SELECT} order by (q.status <> 'open'), q.due_on nulls last`);
   return rows.map(toQuestion);
 }
+
+// ---------------------------------------------------------------- touchpoints (N51, docs/17)
+
+type TouchRow = {
+  meeting_id: string; entity_id: string; entity_name: string; vehicle_id: string | null; vehicle_name: string | null;
+  channel: Channel; kind: MeetingKind | null; held_on: Date | string | null; scheduled_for: Date | string | null;
+  direction: Direction | null; owner_name: string; attendees: string[] | null; summary: string | null;
+  read: Read | null; read_by_name: string | null; source: string; source_ref: string | null; for_entity: string;
+};
+
+/**
+ * Touchpoints for a set of LPs: theirs, and their firm's — the organization they act for now —
+ * because the team's record of an LP is as often on the firm as on the person (N49, measured).
+ * `for_entity` says which LP each row is being read for.
+ */
+const TOUCH_SELECT = `
+  with lp as (select unnest($1::uuid[]) as entity_id),
+  reach as (
+    select lp.entity_id as for_entity, lp.entity_id as entity_id from lp
+    union
+    select a.person_entity, a.org_entity from identity.affiliation a join lp on lp.entity_id = a.person_entity
+     where a.ended_on is null
+  )
+  select m.meeting_id, m.entity_id, e.display_name as entity_name, m.vehicle_id, v.name as vehicle_name,
+         m.channel::text as channel, m.kind::text as kind, m.held_on, m.scheduled_for, m.direction,
+         u.name as owner_name, m.attendees, m.summary, m.read::text as read, rb.name as read_by_name,
+         m.source, m.source_ref, r.for_entity
+    from reach r
+    join meetings.meeting m on m.entity_id = r.entity_id
+    join identity.entity e on e.entity_id = m.entity_id
+    left join platform.vehicle v on v.id = m.vehicle_id
+    join platform.app_user u on u.id = m.owner_id
+    left join platform.app_user rb on rb.id = m.read_by`;
+
+const day = (d: Date | string | null) => (d ? new Date(d) : null);
+
+const toTouch = (r: TouchRow): Touchpoint => ({
+  touchpointId: r.meeting_id, entityId: r.entity_id, entityName: r.entity_name,
+  vehicleId: r.vehicle_id, vehicleName: r.vehicle_name, channel: r.channel, kind: r.kind,
+  on: day(r.held_on), scheduledFor: day(r.scheduled_for), direction: r.direction,
+  ownerName: r.owner_name, attendees: r.attendees ?? [], summary: r.summary,
+  read: r.read, readByName: r.read_by_name, source: r.source, sourceRef: r.source_ref,
+  viaOrganization: r.entity_id === r.for_entity ? null : r.entity_name,
+});
+
+const when = (t: Touchpoint) => (t.on ?? t.scheduledFor)?.getTime() ?? 0;
+
+/**
+ * The log for one LP on one vehicle, newest first: touchpoints about that vehicle, and those
+ * about none in particular. `vehicleId` null: every touchpoint with them.
+ */
+export async function touchpointsFor(entityId: string, vehicleId: string | null): Promise<Touchpoint[]> {
+  const db = await getDb();
+  const rows = await db.query<TouchRow>(
+    `${TOUCH_SELECT} where ($2::uuid is null or m.vehicle_id is null or m.vehicle_id = $2)`,
+    [[entityId], vehicleId],
+  );
+  return rows.map(toTouch).sort((a, b) => when(b) - when(a));
+}
+
+/** What the log adds up to. Pure: the pipeline and the LP page both read it from here. */
+export function summarize(touches: Touchpoint[], now = new Date()): TouchpointSummary {
+  const held = touches.filter((t) => t.on && t.on.getTime() <= now.getTime());
+  const contact = held.filter((t) => t.channel !== 'research');
+  const meetings = held.filter((t) => t.channel === 'meeting' || t.channel === 'call').map((t) => t.on!);
+  // One meeting recorded twice — a note and a calendar entry for the same day — is one meeting.
+  const days = [...new Set(meetings.map((d) => d.toISOString().slice(0, 10)))].sort().map((d) => new Date(`${d}T00:00:00Z`));
+  const last = contact.reduce<Touchpoint | null>((a, t) => (!a || when(t) > when(a) ? t : a), null);
+  const fromThem = contact.filter((t) => t.direction === 'theirs' || t.direction === 'both');
+  const lastFromThem = fromThem.reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null);
+  const ours = contact.filter((t) => t.direction === 'ours' && (!lastFromThem || t.on! > lastFromThem));
+  const awaitingSince = ours.reduce<Date | null>((a, t) => (!a || t.on! < a ? t.on! : a), null);
+  const upcoming = touches
+    .filter((t) => !t.on && t.scheduledFor && t.scheduledFor.getTime() > now.getTime())
+    .reduce<Date | null>((a, t) => (!a || t.scheduledFor! < a ? t.scheduledFor! : a), null);
+  const withRead = held.filter((t) => t.read).sort((a, b) => when(b) - when(a))[0];
+  const research = held.filter((t) => t.channel === 'research').reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null);
+  return {
+    meetingDates: days,
+    lastTouch: last?.on ?? null,
+    lastTouchChannel: last?.channel ?? null,
+    lastFromThem,
+    awaitingSince,
+    nextMeeting: upcoming,
+    read: withRead ? { read: withRead.read!, on: withRead.on, byName: withRead.readByName } : null,
+    lastResearched: research,
+    total: touches.length,
+  };
+}
+
+/** Summaries for many pursuits at once — the pipeline list — keyed `${entityId}:${vehicleId}`. */
+export async function touchpointSummaries(
+  pairs: Array<{ entityId: string; vehicleId: string }>, now = new Date(),
+): Promise<Map<string, TouchpointSummary>> {
+  const out = new Map<string, TouchpointSummary>();
+  if (!pairs.length) return out;
+  const db = await getDb();
+  const rows = (await db.query<TouchRow>(TOUCH_SELECT, [[...new Set(pairs.map((p) => p.entityId))]])).map((r) => ({ r, t: toTouch(r) }));
+  const byEntity = new Map<string, Touchpoint[]>();
+  for (const { r, t } of rows) byEntity.set(r.for_entity, [...(byEntity.get(r.for_entity) ?? []), t]);
+  for (const p of pairs) {
+    const mine = (byEntity.get(p.entityId) ?? []).filter((t) => !t.vehicleId || t.vehicleId === p.vehicleId);
+    out.set(`${p.entityId}:${p.vehicleId}`, summarize(mine, now));
+  }
+  return out;
+}
+

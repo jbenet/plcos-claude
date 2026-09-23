@@ -209,7 +209,7 @@ export async function floorState(
       if (d < 0 || d > 14) continue;
       items.set(key, {
         ...item,
-        urgent: `${m.kind.replace('_', ' ')} in ${d === 0 ? 'hours' : `${d}d`}`,
+        urgent: `${(m.kind ?? 'meeting').replace('_', ' ')} in ${d === 0 ? 'hours' : `${d}d`}`,
         urgentAt: m.scheduledFor,
       });
     }
@@ -308,7 +308,7 @@ export async function floorState(
     if (days(now, m.scheduledFor) > 21) continue;
     schedule.push({
       key: `meeting:${m.meetingId}`, at: m.scheduledFor, kind: 'meeting',
-      label: `${m.kind.replace('_', ' ')} · ${m.entityName}`,
+      label: `${(m.kind ?? 'meeting').replace('_', ' ')} · ${m.entityName}`,
       entityName: m.entityName, vehicleName: m.vehicleName, ownerName: m.ownerName,
     });
   }

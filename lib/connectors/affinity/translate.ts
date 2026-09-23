@@ -6,6 +6,7 @@ import { inventory } from './inventory';
 import { placeEntry, readMapping, reasonOf, type ListMapping } from './mapping';
 import { normName } from './match';
 import { sliceTargets } from './slice';
+import type { AffinityNote } from './notes';
 import type { PursuitStatus } from '@/modules/strategy';
 
 /**
@@ -23,6 +24,9 @@ import type { PursuitStatus } from '@/modules/strategy';
  *                              harden (rule 1), and any amount makes the entry Committed
  *   check size, AUM            research claims with the list as their source (rule 9)
  *   do not contact             a blanket do-not-approach restriction (rule 8)
+ *   touchpoints                dated meetings, calls and emails (N51): each list entry's
+ *                              interaction dates, and every meeting, call or email note
+ *                              attached to someone in the tool — the log, never the ladder
  *
  * Direct SQL across schemas, as the seed does: this is the real profile's seed, read from a
  * source rather than a fixture, and like the seed it runs in one transaction.
@@ -73,6 +77,8 @@ export interface TranslationCounts {
   restrictions: number;
   ownersNotOnTeam: number;
   unreviewedLists: string[];
+  /** Touchpoints added this run (N51); one already there is not counted again. */
+  touchpoints: number;
 }
 
 async function entityFor(tx: Queryable, kind: 'person' | 'org', sourceId: string, name: string, counts: TranslationCounts): Promise<string> {
@@ -100,11 +106,12 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
   const run = await startRun(SOURCE, 'translate', runBy);
   const counts: TranslationCounts = {
     people: 0, organizations: 0, affiliations: 0, pursuits: 0, byVehicle: {}, byStatus: {}, keptOurs: 0, unplaced: 0, skipped: 0,
-    exposures: 0, readyToHarden: 0, claims: 0, restrictions: 0, ownersNotOnTeam: 0, unreviewedLists: [],
+    exposures: 0, readyToHarden: 0, claims: 0, restrictions: 0, ownersNotOnTeam: 0, unreviewedLists: [], touchpoints: 0,
   };
   try {
-    const [inv, init, found, targets, rawEntries] = await Promise.all([
+    const [inv, init, found, targets, rawEntries, rawNotes] = await Promise.all([
       inventory(), initForMatching(), discovered(), sliceTargets(), latestRaw<E>(SOURCE, 'list_entry'),
+      latestRaw<AffinityNote>(SOURCE, 'note'),
     ]);
     const mapping = await readMapping(inv, opts.mappingPath);
     if (!init) throw new Error('The init file does not load; translation needs its team and vehicles.');
@@ -291,6 +298,8 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
         }
       }
 
+      counts.touchpoints = await touchpoints(tx, rawEntries.map((r) => r.payload), rawNotes.map((r) => r.payload), init.team, users, users.get(PLACEHOLDER)!);
+
       await tx.query(
         `update platform.source_sync set status = 'ok', last_sync_at = now(), detail = $1 where source = 'affinity'`,
         [`Read-only · ${counts.pursuits} pursuits translated across ${Object.keys(counts.byVehicle).length} vehicles${counts.unreviewedLists.length ? ' · mapping not reviewed' : ''}`],
@@ -299,7 +308,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
 
     await finishRun(run, {
       status: 'ok', requests: 0, records: counts.pursuits, newRecords: counts.people + counts.organizations,
-      note: `${counts.pursuits} pursuits · ${counts.exposures} soft commitments · ${counts.claims} claims · ${counts.restrictions} do-not-approach${counts.unplaced ? ` · ${counts.unplaced} with no stage` : ''}`,
+      note: `${counts.pursuits} pursuits · ${counts.exposures} soft commitments · ${counts.claims} claims · ${counts.restrictions} do-not-approach · ${counts.touchpoints} new touchpoints${counts.unplaced ? ` · ${counts.unplaced} with no status` : ''}`,
       detail: { ...counts, profile: config.data.profile },
     });
   } catch (err) {
@@ -307,3 +316,110 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
   }
   return latestRun(SOURCE, 'translate');
 }
+
+// ---------------------------------------------------------------- touchpoints (N51)
+
+interface InteractionPerson { type?: string; firstName?: string | null; lastName?: string | null; primaryEmailAddress?: string | null }
+interface Interaction {
+  type: 'email' | 'meeting' | 'call' | 'chat-message';
+  id: number;
+  sentAt?: string;
+  startTime?: string;
+  from?: { emailAddress?: string; person?: InteractionPerson } | null;
+  attendees?: Array<{ emailAddress?: string; person?: InteractionPerson }>;
+}
+
+const CHANNEL_OF: Record<Interaction['type'], string> = { email: 'email', meeting: 'meeting', call: 'call', 'chat-message': 'message' };
+
+/**
+ * The log, from what Affinity already knows (N51, docs/17): each list entry's interaction dates
+ * (last email, last and next meeting…), and each meeting, call or email note attached to
+ * someone in the tool. Keyed by the interaction, so a meeting that has both a calendar entry and
+ * a note is one touchpoint; the calendar's date wins over the note's.
+ *
+ * Nothing is copied that the notes page already holds: no subject line, no note text, no
+ * outside attendee's name. A touchpoint read from Affinity is tied to no vehicle, because
+ * Affinity's interactions are not; it counts for every open pursuit of that LP, and says so.
+ */
+async function touchpoints(
+  tx: Queryable, entries: E[], notes: AffinityNote[], team: Array<{ handle: string; email?: string | null; affinityEmail?: string | null }>,
+  users: Map<string, string>, placeholder: string,
+): Promise<number> {
+  const ours = new Map((await tx.query<{ source_id: string; entity_id: string }>(
+    `select source_id, entity_id from identity.source_record where source = $1`, [SOURCE],
+  )).map((r) => [r.source_id, r.entity_id]));
+  const byEmail = new Map<string, string>();
+  for (const t of team) {
+    const id = users.get(t.handle);
+    if (!id) continue;
+    for (const e of [t.email, t.affinityEmail]) if (e) byEmail.set(e.toLowerCase(), id);
+  }
+  const who = (p?: InteractionPerson | null, email?: string) => {
+    const e = (p?.primaryEmailAddress ?? email ?? '').toLowerCase();
+    return e ? byEmail.get(e) : undefined;
+  };
+  const now = Date.now();
+  let added = 0;
+  const put = async (row: {
+    entity: string; ref: string; channel: string; at: string; direction: string | null; owner: string;
+    attendees: string[]; exact: boolean;
+  }) => {
+    const future = new Date(row.at).getTime() > now;
+    const r = await tx.query<{ meeting_id: string }>(
+      `insert into meetings.meeting
+         (entity_id, vehicle_id, channel, direction, held_on, scheduled_for, owner_id, attendees, source, source_ref)
+       values ($1, null, $2::meetings.channel, $3, $4, $5, $6, $7, 'affinity', $8)
+       on conflict (source, source_ref) where source_ref is not null do ${row.exact
+         ? 'update set held_on = excluded.held_on, scheduled_for = excluded.scheduled_for, attendees = excluded.attendees'
+         : 'nothing'}
+       returning (xmax = 0) as fresh`,
+      [row.entity, row.channel, row.direction, future ? null : row.at.slice(0, 10), future ? row.at : null,
+       row.owner, row.attendees, row.ref],
+    );
+    if ((r[0] as unknown as { fresh?: boolean } | undefined)?.fresh) added++;
+  };
+
+  // A list entry's interaction dates: exact, from Affinity's calendar and mail sync.
+  for (const e of entries) {
+    const key = `${e.type}:${e.entity.id}`;
+    const entity = ours.get(key);
+    if (!entity) continue;
+    for (const f of e.entity.fields ?? []) {
+      if (f.value?.type !== 'interaction' || !f.value.data) continue;
+      const d = f.value.data as Interaction;
+      const at = d.sentAt ?? d.startTime;
+      if (!at || !CHANNEL_OF[d.type]) continue;
+      const internal = (d.attendees ?? []).map((a) => a.person).filter((p): p is InteractionPerson => p?.type === 'internal');
+      await put({
+        entity, ref: `interaction:${d.type}:${d.id}:${key}`, channel: CHANNEL_OF[d.type], at, exact: true,
+        direction: d.type === 'email' || d.type === 'chat-message'
+          ? d.from?.person?.type === 'internal' ? 'ours' : d.from?.person?.type === 'external' ? 'theirs' : null
+          : 'both',
+        owner: who(d.from?.person, d.from?.emailAddress) ?? internal.map((p) => who(p)).find(Boolean) ?? placeholder,
+        attendees: internal.map((p) => [p.firstName, p.lastName].filter(Boolean).join(' ')).filter(Boolean),
+      });
+    }
+  }
+
+  // Notes on an interaction: the note's date stands in for the interaction's, until the
+  // calendar says otherwise. Every attached person and firm that is in the tool gets one.
+  for (const n of notes) {
+    const i = n.type === 'ai-notetaker' ? { type: 'meeting' as const, id: n.interaction?.id } : n.type === 'interaction' ? n.interaction : undefined;
+    if (!i?.id || !CHANNEL_OF[i.type]) continue;
+    const attached = [
+      ...(n.personsPreview?.data ?? []).map((p) => `person:${p.id}`),
+      ...(n.companiesPreview?.data ?? []).map((c) => `company:${c.id}`),
+    ];
+    for (const key of attached) {
+      const entity = ours.get(key);
+      if (!entity) continue;
+      await put({
+        entity, ref: `interaction:${i.type}:${i.id}:${key}`, channel: CHANNEL_OF[i.type], at: n.createdAt, exact: false,
+        direction: i.type === 'meeting' || i.type === 'call' ? 'both' : null,
+        owner: who(n.creator) ?? placeholder, attendees: [],
+      });
+    }
+  }
+  return added;
+}
+

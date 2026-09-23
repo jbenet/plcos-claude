@@ -196,6 +196,45 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N51: [
+    { name: '01-pipeline-with-the-log', path: '/targets?status=selected' },
+    {
+      name: '02-the-log',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        // Logged here, once: the third meeting, with their read.
+        if (!(await page.getByText('the data room walkthrough').count())) {
+          await page.getByText('Log a touchpoint').click();
+          await page.locator('input[name=on]').fill('2026-09-20');
+          await page.locator('input[name=summary]').fill('Third meeting: the data room walkthrough');
+          await page.locator('select[name=read]').selectOption('very_interested');
+          await page.getByRole('button', { name: 'Log it' }).click();
+          await page.getByText('Logged').waitFor({ timeout: 10_000 });
+          await page.reload({ waitUntil: 'networkidle' });
+        }
+        await page.getByRole('heading', { name: 'Touchpoints' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -250));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '03-form',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.getByText('Log a touchpoint').click();
+        await page.getByRole('radio', { name: 'Research pass' }).click();
+        await page.getByRole('button', { name: 'Log it' }).click();
+        await page.getByText(/Say what the research pass looked at/).waitFor({ timeout: 10_000 });
+        await page.getByRole('heading', { name: 'Touchpoints' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, 380));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N50: [
     { name: '01-pipeline', path: '/targets', fullPage: true },
     {

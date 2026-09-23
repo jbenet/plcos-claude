@@ -6,6 +6,7 @@ import {
   IMPLIED_LABEL, PASSED_BY_LABEL, RUNGS, RUNG_LABEL, STATUSES, STATUS_LABEL,
   impliedRung, listPursuits, rungIndex, statusCounts, type Pursuit, type PursuitStatus,
 } from '@/modules/strategy';
+import { READ_LABEL, touchpointSummaries, type TouchpointSummary } from '@/modules/meetings';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +41,7 @@ function Ladder({ p }: { p: Pursuit }) {
 }
 
 /** What else is known about where they are: why it ended, what's next, what the source said. */
-function Where({ p }: { p: Pursuit }) {
+function Where({ p, s }: { p: Pursuit; s: TouchpointSummary }) {
   const bits: string[] = [];
   if (p.status === 'passed') {
     bits.push([p.passedBy ? PASSED_BY_LABEL[p.passedBy] : 'Passed', p.statusReason?.replace('_', ' ')].filter(Boolean).join(' · '));
@@ -49,6 +50,11 @@ function Where({ p }: { p: Pursuit }) {
   return (
     <div style={{ fontSize: 12 }}>
       {bits.length > 0 && <div>{bits.join(' — ')}</div>}
+      {aheadOfStatus(p, s) && (
+        <div style={{ fontSize: 11.5, color: 'var(--amber)' }}>
+          A meeting is on record ({shortDate(s.meetingDates[s.meetingDates.length - 1]!)}) — Discussing?
+        </div>
+      )}
       {p.stageSaid && p.source !== 'us' && (
         <div className="muted" style={{ fontSize: 11.5 }}>
           Affinity: &ldquo;{p.stageSaid}&rdquo;
@@ -59,6 +65,35 @@ function Where({ p }: { p: Pursuit }) {
         <div className="muted" style={{ fontSize: 11.5 }}>set here {shortDate(p.statusSetAt)}{p.statusSetByName ? ` by ${p.statusSetByName}` : ''}</div>
       )}
     </div>
+  );
+}
+
+/**
+ * The log has got ahead of the status: a meeting on record for an LP we still have at Selected
+ * or earlier. Shown as a question — the status is a person's call, and it is never moved for them.
+ */
+function aheadOfStatus(p: Pursuit, s: TouchpointSummary): boolean {
+  return (p.status === 'new' || p.status === 'sourcing' || p.status === 'selected') && s.meetingDates.length > 0;
+}
+
+/** The log, added up: meetings held, when we last touched, and their read with its date. */
+function Touch({ s }: { s: TouchpointSummary }) {
+  const d = s.meetingDates;
+  return (
+    <>
+      <td className="mono" style={{ fontSize: 12 }} title={d.map((x) => shortDate(x)).join(', ')}>
+        {d.length || <span className="muted">—</span>}
+        {d.length > 0 && <div className="muted" style={{ fontSize: 10.5 }}>{shortDate(d[d.length - 1]!)}</div>}
+      </td>
+      <td style={{ fontSize: 12 }}>
+        {s.lastTouch ? shortDate(s.lastTouch) : <span className="muted">—</span>}
+        {s.awaitingSince && <div className="muted" style={{ fontSize: 10.5 }}>waiting on them</div>}
+      </td>
+      <td style={{ fontSize: 12 }}>
+        {s.read ? READ_LABEL[s.read.read] : <span className="muted">—</span>}
+        {s.read?.on && <div className="muted" style={{ fontSize: 10.5 }}>{shortDate(s.read.on)}</div>}
+      </td>
+    </>
   );
 }
 
@@ -75,13 +110,16 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
     STATUSES.some((s) => s.id === asked) ? (asked as PursuitStatus) : OPEN_ON.find((s) => count(s) > 0) ?? 'discussing';
 
   const rows = (await listPursuits(current?.id ?? null, { status })).filter((p) => inScope(p.vehicleId));
-  // Furthest along first — by evidence, then by what the source says happened — then the
-  // nearest next step, then the name.
+  const sums = await touchpointSummaries(rows.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId })));
+  const sum = (p: Pursuit) => sums.get(`${p.entityId}:${p.vehicleId}`)!;
+  // Furthest along first: by evidence, then by meetings held, then by what the source says
+  // happened; then the most recently in touch, then the name.
   rows.sort(
     (a, b) =>
       rungIndex(b.rung) - rungIndex(a.rung) ||
+      sum(b).meetingDates.length - sum(a).meetingDates.length ||
       rungIndex(impliedRung(b.implied)) - rungIndex(impliedRung(a.implied)) ||
-      (a.nextStepOn?.getTime() ?? Infinity) - (b.nextStepOn?.getTime() ?? Infinity) ||
+      (sum(b).lastTouch?.getTime() ?? 0) - (sum(a).lastTouch?.getTime() ?? 0) ||
       a.entityName.localeCompare(b.entityName),
   );
   const total = STATUSES.reduce((a, s) => a + count(s.id), 0);
@@ -168,6 +206,9 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
                 {!current && <th style={{ width: 130 }}>Vehicle</th>}
                 <th style={{ width: 110 }}>Owner</th>
                 <th>Where</th>
+                <th style={{ width: 96 }}>Meetings</th>
+                <th style={{ width: 110 }}>Last touch</th>
+                <th style={{ width: 120 }}>Their read</th>
                 <th style={{ width: 176 }}>Ladder</th>
               </tr>
             </thead>
@@ -180,7 +221,8 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
                   </td>
                   {!current && <td className="muted">{p.vehicleName}</td>}
                   <td className="muted">{p.ownerSaid ?? p.ownerName}</td>
-                  <td><Where p={p} /></td>
+                  <td><Where p={p} s={sum(p)} /></td>
+                  <Touch s={sum(p)} />
                   <td><Ladder p={p} /></td>
                 </tr>
               ))}

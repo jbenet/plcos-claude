@@ -12,6 +12,8 @@ import {
   IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, RUNG_REQUIRES, STATUS_LABEL, getPursuit, impliedRung,
 } from '@/modules/strategy';
 import { StatusForm } from '@/components/strategy/StatusForm';
+import { Touchpoints, meetingLine } from '@/components/strategy/Touchpoints';
+import { READ_LABEL, summarize, touchpointsFor } from '@/modules/meetings';
 import { claimLabel, claimsFor, listSourceDocs, notesFor } from '@/modules/research';
 import { usdCompact } from '@/lib/money';
 import { restrictionsFor } from '@/modules/coordination';
@@ -33,7 +35,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
   if (!pursuit) notFound();
 
   const user = await (await auth()).currentUser();
-  const [claims, docs, notes, restrictions, routes, signals, affinityNotes] = await Promise.all([
+  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches] = await Promise.all([
     claimsFor(pursuit.entityId),
     listSourceDocs(),
     notesFor(pursuit.entityId),
@@ -41,7 +43,9 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     planRoutes(user.handle, pursuit.entityId),
     signalsFor(pursuit.entityId),
     notesAbout(pursuit.entityId),
+    touchpointsFor(pursuit.entityId, pursuit.vehicleId),
   ]);
+  const touchSummary = summarize(touches);
 
   const docMap = new Map<string, EvidenceDoc>(
     docs.map((d) => [
@@ -153,6 +157,18 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
                 <b>Next:</b> {p.nextStep}{p.nextStepOn ? ` — by ${shortDate(p.nextStepOn)}` : ''}
               </div>
             )}
+            {(p.status === 'new' || p.status === 'sourcing' || p.status === 'selected') && touchSummary.meetingDates.length > 0 && (
+              <div className="said differs">
+                A meeting is on record, and the status is still {STATUS_LABEL[p.status]} — Discussing? It is yours to set; nothing moves it for you.
+              </div>
+            )}
+            <div className="said">
+              {meetingLine(touchSummary)}
+              {p.implied.includes('met_twice') && touchSummary.meetingDates.length < 2 ? ' · Affinity says two or more' : ''}
+              {p.implied.includes('met') && !p.implied.includes('met_twice') && touchSummary.meetingDates.length < 1 ? ' · Affinity says one was held' : ''}
+              {touchSummary.lastTouch ? ` · last touch ${shortDate(touchSummary.lastTouch)}` : ''}
+              {touchSummary.read ? ` · their read: ${READ_LABEL[touchSummary.read.read].toLowerCase()}${touchSummary.read.on ? ` (${shortDate(touchSummary.read.on)})` : ''}` : ''}
+            </div>
             {p.stageSaid && p.source !== 'us' && (
               <div className={`said${differs ? ' differs' : ''}`}>
                 {differs ? <>Affinity now says &ldquo;{p.stageSaid}&rdquo;, which reads as {STATUS_LABEL[p.statusSaid!]}. </> : <>Affinity says &ldquo;{p.stageSaid}&rdquo;. </>}
@@ -183,6 +199,15 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
 
       <div className="grid2">
         <div>
+          <Touchpoints
+            touches={touches}
+            summary={touchSummary}
+            pursuitId={pursuit.pursuitId}
+            entityId={pursuit.entityId}
+            vehicleId={pursuit.vehicleId}
+            vehicleName={pursuit.vehicleName}
+          />
+
           <div className="card">
             <div className="chead">
               <h2>Routes in</h2>

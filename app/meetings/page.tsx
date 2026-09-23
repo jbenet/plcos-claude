@@ -42,7 +42,7 @@ export default async function Meetings({
               className={`tix${m.entityId === focusEntity ? ' on' : ''}`}
             >
               <div className="tixtop">
-                <span className="kind k-intro">{MEETING_LABEL[m.kind]}</span>
+                <span className="kind k-intro">{m.kind ? MEETING_LABEL[m.kind] : 'Meeting'}</span>
                 <span className="age">{m.scheduledFor ? shortDate(m.scheduledFor) : ''}</span>
               </div>
               <b>{m.entityName}</b>
@@ -56,7 +56,7 @@ export default async function Meetings({
           {held.map((m) => (
             <Link key={m.meetingId} href={`/meetings?e=${m.entityId}`} className="tix">
               <div className="tixtop">
-                <span className="kind k-chore">{MEETING_LABEL[m.kind]}</span>
+                <span className="kind k-chore">{m.kind ? MEETING_LABEL[m.kind] : 'Meeting'}</span>
                 <span className="age">{m.heldOn ? shortDate(m.heldOn) : ''}</span>
               </div>
               <b>{m.entityName}</b>
@@ -83,7 +83,7 @@ export default async function Meetings({
           <h1>{brief.entityName}</h1>
           <p className="sublede">
             {brief.meeting
-              ? `${MEETING_LABEL[brief.meeting.kind]} with ${brief.meeting.attendees.join(', ')}. `
+              ? `${brief.meeting.kind ? MEETING_LABEL[brief.meeting.kind] : 'Meeting'} with ${brief.meeting.attendees.join(', ')}. `
               : 'No meeting scheduled. '}
             Currently at{' '}
             <b>{brief.currentRung ? RUNG_LABEL[brief.currentRung] : 'nothing on file'}</b> on the
@@ -249,7 +249,7 @@ export default async function Meetings({
             {held.map((m) => (
               <div className="row" key={m.meetingId} style={{ alignItems: 'flex-start' }}>
                 <span className="kind k-chore" style={{ width: 110 }}>
-                  {MEETING_LABEL[m.kind]}
+                  {m.kind ? MEETING_LABEL[m.kind] : 'Meeting'}
                 </span>
                 <div className="t">
                   <b>

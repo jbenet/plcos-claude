@@ -51,7 +51,7 @@ export default async function DecisionRoom({
           .filter((m) => m.heldOn)
           .map((m) => ({
             at: m.heldOn!,
-            label: MEETING_LABEL[m.kind],
+            label: m.kind ? MEETING_LABEL[m.kind] : 'Meeting',
             detail: m.summary ?? '',
             kind: 'meeting' as const,
             ref: m.attendees.join(', '),
