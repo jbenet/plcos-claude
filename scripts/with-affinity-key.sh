@@ -19,20 +19,34 @@ if ! command -v op >/dev/null 2>&1; then
   exec "$@"
 fi
 
+# With the app integration on, the CLI sees the app's accounts; without it, it sees none.
+if [ -z "$(op account list 2>/dev/null)" ]; then
+  echo "[affinity] The 1Password CLI can't see any account. In the 1Password app, turn on" >&2
+  echo "[affinity] Settings → Developer → \"Integrate with 1Password CLI\", then restart this." >&2
+  echo "[affinity] Starting without an Affinity key." >&2
+  exec "$@"
+fi
+
 key=""
+why=""
+errors="$(mktemp)"
 # An API Credential item keeps it in "credential"; a Password item in "password".
 for field in credential password; do
-  value="$(op item get "$ITEM" --fields "label=$field" --reveal 2>/dev/null || true)"
+  # Only op's error messages go to the file. The key itself only ever arrives on stdout.
+  value="$(op item get "$ITEM" --fields "label=$field" --reveal 2>"$errors" || true)"
   # Older CLIs print a placeholder for a concealed field instead of failing.
   if [ -n "$value" ] && [ "${value#\[use }" = "$value" ]; then
     key="$value"
     break
   fi
+  [ -z "$why" ] && why="$(head -1 "$errors")"
 done
+rm -f "$errors"
 unset value
 
 if [ -z "$key" ]; then
-  echo "[affinity] Could not read \"$ITEM\" from 1Password. Starting without an Affinity key." >&2
+  echo "[affinity] Could not read \"$ITEM\" from 1Password: ${why:-no field named credential or password}." >&2
+  echo "[affinity] Starting without an Affinity key." >&2
   exec "$@"
 fi
 
