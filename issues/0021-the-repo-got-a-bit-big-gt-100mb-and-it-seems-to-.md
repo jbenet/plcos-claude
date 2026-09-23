@@ -1,7 +1,7 @@
 ---
 id: "0021"
 title: The repo got a bit big (>100MB) and it seems to be the changelog screenshots
-status: review        # open | triaged | agent-ready | in-progress | review | done
+status: done          # open | triaged | agent-ready | in-progress | review | done
 kind: bug             # bug | request | question | chore
 priority: P2          # P0 blocking | P1 serious | P2 normal | P3 someday
 reporter: juan
@@ -48,4 +48,17 @@ Thanks!
 Also fixed: the `>` in this issue's title arrived as `&gt;`. The editor was writing `<`, `>`
 and `&` as HTML entities, and that reached the body and, through it, the title. Fixed in
 the feedback box, and in this file.
+
+**History rewritten, 23 Sep (Juan: "yes, re-write the git history").** Every
+`docs/changelog/shots/**/*.png` is gone from every commit; nothing else changed. Checked commit by
+commit: the same 72 commits, with the same messages, authors and dates, and each tree identical to
+the old one apart from those PNGs. The issue screenshots in `issues/attachments/` are current files
+and stay. The pack went from 162 MB to 34 MB.
+
+- **To publish it:** `git push --force origin master`. GitHub still has the old history up to N37
+  until then, and every commit hash has changed, so any other clone needs a fresh clone.
+- **A backup** of the old history is at `.git/pre-purge-2026-09-23.bundle` (173 MB). Delete it once
+  the push is done; until then `.git` still looks big.
+- The local `origin/master` tracking ref was dropped, since it pointed into the old history. The
+  push puts it back.
 
