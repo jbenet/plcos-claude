@@ -917,6 +917,44 @@ async function main() {
         `flagged ${flagged}; false alarms ${!clean}; outside names or note words in it: ${outsiders.join(', ') || 'none'}; health-flagged notes ${notes?.health}`,
       );
 
+      {
+        const ans = await import('../lib/connectors/affinity/answers');
+        const { readFile: rf, writeFile: wf } = await import('node:fs/promises');
+        const sheet = join('data', 'demo', 'props-answers.jsonc');
+        await rm(join(process.cwd(), sheet), { force: true });
+        await ans.writeAnswerSheet(report, sheet);
+        const fresh = await ans.readAnswers(report, sheet);
+        const text0 = await rf(join(process.cwd(), sheet), 'utf8');
+        check(
+          'A fresh answer sheet answers nothing: every value is null, the suggestions are comments',
+          fresh.exists && fresh.asked > 0 && fresh.answered === 0 && fresh.problems.length === 0 && /the words suggest/.test(text0),
+          `${fresh.answered} of ${fresh.asked} answered; problems ${fresh.problems.length}`,
+        );
+        // Answer two things by hand, the way a person would, and regenerate.
+        const answered = text0
+          .replace(/"stage": null/, '"stage": "Status"')
+          .replace(/("Signed":\s*)null/, '$1"commitment_accepted"');
+        await wf(join(process.cwd(), sheet), answered);
+        await ans.writeAnswerSheet(report, sheet);
+        const kept = await ans.readAnswers(report, sheet);
+        const pipeline = Object.values(kept.lists)[0]!;
+        check(
+          'Regenerating the answer sheet keeps every answer given',
+          pipeline.stage === 'Status' && pipeline.rungs['Signed'] === 'commitment_accepted' && kept.answered === 2,
+          `stage ${pipeline.stage}; "Signed" → ${pipeline.rungs['Signed']}; answered ${kept.answered}`,
+        );
+        await wf(join(process.cwd(), sheet), answered.replace('"commitment_accepted"', '"signed"'));
+        const wrong = await ans.readAnswers(report, sheet);
+        await ans.writeAnswerSheet(report, sheet);
+        const survived = /"Signed":\s*"signed"/.test(await rf(join(process.cwd(), sheet), 'utf8'));
+        check(
+          'A rung that is not a rung is refused by name, counts as unanswered, and survives regeneration for its author to fix',
+          wrong.problems.some((p) => /"signed" is not a rung/.test(p)) && Object.values(wrong.lists)[0]!.rungs['Signed'] === null && survived,
+          `${wrong.problems[0] ?? 'no problem reported'}; still in the file after regenerating: ${survived}`,
+        );
+        await rm(join(process.cwd(), sheet), { force: true });
+      }
+
       const s8 = scripted(() => ok());
       await aff.affinity({ transport: s8.transport, key: KEY, sleep }).get('/v2/lists/1/list-entries', { limit: 100, fieldTypes: ['list', 'global'] });
       const sentTypes = s8.calls[0]?.searchParams.getAll('fieldTypes') ?? [];

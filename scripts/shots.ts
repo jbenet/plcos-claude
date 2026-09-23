@@ -196,6 +196,31 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N44: [
+    {
+      name: '01-answer-sheet',
+      path: '/dev/affinity/inventory',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /answer sheet|keeping your answers/ }).click();
+        await page.getByText('Show the file').waitFor();
+        await page.getByText('Show the file').click();
+        await page.locator('details.sheet').scrollIntoViewIfNeeded();
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+    // Run after answering two values by hand in data/demo/answers.jsonc — one with a rung name
+    // that does not exist — so the card shows the count moving and the file's mistake named.
+    {
+      name: '02-a-wrong-answer',
+      path: '/dev/affinity/inventory',
+      prepare: async (page) => {
+        await page.getByText('Answer sheet', { exact: true }).scrollIntoViewIfNeeded();
+        await page.evaluate(() => window.scrollBy(0, -60));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N43: [
     { name: '01-inventory', path: '/dev/affinity/inventory', fullPage: true },
     { name: '02-questions', path: '/dev/affinity/inventory' },

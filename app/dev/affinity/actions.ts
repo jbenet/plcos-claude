@@ -42,3 +42,12 @@ export async function writeInventoryReport(): Promise<void> {
   await writeReport(await inventory());
   revalidatePath('/dev/affinity/inventory');
 }
+
+/** Writes data/<profile>/answers.jsonc from the inventory, keeping every answer already in it. */
+export async function writeAnswerSheetAction(): Promise<void> {
+  const { inventory } = await import('@/lib/connectors/affinity/inventory');
+  const { writeAnswerSheet } = await import('@/lib/connectors/affinity/answers');
+  await writeAnswerSheet(await inventory());
+  revalidatePath('/dev/affinity/inventory');
+  revalidatePath('/dev/data');
+}

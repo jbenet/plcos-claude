@@ -3,7 +3,8 @@ import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
 import { inventory, type FieldStat } from '@/lib/connectors/affinity/inventory';
-import { writeInventoryReport } from '../actions';
+import { readAnswers } from '@/lib/connectors/affinity/answers';
+import { writeAnswerSheetAction, writeInventoryReport } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,7 @@ function What({ f }: { f: FieldStat }) {
 export default async function Inventory() {
   const demo = config.data.profile === 'demo';
   const inv = await inventory();
+  const answers = await readAnswers(inv);
   const landed = inv.lists.reduce((a, l) => a + l.entries, 0);
 
   return (
@@ -112,6 +114,46 @@ export default async function Inventory() {
             <ol className="asks">{inv.questions.map((q) => <li key={q}>{q}</li>)}</ol>
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <div className="chead">
+          <h2>Answer sheet</h2>
+          <span className="lbl mono">{answers.path}</span>
+        </div>
+        <div className="cbody">
+          <p style={{ margin: '0 0 10px', fontSize: 13 }}>
+            The questions above, as blanks to fill: for each list, which field is the stage and
+            which rung each of its values evidences, which amount means what, who owns the rows,
+            and which field says do-not-contact. Every answer starts as null, and the suggestions
+            are comments — a wrong default would be worse than a gap.
+          </p>
+          {answers.exists && (
+            <>
+              <div className="fact">
+                <span>Answered</span>
+                <span>{n(answers.answered)} of {n(answers.asked)}</span>
+              </div>
+              {answers.problems.length > 0 && (
+                <div className="warn" style={{ margin: '10px 0', fontSize: 12.5 }}>
+                  <b>{answers.problems.length === 1 ? 'A problem' : `${answers.problems.length} problems`} in the file:</b>
+                  <ul style={{ margin: '6px 0 0' }}>{answers.problems.slice(0, 8).map((p) => <li key={p}>{p}</li>)}</ul>
+                </div>
+              )}
+            </>
+          )}
+          <form action={writeAnswerSheetAction} style={{ marginTop: 10 }}>
+            <button className="btn p" type="submit" disabled={landed === 0}>
+              {answers.exists ? 'Regenerate it, keeping your answers' : 'Write the answer sheet'}
+            </button>
+          </form>
+          {answers.text && (
+            <details className="sheet">
+              <summary>Show the file</summary>
+              <pre>{answers.text}</pre>
+            </details>
+          )}
+        </div>
       </div>
 
       {inv.overlap.length > 0 && (

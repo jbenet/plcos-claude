@@ -3781,3 +3781,39 @@ machine.
 **Next:** your answers. They decide how each list's words are read: which values count as
 which rung, and whether any amount is hard. Translation into the model comes after them, so it
 doesn't have to guess.
+
+---
+
+## N44 — An answer sheet for round two
+
+**Shipped.** The inventory's questions as blanks to fill in. For each list, the sheet asks
+which field is the stage, which rung each stage value actually evidences, which field is the
+amount and whether it means soft or hard, who owns the rows, and which field says
+do-not-contact. It's written to `data/<profile>/answers.jsonc`, beside the init file.
+
+| | |
+|---|---|
+| ![Answer sheet](docs/changelog/shots/n44/01-answer-sheet.webp) | **The sheet, shown on the Inventory page.** Every value of the stage field is listed with how often it's used, next to an empty slot for its rung. The words' suggestion is a comment, never the answer: *"Soft circle": null // the words suggest indication_given*. |
+| ![A wrong answer](docs/changelog/shots/n44/02-a-wrong-answer.webp) | **Two answers given, one of them wrong.** *2 of 38*, and the mistake named: "signed" isn't a rung. It counts as unanswered, and regenerating the sheet keeps it in place for whoever wrote it to fix. |
+
+### Why every value starts as null
+
+A default here would decide the thing the whole tool is careful about. If "Soft Commit"
+defaulted to *commitment accepted*, soft would have blended into hard without anyone saying so
+(rule 1). If "Contacted" defaulted to a rung, the gap between claimed and evidenced would
+disappear (rule 2). So the answers are nulls, and a null is read as *unknown*, never as its
+likeliest meaning. The suggestions are there to save typing, not to be believed. "Documents
+Signed" suggests *commitment_accepted, if countersigned; otherwise indication_given*, because
+the word *signed* doesn't say who else signed.
+
+### Regenerating keeps your answers
+
+The sheet is generated from what's actually in the lists, so it can be regenerated when the
+lists change. Regenerating keeps every answer given, including one that doesn't validate: a
+mistyped rung is reported and left in place for its author, not erased by the tool.
+
+**On the real account**, the sheet has been generated for the four lists and is waiting at
+`data/real/answers.jsonc`.
+
+Three new properties: a fresh sheet answers nothing; regenerating keeps answers; and a rung
+that isn't a rung is refused by name and survives regeneration. **66 of 66 properties hold.**
