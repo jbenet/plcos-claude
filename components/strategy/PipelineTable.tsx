@@ -1,0 +1,369 @@
+'use client';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+/**
+ * The pipeline, as one interactive list (N54). Every pursuit in scope arrives once; the status
+ * columns, the search, the filters and the sort all run here, so narrowing is instant and the
+ * column counts change with it — "12 of 58" — instead of each click asking the server again.
+ */
+
+export type Status = 'new' | 'sourcing' | 'selected' | 'discussing' | 'committed' | 'passed';
+
+export interface PipelineRow {
+  id: string;
+  name: string;
+  headline: string | null;
+  vehicle: string;
+  owner: string;
+  status: Status;
+  /** Passed: who and why. */
+  ended: string | null;
+  next: string | null;
+  nextOn: string | null;
+  /** Affinity's word, and what it implies. */
+  said: string | null;
+  implied: string[];
+  setHere: string | null;
+  /** A meeting on record for an LP still at Selected or earlier. */
+  ahead: boolean;
+  doNotContact: boolean;
+  money: { state: string; amount: number; wired: number; hard: boolean; signedPer: string | null } | null;
+  meetings: number;
+  lastMeeting: string | null;
+  lastTouch: string | null;
+  waitingSince: string | null;
+  read: string | null;
+  readOn: string | null;
+  readSuggested: boolean;
+  rung: number;
+  rungs: Array<'on' | 'na' | 'off'>;
+  rungLabel: string;
+}
+
+interface Props {
+  rows: PipelineRow[];
+  statuses: Array<{ id: Status; label: string; means: string }>;
+  rungNames: string[];
+  initialStatus: Status | null;
+  showVehicle: boolean;
+}
+
+type SortKey = 'rank' | 'name' | 'vehicle' | 'owner' | 'where' | 'meetings' | 'touch' | 'read' | 'ladder';
+const READ_ORDER: Record<string, number> = { 'Very interested': 3, Interested: 2, 'Not very interested': 1 };
+const MONEY_ORDER: Record<string, number> = { Closed: 4, Hard: 3, Signed: 2, Soft: 1, Withdrawn: 0 };
+const PAGE = 200;
+
+const DAY = 86_400_000;
+const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
+const usdM = (n: number) => (n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : `$${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M`);
+const t = (iso: string | null) => (iso ? new Date(iso).getTime() : 0);
+
+interface Filters {
+  q: string;
+  owner: string;
+  vehicle: string;
+  meetings: 'any' | 'some' | 'none';
+  touch: 'any' | 'waiting' | 'recent' | 'stale' | 'none';
+  read: 'any' | 'very' | 'interested' | 'not' | 'none';
+  money: 'any' | 'soft' | 'signed' | 'hard' | 'none';
+  flag: 'any' | 'ahead' | 'dnc';
+}
+const EMPTY: Filters = { q: '', owner: '', vehicle: '', meetings: 'any', touch: 'any', read: 'any', money: 'any', flag: 'any' };
+
+function matches(r: PipelineRow, f: Filters, words: string[], now: number): boolean {
+  if (words.length) {
+    const hay = `${r.name} ${r.headline ?? ''} ${r.owner} ${r.vehicle} ${r.said ?? ''} ${r.next ?? ''} ${r.ended ?? ''}`.toLowerCase();
+    if (!words.every((w) => hay.includes(w))) return false;
+  }
+  if (f.owner && r.owner !== f.owner) return false;
+  if (f.vehicle && r.vehicle !== f.vehicle) return false;
+  if (f.meetings === 'some' && r.meetings === 0) return false;
+  if (f.meetings === 'none' && r.meetings > 0) return false;
+  if (f.touch === 'waiting' && !r.waitingSince) return false;
+  if (f.touch === 'recent' && !(r.lastTouch && now - t(r.lastTouch) <= 30 * DAY)) return false;
+  if (f.touch === 'stale' && !(r.lastTouch && now - t(r.lastTouch) > 90 * DAY)) return false;
+  if (f.touch === 'none' && r.lastTouch) return false;
+  if (f.read === 'very' && r.read !== 'Very interested') return false;
+  if (f.read === 'interested' && r.read !== 'Interested') return false;
+  if (f.read === 'not' && r.read !== 'Not very interested') return false;
+  if (f.read === 'none' && r.read) return false;
+  if (f.money === 'none' && r.money) return false;
+  if (f.money === 'soft' && r.money?.state !== 'Soft') return false;
+  if (f.money === 'signed' && r.money?.state !== 'Signed') return false;
+  if (f.money === 'hard' && !r.money?.hard) return false;
+  if (f.flag === 'ahead' && !r.ahead) return false;
+  if (f.flag === 'dnc' && !r.doNotContact) return false;
+  return true;
+}
+
+function Ladder({ r, names }: { r: PipelineRow; names: string[] }) {
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+        {r.rungs.map((s, i) => (
+          <span
+            key={i}
+            title={names[i]}
+            style={{
+              width: 12, height: 6, borderRadius: 3,
+              background: s === 'on' ? 'var(--green)' : s === 'na' ? 'var(--line)' : '#EDEAE2',
+              outline: i === r.rung + 1 ? '1.5px solid var(--clay)' : undefined, outlineOffset: 1,
+            }}
+          />
+        ))}
+      </div>
+      <div className="muted" style={{ fontSize: 11, marginTop: 5 }}>{r.rungLabel}</div>
+    </>
+  );
+}
+
+export function PipelineTable({ rows, statuses, rungNames, initialStatus, showVehicle }: Props) {
+  const router = useRouter();
+  const search = useRef<HTMLInputElement>(null);
+  const [f, setF] = useState<Filters>(EMPTY);
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'rank', dir: 1 });
+  const [shown, setShown] = useState(PAGE);
+  const now = useMemo(() => Date.now(), []);
+
+  const words = useMemo(() => f.q.toLowerCase().split(/\s+/).filter(Boolean), [f.q]);
+  const filtered = useMemo(() => rows.filter((r) => matches(r, f, words, now)), [rows, f, words, now]);
+  const active = JSON.stringify(f) !== JSON.stringify(EMPTY);
+  const count = (s: Status, list: PipelineRow[]) => list.reduce((a, r) => a + (r.status === s ? 1 : 0), 0);
+
+  // Open on the asked-for column, or the first with somebody in it, most advanced first.
+  const firstFull = (['discussing', 'committed', 'selected', 'sourcing', 'new', 'passed'] as Status[]).find((s) => count(s, rows) > 0) ?? 'discussing';
+  const [status, setStatus] = useState<Status>(initialStatus ?? firstFull);
+
+  // The column and the search live in the address, so a link or the back button returns here.
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    u.searchParams.set('status', status);
+    if (f.q) u.searchParams.set('q', f.q); else u.searchParams.delete('q');
+    window.history.replaceState(null, '', u.toString());
+  }, [status, f.q]);
+  useEffect(() => {
+    const q = new URL(window.location.href).searchParams.get('q');
+    if (q) setF((x) => ({ ...x, q }));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); search.current?.focus(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  useEffect(() => setShown(PAGE), [status, f, sort]);
+
+  const inColumn = useMemo(() => {
+    const list = filtered.filter((r) => r.status === status);
+    const k = sort.key;
+    const by = (a: PipelineRow, b: PipelineRow): number => {
+      switch (k) {
+        case 'name': return a.name.localeCompare(b.name);
+        case 'vehicle': return a.vehicle.localeCompare(b.vehicle) || a.name.localeCompare(b.name);
+        case 'owner': return a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name);
+        case 'where': return (MONEY_ORDER[b.money?.state ?? ''] ?? -1) - (MONEY_ORDER[a.money?.state ?? ''] ?? -1)
+          || (b.money?.amount ?? 0) - (a.money?.amount ?? 0) || (t(a.nextOn) || Infinity) - (t(b.nextOn) || Infinity);
+        case 'meetings': return b.meetings - a.meetings || t(b.lastMeeting) - t(a.lastMeeting);
+        case 'touch': return t(b.lastTouch) - t(a.lastTouch);
+        case 'read': return (READ_ORDER[b.read ?? ''] ?? 0) - (READ_ORDER[a.read ?? ''] ?? 0) || t(b.readOn) - t(a.readOn);
+        case 'ladder': return b.rung - a.rung;
+        default: return 0; // 'rank': the server's order — evidence, meetings, the source's word, recency
+      }
+    };
+    return k === 'rank' ? (sort.dir === 1 ? list : [...list].reverse()) : [...list].sort((a, b) => by(a, b) * sort.dir);
+  }, [filtered, status, sort]);
+
+  const owners = useMemo(() => [...new Set(rows.map((r) => r.owner))].sort(), [rows]);
+  const vehicles = useMemo(() => [...new Set(rows.map((r) => r.vehicle))].sort(), [rows]);
+  // A vehicle column that says the same thing on every row is noise.
+  const byVehicle = showVehicle && vehicles.length > 1;
+  const info = statuses.find((s) => s.id === status)!;
+
+  const Th = ({ k, children, width }: { k: SortKey; children: string; width?: number }) => {
+    const on = sort.key === k;
+    return (
+      <th style={width ? { width } : undefined} aria-sort={on ? (sort.dir === 1 ? 'descending' : 'ascending') : 'none'}>
+        <button className={`thsort${on ? ' on' : ''}`} onClick={() => setSort(on ? { key: k, dir: sort.dir === 1 ? -1 : 1 } : { key: k, dir: 1 })}>
+          {children}{on ? (sort.dir === 1 ? ' ↓' : ' ↑') : ''}
+        </button>
+      </th>
+    );
+  };
+  const set = <K extends keyof Filters>(k: K, v: Filters[K]) => setF((x) => ({ ...x, [k]: v }));
+
+  return (
+    <>
+      <div className="statusboard" role="tablist" aria-label="Status">
+        {statuses.map((s) => {
+          const n = count(s.id, filtered);
+          const m = count(s.id, rows);
+          return (
+            <button
+              key={s.id}
+              className={`sb${s.id === status ? ' on' : ''}${s.id === 'passed' ? ' ended' : ''}`}
+              role="tab"
+              aria-selected={s.id === status}
+              title={s.means}
+              onClick={() => setStatus(s.id)}
+            >
+              <span className="lbl">{s.label}</span>
+              <span className="n">
+                {n.toLocaleString('en-US')}
+                {active && <span className="of"> of {m.toLocaleString('en-US')}</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="pfilters">
+        <input
+          ref={search}
+          type="search"
+          value={f.q}
+          onChange={(e) => set('q', e.target.value)}
+          placeholder="Search names, owners, Affinity words, next steps…  ( / )"
+          aria-label="Search the pipeline"
+        />
+        <select value={f.owner} onChange={(e) => set('owner', e.target.value)} aria-label="Owner">
+          <option value="">Any owner</option>
+          {owners.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        {byVehicle && (
+          <select value={f.vehicle} onChange={(e) => set('vehicle', e.target.value)} aria-label="Vehicle">
+            <option value="">Any vehicle</option>
+            {vehicles.map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        )}
+        <select value={f.meetings} onChange={(e) => set('meetings', e.target.value as Filters['meetings'])} aria-label="Meetings">
+          <option value="any">Meetings: any</option>
+          <option value="some">Has met</option>
+          <option value="none">Never met</option>
+        </select>
+        <select value={f.touch} onChange={(e) => set('touch', e.target.value as Filters['touch'])} aria-label="Last touch">
+          <option value="any">Last touch: any</option>
+          <option value="recent">In the last 30 days</option>
+          <option value="stale">Over 90 days ago</option>
+          <option value="waiting">Waiting on them</option>
+          <option value="none">Never touched</option>
+        </select>
+        <select value={f.read} onChange={(e) => set('read', e.target.value as Filters['read'])} aria-label="Their read">
+          <option value="any">Their read: any</option>
+          <option value="very">Very interested</option>
+          <option value="interested">Interested</option>
+          <option value="not">Not very interested</option>
+          <option value="none">No read</option>
+        </select>
+        <select value={f.money} onChange={(e) => set('money', e.target.value as Filters['money'])} aria-label="Money">
+          <option value="any">Money: any</option>
+          <option value="soft">Soft</option>
+          <option value="signed">Signed</option>
+          <option value="hard">Hard or closed</option>
+          <option value="none">No amount</option>
+        </select>
+        <select value={f.flag} onChange={(e) => set('flag', e.target.value as Filters['flag'])} aria-label="Flags">
+          <option value="any">Flags: any</option>
+          <option value="ahead">Met, status behind</option>
+          <option value="dnc">Do not contact</option>
+        </select>
+        {active && <button className="btn" onClick={() => setF(EMPTY)}>Clear</button>}
+      </div>
+
+      <div className="card">
+        <div className="chead">
+          <h2>{info.label}</h2>
+          <span className="lbl">
+            {inColumn.length.toLocaleString('en-US')}
+            {active ? ` of ${count(status, rows).toLocaleString('en-US')}` : ''} · {info.means}
+          </span>
+        </div>
+        {inColumn.length === 0 ? (
+          <div className="cbody">
+            <div className="empty">
+              <span className="stat unavailable"><i />Nobody here</span>
+              <h3>{active ? `No LP at ${info.label} matches.` : `No LP is at ${info.label}.`}</h3>
+              <p>{active ? 'The filters or the search leave this column empty; the other columns show what they do match.' : 'An empty column, not a failed read.'}</p>
+            </div>
+          </div>
+        ) : (
+          <table className="list pipeline">
+            <thead>
+              <tr>
+                <Th k="name">LP</Th>
+                {byVehicle && <Th k="vehicle" width={120}>Vehicle</Th>}
+                <Th k="owner" width={96}>Owner</Th>
+                <Th k="where">Where</Th>
+                <Th k="meetings" width={78}>Meetings</Th>
+                <Th k="touch" width={96}>Last touch</Th>
+                <Th k="read" width={104}>Their read</Th>
+                <Th k="ladder" width={128}>Ladder</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {inColumn.slice(0, shown).map((r) => (
+                <tr
+                  key={r.id}
+                  className="clickable"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest('a')) return;
+                    if (e.metaKey || e.ctrlKey) window.open(`/targets/${r.id}`, '_blank');
+                    else router.push(`/targets/${r.id}`);
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/targets/${r.id}`); }}
+                >
+                  <td>
+                    <a href={`/targets/${r.id}`}><b>{r.name}</b></a>
+                    {r.doNotContact && <span className="flag f-block" style={{ marginLeft: 6 }}>do not contact</span>}
+                    {r.headline && <div className="muted" style={{ fontSize: 11.5 }}>{r.headline}</div>}
+                  </td>
+                  {byVehicle && <td className="muted">{r.vehicle}</td>}
+                  <td className="muted">{r.owner}</td>
+                  <td className="where" style={{ fontSize: 12 }}>
+                    {r.money && (
+                      <div>
+                        {r.money.state} {usdM(r.money.amount)}
+                        {r.money.signedPer && <span className="muted"> · signed {r.money.signedPer}</span>}
+                        {r.money.hard && <span className="muted"> · {usdM(r.money.wired)} wired</span>}
+                      </div>
+                    )}
+                    {r.ended && <div>{r.ended}</div>}
+                    {r.next && <div>Next: {r.next}{r.nextOn ? `, ${fmt(r.nextOn)}` : ''}</div>}
+                    {r.ahead && <div style={{ fontSize: 11.5, color: 'var(--amber)' }}>A meeting is on record — Discussing?</div>}
+                    {r.said && (
+                      <div className="muted" style={{ fontSize: 11.5 }}>
+                        Affinity: &ldquo;{r.said}&rdquo;{r.implied.length ? ` — ${r.implied.join(', ')}` : ''}
+                      </div>
+                    )}
+                    {r.setHere && <div className="muted" style={{ fontSize: 11.5 }}>{r.setHere}</div>}
+                  </td>
+                  <td className="mono" style={{ fontSize: 12 }}>
+                    {r.meetings || <span className="muted">—</span>}
+                    {r.lastMeeting && <div className="muted" style={{ fontSize: 10.5 }}>{fmt(r.lastMeeting)}</div>}
+                  </td>
+                  <td style={{ fontSize: 12 }}>
+                    {r.lastTouch ? fmt(r.lastTouch) : <span className="muted">—</span>}
+                    {r.waitingSince && <div className="muted" style={{ fontSize: 10.5 }}>waiting on them</div>}
+                  </td>
+                  <td style={{ fontSize: 12 }}>
+                    {r.read ? <span className={r.readSuggested ? 'suggested' : undefined} title={r.readSuggested ? 'Suggested from a note; nobody has confirmed it' : undefined}>{r.read}</span> : <span className="muted">—</span>}
+                    {r.readOn && <div className="muted" style={{ fontSize: 10.5 }}>{fmt(r.readOn)}{r.readSuggested ? ' · suggested' : ''}</div>}
+                  </td>
+                  <td><Ladder r={r} names={rungNames} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {inColumn.length > shown && (
+          <div className="cbody" style={{ borderTop: '1px solid var(--hair)' }}>
+            <button className="btn" onClick={() => setShown((n) => n + PAGE)}>
+              Show {Math.min(PAGE, inColumn.length - shown)} more of {(inColumn.length - shown).toLocaleString('en-US')}
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}

@@ -132,12 +132,14 @@ button.sec .caret{font-size:9px;opacity:.8}
 .dot.amber{background:var(--amber)}
 .dot.grey{background:#B8B2A6}
 .dot.clay{background:var(--clay)}
-/* Which data this is (N38). The words carry it; the colour and the strip only repeat it. */
+/* Which data this is (N38). The words carry it; the colour and the strip only repeat it. Since N53
+   the strip marks the demo, not the real data: the people who use this every day are on real
+   data, and it is the fictional copy that should look unusual (Juan, 24 Sep). */
 .profile{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;
   padding:3px 7px;border-radius:4px;border:1px solid var(--line);color:var(--label);text-decoration:none;margin-right:4px;white-space:nowrap}
 .profile:hover{border-color:var(--muted)}
-.profile.p-real{background:var(--clay);border-color:var(--clay);color:#fff}
-body.real::before{content:'';position:fixed;top:0;left:0;right:0;height:3px;background:var(--clay);z-index:60;pointer-events:none}
+.profile.p-demo{background:var(--purple);border-color:var(--purple);color:#fff}
+body.demo::before{content:'';position:fixed;top:0;left:0;right:0;height:3px;background:var(--purple);z-index:60;pointer-events:none}
 .pnotice{flex:none;padding:8px 20px;font-size:12.5px;line-height:1.45;color:var(--ink);background:#F6EBD9;border-bottom:1px solid #E7D3B0}
 .pnotice b{color:var(--amber);font-weight:600}
 table.profiles td{width:40%}
@@ -162,9 +164,6 @@ details summary{cursor:pointer}
 .valchip{display:inline-block;font-size:11.5px;border:1px solid var(--line);border-radius:4px;padding:0 6px;margin:0 4px 4px 0;background:var(--surface);white-space:nowrap}
 .valchip i{font-style:normal;color:var(--muted);font-family:var(--mono);font-size:10.5px}
 table.list.inv td{padding-top:8px;padding-bottom:8px}
-/* N45: a vehicle kept for its history. The word says it; the dimming only repeats it. */
-.sub.vehicle .hist{margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--rail-muted, #9A958B);border:1px solid rgba(239,235,226,.18);border-radius:3px;padding:0 4px}
 /* N47: what the source says the stage is, beside what the ladder has evidenced. */
 .stageclaim{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;margin:0 0 12px;padding:9px 12px;
   border:1px dashed var(--line);border-radius:8px;background:var(--surface);font-size:13px}
@@ -1603,3 +1602,22 @@ details.more>summary{cursor:pointer;font-size:12px;color:var(--muted);padding:6p
 .closesteps .cs.on i{background:var(--green);border-color:var(--green)}
 .closesteps .cs.now i{box-shadow:0 0 0 3px var(--accent-wash)}
 .closesteps .cs span{color:var(--muted);font-family:var(--mono);font-size:10.5px}
+
+/* N54: the pipeline as one interactive list — counts that follow the filters, sortable heads */
+.statusboard .sb{font-family:inherit;text-align:left;cursor:pointer}
+.statusboard .sb .of{font-family:var(--sans, inherit);font-size:13px;font-weight:400;color:var(--muted);opacity:.75;letter-spacing:0}
+.pfilters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
+.pfilters input[type=search]{flex:1 1 300px;min-width:220px;font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--line);
+  border-radius:7px;background:var(--surface)}
+.pfilters input[type=search]:focus{outline:2px solid var(--accent-wash);border-color:var(--muted)}
+.pfilters select{width:auto;flex:0 0 auto;font-family:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
+.pfilters .btn{flex:0 0 auto}
+table.list.pipeline td:first-child{min-width:160px}
+table.list.pipeline td.where{min-width:220px}
+table.list th .thsort{all:unset;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit}
+table.list th .thsort:hover,table.list th .thsort.on{color:var(--ink)}
+table.list th .thsort:focus-visible{outline:2px solid var(--accent-wash)}
+table.list.pipeline tr.clickable{cursor:pointer}
+table.list.pipeline tr.clickable:focus-visible td{background:var(--accent-wash);outline:none}
+.suggested{border-bottom:1px dashed var(--muted)}
+kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--surface)}

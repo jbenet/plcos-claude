@@ -70,6 +70,15 @@ export function Touchpoints(props: {
           <span>{s.read ? `${READ_LABEL[s.read.read]} — ${s.read.byName ?? 'unattributed'}${s.read.on ? `, ${shortDate(s.read.on)}` : ''}` : 'nobody has recorded one'}</span>
         </div>
         {s.lastResearched && <div className="fact"><span>Last researched</span><span>{shortDate(s.lastResearched)}</span></div>}
+        {s.withFirm.total > 0 && (
+          <div className="fact">
+            <span>With their firm</span>
+            <span className="muted">
+              {s.withFirm.total} more, not counted above{s.withFirm.lastTouch ? ` · last ${shortDate(s.withFirm.lastTouch)}` : ''}
+              {s.withFirm.nextMeeting ? ` · next ${shortDate(s.withFirm.nextMeeting)}` : ''} — they may be with a colleague
+            </span>
+          </div>
+        )}
         <div style={{ marginTop: 10 }}>
           {touches.slice(0, SHOWN).map((t) => <Row key={t.touchpointId} t={t} />)}
           {touches.length > SHOWN && (

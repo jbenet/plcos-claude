@@ -34,10 +34,14 @@ any more than before, and a status never moves it (rule 2).
 | **Selected** | We've decided to approach. Outreach is next, or under way with no reply yet. |
 | **Discussing** | They've engaged: a reply, a call being set, any number of meetings. |
 | **Committed** | They said yes, with an amount. How far the money has got is the close track's job, not this one's. |
-| **Passed** | Off, for now. **Who** (they declined · we stopped · it went quiet) and **why** are kept, and it can reopen. |
+| **Passed** | Off, for now: someone decided. **Who** (they declined · we stopped) and **why** are kept, and it can reopen. |
 
 - **No "paused".** "Come back after the new year" is Discussing with a dated **next step**. A
   status that means "not now" hides the date that makes it true or false.
+- **Silence is not a pass** (N53, Juan, 24 Sep). An LP who never replied is still Selected; the
+  log says "waiting on them" and since when, and the pipeline filters on it. Passed is for a
+  decision, theirs or ours. The team's "On Hold" was its do-not-contact, so it reads as Passed:
+  we stopped, do not contact — as does every entry marked do-not-contact.
 - **No enforced order.** Committed can go back to Discussing when they cut back; Passed can
   reopen. Each change is in the audit log, so the history is there.
 - **Do not contact** is not a status. It's a restriction on the person, across every vehicle,
@@ -57,9 +61,11 @@ last touch, and "waiting on their reply since…".
 
 - **From Affinity, without asking anyone to re-type it:** meeting, call and email notes carry
   the interaction and a date (N49), and every list entry carries Affinity's first and last
-  email and meeting dates. A note about the LP's firm counts for the LP. A meeting that
-  covered two vehicles counts for both; one tied to no vehicle counts for every open pursuit
-  of that LP, labelled as such.
+  email and meeting dates. A meeting that covered two vehicles counts for both; one tied to no
+  vehicle counts for every open pursuit of that LP, labelled as such.
+- **Their firm's touchpoints are shown, not counted** (N53). A meeting with a colleague at the
+  same firm is not a meeting with this LP; counting it as one invented next meetings that were
+  someone else's. The firm's rows appear in the log with its name, summed on one line.
 - **Research is a touchpoint too**, of its own kind: what was looked at, and the date range
   (rule 7). "Last researched" is derived, at any status.
 - What Affinity's status word implies but can't date ("Two meetings held") is kept as a claim

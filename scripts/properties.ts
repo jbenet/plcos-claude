@@ -1030,15 +1030,17 @@ async function main() {
         const signedWord = pv('Subscription signed');
         const quiet = pv('Lost: went dark');
         const held = pv('Paused — verbal yes');
+        const holdAlone = pv('On Hold');
         const contacted = pv('Contacted');
         check(
           'A status word becomes a status and what it says happened; only the latter claims a rung',
           twice?.status === 'discussing' && !!twice.implies?.includes('met_twice') && impliedRung(twice.implies ?? []) === 'meeting_held' &&
             signedWord?.status === 'committed' && impliedRung(signedWord.implies ?? []) === 'commitment_accepted' &&
-            quiet?.status === 'passed' && quiet.passedBy === 'quiet' && quiet.reason === 'no_response' &&
+            quiet?.status === 'selected' && !!quiet.implies?.includes('reached_out') &&
+            holdAlone?.status === 'passed' && holdAlone.passedBy === 'us' && holdAlone.reason === 'do_not_contact' &&
             held?.status === 'committed' && held.next === 'On hold' &&
             contacted?.status === 'selected' && impliedRung(contacted.implies ?? []) === null,
-          `second meeting → ${twice?.status} (${twice?.implies}); signed → ${signedWord?.status}, claims ${impliedRung(signedWord?.implies ?? [])}; lost, went dark → ${quiet?.status} by ${quiet?.passedBy}; paused, verbal → ${held?.status}, next "${held?.next}"; contacted claims ${impliedRung(contacted?.implies ?? []) ?? 'nothing'}`,
+          `second meeting → ${twice?.status} (${twice?.implies}); signed → ${signedWord?.status}, claims ${impliedRung(signedWord?.implies ?? [])}; lost, went dark → ${quiet?.status} (silence is not a pass); on hold alone → ${holdAlone?.status}, ${holdAlone?.reason}; paused, verbal → ${held?.status}, next "${held?.next}"; contacted claims ${impliedRung(contacted?.implies ?? []) ?? 'nothing'}`,
         );
 
         // A person edits it — marks a list reviewed, takes a meaning away — and it is regenerated.
@@ -1121,7 +1123,19 @@ async function main() {
           `select count(*)::text as n from coordination.restriction c join identity.source_record r
              on r.entity_id = c.entity_id and r.source = 'affinity' and r.source_id = 'person:7005' where c.scope = 'blanket'`,
         );
-        check('A do-not-contact mark becomes a do-not-approach restriction on the target', dnc === 1, `restrictions on the marked person: ${dnc}`);
+        const dncPursuit = await adb.one<{ status: string; passed_by: string | null; status_reason: string | null }>(
+          `select p.status::text as status, p.passed_by, p.status_reason from strategy.pursuit p join identity.source_record r
+             on r.entity_id = p.entity_id and r.source = 'affinity' and r.source_id = 'person:7005'`,
+        );
+        const co = await import('../modules/coordination');
+        const overview = (await co.listRestrictions()).filter((x) => (x.source ?? '').startsWith('affinity:list:')).length;
+        const everywhere = (await co.listRestrictions({ includeListMarks: true })).filter((x) => (x.source ?? '').startsWith('affinity:list:')).length;
+        check(
+          'A do-not-contact mark is a do-not-approach restriction and a pass — shown where they come up, not in every overview',
+          dnc === 1 && dncPursuit?.status === 'passed' && dncPursuit.passed_by === 'us' && dncPursuit.status_reason === 'do_not_contact' &&
+            overview === 0 && everywhere === 1,
+          `restrictions on the marked person: ${dnc}; their pursuit ${dncPursuit?.status} (${dncPursuit?.passed_by}, ${dncPursuit?.status_reason}); in overviews ${overview}, on their own page ${everywhere}`,
+        );
 
         {
           const nt = await import('../lib/connectors/affinity/notes');
@@ -1153,11 +1167,12 @@ async function main() {
              from strategy.pursuit p join identity.source_record r
                on r.entity_id = p.entity_id and r.source = 'affinity' and r.source_id = $1`, [who],
         );
-        const was = (await statusOf('person:7005'))?.status;
-        await wf(join(process.cwd(), file), (await rf(join(process.cwd(), file), 'utf8')).replace(/("Contacted":\s*)\{[^}]*\}/, '$1{"status":"discussing","implies":["replied"]}'));
+        // Omar: "Intro made". (Marcus, "Contacted", is marked do-not-contact, which outranks any word.)
+        const was = (await statusOf('person:7002'))?.status;
+        await wf(join(process.cwd(), file), (await rf(join(process.cwd(), file), 'utf8')).replace(/("Intro made":\s*)\{[^}]*\}/, '$1{"status":"discussing","implies":["replied"]}'));
         await tr.translate(null, { mappingPath: file });
-        const now = (await statusOf('person:7005'))?.status;
-        check('A mapping edit takes effect the next time it is translated — no request to Affinity', was === 'selected' && now === 'discussing', `"Contacted" was ${was}, is ${now}`);
+        const now = (await statusOf('person:7002'))?.status;
+        check('A mapping edit takes effect the next time it is translated — no request to Affinity', was === 'selected' && now === 'discussing', `"Intro made" was ${was}, is ${now}`);
 
         // Money says yes: an amount on the commitment field makes an entry Committed, whatever the
         // word — here "Diligence", with a committed amount beside it.

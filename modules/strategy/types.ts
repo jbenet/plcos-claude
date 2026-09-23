@@ -53,15 +53,21 @@ export const STATUSES: StatusInfo[] = [
 
 export const STATUS_LABEL = Object.fromEntries(STATUSES.map((s) => [s.id, s.label])) as Record<PursuitStatus, string>;
 
-/** Who ended it. A decline and a silence are different, and so is our own call. */
+/**
+ * Who ended it: they declined, or we stopped. Silence is not an ending (N53, Juan, 24 Sep): an
+ * LP who never replied is still Selected, and the log says how long we have been waiting.
+ * 'quiet' is still read, for a pursuit that was set that way before; it is no longer offered.
+ */
 export type PassedBy = 'them' | 'us' | 'quiet';
 export const PASSED_BY_LABEL: Record<PassedBy, string> = {
   them: 'They declined', us: 'We stopped', quiet: 'It went quiet',
 };
+export const PASSED_BY_CHOICES: PassedBy[] = ['them', 'us'];
 
 /** Why, when it passed. Words from the lists, normalized so they can be counted. */
 export const REASONS = [
-  'thesis', 'timing', 'valuation', 'structure', 'concentration', 'diligence', 'mandate', 'no_response', 'other',
+  'thesis', 'timing', 'valuation', 'structure', 'concentration', 'diligence', 'mandate', 'no_response',
+  'do_not_contact', 'other',
 ] as const;
 export type OutcomeReason = (typeof REASONS)[number];
 

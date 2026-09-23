@@ -24,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className={config.data.profile === 'real' ? 'real' : undefined}>
+      <body className={config.data.profile}>
         <div className="app">
           <Rail />
           <div className="main">{children}</div>

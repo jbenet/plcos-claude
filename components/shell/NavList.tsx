@@ -145,7 +145,6 @@ export function NavList({
           onClick={() => selectVehicle(v.slug)}
         >
           <span className="nm">{v.name}</span>
-          {v.historical && <span className="hist" title="Did not close. Kept for its history: who was approached, and how far each got.">history</span>}
         </button>
         {selected && (
           <div className="submods">

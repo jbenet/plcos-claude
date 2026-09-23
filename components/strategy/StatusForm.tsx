@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { setPursuitStatus } from '@/app/targets/actions';
 import {
-  PASSED_BY_LABEL, REASONS, STATUSES, type PassedBy, type PursuitStatus,
+  PASSED_BY_CHOICES, PASSED_BY_LABEL, REASONS, STATUSES, type PassedBy, type PursuitStatus,
 } from '@/modules/strategy/client';
 
 /**
@@ -55,9 +55,9 @@ export function StatusForm(props: {
         <div className="fieldrow">
           <label className="field">
             <span className="lbl">Who ended it</span>
-            <select name="passedBy" defaultValue={props.passedBy ?? ''} required>
+            <select name="passedBy" defaultValue={props.passedBy && PASSED_BY_CHOICES.includes(props.passedBy) ? props.passedBy : ''} required>
               <option value="" disabled>Choose</option>
-              {(Object.keys(PASSED_BY_LABEL) as PassedBy[]).map((k) => <option key={k} value={k}>{PASSED_BY_LABEL[k]}</option>)}
+              {PASSED_BY_CHOICES.map((k) => <option key={k} value={k}>{PASSED_BY_LABEL[k]}</option>)}
             </select>
           </label>
           <label className="field">

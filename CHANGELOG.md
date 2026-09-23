@@ -4136,3 +4136,27 @@ dollars as millions ("Record $4000000.0M hard"); it's the text an approver reads
 
 **On the real account**, the Committed LPs read as soft, or as signed per Affinity; nothing is
 hard until countersigned here. 90 of 90 properties hold.
+
+## N53 — Your review: a pipeline you can search, and what "passed" means
+
+**Shipped.** Your notes on N50–N52, most of them in one place: the pipeline page.
+
+| | |
+|---|---|
+| ![Search and filter](docs/changelog/shots/n53/01-search-and-filter.webp) | **Search and filters that change the numbers.** Every column's count reads **N** *of M* while anything is narrowing it. Search covers names, owners, Affinity's words and next steps (press <kbd>/</kbd>); filters cover owner, vehicle, meetings, last touch, their read, money, and two flags. It all runs in the page, so it's instant — about a tenth of a second across the two thousand real rows. |
+| ![Sorted](docs/changelog/shots/n53/02-sorted.webp) | **Sort by any heading**, and click anywhere on a row to open the LP. The purple strip and badge now mark the demo, not the real data, since the real data is what you'll look at every day. The rail no longer says "history" beside the old SPVs. |
+| ![Passed](docs/changelog/shots/n53/03-passed.webp) | **Passed means someone decided.** They declined, or we stopped. Silence isn't a decision, so an LP who never answered is back at Selected, with "waiting on them" and the date. "On Hold" on its own was your team's do-not-contact, so it's Passed: we stopped, do not contact, and so is every entry marked do-not-contact. |
+
+**Do not contact, where it matters.** The mark shows where the person comes up: their row in
+the pipeline, their page, and a route or an ask toward them. That last one is still enforced
+(rule 8). It's no longer listed in Operations, Asks, or the visualizations.
+
+**The upcoming meetings that weren't.** LP pages counted their firm's touchpoints as the LP's
+own, so a colleague's next meeting read as theirs, and a firm's calls added to their meeting
+count. Now only an LP's own touchpoints count. The firm's are shown in the log with its name,
+plus one line: "3 more with their firm, not counted above." The Meetings page also stops
+calling a meeting upcoming once its time has passed.
+
+**On the real account**, all 44 of Affinity's words have a meaning. Neurotech reads Sourcing
+1,604 · Selected 296 · Discussing 58 · Committed 14 · Passed 23: the no-reply entries moved
+back to Selected, and the on-hold ones moved to Passed. 90 of 90 properties hold.

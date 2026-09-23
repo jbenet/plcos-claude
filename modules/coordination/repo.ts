@@ -114,9 +114,29 @@ const toRestriction = (r: RestrictionRow): Restriction => ({
   recordedByName: r.recorded_by_name, recordedAt: new Date(r.recorded_at),
 });
 
-export async function listRestrictions(): Promise<Restriction[]> {
+/**
+ * Every restriction on file — except, unless asked for, the do-not-contact marks read from a
+ * CRM list (N53). Those are shown where the person comes up: their page, their row in the
+ * pipeline, a route or an ask toward them. An overview that lists every one of them turns a
+ * quiet instruction into a banner (Juan, 24 Sep). Enforcement does not read this: the route
+ * planner and the ask guard check `restrictionsFor`, which returns every restriction.
+ */
+export async function listRestrictions(opts: { includeListMarks?: boolean } = {}): Promise<Restriction[]> {
   const db = await getDb();
-  return (await db.query<RestrictionRow>(`${RESTRICTION_SELECT} order by r.recorded_at desc`)).map(toRestriction);
+  const where = opts.includeListMarks ? '' : ` where not (r.scope = 'blanket' and coalesce(r.source, '') like 'affinity:list:%')`;
+  return (await db.query<RestrictionRow>(`${RESTRICTION_SELECT}${where} order by r.recorded_at desc`)).map(toRestriction);
+}
+
+/** Which of these entities carry a do-not-approach instruction on them, by any route (rule 8). */
+export async function blanketRestricted(entityIds: string[]): Promise<Set<string>> {
+  if (!entityIds.length) return new Set();
+  const db = await getDb();
+  const rows = await db.query<{ entity_id: string }>(
+    `select distinct entity_id from coordination.restriction
+      where entity_id = any($1::uuid[]) and scope = 'blanket' and (expires_at is null or expires_at > current_date)`,
+    [entityIds],
+  );
+  return new Set(rows.map((r) => r.entity_id));
 }
 
 export async function restrictionsFor(entityId: string, q?: Queryable): Promise<Restriction[]> {

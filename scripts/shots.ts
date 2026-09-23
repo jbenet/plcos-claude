@@ -196,6 +196,26 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N53: [
+    {
+      name: '01-search-and-filter',
+      path: '/targets?status=discussing',
+      prepare: async (page) => {
+        await page.locator('.pfilters input[type=search]').fill('juan');
+        await page.locator('.pfilters select[aria-label="Meetings"]').selectOption('some');
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: '02-sorted',
+      path: '/targets?status=selected',
+      prepare: async (page) => {
+        await page.locator('th button', { hasText: 'Last touch' }).click();
+        await page.waitForTimeout(250);
+      },
+    },
+    { name: '03-passed', path: '/targets?status=passed' },
+  ],
   N52: [
     { name: '01-committed', path: '/targets?status=committed' },
     {

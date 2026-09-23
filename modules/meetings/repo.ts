@@ -46,7 +46,10 @@ export async function upcomingMeetings(): Promise<Meeting[]> {
   const db = await getDb();
   return (
     await db.query<MeetingRow>(
+      // Still ahead: a scheduled meeting whose time has passed is not upcoming, whether or not
+      // anyone has recorded that it happened.
       `${MEETING_SELECT} where ${MEETINGS_ONLY} and m.held_on is null and m.scheduled_for is not null
+          and m.scheduled_for >= now() - interval '2 hours'
         order by m.scheduled_for`,
     )
   ).map(toMeeting);
@@ -183,8 +186,14 @@ export async function touchpointsFor(entityId: string, vehicleId: string | null)
   return rows.map(toTouch).sort((a, b) => when(b) - when(a));
 }
 
-/** What the log adds up to. Pure: the pipeline and the LP page both read it from here. */
-export function summarize(touches: Touchpoint[], now = new Date()): TouchpointSummary {
+/**
+ * What the log adds up to. Pure: the pipeline and the LP page both read it from here. Only the
+ * LP's own touchpoints count; their firm's are summed apart, and shown in the log with the
+ * firm's name (N55).
+ */
+export function summarize(all: Touchpoint[], now = new Date()): TouchpointSummary {
+  const touches = all.filter((t) => !t.viaOrganization);
+  const firm = all.filter((t) => t.viaOrganization);
   const held = touches.filter((t) => t.on && t.on.getTime() <= now.getTime());
   const contact = held.filter((t) => t.channel !== 'research');
   const meetings = held.filter((t) => t.channel === 'meeting' || t.channel === 'call').map((t) => t.on!);
@@ -210,6 +219,12 @@ export function summarize(touches: Touchpoint[], now = new Date()): TouchpointSu
     read: withRead ? { read: withRead.read!, on: withRead.on, byName: withRead.readByName } : null,
     lastResearched: research,
     total: touches.length,
+    withFirm: {
+      total: firm.length,
+      lastTouch: firm.filter((t) => t.on && t.on.getTime() <= now.getTime()).reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null),
+      nextMeeting: firm.filter((t) => !t.on && t.scheduledFor && t.scheduledFor.getTime() > now.getTime())
+        .reduce<Date | null>((a, t) => (!a || t.scheduledFor! < a ? t.scheduledFor! : a), null),
+    },
   };
 }
 

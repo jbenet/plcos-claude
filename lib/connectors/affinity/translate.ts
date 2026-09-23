@@ -193,10 +193,15 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
           const amount = committed ?? low ?? high;
           let status: PursuitStatus | null = map?.status ?? null;
           if (amount && status !== 'passed') status = 'committed';
+          // Marked do-not-contact: we stopped, whatever the word says (N53, Juan, 24 Sep).
+          const dnc = /^(yes|true|y)$/i.test(text(field(m.doNotContact)) ?? '');
+          if (dnc) status = 'passed';
           if (!status) counts.unplaced++;
           const passed = status === 'passed';
           const passReason = text(field(m.passReason));
-          const reason = passed ? (passReason ? reasonOf(passReason) ?? map?.reason ?? 'other' : map?.reason ?? 'other') : null;
+          const reason = !passed ? null : dnc ? 'do_not_contact'
+            : passReason ? reasonOf(passReason) ?? map?.reason ?? 'other' : map?.reason ?? 'other';
+          const passedBy = !passed ? null : dnc ? 'us' : map?.passedBy ?? 'them';
           const implied = [...new Set([...(map?.implies ?? []), ...(amount ? ['soft'] : [])])];
           const ownerRef = people(field(m.owner)).find((p) => p.type === 'internal');
           const owner = ownerRef ? teamByAffinity.get(ownerRef.id) : undefined;
@@ -223,7 +228,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
              where strategy.pursuit.source = 'affinity'
              returning (status_source = 'us') as ours, closed_at is not null as closed`,
             [
-              entity, vehicle.id, owner ?? users.get(PLACEHOLDER)!, null, status, passed ? map?.passedBy ?? 'them' : null, reason,
+              entity, vehicle.id, owner ?? users.get(PLACEHOLDER)!, null, status, passedBy, reason,
               implied, map?.next ? `${map.next} (Affinity)` : null,
               `list:${t.list.id}:entry:${e.id}`, fetchedAt, place.said, owner ? null : ownerSaid,
               ended ? fetchedAt : null,
@@ -300,7 +305,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
           }
 
           // Do not contact: an instruction about the target, checked on every route (rule 8).
-          if (/^(yes|true|y)$/i.test(text(field(m.doNotContact)) ?? '')) {
+          if (dnc) {
             const has = await tx.one<{ n: string }>(
               `select count(*)::text as n from coordination.restriction where entity_id = $1 and scope = 'blanket' and source = $2`, [entity, doc],
             );

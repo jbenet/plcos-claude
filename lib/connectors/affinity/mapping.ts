@@ -131,11 +131,14 @@ export function proposeValue(value: string): ValueMap | null {
   if (/introducer|non.?lp|not an lp/.test(v)) return { skip: true };
   if (/on hold|paused/.test(v)) {
     const inner = proposeValue(v.replace(/on hold|paused/, '').replace(/^[\s\-–—:]+/, '').replace(/[\s\-–—:]+$/, ''));
-    return { ...(inner && !inner.skip ? inner : { status: null }), next: 'On hold' };
+    // On its own, "On Hold" was the team's do-not-contact (Juan, 24 Sep): we stopped.
+    if (!inner || inner.skip) return { status: 'passed', passedBy: 'us', reason: 'do_not_contact' };
+    return { ...inner, next: 'On hold' };
   }
   if (/\blost\b/.test(v)) {
-    const quiet = /no response|went dark|ghost/.test(v);
-    return { status: 'passed', passedBy: quiet ? 'quiet' : 'them', reason: reasonOf(v) ?? 'other', ...(quiet ? { implies: ['reached_out'] } : {}) };
+    // Silence is not a pass (N53): no reply keeps them Selected, and the log shows the wait.
+    if (/no response|went dark|ghost/.test(v)) return { status: 'selected', implies: ['reached_out'] };
+    return { status: 'passed', passedBy: 'them', reason: reasonOf(v) ?? 'other' };
   }
   if (/pass|declin|not interested/.test(v)) return { status: 'passed', passedBy: 'them', reason: reasonOf(v) ?? 'other' };
   if (/wired|funded|cash|received/.test(v)) return { status: 'committed', implies: ['soft', 'signed', 'wired'] };
