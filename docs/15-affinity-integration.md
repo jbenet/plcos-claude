@@ -40,7 +40,7 @@ shape both.
 | Plan tier | Juan didn't know. The connection test (23 Sep) found the 100,000-a-month cap: Scale or Advanced. Only Advanced has Data Share, and the API can't tell the two apart. |
 | Lists | Juan named the list that probably tracks Neurotech, and a second that may. Both are in `data/real/init.jsonc`, not here: list names describe the real pipeline, so they stay with the real data. Rails' list is unknown; ask someone later. Several SPV lists exist, each with "SPV" in the name. |
 | A view-only key | Not possible — the key is read-write and cannot be changed. Hence rule 1. |
-| Notes | Import note **text** for Neurotech only, so the strategy side has something to reason with. Health detail about a person or their family is flagged and never copied into a derived record (Report 4 §6.2). |
+| Notes | Import note **text** for Neurotech only, so the strategy side has something to reason with. **Changed 23 Sep:** keep every note in the account, whichever list it is on — "replicate the Affinity database locally so we can query against it whenever we want, and we only download the records once (+ updates)". Read in bulk (N49, docs/16 §1). Health detail about a person or their family is flagged and never copied into a derived record (Report 4 §6.2). |
 | What Claude may see | "I'm ok with you seeing the info, just keep it confidential and don't send it anywhere." |
 
 ---
@@ -161,8 +161,8 @@ whenever something else, like the screenshot work in N40, came first.
 The lists the init file names, and the lists that say SPV. For each:
 
 - every entry, with its field values (`fieldTypes` = all four kinds), a hundred to a request;
-- note text for each entry, only where the vehicle's init entry says `importNotes` (Neurotech),
-  and never on an SPV list;
+- ~~note text for each entry, only where the vehicle's init entry says `importNotes`~~ —
+  replaced in N49 by one bulk read of every note in the account (docs/16 §1);
 - relationship strengths to the team, the strongest hundred per person, only on a People list
   that a vehicle claims.
 

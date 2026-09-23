@@ -30,18 +30,36 @@ rate-limit headers, and a log of every request without bodies (docs/15 §5).
 | Connection test | Developer → Affinity | whoami, rate limit | 2 requests |
 | Discovery (N41) | → Lists | every list, its fields, the account's users | one per list, plus a few |
 | First slice (N42) | → First slice | the entries on each list the init file names, plus SPV lists | one per hundred entries |
-| Notes and relationships | → First slice, after a go-ahead | per entry | one or more per entry — **held** |
+| Notes (N49) | → Notes | every note in the account but replies, with what each is attached to | one per hundred notes, plus a count |
+| Relationships | → First slice, after a go-ahead | per person on a vehicle's lists | one per person — **held** |
 
 Everything lands in `sources.raw_record` keyed by source id and a hash of the payload, so a
 second read stores only what changed, and an old version is kept beside a new one. Each run is a
 row in `sources.sync_run` with its counts, its gaps and, for a held run, its estimate.
 
-**Notes and relationships are deliberately not read yet** (Juan, 23 Sep): get the entries wired
-in first. When they are, per-entry reads are the expensive way. Affinity's `GET /v2/notes` pages
-through every note in the account a hundred at a time. Its count comes back from a single request
-(`limit=0&totalCount=true`), so the bulk cost is known before spending it. The bulk read would be
-filtered to Neurotech entries before anything is stored: note text is imported for Neurotech only.
-Relationships have no bulk endpoint; they stay per person, which is why they're a separate choice.
+**Notes, in bulk (N49).** Juan, 23 Sep: replicate Affinity locally — each record downloaded
+once, then only its changes — and keep the notes on every list, not just Neurotech's. So the
+per-entry plan (a request per entry, one vehicle's notes kept) was replaced by `GET /v2/notes`,
+which pages through every note a hundred at a time. With `includes`, each note carries the
+people, organizations and opportunities it is attached to (the first hundred of each, with a
+total). The count comes first, from one request that returns no notes (`limit=0&totalCount=true`),
+and a read is approved as that number: it stops if it would go past it.
+
+- **After the first read**, the next asks only for notes created or updated since that read
+  began, less a day, in two passes because a note nobody edited has no `updatedAt`. A note
+  deleted in Affinity stays here until someone reads everything again.
+- **Replies** are not in the bulk list. Each note says how many it has; reading them would be a
+  request per note, so they are counted and wait.
+- **Which LP a note is about.** A note attached to a person on a list is theirs. So is one
+  attached to the organization the list gives as theirs: most of the team's notes about an LP
+  sit on the LP's firm (measured on the first read). A note on no list's people or firms is
+  kept for later.
+- **Where they show.** On an LP's page in this tool, newest first, with who wrote each and when
+  it was read. A note that mentions someone's health is closed until opened, and nothing
+  derived ever quotes it (Report 4 §6.2).
+
+The first real read took 54 requests, exactly its estimate. Relationships have no bulk
+endpoint; they stay per person, and held.
 
 ## 2. Inventory (→ Inventory)
 
@@ -115,3 +133,5 @@ and running twice changes nothing (a property checks it). Each run is a `sync_ru
 | A list is missing or named wrong | edit `init.jsonc`, reload it | discovery, slice |
 | A field was read wrongly | fix the code; the raw copy is untouched | translation |
 | Affinity changed | read the slice again (only changes are stored) | inventory, translation |
+| New or edited notes | Notes → read what changed (counted first, usually two requests) | nothing — the LP pages read the copy |
+| A note was deleted in Affinity | Notes → read everything again | nothing |

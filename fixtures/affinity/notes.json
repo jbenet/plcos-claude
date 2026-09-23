@@ -1,1 +1,672 @@
-{"data":[],"pagination":{"prevUrl":null,"nextUrl":null,"totalCount":412}}
+{
+ "data": [
+  {
+   "id": 30016,
+   "type": "entities",
+   "content": {
+    "html": "<p>Ruth asked for the track-record deck again. Sam replied with the link.</p>"
+   },
+   "creator": {
+    "id": 90001,
+    "firstName": "Juan",
+    "lastName": null,
+    "primaryEmailAddress": "juan@example.com",
+    "type": "internal"
+   },
+   "mentions": [
+    {
+     "id": 300160,
+     "type": "person",
+     "person": {
+      "id": 90003,
+      "firstName": "Sam",
+      "lastName": "Ferreira",
+      "primaryEmailAddress": "sam@example.com",
+      "type": "internal"
+     }
+    }
+   ],
+   "createdAt": "2026-09-19T15:30:00Z",
+   "updatedAt": null,
+   "repliesCount": 2,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7003,
+      "firstName": "Ruth",
+      "lastName": "Kessler",
+      "primaryEmailAddress": "ruth@kessler-partners.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   }
+  },
+  {
+   "id": 30003,
+   "type": "entities",
+   "content": {
+    "html": "<p>Soft circle at 2.5M, pending her partner's sign-off. Prefers a side letter on reporting.</p>"
+   },
+   "creator": {
+    "id": 90002,
+    "firstName": "Mara",
+    "lastName": "Vance",
+    "primaryEmailAddress": "mara@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-09-19T15:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7004,
+      "firstName": "Ana",
+      "lastName": "Vidal",
+      "primaryEmailAddress": "ana@vidal.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [
+     {
+      "id": 8102,
+      "name": "Vidal — Neurotech I",
+      "listId": 110,
+      "listName": "PLC Neurotech I — Fundraising",
+      "isRestricted": false,
+      "isRedacted": false
+     }
+    ],
+    "totalCount": 1
+   }
+  },
+  {
+   "id": 30002,
+   "type": "entities",
+   "content": {
+    "html": "<p>Her husband is recovering from surgery, so she is slower on email this month. Not a signal about interest.</p>"
+   },
+   "creator": {
+    "id": 90001,
+    "firstName": "Juan",
+    "lastName": null,
+    "primaryEmailAddress": "juan@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-09-18T16:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7001,
+      "firstName": "Nadia",
+      "lastName": "Brandt",
+      "primaryEmailAddress": "nadia@brandt-family.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   }
+  },
+  {
+   "id": 30005,
+   "type": "entities",
+   "content": {
+    "html": "<p>Countersigned subscription docs received 12 Sep. Wire expected within 10 business days.</p>"
+   },
+   "creator": {
+    "id": 90003,
+    "firstName": "Sam",
+    "lastName": "Ferreira",
+    "primaryEmailAddress": "sam@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-09-12T11:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7006,
+      "firstName": "Yuki",
+      "lastName": "Tanaka",
+      "primaryEmailAddress": "yuki@tanaka.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [
+     {
+      "id": 8103,
+      "name": "Tanaka — Neurotech I",
+      "listId": 110,
+      "listName": "PLC Neurotech I — Fundraising",
+      "isRestricted": false,
+      "isRedacted": false
+     }
+    ],
+    "totalCount": 1
+   }
+  },
+  {
+   "id": 30001,
+   "type": "entities",
+   "content": {
+    "html": "<p>Call with Nadia. Wants the data room before the IC on 14 Oct. Asked who else is in the first close.</p>"
+   },
+   "creator": {
+    "id": 90001,
+    "firstName": "Juan",
+    "lastName": null,
+    "primaryEmailAddress": "juan@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-09-10T18:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7001,
+      "firstName": "Nadia",
+      "lastName": "Brandt",
+      "primaryEmailAddress": "nadia@brandt-family.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   }
+  },
+  {
+   "id": 30008,
+   "type": "ai-notetaker",
+   "content": {
+    "html": "<p><b>Summary.</b> Fund size, fees and reporting cadence. She is comfortable with the fee terms.</p><p><b>Next step.</b> Send the draft side letter.</p>"
+   },
+   "creator": {
+    "id": 90001,
+    "firstName": "Juan",
+    "lastName": null,
+    "primaryEmailAddress": "juan@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-09-05T17:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7004,
+      "firstName": "Ana",
+      "lastName": "Vidal",
+      "primaryEmailAddress": "ana@vidal.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "interaction": {
+    "id": 55012,
+    "type": "meeting"
+   },
+   "transcriptId": 4401
+  },
+  {
+   "id": 30007,
+   "type": "interaction",
+   "content": {
+    "html": "<p>Intro call arranged by a mutual friend. Open to a follow-up in October, after their offsite.</p>"
+   },
+   "creator": {
+    "id": 90002,
+    "firstName": "Mara",
+    "lastName": "Vance",
+    "primaryEmailAddress": "mara@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-09-02T14:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7002,
+      "firstName": "Omar",
+      "lastName": "Haddad",
+      "primaryEmailAddress": "omar@haddad.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "interaction": {
+    "id": 55009,
+    "type": "call"
+   }
+  },
+  {
+   "id": 30009,
+   "type": "interaction",
+   "content": {
+    "html": "<p>Sent the one-pager and the deck. No reply yet.</p>"
+   },
+   "creator": {
+    "id": 90004,
+    "firstName": "Inés",
+    "lastName": "Duarte",
+    "primaryEmailAddress": "ines@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-08-30T10:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7005,
+      "firstName": "Marcus",
+      "lastName": "Obi",
+      "primaryEmailAddress": "marcus@obicapital.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "interaction": {
+    "id": 55007,
+    "type": "email"
+   }
+  },
+  {
+   "id": 30006,
+   "type": "interaction",
+   "content": {
+    "html": "<p>First meeting, at their office. Strong thesis fit; wants to see the pipeline of portfolio companies before a second meeting.</p>"
+   },
+   "creator": {
+    "id": 90001,
+    "firstName": "Juan",
+    "lastName": null,
+    "primaryEmailAddress": "juan@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-08-21T16:00:00Z",
+   "updatedAt": "2026-08-22T09:00:00Z",
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7001,
+      "firstName": "Nadia",
+      "lastName": "Brandt",
+      "primaryEmailAddress": "nadia@brandt-family.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "interaction": {
+    "id": 55004,
+    "type": "meeting"
+   }
+  },
+  {
+   "id": 30004,
+   "type": "entities",
+   "content": {
+    "html": "<p>Declined: fund is fully allocated to 2027. Do not re-approach before Q2.</p>"
+   },
+   "creator": {
+    "id": 90003,
+    "firstName": "Sam",
+    "lastName": "Ferreira",
+    "primaryEmailAddress": "sam@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-07-14T12:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7003,
+      "firstName": "Ruth",
+      "lastName": "Kessler",
+      "primaryEmailAddress": "ruth@kessler-partners.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   }
+  },
+  {
+   "id": 30010,
+   "type": "entities",
+   "content": {
+    "html": "<p>Signed the subscription agreement. Their holding entity changed its name, so the documents will be re-signed.</p>"
+   },
+   "creator": {
+    "id": 90001,
+    "firstName": "Juan",
+    "lastName": null,
+    "primaryEmailAddress": "juan@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-06-20T13:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7006,
+      "firstName": "Yuki",
+      "lastName": "Tanaka",
+      "primaryEmailAddress": "yuki@tanaka.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [
+     {
+      "id": 8103,
+      "name": "Tanaka — Neurotech I",
+      "listId": 110,
+      "listName": "PLC Neurotech I — Fundraising",
+      "isRestricted": false,
+      "isRedacted": false
+     }
+    ],
+    "totalCount": 1
+   }
+  },
+  {
+   "id": 30011,
+   "type": "entities",
+   "content": {
+    "html": "<p>Interested in the Cortex SPV at 250k; waiting on their IC.</p>"
+   },
+   "creator": {
+    "id": 90002,
+    "firstName": "Mara",
+    "lastName": "Vance",
+    "primaryEmailAddress": "mara@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-05-11T09:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7005,
+      "firstName": "Marcus",
+      "lastName": "Obi",
+      "primaryEmailAddress": "marcus@obicapital.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [
+     {
+      "id": 8301,
+      "name": "Obi Capital — Cortex",
+      "listId": 103,
+      "listName": "SPV – Cortex",
+      "isRestricted": false,
+      "isRedacted": false
+     }
+    ],
+    "totalCount": 1
+   }
+  },
+  {
+   "id": 30012,
+   "type": "entities",
+   "content": {
+    "html": "<p>Board update: runway through Q3 2027. No fundraising ask from them this year.</p>"
+   },
+   "creator": {
+    "id": 90003,
+    "firstName": "Sam",
+    "lastName": "Ferreira",
+    "primaryEmailAddress": "sam@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-04-02T15:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "companiesPreview": {
+    "data": [
+     {
+      "id": 6101,
+      "name": "Northwind Robotics",
+      "domain": "northwind.example"
+     }
+    ],
+    "totalCount": 1
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   }
+  },
+  {
+   "id": 30013,
+   "type": "entities",
+   "content": {
+    "html": "<p>Met at the neurotech symposium. Runs a foundation's program-related investments; might suit the grants rail rather than the fund.</p>"
+   },
+   "creator": {
+    "id": 90001,
+    "firstName": "Juan",
+    "lastName": null,
+    "primaryEmailAddress": "juan@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-03-15T11:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7101,
+      "firstName": "Leila",
+      "lastName": "Haddou",
+      "primaryEmailAddress": "leila@foundation.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   }
+  },
+  {
+   "id": 30015,
+   "type": "entities",
+   "content": {
+    "html": "<p>Reminder to self: refresh the LP list before Q1.</p>"
+   },
+   "creator": {
+    "id": 90001,
+    "firstName": "Juan",
+    "lastName": null,
+    "primaryEmailAddress": "juan@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-01-10T08:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   }
+  },
+  {
+   "id": 30014,
+   "type": "entities",
+   "content": {
+    "html": "<p>Omar invested in two of our earlier SPVs and asked to hear about the next one.</p>"
+   },
+   "creator": {
+    "id": 90005,
+    "firstName": "Theo",
+    "lastName": "Grant",
+    "primaryEmailAddress": "theo@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2025-11-03T10:00:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7002,
+      "firstName": "Omar",
+      "lastName": "Haddad",
+      "primaryEmailAddress": "omar@haddad.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   }
+  }
+ ],
+ "pagination": {
+  "prevUrl": null,
+  "nextUrl": null,
+  "totalCount": 16
+ }
+}

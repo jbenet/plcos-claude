@@ -13,7 +13,9 @@ import { AFFINITY_ORIGIN, guardedFetch, type FetchLike } from './fetch';
  *   2. The budget allows it — our own per-minute ceiling, our share of the account's month,
  *      and a floor under the account's remaining month. Otherwise: wait, or refuse.
  *   3. GET, no body, no redirects (fetch.ts).
- *   4. A 429 waits for the reset the headers give and tries again, three times at most.
+ *   4. A 429 waits for the reset the headers give and tries again, three times at most. A
+ *      network failure is tried twice more, a second and then two apart: a GET is safe to
+ *      repeat, and a connection kept from an hour ago fails once and then works.
  *   5. Every attempt is logged — path, status, time, budget. Never a body or a header.
  *   6. The key appears in nothing this client writes or throws.
  */
@@ -93,6 +95,7 @@ export type Query = Record<string, string | number | readonly string[] | undefin
 
 const SOURCE = 'affinity';
 const MAX_TRIES = 4;
+const MAX_NETWORK_TRIES = 3;
 const MAX_WAIT_MS = 60_000;
 const MAX_PAGES = 10_000;
 
@@ -181,6 +184,7 @@ export function affinityClient(opts: ClientOptions): AffinityClient {
     const endpoint = allowed(path);
     if (!endpoint) return refuse('(not allowlisted)', path, 'not on the allowlist');
 
+    let networkFailures = 0;
     for (let attempt = 1; ; attempt++) {
       await checkMonth(endpoint.template, path);
       await pace();
@@ -191,8 +195,17 @@ export function affinityClient(opts: ClientOptions): AffinityClient {
       try {
         res = await opts.transport.get(url, { Authorization: `Bearer ${opts.key}`, Accept: 'application/json' });
       } catch (err) {
-        const why = err instanceof Error ? `${err.name}: ${err.message}` : 'unknown';
-        await log({ endpoint: endpoint.template, path, outcome: 'network_error', status: null, durationMs: now() - started, note: why });
+        // undici's "fetch failed" says nothing on its own; the cause says which failure it was.
+        const cause = (err as { cause?: { code?: string; message?: string } } | null)?.cause;
+        const detail = cause?.code ?? cause?.message;
+        const why = err instanceof Error ? `${err.name}: ${err.message}${detail ? ` (${detail})` : ''}` : 'unknown';
+        networkFailures++;
+        const again = networkFailures < MAX_NETWORK_TRIES;
+        await log({ endpoint: endpoint.template, path, outcome: 'network_error', status: null, durationMs: now() - started, note: again ? `${why}; trying again` : why });
+        if (again) {
+          await sleep(1000 * networkFailures);
+          continue;
+        }
         throw new AffinityError(0, redact(`Could not reach Affinity (${why})`));
       }
       readHeaders(res.headers, res.status >= 200 && res.status < 300);

@@ -182,11 +182,11 @@ export default async function Inventory() {
       {inv.notes && (
         <div className="card">
           <div className="chead">
-            <h2>Notes</h2>
-            <span className="lbl">{n(inv.notes.notes)} notes · {n(inv.notes.entities)} entries</span>
+            <h2><Link href="/dev/affinity/notes">Notes</Link></h2>
+            <span className="lbl">{n(inv.notes.notes)} notes · attached to {n(inv.notes.entities)} people, organizations and opportunities</span>
           </div>
           <div className="cbody">
-            <div className="fact"><span>Mention health</span><span>{n(inv.notes.health)} — flagged, never shown, never copied into anything derived</span></div>
+            <div className="fact"><span>Mention health</span><span>{n(inv.notes.health)} — flagged: closed until opened on an LP&rsquo;s page, and never copied into anything derived</span></div>
             <div className="fact"><span>By year</span><span>{inv.notes.byYear.map((y) => `${y.year}: ${n(y.n)}`).join(' · ')}</span></div>
             <div className="fact"><span>By author</span><span>{inv.notes.byAuthor.map((a) => `${a.name} ${n(a.n)}`).join(' · ')}</span></div>
           </div>

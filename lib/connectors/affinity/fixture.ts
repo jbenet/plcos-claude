@@ -9,7 +9,39 @@ import type { Transport } from './client';
  *
  * `/v2/lists?cursor=p2` reads `lists@p2.json`: the path with its slashes as dots, and the
  * cursor after an @. A path with no file answers 404, as Affinity would.
+ *
+ * A collection answers `filter` (`updatedAt>=…`, terms joined by `|` meaning or), `limit=0`
+ * and `totalCount` the way Affinity does, so an incremental read can be shown finding nothing
+ * new instead of re-reading the file.
  */
+
+type Item = Record<string, unknown>;
+
+function matches(item: Item, filter: string): boolean {
+  return filter.split('|').some((term) => {
+    const m = /^([a-zA-Z.]+)(>=|<=|>|<|=)(.+)$/.exec(term.trim());
+    if (!m) return true;
+    const [, field, op, want] = m as unknown as [string, string, string, string];
+    const have = field!.split('.').reduce<unknown>((o, k) => (o as Item | null)?.[k], item);
+    if (have === null || have === undefined) return false;
+    if (op === '=') return String(have) === want;
+    const a = new Date(String(have)).getTime();
+    const b = new Date(want).getTime();
+    return op === '>=' ? a >= b : op === '<=' ? a <= b : op === '>' ? a > b : a < b;
+  });
+}
+
+function narrow(body: string, url: URL): string {
+  const page = JSON.parse(body) as { data?: Item[]; pagination?: Record<string, unknown> };
+  if (!Array.isArray(page.data)) return body;
+  const filter = url.searchParams.get('filter');
+  const data = filter ? page.data.filter((d) => matches(d, filter)) : page.data;
+  const pagination: Record<string, unknown> = { ...(page.pagination ?? {}) };
+  if (url.searchParams.get('totalCount') === 'true') pagination.totalCount = data.length;
+  else delete pagination.totalCount;
+  return JSON.stringify({ ...page, data: url.searchParams.get('limit') === '0' ? [] : data, pagination });
+}
+
 export function fixtureTransport(): Transport {
   let calls = 0;
   return {
@@ -42,6 +74,7 @@ export function fixtureTransport(): Transport {
           body = JSON.stringify({ errors: [{ code: 'not-found', message: `No fixture for ${url.pathname}` }] });
         }
       }
+      if (status === 200) body = narrow(body, url);
       return { status, headers, text: async () => body };
     },
   };

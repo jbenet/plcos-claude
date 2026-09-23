@@ -7,7 +7,7 @@ import { ago } from '@/lib/time';
 import { affinityReady } from '@/lib/connectors/affinity';
 import { sliceRunning, sliceTargets } from '@/lib/connectors/affinity/slice';
 import { latestRun, rawCounts } from '@/modules/sources';
-import { countNotesAction, runSliceAction } from '../actions';
+import { runSliceAction } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +15,8 @@ const TYPE: Record<string, string> = { company: 'Organizations', opportunity: 'O
 
 const KIND: Record<string, string> = {
   list_entry: 'Entries on a list, with their field values',
-  note: 'Notes',
-  note_link: 'Which entry each note was read for',
+  note: 'Notes — every note in the account, with what each is attached to',
+  note_link: 'Which entry a note was read for (the per-entry read, before N49)',
   relationship: 'Relationship sets — one per person, the strongest hundred',
   list: 'Lists (discovery)',
   list_field: 'Fields on a list (discovery)',
@@ -28,15 +28,16 @@ const n = (x: number) => x.toLocaleString('en-US');
 export default async function Slice() {
   const demo = config.data.profile === 'demo';
   const ready = affinityReady();
-  const [targets, run, counts, noteCount] = await Promise.all([
-    sliceTargets(), latestRun('affinity', 'slice'), rawCounts('affinity'), latestRun('affinity', 'count-notes'),
+  const [targets, run, counts] = await Promise.all([
+    sliceTargets(), latestRun('affinity', 'slice'), rawCounts('affinity'),
   ]);
-  const nc = (noteCount?.detail ?? {}) as { total?: number | null; bulkRequests?: number | null };
   const running = sliceRunning();
   // A run the database calls running that this process is not running was cut off by a
   // restart. Saying "running" about it would be staleness rendered as progress.
   const interrupted = run?.status === 'running' && !running;
   const d = (run?.detail ?? {}) as { estimate?: number; notesFor?: number; relationshipsFor?: number; entries?: Record<string, number>; gapCount?: number; gaps?: string[]; ceiling?: number };
+  // A run from before N49 priced notes and relationships together; only relationships are left.
+  const relationshipsFor = d.relationshipsFor ?? d.estimate ?? 0;
 
   return (
     <Page
@@ -44,23 +45,22 @@ export default async function Slice() {
       inspector={
         <>
           <div className="lbl">What the slice reads</div>
-          <div className="ihead">Entries, then notes and relationships</div>
+          <div className="ihead">Entries, then relationships</div>
           <div className="imeta">Landed raw; nothing translated yet</div>
           <div className="scope">
-            <div className="lbl">Notes, for Neurotech only</div>
+            <div className="lbl">Notes come separately</div>
             <p>
-              Note text is read only for lists whose vehicle says <code>importNotes</code> in the
-              init file, and never for an SPV list. A note that mentions a person&rsquo;s or a
-              family&rsquo;s health is flagged when the notes are inventoried, and that detail is
-              never copied into anything derived from it.
+              Every note in the account is read in bulk, a hundred to a request, on{' '}
+              <Link href="/dev/affinity/notes">Notes</Link>. This page used to read them one entry
+              at a time, which cost a request per entry.
             </p>
           </div>
           <div className="scope">
             <div className="lbl">Estimated before it is spent</div>
             <p>
-              Entries come a hundred to a request. Notes and relationships are a request per entry,
-              so that part is counted first, and a run over {n(config.affinity.sliceCeiling)} requests
-              holds until somebody approves the number.
+              Entries come a hundred to a request. Relationships are a request per person, so that
+              part is counted first, and a run over {n(config.affinity.sliceCeiling)} requests holds
+              until somebody approves the number.
             </p>
           </div>
           <div className="note">
@@ -97,7 +97,7 @@ export default async function Slice() {
           </div>
         ) : (
           <table className="list">
-            <thead><tr><th>List</th><th>Holds</th><th>Why</th><th>Entries</th><th>Notes</th><th>Relationships</th></tr></thead>
+            <thead><tr><th>List</th><th>Holds</th><th>Why</th><th>Entries</th><th>Relationships</th></tr></thead>
             <tbody>
               {targets.map((t) => (
                 <tr key={t.list.id}>
@@ -105,7 +105,6 @@ export default async function Slice() {
                   <td className="muted">{TYPE[t.list.type]}</td>
                   <td>{t.why === 'init' ? t.vehicleName : <span className="muted">says SPV — no vehicle yet</span>}</td>
                   <td>yes</td>
-                  <td>{t.notes ? 'text' : <span className="muted">no</span>}</td>
                   <td>{t.relationships ? 'yes' : <span className="muted">no</span>}</td>
                 </tr>
               ))}
@@ -139,8 +138,11 @@ export default async function Slice() {
               <div className="fact"><span>Records</span><span>{n(run.records)} seen · {n(run.newRecords)} new or changed</span></div>
               {d.estimate !== undefined && (
                 <div className="fact">
-                  <span>Per-entry reads</span>
-                  <span>about {n(d.estimate)} requests: notes for {n(d.notesFor ?? 0)}, relationships for {n(d.relationshipsFor ?? 0)}</span>
+                  <span>Per-person reads</span>
+                  <span>
+                    relationships for {n(relationshipsFor)} people, about {n(relationshipsFor)} requests
+                    {d.notesFor ? <span className="muted"> · this run also priced notes for {n(d.notesFor)} entries, which the bulk read now covers</span> : null}
+                  </span>
                 </div>
               )}
               {!!d.gapCount && (
@@ -158,24 +160,15 @@ export default async function Slice() {
               {run.status === 'held' && !running && (
                 <div style={{ marginTop: 12 }}>
                   <div className="acts" style={{ marginTop: 0 }}>
-                    {!!d.relationshipsFor && (
-                      <form action={runSliceAction} style={{ flex: 1 }}>
-                        <input type="hidden" name="approvedEstimate" value={d.notesFor ?? 0} />
-                        <input type="hidden" name="scope" value="notes" />
-                        <button className="btn" type="submit" style={{ width: '100%' }}>
-                          Notes only: about {n(d.notesFor ?? 0)} requests
-                        </button>
-                      </form>
-                    )}
                     <form action={runSliceAction} style={{ flex: 1 }}>
-                      <input type="hidden" name="approvedEstimate" value={d.estimate ?? 0} />
+                      <input type="hidden" name="approvedEstimate" value={relationshipsFor} />
                       <button className="btn c" type="submit" style={{ width: '100%' }}>
-                        {d.relationshipsFor ? 'Notes and relationships' : 'Go ahead'}: about {n(d.estimate ?? 0)} requests
+                        Relationships: about {n(relationshipsFor)} requests
                       </button>
                     </form>
                   </div>
                   <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
-                    Each approves its number and a quarter more, not whatever the run turns out to
+                    It approves that number and a quarter more, not whatever the run turns out to
                     cost.{' '}
                     {typeof (run.detail as { orgRemaining?: number }).orgRemaining === 'number'
                       ? `The account had ${n((run.detail as { orgRemaining: number }).orgRemaining)} requests left this month when this run held; `
@@ -191,30 +184,14 @@ export default async function Slice() {
 
       <div className="card">
         <div className="chead">
-          <h2>Notes, the cheaper way?</h2>
-          <span className="lbl">{noteCount ? `counted ${ago(noteCount.startedAt)}` : 'not counted'}</span>
+          <h2>Notes</h2>
+          <span className="lbl">read in bulk since N49</span>
         </div>
         <div className="cbody">
-          <p style={{ margin: '0 0 10px', fontSize: 13 }}>
-            Reading notes entry by entry costs a request per entry. Affinity can also page through
-            every note in the account a hundred at a time; the text of notes on other lists would
-            pass through and be dropped, never stored. Which costs less depends on how many notes
-            the account holds — one request finds out, and returns none of them.
+          <p style={{ margin: 0, fontSize: 13 }}>
+            Every note in the account, a hundred to a request, each with who and what it is attached
+            to — on <Link href="/dev/affinity/notes">Notes</Link>.
           </p>
-          {noteCount?.status === 'ok' && typeof nc.total === 'number' && (
-            <>
-              <div className="fact"><span>Notes in the account</span><span>{n(nc.total)}</span></div>
-              <div className="fact"><span>Read in bulk</span><span>about {n(nc.bulkRequests ?? 0)} requests, then filtered to Neurotech</span></div>
-              {typeof d.notesFor === 'number' && (
-                <div className="fact"><span>Read entry by entry</span><span>at least {n(d.notesFor)} requests, Neurotech only</span></div>
-              )}
-            </>
-          )}
-          {noteCount?.status === 'failed' && <div className="warn" style={{ fontSize: 12.5 }}><b>{noteCount.note}</b></div>}
-          <form action={countNotesAction} style={{ marginTop: 10 }}>
-            <button className="btn" type="submit" disabled={!ready.ready}>{noteCount ? 'Count again' : 'Count the notes'}</button>
-            <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>One request. No note is read.</span>
-          </form>
         </div>
       </div>
 

@@ -10,15 +10,16 @@ import { matchLists, spvCandidates } from './match';
  *
  * Which lists: the ones the init file names, and the ones that say SPV. What is read for each:
  *   - every entry, with its field values — for all of them;
- *   - note text for each entry — only where the vehicle's init entry says importNotes (Juan:
- *     Neurotech only), and never on an SPV list;
  *   - relationship strengths to our team for each person — only on lists a vehicle claims.
  *
+ * Notes are not read here any more. They come from the bulk read (N49, notes.ts): every note in
+ * the account, a hundred to a request, where this read them one entry at a time.
+ *
  * Two phases, because the cost is in the second. Entries come a hundred to a request, so
- * reading them is cheap, and it is how the number of people becomes known. Notes and
- * relationships are a request per entity: that part is estimated first, and a run whose
- * estimate is over `config.affinity.sliceCeiling` holds until somebody approves that
- * estimate — an approval of a number, not of whatever the run turns out to cost.
+ * reading them is cheap, and it is how the number of people becomes known. Relationships are a
+ * request per person: that part is estimated first, and a run whose estimate is over
+ * `config.affinity.sliceCeiling` holds until somebody approves that estimate — an approval of
+ * a number, not of whatever the run turns out to cost.
  *
  * Nothing here translates anything. A stage is still a string in a payload, an amount still a
  * number nobody has said the meaning of (CLAUDE.md, rules 1, 2 and 6).
@@ -29,13 +30,11 @@ export interface SliceTarget {
   vehicleSlug: string | null;
   vehicleName: string | null;
   why: 'init' | 'spv';
-  notes: boolean;
   relationships: boolean;
 }
 
 const SOURCE = 'affinity';
 const ALL_FIELDS: Query = { limit: 100, fieldTypes: ['enriched', 'global', 'list', 'relationship-intelligence'] };
-const NOTES_PATH: Record<string, string> = { person: 'persons', company: 'companies', opportunity: 'opportunities' };
 
 export async function sliceTargets(): Promise<SliceTarget[]> {
   const [{ lists }, init] = await Promise.all([discovered(), initForMatching()]);
@@ -49,13 +48,13 @@ export async function sliceTargets(): Promise<SliceTarget[]> {
     seen.add(m.list.id);
     out.push({
       list: m.list, vehicleSlug: v.slug, vehicleName: v.name, why: 'init',
-      notes: v.importNotes, relationships: m.list.type === 'person',
+      relationships: m.list.type === 'person',
     });
   }
   for (const l of spvCandidates(lists, matches)) {
     if (seen.has(l.id)) continue;
     seen.add(l.id);
-    out.push({ list: l, vehicleSlug: null, vehicleName: null, why: 'spv', notes: false, relationships: false });
+    out.push({ list: l, vehicleSlug: null, vehicleName: null, why: 'spv', relationships: false });
   }
   return out;
 }
@@ -66,16 +65,10 @@ interface Entry {
   listId: number;
   entity: { id: number };
 }
-interface Note {
-  id: number;
-  createdAt: string;
-  updatedAt: string | null;
-}
-
 export interface SliceOptions {
   /** A held run's estimate that a person approved. The run proceeds only within it. */
   approvedUpTo?: number;
-  /** Notes only: relationship strengths wait for another run. */
+  /** Entries only: relationship strengths wait for another run. */
   skipRelationships?: boolean;
   /** For the property harness. */
   ceiling?: number;
@@ -102,14 +95,13 @@ export async function runSlice(runBy: string | null, opts: SliceOptions = {}): P
   try {
     const client = affinity(opts.overrides);
     const targets = await sliceTargets();
-    detail.lists = targets.map((t) => ({ id: t.list.id, why: t.why, vehicle: t.vehicleSlug, notes: t.notes, relationships: t.relationships }));
+    detail.lists = targets.map((t) => ({ id: t.list.id, why: t.why, vehicle: t.vehicleSlug, relationships: t.relationships }));
     if (targets.length === 0) {
       await finish('failed', 'No lists to read. Run discovery, and name the lists in the init file.');
       return latestRun(SOURCE, 'slice');
     }
 
     // Phase 1: entries, a hundred at a time.
-    const wantNotes = new Map<string, { type: string; id: number }>();
     const wantRelationships = new Set<number>();
     const perList: Record<string, number> = {};
     for (const t of targets) {
@@ -120,7 +112,6 @@ export async function runSlice(runBy: string | null, opts: SliceOptions = {}): P
           for (const e of page) {
             n++;
             await land('list_entry', `${t.list.id}:${e.id}`, null, e);
-            if (t.notes) wantNotes.set(`${e.type}:${e.entity.id}`, { type: e.type, id: e.entity.id });
             if (t.relationships && !opts.skipRelationships && e.type === 'person') wantRelationships.add(e.entity.id);
           }
         }
@@ -132,11 +123,9 @@ export async function runSlice(runBy: string | null, opts: SliceOptions = {}): P
     }
     detail.entries = perList;
 
-    // Phase 2, estimated first: at least one request per entity for notes, one per person for
-    // relationships. More when somebody has over a hundred notes, which is rare and shown.
-    const estimate = wantNotes.size + wantRelationships.size;
+    // Phase 2, estimated first: one request per person for their relationships.
+    const estimate = wantRelationships.size;
     detail.estimate = estimate;
-    detail.notesFor = wantNotes.size;
     detail.relationshipsFor = wantRelationships.size;
     const entryCount = Object.values(perList).reduce((a, b) => a + b, 0);
     const summary = `${entryCount} entries on ${targets.length} lists`;
@@ -144,26 +133,10 @@ export async function runSlice(runBy: string | null, opts: SliceOptions = {}): P
     const month = client.budget().perMonth;
     if (month && month !== 'none') detail.orgRemaining = month.remaining;
     if (estimate > allowed) {
-      await finish('held', `${summary}. Notes and relationships held: about ${estimate} requests, over the ${allowed} allowed without a go-ahead.`);
+      await finish('held', `${summary}. Relationships held: about ${estimate} requests, over the ${allowed} allowed without a go-ahead.`);
       return latestRun(SOURCE, 'slice');
     }
 
-    let notes = 0;
-    for (const want of wantNotes.values()) {
-      try {
-        for await (const page of client.pages<Note>(`/v2/${NOTES_PATH[want.type]}/${want.id}/notes`, { limit: 100 })) {
-          pages++;
-          for (const note of page) {
-            notes++;
-            await land('note', String(note.id), note.updatedAt ?? note.createdAt, note);
-            await land('note_link', `${want.type}:${want.id}:${note.id}`, null, { entityType: want.type, entityId: want.id, noteId: note.id });
-          }
-        }
-      } catch (err) {
-        if (err instanceof AffinityRefused) throw err;
-        gaps.push(`notes for ${want.type} ${want.id}: ${err instanceof AffinityError ? err.status : '?'}`);
-      }
-    }
     let relationships = 0;
     for (const personId of wantRelationships) {
       try {
@@ -177,9 +150,8 @@ export async function runSlice(runBy: string | null, opts: SliceOptions = {}): P
         gaps.push(`relationships for person ${personId}: ${err instanceof AffinityError ? err.status : '?'}`);
       }
     }
-    detail.notes = notes;
     detail.relationships = relationships;
-    await finish('ok', `${summary} · ${notes} notes for ${wantNotes.size} entries · ${relationships} relationship sets${gaps.length ? ` · ${gaps.length} gaps` : ''}`);
+    await finish('ok', `${summary} · ${relationships} relationship sets${gaps.length ? ` · ${gaps.length} gaps` : ''}`);
   } catch (err) {
     await finish('failed', err instanceof Error ? err.message : 'unknown error');
   }
@@ -204,10 +176,8 @@ export function startSlice(runBy: string | null, opts: SliceOptions = {}): 'star
 export const sliceRunning = () => Boolean(g.__affinitySlice);
 
 /**
- * How many notes the account holds, from one request that returns none of them (N48). The
- * per-entry way costs a request per entry; the bulk way costs one per hundred notes in the
- * whole account, and would read every note in transit to keep only Neurotech's. Which is
- * better depends on this number, so it is measured rather than guessed.
+ * How many notes the account holds, from one request that returns none of them (N48). It
+ * prices the bulk read (notes.ts) before anyone approves it: one request per hundred notes.
  */
 export async function countNotes(runBy: string | null): Promise<SyncRun | null> {
   const run = await startRun(SOURCE, 'count-notes', runBy);

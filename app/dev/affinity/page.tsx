@@ -151,6 +151,7 @@ export default async function AffinityPage() {
               : 'Which lists the key can see, their fields, and how they match the init file. '}
             <Link href="/dev/affinity/lists">Open the lists →</Link>{' '}
             <Link href="/dev/affinity/slice">The first slice →</Link>{' '}
+            <Link href="/dev/affinity/notes">Notes →</Link>{' '}
             <Link href="/dev/affinity/inventory">Inventory →</Link>{' '}
             <Link href="/dev/affinity/mapping">Mapping →</Link>
           </p>

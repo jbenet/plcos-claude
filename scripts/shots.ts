@@ -196,6 +196,53 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N49: [
+    {
+      name: '01-every-note',
+      path: '/dev/affinity/notes',
+      fullPage: true,
+      prepare: async (page) => {
+        // The demo copy may be empty (a reset) or already read; either way, end on a full read.
+        const read = page.getByRole('button', { name: /Read every note|Read everything again/ });
+        if (!(await read.count())) {
+          await page.getByRole('button', { name: /Count the notes|Count again/ }).first().click();
+          await page.waitForLoadState('networkidle');
+        }
+        await page.getByRole('button', { name: /Read every note|Read everything again/ }).click();
+        // The read runs in the server while the page refreshes itself; wait for it to finish.
+        await page.waitForFunction(() => {
+          const t = document.body.innerText;
+          return !/reading now/i.test(t) && /Last complete read\s*just now · everything/.test(t);
+        }, undefined, { timeout: 60_000 });
+        await page.waitForLoadState('networkidle');
+        await page.evaluate(() => window.scrollTo(0, 0));
+      },
+    },
+    {
+      name: '02-on-the-lp',
+      path: '/targets',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.getByRole('heading', { name: 'Notes in Affinity' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '03-only-what-changed',
+      path: '/dev/affinity/notes',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Read what changed/ }).click();
+        await page.waitForFunction(() => {
+          const t = document.body.innerText;
+          return !/reading now/i.test(t) && /Last complete read\s*just now · what changed since/.test(t);
+        }, undefined, { timeout: 60_000 });
+        await page.waitForLoadState('networkidle');
+        await page.evaluate(() => window.scrollTo(0, 0));
+      },
+    },
+  ],
   N48: [
     {
       name: '01-notes-counted',

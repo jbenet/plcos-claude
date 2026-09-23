@@ -9,6 +9,13 @@ export function usdM(amount: number, digits = 1): string {
   return `$${(amount / 1_000_000).toFixed(digits)}M`;
 }
 
+/** A claimed size, compact: $2.4B, $5.0M, $250,000. For a figure, not a headline. */
+export function usdCompact(amount: number): string {
+  if (Math.abs(amount) >= 1_000_000_000) return `$${(amount / 1_000_000_000).toFixed(1)}B`;
+  if (Math.abs(amount) >= 1_000_000) return usdM(amount);
+  return usd(amount);
+}
+
 export function usd(amount: number): string {
   return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 }

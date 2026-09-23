@@ -9,13 +9,20 @@ import { Coverage } from '@/components/ui/Coverage';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import { getPursuit, OUTCOME_LABEL, RUNG_LABEL, RUNG_REQUIRES, STAGES } from '@/modules/strategy';
-import { claimsFor, listSourceDocs, notesFor } from '@/modules/research';
+import { claimLabel, claimsFor, listSourceDocs, notesFor } from '@/modules/research';
+import { usdCompact } from '@/lib/money';
 import { restrictionsFor } from '@/modules/coordination';
 import { planRoutes, VERDICT_LABEL } from '@/modules/network';
 import { signalsFor } from '@/modules/signals';
 import { SignalRow } from '@/components/signals/SignalRow';
+import { AffinityNotes } from '@/components/affinity/AffinityNotes';
+import { notesAbout } from '@/lib/connectors/affinity/notes';
 
 export const dynamic = 'force-dynamic';
+
+/** A translated amount is dollars as digits; it reads as a figure. Anything else as written. */
+const claimValue = (field: string, value: string) =>
+  /_usd$/.test(field) && Number.isFinite(Number(value)) ? usdCompact(Number(value)) : value;
 
 export default async function TargetWorkspace({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,13 +30,14 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
   if (!pursuit) notFound();
 
   const user = await (await auth()).currentUser();
-  const [claims, docs, notes, restrictions, routes, signals] = await Promise.all([
+  const [claims, docs, notes, restrictions, routes, signals, affinityNotes] = await Promise.all([
     claimsFor(pursuit.entityId),
     listSourceDocs(),
     notesFor(pursuit.entityId),
     restrictionsFor(pursuit.entityId),
     planRoutes(user.handle, pursuit.entityId),
     signalsFor(pursuit.entityId),
+    notesAbout(pursuit.entityId),
   ]);
 
   const docMap = new Map<string, EvidenceDoc>(
@@ -84,7 +92,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
             {claims.slice(0, 3).map((c) => (
               <div className="prov" key={c.claimId}>
                 <div className="p1">
-                  {c.field}: {c.value}
+                  {claimLabel(c.field)}: {claimValue(c.field, c.value)}
                 </div>
                 <div className="p2">
                   {c.provenance.source} · as of {shortDate(c.provenance.asOf)} · {c.provenance.confidence}
@@ -239,9 +247,9 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
               ) : (
                 claims.map((c) => (
                   <div className="fact" key={c.claimId}>
-                    <span>{c.field}</span>
+                    <span>{claimLabel(c.field)}</span>
                     <span>
-                      {c.value}
+                      {claimValue(c.field, c.value)}
                       {docMap.has(c.provenance.source) && <EvidenceRef doc={docMap.get(c.provenance.source)!} />}
                     </span>
                   </div>
@@ -249,6 +257,8 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
               )}
             </div>
           </div>
+
+          <AffinityNotes notes={affinityNotes} />
 
           <div className="card">
             <div className="chead">

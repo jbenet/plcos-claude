@@ -25,27 +25,23 @@
   //   target       dollars, or null
   //   firstClose   YYYY-MM-DD, or null
   //   affinityLists  the exact names of the Affinity lists that track this raise
-  //   importNotes  note *text* is imported only where this is true
   "vehicles": [
     {
       "slug": "neurotech", "name": "PLC Neurotech I", "kind": "fund", "exemption": "506(c)",
       "target": null, "firstClose": null,
-      "affinityLists": [],
-      "importNotes": false
+      "affinityLists": []
     },
     {
       "slug": "rails", "name": "PLC Crypto/Rails", "kind": "fund", "exemption": "506(c)",
       "target": null, "firstClose": null,
-      "affinityLists": [],
-      "importNotes": false
+      "affinityLists": []
     },
     // SPVs go here once the connection test has listed what is in Affinity. One of them may
     // be 506(b). See answers.spv506b below.
     {
       "slug": "grants", "name": "Grants rail", "kind": "grant_rail", "exemption": "n/a",
       "target": null, "firstClose": null,
-      "affinityLists": [],
-      "importNotes": false
+      "affinityLists": []
     }
   ],
 

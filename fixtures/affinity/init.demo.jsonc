@@ -9,13 +9,13 @@
   ],
   "vehicles": [
     { "slug": "neurotech", "name": "PLC Neurotech I", "kind": "fund", "exemption": "506(c)", "target": 90000000, "firstClose": "2026-12-15",
-      "affinityLists": ["PLC Neurotech I - LP pipeline", "PLC Neurotech I - Fundraising"], "importNotes": true },
+      "affinityLists": ["PLC Neurotech I - LP pipeline", "PLC Neurotech I - Fundraising"] },
     { "slug": "rails", "name": "PLC Crypto/Rails", "kind": "fund", "exemption": "506(c)", "target": 60000000, "firstClose": null,
-      "affinityLists": ["PLC Crypto/Rails LPs"], "importNotes": false },
+      "affinityLists": ["PLC Crypto/Rails LPs"] },
     { "slug": "spv-cortex", "name": "SPV — Cortex", "kind": "spv", "exemption": "506(c)", "target": 8000000, "firstClose": null,
-      "affinityLists": ["SPV — Cortex"], "importNotes": false },
+      "affinityLists": ["SPV — Cortex"] },
     { "slug": "grants", "name": "Grants rail", "kind": "grant_rail", "exemption": "n/a", "target": null, "firstClose": null,
-      "affinityLists": [], "importNotes": false }
+      "affinityLists": [] }
   ],
   "answers": {}
 }

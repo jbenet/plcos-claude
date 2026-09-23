@@ -149,7 +149,8 @@ export async function finishRun(
   );
 }
 
-export async function latestRun(source: string, kind: string): Promise<SyncRun | null> {
+/** The newest run of a kind; with `status`, the newest that ended that way (the last good read). */
+export async function latestRun(source: string, kind: string, status?: SyncRun['status']): Promise<SyncRun | null> {
   const db = await getDb();
   const r = await db.one<{
     id: string; source: string; kind: string; started_at: Date | string; finished_at: Date | string | null;
@@ -159,8 +160,9 @@ export async function latestRun(source: string, kind: string): Promise<SyncRun |
     `select r.id::text, r.source, r.kind, r.started_at, r.finished_at, r.status, u.name as run_by_name,
             r.requests, r.records, r.new_records, r.note, r.detail
        from sources.sync_run r left join platform.app_user u on u.id = r.run_by
-      where r.source = $1 and r.kind = $2 order by r.started_at desc, r.id desc limit 1`,
-    [source, kind],
+      where r.source = $1 and r.kind = $2 and ($3::text is null or r.status = $3)
+      order by r.started_at desc, r.id desc limit 1`,
+    [source, kind, status ?? null],
   );
   if (!r) return null;
   return {

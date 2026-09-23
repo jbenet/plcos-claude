@@ -28,7 +28,16 @@ interface RawEntry {
   createdAt: string;
   entity: { id: number; fields?: RawField[]; type?: string };
 }
-interface RawNote { id: number; content?: { html?: string }; creator?: { firstName?: string | null; lastName?: string | null; type?: string }; createdAt: string }
+interface RawNote {
+  id: number;
+  content?: { html?: string | null } | null;
+  creator?: { firstName?: string | null; lastName?: string | null; type?: string } | null;
+  createdAt: string;
+  // The bulk read (N49) carries what each note is attached to; the per-entry read did not.
+  personsPreview?: { data: Array<{ id: number }> };
+  companiesPreview?: { data: Array<{ id: number }> };
+  opportunitiesPreview?: { data: Array<{ id: number }> };
+}
 
 export interface FieldStat {
   id: string;
@@ -243,14 +252,22 @@ export async function inventory(now = Date.now()): Promise<Inventory> {
     const byYear = new Map<string, number>();
     const byAuthor = new Map<string, number>();
     let health = 0;
+    const about = new Set(linksRaw.map((l) => `${l.payload.entityType}:${l.payload.entityId}`));
     for (const { payload: n } of notesRaw) {
       byYear.set(n.createdAt.slice(0, 4), (byYear.get(n.createdAt.slice(0, 4)) ?? 0) + 1);
-      if (n.creator) byAuthor.set(personName(n.creator), (byAuthor.get(personName(n.creator)) ?? 0) + 1);
+      // Only the team is named. Anyone else who wrote a note is counted under one line.
+      if (n.creator) {
+        const who = n.creator.type === 'internal' ? personName(n.creator) : 'someone outside the team';
+        byAuthor.set(who, (byAuthor.get(who) ?? 0) + 1);
+      }
       if (mentionsHealth(n.content?.html ?? '')) health++;
+      for (const p of n.personsPreview?.data ?? []) about.add(`person:${p.id}`);
+      for (const c of n.companiesPreview?.data ?? []) about.add(`company:${c.id}`);
+      for (const o of n.opportunitiesPreview?.data ?? []) about.add(`opportunity:${o.id}`);
     }
     notes = {
       notes: notesRaw.length,
-      entities: new Set(linksRaw.map((l) => `${l.payload.entityType}:${l.payload.entityId}`)).size,
+      entities: about.size,
       byYear: [...byYear.entries()].sort().map(([year, n]) => ({ year, n })),
       byAuthor: top(byAuthor, 15).map(({ text, n }) => ({ name: text, n })),
       health,

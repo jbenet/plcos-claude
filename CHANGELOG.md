@@ -4007,3 +4007,43 @@ is to read them only for the pursuits that have got somewhere.
 
 A property checks that the count costs one request and lands no note. **76 of 76 properties
 hold.**
+
+## N49 — Every note, once
+
+**Shipped.** You asked for the notes to be replicated rather than filtered: every record
+downloaded once, then only what changes, and notes on other lists kept for later. That's what
+this version does, and on the real account it's done.
+
+| | |
+|---|---|
+| ![Every note](docs/changelog/shots/n49/01-every-note.webp) | **Developer → Affinity → Notes.** The count comes first (one request, no note returned), the read is approved as that number, and the page then says what landed, in counts only: by kind — note, meeting note, email note, notetaker summary — by year, by author (the team by name, anyone else counted), what they're attached to, and how many concern someone on each list we read. |
+| ![On the LP](docs/changelog/shots/n49/02-on-the-lp.webp) | **On an LP's page**, the team's notes about them, newest first, with who wrote each and when, and "via their firm" for a note on their organization. A note that mentions someone's health stays closed until it's opened. The same page now reads its claims as figures ("$2.4B, their claim, not verified") rather than `aum_usd 2400000000`. |
+| ![Only what changed](docs/changelog/shots/n49/03-only-what-changed.webp) | **The second read** asks only for notes created or edited since the first began, less a day, and here finds none: two requests. Reading everything again is how a note deleted in Affinity leaves the copy. |
+
+**How.** `GET /v2/notes` pages through every note in the account, a hundred to a request.
+Affinity's spec has an `includes` parameter that I'd missed in N48: with it, each note arrives
+with the people, organizations and opportunities it's attached to. So one pass gives the text,
+the author, the date and the links, where I had assumed linking would cost a request per note.
+The read stops if it would go past the number approved, and a page whose next URL drops
+`includes` gets them back — both checked by properties.
+
+**On the real account**, about five thousand notes in 54 requests: exactly the estimate. Two
+things it showed:
+
+- **Most notes about an LP are on their firm, not on them.** Counting only notes attached to
+  the person on the list found less than half of what counting their organization too finds. A
+  note on the organization the list gives as theirs now counts for them, and shows on their
+  page.
+- **Most notes are about neither.** Nearly nine in ten concern firms and people on none of the lists
+  we read. They're kept as you asked, and they show nowhere until someone they're about
+  appears in the tool.
+
+**Retired:** the per-entry note endpoints (off the allowlist), the slice's note phase, and the
+init file's `importNotes` (still accepted, now ignored). Relationships remain per person and
+held. Replies aren't in the bulk list; they're counted, and there are very few.
+
+Also fixed: the first real attempt failed on a stale connection ("fetch failed", in half a
+second), so a network failure is now tried twice more before it counts, and the log says which
+failure it was.
+
+**82 of 82 properties hold.**

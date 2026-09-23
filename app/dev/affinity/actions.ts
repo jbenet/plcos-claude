@@ -28,11 +28,7 @@ export async function runSliceAction(formData: FormData): Promise<void> {
   // A go-ahead on a held run carries the estimate it was shown, and the run proceeds only
   // within that estimate plus a quarter — an approval of a number, not of whatever it costs.
   const approved = Number(formData.get('approvedEstimate') ?? 0);
-  const skipRelationships = formData.get('scope') === 'notes';
-  startSlice(user.id, {
-    ...(approved > 0 ? { approvedUpTo: Math.ceil(approved * 1.25) } : {}),
-    skipRelationships,
-  });
+  startSlice(user.id, approved > 0 ? { approvedUpTo: Math.ceil(approved * 1.25) } : {});
   revalidatePath('/dev/affinity/slice');
 }
 
@@ -80,5 +76,22 @@ export async function countNotesAction(): Promise<void> {
   const { countNotes } = await import('@/lib/connectors/affinity/slice');
   const user = await (await auth()).currentUser();
   await countNotes(user.id);
-  revalidatePath('/dev/affinity/slice');
+  revalidatePath('/dev/affinity/notes');
+}
+
+/**
+ * Starts a notes read in this server's process and returns at once; the page watches it. The
+ * button carries the request count its person was shown, and the read stops at that plus a
+ * quarter — an approval of a number, as for the slice. `full` reads everything again; without
+ * it, a read after the first asks only for what changed.
+ */
+export async function readNotesAction(formData: FormData): Promise<void> {
+  const { startNotes } = await import('@/lib/connectors/affinity/notes');
+  const user = await (await auth()).currentUser();
+  const approved = Number(formData.get('approvedEstimate') ?? 0);
+  startNotes(user.id, {
+    ...(approved > 0 ? { approvedUpTo: Math.ceil(approved * 1.25) } : {}),
+    full: formData.get('mode') === 'full',
+  });
+  revalidatePath('/dev/affinity/notes');
 }

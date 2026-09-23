@@ -45,8 +45,8 @@ export interface VehicleInit {
   firstClose: string | null;
   /** Exact Affinity list names. Matched loosely later — dashes and case vary. */
   affinityLists: string[];
-  /** Note text is imported only where this is true. Juan chose Neurotech only (docs/15). */
-  importNotes: boolean;
+  // `importNotes` is retired (N49): every note in the account is kept, whichever list it is
+  // on (Juan, 23 Sep). A file that still has it loads; the value is ignored.
 }
 
 export interface RealInit {
@@ -160,14 +160,12 @@ export function validate(raw: unknown): { init: RealInit | null; problems: strin
       if (firstClose !== null && (typeof firstClose !== 'string' || !DATE.test(firstClose))) problems.push(`${at}.firstClose must be YYYY-MM-DD, or null.`);
       const lists = v?.affinityLists ?? [];
       if (!Array.isArray(lists) || lists.some((l) => typeof l !== 'string')) problems.push(`${at}.affinityLists must be a list of list names.`);
-      if (v?.importNotes !== undefined && typeof v.importNotes !== 'boolean') problems.push(`${at}.importNotes must be true or false.`);
       if (slug && name && KINDS.includes(kind) && EXEMPTIONS.includes(exemption) && PHASES.includes((v?.phase ?? 'active') as VehicleInit['phase'])) {
         vehicles.push({
           slug, name, kind, exemption, phase: (v?.phase ?? 'active') as VehicleInit['phase'],
           target: typeof target === 'number' ? target : null,
           firstClose: typeof firstClose === 'string' ? firstClose : null,
           affinityLists: Array.isArray(lists) ? (lists as string[]).map((l) => l.trim()).filter(Boolean) : [],
-          importNotes: v.importNotes === true,
         });
       }
     });

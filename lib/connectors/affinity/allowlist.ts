@@ -25,15 +25,13 @@ export const ALLOWED: readonly Endpoint[] = [
   },
   { template: '/v2/lists/{listId}/saved-views', purpose: 'The views people have saved on a list.' },
   { template: '/v2/users', purpose: 'The account’s users, to match owners and note authors to our team.', beta: true },
-  // The first slice (N42). Entries only on lists the init file names or that say SPV; notes only
-  // for a vehicle whose init entry says importNotes; relationships only for its people.
+  // The first slice (N42): entries on lists the init file names or that say SPV, and
+  // relationships only for the people on a vehicle's lists.
   { template: '/v2/lists/{listId}/list-entries', purpose: 'The entries on a list, with their field values.' },
-  { template: '/v2/persons/{personId}/notes', purpose: 'Notes about a person — only for a vehicle whose init entry imports notes.' },
-  { template: '/v2/opportunities/{opportunityId}/notes', purpose: 'Notes on an opportunity — only for a vehicle whose init entry imports notes.' },
-  { template: '/v2/companies/{companyId}/notes', purpose: 'Notes about an organization — only for a vehicle whose init entry imports notes.' },
   { template: '/v2/persons/{personId}/relationships', purpose: 'How strongly a person is connected to our team: Affinity’s interaction score. A claim, never proof.' },
-  // N48: counting the account's notes — limit=0 returns none of them — to price a bulk read.
-  { template: '/v2/notes', purpose: 'How many notes the account holds (limit=0 returns none). The bulk read, if it is ever chosen, pages through them a hundred at a time.' },
+  // N49: every note, a hundred to a request, with what each is attached to. It replaced the
+  // per-entry note endpoints (/v2/persons/{id}/notes and the rest), which are no longer allowed.
+  { template: '/v2/notes', purpose: 'Every note in the account but replies, a hundred at a time, each with the people, organizations and opportunities it is attached to. limit=0 counts them and returns none.' },
 ];
 
 /**

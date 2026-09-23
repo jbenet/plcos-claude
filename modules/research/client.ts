@@ -7,3 +7,4 @@ export {
   STATUS_LABEL as METHOD_STATUS_LABEL, TIER_VALUE, VERDICT_LABEL as METHOD_VERDICT_LABEL,
   scoreMethods,
 } from './scoring';
+export { CLAIM_LABEL, claimLabel } from './types';
