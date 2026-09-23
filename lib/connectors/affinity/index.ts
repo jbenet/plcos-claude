@@ -14,17 +14,17 @@ export { ReadOnlyViolation, guardedFetch } from './fetch';
 export class AffinityKeyMissing extends Error {
   constructor() {
     super(
-      'No Affinity key in this server. npm run dev:real reads it from the 1Password item "Affinity API - App: plcos-claude", ' +
-        'which needs the 1Password CLI installed (brew install 1password-cli) and connected to the app under ' +
-        'Settings → Developer. Then restart the real server.',
+      'No Affinity key in this server. npm run dev:real reads it from one macOS Keychain item, which ' +
+        'npm run key:store creates — it asks for the key without showing it. Then restart the real server ' +
+        'and allow the Keychain to hand it over.',
     );
     this.name = 'AffinityKeyMissing';
   }
 }
 
 /**
- * The client for this profile. Real talks to Affinity over HTTPS with the key from
- * 1Password; demo talks to the fake in fixtures/affinity/. Neither may use the other's
+ * The client for this profile. Real talks to Affinity over HTTPS with the key from the
+ * macOS Keychain; demo talks to the fake in fixtures/affinity/. Neither may use the other's
  * transport: the demo must never reach Affinity, and the real database must never receive
  * the fake's invented records.
  */
@@ -56,7 +56,7 @@ export function affinityReady(): { ready: boolean; why: string } {
     return { ready: true, why: 'Demo: a fake Affinity served from fixtures/affinity/. Nothing here contacts Affinity.' };
   }
   return affinityKey()
-    ? { ready: true, why: 'Key present, from 1Password. It is held by this server process only.' }
+    ? { ready: true, why: 'Key present, from the macOS Keychain. It is held by this server process only.' }
     : { ready: false, why: new AffinityKeyMissing().message };
 }
 

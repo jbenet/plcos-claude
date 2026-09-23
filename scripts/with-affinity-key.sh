@@ -1,54 +1,44 @@
 #!/usr/bin/env bash
-# Run a command with AFFINITY_API_KEY taken from 1Password (docs/15).
+# Run a command with AFFINITY_API_KEY taken from the macOS Keychain (docs/15).
 #
 #   scripts/with-affinity-key.sh <command…>
 #
-# The key goes from 1Password into this process's environment, and from there into the
-# command's. It is never written to disk, never echoed, and never put on a command line
-# where `ps` would show it.
+# One Keychain item holds the key: service "plcos-claude", account "affinity-api-key". It is
+# stored with no app trusted to read it (`-T ""`), so every read asks you first — for that one
+# item, not for a vault. `npm run key:store` creates it; `npm run key:status` says whether it
+# is there without reading it.
 #
-# Without the 1Password CLI, or when 1Password says no, the command still runs, without a
-# key, and Developer → Affinity says why. Needs: `brew install 1password-cli`, then in the
-# 1Password app, Settings → Developer → "Integrate with 1Password CLI".
+# The key goes from the Keychain into this process's environment, and from there into the
+# command's. It is never written to a file, never echoed, and never put on a command line
+# where `ps` would show it. Without it the command still runs, without a key, and
+# Developer → Affinity says why.
 set -euo pipefail
 
-ITEM="Affinity API - App: plcos-claude"
+SERVICE="plcos-claude"
+ACCOUNT="affinity-api-key"
 
-if ! command -v op >/dev/null 2>&1; then
-  echo "[affinity] The 1Password CLI (op) is not installed. Starting without an Affinity key." >&2
+if ! command -v security >/dev/null 2>&1; then
+  echo "[affinity] No macOS Keychain on this machine. Starting without an Affinity key." >&2
   exec "$@"
 fi
 
-# With the app integration on, the CLI sees the app's accounts; without it, it sees none.
-if [ -z "$(op account list 2>/dev/null)" ]; then
-  echo "[affinity] The 1Password CLI can't see any account. In the 1Password app, turn on" >&2
-  echo "[affinity] Settings → Developer → \"Integrate with 1Password CLI\", then restart this." >&2
-  echo "[affinity] Starting without an Affinity key." >&2
-  exec "$@"
-fi
-
-key=""
-why=""
 errors="$(mktemp)"
-# An API Credential item keeps it in "credential"; a Password item in "password".
-for field in credential password; do
-  # Only op's error messages go to the file. The key itself only ever arrives on stdout.
-  value="$(op item get "$ITEM" --fields "label=$field" --reveal 2>"$errors" || true)"
-  # Older CLIs print a placeholder for a concealed field instead of failing.
-  if [ -n "$value" ] && [ "${value#\[use }" = "$value" ]; then
-    key="$value"
-    break
-  fi
-  [ -z "$why" ] && why="$(head -1 "$errors")"
-done
+status=0
+# Only the Keychain's error messages go to the file. The key itself only arrives on stdout.
+key="$(security find-generic-password -s "$SERVICE" -a "$ACCOUNT" -w 2>"$errors")" || status=$?
+why="$(head -1 "$errors")"
 rm -f "$errors"
-unset value
 
-if [ -z "$key" ]; then
-  echo "[affinity] Could not read \"$ITEM\" from 1Password: ${why:-no field named credential or password}." >&2
+if [ "$status" -eq 44 ]; then
+  echo "[affinity] No Affinity key in the Keychain yet. Store it once with: npm run key:store" >&2
+  echo "[affinity] Starting without an Affinity key." >&2
+  exec "$@"
+fi
+if [ "$status" -ne 0 ] || [ -z "$key" ]; then
+  echo "[affinity] The Keychain did not hand over the key (${why:-exit $status})." >&2
   echo "[affinity] Starting without an Affinity key." >&2
   exec "$@"
 fi
 
-echo "[affinity] Key read from 1Password. Held by the server process only." >&2
+echo "[affinity] Key read from the macOS Keychain. Held by the server process only." >&2
 AFFINITY_API_KEY="$key" exec "$@"

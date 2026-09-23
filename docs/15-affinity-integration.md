@@ -36,7 +36,7 @@ shape both.
 | Question | Decision (Juan, 22 Sep) |
 |---|---|
 | Where real data lives | Inside this repository, under `data/real/`, gitignored — not in `~/Library`, so other tools on the machine don't poke at it. All data lives under `data/<demo\|real>/`. |
-| The API key | 1Password, item **"Affinity API - App: plcos-claude"**, injected with `op run`. Never printed, never written to disk. Deployment secrets wait until the infrastructure is chosen. |
+| The API key | **The macOS Keychain**, one item (`plcos-claude` / `affinity-api-key`) trusted to no app, so every read asks. Never printed, never in a file. First choice was 1Password (item "Affinity API - App: plcos-claude"); dropped on 23 Sep because its CLI authorizes a whole account — any process running `op` while it is unlocked could read any secret. Deployment gets its own secret store when the infrastructure is chosen. |
 | Plan tier | Unknown. The connection test finds out from the API's own answers. |
 | Lists | Juan named the list that probably tracks Neurotech, and a second that may. Both are in `data/real/init.jsonc`, not here: list names describe the real pipeline, so they stay with the real data. Rails' list is unknown; ask someone later. Several SPV lists exist, each with "SPV" in the name. |
 | A view-only key | Not possible — the key is read-write and cannot be changed. Hence rule 1. |
@@ -118,9 +118,12 @@ first slice. The connector seam lets it replace polling later without touching t
   from Affinity's OpenAPI description (v2, 2026-07-15). It tracks the per-minute and monthly
   budgets from the response headers, waits out a 429, and logs each request: path, status,
   duration, never a body or a header.
-- **The key** comes from 1Password through `scripts/with-affinity-key.sh`, which `npm run
-  dev:real` runs. It lives in the real server's environment only. It is redacted from every
-  log and error, and the demo profile never reads it.
+- **The key** lives in one macOS Keychain item. `npm run key:store` creates it, asking for
+  the key without echoing it, with no app trusted to read it (`-T ""`), so every read asks
+  first — that one item, not a vault. `scripts/with-affinity-key.sh`, which `npm run
+  dev:real` runs, reads it into the real server's environment only. It is redacted from every
+  log and error, and the demo profile never reads it. *Allow* keeps each start asking;
+  *Always Allow* stops the asking, for that one item.
 - **Test the connection** on Developer → Affinity calls `/v2/auth/whoami` and
   `/v2/rate-limit`. That shows whose key it is, which account, what the grant's scopes allow,
   and the real limits.

@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "dev:real": "scripts/with-affinity-key.sh env DATA_PROFILE=real next dev --hostname 127.0.0.1 --port 3100",
+    "key:store": "scripts/affinity-key.sh store",
+    "key:status": "scripts/affinity-key.sh status",
+    "key:forget": "scripts/affinity-key.sh forget",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0 --port 3000",
     "check": "tsc --noEmit",

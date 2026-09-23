@@ -48,7 +48,10 @@ only. `DATA_PROFILE` picks one, in `config/deployment.ts`.
   migration runner refuses a file whose checksum changed after it was applied. So an applied
   migration is never edited; a change is a new `NNN_…sql` file in the same module.
 - Only `lib/connectors/affinity/` talks to Affinity (`npm run boundaries` enforces it). The
-  key comes from 1Password through `scripts/with-affinity-key.sh` and is never printed.
+  key lives in one macOS Keychain item (`npm run key:store`), trusted to no app, so each read
+  asks Juan; `scripts/with-affinity-key.sh` hands it to `dev:real`'s environment. Never
+  printed, never in a file. Not 1Password: its CLI authorizes a whole account, not one item.
+  Deployment will need its own secret store.
 
 ---
 
