@@ -4605,3 +4605,66 @@ had been read as a reply. And the connector plan no longer proposes introducing 
 already met us.
 
 101 of 101 properties hold.
+
+## N67 — A critic for the strategies; the look-alike trap; across vehicles
+
+**Shipped.** The fourth round of the enrichment loop: the strategies graded by a critic, the
+research taught to avoid look-alike names, and a synthesis that reads across vehicles.
+
+| | |
+|---|---|
+| ![A shared record](docs/changelog/shots/n67/01-a-shared-record.webp) | **A shared record, on the LP's page.** Two LPs who invested in the same company are a C tie, named with the company and marked "needs a person to check" (rule 6). W3 used to find these only by matching a name in a sentence, which invented ties out of words like "Science". Now the company comes from the fact's structured part, which W1s fills from the fact's own words. |
+
+**A critic (W5c).** A pass with no web graded 25 strategies against the litmus test and the rules:
+10 A, 12 B, 3 C. The grades rose with each version of the protocol. The recurring faults were
+reading our records for more than they say, stale inputs, firms not coordinated, next steps too long
+to survive the import, and estimates ahead of the evidence. The three Cs were rule slips: one LP's
+amount in a note to a colleague, a soft commit nobody gave, and a D tie treated as C. They became
+W5 1.5:
+
+- Owning a pursuit is not having been in the meeting.
+- A capacity band needs assets, a check on record or a filing.
+- "This year" needs a word from them in the last 90 days, money on the close track, or a meeting
+  that wasn't a group date.
+- The lead strategy carries its firm: one owner, one money ask.
+- The next step fits in 300 characters with who and when.
+- A note to several people never carries one person's amount.
+- A path keeps the tier the connection file gives it.
+
+The checker now counts what a strategy claims beyond the files. The batcher's revise mode rewrites
+every strategy written before 1.3, or flagged, a whole firm at a time, starting with the committed
+LPs.
+
+**The look-alike trap (amendments 1.12–1.15).** Without search, the research's main risk is a
+look-alike name: an acronym whose filings are another company's, a "Ventures 23, LLC" that is a
+real-estate issuer, a relative with the same first name. So a general partner's exact legal name is
+searched in quotes. A filing joins an LP only through a named officer, and the SEC filer number
+separates relatives. The company comes from the opened filing, never the reader's list summary,
+and an amount comes from the raw field — the reader once read whole dollars as thousands.
+
+**Nothing in a special category (1.16).** Health was already off limits. A bio that lists a religious
+community's committee showed the rule had to be wider: no religious, political, ethnic or union
+affiliation and no sexual orientation, ever. The checker now looks for an email address or a phone
+number in every text a finding carries, not only its facts; the real findings have none.
+
+**W3.** A denial after the name ("Protocol Labs and Filecoin are not among them") no longer counts
+as a tie. A path's basis is cut at a sentence end, not in the middle of one. A three-letter firm
+name counts when a record writes it in capitals.
+
+**Triage reads our notes** for an invitation promised or a referral made, a warm signal only our
+notes hold. The first step is to check it was followed through.
+
+**The synthesis** gains:
+
+- **Founders as references:** LPs who backed our portfolio companies.
+- **Timing:** dated signals from the last twelve months.
+- **Across vehicles:** Rails- and SPV-shaped LPs on the Neurotech list, to coordinate, not compete.
+- **Our own network:** PL's directory.
+- **An owner rule:** built from what the strategies proposed, for the team to decide.
+
+The export now says how the last touch happened, since a meeting counts as "from them". docs/19
+says how to run the search pass, one command, once the budget allows.
+
+102 of 102 properties hold, including a new one for the connector plan: restricted prospects and
+ones who have met us are left out, a soft connector is asked after signing, and asks stop at the
+guard's limit.

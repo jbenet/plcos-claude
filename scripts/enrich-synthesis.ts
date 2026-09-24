@@ -10,7 +10,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config/deployment';
 import type { Candidate } from '../lib/enrich/candidates';
-import type { Path } from '../lib/enrich/connect';
+import type { Path, PlDirectoryEntry } from '../lib/enrich/connect';
 import type { Finding } from '../lib/enrich/schema';
 import type { Strategy } from '../lib/enrich/strategy';
 import type { Triage } from '../lib/enrich/triage';
@@ -67,7 +67,8 @@ async function main() {
   md.push('## Coverage', '');
   md.push(`- Research set: ${cands.length} LPs. Researched: ${findings.length} (${resolved.length} resolved; ${findings.length - resolved.length} ambiguous or not found, with no facts).`);
   md.push(`- Investor types among the resolved: ${top(types).map(([k, v]) => `${k} ${v}`).join(', ')}.`);
-  md.push(`- Neuro, health or biotech signal: ${neuro.length} of ${resolved.length}. A tie to Protocol Labs or our portfolio beyond meetings: ${[...plTie].length} LPs.`);
+  const plB = new Set(paths.filter((p) => p.other.type === 'ours' && p.kind !== 'met' && (p.tier === 'A' || p.tier === 'B')).map((p) => p.lp));
+  md.push(`- Neuro, health or biotech signal: ${neuro.length} of ${resolved.length}. A tie to Protocol Labs, its network or our portfolio beyond meetings: ${[...plTie].length} LPs — ${plB.size} documented (A or B), the rest clues to check (C or D).`);
   md.push(`- Strategies: ${strategies.length} (${count(strategies, (s) => s.list)['this year'] ?? 0} this year, ${count(strategies, (s) => s.list)['2027'] ?? 0} for 2027, ${count(strategies, (s) => s.list)['not now'] ?? 0} not now). Asks: ${top(shapes).map(([k, v]) => `${k} ${v}`).join(', ')}.`);
   md.push(`- Triage of the rest (W9): ${top(count(triage, (t) => t.lane)).map(([k, v]) => `${k} ${v}`).join(', ')}.`);
   md.push(`- How the findings were made: ${top(count(findings, (f) => f.researched?.method ?? 'search')).map(([k, v]) => `${k} ${v}`).join(', ')} (a pages-only finding is owed a pass with search).`, '');
@@ -113,7 +114,78 @@ async function main() {
     md.push(`- **${x.f.name}**${x.t?.first ? ` (first: ${x.t.first})` : ''}${x.f.profile?.capacity?.band && x.f.profile.capacity.band !== 'unknown' ? ` · ${x.f.profile.capacity.band}, an estimate` : ''} — ${own(x.f)[0]!.value.slice(0, 150)}${x.s ? ` · angle: ${x.s.angle.slice(0, 140)}` : ''}`);
   }
   md.push('');
+  // Founders as references (iteration 3): an LP who backed one of our portfolio companies has a
+  // founder in common with us — the founder can say what we're like as investors. C: a shared
+  // record, and the founder asked by a person, never routed automatically.
+  const coinvest = paths.filter((p) => /portfolio\)$/.test(p.other.name) && p.kind === 'coinvestor');
+  md.push('## Founders as references — LPs who backed our portfolio companies', '');
+  if (!coinvest.length) md.push('- None found yet.');
+  for (const p of coinvest) md.push(`- **${byKey.get(p.lp)?.name ?? p.lp}** (${byKey.get(p.lp)?.pursuits[0]?.status ?? '?'}) — ${p.other.name.replace(/ \(.*portfolio\)$/, '')}: ${p.basis.slice(0, 140)}`);
+  md.push('');
+  // Timing (iteration 3): dated signals from the last twelve months — an exit, a new fund, a new
+  // role — which move capacity or attention, with the date the source gives.
+  const yearAgo = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10);
+  const timing = resolved.flatMap((f) => (f.profile?.signals ?? []).filter((x) => x.on && x.on >= yearAgo).map((x) => ({ f, x })))
+    .sort((a, b) => (b.x.on ?? '').localeCompare(a.x.on ?? ''));
+  md.push('## Timing — what changed for them in the last twelve months', '');
+  md.push(`${timing.length} dated signals across ${new Set(timing.map((t) => t.f.key)).size} LPs, newest first.`, '');
+  for (const t of timing.slice(0, 30)) md.push(`- ${t.x.on} · **${t.f.name}** (${byKey.get(t.f.key)?.pursuits[0]?.status ?? '?'}) — ${t.x.what.slice(0, 160)}`);
+  md.push('');
+
+  // Across vehicles (iteration 3): LPs on the Neurotech list whose strategies read a strong or
+  // good fit for Rails, or an SPV. Coordinate, don't compete (rule 5): one owner decides which
+  // conversation goes first, and the other gets a dated follow-up.
+  const RAILS = /rails/i, SPV = /spv/i;
+  const cross = strategies.map((x) => ({ x, rails: Object.entries(x.fit ?? {}).find(([k, v]) => RAILS.test(k) && ['strong', 'good'].includes(v.verdict)), spv: Object.entries(x.fit ?? {}).filter(([k]) => SPV.test(k)) }))
+    .filter((y) => y.rails || y.spv.length);
+  md.push('## Across vehicles — Rails-shaped and SPV-shaped LPs on the Neurotech list', '');
+  md.push(`${cross.filter((y) => y.rails).length} read a strong or good fit for Rails; ${cross.filter((y) => y.spv.length).length} have an SPV in their strategy. Coordinate, don't compete (rule 5): one owner decides which conversation goes first, and the other gets a dated follow-up.`, '');
+  for (const y of cross.slice(0, 40)) {
+    md.push(`- **${y.x.name}** (${byKey.get(y.x.key)?.pursuits[0]?.status ?? '?'}, ask: ${y.x.ask.shape} on ${y.x.ask.vehicle})${y.rails ? ` — Rails ${y.rails[1].verdict}: ${y.rails[1].why.slice(0, 120)}` : ''}${y.spv.length ? ` — ${y.spv.map(([k, v]) => `${k} ${v.verdict}`).join(', ')}` : ''}`);
+  }
+  md.push('');
+
+  // W2n: our own network (iteration 3). People in PL's directory under their own name, and firms
+  // that are network teams — the "near us" check the pages-only research couldn't run.
+  const dirEntries = lines(await readFile(join(dir, 'us', 'pl-directory.jsonl'), 'utf8').catch(() => '')).map((l) => JSON.parse(l) as PlDirectoryEntry);
+  const inDirectory = dirEntries.filter((e) => e.members.some((m) => m.match === 'confirmed'));
+  const firmIsTeam = dirEntries.filter((e) => e.firmTeams.length > 0);
+  md.push('## Our own network — Protocol Labs’ directory (W2n)', '');
+  md.push(`${inDirectory.length} LPs are in PL's directory under their own name, matching our record of them; ${dirEntries.filter((e) => e.members.some((m) => m.match === 'name only')).length} more under the name alone (to confirm); ${firmIsTeam.length} work at a firm that is a network team.`, '');
+  for (const e of inDirectory) {
+    const m = e.members.find((x) => x.match === 'confirmed')!;
+    const main = m.roles.find((r) => r.main) ?? m.roles[0];
+    const status = byKey.get(e.key)?.pursuits[0]?.status ?? '?';
+    const ip = m.investorProfile;
+    md.push(`- **${e.name}** (${status}) — ${main?.role ? `${main.role}, ` : ''}${main?.team ?? 'member'}${m.since ? `, since ${m.since.slice(0, 4)}` : ''}${m.investor ? ' · marked an investor' : ''}${ip?.typicalCheck ? ` · typical check ${ip.typicalCheck}` : ''}${ip?.fundTypes?.length ? ` · backs ${ip.fundTypes.join(', ')}` : ''}${m.events.some((x) => x.speaker) ? ' · has spoken at PL events' : ''}`);
+  }
+  if (firmIsTeam.length) {
+    md.push('', 'Firms that are network teams:', '');
+    const byTeam = new Map<string, string[]>();
+    for (const e of firmIsTeam) for (const t of e.firmTeams) byTeam.set(`${t.name} (${t.isFund ? 'fund' : 'team'}${t.sources.length ? `; ${t.sources.join(', ')}` : ''})`, [...(byTeam.get(`${t.name} (${t.isFund ? 'fund' : 'team'}${t.sources.length ? `; ${t.sources.join(', ')}` : ''})`) ?? []), e.name]);
+    for (const [t, names] of [...byTeam.entries()].sort((a, b) => b[1].length - a[1].length)) md.push(`- ${t}: ${names.join(', ')}`);
+  }
+  md.push('');
   md.push('## Who the next steps fall to', '', ...top(who).map(([k, v]) => `- ${k}: ${v}`), '');
+  // An owner rule, for the team to decide (W5 v1.1): what the strategies proposed, by kind of LP.
+  const TYPE_WORDS: Record<string, string> = { fund_gp: 'fund GPs', fund_lp_program: 'fund-of-funds programs', fo_principal: 'family-office principals', fo_staff: 'family-office staff',
+    angel: 'angels', operator: 'operators and founders', foundation: 'foundations', institutional: 'institutions', corporate: 'corporates', advisor: 'advisers', unknown: 'not yet known' };
+  const findingOf = new Map(findings.map((f) => [f.key, f]));
+  const byType = new Map<string, Record<string, number>>();
+  for (const x of strategies) {
+    const t = findingOf.get(x.key)?.profile?.investorType ?? 'unknown';
+    const w = x.next.who.split(/[ (,—]/)[0] ?? '?';
+    const m = byType.get(t) ?? {};
+    m[w] = (m[w] ?? 0) + 1;
+    byType.set(t, m);
+  }
+  const juan = strategies.filter((x) => /^Juan\b/.test(x.next.who)).length;
+  md.push('## An owner rule — what the strategies proposed, for the team to decide', '');
+  md.push(`Juan is proposed for ${juan} of ${strategies.length} next steps. By kind of LP:`, '');
+  for (const [t, m] of [...byType.entries()].sort((a, b) => Object.values(b[1]).reduce((x, y) => x + y, 0) - Object.values(a[1]).reduce((x, y) => x + y, 0))) {
+    md.push(`- ${TYPE_WORDS[t] ?? t}: ${Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+  }
+  md.push('', 'A rule these imply, as a starting point: the committed and the largest to Juan; crypto-native GPs and angels to whoever holds the crypto relationships; scientists and neuro specialists to the neuroscientist; institutions and funds of funds to one person who carries the committee process. The team decides; nothing here assigns anyone.', '');
   md.push('## The connector plan (W11) — who could introduce whom, this quarter', '');
   const plans = JSON.parse(await readFile(join(dir, 'connectors.json'), 'utf8').catch(() => '[]')) as ConnectorPlan[];
   if (!plans.length) md.push('- None found yet.');

@@ -130,6 +130,15 @@ export function check(f: unknown, expectKey?: string): string[] {
     if (EMAIL.test(said) || hasPhone(said)) p.push(`fact ${i}: carries an email address or phone number`);
   }
   if (x.profile && !INVESTOR_TYPES.includes(x.profile.investorType)) p.push(`profile.investorType "${x.profile.investorType}" is not one of the types`);
+  // Contact details anywhere, not only in facts (v1.16): firm pages hand them to the reader freely.
+  const prose: Array<[string, string | null | undefined]> = [
+    ['identity.basis', x.identity?.basis], ['profile.summary', x.profile?.summary], ['profile.howTheyInvest', x.profile?.howTheyInvest],
+    ...(x.profile?.cautions ?? []).map((t, i) => [`profile.cautions ${i}`, t] as [string, string]),
+    ...(x.profile?.signals ?? []).map((t, i) => [`profile.signals ${i}`, t.what] as [string, string]),
+    ['coverage.note', x.coverage?.note], ...(x.coverage?.notFound ?? []).map((t, i) => [`coverage.notFound ${i}`, t] as [string, string]),
+    ...(x.connections ?? []).map((c, i) => [`connection ${i}`, c.basis] as [string, string]),
+  ];
+  for (const [where, text] of prose) if (text && (EMAIL.test(text) || hasPhone(text))) p.push(`${where}: carries an email address or phone number`);
   for (const [i, c] of (x.connections ?? []).entries()) {
     if (!isStr(c.to) || !isStr(c.basis)) p.push(`connection ${i}: needs who and why`);
     if (!['B', 'C', 'D'].includes(c.tier)) p.push(`connection ${i}: tier must be B, C or D — A needs our own record of an interaction`);

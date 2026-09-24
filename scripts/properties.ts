@@ -1556,6 +1556,7 @@ async function main() {
           await imp.importFindings(juan);
           const keptVerified = await n(`select count(*)::text as n from research.claim where entity_id = $1 and field = 'public.role' and last_verified_by is not null`, [pick.key]);
           const phone = (await import('../lib/enrich/schema')).check({ ...finding(), facts: [{ field: 'news', value: 'Call +1 (415) 555-0134', source: { url: 'https://example.org/x', kind: 'press' }, confidence: 'low' }] });
+          const proseEmail = (await import('../lib/enrich/schema')).check({ ...finding(), profile: { summary: 'Invented.', investorType: 'fo_principal', cautions: ['The office answers at desk@example.org'] } });
 
           // A strategy: proposed; the same file again adds nothing; a new file withdraws the open one; accepting moves only the next step.
           const strategy = (next: string) => ({
@@ -1582,10 +1583,10 @@ async function main() {
           check(
             'Enrichment: the research file carries identity only; findings map in unverified, once; a verified claim survives; bad files are refused; a strategy is decided by a person and moves only the next step',
             exported.candidates > 0 && leaks.length === 0 && first.mapped === 1 && first.rejected === 1 && c1 === 2 && unverified === 2 && again.mapped === 1 && c2 === 2 && triageNotes === 1 &&
-              keptVerified === 1 && phone.length > 0 && proposedOnce === 1 && rows.length === 2 && rows[0]!.status === 'withdrawn' && rows[1]!.status === 'proposed' &&
+              keptVerified === 1 && phone.length > 0 && proseEmail.length > 0 && proposedOnce === 1 && rows.length === 2 && rows[0]!.status === 'withdrawn' && rows[1]!.status === 'proposed' &&
               after?.next_step === 'Offer a portfolio briefing — Juan, this week' && after.status === before?.status && after.rungs === before?.rungs && twice instanceof st.SuggestionRefused,
             `${exported.candidates} in the research set, ${leaks.length} lines carrying more than identity; first import mapped ${first.mapped}, refused ${first.rejected}; claims ${c1} (unverified with a date: ${unverified}); imported again, still ${c2}; triage notes after two imports: ${triageNotes}; ` +
-              `a verified claim kept after its fact left the file: ${keptVerified}; a phone number refused: ${phone.length > 0}; one proposal after importing twice: ${proposedOnce}; after a new file: ${rows.map((r) => r.status).join(' → ')}; ` +
+              `a verified claim kept after its fact left the file: ${keptVerified}; a phone number refused: ${phone.length > 0}; an address in a caution refused: ${proseEmail.length > 0}; one proposal after importing twice: ${proposedOnce}; after a new file: ${rows.map((r) => r.status).join(' → ')}; ` +
               `accepted: next step "${after?.next_step}", status ${before?.status} → ${after?.status}, rungs ${before?.rungs} → ${after?.rungs}; accepting again refused: ${twice instanceof st.SuggestionRefused}`,
           );
         }
@@ -1626,6 +1627,41 @@ async function main() {
             !denial && later && ab?.tier === 'C' && ab.kind === 'coinvestor' && ac?.tier === 'D' && oneWord === 0 && staleNewer && !freshPinned && staleUnpinned,
             `denial read as a tie: ${denial}; the next sentence's tie: ${later}; both invested: ${ab?.tier ?? 'none'} ${ab?.kind ?? ''}; both worked at one company: ${ac?.tier ?? 'none'}; ` +
               `paths through "Science" in a sentence: ${oneWord}; stale when the finding is newer: ${staleNewer}; pinned and current: ${freshPinned}; unpinned and older: ${staleUnpinned}`,
+          );
+        }
+
+        // The connector plan (W11): a restricted prospect is left out (rule 8), and so is one who has
+        // met us; a connector whose money is soft asks after signing; asks stop at the guard's limit.
+        {
+          const { mkdtemp, writeFile: wf3, rm: rm3, mkdir: mk3 } = await import('node:fs/promises');
+          const { tmpdir } = await import('node:os');
+          const cp = await import('../lib/enrich/connectors');
+          const { config } = await import('../config/deployment');
+          const scratch = await mkdtemp(join(tmpdir(), 'props-w11-'));
+          await mk3(join(scratch, 'strategy'), { recursive: true });
+          const lp = (key: string, status: string, extra: Record<string, unknown> = {}) => ({
+            key, name: `LP ${key}`, type: 'person', org: null, role: null, location: null, domains: [], enriched: {},
+            pursuits: [{ pursuitId: key, vehicle: 'PLC Neurotech I', status, rung: null, owner: 'Juan', stageSaid: null, nextStep: null }],
+            contact: { meetings: 0, lastTouch: null, lastFromThem: null, awaitingSince: null, read: null, lastTouchChannel: null, groupMeetings: 0, outreachShared: 0 },
+            money: null, notes: [], restrictions: [], ...extra,
+          });
+          const people = [
+            lp('k', 'committed', { money: { amount: 1_000_000, track: 'soft', state: 'soft', signedOn: null, signedPerSource: false, wired: 0 } }),
+            lp('p1', 'selected'), lp('p2', 'connecting'), lp('p3', 'connecting'), lp('p4', 'connecting'),
+            lp('met', 'discussing', { contact: { meetings: 2, lastTouch: '2026-09-01', lastFromThem: '2026-09-01', awaitingSince: null, read: null, lastTouchChannel: 'meeting', groupMeetings: 0, outreachShared: 0 } }),
+            lp('dnc', 'connecting', { restrictions: [{ scope: 'blanket', connector: null, channel: null }] }),
+          ];
+          const tie = (lpKey: string) => ({ lp: lpKey, other: { type: 'lp', name: 'LP k', key: 'k' }, kind: 'coinvestor', tier: 'C', basis: 'Both invested in Harbor Robotics', source: 'https://example.org' });
+          await wf3(join(scratch, 'candidates.jsonl'), people.map((x) => JSON.stringify(x)).join('\n') + '\n');
+          await wf3(join(scratch, 'connections.jsonl'), ['p1', 'p2', 'p3', 'p4', 'met', 'dnc'].map((k) => JSON.stringify(tie(k))).join('\n') + '\n');
+          const plans = await cp.connectorPlans(scratch);
+          await rm3(scratch, { recursive: true, force: true });
+          const plan = plans.find((x) => x.connector.key === 'k');
+          const named = new Set(plan?.prospects.map((x) => x.key) ?? []);
+          check(
+            'The connector plan leaves out a restricted prospect and one who has met us, asks a soft connector after signing, and stops at the guard’s limit',
+            Boolean(plan) && !named.has('dnc') && !named.has('met') && named.size === 4 && plan!.asks.length === config.guard.asksPerConnectorPerQuarter && plan!.when === 'after they sign' && plan!.toConfirm === plan!.asks.length,
+            `prospects: ${[...named].join(', ')}; restricted named: ${named.has('dnc')}; met named: ${named.has('met')}; asks ${plan?.asks.length} (limit ${config.guard.asksPerConnectorPerQuarter}); when: ${plan?.when}; ties to confirm: ${plan?.toConfirm}`,
           );
         }
 

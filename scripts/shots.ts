@@ -212,6 +212,18 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N67: [
+    {
+      name: '01-a-shared-record',
+      path: '/neurotech/pipeline',
+      prepare: async (page) => {
+        await openLp(page, 'Michael Okonjo');
+        await page.getByRole('heading', { name: 'From public sources' }).evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N66: [
     {
       name: '01-the-connector-plan',

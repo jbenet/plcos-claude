@@ -43,6 +43,7 @@ that someone is in the pipeline (CLAUDE.md, real data).
 | W9 | **Triage the cold** — who deserves research, who has a way in now, and the check before any note | the pipeline, W3 | `triage.jsonl` | every lane and first step carries its reasons |
 | W1s | **Structure** — name each fact's company or fund, from the fact's own words | W1's findings | `raw/<key>.json`, `detail` only | no name that isn't in the words |
 | W11 | **The connector plan** — who could introduce whom, within the guard's limit | W3, W9, W5 | `connectors.json` | restricted prospects left out; C and D ties marked to confirm |
+| W5c | **The critic** — grade strategies against the litmus test and the rules, without rewriting them | W5, W1, W9, W3 | `strategy-review.jsonl` | grades by protocol version; the issues become the next amendment |
 | W2n | **The Protocol Labs network** — who is in PL's own directory, and whose firm is a network team | the research set's names; the directory's public API | `us/pl-network.json`, `us/pl-directory.jsonl` | an entry matched to our record of them, or said to need confirming; nothing for contacting anyone kept |
 
 Batches are cut by `scripts/enrich-batch.ts`, whole firms together, so colleagues share one
@@ -340,6 +341,82 @@ search budget was spent):
   as a dated "what they say now", at `low`); Wikipedia's article on an acquired startup often
   redirects to the acquirer and drops the founders (the accelerator page keeps them).
 
+**Amendments, version 1.13:**
+
+- **A company homepage's structured data can name co-founders** the visible page leaves out: with no
+  team page, ask the reader for its schema.org founder entries and job titles.
+- **A LinkedIn handle can match a company's former name,** not the person's; the 1.9 check compares
+  handles with former company names too.
+- **A nickname needs its formal name before EDGAR finds anything** (a foundation's care-of line in
+  the nonprofit database can give it). A role found by name match alone stays `medium` unless the
+  filing names the firm.
+- **Two filings disagreeing on a board seat:** check the issuer's CIK for a later name (a SPAC after
+  its merger); record the seat as former, the new name in `detail`.
+- **The reader's first summary can overstate a relation** ("anchored by" became "largest
+  investor"): ask for the exact sentences before an angle rests on it. An "Attn:" line in a deal
+  exhibit names staff with a date: record the employer and the date, never the address.
+- **EDGAR mechanics:** OR queries and names with an apostrophe return server errors; one phrase with
+  the company's `ciks=` filter works, and reaches a named company's proxy fastest.
+
+**Amendments, version 1.14:**
+
+- **Other companies' proxies carry the freshest dated bio.** A full-name EDGAR search limited to
+  the last two years finds a proxy from a company where the LP is a director: current title,
+  committees, advisory posts — even when their own domain doesn't resolve.
+- **A 13G's reporting persons name the principal,** not only its signature block: a family office
+  that never says whose money it manages may list a founder's trust among them.
+- **A board designee is not an employee.** "One individual designated by X" ties a name to X with no
+  title there: record the designation; the identity is `probable` when only name and organization
+  are on file.
+- **Verbatim before an amount or an acquirer.** The reader's summary turned a round's total into
+  one investor's check, and may attach one acquirer to two companies.
+- **A team page that says the LP "currently leads" a company whose own site names someone else:**
+  `low`, with a caution; the company's filings settle it, and a script-drawn registry goes to a
+  person.
+- **A long filing the reader cuts off:** name the filing and section under "for a person" — two
+  names together in a prospectus is a precise lead. The web archive can't be read from here, so a
+  domain that refuses connections has no fallback.
+
+**Amendments, version 1.15** — look-alikes, the main trap without search:
+
+- **Search a general partner's exact legal name in quotes, never its acronym,** and join a filing to
+  an LP only through a named officer. An acronym's hits were almost all another company's; a
+  "<Firm> Ventures 23, LLC" was a real-estate issuer; advisers and a hedge fund had the firm's name
+  inside theirs; an AI company was called "Brain…".
+- **Take the company from the opened filing, never from a list summary,** and ask for raw field
+  values before recording an amount: the reader put a filing under the company that later took the
+  same ticker, and read whole dollars as thousands.
+- **Namesakes who share a first name are often relatives; the SEC filer number (CIK) separates
+  them.** Board seats come only from the LP's own CIK (a footnote naming their fund entities ties
+  it); the other is a caution for W3.
+- **Family-office staff show up in signature blocks,** which prove they still work there but not
+  their title: record the signing role with its date, keep our title "per our record", and the
+  two-year caution when the newest source is older.
+- **A GP's new funds can carry a brand their own site never uses.** Record the raise at `medium`
+  with the tie spelled out (full name, city, scale); the Form ADV owner check is the first "for a
+  person" item.
+- **Script-drawn sites and dead paths:** ask the reader for the page titles and the homepage's full
+  link list — a title ("Name - Founder of X") can settle identity, and the link list gives the real
+  portfolio pages and doubles as the check against our portfolio's names.
+
+**Amendments, version 1.16:**
+
+- **Nothing in a special category, ever — not only health.** No religious, political, ethnic or
+  union affiliation, no sexual orientation, even when a bio lists it. When the organization on file
+  is a civic or political group, describe it only as its own site does, and tie it to the person
+  only on a page that names them.
+- **A "not listed" from a long page covers only what the reader saw.** A thousand-company portfolio
+  page came through to the names starting with A, and the reader still answered "no" for every
+  name. Ask for the last entries it saw, and write the range covered under `cautions`.
+- **Describe a company only in the page's own words** — its listing's or its own site's — or just
+  "is in the portfolio". Neither the reader's summary nor a first draft may give it a sector no
+  page supports.
+- **A GP's own open fund is a timing signal and a caution:** record the offering, the amount sold
+  and the amount still open. W5 reads it as lower propensity for an LP commitment (they are raising
+  too): the ask becomes introductions or co-investing.
+- The checker now looks for an email address or a phone number in every text a finding carries —
+  the profile, cautions, signals, coverage and the identity's basis — not only in facts.
+
 ## Protocol — W5, strategy for an LP (version 1)
 
 For one researched LP, read: its finding (`raw/<key>.json`), its line in `candidates.jsonl` (where it
@@ -442,6 +519,33 @@ Never an inferred health reason, never pressure, never a claim the record doesn'
   by work domain); the lead conversation's strategy carries it, the others say `firm-level ask`.
 - **Someone who has met us needs no introduction:** W11 no longer proposes one.
 
+**Amendments, W5 version 1.5** (from W5c, the critic's first sample: 25 strategies, 10 A, 12 B,
+3 C — quality rising with each version; its five recurring problems, and three rule slips):
+
+- **Say only what the record says.** Owning a pursuit is not having been in the meeting. Before
+  calling something a reply or a one-to-one, read `contact.lastTouchChannel` and
+  `contact.groupMeetings`. A stage is a claim.
+- **Evidence gates.** Capacity is a band only with assets or net worth, a check or commitment on
+  record, or a filing — otherwise `unknown`. "This year" needs a dated word from them in the last 90
+  days, a commitment on the close track, or a meeting that wasn't a group date; otherwise the 2027
+  list, until the check in the next step comes back. The checker counts both.
+- **Money on file comes first.** When the close track has an amount, the ask starts from it, soft
+  and labelled; a strategy never reads "no amount visible" beside one. A historical vehicle, or an
+  SPV that never went through, is never a fit.
+- **The lead strategy carries the firm.** Colleagues by work domain and by W3's same-firm links; the
+  lead lists every colleague with their owner and status, names the one owner and the one money ask,
+  and the others say `firm-level ask`. A partner's personal check at a large firm is marked
+  personal, so it isn't a second ask of the firm.
+- **A GP raising a fund of their own right now** (a recent Form D with money unsold): lower
+  propensity for an LP commitment — an ask of their partners reads as a trade. The ask becomes
+  introductions or co-investing.
+- **The next step:** one person, one action, a date — under 300 characters with who and when.
+  Whatever its own risks say must come first, comes first. **A note to several people never carries
+  one person's amount or words.** A connector path keeps the tier the connection file gives it: a D
+  is never called C, and never the way in.
+- **Pin every input:** `made.inputs` carries the finding's `researched.at` and the close track's
+  amount and state; a change in either makes the strategy stale.
+
 ## Running W1 as a sub-agent
 
 The instructions a research agent follows, so a launch names only its batch. Its prompt carries no
@@ -471,6 +575,24 @@ real data; it reads its batch file.
 not one — the session's budget is shared and spent — and `method: "pages"` on every finding. The
 rest of the rules stand.
 
+## The search pass, when the budget allows
+
+Every finding made from pages alone (`method: "pages"`) is owed one. It is cheap to start:
+
+1. `DATA_PROFILE=real npx tsx scripts/enrich-batch.ts w1 r 15 --search` cuts the batches — the
+   pages-only findings, whole firms together, discussing and selected first.
+2. Each agent runs W1 as written (amendments through 1.5 for the searches; 1.6–1.12 still apply to
+   the reads), starting from the finding already on file rather than from nothing: its
+   `coverage.notFound` lists what "for the search pass" should look for. The first search is the
+   "near us" check (the name with Protocol Labs, IPFS or Filecoin, limited to those sites); then
+   funding news that names backers; then, for a `not_found`, the name with the organization.
+3. The finding is rewritten with `method: "search"` and the new version; the checker, W3, W9, W11
+   and the import run as always, and strategies older than their finding go back in the W5 queue.
+
+Budget: about four searches per LP, so a session's 200 covers some fifty LPs — the Discussing and
+Selected first, then the research-first lane. Raising `CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION`
+is the user's decision, never an agent's.
+
 ## Running W5 as a sub-agent
 
 1. Read, in full: this document (the W5 protocol and what the earlier research says);
@@ -479,7 +601,7 @@ rest of the rules stand.
 2. For each key in `data/real/enrich/batches/<batch>.txt`, read its finding, its line in
    `candidates.jsonl`, its paths in `connections.jsonl`, and our side (`us/team.json`, `us/network.json`,
    `presence/site.json`); write `data/real/enrich/strategy/<key>.json`, `made` set to
-   `{ at: <now>, by: "claude (sub-agent)", workflow: "W5", version: 1.4, inputs: { finding: <its researched.at, or null> } }`. Skip an unresolved identity unless
+   `{ at: <now>, by: "claude (sub-agent)", workflow: "W5", version: 1.5, inputs: { finding: <its researched.at, or null>, money: <"<track> <state> <amount>" from candidates.jsonl, or null> } }`. Skip an unresolved identity unless
    our own records alone support a strategy. An LP with no finding yet (W9's "warm now" lane) gets a
    strategy from our records alone — its line in `triage.jsonl` says why it is warm — at `low`
    confidence, with "research them" among the open questions.
@@ -620,6 +742,18 @@ beside it.
   research couldn't run — found 18 with an entry under their own name, 15 of them matching our
   record (their firm, their work domain): PL's own record that they're in the network, tier B. 57
   work at a firm that is a network team: the firm's tie, C. Contact fields are never kept.
+- **The synthesis reads top-down now.** Five lines to start (signatures, the five most ready, the
+  checks, introductions, research), then the close gap, the first notes worth writing (a signal of
+  their own in our field), founders as references (LPs who backed our portfolio companies), what
+  changed for them in the last year (dated signals), and our own network — before the long lists.
+- **The critic (W5c).** A no-web pass graded 25 strategies across the protocol's versions: 10 A,
+  12 B, 3 C, none D — and the grades rose with each version (version 1: 2 of 13 A; 1.3 and later: 4
+  of 5). The recurring faults were reading our records for more than they say, stale inputs, firms
+  not coordinated, next steps too long to survive the import, and estimates ahead of the evidence;
+  the three Cs were rule slips (one LP's amount in a note to a colleague, a soft commit nobody gave,
+  a D tie used as C). They became W5 1.5, and the checker's gates now count what a strategy claims
+  beyond the files. Every strategy written before 1.3, or flagged, is being rewritten at 1.5 — firm
+  by firm, the committed LPs first.
 - **The litmus test.** As outreach, most of the Connecting list is not ready to act on; as a list of
   internal checks, it is. What is ready now: the committed LPs' signatures, the warm lane once each
   has an owner, and the checks. What no workflow here can supply: who from our side was in each

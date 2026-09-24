@@ -20,7 +20,7 @@ export interface Strategy {
    * their inputs): the finding's `researched.at`, or null when there was none. A strategy whose LP
    * has a newer finding is stale, and the checker says so.
    */
-  made: { at: string; by: string; workflow: 'W5'; version: number; inputs?: { finding: string | null } };
+  made: { at: string; by: string; workflow: 'W5'; version: number; inputs?: { finding: string | null; money?: string | null } };
   fit: Record<string, { verdict: 'strong' | 'good' | 'possible' | 'weak' | 'unknown'; why: string; gates?: Array<{ gate: string; answer: 'yes' | 'no' | 'unknown'; basis: string }> }>;
   scores: {
     capacity: { band: string; basis: string };
@@ -45,13 +45,51 @@ const isStr = (x: unknown): x is string => typeof x === 'string' && x.trim().len
 
 /** The import keeps what, who and when together in 400 characters (W5 v1.3); longer is cut, not refused. */
 export const nextTooLong = (s: Pick<Strategy, 'next'>) => `${s.next.what} — ${s.next.who}, ${s.next.when ?? ''}`.length > 400;
+/** W5 v1.5: one person, one action, a date — under 300 characters with who and when. */
+export const nextOverLimit = (s: Pick<Strategy, 'next'>) => `${s.next.what} — ${s.next.who}, ${s.next.when ?? ''}`.length > 300;
 
-/** Written before its LP's current finding — from records alone, or from an older finding. */
-export function isStale(s: Pick<Strategy, 'made'>, finding: { researched: { at: string } } | null | undefined): boolean {
+/** The close track as a strategy pins it (W5 v1.5): "<track> <state> <amount>", or null. */
+export const moneyKey = (m: { track: string; state: string; amount: number } | null | undefined) => (m ? `${m.track} ${m.state} ${m.amount}` : null);
+
+/**
+ * Written before its LP's current finding — from records alone, or from an older finding — or,
+ * when it pinned the close track (v1.5), before that changed.
+ */
+export function isStale(
+  s: Pick<Strategy, 'made'>,
+  finding: { researched: { at: string } } | null | undefined,
+  money?: { track: string; state: string; amount: number } | null,
+): boolean {
+  const pinned = s.made.inputs;
+  if (pinned && 'money' in pinned && money !== undefined && (pinned.money ?? null) !== moneyKey(money)) return true;
   if (!finding) return false;
-  const read = s.made.inputs?.finding;
-  if (read !== undefined) return read !== finding.researched.at;
+  if (pinned?.finding !== undefined) return pinned.finding !== finding.researched.at;
   return new Date(finding.researched.at).getTime() > new Date(s.made.at).getTime();
+}
+
+/**
+ * The critic's evidence gates (W5 v1.5), as warnings: what a strategy claims beyond what the files
+ * show. "This year" needs a word from them in the last 90 days, money on the close track, or a
+ * meeting that wasn't a group date; a capacity band needs the finding's estimate or money on file;
+ * a route can't be better than the best path W3 found for the LP.
+ */
+export function gates(
+  s: Pick<Strategy, 'list' | 'scores' | 'route'>,
+  c: { contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: unknown } | undefined,
+  finding: { profile?: { capacity?: { band: string } } } | null | undefined,
+  bestTier: 'A' | 'B' | 'C' | 'D' | null,
+  today = new Date(),
+): string[] {
+  const out: string[] = [];
+  if (!c) return out;
+  const recent = c.contact.lastFromThem && today.getTime() - new Date(c.contact.lastFromThem).getTime() <= 90 * 86_400_000;
+  const oneToOne = c.contact.meetings > c.contact.groupMeetings;
+  if (s.list === 'this year' && !recent && !c.money && !oneToOne) out.push('this year, without the evidence gate');
+  const band = s.scores?.capacity?.band ?? 'unknown';
+  if (!/unknown|not known/i.test(band) && (finding?.profile?.capacity?.band ?? 'unknown') === 'unknown' && !c.money) out.push('capacity ahead of the evidence');
+  const rank = { A: 0, B: 1, C: 2, D: 3 } as const;
+  if (s.route && (bestTier === null || rank[s.route.tier] < rank[bestTier])) out.push('route better than the best path on file');
+  return out;
 }
 
 export function checkStrategy(s: unknown, expectKey?: string): string[] {

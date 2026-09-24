@@ -75,6 +75,9 @@ export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
 
     if (backer) reasons.push(`Their firm backed Protocol Labs (${backer.other.name}): a clue, the firm’s tie, not theirs`);
     if (pagesFoundNothing.has(c.key)) reasons.push('Page reads found nothing on them: they wait for the search pass, not another read of the same pages');
+    // A warm signal only our notes hold (W5, iteration 3): an invitation promised, a referral.
+    const invite = c.notes.find((n) => /invit|invite list|guest list|future events|referr/i.test(n.summary ?? ''));
+    if (invite) reasons.push(`Our notes mention an invitation or a referral (${invite.on}): check it was followed through before anything else`);
     if (senior) reasons.push(`Senior title: ${title}`);
     else if (title) reasons.push(`Not the decision-maker by title (${title}): likely the first contact and a gatekeeper`);
     const mailing = c.contact.outreachShared >= 10;

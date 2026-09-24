@@ -13,6 +13,9 @@
  *   w5   a resolved finding with no strategy, or a strategy older than its finding; or W9's warm
  *        lane with no strategy. Within a firm, the colleague with the most contact comes first, so
  *        the lead conversation's strategy is written before the others read it.
+ *        With `--revise` (W5 v1.5): strategies written before version 1.3, or that the critic's
+ *        gates flag, or with a next step over 300 characters — and every colleague at their firm,
+ *        so a firm is rewritten together.
  *
  * Writes batches/<prefix>NN.jsonl (w1: identity lines from research-set.jsonl) or .txt (w5: keys),
  * and prints counts only.
@@ -23,7 +26,8 @@ import { config } from '../config/deployment';
 import type { Candidate } from '../lib/enrich/candidates';
 import { norm } from '../lib/enrich/connect';
 import { pagesOnly, type Finding } from '../lib/enrich/schema';
-import { isStale, type Strategy } from '../lib/enrich/strategy';
+import { gates, isStale, nextOverLimit, type Strategy } from '../lib/enrich/strategy';
+import type { Path } from '../lib/enrich/connect';
 import type { Triage } from '../lib/enrich/triage';
 
 const FREE = /^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|mac|aol|proton|protonmail|live|msn)\./;
@@ -40,6 +44,7 @@ async function jsonDir<T extends { key: string }>(dir: string): Promise<Map<stri
 async function main() {
   const [mode, prefix, sizeArg] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
   const withSearch = process.argv.includes('--search');
+  const revise = process.argv.includes('--revise');
   if ((mode !== 'w1' && mode !== 'w5') || !prefix) {
     console.error('usage: enrich-batch.ts w1|w5 <prefix> [size] [--search]');
     process.exit(2);
@@ -82,15 +87,30 @@ async function main() {
   const contact = (c: Candidate) => c.contact.meetings * 10 + (c.contact.lastFromThem ? 5 : 0) + (c.contact.lastTouch ? 1 : 0);
   const rank = (c: Candidate) => (STATUS[c.pursuits[0]?.status ?? ''] ?? 9) * 10 + (LANE[triage.get(c.key)?.lane ?? ''] ?? 4);
 
-  const wanted = cands.filter((c) => {
+  const best = new Map<string, 'A' | 'B' | 'C' | 'D'>();
+  for (const l of lines(await readFile(join(dir, 'connections.jsonl'), 'utf8').catch(() => ''))) {
+    const p = JSON.parse(l) as Path;
+    const cur = best.get(p.lp);
+    if (!cur || p.tier < cur) best.set(p.lp, p.tier);
+  }
+  const flagged = (c: Candidate) => {
+    const s = strategies.get(c.key);
+    return Boolean(s && (s.made.version < 1.3 || nextOverLimit(s) || gates(s, c, findings.get(c.key), best.get(c.key) ?? null).length));
+  };
+  let wanted = cands.filter((c) => {
     const f = findings.get(c.key);
     if (batched.has(c.key) && (mode === 'w1' ? !f : !strategies.has(c.key))) return false;
     if (mode === 'w1') return !f || (withSearch && pagesOnly(f));
     const resolved = f && (f.identity.match === 'confirmed' || f.identity.match === 'probable');
     const s = strategies.get(c.key);
-    if (s) return Boolean(f && isStale(s, f));
-    return Boolean(resolved || triage.get(c.key)?.lane === 'warm now');
+    if (s) return isStale(s, f, c.money) || (revise && flagged(c));
+    return !revise && Boolean(resolved || triage.get(c.key)?.lane === 'warm now');
   });
+  if (revise) {
+    // The whole firm comes along: its colleagues' strategies are rewritten with the lead's.
+    const roots = new Set(wanted.map((c) => find(c.key)));
+    wanted = cands.filter((c) => strategies.has(c.key) && roots.has(find(c.key)));
+  }
   const firms = new Map<string, Candidate[]>();
   for (const c of wanted) firms.set(find(c.key), [...(firms.get(find(c.key)) ?? []), c]);
   const ordered = [...firms.values()]

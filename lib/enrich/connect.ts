@@ -62,8 +62,20 @@ function mentions(text: string, alias: string): boolean {
  */
 export function affirms(text: string, alias: string): boolean {
   if (!mentions(text, alias)) return false;
-  return text.split(/(?<=[.;!?])\s+/).some((sentence) => mentions(sentence, alias)
-    && !new RegExp(`\\b(no|not|none|never|without|neither|nor)\\b[^.;]*?${escape(alias)}`, 'i').test(sentence));
+  const a = escape(alias);
+  // A denial before the name ("no Protocol Labs company") or after it, in the same clause
+  // ("Protocol Labs and Filecoin are not among them") rules the mention out (W5, iteration 3).
+  const before = new RegExp(`\\b(no|not|none|never|without|neither|nor)\\b[^.;]*?${a}`, 'i');
+  const after = new RegExp(`${a}[^.;]*?\\b((is|are|was|were|isn['’]t|aren['’]t|wasn['’]t|weren['’]t)\\s+not|not\\s+(among|listed|included|in|part|one)|absent|excluded|missing)\\b`, 'i');
+  return text.split(/(?<=[.;!?])\s+/).some((sentence) => mentions(sentence, alias) && !before.test(sentence) && !after.test(sentence));
+}
+
+/** A fact's words cut for a path's basis at a sentence or clause end, never mid-sentence. */
+export function clip(text: string, max = 200): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('; '));
+  return end > 60 ? cut.slice(0, end + 1) : `${cut.replace(/\s+\S*$/, '')}…`;
 }
 
 export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: number; researched: number }> {
@@ -115,7 +127,7 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
       for (const a of o.aliases) {
         if (text && affirms(text, a)) {
           const fact = f!.facts.find((x) => x.confidence !== 'low' && affirms(x.value, a));
-          add({ lp: c.key, other: { type: 'ours', name: o.name }, kind: fact?.field === 'investment' ? 'coinvestor' : fact?.field === 'board' ? 'board' : 'other', tier: 'C', basis: `Public source mentions ${a}: “${(fact?.value ?? '').slice(0, 140)}”`, source: fact?.source.url ?? null });
+          add({ lp: c.key, other: { type: 'ours', name: o.name }, kind: fact?.field === 'investment' ? 'coinvestor' : fact?.field === 'board' ? 'board' : 'other', tier: 'C', basis: `Public source mentions ${a}: “${clip(fact?.value ?? '')}”`, source: fact?.source.url ?? null });
           break;
         }
       }
@@ -138,7 +150,7 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
       const atOrg = orgs.find((o) => pc.aliases.some((a) => norm(o) === norm(a)));
       if (hit || atOrg) {
         add({ lp: c.key, other: { type: 'ours', name: `${pc.name} (${pc.vehicle} portfolio)` }, kind: atOrg ? 'colleague' : hit!.field === 'board' ? 'board' : 'coinvestor', tier: 'C',
-          basis: atOrg ? `Works at ${pc.name}, a ${pc.vehicle} portfolio company` : `Public source: “${hit!.value.slice(0, 140)}”`, source: hit?.source.url ?? pc.source ?? null });
+          basis: atOrg ? `Works at ${pc.name}, a ${pc.vehicle} portfolio company` : `Public source: “${clip(hit!.value)}”`, source: hit?.source.url ?? pc.source ?? null });
       }
     }
 
@@ -298,7 +310,9 @@ export function sharedRecords(candidates: Candidate[], findings: Map<string, Fin
     for (const part of s.split(/\s*;\s*/)) {
       const n = entityKey(part);
       const words = norm(part);
-      if (n.length >= 4 && !GENERIC.test(words) && !TOO_COMMON.has(words) && !/^\d/.test(n) && words.split(' ').length <= 5 && !names.has(n)) names.set(n, part.trim());
+      // Three letters only as an acronym written in capitals — a firm whose real name is short (c06).
+      const long = n.length >= 4 || (n.length === 3 && /^[A-Z0-9&]{3}$/.test(part.trim()));
+      if (long && !GENERIC.test(words) && !TOO_COMMON.has(words) && !/^\d/.test(n) && words.split(' ').length <= 5 && !names.has(n)) names.set(n, part.trim());
     }
   };
   for (const c of resolved) {

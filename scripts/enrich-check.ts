@@ -8,7 +8,8 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config/deployment';
 import { check, type Finding } from '../lib/enrich/schema';
-import { checkStrategy, isStale, nextTooLong, type Strategy } from '../lib/enrich/strategy';
+import { checkStrategy, gates, isStale, nextOverLimit, nextTooLong, type Strategy } from '../lib/enrich/strategy';
+import type { Path } from '../lib/enrich/connect';
 
 async function main() {
   const dir = join(process.cwd(), config.data.root, 'enrich', 'raw');
@@ -43,7 +44,16 @@ async function main() {
   // W5: the strategies, if any.
   const sdir = join(process.cwd(), config.data.root, 'enrich', 'strategy');
   const sfiles = (await readdir(sdir).catch(() => [])).filter((f) => f.endsWith('.json'));
-  let sbad = 0, stale = 0, long = 0;
+  let sbad = 0, stale = 0, long = 0, over = 0;
+  const gateCount: Record<string, number> = {};
+  const candsByKey = new Map((await readFile(join(process.cwd(), config.data.root, 'enrich', 'candidates.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
+    .map((l) => JSON.parse(l) as { key: string; domains: string[]; contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: { track: string; state: string; amount: number } | null }).map((c) => [c.key, c]));
+  const best = new Map<string, 'A' | 'B' | 'C' | 'D'>();
+  for (const l of (await readFile(join(process.cwd(), config.data.root, 'enrich', 'connections.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)) {
+    const p = JSON.parse(l) as Path;
+    const cur = best.get(p.lp);
+    if (!cur || p.tier < cur) best.set(p.lp, p.tier);
+  }
   const MONEY_SHAPES = ['fund commitment', 'SPV', 're-up or upsize'];
   const moneyAsk = new Map<string, string>();
   const lists: Record<string, number> = {}, shapes: Record<string, number> = {};
@@ -53,8 +63,12 @@ async function main() {
     const problems = checkStrategy(x, f.replace(/\.json$/, ''));
     if (problems.length) { sbad++; console.log(`  strategy ${f.slice(0, 8)}: ${problems.join('; ')}`); }
     const s = x as { list?: string; ask?: { shape?: string } };
-    if ((x as Strategy).made && isStale(x as Strategy, found.get(f.replace(/\.json$/, '')))) stale++;
+    const key = f.replace(/\.json$/, '');
+    const cand = candsByKey.get(key);
+    if ((x as Strategy).made && isStale(x as Strategy, found.get(key), cand ? cand.money : undefined)) stale++;
     if ((x as Strategy).next?.what && nextTooLong(x as Strategy)) long++;
+    if ((x as Strategy).next?.what && nextOverLimit(x as Strategy)) over++;
+    if ((x as Strategy).scores) for (const g of gates(x as Strategy, cand, found.get(key), best.get(key) ?? null)) gateCount[g] = (gateCount[g] ?? 0) + 1;
     if (MONEY_SHAPES.includes((x as Strategy).ask?.shape ?? '')) moneyAsk.set(f.replace(/\.json$/, ''), (x as Strategy).ask.shape);
     lists[s.list ?? '?'] = (lists[s.list ?? '?'] ?? 0) + 1;
     shapes[s.ask?.shape ?? '?'] = (shapes[s.ask?.shape ?? '?'] ?? 0) + 1;
@@ -70,7 +84,7 @@ async function main() {
     for (const d of c.domains.filter((x) => !/^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|mac|aol|proton|protonmail|live|msn)\./.test(x))) asksAt.set(d, (asksAt.get(d) ?? 0) + 1);
   }
   const doubled = [...asksAt.values()].filter((n) => n > 1).length;
-  if (sfiles.length) console.log(`${sfiles.length} strategies · ${sbad} with problems · ${stale} older than their LP's finding · ${long} with a next step the import cuts at 400 characters · ${doubled} firms asked for money twice · lists ${JSON.stringify(lists)} · asks ${JSON.stringify(shapes)}`);
+  if (sfiles.length) console.log(`${sfiles.length} strategies · ${sbad} with problems · ${stale} older than their LP's finding · ${long} with a next step the import cuts at 400 characters (${over} over v1.5's 300) · ${doubled} firms asked for money twice · gates ${JSON.stringify(gateCount)} · lists ${JSON.stringify(lists)} · asks ${JSON.stringify(shapes)}`);
   if (bad || sbad) process.exitCode = 1;
 }
 main();
