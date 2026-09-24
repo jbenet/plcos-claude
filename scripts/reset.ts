@@ -33,7 +33,7 @@ async function main() {
   await rm(join(process.cwd(), lockFile(config.db.localDir)), { force: true });
   console.log(`removed ${config.db.localDir}`);
   const db = await openFresh();
-  const n = await db.one<{ n: string }>('select count(*)::text as n from platform.app_user');
+  const n = await db.one<{ n: string }>('select count(*)::text as n from platform.app_user where active');
   console.log(`rebuilt · ${db.kind} · ${n?.n ?? 0} users seeded`);
   await db.close();
 }

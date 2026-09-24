@@ -271,7 +271,8 @@ async function seedResearch(db: Db) {
 
 /** Called on boot so `npm run dev` on a fresh clone lands on a populated screen. */
 export async function seedIfEmpty(db: Db): Promise<void> {
-  const row = await db.one<{ n: string }>('select count(*)::text as n from platform.app_user');
+  // People, not the system's own actor (platform migration 003), which every database has.
+  const row = await db.one<{ n: string }>('select count(*)::text as n from platform.app_user where active');
   if (row && Number(row.n) > 0) return;
   await seed(db);
 }

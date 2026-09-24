@@ -173,14 +173,35 @@ function NoteRow({ n }: { n: NoteView }) {
 /** Their read, a person's or a suggestion from a note — and, for a suggestion, the two answers. */
 function TheirRead({ r, pursuitId }: { r: ShownRead | null; pursuitId: string }) {
   if (!r) return <>nobody has recorded one</>;
-  if (!r.suggested && r.noteId) {
-    return <>{READ_LABEL[r.read]} — confirmed by {r.byName ?? 'someone'} from a note of {r.on ? shortDate(r.on) : 'an unknown date'}{r.basis ? `: “${r.basis}”` : ''}</>;
+  // Superseded by what happened since (N57): shown struck, with what superseded it, and not
+  // counted as their read. A person can still dismiss a suggestion; there is nothing to confirm.
+  if (r.superseded) {
+    return (
+      <span>
+        <s className="muted">{READ_LABEL[r.read]}</s>
+        <span className="muted"> — {r.suggested ? `suggested by ${r.byName} from a note` : r.byName ?? 'unattributed'} of {r.on ? shortDate(r.on) : 'an unknown date'}; since then, {r.superseded.what}. Not their read now.</span>
+        {r.suggested && (
+          <span className="readacts">
+            <form action={decideReadingAction}>
+              <input type="hidden" name="noteId" value={r.noteId ?? ''} />
+              <input type="hidden" name="pursuitId" value={pursuitId} />
+              <input type="hidden" name="decision" value="dismiss" />
+              <button className="btn" type="submit">Dismiss</button>
+            </form>
+          </span>
+        )}
+      </span>
+    );
   }
-  if (!r.suggested) return <>{READ_LABEL[r.read]} — {r.byName ?? 'unattributed'}{r.on ? `, ${shortDate(r.on)}` : ''}</>;
+  const age = r.old && r.on ? <span className="muted"> · old: {Math.round((Date.now() - r.on.getTime()) / (30 * 86_400_000))} months</span> : null;
+  if (!r.suggested && r.noteId) {
+    return <>{READ_LABEL[r.read]} — confirmed by {r.byName ?? 'someone'} from a note of {r.on ? shortDate(r.on) : 'an unknown date'}{r.basis ? `: “${r.basis}”` : ''}{age}</>;
+  }
+  if (!r.suggested) return <>{READ_LABEL[r.read]} — {r.byName ?? 'unattributed'}{r.on ? `, ${shortDate(r.on)}` : ''}{age}</>;
   return (
     <span>
       <span className="suggested">{READ_LABEL[r.read]}</span>
-      <span className="muted"> — suggested by {r.byName} from a note of {r.on ? shortDate(r.on) : 'an unknown date'}{r.basis ? `: “${r.basis}”` : ''}. Not confirmed.</span>
+      <span className="muted"> — suggested by {r.byName} from a note of {r.on ? shortDate(r.on) : 'an unknown date'}{r.basis ? `: “${r.basis}”` : ''}. Not confirmed.</span>{age}
       <span className="readacts">
         <form action={decideReadingAction}>
           <input type="hidden" name="noteId" value={r.noteId ?? ''} />
@@ -253,7 +274,7 @@ export function Timeline(props: {
         {s.nextMeeting && <div className="fact"><span>Next meeting</span><span>{shortDate(s.nextMeeting)}</span></div>}
         <div className="fact">
           <span>Their read</span>
-          <span><TheirRead r={props.read ?? (s.read ? { ...s.read, suggested: false, basis: null, noteId: null } : null)} pursuitId={props.pursuitId} /></span>
+          <span><TheirRead r={props.read ?? (s.read ? { ...s.read, suggested: false, basis: null, noteId: null, superseded: null, old: false } : null)} pursuitId={props.pursuitId} /></span>
         </div>
         {s.lastResearched && <div className="fact"><span>Last researched</span><span>{shortDate(s.lastResearched)}</span></div>}
         {s.withFirm.total > 0 && (

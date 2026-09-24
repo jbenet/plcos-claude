@@ -67,7 +67,13 @@ export async function writeComparisonAction(): Promise<void> {
 export async function translateAction(): Promise<void> {
   const { translate } = await import('@/lib/connectors/affinity/translate');
   const user = await (await auth()).currentUser();
-  await translate(user.id);
+  const run = await translate(user.id);
+  // With the records translated, propose the ladder climbs they support (N57). Proposals only:
+  // nothing is recorded until someone approves them.
+  if (run?.status === 'ok') {
+    const { reconcile } = await import('@/lib/reconcile');
+    await reconcile(user.id);
+  }
   revalidatePath('/', 'layout');
 }
 

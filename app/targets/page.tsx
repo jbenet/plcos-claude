@@ -6,11 +6,12 @@ import {
   IMPLIED_LABEL, PASSED_BY_LABEL, RUNGS, RUNG_LABEL, STATUSES,
   impliedRung, listPursuits, rungIndex, type Pursuit, type PursuitStatus,
 } from '@/modules/strategy';
-import { READ_LABEL, touchpointSummaries, type TouchpointSummary } from '@/modules/meetings';
+import { READ_LABEL, touchpointSummaries, touchpointsByPair, type TouchpointSummary } from '@/modules/meetings';
 import { CLOSE_STATE_LABEL, closeStates } from '@/modules/pipeline';
 import { blanketRestricted } from '@/modules/coordination';
 import { readingsFor, type NoteReading } from '@/lib/connectors/affinity/readings';
-import { shownRead } from '@/lib/reads';
+import { laterFacts, shownRead } from '@/lib/reads';
+import { onFile } from '@/lib/reconcile';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,8 +37,9 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
 
   const pairs = pursuits.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
   const entityIds = [...new Set(pursuits.map((p) => p.entityId))];
+  const touchesBy = await touchpointsByPair(pairs);
   const [sums, closes, restricted, readings] = await Promise.all([
-    touchpointSummaries(pairs), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
+    touchpointSummaries(pairs, new Date(), touchesBy), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
   ]);
   const readsOf = new Map<string, NoteReading[]>();
   for (const r of readings) readsOf.set(r.entityId, [...(readsOf.get(r.entityId) ?? []), r]);
@@ -56,8 +58,11 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
 
   const rows: PipelineRow[] = pursuits.map((p) => {
     const s = sum(p);
-    const read = shownRead(s.read, readsOf.get(p.entityId) ?? []);
     const c = closes.get(`${p.entityId}:${p.vehicleId}`);
+    const read = shownRead(s.read, readsOf.get(p.entityId) ?? [], laterFacts(p, c ? [c] : []));
+    // What the records support beside what the ladder has accepted (N57, docs/18).
+    const file = onFile(p, touchesBy.get(`${p.entityId}:${p.vehicleId}`) ?? [], c ? [c] : []);
+    const onFileRungs = new Set(file.climb.map((x) => x.rung));
     return {
       id: p.pursuitId,
       name: p.entityName,
@@ -90,12 +95,17 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
       read: read ? READ_LABEL[read.read] : null,
       readOn: iso(read?.on),
       readSuggested: Boolean(read?.suggested),
+      readSuperseded: read?.superseded?.what ?? null,
+      readOld: Boolean(read?.old),
       rung: rungIndex(p.rung),
+      needs: rungIndex(p.rung) + 1 + file.climb.length,
       rungs: RUNGS.map((r) => {
         const ev = p.events.find((e) => e.rung === r);
-        return ev ? (ev.evidenceKind === 'not_applicable' ? 'na' : 'on') : 'off';
+        return ev ? (ev.evidenceKind === 'not_applicable' ? 'na' : 'on') : onFileRungs.has(r) ? 'file' : 'off';
       }),
-      rungLabel: p.rung ? RUNG_LABEL[p.rung] : 'Nothing on file',
+      rungLabel: file.to
+        ? `${p.rung ? `${RUNG_LABEL[p.rung]} · ` : ''}${RUNG_LABEL[file.to]} on file, not accepted`
+        : p.rung ? RUNG_LABEL[p.rung] : 'Nothing on file',
     };
   });
 

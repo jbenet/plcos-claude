@@ -6,7 +6,7 @@ export {
   CHANNELS, CHANNEL_LABEL, DIRECTION_LABEL, MEETING_LABEL, OBJECTION_LABEL, READS, READ_LABEL,
 } from './types';
 export {
-  listMeetings, listObjections, listQuestions, objectionTally, summarize, touchpointSummaries, touchpointsFor,
+  listMeetings, listObjections, listQuestions, objectionTally, summarize, touchpointSummaries, touchpointsByPair, touchpointsFor,
   upcomingMeetings,
 } from './repo';
 export { logTouchpoint, prepBrief, TouchpointRefused, type NewTouchpoint } from './service';

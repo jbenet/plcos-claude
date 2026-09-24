@@ -130,6 +130,12 @@ sourcing, selected, discussing, committed, passed — is our plan: set by a pers
 direction, no ticket, and it never writes a rung. The second rung displays as "LP opted in";
 "target" means only a vehicle's size goal.
 
+Reconciliation (N57, `docs/18-reconciliation.md`) keeps the ladder in step with the records:
+after each translation it proposes the climb that records on file support (a meeting on the
+calendar, a reply from them, a signature recorded here), as one STAGE ticket per LP listing each
+rung and its record, requested by the system's inactive "Reconciliation" actor. A person
+approves; claims and notes are never used as records.
+
 **3. Five approval-ticket kinds gate mutations, before the fact.**
 
 `SEND` · `INTRO_ASK` · `MONEY` · `STAGE` · `ALLOCATION_EXCEPTION`

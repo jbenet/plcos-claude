@@ -196,6 +196,47 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N57: [
+    {
+      name: '01-on-file-not-accepted',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.waitForTimeout(200);
+      },
+    },
+    { name: '02-ladders-behind-their-records', path: '/approvals?view=reconcile' },
+    {
+      // Approves the demo's proposals: every shot after this one sees them recorded.
+      name: '03-approved-in-one-go',
+      path: '/approvals?view=reconcile',
+      prepare: async (page) => {
+        await Promise.all([
+          page.waitForURL(/approved=/, { timeout: 60_000 }),
+          page.getByRole('button', { name: 'Approve the checked' }).click(),
+        ]);
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    {
+      name: '04-accepted',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '05-status-behind-the-log',
+      path: '/targets?status=selected',
+      prepare: async (page) => {
+        await page.locator('.pfilters select[aria-label="Flags"]').selectOption('ahead');
+        await page.waitForTimeout(250);
+      },
+    },
+  ],
   N56: [
     {
       name: '01-one-timeline',
@@ -1777,8 +1818,10 @@ async function refuseReal(base: string) {
 async function main() {
   const version = process.argv[2] ?? 'L1';
   const base = process.env.BASE_URL ?? 'http://localhost:3000';
-  const shots = SHOTS[version];
-  if (!shots) throw new Error(`No shots defined for ${version}`);
+  // `npm run shots -- N57 04` retakes only the shots whose names start with "04".
+  const only = process.argv[3];
+  const shots = SHOTS[version]?.filter((s) => !only || s.name.startsWith(only));
+  if (!shots?.length) throw new Error(`No shots defined for ${version}${only ? ` starting ${only}` : ''}`);
   await refuseReal(base);
 
   const dir = join(process.cwd(), 'docs/changelog/shots', version.toLowerCase());

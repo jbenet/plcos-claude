@@ -9,7 +9,7 @@ import { Coverage } from '@/components/ui/Coverage';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import {
-  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, RUNG_REQUIRES, STATUS_LABEL, getPursuit, impliedRung,
+  IMPLIED_LABEL, PASSED_BY_LABEL, RUNGS, RUNG_LABEL, RUNG_REQUIRES, STATUS_LABEL, getPursuit, impliedRung, rungIndex,
 } from '@/modules/strategy';
 import { StatusForm } from '@/components/strategy/StatusForm';
 import { Timeline, meetingLine, type TouchContext } from '@/components/strategy/Timeline';
@@ -27,7 +27,9 @@ import { SignalRow } from '@/components/signals/SignalRow';
 import { firstSentence, notesAbout } from '@/lib/connectors/affinity/notes';
 import { meetingTitles } from '@/lib/connectors/affinity/meetings';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
-import { shownRead } from '@/lib/reads';
+import { laterFacts, shownRead } from '@/lib/reads';
+import { onFile } from '@/lib/reconcile';
+import { findOpenTicket } from '@/modules/governance';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,7 +57,11 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     readingsFor([pursuit.entityId]),
   ]);
   const touchSummary = summarize(touches);
-  const theirRead = shownRead(touchSummary.read, readings);
+  // What the records here support, beside what the ladder has accepted (N57, docs/18).
+  const file = onFile(pursuit, touches, tracks);
+  const proposal = file.climb.length ? await findOpenTicket('STAGE', 'pursuit', pursuit.pursuitId) : null;
+  const claimedRung = pursuit.source !== 'us' && pursuit.stageSaid ? impliedRung(pursuit.implied) : null;
+  const theirRead = shownRead(touchSummary.read, readings, laterFacts(pursuit, tracks));
   // What each touchpoint was about: the meeting's title from the calendar, and the note Affinity
   // ties to the same interaction — its summary, and all of it a click away.
   const interactionOf = (ref: string | null) => {
@@ -208,7 +214,8 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
               {p.implied.includes('met_twice') && touchSummary.meetingDates.length < 2 ? ' · Affinity says two or more' : ''}
               {p.implied.includes('met') && !p.implied.includes('met_twice') && touchSummary.meetingDates.length < 1 ? ' · Affinity says one was held' : ''}
               {touchSummary.lastTouch ? ` · last touch ${shortDate(touchSummary.lastTouch)}` : ''}
-              {theirRead ? ` · their read: ${READ_LABEL[theirRead.read].toLowerCase()}${theirRead.on ? ` (${shortDate(theirRead.on)})` : ''}${theirRead.suggested ? ', suggested from a note' : ''}` : ''}
+              {theirRead && !theirRead.superseded ? ` · their read: ${READ_LABEL[theirRead.read].toLowerCase()}${theirRead.on ? ` (${shortDate(theirRead.on)})` : ''}${theirRead.suggested ? ', suggested from a note' : ''}${theirRead.old ? ', old' : ''}` : ''}
+              {theirRead?.superseded ? ` · an older read (${READ_LABEL[theirRead.read].toLowerCase()}, ${theirRead.on ? shortDate(theirRead.on) : 'undated'}) is superseded: since then, ${theirRead.superseded.what}` : ''}
             </div>
             {p.stageSaid && p.source !== 'us' && (
               <div className={`said${differs ? ' differs' : ''}`}>
@@ -216,7 +223,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
                 {p.implied.length > 0 && (
                   <span className="muted">
                     Its record implies {p.implied.map((i) => IMPLIED_LABEL[i]).join(', ')}
-                    {claimed ? ` — a claim of ${RUNG_LABEL[claimed]}; ${p.rung ? `the ladder has ${RUNG_LABEL[p.rung]} on file` : 'nothing on the ladder is evidenced yet'}` : ''}.
+                    {claimed ? ` — a claim of ${RUNG_LABEL[claimed]}; ${p.rung ? `the ladder has ${RUNG_LABEL[p.rung]} accepted` : 'nothing on the ladder is accepted yet'}${file.to ? `, and the records on file support ${RUNG_LABEL[file.to]}` : ''}` : ''}.
                   </span>
                 )}
               </div>
@@ -236,7 +243,12 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
         );
       })()}
 
-      <LadderStepper pursuit={pursuit} />
+      <LadderStepper
+        pursuit={pursuit}
+        onFile={file}
+        proposalId={proposal?.id ?? null}
+        claimed={claimedRung ? { rung: claimedRung, word: pursuit.stageSaid! } : null}
+      />
 
       <div className="grid2">
         <div>
@@ -336,7 +348,18 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
                 <h2>Advance the ladder</h2>
                 <span className="lbl">STAGE ticket · nothing is recorded here</span>
               </div>
-              <AdvanceForm pursuitId={pursuit.pursuitId} nextRung={pursuit.nextRung} />
+              {proposal ? (
+                // One open STAGE ticket per pursuit (rule 3): the proposal from the records is it.
+                <div className="cbody">
+                  <p style={{ margin: 0, fontSize: 13 }}>
+                    The records on file support {RUNG_LABEL[file.to!]}, and a proposal to record it is{' '}
+                    <Link href={`/approvals?t=${proposal.id}`}>waiting for approval</Link>. Approve or reject it
+                    first; a rung above it can be asked for after.
+                  </p>
+                </div>
+              ) : (
+                <AdvanceForm pursuitId={pursuit.pursuitId} nextRung={pursuit.nextRung} />
+              )}
             </div>
           )}
         </div>
@@ -401,11 +424,20 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
                   </div>
                 </div>
               ))}
-              {pursuit.nextRung && (
+              {file.to && (
                 <p className="note" style={{ marginTop: 12 }}>
-                  Next: <b>{RUNG_LABEL[pursuit.nextRung]}</b>. {RUNG_REQUIRES[pursuit.nextRung]}
+                  On file, not accepted yet: up to <b>{RUNG_LABEL[file.to]}</b>
+                  {proposal ? <>, <Link href={`/approvals?t=${proposal.id}`}>waiting for approval</Link></> : ''}.
                 </p>
               )}
+              {(() => {
+                const after = RUNGS[rungIndex(pursuit.rung) + 1 + file.climb.length];
+                return after ? (
+                  <p className="note" style={{ marginTop: 12 }}>
+                    {file.to ? 'After that' : 'Next'}: <b>{RUNG_LABEL[after]}</b>. {RUNG_REQUIRES[after]}
+                  </p>
+                ) : null;
+              })()}
               {latest && !pursuit.nextRung && (
                 <p className="note" style={{ marginTop: 12 }}>
                   Every rung is on file. The last was {RUNG_LABEL[latest.rung]}.

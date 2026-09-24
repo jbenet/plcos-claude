@@ -14,10 +14,14 @@ export async function listUsers(): Promise<AppUser[]> {
   return rows.map(toUser);
 }
 
+/**
+ * A person who can act here. Inactive rows — the system's own actor for reconciliation's
+ * proposals (N57) — are not found, so nobody can switch to one and approve what it asked.
+ */
 export async function getUserByHandle(handle: string): Promise<AppUser | null> {
   const db = await getDb();
   const row = await db.one<UserRow>(
-    'select id, handle, name, initials, role, email from platform.app_user where handle = $1',
+    'select id, handle, name, initials, role, email from platform.app_user where handle = $1 and active',
     [handle],
   );
   return row ? toUser(row) : null;

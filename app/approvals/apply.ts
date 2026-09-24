@@ -1,6 +1,6 @@
 import { harden } from '@/modules/pipeline';
 import { recordSend } from '@/modules/content';
-import { recordAdvance, type LadderRung } from '@/modules/strategy';
+import { recordAdvance, recordClimb, type ClimbRung, type LadderRung } from '@/modules/strategy';
 import type { ApprovalTicket } from '@/modules/governance';
 
 /**
@@ -36,6 +36,15 @@ export async function applyApprovedTicket(
         occurredAt: new Date(),
       });
       return { ran: 'strategy.recordAdvance' };
+    }
+    case 'strategy.recordClimb': {
+      await recordClimb(actorId, {
+        pursuitId: String(apply.args['pursuitId']),
+        ticketId: ticket.id,
+        from: (apply.args['from'] as LadderRung | null) ?? null,
+        rungs: apply.args['rungs'] as ClimbRung[],
+      });
+      return { ran: 'strategy.recordClimb' };
     }
     case 'content.recordSend': {
       await recordSend(actorId, String(apply.args['sendId']), ticket.id);

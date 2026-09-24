@@ -119,6 +119,69 @@ export async function recordAdvance(
   });
 }
 
+export interface ClimbRung {
+  rung: LadderRung;
+  evidenceKind: string;
+  evidenceRef: string;
+  evidenceNote: string;
+  occurredAt: string;
+}
+
+/**
+ * Record several rungs at once, each on its own record (N57, docs/18). Reconciliation proposes
+ * this when the records on file are ahead of the ladder — a meeting on the calendar is the record
+ * for "Meeting held" and, since they came, for "LP opted in" — and a person approves it as one
+ * STAGE ticket for the pursuit. Fails closed without that approval, and refuses if the ladder
+ * moved since the proposal or the rungs are not the next ones in order: there is still no
+ * skipping, only a climb in which every step names its record.
+ */
+export async function recordClimb(
+  actorId: string,
+  args: { pursuitId: string; ticketId: string | null; from: LadderRung | null; rungs: ClimbRung[] },
+): Promise<void> {
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    await requireApprovedTicket(tx, {
+      kind: 'STAGE', subjectType: 'pursuit', subjectId: args.pursuitId, ticketId: args.ticketId,
+    });
+    const pursuit = await getPursuit(args.pursuitId, tx);
+    if (!pursuit) throw new Error(`No pursuit ${args.pursuitId}`);
+    if ((pursuit.rung ?? null) !== (args.from ?? null)) {
+      throw new LadderRefused(
+        'skipped',
+        `The ladder moved since this was proposed: ${pursuit.entityName} is at ` +
+        `${pursuit.rung ? RUNG_LABEL[pursuit.rung] : 'nothing on file'}; nothing was recorded.`,
+      );
+    }
+    let at = rungIndex(pursuit.rung);
+    for (const r of args.rungs) {
+      if (rungIndex(r.rung) !== at + 1) {
+        throw new LadderRefused('skipped', `${RUNG_LABEL[r.rung]} is not the next rung; nothing was recorded.`);
+      }
+      if (!r.evidenceRef.trim() || !r.evidenceNote.trim()) {
+        throw new LadderRefused('no_evidence', `${RUNG_LABEL[r.rung]} requires: ${RUNG_REQUIRES[r.rung]}`);
+      }
+      at++;
+    }
+    for (const r of args.rungs) {
+      await tx.query(
+        `insert into strategy.ladder_event
+           (pursuit_id, rung, evidence_kind, evidence_ref, evidence_note, ticket_id, recorded_by, occurred_at)
+         values ($1,$2::strategy.ladder_rung,$3,$4,$5,$6,$7,$8)`,
+        [args.pursuitId, r.rung, r.evidenceKind, r.evidenceRef, r.evidenceNote, args.ticketId, actorId, new Date(r.occurredAt)],
+      );
+    }
+    await tx.query(
+      `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
+       values ($1, 'ladder.climbed', 'pursuit', $2, $3)`,
+      [actorId, args.pursuitId, JSON.stringify({
+        entity: pursuit.entityName, vehicle: pursuit.vehicleName, from: args.from,
+        rungs: args.rungs.map((r) => `${r.rung}:${r.evidenceKind}:${r.evidenceRef}`),
+      })],
+    );
+  });
+}
+
 export class StatusRefused extends Error {
   constructor(message: string) {
     super(message);

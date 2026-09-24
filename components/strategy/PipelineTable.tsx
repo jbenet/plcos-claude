@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { moveMetToDiscussing } from '@/app/targets/actions';
 
 /**
  * The pipeline, as one interactive list (N54). Every pursuit in scope arrives once; the status
@@ -37,8 +38,14 @@ export interface PipelineRow {
   read: string | null;
   readOn: string | null;
   readSuggested: boolean;
+  /** A later record points the other way (N57): shown struck, and not counted as their read. */
+  readSuperseded: string | null;
+  readOld: boolean;
   rung: number;
-  rungs: Array<'on' | 'na' | 'off'>;
+  /** The first rung with nothing on file: past what is accepted and what records support. */
+  needs: number;
+  /** 'file': a record on file supports it, and nobody has accepted it yet (N57). */
+  rungs: Array<'on' | 'na' | 'off' | 'file'>;
   rungLabel: string;
 }
 
@@ -85,10 +92,11 @@ function matches(r: PipelineRow, f: Filters, words: string[], now: number): bool
   if (f.touch === 'recent' && !(r.lastTouch && now - t(r.lastTouch) <= 30 * DAY)) return false;
   if (f.touch === 'stale' && !(r.lastTouch && now - t(r.lastTouch) > 90 * DAY)) return false;
   if (f.touch === 'none' && r.lastTouch) return false;
-  if (f.read === 'very' && r.read !== 'Very interested') return false;
-  if (f.read === 'interested' && r.read !== 'Interested') return false;
-  if (f.read === 'not' && r.read !== 'Not very interested') return false;
-  if (f.read === 'none' && r.read) return false;
+  const read = r.readSuperseded ? null : r.read;
+  if (f.read === 'very' && read !== 'Very interested') return false;
+  if (f.read === 'interested' && read !== 'Interested') return false;
+  if (f.read === 'not' && read !== 'Not very interested') return false;
+  if (f.read === 'none' && read) return false;
   if (f.money === 'none' && r.money) return false;
   if (f.money === 'soft' && r.money?.state !== 'Soft') return false;
   if (f.money === 'signed' && r.money?.state !== 'Signed') return false;
@@ -107,9 +115,10 @@ function Ladder({ r, names }: { r: PipelineRow; names: string[] }) {
             key={i}
             title={names[i]}
             style={{
-              width: 12, height: 6, borderRadius: 3,
-              background: s === 'on' ? 'var(--green)' : s === 'na' ? 'var(--line)' : '#EDEAE2',
-              outline: i === r.rung + 1 ? '1.5px solid var(--clay)' : undefined, outlineOffset: 1,
+              width: 12, height: 6, borderRadius: 3, boxSizing: 'border-box',
+              background: s === 'on' ? 'var(--green)' : s === 'na' ? 'var(--line)' : s === 'file' ? 'transparent' : '#EDEAE2',
+              border: s === 'file' ? '1.5px dashed var(--green)' : undefined,
+              outline: i === r.needs ? '1.5px solid var(--clay)' : undefined, outlineOffset: 1,
             }}
           />
         ))}
@@ -166,7 +175,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, showVe
           || (b.money?.amount ?? 0) - (a.money?.amount ?? 0) || (t(a.nextOn) || Infinity) - (t(b.nextOn) || Infinity);
         case 'meetings': return b.meetings - a.meetings || t(b.lastMeeting) - t(a.lastMeeting);
         case 'touch': return t(b.lastTouch) - t(a.lastTouch);
-        case 'read': return (READ_ORDER[b.read ?? ''] ?? 0) - (READ_ORDER[a.read ?? ''] ?? 0) || t(b.readOn) - t(a.readOn);
+        case 'read': return (READ_ORDER[(b.readSuperseded ? null : b.read) ?? ''] ?? 0) - (READ_ORDER[(a.readSuperseded ? null : a.read) ?? ''] ?? 0) || t(b.readOn) - t(a.readOn);
         case 'ladder': return b.rung - a.rung;
         default: return 0; // 'rank': the server's order — evidence, meetings, the source's word, recency
       }
@@ -278,6 +287,15 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, showVe
             {active ? ` of ${count(status, rows).toLocaleString('en-US')}` : ''} · {info.means}
           </span>
         </div>
+        {f.flag === 'ahead' && inColumn.length > 0 && (status === 'new' || status === 'sourcing' || status === 'selected') && (
+          // The log got ahead of the status (N57): move them, as one person's decision per LP.
+          <form action={moveMetToDiscussing} className="bulkbar">
+            {inColumn.map((r) => <input type="hidden" name="pursuitId" value={r.id} key={r.id} />)}
+            <span>{inColumn.length === 1 ? 'This LP has met us and is' : `These ${inColumn.length} LPs have met us and are`} still at {info.label}.</span>
+            <button className="btn p" type="submit">Move {inColumn.length === 1 ? 'it' : `all ${inColumn.length}`} to Discussing</button>
+            <span className="muted">One status change each, in the audit log, keeping each next step. No rung moves and no ticket is needed: a status claims nothing.</span>
+          </form>
+        )}
         {inColumn.length === 0 ? (
           <div className="cbody">
             <div className="empty">
@@ -347,8 +365,12 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, showVe
                     {r.waitingSince && <div className="muted" style={{ fontSize: 10.5 }}>waiting on them</div>}
                   </td>
                   <td style={{ fontSize: 12 }}>
-                    {r.read ? <span className={r.readSuggested ? 'suggested' : undefined} title={r.readSuggested ? 'Suggested from a note; nobody has confirmed it' : undefined}>{r.read}</span> : <span className="muted">—</span>}
-                    {r.readOn && <div className="muted" style={{ fontSize: 10.5 }}>{fmt(r.readOn)}{r.readSuggested ? ' · suggested' : ''}</div>}
+                    {r.read && r.readSuperseded ? (
+                      <s className="muted" title={`Superseded: since then, ${r.readSuperseded}`}>{r.read}</s>
+                    ) : r.read ? (
+                      <span className={r.readSuggested ? 'suggested' : undefined} title={r.readSuggested ? 'Suggested from a note; nobody has confirmed it' : undefined}>{r.read}</span>
+                    ) : <span className="muted">—</span>}
+                    {r.readOn && <div className="muted" style={{ fontSize: 10.5 }}>{fmt(r.readOn)}{r.readSuperseded ? ' · superseded' : r.readSuggested ? ' · suggested' : ''}{r.readOld && !r.readSuperseded ? ' · old' : ''}</div>}
                   </td>
                   <td><Ladder r={r} names={rungNames} /></td>
                 </tr>

@@ -1277,6 +1277,74 @@ async function main() {
           );
         }
 
+        // Reconciliation (N57): the climbs the records on file support, proposed by the system, recorded
+        // only when a person approves; and a read superseded by a later record pointing the other way.
+        {
+          const rc = await import('../lib/reconcile');
+          const gv = await import('../modules/governance');
+          const ap = await import('../app/approvals/apply');
+          const sg = await import('../modules/strategy');
+          const pf = await import('../modules/platform');
+          const sys = await rc.systemActor();
+          const canBecome = await pf.getUserByHandle('reconciliation');
+          const ladder0 = await n(`select count(*)::text as n from strategy.ladder_event`);
+          const first = await rc.reconcile(null);
+          const ladder1 = await n(`select count(*)::text as n from strategy.ladder_event`);
+          const proposals = await adb.query<{ id: string; subject_id: string; requested_by: string; scope: { apply: { args: { rungs: Array<{ rung: string; evidenceRef: string }> } } } }>(
+            `select id::text, subject_id::text, requested_by::text, scope from governance.approval_ticket
+              where kind = 'STAGE' and decision is null and scope->'apply'->>'command' = 'strategy.recordClimb'`);
+          // Every "Meeting held" it proposes rests on a meeting that happened, with this LP themselves.
+          const heldFor = async (pursuitId: string) => n(
+            `select count(*)::text as n from meetings.meeting t join strategy.pursuit p on p.entity_id = t.entity_id
+              where p.pursuit_id = $1 and t.channel in ('meeting', 'call') and t.held_on <= current_date`, [pursuitId]);
+          let unbacked = 0;
+          for (const pr of proposals) {
+            const rungs = pr.scope.apply.args.rungs;
+            if (pr.requested_by !== sys || rungs.some((r) => !/^(affinity:|us:|touchpoint:|commitment_event:)/.test(r.evidenceRef))) unbacked++;
+            if (rungs.some((r) => r.rung === 'meeting_held') && (await heldFor(pr.subject_id)) === 0) unbacked++;
+          }
+          const second = await rc.reconcile(null);
+          const mine = proposals.find((pr) => pr.subject_id === nadia!.pursuit_id);
+          if (mine) {
+            await gv.decideTicket(juanId, mine.id, 'approve', null);
+            await ap.applyApprovedTicket(juanId, (await gv.getTicket(mine.id))!);
+          }
+          const climbed = await sg.getPursuit(nadia!.pursuit_id);
+          const replay = mine ? await attempt(async () => ap.applyApprovedTicket(juanId, (await gv.getTicket(mine.id))!)) : null;
+          const other = proposals.find((pr) => pr.subject_id !== nadia!.pursuit_id);
+          if (other) await gv.decideTicket(juanId, other.id, 'reject', null);
+          const third = await rc.reconcile(null);
+          check(
+            'Reconciliation proposes only what records support, as the system, one ticket per LP; a person approves, and a rejection holds',
+            proposals.length > 0 && first.proposed === proposals.length && unbacked === 0 && ladder0 === ladder1 &&
+              second.proposed === 0 && canBecome === null && climbed?.rung === 'meeting_held' &&
+              climbed.events.some((e) => e.rung === 'connector_willing' && e.evidenceKind === 'not_applicable') &&
+              replay instanceof sg.LadderRefused && (!other || (third.rejectedBefore >= 1 && third.proposed === 0)),
+            `${first.proposed} proposed (${unbacked} without a record behind them), ladder ${ladder0} → ${ladder1} before any approval; again: ${second.proposed} new, ${second.alreadyOpen} already open; ` +
+              `the system actor can be switched to: ${canBecome ? 'YES' : 'no'}; approved Nadia's → ${climbed?.rung} (${climbed?.events.map((e) => `${e.rung}:${e.evidenceKind}`).join(', ')}); applied twice: ${replay ? 'refused' : 'RECORDED AGAIN'}; ` +
+              `after a rejection, proposed again: ${third.proposed} (${third.rejectedBefore} held back)`,
+          );
+
+          const { shownRead } = await import('../lib/reads');
+          const at = new Date('2026-09-24T00:00:00Z');
+          const note = (read: 'interested' | 'not_very_interested', on: string) => ({
+            noteId: '1', entityId: 'e', on: new Date(on), summary: null, read, basis: null, by: 'claude',
+            confirmedByName: null, confirmedAt: null, dismissed: false,
+          });
+          const cooledThenCommitted = shownRead(null, [note('not_very_interested', '2025-10-21T00:00:00Z')], [{ on: new Date('2026-09-23T00:00:00Z'), points: 'up', what: 'committed' }], at);
+          const keenThenDeclined = shownRead(null, [note('interested', '2026-05-01T00:00:00Z')], [{ on: new Date('2026-07-01T00:00:00Z'), points: 'down', what: 'they declined' }], at);
+          const keenThenCommitted = shownRead(null, [note('interested', '2026-05-01T00:00:00Z')], [{ on: new Date('2026-07-01T00:00:00Z'), points: 'up', what: 'committed' }], at);
+          const declinedBefore = shownRead(null, [note('interested', '2026-05-01T00:00:00Z')], [{ on: new Date('2026-04-01T00:00:00Z'), points: 'down', what: 'they declined' }], at);
+          const aged = shownRead(null, [note('interested', '2025-10-21T00:00:00Z')], [], at);
+          check(
+            'A read is superseded only by a later record pointing the other way, and is old past the threshold',
+            Boolean(cooledThenCommitted?.superseded) && Boolean(keenThenDeclined?.superseded) && !keenThenCommitted?.superseded &&
+              !declinedBefore?.superseded && aged?.old === true && keenThenCommitted?.old === false,
+            `not very interested, then committed: ${cooledThenCommitted?.superseded ? 'superseded' : 'STILL SHOWN'}; interested, then declined: ${keenThenDeclined?.superseded ? 'superseded' : 'STILL SHOWN'}; ` +
+              `interested, then committed: ${keenThenCommitted?.superseded ? 'SUPERSEDED' : 'stands'}; a decline before the read: ${declinedBefore?.superseded ? 'SUPERSEDED' : 'stands'}; 11 months old: ${aged?.old ? 'old' : 'NOT OLD'}`,
+          );
+        }
+
         // A person sets a status; the next translation keeps it, and keeps Affinity's word beside it.
         const st = await import('../modules/strategy');
         const juan = (await adb.one<{ id: string }>(`select id from platform.app_user where handle = 'juan'`))!.id;

@@ -3,6 +3,7 @@ import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { DecideForm } from '@/components/approvals/DecideForm';
 import { AdjudicateForm } from '@/components/approvals/AdjudicateForm';
+import { ReconcileBatch } from '@/components/approvals/ReconcileBatch';
 import { config } from '@/config/deployment';
 import { ago, shortDate } from '@/lib/time';
 import {
@@ -24,11 +25,20 @@ async function guardFor(ticket: ApprovalTicket): Promise<GuardReport | null> {
 export default async function Approvals({
   searchParams,
 }: {
-  searchParams: Promise<{ t?: string }>;
+  searchParams: Promise<{ t?: string; view?: string; approved?: string; rejected?: string; failed?: string }>;
 }) {
-  const { t } = await searchParams;
-  const [open, decided] = await Promise.all([listOpenTickets(), listDecidedTickets(6)]);
-  const selected = open.find((x) => x.id === t) ?? open[0] ?? null;
+  const sp = await searchParams;
+  const { t } = sp;
+  const [all, decided] = await Promise.all([listOpenTickets(), listDecidedTickets(6)]);
+  // Reconciliation's proposals (N57) are one item in the queue and one page of their own.
+  const isProposal = (x: ApprovalTicket) => x.kind === 'STAGE' && x.scope.apply?.command === 'strategy.recordClimb';
+  const proposals = all.filter(isProposal);
+  const open = all.filter((x) => !isProposal(x));
+  const batch = sp.view === 'reconcile' || (!t && open.length === 0 && proposals.length > 0);
+  const selected = batch ? null : all.find((x) => x.id === t) ?? open[0] ?? null;
+  const receipt = sp.approved || sp.rejected || sp.failed
+    ? { approved: sp.approved ? Number(sp.approved) : undefined, rejected: sp.rejected ? Number(sp.rejected) : undefined, failed: sp.failed ? Number(sp.failed) : undefined }
+    : null;
   const guard = selected ? await guardFor(selected) : null;
   const conflict =
     selected && selected.subjectType === 'ask' ? await getConflictForAsk(selected.subjectId) : null;
@@ -50,7 +60,7 @@ export default async function Approvals({
         <>
           <div className="qhead">
             <div className="lbl">Module 24 · gate, not record</div>
-            <h2>{open.length} open</h2>
+            <h2>{all.length} open</h2>
             <p>
               One open ticket per subject per kind. Every mutating command in the five families
               fails closed without an approved, unexpired one.
@@ -77,6 +87,18 @@ export default async function Approvals({
             );
           })}
 
+          {proposals.length > 0 && (
+            <Link href="/approvals?view=reconcile" className={`tix${batch ? ' on' : ''}`}>
+              <div className="tixtop">
+                <span className={`kind ${KIND_CLASS.STAGE}`}>STAGE</span>
+                <span className="age">{proposals.length} tickets</span>
+              </div>
+              <b>Ladders behind their records</b>
+              <p>{proposals.length} {proposals.length === 1 ? 'LP' : 'LPs'} · requested by Reconciliation</p>
+              <span className="flag f-ok">Records on file</span>
+            </Link>
+          )}
+
           {decided.length > 0 && (
             <>
               <div className="qhead" style={{ borderTop: '1px solid var(--line)' }}>
@@ -101,7 +123,9 @@ export default async function Approvals({
         </>
       }
     >
-      {!selected ? (
+      {batch ? (
+        <ReconcileBatch proposals={proposals} receipt={receipt} />
+      ) : !selected ? (
         <>
           <div className="lbl">Module 24 · Approvals &amp; compliance</div>
           <h1>Nothing is waiting on you.</h1>

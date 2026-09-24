@@ -6,4 +6,4 @@ export {
   impliedRung, rungIndex,
 } from './types';
 export { getPursuit, listPursuits, pursuitFor, statusCounts } from './repo';
-export { LadderRefused, recordAdvance, requestAdvance, setStatus, StatusRefused } from './service';
+export { LadderRefused, recordAdvance, recordClimb, requestAdvance, setStatus, StatusRefused, type ClimbRung } from './service';

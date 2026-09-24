@@ -228,19 +228,36 @@ export function summarize(all: Touchpoint[], now = new Date()): TouchpointSummar
   };
 }
 
-/** Summaries for many pursuits at once — the pipeline list — keyed `${entityId}:${vehicleId}`. */
-export async function touchpointSummaries(
-  pairs: Array<{ entityId: string; vehicleId: string }>, now = new Date(),
-): Promise<Map<string, TouchpointSummary>> {
-  const out = new Map<string, TouchpointSummary>();
+/**
+ * The touchpoints of many pursuits at once, keyed `${entityId}:${vehicleId}`: each LP's own and
+ * their firm's, about that vehicle or none in particular. One query for the lot.
+ */
+export async function touchpointsByPair(
+  pairs: Array<{ entityId: string; vehicleId: string }>,
+): Promise<Map<string, Touchpoint[]>> {
+  const out = new Map<string, Touchpoint[]>();
   if (!pairs.length) return out;
   const db = await getDb();
   const rows = (await db.query<TouchRow>(TOUCH_SELECT, [[...new Set(pairs.map((p) => p.entityId))]])).map((r) => ({ r, t: toTouch(r) }));
   const byEntity = new Map<string, Touchpoint[]>();
   for (const { r, t } of rows) byEntity.set(r.for_entity, [...(byEntity.get(r.for_entity) ?? []), t]);
   for (const p of pairs) {
-    const mine = (byEntity.get(p.entityId) ?? []).filter((t) => !t.vehicleId || t.vehicleId === p.vehicleId);
-    out.set(`${p.entityId}:${p.vehicleId}`, summarize(mine, now));
+    out.set(`${p.entityId}:${p.vehicleId}`, (byEntity.get(p.entityId) ?? []).filter((t) => !t.vehicleId || t.vehicleId === p.vehicleId));
+  }
+  return out;
+}
+
+/** Summaries for many pursuits at once — the pipeline list — keyed `${entityId}:${vehicleId}`. */
+export async function touchpointSummaries(
+  pairs: Array<{ entityId: string; vehicleId: string }>, now = new Date(),
+  touches?: Map<string, Touchpoint[]>,
+): Promise<Map<string, TouchpointSummary>> {
+  const out = new Map<string, TouchpointSummary>();
+  if (!pairs.length) return out;
+  const byPair = touches ?? await touchpointsByPair(pairs);
+  for (const p of pairs) {
+    const key = `${p.entityId}:${p.vehicleId}`;
+    out.set(key, summarize(byPair.get(key) ?? [], now));
   }
   return out;
 }

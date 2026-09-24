@@ -104,6 +104,11 @@ the tool shows the facts beside it (reply time, meetings, documents asked for), 
 may *suggest* a read from notes, labelled as a suggestion until a person confirms it.
 A numeric interest score would be a confidence rendered as fact, which this tool doesn't do.
 
+**What happened since (N57, docs/18).** A read is superseded when a later record points the other
+way — a commitment after "not very interested", a decline after "interested" — and old past
+`config.reads.staleAfterDays` (a GUESS). A superseded read stays, dated and struck through, with
+what superseded it; it no longer counts as their read.
+
 **Suggestions from the notes (N55).** Each note can have a reading: a one-sentence summary,
 the read if the note gives one, and the few words the read rests on. Readings are written to
 `data/<profile>/readings.jsonc` by whoever read the notes (the first set by Claude, in a working

@@ -4246,3 +4246,35 @@ unanswered. Silence isn't a read any more than it's a pass (N53), so those two n
 Also fixed: a readings file given by an absolute path was quietly replaced by the demo's; the
 property now covers the refusals. Next is your second note, the ladder that didn't move after
 meetings, and stale reads (N57). 92 of 92 properties hold.
+
+## N57 — Reconciliation: the ladder caught up with the records, and reads that go stale
+
+**Shipped.** Your second note from the feedback box: "meetings already happened, but the state
+didnt move fwd… we may need to build in some reconciliation". And your note on staleness: "please
+figure out how to resolve. you're organizing the data ingest and states." The design is
+docs/18.
+
+| | |
+|---|---|
+| ![On file, not accepted](docs/changelog/shots/n57/01-on-file-not-accepted.webp) | **Three layers on the ladder.** What it has accepted (solid), what the records here support that nobody has accepted yet (a dashed ring, with the record and a link to its proposal), and what Affinity's word claims (in amber, "a claim, with no record from them yet"). "Nothing on file" now appears only when nothing is. |
+| ![Ladders behind their records](docs/changelog/shots/n57/02-ladders-behind-their-records.webp) | **Proposed, not recorded.** After each translation, reconciliation opens one STAGE ticket per LP whose records are ahead of the ladder. The ticket lists every rung and the record behind it: a meeting on the calendar, a reply from them, a signature recorded here. It's requested by a system actor nobody can act as. Affinity's words and the notes are claims and are never used. |
+| ![Approved in one go](docs/changelog/shots/n57/03-approved-in-one-go.webp) | **Approved in one go, or one by one.** Proposals are one item on Approvals, opening a checklist. Each is still its own ticket with its own audit line. A rejection holds for those records; a meeting held since is a new record, and asks again. |
+| ![Accepted](docs/changelog/shots/n57/04-accepted.webp) | **After approval**: connector not applicable (in direct contact), opted in and a meeting held, each dated by its record and attributed to whoever approved. Approving re-checks that the ladder hasn't moved, and never skips a rung. |
+| ![Status behind the log](docs/changelog/shots/n57/05-status-behind-the-log.webp) | **The status, too.** With "Met, status behind" on, the pipeline offers to move those LPs to Discussing in one step. It's your call per LP, and each keeps its next step. |
+
+**Stale reads.** A read is superseded when a later record points the other way: a commitment
+after "not very interested", or a decline after "interested". It stays on the timeline, struck
+through, with what superseded it, and stops counting as their read in the pipeline and its
+filter. A read older than 180 days (a guess, in `config/deployment.ts`) is labelled old.
+Nothing computes a read.
+
+**On the real account**, the first run proposed 278 climbs from 2,143 pursuits: 154 to Meeting
+held, and 124 to LP opted in on a reply from them. 1,694 were already in step; 171 were passed
+or on a vehicle kept for its history. The page in your note, three meetings and nothing on the
+ladder, now shows three rungs on file, waiting for approval. One Committed LP's "not very
+interested", from a note written before they committed, is now superseded. The 278 are waiting
+on Approvals; nothing is recorded until you approve.
+
+Also: the user switcher no longer finds inactive users, so no one can become the system actor,
+and the demo seed counts people, not the system actor. `npm run shots -- N57 04` retakes one
+shot. 94 of 94 properties hold.

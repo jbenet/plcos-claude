@@ -35,6 +35,7 @@ export default async function Mapping() {
   const inv = await inventory();
   const map = await readMapping(inv);
   const translated = await latestRun('affinity', 'translate');
+  const reconciled = await latestRun('reconcile', 'ladder');
   const tc = (translated?.detail ?? {}) as { byVehicle?: Record<string, number>; byStatus?: Record<string, number>; keptOurs?: number; unreviewedLists?: string[]; ownersNotOnTeam?: number; readyToHarden?: number; affiliations?: number; people?: number; organizations?: number; skipped?: number };
   const lists = inv.lists.filter((l) => l.why === 'init' && l.entries > 0);
 
@@ -231,6 +232,15 @@ export default async function Mapping() {
             {translated && (
               <div style={{ marginTop: 14 }}>
                 <div className="fact"><span>Result</span><span>{translated.note}</span></div>
+                {reconciled && (
+                  <div className="fact">
+                    <span>Reconciled</span>
+                    <span>
+                      {reconciled.status === 'ok' ? reconciled.note : `failed: ${reconciled.note}`} ·{' '}
+                      <Link href="/approvals?view=reconcile">review the proposals</Link>
+                    </span>
+                  </div>
+                )}
                 {tc.byVehicle && (
                   <div className="fact">
                     <span>Pursuits by vehicle</span>

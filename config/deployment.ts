@@ -121,6 +121,10 @@ export const config = {
   agents: {
     correctionBudgetHoursPerWeek: 12, // GUESS — v3 said 10–15 h/week; circuit-breaker threshold.
   },
+  /** Their read (N57, docs/18): past this age a read is shown as old, still counted, dated. */
+  reads: {
+    staleAfterDays: 180, // GUESS — half a year; nobody has measured how fast an LP's read goes stale.
+  },
 
   /**
    * L10. A signal is a change that crossed a threshold; everything else is noise. These

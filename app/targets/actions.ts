@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import {
   LadderRefused, requestAdvance, setStatus, StatusRefused,
@@ -120,4 +121,30 @@ export async function decideReadingAction(formData: FormData): Promise<void> {
   await decideReading(user.id, String(formData.get('noteId')), decision);
   revalidatePath(`/targets/${String(formData.get('pursuitId'))}`);
   revalidatePath('/targets');
+}
+
+/**
+ * Move LPs who have met us, and are still at New, Sourcing or Selected, to Discussing (N57): the
+ * log got ahead of the status (docs/18). A person's action, one status change each, each in the
+ * audit log; no ticket, since a status claims nothing, and no rung moves. Each LP is checked
+ * again here — its status, and a meeting on record — whatever the form says, and keeps its next
+ * step.
+ */
+export async function moveMetToDiscussing(formData: FormData): Promise<void> {
+  const { getPursuit } = await import('@/modules/strategy');
+  const { summarize, touchpointsFor } = await import('@/modules/meetings');
+  const user = await (await auth()).currentUser();
+  const ids = [...new Set(formData.getAll('pursuitId').map(String))];
+  for (const id of ids) {
+    const p = await getPursuit(id);
+    if (!p || !['new', 'sourcing', 'selected'].includes(p.status)) continue;
+    const met = summarize(await touchpointsFor(p.entityId, p.vehicleId)).meetingDates.length;
+    if (!met) continue;
+    await setStatus(user.id, id, {
+      status: 'discussing', reason: `Met: ${met} ${met === 1 ? 'meeting' : 'meetings'} on record`,
+      nextStep: p.nextStep, nextStepOn: p.nextStepOn,
+    });
+  }
+  revalidatePath('/targets');
+  redirect('/targets?status=discussing');
 }
