@@ -212,6 +212,18 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N72: [
+    { name: '01-green-by-default', path: '/today' },
+    { name: '02-the-page-you-are-on', path: '/neurotech/pipeline?status=discussing' },
+    {
+      name: '03-the-theme-picker',
+      path: '/settings',
+      prepare: async (page) => {
+        await page.getByText(/In use/).first().evaluate((el) => el.scrollIntoView({ block: 'center' })).catch(() => {});
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N71: [
     {
       name: '01-fact-check-rounds',

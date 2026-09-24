@@ -10,7 +10,7 @@ data/
     database/           PGlite, seeded from fixtures/ when empty; npm run demo rebuilds it
     database.lock       the process that has it open
     props/              scratch copy for npm run props, rebuilt on every run
-  real/                 the raise — npm run dev:real, 127.0.0.1:3100 only
+  real/                 the raise — npm run dev:real, port 3100 (on the LAN since 24 Sep 2026)
     database/           PGlite: the Affinity replica and every judgement recorded against it
     init.jsonc          who is on the team, which vehicles exist, which lists track them
     issues/             feedback filed from the real profile, pictures included

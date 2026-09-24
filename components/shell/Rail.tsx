@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { config } from '@/config/deployment';
 import { auth } from '@/lib/auth';
 import { issues as issueSink } from '@/lib/issues';
@@ -10,6 +11,8 @@ import { FeedbackButton } from './FeedbackBox';
 
 export async function Rail() {
   const a = await auth();
+  // The address the browser asked for, when the proxy rewrote it (proxy.ts, ASKED_PATH).
+  const asked = (await headers()).get('x-asked-path');
   const [user, users, vehicles, open, tickets] = await Promise.all([
     a.currentUser(),
     a.listUsers(),
@@ -30,6 +33,7 @@ export async function Rail() {
           slug: v.slug, name: v.name, kind: v.kind, historical: v.phase === 'historical',
         }))}
         current={vehicles.current?.slug ?? null}
+        asked={asked}
         approvals={tickets.open}
         issues={open.length}
       />

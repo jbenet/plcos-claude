@@ -30,14 +30,24 @@ const STORE_KEY = 'capitalos.nav.collapsed';
  * preference that resets on every reload is not a preference.
  */
 export function NavList({
-  vehicles, current: cookieVehicle, approvals, issues,
+  vehicles, current: cookieVehicle, asked, approvals, issues,
 }: {
   vehicles: NavVehicle[];
   current: string | null;
+  /** The address the browser asked for, when the proxy rewrote it (null otherwise). */
+  asked?: string | null;
   approvals: number;
   issues: number;
 }) {
-  const path = usePathname();
+  /**
+   * On the server, usePathname() is the path the proxy rewrote to (/targets), while the browser
+   * has the address it asked for (/neurotech/pipeline): the rail marked different links on each
+   * side and React refused to hydrate (issue 0011, real). The server uses the asked-for address,
+   * which is exactly what the browser's first render reads, and every render after follows the
+   * router — so the two sides always agree.
+   */
+  const routed = usePathname();
+  const path = typeof window === 'undefined' ? (asked ?? routed) : routed;
   const router = useRouter();
 
   /**

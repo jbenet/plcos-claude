@@ -29,8 +29,9 @@ Seven-plus people plus their agents will eventually use this. Right now, one per
 
 Two data profiles since N38 (`docs/15-affinity-integration.md`). `npm run dev` serves
 **demo**: fictional, port 3000, safe to reset, screenshot and publish. `npm run dev:real`
-serves **real**: the Affinity replica and everything written about it, on `127.0.0.1:3100`
-only. `DATA_PROFILE` picks one, in `config/deployment.ts`.
+serves **real**: the Affinity replica and everything written about it, on port 3100, reachable
+from the local network since 24 Sep 2026 (Juan: a small private network). There is no sign-in, so
+anyone on that network can read and change it. `DATA_PROFILE` picks one, in `config/deployment.ts`.
 
 - Everything real lives under `data/real/`, which git ignores. None of it goes into a commit,
   the changelog, a screenshot, the published build log, `issues/`, a web search or a
@@ -228,7 +229,9 @@ invitation exists. "Sourced, not applied for" is a state machine guard, not advi
 - **Palette** (validated, colour is never the only signal):
   ground `#F5F3EE`, surface `#FFFFFF`, ink `#1A1917`, muted `#5E5A52`, line `#E4E0D6`,
   clay `#BF4A16`, green `#0E7F55`, purple `#5F4B9E`, amber `#8A6410`.
-  Rail: `#1A1917` with `#EFEBE2` text.
+  Rail: `#1A1917` with `#EFEBE2` text. That is the clay theme. **The default theme is green**
+  since 24 Sep 2026 (issue 0010): the same meaning colours, with a green accent, ground and rail
+  (`lib/theme.ts`, `app/globals.css`); clay stays one click away in Settings.
 - **Type:** Fraunces (display), IBM Plex Sans (body), IBM Plex Mono (labels, data).
 - **Status vocabulary is plain language**, never a numeric confidence rendered as fact:
   "Agent working", "Ready for review", "Waiting on counterpart", "Needs evidence",

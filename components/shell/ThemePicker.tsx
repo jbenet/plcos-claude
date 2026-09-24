@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { DEFAULT_THEME, THEMES, THEME_KEY, type ThemeId } from '@/lib/theme';
+import { DEFAULT_THEME, THEMES, THEME_KEY, themeAttr, type ThemeId } from '@/lib/theme';
 
 /**
  * The theme picker.
@@ -26,8 +26,9 @@ export function ThemePicker() {
 
   const choose = (id: ThemeId) => {
     setTheme(id);
-    if (id === DEFAULT_THEME) document.documentElement.removeAttribute('data-theme');
-    else document.documentElement.setAttribute('data-theme', id);
+    const attr = themeAttr(id);
+    if (attr) document.documentElement.setAttribute('data-theme', attr);
+    else document.documentElement.removeAttribute('data-theme');
     try {
       window.localStorage.setItem(THEME_KEY, id);
     } catch {

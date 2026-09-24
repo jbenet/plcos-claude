@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
 const PROFILES: Array<{ fact: string; demo: string; real: string }> = [
   { fact: 'What it is', demo: 'Fictional people, firms and amounts', real: 'The raise: Affinity’s records, and what we write about them' },
   { fact: 'Started with', demo: 'npm run dev', real: 'npm run dev:real' },
-  { fact: 'Served at', demo: 'port 3000, reachable from the local network', real: '127.0.0.1:3100, this machine only' },
+  { fact: 'Served at', demo: 'port 3000, reachable from the local network', real: 'port 3100, reachable from the local network (since 24 Sep 2026)' },
   { fact: 'Kept in', demo: 'data/demo/', real: 'data/real/' },
   { fact: 'Starts from', demo: 'fixtures/, seeded when the database is empty', real: 'data/real/init.jsonc, which you fill in' },
   { fact: 'Reset', demo: 'npm run demo, any time', real: 'Refused. It holds judgements that exist nowhere else' },
@@ -32,7 +32,7 @@ const GUARDS: Array<{ rule: string; where: string }> = [
   { rule: 'db:reset and npm run demo refuse the real profile.', where: 'scripts/reset.ts' },
   { rule: 'Screenshots ask the server which data it is showing, and stop unless it says demo.', where: 'scripts/shots.ts · /api/profile' },
   { rule: 'Feedback filed from the real profile, pictures included, stays in data/real/issues/.', where: 'config.issues.dir' },
-  { rule: 'The real server listens on 127.0.0.1, so nothing else on the network can reach it.', where: 'package.json · next.config.ts' },
+  { rule: 'The real server listens on the local network (Juan, 24 Sep 2026: a small private network). There is no sign-in, so anyone on it can read and change the real data.', where: 'package.json · next.config.ts' },
   { rule: 'In the real profile DATABASE_URL is refused and PGLITE_DIR is ignored, so neither can move the data.', where: 'config/deployment.ts' },
   { rule: 'A second process opening the same database is refused by name instead of corrupting it.', where: 'lib/db/lock.ts' },
   { rule: 'The property harness always runs on a scratch copy of the demo.', where: 'scripts/properties.ts' },
@@ -177,7 +177,7 @@ export default async function DataPage() {
               time <span className="mono">npm run dev:real</span> starts, it copies{' '}
               <span className="mono">{TEMPLATE_PATH}</span> to{' '}
               <span className="mono">data/real/init.jsonc</span>. Then open{' '}
-              <span className="mono">http://127.0.0.1:3100/dev/data</span> to see what it still asks.
+              <span className="mono">http://localhost:3100/dev/data</span> to see what it still asks.
             </p>
             <div className="lbl" style={{ margin: '12px 0 6px' }}>Beyond people and vehicles, it asks</div>
             <ol className="asks">

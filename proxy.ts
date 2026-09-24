@@ -73,13 +73,16 @@ function at(req: NextRequest, path: string): URL {
 
 /**
  * A rewrite marks its request, so the proxy passes it through if it sees it again. On the real
- * server (bound to 127.0.0.1) a rewritten request comes back through here, and without the mark
- * the old-address redirect sent /developer/… round in a loop.
+ * server a rewritten request came back through here (seen while it was bound to 127.0.0.1), and
+ * without the mark the old-address redirect sent /developer/… round in a loop.
  */
 const ROUTED = 'x-routed';
+/** The address the browser asked for, before the rewrite: what the rail marks as the page you're on (issue 0011, real). */
+export const ASKED_PATH = 'x-asked-path';
 function rewrite(req: NextRequest, path: string, extra: Record<string, string> = {}): NextResponse {
   const headers = new Headers(req.headers);
   headers.set(ROUTED, '1');
+  headers.set(ASKED_PATH, req.nextUrl.pathname);
   for (const [k, v] of Object.entries(extra)) headers.set(k, v);
   return NextResponse.rewrite(at(req, path), { request: { headers } });
 }

@@ -30,10 +30,16 @@ export const THEMES: Array<{
 ];
 
 export const THEME_KEY = 'capitalos.theme';
-export const DEFAULT_THEME: ThemeId = 'clay';
+/** Green since 24 Sep 2026 (issue 0010, real: "so the changelog shows the green theme too"). */
+export const DEFAULT_THEME: ThemeId = 'green';
 
 /**
- * Runs before first paint, inline in <head>. Without it the page renders in the default
- * theme and then swaps, which is a flash of the wrong colour on every navigation.
+ * The page is served in the default theme (`data-theme="green"` on <html>; clay is the stylesheet's
+ * base, with no attribute). This runs before first paint, inline in <head>, and applies a stored
+ * choice of clay: without it the page renders green and then swaps, a flash of the wrong colour on
+ * every navigation.
  */
-export const THEME_BOOT = `(function(){try{var t=localStorage.getItem(${JSON.stringify(THEME_KEY)});if(t==='green')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
+export const THEME_BOOT = `(function(){try{var t=localStorage.getItem(${JSON.stringify(THEME_KEY)});if(t==='clay')document.documentElement.removeAttribute('data-theme');else if(t==='green')document.documentElement.setAttribute('data-theme','green');}catch(e){}})();`;
+
+/** The <html> attribute for a theme: clay is the stylesheet's base, so it has none. */
+export const themeAttr = (id: ThemeId): string | undefined => (id === 'clay' ? undefined : id);

@@ -4909,3 +4909,21 @@ file gives that pair. It finds 22 such citations, all agreeing after the night's
 guards the next revision, not this one.
 
 107 of 107 properties hold.
+
+## N72 — Green by default; the rail agrees with itself; the real server on the local network
+
+**Shipped.** Two items from the feedback box, and one request.
+
+| | |
+|---|---|
+| ![Green by default](docs/changelog/shots/n72/01-green-by-default.webp) | **Green is the default theme** (issue 0010). The page is served in it, a fresh browser sees it, and the build log's own page wears it too, so screenshots from here on are green. The earlier ones stay as they were taken. The meaning colours don't move: clay still means refused, green still means passed. |
+| ![The page you are on](docs/changelog/shots/n72/02-the-page-you-are-on.webp) | **The rail marks the page you're on, on both sides** (issue 0011). On `/neurotech/pipeline?status=discussing` the browser showed a console error: the server had marked the rail from the path the proxy rewrote to (`/targets`), the browser from the address asked for (`/neurotech/pipeline`), so "Pipeline" was highlighted on one side only and React refused to hydrate. The proxy now passes the asked-for address along, and the server marks the rail from it. |
+| ![The theme picker](docs/changelog/shots/n72/03-the-theme-picker.webp) | **Clay stays one click away.** A choice of clay is kept per browser and applied before the first paint, as before; the picker, the boot script and "Reset all three to defaults" all read green as the default now. |
+
+**The real server listens on the local network.** Juan, 24 Sep: "I'm in a small private network
+so no problem w/ exposing the port." `npm run dev:real` binds all interfaces on port 3100, and
+the dev server accepts the private address ranges, as the demo's always has. There is no sign-in,
+so anyone on that network can read and change the real data; CLAUDE.md, docs/15 and the data page
+say so.
+
+108 of 108 properties hold.

@@ -1900,7 +1900,7 @@ async function main() {
       if (init.cookie) headers.set('cookie', init.cookie);
       if (init.routed) headers.set('x-routed', '1');
       const r = proxy(new NextRequest(`http://127.0.0.1:3100${path}`, { method: init.method ?? 'GET', headers }));
-      return { status: r.status, location: r.headers.get('location'), rewrite: r.headers.get('x-middleware-rewrite'), vehicle: r.headers.get('x-middleware-request-x-vehicle') };
+      return { status: r.status, location: r.headers.get('location'), rewrite: r.headers.get('x-middleware-rewrite'), vehicle: r.headers.get('x-middleware-request-x-vehicle'), asked: r.headers.get('x-middleware-request-x-asked-path') };
     };
     const dev = call('/developer/enrich');
     const oldDev = call('/dev/enrich?imported=3');
@@ -1911,15 +1911,33 @@ async function main() {
     const again = call('/dev/enrich', { routed: true });
     const ok =
       dev.rewrite?.endsWith('/dev/enrich') === true && oldDev.status === 307 && oldDev.location?.endsWith('/developer/enrich?imported=3') === true &&
-      post.status !== 307 && lp.rewrite?.endsWith('/targets/abc') === true && lp.vehicle === 'neurotech' &&
+      post.status !== 307 && lp.rewrite?.endsWith('/targets/abc') === true && lp.vehicle === 'neurotech' && lp.asked === '/neurotech/pipeline/abc' &&
       old.status === 307 && old.location?.endsWith('/rails/pipeline/abc') === true && !scoped.rewrite && scoped.status !== 307 && again.status !== 307 && !again.rewrite;
     check(
-      'The address follows the sidebar: /<vehicle>/<module> and /developer/<page> reach their pages, old addresses redirect to their place, a POST is never redirected, and a rewritten request passes through',
+      'The address follows the sidebar: /<vehicle>/<module> and /developer/<page> reach their pages and carry the address asked for (issue 0011, real), old addresses redirect to their place, a POST is never redirected, and a rewritten request passes through',
       ok,
       `/developer/enrich → ${dev.rewrite?.replace(/^https?:\/\/[^/]+/, '')}; /dev/enrich → ${oldDev.status} ${oldDev.location?.replace(/^https?:\/\/[^/]+/, '')}; POST /dev/enrich → ${post.status}; ` +
-        `/neurotech/pipeline/abc → ${lp.rewrite?.replace(/^https?:\/\/[^/]+/, '')} (vehicle ${lp.vehicle}); /targets/abc with Rails in view → ${old.status} ${old.location?.replace(/^https?:\/\/[^/]+/, '')}; ` +
+        `/neurotech/pipeline/abc → ${lp.rewrite?.replace(/^https?:\/\/[^/]+/, '')} (vehicle ${lp.vehicle}, asked ${lp.asked}); /targets/abc with Rails in view → ${old.status} ${old.location?.replace(/^https?:\/\/[^/]+/, '')}; ` +
         `/neurotech/strategy passes through: ${!scoped.rewrite}; a rewritten request seen again passes through: ${again.status !== 307 && !again.rewrite}`,
     );
+  }
+
+  // The default theme is green (issue 0010, real): the page is served with data-theme="green", the
+  // boot script takes it away only for a stored choice of clay, and the picker sets what it shows.
+  {
+    const { DEFAULT_THEME, THEME_BOOT, themeAttr } = await import('../lib/theme');
+    const boot = (stored: string | null, served: string | undefined) => {
+      const attrs = new Map<string, string>(served ? [['data-theme', served]] : []);
+      const document = { documentElement: { setAttribute: (k: string, v: string) => attrs.set(k, v), removeAttribute: (k: string) => attrs.delete(k) } };
+      const localStorage = { getItem: () => stored };
+      new Function('document', 'localStorage', THEME_BOOT)(document, localStorage);
+      return attrs.get('data-theme') ?? 'clay';
+    };
+    const served = themeAttr(DEFAULT_THEME);
+    const fresh = boot(null, served), clay = boot('clay', served), green = boot('green', served);
+    check('Green is the default theme; a stored choice of clay is applied before first paint, and green stays green',
+      DEFAULT_THEME === 'green' && served === 'green' && themeAttr('clay') === undefined && fresh === 'green' && clay === 'clay' && green === 'green',
+      `served ${served}; a fresh browser sees ${fresh}; a stored clay sees ${clay}; a stored green sees ${green}`);
   }
 
   // ---------------------------------------------------------------- report

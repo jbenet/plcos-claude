@@ -1,7 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { Rail } from '@/components/shell/Rail';
-import { THEME_BOOT } from '@/lib/theme';
+import { DEFAULT_THEME, THEME_BOOT, themeAttr } from '@/lib/theme';
 import { config } from '@/config/deployment';
 
 export const metadata: Metadata = {
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-theme={themeAttr(DEFAULT_THEME)} suppressHydrationWarning>
       <head>
         {/* Before first paint. Reading the stored theme in an effect would render the
             default first and swap, which is a flash of the wrong colour on every load. */}

@@ -150,24 +150,25 @@ async function main() {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* The palette is the project's own, settled in CLAUDE.md and validated for
-     colour-independence. This page is a rendering of that project, so it wears it. */
+  /* The palette is the project's own, and this page wears the app's default theme: green since
+     24 Sep 2026 (issue 0010), Protocol Labs' colour through the chrome. The meaning colours stay
+     as CLAUDE.md settled them; only the ground, the ink and the accent move. */
   :root{
-    --ground:#F5F3EE; --surface:#FFFFFF; --ink:#1A1917; --muted:#5E5A52;
-    --line:#E4E0D6; --hair:#F0EDE5; --clay:#BF4A16; --green:#0E7F55; --amber:#8A6410;
+    --ground:#F1F4F0; --surface:#FFFFFF; --ink:#16201B; --muted:#54605A;
+    --line:#DAE3DC; --hair:#EAF0EA; --accent:#1E8F5E; --clay:#BF4A16; --green:#0E7F55; --amber:#8A6410;
     --display:'Fraunces',Georgia,serif;
     --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
     --mono:'IBM Plex Mono',ui-monospace,monospace;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --ground:#141312; --surface:#1D1B18; --ink:#EFEBE2; --muted:#A8A296;
-      --line:#332F2A; --hair:#262320; --clay:#E4793F; --green:#4FB88C; --amber:#C99B3F;
+      --ground:#0F1512; --surface:#16201B; --ink:#E6F0E9; --muted:#8FA298;
+      --line:#1F3B30; --hair:#17301F; --accent:#4FB88C; --clay:#E4793F; --green:#4FB88C; --amber:#C99B3F;
     }
   }
   :root[data-theme="dark"]{
-    --ground:#141312; --surface:#1D1B18; --ink:#EFEBE2; --muted:#A8A296;
-    --line:#332F2A; --hair:#262320; --clay:#E4793F; --green:#4FB88C; --amber:#C99B3F;
+    --ground:#0F1512; --surface:#16201B; --ink:#E6F0E9; --muted:#8FA298;
+    --line:#1F3B30; --hair:#17301F; --accent:#4FB88C; --clay:#E4793F; --green:#4FB88C; --amber:#C99B3F;
   }
 
   *{box-sizing:border-box}
@@ -179,7 +180,7 @@ async function main() {
   .wrap{max-width:780px;margin:0 auto;padding-inline:20px}
   .masthead .wrap{padding-block:28px 24px}
   .mark{display:inline-flex;align-items:center;gap:10px;margin-bottom:18px}
-  .mark i{width:26px;height:26px;border-radius:7px;background:var(--clay);color:#fff;
+  .mark i{width:26px;height:26px;border-radius:7px;background:var(--accent);color:#fff;
           display:flex;align-items:center;justify-content:center;font-family:var(--display);
           font-style:normal;font-weight:600;font-size:15px}
   .mark b{font-family:var(--display);font-size:15px;font-weight:600}
@@ -198,8 +199,8 @@ async function main() {
   .tocgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:2px 16px}
   .tocgrid a{display:flex;gap:8px;align-items:baseline;color:var(--ink);
              text-decoration:none;padding:4px 0;font-size:13px;border-bottom:1px solid transparent}
-  .tocgrid a:hover{border-bottom-color:var(--clay)}
-  .tocgrid .k{font-family:var(--mono);font-size:11px;color:var(--clay);flex:none;min-width:34px}
+  .tocgrid a:hover{border-bottom-color:var(--accent)}
+  .tocgrid .k{font-family:var(--mono);font-size:11px;color:var(--accent);flex:none;min-width:34px}
   .tocgrid .t{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   main .wrap{padding-block:8px 60px}
@@ -211,7 +212,7 @@ async function main() {
             padding-top:16px;border-top:1px solid var(--line)}
   .era p:not(.eralabel){color:var(--muted);font-size:13.5px}
   .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;
-           text-transform:uppercase;color:var(--clay);margin:0 0 6px}
+           text-transform:uppercase;color:var(--accent);margin:0 0 6px}
   h2{font-family:var(--display);font-size:clamp(22px,4.6vw,27px);font-weight:600;
      line-height:1.2;margin:0 0 14px;scroll-margin-top:16px;text-wrap:balance}
   h3{font-family:var(--display);font-size:17px;font-weight:600;margin:26px 0 8px}
@@ -220,7 +221,7 @@ async function main() {
   ul,ol{margin:0 0 14px;padding-left:22px;max-width:66ch}
   li{margin-bottom:6px}
   strong{font-weight:600}
-  a{color:var(--clay)}
+  a{color:var(--accent)}
 
   code{font-family:var(--mono);font-size:.86em;background:var(--hair);
        border:1px solid var(--line);border-radius:4px;padding:1px 4px}
@@ -230,7 +231,7 @@ async function main() {
   pre code{background:none;border:0;padding:0;font-size:12px;line-height:1.6}
 
   blockquote{margin:0 0 16px;padding:13px 16px;background:var(--surface);
-             border:1px solid var(--line);border-left:3px solid var(--clay);border-radius:0 8px 8px 0}
+             border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 8px 8px 0}
   blockquote p{margin:0;color:var(--muted);font-style:italic;max-width:none}
 
   .scroller{overflow-x:auto;margin:0 0 18px;border:1px solid var(--line);

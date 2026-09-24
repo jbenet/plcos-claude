@@ -51,7 +51,7 @@ shape both.
 |---|---|---|
 | What it is | fictional people, firms and amounts | the raise |
 | Started with | `npm run dev` | `npm run dev:real` |
-| Served at | port 3000, reachable on the LAN | `127.0.0.1:3100`, this machine only |
+| Served at | port 3000, reachable on the LAN | port 3100, reachable on the LAN since 24 Sep 2026 (a small private network; no sign-in) |
 | Kept in | `data/demo/` | `data/real/` |
 | Starts from | `fixtures/` | `data/real/init.jsonc` |
 | Reset | `npm run demo` | refused |

@@ -1,6 +1,6 @@
 import type { NextConfig } from 'next';
 
-/** docs/15. The real profile builds separately and is served to this machine only. */
+/** docs/15. The real profile builds separately, into its own directory. */
 const real = process.env.DATA_PROFILE === 'real';
 
 const config: NextConfig = {
@@ -16,16 +16,14 @@ const config: NextConfig = {
   // dev servers cannot share a build directory.
   distDir: real ? '.next-real' : '.next',
   /**
-   * `npm run dev` binds 0.0.0.0, so a phone or another laptop on the same network can open
-   * the demo. Next refuses cross-origin dev requests unless the origin is listed, and a
-   * private LAN range is the only place it is ever served from — there is no deployment.
-   *
-   * `npm run dev:real` binds 127.0.0.1, so nothing else on the network can reach it, and
-   * accepts only this machine's own names for itself.
+   * Both servers bind 0.0.0.0, so another computer on the same network can open them: the demo
+   * from the start, the real one since 24 Sep 2026 (Juan: "I'm in a small private network so no
+   * problem w/ exposing the port"). Next refuses cross-origin dev requests unless the origin is
+   * listed, and a private LAN range is the only place either is served from — there is no
+   * deployment. There is no sign-in either: anyone on that network can read and change the
+   * real data.
    */
-  allowedDevOrigins: real
-    ? ['127.0.0.1', 'localhost']
-    : ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '*.local', 'localhost', '127.0.0.1'],
+  allowedDevOrigins: ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '*.local', 'localhost', '127.0.0.1'],
 };
 
 export default config;
