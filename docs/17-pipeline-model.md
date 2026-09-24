@@ -71,6 +71,13 @@ last touch, and "waiting on their reply since…".
 - What Affinity's status word implies but can't date ("Two meetings held") is kept as a claim
   beside the log: "2 meetings on record · Affinity says 2 or more".
 
+**One timeline (N56).** On an LP's page, the touchpoints and the team's notes in Affinity are one
+thread, newest first, each row with an icon for what happened and the same thing in words: a
+meeting (or one still ahead), a call, an email from them or from us, a deck view, questions
+asked, a number given, and so on. A note Affinity ties to a meeting, call or email opens inside
+that row instead of standing on its own. Notes are still a record of what was said, not evidence
+for the ladder; the counts above the thread come only from touchpoints.
+
 ## 3. The close track: events, not a state
 
 Most of this already exists: soft and hard exposures (L6), the close room's pack with its
@@ -107,10 +114,16 @@ session) and the next translation loads them into `meetings.note_reading`. On th
 - **Confirm** makes it the person's read, attributed to them and to the note. **Not right**
   dismisses it, and the next newest suggestion, if any, shows instead. A later file never
   re-suggests a read a person has decided; it can still replace a summary.
-- A note that mentions a person's or a family's health is never read: the importer refuses its
-  line whatever the file says (Report 4 §6.2).
+- A note that mentions a person's or a family's health is read only with that detail redacted,
+  and the summary says so in brackets — "[health detail redacted]" (N56; Juan, 23 Sep: "feel free
+  to redact any info going into the system for privacy. (if so, make it clear in the redacted
+  text.)"). The importer refuses any other line for such a note, and one whose own words still
+  carry the detail (Report 4 §6.2). The note's text stays closed until someone opens it.
 - A touchpoint that Affinity ties to a note shows the summary, with the note itself one click
-  away; a note with no reading shows its first sentence instead.
+  away; a note with no reading shows its first sentence instead, unless it mentions health.
+- Each reading may say what happened, in one word from a fixed list — questions asked,
+  materials, a deck view, a number given, signed, declined, an intro, a portfolio update,
+  background, added to a list, meeting notes — which is the icon on the LP's timeline (N56).
 
 ---
 

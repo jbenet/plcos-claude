@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { config } from '@/config/deployment';
 import { getDb, type Queryable } from '@/lib/db';
 import { parseJsonc } from '@/lib/jsonc';
@@ -14,17 +14,38 @@ import type { AffinityNote } from './notes';
  * suggestion until a person confirms it on the LP's page; one a person dismissed stays
  * dismissed, whatever the file says next time.
  *
- * A note that mentions health is never loaded (Report 4 §6.2), even if the file has a line for it.
+ * A note that mentions health is read only with that detail taken out (N56). Juan, 23 Sep: "fine
+ * to read them and process. feel free to redact any info going into the system for privacy. (if
+ * so, make it clear in the redacted text.)" So its line loads only when the summary says what was
+ * taken out, in brackets — "[health detail redacted]" — and neither the summary nor the basis
+ * trips the health test itself. Anything else is refused, as before (Report 4 §6.2).
  */
 
 export const READINGS_PATH = join(config.data.root, 'readings.jsonc');
 /** The demo's readings are invented, and live with the fixtures so a reset keeps them. */
 const DEMO_READINGS = join('fixtures', 'affinity', 'readings.demo.jsonc');
 
+/**
+ * What happened, as the note tells it (N56): one word, for the icon on the LP's timeline. The
+ * list is the check; a word not on it loads as null.
+ */
+export const WHATS = [
+  'meeting_notes', 'questions', 'materials', 'deck_view', 'indication', 'signed', 'declined',
+  'intro', 'update', 'background', 'pipeline',
+] as const;
+export type What = (typeof WHATS)[number];
+export const WHAT_LABEL: Record<What, string> = {
+  meeting_notes: 'Meeting notes', questions: 'Asked questions', materials: 'Materials',
+  deck_view: 'Viewed the deck', indication: 'Gave a number', signed: 'Signed', declined: 'Declined',
+  intro: 'Intro', update: 'Portfolio update', background: 'Background', pipeline: 'Added to a list',
+};
+export const isWhat = (x: unknown): x is What => typeof x === 'string' && (WHATS as readonly string[]).includes(x);
+
 export interface ReadingLine {
   summary?: string | null;
   read?: Read | null;
   basis?: string | null;
+  what?: string | null;
 }
 
 export interface ReadingFile {
@@ -36,7 +57,7 @@ export interface ReadingFile {
 export async function readingsFile(path = READINGS_PATH): Promise<ReadingFile | null> {
   for (const p of config.data.profile === 'demo' ? [path, DEMO_READINGS] : [path]) {
     try {
-      const raw = parseJsonc(await readFile(join(process.cwd(), p), 'utf8')) as Partial<ReadingFile>;
+      const raw = parseJsonc(await readFile(resolve(process.cwd(), p), 'utf8')) as Partial<ReadingFile>;
       if (raw && typeof raw === 'object' && raw.notes) return { by: raw.by ?? 'unknown', at: raw.at ?? '', notes: raw.notes };
     } catch {
       /* not there: the next candidate */
@@ -45,31 +66,43 @@ export async function readingsFile(path = READINGS_PATH): Promise<ReadingFile | 
   return null;
 }
 
-export interface ImportCounts { loaded: number; health: number; unknown: number; keptDecisions: number }
+export interface ImportCounts { loaded: number; health: number; redacted: number; unknown: number; keptDecisions: number }
+
+/** How a line says that something was taken out: in brackets, with the word "redacted". */
+export const REDACTED = /\[[^\]]*\bredacted\b[^\]]*\]/i;
+
+/** A line for a note that mentions health: loaded only if it is marked redacted and is clean. */
+export function redactedCleanly(line: ReadingLine): boolean {
+  return REDACTED.test(line.summary ?? '') && !mentionsHealth(`${line.summary ?? ''} ${line.basis ?? ''}`);
+}
 
 /** Load the file's readings for the notes that landed. Inside translation's transaction. */
 export async function importReadings(tx: Queryable, notes: AffinityNote[], path?: string): Promise<ImportCounts> {
-  const counts: ImportCounts = { loaded: 0, health: 0, unknown: 0, keptDecisions: 0 };
+  const counts: ImportCounts = { loaded: 0, health: 0, redacted: 0, unknown: 0, keptDecisions: 0 };
   const file = await readingsFile(path);
   if (!file) return counts;
   const byId = new Map(notes.map((n) => [String(n.id), n]));
   for (const [id, line] of Object.entries(file.notes)) {
     const note = byId.get(id);
     if (!note) { counts.unknown++; continue; }
-    if (mentionsHealth(note.content?.html ?? '')) { counts.health++; continue; }
+    if (mentionsHealth(note.content?.html ?? '')) {
+      if (!redactedCleanly(line)) { counts.health++; continue; }
+      counts.redacted++;
+    }
     const read = line.read && READS.includes(line.read) ? line.read : null;
     const rows = await tx.query<{ decided: boolean }>(
-      `insert into meetings.note_reading (source, note_id, summary, read, basis, read_by, read_at)
-       values ('affinity', $1, $2, $3::meetings.read, $4, $5, $6)
+      `insert into meetings.note_reading (source, note_id, summary, read, basis, read_by, read_at, what)
+       values ('affinity', $1, $2, $3::meetings.read, $4, $5, $6, $7)
        on conflict (source, note_id) do update set
          summary = excluded.summary,
+         what = excluded.what,
          -- A person's decision stands: a confirmed or dismissed read is not re-suggested.
          read = case when meetings.note_reading.confirmed_at is null and meetings.note_reading.dismissed_at is null
                      then excluded.read else meetings.note_reading.read end,
          basis = case when meetings.note_reading.confirmed_at is null and meetings.note_reading.dismissed_at is null
                       then excluded.basis else meetings.note_reading.basis end
        returning (confirmed_at is not null or dismissed_at is not null) as decided`,
-      [id, line.summary?.trim() || null, read, line.basis?.trim() || null, file.by, file.at || new Date().toISOString()],
+      [id, line.summary?.trim() || null, read, line.basis?.trim() || null, file.by, file.at || new Date().toISOString(), isWhat(line.what) ? line.what : null],
     );
     counts.loaded++;
     if (rows[0]?.decided) counts.keptDecisions++;

@@ -12,7 +12,7 @@ import {
   IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, RUNG_REQUIRES, STATUS_LABEL, getPursuit, impliedRung,
 } from '@/modules/strategy';
 import { StatusForm } from '@/components/strategy/StatusForm';
-import { Touchpoints, meetingLine } from '@/components/strategy/Touchpoints';
+import { Timeline, meetingLine, type TouchContext } from '@/components/strategy/Timeline';
 import { READ_LABEL, summarize, touchpointsFor } from '@/modules/meetings';
 import { latestRun } from '@/modules/sources';
 import { CLOSE_STATE_LABEL, closeTracksFor } from '@/modules/pipeline';
@@ -24,12 +24,10 @@ import { restrictionsFor } from '@/modules/coordination';
 import { planRoutes, VERDICT_LABEL } from '@/modules/network';
 import { signalsFor } from '@/modules/signals';
 import { SignalRow } from '@/components/signals/SignalRow';
-import { AffinityNotes } from '@/components/affinity/AffinityNotes';
 import { firstSentence, notesAbout } from '@/lib/connectors/affinity/notes';
 import { meetingTitles } from '@/lib/connectors/affinity/meetings';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { shownRead } from '@/lib/reads';
-import type { TouchContext } from '@/components/strategy/Touchpoints';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,10 +71,13 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     const note = noteOn.get(`${i.type}:${i.id}`);
     context[t.touchpointId] = {
       title: i.type === 'meeting' ? titles.get(i.id) ?? null : null,
+      noteId: note?.noteId ?? null,
       text: note?.text ?? null,
       health: note?.health ?? false,
-      summary: note ? note.reading?.summary ?? firstSentence(note.text) : null,
+      // A note that mentions health never lends its first sentence: only a redacted reading (N56).
+      summary: note ? note.reading?.summary ?? (note.health ? null : firstSentence(note.text)) : null,
       summaryBy: note?.reading?.summary ? note.reading.by : null,
+      what: note?.reading?.what ?? null,
     };
   }
 
@@ -241,9 +242,10 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
         <div>
           {tracks.map((t) => <CloseTrack key={t.exposure.exposureId} track={t} pursuitId={pursuit.pursuitId} />)}
 
-          <Touchpoints
+          <Timeline
             touches={touches}
             summary={touchSummary}
+            notes={affinityNotes}
             pursuitId={pursuit.pursuitId}
             entityId={pursuit.entityId}
             vehicleId={pursuit.vehicleId}
@@ -360,8 +362,6 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
               )}
             </div>
           </div>
-
-          <AffinityNotes notes={affinityNotes} />
 
           <div className="card">
             <div className="chead">

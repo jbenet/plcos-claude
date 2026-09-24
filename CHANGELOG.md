@@ -4217,3 +4217,32 @@ and that's what Not right is for.
 
 Also fixed: comments from N53 and N54 dated your review 24 Sep; it was 23 Sep. 92 of 92
 properties hold.
+
+## N56 — One timeline, an icon for what happened, and health notes read with the detail redacted
+
+**Shipped.** Your first note from the feedback box — "move notes in with touchpoints" — and your
+answer about the two health notes: "fine to read them and process… (if so, make it clear in the
+redacted text.)"
+
+| | |
+|---|---|
+| ![One timeline](docs/changelog/shots/n56/01-one-timeline.webp) | **One thread.** An LP's touchpoints and the team's notes in Affinity are now one timeline, newest first: the meetings, calls and emails, and the notes between them. A note Affinity ties to a meeting, call or email opens inside that row rather than appearing twice. The notes panel is gone; its provenance line moved to the bottom of the timeline. |
+| ![Questions and a redaction](docs/changelog/shots/n56/02-questions-and-a-redaction.webp) | **An icon for what happened**: a meeting, or one still ahead; a call; an email from them or from us; a deck view; questions asked; a number given; signed; declined; an intro; a portfolio update. The ones that change an LP's state have a colour too, and every icon also says in words what it is, with a key under the thread. The health note here reads "[health detail about her family redacted]". |
+
+**Where the icons come from.** A touchpoint's icon comes from what it is. A note's comes from
+its reading: one word from a fixed list, kept with the summary (migration 004, since the
+timeline needs it). On the real account the 408 readings are tagged: 153 portfolio updates, 125
+added to a list, 37 meeting notes, 21 background, 17 deck views, 11 declined, 8 a number given,
+7 materials, 6 intros, 3 questions and 1 signed; 19 have no word, and show as a plain note.
+
+**Health notes, read.** The two notes I'd withheld now have summaries, with the health detail
+taken out and the brackets saying so. A reading of a note that mentions health loads only if it
+carries that bracket and its own words pass the health check; anything else is still refused.
+The note's text stays closed until someone opens it, as before.
+
+**Two reads removed.** Two readings said "not very interested" because follow-ups had gone
+unanswered. Silence isn't a read any more than it's a pass (N53), so those two now say nothing.
+
+Also fixed: a readings file given by an absolute path was quietly replaced by the demo's; the
+property now covers the refusals. Next is your second note, the ladder that didn't move after
+meetings, and stale reads (N57). 92 of 92 properties hold.

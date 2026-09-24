@@ -196,6 +196,30 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N56: [
+    {
+      name: '01-one-timeline',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.getByRole('heading', { name: 'Timeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '02-questions-and-a-redaction',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.getByRole('heading', { name: 'Timeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N55: [
     {
       name: '01-a-thread-opened',

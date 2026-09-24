@@ -1,25 +1,27 @@
 // What the demo's invented notes say, read (N55). The real profile's readings live in
 // data/real/readings.jsonc, never here. Each line: a one-sentence summary, their read if the
-// note gives one (very_interested, interested, not_very_interested, or null), and the words
-// the read rests on. Suggestions until a person confirms them on the LP's page.
+// note gives one (very_interested, interested, not_very_interested, or null), the words the read
+// rests on, and what happened (N56). Suggestions until a person confirms them on the LP's page.
 {
   "by": "claude",
   "at": "2026-09-23T12:00:00Z",
   "notes": {
-    "30016": { "summary": "Asked again for the track-record deck; Sam sent the link.", "read": "interested", "basis": "asked for the track-record deck again" },
-    "30003": { "summary": "Soft circle at $2.5M, pending her partner's sign-off; wants a side letter on reporting.", "read": "very_interested", "basis": "soft circle at 2.5M" },
-    // Mentions health: the importer refuses this line, whatever it says (Report 4 §6.2).
-    "30002": { "summary": "Slower on email this month.", "read": "interested", "basis": "not a signal about interest" },
-    "30005": { "summary": "Countersigned subscription documents are in; the wire is expected within ten business days.", "read": "very_interested", "basis": "countersigned subscription docs received" },
-    "30001": { "summary": "Wants the data room before their IC on 14 Oct, and asked who else is in the first close.", "read": "very_interested", "basis": "wants the data room before the IC" },
-    "30008": { "summary": "Walked through fund size, fees and reporting; comfortable with the fees; the side letter is next.", "read": "interested", "basis": "comfortable with the fee terms" },
-    "30007": { "summary": "Intro call through a mutual friend; open to following up in October.", "read": "interested", "basis": "open to a follow-up in October" },
-    "30009": { "summary": "Sent the one-pager and the deck; no reply yet.", "read": null, "basis": null },
-    "30006": { "summary": "First meeting at their office: a strong thesis fit; wants the portfolio pipeline before a second meeting.", "read": "interested", "basis": "strong thesis fit" },
-    "30004": { "summary": "Declined: fully allocated through 2027; not to be approached again before Q2.", "read": "not_very_interested", "basis": "fund is fully allocated to 2027" },
-    "30010": { "summary": "Signed the subscription agreement; to be re-signed after their holding entity's name change.", "read": "very_interested", "basis": "signed the subscription agreement" },
-    "30011": { "summary": "Interested in the Cortex SPV at $250K, waiting on their IC.", "read": "interested", "basis": "interested in the Cortex SPV" },
-    "30012": { "summary": "Board update: runway through Q3 2027; no fundraising ask this year.", "read": null, "basis": null },
-    "30014": { "summary": "Invested in two earlier SPVs and asked to hear about the next one.", "read": "interested", "basis": "asked to hear about the next one" }
+    "30016": { "summary": "Asked again for the track-record deck; Sam sent the link.", "read": "interested", "basis": "asked for the track-record deck again", "what": "materials" },
+    "30003": { "summary": "Soft circle at $2.5M, pending her partner's sign-off; wants a side letter on reporting.", "read": "very_interested", "basis": "soft circle at 2.5M", "what": "indication" },
+    // Mentions health, so the line loads only because it says what was taken out (N56); the same
+    // line without the bracketed redaction would be refused (Report 4 §6.2).
+    "30002": { "summary": "Slower on email this month [health detail about her family redacted]; not a signal about interest.", "read": null, "basis": null },
+    "30017": { "summary": "Viewed “PLC Neurotech Fund I — Deck” on DocSend, 17 Sep.", "read": null, "basis": null, "what": "deck_view" },
+    "30005": { "summary": "Countersigned subscription documents are in; the wire is expected within ten business days.", "read": "very_interested", "basis": "countersigned subscription docs received", "what": "signed" },
+    "30001": { "summary": "Wants the data room before their IC on 14 Oct, and asked who else is in the first close.", "read": "very_interested", "basis": "wants the data room before the IC", "what": "questions" },
+    "30008": { "summary": "Walked through fund size, fees and reporting; comfortable with the fees; the side letter is next.", "read": "interested", "basis": "comfortable with the fee terms", "what": "meeting_notes" },
+    "30007": { "summary": "Intro call through a mutual friend; open to following up in October.", "read": "interested", "basis": "open to a follow-up in October", "what": "intro" },
+    "30009": { "summary": "Sent the one-pager and the deck; no reply yet.", "read": null, "basis": null, "what": "materials" },
+    "30006": { "summary": "First meeting at their office: a strong thesis fit; wants the portfolio pipeline before a second meeting.", "read": "interested", "basis": "strong thesis fit", "what": "meeting_notes" },
+    "30004": { "summary": "Declined: fully allocated through 2027; not to be approached again before Q2.", "read": "not_very_interested", "basis": "fund is fully allocated to 2027", "what": "declined" },
+    "30010": { "summary": "Signed the subscription agreement; to be re-signed after their holding entity's name change.", "read": "very_interested", "basis": "signed the subscription agreement", "what": "signed" },
+    "30011": { "summary": "Interested in the Cortex SPV at $250K, waiting on their IC.", "read": "interested", "basis": "interested in the Cortex SPV", "what": "indication" },
+    "30012": { "summary": "Board update: runway through Q3 2027; no fundraising ask this year.", "read": null, "basis": null, "what": "update" },
+    "30014": { "summary": "Invested in two earlier SPVs and asked to hear about the next one.", "read": "interested", "basis": "asked to hear about the next one", "what": "background" }
   }
 }

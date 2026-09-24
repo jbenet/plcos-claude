@@ -136,6 +136,44 @@
    }
   },
   {
+   "id": 30017,
+   "type": "entities",
+   "content": {
+    "html": "<p>DocSend Deck Viewed</p><p>Document: PLC Neurotech Fund I — Deck</p><p>Email: ana@vidal.example Time Viewed: 2026-09-17 14:02:11 UTC</p>"
+   },
+   "creator": {
+    "id": 90002,
+    "firstName": "Mara",
+    "lastName": "Vance",
+    "primaryEmailAddress": "mara@example.com",
+    "type": "internal"
+   },
+   "mentions": [],
+   "createdAt": "2026-09-17T14:05:00Z",
+   "updatedAt": null,
+   "repliesCount": 0,
+   "personsPreview": {
+    "data": [
+     {
+      "id": 7004,
+      "firstName": "Ana",
+      "lastName": "Vidal",
+      "primaryEmailAddress": "ana@vidal.example",
+      "type": "external"
+     }
+    ],
+    "totalCount": 1
+   },
+   "companiesPreview": {
+    "data": [],
+    "totalCount": 0
+   },
+   "opportunitiesPreview": {
+    "data": [],
+    "totalCount": 0
+   }
+  },
+  {
    "id": 30005,
    "type": "entities",
    "content": {

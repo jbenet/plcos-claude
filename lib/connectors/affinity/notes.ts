@@ -4,6 +4,7 @@ import { finishRun, landRaw, latestRaw, latestRun, progressRun, startRun, type S
 import { AffinityRefused, type Query } from './client';
 import { affinity } from './index';
 import { mentionsHealth } from './inventory';
+import { isWhat, redactedCleanly, type What } from './readings';
 import { sliceTargets } from './slice';
 
 /**
@@ -29,7 +30,8 @@ import { sliceTargets } from './slice';
  * request per note that has any, so they are counted and left for later.
  *
  * Nothing here translates a note into anything. A note mentioning someone's health is kept as
- * Affinity has it, flagged, and never copied into anything derived (Report 4 §6.2).
+ * Affinity has it, flagged, and nothing derived from it carries the health detail (Report 4
+ * §6.2): a reading of it loads only with that detail redacted and the redaction marked (N56).
  */
 
 export interface NotePerson {
@@ -278,7 +280,9 @@ export interface NoteView {
   /** The meeting, call or email the note is on, when Affinity ties it to one. */
   interaction: { type: string; id: number } | null;
   /** What the note says in a sentence, and their read, if someone read it (N55). */
-  reading: { summary: string | null; read: string | null; basis: string | null; suggested: boolean; by: string; confirmedByName: string | null; dismissed: boolean } | null;
+  reading: { summary: string | null; read: string | null; basis: string | null; what: What | null; suggested: boolean; by: string; confirmedByName: string | null; dismissed: boolean } | null;
+  /** A DocSend notification, which says only that the deck was opened: shown as a deck view. */
+  deckView: boolean;
   /** Attached to the LP themselves, or to the organization they are affiliated with. */
   via: { kind: 'self' } | { kind: 'organization'; name: string };
   kind: string;
@@ -326,8 +330,8 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
   if (!persons.length && !companies.length) return [];
   // The newest version of each note first, then the filter: an older version attached to this
   // entity must not show a note that has since been moved off it.
-  const rows = await db.query<{ fetched_at: Date | string; payload: AffinityNote; summary: string | null; read: string | null; basis: string | null; read_by: string | null; confirmed_at: Date | string | null; confirmed_by_name: string | null; dismissed_at: Date | string | null }>(
-    `select n.fetched_at, n.payload, nr.summary, nr.read::text as read, nr.basis, nr.read_by, nr.confirmed_at,
+  const rows = await db.query<{ fetched_at: Date | string; payload: AffinityNote; summary: string | null; read: string | null; basis: string | null; what: string | null; read_by: string | null; confirmed_at: Date | string | null; confirmed_by_name: string | null; dismissed_at: Date | string | null }>(
+    `select n.fetched_at, n.payload, nr.summary, nr.read::text as read, nr.basis, nr.what, nr.read_by, nr.confirmed_at,
             cu.name as confirmed_by_name, nr.dismissed_at
        from (
        select fetched_at, payload from (
@@ -356,10 +360,12 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
     return {
       noteId: n.id,
       interaction: n.type === 'ai-notetaker' && n.interaction ? { type: 'meeting', id: n.interaction.id } : n.interaction ? { type: n.interaction.type, id: n.interaction.id } : null,
-      // Health detail is never read into anything, so a reading of such a note is not shown either.
-      reading: r.read_by && !health
-        ? { summary: r.summary, read: r.read, basis: r.basis, suggested: !r.confirmed_at, by: r.read_by, confirmedByName: r.confirmed_by_name, dismissed: Boolean(r.dismissed_at) }
+      // A note that mentions health shows a reading only if it was redacted (N56); the importer
+      // refuses any other, and this check holds even for a row written some other way.
+      reading: r.read_by && (!health || redactedCleanly({ summary: r.summary, basis: r.basis }))
+        ? { summary: r.summary, read: r.read, basis: r.basis, what: isWhat(r.what) ? r.what : null, suggested: !r.confirmed_at, by: r.read_by, confirmedByName: r.confirmed_by_name, dismissed: Boolean(r.dismissed_at) }
         : null,
+      deckView: /^\s*DocSend Deck Viewed\b/i.test(noteText(html)),
       via: viaOrg ? { kind: 'organization', name: orgName.get(viaOrg)! } : { kind: 'self' },
       kind: noteKind(n),
       kindLabel: NOTE_KIND_LABEL[noteKind(n)] ?? n.type,
