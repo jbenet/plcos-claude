@@ -4927,3 +4927,13 @@ so anyone on that network can read and change the real data; CLAUDE.md, docs/15 
 say so.
 
 108 of 108 properties hold.
+
+## N73 — The pipeline table stays inside its card
+
+**Shipped.** One item from the feedback box (issue 0012).
+
+| | |
+|---|---|
+| ![The table in its card](docs/changelog/shots/n73/01-the-table-in-its-card.webp) | **The evidence column stays in view.** The pipeline table's seven columns needed more room than its card had at a laptop's width, so the ladder spilled past the card's edge. The LP and "Where" columns now give way first and the cells are a little tighter, so the whole table fits a 1280-wide window, the evidence column included: it is the column that shows the gap between claimed and evidenced, so it is never the one pushed out of view. Narrower than that, the table scrolls sideways inside its card instead of painting outside it. Measured on the demo and on the real data: whole at 1280, 1440 and 1920 wide, scrolling within the card at 1180. |
+
+108 of 108 properties hold.

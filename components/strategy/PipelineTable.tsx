@@ -356,6 +356,9 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
             </div>
           </div>
         ) : (
+          // A narrow window scrolls the table inside its card rather than painting the evidence
+          // column past the card's edge (issue 0012, real).
+          <div className="tscroll">
           <table className="list pipeline">
             <thead>
               <tr>
@@ -428,6 +431,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
               ))}
             </tbody>
           </table>
+          </div>
         )}
         {inColumn.length > shown && (
           <div className="cbody" style={{ borderTop: '1px solid var(--hair)' }}>

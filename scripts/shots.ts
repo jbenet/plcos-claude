@@ -212,6 +212,18 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N73: [
+    {
+      name: '01-the-table-in-its-card',
+      path: '/neurotech/pipeline?status=discussing',
+      width: 1280,
+      prepare: async (page) => {
+        await page.locator('table.pipeline').first().evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -140));
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N72: [
     { name: '01-green-by-default', path: '/today' },
     { name: '02-the-page-you-are-on', path: '/neurotech/pipeline?status=discussing' },

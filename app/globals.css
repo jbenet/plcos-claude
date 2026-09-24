@@ -1703,8 +1703,14 @@ details.more>summary{cursor:pointer;font-size:12px;color:var(--muted);padding:6p
 .pfilters input[type=search]:focus{outline:2px solid var(--accent-wash);border-color:var(--muted)}
 .pfilters select{width:auto;flex:0 0 auto;font-family:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
 .pfilters .btn{flex:0 0 auto}
-table.list.pipeline td:first-child{min-width:160px}
-table.list.pipeline td.where{min-width:220px}
+table.list.pipeline td:first-child{min-width:140px}
+table.list.pipeline td.where{min-width:160px}
+/* The pipeline's seven columns fit a 1280-wide window at 10px padding, the evidence column
+   included: it is the one that shows the gap between claimed and evidenced, so it is never the
+   one pushed out of view. Narrower than that, the table scrolls inside its card (.tscroll)
+   instead of spilling past it (issue 0012, real). */
+table.list.pipeline th,table.list.pipeline td{padding-left:10px;padding-right:10px}
+.tscroll{overflow-x:auto;max-width:100%}
 table.list th .thsort{all:unset;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit}
 table.list th .thsort:hover,table.list th .thsort.on{color:var(--ink)}
 table.list th .thsort:focus-visible{outline:2px solid var(--accent-wash)}
