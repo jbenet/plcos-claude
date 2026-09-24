@@ -4373,3 +4373,29 @@ like anyone's. "On file, not accepted, not proposed yet" was showing on those pa
 they'd been skipped. On your instruction, I approved the 10 new proposals the same way as the
 last 66, with the same note. The pipeline's ladder column is now called Evidence. 95 of 95
 properties hold.
+
+## N61 — Updates on the LP page, and the timeline shows the state changing
+
+**Shipped.** From your notes on two LP pages (issues 0004 and 0006): "add a row at start with a
+text field to add an update… updates from here should get their own icon too", "events on the
+timeline that change the status maybe should clearly indicate that the status changed", and
+"ladder history should be in timeline".
+
+| | |
+|---|---|
+| ![An update, read as you type](docs/changelog/shots/n61/01-an-update-read-as-you-type.webp) | **Every LP's timeline starts with an update box.** Write what happened. The words are read as you type and fill in the form: a status (forward only), the meeting, call or email they describe, with its date ("on Tuesday" becomes 22 Sep), their read after it, and a next step. Each suggestion shows the words it came from. Anything you change by hand stays as you set it, and "Saving will…" says in one line everything Save does. An amount is never recorded from an update; the form points you to the close track. |
+| ![The state changing on the timeline](docs/changelog/shots/n61/02-the-state-changing-on-the-timeline.webp) | **The timeline shows the state changing.** An update gets its own icon, and what it changed shows inside it: *Status: Selected → Discussing*, the meeting it logged, the next step. Each rung on the ladder sits in the row that is its record, with who confirmed it and when. A record the ladder hasn't accepted says so and links to where you confirm it. A status change made without an update gets its own row. The Ladder history card is gone, and its misaligned references went with it. |
+
+**Word rules for now; a model is your call.** You asked for an LLM to read the updates. The
+Agent seam refuses until the agent runtime lands (L13: envelope checks, pinned run config, a set
+of example cases), so for now word rules read them, and the form says so. Each update keeps
+what the rules suggested, which version of the rules, and what you did with it. When a model
+replaces the rules, those are real cases to test it on. Turning a model on would send update
+text, which is real LP detail, to the model's provider. That's for you to decide, and it would
+need its own key.
+
+**An update never writes a rung.** A meeting it logs counts as a record, so reconciliation reads
+that LP again straight away. If the ladder is behind, it proposes the climb for approval, the
+same as after a translation. Save writes the update and whatever you ticked in one transaction,
+once per form, with the update's id in each audit row. The related events you mentioned
+(outreach through a connector, Linear tasks) are now issue 0023. 97 of 97 properties hold.

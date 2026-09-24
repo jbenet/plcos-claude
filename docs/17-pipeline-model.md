@@ -137,6 +137,56 @@ session) and the next translation loads them into `meetings.note_reading`. On th
   materials, a deck view, a number given, signed, declined, an intro, a portfolio update,
   background, added to a list, meeting notes — which is the icon on the LP's timeline (N56).
 
+## 5. Updates, and the state on the timeline (N61)
+
+Juan, 24 Sep 2026 (issue 0004): "add a row at start with a text field to add an update. we should
+LLM process the output to decide on what to do with the update (ie change status, etc). updates
+from here should get their own icon too." And (issue 0006): "ladder history should be in timeline
+(the events should imply the status changed)".
+
+**An update** is a person's words about an LP, written in the first row of the timeline, with
+its own icon. It is ours, not contact with them, so it is not a touchpoint and never counts as a
+touch (`strategy.pursuit_update`, strategy 005). As it is typed, the words are read
+(`modules/strategy/reader.ts`) and what they suggest fills the form:
+
+| Suggestion | From words like | Goes through |
+|---|---|---|
+| A status, forward only (Passed from anywhere; anything from Passed) | "met", "they replied", "reached out", "they're in", "they passed — timing" | `setStatus`, the update's first line as the reason |
+| The touchpoint it describes, dated | "met them Tuesday", "emailed them this morning", "call set for Monday" | `logTouchpoint`, on this vehicle |
+| Their read, only beside a touchpoint that happened | "very keen", "lukewarm" | the touchpoint's read |
+| A next step | "they want the deck", "next: …", "follow up in two weeks" | the pursuit's next step |
+| An amount — shown, never recorded | "$2M", "5 million" | nothing: it points to the close track (rule 1) |
+
+Each suggestion shows the words it rests on, a field set by hand stops following the words,
+and "Saving will…" says in one line everything Save will do. Save writes the update and each
+ticked change in one transaction, once per form (an idempotency key), with the update's id in
+each audit row. What the reader suggested is read again on the server and kept with the update,
+pinned to the reader's version, beside what was applied and what was left unticked — so a wrong
+rule can be traced to the updates it touched.
+
+**Word rules, not a model, for now.** The Agent seam refuses until the agent runtime lands (L13):
+a run needs its envelope checked, its config pinned and its prompt tried against example cases,
+and none of that is built. A model's reading would replace the rules behind the same form; it
+would also send the update's words to the model's provider, which is a decision for Juan, not a
+default.
+
+**It never writes a rung.** A meeting the update logs is a record, so reconciliation reads the LP
+again at once (`reconcilePursuit`) and, if the ladder is behind, proposes the climb as a STAGE
+ticket for a person to approve (docs/18).
+
+**The timeline shows the state changing.** Newest first, beside the touchpoints and notes:
+
+- an update, with what it changed folded in: *Status: Selected → Discussing*, the meeting it
+  logged, the next step. The meeting's own row says it was logged from the update;
+- a status set without an update, from the audit log: old, new, who, and the reason;
+- each rung on the ladder, folded into the row that is its record — *On the ladder: LP opted in,
+  Meeting held — confirmed 24 Sep by Juan* — or, when its record is not on the timeline (a
+  signature, a wire, a connector's yes), a row of its own;
+- a record the ladder hasn't accepted: *The record for Meeting held — not confirmed yet*, with
+  the link to confirm it.
+
+The LP page's separate "Ladder history" card is gone; the stepper and the timeline carry it.
+
 ---
 
 ## What Affinity's words become

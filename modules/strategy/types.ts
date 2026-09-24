@@ -110,6 +110,9 @@ export interface LadderEvent {
   evidenceNote: string;
   recordedByName: string;
   occurredAt: Date;
+  /** When it was recorded here, and the STAGE ticket that let it be: the timeline says both (N61). */
+  recordedAt: Date;
+  ticketId: string | null;
 }
 
 export interface PlanStep {

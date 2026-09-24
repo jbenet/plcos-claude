@@ -1708,3 +1708,31 @@ details.thread .warnline{font-size:12px;color:var(--amber)}
 .closeline .cstep i{width:9px;height:9px;border-radius:50%;border:2px solid var(--line);display:inline-block}
 .closeline .cstep.reached{color:var(--ink)}
 .closeline .cstep.reached i{background:var(--green);border-color:var(--green)}
+
+/* The LP timeline's state (N61, issues 0004 and 0006): the update row at the top, and what each
+   row changed — a status, a rung folded into the row that is its record. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.updbox{padding-bottom:12px}
+.updbox textarea{width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;line-height:1.5;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);resize:vertical;min-height:34px}
+.updbox textarea:focus{outline:2px solid var(--accent-halo);border-color:var(--accent-line)}
+.upd-changes{margin-top:8px;padding:10px 12px;background:var(--accent-wash);border:1px solid var(--line);border-radius:7px;font-size:12.5px}
+.upd-changes .fieldrow{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;margin-top:6px}
+.upd-changes .field{display:flex;flex-direction:column;gap:4px}
+.upd-changes select,.upd-changes input:not([type=checkbox]){font-family:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.upd-changes select:disabled,.upd-changes input:disabled{opacity:.5}
+.upd-changes .sug{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:8px}
+.upd-changes .sug select,.upd-changes .sug input{width:auto}
+.upd-changes .sug input[name=nextStep]{flex:1;min-width:180px}
+.upd-changes .check{display:inline-flex;align-items:center;gap:6px}
+.basis{font-size:11.5px;color:var(--muted);font-style:italic}
+.basis.warnish{color:var(--amber);font-style:normal}
+.willdo{margin:10px 0 0;font-size:12px;color:var(--ink);line-height:1.5}
+.tl-row .tl-state{display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin-top:6px;font-size:12px}
+.tl-row .tl-state>span{display:grid;grid-template-columns:18px minmax(0,1fr);gap:6px;align-items:center}
+.tl-row .tl-state>span>i{display:block}
+.tl-row .tl-state .glyph{width:18px;height:18px}
+.tl-row .tl-state .glyph svg{width:11px;height:11px}
+.statechg b{color:var(--ink)}
+.rungchg{color:var(--green)}
+.rungpend{color:var(--muted)}
+.rungpend a{color:var(--accent)}

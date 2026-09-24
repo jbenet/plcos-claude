@@ -19,6 +19,22 @@ interface Shot {
   width?: number;
 }
 
+/** An LP's page by name, from whichever status it is at now: a shot that saves moves it (N61). */
+async function openLp(page: Page, name: string) {
+  for (const status of ['selected', 'connecting', 'discussing', 'committed', 'passed', 'sourcing', 'new']) {
+    await page.goto(new URL(`/targets?status=${status}`, page.url()).toString(), { waitUntil: 'networkidle' });
+    const link = page.getByRole('link', { name: new RegExp(name) }).first();
+    if (await link.count()) {
+      await page.goto(new URL((await link.getAttribute('href'))!, page.url()).toString(), { waitUntil: 'networkidle' });
+      return;
+    }
+  }
+  throw new Error(`No LP named ${name} in the pipeline`);
+}
+
+const N61_UPDATE =
+  "Met Michael and the family office's CIO on Tuesday. They want the deck and the track record before a second meeting — very keen on the thesis.";
+
 const SHOTS: Record<string, Shot[]> = {
   L1: [
     { name: '01-today', path: '/today' },
@@ -193,6 +209,33 @@ const SHOTS: Record<string, Shot[]> = {
         await page.getByText(/relationship sets/).first().waitFor({ timeout: 30_000 });
         await page.waitForLoadState('networkidle');
         await page.evaluate(() => window.scrollTo(0, 0));
+      },
+    },
+  ],
+  N61: [
+    {
+      name: '01-an-update-read-as-you-type',
+      path: '/targets?status=selected',
+      prepare: async (page) => {
+        await openLp(page, 'Michael Okonjo');
+        await page.getByRole('heading', { name: 'Timeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.locator('.updbox textarea').fill(N61_UPDATE);
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: '02-the-state-changing-on-the-timeline',
+      path: '/targets?status=selected',
+      prepare: async (page) => {
+        await openLp(page, 'Michael Okonjo');
+        await page.locator('.updbox textarea').fill(N61_UPDATE);
+        await page.getByRole('button', { name: 'Save update' }).click();
+        await page.locator('.updbox .stat.ready').waitFor({ timeout: 15000 });
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.getByRole('heading', { name: 'Timeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
       },
     },
   ],

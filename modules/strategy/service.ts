@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getDb, type Queryable } from '@/lib/db';
 import { openTicket, requireApprovedTicket } from '@/modules/governance';
 import { getPursuit } from './repo';
 import {
@@ -206,8 +206,14 @@ export interface StatusChange {
  * No ticket, deliberately. A status is our plan and claims nothing about the LP — it never
  * writes to the ladder, which keeps its STAGE tickets, and never touches money, which keeps its
  * MONEY tickets. A status set here is never overwritten by a translation from Affinity.
+ *
+ * Inside a caller's transaction when given one (N61: an update and the status it changes are
+ * written together), and with the update named in the audit row, so the timeline can show the
+ * change as a consequence of the update rather than as a second event.
  */
-export async function setStatus(actorId: string, pursuitId: string, change: StatusChange): Promise<void> {
+export async function setStatus(
+  actorId: string, pursuitId: string, change: StatusChange, opts: { q?: Queryable; updateId?: string } = {},
+): Promise<void> {
   if (!STATUSES.some((s) => s.id === change.status)) throw new StatusRefused(`"${change.status}" is not a status this tool has.`);
   const passed = change.status === 'passed';
   if (passed && !change.passedBy) {
@@ -221,8 +227,7 @@ export async function setStatus(actorId: string, pursuitId: string, change: Stat
   const nextStep = change.nextStep?.trim() || null;
   if (change.nextStepOn && !nextStep) throw new StatusRefused('A date needs a next step to be the date of.');
 
-  const db = await getDb();
-  await db.transaction(async (tx) => {
+  const write = async (tx: Queryable) => {
     const pursuit = await getPursuit(pursuitId, tx);
     if (!pursuit) throw new Error(`No pursuit ${pursuitId}`);
     await tx.query(
@@ -245,9 +250,45 @@ export async function setStatus(actorId: string, pursuitId: string, change: Stat
       [actorId, pursuitId, JSON.stringify({
         entity: pursuit.entityName, vehicle: pursuit.vehicleName,
         from: STATUS_LABEL[pursuit.status], to: STATUS_LABEL[change.status],
-        ...(passed ? { passedBy: change.passedBy, reason } : {}), ...(nextStep ? { nextStep } : {}),
+        // The ids as well as the words (N61): a label can be renamed; the timeline reads these.
+        fromId: pursuit.status, toId: change.status,
+        ...(passed ? { passedBy: change.passedBy } : {}), ...(reason ? { reason } : {}), ...(nextStep ? { nextStep } : {}),
+        ...(opts.updateId ? { updateId: opts.updateId } : {}),
       })],
     );
-  });
+  };
+  if (opts.q) return write(opts.q);
+  const db = await getDb();
+  await db.transaction(write);
+}
+
+/**
+ * The next step alone (N61), for an update that names one and leaves the status where it is.
+ * Unlike setStatus, it leaves the status and where it came from alone: a status read from
+ * Affinity stays Affinity's to update.
+ */
+export async function setNextStep(
+  actorId: string, pursuitId: string, step: { nextStep: string; nextStepOn: Date | null },
+  opts: { q?: Queryable; updateId?: string } = {},
+): Promise<void> {
+  const nextStep = step.nextStep.trim();
+  if (!nextStep) throw new StatusRefused('A next step needs words.');
+  const write = async (tx: Queryable) => {
+    const pursuit = await getPursuit(pursuitId, tx);
+    if (!pursuit) throw new Error(`No pursuit ${pursuitId}`);
+    await tx.query(`update strategy.pursuit set next_step = $2, next_step_on = $3 where pursuit_id = $1`, [pursuitId, nextStep, step.nextStepOn]);
+    await tx.query(
+      `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
+       values ($1, 'pursuit.next_step_set', 'pursuit', $2, $3)`,
+      [actorId, pursuitId, JSON.stringify({
+        entity: pursuit.entityName, vehicle: pursuit.vehicleName, nextStep,
+        ...(step.nextStepOn ? { on: step.nextStepOn.toISOString().slice(0, 10) } : {}),
+        ...(opts.updateId ? { updateId: opts.updateId } : {}),
+      })],
+    );
+  };
+  if (opts.q) return write(opts.q);
+  const db = await getDb();
+  await db.transaction(write);
 }
 

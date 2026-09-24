@@ -1,7 +1,7 @@
 import { claimsFor } from '@/modules/research';
 import { restrictionsFor } from '@/modules/coordination';
 import { pursuitFor } from '@/modules/strategy';
-import { getDb } from '@/lib/db';
+import { getDb, type Queryable } from '@/lib/db';
 import { listObjections, listQuestions, upcomingMeetings } from './repo';
 import {
   CHANNELS, DIRECTION_LABEL, READS,
@@ -89,7 +89,7 @@ export interface NewTouchpoint {
  * meeting logged here is what a later "meeting held" request can point to as its evidence,
  * and the STAGE ticket is still where that is decided. No ticket, and nothing is sent.
  */
-export async function logTouchpoint(actorId: string, t: NewTouchpoint): Promise<string> {
+export async function logTouchpoint(actorId: string, t: NewTouchpoint, opts: { q?: Queryable; updateId?: string } = {}): Promise<string> {
   if (!CHANNELS.includes(t.channel)) throw new TouchpointRefused(`"${t.channel}" is not a kind of touchpoint this tool has.`);
   if (t.direction && !(t.direction in DIRECTION_LABEL)) throw new TouchpointRefused(`"${t.direction}" is not a direction.`);
   if (t.read && !READS.includes(t.read)) throw new TouchpointRefused(`"${t.read}" is not a read this tool records.`);
@@ -102,8 +102,7 @@ export async function logTouchpoint(actorId: string, t: NewTouchpoint): Promise<
   // Rule 7: a search says what it inspected. A research pass with no corpus reads as thorough.
   if (t.channel === 'research' && !summary) throw new TouchpointRefused('Say what the research pass looked at, and over what dates (rule 7).');
 
-  const db = await getDb();
-  return db.transaction(async (tx) => {
+  const write = async (tx: Queryable) => {
     const row = await tx.one<{ meeting_id: string }>(
       `insert into meetings.meeting
          (pursuit_id, entity_id, vehicle_id, kind, channel, direction, held_on, scheduled_for,
@@ -117,8 +116,15 @@ export async function logTouchpoint(actorId: string, t: NewTouchpoint): Promise<
     await tx.query(
       `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
        values ($1, 'touchpoint.logged', 'entity', $2, $3)`,
-      [actorId, t.entityId, JSON.stringify({ channel: t.channel, on: t.on.toISOString().slice(0, 10), scheduled: ahead, read: t.read ?? null })],
+      [actorId, t.entityId, JSON.stringify({
+        channel: t.channel, on: t.on.toISOString().slice(0, 10), scheduled: ahead, read: t.read ?? null,
+        touchpointId: row!.meeting_id, ...(opts.updateId ? { updateId: opts.updateId } : {}),
+      })],
     );
     return row!.meeting_id;
-  });
+  };
+  // Inside a caller's transaction when given one (N61: an update and what it logs are one write).
+  if (opts.q) return write(opts.q);
+  const db = await getDb();
+  return db.transaction(write);
 }

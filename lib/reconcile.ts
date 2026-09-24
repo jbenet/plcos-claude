@@ -5,7 +5,7 @@ import { finishRun, startRun } from '@/modules/sources';
 import { CHANNEL_LABEL, touchpointsByPair, type Touchpoint } from '@/modules/meetings';
 import { STEP_LABEL, closeStates, type CloseTrack, type CommitmentEvent } from '@/modules/pipeline';
 import {
-  RUNGS, RUNG_LABEL, listPursuits, rungIndex, type ClimbRung, type LadderRung, type Pursuit,
+  RUNGS, RUNG_LABEL, getPursuit, listPursuits, rungIndex, type ClimbRung, type LadderRung, type Pursuit,
 } from '@/modules/strategy';
 
 /**
@@ -47,7 +47,8 @@ export interface OnFile {
   key: string;
 }
 
-const refOf = (t: Touchpoint) => (t.sourceRef ? `${t.source}:${t.sourceRef}` : `touchpoint:${t.touchpointId}`);
+/** How a rung names the touchpoint behind it: the timeline matches on it (N61). */
+export const refOf = (t: Touchpoint) => (t.sourceRef ? `${t.source}:${t.sourceRef}` : `touchpoint:${t.touchpointId}`);
 
 function said(t: Touchpoint): string {
   const who = t.attendees.length ? `, with ${t.attendees.join(', ')}` : '';
@@ -202,11 +203,19 @@ export async function reconcile(runBy: string | null = null): Promise<ReconcileC
   }
 }
 
-async function propose(): Promise<ReconcileCounts> {
+/**
+ * The same, for one LP (N61): after an update logs a meeting, its climb is proposed at once
+ * instead of at the next translation. No run is recorded — that is the whole pipeline's summary.
+ */
+export async function reconcilePursuit(pursuitId: string): Promise<ReconcileCounts> {
+  return propose(pursuitId);
+}
+
+async function propose(only?: string): Promise<ReconcileCounts> {
   const counts: ReconcileCounts = { pursuits: 0, proposed: 0, alreadyOpen: 0, rejectedBefore: 0, renewed: 0, withdrawn: 0, inStep: 0, skipped: 0 };
   const db = await getDb();
   const actor = await systemActor();
-  const pursuits = await listPursuits(null);
+  const pursuits = only ? [await getPursuit(only)].filter((p): p is Pursuit => Boolean(p)) : await listPursuits(null);
   counts.pursuits = pursuits.length;
   // A passed LP's meetings still happened (N60): only a vehicle kept for its history is skipped.
   const live = pursuits.filter((p) => !p.historical);
@@ -217,8 +226,9 @@ async function propose(): Promise<ReconcileCounts> {
   const open = new Map((await db.query<{ subject_id: string; id: string; mine: boolean; expired: boolean; key: string | null }>(
     `select subject_id::text, id::text, requested_by = $1 and scope->'apply'->>'command' = $2 as mine,
             coalesce(expires_at < now(), false) as expired, scope->'apply'->'args'->>'key' as key
-       from governance.approval_ticket where kind = 'STAGE' and subject_type = 'pursuit' and decision is null`,
-    [actor, COMMAND],
+       from governance.approval_ticket where kind = 'STAGE' and subject_type = 'pursuit' and decision is null
+        and ($3::text is null or subject_id::text = $3::text)`,
+    [actor, COMMAND, only ?? null],
   )).map((r) => [r.subject_id, r]));
   const withdraw = (tx: Queryable, id: string, why: string) => tx.query(
     `update governance.approval_ticket set decision = 'defer', decided_by = $2, decided_at = now(), decision_note = $3

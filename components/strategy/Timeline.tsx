@@ -8,7 +8,23 @@ import type { NoteView } from '@/lib/connectors/affinity/notes';
 import { WHAT_LABEL, type What } from '@/lib/connectors/affinity/readings';
 import { decideReadingAction } from '@/app/targets/actions';
 import { Glyph, type GlyphName } from '@/components/ui/Glyph';
+import { refOf, type RungRecord } from '@/lib/reconcile';
+import {
+  RUNG_LABEL, STATUS_LABEL, rungIndex, type LadderEvent, type LadderRung, type PursuitStatus, type PursuitUpdate,
+} from '@/modules/strategy';
 import { TouchpointForm } from './TouchpointForm';
+import { UpdateBox } from './UpdateBox';
+
+/** A status change from the audit log (N61): what it was, what it became, who, and why. */
+export interface StatusEvent {
+  at: Date;
+  from: string;
+  to: string;
+  byName: string | null;
+  reason: string | null;
+  /** Set when an update made the change: the update's row shows it, not a row of its own. */
+  updateId: string | null;
+}
 
 /** What a touchpoint was about, read when the page is shown: the meeting's title, its note. */
 export interface TouchContext {
@@ -122,7 +138,48 @@ function Thread({ summary, by, text, health }: { summary: string | null; by: str
   );
 }
 
-function TouchRow({ t, c, now }: { t: Touchpoint; c?: TouchContext; now: number }) {
+/**
+ * What a row changed on the ladder (N61, issue 0006): the rungs it is the record for, confirmed —
+ * in green, with who confirmed them and when — or on record and waiting for a person to confirm.
+ * Folded into the row that is their evidence, so the state is seen changing where it changed.
+ */
+function RungState({ rungs, waiting, proposalId }: { rungs: LadderEvent[]; waiting: LadderRung[]; proposalId?: string | null }) {
+  if (!rungs.length && !waiting.length) return null;
+  const groups = new Map<string, LadderEvent[]>();
+  for (const r of rungs) {
+    const k = `${shortDate(r.recordedAt)}|${r.recordedByName}`;
+    groups.set(k, [...(groups.get(k) ?? []), r]);
+  }
+  return (
+    <div className="tl-state">
+      {[...groups.entries()].map(([k, rs]) => (
+        <span className="rungchg" key={k}>
+          <Glyph name="rung" title="On the ladder" tone="good" />
+          <span>
+            On the ladder: {rs.map((r) => `${RUNG_LABEL[r.rung]}${r.evidenceKind === 'not_applicable' ? ' (not applicable: in direct contact)' : ''}`).join(', ')}
+            <span className="muted"> — confirmed {k.split('|')[0]} by {k.split('|')[1]}</span>
+          </span>
+        </span>
+      ))}
+      {waiting.length > 0 && (
+        <span className="rungpend">
+          <Glyph name="rung" title="On record, not confirmed" />
+          <span>
+            The record for {waiting.map((r) => RUNG_LABEL[r]).join(', ')} — not confirmed yet
+            {proposalId ? <> · <Link href={`/approvals?t=${proposalId}`}>confirm it</Link></> : ''}
+          </span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate }: {
+  t: Touchpoint; c?: TouchContext; now: number;
+  rungs?: LadderEvent[]; waiting?: LadderRung[]; proposalId?: string | null;
+  /** Logged by an update: its words are the update's, shown there. */
+  fromUpdate?: PursuitUpdate;
+}) {
   const on = t.on ?? t.scheduledFor;
   const who = t.attendees.length ? `With ${t.attendees.join(', ')}` : t.ownerName === 'Not on the team' ? 'Who from our side: not recorded' : t.ownerName;
   const mark = touchMark(t, now);
@@ -137,13 +194,95 @@ function TouchRow({ t, c, now }: { t: Touchpoint; c?: TouchContext; now: number 
           {c?.what && SIGNALS.includes(c.what) ? <> · <b className="whatword">{WHAT_LABEL[c.what]}</b></> : null}
         </div>
         {c?.title && <div className="t"><b>{c.title}</b></div>}
-        {c?.text ? (
+        {fromUpdate ? (
+          <div className="t"><span className="muted">Logged from {fromUpdate.createdByName}&rsquo;s update of {shortDate(fromUpdate.createdAt)}</span></div>
+        ) : c?.text ? (
           <Thread summary={c.summary ?? null} by={c.summaryBy ?? null} text={c.text} health={Boolean(c.health)} />
         ) : (
           <div className="t"><span className="muted">{t.summary ?? who}</span></div>
         )}
         {c?.text && <div className="p2" style={{ marginTop: 3 }}>{who}</div>}
         {t.read && <span className="flag f-mute" style={{ marginTop: 4, display: 'inline-block' }}>{READ_LABEL[t.read]}{t.readByName ? ` — ${t.readByName}` : ''}</span>}
+        <RungState rungs={rungs} waiting={waiting} proposalId={proposalId} />
+      </div>
+    </div>
+  );
+}
+
+const CLIP_UPDATE = 480;
+
+/** An update from the team (N61), with what it changed folded in: the status, a touchpoint, a next step. */
+function UpdateRow({ u }: { u: PursuitUpdate }) {
+  const a = u.applied;
+  const long = u.body.length > CLIP_UPDATE;
+  return (
+    <div className="tl-row upd">
+      <Glyph name="update" title="An update from the team" tone="signal" />
+      <div className="anote">
+        <div className="p2">{shortDate(u.createdAt)} · <b className="whatword">Update</b> · {u.createdByName}</div>
+        {long ? (
+          <details className="thread">
+            <summary><span className="t">{u.body.slice(0, CLIP_UPDATE).trimEnd()}…</span><span className="open">the rest</span></summary>
+            <div className="t full">{u.body}</div>
+          </details>
+        ) : <div className="t" style={{ whiteSpace: 'pre-line' }}>{u.body}</div>}
+        {(a.status || a.touch || a.nextStep) && (
+          <div className="tl-state">
+            {a.status && (
+              <span className="statechg">
+                <Glyph name="status" title="Status changed" />
+                <span>Status: {STATUS_LABEL[a.status.from]} → <b>{STATUS_LABEL[a.status.to]}</b></span>
+              </span>
+            )}
+            {a.touch && (
+              <span className="muted">
+                <i />
+                <span>
+                  {a.touch.ahead ? 'Put a' : 'Logged a'} {a.touch.channel} {a.touch.ahead ? 'on record for' : 'on'} {shortDate(new Date(`${a.touch.on}T12:00:00Z`))}
+                  {a.touch.read ? `, their read ${READ_LABEL[a.touch.read as keyof typeof READ_LABEL].toLowerCase()}` : ''}
+                </span>
+              </span>
+            )}
+            {a.nextStep && (
+              <span className="muted">
+                <i />
+                <span>Next step: &ldquo;{a.nextStep.step}&rdquo;{a.nextStep.on ? `, by ${shortDate(new Date(`${a.nextStep.on}T00:00:00Z`))}` : ''}</span>
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** A status set here without an update (N61): the old words, the new, who, and why. */
+function StatusRow({ s }: { s: StatusEvent }) {
+  return (
+    <div className="tl-row">
+      <Glyph name="status" title="Status changed" />
+      <div className="anote">
+        <div className="p2">{shortDate(s.at)} · <b className="whatword">Status</b> · set by {s.byName ?? 'someone'}</div>
+        <div className="t">
+          <span className="statechg">{s.from} → <b>{s.to}</b></span>
+          {s.reason ? <span className="muted"> · &ldquo;{s.reason.replace(/_/g, ' ')}&rdquo;</span> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A rung whose record isn't a row on this timeline — a signature, a wire (N61). */
+function RungRow({ e }: { e: LadderEvent }) {
+  return (
+    <div className="tl-row">
+      <Glyph name="rung" title="On the ladder" tone="good" />
+      <div className="anote">
+        <div className="p2">{shortDate(e.occurredAt)} · <b className="whatword">On the ladder</b> · confirmed {shortDate(e.recordedAt)} by {e.recordedByName}</div>
+        <div className="t">
+          <b>{RUNG_LABEL[e.rung]}</b>{e.evidenceKind === 'not_applicable' ? ' — not applicable' : ''}
+          <span className="muted"> · {e.evidenceNote}</span>
+        </div>
       </div>
     </div>
   );
@@ -220,13 +359,29 @@ function TheirRead({ r, pursuitId }: { r: ShownRead | null; pursuitId: string })
   );
 }
 
-type Item = { at: number; key: string } & ({ kind: 'touch'; t: Touchpoint } | { kind: 'note'; n: NoteView });
+type Item = { at: number; key: string } & (
+  | { kind: 'touch'; t: Touchpoint }
+  | { kind: 'note'; n: NoteView }
+  | { kind: 'update'; u: PursuitUpdate }
+  | { kind: 'status'; s: StatusEvent }
+  | { kind: 'rung'; e: LadderEvent }
+);
+
+const MARK: Record<'update' | 'status' | 'rung', Mark> = {
+  update: { name: 'update', title: 'An update from the team', tone: 'signal' },
+  status: { name: 'status', title: 'Status changed' },
+  rung: { name: 'rung', title: 'On the ladder', tone: 'good' },
+};
 
 /**
  * Everything that has happened with this LP, in one thread (N56; N51 for the touchpoints): the
  * meetings, calls and emails, and the team's notes in Affinity, newest first. A note Affinity ties
  * to a meeting, call or email opens inside that row rather than standing on its own. The counts
  * above it are derived here, never set — so a second meeting is a second row, not a stage.
+ *
+ * And what changed its state (N61, issues 0004 and 0006): the team's updates, with what each
+ * changed; status changes made without one; and the ladder, each rung folded into the row that
+ * is its record, or a row of its own when its record is not on the timeline.
  */
 export function Timeline(props: {
   touches: Touchpoint[]; summary: TouchpointSummary; notes: NoteView[];
@@ -237,25 +392,70 @@ export function Timeline(props: {
   read?: ShownRead | null;
   /** Contact with them that isn't about this raise (N59): counted on their own page. */
   elsewhere?: { emails: number; meetings: number; first: Date | null; last: Date | null; href: string };
+  /** N61: the status now, for the update row; the updates; status changes; the ladder. */
+  status: PursuitStatus;
+  today: string;
+  updates?: PursuitUpdate[];
+  statusEvents?: StatusEvent[];
+  ladder?: LadderEvent[];
+  /** The records on file for rungs the ladder hasn't accepted, and the proposal to accept them. */
+  onRecord?: Partial<Record<LadderRung, RungRecord>>;
+  proposalId?: string | null;
 }) {
   const { touches, summary: s, notes } = props;
   const away = props.elsewhere;
   const now = Date.now();
   const inside = new Set(Object.values(props.context ?? {}).map((c) => c.noteId).filter((x): x is number => typeof x === 'number'));
   const alone = notes.filter((n) => !inside.has(n.noteId));
+  const updates = props.updates ?? [];
+  const ladder = props.ladder ?? [];
+  // Each rung goes to the row that is its record; one whose record isn't here gets a row.
+  const refs = new Map(touches.map((t) => [refOf(t), t.touchpointId]));
+  const rungsOn = new Map<string, LadderEvent[]>();
+  for (const e of ladder) {
+    const at = refs.get(e.evidenceRef);
+    if (at) rungsOn.set(at, [...(rungsOn.get(at) ?? []), e]);
+  }
+  const accepted = new Set(ladder.map((e) => e.rung));
+  const waitingOn = new Map<string, LadderRung[]>();
+  const onRecord = Object.values(props.onRecord ?? {}).sort((a, b) => rungIndex(a!.rung) - rungIndex(b!.rung));
+  for (const r of onRecord) {
+    const at = r && !accepted.has(r.rung) ? refs.get(r.ref) : undefined;
+    if (at) waitingOn.set(at, [...(waitingOn.get(at) ?? []), r!.rung]);
+  }
+  const byUpdate = new Map(updates.filter((u) => u.applied.touchpointId).map((u) => [u.applied.touchpointId!, u]));
   const items: Item[] = [
     ...touches.map((t): Item => ({ kind: 'touch', t, key: `t:${t.touchpointId}`, at: (t.on ?? t.scheduledFor)?.getTime() ?? 0 })),
     ...alone.map((n): Item => ({ kind: 'note', n, key: `n:${n.noteId}`, at: n.createdAt.getTime() })),
+    ...updates.map((u): Item => ({ kind: 'update', u, key: `u:${u.updateId}`, at: u.createdAt.getTime() })),
+    ...(props.statusEvents ?? []).filter((x) => !x.updateId && x.from !== x.to)
+      .map((x, i): Item => ({ kind: 'status', s: x, key: `s:${i}:${x.at.getTime()}`, at: x.at.getTime() })),
+    ...ladder.filter((e) => !refs.has(e.evidenceRef)).map((e): Item => ({ kind: 'rung', e, key: `r:${e.eventId}`, at: e.occurredAt.getTime() })),
   ].sort((a, b) => b.at - a.at);
-  const row = (x: Item) => (x.kind === 'touch'
-    ? <TouchRow key={x.key} t={x.t} c={props.context?.[x.t.touchpointId]} now={now} />
-    : <NoteRow key={x.key} n={x.n} />);
+  const row = (x: Item) => {
+    switch (x.kind) {
+      case 'touch':
+        return (
+          <TouchRow
+            key={x.key} t={x.t} c={props.context?.[x.t.touchpointId]} now={now}
+            rungs={rungsOn.get(x.t.touchpointId)} waiting={waitingOn.get(x.t.touchpointId)} proposalId={props.proposalId}
+            fromUpdate={byUpdate.get(x.t.touchpointId)}
+          />
+        );
+      case 'note': return <NoteRow key={x.key} n={x.n} />;
+      case 'update': return <UpdateRow key={x.key} u={x.u} />;
+      case 'status': return <StatusRow key={x.key} s={x.s} />;
+      case 'rung': return <RungRow key={x.key} e={x.e} />;
+    }
+  };
   // The key: each icon on this timeline once, with its words (colour is never the only signal).
   const key = new Map<string, Mark>();
   for (const x of items) {
-    const m = x.kind === 'touch' ? touchMark(x.t, now) : noteMark(x.n);
+    const m = x.kind === 'touch' ? touchMark(x.t, now) : x.kind === 'note' ? noteMark(x.n) : MARK[x.kind];
     if (!key.has(m.title)) key.set(m.title, m);
   }
+  if (rungsOn.size && !key.has(MARK.rung.title)) key.set(MARK.rung.title, MARK.rung);
+  if (!key.has(MARK.update.title)) key.set(MARK.update.title, MARK.update);
   const onOrg = notes.filter((x) => x.via.kind === 'organization').length;
   const notesRead = notes.reduce((a, x) => (x.fetchedAt > a ? x.fetchedAt : a), new Date(0));
 
@@ -265,6 +465,7 @@ export function Timeline(props: {
         <h2>Timeline</h2>
         <span className="lbl">
           {touches.length} {touches.length === 1 ? 'touchpoint' : 'touchpoints'} · {s.meetingDates.length} {s.meetingDates.length === 1 ? 'meeting' : 'meetings'} · {notes.length} {notes.length === 1 ? 'note' : 'notes'}
+          {updates.length ? ` · ${updates.length} ${updates.length === 1 ? 'update' : 'updates'}` : ''}
         </span>
       </div>
       <div className="cbody">
@@ -290,7 +491,8 @@ export function Timeline(props: {
           </div>
         )}
         <div className="timeline">
-          {items.length === 0 && <p className="muted">Nothing on record yet: no touchpoint, and no note in Affinity.</p>}
+          <UpdateBox pursuitId={props.pursuitId} status={props.status} today={props.today} />
+          {items.length === 0 && <p className="muted" style={{ marginTop: 8 }}>Nothing on record yet: no touchpoint, and no note in Affinity.</p>}
           {items.slice(0, SHOWN).map(row)}
           {items.length > SHOWN && (
             <details className="more">

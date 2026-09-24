@@ -18,7 +18,7 @@ type PursuitRow = {
 type EventRow = {
   event_id: string; pursuit_id: string; rung: LadderRung; evidence_kind: string;
   evidence_ref: string; evidence_note: string; recorded_by_name: string;
-  occurred_at: Date | string;
+  occurred_at: Date | string; created_at: Date | string; ticket_id: string | null;
 };
 
 const PURSUIT_SELECT = `
@@ -38,6 +38,7 @@ const toEvent = (r: EventRow): LadderEvent => ({
   eventId: r.event_id, rung: r.rung, evidenceKind: r.evidence_kind,
   evidenceRef: r.evidence_ref, evidenceNote: r.evidence_note,
   recordedByName: r.recorded_by_name, occurredAt: new Date(r.occurred_at),
+  recordedAt: new Date(r.created_at), ticketId: r.ticket_id,
 });
 
 function assemble(row: PursuitRow, events: LadderEvent[]): Pursuit {
@@ -65,7 +66,7 @@ async function eventsFor(ids: string[], q?: Queryable): Promise<Map<string, Ladd
   const db = q ?? (await getDb());
   const rows = await db.query<EventRow>(
     `select l.event_id, l.pursuit_id, l.rung, l.evidence_kind, l.evidence_ref,
-            l.evidence_note, u.name as recorded_by_name, l.occurred_at
+            l.evidence_note, u.name as recorded_by_name, l.occurred_at, l.created_at, l.ticket_id::text as ticket_id
        from strategy.ladder_event l
        join platform.app_user u on u.id = l.recorded_by
       where l.pursuit_id = any($1::uuid[])`,

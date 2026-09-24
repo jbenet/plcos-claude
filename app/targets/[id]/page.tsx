@@ -9,10 +9,11 @@ import { Coverage } from '@/components/ui/Coverage';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import {
-  IMPLIED_LABEL, PASSED_BY_LABEL, RUNGS, RUNG_LABEL, RUNG_REQUIRES, STATUS_LABEL, getPursuit, impliedRung, rungIndex,
+  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, updatesFor,
 } from '@/modules/strategy';
+import { auditFor } from '@/modules/platform';
 import { StatusForm } from '@/components/strategy/StatusForm';
-import { Timeline, meetingLine, type TouchContext } from '@/components/strategy/Timeline';
+import { Timeline, meetingLine, type StatusEvent, type TouchContext } from '@/components/strategy/Timeline';
 import { READ_LABEL, summarize, touchpointsFor } from '@/modules/meetings';
 import { latestRun } from '@/modules/sources';
 import { CLOSE_STATE_LABEL, closeTracksFor } from '@/modules/pipeline';
@@ -44,7 +45,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
   if (!pursuit) notFound();
 
   const user = await (await auth()).currentUser();
-  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches, tracks, calendar, readings, everything] = await Promise.all([
+  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches, tracks, calendar, readings, everything, updates, statusLog] = await Promise.all([
     claimsFor(pursuit.entityId),
     listSourceDocs(),
     notesFor(pursuit.entityId),
@@ -57,7 +58,19 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     latestRun('affinity', 'meetings'),
     readingsFor([pursuit.entityId]),
     touchpointsFor(pursuit.entityId, null),
+    updatesFor(pursuit.pursuitId),
+    auditFor('pursuit', pursuit.pursuitId, ['pursuit.status_set']),
   ]);
+  // Status changes, for the timeline (N61). Before N61 the log kept a reason only for a pass;
+  // the latest change's reason is still on the pursuit, so it is read from there.
+  const statusEvents: StatusEvent[] = statusLog.map((a, i) => {
+    const d = a.detail as { from?: string; to?: string; reason?: string; updateId?: string };
+    const last = i === statusLog.length - 1 && d.to === STATUS_LABEL[pursuit.status];
+    return {
+      at: a.at, from: d.from ?? '?', to: d.to ?? '?', byName: a.actor,
+      reason: d.reason ?? (last ? pursuit.statusReason : null), updateId: d.updateId ?? null,
+    };
+  });
   // Contact that isn't about this raise (N59): counted on their own page, pointed to from here.
   const counted = new Set(touches.map((t) => t.touchpointId));
   const elsewhere = countContact(everything.filter((t) => !counted.has(t.touchpointId)));
@@ -98,7 +111,6 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     ]),
   );
   const questions = notes.filter((n) => n.kind === 'open_question');
-  const latest = pursuit.events[pursuit.events.length - 1];
 
   return (
     <Page
@@ -200,7 +212,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
               {/* Why it is what it is (N60): Juan couldn't tell why an LP read as Passed. */}
               <b>Why:</b>{' '}
               {p.statusSource === 'us'
-                ? <>{p.statusSetByName ?? 'someone'} set it here{p.statusSetAt ? ` on ${shortDate(p.statusSetAt)}` : ''}{p.statusReason ? <>: &ldquo;{p.statusReason.replace(/_/g, ' ')}&rdquo;</> : ', with no reason given'}.</>
+                ? <>{p.statusSetByName ?? 'someone'} set it here{p.statusSetAt ? ` on ${shortDate(p.statusSetAt)}` : ''}{p.statusReason ? <>: &ldquo;{p.statusReason.replace(/_/g, ' ').replace(/[.!?…]+$/, '')}&rdquo;</> : ', with no reason given'}.</>
                 : p.stageSaid
                   ? <>its status in Affinity reads &ldquo;{p.stageSaid}&rdquo;, which the mapping reads as {STATUS_LABEL[p.status]}{p.status === 'passed' && p.passedBy ? ` (${PASSED_BY_LABEL[p.passedBy].toLowerCase()})` : ''}. Someone on the team set it in Affinity; when, and why, Affinity doesn&rsquo;t say.</>
                   : <>nobody has set one: this is where every LP starts.</>}
@@ -274,6 +286,13 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
             context={context}
             read={theirRead}
             elsewhere={{ ...elsewhere, href: `/orgs/${pursuit.entityId}` }}
+            status={pursuit.status}
+            today={new Date().toISOString().slice(0, 10)}
+            updates={updates}
+            statusEvents={statusEvents}
+            ladder={pursuit.events}
+            onRecord={file.byRung}
+            proposalId={proposal?.id ?? null}
           />
 
           <div className="card">
@@ -416,44 +435,6 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
             </div>
           </div>
 
-          <div className="card">
-            <div className="chead">
-              <h2>Ladder history</h2>
-              <span className="lbl">{pursuit.events.length} record{pursuit.events.length === 1 ? '' : 's'}</span>
-            </div>
-            <div className="cbody">
-              {pursuit.events.map((ev) => (
-                <div className="prov" key={ev.eventId}>
-                  <div className="p1">
-                    {RUNG_LABEL[ev.rung]}
-                    {ev.evidenceKind === 'not_applicable' ? ' — not applicable' : ''}
-                  </div>
-                  <div className="p2">
-                    {shortDate(ev.occurredAt)} · {ev.evidenceKind} {ev.evidenceRef} · {ev.recordedByName}
-                  </div>
-                </div>
-              ))}
-              {file.to && (
-                <p className="note" style={{ marginTop: 12 }}>
-                  On file, not accepted yet: up to <b>{RUNG_LABEL[file.to]}</b>
-                  {proposal ? <>, <Link href={`/approvals?t=${proposal.id}`}>waiting for approval</Link></> : ''}.
-                </p>
-              )}
-              {(() => {
-                const after = RUNGS[rungIndex(pursuit.rung) + 1 + file.climb.length];
-                return after ? (
-                  <p className="note" style={{ marginTop: 12 }}>
-                    {file.to ? 'After that' : 'Next'}: <b>{RUNG_LABEL[after]}</b>. {RUNG_REQUIRES[after]}
-                  </p>
-                ) : null;
-              })()}
-              {latest && !pursuit.nextRung && (
-                <p className="note" style={{ marginTop: 12 }}>
-                  Every rung is on file. The last was {RUNG_LABEL[latest.rung]}.
-                </p>
-              )}
-            </div>
-          </div>
         </div>
       </div>
     </Page>

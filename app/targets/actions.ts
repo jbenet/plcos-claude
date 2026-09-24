@@ -56,6 +56,42 @@ export async function setPursuitStatus(formData: FormData): Promise<{ error?: st
   }
 }
 
+/**
+ * An update on an LP (N61, issue 0004): the words, and what the person ticked — a status, the
+ * touchpoint the words describe, a next step. Written together (lib/updates.ts); it waits for
+ * the server's answer, since a status and a meeting are records. Nothing is sent.
+ */
+export async function addUpdateAction(formData: FormData): Promise<{ error?: string; ok?: boolean; created?: boolean; proposed?: boolean }> {
+  const { addUpdate } = await import('@/lib/updates');
+  const user = await (await auth()).currentUser();
+  const text = (k: string) => String(formData.get(k) ?? '').trim();
+  const day = (k: string, hour: string) => (text(k) ? new Date(`${text(k)}T${hour}:00:00Z`) : null);
+  const pursuitId = text('pursuitId');
+  const status = text('status');
+  try {
+    const touchOn = formData.get('touch') ? day('touchOn', '12') : null;
+    if (formData.get('touch') && !touchOn) return { error: 'The touchpoint needs the date it happened, or is set for.' };
+    const r = await addUpdate(user.id, {
+      pursuitId,
+      body: String(formData.get('body') ?? ''),
+      idempotencyKey: text('key'),
+      status: status ? { to: status as PursuitStatus, passedBy: (text('passedBy') || null) as PassedBy | null, reason: text('reason') || null } : null,
+      touch: touchOn ? {
+        channel: text('touchChannel') as Channel, direction: (text('touchDirection') || null) as Direction | null,
+        on: touchOn, read: (text('touchRead') || null) as Read | null,
+      } : null,
+      nextStep: formData.get('next') && text('nextStep') ? { step: text('nextStep'), on: day('nextStepOn', '00') } : null,
+    });
+    revalidatePath('/targets');
+    revalidatePath(`/targets/${pursuitId}`);
+    if (r.proposed) revalidatePath('/approvals');
+    return { ok: true, created: r.created, proposed: r.proposed };
+  } catch (err) {
+    if (err instanceof StatusRefused || err instanceof TouchpointRefused) return { error: err.message };
+    return { error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
 /** Log a touchpoint on an LP (N51). A record of what happened; nothing is sent, nothing claimed. */
 export async function logTouchpointAction(formData: FormData): Promise<{ error?: string; ok?: boolean }> {
   const user = await (await auth()).currentUser();

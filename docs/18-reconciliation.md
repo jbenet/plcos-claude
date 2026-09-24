@@ -24,11 +24,14 @@ proposes what they add up to.
 
 For every pursuit, on the LP's page and in the pipeline's ladder column:
 
-| Layer | What it is | Drawn as |
+| Layer | What it is | Drawn as (since N60 and N61) |
 |---|---|---|
-| **Accepted** | Rungs recorded on the ladder, each with its evidence, through a STAGE ticket | Solid |
-| **On file** | Rungs that records in this system support, not accepted yet | A dashed ring, with the record and its proposal |
+| **Accepted** | Rungs recorded on the ladder, each with its evidence, through a STAGE ticket | Green, with a check, under its status on the stepper; on the timeline, folded into the row that is its record, with who confirmed it and when |
+| **On file** | Rungs that records in this system support, not accepted yet | Grey under its status; on the timeline, "the record for … — not confirmed yet", with the link to its proposal |
 | **Claimed** | What Affinity's word would be evidence for, if it were evidence | Named in amber: "Affinity says …: a claim" |
+
+N57 drew the on-file layer as dashed rings; Juan found them hard to read (issue 0004), and N60
+replaced them.
 
 ## What counts as a record
 
