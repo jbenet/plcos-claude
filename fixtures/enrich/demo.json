@@ -259,7 +259,8 @@
     "at": "2026-09-20T10:00:00Z",
     "by": "claude (sub-agent)",
     "workflow": "W1",
-    "version": 5
+    "version": "1.24",
+    "method": "pages"
    },
    "identity": {
     "match": "probable",
@@ -312,11 +313,12 @@
    "connections": [],
    "coverage": {
     "searched": [
-     "web search"
+     "the trust's own page"
     ],
     "notFound": [
      "for a person: LinkedIn",
-     "anything on how the trust invests"
+     "anything on how the trust invests",
+     "for the search pass: the near-us check on Protocol Labs’ own sites, and funding news that names backers"
     ]
    }
   }

@@ -69,11 +69,13 @@ async function main() {
   const parent = new Map(cands.map((c) => [c.key, c.key]));
   const find = (k: string): string => (parent.get(k) === k ? k : (parent.set(k, find(parent.get(k)!)), parent.get(k)!));
   const byMark = new Map<string, string>();
+  // Our own domains join nobody (v01): an old protocol.ai address isn't a firm the two share now.
+  const ours = new Set(((JSON.parse(await readFile(join(dir, 'us', 'network.json'), 'utf8').catch(() => '{"orgs":[]}')) as { orgs: Array<{ domains?: string[] }> }).orgs).flatMap((o) => o.domains ?? []));
   for (const c of cands) {
     const f = findings.get(c.key);
     const marks = [
-      ...c.domains.filter((d) => !FREE.test(d)).map((d) => `d:${d}`),
-      ...[c.org, f?.identity.match === 'confirmed' || f?.identity.match === 'probable' ? f.identity.canonical?.org : null]
+      ...c.domains.filter((d) => !FREE.test(d) && !ours.has(d)).map((d) => `d:${d}`),
+      ...[c.org, ...(f?.identity.match === 'confirmed' || f?.identity.match === 'probable' ? (f.identity.canonical?.org ?? '').split(/\s*;\s*/) : [])]
         .filter((o): o is string => Boolean(o && norm(o).length > 2)).map((o) => `o:${norm(o)}`),
     ];
     for (const m of marks) {
@@ -84,7 +86,8 @@ async function main() {
 
   const STATUS: Record<string, number> = { committed: 0, discussing: 1, selected: 2, connecting: 3 };
   const LANE: Record<string, number> = { 'warm now': 0, 'research first': 1, 'long process': 2, cold: 3 };
-  const contact = (c: Candidate) => c.contact.meetings * 10 + (c.contact.lastFromThem ? 5 : 0) + (c.contact.lastTouch ? 1 : 0);
+  // The lead is who has had one-to-ones with us: a meeting on a group date is an event (v02's learning).
+  const contact = (c: Candidate) => Math.max(0, c.contact.meetings - c.contact.groupMeetings) * 10 + (c.contact.lastFromThem ? 5 : 0) + (c.contact.lastTouch ? 1 : 0);
   const rank = (c: Candidate) => (STATUS[c.pursuits[0]?.status ?? ''] ?? 9) * 10 + (LANE[triage.get(c.key)?.lane ?? ''] ?? 4);
 
   const best = new Map<string, 'A' | 'B' | 'C' | 'D'>();
@@ -103,8 +106,11 @@ async function main() {
     if (mode === 'w1') return !f || (withSearch && pagesOnly(f));
     const resolved = f && (f.identity.match === 'confirmed' || f.identity.match === 'probable');
     const s = strategies.get(c.key);
-    if (s) return isStale(s, f, c.money) || (revise && flagged(c));
-    return !revise && Boolean(resolved || triage.get(c.key)?.lane === 'warm now');
+    if (s) return isStale(s, f, c.money, best.get(c.key) ?? null) || (revise && flagged(c));
+    // Discussing or committed: a strategy from our records even without a resolved finding — a
+    // firm's lead can be one of them (v03's learning).
+    const engaged = ['discussing', 'committed'].includes(c.pursuits[0]?.status ?? '');
+    return !revise && Boolean(resolved || engaged || triage.get(c.key)?.lane === 'warm now');
   });
   if (revise) {
     // The whole firm comes along: its colleagues' strategies are rewritten with the lead's.

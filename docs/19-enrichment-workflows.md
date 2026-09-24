@@ -417,6 +417,180 @@ search budget was spent):
 - The checker now looks for an email address or a phone number in every text a finding carries —
   the profile, cautions, signals, coverage and the identity's basis — not only in facts.
 
+**Amendments, version 1.17:**
+
+- **Ask a firm's page what it excludes, not only its thesis.** "Does not invest in venture capital
+  funds" is a firm-level `statement`, quoted — and W4 reads it as a gate answered no, not unknown.
+- **A list page's entries word for word** before a sector or a signal: on a page of logos the reader
+  first called two companies medical, then said there was no text. What can't be quoted isn't
+  recorded.
+- **EDGAR's full-text search matches words, not names** ("Clear Path Family Office" hit a press
+  release using the phrase): open the document before a hit counts, and trust the filing's own
+  fields over the index's.
+- **Insider filings, when a firm's site blocks the reader:** the filer's submissions lead to a Form 3
+  (when a board seat began) and the latest Form 4 (a dated sale, and the shares still held — times
+  the price, a floor for capacity, labelled an estimate). Never the address on it.
+- **A brand's site may name nobody; filings use the legal name.** A Form D under an unfamiliar
+  company can be the brand — an acquirer's "X, Inc. (dba Brand)" or a co-officer on an accelerator
+  page ties them.
+- **A coded syndicate series ("AB-1234 Fund I") is not a sector,** and a lead's role resting on the
+  name alone stays `medium`.
+
+**Amendments, version 1.18:**
+
+- **A dead work domain, with an organization named after it:** EDGAR on the full name first. A
+  filing that lists a contact at the same domain as our record counts as a domain match — record
+  the match, never the address.
+- **A nickname on file, a legal name in filings** ("Jamie" filed as "Jameson J.", signing "James"):
+  the 1.10 first-name check accepts a legal name when the firm ties it to the person. On an EDGAR
+  server error, drop the quotes (surname plus firm) rather than retry.
+- **A blank-check company's final prospectus (424B4) reaches the management bios,** unlike the long
+  S-1s and 10-Ks: worth one read for its officers.
+- **ProPublica's organization page lists officers from e-filed returns; its API doesn't.** Check a
+  nonprofit's total assets before hunting its staff — a fundraising foundation is not where the
+  endowment's CIO sits.
+- **Stop after two guessed subdomains on an institution's domain:** a "governors" subdomain was a
+  research centre, not the board.
+- **Every descriptive clause comes from a page read** — a company's line of business, a city, a
+  word implying an event. What wasn't read stays unstated, and a signal resting on it is marked
+  "likely".
+- **A capacity band needs evidence** — assets or net worth, a check or commitment on record, a
+  filing (a 13F total, Form 4 holdings). A title or how someone describes themselves is not
+  evidence: the band is `unknown` (the W5 1.5 gate, applied where the band is first written).
+
+**Amendments, version 1.19:**
+
+- **An unreadable site may still serve its own feeds.** Before writing a site off, try its
+  `/sitemap.xml` for the real paths, and a WordPress site's own content API
+  (`/wp-json/wp/v2/pages?slug=…`) for the team, committee and portfolio pages. That is reading the
+  site, not searching the web.
+- **EDGAR's company search maps a manager-selection platform:** a wealth manager with no public list
+  of its managers files one Form D per client feeder ("<Firm> Investors <year> - <fund>"). Each
+  fund it backs is a firm-level `fund_lp` fact with the feeder's amount and investor count; reading a
+  fund family from its initials stays `medium`.
+- **A mandate the firm states itself is a gate, with its quote:** "we don't do venture" is a `high`
+  fact plus a caution, and triage stops spending research on a fund ask there.
+- **Trust a person's own insider filings (Forms 3 and 4) over a garbled proxy line** — the Form 4 is
+  small, and settles whether they are a director now.
+- **A surname that is also a street name brings in property records** — the same false match as a
+  surname that is a common word (1.10).
+- **Every prompt to the reader about a filing asks it to leave out addresses, emails and phone
+  numbers:** "copy the entry exactly" returned street addresses. None may be recorded.
+
+**Amendments, version 1.20:**
+
+- **Back doors on a script-drawn or overlong site:** `robots.txt` leads to the sitemap index, which
+  lists the people and portfolio pages by exact address; the site's own content API returns what
+  the reader truncated; a German firm's legal imprint (Impressum) names its managing directors.
+- **Name plus firm, as two phrases, can settle a staff identity** in EDGAR when the filings that
+  name them are too long to read — and try the firm's spellings from its deal documents ("S-Cubed"
+  found none, "SCubed" all ten).
+- **Their own dated words beat an older filing's title.** "To January 2026" on their own site, or
+  "Emeritus" on the firm's, is a dated prior role; the older title stays as a caution. (1.9 still
+  holds for a bare absence from a team page.)
+- **A Form D gives every related person the company's city** — not evidence of where the person is.
+- **An allocator's program page states its mandate** ("long-only public equities and hedge funds
+  from proven managers"): a firm-scope fact plus a caution, read by W5 as a gate.
+- **A fund of funds' backed managers:** record them (1.12), from their text, not logo labels — and
+  W3 now joins one to a pipeline LP who runs or works at a manager it backs.
+
+**Amendments, version 1.21:**
+
+- **Middle names make look-alikes:** a full-name phrase finds another person whose first and middle
+  names equal our LP's name ("Ann Lee" finds "Ann Lee Morgan"). Compare the full name in the
+  filing's related-person field before joining a hit.
+- **Staff at wealth managers are in the SEC adviser database:** its individual search gives the
+  registered person's branch city and start date, and the firm's former names explain a
+  registration older than the brand.
+- **Dead work domains are common** (six of thirteen in one batch). The organization's own site may
+  live under another domain; identity then rests on that page naming the person with our title,
+  and the domain used goes in the basis.
+- **Check the LP's own organization against our portfolio list** as well as the firm's portfolio
+  page: a founder of one of our portfolio companies is a reference and a connector first.
+- **A deal press release's "About" paragraph** is a quiet family office's own dated words on its
+  mandate; a foundation's 13D on a fund's share class is a documented anchor commitment.
+- **Sector labels from general knowledge** (a portfolio page that lists only names) sit in `detail`,
+  marked as general knowledge, so no signal count rests on them.
+
+**Amendments, version 1.22:**
+
+- **The SEC adviser database resolves nicknames:** its "other names" field ties a nickname to the
+  legal name at the firm on file. Record the employer and city — never a former surname.
+- **Filing footnotes stand in for a refused site:** a Form 4's "X is the managing member of Y's
+  general partner" ties a manager to the LP, and opens the firm's 13F.
+- **A national company register's officer search: the surname alone,** then the appointments —
+  leaving out building-management companies, which stand in for a home address.
+- **Follow a work domain's redirect before matching,** and a foundation's code-hosting organization
+  page can give its real site and list the LP as a member.
+- **A title the sources contradict is a caution, never a departure** — a nonprofit's 990s naming
+  someone else as CIO, "Venture Partner" on the firm's page against "General Partner" on file.
+- **"Medical devices" among a firm's exclusions is a neurotech gate:** the firm's statement, so W4
+  reads it as the firm's answer on fit.
+
+**Amendments, version 1.23** (from the last pages-only batches, for the search pass):
+
+- **The sitemap is the fastest route to a staff bio:** `robots.txt`, the sitemap index, then the
+  team sitemap — three reads. A press sitemap's "appoints-…" addresses give a dated appointment.
+- **Form ADVs and an institution's own PDFs can be read:** the fetch tool keeps a copy in the
+  session's own storage (like the transcript, never in the repository), and their text gives
+  assets under management, client types and each officer's title with a start date. A policy's
+  asset table is read column by column, at `medium`.
+- **Follow a work domain's redirect, and read logo walls through their links:** a redirect can land
+  on a code repository whose README is an angel vehicle's only page; a logo wall is recorded as the
+  domains it links to, as written.
+- **A one-word family-office domain, split into the name its filings use** ("Xyhall" → "Xy Hall
+  LLC"), finds the whole fund series the one-word form misses.
+- **Filter a hit list of fund vote records to 6-K and 8-K first** — a foreign buyer's 6-K can carry a
+  quiet family holding's exit; a vote record ("Elect X as Director") dates a nomination, read from
+  the smallest filer.
+- **A check size for another asset class is a fact, never a capacity band** — a private-equity
+  check must not become a venture ask.
+- **A competing position in our own field** (an employer's majority stake in a brain-implant
+  company) is both an affinity signal and a conflict gate: flag both, for W3 and W4.
+
+**Amendments, version 1.24:**
+
+- **No street address, ever — and the checker now catches them** (a number and a street word, a
+  suite or floor, a post-office box), in every text a finding carries. The reader hands addresses
+  back from filings even when asked not to: ask it for "the city only". A building known by its
+  street address is described as what it is ("an office building"), never by the address.
+- **A resale prospectus names who runs a small adviser:** a selling-stockholder footnote ("the
+  managing members of X LLC are A and B") — dated, `medium`, with the two-year caution.
+- **For a fund partner, only the direct holding counts toward capacity;** a proxy's ownership table
+  and a Form 4's "indirect, by [fund]" lines are mostly the fund's.
+- **A record can merge two people:** `probable`, listing the fields that don't fit, and the name with
+  the organization decides whose facts they are.
+- **A rare surname at one of our own portfolio companies** (a different first name) is a caution and
+  a question for a person — a family tie is possible — never a join.
+- **Try `www.` once before calling a domain dead:** the bare domain may not resolve while the www
+  address redirects to the company's current site.
+
+**Amendments, version 1.25** (the last pages-only batches):
+
+- **The sitemap doubles as a "near us" check:** search a firm's sitemap addresses for "filecoin",
+  "ipfs", "protocol-labs" and our portfolio's names — a post address found a firm's FIL position and
+  its lead of a Filecoin round that its script-drawn portfolio page hid.
+- **A parked look-alike domain is no source:** a firm's real site on a new-TLD domain, the `.com` of
+  the same name a domain-for-sale page; a sitemap listing only `/lander` marks one.
+- **For a director, the appointment 8-K (Item 5.02) and their own latest Form 4** — not a proxy the
+  reader cuts off: the 8-K gives the dated bio, the Form 4 the end of a seat and the direct holding.
+- **A foundation's 990-PF splits its investment office:** record who manages private investments,
+  so an introduction reaches the right person.
+- **A record that is only a firm's name, filed as a person:** `probable` at most, firm facts only.
+- **EDGAR's full-text search misses names with "&":** company search is the next step.
+- **A company's own copy of press coverage** (a PDF on its domain) gets around a paywall.
+- **A stated scope is not an exclusion:** "invests in the Midwest" is recorded as said, with its
+  sentence — never paraphrased into "does not invest elsewhere".
+- **Filing numbers:** shares still held on a Form 4 are assets and can set a band; a 13D purchase
+  cost, a credit fund's size or an old loan vehicle's check are another asset class. File, CRD and
+  SEC numbers stay out of prose (they read as phone numbers) — in `detail`, or left out.
+
+**Open, for Juan:** an unresolved person at a firm our own records confirm (their work domain is the
+firm's site) can't carry the firm's facts — its mandate, its typical check — because a finding with
+an unresolved identity carries none. They go into `coverage.note` as prose. Allowing firm-scope
+facts there (never the person's) would keep that context for a firm-level ask; it changes the
+checker and the import, so it waits for a yes.
+
 ## Protocol — W5, strategy for an LP (version 1)
 
 For one researched LP, read: its finding (`raw/<key>.json`), its line in `candidates.jsonl` (where it
@@ -532,19 +706,49 @@ Never an inferred health reason, never pressure, never a claim the record doesn'
 - **Money on file comes first.** When the close track has an amount, the ask starts from it, soft
   and labelled; a strategy never reads "no amount visible" beside one. A historical vehicle, or an
   SPV that never went through, is never a fit.
+- **Read every finding at the firm before setting the lead's ask:** a firm's live raise can sit in a
+  colleague's finding, not the lead's. A colleague the research found has left is no longer at
+  the firm (W3 now groups them with their new one).
 - **The lead strategy carries the firm.** Colleagues by work domain and by W3's same-firm links; the
   lead lists every colleague with their owner and status, names the one owner and the one money ask,
   and the others say `firm-level ask`. A partner's personal check at a large firm is marked
   personal, so it isn't a second ask of the firm.
+- **A founder of one of our portfolio companies is a reference and a connector first:** the first
+  ask is their view and their introductions, and money, if ever, comes after. The same holds for a
+  founder of a company Protocol Labs backed (PL's directory marks it "Venture Investment"; Affinity's
+  portfolio-founder lists; a protocol.ai logo among their investors).
+- **"Raising now," one definition for every strategy and the synthesis:** a Form D, or an amendment,
+  with money unsold and dated in the last twelve months, and no later word that it closed. Older
+  with nothing newer is a question to ask, never a raise.
+- **Re-read the paths just before writing each firm** — `connections.jsonl` is regenerated as
+  findings land, and a pinned `bestPath` then marks the strategy stale.
+- **An LP outside the US: counsel before any fund material.** What may be sent to, say, a UK
+  recipient about a US 506(c) fund, and how a non-US investor is admitted, is a question for
+  counsel. The first note carries no fund terms, and the gate is written into the strategy.
+- **A work domain that now redirects** (a renamed firm, a move) may mean our emails never reached
+  them: the next step is a first personal note to a current address, not a follow-up.
+- **A firm that says it doesn't invest in funds** (a quoted exclusion in its finding): the fund
+  gate is no. The ask is a co-investment or an SPV at most — or none.
 - **A GP raising a fund of their own right now** (a recent Form D with money unsold): lower
   propensity for an LP commitment — an ask of their partners reads as a trade. The ask becomes
-  introductions or co-investing.
+  introductions or co-investing. This covers a fund that invests in companies; **a fund of funds
+  raising its next vintage is raising money for managers like us** — a timing signal in our favour.
+- **"Raising now" needs a date:** a fund announced long ago with no Form D read is neither known to
+  be raising nor known to be closed — hold the money ask, and leave the Form D as a question.
+- **One firm, one ask — made to the unit that commits:** at a firm with a wealth unit and a fund-of-
+  funds unit, the money ask names the unit that would commit, wherever the lead conversation sits.
+- **Every Discussing or Committed LP gets a strategy,** from our records when the research found
+  nothing: a firm's lead can be one of them.
 - **The next step:** one person, one action, a date — under 300 characters with who and when.
   Whatever its own risks say must come first, comes first. **A note to several people never carries
   one person's amount or words.** A connector path keeps the tier the connection file gives it: a D
   is never called C, and never the way in.
-- **Pin every input:** `made.inputs` carries the finding's `researched.at` and the close track's
-  amount and state; a change in either makes the strategy stale.
+- **Pin every input:** `made.inputs` carries the finding's `researched.at`, the close track's
+  amount and state, and the best tier among the LP's paths on file (`bestPath`); a change in any of
+  them makes the strategy stale.
+- **An old address at our own domain joins nobody.** Two LPs who once had protocol.ai addresses
+  don't share a firm now; each keeps their own money, and a partner's check at a large firm is
+  marked personal.
 
 ## Running W1 as a sub-agent
 
@@ -601,7 +805,7 @@ is the user's decision, never an agent's.
 2. For each key in `data/real/enrich/batches/<batch>.txt`, read its finding, its line in
    `candidates.jsonl`, its paths in `connections.jsonl`, and our side (`us/team.json`, `us/network.json`,
    `presence/site.json`); write `data/real/enrich/strategy/<key>.json`, `made` set to
-   `{ at: <now>, by: "claude (sub-agent)", workflow: "W5", version: 1.5, inputs: { finding: <its researched.at, or null>, money: <"<track> <state> <amount>" from candidates.jsonl, or null> } }`. Skip an unresolved identity unless
+   `{ at: <now>, by: "claude (sub-agent)", workflow: "W5", version: 1.5, inputs: { finding: <its researched.at, or null>, money: <"<track> <state> <amount>" from candidates.jsonl, or null>, bestPath: <the best tier among its paths in connections.jsonl, or null> } }`. Skip an unresolved identity unless
    our own records alone support a strategy. An LP with no finding yet (W9's "warm now" lane) gets a
    strategy from our records alone — its line in `triage.jsonl` says why it is warm — at `low`
    confidence, with "research them" among the open questions.

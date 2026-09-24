@@ -106,6 +106,13 @@ const hasPhone = (t: string) => {
   return (rest.match(/\+?\d[\d\s().-]{8,}\d/g) ?? []).some((m) => m.replace(/\D/g, '').length >= 10);
 };
 
+/**
+ * A street address (c16): a number and a street word, a suite or floor, a post-office box. The
+ * reader hands them back from filings even when asked not to. A city alone is fine.
+ */
+const STREET = /\b\d{1,6}\s+(?:[NSEW]\.?\s+)?(?:[A-Z][A-Za-z.'-]*\s+){1,4}(?:Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Lane|Ln\.?|Way|Place|Pl\.?|Court|Ct\.?|Parkway|Pkwy\.?|Square|Sq\.?|Highway|Hwy\.?|Terrace|Circle|Plaza)\b|\b(?:Suite|Ste\.?|Floor|Fl\.)\s*#?\d+\b|\bP\.?\s?O\.?\s+Box\s+\d+/;
+export const hasAddress = (t: string) => STREET.test(t);
+
 /** Problems with a finding, in words. Empty means it may be mapped in. */
 export function check(f: unknown, expectKey?: string): string[] {
   const p: string[] = [];
@@ -128,6 +135,8 @@ export function check(f: unknown, expectKey?: string): string[] {
     if (fact.quote && fact.quote.split(/\s+/).length > 40) p.push(`fact ${i}: quote longer than 40 words`);
     const said = `${fact.value} ${fact.quote ?? ''}`;
     if (EMAIL.test(said) || hasPhone(said)) p.push(`fact ${i}: carries an email address or phone number`);
+    // Each text on its own: joined, a quote ending "in 2014" and a company "Sixth Street Partners" read as an address.
+    if ([fact.value, fact.quote ?? '', ...Object.values(fact.detail ?? {}).filter((v): v is string => typeof v === 'string')].some(hasAddress)) p.push(`fact ${i}: carries a street address`);
   }
   if (x.profile && !INVESTOR_TYPES.includes(x.profile.investorType)) p.push(`profile.investorType "${x.profile.investorType}" is not one of the types`);
   // Contact details anywhere, not only in facts (v1.16): firm pages hand them to the reader freely.
@@ -138,7 +147,10 @@ export function check(f: unknown, expectKey?: string): string[] {
     ['coverage.note', x.coverage?.note], ...(x.coverage?.notFound ?? []).map((t, i) => [`coverage.notFound ${i}`, t] as [string, string]),
     ...(x.connections ?? []).map((c, i) => [`connection ${i}`, c.basis] as [string, string]),
   ];
-  for (const [where, text] of prose) if (text && (EMAIL.test(text) || hasPhone(text))) p.push(`${where}: carries an email address or phone number`);
+  for (const [where, text] of prose) {
+    if (text && (EMAIL.test(text) || hasPhone(text))) p.push(`${where}: carries an email address or phone number`);
+    if (text && hasAddress(text)) p.push(`${where}: carries a street address`);
+  }
   for (const [i, c] of (x.connections ?? []).entries()) {
     if (!isStr(c.to) || !isStr(c.basis)) p.push(`connection ${i}: needs who and why`);
     if (!['B', 'C', 'D'].includes(c.tier)) p.push(`connection ${i}: tier must be B, C or D — A needs our own record of an interaction`);

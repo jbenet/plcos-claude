@@ -1557,6 +1557,8 @@ async function main() {
           const keptVerified = await n(`select count(*)::text as n from research.claim where entity_id = $1 and field = 'public.role' and last_verified_by is not null`, [pick.key]);
           const phone = (await import('../lib/enrich/schema')).check({ ...finding(), facts: [{ field: 'news', value: 'Call +1 (415) 555-0134', source: { url: 'https://example.org/x', kind: 'press' }, confidence: 'low' }] });
           const proseEmail = (await import('../lib/enrich/schema')).check({ ...finding(), profile: { summary: 'Invented.', investorType: 'fo_principal', cautions: ['The office answers at desk@example.org'] } });
+          const street = (await import('../lib/enrich/schema')).check({ ...finding(), facts: [{ field: 'role', value: 'Principal; the office sits at 400 Harbor Street, Suite 12.', source: { url: 'https://example.org/x', kind: 'primary' }, confidence: 'high' }] });
+          const firmName = (await import('../lib/enrich/schema')).check({ ...finding(), facts: [{ field: 'prior_role', value: 'Went public in 2014.', detail: { company: 'Sixth Street Partners' }, source: { url: 'https://example.org/x', kind: 'primary' }, confidence: 'high' }] });
 
           // A strategy: proposed; the same file again adds nothing; a new file withdraws the open one; accepting moves only the next step.
           const strategy = (next: string) => ({
@@ -1583,10 +1585,10 @@ async function main() {
           check(
             'Enrichment: the research file carries identity only; findings map in unverified, once; a verified claim survives; bad files are refused; a strategy is decided by a person and moves only the next step',
             exported.candidates > 0 && leaks.length === 0 && first.mapped === 1 && first.rejected === 1 && c1 === 2 && unverified === 2 && again.mapped === 1 && c2 === 2 && triageNotes === 1 &&
-              keptVerified === 1 && phone.length > 0 && proseEmail.length > 0 && proposedOnce === 1 && rows.length === 2 && rows[0]!.status === 'withdrawn' && rows[1]!.status === 'proposed' &&
+              keptVerified === 1 && phone.length > 0 && proseEmail.length > 0 && street.length > 0 && firmName.length === 0 && proposedOnce === 1 && rows.length === 2 && rows[0]!.status === 'withdrawn' && rows[1]!.status === 'proposed' &&
               after?.next_step === 'Offer a portfolio briefing — Juan, this week' && after.status === before?.status && after.rungs === before?.rungs && twice instanceof st.SuggestionRefused,
             `${exported.candidates} in the research set, ${leaks.length} lines carrying more than identity; first import mapped ${first.mapped}, refused ${first.rejected}; claims ${c1} (unverified with a date: ${unverified}); imported again, still ${c2}; triage notes after two imports: ${triageNotes}; ` +
-              `a verified claim kept after its fact left the file: ${keptVerified}; a phone number refused: ${phone.length > 0}; an address in a caution refused: ${proseEmail.length > 0}; one proposal after importing twice: ${proposedOnce}; after a new file: ${rows.map((r) => r.status).join(' → ')}; ` +
+              `a verified claim kept after its fact left the file: ${keptVerified}; a phone number refused: ${phone.length > 0}; an address in a caution refused: ${proseEmail.length > 0}; a street address refused: ${street.length > 0}; a firm called Sixth Street accepted: ${firmName.length === 0}; one proposal after importing twice: ${proposedOnce}; after a new file: ${rows.map((r) => r.status).join(' → ')}; ` +
               `accepted: next step "${after?.next_step}", status ${before?.status} → ${after?.status}, rungs ${before?.rungs} → ${after?.rungs}; accepting again refused: ${twice instanceof st.SuggestionRefused}`,
           );
         }
@@ -1606,28 +1608,55 @@ async function main() {
           });
           const fact = (field: string, value: string, company?: string) => ({ field, value, detail: company ? { company } : undefined, source: { url: 'https://example.org/x', kind: 'primary' }, confidence: 'high' });
           const found = (key: string, facts: unknown[]) => [key, { key, name: `Person ${key}`, researched: { at: '2026-09-20T10:00:00Z', by: 'test', workflow: 'W1', version: '1.6' }, identity: { match: 'confirmed', basis: 'Invented.' }, facts }] as const;
-          const people = [person('a', 'Alder Capital'), person('b', 'Birch Partners'), person('c', 'Cedar Fund'), person('d', 'Dune Office'), person('e', 'Elm Group')];
+          const people = [person('a', 'Alder Capital'), person('b', 'Birch Partners'), person('c', 'Cedar Fund'), person('d', 'Dune Office'), person('e', 'Elm Group'),
+            person('f', 'Fir Allocators'), person('g', 'Gale Ventures')];
           const findings = new Map([
             found('a', [fact('investment', 'Seed investor in Harbor Robotics', 'Harbor Robotics'), fact('prior_role', 'Engineer at Northwind Analytics', 'Northwind Analytics'), fact('education', 'Studied computer science')]),
             found('b', [fact('investment', 'Backed Harbor Robotics in its seed round', 'Harbor Robotics')]),
             found('c', [fact('prior_role', 'Product lead at Northwind Analytics', 'Northwind Analytics')]),
             found('d', [fact('board', 'Board member of Science', 'Science')]),
             found('e', [fact('role', 'Partner; computer science by training')]),
+            // A fund of funds that backs a manager (firm scope), and the manager's GP (1.20).
+            found('f', [{ ...fact('fund_lp', 'Its program backs Harbor Seed Fund III', undefined), detail: { fund: 'Harbor Seed Fund III' }, scope: 'firm' }]),
+            found('g', [{ ...fact('fund_gp', 'General partner of Harbor Seed Fund III', undefined), detail: { fund: 'Harbor Seed Fund III' } }]),
           ]);
           const shared = cn.sharedRecords(people as never, findings as never);
           const ab = shared.find((p) => p.lp === 'a' && p.other.key === 'b');
           const ac = shared.find((p) => p.lp === 'a' && p.other.key === 'c');
           const oneWord = shared.filter((p) => (p.lp === 'd' && p.other.key === 'e') || (p.lp === 'e' && p.other.key === 'd')).length;
+          const fof = shared.find((p) => p.lp === 'g' && p.other.key === 'f');
           const made = (inputs?: { finding: string | null }) => ({ made: { at: '2026-09-21T09:00:00Z', by: 'test', workflow: 'W5' as const, version: 1.2, inputs } });
           const staleNewer = sg.isStale(made({ finding: '2026-09-19T10:00:00Z' }), { researched: { at: '2026-09-20T10:00:00Z' } });
           const freshPinned = sg.isStale(made({ finding: '2026-09-20T10:00:00Z' }), { researched: { at: '2026-09-20T10:00:00Z' } });
           const staleUnpinned = sg.isStale({ made: { ...made().made, at: '2026-09-19T00:00:00Z' } }, { researched: { at: '2026-09-20T10:00:00Z' } });
           check(
-            'Connections without the web: a denial is no tie; a shared company record is C and a shared employer D; a one-word name in a sentence is no tie; a strategy older than its finding is stale',
-            !denial && later && ab?.tier === 'C' && ab.kind === 'coinvestor' && ac?.tier === 'D' && oneWord === 0 && staleNewer && !freshPinned && staleUnpinned,
+            'Connections without the web: a denial is no tie; a shared company record is C and a shared employer D; a one-word name in a sentence is no tie; a fund of funds sits next to the GP of a fund it backs; a strategy older than its finding is stale',
+            !denial && later && ab?.tier === 'C' && ab.kind === 'coinvestor' && ac?.tier === 'D' && oneWord === 0 && fof?.tier === 'C' && /backs/.test(fof.basis) && staleNewer && !freshPinned && staleUnpinned,
             `denial read as a tie: ${denial}; the next sentence's tie: ${later}; both invested: ${ab?.tier ?? 'none'} ${ab?.kind ?? ''}; both worked at one company: ${ac?.tier ?? 'none'}; ` +
-              `paths through "Science" in a sentence: ${oneWord}; stale when the finding is newer: ${staleNewer}; pinned and current: ${freshPinned}; unpinned and older: ${staleUnpinned}`,
+              `paths through "Science" in a sentence: ${oneWord}; a fund of funds next to the GP of a fund it backs: ${fof?.tier ?? 'none'}; stale when the finding is newer: ${staleNewer}; pinned and current: ${freshPinned}; unpinned and older: ${staleUnpinned}`,
           );
+        }
+
+        // A firm's own words close a fund ask (1.17) — but "not directly" is a firm that backs managers.
+        {
+          const { NO_FUNDS } = await import('../lib/enrich/triage');
+          const closes = ['The office does not invest in private equity, venture capital or real estate funds.', "We don't do venture."];
+          const open = ['It does not invest directly in venture companies; it backs about twenty venture managers.', 'Invests in venture funds and co-investments.'];
+          const wrongClosed = closes.filter((t) => !NO_FUNDS.test(t)).length;
+          const wrongOpen = open.filter((t) => NO_FUNDS.test(t)).length;
+          check('A firm that says it doesn’t invest in funds closes a fund ask; one that only doesn’t invest directly does not',
+            wrongClosed === 0 && wrongOpen === 0, `exclusions missed: ${wrongClosed} of ${closes.length}; backers of managers misread as closed: ${wrongOpen} of ${open.length}`);
+        }
+
+        // Capacity rests on evidence (W5 1.5): money, assets, a filing — not a denial, not a
+        // company's valuation or round, not a figure the basis calls unknown.
+        {
+          const { hasCapacityEvidence } = await import('../lib/enrich/strategy');
+          const evidence = ['990-PF assets of $40M (2024)', 'A 13F reporting $1.2B in holdings'];
+          const not = ['No LP commitment is on record', 'Company valuation of $2B; founder stake unknown', 'Raised $30M Series B for the company', 'No assets under management and no commitment sizes'];
+          const missed = evidence.filter((b) => !hasCapacityEvidence(b)).length, passed = not.filter(hasCapacityEvidence).length;
+          check('A capacity band rests on evidence: not a denial, not a company’s valuation or round, not a figure called unknown',
+            missed === 0 && passed === 0, `evidence missed: ${missed} of ${evidence.length}; non-evidence accepted: ${passed} of ${not.length}`);
         }
 
         // The connector plan (W11): a restricted prospect is left out (rule 8), and so is one who has

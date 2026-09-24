@@ -20,7 +20,7 @@ export interface Strategy {
    * their inputs): the finding's `researched.at`, or null when there was none. A strategy whose LP
    * has a newer finding is stale, and the checker says so.
    */
-  made: { at: string; by: string; workflow: 'W5'; version: number; inputs?: { finding: string | null; money?: string | null } };
+  made: { at: string; by: string; workflow: 'W5'; version: number; inputs?: { finding: string | null; money?: string | null; bestPath?: 'A' | 'B' | 'C' | 'D' | null } };
   fit: Record<string, { verdict: 'strong' | 'good' | 'possible' | 'weak' | 'unknown'; why: string; gates?: Array<{ gate: string; answer: 'yes' | 'no' | 'unknown'; basis: string }> }>;
   scores: {
     capacity: { band: string; basis: string };
@@ -59,9 +59,13 @@ export function isStale(
   s: Pick<Strategy, 'made'>,
   finding: { researched: { at: string } } | null | undefined,
   money?: { track: string; state: string; amount: number } | null,
+  bestPath?: 'A' | 'B' | 'C' | 'D' | null,
 ): boolean {
   const pinned = s.made.inputs;
   if (pinned && 'money' in pinned && money !== undefined && (pinned.money ?? null) !== moneyKey(money)) return true;
+  // The best path on file when it was written (v1.5, v01's learning): a route resting on a path W3
+  // no longer finds needs rewriting.
+  if (pinned && 'bestPath' in pinned && bestPath !== undefined && (pinned.bestPath ?? null) !== bestPath) return true;
   if (!finding) return false;
   if (pinned?.finding !== undefined) return pinned.finding !== finding.researched.at;
   return new Date(finding.researched.at).getTime() > new Date(s.made.at).getTime();
@@ -73,10 +77,27 @@ export function isStale(
  * meeting that wasn't a group date; a capacity band needs the finding's estimate or money on file;
  * a route can't be better than the best path W3 found for the LP.
  */
+/** What counts as evidence for a capacity band (1.18): money, assets, a check, a filing. */
+export const CAPACITY_EVIDENCE = /\$\s?\d|\b\d+(\.\d+)?\s?(m|mm|million|b|bn|billion|k)\b|\baum\b|assets|net worth|13f|form d|form 4|990|filing|commit|check size|checks? of|holdings|stake|sold|raised|fund size/i;
+
+/**
+ * Evidence in a band's basis, clause by clause (s08, v04): a match inside a denial ("no LP
+ * commitment is on record") is the absence of evidence, and a company's valuation or the size of a
+ * round it raised is the company's money, not the person's.
+ */
+export function hasCapacityEvidence(basis: string): boolean {
+  return basis.split(/(?<=[.;])\s+|,\s+(?:but|and)\s+/).some((clause) => CAPACITY_EVIDENCE.test(clause)
+    && !/\b(no|not|none|never|without|nothing|unknown|unclear|unconfirmed|unverified|n['’]t)\b/i.test(clause)
+    && !/\b(valuation|valued at|round|raised|series [a-f]|company['’]s)\b/i.test(clause)
+    && !/\b(under|less than|below|up to)\s+\$/i.test(clause)
+    // A company's sale price and a GP's fund sizes are not the LP's own money (s11).
+    && !/\b(sold for|sale price|acquired for|acquisition price|funds? of \$|fund size|under management|project value)\b/i.test(clause));
+}
+
 export function gates(
   s: Pick<Strategy, 'list' | 'scores' | 'route'>,
   c: { contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: unknown } | undefined,
-  finding: { profile?: { capacity?: { band: string } } } | null | undefined,
+  finding: { profile?: { investorType?: string; capacity?: { band: string; basis?: string } } } | null | undefined,
   bestTier: 'A' | 'B' | 'C' | 'D' | null,
   today = new Date(),
 ): string[] {
@@ -85,8 +106,16 @@ export function gates(
   const recent = c.contact.lastFromThem && today.getTime() - new Date(c.contact.lastFromThem).getTime() <= 90 * 86_400_000;
   const oneToOne = c.contact.meetings > c.contact.groupMeetings;
   if (s.list === 'this year' && !recent && !c.money && !oneToOne) out.push('this year, without the evidence gate');
+  // The finding's own band counts only when its basis is evidence (1.18): assets, a check or a
+  // commitment on record, a filing — not a title or a career (v03's learning).
+  const fb = finding?.profile?.capacity;
+  // A manager's assets under management are its clients' money, not the LP's own (v08) — except for
+  // a family office's principal or a foundation, whose office's money is theirs to direct.
+  const ownsItsAssets = ['fo_principal', 'foundation', 'angel'].includes(finding?.profile?.investorType ?? '');
+  const managersMoney = !ownsItsAssets && /\b(aum|assets under management|manages|manager|under management)\b/i.test(fb?.basis ?? '');
+  const evidenced = Boolean(fb && fb.band !== 'unknown' && hasCapacityEvidence(fb.basis ?? '') && !managersMoney);
   const band = s.scores?.capacity?.band ?? 'unknown';
-  if (!/unknown|not known/i.test(band) && (finding?.profile?.capacity?.band ?? 'unknown') === 'unknown' && !c.money) out.push('capacity ahead of the evidence');
+  if (!/unknown|not known/i.test(band) && !evidenced && !c.money) out.push('capacity ahead of the evidence');
   const rank = { A: 0, B: 1, C: 2, D: 3 } as const;
   if (s.route && (bestTier === null || rank[s.route.tier] < rank[bestTier])) out.push('route better than the best path on file');
   return out;

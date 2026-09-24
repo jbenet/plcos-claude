@@ -51,6 +51,8 @@ export interface Candidate extends ResearchIdentity {
     lastTouchChannel: string | null;
     /** Meetings on a date that four or more LPs share: an event, most likely, not a one-to-one (W5 learning). */
     groupMeetings: number;
+    /** The dates of their meetings and calls, oldest first, each marked when four or more LPs share it (v05). */
+    meetingDates: Array<{ on: string; group: boolean }>;
     /**
      * How many LPs in the set our last unanswered word went to on the same day (W5, iteration 3):
      * ten or more is a mailing, and the next step is a first personal note, not a follow-up.
@@ -187,6 +189,9 @@ export async function researchSet(): Promise<Candidate[]> {
           .filter((t) => (t.channel === 'meeting' || t.channel === 'call') && t.on && !t.viaOrganization && (onDay.get(t.on.toISOString().slice(0, 10)) ?? 0) >= 4)
           .map((t) => t.on!.toISOString().slice(0, 10))).size, 0),
         outreachShared: 0,
+        meetingDates: [...new Set(ps.flatMap((p) => (touches.get(`${p.entityId}:${p.vehicleId}`) ?? [])
+          .filter((t) => (t.channel === 'meeting' || t.channel === 'call') && t.on && !t.viaOrganization)
+          .map((t) => t.on!.toISOString().slice(0, 10))))].sort().map((on) => ({ on, group: (onDay.get(on) ?? 0) >= 4 })),
       },
       money: (() => {
         const t = ps.map((p) => tracks.get(`${p.entityId}:${p.vehicleId}`)).find(Boolean);

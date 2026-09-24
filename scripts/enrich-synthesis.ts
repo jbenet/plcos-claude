@@ -13,7 +13,7 @@ import type { Candidate } from '../lib/enrich/candidates';
 import type { Path, PlDirectoryEntry } from '../lib/enrich/connect';
 import type { Finding } from '../lib/enrich/schema';
 import type { Strategy } from '../lib/enrich/strategy';
-import type { Triage } from '../lib/enrich/triage';
+import { NO_FUNDS, type Triage } from '../lib/enrich/triage';
 import type { ConnectorPlan } from '../lib/enrich/connectors';
 
 const lines = (s: string) => s.split('\n').filter(Boolean);
@@ -38,6 +38,7 @@ async function main() {
   const materials = JSON.parse(await readFile(join(dir, 'presence', 'materials.json'), 'utf8').catch(() => '{}')) as { grades?: Array<{ criterion: string; grade: string; basis: string }>; suggestions?: string[] };
 
   const resolved = findings.filter((f) => f.identity.match === 'confirmed' || f.identity.match === 'probable');
+  const yearAgoGate = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10);
   const neuroRe = /neuro|brain|bci|neural|biotech|health|medic|longevity|bio\b|biology|clinical|psychiatr/i;
   const neuro = resolved.filter((f) => f.facts.some((x) => x.confidence !== 'low' && neuroRe.test(`${x.field === 'interest' || x.field === 'investment' || x.field === 'statement' || x.field === 'philanthropy' || x.field === 'board' ? x.value : ''}`)) || (f.profile?.interests ?? []).some((i) => neuroRe.test(i)));
   const plTie = new Set(paths.filter((p) => p.other.type === 'ours' && p.kind !== 'met').map((p) => p.lp));
@@ -114,6 +115,24 @@ async function main() {
     md.push(`- **${x.f.name}**${x.t?.first ? ` (first: ${x.t.first})` : ''}${x.f.profile?.capacity?.band && x.f.profile.capacity.band !== 'unknown' ? ` · ${x.f.profile.capacity.band}, an estimate` : ''} — ${own(x.f)[0]!.value.slice(0, 150)}${x.s ? ` · angle: ${x.s.angle.slice(0, 140)}` : ''}`);
   }
   md.push('');
+  // Gates the research found (1.16, 1.17): a firm that says it doesn't invest in funds, and a GP
+  // raising a fund of their own right now. Both change the ask before anyone makes it.
+  // The same words triage reads (lib/enrich/triage.ts).
+  // A raise open now: an offering, a Form D, a first sale, money unsold — not merely a numbered fund.
+  const RAISING = /\b(form d|offering|raising|first sale|unsold|remaining to be sold|no sales? yet|still open)\b/i;
+  const noFunds = resolved.filter((f) => f.facts.some((x) => NO_FUNDS.test(`${x.value} ${x.quote ?? ''}`)));
+  // The newest dated word decides (v08): a fund whose close was announced after its filing is not raising.
+  const CLOSED = /\b(final close|closed (its|the|a) fund|held (its|a) (first|final) close|oversubscribed|fully (subscribed|sold))\b/i;
+  const closedSince = (f: Finding) => (f.profile?.signals ?? []).some((x) => x.on && x.on >= yearAgoGate && CLOSED.test(x.what)) || f.facts.some((x) => CLOSED.test(x.value) && (x.source.published ?? '') >= yearAgoGate);
+  const raisingNow = resolved.filter((f) => !closedSince(f)).filter((f) => (f.profile?.signals ?? []).some((x) => x.on && x.on >= yearAgoGate && RAISING.test(x.what) && /fund/i.test(x.what))
+    || f.facts.some((x) => ['fund_gp', 'news', 'capacity'].includes(x.field) && RAISING.test(`${x.value} ${x.quote ?? ''}`) && /fund/i.test(x.value) && (x.source.published ?? '') >= yearAgoGate));
+  md.push('## Gates the research found — before anyone asks for a fund commitment', '');
+  md.push(`- They say they don't invest in funds: ${noFunds.length ? noFunds.map((f) => f.name).join(', ') : 'none found'}. The fund gate is no; a co-investment or an SPV at most.`);
+  const fof = (f: Finding) => f.profile?.investorType === 'fund_lp_program';
+  const direct = raisingNow.filter((f) => !fof(f)), vintage = raisingNow.filter(fof);
+  md.push(`- Raising a fund of their own right now: ${direct.length ? direct.map((f) => f.name).join(', ') : 'none found'}. Lower propensity for an LP commitment; the ask becomes introductions or co-investing.`);
+  md.push(`- A fund of funds raising its next vintage — money for managers like us, in our favour: ${vintage.length ? vintage.map((f) => f.name).join(', ') : 'none found'}.`, '');
+
   // Founders as references (iteration 3): an LP who backed one of our portfolio companies has a
   // founder in common with us — the founder can say what we're like as investors. C: a shared
   // record, and the founder asked by a person, never routed automatically.
@@ -165,6 +184,17 @@ async function main() {
     for (const e of firmIsTeam) for (const t of e.firmTeams) byTeam.set(`${t.name} (${t.isFund ? 'fund' : 'team'}${t.sources.length ? `; ${t.sources.join(', ')}` : ''})`, [...(byTeam.get(`${t.name} (${t.isFund ? 'fund' : 'team'}${t.sources.length ? `; ${t.sources.join(', ')}` : ''})`) ?? []), e.name]);
     for (const [t, names] of [...byTeam.entries()].sort((a, b) => b[1].length - a[1].length)) md.push(`- ${t}: ${names.join(', ')}`);
   }
+  md.push('');
+  // Lapsing soon (v08): a this-year strategy resting on a word from them passes 90 days on a date.
+  const now = Date.now();
+  const lapsing = strategies.filter((x) => x.list === 'this year').map((x) => ({ x, c: byKey.get(x.key) }))
+    .filter(({ c }) => c?.contact.lastFromThem && !c.money)
+    .map(({ x, c }) => ({ x, lapses: new Date(new Date(c!.contact.lastFromThem!).getTime() + 90 * 86_400_000) }))
+    .filter(({ lapses }) => lapses.getTime() - now < 21 * 86_400_000)
+    .sort((a, b) => a.lapses.getTime() - b.lapses.getTime());
+  md.push('## Lapsing soon — this-year evidence that passes 90 days in the next three weeks', '');
+  if (!lapsing.length) md.push('- None.');
+  for (const { x, lapses } of lapsing) md.push(`- **${x.name}** — their last word turns 90 days old on ${lapses.toISOString().slice(0, 10)}; after that, 2027 unless they answer. Next: ${x.next.what.slice(0, 140)}`);
   md.push('');
   md.push('## Who the next steps fall to', '', ...top(who).map(([k, v]) => `- ${k}: ${v}`), '');
   // An owner rule, for the team to decide (W5 v1.1): what the strategies proposed, by kind of LP.

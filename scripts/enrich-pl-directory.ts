@@ -4,6 +4,11 @@
  * directory's public API; one lookup per LP, carrying their name and nothing else, one at a time.
  *
  *   DATA_PROFILE=real npx tsx scripts/enrich-pl-directory.ts
+ *   DATA_PROFILE=real npx tsx scripts/enrich-pl-directory.ts --teams-only
+ *
+ * `--teams-only` keeps the directory entries already looked up and matches firms again, now also
+ * on what the research found: each finding's organization and its own website's domain — a work
+ * domain on file can redirect to a new one (1.22). No name is looked up twice.
  *
  * Writes, under data/<profile>/enrich/us/:
  *   pl-network.json      the network's teams: name, site domain, fund or not, focus areas.
@@ -15,11 +20,12 @@
  * someone. The directory's investor profile is kept as what they said about their investing.
  * Prints counts only.
  */
-import { readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config/deployment';
 import type { ResearchIdentity } from '../lib/enrich/candidates';
 import { entityKey } from '../lib/enrich/connect';
+import type { Finding } from '../lib/enrich/schema';
 
 const API = 'https://api-directory.os.pl.xyz/v1';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -55,6 +61,46 @@ interface MemberDetail {
 async function main() {
   const dir = join(process.cwd(), config.data.root, 'enrich');
   const set = (await readFile(join(dir, 'research-set.jsonl'), 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as ResearchIdentity);
+  const teamsOnly = process.argv.includes('--teams-only');
+  // What the research found about where they work: its organization and its own website.
+  const research = new Map<string, { org: string | null; domains: string[] }>();
+  for (const f of (await readdir(join(dir, 'raw')).catch(() => [])).filter((x) => x.endsWith('.json'))) {
+    try {
+      const x = JSON.parse(await readFile(join(dir, 'raw', f), 'utf8')) as Finding;
+      if (x.identity.match !== 'confirmed' && x.identity.match !== 'probable') continue;
+      const sites = (x.identity.links ?? []).filter((l) => l.kind === 'website' || l.kind === 'bio').map((l) => domainOf(l.url)).filter((d): d is string => Boolean(d));
+      research.set(x.key, { org: x.identity.canonical?.org ?? null, domains: [...new Set(sites)] });
+    } catch { /* the checker reports it */ }
+  }
+  if (teamsOnly) {
+    const net = JSON.parse(await readFile(join(dir, 'us', 'pl-network.json'), 'utf8')) as { teams: Array<{ uid: string; name: string; domain: string | null; isFund: boolean; focus: string[] }> };
+    const prior = new Map((await readFile(join(dir, 'us', 'pl-directory.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as { key: string; members: unknown[]; firmTeams: Array<{ name: string }> }).map((e) => [e.key, e]));
+    const byKeyT = new Map(net.teams.map((t) => [entityKey(t.name), t]));
+    const byDomainT = new Map(net.teams.filter((t) => t.domain).map((t) => [t.domain!, t]));
+    const lines: string[] = [];
+    let firms = 0, added = 0;
+    for (const lp of set) {
+      const fr = research.get(lp.key);
+      const orgs = [lp.org, lp.enriched['Current Organization'], ...(lp.enriched['Organizations'] ?? '').split(/;\s*/), fr?.org].filter((o): o is string => Boolean(o && o.trim()));
+      const doms = [...lp.domains, ...(fr?.domains ?? [])];
+      const teams = [...new Set([...orgs.map((o) => byKeyT.get(entityKey(o))), ...doms.map((d) => byDomainT.get(d))].filter(Boolean))] as typeof net.teams;
+      const firmOut = [];
+      for (const t of teams.slice(0, 3)) {
+        const known = (prior.get(lp.key)?.firmTeams ?? []).find((x) => x.name === t.name);
+        if (known) { firmOut.push(known); continue; }
+        const d = await get<TeamDetail>(`/teams/${t.uid}`);
+        await sleep(150);
+        added++;
+        firmOut.push({ name: t.name, isFund: t.isFund, focus: t.focus, via: doms.includes(t.domain ?? '') ? 'domain' : 'organization', sources: d?.membershipSources?.map((m) => m.title) ?? [], technologies: d?.technologies?.map((x) => x.title) ?? [] });
+      }
+      if (firmOut.length) firms++;
+      const members = prior.get(lp.key)?.members ?? [];
+      if (members.length || firmOut.length) lines.push(JSON.stringify({ key: lp.key, name: lp.name, members, firmTeams: firmOut, at: new Date().toISOString() }));
+    }
+    await writeFile(join(dir, 'us', 'pl-directory.jsonl'), lines.join('\n') + '\n', 'utf8');
+    console.log(`PL network, firms matched again: ${firms} LPs whose firm is a network team (${added} newly matched, from what the research found)`);
+    return;
+  }
 
   // The network's teams: one read of the list, and the two neuro focus areas.
   const list = await get<{ teams: TeamRow[] }>('/teams?limit=2000');

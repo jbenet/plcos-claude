@@ -30,10 +30,16 @@ export interface Triage {
   first: 'name an owner' | 'check sent mail' | 'first personal note' | null;
 }
 
-const SENIOR = /\b(founder|co-?founder|managing|partner|principal|chief|cio|ceo|cfo|president|chair|head|director|owner|general partner|gp|trustee|board)\b/i;
+const SENIOR = /\b(founder|co-?founder|managing|partner|principal|chief|cio|ceo|cfo|president|chair|head|director|owner|general partner|gp|trustee|board|angel)\b/i;
 const JUNIOR = /\b(analyst|associate|specialist|research|intern|coordinator|assistant|junior)\b/i;
 const SLOW = /\b(investment authority|sovereign|pension|retirement|endowment|university|college|bank|insurance|holdings? (?:plc|group)|asset management)\b/i;
 const INVESTS = /venture|capital|partners|fund|family office|investments?|ventures|holdings|trust|foundation|asset|advisors|group/i;
+/**
+ * A firm saying in its own words that it doesn't invest in funds (1.17) — "does not invest in private
+ * equity, venture capital or real estate funds" — but not one that only doesn't invest directly
+ * ("does not invest directly in venture companies" is a firm that backs managers).
+ */
+export const NO_FUNDS = /\b(does not|doesn['’]t|do not|don['’]t|will not|won['’]t|never)\s+(do\s+venture|(invest|allocate)\w*\s+(?!directly)(in|to)\s+[^.;]{0,60}?\b(venture capital|venture funds?|funds?|fund managers))\b|\bno\s+(third[- ]party\s+)?fund\s+investments?\b/i;
 
 export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
   const candidates = (await readFile(join(dir, 'candidates.jsonl'), 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Candidate);
@@ -41,9 +47,11 @@ export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
   // Researched means the protocol as written ran; a pages-only finding (v1.6) is still owed its search pass.
   const researched = new Set<string>();
   const pagesFoundNothing = new Set<string>();
+  const findingByKey = new Map<string, Finding>();
   for (const f of (await readdir(join(dir, 'raw')).catch(() => [])).filter((x) => x.endsWith('.json'))) {
     try {
       const x = JSON.parse(await readFile(join(dir, 'raw', f), 'utf8')) as Finding;
+      if (x.identity.match === 'confirmed' || x.identity.match === 'probable') findingByKey.set(x.key, x);
       if (!pagesOnly(x)) researched.add(x.key);
       else if (x.identity.match === 'not_found' || x.identity.match === 'ambiguous') pagesFoundNothing.add(x.key);
     } catch { /* the checker reports it */ }
@@ -54,7 +62,8 @@ export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
     if (status !== 'connecting' && status !== 'selected') continue;
     const mine = paths.filter((p) => p.lp === c.key);
     const reasons: string[] = [];
-    const title = c.role ?? c.enriched['Current Job Title'] ?? '';
+    // The finding's confirmed role wins over ours (s08): a council membership on file hid a founding partner.
+    const title = findingByKey.get(c.key)?.identity.canonical?.role ?? c.role ?? c.enriched['Current Job Title'] ?? '';
     const senior = SENIOR.test(title) && !JUNIOR.test(title);
     const org = `${c.org ?? ''} ${c.enriched['Industry'] ?? ''}`;
     const waitedDays = c.contact.awaitingSince ? Math.round((now.getTime() - new Date(c.contact.awaitingSince).getTime()) / 86_400_000) : null;
@@ -67,7 +76,11 @@ export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
     const researchPath = mine.find((p) => ['A', 'B'].includes(p.tier) && p.kind !== 'met');
 
     if (colleagueMet) reasons.push(`A colleague at their firm has met us: ${colleagueMet.other.name}`);
-    if (insider) reasons.push(`They were inside the Protocol Labs network: ${insider.basis.toLowerCase()}`);
+    if (insider) {
+      reasons.push(/portfolio\)$/.test(insider.other.name)
+        ? `A founder or executive of one of our portfolio companies (${insider.other.name.replace(/ \(.*\)$/, '')}): a reference and a connector first`
+        : `They were inside the Protocol Labs network: ${insider.basis.charAt(0).toLowerCase()}${insider.basis.slice(1)}`);
+    }
     if (close) reasons.push('The team marks them a close contact — relationship strength, a tier C mark that doesn’t say whose contact they are');
     if (opened) reasons.push(`They opened our material: ${opened.summary}`);
     if (researchPath && researchPath !== colleagueMet && researchPath !== insider) reasons.push(`A documented tie: ${researchPath.basis}`);
@@ -75,6 +88,9 @@ export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
 
     if (backer) reasons.push(`Their firm backed Protocol Labs (${backer.other.name}): a clue, the firm’s tie, not theirs`);
     if (pagesFoundNothing.has(c.key)) reasons.push('Page reads found nothing on them: they wait for the search pass, not another read of the same pages');
+    // A mandate the firm states itself (1.17, 1.19): "doesn't invest in funds" closes a fund ask.
+    const excl = findingByKey.get(c.key)?.facts.find((x) => NO_FUNDS.test(`${x.value} ${x.quote ?? ''}`));
+    if (excl) reasons.push('Their firm says it doesn’t invest in funds: a fund ask is closed; a co-investment or an SPV at most');
     // A warm signal only our notes hold (W5, iteration 3): an invitation promised, a referral.
     const invite = c.notes.find((n) => /invit|invite list|guest list|future events|referr/i.test(n.summary ?? ''));
     if (invite) reasons.push(`Our notes mention an invitation or a referral (${invite.on}): check it was followed through before anything else`);

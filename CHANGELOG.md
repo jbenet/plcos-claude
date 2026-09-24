@@ -4668,3 +4668,54 @@ says how to run the search pass, one command, once the budget allows.
 102 of 102 properties hold, including a new one for the connector plan: restricted prospects and
 ones who have met us are left out, a soft connector is asked after signing, and asks stop at the
 guard's limit.
+
+## N68 — Every LP read; the strategies rewritten to the critic's rules; what the ties really rest on
+
+**Shipped.** The research set is read in full, the earlier strategies are rewritten at W5 1.5, and a
+round of fixes to what the connections rest on, each found by an agent reading its own inputs.
+
+| | |
+|---|---|
+| ![Page reads only](docs/changelog/shots/n68/01-page-reads-only.webp) | **A finding made without search, said so on the LP's page.** "From page reads only, with no web search: a search pass is still owed, and 'not found' here means not named in the pages read" — rule 7's coverage disclosure, for the 328 LPs read after the session's search budget ran out. What the search pass should look for is listed under "not found". |
+
+**Every LP in the research set is read** — 388 of 388, with no checker problems: 278 confirmed, 26
+probable, 78 not found (staff at firms whose sites name only their leaders, most of them) and 6
+ambiguous. Amendments 1.17–1.25 came from those batches. A firm's own words about what it excludes
+are a gate. EDGAR hits are checked for look-alike names. A site's own sitemap and content API reach
+what the page reader can't. And the checker now refuses a street address anywhere in a finding, and
+lists religious or political terms for review under 1.16 — one finding was edited on that review;
+the others were a person's name or an institution's own identity.
+
+**The strategies, rewritten at W5 1.5.** Every strategy written before version 1.3, or that the
+critic's gates flagged, was rewritten, a whole firm at a time and the committed LPs first. Most
+committed LPs' first step is now an internal check: who took the soft commit, and where the signed
+documents are. No firm is asked for money twice. A capacity band rests only on evidence of the LP's
+own money (`hasCapacityEvidence`: not a denial, not a company's valuation or sale price, not a fund's
+size or a manager's assets). "This year" needs a word from them in the last 90 days, money on the
+close track, or a meeting that wasn't a group date, and the synthesis now lists what lapses in the
+next three weeks. An LP outside the US needs counsel before any fund material.
+
+**What the ties rest on (W3).** Each fix came from a strategy agent finding a route its own inputs
+didn't support:
+
+- An old address at our own domain joins nobody.
+- A company that bought an LP's company isn't a co-investment.
+- Someone who has moved on is grouped with their new firm.
+- A fund of funds sits next to the GP of a fund it backs.
+- A founder of one of our portfolio companies is B — we are their investors.
+- Going through an accelerator is D, not having worked there.
+- The team's "close contact" mark is a C path of its own.
+- A word from them, with no meeting on record, is a B path, like a meeting.
+- A join rests on a fact's structured company only, never a name found in a sentence.
+
+The Protocol Labs directory is matched again using what the research found (each finding's own
+organization and website): 60 LPs work at a network team.
+
+**Triage and the export.** Triage reads a firm's stated exclusion, an invitation or a referral in our
+notes, and treats an angel as a principal. The export now carries the dates of each LP's meetings,
+each marked when four or more LPs share it.
+
+**The real server** hit the open-file limit as the enrichment files grew, then served nothing. It now
+starts with a higher limit and polls for changes.
+
+104 of 104 properties hold.

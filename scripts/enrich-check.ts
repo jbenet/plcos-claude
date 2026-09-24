@@ -16,6 +16,8 @@ async function main() {
   const files = (await readdir(dir).catch(() => [])).filter((f) => f.endsWith('.json'));
   const tally: Record<string, number> = {}, method: Record<string, number> = {};
   const found = new Map<string, Finding>();
+  const special: string[] = [];
+  const SPECIAL = /\b(church|synagogue|mosque|parish|diocese|congregation|religious|faith[- ]based|evangelical|catholic|jewish|muslim|christian|hindu|buddhist|republican party|democratic party|political action committee|super pac|campaign donor|donated to .{0,30}campaign)\b/i;
   let facts = 0, sourced = 0, bad = 0, conns = 0;
   const kinds: Record<string, number> = {}, conf: Record<string, number> = {}, types: Record<string, number> = {};
   for (const f of files) {
@@ -34,10 +36,15 @@ async function main() {
       conf[fa.confidence] = (conf[fa.confidence] ?? 0) + 1;
       if (fa.quote) sourced++;
     }
+    const words = [...(x.facts ?? []).map((fa) => `${fa.value} ${fa.quote ?? ''}`), x.profile?.summary ?? '', ...(x.profile?.interests ?? [])].join(' ');
+    if (SPECIAL.test(words)) special.push(x.key);
     const t = x.profile?.investorType ?? 'none';
     types[t] = (types[t] ?? 0) + 1;
   }
   console.log(`${files.length} findings · ${bad} with problems · identity ${JSON.stringify(tally)} · method ${JSON.stringify(method)}`);
+  // 1.16: nothing in a special category. A word here isn't always one (an organization's name can
+  // carry it), so these are for a person to review, not refused.
+  if (special.length) console.log(`  review under 1.16 — a religious or political term in ${special.length} findings: ${special.map((k) => k.slice(0, 8)).join(', ')}`);
   console.log(`${facts} facts (${sourced} quoted) · ${conns} connections · confidence ${JSON.stringify(conf)}`);
   console.log(`fields ${JSON.stringify(kinds)}`);
   console.log(`investor types ${JSON.stringify(types)}`);
@@ -65,7 +72,7 @@ async function main() {
     const s = x as { list?: string; ask?: { shape?: string } };
     const key = f.replace(/\.json$/, '');
     const cand = candsByKey.get(key);
-    if ((x as Strategy).made && isStale(x as Strategy, found.get(key), cand ? cand.money : undefined)) stale++;
+    if ((x as Strategy).made && isStale(x as Strategy, found.get(key), cand ? cand.money : undefined, best.get(key) ?? null)) stale++;
     if ((x as Strategy).next?.what && nextTooLong(x as Strategy)) long++;
     if ((x as Strategy).next?.what && nextOverLimit(x as Strategy)) over++;
     if ((x as Strategy).scores) for (const g of gates(x as Strategy, cand, found.get(key), best.get(key) ?? null)) gateCount[g] = (gateCount[g] ?? 0) + 1;

@@ -65,6 +65,10 @@ export function affirms(text: string, alias: string): boolean {
   const a = escape(alias);
   // A denial before the name ("no Protocol Labs company") or after it, in the same clause
   // ("Protocol Labs and Filecoin are not among them") rules the mention out (W5, iteration 3).
+  // A company named after it is another company: "IPFS Labs Inc" is not IPFS (v05).
+  const lookalike = new RegExp(`${a}\\s+(Labs?|Inc\\.?|Corp\\.?|LLC|Ltd\\.?|Technologies|Systems|Holdings|Capital|Ventures|Partners|Group)\\b`);
+  if (!/\s(Labs?|Foundation|Inc|Corp|LLC|Ltd|Technologies|Systems|Holdings|Capital|Ventures|Partners|Group)$/i.test(alias)
+    && text.split(/(?<=[.;!?])\s+/).every((sentence) => !mentions(sentence, alias) || lookalike.test(sentence))) return false;
   const before = new RegExp(`\\b(no|not|none|never|without|neither|nor)\\b[^.;]*?${a}`, 'i');
   const after = new RegExp(`${a}[^.;]*?\\b((is|are|was|were|isn['’]t|aren['’]t|wasn['’]t|weren['’]t)\\s+not|not\\s+(among|listed|included|in|part|one)|absent|excluded|missing)\\b`, 'i');
   return text.split(/(?<=[.;!?])\s+/).some((sentence) => mentions(sentence, alias) && !before.test(sentence) && !after.test(sentence));
@@ -120,6 +124,22 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
       }
     }
 
+    // C: the team marks them a close contact — relationship strength, a tier-C edge that never says
+    // whose contact they are (CLAUDE.md). A path of its own, so triage, the pins and the routes
+    // agree (v06); a person names who holds it before it routes anything.
+    if (/close/i.test(c.enriched['Relationship Tier'] ?? '')) {
+      add({ lp: c.key, other: { type: 'ours', name: 'Someone on the team (unrecorded)' }, kind: 'other', tier: 'C',
+        basis: 'The team marks them a close contact; whose contact isn’t recorded', source: 'our records' });
+    }
+
+    // B: they wrote to us — our own record of an interaction, though who received it isn't (v08).
+    // A meeting counts as "from them" too, so only when no meeting is on record.
+    if (c.contact.meetings === 0 && c.contact.lastFromThem) {
+      const owner = c.pursuits[0]?.owner;
+      add({ lp: c.key, other: owner && owner !== 'Not on the team' ? { type: 'team', name: owner } : { type: 'ours', name: 'PL Capital' }, kind: 'met', tier: 'B',
+        basis: `They wrote to us on ${c.contact.lastFromThem}; who from our side received it isn't recorded${owner && owner !== 'Not on the team' ? `, and ${owner} owns the pursuit` : ''}`, source: 'our records' });
+    }
+
     // B: an address at one of our domains — they were inside the network.
     for (const o of net.orgs) {
       const d = c.domains.find((x) => o.domains?.includes(x));
@@ -148,9 +168,16 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
     for (const pc of net.portfolio ?? []) {
       const hit = text ? f!.facts.find((x) => x.confidence !== 'low' && pc.aliases.some((a) => affirms(x.value, a))) : undefined;
       const atOrg = orgs.find((o) => pc.aliases.some((a) => norm(o) === norm(a)));
+      // A founder or an executive of one of our portfolio companies: we are their investors — a
+      // documented relationship, B, and a reference before any ask (1.21). Anyone else there, C.
+      const LEADS = /\b(co-?founder|founder|ceo|chief executive|president|cto|chief technology|coo|managing director)\b/i;
+      const leadFact = text ? f!.facts.find((x) => x.confidence !== 'low' && (x.field === 'role' || x.field === 'prior_role') && LEADS.test(x.value) && pc.aliases.some((a) => affirms(x.value, a))) : undefined;
+      const title = `${c.role ?? ''} ${c.enriched['Current Job Title'] ?? ''} ${unsure ? '' : f?.identity.canonical?.role ?? ''}`;
+      const leads = Boolean(leadFact || (atOrg && LEADS.test(title)));
       if (hit || atOrg) {
-        add({ lp: c.key, other: { type: 'ours', name: `${pc.name} (${pc.vehicle} portfolio)` }, kind: atOrg ? 'colleague' : hit!.field === 'board' ? 'board' : 'coinvestor', tier: 'C',
-          basis: atOrg ? `Works at ${pc.name}, a ${pc.vehicle} portfolio company` : `Public source: “${clip(hit!.value)}”`, source: hit?.source.url ?? pc.source ?? null });
+        add({ lp: c.key, other: { type: 'ours', name: `${pc.name} (${pc.vehicle} portfolio)` }, kind: atOrg || leadFact ? 'colleague' : hit!.field === 'board' ? 'board' : 'coinvestor', tier: leads ? 'B' : 'C',
+          basis: leads ? `A founder or executive of ${pc.name}, a ${pc.vehicle} portfolio company: we are their investors` : atOrg ? `Works at ${pc.name}, a ${pc.vehicle} portfolio company` : `Public source: “${clip(hit!.value)}”`,
+          source: leadFact?.source.url ?? hit?.source.url ?? pc.source ?? null });
       }
     }
 
@@ -160,7 +187,11 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
         const o = norm(r.org);
         if (!o || TOO_COMMON.has(o) || ['protocol labs', 'pl capital', 'protocol labs protocol vc'].includes(o)) continue;
         if (orgs.some((x) => norm(x) === o) || (jobs && r.org.length > 4 && affirms(jobs, r.org))) {
-          add({ lp: c.key, other: { type: 'team', name: t.name, handle: t.handle }, kind: 'colleague', tier: 'C', basis: `Both have worked at ${r.org}`, source: null });
+          // Going through an accelerator is being in a batch, not working there (s08): D, as alumni.
+          const accelerator = /y combinator|\byc\b|techstars|500 startups|on deck|entrepreneur first|antler|accelerator/i.test(r.org);
+          add(accelerator
+            ? { lp: c.key, other: { type: 'team', name: t.name, handle: t.handle }, kind: 'alumni', tier: 'D', basis: `Both went through ${r.org}, in different batches most likely`, source: null }
+            : { lp: c.key, other: { type: 'team', name: t.name, handle: t.handle }, kind: 'colleague', tier: 'C', basis: `Both have worked at ${r.org}`, source: null });
         }
       }
       for (const e of t.education) {
@@ -187,7 +218,8 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
   // work there by our records — their address at its domain. The firm's tie, C at most.
   const FREE_MAIL = /^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|mac|aol|proton|protonmail|live|msn)\./;
   const atDomain = new Map<string, Candidate[]>();
-  for (const c of candidates) for (const d of c.domains) if (!FREE_MAIL.test(d)) atDomain.set(d, [...(atDomain.get(d) ?? []), c]);
+  const OUR_DOMAINS = new Set(net.orgs.flatMap((o) => o.domains ?? []));
+  for (const c of candidates) for (const d of c.domains) if (!FREE_MAIL.test(d) && !OUR_DOMAINS.has(d)) atDomain.set(d, [...(atDomain.get(d) ?? []), c]);
   const byKeyAll = new Map(candidates.map((c) => [c.key, c]));
   for (const f of findings.values()) {
     if (f.identity.match === 'ambiguous' || f.identity.match === 'not_found') continue;
@@ -211,11 +243,19 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
   // the list spells their firm differently (W5 learning).
   const byFirm = new Map<string, Candidate[]>();
   const FREE = /^(gmail|yahoo|hotmail|outlook|icloud|me|mac|aol|proton|protonmail)\./;
+  // An address at one of our own domains says they were inside the network (a B path above), not
+  // that they work together now: it joins nobody as colleagues (v01's learning).
+  const OURS = new Set(net.orgs.flatMap((o) => o.domains ?? []));
   for (const c of candidates) {
     const keys = new Set<string>();
-    const o = c.org ? norm(c.org) : null;
+    // Someone the research found has moved on (their own site names another employer) is grouped
+    // with their new firm, not the old one our records still show (W5 revise, iteration 3).
+    const f = findings.get(c.key);
+    const now = f && (f.identity.match === 'confirmed' || f.identity.match === 'probable') ? f.identity.canonical?.org : null;
+    const moved = Boolean(now && c.org && !sameFirm(now, c.org));
+    const o = moved ? norm(now!) : c.org ? norm(c.org) : null;
     if (o && !TOO_COMMON.has(o)) keys.add(`org:${o}`);
-    for (const d of c.domains) if (!FREE.test(d)) keys.add(`domain:${d}`);
+    if (!moved) for (const d of c.domains) if (!FREE.test(d) && !OURS.has(d)) keys.add(`domain:${d}`);
     for (const k of keys) byFirm.set(k, [...(byFirm.get(k) ?? []), c]);
   }
   for (const group of byFirm.values()) {
@@ -281,11 +321,24 @@ export const entityKey = (s: string) => s.toLowerCase().replace(/[’'`]/g, '')
   .replace(/[,.]?\s*\b(llc|l\.l\.c\.|inc|incorporated|corp|corporation|ltd|limited|lp|l\.p\.|plc|gmbh|ag|s\.a\.)\.?\s*$/i, '')
   .replace(/^the\s+/, '').replace(/[^a-z0-9]+/g, '');
 
+/**
+ * Two ways of writing one firm: "Harbor" and "Harbor Capital", "Birch Labs" and "Birch Labs crypto" —
+ * one name inside the other, or the same first word that isn't a generic one.
+ */
+export function sameFirm(a: string, b: string): boolean {
+  const ka = entityKey(a), kb = entityKey(b);
+  if (!ka || !kb) return false;
+  if (ka === kb || ka.includes(kb) || kb.includes(ka)) return true;
+  const first = (x: string) => norm(x).split(' ').find((w) => w.length > 2 && !GENERIC.test(w)) ?? '';
+  return first(a) !== '' && first(a) === first(b);
+}
+
 /** Words that name a kind of organization, not one: sharing only these says nothing. */
 const GENERIC = /^(capital|ventures?|partners|fund|funds|labs?|group|holdings|investments?|management|advisors|foundation|trust|family office|angel|seed|series [a-e]|university|college|board|company|startup|startups|the fund|protocol labs|pl capital)$/;
 /** Fields whose words name a company, a fund or a board they were part of. */
 const RECORD_FIELDS = new Set(['investment', 'board', 'fund_lp', 'fund_gp', 'exit', 'prior_role', 'role', 'affiliation']);
-const RECORD_KEYS = ['company', 'companies', 'fund', 'organization', 'org', 'acquirer', 'firm'];
+/** The keys that name what a fact is about. An exit's acquirer is not one: buying the company isn't investing beside them (v01). */
+const RECORD_KEYS = ['company', 'companies', 'fund', 'organization', 'org', 'firm'];
 
 /**
  * C: two LPs in one record — both invested in a company, sat on its board, backed the same fund, or
@@ -323,40 +376,56 @@ export function sharedRecords(candidates: Candidate[], findings: Map<string, Fin
   }
   for (const c of candidates) addName(c.org);
 
-  // Who mentions what, and how: an investment, a board seat, a fund, a job.
-  type Hit = { key: string; field: string; value: string; url: string };
+  // Who mentions what, and how: an investment, a board seat, a fund, a job. A firm's own facts
+  // count only for a fund it backs (1.20): a fund of funds' manager, joined to whoever runs it.
+  type Hit = { key: string; field: string; value: string; url: string; firm: boolean };
   const hits = new Map<string, Hit[]>();
   for (const c of resolved) {
     const f = findings.get(c.key)!;
     const own = new Set([c.org, f.identity.canonical?.org].filter(Boolean).map((o) => entityKey(o!)));
     const seen = new Set<string>();
     for (const x of f.facts) {
-      if (x.confidence === 'low' || !RECORD_FIELDS.has(x.field) || x.scope === 'firm') continue;
+      const firm = x.scope === 'firm';
+      if (x.confidence === 'low' || !RECORD_FIELDS.has(x.field) || (firm && x.field !== 'fund_lp')) continue;
       const structured = new Set(RECORD_KEYS.flatMap((k) => (typeof x.detail?.[k] === 'string' ? String(x.detail[k]).split(/\s*;\s*/).map(entityKey) : [])));
       for (const [n, shown] of names) {
         if (own.has(n) || seen.has(n)) continue;
-        const inWords = /\s/.test(shown.trim()) && mentions(x.value, shown);
-        if (!structured.has(n) && !inWords) continue;
+        // The structured company only (v08): "raised from investors including X" names X in a
+        // sentence without the LP having worked there or invested beside it.
+        if (!structured.has(n)) continue;
         seen.add(n);
-        hits.set(n, [...(hits.get(n) ?? []), { key: c.key, field: x.field, value: x.value, url: x.source.url }]);
+        hits.set(n, [...(hits.get(n) ?? []), { key: c.key, field: x.field, value: x.value, url: x.source.url, firm }]);
       }
     }
   }
 
   const byKey = new Map(candidates.map((c) => [c.key, c]));
-  const how = (h: Hit) => (h.field === 'investment' || h.field === 'exit' ? 'invested in' : h.field === 'board' ? 'sat on the board of' : h.field === 'fund_lp' ? 'backed' : h.field === 'fund_gp' ? 'runs or ran' : 'worked at');
+  const how = (h: Hit) => (h.field === 'investment' ? 'invested in' : h.field === 'exit' ? 'exited' : h.field === 'board' ? 'sat on the board of' : h.field === 'fund_lp' ? 'backed' : h.field === 'fund_gp' ? 'runs or ran' : 'worked at');
   const out: Path[] = [];
   for (const [n, hs] of hits) {
     const lps = [...new Set(hs.map((h) => h.key))];
     if (lps.length < 2 || lps.length > 8) continue;
     const shown = names.get(n)!;
+    const job = (h: Hit) => h.field === 'role' || h.field === 'prior_role' || h.field === 'affiliation' || h.field === 'fund_gp';
     for (const a of hs) for (const b of hs) {
       if (a.key === b.key) continue;
       const ca = byKey.get(a.key)!, cb = byKey.get(b.key)!;
       if (ca.org && cb.org && norm(ca.org) === norm(cb.org)) continue;
+      // A firm that backs a fund, and someone who runs or works at it: the firm is that fund's LP.
+      // C — the firm's tie, with no evidence the two people ever spoke. Firm facts join nothing else.
+      if (a.firm || b.firm) {
+        if (a.firm === b.firm) continue;
+        const backer = a.firm ? a : b, runner = a.firm ? b : a;
+        if (!job(runner)) continue;
+        const cr = byKey.get(runner.key)!, cbk = byKey.get(backer.key)!;
+        out.push(a.firm
+          ? { lp: a.key, other: { type: 'lp', name: cr.name, key: cr.key }, kind: 'other', tier: 'C', basis: `Their firm backs ${shown}, which ${cr.name} runs or works at — the firm's tie`, source: a.url }
+          : { lp: a.key, other: { type: 'lp', name: cbk.name, key: cbk.key }, kind: 'other', tier: 'C', basis: `${cbk.name}'s firm backs ${shown}, where they work — the firm's tie`, source: b.url });
+        continue;
+      }
       const kind: Path['kind'] = a.field === 'board' && b.field === 'board' ? 'board' : (a.field === 'investment' || a.field === 'exit') && (b.field === 'investment' || b.field === 'exit') ? 'coinvestor' : 'other';
-      const job = (h: Hit) => h.field === 'role' || h.field === 'prior_role' || h.field === 'affiliation';
-      out.push({ lp: a.key, other: { type: 'lp', name: cb.name, key: cb.key }, kind, tier: job(a) && job(b) ? 'D' : 'C',
+      const worked = (h: Hit) => h.field === 'role' || h.field === 'prior_role' || h.field === 'affiliation';
+      out.push({ lp: a.key, other: { type: 'lp', name: cb.name, key: cb.key }, kind, tier: worked(a) && worked(b) ? 'D' : 'C',
         basis: how(a) === how(b) ? `Both ${how(a)} ${shown}` : `They ${how(a)} ${shown}; ${cb.name} ${how(b)} it`, source: a.url });
     }
   }
