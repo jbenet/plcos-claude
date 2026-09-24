@@ -14,7 +14,8 @@ import {
 import { auditFor } from '@/modules/platform';
 import { StatusForm } from '@/components/strategy/StatusForm';
 import { Timeline, meetingLine, type StatusEvent, type TouchContext } from '@/components/strategy/Timeline';
-import { READ_LABEL, summarize, touchpointsFor } from '@/modules/meetings';
+import { READ_LABEL, colleagueTouchpointsFor, summarize, touchpointsFor } from '@/modules/meetings';
+import { lpHeadings } from '@/lib/lp-heading';
 import { latestRun } from '@/modules/sources';
 import { CLOSE_STATE_LABEL, closeTracksFor } from '@/modules/pipeline';
 import { CloseTrack } from '@/components/strategy/CloseTrack';
@@ -74,6 +75,11 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
       reason: d.reason ?? (last ? pursuit.statusReason : null), updateId: d.updateId ?? null,
     };
   });
+  // When the organisation is the LP we're targeting (issue 0013), its name leads, and meetings
+  // with its other people are on its timeline too — shown with who they were with, and summed
+  // apart from this person's own record, which is what the ladder reads.
+  const heading = (await lpHeadings([{ pursuitId: pursuit.pursuitId, entityId: pursuit.entityId }])).get(pursuit.pursuitId) ?? null;
+  const colleagues = heading?.orgFirst ? await colleagueTouchpointsFor(pursuit.entityId, pursuit.vehicleId) : [];
   // Contact that isn't about this raise (N59): counted on their own page, pointed to from here.
   const counted = new Set(touches.map((t) => t.touchpointId));
   const elsewhere = countContact(everything.filter((t) => !counted.has(t.touchpointId)));
@@ -122,7 +128,8 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
       crumbs={[
         { label: pursuit.vehicleName, href: '/overview' },
         { label: 'Pipeline', href: `/targets?status=${pursuit.status}` },
-        { label: pursuit.entityName },
+        // The name that leads the page (issue 0013): the organisation's when it is the LP we're targeting.
+        { label: heading?.orgFirst && heading.org ? `${heading.org} · ${pursuit.entityName}` : pursuit.entityName },
       ]}
       inspector={
         <>
@@ -205,8 +212,17 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
         {pursuit.historical ? ' · a vehicle kept for its history' : ''}
       </div>
       <h1 style={{ marginTop: 4 }}>
-        <Link href={`/orgs/${pursuit.entityId}`}>{pursuit.entityName}</Link>
+        {heading?.orgFirst && heading.org
+          ? <Link href={`/orgs/${heading.orgId}`}>{heading.org}</Link>
+          : <Link href={`/orgs/${pursuit.entityId}`}>{pursuit.entityName}</Link>}
       </h1>
+      {heading?.org && (
+        <div className="h1second">
+          {heading.orgFirst
+            ? <Link href={`/orgs/${pursuit.entityId}`}>{pursuit.entityName}</Link>
+            : <Link href={`/orgs/${heading.orgId}`}>{heading.org}</Link>}
+        </div>
+      )}
       <p className="sublede">{pursuit.headline}</p>
 
       {(() => {
@@ -295,7 +311,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
           {tracks.map((t) => <CloseTrack key={t.exposure.exposureId} track={t} pursuitId={pursuit.pursuitId} />)}
 
           <Timeline
-            touches={touches}
+            touches={colleagues.length ? [...touches, ...colleagues] : touches}
             summary={touchSummary}
             notes={affinityNotes}
             pursuitId={pursuit.pursuitId}

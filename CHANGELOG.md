@@ -4937,3 +4937,21 @@ say so.
 | ![The table in its card](docs/changelog/shots/n73/01-the-table-in-its-card.webp) | **The evidence column stays in view.** The pipeline table's seven columns needed more room than its card had at a laptop's width, so the ladder spilled past the card's edge. The LP and "Where" columns now give way first and the cells are a little tighter, so the whole table fits a 1280-wide window, the evidence column included: it is the column that shows the gap between claimed and evidenced, so it is never the one pushed out of view. Narrower than that, the table scrolls sideways inside its card instead of painting outside it. Measured on the demo and on the real data: whole at 1280, 1440 and 1920 wide, scrolling within the card at 1180. |
 
 108 of 108 properties hold.
+
+## N74 — The organisation leads when it is the LP; the slash reaches the feedback box
+
+**Shipped.** Two items from the feedback box (issues 0013 and 0014).
+
+| | |
+|---|---|
+| ![The org leads](docs/changelog/shots/n74/01-the-org-leads.webp) | **The organisation's name leads when it is the LP we're targeting** (issue 0013), with the person beneath in grey; otherwise the person leads, with their organisation beneath, so it is always in view. Search matches both names, and sorting by LP sorts by the one that leads. What decides it is on file: the strategy's named unit first — who would commit, a unit at the firm or "personal" — else the investor type the research found (a fund-of-funds programme, family-office staff, an institution, a corporate or a foundation makes the organisation the LP). With neither, the person leads. On the real set, 93 LPs lead with their organisation and 272 with the person; 23 have no organisation on record. |
+| ![The org on its page](docs/changelog/shots/n74/02-the-org-on-its-page.webp) | **The organisation's page, and its timeline.** The LP page's title and breadcrumb lead with the organisation too. Its log now includes meetings with the organisation's other people — the colleagues who act for it — each marked "with ‹name›, ‹organisation›", and summed apart from the person's own record, which is what the ladder reads (on one real LP's page, 8 such rows; the demo's colleague has none inside this raise's window). Whether a colleague's meeting should count toward the organisation's rung is Juan's to decide; it doesn't yet. |
+
+**The slash reaches the feedback box** (issue 0014). The pipeline's "/" shortcut took the slash
+from any field that wasn't an input — the feedback box's text is an editable box — and moved focus
+to the search behind it, so the words after the slash went there too. It now leaves a key alone
+when it is typed into any field or inside an open dialog, and ignores it with a modifier key.
+Checked in a browser: "a/b te" typed into the feedback box stays there; "/" on the page still
+searches.
+
+109 of 109 properties hold.

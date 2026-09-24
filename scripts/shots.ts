@@ -212,6 +212,26 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N74: [
+    {
+      name: '01-the-org-leads',
+      path: '/rails/pipeline?status=discussing',
+      prepare: async (page) => {
+        await page.locator('table.pipeline').first().evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -140));
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '02-the-org-on-its-page',
+      path: '/rails/pipeline?status=discussing',
+      prepare: async (page) => {
+        await page.locator('tr', { hasText: 'Hannah Boyle' }).locator('a').first().click();
+        await page.waitForURL(/\/rails\/pipeline\/[0-9a-f-]{36}/, { timeout: 60_000 });
+        await page.waitForLoadState('networkidle');
+      },
+    },
+  ],
   N73: [
     {
       name: '01-the-table-in-its-card',

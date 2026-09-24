@@ -12,6 +12,7 @@ import { blanketRestricted } from '@/modules/coordination';
 import { readingsFor, type NoteReading } from '@/lib/connectors/affinity/readings';
 import { laterFacts, shownRead } from '@/lib/reads';
 import { onFile } from '@/lib/reconcile';
+import { lpHeadings } from '@/lib/lp-heading';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,8 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
   const [sums, closes, restricted, readings] = await Promise.all([
     touchpointSummaries(pairs, new Date(), touchesBy), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
   ]);
+  // Whose name leads each row: the organisation's when it is the LP we're targeting (issue 0013).
+  const headings = await lpHeadings(pursuits.map((p) => ({ pursuitId: p.pursuitId, entityId: p.entityId })));
   const readsOf = new Map<string, NoteReading[]>();
   for (const r of readings) readsOf.set(r.entityId, [...(readsOf.get(r.entityId) ?? []), r]);
   const sum = (p: Pursuit) => sums.get(`${p.entityId}:${p.vehicleId}`)!;
@@ -70,6 +73,8 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
     return {
       id: p.pursuitId,
       name: p.entityName,
+      org: headings.get(p.pursuitId)?.org ?? null,
+      orgFirst: headings.get(p.pursuitId)?.orgFirst ?? false,
       headline: p.headline,
       vehicle: p.vehicleName,
       owner: p.ownerSaid ?? p.ownerName,

@@ -148,6 +148,19 @@ type TouchRow = {
   about: 'raise' | 'other' | null; about_vehicles: string[] | null; about_basis: string | null;
 };
 
+/** The touchpoint columns, read through a `reach` CTE of (for_entity, entity_id). */
+const TOUCH_FROM_REACH = `
+  select m.meeting_id, m.entity_id, e.display_name as entity_name, m.vehicle_id, v.name as vehicle_name,
+         m.channel::text as channel, m.kind::text as kind, m.held_on, m.scheduled_for, m.direction,
+         u.name as owner_name, m.attendees, m.summary, m.read::text as read, rb.name as read_by_name,
+         m.source, m.source_ref, r.for_entity, m.about, m.about_vehicles, m.about_basis
+    from reach r
+    join meetings.meeting m on m.entity_id = r.entity_id
+    join identity.entity e on e.entity_id = m.entity_id
+    left join platform.vehicle v on v.id = m.vehicle_id
+    join platform.app_user u on u.id = m.owner_id
+    left join platform.app_user rb on rb.id = m.read_by`;
+
 /**
  * Touchpoints for a set of LPs: theirs, and their firm's — the organization they act for now —
  * because the team's record of an LP is as often on the firm as on the person (N49, measured).
@@ -161,16 +174,21 @@ const TOUCH_SELECT = `
     select a.person_entity, a.org_entity from identity.affiliation a join lp on lp.entity_id = a.person_entity
      where a.ended_on is null
   )
-  select m.meeting_id, m.entity_id, e.display_name as entity_name, m.vehicle_id, v.name as vehicle_name,
-         m.channel::text as channel, m.kind::text as kind, m.held_on, m.scheduled_for, m.direction,
-         u.name as owner_name, m.attendees, m.summary, m.read::text as read, rb.name as read_by_name,
-         m.source, m.source_ref, r.for_entity, m.about, m.about_vehicles, m.about_basis
-    from reach r
-    join meetings.meeting m on m.entity_id = r.entity_id
-    join identity.entity e on e.entity_id = m.entity_id
-    left join platform.vehicle v on v.id = m.vehicle_id
-    join platform.app_user u on u.id = m.owner_id
-    left join platform.app_user rb on rb.id = m.read_by`;
+  ${TOUCH_FROM_REACH}`;
+
+/** Colleagues: the others acting now for the organisation an LP deals with us through (issue 0013). */
+const COLLEAGUE_SELECT = `
+  with firm as (
+    select a.org_entity from identity.affiliation a
+     where a.person_entity = $1::uuid and a.ended_on is null
+     order by a.is_primary desc, a.as_of desc limit 1
+  ),
+  reach as (
+    select distinct $1::uuid as for_entity, c.person_entity as entity_id
+      from firm join identity.affiliation c on c.org_entity = firm.org_entity
+     where c.person_entity <> $1::uuid and c.ended_on is null
+  )
+  ${TOUCH_FROM_REACH}`;
 
 const day = (d: Date | string | null) => (d ? new Date(d) : null);
 
@@ -208,6 +226,28 @@ export async function touchpointsFor(entityId: string, vehicleId: string | null)
     [[entityId], vehicleId],
   );
   const all = rows.map(toTouch).sort((a, b) => when(b) - when(a));
+  if (!vehicleId) return all;
+  const w = (await raiseWindows()).get(vehicleId);
+  return w ? all.filter((t) => aboutThisRaise(t, w)) : all;
+}
+
+/**
+ * Touchpoints with an LP's colleagues — the others acting for the same organisation now — for
+ * when the organisation is the LP we're targeting (issue 0013): a meeting with any of them on the
+ * organisation's behalf belongs on its timeline. Each carries its person and the organisation in
+ * `viaOrganization`, so it is shown with who it was with and summed apart: it is the
+ * organisation's record, not evidence for this person's own rungs.
+ */
+export async function colleagueTouchpointsFor(entityId: string, vehicleId: string | null): Promise<Touchpoint[]> {
+  const db = await getDb();
+  const rows = await db.query<TouchRow>(
+    `${COLLEAGUE_SELECT} where ($2::uuid is null or m.vehicle_id is null or m.vehicle_id = $2)`,
+    [entityId, vehicleId],
+  );
+  const org = (await db.one<{ name: string }>(
+    `select o.display_name as name from identity.affiliation a join identity.entity o on o.entity_id = a.org_entity
+      where a.person_entity = $1::uuid and a.ended_on is null order by a.is_primary desc, a.as_of desc limit 1`, [entityId]))?.name ?? null;
+  const all = rows.map(toTouch).map((t) => ({ ...t, viaOrganization: org ? `${t.entityName}, ${org}` : t.entityName })).sort((a, b) => when(b) - when(a));
   if (!vehicleId) return all;
   const w = (await raiseWindows()).get(vehicleId);
   return w ? all.filter((t) => aboutThisRaise(t, w)) : all;

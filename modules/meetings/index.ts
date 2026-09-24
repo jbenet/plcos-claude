@@ -7,6 +7,6 @@ export {
 } from './types';
 export {
   listMeetings, listObjections, listQuestions, objectionTally, raiseWindows, summarize, touchpointSummaries, touchpointsByPair,
-  touchpointsFor, upcomingMeetings,
+  touchpointsFor, colleagueTouchpointsFor, upcomingMeetings,
 } from './repo';
 export { logTouchpoint, prepBrief, TouchpointRefused, type NewTouchpoint } from './service';

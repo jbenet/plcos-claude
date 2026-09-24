@@ -382,6 +382,56 @@
      "for the search pass: the near-us check on Protocol Labs’ own sites, and funding news that names backers"
     ]
    }
+  },
+  {
+   "name": "Hannah Boyle",
+   "researched": {
+    "at": "2026-09-21T09:00:00Z",
+    "by": "claude (sub-agent)",
+    "workflow": "W1",
+    "version": "1.26",
+    "method": "pages"
+   },
+   "identity": {
+    "match": "confirmed",
+    "basis": "The trust's own team page names her with the title, beside its CIO.",
+    "canonical": {
+     "name": "Hannah Boyle",
+     "role": "Director of Investments",
+     "org": "Cedar Trust"
+    }
+   },
+   "facts": [
+    {
+     "field": "role",
+     "value": "Director of Investments at Cedar Trust.",
+     "source": {
+      "url": "https://cedar-trust.example.org/team",
+      "kind": "primary",
+      "title": null,
+      "published": null
+     },
+     "confidence": "high"
+    }
+   ],
+   "profile": {
+    "summary": "Runs the trust's manager programme with its CIO; the commitments are the trust's.",
+    "investorType": "institutional",
+    "capacity": {
+     "band": "unknown",
+     "basis": "Not public."
+    },
+    "cautions": []
+   },
+   "connections": [],
+   "coverage": {
+    "searched": [
+     "the trust's team page (read)"
+    ],
+    "notFound": [
+     "for the search pass: the near-us check on Protocol Labs’ own sites"
+    ]
+   }
   }
  ],
  "strategies": [

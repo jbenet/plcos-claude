@@ -15,6 +15,9 @@ export type Status = 'new' | 'sourcing' | 'selected' | 'connecting' | 'discussin
 export interface PipelineRow {
   id: string;
   name: string;
+  /** Their organisation on record, and whether it leads the row as the LP we're targeting (issue 0013, lib/lp-heading.ts). */
+  org: string | null;
+  orgFirst: boolean;
   headline: string | null;
   vehicle: string;
   owner: string;
@@ -104,9 +107,12 @@ interface Filters {
 }
 const EMPTY: Filters = { q: '', owner: '', vehicle: '', meetings: 'any', touch: 'any', read: 'any', money: 'any', flag: 'any' };
 
+/** The name that leads an LP's row (issue 0013). */
+const lead = (r: PipelineRow) => (r.orgFirst && r.org ? r.org : r.name);
+
 function matches(r: PipelineRow, f: Filters, words: string[], now: number): boolean {
   if (words.length) {
-    const hay = `${r.name} ${r.headline ?? ''} ${r.owner} ${r.vehicle} ${r.said ?? ''} ${r.next ?? ''} ${r.ended ?? ''}`.toLowerCase();
+    const hay = `${r.name} ${r.org ?? ''} ${r.headline ?? ''} ${r.owner} ${r.vehicle} ${r.said ?? ''} ${r.next ?? ''} ${r.ended ?? ''}`.toLowerCase();
     if (!words.every((w) => hay.includes(w))) return false;
   }
   if (f.owner && r.owner !== f.owner) return false;
@@ -205,8 +211,18 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
     return () => window.removeEventListener('popstate', onPop);
   }, [statuses, status]);
   useEffect(() => {
+    // "/" searches, unless it is being typed: into any field — a textarea or an editable box as well
+    // as an input — or anywhere inside an open dialog. The feedback box's text took its slashes to
+    // the search box behind it, and the words after them too (issue 0014, real).
+    const typing = (e: KeyboardEvent) => {
+      const el = e.target instanceof HTMLElement ? e.target : null;
+      if (!el) return false;
+      return el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || Boolean(el.closest('dialog, [role="dialog"]'));
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); search.current?.focus(); }
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey || typing(e)) return;
+      e.preventDefault();
+      search.current?.focus();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -218,7 +234,8 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
     const k = sort.key;
     const by = (a: PipelineRow, b: PipelineRow): number => {
       switch (k) {
-        case 'name': return a.name.localeCompare(b.name);
+        // By the name that leads the row: the organisation's when it is the LP we're targeting.
+        case 'name': return lead(a).localeCompare(lead(b));
         case 'vehicle': return a.vehicle.localeCompare(b.vehicle) || a.name.localeCompare(b.name);
         case 'owner': return a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name);
         case 'where': return (MONEY_ORDER[b.money?.state ?? ''] ?? -1) - (MONEY_ORDER[a.money?.state ?? ''] ?? -1)
@@ -386,8 +403,9 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
                   onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/targets/${r.id}`); }}
                 >
                   <td>
-                    <a href={`/targets/${r.id}`}><b>{r.name}</b></a>
+                    <a href={`/targets/${r.id}`}><b>{lead(r)}</b></a>
                     {r.doNotContact && <span className="flag f-block" style={{ marginLeft: 6 }}>do not contact</span>}
+                    {r.org && <div className="lpsecond">{r.orgFirst ? r.name : r.org}</div>}
                     {r.headline && <div className="muted" style={{ fontSize: 11.5 }}>{r.headline}</div>}
                   </td>
                   {byVehicle && <td className="muted">{r.vehicle}</td>}

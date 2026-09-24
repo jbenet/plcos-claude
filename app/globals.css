@@ -1704,6 +1704,9 @@ details.more>summary{cursor:pointer;font-size:12px;color:var(--muted);padding:6p
 .pfilters select{width:auto;flex:0 0 auto;font-family:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
 .pfilters .btn{flex:0 0 auto}
 table.list.pipeline td:first-child{min-width:140px}
+/* The second name in an LP's cell (issue 0013): the person under their organisation when the
+   organisation is the LP we're targeting, the organisation under the person otherwise. */
+table.list.pipeline .lpsecond{color:var(--muted);font-size:12px;margin-top:1px}
 table.list.pipeline td.where{min-width:160px}
 /* The pipeline's seven columns fit a 1280-wide window at 10px padding, the evidence column
    included: it is the one that shows the gap between claimed and evidenced, so it is never the
@@ -1853,3 +1856,8 @@ a.vstat:hover{border-color:var(--accent-line);background:var(--accent-wash)}
 .sugstrat .ss-decide{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
 .sugstrat .ss-decide input{flex:1;min-width:200px;font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--line);border-radius:6px}
 .sugstrat .tier,.pubprof .pp-path .tier{display:inline-grid;vertical-align:middle;margin-right:6px}
+/* The second name under an LP page's title (issue 0013): the person under their organisation
+   when it is the LP we're targeting, the organisation under the person otherwise. */
+.h1second{color:var(--muted);font-size:14px;margin:-2px 0 6px}
+.h1second a{color:inherit}
+.h1second a:hover{color:var(--ink)}
