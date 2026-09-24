@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "WATCHPACK_POLLING=true next dev --hostname 0.0.0.0 --port 3000",
     "dev:real": "ulimit -n 65536 2>/dev/null; scripts/with-affinity-key.sh env DATA_PROFILE=real WATCHPACK_POLLING=true next dev --hostname 0.0.0.0 --port 3100",
+    "build:real": "DATA_PROFILE=real NEXT_DIST_DIR=.next-real-prod next build",
+    "start:real": "ulimit -n 65536 2>/dev/null; scripts/with-affinity-key.sh env DATA_PROFILE=real NEXT_DIST_DIR=.next-real-prod next start --hostname 0.0.0.0 --port 3100",
     "key:store": "scripts/affinity-key.sh store",
     "key:status": "scripts/affinity-key.sh status",
     "key:forget": "scripts/affinity-key.sh forget",

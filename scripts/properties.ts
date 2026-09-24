@@ -1951,6 +1951,19 @@ async function main() {
       newer && !older && !none, `context after it: ${newer}; context before it: ${older}; no context: ${none}`);
   }
 
+  // A provisional score from a proposed strategy (issue 0022, real): weighted as config.scoring says,
+  // "unknown" left out rather than guessed, and no score from fewer than two readings.
+  {
+    const { provisionalScore, capacityValue } = await import('../lib/strategy-score');
+    const none = provisionalScore({ capacity: { band: 'unknown' }, affinity: { level: 'unknown' }, propensity: { level: 'high' }, timeToDecision: { band: 'unknown' } });
+    const two = provisionalScore({ capacity: { band: 'unknown' }, affinity: { level: 'high' }, propensity: { level: 'low' }, timeToDecision: { band: 'unknown' } });
+    const all = provisionalScore({ capacity: { band: '$1–5M' }, affinity: { level: 'high' }, propensity: { level: 'medium' }, timeToDecision: { band: 'weeks' } });
+    // affinity .30×1 + propensity .25×.25 over .55 = 66; the four: (.25×.65 + .30×1 + .25×.6 + .20×1) = .8125 → 81.
+    check('A provisional score weighs the strategy’s known readings as the scoring settings say, and gives none from fewer than two',
+      none === null && two === 66 && all === 81 && capacityValue('$250K soft, on the close track (unverified)') === 0.45 && capacityValue('unknown') === null,
+      `one reading: ${none}; two readings: ${two}; all four: ${all}`);
+  }
+
   // The default theme is green (issue 0010, real): the page is served with data-theme="green", the
   // boot script takes it away only for a stored choice of clay, and the picker sets what it shows.
   {

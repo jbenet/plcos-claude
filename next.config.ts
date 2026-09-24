@@ -14,7 +14,9 @@ const config: NextConfig = {
   devIndicators: false,
   // Both servers can run at once — the demo for screenshots, the real one for work — and two
   // dev servers cannot share a build directory.
-  distDir: real ? '.next-real' : '.next',
+  // A production build of the real profile (npm run build:real, issue 0023) has its own directory
+  // too, so it can be built while the development server runs.
+  distDir: process.env.NEXT_DIST_DIR ?? (real ? '.next-real' : '.next'),
   /**
    * Both servers bind 0.0.0.0, so another computer on the same network can open them: the demo
    * from the start, the real one since 24 Sep 2026 (Juan: "I'm in a small private network so no

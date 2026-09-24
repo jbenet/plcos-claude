@@ -1921,4 +1921,6 @@ table.list.dated .dwhen{font-size:11px;white-space:nowrap}
 table.list.dated .dwhat{display:inline-flex;align-items:center;gap:7px;font-weight:500}
 table.list.dated .dwhat .glyph{color:var(--lc)}
 table.list.dated .ddetail{color:var(--muted);font-size:11.5px;margin:1px 0 0 23px}
+/* A provisional score, from the proposed strategy's readings rather than a fit assessment (issue 0022). */
+.tscore.prov{font-style:italic;opacity:.8}
 

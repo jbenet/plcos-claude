@@ -212,6 +212,13 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N77: [
+    { name: '01-routes-with-scores', path: '/all/routes' },
+    {
+      name: '02-routes-search',
+      path: '/all/routes?q=family',
+    },
+  ],
   N76: [
     {
       name: '01-calendar-numbers',

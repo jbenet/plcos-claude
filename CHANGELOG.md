@@ -4983,3 +4983,35 @@ so the rail's footer — the feedback button — sat off the bottom of the scree
 item. The rail now uses the visible screen's height (100dvh).
 
 110 of 110 properties hold.
+
+## N77 — Scores on the routes page; the heavy pages made light; a production build for the real server
+
+**Shipped.** Two items from the feedback box (issues 0022 and 0023), and a design for a third (0021).
+
+| | |
+|---|---|
+| ![Routes with scores](docs/changelog/shots/n77/01-routes-with-scores.webp) | **Scores on the Warm intro routes page** (issue 0022). Its scores came only from fit assessments, and the real data has none. Where no assessment exists, the page shows a provisional score from the proposed strategy's four readings — capacity, affinity, propensity, time to decide — weighted as the scoring settings say, with "unknown" left out rather than guessed and no score from fewer than two readings. It is marked "~", and its tooltip says it is a proposal's reading, not an assessment; an assessment, where one exists, always wins. The targets are the pipeline's LPs and the organisations they act for, with the team left out by its own list. |
+| ![Routes search](docs/changelog/shots/n77/02-routes-search.webp) | **The routes page searches on the server** (issue 0023). The target list drew every person and firm in the replica — 3,700 links on the real data — and sent them all again as data: 1.7 MB. It now sends only the 80 rows it draws, for the search, order and minimum in the address. |
+
+**The heavy pages, measured and made light** (issue 0023). Pages were served in 0.2–0.6 s and nothing
+on them polls; the weight was the problem. On the real data:
+
+| Page | Before | After |
+|---|---|---|
+| Warm intro routes | 1.7 MB | 95 KB |
+| The pipeline | 1.56 MB | 478 KB |
+
+The pipeline sent every pursuit, Sourcing's thousands included, so any column could open instantly;
+Sourcing's rows now go only when its column is opened, and its tile shows the server's count.
+
+**A production build of the real server.** It ran in development mode — unminified code, React's
+checks, a live-reload connection — which costs a tablet's battery. `npm run build:real` and
+`npm run start:real` build and serve it for use, in its own build directory; every page is rendered
+per request (no page reads the database at build time). Switching Juan's terminal loop to it is his
+call; the database takes one process at a time.
+
+**Team travel and events on the calendar** (issue 0021) is designed, not built: a read-only Google
+Calendar feed by each calendar's private iCal address — no sign-in, nothing that can write — would be
+a second exception to the no-connectors rule, so it waits for Juan's yes.
+
+111 of 111 properties hold.

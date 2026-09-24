@@ -119,6 +119,13 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
   });
 
   const initial = STATUSES.some((s) => s.id === asked) ? (asked as PursuitStatus) : null;
+  // The bulky columns (issue 0023, real): Sourcing holds thousands of LPs, and sending every row
+  // made this page 1.5 MB. Their rows go to the browser only when their column is the one open;
+  // their tiles carry the server's count, and opening one asks the server for it.
+  const BULKY: PursuitStatus[] = ['sourcing', 'new'];
+  const held = BULKY.filter((s) => s !== initial);
+  const heldBack = Object.fromEntries(held.map((s) => [s, rows.filter((r) => r.status === s).length] as const).filter(([, n]) => n > 0));
+  const sent = held.length ? rows.filter((r) => !held.includes(r.status as PursuitStatus)) : rows;
   const count = (s: PursuitStatus) => pursuits.filter((p) => p.status === s).length;
 
   return (
@@ -170,7 +177,8 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
       </p>
 
       <PipelineTable
-        rows={rows}
+        rows={sent}
+        heldBack={heldBack}
         statuses={STATUSES.map((s) => ({ id: s.id, label: s.label, means: s.means }))}
         rungNames={RUNGS.map((r) => RUNG_LABEL[r])}
         initialStatus={initial}

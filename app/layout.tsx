@@ -4,6 +4,10 @@ import { Rail } from '@/components/shell/Rail';
 import { DEFAULT_THEME, THEME_BOOT, themeAttr } from '@/lib/theme';
 import { config } from '@/config/deployment';
 
+// Every page reads the live database, so none is rendered at build time (issue 0023): a production
+// build otherwise opened the real database while the running server held it.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   // The tab says which data it holds, so two windows side by side cannot be confused.
   title: config.data.profile === 'real' ? `Real · ${config.product.name}` : config.product.name,

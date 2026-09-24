@@ -15,6 +15,8 @@ import { TargetPicker, type TargetRow } from '@/components/routes/TargetPicker';
 import { listSourceDocs } from '@/modules/research';
 import { listVehicles } from '@/modules/platform';
 import { planRoutes, tierCounts, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
+import { listPursuits } from '@/modules/strategy';
+import { provisionalScores } from '@/lib/strategy-score';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,20 +29,24 @@ const TIERS: EvidenceTier[] = ['A', 'B', 'C', 'D'];
 export default async function Routes({
   searchParams,
 }: {
-  searchParams: Promise<{ target?: string; r?: string }>;
+  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string }>;
 }) {
   const selection = await vehicleSelection();
-  const { target, r } = await searchParams;
+  const { target, r, q = '', sort: sortParam, min: minParam } = await searchParams;
   const user = await (await auth()).currentUser();
-  const [entities, docs, tiers, vehicles, affiliations, fit, asks, team] = await Promise.all([
+  const [entities, docs, tiers, vehicles, affiliations, fit, asks, team, pursuits] = await Promise.all([
     listEntities(), listSourceDocs(), tierCounts(), listVehicles(),
     listAffiliations(), listAssessments(selection.current?.id ?? null),
-    listAsks(null), (await auth()).listUsers(),
+    listAsks(null), (await auth()).listUsers(), listPursuits(selection.current?.id ?? null),
   ]);
 
-  // Targets worth showing: everyone who is not a member of the team.
-  const teamNames = new Set(['Juan', 'Mara Vance', 'Sam Ferreira', 'Inés Duarte', 'Tomás Reyes']);
-  const targets = entities.filter((e) => !teamNames.has(e.displayName));
+  // Targets worth showing (issues 0022–0023, real): the LPs in this pipeline and the organisations
+  // they act for — not every person and firm in the replica, which made this page 1.7 MB — and
+  // never a member of the team, by the team's own list.
+  const teamNames = new Set(team.map((u) => u.name));
+  const inPipeline = new Set(pursuits.filter((p) => !p.historical).map((p) => p.entityId));
+  for (const a of affiliations) if (a.current && inPipeline.has(a.personId)) inPipeline.add(a.orgId);
+  const targets = entities.filter((e) => inPipeline.has(e.entityId) && !teamNames.has(e.displayName));
   const targetId = target ?? targets.find((t) => t.displayName === 'Delia Roos')?.entityId ?? targets[0]?.entityId;
   const search = targetId
     ? await planRoutes(user.handle, targetId, 3, selection.current?.kind ?? 'fund')
@@ -51,11 +57,14 @@ export default async function Routes({
    * to somebody nobody has qualified — and the records around each name, so searching
    * "Kaplan" turns up the trust and the person who signs for it.
    */
-  const best = new Map<string, { score: number; blocker: string }>();
+  const best = new Map<string, { score: number; blocker: string | null; provisional?: boolean }>();
+  // Where no fit assessment exists, a provisional score from the proposed strategy (issue 0022).
+  for (const [id, score] of await provisionalScores([...inPipeline])) best.set(id, { score, blocker: null, provisional: true });
   for (const a of fit) {
     const hit = best.get(a.entityId);
     const score = Math.round(a.weightedFit * 100);
-    if (!hit || score > hit.score) {
+    // An assessment outranks a provisional score, whatever the numbers.
+    if (!hit || hit.provisional || score > hit.score) {
       best.set(a.entityId, { score, blocker: BLOCKER_SHORT[a.diagnosis.blocker] });
     }
   }
@@ -80,11 +89,24 @@ export default async function Routes({
       name: t.displayName,
       isPerson: t.entityType === 'person',
       score: reading?.score ?? null,
+      provisional: Boolean(reading?.provisional),
       borrowedFrom: borrowedFrom?.org ?? null,
       blocker: reading?.blocker ?? null,
       related: [...new Set(related)].slice(0, 3),
     };
   });
+  // The server searches the targets (issue 0023): the page carries only the rows it draws.
+  const SHOWN = 80;
+  const sort: 'score' | 'name' = sortParam === 'name' ? 'name' : 'score';
+  const minScore = [60, 75].includes(Number(minParam)) ? Number(minParam) : 0;
+  const needle = q.trim().toLowerCase();
+  const matched = rows
+    .filter((t) => (minScore ? (t.score ?? -1) >= minScore : true))
+    .filter((t) => !needle || t.name.toLowerCase().includes(needle) || t.related.some((x) => x.toLowerCase().includes(needle)))
+    .sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name) : (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name)));
+  const shown = matched.slice(0, SHOWN);
+  const currentRow = rows.find((t) => t.entityId === targetId);
+  if (currentRow && !shown.includes(currentRow)) shown.unshift(currentRow);
   const selected = Math.min(Math.max(0, Number(r ?? 0)), Math.max(0, (search?.routes.length ?? 1) - 1));
 
   /**
@@ -125,7 +147,7 @@ export default async function Routes({
   return (
     <Page
       crumbs={moduleCrumbs('routes', selection.current?.name ?? null)}
-      queue={<TargetPicker targets={rows} current={targetId} total={targets.length} />}
+      queue={<TargetPicker targets={shown} current={targetId} matched={matched.length} total={rows.length} q={q} sort={sort} min={minScore} />}
       inspector={
         <>
           <div className="lbl">Evidence tiers</div>

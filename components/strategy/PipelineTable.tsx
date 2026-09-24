@@ -60,6 +60,11 @@ interface Props {
   /** Filters from the address, read by the server (N62), so a link opens the view it names. */
   initialFilters?: Record<string, string>;
   showVehicle: boolean;
+  /**
+   * Columns whose rows weren't sent, with the server's count (issue 0023, real): Sourcing holds
+   * thousands of LPs, and sending them made this page 1.5 MB. Opening one asks the server for it.
+   */
+  heldBack?: Partial<Record<Status, number>>;
 }
 
 const CHOICES: Partial<Record<keyof Filters, readonly string[]>> = {
@@ -159,7 +164,7 @@ function Ladder({ r, names }: { r: PipelineRow; names: string[] }) {
   );
 }
 
-export function PipelineTable({ rows, statuses, rungNames, initialStatus, initialFilters, showVehicle }: Props) {
+export function PipelineTable({ rows, statuses, rungNames, initialStatus, initialFilters, showVehicle, heldBack = {} }: Props) {
   const router = useRouter();
   const search = useRef<HTMLInputElement>(null);
   const [f, setF] = useState<Filters>(() => fromAddress(initialFilters));
@@ -272,21 +277,27 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
     <>
       <div className="statusboard" role="tablist" aria-label="Status">
         {statuses.map((s) => {
-          const n = count(s.id, filtered);
-          const m = count(s.id, rows);
+          const held = heldBack[s.id];
+          const n = held ?? count(s.id, filtered);
+          const m = held ?? count(s.id, rows);
           return (
             <button
               key={s.id}
               className={`sb${s.id === status ? ' on' : ''}${s.id === 'passed' ? ' ended' : ''}`}
               role="tab"
               aria-selected={s.id === status}
-              title={s.means}
-              onClick={() => setStatus(s.id)}
+              title={held !== undefined ? `${s.means} Opening it asks the server for its ${held.toLocaleString('en-US')} rows; the filters apply once it's open.` : s.means}
+              onClick={() => {
+                if (held === undefined) { setStatus(s.id); return; }
+                const u = new URL(window.location.href);
+                u.searchParams.set('status', s.id);
+                router.push(`${u.pathname}${u.search}`);
+              }}
             >
               <span className="lbl">{s.label}</span>
               <span className="n">
                 {n.toLocaleString('en-US')}
-                {active && <span className="of"> of {m.toLocaleString('en-US')}</span>}
+                {active && held === undefined && <span className="of"> of {m.toLocaleString('en-US')}</span>}
               </span>
             </button>
           );
