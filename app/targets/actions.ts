@@ -92,6 +92,16 @@ export async function addUpdateAction(formData: FormData): Promise<{ error?: str
   }
 }
 
+/** Accept or dismiss a suggested strategy (N64). Accepting sets the next step; nothing else moves. */
+export async function decideSuggestionAction(formData: FormData): Promise<void> {
+  const { decideSuggestion } = await import('@/modules/strategy');
+  const user = await (await auth()).currentUser();
+  const decision = String(formData.get('decision')) === 'accept' ? 'accept' : 'dismiss';
+  await decideSuggestion(user.id, String(formData.get('suggestionId')), decision, String(formData.get('note') ?? '') || null);
+  revalidatePath(`/targets/${String(formData.get('pursuitId'))}`);
+  revalidatePath('/targets');
+}
+
 /** Log a touchpoint on an LP (N51). A record of what happened; nothing is sent, nothing claimed. */
 export async function logTouchpointAction(formData: FormData): Promise<{ error?: string; ok?: boolean }> {
   const user = await (await auth()).currentUser();

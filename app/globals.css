@@ -1793,3 +1793,27 @@ a.vstat:hover{border-color:var(--accent-line);background:var(--accent-wash)}
 .vstat .n.warnnum{color:var(--clay)}
 .vstat .l{font-size:12px;line-height:1.35}
 .vstat .s{font-size:11px;color:var(--muted);line-height:1.35}
+
+/* From public sources (N64): the enrichment research on an LP, every line with its page. */
+.pubprof .pp-id{margin:0 0 8px;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.pubprof .pp-id b{color:var(--ink);font-weight:500}
+.pubprof .pp-id.warnish b{color:var(--amber)}
+.pubprof .pp-links a{margin-left:6px;font-size:11.5px}
+.pubprof .pp-sum{margin:0 0 8px;font-size:13px;line-height:1.55}
+.pubprof .pp-caution{margin:6px 0 0;font-size:12px}
+.pubprof .pp-fact{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;padding:6px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.pubprof .pp-fact .lbl{padding-top:2px}
+.pubprof .pp-path{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:start;padding:5px 0;font-size:12.5px;line-height:1.45}
+.pubprof .needs{color:var(--amber);font-size:11.5px}
+.pubprof .fact{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px;align-items:start}
+.pubprof .fact>span:last-child{text-align:left}
+/* A suggested strategy (N64): what to do next with this LP, and why, for a person to decide. */
+.sugstrat .ss-angle{margin:0 0 8px;font-size:13px;line-height:1.55}
+.sugstrat .fact{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px;align-items:start}
+.sugstrat .fact>span:last-child{text-align:left}
+.sugstrat .ss-scores{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0}
+.sugstrat .ss-scores>div{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px}
+.sugstrat .ss-scores small{color:var(--muted);font-size:11px;line-height:1.4}
+.sugstrat .ss-decide{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.sugstrat .ss-decide input{flex:1;min-width:200px;font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--line);border-radius:6px}
+.sugstrat .tier,.pubprof .pp-path .tier{display:inline-grid;vertical-align:middle;margin-right:6px}

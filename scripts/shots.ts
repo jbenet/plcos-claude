@@ -212,6 +212,34 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N64: [
+    {
+      name: '01-a-suggested-strategy',
+      path: '/targets?status=discussing',
+      prepare: async (page) => {
+        await openLp(page, 'Michael Okonjo');
+        await page.getByRole('heading', { name: 'Suggested strategy' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '02-from-public-sources',
+      path: '/targets?status=discussing',
+      prepare: async (page) => {
+        await openLp(page, 'Michael Okonjo');
+        await page.locator('.pubprof details summary').first().click();
+        await page.getByRole('heading', { name: 'From public sources' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '03-the-research-set-and-the-import',
+      path: '/dev/enrich',
+      prepare: async (page) => { await page.waitForTimeout(200); },
+    },
+  ],
   N63: [
     {
       name: '01-type-anywhere-any-size-any-colour',

@@ -1,0 +1,444 @@
+{
+ "note": "Fictional findings and strategies for the demo profile (N64). Keyed by name; scripts/enrich-demo.ts writes them under data/demo/enrich/ with the demo’s own keys.",
+ "findings": [
+  {
+   "name": "Michael Okonjo",
+   "researched": {
+    "at": "2026-09-20T10:00:00Z",
+    "by": "claude (sub-agent)",
+    "workflow": "W1",
+    "version": 5
+   },
+   "identity": {
+    "match": "confirmed",
+    "basis": "Name, family office and title match the record; the office’s own page names him as principal.",
+    "canonical": {
+     "name": "Michael Okonjo",
+     "role": "Principal",
+     "org": "Okonjo Family Office",
+     "location": "Lagos and London"
+    },
+    "links": [
+     {
+      "kind": "website",
+      "url": "https://okonjo-family-office.example.org/"
+     },
+     {
+      "kind": "podcast",
+      "url": "https://allocators-hour.example.org/episodes/okonjo"
+     }
+    ]
+   },
+   "facts": [
+    {
+     "field": "role",
+     "value": "Principal of the Okonjo Family Office, a single-family office investing across venture, credit and real estate.",
+     "source": {
+      "url": "https://okonjo-family-office.example.org/about",
+      "kind": "primary",
+      "title": null,
+      "published": null
+     },
+     "confidence": "high",
+     "quote": "the family’s investment office"
+    },
+    {
+     "field": "fund_lp",
+     "value": "Commits to three to five venture funds a year, usually as an early LP in a manager’s first or second fund.",
+     "source": {
+      "url": "https://allocators-hour.example.org/episodes/okonjo",
+      "kind": "podcast",
+      "title": null,
+      "published": "2026-05-12"
+     },
+     "confidence": "medium",
+     "quote": "we like being early in a manager’s first fund"
+    },
+    {
+     "field": "interest",
+     "value": "Says brain–computer interfaces are \"the next platform\" and wants exposure before the category is priced.",
+     "source": {
+      "url": "https://allocators-hour.example.org/episodes/okonjo",
+      "kind": "podcast",
+      "title": null,
+      "published": "2026-05-12"
+     },
+     "confidence": "medium",
+     "quote": "the next platform"
+    },
+    {
+     "field": "investment",
+     "value": "Angel investor in two neuromodulation startups.",
+     "source": {
+      "url": "https://okonjo-family-office.example.org/portfolio",
+      "kind": "primary",
+      "title": null,
+      "published": null
+     },
+     "confidence": "medium",
+     "scope": "firm"
+    },
+    {
+     "field": "news",
+     "value": "Speaking at a neurotech conference in November.",
+     "source": {
+      "url": "https://neuro-summit.example.org/speakers",
+      "kind": "press",
+      "title": null,
+      "published": "2026-09-11"
+     },
+     "confidence": "high"
+    }
+   ],
+   "profile": {
+    "summary": "Principal of a single-family office that backs emerging venture managers early and has said publicly that BCI is the next platform. Decides himself.",
+    "investorType": "fo_principal",
+    "howTheyInvest": "Three to five fund commitments a year, early in a manager’s first or second fund; direct angel checks in neuromodulation.",
+    "interests": [
+     "brain–computer interfaces",
+     "neuromodulation",
+     "emerging managers"
+    ],
+    "capacity": {
+     "band": "$1–5M",
+     "basis": "Typical early-fund commitment he describes on the podcast; the office’s size is not public. An estimate."
+    },
+    "signals": [
+     {
+      "what": "Speaking at a neurotech conference in November",
+      "on": "2026-11",
+      "source": "https://neuro-summit.example.org/speakers"
+     }
+    ],
+    "cautions": [
+     "His interest is stated on a podcast; the portfolio page is the office’s, not his personally."
+    ]
+   },
+   "connections": [
+    {
+     "to": "Mara Vance",
+     "kind": "other",
+     "basis": "Both on the same allocator panel in 2025.",
+     "source": "https://allocators-hour.example.org/panel-2025",
+     "tier": "D"
+    }
+   ],
+   "coverage": {
+    "searched": [
+     "web search",
+     "the office’s site",
+     "a podcast"
+    ],
+    "notFound": [
+     "for a person: the office’s committee process"
+    ]
+   }
+  },
+  {
+   "name": "Nadia Brandt",
+   "researched": {
+    "at": "2026-09-20T10:00:00Z",
+    "by": "claude (sub-agent)",
+    "workflow": "W1",
+    "version": 5
+   },
+   "identity": {
+    "match": "confirmed",
+    "basis": "Name and firm match; her firm’s team page and two interviews agree.",
+    "canonical": {
+     "name": "Nadia Brandt",
+     "role": "Managing Partner",
+     "org": "Brandt & Co.",
+     "location": "Zurich"
+    },
+    "links": [
+     {
+      "kind": "bio",
+      "url": "https://brandt-co.example.org/team"
+     }
+    ]
+   },
+   "facts": [
+    {
+     "field": "role",
+     "value": "Managing Partner of Brandt & Co., a multi-family office.",
+     "source": {
+      "url": "https://brandt-co.example.org/team",
+      "kind": "primary",
+      "title": null,
+      "published": null
+     },
+     "confidence": "high"
+    },
+    {
+     "field": "exit",
+     "value": "Sold her medical-imaging company in 2019.",
+     "source": {
+      "url": "https://swiss-tech-news.example.org/2019/brandt-exit",
+      "kind": "press",
+      "title": null,
+      "published": "2019-06-01"
+     },
+     "confidence": "high"
+    },
+    {
+     "field": "philanthropy",
+     "value": "Chairs a foundation funding neurodegeneration research.",
+     "source": {
+      "url": "https://brandt-foundation.example.org/",
+      "kind": "primary",
+      "title": null,
+      "published": null
+     },
+     "confidence": "high"
+    }
+   ],
+   "profile": {
+    "summary": "A founder with a medical-imaging exit, now running a multi-family office, who chairs a foundation funding neurodegeneration research.",
+    "investorType": "fo_principal",
+    "howTheyInvest": "Fund commitments and co-investments for the families the office serves.",
+    "interests": [
+     "neuroscience",
+     "medical devices"
+    ],
+    "capacity": {
+     "band": "$5–25M",
+     "basis": "Multi-family office; commitment sizes not published. An estimate."
+    },
+    "signals": [],
+    "cautions": [
+     "A multi-family office decides by committee: a longer clock."
+    ]
+   },
+   "connections": [],
+   "coverage": {
+    "searched": [
+     "web search",
+     "the firm’s site",
+     "press"
+    ],
+    "notFound": []
+   }
+  },
+  {
+   "name": "Rachel Kaplan",
+   "researched": {
+    "at": "2026-09-20T10:00:00Z",
+    "by": "claude (sub-agent)",
+    "workflow": "W1",
+    "version": 5
+   },
+   "identity": {
+    "match": "probable",
+    "basis": "Name and trust match; only one public page names her.",
+    "canonical": {
+     "name": "Rachel Kaplan",
+     "role": "Principal",
+     "org": "Kaplan Family Trust"
+    }
+   },
+   "facts": [
+    {
+     "field": "role",
+     "value": "Principal of the Kaplan Family Trust.",
+     "source": {
+      "url": "https://kaplan-trust.example.org/",
+      "kind": "primary",
+      "title": null,
+      "published": null
+     },
+     "confidence": "medium"
+    }
+   ],
+   "profile": {
+    "summary": "Principal of a family trust; little else is public.",
+    "investorType": "fo_principal",
+    "capacity": {
+     "band": "unknown",
+     "basis": "Not public."
+    },
+    "cautions": [
+     "Identity probable: one page only."
+    ]
+   },
+   "connections": [],
+   "coverage": {
+    "searched": [
+     "web search"
+    ],
+    "notFound": [
+     "for a person: LinkedIn",
+     "anything on how the trust invests"
+    ]
+   }
+  }
+ ],
+ "strategies": [
+  {
+   "name": "Michael Okonjo",
+   "made": {
+    "at": "2026-09-20T11:00:00Z",
+    "by": "claude (sub-agent)",
+    "workflow": "W5",
+    "version": 1
+   },
+   "fit": {
+    "PLC Neurotech I": {
+     "verdict": "strong",
+     "why": "He backs first funds early and has said BCI is the next platform.",
+     "gates": [
+      {
+       "gate": "Mandate takes an emerging specialist fund",
+       "answer": "yes",
+       "basis": "Commits early to first and second funds (podcast)."
+      }
+     ]
+    }
+   },
+   "scores": {
+    "capacity": {
+     "band": "$1–5M",
+     "basis": "The early-fund commitment he describes. An estimate."
+    },
+    "affinity": {
+     "level": "high",
+     "basis": "Says BCI is the next platform; angel checks in neuromodulation."
+    },
+    "propensity": {
+     "level": "medium",
+     "basis": "Met once; speaking at a neurotech conference in November."
+    },
+    "timeToDecision": {
+     "band": "weeks",
+     "basis": "A principal of a single-family office decides himself."
+    }
+   },
+   "angle": "He said on a podcast that BCI is the next platform and that he likes being early in a manager’s first fund: the portfolio (a clinical-stage BCI company among ten) is exactly the exposure he described.",
+   "route": {
+    "via": "Our own meeting; Mara Vance was on an allocator panel with him",
+    "tier": "B",
+    "why": "Met once; the panel is a D clue on its own."
+   },
+   "next": {
+    "what": "Offer 20 minutes at the November conference, where he is speaking, with one portfolio company’s founder",
+    "who": "Juan",
+    "when": "before the conference",
+    "material": "the portfolio one-pager"
+   },
+   "ask": {
+    "vehicle": "PLC Neurotech I",
+    "shape": "fund commitment",
+    "range": "$1–3M, an estimate"
+   },
+   "openQuestions": [
+    "Does the office’s committee sit on fund decisions, or does he decide alone?"
+   ],
+   "risks": [
+    "The neuromodulation checks are the office’s, not necessarily his: ask before citing them."
+   ],
+   "list": "this year",
+   "confidence": "medium"
+  },
+  {
+   "name": "Nadia Brandt",
+   "made": {
+    "at": "2026-09-20T11:00:00Z",
+    "by": "claude (sub-agent)",
+    "workflow": "W5",
+    "version": 1
+   },
+   "fit": {
+    "PLC Neurotech I": {
+     "verdict": "strong",
+     "why": "Committed; a medical-imaging founder who funds neurodegeneration research."
+    }
+   },
+   "scores": {
+    "capacity": {
+     "band": "$5–25M",
+     "basis": "Multi-family office. An estimate."
+    },
+    "affinity": {
+     "level": "high",
+     "basis": "Chairs a neurodegeneration research foundation; a medical-imaging exit."
+    },
+    "propensity": {
+     "level": "high",
+     "basis": "Committed; four meetings on record."
+    },
+    "timeToDecision": {
+     "band": "a quarter or more",
+     "basis": "A committee decides for the families."
+    }
+   },
+   "angle": "She has already committed, and her foundation funds the research our portfolio builds on: she can speak for the fund to other families.",
+   "route": {
+    "via": "Four meetings on record",
+    "tier": "B",
+    "why": "An existing LP."
+   },
+   "next": {
+    "what": "Ask which two or three families in the office should see the fund, and offer a portfolio briefing for them",
+    "who": "Mara Vance",
+    "when": "this month",
+    "material": null
+   },
+   "ask": {
+    "vehicle": "PLC Neurotech I",
+    "shape": "intro to others",
+    "range": null
+   },
+   "openQuestions": [
+    "Would the foundation consider a program-related investment?"
+   ],
+   "risks": [],
+   "list": "this year",
+   "confidence": "high"
+  }
+ ],
+ "network": {
+  "researched": {
+   "at": "2026-09-20T10:00:00Z",
+   "by": "claude (working session)",
+   "workflow": "W2",
+   "version": 1
+  },
+  "orgs": [
+   {
+    "name": "PL Capital",
+    "aliases": [
+     "PL Capital"
+    ],
+    "kind": "ours",
+    "domains": [
+     "example.com"
+    ],
+    "source": "https://example.com/"
+   }
+  ],
+  "backers": [
+   {
+    "name": "Harbor Street Ventures",
+    "aliases": [
+     "Harbor Street Ventures"
+    ],
+    "domains": [
+     "harborstreet.example.org"
+    ],
+    "what": "An early backer of ours",
+    "source": "https://example.org/harbor"
+   }
+  ],
+  "backer_people": [],
+  "portfolio": [
+   {
+    "name": "Cortex Bio",
+    "aliases": [
+     "Cortex Bio"
+    ],
+    "vehicle": "PLC Neurotech",
+    "source": "https://example.com/neurotech"
+   }
+  ]
+ }
+}

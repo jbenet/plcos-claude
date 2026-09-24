@@ -1515,6 +1515,78 @@ async function main() {
           );
         }
 
+        // Enrichment (N64, docs/19): the research set carries identity only; findings map in as
+        // unverified claims with their provenance, once; a verified claim survives a re-import; a
+        // bad file is refused; a strategy is a proposal a person decides, moving only the next step.
+        {
+          const { mkdir: mk, writeFile: wf2, readFile: rf, rm: rmr } = await import('node:fs/promises');
+          const scratch = join(process.cwd(), 'data', 'demo', 'props-enrich');
+          await rmr(scratch, { recursive: true, force: true });
+          process.env.ENRICH_DIR = scratch;
+          const cand = await import('../lib/enrich/candidates');
+          const imp = await import('../lib/enrich/import');
+          const exported = await cand.exportResearchSet();
+          const identity = (await rf(join(scratch, 'research-set.jsonl'), 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
+          const leaks = identity.filter((x) => 'pursuits' in x || 'contact' in x || 'notes' in x || Object.keys((x.enriched ?? {}) as object).some((k) => !['Current Organization', 'Current Job Title', 'Organizations', 'Job Titles', 'Industry', 'Location', 'LinkedIn URL'].includes(k)));
+          const pick = identity[0] as { key: string; name: string };
+          await mk(join(scratch, 'raw'), { recursive: true });
+          await mk(join(scratch, 'strategy'), { recursive: true });
+          const finding = (extra: Record<string, unknown> = {}) => ({
+            key: pick.key, name: pick.name, researched: { at: '2026-09-20T10:00:00Z', by: 'claude (sub-agent)', workflow: 'W1', version: 5 },
+            identity: { match: 'confirmed', basis: 'Invented for the harness.' },
+            facts: [{ field: 'role', value: 'Principal of an invented office.', source: { url: 'https://example.org/about', kind: 'primary' }, confidence: 'high' },
+                    { field: 'interest', value: 'Says neurotech matters.', source: { url: 'https://example.org/podcast', kind: 'podcast', published: '2026-05-01' }, confidence: 'medium' }],
+            profile: { summary: 'Invented.', investorType: 'fo_principal' }, ...extra,
+          });
+          await wf2(join(scratch, 'raw', `${pick.key}.json`), JSON.stringify(finding()));
+          // Refused: facts for an identity that is not resolved, and a phone number in a fact.
+          const other = identity[1] as { key: string; name: string };
+          await wf2(join(scratch, 'raw', `${other.key}.json`), JSON.stringify({ ...finding(), key: other.key, identity: { match: 'ambiguous', basis: 'Two people share the name.' } }));
+          const first = await imp.importFindings(juan);
+          const claimsNow = () => n(`select count(*)::text as n from research.claim where entity_id = $1 and source like 'pub:%'`, [pick.key]);
+          const c1 = await claimsNow();
+          const unverified = await n(`select count(*)::text as n from research.claim c join research.source_doc d on d.doc_id = c.source where c.entity_id = $1 and c.source like 'pub:%' and c.last_verified_by is null and c.as_of is not null`, [pick.key]);
+          const again = await imp.importFindings(juan);
+          const c2 = await claimsNow();
+          await adb.query(`update research.claim set last_verified_by = $2, last_verified_at = now() where entity_id = $1 and field = 'public.role'`, [pick.key, juan]);
+          await wf2(join(scratch, 'raw', `${pick.key}.json`), JSON.stringify(finding({ facts: [{ field: 'interest', value: 'Says neurotech matters.', source: { url: 'https://example.org/podcast', kind: 'podcast' }, confidence: 'medium' }] })));
+          await imp.importFindings(juan);
+          const keptVerified = await n(`select count(*)::text as n from research.claim where entity_id = $1 and field = 'public.role' and last_verified_by is not null`, [pick.key]);
+          const phone = (await import('../lib/enrich/schema')).check({ ...finding(), facts: [{ field: 'news', value: 'Call +1 (415) 555-0134', source: { url: 'https://example.org/x', kind: 'press' }, confidence: 'low' }] });
+
+          // A strategy: proposed; the same file again adds nothing; a new file withdraws the open one; accepting moves only the next step.
+          const strategy = (next: string) => ({
+            key: pick.key, name: pick.name, made: { at: '2026-09-20T11:00:00Z', by: 'claude (sub-agent)', workflow: 'W5', version: 1 },
+            fit: { 'PLC Neurotech I': { verdict: 'good', why: 'Invented.' } },
+            scores: { capacity: { band: '$1–5M', basis: 'Invented.' }, affinity: { level: 'medium', basis: 'Invented.' }, propensity: { level: 'medium', basis: 'Invented.' }, timeToDecision: { band: 'weeks', basis: 'Invented.' } },
+            angle: 'Invented.', route: null, next: { what: next, who: 'Juan', when: 'this week' }, ask: { vehicle: 'PLC Neurotech I', shape: 'fund commitment' },
+            openQuestions: [], risks: [], list: 'this year', confidence: 'medium',
+          });
+          await wf2(join(scratch, 'strategy', `${pick.key}.json`), JSON.stringify(strategy('Ask for twenty minutes')));
+          await imp.importFindings(juan);
+          await imp.importFindings(juan);
+          const proposedOnce = await n(`select count(*)::text as n from strategy.suggestion s join strategy.pursuit p on p.pursuit_id = s.pursuit_id where p.entity_id = $1 and s.status = 'proposed'`, [pick.key]);
+          await wf2(join(scratch, 'strategy', `${pick.key}.json`), JSON.stringify(strategy('Offer a portfolio briefing')));
+          await imp.importFindings(juan);
+          const rows = await adb.query<{ status: string; body: string; id: string; pursuit_id: string }>(
+            `select s.status, s.body, s.suggestion_id::text as id, s.pursuit_id::text from strategy.suggestion s join strategy.pursuit p on p.pursuit_id = s.pursuit_id where p.entity_id = $1 order by s.created_at`, [pick.key]);
+          const before = await adb.one<{ status: string; rungs: string }>(`select p.status::text, (select count(*)::text from strategy.ladder_event l where l.pursuit_id = p.pursuit_id) as rungs from strategy.pursuit p where p.pursuit_id = $1`, [rows[rows.length - 1]!.pursuit_id]);
+          await st.decideSuggestion(juan, rows[rows.length - 1]!.id, 'accept', null);
+          const after = await adb.one<{ status: string; next_step: string | null; rungs: string }>(`select p.status::text, p.next_step, (select count(*)::text from strategy.ladder_event l where l.pursuit_id = p.pursuit_id) as rungs from strategy.pursuit p where p.pursuit_id = $1`, [rows[rows.length - 1]!.pursuit_id]);
+          const twice = await attempt(() => st.decideSuggestion(juan, rows[rows.length - 1]!.id, 'accept', null));
+          delete process.env.ENRICH_DIR;
+          await rmr(scratch, { recursive: true, force: true });
+          check(
+            'Enrichment: the research file carries identity only; findings map in unverified, once; a verified claim survives; bad files are refused; a strategy is decided by a person and moves only the next step',
+            exported.candidates > 0 && leaks.length === 0 && first.mapped === 1 && first.rejected === 1 && c1 === 2 && unverified === 2 && again.mapped === 1 && c2 === 2 &&
+              keptVerified === 1 && phone.length > 0 && proposedOnce === 1 && rows.length === 2 && rows[0]!.status === 'withdrawn' && rows[1]!.status === 'proposed' &&
+              after?.next_step === 'Offer a portfolio briefing — Juan, this week' && after.status === before?.status && after.rungs === before?.rungs && twice instanceof st.SuggestionRefused,
+            `${exported.candidates} in the research set, ${leaks.length} lines carrying more than identity; first import mapped ${first.mapped}, refused ${first.rejected}; claims ${c1} (unverified with a date: ${unverified}); imported again, still ${c2}; ` +
+              `a verified claim kept after its fact left the file: ${keptVerified}; a phone number refused: ${phone.length > 0}; one proposal after importing twice: ${proposedOnce}; after a new file: ${rows.map((r) => r.status).join(' → ')}; ` +
+              `accepted: next step "${after?.next_step}", status ${before?.status} → ${after?.status}, rungs ${before?.rungs} → ${after?.rungs}; accepting again refused: ${twice instanceof st.SuggestionRefused}`,
+          );
+        }
+
         await adb.query(`update platform.vehicle set phase = 'historical' where slug = 'neurotech'`);
         await tr.translate(null, { mappingPath: file });
         const open = await n(

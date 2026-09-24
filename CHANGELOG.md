@@ -4456,3 +4456,43 @@ resizing is mouse-only; both predate this change.
 A background agent built this in its own worktree, on demo data only. I checked the six fixes
 again here: the two shots, a label growing to the edge (57 px wide to the picture's edge, then
 two lines), and a resized label keeping 350 × 115 while I typed.
+
+## N64 — Enrichment workflows: the LPs researched from public sources, mapped in with their sources
+
+**Shipping in iterations, tonight.** You asked for workflows to seed the strategy: enrich the LPs from
+public sources, find the connections, grade our own presence and materials, and turn it all into
+strategies and actions. You wanted it read-only, stored before it's mapped, and run as a loop that
+learns. This is the first installment. The research is still running as I write this.
+
+| | |
+|---|---|
+| ![A suggested strategy](docs/changelog/shots/n64/01-a-suggested-strategy.webp) | **A suggested strategy on the LP's page.** Why they'd care, in their own record's terms. The next step, with who takes it, when, and what material goes with it. The best way in, with its tier; the ask; which list they belong on (this year's close or 2027). The four scores (capacity, affinity, propensity, time to decide), each with its basis, never collapsed into one number. It's ready for review until someone decides. Accepting makes it the LP's next step and moves nothing else; nothing is sent. |
+| ![From public sources](docs/changelog/shots/n64/02-from-public-sources.webp) | **From public sources.** Whether the identity is confirmed, and on what. How they invest and what they care about, the capacity estimate, signals, cautions. Every fact links to its page, with how sure it is, and nobody on the team has verified any of it yet. The paths near us carry their tiers, and a C or D path says a person needs to check it. The footer says what was searched and what wasn't found: *not found* is not *not there*. |
+| ![The research set and the import](docs/changelog/shots/n64/03-the-research-set-and-the-import.webp) | **Developer → Enrichment.** The research set: everyone at Selected, Connecting, Discussing or Committed. It's exported to files, and the research reads only the identity file, never where an LP stands with us. The import maps the findings in, and can run again as often as needed: a claim a person has verified is kept. All the suggestions sit together, this year's close first, with who each next step falls to. |
+
+**The workflows** are in docs/19:
+
+- **W0:** the research set.
+- **W1:** profile an LP.
+- **W2:** profile us: the team and Protocol Labs' documented backers.
+- **W3:** find connections.
+- **W4 and W5:** fit, angle, strategy and the next step.
+- **W6 and W7:** our presence and our materials.
+- **W8:** step back.
+
+Each has an envelope: what it reads, what it may do, what it writes, and how it's judged. The W1
+protocol is already at version 1.5. Each research batch reported what worked and what failed, and
+that became the next amendment. Search summaries are leads, not facts. A tie to Protocol Labs is
+read on its page and checked to be about the right firm. A firm's facts are marked as the firm's,
+not the person's.
+
+**On the real account so far:** 46 LPs researched, the first six by hand and forty by four agents
+working in parallel. 44 identities resolved; the other two carry no facts. About 260 facts, each
+with its page. Of the forty, 15 show a neuro or health signal, 14 a tie to Protocol Labs, and 26 a
+crypto tie. W3 has found 187 connection candidates for 101 LPs. More research and the first strategy
+batches are running now.
+
+**Read only, and said so.** No sign-ins, no paid services, no contact-data brokers, and nothing
+posted. A search carries a name, a firm, a title and topic words, never a status, an amount or a
+note. The exception is written into CLAUDE.md in your words, and local sub-agents read batch files
+without the prompt carrying real data. 99 of 99 properties hold.

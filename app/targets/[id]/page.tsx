@@ -31,6 +31,8 @@ import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { laterFacts, shownRead } from '@/lib/reads';
 import { onFile } from '@/lib/reconcile';
 import { countContact } from '@/components/entity/ContactHistory';
+import { PublicProfile } from '@/components/entity/PublicProfile';
+import { SuggestedStrategy } from '@/components/strategy/SuggestedStrategy';
 import { findOpenTicket } from '@/modules/governance';
 
 export const dynamic = 'force-dynamic';
@@ -111,6 +113,8 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     ]),
   );
   const questions = notes.filter((n) => n.kind === 'open_question');
+  // Public-source facts (N64) are in their own card, with their pages; these are the rest.
+  const ownClaims = claims.filter((c) => !c.field.startsWith('public.'));
 
   return (
     <Page
@@ -310,6 +314,9 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
             proposalId={proposal?.id ?? null}
           />
 
+          <SuggestedStrategy pursuitId={pursuit.pursuitId} />
+          <PublicProfile entityId={pursuit.entityId} />
+
           <div className="card">
             <div className="chead">
               <h2>Routes in</h2>
@@ -413,10 +420,10 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
               <h2>What we know</h2>
             </div>
             <div className="cbody">
-              {claims.length === 0 ? (
-                <p className="muted">Nothing on file carries a full provenance tuple.</p>
+              {ownClaims.length === 0 ? (
+                <p className="muted">Nothing on file carries a full provenance tuple{claims.length > ownClaims.length ? ', beyond what public sources say above' : ''}.</p>
               ) : (
-                claims.map((c) => (
+                ownClaims.map((c) => (
                   <div className="fact" key={c.claimId}>
                     <span>{claimLabel(c.field)}</span>
                     <span>

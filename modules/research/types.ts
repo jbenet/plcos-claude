@@ -50,4 +50,12 @@ export const CLAIM_LABEL: Record<string, string> = {
   typical_check_usd: 'Typical check, as the list records it',
   aum_usd: 'AUM — their claim, not verified',
 };
-export const claimLabel = (field: string): string => CLAIM_LABEL[field] ?? field;
+/** A fact read from a public page by the enrichment research (N64, docs/19). */
+const PUBLIC_LABEL: Record<string, string> = {
+  role: 'Role', prior_role: 'Before', education: 'Studied', board: 'Board', investment: 'Invested in',
+  fund_lp: 'Backs funds', fund_gp: 'Runs a fund', exit: 'Exit', philanthropy: 'Philanthropy',
+  capacity: 'Capacity', aum: 'Assets under management', check_size: 'Check size', interest: 'Interest',
+  statement: 'Said', news: 'In the news', location: 'Location', investor_type: 'Investor type', affiliation: 'Affiliation',
+};
+export const claimLabel = (field: string): string =>
+  CLAIM_LABEL[field] ?? (field.startsWith('public.') ? `${PUBLIC_LABEL[field.slice(7)] ?? field.slice(7)} (public source)` : field);

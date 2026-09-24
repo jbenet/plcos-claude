@@ -36,6 +36,14 @@ only. `DATA_PROFILE` picks one, in `config/deployment.ts`.
   the changelog, a screenshot, the published build log, `issues/`, a web search or a
   sub-agent prompt. Changelog entries about real-data work use counts and invented examples.
   Juan is fine with Claude reading real records while working; that is the only exception.
+- **Enrichment research (N64, docs/19), decided 24 Sep 2026.** Juan: "Feel free to use the
+  internet to find useful publicly available information… (dont sign up for paid services or
+  write any info into the world, only read!)". So a search may carry an LP's name with their
+  organization, title, location and topic words, to read public pages. It never carries a status,
+  an amount, a note, a list name, or the fact that they are in this pipeline. A local sub-agent may
+  read a research batch under `data/real/enrich/` and write its findings back there; its prompt
+  still carries no real data, and it never runs remotely. No sign-ins, no paid services, no
+  contact-data brokers, nothing posted. Findings land in files first and are mapped in by an import.
 - **Affinity is read-only.** The key can write and cannot be scoped, so read-only is
   enforced in the client: GET only, allowlisted paths, a property test that a write throws.
   Writing back is a later decision, and would go through approval tickets.
