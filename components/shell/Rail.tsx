@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { headers } from 'next/headers';
 import { config } from '@/config/deployment';
 import { auth } from '@/lib/auth';

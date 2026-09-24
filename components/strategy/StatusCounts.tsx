@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { RUNG_LABEL, STATUSES, STATUS_BACKED_BY, rungIndex, type Pursuit, type PursuitStatus } from '@/modules/strategy';
 
 /**

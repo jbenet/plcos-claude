@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { summarize, touchpointsByPair } from '@/modules/meetings';
 import { auditSince } from '@/modules/platform';
 import { STATUSES, type Pursuit, type PursuitStatus } from '@/modules/strategy';

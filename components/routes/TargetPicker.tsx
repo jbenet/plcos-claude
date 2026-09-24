@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Glyph } from '@/components/ui/Glyph';
 
 export interface TargetRow {
   entityId: string;
@@ -17,6 +18,11 @@ export interface TargetRow {
   /** The organisations a person acts for, or the people who act for an organisation. */
   related: string[];
   blocker: string | null;
+  /**
+   * Already in touch (issue 0027, real): the latest meeting held with them or message from them, in
+   * words — "Met 12 Mar 2026". Someone the team deals with directly needs no introduction.
+   */
+  touch: string | null;
 }
 
 type Sort = 'score' | 'name';
@@ -33,8 +39,12 @@ type Sort = 'score' | 'name';
  * sending all of it made this page 1.7 MB. The page carries only the rows it draws — the top
  * of the search, by the chosen order — and the search, the order and the minimum score live in
  * the address, so a link opens the same view.
+ *
+ * People the team is already in touch with are left out unless asked for (issue 0027, real): they
+ * need no introduction. The count says how many are left out, and when they are shown each carries
+ * a check and the words for it.
  */
-export function TargetPicker({ targets, current, matched, total, q, sort, min }: {
+export function TargetPicker({ targets, current, matched, total, q, sort, min, touchShown, hiddenInTouch, firstShown }: {
   targets: TargetRow[];
   current: string | undefined;
   /** How many match the search and the minimum; `targets` is the first of them. */
@@ -43,6 +53,12 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min }:
   q: string;
   sort: Sort;
   min: number;
+  /** In-touch people are listed too. */
+  touchShown: boolean;
+  /** How many match but are left out for being in touch. */
+  hiddenInTouch: number;
+  /** How many of the matches are drawn: `targets` may also carry the one selected, pinned on top. */
+  firstShown: number;
 }) {
   const router = useRouter();
   const path = usePathname();
@@ -95,9 +111,19 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min }:
               {m === 0 ? 'Any' : `${m}+`}
             </button>
           ))}
+          <span className="sp" />
+          <button
+            className={touchShown ? 'on' : ''}
+            onClick={() => go({ touch: touchShown ? null : '1' })}
+            aria-pressed={touchShown}
+            title="People the team has met, or heard from, already: they need no introduction, so they are left out unless this is on."
+          >
+            ✓ In touch
+          </button>
         </div>
         <p className="qcount">
-          {pending ? 'Searching…' : <>{matched === total ? `${total}` : `${matched} of ${total}`}{matched > targets.length ? ` · the first ${targets.length} shown` : ''}</>}
+          {pending ? 'Searching…' : <>{matched === total ? `${total}` : `${matched} of ${total}`}{matched > firstShown ? ` · the first ${firstShown} shown` : ''}</>}
+          {hiddenInTouch > 0 && <> · {hiddenInTouch} in touch, left out</>}
           {targets.some((t) => t.borrowedFrom) && <> · * from their org</>}
           {targets.some((t) => t.provisional) && <> · ~ provisional, from the proposed strategy</>}
         </p>
@@ -113,7 +139,7 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min }:
             <span className="tkind" aria-hidden title={t.isPerson ? 'Person' : 'Organisation'}>
               {t.isPerson ? '◔' : '▣'}
             </span>
-            <b>{t.name}</b>
+            <b>{t.name}{t.touch && <Glyph name="check" title={`In touch: ${t.touch}`} tone="good" />}</b>
             <span
               className={`tscore${t.score === null ? ' none' : ''}${t.borrowedFrom ? ' borrowed' : ''}${t.provisional ? ' prov' : ''}`}
               title={[
@@ -125,12 +151,13 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min }:
             </span>
           </span>
           {t.related.length > 0 && <p className="trel">{t.related.join(' · ')}</p>}
+          {t.touch && <p className="ttouch">In touch · {t.touch}</p>}
           {t.blocker && <p className="tblock">{t.blocker}</p>}
         </Link>
       ))}
 
-      {matched > targets.length && (
-        <p className="qempty">{matched - targets.length} more — search, or raise the minimum score, to narrow the list.</p>
+      {matched > firstShown && (
+        <p className="qempty">{matched - firstShown} more — search, or raise the minimum score, to narrow the list.</p>
       )}
       {targets.length === 0 && (
         <p className="qempty">

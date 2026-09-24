@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
@@ -6,13 +6,15 @@ import { RouteGraph } from '@/components/routes/RouteGraph';
 import { ProposeButton } from '@/components/routes/ProposeButton';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { Coverage } from '@/components/ui/Coverage';
+import { Glyph } from '@/components/ui/Glyph';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import { listAffiliations, listEntities } from '@/modules/identity';
 import { listAsks } from '@/modules/coordination';
 import { listAssessments, BLOCKER_SHORT } from '@/modules/fit';
 import { TargetPicker, type TargetRow } from '@/components/routes/TargetPicker';
-import { listSourceDocs } from '@/modules/research';
+import { listSourceDocs, notesFor } from '@/modules/research';
+import { directContact, type DirectContact } from '@/modules/meetings';
 import { listVehicles } from '@/modules/platform';
 import { planRoutes, tierCounts, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
 import { listPursuits } from '@/modules/strategy';
@@ -26,13 +28,27 @@ const VERDICT_FLAG: Record<string, string> = {
 
 const TIERS: EvidenceTier[] = ['A', 'B', 'C', 'D'];
 
+/** "Met 12 Mar 2026", "Heard from Ana Ruiz, 3 Jun 2026": the latest direct contact, in words. */
+const touchWords = (c: DirectContact) => c.via
+  ? `${c.how === 'met' ? 'Met' : 'Heard from'} ${c.via}, ${shortDate(c.on)}`
+  : `${c.how === 'met' ? 'Met' : 'Heard from them'} ${shortDate(c.on)}`;
+
+/** A path the research found near a target (docs/19, W3): a candidate for a person to check, never a route. */
+interface CandidatePath {
+  other: { type: 'team' | 'ours' | 'backer' | 'lp'; name: string; handle?: string };
+  kind: string; tier: 'A' | 'B' | 'C' | 'D'; basis: string;
+}
+const OTHER_LABEL: Record<CandidatePath['other']['type'], string> = {
+  team: 'on the team', ours: 'one of ours', backer: 'a backer of ours', lp: 'another LP',
+};
+
 export default async function Routes({
   searchParams,
 }: {
-  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string }>;
+  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string }>;
 }) {
   const selection = await vehicleSelection();
-  const { target, r, q = '', sort: sortParam, min: minParam } = await searchParams;
+  const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam } = await searchParams;
   const user = await (await auth()).currentUser();
   const [entities, docs, tiers, vehicles, affiliations, fit, asks, team, pursuits] = await Promise.all([
     listEntities(), listSourceDocs(), tierCounts(), listVehicles(),
@@ -58,8 +74,12 @@ export default async function Routes({
    * "Kaplan" turns up the trust and the person who signs for it.
    */
   const best = new Map<string, { score: number; blocker: string | null; provisional?: boolean }>();
+  // Whom the team already deals with directly (issue 0027, real): a meeting held, or word from them.
+  const [provisional, contact] = await Promise.all([
+    provisionalScores([...inPipeline]), directContact(targets.map((t) => t.entityId)),
+  ]);
   // Where no fit assessment exists, a provisional score from the proposed strategy (issue 0022).
-  for (const [id, score] of await provisionalScores([...inPipeline])) best.set(id, { score, blocker: null, provisional: true });
+  for (const [id, score] of provisional) best.set(id, { score, blocker: null, provisional: true });
   for (const a of fit) {
     const hit = best.get(a.entityId);
     const score = Math.round(a.weightedFit * 100);
@@ -93,6 +113,7 @@ export default async function Routes({
       borrowedFrom: borrowedFrom?.org ?? null,
       blocker: reading?.blocker ?? null,
       related: [...new Set(related)].slice(0, 3),
+      touch: contact.has(t.entityId) ? touchWords(contact.get(t.entityId)!) : null,
     };
   });
   // The server searches the targets (issue 0023): the page carries only the rows it draws.
@@ -100,14 +121,46 @@ export default async function Routes({
   const sort: 'score' | 'name' = sortParam === 'name' ? 'name' : 'score';
   const minScore = [60, 75].includes(Number(minParam)) ? Number(minParam) : 0;
   const needle = q.trim().toLowerCase();
-  const matched = rows
+  const touchShown = touchParam === '1';
+  const matching = rows
     .filter((t) => (minScore ? (t.score ?? -1) >= minScore : true))
-    .filter((t) => !needle || t.name.toLowerCase().includes(needle) || t.related.some((x) => x.toLowerCase().includes(needle)))
+    .filter((t) => !needle || t.name.toLowerCase().includes(needle) || t.related.some((x) => x.toLowerCase().includes(needle)));
+  // In touch already: left out unless asked for, and counted, so none is dropped without a word.
+  const hiddenInTouch = touchShown ? 0 : matching.filter((t) => t.touch).length;
+  const matched = (touchShown ? matching : matching.filter((t) => !t.touch))
     .sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name) : (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name)));
   const shown = matched.slice(0, SHOWN);
   const currentRow = rows.find((t) => t.entityId === targetId);
   if (currentRow && !shown.includes(currentRow)) shown.unshift(currentRow);
   const selected = Math.min(Math.max(0, Number(r ?? 0)), Math.max(0, (search?.routes.length ?? 1) - 1));
+
+  /**
+   * What there is besides edges (issues 0027–0028, real). The target's name comes from the records
+   * even when no search ran. A search starts from the user's own person record, and a user with none
+   * gets no search — which the page says, instead of "Routes to —". And whatever the edges say, what
+   * the research found near them (candidates, rule 6) and whom at their firm the team already deals
+   * with, since those are where a warm introduction would come from.
+   */
+  const targetEntity = targetId ? entities.find((e) => e.entityId === targetId) : undefined;
+  const targetName = search?.targetName ?? targetEntity?.displayName ?? null;
+  const edgesOnFile = tiers.reduce((n, t) => n + t.n, 0);
+  const targetTouch = targetId ? contact.get(targetId) ?? null : null;
+  const isPerson = targetEntity?.entityType === 'person';
+  const theirFirms = isPerson ? affiliations.filter((a) => a.current && a.personId === targetId) : [];
+  const nearbyPeople = new Map<string, string>(
+    (isPerson
+      ? affiliations.filter((a) => a.current && a.personId !== targetId && theirFirms.some((f) => f.orgId === a.orgId))
+      : affiliations.filter((a) => a.current && a.orgId === targetId)
+    ).map((a) => [a.personId, a.orgName]),
+  );
+  const [pathsNote, nearbyContact] = await Promise.all([
+    targetId ? notesFor(targetId, 'connection_candidates').then((n) => n[0] ?? null) : Promise.resolve(null),
+    directContact([...nearbyPeople.keys()]),
+  ]);
+  const candidates = ((pathsNote?.data ?? {}) as { paths?: CandidatePath[] }).paths ?? [];
+  const inTouchNearby = [...nearbyContact.entries()]
+    .map(([id, c]) => ({ id, c, name: affiliations.find((a) => a.personId === id)?.personName ?? 'Someone', org: nearbyPeople.get(id)! }))
+    .sort((a, b) => b.c.on.getTime() - a.c.on.getTime());
 
   /**
    * Who should carry the ask.
@@ -147,7 +200,7 @@ export default async function Routes({
   return (
     <Page
       crumbs={moduleCrumbs('routes', selection.current?.name ?? null)}
-      queue={<TargetPicker targets={shown} current={targetId} matched={matched.length} total={rows.length} q={q} sort={sort} min={minScore} />}
+      queue={<TargetPicker targets={shown} current={targetId} matched={matched.length} total={rows.length} q={q} sort={sort} min={minScore} touchShown={touchShown} hiddenInTouch={hiddenInTouch} firstShown={Math.min(matched.length, SHOWN)} />}
       inspector={
         <>
           <div className="lbl">Evidence tiers</div>
@@ -195,7 +248,7 @@ export default async function Routes({
       }
     >
       <div className="lbl">Module 05 · Warm intro routes</div>
-      <h1>Routes to {search?.targetName ?? '—'}</h1>
+      <h1>Routes to {targetName ?? '—'}</h1>
       <p className="sublede">
         Two questions, answered in order. <b>May this route be used?</b> — a route is only as good
         as its worst hop, an unconfirmed tier C or D hop cannot carry one at all, and a restriction
@@ -203,7 +256,54 @@ export default async function Routes({
         may be used: <b>how much weight does it actually carry?</b>
       </p>
 
-      {!search || search.routes.length === 0 ? (
+      {targetTouch && (
+        <p className="intouch">
+          <Glyph name="check" title="In touch" tone="good" />
+          <span>
+            <b>In touch already.</b> {touchWords(targetTouch)}, by the team&rsquo;s own record. Someone the
+            team deals with directly needs no introduction; a route is for when a second voice would help.
+          </span>
+        </p>
+      )}
+
+      {!search ? (
+        <div className="card">
+          <div className="chead">
+            <h2>No route search ran</h2>
+            <span className="lbl">this is a statement about our records</span>
+          </div>
+          <div className="cbody">
+            <div className="empty">
+              <span className="stat unavailable">
+                <i />
+                Not searched
+              </span>
+              <h3>A route starts from your own person record, and {user.name} has none here yet.</h3>
+              <p>
+                Routes are walked from a person in the relationship records to {targetName ?? 'the target'},
+                and this user is not linked to one, so there was nowhere to start.
+                {edgesOnFile === 0 && (
+                  <> No relationship edges are on file yet either. What the research found near them is
+                  below, as candidates: they are held as notes, not edges, until someone decides they
+                  may carry a route (rule 6).</>
+                )}
+              </p>
+              <dl>
+                <dt>What is known</dt>
+                <dd>
+                  {edgesOnFile} relationship {edgesOnFile === 1 ? 'edge' : 'edges'} on file · {candidates.length} candidate{' '}
+                  {candidates.length === 1 ? 'path' : 'paths'} from the research · {inTouchNearby.length}{' '}
+                  {inTouchNearby.length === 1 ? 'person' : 'people'} {isPerson ? 'at their firm' : 'there'} the team deals with.
+                </dd>
+                <dt>Who can act</dt>
+                <dd>Whoever keeps the records, by linking your user to your person record; anyone, by confirming a candidate with its evidence.</dd>
+                <dt>Safe next step</dt>
+                <dd>Read the candidates below. Where the team is in touch already, approach directly and say so.</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      ) : search.routes.length === 0 ? (
         <div className="card">
           <div className="chead">
             <h2>No supported route</h2>
@@ -216,18 +316,18 @@ export default async function Routes({
                 Nothing supported
               </span>
               <h3>
-                No path from {search?.fromName ?? user.name} to {search?.targetName ?? 'this target'} exists in
+                No path from {search.fromName} to {search.targetName} exists in
                 the material available.
               </h3>
               <p>
                 That is not the same as &ldquo;no route exists&rdquo;. It means the edges on file do not
-                connect you within {search?.coverage.maxHops ?? 3} hops. Someone else on the team may
+                connect you within {search.coverage.maxHops} hops. Someone else on the team may
                 have a path — switch user in the rail and this page recomputes.
               </p>
               <dl>
                 <dt>What is known</dt>
                 <dd>
-                  {search?.coverage.edges ?? 0} edges inspected, up to {search?.coverage.maxHops ?? 3} hops.
+                  {search.coverage.edges} edges inspected, up to {search.coverage.maxHops} hops.
                 </dd>
                 <dt>Who can act</dt>
                 <dd>Anyone who knows of a relationship we have not recorded.</dd>
@@ -236,14 +336,12 @@ export default async function Routes({
               </dl>
             </div>
           </div>
-          {search && (
-            <Coverage
-              corpus={`${search.coverage.edges} relationship edges, up to ${search.coverage.maxHops} hops`}
-              from={search.coverage.from ? shortDate(search.coverage.from) : null}
-              to={search.coverage.to ? shortDate(search.coverage.to) : null}
-              notInspected={search.coverage.notInspected}
-            />
-          )}
+          <Coverage
+            corpus={`${search.coverage.edges} relationship edges, up to ${search.coverage.maxHops} hops`}
+            from={search.coverage.from ? shortDate(search.coverage.from) : null}
+            to={search.coverage.to ? shortDate(search.coverage.to) : null}
+            notInspected={search.coverage.notInspected}
+          />
         </div>
       ) : (
         <>
@@ -396,6 +494,55 @@ export default async function Routes({
             </p>
           </div>
         </>
+      )}
+
+      {candidates.length > 0 && (
+        <div className="card nearcard">
+          <div className="chead">
+            <h2>Near them, from the research</h2>
+            <span className="lbl">{candidates.length} candidate {candidates.length === 1 ? 'path' : 'paths'} · not routes</span>
+          </div>
+          <div className="cbody">
+            {candidates.slice(0, 12).map((x, i) => (
+              <div className="pp-path" key={i}>
+                <span className={`tier t${x.tier}`} title={TIER_MEANING[x.tier].label}>{x.tier}</span>
+                <span>
+                  <b>{x.other.name}{x.other.type === 'team' && x.other.handle === user.handle ? ' (you)' : ''}</b>
+                  <span className="muted"> — {OTHER_LABEL[x.other.type] ?? x.other.type}. {x.basis}</span>
+                  {(x.tier === 'C' || x.tier === 'D') && <span className="needs"> · needs a person to check</span>}
+                </span>
+              </div>
+            ))}
+            {candidates.length > 12 && <p className="muted" style={{ fontSize: 12 }}>{candidates.length - 12} more on their page.</p>}
+          </div>
+          <p className="cover">
+            <b>What this is:</b> the research&rsquo;s path finder{pathsNote ? `, run ${shortDate(pathsNote.createdAt)}` : ''}, over our
+            own records and public sources (docs/19, W3). None of it is a route yet: the paths are held as notes, not
+            edges. An A or B path could carry a route once recorded as an edge, which is a decision still to make; a C or
+            D path needs a person to check it first (rule 6). Not found here means not found by the research.
+          </p>
+        </div>
+      )}
+
+      {inTouchNearby.length > 0 && (
+        <div className="card nearcard">
+          <div className="chead">
+            <h2>{isPerson ? 'At their firm, in touch with the team' : 'There, in touch with the team'}</h2>
+            <span className="lbl">{inTouchNearby.length} {inTouchNearby.length === 1 ? 'person' : 'people'} · our own records</span>
+          </div>
+          <div className="cbody">
+            {inTouchNearby.slice(0, 8).map((x) => (
+              <div className="pp-path" key={x.id}>
+                <Glyph name="check" title="In touch" tone="good" />
+                <span><b>{x.name}</b> <span className="muted">— {x.org}. {touchWords(x.c)}.</span></span>
+              </div>
+            ))}
+            {inTouchNearby.length > 8 && <p className="muted" style={{ fontSize: 12 }}>{inTouchNearby.length - 8} more.</p>}
+          </div>
+          <p className="cover">
+            A meeting held or word from them, by the team&rsquo;s own record. {isPerson ? 'Working at the same firm is a shared affiliation, not proof that they speak (tier C): someone who knows both should say whether an introduction through them makes sense.' : 'Whoever the team deals with there is the natural way in.'}
+          </p>
+        </div>
       )}
     </Page>
   );

@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
+import { canonicalPath } from '@/lib/paths';
+import { vehicleSelection } from '@/lib/session';
 import {
   LadderRefused, requestAdvance, setStatus, StatusRefused,
   type LadderRung, type PassedBy, type PursuitStatus,
@@ -211,5 +213,6 @@ export async function moveMetToDiscussing(formData: FormData): Promise<void> {
     });
   }
   revalidatePath('/targets');
-  redirect('/targets?status=discussing');
+  // To the pipeline's own address, not the old one the proxy redirects (issues 0027–0028).
+  redirect(canonicalPath('/targets?status=discussing', (await vehicleSelection()).current?.slug ?? 'all'));
 }

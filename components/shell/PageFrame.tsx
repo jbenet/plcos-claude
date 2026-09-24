@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { useEffect, useState, type ReactNode } from 'react';
 
 const STORE_KEY = 'capitalos.rightpane';

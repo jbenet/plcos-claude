@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
@@ -143,8 +143,8 @@ export default async function Overview() {
             )}
           </p>
           <span className="exrefs">
-            <a href="/materials">Send gate</a>
-            <a href="/compliance">Compliance registry</a>
+            <Link href="/materials">Send gate</Link>
+            <Link href="/compliance">Compliance registry</Link>
           </span>
         </div>
       )}

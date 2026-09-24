@@ -5,7 +5,7 @@ import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
 import { ago } from '@/lib/time';
 import { RESEARCH_STATUSES, enrichDir } from '@/lib/enrich/candidates';
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { listPursuits, openSuggestions, STATUS_LABEL } from '@/modules/strategy';
 import type { Strategy } from '@/lib/enrich/strategy';
 import { pagesOnly as isPagesOnly, partialSearch, type Finding } from '@/lib/enrich/schema';

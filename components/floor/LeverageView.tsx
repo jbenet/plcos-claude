@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import type { Leverage, Prerequisite } from '@/lib/lenses-client';
 import { useFloor } from './FloorContext';
 import { compactUsd, shortName } from './shared';

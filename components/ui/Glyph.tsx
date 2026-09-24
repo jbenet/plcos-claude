@@ -7,7 +7,7 @@
 export type GlyphName =
   | 'calendar' | 'calendar-next' | 'phone' | 'mail' | 'mail-in' | 'mail-out' | 'chat' | 'link'
   | 'ticket' | 'search' | 'note' | 'mic' | 'eye' | 'question' | 'folder' | 'coin' | 'pen' | 'stop'
-  | 'chart' | 'person' | 'list' | 'update' | 'status' | 'rung';
+  | 'chart' | 'person' | 'list' | 'update' | 'status' | 'rung' | 'check';
 
 const PATHS: Record<GlyphName, React.ReactNode> = {
   calendar: <><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" /></>,
@@ -34,6 +34,7 @@ const PATHS: Record<GlyphName, React.ReactNode> = {
   update: <><path d="M2 13.5c1.3-1 2.3-1 3.3 0s2.2 1 3.4 0" /><path d="M8 9.8l.5-2.1 4.4-4.4 1.6 1.6-4.4 4.4z" /></>,
   status: <><path d="M3.5 14V2.5" /><path d="M3.5 3h8.5l-2 2.8 2 2.7H3.5" /></>,
   rung: <path d="M5 2v12M11 2v12M5 5h6M5 8h6M5 11h6" />,
+  check: <path d="M3.5 8.5l3 3 6-6.5" />,
   list: <><path d="M5.5 4.5h8M5.5 8h8M5.5 11.5h8" /><circle cx="3" cy="4.5" r=".6" fill="currentColor" /><circle cx="3" cy="8" r=".6" fill="currentColor" /><circle cx="3" cy="11.5" r=".6" fill="currentColor" /></>,
 };
 

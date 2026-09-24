@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { useMemo, useState } from 'react';
 import type { Issue, IssueKind, IssuePriority, IssueStatus } from '@/lib/issues';
 import { ago } from '@/lib/time';
@@ -103,7 +103,7 @@ export function IssueList({ issues }: { issues: Issue[] }) {
                 <td><span className="flag f-mute">{i.status}</span></td>
                 <td className="mono">
                   {i.fixedIn
-                    ? <a href={`/dev/changelog#${i.fixedIn.toLowerCase()}`} title="Open the changelog entry">{i.fixedIn}</a>
+                    ? <Link href={`/dev/changelog#${i.fixedIn.toLowerCase()}`} title="Open the changelog entry">{i.fixedIn}</Link>
                     : <span className="muted">—</span>}
                 </td>
                 <td className="muted nowrap">{i.created ? ago(new Date(i.created)) : '—'}</td>

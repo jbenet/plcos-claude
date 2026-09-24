@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { requestLadderAdvance } from '@/app/targets/actions';
 import { RUNG_LABEL, RUNG_REQUIRES, type LadderRung } from '@/modules/strategy/client';
 

@@ -1982,6 +1982,76 @@ async function main() {
       `served ${served}; a fresh browser sees ${fresh}; a stored clay sees ${clay}; a stored green sees ${green}`);
   }
 
+  {
+    // Issues 0027–0028 (real): a link goes straight to where the proxy would send it, and the
+    // address it lands on is never redirected again.
+    const { canonicalPath, vehicleOfPath, PAGE_MODULES } = await import('../lib/paths');
+    const cases: Array<[string, string, string]> = [
+      ['/targets/abc?x=1#h', 'neurotech', '/neurotech/pipeline/abc?x=1#h'],
+      ['/routes?target=t1', 'all', '/all/routes?target=t1'],
+      ['/vehicles', 'rails', '/rails/status'],
+      ['/dev/status', 'all', '/developer/status'],
+      ['/issues/0001', 'all', '/developer/issues/0001'],
+      ['/all/routes?target=t1', 'neurotech', '/all/routes?target=t1'],
+      ['/today', 'all', '/today'],
+      ['/constructor', 'all', '/constructor'],
+      ['https://example.com/targets', 'all', 'https://example.com/targets'],
+    ];
+    const wrong = cases.filter(([href, v, want]) => canonicalPath(href, v) !== want);
+    const pages = Object.keys(PAGE_MODULES).flatMap((page) => [`/${page}`, `/${page}/x?y=1`]);
+    const unstable = pages.filter((h) => { const once = canonicalPath(h, 'all'); return canonicalPath(once, 'all') !== once || once === h; });
+    const vehicles: Array<[string, string | null]> = [
+      ['/neurotech/pipeline/abc', 'neurotech'], ['/all/calendar', 'all'], ['/today', null],
+      ['/everything/visualizations', null], ['/developer/issues', null], ['/x/constructor', null],
+    ];
+    const misread = vehicles.filter(([p, v]) => vehicleOfPath(p) !== v);
+    check('An old address is put in its place before a click, and the place is never redirected again',
+      wrong.length === 0 && unstable.length === 0 && misread.length === 0,
+      `${cases.length - wrong.length} of ${cases.length} addresses placed right; ${pages.length - unstable.length} of ${pages.length} old addresses land on a settled one; `
+        + `${vehicles.length - misread.length} of ${vehicles.length} vehicles read from the address${wrong.length ? `; wrong: ${wrong.map((w) => w[0]).join(', ')}` : ''}${misread.length ? `; misread: ${misread.map((m) => m[0]).join(', ')}` : ''}`);
+  }
+
+  {
+    // Issue 0029 (real): the rail is as tall as the window, measured, not as 100dvh says.
+    const { VIEWPORT_BOOT } = await import('../lib/viewport');
+    const props = new Map<string, string>();
+    const listeners: string[] = [];
+    const window = { innerHeight: 892, visualViewport: { scale: 1 }, addEventListener: (e: string) => listeners.push(e) };
+    const document = { documentElement: { style: { setProperty: (k: string, v: string) => props.set(k, v) } } };
+    new Function('window', 'document', VIEWPORT_BOOT)(window, document);
+    const zoomed = new Map<string, string>();
+    new Function('window', 'document', VIEWPORT_BOOT)(
+      { innerHeight: 400, visualViewport: { scale: 2 }, addEventListener: () => {} },
+      { documentElement: { style: { setProperty: (k: string, v: string) => zoomed.set(k, v) } } },
+    );
+    check('The page height comes from the window before first paint, follows it when it changes, and ignores a pinch',
+      props.get('--app-h') === '892px' && listeners.includes('resize') && listeners.includes('orientationchange') && !zoomed.has('--app-h'),
+      `--app-h ${props.get('--app-h') ?? 'unset'}; listens for ${listeners.join(', ')}; zoomed in: ${zoomed.get('--app-h') ?? 'left alone'}`);
+  }
+
+  {
+    // Issue 0027 (real): whom the team is in touch with. A meeting held, or word from them — never
+    // only our own message; and a colleague's meeting is not the person's (N55), though it counts for
+    // their firm, which says through whom. On a fresh database, last, so nothing after it sees the rows.
+    const d = await freshDb();
+    const mt = await import('../modules/meetings');
+    const juan = (await d.one<{ id: string }>(`select id from platform.app_user where handle = 'juan'`))!.id;
+    const make = async (type: 'person' | 'org', name: string) =>
+      (await d.one<{ entity_id: string }>(`insert into identity.entity (entity_type, display_name) values ($1, $2) returning entity_id`, [type, name]))!.entity_id;
+    const [firm, wrote, met, heard] = [await make('org', 'Test Firm'), await make('person', 'Only Written To'), await make('person', 'Met Once'), await make('person', 'Wrote Back')];
+    for (const person of [wrote, met]) {
+      await d.query(`insert into identity.affiliation (person_entity, org_entity, kind, role, as_of, is_primary) values ($1, $2, 'staff', 'Partner', current_date, true)`, [person, firm]);
+    }
+    const day = new Date(Date.now() - 20 * 86_400_000);
+    await mt.logTouchpoint(juan, { entityId: wrote, vehicleId: null, channel: 'email', direction: 'ours', on: day, summary: 'Sent a note' });
+    await mt.logTouchpoint(juan, { entityId: met, vehicleId: null, channel: 'meeting', direction: 'both', on: day, summary: 'Coffee' });
+    await mt.logTouchpoint(juan, { entityId: heard, vehicleId: null, channel: 'email', direction: 'theirs', on: day, summary: 'They wrote' });
+    const c = await mt.directContact([firm, wrote, met, heard]);
+    check('In touch means a meeting held or word from them; our own message is not, and a colleague\u2019s meeting counts for their firm, not for them',
+      !c.has(wrote) && c.get(met)?.how === 'met' && c.get(heard)?.how === 'heard' && c.get(firm)?.via === 'Met Once' && c.get(met)?.via === null,
+      `only written to: ${c.has(wrote) ? 'in touch' : 'not in touch'}; met: ${c.get(met)?.how ?? 'none'}; wrote back: ${c.get(heard)?.how ?? 'none'}; their firm: ${c.get(firm) ? `through ${c.get(firm)!.via}` : 'none'}`);
+  }
+
   // ---------------------------------------------------------------- report
 
   const failed = results.filter((r) => !r.ok);

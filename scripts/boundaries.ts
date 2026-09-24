@@ -13,6 +13,9 @@ import { SHOT } from './shot-image';
  *   4. Changelog screenshots are stored small (issue 0021): WebP only, none over the size
  *      in scripts/shot-image.ts. Git keeps every one forever, so a big one is paid for on
  *      every clone.
+ *   5. In-app links go through components/ui/AppLink (issues 0027–0028): next/link is
+ *      imported only there, so an old address is put in its place before a click instead of
+ *      being redirected in the middle of a client navigation, which Safari broke on.
  */
 const ROOTS = ['app', 'components', 'lib', 'modules', 'config', 'scripts'];
 const DRIVERS = ['@electric-sql/pglite', "from 'pg'", 'from "pg"'];
@@ -54,6 +57,10 @@ async function main() {
       for (const needle of AFFINITY) {
         if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/affinity/ talks to Affinity`);
       }
+    }
+
+    if (rel !== join('components', 'ui', 'AppLink.tsx') && /from ['"]next\/link['"]/.test(text)) {
+      violations.push(`${rel}: imports next/link — use @/components/ui/AppLink, which puts an old address in its place`);
     }
 
     // `client.ts` is a deliberate second entrance: types and constants, no data access.

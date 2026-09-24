@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { shortDate } from '@/lib/time';
 import { usdM } from '@/lib/money';
 import { PASSED_BY_LABEL, RUNG_LABEL, STATUSES, type LadderRung, type Pursuit } from '@/modules/strategy';

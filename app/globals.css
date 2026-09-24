@@ -78,17 +78,20 @@ button{font-family:inherit}
 /* ---------------- shell ---------------- */
 /* The rail is sticky at 100vh, so the column behind it is painted here — otherwise a
    long page shows ground colour beside the content once you scroll past the first screen. */
-.app{min-height:100vh;min-height:100dvh;display:flex;background:var(--ground);
+.app{min-height:100vh;min-height:100dvh;min-height:var(--app-h,100dvh);display:flex;background:var(--ground);
      background-image:linear-gradient(to right,var(--rail) 0 244px,var(--ground) 244px)}
-.rail{width:244px;flex:none;background:var(--rail);color:var(--rail-ink);display:flex;flex-direction:column;padding:0 0 12px;position:sticky;top:0;height:100vh;height:100dvh}
+.rail{width:244px;flex:none;background:var(--rail);color:var(--rail-ink);display:flex;flex-direction:column;padding:0 0 12px;position:sticky;top:0;height:100vh;height:100dvh;height:var(--app-h,100dvh)}
 /* 100dvh (issue 0019, real): on Safari on an iPad, 100vh reaches under the browser's toolbar, and the
-   rail's footer — the feedback button — sat off the bottom of the screen, over the last nav item. */
+   rail's footer — the feedback button — sat off the bottom of the screen, over the last nav item.
+   100dvh did not cure it in Safari (issue 0029), so the height is the window's own, measured by
+   VIEWPORT_BOOT (lib/viewport.ts); 100dvh is the fallback. The nav shrinks and scrolls; the footer
+   never does. */
 /* 46px exactly, so this rule lines up with the one under the breadcrumbs. */
 .brand{height:46px;flex:none;padding:0 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--rail-line)}
 .mark{width:26px;height:26px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:15px;font-weight:600;color:var(--accent-ink);flex:none}
 .brand b{font-family:var(--display);font-size:15px;font-weight:600;letter-spacing:.01em}
 
-.nav{flex:1;padding:10px 8px 0;overflow-y:auto}
+.nav{flex:1 1 0;min-height:0;padding:10px 8px 0;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .nav::-webkit-scrollbar{width:6px}
 .nav::-webkit-scrollbar-thumb{background:var(--rail-line);border-radius:3px}
 .nitem{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:7px;font-size:13.5px;color:var(--rail-ink);position:relative;cursor:pointer}
@@ -108,7 +111,7 @@ button.sec .caret{font-size:9px;opacity:.8}
 .sub.later .nm{color:var(--rail-dim)}
 .sub.later .ct{color:var(--rail-dim);opacity:.8}
 
-.railfoot{margin:0 10px;padding-top:10px;border-top:1px solid var(--rail-line)}
+.railfoot{flex:none;margin:0 10px;padding-top:10px;border-top:1px solid var(--rail-line)}
 
 /* --- the new nav pieces --- */
 .sub.vehicle .nm{font-weight:500;color:var(--rail-ink);opacity:.92}
@@ -1030,6 +1033,10 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
 .tscore{font-family:var(--mono);font-size:12px;font-weight:500;flex:none}
 .tscore.none{color:var(--muted);opacity:.6;font-weight:400}
 .trel{margin:2px 0 0;font-size:10px;line-height:1.35;color:var(--muted)}
+/* In touch already (issue 0027): a small check by the name, and the words under it. */
+.tixline b .glyph{width:14px;height:14px;margin-left:5px;vertical-align:-2px}
+.tixline b .glyph svg{width:9px;height:9px}
+.ttouch{margin:2px 0 0;font-size:10px;line-height:1.35;color:var(--green)}
 .tblock{margin:2px 0 0;font-size:9.5px;line-height:1.3;color:var(--amber)}
 .qempty{padding:14px 12px;margin:0;font-size:11px;line-height:1.55;color:var(--muted)}
 
@@ -1638,9 +1645,20 @@ th.stripoff{font-size:6.5px;letter-spacing:.03em;text-transform:uppercase;border
 /* issue 0020 — a wider drawer for a long report */
 .drawer{transition:width .18s ease}
 .drawerhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.drawerhead .lbl{margin-right:auto}
 .drawerwide{background:none;border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer;
   font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--label)}
 .drawerwide:hover{border-color:var(--accent);color:var(--accent)}
+/* Drafts started on other pages (issue 0026, real): pick one to carry on with it here. */
+.draftlist{margin:10px 0 4px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--ground)}
+.draftlist p{margin:8px 0 0;font-size:11.5px;line-height:1.5;color:var(--muted)}
+.draftrow{display:flex;gap:8px;align-items:stretch;margin-top:6px}
+.draftopen{flex:1;min-width:0;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 9px;cursor:pointer;font:inherit;color:var(--ink)}
+.draftopen:hover{border-color:var(--accent)}
+.draftopen b{display:block;font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.draftopen span{display:block;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.draftx{flex:none;background:none;border:1px solid var(--line);border-radius:6px;padding:0 9px;cursor:pointer;font:inherit;font-size:11.5px;color:var(--muted)}
+.draftx:hover{border-color:var(--clay);color:var(--clay)}
 .drawer.wide{width:min(1120px, 80vw)}
 .drawer.wide .fbcols{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(300px,1fr);gap:28px;align-items:start}
 .drawer.wide .fbtext{grid-column:1;grid-row:1}
@@ -1846,6 +1864,15 @@ a.vstat:hover{border-color:var(--accent-line);background:var(--accent-wash)}
 .pubprof .pp-fact .lbl{padding-top:2px}
 .pubprof .pp-path{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:start;padding:5px 0;font-size:12.5px;line-height:1.45}
 .pubprof .needs{color:var(--amber);font-size:11.5px}
+/* The routes page, besides edges (issues 0027–0028, real): the research's candidates near a target,
+   and the people at their firm the team deals with. The same rows as the LP page's. */
+.nearcard .pp-path{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:start;padding:5px 0;font-size:12.5px;line-height:1.45}
+.nearcard .needs{color:var(--amber);font-size:11.5px}
+.nearcard .glyph{width:20px;height:20px}
+.nearcard .glyph svg{width:12px;height:12px}
+.intouch{display:flex;gap:10px;align-items:flex-start;margin:0 0 16px;padding:10px 14px;border:1px solid color-mix(in srgb,var(--green) 30%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--green) 6%,var(--surface));font-size:13px;line-height:1.5}
+.intouch .glyph{flex:none;width:20px;height:20px;margin-top:1px}
+.intouch .glyph svg{width:12px;height:12px}
 .pubprof .fact{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px;align-items:start}
 .pubprof .fact>span:last-child{text-align:left}
 /* A suggested strategy (N64): what to do next with this LP, and why, for a person to decide. */

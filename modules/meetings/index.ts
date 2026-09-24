@@ -1,5 +1,5 @@
 export type {
-  Channel, DiligenceQuestion, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
+  Channel, DiligenceQuestion, DirectContact, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
   PrepBrief, QuestionStatus, RaiseWindow, Read, Touchpoint, TouchpointSummary,
 } from './types';
 export {
@@ -7,6 +7,6 @@ export {
 } from './types';
 export {
   listMeetings, listObjections, listQuestions, objectionTally, raiseWindows, summarize, touchpointSummaries, touchpointsByPair,
-  touchpointsFor, colleagueTouchpointsFor, upcomingMeetings,
+  touchpointsFor, colleagueTouchpointsFor, directContact, upcomingMeetings,
 } from './repo';
 export { logTouchpoint, prepBrief, TouchpointRefused, type NewTouchpoint } from './service';

@@ -9,6 +9,9 @@ import {
 } from '@/lib/capture';
 import { RegionPicker } from './RegionPicker';
 import { MarkdownField, packAttachments, type DroppedImage } from '@/components/ui/MarkdownField';
+import {
+  discardDraft, listDrafts, readDraft, readPictures, writeDraft, writePictures, type DraftSummary,
+} from '@/lib/feedback-drafts';
 
 type Kind = 'bug' | 'request' | 'question' | 'chore';
 type Priority = 'P0' | 'P1' | 'P2' | 'P3';
@@ -28,6 +31,13 @@ const PRIORITY_MEANS: Record<Priority, string> = {
 };
 
 const WIDE_KEY = 'capitalos.feedback.wide';
+
+/** "14:05" today, "23 Sep 14:05" before. */
+const savedAt = (iso: string) => {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${time}`;
+};
 
 export function FeedbackButton({
   variant = 'bar', profile = 'demo',
@@ -95,11 +105,6 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
 
   /** The automatic one. Its failure is silent — it was never asked for. */
   const seedShot = () => { void capturePage().then((c) => { if (c) add(c.dataUrl, c.method); }); };
-  useEffect(() => {
-    if (seeded.current) return;
-    seeded.current = true;
-    seedShot();
-  }, []);
 
   /**
    * A retake, using the browser's own screen capture. It shows a permission dialog and it
@@ -199,48 +204,92 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   // layout bug can be reproduced on the device it was seen on.
   const [client, setClient] = useState<{ userAgent: string; viewport: string; pixelRatio: number; touch: boolean } | null>(null);
   useEffect(() => {
-    if (!open) return;
     setClient({
       userAgent: navigator.userAgent,
       viewport: `${window.innerWidth}×${window.innerHeight}`,
       pixelRatio: window.devicePixelRatio,
       touch: navigator.maxTouchPoints > 0,
     });
-  }, [open]);
-  const context = useMemo(
-    () => ({ route: path, filters, ...(client ? { client } : {}) }),
-    [path, filters, client],
-  );
+  }, []);
 
-  // A draft survives a reload (issue 0018, real): the words, the kind and the priority are kept in
-  // this browser while they're being written, one draft per page — the way GitHub keeps an unsent
-  // comment — and cleared once the report is filed. Pictures are not kept: they're too big for it.
-  const draftKey = `capitalos.feedback.draft:${path}`;
-  const [restored, setRestored] = useState<string | null>(null);
+  /**
+   * Drafts (issues 0018 and 0026, real). The box edits one draft at a time, named by the page it was
+   * started on: this page's, until another is picked from the list beside Wider. Its words and its
+   * pictures are kept in this browser as they change (lib/feedback-drafts.ts) and dropped once it is
+   * filed. A draft is words, or a picture somebody drew on or dropped in; the automatic screenshot
+   * alone is not one. Moving to another page with the box open keeps editing the same draft.
+   */
+  const [draftPage, setDraftPage] = useState(path);
+  const [restored, setRestored] = useState<{ at: string; pictures: number } | null>(null);
+  const [others, setOthers] = useState<DraftSummary[]>([]);
+  const [showDrafts, setShowDrafts] = useState(false);
+  /** While a draft's pictures are read back, nothing is saved over them. */
+  const hydrating = useRef(false);
+  const worthKeeping = Boolean(title.trim() || body.trim() || shots.some((x) => x.annotated) || images.length);
+
+  /**
+   * Put a draft in the box: its words at once, its pictures when IndexedDB answers. `carry` is what
+   * to show when it brings no pictures — the screenshot already on screen, or (null) a fresh one.
+   */
+  const load = (page: string, carry: Shot[] | null) => {
+    const d = readDraft(page);
+    setDraftPage(page);
+    setTitle(d?.title ?? '');
+    setBody(d?.body ?? '');
+    setKind((d?.kind as Kind | undefined) ?? 'bug');
+    setPriority((d?.priority as Priority | undefined) ?? 'P2');
+    setRestored(d ? { at: d.at ?? '', pictures: d.pictures ?? 0 } : null);
+    setImages([]);
+    setGeneration((g) => g + 1);
+    const fill = (kept: { shots: Shot[]; images: DroppedImage[] } | null) => {
+      if (kept) { setShots(kept.shots); setImages(kept.images); }
+      else if (carry) setShots(carry);
+      else { setShots([]); seedShot(); }
+    };
+    if (d?.pictures) {
+      hydrating.current = true;
+      setShots([]);
+      void readPictures<Shot, DroppedImage>(page).then((kept) => { hydrating.current = false; fill(kept); });
+    } else fill(null);
+  };
+  // On opening: this page's draft, if there is one, else a fresh automatic screenshot.
   useEffect(() => {
-    if (!open || title || body) return;
-    try {
-      const raw = window.localStorage.getItem(draftKey);
-      if (!raw) return;
-      const d = JSON.parse(raw) as { title?: string; body?: string; kind?: Kind; priority?: Priority; at?: string };
-      if (!d.title && !d.body) return;
-      setTitle(d.title ?? '');
-      setBody(d.body ?? '');
-      if (d.kind) setKind(d.kind);
-      if (d.priority) setPriority(d.priority);
-      setGeneration((g) => g + 1);
-      setRestored(d.at ?? null);
-    } catch { /* private window, or a draft that doesn't parse: start clean */ }
-    // Only when the box opens: a restore while typing would fight the person.
+    if (seeded.current) return;
+    seeded.current = true;
+    load(path, null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, draftKey]);
+  }, []);
+
   useEffect(() => {
-    if (state === 'done') { try { window.localStorage.removeItem(draftKey); } catch { /* nothing kept */ } return; }
-    try {
-      if (title.trim() || body.trim()) window.localStorage.setItem(draftKey, JSON.stringify({ title, body, kind, priority, at: new Date().toISOString() }));
-      else window.localStorage.removeItem(draftKey);
-    } catch { /* private window: the draft just isn't kept */ }
-  }, [title, body, kind, priority, state, draftKey]);
+    if (hydrating.current || state === 'done') return;
+    writeDraft(draftPage, worthKeeping
+      ? { title, body, kind, priority, at: new Date().toISOString(), pictures: shots.length + images.length }
+      : null);
+  }, [title, body, kind, priority, shots, images, draftPage, state, worthKeeping]);
+  // Pictures change rarely — taken, drawn on, removed — so each change is written as it happens.
+  useEffect(() => {
+    if (hydrating.current || state === 'done') return;
+    void writePictures<Shot, DroppedImage>(draftPage, worthKeeping ? { shots, images } : null);
+  }, [shots, images, draftPage, state, worthKeeping]);
+  useEffect(() => { if (state === 'done') void discardDraft(draftPage); }, [state, draftPage]);
+  useEffect(() => {
+    setOthers(listDrafts().filter((d) => d.page !== draftPage));
+  }, [draftPage, showDrafts, state]);
+
+  /** The one in the box is already kept, as it stands; its pictures stay with it. */
+  const switchTo = (page: string) => {
+    load(page, worthKeeping ? null : shots);
+    setShowDrafts(false);
+  };
+  const discard = (page: string) => {
+    if (!window.confirm(`Discard the unsent draft started on ${page}? Its words and pictures go, and this cannot be undone.`)) return;
+    void discardDraft(page).then(() => setOthers(listDrafts().filter((d) => d.page !== draftPage)));
+  };
+
+  const context = useMemo(
+    () => ({ route: path, filters, ...(draftPage !== path ? { startedOn: draftPage } : {}), ...(client ? { client } : {}) }),
+    [path, filters, client, draftPage],
+  );
 
   const submitRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -287,20 +336,13 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
    * belongs to the issue it was filed with. The page and filters are captured again anyway.
    */
   const again = () => {
-    setRestored(null);
-    setTitle('');
-    setBody('');
-    setImages([]);
-    setShots([]);
     setIncludeShot(true);
     setFailed(false);
-    setKind('bug');
-    setPriority('P2');
     setError(null);
     setResult(null);
     setState('idle');
-    setGeneration((g) => g + 1);
-    seedShot();
+    // This page's own draft, if one was kept while another was being filed.
+    load(path, null);
   };
   const againRef = useRef<(() => void) | null>(null);
   againRef.current = again;
@@ -356,6 +398,17 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
       >
         <div className="drawerhead">
           <div className="lbl">Feedback</div>
+          {others.length > 0 && state !== 'done' && (
+            <button
+              type="button"
+              className="drawerwide"
+              onClick={() => setShowDrafts((v) => !v)}
+              aria-expanded={showDrafts}
+              title="Unsent reports kept in this browser, started on other pages"
+            >
+              Drafts · {others.length}
+            </button>
+          )}
           <button
             type="button"
             className="drawerwide"
@@ -366,6 +419,27 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             {wide ? '⇥ Narrower' : '⇤ Wider'}
           </button>
         </div>
+        {showDrafts && others.length > 0 && state !== 'done' && (
+          <div className="draftlist">
+            <div className="lbl">Unsent, kept in this browser · {others.length}</div>
+            {others.map((d) => (
+              <div className="draftrow" key={d.page}>
+                <button type="button" className="draftopen" onClick={() => switchTo(d.page)}>
+                  <b>{d.title}</b>
+                  <span>
+                    {d.page}{d.at ? ` · ${savedAt(d.at)}` : ''}
+                    {d.pictures ? ` · ${d.pictures} ${d.pictures === 1 ? 'picture' : 'pictures'}` : ''}
+                  </span>
+                </button>
+                <button type="button" className="draftx" onClick={() => discard(d.page)}>Discard</button>
+              </div>
+            ))}
+            <p>
+              Picking one puts it in this box, pictures and all{worthKeeping ? '; the one in the box now is kept' : ''}.
+              It is filed with this page and says which page it was started on.
+            </p>
+          </div>
+        )}
 
         {state === 'done' && result ? (
           <>
@@ -378,7 +452,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
               <button className="btn p" onClick={again} autoFocus>
                 Give more feedback
               </button>
-              <a className="btn" href={`/issues/${result.id}`} style={{ textAlign: 'center' }}>
+              <a className="btn" href={`/developer/issues/${result.id}`} style={{ textAlign: 'center' }}>
                 Open the issue
               </a>
               <button className="btn" onClick={onClose}>
@@ -393,7 +467,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
               <div className="filedlist">
                 <div className="lbl">Filed while this was open · {filed.length}</div>
                 {filed.map((f) => (
-                  <a key={f.id} href={`/issues/${f.id}`} className="filedrow">
+                  <a key={f.id} href={`/developer/issues/${f.id}`} className="filedrow">
                     <span className="mono">{f.id}</span>
                     <span>{f.title || 'Untitled'}</span>
                   </a>
@@ -508,9 +582,11 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             </div>
 
             <div className="fbtext">
-            {restored !== null && state === 'idle' && (title || body) && (
+            {restored !== null && state === 'idle' && worthKeeping && (
               <p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
-                Your unsent draft for this page, kept in this browser{restored ? ` since ${new Date(restored).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}. Pictures aren&rsquo;t kept in a draft.
+                Your unsent draft {draftPage === path ? 'for this page' : <>started on <span className="mono">{draftPage}</span></>},
+                kept in this browser{restored.at ? ` since ${savedAt(restored.at)}` : ''}
+                {restored.pictures ? ', with its pictures' : ''}.
               </p>
             )}
             <label className="field">

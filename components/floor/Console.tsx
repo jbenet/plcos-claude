@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_LABEL } from '@/modules/strategy/client';
 import type { BoardState } from '@/lib/board-client';
 import { EXPLORED_LABEL, HOLDING_LABEL } from '@/lib/board-client';

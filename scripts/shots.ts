@@ -212,6 +212,35 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N79: [
+    {
+      name: '01-routes-in-touch',
+      path: '/all/routes?touch=1',
+      prepare: async (page) => {
+        await page.locator('a.tix:has(.ttouch)').first().click();
+        await page.locator('.intouch').first().waitFor({ timeout: 15_000 });
+        await page.waitForLoadState('networkidle');
+      },
+    },
+    { name: '02-routes-in-touch-left-out', path: '/all/routes' },
+    {
+      name: '03-feedback-drafts',
+      path: '/today',
+      prepare: async (page) => {
+        // A draft left on another page, as the box keeps one.
+        await page.evaluate(() => localStorage.setItem('capitalos.feedback.draft:/all/routes', JSON.stringify({
+          title: 'Mark the LPs we already know', body: 'A small check beside their names, and a filter to hide them.',
+          kind: 'request', priority: 'P2', at: new Date(Date.now() - 42 * 60_000).toISOString(), pictures: 0,
+        })));
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.locator('.rail .railrow button').filter({ hasText: 'Feedback' }).first().click();
+        await page.locator('[aria-label="Give feedback"] .fbshots img').first().waitFor({ timeout: 20_000 });
+        await page.locator('[aria-label="Give feedback"] .drawerhead button').filter({ hasText: 'Drafts' }).click();
+        await page.locator('[aria-label="Give feedback"] .draftlist').waitFor();
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N78: [
     {
       name: '01-captured-folded',

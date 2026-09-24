@@ -1,7 +1,7 @@
 import { getDb } from '@/lib/db';
 import type { LadderRung } from '@/modules/strategy/client';
 import type {
-  Channel, DiligenceQuestion, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
+  Channel, DiligenceQuestion, DirectContact, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
   QuestionStatus, RaiseWindow, Read, Touchpoint, TouchpointSummary,
 } from './types';
 import { aboutThisRaise } from './types';
@@ -332,3 +332,35 @@ export async function touchpointSummaries(
   return out;
 }
 
+
+/**
+ * The latest direct contact with each of a set of people and organisations (issue 0027, real): a
+ * meeting or call held, or a message from them, dated today or before. A person counts by their own
+ * record only — a meeting with a colleague is not a meeting with them (N55). An organisation
+ * counts through the people acting for it now, and says whom.
+ */
+export async function directContact(entityIds: string[]): Promise<Map<string, DirectContact>> {
+  const out = new Map<string, DirectContact>();
+  if (!entityIds.length) return out;
+  const db = await getDb();
+  const rows = await db.query<{ for_entity: string; held_on: Date | string; met: boolean; via: string | null }>(
+    `with t as (select unnest($1::uuid[]) as entity_id),
+     reach as (
+       select t.entity_id as for_entity, t.entity_id as entity_id from t
+       union
+       select a.org_entity, a.person_entity from identity.affiliation a join t on t.entity_id = a.org_entity
+        where a.ended_on is null
+     )
+     select distinct on (r.for_entity) r.for_entity::text, m.held_on, m.channel in ('meeting', 'call') as met,
+            case when m.entity_id = r.for_entity then null else e.display_name end as via
+       from reach r
+       join meetings.meeting m on m.entity_id = r.entity_id
+       join identity.entity e on e.entity_id = m.entity_id
+      where m.held_on is not null and m.held_on <= current_date
+        and (m.channel in ('meeting', 'call') or m.direction in ('theirs', 'both'))
+      order by r.for_entity, m.held_on desc, (m.entity_id = r.for_entity) desc`,
+    [entityIds],
+  );
+  for (const r of rows) out.set(r.for_entity, { on: new Date(r.held_on), how: r.met ? 'met' : 'heard', via: r.via });
+  return out;
+}

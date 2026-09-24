@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { AutoRefresh } from '@/components/ui/AutoRefresh';
 import { SECTION } from '@/lib/nav';

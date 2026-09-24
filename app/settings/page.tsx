@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { PrefsReset } from '@/components/shell/PrefsReset';
 import { ThemePicker } from '@/components/shell/ThemePicker';

@@ -5034,3 +5034,48 @@ proven. "Pick a part" uses the browser's own screen capture instead, and a repor
 the device.
 
 111 of 111 properties hold.
+
+## N79 — Links that go straight to their page; who we're already in touch with; drafts that keep their pictures; the rail on an iPad, again
+
+**Shipped.** Four items from the feedback box (issues 0026–0029).
+
+| | |
+|---|---|
+| ![Routes, in touch](docs/changelog/shots/n79/01-routes-in-touch.webp) | **Who the team is already in touch with** (issue 0027). A meeting held with them, or word from them — not our own unanswered message — puts a small ✓ by the name and the words under it: "Met 20 Aug 2026". Selecting one says so above the routes: someone the team deals with directly needs no introduction. Below the routes, what the research found near them: candidate paths, not routes (rule 6). |
+| ![Left out by default](docs/changelog/shots/n79/02-routes-in-touch-left-out.webp) | **Left out unless asked for.** The list leaves them out by default and says how many ("13 in touch, left out"); **✓ In touch** in the filters brings them back. An organisation counts through the people acting for it now, and says through whom; a person counts by their own record only, since a colleague's meeting is not theirs (N55). |
+| ![Drafts](docs/changelog/shots/n79/03-feedback-drafts.webp) | **Drafts from other pages** (issue 0026). A **Drafts · N** button beside Wider lists the unsent reports kept in this browser that were started on other pages; picking one puts it in the box, and the one you were on is kept. Filed from another page, a report says where it was started. |
+
+**The click that broke in Safari** (issues 0027–0028). The routes page linked its targets to the old
+address, `/routes?target=…`, which the proxy redirects to `/all/routes?target=…`. A click followed
+that redirect in the middle of a client navigation: Chrome shrugs; Safari fetched the page twice and
+threw "stream is closing or closed" — the two issues in the Next.js badge. The pipeline's rows went
+to the LP page the same way. Where each page lives is now one table, `lib/paths.ts`, read by the proxy
+and by the links: every in-app link goes through `components/ui/AppLink`, which puts an old address in
+its place before anyone clicks it, and `npm run boundaries` fails on a `next/link` import anywhere
+else. On the demo, a target click is one request now, where it was two.
+
+**"Routes to —" on the real data.** A route search starts from your own person record, and on the real
+data no team user is linked to one; nor is any relationship edge on file yet — the research's paths,
+for 208 LPs, are held as notes until someone decides they may carry a route. The page named nobody and
+said "0 edges inspected". It now names the target, says why no search ran, and shows what there is
+instead: the research's candidate paths near them, and the people at their firm the team deals with.
+On the real data, 553 of the 3,503 targets are in touch already and left out by default. Two decisions
+turn the page on there, and both are Juan's: linking team users to their person records, and whether
+A and B candidate paths may be recorded as edges (rule 6).
+
+**Drafts keep their pictures** (issue 0026). A draft's words have been kept since N76; its pictures
+were not, being too big for localStorage. They are kept in the browser's IndexedDB now — screenshots,
+drawn on or not, and images dropped into the text — and come back with the draft, with no second
+automatic screenshot taken over them. Moving to another page with the box open keeps editing the same
+draft; before, it could write it over that page's own.
+
+**The rail on an iPad, again** (issue 0029). N76's `100dvh` did not cure it: in Safari on an iPad,
+100dvh came out taller than the page as drawn, so the footer — feedback and user — sat under the bottom
+edge, while Chrome on the same iPad was fine. The rail now takes its height from the window itself
+(`innerHeight`), measured before first paint and whenever the window changes size, with 100dvh as the
+fallback; the nav shrinks and scrolls, and the footer never does. Safari cannot be run here, so this one
+wants checking on the iPad.
+
+114 of 114 properties hold, three of them new: an old address is put in its place and never
+redirected again; the page height comes from the window and ignores a pinch; and what counts as in
+touch.

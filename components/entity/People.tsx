@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { shortDate } from '@/lib/time';
 import { AFFIL_LABEL, AFFIL_MEANS, type Affiliation } from '@/modules/identity';
 import { EntityLink } from './EntityLink';

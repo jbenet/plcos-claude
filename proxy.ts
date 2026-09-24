@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { canonicalPath, DEV_PAGES, MODULE_PAGES, RESERVED } from '@/lib/paths';
 
 /**
  * Routes that follow the sidebar (N65, issue 0009). Juan: "the route should follow the hierarchy
@@ -16,27 +17,13 @@ import { NextResponse, type NextRequest } from 'next/server';
  *                           where you are and a copied link means the same thing to anyone.
  *
  * The four modules already scoped by path (visualizations, strategy, calendar, fit) live under
- * app/[vehicle] and pass through untouched.
+ * app/[vehicle] and pass through untouched. The table of where each page lives is lib/paths.ts,
+ * which the links read too, so a click goes straight to the address this would redirect it to.
  */
 
 const PREFIX = process.env.DATA_PROFILE === 'real' ? 'capitalos_real_' : 'capitalos_';
 const USER_COOKIE = `${PREFIX}user`;
 const VEHICLE_COOKIE = `${PREFIX}vehicle`;
-
-/** A vehicle's modules served from top-level pages; the address's name when it differs. */
-const MODULES: Record<string, string> = {
-  overview: 'overview', pipeline: 'targets', routes: 'routes', selection: 'selection', asks: 'asks', meetings: 'meetings',
-  decisions: 'decisions', 'soft-hard': 'soft-hard', status: 'vehicles', materials: 'materials', close: 'close', spv: 'spv',
-  grants: 'grants', compliance: 'compliance',
-};
-const PAGE_TO_PATH = Object.fromEntries(Object.entries(MODULES).map(([path, page]) => [page, path]));
-/** First segments that are pages of their own, never a vehicle. */
-const RESERVED = new Set([
-  '_next', 'api', 'developer', 'dev', 'issues', 'agents', 'm', 'today', 'approvals', 'standup', 'everything', 'orgs', 'rnd',
-  'research', 'forecast', 'content', 'performance', 'library', 'relationships', 'operations', 'plays', 'settings', 'system',
-  'calendar', 'visualizations', 'fit', 'favicon.ico', ...Object.values(MODULES), ...Object.keys(MODULES),
-]);
-const DEV_PAGES: Record<string, string> = { issues: '/issues', agents: '/agents' };
 
 function currentVehicle(req: NextRequest): string {
   const handle = req.cookies.get(USER_COOKIE)?.value ?? '';
@@ -96,21 +83,18 @@ export function proxy(req: NextRequest) {
   // The Developer section, where its sidebar puts it.
   if (seg[0] === 'developer') {
     const page = seg[1] ?? '';
-    const target = DEV_PAGES[page] ? `${DEV_PAGES[page]}${rest(2)}` : page ? `/dev${rest(1)}` : '/dev/status';
+    const target = Object.hasOwn(DEV_PAGES, page) ? `${DEV_PAGES[page]}${rest(2)}` : page ? `/dev${rest(1)}` : '/dev/status';
     return rewrite(req, target);
-  }
-  if ((seg[0] === 'dev' || seg[0] === 'issues' || seg[0] === 'agents') && req.method === 'GET') {
-    const to = seg[0] === 'dev' ? `/developer${rest(1)}` : `/developer${rest(0)}`;
-    return NextResponse.redirect(at(req, to), 307);
   }
 
   // A vehicle's module, with the vehicle in the path.
-  if (seg.length >= 2 && !RESERVED.has(seg[0]!) && MODULES[seg[1]!]) {
-    return rememberVehicle(req, rewrite(req, `/${MODULES[seg[1]!]}${rest(2)}`, { 'x-vehicle': seg[0]! }), seg[0]!);
+  if (seg.length >= 2 && !RESERVED.has(seg[0]!) && Object.hasOwn(MODULE_PAGES, seg[1]!)) {
+    return rememberVehicle(req, rewrite(req, `/${MODULE_PAGES[seg[1]!]}${rest(2)}`, { 'x-vehicle': seg[0]! }), seg[0]!);
   }
-  // The old address of one: to its place under the vehicle in view.
-  if (seg.length >= 1 && PAGE_TO_PATH[seg[0]!] && req.method === 'GET') {
-    return NextResponse.redirect(at(req, `/${currentVehicle(req)}/${PAGE_TO_PATH[seg[0]!]}${rest(1)}`), 307);
+  // An old address: to its place in the hierarchy, under the vehicle in view.
+  if (req.method === 'GET') {
+    const to = canonicalPath(pathname, currentVehicle(req));
+    if (to !== pathname) return NextResponse.redirect(at(req, to), 307);
   }
   return NextResponse.next();
 }

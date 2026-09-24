@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { usdM } from '@/lib/money';
 import { shortDate } from '@/lib/time';
 import { getEntity } from '@/modules/identity';

@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { useMemo, useState } from 'react';
 import { Glyph } from '@/components/ui/Glyph';
 import { LANE_LOOK, type DatedRow, type LaneLook } from '@/lib/lanes';

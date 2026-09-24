@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   moduleHref, modulesForKind, OVERVIEW_SECTION, STATIC_SECTIONS, type NavSection,

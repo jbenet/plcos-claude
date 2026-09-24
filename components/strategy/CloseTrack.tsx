@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { shortDate } from '@/lib/time';
 import { usdM } from '@/lib/money';
 import { CLOSE_STATES, CLOSE_STATE_LABEL, STEP_LABEL, type CloseTrack as Track } from '@/modules/pipeline';

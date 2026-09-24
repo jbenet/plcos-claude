@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { config } from '@/config/deployment';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';

@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { Fragment } from 'react';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';

@@ -157,6 +157,18 @@ export function aboutThisRaise(t: Touchpoint, w: RaiseWindow): boolean {
   return true;
 }
 
+/**
+ * Whom the team is already in touch with (issue 0027, real): the latest meeting or call held with
+ * them, or message from them — our own record of direct contact. A message only we sent is not
+ * contact; nobody has answered it.
+ */
+export interface DirectContact {
+  on: Date;
+  how: 'met' | 'heard';
+  /** For an organisation: the person acting for it whom the contact was with. Null when it was them. */
+  via: string | null;
+}
+
 /** Derived from the log, never stored: what the twelve stages used to try to say. */
 export interface TouchpointSummary {
   /** Meetings and calls held, oldest first — the first meeting, the second, and so on. */

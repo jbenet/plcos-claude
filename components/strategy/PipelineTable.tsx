@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useVehicleSlug } from '@/components/shell/Here';
+import { canonicalPath } from '@/lib/paths';
 import { moveMetToDiscussing } from '@/app/targets/actions';
 
 /**
@@ -166,6 +168,9 @@ function Ladder({ r, names }: { r: PipelineRow; names: string[] }) {
 
 export function PipelineTable({ rows, statuses, rungNames, initialStatus, initialFilters, showVehicle, heldBack = {} }: Props) {
   const router = useRouter();
+  // The LP page at its own address, not the old one the proxy redirects (issues 0027–0028).
+  const vehicle = useVehicleSlug();
+  const lpHref = (id: string) => canonicalPath(`/targets/${id}`, vehicle);
   const search = useRef<HTMLInputElement>(null);
   const [f, setF] = useState<Filters>(() => fromAddress(initialFilters));
   const [sort, setSort] = useState<Sort>(() => sortFrom(initialFilters));
@@ -408,13 +413,13 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
                   tabIndex={0}
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest('a')) return;
-                    if (e.metaKey || e.ctrlKey) window.open(`/targets/${r.id}`, '_blank');
-                    else router.push(`/targets/${r.id}`);
+                    if (e.metaKey || e.ctrlKey) window.open(lpHref(r.id), '_blank');
+                    else router.push(lpHref(r.id));
                   }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/targets/${r.id}`); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') router.push(lpHref(r.id)); }}
                 >
                   <td>
-                    <a href={`/targets/${r.id}`}><b>{lead(r)}</b></a>
+                    <a href={lpHref(r.id)}><b>{lead(r)}</b></a>
                     {r.doNotContact && <span className="flag f-block" style={{ marginLeft: 6 }}>do not contact</span>}
                     {r.org && <div className="lpsecond">{r.orgFirst ? r.name : r.org}</div>}
                     {r.headline && <div className="muted" style={{ fontSize: 11.5 }}>{r.headline}</div>}

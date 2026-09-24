@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 
 /**
  * A person or organisation, wherever their name appears.

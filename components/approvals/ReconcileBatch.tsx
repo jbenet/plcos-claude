@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { ago } from '@/lib/time';
 import type { ApprovalTicket } from '@/modules/governance';
 import { decideMany } from '@/app/approvals/actions';

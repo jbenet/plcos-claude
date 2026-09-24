@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/components/ui/AppLink';
 import { useState } from 'react';
 import type { FloorState } from '@/lib/floor-client';
 import { TEMP_LABEL } from '@/lib/floor-client';
