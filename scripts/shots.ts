@@ -196,6 +196,35 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N58: [
+    {
+      name: '01-captured-as-drawn',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.evaluate(() => document.fonts.ready);
+        await page.locator('button', { hasText: /^\s*✎?\s*Feedback\s*$/ }).first().click();
+        await page.locator('.shotthumb img').first().waitFor({ timeout: 30_000 });
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '02-scrolled-full-size',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.evaluate(() => document.fonts.ready);
+        await page.mouse.wheel(0, 700);
+        await page.waitForTimeout(300);
+        await page.locator('button', { hasText: /^\s*✎?\s*Feedback\s*$/ }).first().click();
+        await page.locator('.shotthumb img').first().waitFor({ timeout: 30_000 });
+        await page.locator('.shotopen').first().click();
+        await page.waitForTimeout(600);
+      },
+    },
+  ],
   N57: [
     {
       name: '01-on-file-not-accepted',

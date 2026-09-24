@@ -17,12 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Before first paint. Reading the stored theme in an effect would render the
             default first and swap, which is a flash of the wrong colour on every load. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
-          rel="stylesheet"
-        />
+        {/* The fonts are self-hosted from app/globals.css (N58): no request goes to a font server. */}
       </head>
       <body className={config.data.profile}>
         <div className="app">

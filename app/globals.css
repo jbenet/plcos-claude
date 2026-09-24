@@ -12,6 +12,25 @@
    A theme re-points --accent, the ground and the rail. It never re-points --clay,
    --green, --amber or --purple, because those four carry meanings rather than taste. */
 
+/* The fonts, self-hosted (N58): the Latin files of the @fontsource packages, under the family
+   names the rest of this file already uses. Loading them from Google Fonts left the feedback
+   box's screenshots in fallback fonts — a cross-origin stylesheet can't be read, so the capture
+   had nothing to embed and every heading re-wrapped — and asked a third party for a font on
+   every page of an app that holds confidential records. Same-origin, they are read and embedded;
+   offline, they still load. Fraunces is the variable font with its optical-size axis, as before. */
+@font-face{font-family:'Fraunces';font-style:normal;font-weight:100 900;font-display:swap;
+  src:url('../node_modules/@fontsource-variable/fraunces/files/fraunces-latin-opsz-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:400;font-display:swap;
+  src:url('../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:500;font-display:swap;
+  src:url('../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:600;font-display:swap;
+  src:url('../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;
+  src:url('../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;
+  src:url('../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2') format('woff2')}
+
 :root{
   --ground:#F5F3EE; --surface:#FFFFFF; --ink:#1A1917; --muted:#5E5A52; --line:#E4E0D6;
   --clay:#BF4A16; --green:#0E7F55; --purple:#5F4B9E; --amber:#8A6410;

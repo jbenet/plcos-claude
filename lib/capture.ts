@@ -139,10 +139,53 @@ export async function captureRender(region?: Region): Promise<string | null> {
   return withTimeout(renderNow(region));
 }
 
+const SHIFT = 'data-capture-shift';
+
+/**
+ * The clone has no scroll: it is the page drawn once and moved up by the scroll. A sticky rail
+ * or top bar, or anything fixed, sits where the scroll put it on screen, and would go up with
+ * the rest. So each is marked with how far to move it back, measured on the live page, and moved
+ * in the clone (N58): a sticky element by where it is now less where it would be unstuck, a
+ * fixed one by the scroll itself. Returns the cleanup, which takes the marks off again.
+ */
+function pinStuck(): { cleanup: () => void; rootShift: string | null } {
+  const sx = window.scrollX;
+  const sy = window.scrollY;
+  if (!sx && !sy) return { cleanup: () => {}, rootShift: null };
+  const marked: HTMLElement[] = [];
+  for (const el of Array.from(document.body.querySelectorAll<HTMLElement>('*'))) {
+    const position = getComputedStyle(el).position;
+    if (position !== 'sticky' && position !== 'fixed') continue;
+    let dx = sx;
+    let dy = sy;
+    if (position === 'sticky') {
+      const now = el.getBoundingClientRect();
+      const inline = el.style.position;
+      el.style.position = 'relative';
+      const unstuck = el.getBoundingClientRect();
+      el.style.position = inline;
+      dx = now.left - unstuck.left;
+      dy = now.top - unstuck.top;
+    }
+    if (!dx && !dy) continue;
+    el.setAttribute(SHIFT, `${dx}px ${dy}px`);
+    marked.push(el);
+  }
+  // The body's own ::before and ::after cannot carry a mark; a fixed one gets a rule instead.
+  const fixedPseudo = ['::before', '::after'].filter((p) => getComputedStyle(document.body, p).position === 'fixed');
+  return {
+    cleanup: () => marked.forEach((el) => el.removeAttribute(SHIFT)),
+    rootShift: fixedPseudo.length ? `${fixedPseudo.map((p) => `body${p}`).join(',')}{translate:${sx}px ${sy}px !important}` : null,
+  };
+}
+
 async function renderNow(region?: Region): Promise<string | null> {
+  const pinned = pinStuck();
   try {
     const { domToPng } = await import('modern-screenshot');
-    // Without this the clone renders in fallback metrics and every heading re-wraps.
+    // The clone can only use fonts it can embed, and it embeds only what it can read: the
+    // @font-face rules of a same-origin stylesheet (app/globals.css since N58). A cross-origin
+    // one, like Google Fonts', is skipped, and the clone falls back to wider fonts and re-wraps.
     await document.fonts.ready;
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -153,8 +196,34 @@ async function renderNow(region?: Region): Promise<string | null> {
       scale,
       backgroundColor: getComputedStyle(document.body).backgroundColor,
       style: {
+        // The clone's root is a <body> again, and a body's default margin is 8px: without this,
+        // the whole page was drawn 8px down and right, and 16px narrower (N58).
+        margin: '0',
         transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
         transformOrigin: 'top left',
+      },
+      // A panel scrolled on screen (the rail, a drawer) is drawn scrolled, as it is seen.
+      features: { restoreScrollPosition: true, copyScrollbar: false },
+      onCloneEachNode: (node: Node) => {
+        // Not `instanceof`: the clone may belong to another window's constructors.
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const el = node as HTMLElement;
+        // No scrollbars: the clone drew ones the page didn't show — one across the foot of the
+        // rail — and its scrolled panels are already drawn at their scroll.
+        for (const prop of ['overflow', 'overflow-x', 'overflow-y']) {
+          const v = el.style.getPropertyValue(prop);
+          if (v === 'auto' || v === 'scroll' || v === 'overlay') el.style.setProperty(prop, 'hidden');
+        }
+        const shift = el.getAttribute(SHIFT);
+        if (!shift) return;
+        el.style.setProperty('translate', shift);
+        el.removeAttribute(SHIFT);
+      },
+      onCreateForeignObjectSvg: (svg: SVGSVGElement) => {
+        if (!pinned.rootShift) return;
+        const style = svg.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'style');
+        style.textContent = pinned.rootShift;
+        svg.appendChild(style);
       },
       timeout: 6000,
       filter: (node: Node) => {
@@ -173,6 +242,8 @@ async function renderNow(region?: Region): Promise<string | null> {
     return await crop(full, region, scale);
   } catch {
     return null;
+  } finally {
+    pinned.cleanup();
   }
 }
 

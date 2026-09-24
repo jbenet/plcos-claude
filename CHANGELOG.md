@@ -4278,3 +4278,35 @@ on Approvals; nothing is recorded until you approve.
 Also: the user switcher no longer finds inactive users, so no one can become the system actor,
 and the demo seed counts people, not the system actor. `npm run shots -- N57 04` retakes one
 shot. 94 of 94 properties hold.
+
+## N58 — Screenshots from the feedback box, drawn as the page is
+
+**Shipped.** The feedback box's automatic screenshot, the one it takes as it opens, wrapped text
+that the page doesn't: card titles on two lines, fact labels folded, the rail's vehicle names
+stacked a word at a time. Your screenshots in the last two issues showed it.
+
+| | |
+|---|---|
+| ![Captured as drawn](docs/changelog/shots/n58/01-captured-as-drawn.webp) | **The automatic capture, fixed.** It redraws the page through the browser's own engine, so it needs no permission and can leave the feedback panel out. That still holds: anything marked not-for-capture stays out. |
+| ![Scrolled, full size](docs/changelog/shots/n58/02-scrolled-full-size.webp) | **Scrolled, too.** Taken 700 px down the page and opened in the annotation editor: the rail, the top bar and the demo strip are where they are on screen. |
+
+**Why it wrapped.** Four things, found by comparing the capture with the browser's own
+screenshot of the same page, pixel by pixel:
+
+- **The fonts.** They came from Google Fonts, a stylesheet on another origin, whose rules a
+  page can't read. The capture embeds only fonts it can read, so it drew in the fallbacks,
+  which are wider. The fonts are now self-hosted from the `@fontsource` packages, Latin only,
+  under the same names, so nothing else changed. A side effect: no page of the app asks a third
+  party for a font any more, and they load offline.
+- **An 8 px margin.** The redraw deliberately drops the root element's margins, so the page's
+  `<body>` got a browser's default one back. Everything was drawn 8 px down and right, and
+  16 px narrower. Zeroed.
+- **Sticky and fixed elements.** The redraw is the page drawn once and moved up by the scroll,
+  so the rail and the top bar went up with it. Each is now measured on the live page and put
+  back where it is on screen.
+- **Scrollbars** the page didn't show, one of them across the foot of the rail. Dropped.
+
+Measured on Nadia Brandt's page at 1440 × 940, the capture differed from the browser's own
+screenshot on 12.5% of pixels before; now 0.04% at the top of the page and 0.05% scrolled
+700 px down. That's anti-aliasing. The design boards and the published build log still load
+Google Fonts, since they are standalone pages. 94 of 94 properties hold.
