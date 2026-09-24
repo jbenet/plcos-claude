@@ -107,7 +107,53 @@ export const pagesOnly = (f: { researched?: { method?: string } }) => f.research
  */
 export const partialSearch = (f: { researched?: { method?: string }; coverage?: { searched?: string[] } | null }) =>
   pagesOnly(f) && (f.coverage?.searched ?? []).some((s) => /(?<!\bno )\bweb search\b/i.test(s));
-const BROKERS = /zoominfo|rocketreach|contactout|signalhire|apollo\.io|lusha|flashlabs|datanyze|seamless\.ai|leadiq|clearbit|spokeo|success\.ai|wiza|cience\.com|beenverified|whitepages|peoplefinders|aeroleads|adapt\.io|instantcheckmate|connectsafely|voilanorbert|hunter\.io|snov\.io|kaspr|uplead|prospeo|fintrx|alphamaven|altss\.com/i;
+/**
+ * Contact-data brokers, people-search sites and LP-contact databases (W1 1.26): never a source, and
+ * passed as `blocked_domains` on every search but the near-us check (1.27). A name matches a
+ * domain's own label — "zoominfo" is zoominfo.com and zoominfo.co.uk — and is kept to distinctive
+ * names; a domain matches itself and its subdomains. Both whole, hyphens ignored (1.29): the old
+ * pattern's "cience.com" caught every "…science.com", and "alphamaven" missed alpha-maven.com.
+ */
+const BROKER_NAMES = [
+  'zoominfo', 'rocketreach', 'contactout', 'signalhire', 'lusha', 'flashlabs', 'datanyze', 'leadiq', 'clearbit', 'spokeo',
+  'beenverified', 'whitepages', 'peoplefinders', 'aeroleads', 'instantcheckmate', 'connectsafely', 'voilanorbert', 'kaspr',
+  'uplead', 'prospeo', 'fintrx', 'alphamaven', 'altss', 'lead411', 'visualvisitor', 'datalead', 'muraena', 'premieralts',
+  'radaris', 'truepeoplesearch', 'fastpeoplesearch', 'nuwber', 'peekyou', 'thatsthem', 'clustrmaps', 'usphonebook',
+  'intelius', 'truthfinder', 'zabasearch', 'idcrawl', 'peoplelooker', 'anywho', 'massinvestordatabase', 'massinvestor',
+  'growjo', 'cisleads', 'opengovny', 'pipelineroad', 'venturecapitalarchive', 'shortlyst', 'unmask', 'freepeoplesearch',
+  'equilar', 'wealthmetrica', 'lpbacked', 'clodura', 'vcsheet', 'lpallocator', 'angelspartners', 'flashintel',
+  'startupfundraising', 'theraiselist', 'findlimitedpartners', 'bookyourdata', 'startupinvestorsdirectory', 'finalscout',
+  'businessprofiles', 'buzzfile', 'findlps', 'allfamilyoffices', 'praxisrock', 'activefamilyoffices', 'relationshipscience',
+  'askforfunding', 'leadferret', 'reachinbox', 'peoplesearch', 'veripages', 'dastelefonbuch', 'venturebanc', 'familyofficehub',
+  'fundinfolks', 'opendatany', 'inforcapital', 'angelbacked', 'highperformr', 'scalelist', 'theofficialboard', 'getemail',
+  'allpeople', 'konaequity', 'realtyhop', 'getprospect', 'officialusa',
+];
+const BROKER_DOMAINS = ['apollo.io', 'seamless.ai', 'success.ai', 'wiza.co', 'cience.com', 'adapt.io', 'hunter.io', 'snov.io', 'me.sh', 'clay.com', 'clay.earth', 'mylife.com', 'dnb.com', 'salesflow.io', 'investorfundraising.gumroad.com', 'x-ray.contact', 'mycity.com', 'ic-research.com', 'maven-data.com', 'sales.superagi.com'];
+/** The same list as domains, for a search's `blocked_domains`. */
+export const BLOCKED_DOMAINS = [
+  'zoominfo.com', 'rocketreach.co', 'contactout.com', 'signalhire.com', 'lusha.com', 'datanyze.com', 'leadiq.com', 'clearbit.com',
+  'spokeo.com', 'beenverified.com', 'whitepages.com', 'peoplefinders.com', 'aeroleads.com', 'instantcheckmate.com', 'voilanorbert.com',
+  'kaspr.io', 'uplead.com', 'prospeo.io', 'fintrx.com', 'alphamaven.com', 'alpha-maven.com', 'altss.com', 'lead411.com',
+  'visualvisitor.com', 'data-lead.com', 'muraena.ai', 'premieralts.com', 'radaris.com', 'truepeoplesearch.com',
+  'fastpeoplesearch.com', 'nuwber.com', 'peekyou.com', 'thatsthem.com', 'clustrmaps.com', 'usphonebook.com', 'intelius.com',
+  'truthfinder.com', 'zabasearch.com', 'idcrawl.com', 'peoplelooker.com', 'anywho.com', 'massinvestordatabase.com', 'growjo.com', 'cisleads.com', 'opengovny.com', 'pipelineroad.com', 'venturecapitalarchive.com', 'shortlyst.ai', 'unmask.com',
+  'freepeoplesearch.com', 'equilar.com', 'wealthmetrica.com', 'lpbacked.com', 'clodura.ai', 'vcsheet.com', 'lpallocator.com', 'angelspartners.com', 'flashintel.ai',
+  'startupfundraising.com', 'theraiselist.com', 'findlimitedpartners.com', 'bookyourdata.com', 'startupinvestorsdirectory.com', 'finalscout.com',
+  'businessprofiles.com', 'buzzfile.com', 'findlps.com', 'allfamilyoffices.com', 'praxisrock.com', 'activefamilyoffices.com',
+  'relationshipscience.com', 'askforfunding.com', 'leadferret.com', 'reachinbox.ai', 'peoplesearch.com', 'veripages.com',
+  'dastelefonbuch.de', 'venturebanc.com', 'familyofficehub.io', 'fundinfolks.com', 'opendatany.com', 'inforcapital.com',
+  'angelbacked.co', 'highperformr.ai', 'scalelist.com', 'theofficialboard.com', 'getemail.io', 'allpeople.com', 'konaequity.com',
+  'realtyhop.com', 'getprospect.com', 'officialusa.com', ...BROKER_DOMAINS,
+];
+export function isBroker(url: string | null | undefined): boolean {
+  if (!url) return false;
+  let host: string;
+  try { host = new URL(url).hostname.toLowerCase(); } catch { return false; }
+  const bare = host.replace(/-/g, '');
+  const labels = bare.split('.').slice(0, -1);
+  return BROKER_NAMES.some((n) => labels.includes(n))
+    || BROKER_DOMAINS.some((d) => { const b = d.replace(/-/g, ''); return bare === b || bare.endsWith(`.${b}`); });
+}
 const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/;
 /** A phone number: ten or more digits in a run of digits and separators — once dates and year ranges are set aside. */
 const hasPhone = (t: string) => {
@@ -142,7 +188,7 @@ export function check(f: unknown, expectKey?: string): string[] {
     if (!FACT_FIELDS.includes(fact.field)) p.push(`fact ${i}: unknown field "${fact.field}"`);
     if (!isStr(fact.value)) p.push(`fact ${i}: no value`);
     if (!fact.source || !isStr(fact.source.url) || !/^https?:\/\//.test(fact.source.url)) p.push(`fact ${i}: no source URL`);
-    if (fact.source && BROKERS.test(fact.source.url)) p.push(`fact ${i}: from a contact-data broker`);
+    if (fact.source && isBroker(fact.source.url)) p.push(`fact ${i}: from a contact-data broker`);
     if (!['high', 'medium', 'low'].includes(fact.confidence)) p.push(`fact ${i}: no confidence`);
     if (fact.quote && fact.quote.split(/\s+/).length > 40) p.push(`fact ${i}: quote longer than 40 words`);
     const said = `${fact.value} ${fact.quote ?? ''}`;
@@ -159,6 +205,9 @@ export function check(f: unknown, expectKey?: string): string[] {
     ['coverage.note', x.coverage?.note], ...(x.coverage?.notFound ?? []).map((t, i) => [`coverage.notFound ${i}`, t] as [string, string]),
     ...(x.connections ?? []).map((c, i) => [`connection ${i}`, c.basis] as [string, string]),
   ];
+  // A broker is no source anywhere in a finding, not only under a fact (1.29).
+  for (const [i, l] of (x.identity?.links ?? []).entries()) if (isBroker(l.url)) p.push(`identity link ${i}: a contact-data broker`);
+  for (const [i, sg] of (x.profile?.signals ?? []).entries()) if (isBroker(sg.source)) p.push(`profile.signals ${i}: from a contact-data broker`);
   for (const [where, text] of prose) {
     if (text && (EMAIL.test(text) || hasPhone(text))) p.push(`${where}: carries an email address or phone number`);
     if (text && hasAddress(text)) p.push(`${where}: carries a street address`);

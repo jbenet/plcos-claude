@@ -2012,6 +2012,63 @@ async function main() {
   }
 
   {
+    // W5 after the search pass: a correction to the finding after the strategy was written makes it
+    // stale, though the finding's date — and so the pin — is unchanged.
+    const { isStale } = await import('../lib/enrich/strategy');
+    const made = { at: '2026-09-24T12:00:00Z', by: 'claude', workflow: 'W5', version: 1.7, inputs: { finding: '2026-09-24T09:00:00Z' } } as never;
+    const before = isStale({ made }, { researched: { at: '2026-09-24T09:00:00Z', corrected: [{ at: '2026-09-24T10:00:00Z' }] } });
+    const after = isStale({ made }, { researched: { at: '2026-09-24T09:00:00Z', corrected: [{ at: '2026-09-24T13:00:00Z' }] } });
+    check('A strategy written before a correction to its finding is stale; one written after it is not',
+      after && !before, `correction before the strategy: ${before ? 'stale' : 'fresh'}; after it: ${after ? 'stale' : 'fresh'}`);
+  }
+
+  {
+    // W5 after the search pass: "a parked page" is a dead domain, not a park; "Parker" is a name.
+    const { parksWithoutDate } = await import('../lib/enrich/strategy');
+    const read = (what: string) => parksWithoutDate({ next: { what } });
+    const cases: Array<[string, boolean]> = [
+      ['Check the address first: the domain is a parked page.', false], ['Email Parker Lee this week.', false],
+      ['Park him until the search pass.', true], ['Parked until the fund closes.', true], ['Park him to 4 Jan 2027.', false],
+      ['Park him until the search pass; the Form D was filed 3 Jun 2026.', true], ['Park the pursuit until March 2027, then re-read.', false],
+      ['Park ADIA to 4 Jan 2027; no fund material.', false],
+      ['She waits for the search pass before any note.', true], ['Hold until 4 Jan 2027, then re-read.', false],
+      ['Park him to Mon 4 Jan 2027.', false],
+    ];
+    const wrong = cases.filter(([w, want]) => read(w) !== want);
+    check('A park with no date is caught, and a parked domain or a name is not one',
+      wrong.length === 0, `${cases.length - wrong.length} of ${cases.length} read right${wrong.length ? `; wrong: ${wrong.map((w) => w[0]).join(' | ')}` : ''}`);
+  }
+
+  {
+    // W5 after the search pass: a date in May is not a hedge. The hypothetical filter read "(May 2026)"
+    // as "may", so a capacity fact dated in May never counted.
+    const { hasCapacityEvidence } = await import('../lib/enrich/strategy');
+    const dated = hasCapacityEvidence('Its 13F reports about $5.2 billion in holdings (May 2026).', new Date('2026-09-24'));
+    const hedged = hasCapacityEvidence('A first commitment may be $1 million.', new Date('2026-09-24'));
+    // And a Form D's "date of first sale" is a date, not a sale.
+    const formD = hasCapacityEvidence('Its Form D reports $2.5 million committed to the feeder, date of first sale 3 Jun 2026.', new Date('2026-09-24'));
+    check('A capacity fact dated in May counts as evidence; a clause that says "may" does not; a Form D\u2019s first-sale date is no sale',
+      dated && !hedged && formD, `dated in May: ${dated ? 'evidence' : 'not evidence'}; "may be": ${hedged ? 'evidence' : 'not evidence'}; a Form D with its first-sale date: ${formD ? 'evidence' : 'not evidence'}`);
+  }
+
+  {
+    // W1 1.29: a broker is matched on its whole domain, hyphens ignored — the old pattern's
+    // "cience.com" flagged every "…science.com", and "alphamaven" missed alpha-maven.com.
+    const { isBroker, BLOCKED_DOMAINS } = await import('../lib/enrich/schema');
+    const cases: Array<[string, boolean]> = [
+      ['https://www.zoominfo.com/p/x', true], ['https://zoominfo.co.uk/x', true], ['https://alpha-maven.com/x', true],
+      ['https://app.apollo.io/x', true], ['https://me.sh/x', true], ['https://cience.com/x', true],
+      ['https://www.healthscience.com/x', false], ['https://sciencedaily.com/x', false], ['https://apollo.com/x', false],
+      ['https://home.sh/', false], ['https://sinclay.com/', false], ['https://www.crunchbase.com/x', false], ['not a url', false],
+    ];
+    const wrong = cases.filter(([u, want]) => isBroker(u) !== want);
+    const unblocked = BLOCKED_DOMAINS.filter((d) => !isBroker(`https://${d}/`));
+    check('A broker is caught on its whole domain, hyphens ignored, and nothing else is; every blocked domain is one',
+      wrong.length === 0 && unblocked.length === 0,
+      `${cases.length - wrong.length} of ${cases.length} addresses read right; ${BLOCKED_DOMAINS.length - unblocked.length} of ${BLOCKED_DOMAINS.length} blocked domains caught${wrong.length ? `; wrong: ${wrong.map((w) => w[0]).join(', ')}` : ''}${unblocked.length ? `; missed: ${unblocked.join(', ')}` : ''}`);
+  }
+
+  {
     // Issue 0029 (real): the rail is as tall as the window, measured, not as 100dvh says.
     const { VIEWPORT_BOOT } = await import('../lib/viewport');
     const props = new Map<string, string>();

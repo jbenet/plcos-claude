@@ -98,9 +98,11 @@ export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
     if (backer) reasons.push(`Their firm backed Protocol Labs (${backer.other.name}): a clue, the firm’s tie, not theirs`);
     if (pagesFoundNothing.has(c.key)) reasons.push('Page reads found nothing on them: they wait for the search pass, not another read of the same pages');
     // The firm's own words ruling out our field (s18): "generally avoids medical devices", buyouts
-    // only. W5 parks those instead of writing; triage says so before proposing a note.
-    const outOfField = findingByKey.get(c.key)?.facts.find((x) => x.scope === 'firm'
-      && /\b(avoid|avoids|does not invest|doesn['’]t invest|excludes?|no)\b[^.;]{0,60}\b(medical|health|healthcare|biotech|life sciences?|neuro|venture)\b/i.test(`${x.value} ${x.quote ?? ''}`));
+    // only. W5 parks those instead of writing; triage says so before proposing a note. The quote only —
+    // the page's words — never the research's own sentence about it ("the page shows no names, and…
+    // Venture Capital"), which fired on 2 of 15 in W5 after the search pass.
+    const outOfField = findingByKey.get(c.key)?.facts.find((x) => x.scope === 'firm' && x.quote
+      && /\b(avoid|avoids|does not invest|doesn['’]t invest|excludes?|no)\b[^.;]{0,60}\b(medical|health|healthcare|biotech|life sciences?|neuro|venture)\b/i.test(x.quote));
     if (outOfField) reasons.push('Their firm’s own words rule out our field or venture: read that before writing a note');
     // A mandate the firm states itself (1.17, 1.19): "doesn't invest in funds" closes a fund ask.
     const excl = findingByKey.get(c.key)?.facts.find((x) => NO_FUNDS.test(`${x.value} ${x.quote ?? ''}`));

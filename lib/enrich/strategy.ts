@@ -68,7 +68,7 @@ export const moneyKey = (m: { track: string; state: string; amount: number } | n
  */
 export function isStale(
   s: Pick<Strategy, 'made'>,
-  finding: { researched: { at: string } } | null | undefined,
+  finding: { researched: { at: string; corrected?: Array<{ at: string }> } } | null | undefined,
   money?: { track: string; state: string; amount: number } | null,
   bestPath?: 'A' | 'B' | 'C' | 'D' | null,
   /** The team's newest context on this LP (issue 0016): a strategy written before it is due a re-think. */
@@ -81,6 +81,10 @@ export function isStale(
   // no longer finds needs rewriting.
   if (pinned && 'bestPath' in pinned && bestPath !== undefined && (pinned.bestPath ?? null) !== bestPath) return true;
   if (!finding) return false;
+  // A correction made to the finding after the strategy was written — the fact check, a band sweep —
+  // keeps `researched.at`, so the pin still matches while the strategy may repeat what was cut (W5
+  // after the search pass).
+  if (s.made.at && (finding.researched.corrected ?? []).some((c) => Date.parse(c.at) > Date.parse(s.made.at))) return true;
   if (pinned?.finding !== undefined) return pinned.finding !== finding.researched.at;
   return new Date(finding.researched.at).getTime() > new Date(s.made.at).getTime();
 }
@@ -107,11 +111,15 @@ export function hasCapacityEvidence(basis: string, today = new Date()): boolean 
     const years = [...clause.matchAll(/\b(19|20)\d{2}\b/g)].map((m) => Number(m[0]));
     return years.length > 0 && years.every((y) => y < today.getFullYear() - 6);
   };
-  return basis.split(/(?<=[.;])\s+|,\s+(?:but|and)\s+/).some((clause) => CAPACITY_EVIDENCE.test(clause) && !stale(clause)
+  // A Form D's "date of first sale" is a date, not a sale (W5 after the search pass): it tripped the
+  // sale-price filter below, so no Form D fact could count.
+  return basis.split(/(?<=[.;])\s+|,\s+(?:but|and)\s+/).map((c) => c.replace(/\b(?:date of )?first sale\b/gi, 'filing date'))
+    .some((clause) => CAPACITY_EVIDENCE.test(clause) && !stale(clause)
     && !/\b(no|not|none|never|without|nothing|unknown|unclear|unconfirmed|unverified)\b|n['’]t\b/i.test(clause)
     && !/\b(valuation|valued at|rounds?|raised|series [a-f]|company['’]s)\b/i.test(clause)
-    // A hypothetical is no evidence (s21): "a personal commitment would be his decision".
-    && !/\b(would|could|might|may)\b/i.test(clause)
+    // A hypothetical is no evidence (s21): "a personal commitment would be his decision". "may" in
+    // lower case only: the month in "(May 2026)" is a date, not a hedge (W5 after the search pass).
+    && !/\b(would|could|might)\b/i.test(clause) && !/\bmay\b/.test(clause)
     && !/\b(under|less than|below|up to)\s+\$/i.test(clause)
     // A company's sale price and a GP's fund sizes are not the LP's own money (s11) — but their own
     // shares sold, on a Form 4, are (s16).
@@ -140,9 +148,17 @@ export const placedOutsideUs = (places: Array<string | null | undefined>): boole
 /** A step that parks the LP with no date to look again (the critic's fourth round). */
 export function parksWithoutDate(s: { next?: { what: string; lookAgain?: string | null } }): boolean {
   const what = s.next?.what ?? '';
-  const at = what.search(/\bpark/i);
+  // "park" or "parked" as a word — not "a parked page" (a dead domain, W1 1.25) nor "Parker" (W5 after
+  // the search pass: a domain note in a next step read as a park with no date).
+  // …and a park worded without the word: "waits for the search pass", "hold until the fund closes".
+  const at = what.search(/\bpark(?:ed)?\b(?!\s+(?:page|domain|site|website))|\bwait(?:s|ing)?\s+(?:for|until)\b|\bhold(?:s|ing)?\s+(?:until|till)\b/i);
   if (at < 0 || s.next?.lookAgain) return false;
-  return !/\b\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}\b|\b\d{4}-\d{2}-\d{2}\b|look again|revisit/i.test(what.slice(at));
+  // The park's own date: introduced by "to", "until", "till" or "look again" — not any date later in
+  // the sentence (W5 after the search pass: "park until the search pass; the Form D was filed 3 Jun
+  // 2026" passed on the filing's date).
+  const date = String.raw`(?:\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*(?:\s+\d{4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(?:,?\s+\d{4})?|\d{4}-\d{2}-\d{2}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4})`;
+  // A weekday may come first: "to Mon 4 Jan 2027".
+  return !new RegExp(String.raw`\b(?:to|until|till|through|look again(?: on| in)?|revisit(?: on| in)?)\s+(?:the\s+)?(?:(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s+)?${date}\b`, 'i').test(what.slice(at));
 }
 
 export function gates(

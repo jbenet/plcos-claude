@@ -6,6 +6,7 @@ import { config } from '@/config/deployment';
 import { ago } from '@/lib/time';
 import { RESEARCH_STATUSES, enrichDir } from '@/lib/enrich/candidates';
 import Link from '@/components/ui/AppLink';
+import { latestRecordsToFix } from '@/lib/enrich/fixes';
 import { listPursuits, openSuggestions, STATUS_LABEL } from '@/modules/strategy';
 import type { Strategy } from '@/lib/enrich/strategy';
 import { pagesOnly as isPagesOnly, partialSearch, type Finding } from '@/lib/enrich/schema';
@@ -79,6 +80,7 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
     latestRun('enrich', 'import'),
     openSuggestions(),
   ]);
+  const fixes = await latestRecordsToFix();
   // W8, the portfolio view: every proposal together, this year's close first, then by how much
   // they could do and how ready they are. A person decides each on its LP's page.
   const LEVEL = { high: 3, medium: 2, low: 1, unknown: 0 } as Record<string, number>;
@@ -327,6 +329,40 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
           decided on its LP&rsquo;s page: accepting sets the next step, and nothing else moves.
         </p>
       </div>
+
+      {fixes && (
+        <div className="card">
+          <div className="chead">
+            <h2>Records to fix in Affinity</h2>
+            <span className="lbl">{n(fixes.rows.length)} LPs · listed {new Date(fixes.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+          </div>
+          <div className="cbody">
+            <div className="fact"><span>By kind</span><span>{Object.entries(fixes.kinds).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · ')}</span></div>
+          </div>
+          <table className="list sugtable">
+            <thead><tr><th style={{ width: 200 }}>LP</th><th>What the research says</th><th>The proposed step</th></tr></thead>
+            <tbody>
+              {fixes.rows.map((r) => (
+                <tr key={r.key}>
+                  <td>
+                    {r.pursuitId ? <Link href={`/targets/${r.pursuitId}`}><b>{r.name}</b></Link> : <b>{r.name}</b>}
+                    <div className="muted" style={{ fontSize: 11 }}>{r.org ?? '—'} · {r.kind}</div>
+                  </td>
+                  <td style={{ fontSize: 12 }}>{r.said[0] ?? <span className="muted">—</span>}{r.said.length > 1 && <div className="muted" style={{ fontSize: 11 }}>and {r.said.length - 1} more</div>}</td>
+                  <td style={{ fontSize: 12 }}>{r.step ?? <span className="muted">—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="cover">
+            <b>For a person, in Affinity.</b> What the research found wrong or in doubt in our own records —
+            a title the pages contradict, a record merging two people, a misspelled name, a dead domain, a
+            firm renamed, a role that ended — and the next steps that start by fixing one. A caution is a
+            question, not a verdict: check it against our own mail first. Nothing here writes to Affinity.
+            Listed by <code>scripts/enrich-fixes.ts</code>.
+          </p>
+        </div>
+      )}
     </Page>
   );
 }

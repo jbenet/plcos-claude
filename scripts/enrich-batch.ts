@@ -30,6 +30,8 @@ import { gates, isStale, nextOverLimit, type Strategy } from '../lib/enrich/stra
 import type { Path } from '../lib/enrich/connect';
 import type { Triage } from '../lib/enrich/triage';
 
+/** How long a cut W5 batch holds its keys: a guess — batches have finished within the hour so far. */
+const OPEN_HOURS = 3;
 const FREE = /^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|mac|aol|proton|protonmail|live|msn)\./;
 const lines = (s: string) => s.split('\n').filter(Boolean);
 
@@ -65,9 +67,12 @@ async function main() {
     const text = await readFile(join(dir, 'batches', f), 'utf8');
     if (mode === 'w1' && f.endsWith('.jsonl')) for (const l of lines(text)) batched.add(JSON.parse(l).key);
     if (mode === 'w5' && /^s\d+\.txt$/.test(f)) for (const k of lines(text)) batched.add(k.trim());
-    if (mode === 'w5' && /^[sv]\d+\.txt$/.test(f)) {
+    // A batch is open for a few hours after it is cut, never for good (W5 after the search pass): a
+    // strategy re-pinned without a new `made.at` stayed "in an open batch" long after that batch had
+    // finished, and 28 stale strategies went unbatched. Batches finish within the hour.
+    if (mode === 'w5' && /^[suv]\d+\.txt$/.test(f)) {
       const cut = (await stat(join(dir, 'batches', f))).mtime.getTime();
-      for (const k of lines(text).map((x) => x.trim())) openW5.add(`${k} ${cut}`);
+      if (Date.now() - cut < OPEN_HOURS * 3_600_000) for (const k of lines(text).map((x) => x.trim())) openW5.add(`${k} ${cut}`);
     }
   }
 

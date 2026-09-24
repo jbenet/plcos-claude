@@ -406,7 +406,10 @@ export function sharedRecords(candidates: Candidate[], findings: Map<string, Fin
     const lps = [...new Set(hs.map((h) => h.key))];
     if (lps.length < 2 || lps.length > 8) continue;
     const shown = names.get(n)!;
-    const job = (h: Hit) => h.field === 'role' || h.field === 'prior_role' || h.field === 'affiliation' || h.field === 'fund_gp';
+    // A job, not a place someone went through (W5 after the search pass): an accelerator's alumni don't
+    // run or work at it, and "their firm backs X, which B runs" made a shared accelerator a C tie.
+    const ALUMNI = /\b(alum(?:na|nus|ni|nae)?|batch|cohort|went through|participated|graduated?|fellows?(?:hip)?|demo day)\b/i;
+    const job = (h: Hit) => (h.field === 'role' || h.field === 'prior_role' || h.field === 'affiliation' || h.field === 'fund_gp') && !ALUMNI.test(h.value);
     // A one-word name joins only like with like (s23): two investments in "Nimbus", two seats on its
     // board — not a former employer and a fund that happen to share the word.
     const oneWord = !/\s/.test(shown.trim());

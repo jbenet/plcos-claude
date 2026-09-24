@@ -8,7 +8,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config/deployment';
 import { check, type Finding } from '../lib/enrich/schema';
-import { checkStrategy, gates, isStale, nextOverLimit, nextTooLong, type Strategy } from '../lib/enrich/strategy';
+import { CAPACITY_EVIDENCE, checkStrategy, gates, isStale, nextOverLimit, nextTooLong, type Strategy } from '../lib/enrich/strategy';
 import type { Path } from '../lib/enrich/connect';
 
 async function main() {
@@ -17,7 +17,36 @@ async function main() {
   const tally: Record<string, number> = {}, method: Record<string, number> = {};
   const found = new Map<string, Finding>();
   const special: string[] = [];
-  const SPECIAL = /\b(church|synagogue|mosque|parish|diocese|congregation|religious|faith[- ]based|evangelical|catholic|jewish|muslim|christian|hindu|buddhist|republican party|democratic party|political action committee|super pac|campaign donor|donated to .{0,30}campaign)\b/i;
+  /**
+   * A capacity band whose basis names no money, holding or filing at all (1.18), a pattern the search
+   * pass kept finding (1.39). Looser than W5's clause-by-clause test, which reads "an estimate for the
+   * firm, not for him: a $6B office" as no evidence: this one only asks whether any is named.
+   */
+  const BAND_EVIDENCE = new RegExp(`${CAPACITY_EVIDENCE.source}|billionaire|\\b13[dg]\\b|\\d+(\\.\\d+)?\\s?%\\s+of|[\\d,]{4,}\\s+(\\w+\\s+)?shares|multimillion|(tens|hundreds) of millions`, 'i');
+  /**
+   * Other people's money is no evidence (1.43): a phrase about a company's raise, round, valuation or
+   * sale price is set aside before looking — the loose test above let those through. No negation
+   * filter, unlike W5's: "an estimate for the firm, not for him: a $6B office" is the firm's evidence.
+   */
+  // Clients' money too (W5 after the search pass): a wealth manager's supervised or advised assets are
+  // its clients', whatever an office's own totals turn out to be allowed to set (open, for Juan).
+  const OTHERS_MONEY = /\b(valuation|valued at|rounds?|raised|raise|series [a-f]|sold (?:it |to .{0,40} )?for|sale (?:to .{0,40} )?for|(?:acquired|bought) (?:by .{0,40} )?for|sale price|exit(?:ed)? (?:at|for)|clients?['’]? (?:assets|money)|on behalf of (?:its )?clients|supervised (?:client )?assets|(?:assets )?under advisement|advised assets)\b/i;
+  // A phrase that denies ("his stake and proceeds are not public") names no evidence (1.44). Split
+  // first, so "not for him" no longer takes "a $6B office" down with it.
+  const DENIES = /\b(no|not|none|never|without|nothing|unknown|unclear|unconfirmed|unverified|undisclosed)\b|n['’]t\b/i;
+  // Phrase by phrase — a sentence often carries the evidence and a round side by side.
+  // Old evidence is no evidence, as in W5's gate (s19): a phrase whose every year is more than six
+  // years back — so a band in a finding is one a strategy can carry (W5 after the search pass).
+  const year = new Date().getFullYear();
+  const oldOnly = (phrase: string) => {
+    const years = [...phrase.matchAll(/\b(19|20)\d{2}\b/g)].map((m) => Number(m[0]));
+    return years.length > 0 && years.every((y) => y < year - 6);
+  };
+  const bandHasEvidence = (basis: string) =>
+    basis.split(/[.;:]\s+|,\s+|\s+and\s+|\s*[()]\s*/).some((phrase) => !OTHERS_MONEY.test(phrase) && !DENIES.test(phrase) && !oldOnly(phrase) && BAND_EVIDENCE.test(phrase));
+  const bareBands: string[] = [];
+  // "bible", "seminary", "ministry" and the like since the search pass (1.32): a religious-education gift went past it.
+  const SPECIAL = /\b(church|synagogue|mosque|temple|parish|diocese|congregation|religious|faith[- ]based|evangelical|catholic|jewish|muslim|christian|hindu|buddhist|bible|biblical|seminary|ministry|ministries|missionary|theolog\w*|yeshiva|republican party|democratic party|political action committee|super pac|campaign donor|donated to .{0,30}campaign)\b/i;
   let facts = 0, sourced = 0, bad = 0, conns = 0;
   const kinds: Record<string, number> = {}, conf: Record<string, number> = {}, types: Record<string, number> = {};
   for (const f of files) {
@@ -40,6 +69,8 @@ async function main() {
       ...(x.profile?.cautions ?? []), x.coverage?.note ?? '', ...(x.coverage?.notFound ?? [])].join(' ');
     // A person's name is not a category (N70): a surname "Church", a first name "Christian".
     if (SPECIAL.test(words.replace(/\b[A-Z][a-z]+ Church\b|\bChristian [A-Z][a-z]+\b/g, ''))) special.push(x.key);
+    const cap = x.profile?.capacity;
+    if (cap?.band && !/unknown|not known/i.test(cap.band) && !bandHasEvidence(cap.basis ?? '')) bareBands.push(x.key);
     const t = x.profile?.investorType ?? 'none';
     types[t] = (types[t] ?? 0) + 1;
   }
@@ -47,6 +78,35 @@ async function main() {
   // 1.16: nothing in a special category. A word here isn't always one (an organization's name can
   // carry it), so these are for a person to review, not refused.
   if (special.length) console.log(`  review under 1.16 — a religious or political term in ${special.length} findings: ${special.map((k) => k.slice(0, 8)).join(', ')}`);
+  if (bareBands.length) console.log(`  review under 1.18 — a capacity band with no evidence in its basis in ${bareBands.length} findings: ${bareBands.map((k) => k.slice(0, 8)).join(', ')}`);
+  // Near-duplicate names in the research set (1.43): a record one letter from another may be the same
+  // person misspelled, and a search on either spelling finds the other's pages. Keys only, for a person.
+  const setLines = (await readFile(join(process.cwd(), config.data.root, 'enrich', 'research-set.jsonl'), 'utf8').catch(() => ''))
+    .split('\n').filter(Boolean).map((l) => JSON.parse(l) as { key: string; name: string; org?: string | null; domains?: string[] });
+  const normName = (n: string) => n.toLowerCase().normalize('NFKD').replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+  const within2 = (a: string, b: string) => {
+    if (Math.abs(a.length - b.length) > 2) return false;
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (Math.min(...cur) > 2) return false;
+      prev = cur;
+    }
+    return prev[b.length]! <= 2;
+  };
+  const lookalikes: string[] = [];
+  for (let i = 0; i < setLines.length; i++) for (let j = i + 1; j < setLines.length; j++) {
+    const x = setLines[i]!, y = setLines[j]!;
+    const a = normName(x.name), b = normName(y.name);
+    if (!a || !b || a === b || a.length <= 5 || !within2(a, b)) continue;
+    // Two people at two different firms with near names are two people (Rose and Rowe): a pair is
+    // flagged when one record has nothing but a name, or both share a firm or a domain.
+    const bare = (r: typeof x) => !r.org && !(r.domains ?? []).length;
+    const shared = Boolean(x.org && y.org && normName(x.org) === normName(y.org)) || (x.domains ?? []).some((d) => (y.domains ?? []).includes(d));
+    if (bare(x) || bare(y) || shared) lookalikes.push(`${x.key.slice(0, 8)}~${y.key.slice(0, 8)}`);
+  }
+  if (lookalikes.length) console.log(`  review under 1.43 — names within two letters of another record's, a possible duplicate: ${lookalikes.join(', ')}`);
   console.log(`${facts} facts (${sourced} quoted) · ${conns} connections · confidence ${JSON.stringify(conf)}`);
   console.log(`fields ${JSON.stringify(kinds)}`);
   console.log(`investor types ${JSON.stringify(types)}`);
@@ -54,6 +114,7 @@ async function main() {
   const sdir = join(process.cwd(), config.data.root, 'enrich', 'strategy');
   const sfiles = (await readdir(sdir).catch(() => [])).filter((f) => f.endsWith('.json'));
   let sbad = 0, stale = 0, long = 0, over = 0, namesOthers = 0, staleTies = 0, tierMismatch = 0;
+  const namingKeys: string[] = [];
   // Another LP named in a strategy (v12, refined in N70): one careless step from telling one LP
   // about another. Fine when the files join them — a path either way, or one firm (a work domain,
   // an organization, or one lead) — or when the text only guards the other's privacy. The rest are
@@ -65,8 +126,12 @@ async function main() {
   const keyByName = new Map(allCands.map((c) => [c.name, c.key]));
   const nameByKey = new Map(allCands.map((c) => [c.key, c.name]));
   const PERSONAL = /^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|mac|aol|proton|protonmail|live|msn)\./;
+  // An address at one of our own domains joins nobody (W5 1.5), as in W3: the naming test treated old
+  // addresses at our domain as one firm and let four LPs be grouped through them (W5 after the search pass).
+  const ourNet = JSON.parse(await readFile(join(process.cwd(), config.data.root, 'enrich', 'us', 'network.json'), 'utf8').catch(() => '{}')) as { orgs?: Array<{ domains?: string[] }> };
+  const OUR_DOMAINS = new Set((ourNet.orgs ?? []).flatMap((o) => o.domains ?? []));
   const firmOf = (c: { org: string | null; domains: string[] } | undefined) =>
-    new Set([...(c?.domains ?? []).filter((d) => !PERSONAL.test(d)), (c?.org ?? '').toLowerCase().trim()].filter(Boolean));
+    new Set([...(c?.domains ?? []).filter((d) => !PERSONAL.test(d) && !OUR_DOMAINS.has(d)), (c?.org ?? '').toLowerCase().trim()].filter(Boolean));
   const firms = new Map(allCands.map((c) => [c.key, firmOf(c)]));
   const pathNames = new Map<string, Set<string>>();
   const pairTiers = new Map<string, Set<string>>(); // `${lpKey}|${otherName}` → the tiers W3's file gives the pair
@@ -114,7 +179,7 @@ async function main() {
         named = true;
         if (CITES_W3.test(around) && !/W3 has no path|W3's file doesn['’]t carry|no path between/i.test(around)) cited = true;
       }
-      if (named) namesOthers++;
+      if (named) { namesOthers++; namingKeys.push(key); }
       if (cited) { staleTies++; staleTieKeys.push(key); }
       // A tier cited beside a name the files do join (v15a): "(C, both invested …)" when W3's file
       // now gives the pair D. The within-firm citations the name check can't see.
@@ -175,7 +240,7 @@ async function main() {
   const leadMoved = movedLeads.length;
   // `--stale-ties`, `--gated`, `--lead-moved` and `--unpinned`, each with a file, write those keys,
   // one a line, for a revision batch.
-  for (const [flag, keys] of [['--stale-ties', staleTieKeys], ['--gated', gatedKeys], ['--lead-moved', movedLeads.map((x) => x.key)], ['--unpinned', unpinned]] as const) {
+  for (const [flag, keys] of [['--stale-ties', staleTieKeys], ['--gated', gatedKeys], ['--lead-moved', movedLeads.map((x) => x.key)], ['--unpinned', unpinned], ['--naming', namingKeys]] as const) {
     const at = process.argv.indexOf(flag);
     if (at > 0 && process.argv[at + 1]) await writeFile(process.argv[at + 1], keys.join('\n') + '\n');
   }

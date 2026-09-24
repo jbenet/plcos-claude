@@ -5079,3 +5079,60 @@ wants checking on the iPad.
 114 of 114 properties hold, three of them new: an old address is put in its place and never
 redirected again; the page height comes from the window and ignores a pinch; and what counts as in
 touch.
+
+## N80 — The search pass: every LP read with web search, every strategy rewritten on what it found, and the records to fix
+
+**Shipped.** The enrichment loop's search pass over the real data, the strategy rewrite after it, and
+what the loop taught its own checks. Real data, so counts only; the examples below are invented.
+
+| | |
+|---|---|
+| ![Records to fix](docs/changelog/shots/n80/01-records-to-fix.webp) | **Records to fix in Affinity**, on the enrichment page: what the research found wrong or in doubt in our own records — a title the pages contradict, a record that merges two people, a parked domain, a firm renamed — and the next steps that start by fixing one, in one list for one sitting. Affinity stays read-only: each fix is for a person, and a caution is a question to check against our own mail first. The demo's three rows are invented (`scripts/enrich-fixes.ts`). |
+
+**The search pass.** Juan raised the session's search cap, and the 334 findings made from page reads
+alone got their pass with web search: 23 batches of whole firms, six agents at a time, the W1
+protocol amended after every batch (1.27 to 1.47). On those 334, not-found went from 74 to 4, and
+facts from 2,669 to about 4,120 — every fact kept cut to its page's own words, so the pass was a fact
+check as much as an addition. Across all 388: 325 confirmed, 47 probable, 8 ambiguous, 8 not found.
+What it found was mostly dated: new roles and board seats, a departure recorded in an 8-K, funds raising
+or closed, renamed firms. Firm sitemaps, PL Neuro's allies page and the PL directory, read once a batch,
+found more ties to us than name searches did; W3 now holds 809 paths for 244 LPs.
+
+**The strategies, rewritten.** Twenty batches took the 299 whose findings had changed (189 revised, 59
+re-read and re-pinned, 51 new for identities the pass resolved), then two sweeps took the 92 left
+behind — stale, a lead rewritten, a colleague out of step, a park still waiting on "the search pass", a
+finding corrected after its strategy — and one more fixed the last. 381 strategies, all read against
+their new findings, with no problem, gate or stale pin on the checker. The pass moved gates, owners and
+records far more than lists: "this year" holds at 33. W5's lessons are amendment 1.7, among them a
+written scale for affinity and "the ask names the unit that commits".
+
+**Our own records came first.** In several batches half the next steps begin by fixing a record, hence
+the list above: on the real data it runs to about a hundred LPs.
+
+**Brokers, matched whole.** The broker check is now a list of 112 domains matched whole, hyphens
+ignored (`isBroker`, `BLOCKED_DOMAINS`), and it reads every address a finding cites. The old pattern
+flagged any "…science.com" news site and missed "alpha-maven.com"; agents met dozens of sites it didn't
+know, from investor-contact databases to a property-records site.
+
+**The checks the loop fixed in itself,** each with a property: a fact dated "(May 2026)" read as the
+hedge "may"; a Form D's "date of first sale" read as a sale; "a parked page" and "Parker" read as parks,
+while "waits for the search pass" did not; a park's date could be any date later in its sentence; a
+correction to a finding didn't make its strategy stale; W3 counted an accelerator's alumni as its staff;
+W9's "rules out our field" read the research's words instead of the firm's; the batch cutter held stale
+strategies in batches long finished; the checker's firm test joined LPs through our own domain. The
+checker also reviews a band whose basis names no money of the unit that commits, and names one likely
+duplicate record.
+
+**A slip, and the rule it made.** Three research agents fetched from SEC with curl, and the User-Agent
+carried our tool's name and Juan's email — some with an LP's name in the query. Stopped mid-pass. A
+request now carries no identity of ours (W1 1.36, CLAUDE.md).
+
+**Open, for Juan:** whether an office's totals (assets under management, a 13F, a principal's net worth)
+may set a band for the people who work there — the findings say yes, labelled, and the strategies' gate
+says no, so an LP's page can show both; whether evidence of an LP's own money with no amount on it may
+carry a band (nineteen were withdrawn for want of one); the names bulk-loaded on 31 May that strategies
+keep asking about; and the records to fix.
+
+118 of 118 properties hold, four of them new: brokers matched whole; a date in May and a Form D's
+first-sale date read right; a park caught whatever its wording, and only by its own date; a correction
+makes a strategy stale.

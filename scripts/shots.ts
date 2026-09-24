@@ -212,6 +212,17 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N80: [
+    {
+      name: '01-records-to-fix',
+      path: '/developer/enrich',
+      prepare: async (page) => {
+        await page.getByRole('heading', { name: 'Records to fix in Affinity' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N79: [
     {
       name: '01-routes-in-touch',

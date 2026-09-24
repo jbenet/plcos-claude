@@ -45,6 +45,8 @@ anyone on that network can read and change it. `DATA_PROFILE` picks one, in `con
   read a research batch under `data/real/enrich/` and write its findings back there; its prompt
   still carries no real data, and it never runs remotely. No sign-ins, no paid services, no
   contact-data brokers, nothing posted. Findings land in files first and are mapped in by an import.
+  A request carries no identity of ours: no email, name or product name in any header — a
+  User-Agent included (docs/19, W1 1.36).
 - **Affinity is read-only.** The key can write and cannot be scoped, so read-only is
   enforced in the client: GET only, allowlisted paths, a property test that a write throws.
   Writing back is a later decision, and would go through approval tickets.
