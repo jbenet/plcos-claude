@@ -78,9 +78,11 @@ button{font-family:inherit}
 /* ---------------- shell ---------------- */
 /* The rail is sticky at 100vh, so the column behind it is painted here — otherwise a
    long page shows ground colour beside the content once you scroll past the first screen. */
-.app{min-height:100vh;display:flex;background:var(--ground);
+.app{min-height:100vh;min-height:100dvh;display:flex;background:var(--ground);
      background-image:linear-gradient(to right,var(--rail) 0 244px,var(--ground) 244px)}
-.rail{width:244px;flex:none;background:var(--rail);color:var(--rail-ink);display:flex;flex-direction:column;padding:0 0 12px;position:sticky;top:0;height:100vh}
+.rail{width:244px;flex:none;background:var(--rail);color:var(--rail-ink);display:flex;flex-direction:column;padding:0 0 12px;position:sticky;top:0;height:100vh;height:100dvh}
+/* 100dvh (issue 0019, real): on Safari on an iPad, 100vh reaches under the browser's toolbar, and the
+   rail's footer — the feedback button — sat off the bottom of the screen, over the last nav item. */
 /* 46px exactly, so this rule lines up with the one under the breadcrumbs. */
 .brand{height:46px;flex:none;padding:0 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--rail-line)}
 .mark{width:26px;height:26px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:15px;font-weight:600;color:var(--accent-ink);flex:none}
@@ -1879,4 +1881,44 @@ a.vstat:hover{border-color:var(--accent-line);background:var(--accent-wash)}
 .ctxmeta{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
 .ctxbody{font-size:13px;margin-top:3px;white-space:pre-wrap}
 .ss-newctx{margin:0 0 10px;padding:9px 11px;border:1px solid var(--accent-line);background:var(--accent-wash);border-radius:7px;font-size:12.5px}
+/* The calendar's lanes (issue 0020): one colour each — on the density chart, its key, the chips and
+   the list's icons. Categorical, not semantic: every lane also carries its icon and its name. */
+.lane-meetings{--lc:var(--accent)}
+.lane-outreach{--lc:#5F4B9E}
+.lane-close{--lc:#2F6DB5}
+.lane-spv{--lc:#7A5C3E}
+.lane-deadlines{--lc:#8A6410}
+.lane-grants{--lc:#A1467A}
+.lane-sprint{--lc:#9A958A}
+.calstat-tiles{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.calstat-tiles>div{border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-width:92px;background:var(--surface)}
+.calstat-tiles>div b{display:block;font-family:var(--display);font-size:22px;font-weight:600;margin-top:2px}
+.calstat-tiles>div .glyph{color:var(--lc)}
+.density{display:flex;align-items:flex-end;gap:3px;height:132px;padding:6px 0 18px;border-bottom:1px solid var(--line);position:relative}
+.dcol{flex:1 1 0;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;position:relative}
+.dcol.now{outline:1px solid var(--ink);outline-offset:1px;border-radius:2px}
+.dcol.ahead .dstack{opacity:.55}
+.dstack{display:flex;flex-direction:column-reverse;border-radius:2px 2px 0 0;overflow:hidden;min-height:0}
+.dstack i{display:block;background:var(--lc);min-height:2px}
+.dmon{position:absolute;bottom:-17px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:9px;color:var(--muted)}
+.dmon em{font-style:normal;opacity:.7;margin-left:1px}
+.dkey{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0 4px;font-size:12px;color:var(--muted)}
+.dkey span{display:inline-flex;align-items:center;gap:5px}
+.dkey i{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--lc)}
+.dkey .dnow{margin-left:auto}
+.dfilters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--line)}
+.dfilters input[type=search]{flex:1 1 220px;min-width:180px;font-family:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
+.dfilters select{width:auto;flex:0 0 auto;font-family:inherit;font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
+.dchips{display:flex;flex-wrap:wrap;gap:6px;flex-basis:100%}
+.dchip{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
+.dchip .glyph{color:var(--lc)}
+.dchip .n{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.dchip.on{border-color:var(--lc);box-shadow:inset 0 0 0 1px var(--lc)}
+.dchip:focus-visible{outline:2px solid var(--accent-halo)}
+.dcount{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)}
+table.list.dated td{padding-top:6px;padding-bottom:6px;vertical-align:middle}
+table.list.dated .dwhen{font-size:11px;white-space:nowrap}
+table.list.dated .dwhat{display:inline-flex;align-items:center;gap:7px;font-weight:500}
+table.list.dated .dwhat .glyph{color:var(--lc)}
+table.list.dated .ddetail{color:var(--muted);font-size:11.5px;margin:1px 0 0 23px}
 

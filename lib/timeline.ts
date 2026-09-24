@@ -19,28 +19,9 @@ import { listAccreditation } from '@/modules/compliance';
  * The cost is that anything nobody has dated does not appear. The page says so.
  */
 
-export type Lane =
-  | 'close' | 'spv' | 'outreach' | 'meetings' | 'deadlines' | 'sprint' | 'grants';
-
-export const LANE_LABEL: Record<Lane, string> = {
-  sprint: 'Sprints & dead weeks',
-  close: 'Close',
-  spv: 'SPV seats',
-  outreach: 'Asks',
-  meetings: 'Meetings',
-  deadlines: 'Expiries & due dates',
-  grants: 'Grants rail',
-};
-
-export const LANE_MEANS: Record<Lane, string> = {
-  sprint: 'Periods from the sprint calendar, including the weeks that are structurally dead.',
-  close: 'Close targets and the conditions that gate them.',
-  spv: 'One bar per seat, invite through wire. An open seat runs to today.',
-  outreach: 'Asks with a date on them. An ask nobody scheduled has no mark.',
-  meetings: 'Scheduled and held. A held meeting is a fact; a scheduled one is an intention.',
-  deadlines: 'Things that expire: tickets, accreditation letters, answers, diligence questions.',
-  grants: 'Funder invitations. Outreach is blocked until one exists, so the date is the gate.',
-};
+// The lanes, their names and meanings, live with how they look (lib/lanes.ts, issue 0020).
+import type { Lane } from '@/lib/lanes';
+export { LANE_LABEL, LANE_MEANS, type Lane } from '@/lib/lanes';
 
 export type MarkKind = 'span' | 'point' | 'deadline';
 

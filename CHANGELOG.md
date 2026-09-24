@@ -4967,3 +4967,19 @@ searches.
 | ![The calendar](docs/changelog/shots/n75/03-the-calendar.webp) | **The vehicle's calendar shows its meetings** (issue 0017). It kept only meetings tied to the vehicle, and Affinity records most meetings with none, so the Neurotech calendar was empty. It now places each LP's meetings and calls by the rule the pipeline and every LP page use (N59: inside the raise's window, and read as about it), counting a meeting shared by colleagues once. On the real data: from 0 dated things to 164. The demo's meetings were always tied to their vehicles, so its calendar looks as it did. |
 
 110 of 110 properties hold.
+
+## N76 — The calendar by the numbers, filtered as you type; drafts kept; the rail on an iPad
+
+**Shipped.** Three items from the feedback box (issues 0018, 0019 and 0020).
+
+| | |
+|---|---|
+| ![By the numbers](docs/changelog/shots/n76/01-calendar-numbers.webp) | **By the numbers** (issue 0020), before the list on every calendar page: ahead, pressing and done, a count per lane with its icon, and the density month by month over the whole record, stacked by lane in the lane's colour — this month outlined, months ahead lighter. The months' numbers are in a table under the chart, its list equivalent. On the real data: 239 dated things over 13 months. |
+| ![The list](docs/changelog/shots/n76/02-calendar-list.webp) | **Every dated thing, filtered as you type** (issue 0020): a search over what, who and vehicle, a chip per lane with its count, a standing and a vehicle filter. Rows are tighter, and a detail that only repeats the standing ("Held.") isn't printed. Each row carries its lane's icon and colour — the chart's, and the timeline's where the thing is the same: a meeting is the calendar mark everywhere. Colour is never the only signal; every lane also has its icon and name. |
+| ![A kept draft](docs/changelog/shots/n76/03-a-kept-draft.webp) | **A feedback draft survives a reload** (issue 0018): the title, words, kind and priority are kept in the browser while they're written, one draft per page, and come back — saying so — when the box opens there again; filing clears it. Pictures aren't kept. And every report now records what it was written on (issue 0019): the browser, the window, the pixel ratio, touch or not. |
+
+**The rail on an iPad** (issue 0019). On Safari on an iPad, 100vh reaches under the browser's toolbar,
+so the rail's footer — the feedback button — sat off the bottom of the screen, over the last nav
+item. The rail now uses the visible screen's height (100dvh).
+
+110 of 110 properties hold.

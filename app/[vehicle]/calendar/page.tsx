@@ -5,6 +5,9 @@ import { SECTION } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
 import { timeline, LANE_LABEL, LANE_MEANS, type Lane, type Mark } from '@/lib/timeline';
+import type { DatedRow } from '@/lib/lanes';
+import { DatedList } from '@/components/calendar/DatedList';
+import { CalendarStats } from '@/components/calendar/CalendarStats';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +30,17 @@ export default async function Calendar({ params }: { params: Promise<{ vehicle: 
 
   const now = new Date('2026-09-20T00:00:00Z');
   const marks = await timeline(vehicle?.name ?? null, now);
+  // The list and the numbers read the same rows (issue 0020). A detail that only repeats the
+  // standing ("Held.", "Scheduled…") isn't printed: the standing column says it.
+  const REPEATS_STANDING = /^(Held\.$|Held; counted for this raise|Scheduled\. An intention, not a fact\.$)/;
+  const rows: DatedRow[] = marks.map((m) => ({
+    id: m.id, lane: m.lane, label: m.label,
+    detail: m.detail && !REPEATS_STANDING.test(m.detail) ? m.detail : null,
+    from: m.from.toISOString(),
+    to: m.kind === 'span' && m.to.getTime() !== m.from.getTime() ? m.to.toISOString() : null,
+    vehicle: m.vehicleName, standing: m.alert ? 'pressing' : m.past ? 'done' : 'ahead', href: m.href,
+  }));
+  const vehicleNames = [...new Set(marks.map((m) => m.vehicleName).filter((v): v is string => Boolean(v)))].sort();
 
   const start = MONDAY(now);
   start.setUTCDate(start.getUTCDate() - WEEKS_BACK * 7);
@@ -220,47 +234,14 @@ export default async function Calendar({ params }: { params: Promise<{ vehicle: 
         </div>
       )}
 
+      <CalendarStats rows={rows} now={now.toISOString()} />
+
       <div className="card">
         <div className="chead">
           <h2>Every dated thing, in order</h2>
-          <span className="lbl">{marks.length} row{marks.length === 1 ? '' : 's'}</span>
+          <span className="lbl">search, lanes and standing filter as you type</span>
         </div>
-        <table className="list">
-          <thead>
-            <tr>
-              <th style={{ width: 150 }}>When</th>
-              <th style={{ width: 150 }}>Lane</th>
-              <th>What</th>
-              <th style={{ width: 150 }}>Vehicle</th>
-              <th style={{ width: 110 }}>Standing</th>
-            </tr>
-          </thead>
-          <tbody>
-            {marks.map((m) => (
-              <tr key={m.id}>
-                <td className="mono" style={{ fontSize: 11 }}>
-                  {shortDate(m.from)}
-                  {m.kind === 'span' && m.to.getTime() !== m.from.getTime() && (
-                    <div className="muted">→ {shortDate(m.to)}</div>
-                  )}
-                </td>
-                <td className="muted">{LANE_LABEL[m.lane]}</td>
-                <td>
-                  {m.href ? <Link href={m.href}><b>{m.label}</b></Link> : <b>{m.label}</b>}
-                  <div className="muted" style={{ fontSize: 11.5 }}>{m.detail}</div>
-                </td>
-                <td className="muted">{m.vehicleName ?? '—'}</td>
-                <td>
-                  {m.alert
-                    ? <span className="flag f-block">Pressing</span>
-                    : m.past
-                      ? <span className="flag f-mute">Done</span>
-                      : <span className="flag f-ev">Ahead</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DatedList rows={rows} vehicles={vehicleNames} />
         <p className="cover">
           <b>What this covers:</b> every record in this system that carries a date
           {vehicle ? ` and belongs to ${vehicle.name}` : ' across every vehicle'}. Work nobody has

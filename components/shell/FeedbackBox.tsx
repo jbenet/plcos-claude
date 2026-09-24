@@ -195,10 +195,52 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   }, [editingId, editingImage, picking, showKeys, onClose]);
 
   const filters = useMemo(() => Object.fromEntries(params.entries()), [params]);
+  // What the report was written on (issue 0019, real): the browser, the window and the screen, so a
+  // layout bug can be reproduced on the device it was seen on.
+  const [client, setClient] = useState<{ userAgent: string; viewport: string; pixelRatio: number; touch: boolean } | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    setClient({
+      userAgent: navigator.userAgent,
+      viewport: `${window.innerWidth}×${window.innerHeight}`,
+      pixelRatio: window.devicePixelRatio,
+      touch: navigator.maxTouchPoints > 0,
+    });
+  }, [open]);
   const context = useMemo(
-    () => ({ route: path, filters }),
-    [path, filters],
+    () => ({ route: path, filters, ...(client ? { client } : {}) }),
+    [path, filters, client],
   );
+
+  // A draft survives a reload (issue 0018, real): the words, the kind and the priority are kept in
+  // this browser while they're being written, one draft per page — the way GitHub keeps an unsent
+  // comment — and cleared once the report is filed. Pictures are not kept: they're too big for it.
+  const draftKey = `capitalos.feedback.draft:${path}`;
+  const [restored, setRestored] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open || title || body) return;
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw) as { title?: string; body?: string; kind?: Kind; priority?: Priority; at?: string };
+      if (!d.title && !d.body) return;
+      setTitle(d.title ?? '');
+      setBody(d.body ?? '');
+      if (d.kind) setKind(d.kind);
+      if (d.priority) setPriority(d.priority);
+      setGeneration((g) => g + 1);
+      setRestored(d.at ?? null);
+    } catch { /* private window, or a draft that doesn't parse: start clean */ }
+    // Only when the box opens: a restore while typing would fight the person.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, draftKey]);
+  useEffect(() => {
+    if (state === 'done') { try { window.localStorage.removeItem(draftKey); } catch { /* nothing kept */ } return; }
+    try {
+      if (title.trim() || body.trim()) window.localStorage.setItem(draftKey, JSON.stringify({ title, body, kind, priority, at: new Date().toISOString() }));
+      else window.localStorage.removeItem(draftKey);
+    } catch { /* private window: the draft just isn't kept */ }
+  }, [title, body, kind, priority, state, draftKey]);
 
   const submitRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -245,6 +287,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
    * belongs to the issue it was filed with. The page and filters are captured again anyway.
    */
   const again = () => {
+    setRestored(null);
     setTitle('');
     setBody('');
     setImages([]);
@@ -468,6 +511,11 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             </div>
 
             <div className="fbtext">
+            {restored !== null && state === 'idle' && (title || body) && (
+              <p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+                Your unsent draft for this page, kept in this browser{restored ? ` since ${new Date(restored).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}. Pictures aren&rsquo;t kept in a draft.
+              </p>
+            )}
             <label className="field">
               <span className="lbl">Title · optional</span>
               <input

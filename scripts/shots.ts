@@ -212,6 +212,44 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N76: [
+    {
+      name: '01-calendar-numbers',
+      path: '/all/calendar',
+      prepare: async (page) => {
+        await page.locator('.calstats').first().evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '02-calendar-list',
+      path: '/all/calendar',
+      prepare: async (page) => {
+        await page.locator('.dfilters').first().evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -120));
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '03-a-kept-draft',
+      path: '/all/calendar',
+      prepare: async (page) => {
+        const open = async () => {
+          await page.locator('.rail .railrow button').filter({ hasText: 'Feedback' }).first().click();
+          await page.locator('[aria-label="Give feedback"] [contenteditable="true"]').first().waitFor({ timeout: 15_000 });
+        };
+        await open();
+        await page.getByPlaceholder(/intake names it/).fill('The dead weeks lane is hard to read');
+        await page.locator('[aria-label="Give feedback"] [contenteditable="true"]').first().click();
+        await page.keyboard.type('Half-written when the server restarted: the lane labels overlap the first week.');
+        await page.waitForTimeout(400);
+        await page.reload({ waitUntil: 'networkidle' });
+        await open();
+        await page.waitForTimeout(600);
+      },
+    },
+  ],
   N75: [
     {
       name: '01-update-or-touchpoint',
