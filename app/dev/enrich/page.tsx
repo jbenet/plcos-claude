@@ -8,9 +8,11 @@ import { RESEARCH_STATUSES, enrichDir } from '@/lib/enrich/candidates';
 import Link from 'next/link';
 import { listPursuits, openSuggestions, STATUS_LABEL } from '@/modules/strategy';
 import type { Strategy } from '@/lib/enrich/strategy';
+import { pagesOnly as isPagesOnly, partialSearch, type Finding } from '@/lib/enrich/schema';
 import type { Triage } from '@/lib/enrich/triage';
 import type { ConnectorPlan } from '@/lib/enrich/connectors';
 import { latestRun } from '@/modules/sources';
+import { readQuality } from '@/lib/enrich/quality';
 import { exportResearchSetAction, importFindingsAction } from './actions';
 
 /** The checks the records point to before anyone writes (iteration 3, docs/19). */
@@ -18,7 +20,7 @@ const FIRSTS: Array<{ id: NonNullable<Triage['first']>; label: string; means: st
   { id: 'name an owner', label: 'Name an owner', means: 'a way in exists, and nobody on the team owns the pursuit' },
   { id: 'check sent mail', label: 'Check sent mail', means: 'the stage on file claims contact that no touch on record shows' },
   { id: 'first personal note', label: 'A first personal note', means: 'our last word was a mailing, sent the same day to ten or more' },
-  { id: 'reply we owe', label: 'A reply we owe', means: 'Discussing or Committed, and they wrote last, with nothing from us since' },
+  { id: 'reply we owe', label: 'A reply we owe', means: 'they wrote last, with nothing from us since — at any status' },
 ];
 
 export const dynamic = 'force-dynamic';
@@ -38,14 +40,18 @@ async function count(dir: string): Promise<number> {
   try { return (await readdir(dir)).filter((f) => f.endsWith('.json')).length; } catch { return 0; }
 }
 
-/** Findings made from page reads alone (v1.6): still owed a pass with search. */
-async function pagesOnly(dir: string): Promise<number> {
+/** Findings still owed a pass with search (v1.6): from page reads alone, or with too few searches. */
+async function pagesOnly(dir: string): Promise<{ pages: number; partial: number }> {
   const { readFile } = await import('node:fs/promises');
-  let n = 0;
+  let pages = 0, partial = 0;
   for (const f of (await readdir(dir).catch(() => [])).filter((x) => x.endsWith('.json'))) {
-    try { if ((JSON.parse(await readFile(join(dir, f), 'utf8')) as { researched?: { method?: string } }).researched?.method === 'pages') n++; } catch { /* the checker reports it */ }
+    try {
+      const x = JSON.parse(await readFile(join(dir, f), 'utf8')) as Finding;
+      if (isPagesOnly(x)) pages++;
+      if (partialSearch(x)) partial++;
+    } catch { /* the checker reports it */ }
   }
-  return n;
+  return { pages, partial };
 }
 
 /**
@@ -63,6 +69,7 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
   const triage = (await readFile(join(dir, 'triage.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Triage);
   const lanes = (['warm now', 'research first', 'long process', 'cold'] as const).map((lane) => ({ lane, rows: triage.filter((t) => t.lane === lane) }));
   const plans = JSON.parse(await readFile(join(dir, 'connectors.json'), 'utf8').catch(() => '[]')) as ConnectorPlan[];
+  const quality = await readQuality(dir);
   const [set, cands, raw, pages, strategies, imported, suggestions] = await Promise.all([
     fileInfo(join(dir, 'research-set.jsonl')),
     fileInfo(join(dir, 'candidates.jsonl')),
@@ -119,7 +126,7 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
             <div className="fact" key={s}><span>{STATUS_LABEL[s]}</span><span>{n(pursuits.filter((p) => p.status === s).length)}</span></div>
           ))}
           <div className="fact"><span>Exported</span><span>{set ? `${n(set.lines)} LPs · ${ago(set.at)}` : 'not yet'}{cands && set && cands.lines !== set.lines ? ' · the two files disagree' : ''}</span></div>
-          <div className="fact"><span>Findings back</span><span>{n(raw)} LPs researched{pages ? ` (${n(pages)} from page reads only, owed a pass with search)` : ''} · {n(strategies)} with a strategy</span></div>
+          <div className="fact"><span>Findings back</span><span>{n(raw)} LPs researched{pages.pages ? ` (${n(pages.pages)} owed a pass with search: ${n(pages.pages - pages.partial)} from page reads alone${pages.partial ? `, ${n(pages.partial)} with too few searches to follow the protocol` : ''})` : ''} · {n(strategies)} with a strategy</span></div>
           {sp.exported && <p className="stat ready" style={{ marginTop: 10 }}><i />Exported {sp.exported} LPs to {join(config.data.root, 'enrich')}</p>}
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>
             <button className="btn p" type="submit">Export the research set</button>
@@ -163,6 +170,41 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
           (or the day it was read), a confidence, and nobody as its verifier until a person is
           (rule 9). Each connection path keeps its tier: a C or D path is a clue for a person to
           check, not a route (rule 6).
+        </p>
+      </div>
+
+      <div className="card">
+        <div className="chead">
+          <h2>How good it is — the loop&rsquo;s own measurements</h2>
+          <span className="lbl">the critic (W5c) · the fact check (W1c)</span>
+        </div>
+        <div className="cbody">
+          {quality.rounds.length === 0 && !quality.facts && <p className="muted">No critic round and no fact check has run on these files yet.</p>}
+          {quality.rounds.map((r) => (
+            <div className="fact" key={r.round}>
+              <span>Critic, round {r.round}</span>
+              <span>{n(r.graded)} strategies graded: {(['A', 'B', 'C', 'D'] as const).map((g) => `${r.grades[g]} ${g}`).join(' · ')}
+                {Object.keys(r.byCriterion).length > 0 && <span className="muted"> — issues by criterion: {Object.entries(r.byCriterion).sort(([a], [b]) => Number(a) - Number(b)).map(([c, k]) => `${c}: ${k}`).join(', ')}</span>}
+              </span>
+            </div>
+          ))}
+          {quality.facts && (() => {
+            const f = quality.facts;
+            const read = f.facts.supported + f.facts.partly + f.facts['not supported'] + f.facts['someone else'];
+            return (
+              <>
+                <div className="fact"><span>Fact check</span><span>{n(read + f.facts.unavailable)} facts in {n(f.findings)} findings, each re-read at the page it cites: {n(f.facts.supported)} supported, {n(f.facts.partly)} partly, {n(f.facts['not supported'])} not supported, {n(f.facts['someone else'])} about someone else; {n(f.facts.unavailable)} {f.facts.unavailable === 1 ? 'page' : 'pages'} unavailable{read ? ` (${Math.round((100 * f.facts.supported) / read)}% of those read, supported as written)` : ''}</span></div>
+                <div className="fact"><span>Identities</span><span>{n(f.identities.holds)} hold · {n(f.identities.doubt)} in doubt · {n(f.identities.wrong)} wrong</span></div>
+              </>
+            );
+          })()}
+        </div>
+        <p className="cover">
+          <b>What this is:</b> an agent grading against the written protocol (docs/19) — the critic
+          grades strategies by its criteria, the fact check re-reads each fact&rsquo;s cited page and
+          nothing else. Each round grades its own sample, so the rounds compare the protocol&rsquo;s
+          versions, not the same strategies twice. It measures the loop; it is never the team&rsquo;s
+          verification of a fact, nor a verdict on an LP.
         </p>
       </div>
 

@@ -37,7 +37,11 @@ export interface Strategy {
   angle: string;
   /** The best path in, from W3 — or none, said so. */
   route: { via: string; tier: 'A' | 'B' | 'C' | 'D'; why: string } | null;
-  next: { what: string; who: string; when: string; material?: string | null };
+  /**
+   * `lookAgain` (the critic's fourth round): when the step parks the LP, the date to look again — a
+   * park "until the search pass" with no date is a park for good if the pass never runs.
+   */
+  next: { what: string; who: string; when: string; material?: string | null; lookAgain?: string | null };
   /** `co-invest` (W5 v1.3): a fund in our field that backs our portfolio companies — a co-investor, not an LP. */
   ask: { vehicle: string; shape: 'fund commitment' | 'SPV' | 're-up or upsize' | 'intro to others' | 'advice' | 'verify first' | 'firm-level ask' | 'co-invest' | 'none yet'; range?: string | null;
     /** Who would commit (W5 1.5, s16): the unit at the firm, or "personal" for a partner's own check. */
@@ -85,7 +89,9 @@ export function isStale(
  * a route can't be better than the best path W3 found for the LP.
  */
 /** What counts as evidence for a capacity band (1.18): money, assets, a check, a filing. */
-export const CAPACITY_EVIDENCE = /\$\s?\d|\b\d+(\.\d+)?\s?(m|mm|million|b|bn|billion|k)\b|\baum\b|assets|net worth|13f|form d|form 4|990|filing|commit|check size|checks? of|holdings|stake|sold|raised|fund size|shares? (held|owned)|holds [\d,]+ shares/i;
+// A bare "commit" is a practice, not money (W5c round three: "commits to venture funds" read as
+// capacity); a commitment counts through its amount or its filing.
+export const CAPACITY_EVIDENCE = /\$\s?\d|\b\d+(\.\d+)?\s?(m|mm|million|b|bn|billion|k)\b|\baum\b|assets|net worth|13f|form d|form 4|990|filing|check size|checks? of|holdings|stake|sold|raised|fund size|shares? (held|owned)|holds [\d,]+ shares/i;
 
 /**
  * Evidence in a band's basis, clause by clause (s08, v04): a match inside a denial ("no LP
@@ -112,10 +118,34 @@ export function hasCapacityEvidence(basis: string, today = new Date()): boolean 
     && (!/\b(sale|acquisition|acquired|merger|buyout|to [A-Z][\w&.-]*( [A-Z][\w&.-]*)* for \$)\b/.test(clause) || /\b(form 4|shares|proceeds|stake|holding)\b/i.test(clause)));
 }
 
+/**
+ * Where the record or the research places an LP, tested for the US (s24): outside it, counsel comes
+ * before any fund material (W5 1.5). A place not stated is not "outside"; the US territories are in
+ * (a reviser found Puerto Rico flagged as abroad), and so is "U.S." however it is spaced.
+ */
+export const IN_US = /(?:^|[^a-z])u\.\s?s\.(?:\s?a\.?)?(?![a-z])|\b(united states|usa|puerto rico|guam|virgin islands|northern mariana islands|american samoa|alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawai['ʻ’]?i|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|district of columbia|san francisco|los angeles|boston|chicago|seattle|miami|austin|denver)\b/i;
+export const outsideUs = (where: string | null | undefined): boolean => Boolean(where?.trim()) && !IN_US.test(where ?? '');
+/**
+ * Outside the US when some source places them and none places them in it (v13a1): a finding's short
+ * "Palo Alto" beside our record's "Palo Alto, California, United States" is the US.
+ */
+export const placedOutsideUs = (places: Array<string | null | undefined>): boolean => {
+  const said = places.filter((p): p is string => Boolean(p?.trim()));
+  return said.length > 0 && !said.some((p) => IN_US.test(p));
+};
+
+/** A step that parks the LP with no date to look again (the critic's fourth round). */
+export function parksWithoutDate(s: { next?: { what: string; lookAgain?: string | null } }): boolean {
+  const what = s.next?.what ?? '';
+  const at = what.search(/\bpark/i);
+  if (at < 0 || s.next?.lookAgain) return false;
+  return !/\b\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}\b|\b\d{4}-\d{2}-\d{2}\b|look again|revisit/i.test(what.slice(at));
+}
+
 export function gates(
-  s: Pick<Strategy, 'list' | 'scores' | 'route'> & { ask?: Strategy['ask'] },
-  c: { contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: unknown; notes?: Array<{ summary: string | null }> } | undefined,
-  finding: { profile?: { investorType?: string; capacity?: { band: string; basis?: string } } } | null | undefined,
+  s: Pick<Strategy, 'list' | 'scores' | 'route'> & { ask?: Strategy['ask']; angle?: string; next?: { what: string; lookAgain?: string | null }; risks?: string[]; openQuestions?: string[] },
+  c: { contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: unknown; notes?: Array<{ summary: string | null }>; location?: string | null } | undefined,
+  finding: { profile?: { investorType?: string; capacity?: { band: string; basis?: string } }; identity?: { canonical?: { location?: string | null } | null }; facts?: Array<{ field: string; value: string }> } | null | undefined,
   bestTier: 'A' | 'B' | 'C' | 'D' | null,
   today = new Date(),
 ): string[] {
@@ -130,10 +160,14 @@ export function gates(
   // A manager's assets under management are its clients' money, not the LP's own (v08) — except for
   // a family office's principal or a foundation, whose office's money is theirs to direct.
   const ownsItsAssets = ['fo_principal', 'foundation', 'angel'].includes(finding?.profile?.investorType ?? '');
-  const managersMoney = !ownsItsAssets && /\b(aum|assets under management|manages|managed|manager|under management|supervises|supervised|advises on|advisory assets|client assets)\b/i.test(fb?.basis ?? '');
+  const managersMoney = !ownsItsAssets && /\b(aum|aua|assets under management|manages|managed|manager|under management|under advice|under advisement|advised assets|supervises|supervised|advises on|advisory assets|client assets)\b/i.test(fb?.basis ?? '');
   // Our own notes count too (v09): a family office's stated minimum can sit only in a note.
   const fromNotes = (c?.notes ?? []).some((n) => n.summary && hasCapacityEvidence(n.summary));
-  const evidenced = Boolean((fb && fb.band !== 'unknown' && hasCapacityEvidence(fb.basis ?? '') && !managersMoney) || fromNotes);
+  // And the finding's own facts (v13a2): a net worth recorded as a capacity fact is evidence even when
+  // the profile's summary only says "a billionaire". Assets under management count only for an
+  // investor whose assets are their own.
+  const fromFacts = (finding?.facts ?? []).some((f) => (f.field === 'capacity' || f.field === 'check_size' || (f.field === 'aum' && ownsItsAssets)) && hasCapacityEvidence(f.value));
+  const evidenced = Boolean((fb && fb.band !== 'unknown' && hasCapacityEvidence(fb.basis ?? '') && !managersMoney) || fromNotes || fromFacts);
   const band = s.scores?.capacity?.band ?? 'unknown';
   if (!/unknown|not known/i.test(band) && !evidenced && !c.money) out.push('capacity ahead of the evidence');
   const rank = { A: 0, B: 1, C: 2, D: 3 } as const;
@@ -141,6 +175,11 @@ export function gates(
   // A range on the ask with no capacity behind it gets round the capacity gate (the critic, round two).
   // An amount, not any digit: a rule number or "Fund 3" in the range is no size (s15).
   if (s.ask?.range && /\$\s?\d|\b\d+(\.\d+)?\s?(k|m|mm|million|b|bn|billion)\b/i.test(s.ask.range) && /unknown|not known/i.test(band) && !c.money) out.push('ask sized without capacity');
+  // An LP placed outside the US (1.5): the counsel gate is written into the strategy. The critic's
+  // third round found every such strategy on the list we act on first without it.
+  const said = [s.angle, s.next?.what, ...(s.risks ?? []), ...(s.openQuestions ?? [])].filter(Boolean).join(' ');
+  if (placedOutsideUs([finding?.identity?.canonical?.location, c.location]) && !/\bcounsel\b/i.test(said)) out.push('outside the US, no counsel gate');
+  if (parksWithoutDate(s)) out.push('a park with no date to look again');
   return out;
 }
 

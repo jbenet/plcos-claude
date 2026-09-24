@@ -4768,3 +4768,101 @@ outside the US, and conflicts: a competing position in our own field, listed apa
 hold, and each server in turn stopped serving pages.
 
 104 of 104 properties hold.
+
+## N70 — The list we act on first, graded; the facts checked at their sources; coverage that says what ran
+
+**Shipped.** A fourth round of the enrichment loop, aimed at what a person acts on first: every
+strategy on the "this year" list and every one for an LP who wrote to us last, graded by the critic
+and revised; a first check of the research itself, fact by fact, against the pages it cites; and
+the LP page's coverage line made exact.
+
+| | |
+|---|---|
+| ![A few searches](docs/changelog/shots/n70/01-a-few-searches.webp) | **Coverage that says what ran.** Fifteen findings ran one to five web searches before the session's search budget ran out: too few to follow the protocol, so they are owed the search pass like the page reads, but their LP pages said "with no web search", which was false (rule 7). They now say "from page reads and a few web searches, too few to follow the protocol", and the line lists what was searched plainly. N68 counted 328 findings read without search; the count is 334 owed the pass — 319 with no web search, 15 with a few — and 54 with search as the protocol asks. |
+| ![A fact check](docs/changelog/shots/n70/02-a-fact-check.webp) | **A finding corrected after a fact check, and saying so.** When the fact check (W1c, below) cuts a fact down to what its page says, the finding keeps the date it was read and lists the correction; the LP page says when, what changed, and that an agent re-read the pages — a fact check, not the team's verification, which is still "nobody on the team has verified it yet". |
+| ![The loop's measurements](docs/changelog/shots/n70/03-the-loops-measurements.webp) | **The loop's own measurements, in the app.** The critic's rounds and the fact check were files only. The enrichment page now reads them: each round's grades and its issues by criterion, and the fact check's counts, with the share of facts read that their pages support as written. A round graded in two halves counts as one. It says what it is — an agent grading against the written protocol, a measure of the loop, never the team's verification or a verdict on an LP. The demo's rounds are fictional. |
+
+**The critic's third round.** It graded the 47 strategies a person acts on first — all 33 on the "this
+year" list and 14 more for LPs who wrote to us last — by the same six criteria as rounds one and two,
+and a seventh: when the last word is theirs, does the next step answer it? 27 A, 16 B, 4 C. The
+"this year" list held (21 A, 11 B, 1 C); the seventh criterion found the gap: 15 of the 25 LPs who
+wrote last had a strategy that didn't answer what they wrote, or answered it with a question of our
+own. Of the 17 strategies graded in an earlier round, 13 held their grade, 2 rose and 2 fell, both on
+the new checks.
+
+Two rule slips became gates, because the checker could see them: an LP our records place outside the
+US whose strategy never names counsel (amendment 1.5 writes the gate into the strategy before any
+fund material or signature — the one C on the "this year" list proposed countersigning a non-US LP's
+documents without it; 18 strategies across the set tripped the new gate), and a capacity check that read
+"commits to venture funds" as money and assets under advice as the LP's own. What the checker can't
+see became W5 amendment 1.6: when the last word is theirs, the next step answers it; one meeting,
+one date (two partners at one firm on the same day were one meeting, not two one-to-ones); owning a
+pursuit is not a channel to the LP; W3 is cited as it stands; a firm's lead re-reads its colleagues.
+
+Then the revisions, by rule and recorded on each strategy. Four batches rewrote 52 strategies at
+W5 1.6 — the critic's fixes, the stale ties and the new gates; no list changed. Every reply we owe
+now starts by finding the LP's message and checking sent mail, then answers it, owning the delay,
+before any question of ours. Where two colleagues share a meeting date, it is one reply to both, and
+neither one's words go to the other. A final pass pinned every firm-level ask to its lead (22 pins,
+14 texts brought into line with their lead) and restored one capacity band the gate had hidden.
+Then every firm's lead was brought to 1.6 (15 leads, 9 revised), and its colleagues re-pinned after
+it (22), the lead first; three leads had fallen behind colleagues revised earlier in the night.
+
+**The critic's fourth round, on the bulk.** A fresh random sample no round had graded: 20 strategies
+on the 2027 list and 5 marked "not now". All 25 A — an easy sample, the critic said (none owes a reply,
+has money on the close track, or a meeting on file). One thing recurred: 12 of the 25 parked an LP
+"until the search pass", with no date to look again — a park for good if the pass never runs. Across
+the set, 54 of the 57 strategies that park had none. A park now carries `next.lookAgain`, shown on the
+LP page; a gate counts any without one; and a rule set it for those 54 — the 2027 list on 4 Jan 2027,
+"not now" on 5 Apr 2027, or the search pass if that comes first. The dates are guesses, for a person
+to change, and each is recorded on its strategy.
+
+The checker ends the night at 388 findings and 330 strategies with no problems: none stale, no gate,
+no firm asked twice, no lead moved or unpinned, no W3 tie cited that the files don't carry.
+
+**The fact check (W1c), new.** Two agents re-read 171 facts in 20 findings, half of them behind a
+"this year" strategy, at the pages the facts cite and nothing else: no search, no other pages, no
+sign-ins. Of the 153 whose page loaded, 133 are supported as written, 19 partly and 1 not; none is
+about someone else. Of the 20 identities, 18 hold and 2 are in doubt; none is wrong. Every partial
+had one of three causes: a detail brought in from a second page, a description the page doesn't
+give, or a stronger word than the page's ("joined" for "offered", "acquired" for "joined forces").
+One fund name in a `detail` field had been made up by analogy with a sister fund's filing, and W3
+joins LPs on those names. They became W1 amendment 1.26, and the 20 findings were corrected to their
+pages: 16 changed and 4 untouched — 19 facts cut to their pages' words, 2 split, 1 removed, 13 moved
+to the cautions as unconfirmed (they rested on a search summary, or on a page that was never read),
+and 8 `detail` fields removed; no identity changed. A fact from an LP-contact database was removed,
+and the checker's broker list gained the site.
+
+**The checker names what it means.** "A strategy naming an LP outside its paths" counted 34, mostly
+colleagues at one firm, paths recorded in the other direction, and lines that guard one LP's
+privacy from another. It now leaves those out: 22 name an LP the files don't join to them, and 11
+of those cite a W3 row or a connector-plan pairing that W3's later fixes removed (a shared employer,
+an acquirer, a one-word name). All were revised, and the check now reads the route's reason too.
+
+**The revisers found the checker's blind spots.** Each reviser reports what it learned, and each
+report became a fix tonight:
+
+- The US test read Puerto Rico, Guam and "U.S." followed by a space as abroad, and a finding's short
+  "Palo Alto" as abroad next to our record's "Palo Alto, California, United States". Now an LP is
+  outside the US only when some source places them there and none places them in it. The count
+  that one question to counsel covers is 40 LPs, not 46.
+- The capacity gate read only the profile's summary, so a net worth recorded as a fact was invisible
+  and a reviser set a supported band to unknown. The gate now reads the finding's capacity and
+  check-size facts, and the band is restored.
+- Three of four stale citations sat in the route's reason, which the check didn't read, and a W3 row
+  filed under "X (adviser to Y)" looked stale when it wasn't. Both are fixed.
+- 18 of 37 firm-level asks pinned no lead, so a lead's rewrite couldn't mark them stale. The checker
+  counts them now, and each is pinned.
+- Parallel batches unpin each other's firms. Batches are now cut by firm, a lead is written before
+  its colleagues, and one re-pin step runs after they all finish (docs/19).
+
+**Two first steps, measured.** Each LP page shows triage's check ("Before any outreach") and the
+strategy's next step. They agree on 174 of the 224 LPs that have both. Of the 50 that differ, most
+are the strategy being more specific, or departing on purpose with its reason given, such as
+correcting the contact first, or waiting on counsel. That is left as it is, not made a gate.
+
+**The synthesis counts people.** "Who the next steps fall to" read the first word of each owner
+line, so a firm's name counted as a person. It now counts the first member of the team named. One
+person holds 190 of the 330 next steps, which is the owner rule's question for the team.
+
+107 of 107 properties hold.

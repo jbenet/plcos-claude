@@ -11,8 +11,8 @@ import { join } from 'node:path';
 import { config } from '../config/deployment';
 import type { Candidate } from '../lib/enrich/candidates';
 import type { Path, PlDirectoryEntry } from '../lib/enrich/connect';
-import type { Finding } from '../lib/enrich/schema';
-import type { Strategy } from '../lib/enrich/strategy';
+import { pagesOnly, partialSearch, type Finding } from '../lib/enrich/schema';
+import { placedOutsideUs, type Strategy } from '../lib/enrich/strategy';
 import { NO_FUNDS, type Triage } from '../lib/enrich/triage';
 import type { ConnectorPlan } from '../lib/enrich/connectors';
 
@@ -49,7 +49,19 @@ async function main() {
   const BAND: Record<string, number> = { '>$25M': 5, '$5–25M': 4, '$1–5M': 3, '$250K–1M': 2, '<$250K': 1 };
   const thisYear = strategies.filter((s) => s.list === 'this year')
     .sort((a, b) => (LEVEL[b.scores.propensity.level] ?? 0) - (LEVEL[a.scores.propensity.level] ?? 0) || (BAND[b.scores.capacity.band] ?? 0) - (BAND[a.scores.capacity.band] ?? 0));
-  const who = count(strategies, (s) => s.next.who.split(/[ (,—]/)[0] ?? '?');
+  // Who the next steps fall to: the first person of the team named in `next.who`, by first or full
+  // name — a firm's name ("its one owner") isn't a person, and an unnamed owner is counted as such.
+  const team = (JSON.parse(await readFile(join(dir, 'team.json'), 'utf8').catch(() => '[]')) as Array<{ name: string }>).filter((m) => m.name?.trim());
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const firstNamed = (w: string) => {
+    let best: { at: number; name: string } | null = null;
+    for (const m of team) for (const n of new Set([m.name, m.name.split(/\s+/)[0]])) {
+      const at = w.search(new RegExp(`\\b${esc(n)}\\b`));
+      if (at >= 0 && (!best || at < best.at)) best = { at, name: m.name.split(/\s+/)[0] };
+    }
+    return best?.name ?? 'nobody on the team named';
+  };
+  const who = count(strategies, (s) => firstNamed(s.next.who));
   const shapes = count(strategies, (s) => s.ask.shape);
 
   const committed = new Set(cands.filter((c) => c.pursuits.some((p) => p.status === 'committed')).map((c) => c.key));
@@ -72,7 +84,7 @@ async function main() {
   md.push(`- Neuro, health or biotech signal: ${neuro.length} of ${resolved.length}. A tie to Protocol Labs, its network or our portfolio beyond meetings: ${[...plTie].length} LPs — ${plB.size} documented (A or B), the rest clues to check (C or D).`);
   md.push(`- Strategies: ${strategies.length} (${count(strategies, (s) => s.list)['this year'] ?? 0} this year, ${count(strategies, (s) => s.list)['2027'] ?? 0} for 2027, ${count(strategies, (s) => s.list)['not now'] ?? 0} not now). Asks: ${top(shapes).map(([k, v]) => `${k} ${v}`).join(', ')}.`);
   md.push(`- Triage of the rest (W9): ${top(count(triage.filter((t) => t.first !== 'reply we owe'), (t) => t.lane)).map(([k, v]) => `${k} ${v}`).join(', ')}.`);
-  md.push(`- How the findings were made: ${top(count(findings, (f) => f.researched?.method ?? 'search')).map(([k, v]) => `${k} ${v}`).join(', ')} (a pages-only finding is owed a pass with search).`, '');
+  md.push(`- How the findings were made: ${top(count(findings, (f) => partialSearch(f) ? 'pages and too few searches' : f.researched?.method ?? 'search')).map(([k, v]) => `${k} ${v}`).join(', ')} (all but search are owed a pass with search).`, '');
 
   md.push('## This year — the best opportunities, by readiness then capacity', '');
   for (const s of thisYear.slice(0, 25)) {
@@ -270,15 +282,14 @@ async function main() {
     `2. **This week, the five most ready:** ${thisYear.slice(0, 5).map((x) => `${x.name} (${x.next.who.split(/[ (,—]/)[0]})`).join(', ')}.`,
     `3. **Replies we owe, and checks before any note:** ${owe.length} warm LPs wrote last and wait on us; ${firsts['check sent mail'] ?? 0} to check sent mail, ${firsts['name an owner'] ?? 0} to give an owner, ${firsts['first personal note'] ?? 0} due a first personal note rather than a follow-up.`,
     `4. **Introductions:** ${plans.length} connectors next to ${new Set(plans.flatMap((x) => x.prospects.map((q) => q.key))).size} prospects; ${plans.filter((x) => x.when === 'after they sign').length} ask once their own commitment is signed.`,
-    `5. **Research:** ${findings.length} of ${cands.length} read; ${findings.filter((f) => f.researched?.method === 'pages').length} from pages only and owed a search pass; ${firstNotes.length} Connecting or Selected LPs with a neuro or health signal of their own.`,
+    `5. **Research:** ${findings.length} of ${cands.length} read; ${findings.filter(pagesOnly).length} owed a search pass (${findings.filter((f) => pagesOnly(f) && !partialSearch(f)).length} from pages alone, ${findings.filter(partialSearch).length} with too few searches to follow the protocol); ${firstNotes.length} Connecting or Selected LPs with a neuro or health signal of their own.`,
     '',
   ];
   // One question to counsel unblocks every LP outside the US (s24): count them where the record or
   // the research says where they are.
-  const US = /\b(united states|usa|u\.s\.|alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|district of columbia|san francisco|los angeles|boston|chicago|seattle|miami|austin|denver)\b/i;
-  const whereOf = (c: Candidate) => findings.find((f) => f.key === c.key)?.identity.canonical?.location ?? c.location ?? '';
-  const outsideUs = cands.filter((c) => { const w = whereOf(c); return w.trim() && !US.test(w); });
-  start.splice(start.length - 1, 0, `6. **One question to counsel:** ${outsideUs.length} LPs are placed outside the US — what may a first note to them say about a US 506(c) fund, and how is a non-US investor admitted? One answer unblocks all of them.`);
+  // IN_US and outsideUs live with the gate that uses them (lib/enrich/strategy.ts).
+  const placedOutside = cands.filter((c) => placedOutsideUs([findings.find((f) => f.key === c.key)?.identity.canonical?.location, c.location]));
+  start.splice(start.length - 1, 0, `6. **One question to counsel:** ${placedOutside.length} LPs are placed outside the US — what may a first note to them say about a US 506(c) fund, and how is a non-US investor admitted? One answer unblocks all of them.`);
   md.splice(4, 0, ...start);
   await writeFile(join(dir, 'synthesis.md'), md.join('\n') + '\n', 'utf8');
   console.log(`synthesis: ${cands.length} in the set, ${findings.length} researched (${resolved.length} resolved), ${neuro.length} neuro signals, ${plTie.size} with a PL tie, ${strategies.length} strategies (${thisYear.length} this year), ${clusters.length} firm clusters, triage ${JSON.stringify(count(triage, (t) => t.lane))}`);

@@ -1648,15 +1648,79 @@ async function main() {
             wrongClosed === 0 && wrongOpen === 0, `exclusions missed: ${wrongClosed} of ${closes.length}; backers of managers misread as closed: ${wrongOpen} of ${open.length}`);
         }
 
+        // Coverage says what ran (rule 7): a finding owed the search pass because it ran too few
+        // searches is not said to have run none.
+        {
+          const { pagesOnly, partialSearch } = await import('../lib/enrich/schema');
+          const none = { researched: { method: 'pages' }, coverage: { searched: ['the firm’s team page (read)', 'SEC adviser search'] } };
+          const few = { researched: { method: 'pages' }, coverage: { searched: ['web search (2 queries)', 'the firm’s site (read)'] } };
+          const denied = { researched: { method: 'pages' }, coverage: { searched: ['no web search: the budget was spent'] } };
+          const full = { researched: { method: 'search' }, coverage: { searched: ['web search (6 queries)'] } };
+          check('A finding that ran a few web searches is owed the pass but not said to have run none; site searches and a full pass are neither',
+            pagesOnly(few) && partialSearch(few) && pagesOnly(none) && !partialSearch(none) && !partialSearch(denied) && !pagesOnly(full) && !partialSearch(full),
+            `too few read as a few: ${partialSearch(few)}; site searches read as a web search: ${partialSearch(none)}; "no web search" read as one: ${partialSearch(denied)}; a full pass owed one: ${pagesOnly(full) || partialSearch(full)}`);
+        }
+
         // Capacity rests on evidence (W5 1.5): money, assets, a filing — not a denial, not a
         // company's valuation or round, not a figure the basis calls unknown.
         {
           const { hasCapacityEvidence } = await import('../lib/enrich/strategy');
-          const evidence = ['990-PF assets of $40M (2024)', 'A 13F reporting $1.2B in holdings'];
-          const not = ['No LP commitment is on record', 'Company valuation of $2B; founder stake unknown', 'Raised $30M Series B for the company', 'No assets under management and no commitment sizes'];
+          const evidence = ['990-PF assets of $40M (2024)', 'A 13F reporting $1.2B in holdings', 'A commitment of $2M to a venture fund, per the foundation’s 2024 990-PF'];
+          const not = ['No LP commitment is on record', 'Company valuation of $2B; founder stake unknown', 'Raised $30M Series B for the company', 'No assets under management and no commitment sizes', 'Commits to venture funds as an LP'];
           const missed = evidence.filter((b) => !hasCapacityEvidence(b)).length, passed = not.filter((b) => hasCapacityEvidence(b)).length;
           check('A capacity band rests on evidence: not a denial, not a company’s valuation or round, not a figure called unknown',
             missed === 0 && passed === 0, `evidence missed: ${missed} of ${evidence.length}; non-evidence accepted: ${passed} of ${not.length}`);
+        }
+
+        // The loop's own measurements (N70): the critic's rounds from their files — a round in two
+        // halves is one round — and the fact check's grades, counted as written.
+        {
+          const { mkdtemp, writeFile: wfq, rm: rmq } = await import('node:fs/promises');
+          const { tmpdir } = await import('node:os');
+          const { join: jq } = await import('node:path');
+          const { readQuality, roundOf } = await import('../lib/enrich/quality');
+          const dq = await mkdtemp(jq(tmpdir(), 'quality-'));
+          await wfq(jq(dq, 'strategy-review.jsonl'), ['{"key":"a","grade":"B","issues":[{"criterion":2,"what":"x"}]}', '{"key":"b","grade":"C","issues":[]}'].join('\n'));
+          await wfq(jq(dq, 'strategy-review-3a.jsonl'), '{"key":"c","grade":"A","issues":[]}\n');
+          await wfq(jq(dq, 'strategy-review-3b.jsonl'), '{"key":"d","grade":"A","issues":[]}\nnot json\n');
+          await wfq(jq(dq, 'fact-review-01a.jsonl'), '{"key":"a","identity":"holds","facts":[{"i":0,"grade":"supported"},{"i":1,"grade":"partly"},{"i":2,"grade":"unavailable"}]}\n');
+          const q = await readQuality(dq);
+          await rmq(dq, { recursive: true, force: true });
+          const one = q.rounds.find((r) => r.round === 1), three = q.rounds.find((r) => r.round === 3);
+          check('The loop’s measurements: a round in two halves is one round; grades and facts are counted as written; a broken line is skipped',
+            roundOf('strategy-review.jsonl') === 1 && roundOf('strategy-review-2.jsonl') === 2 && roundOf('strategy-review-3b.jsonl') === 3 && roundOf('fact-review-01a.jsonl') === null
+              && one?.graded === 2 && one.grades.C === 1 && one.byCriterion['2'] === 1 && three?.graded === 2 && three.grades.A === 2
+              && q.facts?.facts.supported === 1 && q.facts.facts.partly === 1 && q.facts.facts.unavailable === 1 && q.facts.identities.holds === 1,
+            `rounds ${JSON.stringify(q.rounds.map((r) => [r.round, r.graded]))}; facts ${JSON.stringify(q.facts?.facts)}`);
+        }
+
+        // Outside the US, counsel first (W5 1.5, made a gate after the critic's third round): a
+        // strategy for an LP placed abroad names counsel; one placed in the US, or placed nowhere,
+        // needn't. Assets a firm holds under advice are its clients' money, not the LP's own.
+        {
+          const { gates } = await import('../lib/enrich/strategy');
+          const contact = { lastFromThem: null, meetings: 2, groupMeetings: 0 };
+          const s = (said: string) => ({ list: '2027' as const, scores: { capacity: { band: 'unknown', basis: 'Not public.' } } as never, route: null, next: { what: said }, risks: [], openQuestions: [] });
+          const flagged = (said: string, where: string | null) => gates(s(said), { contact, money: null, location: where }, null, null).includes('outside the US, no counsel gate');
+          const abroad = flagged('Marc answers his 1 Sep email with the first-close date, by 30 Sep.', 'Berlin, Germany');
+          const withCounsel = flagged('Marc asks counsel how a Berlin-based investor is admitted, then answers his email, by 2 Oct.', 'Berlin, Germany');
+          const home = flagged('Marc answers his email, by 30 Sep.', 'Austin, Texas');
+          const nowhere = flagged('Marc answers his email, by 30 Sep.', null);
+          const territory = flagged('Marc answers his email, by 30 Sep.', 'San Juan, Puerto Rico') || flagged('Marc answers his email, by 30 Sep.', 'Boston, U.S.');
+          // A finding's short place beside our record's full one: the record's "United States" wins.
+          const shortPlace = gates(s('Marc answers his email, by 30 Sep.'), { contact, money: null, location: 'Palo Alto, California, United States' }, { identity: { canonical: { location: 'Palo Alto' } } }, null).includes('outside the US, no counsel gate');
+          const advised = gates({ list: '2027', scores: { capacity: { band: '$1–5M', basis: '$900M of client assets under advice.' } } as never, route: null }, { contact, money: null }, { profile: { investorType: 'fo_staff', capacity: { band: '$1–5M', basis: '$900M of client assets under advice.' } } }, null).includes('capacity ahead of the evidence');
+          // A net worth recorded as a capacity fact is evidence, though the summary only says "a billionaire" (v13a2).
+          const billionaire = { profile: { investorType: 'fo_principal', capacity: { band: '$5–25M', basis: 'A billionaire.' } }, facts: [{ field: 'capacity', value: 'Net worth of $2.1B (2025 list).' }] };
+          const factBacked = !gates({ list: '2027', scores: { capacity: { band: '$5–25M', basis: 'Net worth on file.' } } as never, route: null }, { contact, money: null }, billionaire, null).includes('capacity ahead of the evidence');
+          // A park carries a date to look again (the critic, round four).
+          const { parksWithoutDate } = await import('../lib/enrich/strategy');
+          const park = (what: string, lookAgain?: string) => parksWithoutDate({ next: { what, lookAgain } });
+          const parks = park('Check sent mail; if nothing went, park him until the search pass.') && !park('Check sent mail; if nothing went, park him until the search pass.', 'Mon 4 Jan 2027')
+            && !park('Park him; look again on 4 Jan.') && !park('Answer her email with the first-close date.');
+          check('Outside the US, a strategy names counsel; in the US, its territories, or placed nowhere it needn’t; assets under advice are clients’ money; a capacity fact is evidence; a park carries a date',
+            abroad && !withCounsel && !home && !nowhere && !territory && !shortPlace && advised && factBacked && parks,
+            `abroad without counsel flagged: ${abroad}; with counsel flagged: ${withCounsel}; in the US flagged: ${home}; a territory or "U.S." flagged: ${territory}; placed nowhere flagged: ${nowhere}; a band on assets under advice flagged: ${advised}; a band on a capacity fact accepted: ${factBacked}; parks read right: ${parks}`);
         }
 
         // The connector plan (W11): a restricted prospect is left out (rule 8), and so is one who has

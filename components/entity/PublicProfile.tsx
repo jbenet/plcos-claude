@@ -1,4 +1,5 @@
 import { shortDate } from '@/lib/time';
+import { partialSearch } from '@/lib/enrich/schema';
 import { claimLabel, claimsFor, getSourceDoc, notesFor, type Claim } from '@/modules/research';
 
 /**
@@ -15,7 +16,7 @@ interface Profile {
     summary: string; investorType: string; howTheyInvest?: string; interests?: string[];
     capacity?: { band: string; basis: string }; signals?: Array<{ what: string; on?: string | null; source?: string | null }>; cautions?: string[];
   } | null;
-  researched?: { at: string; by: string; method?: 'search' | 'pages' };
+  researched?: { at: string; by: string; method?: 'search' | 'pages'; corrected?: Array<{ at: string; by: string; what: string }> };
   coverage?: { searched?: string[]; notFound?: string[]; note?: string } | null;
 }
 interface PathView { other: { type: string; name: string }; kind: string; tier: 'A' | 'B' | 'C' | 'D'; basis: string; source?: string | null }
@@ -115,8 +116,11 @@ export async function PublicProfile({ entityId }: { entityId: string }) {
       </div>
       <p className="cover">
         <b>What this covers:</b> {d.researched ? `public pages read on ${shortDate(new Date(d.researched.at))} by ${d.researched.by}` : 'our own records only'}
-        {d.coverage?.searched?.length ? `, searching ${d.coverage.searched.join(', ')}` : ''}.
-        {d.researched?.method === 'pages' && <> From page reads only, with no web search: a search pass is still owed, and &ldquo;not found&rdquo; here means not named in the pages read.</>}
+        .{d.coverage?.searched?.length ? ` Searched: ${d.coverage.searched.join(', ')}.` : ''}
+        {d.researched?.method === 'pages' && (partialSearch(d)
+          ? <> From page reads and a few web searches, too few to follow the protocol: a full search pass is still owed, and &ldquo;not found&rdquo; here means not found in what was read and searched.</>
+          : <> From page reads only, with no web search: a search pass is still owed, and &ldquo;not found&rdquo; here means not named in the pages read.</>)}
+        {d.researched?.corrected?.length ? <> Corrected on {shortDate(new Date(d.researched.corrected[d.researched.corrected.length - 1].at))} after an agent re-read the pages it cites (a fact check, not the team&rsquo;s verification): {d.researched.corrected.map((c) => c.what).join('; ')}.</> : null}
         {d.coverage?.notFound?.length ? <> Not found: {d.coverage.notFound.join('; ')} — not found in what was searched, which is not the same as not there.</> : null}
         {' '}Nothing here was sent or posted anywhere; nobody on the team has verified it yet.
       </p>

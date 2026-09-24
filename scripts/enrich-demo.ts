@@ -17,12 +17,18 @@ async function main() {
   const keyOf = new Map(set.map((c) => [c.name, c.key]));
   const fx = JSON.parse(await readFile(join(process.cwd(), 'fixtures', 'enrich', 'demo.json'), 'utf8')) as {
     findings: Array<{ name: string }>; strategies: Array<{ name: string }>; network: unknown;
+    reviews?: { strategy?: Record<string, Array<{ name: string }>>; facts?: Record<string, Array<{ name: string }>> };
   };
   for (const d of ['raw', 'strategy', 'us']) await mkdir(join(dir, d), { recursive: true });
   let f = 0, s = 0;
   for (const x of fx.findings) { const k = keyOf.get(x.name); if (k) { await writeFile(join(dir, 'raw', `${k}.json`), JSON.stringify({ key: k, ...x }, null, 1)); f++; } }
   for (const x of fx.strategies) { const k = keyOf.get(x.name); if (k) { await writeFile(join(dir, 'strategy', `${k}.json`), JSON.stringify({ key: k, ...x }, null, 1)); s++; } }
   await writeFile(join(dir, 'us', 'network.json'), JSON.stringify(fx.network, null, 1));
+  // The loop's own measurements (N70): fictional critic rounds and a fact check, keyed like the rest.
+  for (const [file, rows] of Object.entries({ ...(fx.reviews?.strategy ?? {}), ...(fx.reviews?.facts ?? {}) })) {
+    const out = rows.flatMap(({ name, ...rest }) => { const k = keyOf.get(name); return k ? [JSON.stringify({ key: k, ...rest })] : []; });
+    await writeFile(join(dir, file), out.join('\n') + '\n');
+  }
   await writeFile(join(dir, 'us', 'team.json'), JSON.stringify({ team: [] }, null, 1));
   console.log(`demo fixtures: ${f} findings, ${s} strategies, and our side, under ${join(config.data.root, 'enrich')}`);
 }

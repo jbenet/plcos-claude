@@ -44,6 +44,7 @@ that someone is in the pipeline (CLAUDE.md, real data).
 | W1s | **Structure** — name each fact's company or fund, from the fact's own words | W1's findings | `raw/<key>.json`, `detail` only | no name that isn't in the words |
 | W11 | **The connector plan** — who could introduce whom, within the guard's limit | W3, W9, W5 | `connectors.json` | restricted prospects left out; C and D ties marked to confirm |
 | W5c | **The critic** — grade strategies against the litmus test and the rules, without rewriting them | W5, W1, W9, W3 | `strategy-review.jsonl` | grades by protocol version; the issues become the next amendment |
+| W1c | **The fact check** — re-read each fact's own source and say whether it says what the fact says | W1's findings; only the URLs they cite | `fact-review-*.jsonl` | facts supported, partly, not, about someone else, or unavailable; each identity holds, in doubt, or wrong |
 | W2n | **The Protocol Labs network** — who is in PL's own directory, and whose firm is a network team | the research set's names; the directory's public API | `us/pl-network.json`, `us/pl-directory.jsonl` | an entry matched to our record of them, or said to need confirming; nothing for contacting anyone kept |
 
 Batches are cut by `scripts/enrich-batch.ts`, whole firms together, so colleagues share one
@@ -585,6 +586,26 @@ search budget was spent):
   cost, a credit fund's size or an old loan vehicle's check are another asset class. File, CRD and
   SEC numbers stay out of prose (they read as phone numbers) — in `detail`, or left out.
 
+**Amendments, version 1.26** (from W1c, the first fact check: 171 facts in 20 findings, half behind
+a "this year" strategy, each re-read at the page it cites. Of the 153 whose page loaded, 133 were
+supported, 19 partly, 1 not; none was about someone else. Of 20 identities, 18 held, 2 were in
+doubt, none was wrong. Every partial had one of three causes, and they become the rules):
+
+- **One fact, one page — every part of it on that page.** Each list item, sector, role word, count,
+  relation and `detail` field is on the page in `source.url`. When a second page contributes (a
+  founding year from the person's own site, a signature from a filing), it is its own fact with its
+  own source, or it is left out.
+- **The page's own words for events, relations and descriptions.** "Offered", not "joined"; "joined
+  forces", not "acquired"; a company described in the page's words or not at all; a relation copied
+  from a filing in the filing's words ("trustee of the trust and sole director of the firm"). A fund's
+  name is not its mandate. When the stronger word is probably right, it goes under `cautions` as
+  "likely" (1.18), and the fact keeps the page's wording.
+- **A name in `detail` is one the page states.** A fund's filed name comes from its own filing, never
+  by analogy with a sister fund's — W3 joins LPs on these names.
+- **A fact cites a page that was read.** A claim seen only in a search summary, a sign-in page's
+  snippet, or a page that refused the reader goes under `cautions` or "for a person", not `facts`.
+- **LP-contact databases are brokers,** whatever they call themselves; the checker's list gained one.
+
 **Open, for Juan:** an unresolved person at a firm our own records confirm (their work domain is the
 firm's site) can't carry the firm's facts — its mandate, its typical check — because a finding with
 an unresolved identity carries none. They go into `coverage.note` as prose. Allowing firm-scope
@@ -763,6 +784,33 @@ Never an inferred health reason, never pressure, never a claim the record doesn'
   don't share a firm now; each keeps their own money, and a partner's check at a large firm is
   marked personal.
 
+**Amendments, W5 version 1.6** (from W5c's third round, which graded every "this year" strategy and
+every one for an LP who wrote to us last — the ones a person acts on first — against the six
+criteria and a seventh, the last word):
+
+- **When the last word is theirs, the next step answers it.** Triage's "reply we owe" means they
+  wrote last and nothing from us is on record since. The next step reads what they wrote and answers
+  it — the question they asked, the dates they offered — or says plainly why not (a reply may have
+  gone from an inbox Affinity doesn't see: check sent mail first; counsel first). A new question of
+  ours before theirs is answered is not a reply, and "silence since" is ours, not theirs.
+- **One meeting, one date.** Two people at one firm with a meeting on the same day were most likely
+  in one meeting: neither is a one-to-one on that record alone. A meeting a note only scheduled is
+  not held until a record says so.
+- **Owning a pursuit is not a channel.** Who owns an LP's pursuit says who acts, not that they know
+  the LP; the way in needs its own record.
+- **Cite W3 as it stands.** A path, a W3 row or a connector-plan pairing named in a strategy is one
+  the current files carry, at the tier they give it; a tie W3 has since dropped is gone, or at most
+  a clue the files don't carry. The checker counts the citations that no longer match.
+- **The lead re-reads its colleagues** — their findings and their strategies' `made.revised` notes.
+  A firm-level lead is stale when a colleague's finding is newer than it: a filing on one colleague's
+  record can change the firm's ask; and a colleague revised first can be ahead of its lead (one call
+  read as one, a reply answered first), which a re-pin alone would leave contradicting it.
+- **A park carries a date to look again** (the critic's fourth round, on the bulk): "park him until
+  the search pass" is a park for good if the pass never runs. `next.lookAgain` holds the date; a gate
+  counts a park without one, and `scripts/enrich-look-again.ts` sets it by rule where missing (the
+  2027 list on 4 Jan 2027, "not now" on 5 Apr 2027 — guesses for a person to change), recorded in
+  `made.revised` without moving `made.at`, so a colleague's pin stays valid.
+
 ## Running W1 as a sub-agent
 
 The instructions a research agent follows, so a launch names only its batch. Its prompt carries no
@@ -830,6 +878,11 @@ is the user's decision, never an agent's.
    `data/real/enrich/strategy/`; no git.
 4. Finish with the checker, fix what it reports, and reply with counts (written, skipped; by list; by
    ask; routes A/B vs C/D vs none), the checker's strategy line, and three to six learnings. No names.
+5. **Parallel batches keep a firm together** (iteration 4). Rewriting a lead unpins every
+   firm-level colleague in another batch, so batches are cut by firm (the lead, its colleagues by
+   work domain and organization), a lead is written before its colleagues, and one re-pin step runs
+   after all batches finish (`enrich-check --lead-moved`, `--unpinned`). The checker's other lists
+   feed the next batch the same way: `--gated`, `--stale-ties`.
 
 ## Log
 
@@ -983,12 +1036,45 @@ beside it.
   meeting, what the last message said, the first-close date, and a search pass for the pages-only
   findings.
 
+### Iteration 4 — the list we act on first (24 Sep, 08:50 UTC →)
+
+- **Two first steps, measured.** Triage's check and the strategy's next step agree on 174 of the
+  224 LPs that have both. Of the 50 that differ, most are the strategy being more specific or
+  departing on purpose, with its reason given ("fix the contact first", "counsel first"). Not a gate.
+- **Coverage says what ran.** 15 findings ran one to five web searches before the budget ran out;
+  their LP pages said "with no web search". They now say "a few web searches, too few to follow the
+  protocol" (`partialSearch`). The split: 54 search, 319 pages alone, 15 pages with too few searches.
+- **The critic, round three (W5c),** on the 47 a person acts on first — all 33 "this year"
+  strategies and 14 more that owe a reply — by the six criteria and a seventh, the last word: 27 A,
+  16 B, 4 C. "This year" held (21 A, 11 B, 1 C); 15 of the 25 that owe a reply didn't answer what
+  the LP wrote. Of 17 graded before, 13 held, 2 rose, 2 fell on the new checks. Two slips became
+  gates (the counsel gate for an LP placed outside the US, 18 strategies; a tighter capacity check);
+  the rest became W5 1.6. Revisions: four batches rewrote 52 at 1.6 (every
+  reply we owe now answers first; no list changed); a pass pinned all 37 firm-level asks to their
+  leads; every lead reached 1.6 with its colleagues re-pinned after it.
+- **The critic, round four,** on a fresh random 25 from the bulk (20 on 2027, 5 not now): 25 A — an
+  easy sample. 12 parked "until the search pass" with no date to look again (54 of 57 parks in the
+  set): `next.lookAgain`, a gate, and a rule to set it (guessed dates, recorded on each).
+- **The checker ends the round** at 388 findings and 330 strategies with no problems, none stale, no
+  gate, no lead moved or unpinned, no stale W3 citation. 94 strategies at 1.6, 235 at 1.5.
+- **The fact check (W1c), new:** 171 facts in 20 findings re-read at their cited pages. Of the 153
+  that loaded, 133 supported, 19 partly, 1 not; no one else's facts; 18 of 20 identities hold, 2 in
+  doubt. The partials' three causes became W1 1.26; the 20 findings were corrected to their pages,
+  each correction listed in `researched.corrected` without moving the date it was read. Of the 20: 16 changed, 4 untouched; 19 facts cut to
+  their pages' words, 2 split, 1 removed, 13 moved to cautions as unconfirmed, 8 `detail` fields
+  removed; no identity changed.
+- **The checker says what it counts.** "Naming an LP outside their paths" (34) left out colleagues,
+  paths in the other direction and privacy guards: 22 remain, 11 citing a W3 tie the files no longer
+  carry (revised). The special-category review no longer counts a surname or a first name. The
+  synthesis counts people, not a firm's name, as owners: one person holds 190 of 330 next steps.
+
 ### Where the loop stood (24 Sep, 08:43 UTC)
 
-- **Research: every LP in the set is read** — 388 of 388, 60 with web search and 328 from page reads
-  alone (owed the search pass); 304 resolved, 78 not found (mostly staff at firms whose sites name
-  only their leaders), 6 ambiguous. The protocol went from amendment 1.5 to 1.25, each batch's
-  learnings becoming the next.
+- **Research: every LP in the set is read** — 388 of 388: 54 with web search as the protocol asks,
+  319 from page reads alone and 15 with a few searches, too few to follow it (334 owed the search
+  pass; the 15 are no longer said to have had "no web search"); 304 resolved, 78 not found
+  (mostly staff at firms whose sites name only their leaders), 6 ambiguous. The protocol went from
+  amendment 1.5 to 1.25, each batch's learnings becoming the next.
 - **Strategies: one for every resolved LP and every Discussing or Committed one** — 330, all at W5
   1.5, with no checker problems, no firm asked for money twice, and every input pinned. The critic's
   two rounds measured the loop: 10 A, 12 B, 3 C before; 22 A, 3 B after.

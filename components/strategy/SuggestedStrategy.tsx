@@ -28,7 +28,7 @@ export async function SuggestedStrategy({ pursuitId }: { pursuitId: string }) {
       </div>
       <div className="cbody">
         <p className="ss-angle"><b>Why they&rsquo;d care.</b> {st.angle}</p>
-        <div className="fact"><span>Next</span><span><b>{st.next.what}</b> — {st.next.who}{st.next.when ? `, ${st.next.when}` : ''}{st.next.material ? <span className="muted"> · with {st.next.material}</span> : null}</span></div>
+        <div className="fact"><span>Next</span><span><b>{st.next.what}</b> — {st.next.who}{st.next.when ? `, ${st.next.when}` : ''}{st.next.material ? <span className="muted"> · with {st.next.material}</span> : null}{st.next.lookAgain ? <span className="muted"> · parked: look again {st.next.lookAgain}</span> : null}</span></div>
         <div className="fact"><span>Way in</span><span>{st.route ? <><span className={`tier t${st.route.tier}`}>{st.route.tier}</span> {st.route.via} <span className="muted">— {st.route.why}</span></> : <span className="muted">No path found in what was read: a direct approach, or find a connector first.</span>}</span></div>
         <div className="fact"><span>The ask</span><span>{st.ask.shape} · {st.ask.vehicle}{st.ask.range ? ` · ${st.ask.range}` : ''}</span></div>
         <div className="fact"><span>Which list</span><span>{st.list === 'this year' ? 'This year’s close' : st.list === '2027' ? 'The 2027 pipeline' : 'Not now'} <span className="muted">· confidence {st.confidence}</span></span></div>

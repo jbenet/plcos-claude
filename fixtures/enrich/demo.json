@@ -143,7 +143,14 @@
     "at": "2026-09-20T10:00:00Z",
     "by": "claude (sub-agent)",
     "workflow": "W1",
-    "version": 5
+    "version": 5,
+    "corrected": [
+     {
+      "at": "2026-09-24T09:30:00Z",
+      "by": "claude (sub-agent), W1c",
+      "what": "one fact cut to what its page says (a founding year that came from another page, removed)"
+     }
+    ]
    },
    "identity": {
     "match": "confirmed",
@@ -321,6 +328,60 @@
      "for the search pass: the near-us check on Protocol Labs’ own sites, and funding news that names backers"
     ]
    }
+  },
+  {
+   "name": "Gordon Whitcomb",
+   "researched": {
+    "at": "2026-09-20T09:30:00Z",
+    "by": "claude (sub-agent)",
+    "workflow": "W1",
+    "version": "1.3",
+    "method": "pages"
+   },
+   "identity": {
+    "match": "probable",
+    "basis": "Name, firm and city agree on the firm's own page; two searches ran before the session's budget ran out.",
+    "canonical": {
+     "name": "Gordon Whitcomb",
+     "role": "Managing Partner",
+     "org": "Whitcomb Capital"
+    }
+   },
+   "facts": [
+    {
+     "field": "role",
+     "value": "Managing Partner of Whitcomb Capital.",
+     "source": {
+      "url": "https://whitcomb-capital.example.com/team",
+      "kind": "primary",
+      "title": null,
+      "published": null
+     },
+     "confidence": "medium"
+    }
+   ],
+   "profile": {
+    "summary": "Runs a small firm that backs early-stage companies; how it invests in other managers isn't public.",
+    "investorType": "fund_gp",
+    "capacity": {
+     "band": "unknown",
+     "basis": "Not public."
+    },
+    "cautions": [
+     "Identity probable: the firm's page only."
+    ]
+   },
+   "connections": [],
+   "coverage": {
+    "searched": [
+     "web search (2 queries)",
+     "Whitcomb Capital's team page (read)"
+    ],
+    "notFound": [
+     "whether the firm backs other managers' funds",
+     "for the search pass: the near-us check on Protocol Labs’ own sites, and funding news that names backers"
+    ]
+   }
   }
  ],
  "strategies": [
@@ -490,5 +551,146 @@
     "source": "https://example.com/neurotech"
    }
   ]
+ },
+ "reviews": {
+  "note": "Fictional critic rounds and a fictional fact check, for the measurements card (N70).",
+  "strategy": {
+   "strategy-review.jsonl": [
+    {
+     "name": "Michael Okonjo",
+     "grade": "B",
+     "version": 1,
+     "issues": [
+      {
+       "criterion": 2,
+       "what": "A capacity band on a title, not on money of his own."
+      }
+     ],
+     "fix": "Set capacity to unknown."
+    },
+    {
+     "name": "Nadia Brandt",
+     "grade": "C",
+     "version": 1,
+     "issues": [
+      {
+       "criterion": 3,
+       "what": "A soft figure written as if signed."
+      },
+      {
+       "criterion": 6,
+       "what": "This year without the evidence gate."
+      }
+     ],
+     "fix": "Label the soft figure; move to 2027 until a word from her."
+    }
+   ],
+   "strategy-review-2.jsonl": [
+    {
+     "name": "Michael Okonjo",
+     "grade": "A",
+     "version": 1.5,
+     "issues": [],
+     "fix": "No rewrite needed."
+    },
+    {
+     "name": "Nadia Brandt",
+     "grade": "B",
+     "version": 1.5,
+     "issues": [
+      {
+       "criterion": 7,
+       "what": "Her last email asked about the first close; the step asks her something else."
+      }
+     ],
+     "fix": "Answer her question first."
+    }
+   ]
+  },
+  "facts": {
+   "fact-review-01.jsonl": [
+    {
+     "name": "Michael Okonjo",
+     "identity": "holds",
+     "identityNote": "The office's page and the podcast agree.",
+     "facts": [
+      {
+       "i": 0,
+       "grade": "supported",
+       "note": ""
+      },
+      {
+       "i": 1,
+       "grade": "supported",
+       "note": ""
+      },
+      {
+       "i": 2,
+       "grade": "supported",
+       "note": ""
+      },
+      {
+       "i": 3,
+       "grade": "partly",
+       "note": "The page gives the year, not the month."
+      },
+      {
+       "i": 4,
+       "grade": "unavailable",
+       "note": "The page refused the reader."
+      }
+     ]
+    },
+    {
+     "name": "Nadia Brandt",
+     "identity": "holds",
+     "identityNote": "The firm's page names her.",
+     "facts": [
+      {
+       "i": 0,
+       "grade": "supported",
+       "note": ""
+      },
+      {
+       "i": 1,
+       "grade": "supported",
+       "note": ""
+      },
+      {
+       "i": 2,
+       "grade": "partly",
+       "note": "The founding year is on another page."
+      },
+      {
+       "i": 3,
+       "grade": "supported",
+       "note": ""
+      },
+      {
+       "i": 4,
+       "grade": "supported",
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Rachel Kaplan",
+     "identity": "doubt",
+     "identityNote": "One page only.",
+     "facts": [
+      {
+       "i": 0,
+       "grade": "supported",
+       "note": ""
+      },
+      {
+       "i": 1,
+       "grade": "supported",
+       "note": ""
+      }
+     ]
+    }
+   ]
+  }
  }
 }

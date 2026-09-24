@@ -212,6 +212,36 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N70: [
+    {
+      name: '01-a-few-searches',
+      path: '/all/pipeline',
+      prepare: async (page) => {
+        await openLp(page, 'Gordon Whitcomb');
+        await page.getByRole('heading', { name: 'From public sources' }).evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '03-the-loops-measurements',
+      path: '/developer/enrich',
+      prepare: async (page) => {
+        await page.getByRole('heading', { name: /How good it is/ }).evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '02-a-fact-check',
+      path: '/all/pipeline',
+      prepare: async (page) => {
+        await openLp(page, 'Nadia Brandt');
+        await page.getByText(/Corrected on/).first().evaluate((el) => el.scrollIntoView({ block: 'center' })).catch(() => {});
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N69: [
     {
       name: '01-a-reply-we-owe',

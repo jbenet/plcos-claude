@@ -62,8 +62,11 @@ export interface Finding {
    * written; or `pages`, from page reads with no search or too few to follow it (W1d, or a batch
    * the search budget ran out under) — then "not found" means not named in what could be read, not
    * that nothing exists, and the LP is owed a pass with search. Unset reads as search.
+   * `corrected` lists edits made later by rule without a new reading (W1c, the fact check): the
+   * reading's date stays, so what was read when stays true.
    */
-  researched: { at: string; by: string; workflow: 'W1'; version: string | number; method?: 'search' | 'pages' };
+  researched: { at: string; by: string; workflow: 'W1'; version: string | number; method?: 'search' | 'pages';
+    corrected?: Array<{ at: string; by: string; what: string }> };
   identity: {
     match: Match;
     basis: string;
@@ -97,8 +100,14 @@ export function protocolOf(f: Pick<Finding, 'researched'>): string {
 }
 
 /** Made from page reads alone, and so due a pass with search (v1.6). */
-export const pagesOnly = (f: Pick<Finding, 'researched'>) => f.researched?.method === 'pages';
-const BROKERS = /zoominfo|rocketreach|contactout|signalhire|apollo\.io|lusha|flashlabs|datanyze|seamless\.ai|leadiq|clearbit|spokeo|success\.ai|wiza|cience\.com|beenverified|whitepages|peoplefinders|aeroleads|adapt\.io|instantcheckmate|connectsafely|voilanorbert|hunter\.io|snov\.io|kaspr|uplead|prospeo|fintrx|alphamaven/i;
+export const pagesOnly = (f: { researched?: { method?: string } }) => f.researched?.method === 'pages';
+/**
+ * A pages finding that ran a few web searches before the session's budget ran out: too few to
+ * follow the protocol, so still due the pass, but not one made "with no web search" (rule 7).
+ */
+export const partialSearch = (f: { researched?: { method?: string }; coverage?: { searched?: string[] } | null }) =>
+  pagesOnly(f) && (f.coverage?.searched ?? []).some((s) => /(?<!\bno )\bweb search\b/i.test(s));
+const BROKERS = /zoominfo|rocketreach|contactout|signalhire|apollo\.io|lusha|flashlabs|datanyze|seamless\.ai|leadiq|clearbit|spokeo|success\.ai|wiza|cience\.com|beenverified|whitepages|peoplefinders|aeroleads|adapt\.io|instantcheckmate|connectsafely|voilanorbert|hunter\.io|snov\.io|kaspr|uplead|prospeo|fintrx|alphamaven|altss\.com/i;
 const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/;
 /** A phone number: ten or more digits in a run of digits and separators — once dates and year ranges are set aside. */
 const hasPhone = (t: string) => {
@@ -124,6 +133,9 @@ export function check(f: unknown, expectKey?: string): string[] {
   if (!x.identity || !['confirmed', 'probable', 'ambiguous', 'not_found'].includes(x.identity.match)) p.push('identity.match missing or unknown');
   if (!Array.isArray(x.facts)) p.push('facts is not a list');
   if (x.researched?.method && !['search', 'pages'].includes(x.researched.method)) p.push('researched.method must be search or pages');
+  const corrected = (x.researched as { corrected?: unknown } | undefined)?.corrected;
+  if (corrected !== undefined && (!Array.isArray(corrected) || corrected.some((c) => !c || !isStr((c as { at?: unknown }).at) || !isStr((c as { by?: unknown }).by) || !isStr((c as { what?: unknown }).what))))
+    p.push('researched.corrected must list { at, by, what }');
   const unsure = x.identity?.match === 'ambiguous' || x.identity?.match === 'not_found';
   if (unsure && (x.facts?.length ?? 0) > 0) p.push('facts recorded for an identity that is not resolved');
   for (const [i, fact] of (x.facts ?? []).entries()) {
