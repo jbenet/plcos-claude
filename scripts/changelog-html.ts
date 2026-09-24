@@ -35,12 +35,21 @@ function findTwins(dir: string) {
   }
 }
 
+/**
+ * Shots published to the build log's asset store rather than as its files (N65): the page may
+ * carry at most 255 files and had used them. docs/changelog/published-assets.json maps a shot's
+ * path to its asset URL; a shot with no entry is still referenced as a file.
+ */
+let assets: Record<string, string> = {};
+try { assets = JSON.parse(readFileSync(join(process.cwd(), 'docs', 'changelog', 'published-assets.json'), 'utf8')) as Record<string, string>; } catch { assets = {}; }
+
 const imageSrc = (href: string): string => {
   const marker = 'docs/changelog/shots/';
   const at = href.indexOf(marker);
   if (at === -1) return href;
   const rel = href.slice(at + marker.length);
-  return `shots/${twins.get(rel) ?? rel}`;
+  const path = twins.get(rel) ?? rel;
+  return assets[path] ?? `shots/${path}`;
 };
 
 function inline(src: string): string {
