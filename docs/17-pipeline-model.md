@@ -52,6 +52,14 @@ any more than before, and a status never moves it (rule 2).
 - **"Target" is retired as a word for an LP.** The whole set is the *pipeline*, each row an
   *LP*, and "target" means only the fund's size goal. The ladder's second rung reads
   "LP opted in".
+- **The status leads everywhere an LP's standing is shown** (N62, issue 0008: "look through
+  whole system to make sure new ladder is properly setup everywhere"): the vehicle overview
+  counts by status, with how many the ladder backs beside the three it can (Connecting,
+  Discussing, Committed); Today's "Waiting on a first reply" is Connecting with nothing from
+  them yet; the LP's own page, the group tables, All vehicles, the decision room and the
+  strategy page show the status first and "… on the ladder" under it. The ladder still leads
+  where the page is about evidence: the meeting prep ("the rung a reply justifies"), content
+  attribution, and the approvals. The visualizations still draw the ladder; they are next.
 
 ## 2. Touchpoints: the dated log
 

@@ -238,7 +238,7 @@ function UpdateRow({ u }: { u: PursuitUpdate }) {
               <span className="muted">
                 <i />
                 <span>
-                  {a.touch.ahead ? 'Put a' : 'Logged a'} {a.touch.channel} {a.touch.ahead ? 'on record for' : 'on'} {shortDate(new Date(`${a.touch.on}T12:00:00Z`))}
+                  {a.touch.ahead ? 'Put' : 'Logged'} {/^[aeiou]/.test(a.touch.channel) ? 'an' : 'a'} {a.touch.channel} {a.touch.ahead ? 'on record for' : 'on'} {shortDate(new Date(`${a.touch.on}T12:00:00Z`))}
                   {a.touch.read ? `, their read ${READ_LABEL[a.touch.read as keyof typeof READ_LABEL].toLowerCase()}` : ''}
                 </span>
               </span>

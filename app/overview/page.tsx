@@ -6,11 +6,12 @@ import { usdM, multiple } from '@/lib/money';
 import { ago, shortDate } from '@/lib/time';
 import { modulesForKind } from '@/lib/nav';
 import { KIND_CLASS, listOpenTickets } from '@/modules/governance';
-import { listPursuits, RUNGS, RUNG_LABEL, rungIndex } from '@/modules/strategy';
+import { listPursuits } from '@/modules/strategy';
 import { listExposures, vehicleTotals } from '@/modules/pipeline';
 import { listAsks, listConflicts } from '@/modules/coordination';
 import { listCycles, spvRooms } from '@/modules/close';
-import { recentAudit } from '@/modules/platform';
+import { StatusCounts } from '@/components/strategy/StatusCounts';
+import { Lately } from '@/components/strategy/Lately';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,7 @@ export default async function Overview() {
   const selection = await vehicleSelection();
   const v = selection.current;
 
-  const [totals, pursuits, tickets, asks, conflicts, cycles, rooms, audit, exposures] =
+  const [totals, pursuits, tickets, asks, conflicts, cycles, rooms, exposures] =
     await Promise.all([
       vehicleTotals(),
       listPursuits(v?.id ?? null),
@@ -27,7 +28,6 @@ export default async function Overview() {
       listConflicts('open'),
       listCycles(),
       spvRooms(),
-      recentAudit(6),
       listExposures(v?.id ?? null),
     ]);
 
@@ -35,7 +35,10 @@ export default async function Overview() {
   const ticketsHere = v ? tickets.filter((t) => t.vehicleId === v.id) : tickets;
   const cycle = v ? cycles.find((c) => c.vehicleId === v.id) ?? null : null;
   const room = v ? rooms.find((r) => r.vehicleId === v.id) ?? null : null;
-  const atRung = (i: number) => pursuits.filter((p) => rungIndex(p.rung) === i).length;
+  // Every vehicle means the ones being raised, as on the pipeline: one kept for its history is
+  // counted when it is the one picked, not mixed in.
+  const counted = v ? pursuits : pursuits.filter((p) => !p.historical);
+  const openHere = counted.filter((p) => p.status !== 'passed').length;
 
   return (
     <Page
@@ -55,7 +58,7 @@ export default async function Overview() {
               </div>
               <div className="kv">
                 <span>Pursuits open</span>
-                <span>{pursuits.length}</span>
+                <span>{openHere.toLocaleString('en-US')}</span>
               </div>
               <div className="kv">
                 <span>Asks on file</span>
@@ -207,26 +210,7 @@ export default async function Overview() {
       )}
 
       <div className="grid-even">
-        <div className="card">
-          <div className="chead">
-            <h2>Where the pursuits stand</h2>
-            <span className="lbl">{pursuits.length} open</span>
-          </div>
-          <div className="cbody">
-            {RUNGS.map((r, i) => (
-              <div className="fact" key={r}>
-                <span>{RUNG_LABEL[r]}</span>
-                <span>{atRung(i)}</span>
-              </div>
-            ))}
-          </div>
-          {pursuits.length > 0 && (
-            <p className="cover">
-              <Link href="/targets">Open the workspaces</Link> — {pursuits.filter((p) => p.rung === 'connector_willing').length}{' '}
-              are at rung one, which is a statement about a connector and nothing else.
-            </p>
-          )}
-        </div>
+        <StatusCounts pursuits={counted} vehicleName={v?.name ?? null} />
 
         <div className="card">
           <div className="chead">
@@ -275,29 +259,7 @@ export default async function Overview() {
           ))}
         </div>
 
-        <div className="card">
-          <div className="chead">
-            <h2>What happened</h2>
-            <span className="lbl">audit log · append-only</span>
-          </div>
-          <table className="list">
-            <tbody>
-              {audit.map((a, i) => (
-                <tr key={i}>
-                  <td className="nowrap muted mono" style={{ fontSize: 10.5, width: 70 }}>
-                    {ago(new Date(a.at))}
-                  </td>
-                  <td>
-                    <b>{a.action}</b>
-                    <div className="muted" style={{ fontSize: 11.5 }}>
-                      {a.name ?? 'system'} · {a.subject_type}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Lately pursuits={counted} vehicleName={v?.name ?? 'Every vehicle'} />
       </div>
     </Page>
   );

@@ -4399,3 +4399,32 @@ that LP again straight away. If the ladder is behind, it proposes the climb for 
 same as after a translation. Save writes the update and whatever you ticked in one transaction,
 once per form, with the update's id in each audit row. The related events you mentioned
 (outreach through a connector, Linear tasks) are now issue 0023. 97 of 97 properties hold.
+
+## N62 — The statuses everywhere: the vehicle overview, Today, and every LP's standing
+
+**Shipped.** From your notes on the vehicle overview (issues 0007 and 0008): "Statuses in overview
+should be the new statuses we aligned on. maybe look through whole system to make sure new
+ladder is properly setup everywhere", and on "What happened": "some of these dont belong… i think
+aggregate stats/metrics/dashboard things are good here, not a big list."
+
+| | |
+|---|---|
+| ![Where the pursuits stand](docs/changelog/shots/n62/01-where-the-pursuits-stand.webp) | **The overview counts by status.** All seven statuses, each with its count, a bar for its share, and a link to that column of the pipeline. The three the ladder can back show how many it has confirmed: Connecting with a connector's yes or direct contact, Discussing with a meeting, Committed countersigned. The header says open and passed separately. It used to call every pursuit "open", passed ones included. |
+| ![Lately](docs/changelog/shots/n62/02-lately.webp) | **"What happened" is now "Lately": figures, not a list.** Counted from this vehicle's pursuits only, and from touchpoints about its raise. For the last 30 days: meetings and calls held (and how many were a first), emails each way, LPs moved forward here, passed, updates written. Coming up: meetings in the next 30 days, next steps due this week and next steps overdue. Waiting: LPs we wrote to two weeks ago or more with nothing back, and LPs at Discussing with no touch in 90 days. Each figure with a view links to the pipeline filtered to it. |
+| ![Waiting on a first reply](docs/changelog/shots/n62/03-waiting-on-a-first-reply.webp) | **Today: "Stuck at rung one" is now "Waiting on a first reply".** It lists LPs at Connecting with nothing from them yet, longest wait first, and says whether we wrote or a connector is asking. "What happened" reads as sentences: *Juan set the status to Connecting, from Selected — Anneliese Mork · PLC Crypto/Rails*, not `pursuit.status_set`. |
+
+**The status first, everywhere else.** On an LP's own page, the group tables, All vehicles, the
+decision room and the strategy page, the status comes first and "… on the ladder" sits under it.
+The LP page's side panel now says "Needs evidence" when the status claims more than the ladder
+has confirmed. The ladder still leads where a page is about evidence: meeting prep, content
+attribution and the approvals. The visualizations still draw the ladder; they're next.
+
+**The pipeline's filters are in the address.** A link like `/targets?status=connecting&touch=waiting`
+opens that exact view, and so does sending it to someone. The rest of issue 0009, routes that
+follow the sidebar, is its own version.
+
+**On the real account**, PLC Neurotech I: 276 at Connecting, 6 of them with a connector's yes or
+direct contact on the ladder; 79 at Discussing, 53 with a meeting on the ladder; 14 committed,
+none countersigned yet. 210 LPs from Selected on are waiting two weeks or more on a reply. The
+update reader now takes "emailed Anneliese" as outreach and "they emailed" as a reply. 98 of 98
+properties hold.

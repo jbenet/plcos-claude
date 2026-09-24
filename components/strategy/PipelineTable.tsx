@@ -54,7 +54,25 @@ interface Props {
   statuses: Array<{ id: Status; label: string; means: string }>;
   rungNames: string[];
   initialStatus: Status | null;
+  /** Filters from the address, read by the server (N62), so a link opens the view it names. */
+  initialFilters?: Record<string, string>;
   showVehicle: boolean;
+}
+
+const CHOICES: Partial<Record<keyof Filters, readonly string[]>> = {
+  meetings: ['any', 'some', 'none'], touch: ['any', 'waiting', 'recent', 'stale', 'none'],
+  read: ['any', 'very', 'interested', 'not', 'none'], money: ['any', 'soft', 'signed', 'hard', 'none'], flag: ['any', 'ahead', 'dnc'],
+};
+/** Only values the filters have: an address someone edited by hand can't put the table in a state it can't show. */
+function fromAddress(given: Record<string, string> | undefined): Filters {
+  const f: Filters = { ...EMPTY };
+  for (const [k, v] of Object.entries(given ?? {})) {
+    if (!(k in EMPTY)) continue;
+    const ok = CHOICES[k as keyof Filters];
+    if (ok && !ok.includes(v)) continue;
+    (f as unknown as Record<string, string>)[k] = v;
+  }
+  return f;
 }
 
 type SortKey = 'rank' | 'name' | 'vehicle' | 'owner' | 'where' | 'meetings' | 'touch' | 'read' | 'ladder';
@@ -128,10 +146,10 @@ function Ladder({ r, names }: { r: PipelineRow; names: string[] }) {
   );
 }
 
-export function PipelineTable({ rows, statuses, rungNames, initialStatus, showVehicle }: Props) {
+export function PipelineTable({ rows, statuses, rungNames, initialStatus, initialFilters, showVehicle }: Props) {
   const router = useRouter();
   const search = useRef<HTMLInputElement>(null);
-  const [f, setF] = useState<Filters>(EMPTY);
+  const [f, setF] = useState<Filters>(() => fromAddress(initialFilters));
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'rank', dir: 1 });
   const [shown, setShown] = useState(PAGE);
   const now = useMemo(() => Date.now(), []);
@@ -145,16 +163,17 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, showVe
   const firstFull = (['discussing', 'committed', 'connecting', 'selected', 'sourcing', 'new', 'passed'] as Status[]).find((s) => count(s, rows) > 0) ?? 'discussing';
   const [status, setStatus] = useState<Status>(initialStatus ?? firstFull);
 
-  // The column and the search live in the address, so a link or the back button returns here.
+  // The column, the search and every filter live in the address (N62), so a link — from the
+  // overview's counts, or sent to someone — opens this exact view, and back returns to it.
   useEffect(() => {
     const u = new URL(window.location.href);
     u.searchParams.set('status', status);
-    if (f.q) u.searchParams.set('q', f.q); else u.searchParams.delete('q');
+    for (const k of Object.keys(EMPTY) as (keyof Filters)[]) {
+      if (f[k] !== EMPTY[k]) u.searchParams.set(k, f[k]); else u.searchParams.delete(k);
+    }
     window.history.replaceState(null, '', u.toString());
-  }, [status, f.q]);
+  }, [status, f]);
   useEffect(() => {
-    const q = new URL(window.location.href).searchParams.get('q');
-    if (q) setF((x) => ({ ...x, q }));
     const onKey = (e: KeyboardEvent) => {
       if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); search.current?.focus(); }
     };

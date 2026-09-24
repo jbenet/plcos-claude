@@ -3,7 +3,7 @@ import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
-import { listPursuits, RUNG_LABEL } from '@/modules/strategy';
+import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/modules/strategy';
 import {
   listMeetings, listObjections, listQuestions, MEETING_LABEL, objectionTally, OBJECTION_LABEL,
 } from '@/modules/meetings';
@@ -83,7 +83,7 @@ export default async function DecisionRoom({
               >
                 <b>{p.entityName}</b>
                 <p>
-                  {p.vehicleName} · {p.rung ? RUNG_LABEL[p.rung] : 'nothing on file'}
+                  {p.vehicleName} · {STATUS_LABEL[p.status]}{p.rung ? ` · ${RUNG_LABEL[p.rung]} on the ladder` : ''}
                 </p>
                 <span className={`flag ${openO + openQ > 0 ? 'f-ev' : 'f-ok'}`}>
                   {openO} objection{openO === 1 ? '' : 's'} · {openQ} question{openQ === 1 ? '' : 's'}
@@ -139,8 +139,8 @@ export default async function DecisionRoom({
           <p className="sublede">
             {objections.filter((o) => o.status === 'open').length} open objections,{' '}
             {questions.filter((q) => q.status !== 'answered').length} outstanding questions, and the
-            timeline of what has actually happened. Currently at{' '}
-            <b>{focus.rung ? RUNG_LABEL[focus.rung] : 'nothing on file'}</b>.
+            timeline of what has actually happened. Status <b>{STATUS_LABEL[focus.status]}</b>; on the
+            ladder, <b>{focus.rung ? RUNG_LABEL[focus.rung] : 'nothing yet'}</b>.
           </p>
 
           <div className="grid2">

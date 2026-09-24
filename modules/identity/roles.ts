@@ -22,6 +22,8 @@ export interface RelationshipRow {
   vehicles: string[];
   connectorAsks: number;
   rung: string | null;
+  /** Their furthest status across vehicles (N62); Passed only when every pursuit passed. */
+  status: string | null;
 }
 
 /**
@@ -37,7 +39,7 @@ export async function relationshipRoles(): Promise<RelationshipRow[]> {
     entity_id: string; name: string; entity_type: string;
     hard: string; soft: string; vehicles: string[] | null;
     connector_asks: string; is_team: boolean; is_funder: boolean;
-    is_coinvestor: boolean; rung: string | null;
+    is_coinvestor: boolean; rung: string | null; status: string | null;
   }>(
     `select e.entity_id, e.display_name as name, e.entity_type::text as entity_type,
             coalesce(sum(x.amount) filter (where x.track = 'hard'), 0)::text as hard,
@@ -54,7 +56,10 @@ export async function relationshipRoles(): Promise<RelationshipRow[]> {
             (select l.rung::text from strategy.pursuit p
                join strategy.ladder_event l on l.pursuit_id = p.pursuit_id
               where p.entity_id = e.entity_id
-              order by l.occurred_at desc limit 1) as rung
+              order by l.occurred_at desc limit 1) as rung,
+            (select p.status::text from strategy.pursuit p
+              where p.entity_id = e.entity_id
+              order by (p.status = 'passed'), p.status desc limit 1) as status
        from identity.entity e
        left join pipeline.exposure x on x.entity_id = e.entity_id and x.closed_at is null
        left join platform.vehicle v on v.id = x.vehicle_id
@@ -76,7 +81,7 @@ export async function relationshipRoles(): Promise<RelationshipRow[]> {
     return {
       entityId: r.entity_id, name: r.name, entityType: r.entity_type, roles,
       hard, soft, vehicles: r.vehicles ?? [],
-      connectorAsks: Number(r.connector_asks), rung: r.rung,
+      connectorAsks: Number(r.connector_asks), rung: r.rung, status: r.status,
     };
   });
 }

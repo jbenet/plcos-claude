@@ -113,10 +113,17 @@ export async function logTouchpoint(actorId: string, t: NewTouchpoint, opts: { q
        ahead ? null : t.on.toISOString().slice(0, 10), ahead ? t.on : null, actorId, summary,
        t.read ?? null, t.read ? actorId : null],
     );
+    // Named in the log (N62), so "logged a meeting" can say with whom and on which vehicle.
+    const named = await tx.one<{ entity: string | null; vehicle: string | null }>(
+      `select (select display_name from identity.entity where entity_id = $1) as entity,
+              (select name from platform.vehicle where id = $2) as vehicle`,
+      [t.entityId, t.vehicleId],
+    );
     await tx.query(
       `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
        values ($1, 'touchpoint.logged', 'entity', $2, $3)`,
       [actorId, t.entityId, JSON.stringify({
+        entity: named?.entity ?? null, vehicle: named?.vehicle ?? null,
         channel: t.channel, on: t.on.toISOString().slice(0, 10), scheduled: ahead, read: t.read ?? null,
         touchpointId: row!.meeting_id, ...(opts.updateId ? { updateId: opts.updateId } : {}),
       })],

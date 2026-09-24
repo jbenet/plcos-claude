@@ -10,7 +10,7 @@ import { claimsFor, listSourceDocs, notesFor, corpusCoverage } from '@/modules/r
 import { assessmentsForEntity, listAssessments, BLOCKER_LABEL } from '@/modules/fit';
 import { listSyncSources } from '@/modules/platform';
 import { listExposures } from '@/modules/pipeline';
-import { listPursuits, RUNG_LABEL, RUNGS, rungIndex } from '@/modules/strategy';
+import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/modules/strategy';
 import { listEdges, TIER_MEANING } from '@/modules/network';
 import { restrictionsFor, listAsks } from '@/modules/coordination';
 import { ROLE_LABEL, relationshipRoles, listAffiliations, orgsFor, peopleAt, type RelationshipRole } from '@/modules/identity';
@@ -253,7 +253,7 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
               <tr>
                 <th style={{ width: 190 }}>Vehicle</th>
                 <th style={{ width: 150 }}>Money on file</th>
-                <th style={{ width: 190 }}>Consent ladder</th>
+                <th style={{ width: 190 }}>Status</th>
                 <th>What is in the way</th>
               </tr>
             </thead>
@@ -271,11 +271,9 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
                   <td>
                     {s.pursuit
                       ? <>
-                          {s.pursuit.rung ? RUNG_LABEL[s.pursuit.rung] : 'No rung evidenced'}
+                          <Link href={`/targets/${s.pursuit.pursuitId}`}>{STATUS_LABEL[s.pursuit.status]}</Link>
                           <div className="muted" style={{ fontSize: 11 }}>
-                            {s.pursuit.rung
-                              ? `${rungIndex(s.pursuit.rung) + 1} of ${RUNGS.length}`
-                              : 'the first rung needs an evidence record'}
+                            {s.pursuit.rung ? `${RUNG_LABEL[s.pursuit.rung]} on the ladder` : 'nothing on the ladder yet'}
                           </div>
                         </>
                       : <span className="muted">No pursuit open</span>}
@@ -347,7 +345,7 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
               <tr>
                 <th style={{ width: 190 }}>Vehicle</th>
                 <th style={{ width: 150 }}>Money on file</th>
-                <th style={{ width: 190 }}>Consent ladder</th>
+                <th style={{ width: 190 }}>Status</th>
                 <th>What is in the way</th>
               </tr>
             </thead>
@@ -365,11 +363,9 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
                   <td>
                     {s.pursuit
                       ? <>
-                          {s.pursuit.rung ? RUNG_LABEL[s.pursuit.rung] : 'No rung evidenced'}
+                          <Link href={`/targets/${s.pursuit.pursuitId}`}>{STATUS_LABEL[s.pursuit.status]}</Link>
                           <div className="muted" style={{ fontSize: 11 }}>
-                            {s.pursuit.rung
-                              ? `${rungIndex(s.pursuit.rung) + 1} of ${RUNGS.length}`
-                              : 'the first rung needs an evidence record'}
+                            {s.pursuit.rung ? `${RUNG_LABEL[s.pursuit.rung]} on the ladder` : 'nothing on the ladder yet'}
                           </div>
                         </>
                       : <span className="muted">No pursuit open</span>}

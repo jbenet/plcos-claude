@@ -12,7 +12,7 @@ import { getEntity, orgsFor, peopleAt, AFFIL_LABEL } from '@/modules/identity';
 import { assessmentFor, BLOCKER_LABEL, LINK_LABEL } from '@/modules/fit';
 import { gapsForTarget, METHOD_KIND_LABEL } from '@/modules/research';
 import { listExposures } from '@/modules/pipeline';
-import { listPursuits, RUNG_LABEL, RUNG_REQUIRES, RUNGS, rungIndex } from '@/modules/strategy';
+import { listPursuits, RUNG_LABEL, RUNG_REQUIRES, RUNGS, STATUS_LABEL, rungIndex } from '@/modules/strategy';
 import { listAsks, restrictionsFor } from '@/modules/coordination';
 import { listMeetings } from '@/modules/meetings';
 import {
@@ -163,7 +163,8 @@ export default async function TargetStrategy({
           ) : (
             <div className="note">Not assessed against this vehicle. The board below is thin for a reason.</div>
           )}
-          <div className="kv"><span>Rung</span><span>{pursuit?.rung ? RUNG_LABEL[pursuit.rung] : 'no pursuit'}</span></div>
+          <div className="kv"><span>Status</span><span>{pursuit ? STATUS_LABEL[pursuit.status] : 'no pursuit'}</span></div>
+          <div className="kv"><span>On the ladder</span><span>{pursuit?.rung ? RUNG_LABEL[pursuit.rung] : pursuit ? 'nothing yet' : '—'}</span></div>
           <div className="kv"><span>Needs unmet</span><span>{unmet.length} of {needs.length}</span></div>
           <div className="kv"><span>Plays</span><span>{plays.length}</span></div>
           <div className="kv"><span>Last touch</span><span>{lastTouch ? ago(lastTouch) : 'never'}</span></div>
@@ -232,6 +233,17 @@ export default async function TargetStrategy({
                     </div>
                   </>
                 ) : <span className="muted">Nobody has assessed them against this vehicle.</span>}
+              </td>
+            </tr>
+            <tr>
+              <td><b>Status</b></td>
+              <td>
+                {pursuit ? (
+                  <>
+                    <Link href={`/targets/${pursuit.pursuitId}`}>{STATUS_LABEL[pursuit.status]}</Link>
+                    {pursuit.nextStep && <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>Next: {pursuit.nextStep}</div>}
+                  </>
+                ) : <span className="muted">No pursuit open.</span>}
               </td>
             </tr>
             <tr>

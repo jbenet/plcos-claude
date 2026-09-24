@@ -4,13 +4,15 @@ import { SECTION } from '@/lib/nav';
 import { SprintStrip } from '@/components/calendar/SprintStrip';
 import { auth } from '@/lib/auth';
 import { issues as issueSink } from '@/lib/issues';
-import { recentAudit } from '@/modules/platform';
+import { auditLog } from '@/modules/platform';
+import { describeAudit } from '@/lib/audit-words';
+import { touchpointSummaries } from '@/modules/meetings';
 import { vehicleSelection } from '@/lib/session';
 import { ago, dateLabel, shortDate } from '@/lib/time';
 import { usdM, multiple } from '@/lib/money';
 import { KIND_CLASS, listOpenTickets } from '@/modules/governance';
 import { listAsks, listConflicts } from '@/modules/coordination';
-import { listPursuits, RUNG_LABEL } from '@/modules/strategy';
+import { listPursuits } from '@/modules/strategy';
 import { listExposures, vehicleTotals } from '@/modules/pipeline';
 import { sprintStrip, urgency } from '@/modules/calendar';
 import { actionableSignals, heldBack } from '@/modules/signals';
@@ -24,7 +26,7 @@ export default async function Today() {
       auth().then((a) => a.currentUser()),
       issueSink(),
       vehicleSelection(),
-      recentAudit(6),
+      auditLog(40),
       listOpenTickets(),
       listConflicts('open'),
       listAsks(),
@@ -46,7 +48,17 @@ export default async function Today() {
   const open = await sink.list({ status: ['open', 'triaged', 'agent-ready', 'in-progress', 'review'] });
   const focus = selection.current ? totals.find((t) => t.vehicleId === selection.current!.id) ?? null : null;
   const blocked = asks.filter((a) => a.status === 'blocked');
-  const needsEvidence = pursuits.filter((p) => p.rung === 'connector_willing');
+  // Waiting on a first reply (N62, issue 0008): LPs at Connecting with nothing from them on
+  // record — the status's view of what "stuck at rung one" used to count. Longest wait first.
+  const connecting = pursuits.filter((p) => p.status === 'connecting');
+  const heard = await touchpointSummaries(connecting.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId })));
+  const waitingOn = connecting
+    .map((p) => ({ p, s: heard.get(`${p.entityId}:${p.vehicleId}`) }))
+    .filter((x) => !x.s?.lastFromThem)
+    .map((x) => ({ ...x, since: x.s?.awaitingSince ?? x.p.statusSetAt ?? x.p.openedAt }))
+    .sort((a, b) => a.since.getTime() - b.since.getTime());
+  // Signing in as someone else is not something that happened to the raise.
+  const happened = audit.filter((a) => a.action !== 'session.user_switched').slice(0, 7);
 
   const headline = urgencyState.suppressed
     ? 'Nothing is being chased this week.'
@@ -118,10 +130,10 @@ export default async function Today() {
             <div className="f">Refused by a guard before anything left the building.</div>
           </div>
           <div className="kpi">
-            <span className="tag t-plain">Stuck at rung one</span>
-            <div className="n">{needsEvidence.length}</div>
+            <span className="tag t-plain">Waiting on a first reply</span>
+            <div className="n">{waitingOn.length}</div>
             <div className="f">
-              A connector said they would ask. Nothing has come back from the target.
+              Connecting, and nothing from them yet: a connector is asking, or we wrote.
             </div>
           </div>
         </div>
@@ -268,28 +280,33 @@ export default async function Today() {
       <div className="grid-even">
         <div className="card">
           <div className="chead">
-            <h2>Stuck at the first rung</h2>
-            <span className="lbl">connector willing, nothing from the target</span>
+            <h2>Waiting on a first reply</h2>
+            <span className="lbl">connecting · nothing from them yet</span>
           </div>
-          {needsEvidence.length === 0 ? (
+          {waitingOn.length === 0 ? (
             <div className="cbody">
-              <p className="muted">Nobody is sitting at rung one.</p>
+              <p className="muted">Nobody at Connecting is waiting: everyone there has answered, or there is nobody there.</p>
             </div>
           ) : (
-            needsEvidence.map((p) => (
+            waitingOn.slice(0, 8).map(({ p, s }) => (
               <Link className="row" key={p.pursuitId} href={`/targets/${p.pursuitId}`}>
                 <div className="t">
                   <b>{p.entityName}</b>
                   <span>
-                    {p.vehicleName} · opened {shortDate(p.openedAt)} · owner {p.ownerName}
+                    {p.vehicleName} · owner {p.ownerSaid ?? p.ownerName}
                   </span>
                 </div>
                 <div className="state">
-                  <b>{p.rung ? RUNG_LABEL[p.rung] : '—'}</b>
-                  not target interest
+                  <b>{s?.awaitingSince ? `we wrote ${shortDate(s.awaitingSince)}` : 'no outreach on record'}</b>
+                  {p.rung === 'connector_willing' ? 'a connector is asking' : 'Connecting'}
                 </div>
               </Link>
             ))
+          )}
+          {waitingOn.length > 8 && (
+            <p className="cover">
+              {waitingOn.length - 8} more. <Link href="/targets?status=connecting&touch=waiting">The pipeline, at Connecting, waiting on them</Link>.
+            </p>
           )}
         </div>
 
@@ -300,19 +317,20 @@ export default async function Today() {
           </div>
           <table className="list">
             <tbody>
-              {audit.map((a, i) => (
-                <tr key={i}>
-                  <td className="nowrap muted mono" style={{ fontSize: 10.5, width: 70 }}>
-                    {ago(new Date(a.at))}
-                  </td>
-                  <td>
-                    <b>{a.action}</b>
-                    <div className="muted" style={{ fontSize: 11.5 }}>
-                      {a.name ?? 'system'} · {a.subject_type}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {happened.map((a, i) => {
+                const w = describeAudit(a);
+                return (
+                  <tr key={i}>
+                    <td className="nowrap muted mono" style={{ fontSize: 10.5, width: 70 }}>
+                      {ago(a.at)}
+                    </td>
+                    <td>
+                      <b>{w.what}</b>
+                      {w.about && <div className="muted" style={{ fontSize: 11.5 }}>{w.about}</div>}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {open.length > 0 && (

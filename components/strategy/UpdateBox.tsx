@@ -13,6 +13,7 @@ type Of<K extends UpdateSuggestion['kind']> = Extract<UpdateSuggestion, { kind: 
 
 const CHANNEL_WORD: Record<TouchChannel, string> = { meeting: 'meeting', call: 'call', email: 'email', message: 'message' };
 const newKey = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+const a = (w: string) => `${/^[aeiou]/.test(w) ? 'an' : 'a'} ${w}`;
 const day = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
 /**
@@ -63,7 +64,7 @@ export function UpdateBox({ pursuitId, status, today }: { pursuitId: string; sta
   const will = [
     'add this update to the timeline',
     changes ? `set the status to ${STATUS_LABEL[to as PursuitStatus]}${passed && passedBy ? ` (${PASSED_BY_LABEL[passedBy].toLowerCase()}, ${reason.replace(/_/g, ' ')})` : ''}, from ${STATUS_LABEL[status]}` : null,
-    touch ? (ahead ? `put a ${CHANNEL_WORD[channel]} on record for ${day(on)}` : `log a ${CHANNEL_WORD[channel]} on ${day(on)}${read ? `, their read ${READ_LABEL[read as Read].toLowerCase()}` : ''}`) : null,
+    touch ? (ahead ? `put ${a(CHANNEL_WORD[channel])} on record for ${day(on)}` : `log ${a(CHANNEL_WORD[channel])} on ${day(on)}${read ? `, their read ${READ_LABEL[read as Read].toLowerCase()}` : ''}`) : null,
     next && step ? `make the next step “${step}”${nextOn ? `, by ${day(nextOn)}` : ''}` : null,
   ].filter(Boolean) as string[];
 
@@ -124,10 +125,10 @@ export function UpdateBox({ pursuitId, status, today }: { pursuitId: string; sta
             <div className="sug">
               <label className="check">
                 <input type="checkbox" name="touch" checked={touch} onChange={(e) => set('touch', e.target.checked)} />
-                <span>Log a</span>
+                <span>Log</span>
               </label>
               <select name="touchChannel" aria-label="What kind of touchpoint" value={channel} disabled={!touch} onChange={(e) => set('channel', e.target.value)}>
-                {(['meeting', 'call', 'email', 'message'] as TouchChannel[]).map((c) => <option key={c} value={c}>{CHANNEL_WORD[c]}</option>)}
+                {(['meeting', 'call', 'email', 'message'] as TouchChannel[]).map((c) => <option key={c} value={c}>{a(CHANNEL_WORD[c])}</option>)}
               </select>
               <span>on</span>
               <input type="date" name="touchOn" aria-label="When" value={on} disabled={!touch} onChange={(e) => set('on', e.target.value)} />
@@ -161,7 +162,7 @@ export function UpdateBox({ pursuitId, status, today }: { pursuitId: string; sta
             )}
             {touch && !ahead && (channel === 'meeting' || channel === 'call') && (
               <p className="muted" style={{ fontSize: 11.5, margin: '6px 0 0' }}>
-                A {CHANNEL_WORD[channel]} logged is a record: if the ladder is behind it, the rung it supports is proposed for approval — never recorded from here.
+                {a(CHANNEL_WORD[channel]).replace(/^a/, 'A')} logged is a record: if the ladder is behind it, the rung it supports is proposed for approval — never recorded from here.
               </p>
             )}
             <p className="willdo"><b>Saving will</b> {will.join('; ')}.</p>

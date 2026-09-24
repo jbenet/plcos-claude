@@ -1736,3 +1736,21 @@ details.thread .warnline{font-size:12px;color:var(--amber)}
 .rungchg{color:var(--green)}
 .rungpend{color:var(--muted)}
 .rungpend a{color:var(--accent)}
+
+/* Where the pursuits stand, by status, and a vehicle's movement in numbers (N62, issues 0007
+   and 0008). A bar for each status's share; the ladder's confirmations beside it, in words. */
+.scount{display:grid;grid-template-columns:110px minmax(60px,1fr) 64px;align-items:center;gap:4px 12px;padding:7px 0;border-top:1px solid var(--hair);color:var(--ink);text-decoration:none;font-size:13px}
+.scount:first-child{border-top:0;padding-top:0}
+.scount:hover .nm{text-decoration:underline}
+.scount .bar{height:8px;border-radius:4px;background:var(--ground);overflow:hidden}
+.scount .bar i{display:block;height:100%;background:var(--ink);opacity:.75;border-radius:4px}
+.scount.off .bar i{background:var(--clay)}
+.scount .n{text-align:right}
+.scount .ev{grid-column:2/4;font-size:11.5px;color:var(--green);margin-top:-2px}
+.vstats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:6px}
+.vstat{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);text-decoration:none}
+a.vstat:hover{border-color:var(--accent-line);background:var(--accent-wash)}
+.vstat .n{font-size:20px;line-height:1.1}
+.vstat .n.warnnum{color:var(--clay)}
+.vstat .l{font-size:12px;line-height:1.35}
+.vstat .s{font-size:11px;color:var(--muted);line-height:1.35}

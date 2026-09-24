@@ -8,7 +8,7 @@ import { usdM } from '@/lib/money';
 import {
   AFFIL_LABEL, listAffiliations, relationshipRoles, ROLE_LABEL, type RelationshipRole,
 } from '@/modules/identity';
-import { RUNG_LABEL, type LadderRung } from '@/modules/strategy';
+import { RUNG_LABEL, STATUS_LABEL, type LadderRung, type PursuitStatus } from '@/modules/strategy';
 import { listAssessments, BLOCKER_SHORT, type Blocker } from '@/modules/fit';
 
 export const dynamic = 'force-dynamic';
@@ -159,7 +159,7 @@ export default async function Orgs({
                 <th style={{ width: 158 }}>Is to us</th>
                 <th style={{ width: 88 }} className="right">Hard</th>
                 <th style={{ width: 88 }} className="right">Soft</th>
-                <th style={{ width: 142 }}>Ladder</th>
+                <th style={{ width: 142 }}>Status</th>
                 <th>What is in the way</th>
               </tr>
             </thead>
@@ -216,7 +216,8 @@ export default async function Orgs({
                     </td>
                     <td className="right mono muted">{r.soft > 0 ? usdM(r.soft) : '—'}</td>
                     <td className="muted" style={{ fontSize: 11.5 }}>
-                      {r.rung ? RUNG_LABEL[r.rung as LadderRung] : '—'}
+                      {r.status ? <span style={{ color: 'var(--ink)' }}>{STATUS_LABEL[r.status as PursuitStatus]}</span> : '—'}
+                      {r.rung && <div style={{ fontSize: 11 }}>{RUNG_LABEL[r.rung as LadderRung]} on the ladder</div>}
                       {r.connectorAsks > 0 && (
                         <div style={{ fontSize: 11 }}>{r.connectorAsks} asks carried</div>
                       )}

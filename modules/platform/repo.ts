@@ -155,6 +155,25 @@ export interface AuditRow {
   detail: Record<string, unknown>;
 }
 
+/** Everything of these kinds since a date, newest first (N62: a vehicle's recent movement). */
+export async function auditSince(actions: string[], since: Date): Promise<AuditRow[]> {
+  const db = await getDb();
+  const rows = await db.query<{
+    at: Date | string; action: string; subject_type: string; subject_id: string | null;
+    name: string | null; detail: Record<string, unknown>;
+  }>(
+    `select a.at, a.action, a.subject_type, a.subject_id, u.name, a.detail
+       from platform.audit_log a left join platform.app_user u on u.id = a.actor_id
+      where a.action = any($1::text[]) and a.at >= $2
+      order by a.at desc`,
+    [actions, since],
+  );
+  return rows.map((r) => ({
+    at: new Date(r.at), action: r.action, subjectType: r.subject_type,
+    subjectId: r.subject_id, actor: r.name, detail: r.detail ?? {},
+  }));
+}
+
 /** One subject's history, oldest first: what the LP timeline reads status changes from (N61). */
 export async function auditFor(subjectType: string, subjectId: string, actions: string[]): Promise<AuditRow[]> {
   const db = await getDb();

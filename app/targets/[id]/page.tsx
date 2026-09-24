@@ -9,7 +9,7 @@ import { Coverage } from '@/components/ui/Coverage';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import {
-  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, updatesFor,
+  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, rungIndex, updatesFor,
 } from '@/modules/strategy';
 import { auditFor } from '@/modules/platform';
 import { StatusForm } from '@/components/strategy/StatusForm';
@@ -165,18 +165,33 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
             ))}
           </div>
 
-          <div style={{ marginTop: 14 }}>
-            <span className={`stat ${pursuit.rung === 'connector_willing' ? 'waiting' : 'ready'}`}>
-              <i />
-              {pursuit.rung === 'connector_willing' ? 'Waiting on counterpart' : 'Ready for review'}
-            </span>
-          </div>
-
-          <div className="note">
-            {pursuit.rung === 'connector_willing'
-              ? 'The connector said they were happy to ask. That is the first rung and nothing more — it is not target interest, not a meeting, and not a commitment. The ladder will not advance until a reply from the target is on file.'
-              : `Currently at ${pursuit.rung ? RUNG_LABEL[pursuit.rung] : 'nothing on file'}. Every rung above it is empty, and empty is rendered as empty.`}
-          </div>
+          {(() => {
+            // The status first, then how far the ladder backs it (N62): "Needs evidence" when the
+            // status claims more than the ladder has confirmed, "Waiting on counterpart" when we
+            // wrote last. A connector's yes is still the first rung and nothing more.
+            const backing = { connecting: 'connector_willing', discussing: 'meeting_held', committed: 'commitment_accepted' } as const;
+            const needs = backing[pursuit.status as keyof typeof backing];
+            const short = needs && rungIndex(pursuit.rung) < rungIndex(needs);
+            return (
+              <>
+                <div style={{ marginTop: 14 }}>
+                  {short ? (
+                    <span className="stat evidence"><i />Needs evidence</span>
+                  ) : touchSummary.awaitingSince && pursuit.status !== 'passed' ? (
+                    <span className="stat waiting"><i />Waiting on counterpart</span>
+                  ) : null}
+                </div>
+                <div className="note">
+                  {STATUS_LABEL[pursuit.status]}, and on the ladder {pursuit.rung ? RUNG_LABEL[pursuit.rung] : 'nothing yet'}.{' '}
+                  {short
+                    ? `${STATUS_LABEL[pursuit.status]} claims ${RUNG_LABEL[needs]}; the ladder hasn't confirmed it${file.byRung[needs] ? ', though the record is on file' : ''}.`
+                    : pursuit.rung === 'connector_willing' && pursuit.status === 'connecting'
+                      ? 'The connector said they were happy to ask. That is the first rung and nothing more — not interest from the LP, not a meeting, not a commitment.'
+                      : 'Every rung above it is empty, and empty is shown as empty.'}
+                </div>
+              </>
+            );
+          })()}
         </>
       }
     >

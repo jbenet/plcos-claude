@@ -1436,7 +1436,10 @@ async function main() {
           const declined = read('They passed — timing, next fund maybe.', 'discussing');
           const ours = read("We're passing for now.", 'discussing');
           const again = read('Met again today; still in.', 'committed');
-          const all = [met, notMet, inFor, boston, declined, ours, again].flat();
+          const wrote = read('Emailed Anneliese this morning to ask for twenty minutes.', 'selected');
+          const theyWrote = read('They emailed yesterday, keen to talk.', 'connecting');
+          const all = [met, notMet, inFor, boston, declined, ours, again, wrote, theyWrote].flat();
+          const dir = (xs: ReturnType<typeof read>) => (xs.find((x) => x.kind === 'touch') as { direction?: string } | undefined)?.direction;
           const status = (xs: ReturnType<typeof read>) => xs.find((x) => x.kind === 'status') as { to: string; passedBy?: string; reason?: string } | undefined;
           const touch = met.find((x) => x.kind === 'touch') as { on: string; channel: string } | undefined;
           const readerOk =
@@ -1445,13 +1448,31 @@ async function main() {
             notMet.length === 0 && status(inFor)?.to === 'committed' && inFor.some((x) => x.kind === 'amount') &&
             !status(boston) && status(declined)?.to === 'passed' && status(declined)?.passedBy === 'them' && status(declined)?.reason === 'timing' &&
             status(ours)?.passedBy === 'us' && !status(again) && again.some((x) => x.kind === 'touch') &&
+            status(wrote)?.to === 'connecting' && dir(wrote) === 'ours' && status(theyWrote)?.to === 'discussing' && dir(theyWrote) === 'theirs' &&
             all.every((x) => ['status', 'touch', 'read', 'next', 'amount'].includes(x.kind) && x.basis.length > 0);
           check(
             'An update is read into suggestions, each resting on the words it quotes; forward only; never a rung, and an amount only pointed at',
             readerOk,
             `met Tuesday → ${kinds(met)} (${status(met)?.to}, ${touch?.on}); haven't met → ${kinds(notMet) || 'nothing'}; in for $2M → ${kinds(inFor)}; ` +
               `in Boston → ${kinds(boston) || 'nothing'}; passed on timing → ${status(declined)?.to}/${status(declined)?.passedBy}/${status(declined)?.reason}; we're passing → ${status(ours)?.passedBy}; ` +
-              `met again, already committed → ${kinds(again)}`,
+              `met again, already committed → ${kinds(again)}; emailed someone by name → ${status(wrote)?.to}/${dir(wrote)}; they emailed → ${status(theyWrote)?.to}/${dir(theyWrote)}`,
+          );
+
+          // The audit log in words (N62, issue 0007): what a known action did, and to whom.
+          const words = await import('../lib/audit-words');
+          const row = (action: string, detail: Record<string, unknown>) => ({ at: new Date(), action, subjectType: 'pursuit', subjectId: 'x', actor: 'Juan', detail });
+          const said = [
+            words.describeAudit(row('pursuit.status_set', { entity: 'Omar Haddad', vehicle: 'PLC Neurotech I', from: 'Selected', to: 'Discussing' })),
+            words.describeAudit(row('ladder.climbed', { entity: 'Omar Haddad', vehicle: 'PLC Neurotech I', rungs: ['target_opted_in:calendar:x', 'meeting_held:calendar:x'] })),
+            words.describeAudit(row('touchpoint.logged', { entity: 'Omar Haddad', vehicle: 'PLC Neurotech I', channel: 'email' })),
+          ];
+          const unknown = words.describeAudit(row('something.new_here', {}));
+          check(
+            'The audit log reads as sentences that name who and what; an action it does not know is shown by its name, not guessed',
+            said[0]!.what === 'Juan set the status to Discussing, from Selected' && said[0]!.about === 'Omar Haddad · PLC Neurotech I' &&
+              /LP opted in, Meeting held recorded on the ladder, approved by Juan/.test(said[1]!.what) && said[2]!.what === 'Juan logged an email' &&
+              unknown.what === 'Juan · something new here',
+            said.map((x) => `${x.what} — ${x.about}`).join('; ') + `; unknown: ${unknown.what}`,
           );
 
           const up = await import('../lib/updates');

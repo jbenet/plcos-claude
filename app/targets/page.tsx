@@ -25,8 +25,12 @@ function aheadOfStatus(p: Pursuit, s: TouchpointSummary): boolean {
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
-export default async function Pipeline({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  const [{ status: asked }, selection] = await Promise.all([searchParams, vehicleSelection()]);
+export default async function Pipeline({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const [sp, selection] = await Promise.all([searchParams, vehicleSelection()]);
+  const one = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : undefined);
+  const asked = one('status');
+  // The filters in the address (N62): read here, so the page is drawn filtered from the start.
+  const filters = Object.fromEntries(['q', 'owner', 'vehicle', 'meetings', 'touch', 'read', 'money', 'flag'].flatMap((k) => (one(k) ? [[k, one(k)!]] : [])));
   const current = selection.current;
   // All vehicles means the ones being raised: a vehicle kept for its history is shown when it
   // is the one selected, and counted, not mixed in.
@@ -165,6 +169,7 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
         statuses={STATUSES.map((s) => ({ id: s.id, label: s.label, means: s.means }))}
         rungNames={RUNGS.map((r) => RUNG_LABEL[r])}
         initialStatus={initial}
+        initialFilters={filters}
         showVehicle={!current}
       />
 

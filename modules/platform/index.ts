@@ -8,7 +8,7 @@ export type {
 } from './types';
 export type { AuditRow, FeedbackRow } from './repo';
 export {
-  appendAudit, attachIssueRef, auditFor, auditLog, getUserByHandle, insertFeedback, listFeedback,
+  appendAudit, attachIssueRef, auditFor, auditLog, auditSince, getUserByHandle, insertFeedback, listFeedback,
   listSyncSources, listUsers, listVehicles, recentAudit,
 } from './repo';
 export { fileFeedback, type FeedbackCommand } from './service';

@@ -132,7 +132,7 @@ export default async function Vehicles() {
         <div className="card">
           <div className="chead">
             <h2>Where the pursuits stand</h2>
-            <span className="lbl">consent ladder, per vehicle</span>
+            <span className="lbl">furthest along, by status</span>
           </div>
           {furthest.map((p) => (
             <Link className="row" key={p.pursuitId} href={`/targets/${p.pursuitId}`}>
@@ -143,8 +143,8 @@ export default async function Vehicles() {
                 </span>
               </div>
               <div className="state">
-                <b>{p.rung ? RUNG_LABEL[p.rung] : 'Nothing on file'}</b>
-                {STATUS_LABEL[p.status]}
+                <b>{STATUS_LABEL[p.status]}</b>
+                {p.rung ? `${RUNG_LABEL[p.rung]} on the ladder` : 'nothing on the ladder'}
                 {p.stageSaid && p.source !== 'us' ? <> · Affinity: {p.stageSaid}</> : <> · opened {shortDate(p.openedAt)}</>}
               </div>
             </Link>

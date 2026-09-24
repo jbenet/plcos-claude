@@ -8,7 +8,7 @@ import { listEdges, TIER_MEANING } from '@/modules/network';
 import { restrictionsFor } from '@/modules/coordination';
 import { assessmentsForEntity, BLOCKER_LABEL } from '@/modules/fit';
 import { claimsFor, listSourceDocs } from '@/modules/research';
-import { listPursuits, RUNG_LABEL } from '@/modules/strategy';
+import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/modules/strategy';
 
 const TYPE_LABEL: Record<string, string> = {
   person: 'Person', org: 'Organisation', family: 'Family office',
@@ -154,7 +154,7 @@ export async function EntitySummary({ entityId }: { entityId: string }) {
           {theirs.map((p) => (
             <div className="kv" key={p.pursuitId}>
               <span>{p.vehicleName}</span>
-              <span>{p.rung ? RUNG_LABEL[p.rung] : 'No rung evidenced'}</span>
+              <span>{STATUS_LABEL[p.status]}{p.rung ? <span className="muted"> · {RUNG_LABEL[p.rung]} on the ladder</span> : null}</span>
             </div>
           ))}
         </>

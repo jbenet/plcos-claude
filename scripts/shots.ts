@@ -212,6 +212,44 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N62: [
+    {
+      name: '01-where-the-pursuits-stand',
+      path: '/overview',
+      prepare: async (page) => {
+        await page.request.post(new URL('/api/session', page.url()).toString(), { data: { vehicleSlug: 'neurotech' } });
+        await page.goto(new URL('/overview', page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.getByRole('heading', { name: 'Where the pursuits stand' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '02-lately',
+      path: '/overview',
+      prepare: async (page) => {
+        await page.getByRole('heading', { name: 'Lately' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '03-waiting-on-a-first-reply',
+      path: '/today',
+      prepare: async (page) => {
+        await page.request.post(new URL('/api/session', page.url()).toString(), { data: { vehicleSlug: 'all' } });
+        // Someone reaches out, and says so on the LP's page: Connecting, waiting on a reply.
+        await openLp(page, 'Anneliese Mork');
+        await page.locator('.updbox textarea').fill('Emailed Anneliese this morning to ask for twenty minutes before the IC.');
+        await page.getByRole('button', { name: 'Save update' }).click();
+        await page.locator('.updbox .stat.ready').waitFor({ timeout: 15000 });
+        await page.goto(new URL('/today', page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.getByRole('heading', { name: 'Waiting on a first reply' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N61: [
     {
       name: '01-an-update-read-as-you-type',
