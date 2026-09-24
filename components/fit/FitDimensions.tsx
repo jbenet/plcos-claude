@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useUrlParam } from '@/lib/url-state';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { GRADE_SCORE, type Certainty, type Grade } from '@/modules/fit/client';
 import { CertaintyMark, Reading, Weight } from './marks';
@@ -34,7 +34,8 @@ const ORDERS: Array<{ id: Order; label: string; hint: string }> = [
  * disagree often enough that collapsing them into one number would hide the disagreement.
  */
 export function FitDimensions({ rows, docs }: { rows: DimRow[]; docs: Record<string, EvidenceDoc> }) {
-  const [order, setOrder] = useState<Order>('us');
+  // The order is a view, so it's in the address (issue 0009).
+  const [order, setOrder] = useUrlParam<Order>('order', 'us', ['us', 'them', 'miss']);
 
   const sorted = [...rows].sort((a, b) => {
     if (order === 'them') return b.weightThem - a.weightThem || a.label.localeCompare(b.label);

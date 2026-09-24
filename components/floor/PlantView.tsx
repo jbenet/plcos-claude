@@ -14,6 +14,10 @@ import type { FloorState } from '@/lib/floor-client';
  * **Dwell is the honest half of a cycle time.** It measures the gap between two evidence
  * records, so it says how long this system took to learn the next thing about a pursuit —
  * not how long the LP took to decide. Those differ, and only one of them is observable here.
+ *
+ * The stations are the ladder's rungs, not the statuses, and the drawing says so: in, out and
+ * dwell need dated steps that only go up, which the ladder's records are and a status is not
+ * (N50). Where each LP stands by status is on the line; a passed LP sits at no station.
  */
 
 const FEEDERS: Array<{ into: string; label: string; detail: string }> = [
@@ -28,6 +32,7 @@ export function PlantView({ board, floor }: { board: BoardState; floor: FloorSta
 
   return (
     <div className="plantview">
+      <div className="lbl plantcap">The consent ladder, rung by rung · evidence records, not statuses</div>
       <div className="plantline">
         {board.stations.map((s, i) => {
           const feeder = FEEDERS.find((f) => f.into === s.key);
@@ -47,10 +52,10 @@ export function PlantView({ board, floor }: { board: BoardState; floor: FloorSta
                   )}
                 </div>
               )}
-              <div className={`pstation${jam ? ' jam' : ''}${idle ? ' idle' : ''}`}>
+              <div className={`pstation${jam ? ' jam' : ''}${idle ? ' idle' : ''}`} title={s.requires}>
                 <div className="plabel">{s.label}</div>
                 <div className="pwip">{s.wip}</div>
-                <div className="pwipl">in the station</div>
+                <div className="pwipl">{s.key === 'sourced' ? 'names, no pursuit' : 'at this rung now'}</div>
                 <dl className="pgauges">
                   <div>
                     <dt>In · 30d</dt>
@@ -100,6 +105,15 @@ export function PlantView({ board, floor }: { board: BoardState; floor: FloorSta
             The gap between two evidence records on one pursuit. It is how long we took to
             learn the next thing, not how long they took to decide. A station with a long
             dwell and nothing jammed is usually a recording habit, not a slow counterparty.
+          </p>
+        </div>
+        <div className="pnote">
+          <div className="lbl">Why rungs, not statuses</div>
+          <p>
+            A status is our plan: it moves in any direction and records nothing, so it has no
+            in, out or dwell. A rung is a dated evidence record, and the ladder only climbs, which
+            is what a gauge needs. So the plant is the ladder; the line is the statuses. Passed
+            LPs are at no station and jam none.
           </p>
         </div>
         <div className="pnote">

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useUrlParam } from '@/lib/url-state';
 
 export interface TargetRow {
   entityId: string;
@@ -37,7 +38,8 @@ export function TargetPicker({
   total: number;
 }) {
   const [q, setQ] = useState('');
-  const [sort, setSort] = useState<Sort>('score');
+  // The order is a view, so it's in the address (issue 0009); the search box stays local while typed.
+  const [sort, setSort] = useUrlParam<Sort>('sort', 'score', ['score', 'name']);
   const [min, setMin] = useState(0);
 
   const rows = useMemo(() => {

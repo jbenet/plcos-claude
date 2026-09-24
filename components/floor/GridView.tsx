@@ -2,23 +2,29 @@
 
 import type { BoardState, CellState } from '@/lib/board-client';
 import { CELL_GLYPH, CELL_LABEL, LEVERS } from '@/lib/board-client';
-import { compactUsd } from './shared';
+import { STATUS_LABEL } from '@/modules/strategy/client';
+import { useFloor } from './FloorContext';
+import { claimWords, compactUsd, EVIDENCE_GLYPH, rungShort, standingWords } from './shared';
 
 /**
  * View 9 — the grid.
  *
- * The action economy: one row per target, one column per lever, and the state of that lever
- * on that target. It answers the question the other views dodge — **what can we actually do
+ * The action economy: one row per LP, one column per lever, and the state of that lever
+ * on that LP. It answers the question the other views dodge — **what can we actually do
  * about this one**, and it makes the worst case legible: a row with no open cell at all.
  *
  * The distinction the grid exists to keep is between *blocked* and *not yet*. A lever we are
  * forbidden to pull and a lever that is simply out of reach look identical on a status list
  * and demand opposite responses: one is a decision to revisit, the other is a rung to climb.
+ * So each row leads with its status (N62) and says the rung under it: "not yet" is read from
+ * the ladder, and a status the ladder does not back is marked, because that is the row where
+ * a lever looks locked while the plan says we are past it.
  */
 
 const ORDER: CellState[] = ['open', 'spent', 'done', 'blocked', 'locked'];
 
 export function GridView({ board }: { board: BoardState }) {
+  const { select } = useFloor();
   const count = (key: string, state: CellState) =>
     board.rows.filter((r) => r.cells[key]?.state === state).length;
 
@@ -28,8 +34,9 @@ export function GridView({ board }: { board: BoardState }) {
         <table className="list gridtable">
           <thead>
             <tr>
-              <th style={{ width: 210 }}>Target</th>
-              <th style={{ width: 86 }}>At stake</th>
+              <th style={{ width: 196 }}>LP</th>
+              <th style={{ width: 118 }}>Status · ladder</th>
+              <th style={{ width: 80 }}>At stake</th>
               {LEVERS.map((l) => (
                 <th key={l.key} title={l.means}>{l.label}</th>
               ))}
@@ -40,10 +47,17 @@ export function GridView({ board }: { board: BoardState }) {
             {board.rows.map((r) => {
               const open = LEVERS.filter((l) => r.cells[l.key]?.state === 'open').length;
               return (
-                <tr key={`${r.entityId}:${r.vehicleName}`} className={open === 0 ? 'stuck' : undefined}>
+                <tr key={r.key} className={open === 0 ? 'stuck' : undefined}>
                   <td>
-                    <b>{r.name}</b>
-                    <div className="muted gsub">{r.vehicleName} · {r.ownerName}</div>
+                    <button className="covname" onClick={() => select({ kind: 'item', key: r.key })}>
+                      <b>{r.name}</b>
+                      <span>{r.vehicleName} · {r.ownerName}</span>
+                    </button>
+                  </td>
+                  <td title={`${standingWords(r)}${claimWords(r) ? `\n${claimWords(r)}` : ''}`}>
+                    {STATUS_LABEL[r.status]}
+                    {r.needsEvidence && <span className="gev" aria-label="needs evidence"> {EVIDENCE_GLYPH}</span>}
+                    <div className="muted gsub">{rungShort(r)}</div>
                   </td>
                   <td className="mono right">{compactUsd(r.stake)}</td>
                   {LEVERS.map((l) => {
@@ -64,7 +78,7 @@ export function GridView({ board }: { board: BoardState }) {
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={2} className="muted">Targets with this lever open</td>
+              <td colSpan={3} className="muted">LPs with this lever open</td>
               {LEVERS.map((l) => (
                 <td key={l.key} className="mono gfoot">{count(l.key, 'open')}</td>
               ))}
@@ -80,12 +94,15 @@ export function GridView({ board }: { board: BoardState }) {
             <i>{CELL_GLYPH[s]}</i> {CELL_LABEL[s]}
           </span>
         ))}
+        <span className="gkey"><i>{EVIDENCE_GLYPH}</i> Needs evidence — the status claims more than the ladder shows</span>
       </div>
       <p className="cover">
-        <b>A row with no open cell is the finding.</b> It is not a target going badly — it is a
-        target we have run out of legal moves on, which is a different meeting with a different
+        <b>A row with no open cell is the finding.</b> It is not an LP going badly — it is an
+        LP we have run out of legal moves on, which is a different meeting with a different
         person. Blocked and not-yet are drawn apart for the same reason: one is a decision to
-        revisit, the other is a rung to climb.
+        revisit, the other is a rung to climb. Not-yet is read from the ladder, never from the
+        status, and {EVIDENCE_GLYPH} marks a row whose status is ahead of it. Wired and passed
+        LPs are not on the grid: nothing is left to pull on either.
       </p>
     </div>
   );

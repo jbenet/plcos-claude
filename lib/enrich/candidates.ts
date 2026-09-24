@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db';
 import { latestRaw } from '@/modules/sources';
 import { touchpointSummaries, touchpointsByPair } from '@/modules/meetings';
 import { closeStates } from '@/modules/pipeline';
+import { listRestrictions } from '@/modules/coordination';
 import { listPursuits, type Pursuit, type PursuitStatus } from '@/modules/strategy';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 
@@ -46,13 +47,26 @@ export interface Candidate extends ResearchIdentity {
   pursuits: Array<{ pursuitId: string; vehicle: string; status: PursuitStatus; rung: string | null; owner: string; stageSaid: string | null; nextStep: string | null }>;
   contact: {
     meetings: number; lastTouch: string | null; lastFromThem: string | null; awaitingSince: string | null; read: string | null;
+    /** How the last touch happened — a meeting counts as "from them", so their last word can be a meeting, not a reply (W5, iteration 3). */
+    lastTouchChannel: string | null;
     /** Meetings on a date that four or more LPs share: an event, most likely, not a one-to-one (W5 learning). */
     groupMeetings: number;
+    /**
+     * How many LPs in the set our last unanswered word went to on the same day (W5, iteration 3):
+     * ten or more is a mailing, and the next step is a first personal note, not a follow-up.
+     */
+    outreachShared: number;
   };
   /** The close track, where there is one: the amount, and how far it has got (rule 1: soft until signed). */
   money: { amount: number; track: string; state: string; signedOn: string | null; signedPerSource: boolean; wired: number } | null;
   /** Our notes about them, as read (N55): the summaries, dated, health detail already redacted. */
   notes: Array<{ on: string; summary: string | null; read: string | null }>;
+  /**
+   * Do-not-approach instructions on file (rule 8), list marks included: a blanket one rules them out
+   * of any plan, one through a connector rules out that route. The instruction's words stay in the
+   * app; the plan needs only its shape.
+   */
+  restrictions: Array<{ scope: 'connector' | 'channel' | 'blanket'; connector: string | null; channel: string | null }>;
 }
 
 interface V { type: string; data: unknown }
@@ -110,6 +124,7 @@ export async function researchSet(): Promise<Candidate[]> {
     touchpointSummaries(all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }))),
   ]);
   const readings = await readingsFor(ids);
+  const restrictions = (await listRestrictions({ includeListMarks: true })).filter((r) => byEntity.has(r.entityId));
   const pairs = all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
   const [touches, tracks] = await Promise.all([touchpointsByPair(pairs), closeStates(pairs)]);
   // A date many LPs share is an event: count who was "in a meeting" each day.
@@ -130,7 +145,7 @@ export async function researchSet(): Promise<Candidate[]> {
     entriesOf.set(k, [...(entriesOf.get(k) ?? []), e]);
   }
 
-  return entities.map((ent) => {
+  const out: Candidate[] = entities.map((ent) => {
     const ps = byEntity.get(ent.entity_id)!;
     const aff = affiliations.find((a) => a.person_entity === ent.entity_id) ?? null;
     const es = entriesOf.get(affinityOf.get(ent.entity_id) ?? '') ?? [];
@@ -164,12 +179,14 @@ export async function researchSet(): Promise<Candidate[]> {
       contact: {
         meetings: Math.max(0, ...sums.map((s) => s!.meetingDates.length)),
         lastTouch: latest(sums.map((s) => s!.lastTouch)),
+        lastTouchChannel: sums.map((s) => s!).filter((s) => s.lastTouch).sort((a, b) => b.lastTouch!.getTime() - a.lastTouch!.getTime())[0]?.lastTouchChannel ?? null,
         lastFromThem: latest(sums.map((s) => s!.lastFromThem)),
         awaitingSince: latest(sums.map((s) => s!.awaitingSince)),
         read: sums.map((s) => s!.read?.read).find(Boolean) ?? null,
         groupMeetings: ps.reduce((n, p) => n + new Set((touches.get(`${p.entityId}:${p.vehicleId}`) ?? [])
           .filter((t) => (t.channel === 'meeting' || t.channel === 'call') && t.on && !t.viaOrganization && (onDay.get(t.on.toISOString().slice(0, 10)) ?? 0) >= 4)
           .map((t) => t.on!.toISOString().slice(0, 10))).size, 0),
+        outreachShared: 0,
       },
       money: (() => {
         const t = ps.map((p) => tracks.get(`${p.entityId}:${p.vehicleId}`)).find(Boolean);
@@ -182,8 +199,14 @@ export async function researchSet(): Promise<Candidate[]> {
       notes: readings.filter((r) => r.entityId === ent.entity_id && !r.dismissed && r.summary)
         .sort((a, b) => b.on.getTime() - a.on.getTime()).slice(0, 8)
         .map((r) => ({ on: r.on.toISOString().slice(0, 10), summary: r.summary, read: r.read })),
+      restrictions: restrictions.filter((r) => r.entityId === ent.entity_id)
+        .map((r) => ({ scope: r.scope, connector: r.connectorName, channel: r.channel })),
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
+  const sentOn = new Map<string, number>();
+  for (const c of out) if (c.contact.awaitingSince) sentOn.set(c.contact.awaitingSince, (sentOn.get(c.contact.awaitingSince) ?? 0) + 1);
+  for (const c of out) c.contact.outreachShared = c.contact.awaitingSince ? sentOn.get(c.contact.awaitingSince)! : 0;
+  return out;
 }
 
 /** Where the files live; the property harness points it at a scratch directory of its own. */

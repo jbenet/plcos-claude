@@ -212,6 +212,35 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N66: [
+    {
+      name: '01-the-connector-plan',
+      path: '/developer/enrich',
+      prepare: async (page) => {
+        await page.getByRole('heading', { name: /The connector plan/ }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '02-the-line-by-status',
+      path: '/neurotech/visualizations?view=line',
+      prepare: async (page) => {
+        await page.getByRole('heading', { name: 'The line' }).first().evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '03-the-room-by-status',
+      path: '/neurotech/visualizations?view=room',
+      prepare: async (page) => {
+        await page.getByRole('heading', { name: 'The room' }).first().evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N65: [
     {
       name: '01-triage-without-the-web',

@@ -7,7 +7,7 @@ import { listMeetings, listObjections, listQuestions } from '@/modules/meetings'
 import { listEdges } from '@/modules/network';
 import { poolChecks } from '@/modules/pipeline';
 import { listUsers, listVehicles } from '@/modules/platform';
-import { listPursuits } from '@/modules/strategy';
+import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/modules/strategy';
 import type {
   CellMark, Coverage, CoverageRow, Dependent, Lenses, Leverage, NetLink, NetNode, NetPath,
   Network, Prerequisite, Radar, RadarDot, Strip, StripCell, StripLane, Track,
@@ -98,7 +98,10 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
       id: `t:${i.key}`,
       name: i.entityName,
       role: 'target',
-      note: i.rung ?? 'no rung',
+      // The status first, the ladder under it (N62): a node's note is never a bare rung.
+      note: `${STATUS_LABEL[i.status]}${i.needsEvidence ? ', needs evidence' : ''} · ${
+        !i.pursuitId ? (i.rung ? `${RUNG_LABEL[i.rung]}, from the close track` : 'nothing on record')
+          : i.ladderRung ? `${RUNG_LABEL[i.ladderRung]} on the ladder` : 'nothing on the ladder yet'}`,
       vehicleName: i.vehicleName,
       amount: i.amount,
       actions: i.blocked ? 1 : 0,
@@ -330,11 +333,11 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
     ].sort((x, y) => y.getTime() - x.getTime());
     return dates[0] ?? null;
   };
-  const entryFor = (entityId: string, vehicleName: string): Date | null => {
+  const entryFor = (entityId: string, vehicleName: string) => {
     const p = pursuits.find((x) => x.entityId === entityId && x.vehicleName === vehicleName);
     if (!p || !p.rung) return null;
     const ev = p.events.filter((e) => e.rung === p.rung).sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
-    return ev[0]?.occurredAt ?? null;
+    return ev[0] ? { at: ev[0].occurredAt, rung: p.rung } : null;
   };
 
   const rows: CoverageRow[] = items.map((i) => {
@@ -365,11 +368,11 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
 
     const open = Boolean(i.urgent) || Boolean(i.nextRung) || Boolean(i.blocked);
     put('action', open ? 'recorded' : 'missing',
-      open ? (i.blocked ?? i.urgent ?? `Next: ${i.nextRung}`) : 'Nothing open with a name on it.');
+      open ? (i.blocked ?? i.urgent ?? `Next on the ladder: ${RUNG_LABEL[i.nextRung!]}`) : 'Nothing open with a name on it.');
 
     const entry = entryFor(i.entityId, i.vehicleName);
     put('entry', entry ? 'recorded' : 'missing',
-      entry ? `Arrived at this rung ${days(entry, now)}d ago.`
+      entry ? `Reached ${RUNG_LABEL[entry.rung]} on the ladder ${days(entry.at, now)}d ago.`
         : 'No dated record of arriving where it sits.');
 
     const recorded = COVERAGE_FIELDS.filter((f) => cells[f.key]!.mark === 'recorded').length;
@@ -463,7 +466,7 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
       for (const p of pursuits.filter((x) => x.vehicleName === v.name)) {
         for (const e of p.events) {
           if (e.rung !== 'connector_willing') {
-            place('exchange', e.occurredAt, `${e.rung.replace(/_/g, ' ')} · ${p.entityName}`, 'done');
+            place('exchange', e.occurredAt, `On the ladder: ${RUNG_LABEL[e.rung]} · ${p.entityName}`, 'done');
           }
         }
       }
@@ -483,7 +486,8 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
       return {
         vehicleName: v.name,
         pursuits: mine.length,
-        open: mine.filter((i) => !i.cashReceived).length,
+        // Open as the overview counts it (N62): not wired, and not passed.
+        open: mine.filter((i) => !i.cashReceived && i.status !== 'passed').length,
         tracks,
         overflow,
       };

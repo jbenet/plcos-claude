@@ -1,4 +1,4 @@
-import type { LadderRung } from '@/modules/strategy/client';
+import type { LadderRung, PursuitStatus } from '@/modules/strategy/client';
 
 /**
  * The second projection's shapes and vocabulary, with no database in them.
@@ -74,8 +74,10 @@ export interface Move {
   family: string;
   label: string;
   requires: string;
-  /** How many items this move is available on right now. */
+  /** How many items this move is available on right now. The ladder decides; a passed LP never counts. */
   available: number;
+  /** The same items by status, for a move made on pursuits. Absent for moves on names or objections. */
+  byStatus?: Partial<Record<PursuitStatus, number>>;
   /** How many it is blocked on, and why. */
   blocked: number;
   blockedWhy: string | null;
@@ -92,7 +94,7 @@ export const CELL_LABEL: Record<CellState, string> = {
   open: 'Available now',
   spent: 'Used this quarter',
   blocked: 'Blocked',
-  locked: 'Not yet — the rung below is missing',
+  locked: 'Not yet — the ladder is missing the rung below',
   done: 'Done',
 };
 
@@ -118,10 +120,20 @@ export const LEVERS: Lever[] = [
 ];
 
 export interface BoardRow {
+  /** The floor item's key, entity × vehicle. */
+  key: string;
   entityId: string;
+  pursuitId: string | null;
   name: string;
   vehicleName: string;
   ownerName: string;
+  /** The status first, then the rung under it; the levers are gated by the rung. */
+  status: PursuitStatus;
+  needsEvidence: LadderRung | null;
+  /** What gates the levers: the floor's rung, close-track records included. */
+  rung: LadderRung | null;
+  /** What the ladder has confirmed, which "Needs evidence" is judged on. */
+  ladderRung: LadderRung | null;
   stake: number | null;
   cells: Record<string, { state: CellState; note: string }>;
 }

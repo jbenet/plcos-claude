@@ -68,7 +68,7 @@
     },
     {
      "field": "investment",
-     "value": "Angel investor in two neuromodulation startups.",
+     "value": "Angel investor in two neuromodulation startups, Halcyon Neuro among them.",
      "source": {
       "url": "https://okonjo-family-office.example.org/portfolio",
       "kind": "primary",
@@ -76,7 +76,10 @@
       "published": null
      },
      "confidence": "medium",
-     "scope": "firm"
+     "scope": "person",
+     "detail": {
+      "company": "Halcyon Neuro"
+     }
     },
     {
      "field": "news",
@@ -191,6 +194,36 @@
       "published": null
      },
      "confidence": "high"
+    },
+    {
+     "field": "investment",
+     "value": "Seed investor in Halcyon Neuro, a neuromodulation startup.",
+     "detail": {
+      "company": "Halcyon Neuro"
+     },
+     "source": {
+      "url": "https://brandt-co.example.org/portfolio",
+      "kind": "primary",
+      "title": null,
+      "published": null
+     },
+     "quote": "Seed: Halcyon Neuro",
+     "confidence": "high"
+    },
+    {
+     "field": "board",
+     "value": "Sits on the board of the Lumen Brain Institute.",
+     "detail": {
+      "company": "Lumen Brain Institute"
+     },
+     "source": {
+      "url": "https://lumen-brain.example.org/board",
+      "kind": "primary",
+      "title": null,
+      "published": null
+     },
+     "quote": "Board of directors",
+     "confidence": "high"
     }
    ],
    "profile": {
@@ -247,6 +280,21 @@
       "title": null,
       "published": null
      },
+     "confidence": "medium"
+    },
+    {
+     "field": "board",
+     "value": "Board member of the Lumen Brain Institute.",
+     "detail": {
+      "company": "Lumen Brain Institute"
+     },
+     "source": {
+      "url": "https://lumen-brain.example.org/board",
+      "kind": "primary",
+      "title": null,
+      "published": null
+     },
+     "quote": "Board of directors",
      "confidence": "medium"
     }
    ],

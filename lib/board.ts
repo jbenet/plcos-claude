@@ -12,7 +12,7 @@ import { poolChecks } from '@/modules/pipeline';
 import { listVehicles } from '@/modules/platform';
 import { DEFAULT_PARAMS, listMethods, scoreMethods } from '@/modules/research';
 import { BAND_LABEL, ranked } from '@/modules/scoring';
-import { listPursuits, RUNGS, type LadderRung } from '@/modules/strategy';
+import { listPursuits, RUNG_LABEL, RUNG_REQUIRES, RUNGS, type LadderRung, type PursuitStatus } from '@/modules/strategy';
 import type {
   BoardRow, BoardState, CellState, Explored, Holding, Move, Resource, Station, Territory,
 } from './board-client';
@@ -74,6 +74,12 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
 
   const floorByEntity = new Map(floor.items.map((i) => [i.entityId, i]));
   const teamNames = new Set(['Juan', 'Mara Vance', 'Sam Ferreira', 'Inés Duarte', 'Tomás Reyes']);
+  /**
+   * What is still being worked. A passed LP is off, for now — they declined or we stopped
+   * (docs/17) — so it sits at no station, and no move is "available" on it: an ask toward an
+   * LP who said no is the substitution rule 8 forbids, not an opportunity.
+   */
+  const live = floor.items.filter((i) => i.status !== 'passed');
 
   /**
    * One territory per name we could conceivably approach. Names with nothing on them are
@@ -123,7 +129,9 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
     });
 
   /**
-   * The machine, with a gauge at every station.
+   * The machine, with a gauge at every station — and the stations are the ladder's rungs, not
+   * the statuses. In, out and dwell are counted from dated evidence records, which the ladder
+   * has and a status does not: a status moves in any direction and says nothing happened.
    *
    * Dwell is measured between two evidence records on the same pursuit, which is the only
    * honest reading available: it says how long this system took to learn the next thing,
@@ -160,8 +168,9 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
 
   const stations: Station[] = [
     {
-      key: 'sourced', label: 'Sourced',
-      requires: 'A name in the system. Nothing more is claimed.',
+      // Not "Sourced": Sourcing is a status now, and these names have no pursuit at all.
+      key: 'sourced', label: 'Names nobody is working',
+      requires: 'A name in the system with no pursuit on any vehicle. Nothing more is claimed.',
       wip: territories.filter((t) => t.holding === 'open').length,
       in30: 0, out30: 0, dwell: null,
       blocked: territories.filter((t) => t.holding === 'restricted').length,
@@ -172,13 +181,14 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
       const gate = GATES[r];
       return {
         key: r,
-        label: r.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()),
-        requires: '',
-        wip: floor.items.filter((i) => i.rung === r).length,
+        // The rung's own label: the second one reads "LP opted in", never "Target opted in".
+        label: RUNG_LABEL[r],
+        requires: RUNG_REQUIRES[r],
+        wip: live.filter((i) => i.rung === r).length,
         in30: inByRung.get(r) ?? 0,
         out30: outByRung.get(r) ?? 0,
         dwell: median(dwellsByRung.get(r) ?? []),
-        blocked: floor.items.filter((i) => i.rung === r && (i.blocked || i.restricted || i.conflict)).length,
+        blocked: live.filter((i) => i.rung === r && (i.blocked || i.restricted || i.conflict)).length,
         gate: gate?.kind ?? null,
         gateOpen: gate ? tickets.filter((t) => t.kind === gate.kind).length : 0,
         gateNote: gate?.note ?? 'No approval gates this step.',
@@ -190,12 +200,23 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
   const scored = scoreMethods(methods, DEFAULT_PARAMS);
   const quarterCap = config.guard.asksPerConnectorPerQuarter;
   const spentConnectors = loads.filter((l) => l.used >= quarterCap).length;
-  const openable = floor.items.filter((i) => i.rung === 'connector_willing' && !i.blocked && !i.restricted);
-  const sendable = floor.items.filter((i) => ['target_opted_in', 'meeting_held', 'indication_given'].includes(i.rung ?? ''));
-  const meetable = floor.items.filter((i) => i.rung === 'target_opted_in');
-  const indicatable = floor.items.filter((i) => i.rung === 'meeting_held');
-  const hardenable = floor.items.filter((i) => i.rung === 'indication_given');
-  const cashable = floor.items.filter((i) => i.rung === 'commitment_accepted');
+  /**
+   * What a move is available on is still read from the ladder: each one needs the record below
+   * it, and a status is not a record. The status is said beside the count, so "6 available"
+   * also says where those six stand — often a status ahead of its evidence, which is what
+   * recording that evidence would fix.
+   */
+  const openable = live.filter((i) => i.rung === 'connector_willing' && !i.blocked && !i.restricted);
+  const sendable = live.filter((i) => ['target_opted_in', 'meeting_held', 'indication_given'].includes(i.rung ?? ''));
+  const meetable = live.filter((i) => i.rung === 'target_opted_in');
+  const indicatable = live.filter((i) => i.rung === 'meeting_held');
+  const hardenable = live.filter((i) => i.rung === 'indication_given');
+  const cashable = live.filter((i) => i.rung === 'commitment_accepted');
+  const byStatus = (items: typeof live) => {
+    const out: Partial<Record<PursuitStatus, number>> = {};
+    for (const i of items) out[i.status] = (out[i.status] ?? 0) + 1;
+    return out;
+  };
 
   const moves: Move[] = [
     {
@@ -222,7 +243,8 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
       key: 'ask', family: 'Open', label: 'Ask a connector for an introduction',
       requires: 'A willing connector, an approved INTRO_ASK ticket, and goodwill left this quarter.',
       available: openable.length,
-      blocked: floor.items.filter((i) => i.rung === 'connector_willing' && (i.blocked || i.restricted)).length,
+      byStatus: byStatus(openable),
+      blocked: live.filter((i) => i.rung === 'connector_willing' && (i.blocked || i.restricted)).length,
       blockedWhy: [
         'Willing connectors whose ask is stopped by a restriction, a collision or a guard.',
         spentConnectors > 0
@@ -238,6 +260,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
       key: 'send', family: 'Open', label: 'Send them something',
       requires: 'An approved SEND ticket and an asset the wrap matrix permits for this vehicle.',
       available: sendable.length,
+      byStatus: byStatus(sendable),
       blocked: assets.filter((a) => a.flags.length > 0).length,
       blockedWhy: 'Assets carrying an open refresh flag — a claim underneath them moved.',
       gate: 'SEND',
@@ -249,6 +272,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
       key: 'meet', family: 'Advance', label: 'Hold a meeting',
       requires: 'The LP opted in themselves. A connector relaying optimism is not an opt-in.',
       available: meetable.length,
+      byStatus: byStatus(meetable),
       blocked: 0, blockedWhy: null, gate: null,
       cost: `${meetings.filter((m) => m.scheduledFor && m.scheduledFor > now).length} already on the calendar`,
       payoff: 'The rung most likely to be claimed without evidence, and the easiest to evidence.',
@@ -269,6 +293,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
       key: 'indicate', family: 'Advance', label: 'Record an indication',
       requires: 'A number or a range from them. Enthusiasm is not an indication.',
       available: indicatable.length,
+      byStatus: byStatus(indicatable),
       blocked: 0, blockedWhy: null, gate: 'STAGE',
       cost: 'Nothing, and that is the danger — it is free to claim and expensive to be wrong about.',
       payoff: 'The first rung where a figure exists at all.',
@@ -278,6 +303,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
       key: 'harden', family: 'Close', label: 'Move soft to hard',
       requires: 'Signed and countersigned. This is the only step that moves a number between tracks.',
       available: hardenable.length,
+      byStatus: byStatus(hardenable),
       blocked: 0, blockedWhy: null, gate: 'MONEY',
       cost: 'Counsel time, and a conserved-pool check against everything else they have with us.',
       payoff: 'The only number that appears in a headline.',
@@ -287,6 +313,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
       key: 'cash', family: 'Close', label: 'Record the wire',
       requires: 'The money landed. A separate state from the commitment, always.',
       available: cashable.length,
+      byStatus: byStatus(cashable),
       blocked: 0, blockedWhy: null, gate: 'MONEY',
       cost: 'None.',
       payoff: 'The only state that cannot be argued with.',
@@ -297,10 +324,11 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
   /**
    * The action economy, as a grid. A lever is spent, blocked, available, or not yet reachable
    * — and "not yet" is different from "blocked" in a way that matters when you are choosing
-   * what to do this week.
+   * what to do this week. "Not yet" is read from the ladder: a lever waits on a record, never
+   * on a status. Wired and passed LPs are left off, because nothing is left to pull on either.
    */
   const rungAt = (r: LadderRung | null) => (r === null ? -1 : RUNGS.indexOf(r));
-  const rows: BoardRow[] = floor.items
+  const rows: BoardRow[] = live
     .filter((i) => !i.cashReceived)
     .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
     .slice(0, 22)
@@ -316,10 +344,16 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
       const gate = (ok: boolean, state: CellState, note: string, lockedNote: string) =>
         (ok ? cell(state, note) : cell('locked', lockedNote));
       return {
+        key: i.key,
         entityId: i.entityId,
+        pursuitId: i.pursuitId,
         name: i.entityName,
         vehicleName: i.vehicleName,
         ownerName: i.ownerName,
+        status: i.status,
+        needsEvidence: i.needsEvidence,
+        rung: i.rung,
+        ladderRung: i.ladderRung,
         stake: i.amount,
         cells: {
           route: (edgeCount.get(i.entityId) ?? 0) > 0
@@ -355,9 +389,10 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
     });
 
   // What runs out. Every cap says where it came from, and a guess says it is a guess.
-  const owners = [...new Set(floor.items.filter((i) => !i.cashReceived).map((i) => i.ownerName))];
+  // Person-time is what is in flight: not wired, not passed — the same count as the load.
+  const owners = [...new Set(live.filter((i) => !i.cashReceived).map((i) => i.ownerName))];
   const heaviest = owners
-    .map((o) => ({ o, n: floor.items.filter((i) => i.ownerName === o && !i.cashReceived).length }))
+    .map((o) => ({ o, n: live.filter((i) => i.ownerName === o && !i.cashReceived).length }))
     .sort((a, b) => b.n - a.n);
   const overPools = pools.filter((p) => p.status === 'over');
   const unverifiedPools = pools.filter((p) => p.status === 'unverified');

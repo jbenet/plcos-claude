@@ -4532,3 +4532,76 @@ domain as well as by firm name, which nearly doubled the same-firm paths. W5 rul
 - A firm gets one owner and one ask.
 
 100 of 100 properties hold.
+
+## N66 — The research without search; what our records say before anyone writes; who could introduce whom
+
+**Shipped.** The third round of the enrichment loop, and the two remainders of your issues 0008 and
+0009.
+
+| | |
+|---|---|
+| ![The connector plan](docs/changelog/shots/n66/01-the-connector-plan.webp) | **W11, the connector plan.** For everyone who could make an introduction — an LP who has committed, a warm LP who has met us — the prospects W3 found next to them, and the few to ask about this quarter: at most three per connector, the guard's number, still a guess. A prospect under a do-not-approach instruction is left out (rule 8). A C or D tie is a question for the connector before it's an introduction (rule 6). A plan names the prospect, never where they stand with us. And a connector whose own money is soft is asked after they sign. |
+| ![The line, by status](docs/changelog/shots/n66/02-the-line-by-status.webp) | **The visualizations speak in statuses (0008).** The Line has seven columns, New to Passed, each saying how many need evidence. A ◇ on a block means its status claims more than the ladder shows. The ladder is in the tooltip, and a click opens both. The Grid, the Console and the List lead with the status and put the ladder under it. |
+| ![The room, by status](docs/changelog/shots/n66/03-the-room-by-status.webp) | **The Room, by status.** Seven rows per vehicle. The part of a bar the ladder doesn't back is hatched and counted. "Needs evidence" is one rule now (`statusNeedsEvidence`), shared with the LP page and the overview, so they can't disagree. The Flow and the Plant count dated steps, so they stay on the ladder and say so. Passed LPs no longer count as load, stalled or in flight. |
+
+**The research went on without search.** With the session's web-search budget spent, the research
+agents read pages only: the firm's site from the work domain on file, then SEC EDGAR's full-text
+search, Form D, proxy statements and 13D/13G signature blocks, the adviser database, ProPublica and
+Wikipedia. It works better than the first try suggested. Across the first pages-only batches, the
+work domain found the right bio for nine firm domains in ten. What it can't reach is staff at firms
+whose sites list only their leaders. Each finding now says how it was made (`method: "pages"`), and a
+pages-only "not found" means "not named in what could be read": that LP is still owed a pass with
+search. The protocol went from amendment 1.6 to 1.10 in this round, one batch's learnings at a time.
+
+**What our records say before anyone writes.** The strategy batches kept finding the same thing:
+our records claim more than they show. So triage now gives a first step before any outreach, and
+the LP's own page shows it, under **Before any outreach**:
+
+- **Check sent mail.** A stage like "Contacted" or "Lost – No Response" with no touch on record.
+- **Name an owner.** A way in exists and nobody on the team owns the pursuit.
+- **A first personal note.** Our last word was a mailing, sent the same day to many others, so the
+  next note is a first, not a follow-up.
+
+**The close gap.** The synthesis now lists the committed LPs by what the close track shows, state by
+state: soft and unsigned, signed per a source and unverified, countersigned, wired. It never adds the
+states together (rule 1). In the real data, none of the committed LPs in the research set is past
+soft yet. The quickest money toward the first close is signatures from people who have already
+said yes.
+
+**Connections from shared records (W3).** Two LPs in one company's record — both invested, both on
+its board — are now a C tie, and two who only worked at the same company are D. Matching names in
+sentences had invented ties: "Science" matched "computer science", and a sentence denying a Protocol
+Labs tie was read as one. Now a one-word name counts only in a fact's structured part, and a denial
+never counts. W1s, a pass with no web, fills in each fact's company from the fact's own words. A
+firm's documented tie now also reaches colleagues at its domain whose own identity didn't resolve.
+
+**The Protocol Labs network (W2n).** PL's own directory has a public API: 1,733 teams, 667 of them
+funds, 36 in neurotech. One lookup per LP, carrying the name and nothing else, finds who is in it.
+An entry that matches our record of them — their firm, their work domain — is PL's own record that
+they're in the network: tier B. An entry under the name alone is C until a person confirms it. A
+firm listed as a network team is the firm's tie, C. Speaking at a PL event is C and attending one is
+D. Nothing for contacting anyone is kept: no email, handle or phone number. In the real data, 18
+LPs have an entry under their own name, 15 of which match our record of them, and 57 work at a firm
+that is a network team. This is the "near us" check the pages-only research couldn't run.
+
+**Fixed along the way.** Every "Open the target" link on the floor went to a page that doesn't
+exist; they now open the LP page. An exposure could lower a rung the ladder had already confirmed.
+
+**For you to decide.** Committed rests on a countersignature (N62's rule), so every soft commitment
+reads "Needs evidence", on the demo and on the real account alike. If Committed should mean "a yes
+with an amount", Indication given would back it instead. That's one line in `STATUS_BACKED_BY`, and
+it moves the LP page and the overview with it.
+
+**Every sort and filter in the address (0009).** The enrichment catalogue's filters and sort order,
+the pipeline's sort, the route picker's order and the fit view's order all live in the URL now.
+Back steps through them, and a copied link opens the same view.
+
+**The strategies pin what they read.** Each strategy records the finding it was written from. The
+checker counts the strategies whose LP has a newer finding, and the batcher puts those back in the
+queue. The batcher also keeps a firm's people in one batch, joined by work domain or organization,
+so colleagues get one owner and one ask. The checker also counts firms whose money is asked for
+twice. The export now says how the last touch happened, because a meeting counts as "from them" and
+had been read as a reply. And the connector plan no longer proposes introducing someone who has
+already met us.
+
+101 of 101 properties hold.

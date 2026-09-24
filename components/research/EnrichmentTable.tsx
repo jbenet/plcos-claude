@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useMemo, useState, useTransition } from 'react';
+import { useUrlParam } from '@/lib/url-state';
 import { choose } from '@/app/orgs/enrichment/select';
 import {
   DEFAULT_PARAMS, METHOD_KIND_LABEL, METHOD_KIND_MEANS, METHOD_STATUS_LABEL,
@@ -9,6 +10,9 @@ import {
 } from '@/modules/research/client';
 
 type SortKey = 'priority' | 'value' | 'cost' | 'name' | 'kind' | 'tier' | 'fills';
+const SORT_KEYS: readonly SortKey[] = ['priority', 'value', 'cost', 'name', 'kind', 'tier', 'fills'];
+type Only = 'all' | 'runnable' | 'automatable' | 'human' | 'queued';
+const ONLY: readonly Only[] = ['all', 'runnable', 'automatable', 'human', 'queued'];
 
 const KINDS: MethodKind[] = ['ask', 'interview', 'buy', 'integrate', 'query', 'observe', 'infer'];
 
@@ -50,10 +54,13 @@ const KNOBS: Array<{
 export function EnrichmentTable({ methods }: { methods: Method[] }) {
   const [params, setParams] = useState<ScoreParams>(DEFAULT_PARAMS);
   const [showKnobs, setShowKnobs] = useState(false);
-  const [kind, setKind] = useState<MethodKind | 'all'>('all');
-  const [only, setOnly] = useState<'all' | 'runnable' | 'automatable' | 'human' | 'queued'>('runnable');
-  const [sort, setSort] = useState<SortKey>('priority');
-  const [asc, setAsc] = useState(false);
+  // The view is in the address (issue 0009): which methods, and in what order, so back steps
+  // through them and a copied link shows the same table.
+  const [kind, setKind] = useUrlParam<MethodKind | 'all'>('kind', 'all', ['all', ...KINDS]);
+  const [only, setOnly] = useUrlParam<Only>('show', 'runnable', ONLY);
+  const [sort] = useUrlParam<SortKey>('sort', 'priority', SORT_KEYS);
+  const [dir, setDir] = useUrlParam<'asc' | 'desc'>('dir', 'desc', ['asc', 'desc']);
+  const asc = dir === 'asc';
   const [pending, start] = useTransition();
   /**
    * The checkbox has to answer immediately.
@@ -102,7 +109,14 @@ export function EnrichmentTable({ methods }: { methods: Method[] }) {
   const head = (key: SortKey, label: string, cls = '') => (
     <th
       className={`sortable ${cls}${sort === key ? ' on' : ''}`}
-      onClick={() => { if (sort === key) setAsc(!asc); else { setSort(key); setAsc(false); } }}
+      onClick={() => {
+        if (sort === key) { setDir(asc ? 'desc' : 'asc'); return; }
+        // One history entry for the new order: the key and the direction change together.
+        const u = new URL(window.location.href);
+        if (key === 'priority') u.searchParams.delete('sort'); else u.searchParams.set('sort', key);
+        u.searchParams.delete('dir');
+        window.history.pushState(null, '', u.toString());
+      }}
       aria-sort={sort === key ? (asc ? 'ascending' : 'descending') : 'none'}
     >
       {label}

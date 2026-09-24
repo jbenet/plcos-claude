@@ -55,6 +55,24 @@ export const STATUSES: StatusInfo[] = [
 export const STATUS_LABEL = Object.fromEntries(STATUSES.map((s) => [s.id, s.label])) as Record<PursuitStatus, string>;
 
 /**
+ * The rung each status's claim rests on (N62): Connecting on a connector's yes or direct contact,
+ * Discussing on a meeting, Committed on a countersignature. New, Sourcing, Selected and Passed say
+ * nothing about the LP, so there is nothing on the ladder for them to wait for.
+ */
+export const STATUS_BACKED_BY: Partial<Record<PursuitStatus, LadderRung>> = {
+  connecting: 'connector_willing', discussing: 'meeting_held', committed: 'commitment_accepted',
+};
+
+/**
+ * The rung a status claims that the ladder has not confirmed, or null when the ladder backs it.
+ * Non-null is "Needs evidence": the status is ahead of the records. It moves neither (rule 2).
+ */
+export function statusNeedsEvidence(status: PursuitStatus, rung: LadderRung | null): LadderRung | null {
+  const needs = STATUS_BACKED_BY[status];
+  return needs && rungIndex(rung) < rungIndex(needs) ? needs : null;
+}
+
+/**
  * Who ended it: they declined, or we stopped. Silence is not an ending (N53, Juan, 23 Sep): an
  * LP who never replied is still Selected, and the log says how long we have been waiting.
  * 'quiet' is still read, for a pursuit that was set that way before; it is no longer offered.

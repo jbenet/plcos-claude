@@ -15,7 +15,12 @@ export type Level = 'high' | 'medium' | 'low' | 'unknown';
 export interface Strategy {
   key: string;
   name: string;
-  made: { at: string; by: string; workflow: 'W5'; version: number };
+  /**
+   * `inputs` pins what it was written from (iteration 3; CLAUDE.md, Agent rules: run records pin
+   * their inputs): the finding's `researched.at`, or null when there was none. A strategy whose LP
+   * has a newer finding is stale, and the checker says so.
+   */
+  made: { at: string; by: string; workflow: 'W5'; version: number; inputs?: { finding: string | null } };
   fit: Record<string, { verdict: 'strong' | 'good' | 'possible' | 'weak' | 'unknown'; why: string; gates?: Array<{ gate: string; answer: 'yes' | 'no' | 'unknown'; basis: string }> }>;
   scores: {
     capacity: { band: string; basis: string };
@@ -28,7 +33,8 @@ export interface Strategy {
   /** The best path in, from W3 — or none, said so. */
   route: { via: string; tier: 'A' | 'B' | 'C' | 'D'; why: string } | null;
   next: { what: string; who: string; when: string; material?: string | null };
-  ask: { vehicle: string; shape: 'fund commitment' | 'SPV' | 're-up or upsize' | 'intro to others' | 'advice' | 'verify first' | 'firm-level ask' | 'none yet'; range?: string | null };
+  /** `co-invest` (W5 v1.3): a fund in our field that backs our portfolio companies — a co-investor, not an LP. */
+  ask: { vehicle: string; shape: 'fund commitment' | 'SPV' | 're-up or upsize' | 'intro to others' | 'advice' | 'verify first' | 'firm-level ask' | 'co-invest' | 'none yet'; range?: string | null };
   openQuestions: string[];
   risks: string[];
   list: 'this year' | '2027' | 'not now';
@@ -36,6 +42,17 @@ export interface Strategy {
 }
 
 const isStr = (x: unknown): x is string => typeof x === 'string' && x.trim().length > 0;
+
+/** The import keeps what, who and when together in 400 characters (W5 v1.3); longer is cut, not refused. */
+export const nextTooLong = (s: Pick<Strategy, 'next'>) => `${s.next.what} — ${s.next.who}, ${s.next.when ?? ''}`.length > 400;
+
+/** Written before its LP's current finding — from records alone, or from an older finding. */
+export function isStale(s: Pick<Strategy, 'made'>, finding: { researched: { at: string } } | null | undefined): boolean {
+  if (!finding) return false;
+  const read = s.made.inputs?.finding;
+  if (read !== undefined) return read !== finding.researched.at;
+  return new Date(finding.researched.at).getTime() > new Date(s.made.at).getTime();
+}
 
 export function checkStrategy(s: unknown, expectKey?: string): string[] {
   const p: string[] = [];

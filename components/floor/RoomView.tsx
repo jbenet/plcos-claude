@@ -1,8 +1,8 @@
 'use client';
 
 import type { FloorState } from '@/lib/floor-client';
-import { RUNG_LABEL, RUNGS } from '@/modules/strategy/client';
-import { compactUsd, stateOf } from './shared';
+import { RUNG_LABEL, STATUS_BACKED_BY, STATUSES } from '@/modules/strategy/client';
+import { compactUsd, EVIDENCE_GLYPH, stateOf } from './shared';
 
 /**
  * View 5 — the room.
@@ -11,6 +11,11 @@ import { compactUsd, stateOf } from './shared';
  * the same eight numbers on each, read left to right like instruments. No drawing here
  * encodes anything a number could not, which is the point — it is the version you can read
  * at a glance from across a room and the version that is hardest to misread.
+ *
+ * The first instrument is the pipeline by status (N62), the same seven rows as the vehicle
+ * overview. Where a status claims something the ladder can back, the part of its bar the
+ * ladder does not back yet is hatched and counted with ◇: the gap is on the dial, not in a
+ * footnote.
  *
  * Hard and soft sit on two separate lines with two separate counts. There is no line on
  * this page that adds them, and there is no total across vehicles anywhere on it.
@@ -28,24 +33,38 @@ export function RoomView({ state }: { state: FloorState }) {
           const urgent = mine.filter((i) => stateOf(i) === 'urgent');
           const cash = mine.filter((i) => i.cashReceived);
           const alarms = state.alarms.filter((x) => x.vehicleName === v.name).slice(0, 3);
-          const max = Math.max(1, ...RUNGS.map((r) => mine.filter((i) => i.rung === r).length));
+          const passed = mine.filter((i) => i.status === 'passed').length;
+          const short = mine.filter((i) => i.needsEvidence);
+          const rows = STATUSES.map((s) => {
+            const here = mine.filter((i) => i.status === s.id);
+            return { ...s, n: here.length, short: here.filter((i) => i.needsEvidence).length };
+          });
+          const max = Math.max(1, ...rows.map((r) => r.n));
           return (
             <div className="rcard" key={v.slug}>
               <div className="rhead">
                 <b>{v.name}</b>
-                <span className="lbl">{mine.length} in flight</span>
+                <span className="lbl">{mine.length - passed} in flight{passed ? ` · ${passed} passed` : ''}</span>
               </div>
 
-              <div className="rbars">
-                {RUNGS.map((r, i) => {
-                  const n = mine.filter((x) => x.rung === r).length;
+              <div className="rstatus" role="list" aria-label={`${v.name} by status`}>
+                {rows.map((r) => {
+                  const backedBy = STATUS_BACKED_BY[r.id];
                   return (
-                    <div className="rbar" key={r} title={`${RUNG_LABEL[r]}: ${n}`}>
-                      <div className="rbwrap">
-                        <div className="rbfill" style={{ height: `${(n / max) * 100}%` }} />
-                      </div>
-                      <span className="rbn">{n}</span>
-                      <span className="rbl">{String(i + 1).padStart(2, '0')}</span>
+                    <div
+                      className={`rsrow${r.id === 'passed' ? ' off' : ''}${r.n === 0 ? ' none' : ''}`} key={r.id} role="listitem"
+                      title={`${r.label}: ${r.n}. ${r.means}${backedBy && r.n
+                        ? `\n${r.n - r.short} of ${r.n} have ${RUNG_LABEL[backedBy]} on the ladder${r.short ? `; ${r.short} need${r.short === 1 ? 's' : ''} evidence` : ''}.`
+                        : ''}`}
+                    >
+                      <span className="rsn">{r.label}</span>
+                      <span className="rsbar">
+                        <i style={{ width: `${(r.n / max) * 100}%` }}>
+                          {r.short > 0 && <u style={{ width: `${(r.short / r.n) * 100}%` }} />}
+                        </i>
+                      </span>
+                      <span className="rsc">{r.n}</span>
+                      <span className="rse">{r.short ? `${EVIDENCE_GLYPH} ${r.short}` : ''}</span>
                     </div>
                   );
                 })}
@@ -72,6 +91,9 @@ export function RoomView({ state }: { state: FloorState }) {
                 <span className={`rl${blocked.length ? ' on stop' : ''}`}>✕ {blocked.length} blocked</span>
                 <span className={`rl${urgent.length ? ' on soon' : ''}`}>! {urgent.length} dated soon</span>
                 <span className={`rl${stalled.length ? ' on warn' : ''}`}>◷ {stalled.length} stalled</span>
+                <span className={`rl${short.length ? ' on warn' : ''}`} title="The status claims more than the ladder shows">
+                  {EVIDENCE_GLYPH} {short.length} need{short.length === 1 ? 's' : ''} evidence
+                </span>
                 <span className={`rl${cash.length ? ' on ok' : ''}`}>✓ {cash.length} wired</span>
               </div>
 

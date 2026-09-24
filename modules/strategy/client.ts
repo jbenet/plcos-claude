@@ -3,5 +3,6 @@ export type { Implied, LadderEvent, LadderRung, OutcomeReason, PassedBy, PlanSte
 export type { PursuitUpdate, UpdateApplied } from './updates';
 export { READER, dateIn, readUpdate, type TouchChannel, type UpdateSuggestion } from './reader';
 export {
-  IMPLIED_LABEL, PASSED_BY_CHOICES, PASSED_BY_LABEL, REASONS, RUNGS, RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_LABEL, rungIndex,
+  IMPLIED_LABEL, PASSED_BY_CHOICES, PASSED_BY_LABEL, REASONS, RUNGS, RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_BACKED_BY,
+  STATUS_LABEL, rungIndex, statusNeedsEvidence,
 } from './types';

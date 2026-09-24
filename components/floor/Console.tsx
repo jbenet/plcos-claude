@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { RUNG_LABEL, RUNG_REQUIRES } from '@/modules/strategy/client';
+import { RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_LABEL } from '@/modules/strategy/client';
 import type { BoardState } from '@/lib/board-client';
 import { EXPLORED_LABEL, HOLDING_LABEL } from '@/lib/board-client';
 import { TEMP_LABEL, type FloorState } from '@/lib/floor-client';
 import { useFloor } from './FloorContext';
-import { compactUsd, stateOf, STATE_LABEL } from './shared';
+import { claimWords, compactUsd, itemHref, ladderWords, shownRung, standingWords, stateOf, STATE_LABEL } from './shared';
 
 /**
  * The context console.
@@ -15,6 +15,10 @@ import { compactUsd, stateOf, STATE_LABEL } from './shared';
  * "what is this, and what do I do about it" without leaving the page. It shows what is
  * recorded, the basis for each reading, and links to the screens where the thing can
  * actually be changed — because a panel that explains but cannot hand off is a dead end.
+ *
+ * An item reads the way an LP page does (N62): the status first, with where it came from,
+ * then the ladder under it, and "Needs evidence" when the status claims more than the ladder
+ * shows. Neither is inferred from the other, and neither is changed here.
  */
 export function Console({ state, board }: { state: FloorState; board: BoardState }) {
   const { selected, select } = useFloor();
@@ -37,7 +41,8 @@ export function Console({ state, board }: { state: FloorState; board: BoardState
 
   if (selected.kind === 'person') {
     const theirs = state.items.filter((i) => i.ownerName === selected.name);
-    const open = theirs.filter((i) => !i.cashReceived);
+    // What they carry: not wired, not passed — the same count as the load.
+    const open = theirs.filter((i) => !i.cashReceived && i.status !== 'passed');
     const runs = state.agents.queue.filter((q) => q.who === selected.name);
     return (
       <aside className="console">
@@ -52,7 +57,7 @@ export function Console({ state, board }: { state: FloorState; board: BoardState
             <button key={i.key} className="crow" onClick={() => select({ kind: 'item', key: i.key })}>
               <b>{i.entityName}</b>
               <span className="mono">{compactUsd(i.amount)}</span>
-              <span className="csmall">{i.vehicleName} · {i.rung ? RUNG_LABEL[i.rung] : 'no rung'}</span>
+              <span className="csmall">{i.vehicleName} · {standingWords(i)}</span>
             </button>
           ))}
           {open.length === 0 && <p className="csmall">Nothing open.</p>}
@@ -105,14 +110,14 @@ export function Console({ state, board }: { state: FloorState; board: BoardState
                 <button key={i.key} className="crow" onClick={() => select({ kind: 'item', key: i.key })}>
                   <b>{i.vehicleName}</b>
                   <span className="mono">{compactUsd(i.amount)}</span>
-                  <span className="csmall">{i.rung ? RUNG_LABEL[i.rung] : 'no rung'} · {i.ownerName}</span>
+                  <span className="csmall">{standingWords(i)} · {i.ownerName}</span>
                 </button>
               ))}
             </div>
           </>
         )}
         <div className="cacts">
-          <Link className="btn p" href={`/targets/${selected.entityId}`}>Open the target</Link>
+          <Link className="btn p" href={`/orgs/${selected.entityId}`}>Open their page</Link>
           <Link className="btn" href="/routes">Routes</Link>
         </div>
       </aside>
@@ -122,6 +127,8 @@ export function Console({ state, board }: { state: FloorState; board: BoardState
   const item = state.items.find((i) => i.key === selected.key);
   if (!item) return null;
   const st = stateOf(item);
+  const claim = claimWords(item);
+  const shown = shownRung(item);
   return (
     <aside className="console">
       <Head title={item.entityName} onClose={close} />
@@ -129,18 +136,37 @@ export function Console({ state, board }: { state: FloorState; board: BoardState
       <span className={`flag ${st === 'blocked' ? 'f-block' : st === 'urgent' ? 'f-ev' : st === 'cash' ? 'f-ok' : 'f-mute'}`}>
         {STATE_LABEL[st]}
       </span>
+      {claim && <span className="stat evidence" title={claim}><i />Needs evidence</span>}
       {item.headline && <p className="csub" style={{ marginTop: 8 }}>{item.headline}</p>}
       <dl className="cdl">
         <div>
-          <dt>Rung</dt>
+          <dt>Status</dt>
           <dd>
-            {item.rung ? RUNG_LABEL[item.rung] : 'Sourced, nothing evidenced'}
-            {item.rung && <span className="csmall"> — {RUNG_REQUIRES[item.rung]}</span>}
+            <b>{STATUS_LABEL[item.status]}</b>
+            <span className="csmall"> — {item.statusBasis}</span>
+            <span className="csmall cline">{STATUSES.find((s) => s.id === item.status)?.means}</span>
           </dd>
         </div>
         <div>
-          <dt>Next needs</dt>
-          <dd>{item.nextRung ? RUNG_REQUIRES[item.nextRung] : 'Nothing above this one.'}</dd>
+          <dt>Ladder</dt>
+          <dd>
+            {ladderWords(item)}
+            {shown && <span className="csmall"> — {RUNG_REQUIRES[shown]}</span>}
+            {claim && <span className="cclaim">{claim}</span>}
+            {!claim && shown === 'connector_willing' && (
+              <span className="csmall cline">
+                The first rung and nothing more: not interest from the LP, not a meeting, not a commitment.
+              </span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Next rung</dt>
+          <dd>
+            {item.nextRung
+              ? <>{RUNG_LABEL[item.nextRung]}<span className="csmall"> — {RUNG_REQUIRES[item.nextRung]}</span></>
+              : 'Nothing above this one.'}
+          </dd>
         </div>
         <div><dt>At stake</dt><dd>{compactUsd(item.amount)} {item.track ?? ''} — {item.sizeBasis}</dd></div>
         <div><dt>Last record</dt><dd>{TEMP_LABEL[item.temp]} · {item.tempBasis}</dd></div>
@@ -151,14 +177,16 @@ export function Console({ state, board }: { state: FloorState; board: BoardState
         {item.openTicket && <div><dt>Ticket</dt><dd>{item.openTicket} open on this pursuit</dd></div>}
       </dl>
       <div className="cacts">
-        <Link className="btn p" href={`/targets/${item.entityId}`}>Open the target</Link>
+        <Link className="btn p" href={itemHref(item)}>{item.pursuitId ? 'Open the LP page' : 'Open their page'}</Link>
         <button className="btn" onClick={() => select({ kind: 'person', name: item.ownerName })}>
           {item.ownerName}&rsquo;s load
         </button>
       </div>
       <p className="cnote">
-        Every line here is a record with a date and an author. Nothing on this panel is
-        inferred from the shape of the drawing you clicked.
+        Every line here is a record with a date and an author, or says where it came from.
+        Nothing on this panel is inferred from the shape of the drawing you clicked, and the
+        status and the ladder are set in different places: the status on the LP page, a rung
+        only through a STAGE ticket.
       </p>
     </aside>
   );

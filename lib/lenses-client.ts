@@ -100,7 +100,7 @@ export const COVERAGE_FIELDS: CoverageField[] = [
   { key: 'access', label: 'Access', means: 'At least one route whose weakest hop is confirmed.' },
   { key: 'exchange', label: 'Exchange', means: 'A dated conversation with them. Our own notes are not an exchange.' },
   { key: 'action', label: 'Action', means: 'An open next move with somebody’s name on it.' },
-  { key: 'entry', label: 'Entry', means: 'A dated record of arriving at the rung it sits on.' },
+  { key: 'entry', label: 'Entry', means: 'A dated record of reaching its rung on the ladder.' },
 ];
 
 export interface CoverageRow {

@@ -1,16 +1,18 @@
 import Link from 'next/link';
-import { RUNG_LABEL, STATUSES, rungIndex, type LadderRung, type Pursuit, type PursuitStatus } from '@/modules/strategy';
+import { RUNG_LABEL, STATUSES, STATUS_BACKED_BY, rungIndex, type Pursuit, type PursuitStatus } from '@/modules/strategy';
 
 /**
  * Where the pursuits stand, by status (N62, issue 0008): "Statuses in overview should be the new
  * statuses we aligned on." Each status with its count, a bar for its share, and — for the three
  * whose claim the ladder can back — how many have that evidence confirmed. The status is our plan;
  * the second number is what the records show, so the gap between them stays visible (rule 2).
+ * Which rung backs which status is STATUS_BACKED_BY, the rule the LP page and the
+ * visualizations use too; these are its words.
  */
-const BACKED_BY: Partial<Record<PursuitStatus, { rung: LadderRung; words: string }>> = {
-  connecting: { rung: 'connector_willing', words: 'with a connector’s yes, or direct contact, on the ladder' },
-  discussing: { rung: 'meeting_held', words: 'with a meeting on the ladder' },
-  committed: { rung: 'commitment_accepted', words: 'countersigned' },
+const BACKED_WORDS: Partial<Record<PursuitStatus, string>> = {
+  connecting: 'with a connector’s yes, or direct contact, on the ladder',
+  discussing: 'with a meeting on the ladder',
+  committed: 'countersigned',
 };
 
 export function StatusCounts({ pursuits, vehicleName }: {
@@ -20,10 +22,11 @@ export function StatusCounts({ pursuits, vehicleName }: {
   const passed = pursuits.filter((p) => p.status === 'passed').length;
   const rows = STATUSES.map((s) => {
     const here = pursuits.filter((p) => p.status === s.id);
-    const backed = BACKED_BY[s.id];
+    const rung = STATUS_BACKED_BY[s.id];
+    const words = BACKED_WORDS[s.id];
     return {
       ...s, n: here.length,
-      backed: backed ? { n: here.filter((p) => rungIndex(p.rung) >= rungIndex(backed.rung)).length, words: backed.words, rung: backed.rung } : null,
+      backed: rung && words ? { n: here.filter((p) => rungIndex(p.rung) >= rungIndex(rung)).length, words, rung } : null,
     };
   });
   const max = Math.max(1, ...rows.map((r) => r.n));

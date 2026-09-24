@@ -59,7 +59,13 @@ any more than before, and a status never moves it (rule 2).
   them yet; the LP's own page, the group tables, All vehicles, the decision room and the
   strategy page show the status first and "… on the ladder" under it. The ladder still leads
   where the page is about evidence: the meeting prep ("the rung a reply justifies"), content
-  attribution, and the approvals. The visualizations still draw the ladder; they are next.
+  attribution, and the approvals. The visualizations lay out by status too: the line's
+  stations, the room's bars, the grid's rows, the filter and the list, with the ladder under
+  the status in the console and "◇ Needs evidence" where the status claims more than the
+  ladder shows (`statusNeedsEvidence`, one rule for the LP page, the overview and the
+  visualizations). The flow and the plant stay on the ladder, labelled as the ladder, because
+  they count dated steps that only go one way. An exposure with no pursuit reads as
+  Committed, and a passed LP is no one's load and no move's target.
 
 ## 2. Touchpoints: the dated log
 

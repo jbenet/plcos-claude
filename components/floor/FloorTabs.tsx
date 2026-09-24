@@ -41,18 +41,18 @@ import { RoomView } from './RoomView';
 const TABS = [
   {
     id: 'line', title: 'The line',
-    asks: 'Where is every pursuit, and what is stuck at which station?',
-    learn: 'Reads like a factory: stations left to right, work sitting in them. Best for "what is the shape of the raise right now".',
+    asks: 'Where is every LP, by status, and what is stuck where?',
+    learn: 'Reads like a factory: one station per status, left to right, work sitting in them. ◇ marks a status the ladder does not back yet. Best for "what is the shape of the raise right now".',
   },
   {
     id: 'load', title: 'The load',
     asks: 'Who is carrying what, and is anyone holding more than they can finish?',
-    learn: 'Ignores stage entirely and sorts by person. Best before assigning anything new.',
+    learn: 'Ignores status entirely and sorts by person. Wired and passed LPs are not load. Best before assigning anything new.',
   },
   {
     id: 'flow', title: 'The flow',
-    asks: 'Where does work stop moving?',
-    learn: 'The ladder as a funnel with the drop-off drawn. Best for finding the station that is actually the bottleneck.',
+    asks: 'Where does the evidence stop?',
+    learn: 'The consent ladder, not the statuses: how many LPs have each rung on record, and how many went on to the next. Best for finding the rung where evidence stops arriving.',
   },
   {
     id: 'clock', title: 'The clock',
@@ -72,7 +72,7 @@ const TABS = [
   {
     id: 'plant', title: 'The plant',
     asks: 'What does the whole machine look like, station by station?',
-    learn: 'Gauges at every step and a valve at every approval. Best for finding which station is slow rather than which deal is.',
+    learn: 'The ladder rung by rung, with gauges read from dated evidence and a valve at every approval. Best for finding which step is slow rather than which deal is.',
   },
   {
     id: 'moves', title: 'The moves',
@@ -81,8 +81,8 @@ const TABS = [
   },
   {
     id: 'grid', title: 'The grid',
-    asks: 'What levers are left on each target?',
-    learn: 'Targets against levers. Best for spotting a target we have run out of legal moves on.',
+    asks: 'What levers are left on each LP?',
+    learn: 'LPs against levers. The status leads each row; what is open or not yet is read from the ladder. Best for spotting an LP we have run out of legal moves on.',
   },
   {
     id: 'economy', title: 'The economy',
@@ -149,8 +149,8 @@ export function FloorTabs({ state, board, lenses }: { state: FloorState; board: 
     const filteredState: FloorState = { ...state, items, money };
     const filteredBoard: BoardState = {
       ...board,
-      rows: board.rows.filter((r) => keep.has(`${r.entityId}:${state.items.find((i) => i.entityId === r.entityId && i.vehicleName === r.vehicleName)?.vehicleSlug ?? ''}`)),
-      territories: filter.find.trim() || filter.owner !== 'everyone' || filter.signal !== 'all' || filter.stage !== 'all'
+      rows: board.rows.filter((r) => keep.has(r.key)),
+      territories: filter.find.trim() || filter.owner !== 'everyone' || filter.signal !== 'all' || filter.status !== 'all'
         ? board.territories.filter((t) => entities.has(t.entityId))
         : board.territories,
     };

@@ -9,7 +9,7 @@ import { Coverage } from '@/components/ui/Coverage';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import {
-  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, rungIndex, updatesFor,
+  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, statusNeedsEvidence, updatesFor,
 } from '@/modules/strategy';
 import { auditFor } from '@/modules/platform';
 import { StatusForm } from '@/components/strategy/StatusForm';
@@ -33,6 +33,7 @@ import { onFile } from '@/lib/reconcile';
 import { countContact } from '@/components/entity/ContactHistory';
 import { PublicProfile } from '@/components/entity/PublicProfile';
 import { SuggestedStrategy } from '@/components/strategy/SuggestedStrategy';
+import { BeforeOutreach } from '@/components/strategy/BeforeOutreach';
 import { findOpenTicket } from '@/modules/governance';
 
 export const dynamic = 'force-dynamic';
@@ -172,10 +173,10 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
           {(() => {
             // The status first, then how far the ladder backs it (N62): "Needs evidence" when the
             // status claims more than the ladder has confirmed, "Waiting on counterpart" when we
-            // wrote last. A connector's yes is still the first rung and nothing more.
-            const backing = { connecting: 'connector_willing', discussing: 'meeting_held', committed: 'commitment_accepted' } as const;
-            const needs = backing[pursuit.status as keyof typeof backing];
-            const short = needs && rungIndex(pursuit.rung) < rungIndex(needs);
+            // wrote last. A connector's yes is still the first rung and nothing more. The rule is
+            // one function, so the visualizations say "Needs evidence" of the same LPs as this.
+            const needs = statusNeedsEvidence(pursuit.status, pursuit.rung);
+            const short = needs !== null;
             return (
               <>
                 <div style={{ marginTop: 14 }}>
@@ -314,6 +315,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
             proposalId={proposal?.id ?? null}
           />
 
+          <BeforeOutreach entityId={pursuit.entityId} />
           <SuggestedStrategy pursuitId={pursuit.pursuitId} />
           <PublicProfile entityId={pursuit.entityId} />
 

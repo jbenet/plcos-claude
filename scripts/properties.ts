@@ -1539,6 +1539,8 @@ async function main() {
             profile: { summary: 'Invented.', investorType: 'fo_principal' }, ...extra,
           });
           await wf2(join(scratch, 'raw', `${pick.key}.json`), JSON.stringify(finding()));
+          // W9's line for them: mapped in as a note, replaced (never piled up) by the next import.
+          await wf2(join(scratch, 'triage.jsonl'), JSON.stringify({ key: pick.key, name: pick.name, lane: 'cold', reasons: ['The stage on file says “Contacted”, but no touch is on record: check sent mail before writing'], senior: true, researched: true, waitedDays: null, first: 'check sent mail' }) + '\n');
           // Refused: facts for an identity that is not resolved, and a phone number in a fact.
           const other = identity[1] as { key: string; name: string };
           await wf2(join(scratch, 'raw', `${other.key}.json`), JSON.stringify({ ...finding(), key: other.key, identity: { match: 'ambiguous', basis: 'Two people share the name.' } }));
@@ -1548,6 +1550,7 @@ async function main() {
           const unverified = await n(`select count(*)::text as n from research.claim c join research.source_doc d on d.doc_id = c.source where c.entity_id = $1 and c.source like 'pub:%' and c.last_verified_by is null and c.as_of is not null`, [pick.key]);
           const again = await imp.importFindings(juan);
           const c2 = await claimsNow();
+          const triageNotes = await n(`select count(*)::text as n from research.note where entity_id = $1 and kind = 'triage' and body like 'Before any outreach: check sent mail%'`, [pick.key]);
           await adb.query(`update research.claim set last_verified_by = $2, last_verified_at = now() where entity_id = $1 and field = 'public.role'`, [pick.key, juan]);
           await wf2(join(scratch, 'raw', `${pick.key}.json`), JSON.stringify(finding({ facts: [{ field: 'interest', value: 'Says neurotech matters.', source: { url: 'https://example.org/podcast', kind: 'podcast' }, confidence: 'medium' }] })));
           await imp.importFindings(juan);
@@ -1578,12 +1581,51 @@ async function main() {
           await rmr(scratch, { recursive: true, force: true });
           check(
             'Enrichment: the research file carries identity only; findings map in unverified, once; a verified claim survives; bad files are refused; a strategy is decided by a person and moves only the next step',
-            exported.candidates > 0 && leaks.length === 0 && first.mapped === 1 && first.rejected === 1 && c1 === 2 && unverified === 2 && again.mapped === 1 && c2 === 2 &&
+            exported.candidates > 0 && leaks.length === 0 && first.mapped === 1 && first.rejected === 1 && c1 === 2 && unverified === 2 && again.mapped === 1 && c2 === 2 && triageNotes === 1 &&
               keptVerified === 1 && phone.length > 0 && proposedOnce === 1 && rows.length === 2 && rows[0]!.status === 'withdrawn' && rows[1]!.status === 'proposed' &&
               after?.next_step === 'Offer a portfolio briefing — Juan, this week' && after.status === before?.status && after.rungs === before?.rungs && twice instanceof st.SuggestionRefused,
-            `${exported.candidates} in the research set, ${leaks.length} lines carrying more than identity; first import mapped ${first.mapped}, refused ${first.rejected}; claims ${c1} (unverified with a date: ${unverified}); imported again, still ${c2}; ` +
+            `${exported.candidates} in the research set, ${leaks.length} lines carrying more than identity; first import mapped ${first.mapped}, refused ${first.rejected}; claims ${c1} (unverified with a date: ${unverified}); imported again, still ${c2}; triage notes after two imports: ${triageNotes}; ` +
               `a verified claim kept after its fact left the file: ${keptVerified}; a phone number refused: ${phone.length > 0}; one proposal after importing twice: ${proposedOnce}; after a new file: ${rows.map((r) => r.status).join(' → ')}; ` +
               `accepted: next step "${after?.next_step}", status ${before?.status} → ${after?.status}, rungs ${before?.rungs} → ${after?.rungs}; accepting again refused: ${twice instanceof st.SuggestionRefused}`,
+          );
+        }
+
+        // Connections without the web (docs/19, iteration 3): a denial names a firm and ties to
+        // none; a school is not an employer; a shared company record is C and a shared employer D;
+        // a one-word name in a sentence is no tie; a strategy older than its LP's finding is stale.
+        {
+          const cn = await import('../lib/enrich/connect');
+          const sg = await import('../lib/enrich/strategy');
+          const denial = cn.affirms('Its portfolio has no Protocol Labs or Filecoin company.', 'Filecoin');
+          const later = cn.affirms('No Protocol Labs company here. It backed Filecoin in 2017.', 'Filecoin');
+          const person = (key: string, org: string) => ({
+            key, name: `Person ${key}`, type: 'person', org, role: null, location: null, domains: [], enriched: {},
+            pursuits: [{ pursuitId: key, vehicle: 'PLC Neurotech I', status: 'connecting', rung: null, owner: 'Juan', stageSaid: null, nextStep: null }],
+            contact: { meetings: 0, lastTouch: null, lastFromThem: null, awaitingSince: null, read: null, groupMeetings: 0, outreachShared: 0 }, money: null, notes: [],
+          });
+          const fact = (field: string, value: string, company?: string) => ({ field, value, detail: company ? { company } : undefined, source: { url: 'https://example.org/x', kind: 'primary' }, confidence: 'high' });
+          const found = (key: string, facts: unknown[]) => [key, { key, name: `Person ${key}`, researched: { at: '2026-09-20T10:00:00Z', by: 'test', workflow: 'W1', version: '1.6' }, identity: { match: 'confirmed', basis: 'Invented.' }, facts }] as const;
+          const people = [person('a', 'Alder Capital'), person('b', 'Birch Partners'), person('c', 'Cedar Fund'), person('d', 'Dune Office'), person('e', 'Elm Group')];
+          const findings = new Map([
+            found('a', [fact('investment', 'Seed investor in Harbor Robotics', 'Harbor Robotics'), fact('prior_role', 'Engineer at Northwind Analytics', 'Northwind Analytics'), fact('education', 'Studied computer science')]),
+            found('b', [fact('investment', 'Backed Harbor Robotics in its seed round', 'Harbor Robotics')]),
+            found('c', [fact('prior_role', 'Product lead at Northwind Analytics', 'Northwind Analytics')]),
+            found('d', [fact('board', 'Board member of Science', 'Science')]),
+            found('e', [fact('role', 'Partner; computer science by training')]),
+          ]);
+          const shared = cn.sharedRecords(people as never, findings as never);
+          const ab = shared.find((p) => p.lp === 'a' && p.other.key === 'b');
+          const ac = shared.find((p) => p.lp === 'a' && p.other.key === 'c');
+          const oneWord = shared.filter((p) => (p.lp === 'd' && p.other.key === 'e') || (p.lp === 'e' && p.other.key === 'd')).length;
+          const made = (inputs?: { finding: string | null }) => ({ made: { at: '2026-09-21T09:00:00Z', by: 'test', workflow: 'W5' as const, version: 1.2, inputs } });
+          const staleNewer = sg.isStale(made({ finding: '2026-09-19T10:00:00Z' }), { researched: { at: '2026-09-20T10:00:00Z' } });
+          const freshPinned = sg.isStale(made({ finding: '2026-09-20T10:00:00Z' }), { researched: { at: '2026-09-20T10:00:00Z' } });
+          const staleUnpinned = sg.isStale({ made: { ...made().made, at: '2026-09-19T00:00:00Z' } }, { researched: { at: '2026-09-20T10:00:00Z' } });
+          check(
+            'Connections without the web: a denial is no tie; a shared company record is C and a shared employer D; a one-word name in a sentence is no tie; a strategy older than its finding is stale',
+            !denial && later && ab?.tier === 'C' && ab.kind === 'coinvestor' && ac?.tier === 'D' && oneWord === 0 && staleNewer && !freshPinned && staleUnpinned,
+            `denial read as a tie: ${denial}; the next sentence's tie: ${later}; both invested: ${ab?.tier ?? 'none'} ${ab?.kind ?? ''}; both worked at one company: ${ac?.tier ?? 'none'}; ` +
+              `paths through "Science" in a sentence: ${oneWord}; stale when the finding is newer: ${staleNewer}; pinned and current: ${freshPinned}; unpinned and older: ${staleUnpinned}`,
           );
         }
 

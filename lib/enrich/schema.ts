@@ -56,7 +56,14 @@ export interface Connection {
 export interface Finding {
   key: string;
   name: string;
-  researched: { at: string; by: string; workflow: 'W1'; version: number };
+  /**
+   * `version` is the protocol's latest amendment as written, a string ("1.6"); older findings carry
+   * a number, read by `protocolOf`. `method` is how it was made (v1.6): `search`, the protocol as
+   * written; or `pages`, from page reads with no search or too few to follow it (W1d, or a batch
+   * the search budget ran out under) — then "not found" means not named in what could be read, not
+   * that nothing exists, and the LP is owed a pass with search. Unset reads as search.
+   */
+  researched: { at: string; by: string; workflow: 'W1'; version: string | number; method?: 'search' | 'pages' };
   identity: {
     match: Match;
     basis: string;
@@ -80,6 +87,17 @@ export interface Finding {
 }
 
 const isStr = (x: unknown): x is string => typeof x === 'string' && x.trim().length > 0;
+
+/** The amendment a finding followed, as written: 1 → "1.0", 5 (as the first batches wrote 1.5) → "1.5". */
+export function protocolOf(f: Pick<Finding, 'researched'>): string {
+  const v = f.researched?.version;
+  if (typeof v === 'string') return v;
+  if (typeof v !== 'number') return '?';
+  return Number.isInteger(v) ? (v === 1 ? '1.0' : `1.${v}`) : String(v);
+}
+
+/** Made from page reads alone, and so due a pass with search (v1.6). */
+export const pagesOnly = (f: Pick<Finding, 'researched'>) => f.researched?.method === 'pages';
 const BROKERS = /zoominfo|rocketreach|contactout|signalhire|apollo\.io|lusha|flashlabs|datanyze|seamless\.ai|leadiq|clearbit|spokeo|success\.ai|wiza|cience\.com|beenverified|whitepages|peoplefinders|aeroleads|adapt\.io|instantcheckmate|connectsafely|voilanorbert|hunter\.io|snov\.io|kaspr|uplead|prospeo|fintrx|alphamaven/i;
 const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/;
 /** A phone number: ten or more digits in a run of digits and separators — once dates and year ranges are set aside. */
@@ -98,6 +116,7 @@ export function check(f: unknown, expectKey?: string): string[] {
   if (!isStr(x.name)) p.push('no name');
   if (!x.identity || !['confirmed', 'probable', 'ambiguous', 'not_found'].includes(x.identity.match)) p.push('identity.match missing or unknown');
   if (!Array.isArray(x.facts)) p.push('facts is not a list');
+  if (x.researched?.method && !['search', 'pages'].includes(x.researched.method)) p.push('researched.method must be search or pages');
   const unsure = x.identity?.match === 'ambiguous' || x.identity?.match === 'not_found';
   if (unsure && (x.facts?.length ?? 0) > 0) p.push('facts recorded for an identity that is not resolved');
   for (const [i, fact] of (x.facts ?? []).entries()) {

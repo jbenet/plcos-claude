@@ -7,6 +7,7 @@ import { enrichDir } from './candidates';
 import { check, type Finding, type SourceKind } from './schema';
 import type { Path } from './connect';
 import { checkStrategy, type Strategy } from './strategy';
+import type { Triage } from './triage';
 
 /**
  * The import (N64, docs/19): the research findings under data/<profile>/enrich/, mapped into the
@@ -38,6 +39,8 @@ export interface ImportCounts {
   strategies: number;
   proposed: number;
   withdrawn: number;
+  /** LPs given their triage line: the lane and the first step before any outreach (W9). */
+  triaged: number;
   problems: Array<{ key: string; problems: string[] }>;
 }
 
@@ -53,7 +56,7 @@ const day = (s: string | null | undefined, fallback: string) => {
 
 export async function importFindings(runBy: string | null): Promise<ImportCounts> {
   const dir = enrichDir();
-  const counts: ImportCounts = { files: 0, mapped: 0, rejected: 0, unresolved: 0, notInSystem: 0, claims: 0, keptVerified: 0, docs: 0, profiles: 0, withPaths: 0, paths: 0, strategies: 0, proposed: 0, withdrawn: 0, problems: [] };
+  const counts: ImportCounts = { files: 0, mapped: 0, rejected: 0, unresolved: 0, notInSystem: 0, claims: 0, keptVerified: 0, docs: 0, profiles: 0, withPaths: 0, paths: 0, strategies: 0, proposed: 0, withdrawn: 0, triaged: 0, problems: [] };
   const run = await startRun('enrich', 'import', runBy);
   try {
     const files = (await readdir(join(dir, 'raw')).catch(() => [])).filter((f) => f.endsWith('.json'));
@@ -68,6 +71,8 @@ export async function importFindings(runBy: string | null): Promise<ImportCounts
       findings.push(x as Finding);
     }
     const paths = (await readFile(join(dir, 'connections.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Path);
+    // W9: the lane and the first step before any outreach (iteration 3), shown on the LP's page.
+    const triage = (await readFile(join(dir, 'triage.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Triage);
     // W5: one strategy per LP, checked like the findings.
     const strategies: Array<{ s: Strategy; hash: string }> = [];
     for (const f of (await readdir(join(dir, 'strategy')).catch(() => [])).filter((x) => x.endsWith('.json'))) {
@@ -85,7 +90,7 @@ export async function importFindings(runBy: string | null): Promise<ImportCounts
     await db.transaction(async (tx) => {
       const known = new Set((await tx.query<{ id: string }>(
         `select entity_id::text as id from identity.entity where entity_id = any($1::uuid[])`,
-        [[...new Set([...findings.map((f) => f.key), ...paths.map((p) => p.lp)])]],
+        [[...new Set([...findings.map((f) => f.key), ...paths.map((p) => p.lp), ...triage.map((t) => t.key)])]],
       )).map((r) => r.id));
       const keys = findings.map((f) => f.key).filter((k) => known.has(k));
       counts.notInSystem = findings.length - keys.length;
@@ -95,7 +100,13 @@ export async function importFindings(runBy: string | null): Promise<ImportCounts
         `select count(*)::text as n from research.claim where source like 'pub:%' and entity_id = any($1::uuid[]) and last_verified_by is not null`, [keys],
       ))?.n ?? 0);
       await tx.query(`delete from research.claim where source like 'pub:%' and entity_id = any($1::uuid[]) and last_verified_by is null`, [keys]);
-      await tx.query(`delete from research.note where kind in ('public_profile', 'connection_candidates') and author_id is null and entity_id = any($1::uuid[])`, [[...known]]);
+      await tx.query(`delete from research.note where kind in ('public_profile', 'connection_candidates', 'triage') and author_id is null and entity_id = any($1::uuid[])`, [[...known]]);
+      for (const t of triage) {
+        if (!known.has(t.key)) continue;
+        await tx.query(`insert into research.note (entity_id, kind, body, data) values ($1, 'triage', $2, $3)`,
+          [t.key, t.first ? `Before any outreach: ${t.first}` : `Triage: ${t.lane}`, JSON.stringify(t)]);
+        counts.triaged++;
+      }
 
       const docs = new Set<string>();
       for (const f of findings) {

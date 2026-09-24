@@ -1,7 +1,7 @@
 'use client';
 
 import type { Dated, FloorState } from '@/lib/floor-client';
-import { shortName } from './shared';
+import { shortName, standingWords } from './shared';
 
 /**
  * View 4 — the clock.
@@ -41,7 +41,8 @@ export function ClockView({ state }: { state: FloorState }) {
   const colW = (W - LEFT) / DAYS;
   const height = TOP + lanes.length * ROW_H + 24;
 
-  const undated = state.items.filter((i) => !i.urgentAt && !i.cashReceived);
+  // A passed LP is not unscheduled work: someone decided (docs/17), as with the load.
+  const undated = state.items.filter((i) => !i.urgentAt && !i.cashReceived && i.status !== 'passed');
 
   return (
     <div className="floordark clockview">
@@ -55,7 +56,7 @@ export function ClockView({ state }: { state: FloorState }) {
           </p>
           <div className="cplist">
             {undated.slice(0, 14).map((i) => (
-              <div className="cprow" key={i.key} title={`${i.tempBasis}${i.blocked ? `\nBlocked: ${i.blocked}` : ''}`}>
+              <div className="cprow" key={i.key} title={`${standingWords(i)}\n${i.tempBasis}${i.blocked ? `\nBlocked: ${i.blocked}` : ''}`}>
                 <span className={`cpdot t-${i.temp}`} />
                 <span className="cpname">{shortName(i.entityName, 22)}</span>
                 <span className="cpdays">{i.daysSinceMove === null ? 'never' : `${i.daysSinceMove}d`}</span>

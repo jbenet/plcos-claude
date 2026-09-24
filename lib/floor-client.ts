@@ -1,4 +1,4 @@
-import type { LadderRung } from '@/modules/strategy/client';
+import type { LadderRung, PursuitStatus } from '@/modules/strategy/client';
 
 /**
  * The floor's shapes and its vocabulary, with no database in them.
@@ -32,8 +32,34 @@ export interface FloorItem {
   vehicleSlug: string;
   vehicleName: string;
   ownerName: string;
-  /** The highest rung with an evidence record. Null means sourced and nothing more. */
+  /** The pursuit behind the item, for its LP page. Null for money on the close track with no pursuit. */
+  pursuitId: string | null;
+  /**
+   * Where our effort is with them (N50, docs/17): the pursuit's status, which is what the views
+   * lay out by. It is our plan, set by a person or read from Affinity until one is: it never
+   * moves the rung, and the rung never moves it. An item with no pursuit reads as Committed
+   * (lib/floor.ts says why).
+   */
+  status: PursuitStatus;
+  /** Where the status came from, in words: who set it and when, Affinity's word, or the close track. */
+  statusBasis: string;
+  /**
+   * The rung the status claims and the ladder has not confirmed ("Needs evidence"), or null when
+   * the ladder backs it or the status claims nothing. `statusNeedsEvidence` in modules/strategy.
+   */
+  needsEvidence: LadderRung | null;
+  /**
+   * The highest rung with an evidence record: the evidence under the status, and what the views
+   * that count evidence lay out by. It includes what the close track records — a soft amount, a
+   * countersignature, a wire — so it can be ahead of `ladderRung`. Null means none yet.
+   */
   rung: LadderRung | null;
+  /**
+   * The highest rung the ladder itself has confirmed, through a STAGE ticket: the pursuit's
+   * rung, as the LP page shows it. Null with no pursuit, or nothing confirmed yet. "Needs
+   * evidence" is judged on this one, so the floor and the LP page agree.
+   */
+  ladderRung: LadderRung | null;
   rungIndex: number;
   nextRung: LadderRung | null;
   /** Soft and hard are separate tracks and are never added together anywhere. */
@@ -60,7 +86,7 @@ export interface FloorItem {
   path: LadderRung[];
   /** Dates against those rungs, so a flow can be drawn over time rather than asserted. */
   walkedAt: Array<{ rung: LadderRung; at: Date }>;
-  /** Sitting still at its rung for longer than three weeks. */
+  /** Nothing recorded for longer than three weeks. Never a wired item or a passed one. */
   stalled: boolean;
 }
 

@@ -30,7 +30,7 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
   const one = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : undefined);
   const asked = one('status');
   // The filters in the address (N62): read here, so the page is drawn filtered from the start.
-  const filters = Object.fromEntries(['q', 'owner', 'vehicle', 'meetings', 'touch', 'read', 'money', 'flag'].flatMap((k) => (one(k) ? [[k, one(k)!]] : [])));
+  const filters = Object.fromEntries(['q', 'owner', 'vehicle', 'meetings', 'touch', 'read', 'money', 'flag', 'sort', 'dir'].flatMap((k) => (one(k) ? [[k, one(k)!]] : [])));
   const current = selection.current;
   // All vehicles means the ones being raised: a vehicle kept for its history is shown when it
   // is the one selected, and counted, not mixed in.

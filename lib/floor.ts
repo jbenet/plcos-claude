@@ -7,8 +7,11 @@ import { listExposures } from '@/modules/pipeline';
 import { listVehicles } from '@/modules/platform';
 import { DEFAULT_PARAMS, listMethods, scoreMethods } from '@/modules/research';
 import { actionableSignals } from '@/modules/signals';
-import { listPursuits, rungIndex, RUNGS, type LadderRung } from '@/modules/strategy';
+import {
+  listPursuits, PASSED_BY_LABEL, rungIndex, RUNGS, statusNeedsEvidence, type LadderRung, type Pursuit,
+} from '@/modules/strategy';
 import type { Alarm, Dated, FloorAgents, FloorItem, FloorState, Temp } from './floor-client';
+import { shortDate } from './time';
 
 export * from './floor-client';
 
@@ -20,13 +23,36 @@ export * from './floor-client';
  * a dashboard that disagrees with the pages people act on.** The cost is that anything no
  * module records does not appear, and the coverage note says so.
  *
- * Two rules shape the shape of this file. Soft and hard money never merge into one number,
- * so an item carries its track and the totals are counted separately. And a rung is only
- * ever the highest one with an evidence record — nothing here infers a step from a mood.
+ * Three rules shape the shape of this file. Soft and hard money never merge into one number,
+ * so an item carries its track and the totals are counted separately. A rung is only ever
+ * the highest one with an evidence record — nothing here infers a step from a mood. And the
+ * status (N50) is the pursuit's own, set by a person or read from Affinity until one is: the
+ * views lay out by it, and the rung sits under it as the evidence, never the other way round
+ * (N62, rule 2).
  */
 
 const DAY = 86_400_000;
 const days = (from: Date, to: Date) => Math.floor((to.getTime() - from.getTime()) / DAY);
+
+/** Where a pursuit's status came from, in one line: who set it, or the source it was read from. */
+function statusBasis(p: Pursuit): string {
+  const set = p.statusSource === 'us'
+    ? p.statusSetAt ? `Set ${shortDate(p.statusSetAt)}${p.statusSetByName ? ` by ${p.statusSetByName}` : ''}.` : 'Set here.'
+    : `Read from Affinity${p.stageSaid ? `, which says “${p.stageSaid}”` : ''}. Nobody has set one here yet.`;
+  if (p.status !== 'passed') return set;
+  const why = [p.passedBy ? PASSED_BY_LABEL[p.passedBy] : null, p.statusReason?.replace(/_/g, ' ')].filter(Boolean).join(' · ');
+  return why ? `${why}. ${set}` : set;
+}
+
+/**
+ * Money on the close track with no pursuit behind it — a commitment signed before any of this
+ * existed, or a soft number nobody opened a pursuit for — reads as Committed. Committed means
+ * "they said yes, with an amount", and an exposure is exactly an amount from them; it is the
+ * rule translation applies to an Affinity entry with a committed amount (docs/17). Nobody set
+ * it, so the basis says so, and the ladder under it is the exposure's own evidence: a soft
+ * number with no countersignature still reads "Needs evidence", as it would on an LP page.
+ */
+const NO_PURSUIT_BASIS = 'No pursuit: read as Committed from the close track.';
 
 function temperature(last: Date | null, now: Date): { temp: Temp; basis: string } {
   if (!last) return { temp: 'unmoved', basis: 'No dated record on this pursuit at all.' };
@@ -88,6 +114,11 @@ export async function floorState(
       vehicleSlug: vehicle.slug,
       vehicleName: vehicle.name,
       ownerName: p.ownerName,
+      pursuitId: p.pursuitId,
+      status: p.status,
+      statusBasis: statusBasis(p),
+      needsEvidence: null,
+      ladderRung: p.rung,
       rung: p.rung,
       rungIndex: rungIndex(p.rung),
       nextRung: p.nextRung,
@@ -109,7 +140,8 @@ export async function floorState(
       headline: p.headline,
       path: p.events.map((e) => e.rung),
       walkedAt: p.events.map((e) => ({ rung: e.rung, at: e.occurredAt })),
-      stalled: last !== null && days(last, now) > 21,
+      // A pass is a decision, theirs or ours (N53), so a passed pursuit is finished, not stalled.
+      stalled: last !== null && days(last, now) > 21 && p.status !== 'passed',
     });
   }
 
@@ -120,12 +152,12 @@ export async function floorState(
     /**
      * A countersignature and a wire are evidence records like any other, so they set the
      * rung. This is the one place a rung comes from outside the ladder table, and it comes
-     * from a document, never from a mood.
+     * from a document, never from a mood. A document only ever raises the rung: a ladder that
+     * already confirms more is not lowered by an exposure that has not caught up.
      */
-    const rung: LadderRung | null = x.cashReceivedAt
-      ? 'cash_received'
-      : x.hardenedAt ? 'commitment_accepted'
-      : existing?.rung ?? (x.track === 'soft' ? 'indication_given' : null);
+    const kept: LadderRung | null = existing?.rung ?? (x.track === 'soft' ? 'indication_given' : null);
+    const documented: LadderRung | null = x.cashReceivedAt ? 'cash_received' : x.hardenedAt ? 'commitment_accepted' : null;
+    const rung = rungIndex(documented) > rungIndex(kept) ? documented : kept;
     const moneyMove = x.cashReceivedAt ?? x.hardenedAt ?? null;
     const last = [existing?.lastMoveAt ?? null, moneyMove]
       .filter((d): d is Date => d !== null)
@@ -150,6 +182,11 @@ export async function floorState(
       vehicleSlug: x.vehicleSlug,
       vehicleName: x.vehicleName,
       ownerName: x.ownerName,
+      pursuitId: null,
+      status: 'committed',
+      statusBasis: NO_PURSUIT_BASIS,
+      needsEvidence: null,
+      ladderRung: null,
       rung: null,
       rungIndex: -1,
       nextRung: null,
@@ -177,6 +214,7 @@ export async function floorState(
       ...base,
       rung,
       rungIndex: rungIndex(rung),
+      nextRung: RUNGS[rungIndex(rung) + 1] ?? null,
       track: x.track,
       amount: x.amount,
       probability: x.probability,
@@ -186,7 +224,7 @@ export async function floorState(
       tempBasis: basis,
       lastMoveAt: last,
       daysSinceMove: last ? days(last, now) : null,
-      stalled: last !== null && days(last, now) > 21 && !x.cashReceivedAt,
+      stalled: last !== null && days(last, now) > 21 && !x.cashReceivedAt && base.status !== 'passed',
       path: [
         ...base.path,
         ...(x.hardenedAt ? (['commitment_accepted'] as LadderRung[]) : []),
@@ -267,9 +305,10 @@ export async function floorState(
       entityName: r.entityName, vehicleName: null, at: null,
     });
   }
-  for (const b of bandwidth) {
+  // One investor can be stretched on two vehicles at once, so the name alone is not a key.
+  for (const [n, b] of bandwidth.entries()) {
     alarms.push({
-      key: `bandwidth:${b.kind}:${b.name}`, severity: 'soon',
+      key: `bandwidth:${b.kind}:${b.name}:${n}`, severity: 'soon',
       label: `${b.kind === 'owner' ? 'Owner' : 'Investor'} stretched`,
       detail: `${b.name} — ${b.detail}`, entityName: null, vehicleName: null, at: null,
     });
@@ -340,7 +379,16 @@ export async function floorState(
   }
   schedule.sort((a, b) => a.at.getTime() - b.at.getTime());
 
-  const list = [...items.values()].filter((i) => inScope(i.vehicleSlug));
+  /**
+   * Last, whether the ladder backs the status. With a pursuit, that is judged on the rung the
+   * ladder has confirmed, exactly as the LP page judges it, so the two never disagree about who
+   * needs evidence; a countersignature on the close track that no STAGE ticket has confirmed
+   * yet is on record, not on the ladder. With no pursuit there is no ladder, and the close
+   * track's own records are all the evidence there is.
+   */
+  const list = [...items.values()]
+    .filter((i) => inScope(i.vehicleSlug))
+    .map((i) => ({ ...i, needsEvidence: statusNeedsEvidence(i.status, i.pursuitId ? i.ladderRung : i.rung) }));
   const money = vehicles
     .filter((v) => inScope(v.slug))
     .map((v) => {

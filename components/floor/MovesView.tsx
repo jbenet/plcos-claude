@@ -1,6 +1,7 @@
 'use client';
 
 import type { BoardState, Move } from '@/lib/board-client';
+import { STATUSES } from '@/modules/strategy/client';
 
 /**
  * View 8 — the moves.
@@ -12,6 +13,11 @@ import type { BoardState, Move } from '@/lib/board-client';
  * The ordering is the ladder's ordering, so the menu doubles as the prerequisite chain:
  * nothing in **Advance** is reachable until something in **Open** has happened, and the
  * only move with no prerequisite at all is the first one.
+ *
+ * What a move is available on is read from the ladder, because a move needs the record below
+ * it and a status is not a record. Where the LPs it is available on stand is said by status
+ * under the count (N62), and a passed LP is never counted: an ask toward someone who said no
+ * is not a move we have.
  */
 
 const FAMILIES = ['Discover', 'Open', 'Advance', 'Close'] as const;
@@ -19,7 +25,7 @@ const FAMILIES = ['Discover', 'Open', 'Advance', 'Close'] as const;
 const FAMILY_MEANS: Record<string, string> = {
   Discover: 'Costs nothing but time, needs nobody’s permission, and is the only work available on a cold name.',
   Open: 'Spends something that does not come back — a connector’s goodwill, or a claim on their attention.',
-  Advance: 'Moves an item one rung. Each needs its own evidence record, and none of them can be skipped.',
+  Advance: 'Moves an item one rung on the ladder. Each needs its own evidence record, and none of them can be skipped.',
   Close: 'Two separate states and two separate tickets. Signed is not wired.',
 };
 
@@ -39,6 +45,11 @@ export function MovesView({ board }: { board: BoardState }) {
           <span className="mvblocked" title={m.blockedWhy ?? ''}>✕ {m.blocked} blocked</span>
         )}
       </div>
+      {m.byStatus && m.available > 0 && (
+        <div className="mvst" title="Where the LPs this move is available on stand, by status">
+          {STATUSES.filter((s) => m.byStatus?.[s.id]).map((s) => `${m.byStatus![s.id]} ${s.label}`).join(' · ')}
+        </div>
+      )}
       <dl className="mvdl">
         <div><dt>Needs</dt><dd>{m.requires}</dd></div>
         <div><dt>Costs</dt><dd>{m.cost}</dd></div>
@@ -68,6 +79,8 @@ export function MovesView({ board }: { board: BoardState }) {
       </div>
       <div className="fllegend light">
         <span>Left to right is the prerequisite chain, not a preference order</span>
+        <span>Available is read from the ladder; the line under it is where those LPs stand by status</span>
+        <span>Passed LPs are not counted anywhere here</span>
         <span>A move with zero available is not missing — it is waiting on the column to its left</span>
         <span>gated = fails closed without an approved ticket</span>
       </div>

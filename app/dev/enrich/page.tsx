@@ -9,8 +9,16 @@ import Link from 'next/link';
 import { listPursuits, openSuggestions, STATUS_LABEL } from '@/modules/strategy';
 import type { Strategy } from '@/lib/enrich/strategy';
 import type { Triage } from '@/lib/enrich/triage';
+import type { ConnectorPlan } from '@/lib/enrich/connectors';
 import { latestRun } from '@/modules/sources';
 import { exportResearchSetAction, importFindingsAction } from './actions';
+
+/** The checks the records point to before anyone writes (iteration 3, docs/19). */
+const FIRSTS: Array<{ id: NonNullable<Triage['first']>; label: string; means: string }> = [
+  { id: 'name an owner', label: 'Name an owner', means: 'a way in exists, and nobody on the team owns the pursuit' },
+  { id: 'check sent mail', label: 'Check sent mail', means: 'the stage on file claims contact that no touch on record shows' },
+  { id: 'first personal note', label: 'A first personal note', means: 'our last word was a mailing, sent the same day to ten or more' },
+];
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +37,16 @@ async function count(dir: string): Promise<number> {
   try { return (await readdir(dir)).filter((f) => f.endsWith('.json')).length; } catch { return 0; }
 }
 
+/** Findings made from page reads alone (v1.6): still owed a pass with search. */
+async function pagesOnly(dir: string): Promise<number> {
+  const { readFile } = await import('node:fs/promises');
+  let n = 0;
+  for (const f of (await readdir(dir).catch(() => [])).filter((x) => x.endsWith('.json'))) {
+    try { if ((JSON.parse(await readFile(join(dir, f), 'utf8')) as { researched?: { method?: string } }).researched?.method === 'pages') n++; } catch { /* the checker reports it */ }
+  }
+  return n;
+}
+
 /**
  * Enrichment (N64, docs/19): the research set, exported for the research workflows, and what
  * came back. The workflows run outside the app and read only public sources; their findings
@@ -43,10 +61,12 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
   const { readFile } = await import('node:fs/promises');
   const triage = (await readFile(join(dir, 'triage.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Triage);
   const lanes = (['warm now', 'research first', 'long process', 'cold'] as const).map((lane) => ({ lane, rows: triage.filter((t) => t.lane === lane) }));
-  const [set, cands, raw, strategies, imported, suggestions] = await Promise.all([
+  const plans = JSON.parse(await readFile(join(dir, 'connectors.json'), 'utf8').catch(() => '[]')) as ConnectorPlan[];
+  const [set, cands, raw, pages, strategies, imported, suggestions] = await Promise.all([
     fileInfo(join(dir, 'research-set.jsonl')),
     fileInfo(join(dir, 'candidates.jsonl')),
     count(join(dir, 'raw')),
+    pagesOnly(join(dir, 'raw')),
     count(join(dir, 'strategy')),
     latestRun('enrich', 'import'),
     openSuggestions(),
@@ -98,7 +118,7 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
             <div className="fact" key={s}><span>{STATUS_LABEL[s]}</span><span>{n(pursuits.filter((p) => p.status === s).length)}</span></div>
           ))}
           <div className="fact"><span>Exported</span><span>{set ? `${n(set.lines)} LPs · ${ago(set.at)}` : 'not yet'}{cands && set && cands.lines !== set.lines ? ' · the two files disagree' : ''}</span></div>
-          <div className="fact"><span>Findings back</span><span>{n(raw)} LPs researched · {n(strategies)} with a strategy</span></div>
+          <div className="fact"><span>Findings back</span><span>{n(raw)} LPs researched{pages ? ` (${n(pages)} from page reads only, owed a pass with search)` : ''} · {n(strategies)} with a strategy</span></div>
           {sp.exported && <p className="stat ready" style={{ marginTop: 10 }}><i />Exported {sp.exported} LPs to {join(config.data.root, 'enrich')}</p>}
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>
             <button className="btn p" type="submit">Export the research set</button>
@@ -166,11 +186,21 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
                 </span>
               </div>
             ))}
+            <div className="lbl" style={{ marginTop: 14 }}>Before any outreach</div>
+            {FIRSTS.map((f) => (
+              <div className="fact" key={f.id}>
+                <span>{f.label}</span>
+                <span>
+                  {n(triage.filter((t) => t.first === f.id).length)}
+                  <span className="muted"> — {f.means}</span>
+                </span>
+              </div>
+            ))}
             <details className="more" style={{ marginTop: 10 }}>
               <summary>The warm ones, and why</summary>
               {lanes[0]!.rows.map((t) => (
                 <div className="pp-fact" key={t.key} style={{ gridTemplateColumns: '200px minmax(0,1fr)' }}>
-                  <span><b>{t.name}</b></span>
+                  <span><b>{t.name}</b>{t.first && <span className="muted" style={{ display: 'block', fontSize: 11.5 }}>first: {t.first}</span>}</span>
                   <span style={{ fontSize: 12.5 }}>{t.reasons.join(' · ')}</span>
                 </div>
               ))}
@@ -179,7 +209,43 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
         )}
         <p className="cover">
           <b>What this reads:</b> the pipeline, our notes, and the paths W3 found — nothing public, and
-          nothing sent. A lane is a starting point with its reasons; a person can overrule it.
+          nothing sent. A lane is a starting point with its reasons; a person can overrule it. A first
+          step is a check for someone on the team, before anyone writes.
+        </p>
+      </div>
+
+      <div className="card">
+        <div className="chead">
+          <h2>The connector plan — who could introduce whom</h2>
+          <span className="lbl">W11 · no web · {config.guard.asksPerConnectorPerQuarter} asks a connector a quarter, a guess</span>
+        </div>
+        {plans.length === 0 ? (
+          <div className="cbody"><p className="muted">Nobody yet: <code>scripts/enrich-connectors.ts</code> writes it once W3 has found an LP who has committed next to a prospect.</p></div>
+        ) : (
+          <div className="cbody">
+            {plans.map((pl) => (
+              <div className="pp-fact" key={pl.connector.key} style={{ gridTemplateColumns: '220px minmax(0,1fr)' }}>
+                <span>
+                  <b>{pl.connector.name}</b>
+                  <span className="muted" style={{ display: 'block', fontSize: 11.5 }}>
+                    {pl.connector.status}{pl.connector.money ? ` · ${pl.connector.money}` : ''} · ask {pl.when}
+                  </span>
+                </span>
+                <span style={{ fontSize: 12.5 }}>
+                  {pl.prospects.filter((x) => pl.asks.includes(x.key)).map((x, i) => (
+                    <span key={x.key}>{i > 0 && ' · '}{x.name} <span className="muted">(tier {x.tier}{x.tier === 'C' || x.tier === 'D' ? ', to confirm' : ''}: {/^(Both|They)\b/.test(x.basis) ? x.basis[0]!.toLowerCase() + x.basis.slice(1) : x.basis})</span></span>
+                  ))}
+                  {pl.prospects.length > pl.asks.length && <span className="muted"> · {pl.prospects.length - pl.asks.length} more next quarter</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="cover">
+          <b>What this reads:</b> the paths, the triage and the strategies. A prospect under a
+          do-not-approach instruction is left out (rule 8); a C or D tie is a question for the
+          connector before it is an introduction (rule 6); a plan names the prospect, never where
+          they stand with us. An introduction still goes through an approved ticket.
         </p>
       </div>
 

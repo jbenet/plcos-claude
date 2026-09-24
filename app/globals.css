@@ -210,6 +210,7 @@ h2{font-family:var(--display)}
 /* ---------------- cards, kpis ---------------- */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:20px}
 .kpis.five{grid-template-columns:repeat(5,minmax(0,1fr))}
+.kpis.six{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 15px}
 .kpi.soft{background:repeating-linear-gradient(135deg,#FFF,#FFF 6px,#FAF8F3 6px,#FAF8F3 12px);border-style:dashed}
 .kpi .n{font-family:var(--display);font-size:25px;font-weight:600;margin:5px 0 3px;letter-spacing:-.01em}
@@ -1077,6 +1078,8 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
 .flls{font-size:8.5px}
 .flbt{font-size:8.5px;font-family:var(--sans)!important}
 .flbg{font-size:9px;font-weight:700}
+.flse{font-size:8px}
+.flblk{cursor:pointer}
 .flblk rect{transition:filter .1s}
 .flblk:hover rect{filter:brightness(1.35)}
 
@@ -1107,6 +1110,8 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
 .lsbars{display:flex;flex-direction:column-reverse;gap:3px}
 .lsbar{border-radius:3px;background:var(--ink);color:#F5F3EE;padding:2px 5px;overflow:hidden;
   display:flex;flex-direction:column;justify-content:flex-start;min-height:15px}
+button.lsbar{border:0;font:inherit;text-align:left;cursor:pointer}
+button.lsbar:hover{filter:brightness(1.12)}
 .lsbar.t-soft{border:1px dashed rgba(255,255,255,.45)}
 .lsbar.s-blocked{background:var(--clay)}
 .lsbar.s-urgent{background:var(--amber)}
@@ -1118,6 +1123,10 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
   flex-wrap:wrap;gap:4px}
 .lchip{font-size:9.5px;border:1px dashed var(--line);border-radius:4px;padding:1px 5px;color:var(--muted)}
 .lchip.s-blocked{border-color:var(--clay);color:var(--clay)}
+button.lchip{background:none;font-family:inherit;cursor:pointer}
+button.lchip:hover{border-color:var(--accent)}
+.lpassed{margin-top:7px;font-family:var(--mono);font-size:9.5px;color:var(--muted);
+  border-top:1px solid var(--hair);padding-top:6px}
 .lnote{font-size:9.5px;color:var(--muted);line-height:1.45}
 .lwired{margin-top:7px;font-family:var(--mono);font-size:9.5px;color:var(--green);
   border-top:1px solid var(--hair);padding-top:6px}
@@ -1158,7 +1167,12 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
 .fsrow{display:grid;grid-template-columns:1fr 54px 44px;gap:6px;align-items:baseline;
   padding:4px 0;border-bottom:1px solid var(--hair);font-size:11.5px}
 .fsrow:last-child{border-bottom:0}
+button.fsrow{width:100%;border-width:0 0 1px;border-style:solid;border-color:var(--hair);background:none;
+  font:inherit;font-size:11.5px;color:inherit;text-align:left;cursor:pointer}
+button.fsrow:last-child{border-bottom:0}
+button.fsrow:hover b{text-decoration:underline}
 .fsrow .fswhy{grid-column:1/-1;font-size:10.5px;color:var(--muted);line-height:1.45}
+.fsrow .fsst{color:var(--ink)}
 .fsrow .mono{font-size:10.5px;text-align:right}
 
 /* 4 · the clock */
@@ -1194,14 +1208,21 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
 .roomview{padding:14px 15px 0}
 .rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:10px}
 .rcard{border:1px solid var(--line);border-radius:9px;padding:10px 11px;background:var(--ground)}
-.rhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.rhead{display:flex;justify-content:space-between;align-items:baseline;gap:2px 8px;flex-wrap:wrap}
 .rhead b{font-size:13.5px;font-weight:500}
-.rbars{display:flex;gap:4px;align-items:flex-end;height:64px;margin:9px 0 7px}
-.rbar{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%}
-.rbwrap{flex:1;width:100%;background:#EDEAE2;border-radius:2px;display:flex;align-items:flex-end}
-.rbfill{width:100%;background:var(--ink);border-radius:2px;min-height:2px}
-.rbn{font-family:var(--mono);font-size:9.5px}
-.rbl{font-family:var(--mono);font-size:7.5px;color:var(--muted)}
+/* The pipeline by status (N62): a row per status, the part the ladder doesn't back hatched. */
+.rstatus{display:flex;flex-direction:column;gap:3px;margin:9px 0 8px}
+.rsrow{display:grid;grid-template-columns:66px minmax(30px,1fr) 22px 28px;gap:6px;align-items:center;
+  font-size:10.5px;line-height:1.2}
+.rsn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rsbar{height:7px;background:#EDEAE2;border-radius:2px;overflow:hidden}
+.rsbar i{display:block;height:100%;background:var(--ink);border-radius:2px;min-width:0}
+.rsbar u{display:block;height:100%;margin-left:auto;background:repeating-linear-gradient(135deg,
+  #EDEAE2 0 2px,transparent 2px 4px)}
+.rsrow.off .rsbar i{background:var(--muted)}
+.rsrow.none{color:var(--muted)}
+.rsc{font-family:var(--mono);font-size:10px;text-align:right}
+.rse{font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap}
 .rmoney{margin:0 0 8px;display:flex;flex-direction:column;gap:3px}
 .rmoney div{display:flex;gap:8px;align-items:baseline}
 .rmoney dt{font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;
@@ -1230,6 +1251,8 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
 
 .floorlist{table-layout:fixed;min-width:940px}
 .floorlist .fllh{font-size:10px;line-height:1.4;margin-top:2px}
+.floorlist th.w150{width:150px} .floorlist th.w136{width:136px}
+.floorlist .stat,.console .stat{padding:1px 7px;margin-left:4px;vertical-align:1px}
 
 
 /* ── the board: map, plant, moves, grid, economy ─────────────────────────── */
@@ -1266,6 +1289,7 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
 
 /* 7 · the plant */
 .plantview{padding:14px 15px 0}
+.plantcap{margin:0 0 8px}
 .plantline{display:flex;align-items:stretch;overflow-x:auto;padding-bottom:6px}
 .pstationwrap{display:flex;align-items:stretch;flex:1 0 auto}
 .pconn{display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -1315,6 +1339,7 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
 .mvcount b{font-family:var(--mono);font-size:19px;font-weight:500}
 .mvcount span{font-size:10px;color:var(--muted)}
 .mvblocked{font-family:var(--mono);font-size:9.5px;color:var(--clay)}
+.mvst{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin:-3px 0 6px}
 .mvdl{margin:0;display:flex;flex-direction:column;gap:4px}
 .mvdl div{display:grid;grid-template-columns:44px 1fr;gap:6px}
 .mvdl dt{font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;
@@ -1327,8 +1352,11 @@ th.w80{width:80px} th.w104{width:104px} th.w108{width:108px} th.w144{width:144px
 /* 9 · the grid */
 .gridview{padding:12px 15px 0}
 .gridtable{min-width:900px}
+/* Narrower gutters than a list, so the status column fits beside eight levers. */
+.gridtable th,.gridtable td{padding-left:9px;padding-right:9px}
 .gridtable th{font-size:9.5px}
 .gridtable .gsub{font-size:10px;margin-top:1px}
+.gridtable .gev{font-size:11px}
 .gcell{text-align:center;font-size:14px;line-height:1;color:var(--muted)}
 .gcell.s-open{color:var(--green)}
 .gcell.s-blocked{color:var(--clay)}
@@ -1413,6 +1441,8 @@ kbd{font-family:var(--mono);font-size:9.5px;border:1px solid var(--line);border-
 .cdl dt{font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding-top:2px}
 .cdl dd{margin:0;font-size:11.5px;line-height:1.5}
 .cdl .cbad{color:var(--clay)}
+.cdl .cline{display:block;margin-top:2px}
+.cdl .cclaim{display:block;font-size:10.5px;line-height:1.45;margin-top:4px;padding-left:7px;border-left:2px solid var(--clay)}
 .clist{display:flex;flex-direction:column;gap:4px;margin-top:4px}
 .crow{display:grid;grid-template-columns:1fr auto;gap:2px 8px;text-align:left;border:1px solid var(--line);
   border-radius:6px;padding:6px 8px;background:var(--ground);font:inherit;cursor:pointer}

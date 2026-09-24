@@ -76,6 +76,13 @@ function fromAddress(given: Record<string, string> | undefined): Filters {
 }
 
 type SortKey = 'rank' | 'name' | 'vehicle' | 'owner' | 'where' | 'meetings' | 'touch' | 'read' | 'ladder';
+const SORT_KEYS: readonly SortKey[] = ['rank', 'name', 'vehicle', 'owner', 'where', 'meetings', 'touch', 'read', 'ladder'];
+type Sort = { key: SortKey; dir: 1 | -1 };
+/** The order in the address (issue 0009): `sort=<key>`, `dir=desc` — rank, ascending, when neither is there. */
+function sortFrom(given: Record<string, string | null> | undefined): Sort {
+  const key = SORT_KEYS.find((k) => k === given?.sort) ?? 'rank';
+  return { key, dir: given?.dir === 'desc' ? -1 : 1 };
+}
 const READ_ORDER: Record<string, number> = { 'Very interested': 3, Interested: 2, 'Not very interested': 1 };
 const MONEY_ORDER: Record<string, number> = { Closed: 4, Hard: 3, Signed: 2, Soft: 1, Withdrawn: 0 };
 const PAGE = 200;
@@ -150,7 +157,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
   const router = useRouter();
   const search = useRef<HTMLInputElement>(null);
   const [f, setF] = useState<Filters>(() => fromAddress(initialFilters));
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'rank', dir: 1 });
+  const [sort, setSort] = useState<Sort>(() => sortFrom(initialFilters));
   const [shown, setShown] = useState(PAGE);
   const now = useMemo(() => Date.now(), []);
 
@@ -165,29 +172,38 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
 
   // The column, the search and every filter live in the address (N62), so a link — from the
   // overview's counts, or sent to someone — opens this exact view, and back returns to it.
-  // A new column is a new view, with its own history entry (N65): back returns to the last one.
-  // Typing in the search or setting a filter replaces the entry instead of piling them up.
-  const lastStatus = useRef(status);
+  // A new column or a new order is a new view, with its own history entry (N65): back returns to
+  // the last one. Typing in the search or setting a filter replaces the entry instead of piling
+  // them up.
+  const lastView = useRef(`${status} ${sort.key} ${sort.dir}`);
   useEffect(() => {
     const u = new URL(window.location.href);
     u.searchParams.set('status', status);
     for (const k of Object.keys(EMPTY) as (keyof Filters)[]) {
       if (f[k] !== EMPTY[k]) u.searchParams.set(k, f[k]); else u.searchParams.delete(k);
     }
+    if (sort.key !== 'rank') u.searchParams.set('sort', sort.key); else u.searchParams.delete('sort');
+    if (sort.dir === -1) u.searchParams.set('dir', 'desc'); else u.searchParams.delete('dir');
     if (u.toString() === window.location.href) return;
-    const moved = lastStatus.current !== status;
-    lastStatus.current = status;
+    const view = `${status} ${sort.key} ${sort.dir}`;
+    const moved = lastView.current !== view;
+    lastView.current = view;
     window.history[moved ? 'pushState' : 'replaceState'](null, '', u.toString());
-  }, [status, f]);
-  // Back or forward to another column: follow the address.
+  }, [status, f, sort]);
+  // Back or forward to another column or order: follow the address.
   useEffect(() => {
     const onPop = () => {
-      const s = new URL(window.location.href).searchParams.get('status') as Status | null;
-      if (s && statuses.some((x) => x.id === s)) { lastStatus.current = s; setStatus(s); }
+      const q = new URL(window.location.href).searchParams;
+      const s = q.get('status') as Status | null;
+      const next = sortFrom({ sort: q.get('sort'), dir: q.get('dir') });
+      const st = s && statuses.some((x) => x.id === s) ? s : null;
+      lastView.current = `${st ?? status} ${next.key} ${next.dir}`;
+      if (st) setStatus(st);
+      setSort(next);
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [statuses]);
+  }, [statuses, status]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); search.current?.focus(); }

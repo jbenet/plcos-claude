@@ -29,8 +29,10 @@ export default async function Visualizations({ params }: { params: Promise<{ veh
   const board = await boardState(vehicle?.slug ?? null, state);
   const lens = await lenses(vehicle?.slug ?? null, state);
   const scopeName = vehicle ? vehicle.name : everything ? 'PL Capital and PL R&D' : 'All of PL Capital';
+  const passed = state.items.filter((i) => i.status === 'passed').length;
   const blocked = state.items.filter((i) => i.blocked || i.restricted || i.conflict).length;
   const stalled = state.items.filter((i) => i.stalled).length;
+  const unbacked = state.items.filter((i) => i.needsEvidence).length;
   const unsized = state.items.filter((i) => i.amount === null).length;
 
   return (
@@ -42,6 +44,8 @@ export default async function Visualizations({ params }: { params: Promise<{ veh
           <div className="ihead">One vocabulary, fifteen layouts</div>
           <div className="imeta">Switching tabs should not mean relearning the colours</div>
 
+          <div className="kv"><span>Column</span><span>The status: our plan, not a claim</span></div>
+          <div className="kv"><span>◇</span><span>Needs evidence — the status claims more than the ladder shows</span></div>
           <div className="kv"><span>Size</span><span>Money at stake, square-root scale</span></div>
           <div className="kv"><span>No size</span><span>Nobody has a number from them yet</span></div>
           <div className="kv"><span>Fill</span><span>How recently anything was recorded</span></div>
@@ -53,11 +57,25 @@ export default async function Visualizations({ params }: { params: Promise<{ veh
           <div className="kv"><span>Valve</span><span>An approval gate, with tickets open on it</span></div>
 
           <div className="scope">
-            <div className="lbl">What a rung means here</div>
+            <div className="lbl">Status first, the ladder under it</div>
             <p>
-              An item sits at the highest rung it has an <b>evidence record</b> for. A connector
-              saying they are happy to ask is rung one and nothing more. Nothing on this page
-              promotes an item because it feels further along.
+              Where a view lays LPs out by stage, the stages are the <b>status</b>: New,
+              Sourcing, Selected, Connecting, Discussing, Committed or Passed. The status is our
+              plan: set by a person on the LP page, or read from Affinity until someone does. It
+              can move in any direction, and it claims nothing about the LP.
+            </p>
+            <p>
+              The <b>ladder</b> is the evidence under the status. It has six rungs, and each
+              needs its own record: a connector&rsquo;s yes, a reply from the LP, a meeting, a
+              number from them, a countersignature, a wire. An LP is at the highest rung it has a
+              record for. A connector saying they are happy to ask is the first rung and nothing
+              more. Nothing on this page moves an LP up because it feels further along.
+            </p>
+            <p>
+              Three statuses rest on a rung: Connecting on a connector&rsquo;s yes or direct
+              contact, Discussing on a meeting, Committed on a countersignature. Until the ladder
+              has that rung, the LP is marked <b>◇ Needs evidence</b>. The flow and the plant are
+              the exceptions: they count dated steps, so they are drawn on the ladder, and say so.
             </p>
           </div>
 
@@ -90,7 +108,7 @@ export default async function Visualizations({ params }: { params: Promise<{ veh
         reserved for the exceptions — so a floor with nothing wrong has almost no colour on it.
       </p>
 
-      <div className="kpis">
+      <div className="kpis six">
         <div className="kpi">
           <span className="tag t-plain">On the map</span>
           <div className="n">{board.fog.scored}<span className="of"> of {board.territories.length}</span></div>
@@ -98,8 +116,11 @@ export default async function Visualizations({ params }: { params: Promise<{ veh
         </div>
         <div className="kpi">
           <span className="tag t-plain">In flight</span>
-          <div className="n">{state.items.length}</div>
-          <div className="f">Entity × vehicle pairs with a pursuit, an exposure, or both.</div>
+          <div className="n">{state.items.length - passed}</div>
+          <div className="f">
+            Entity × vehicle pairs with a pursuit, an exposure, or both.
+            {passed ? ` ${passed} passed are drawn but not counted.` : ''}
+          </div>
         </div>
         <div className="kpi">
           <span className={`tag ${blocked ? 't-clay' : 't-plain'}`}>Blocked</span>
@@ -110,6 +131,11 @@ export default async function Visualizations({ params }: { params: Promise<{ veh
           <span className={`tag ${stalled ? 't-clay' : 't-plain'}`}>Stalled</span>
           <div className="n">{stalled}</div>
           <div className="f">Nothing recorded for more than three weeks.</div>
+        </div>
+        <div className="kpi">
+          <span className={`tag ${unbacked ? 't-clay' : 't-plain'}`}>Needs evidence</span>
+          <div className="n">{unbacked}</div>
+          <div className="f">The status claims a rung the ladder doesn&rsquo;t have yet. Marked ◇.</div>
         </div>
         <div className="kpi">
           <span className="tag t-plain">No number</span>

@@ -1,8 +1,8 @@
 'use client';
 
 import type { FloorItem, FloorState } from '@/lib/floor-client';
-import { RUNG_LABEL } from '@/modules/strategy/client';
-import { compactUsd, shortName, stateOf, STATE_GLYPH, TEMP_ALPHA } from './shared';
+import { useFloor } from './FloorContext';
+import { compactUsd, EVIDENCE_GLYPH, shortName, standingWords, stateOf, STATE_GLYPH, TEMP_ALPHA } from './shared';
 
 /**
  * View 2 — the load.
@@ -20,12 +20,14 @@ const COL_H = 300;
 const WIP_LINE = 6;
 
 export function LoadView({ state }: { state: FloorState }) {
+  const { select } = useFloor();
   /**
    * Wired money is not load. It was work once; it is now a fact, and leaving it in the
    * bars makes the person who closed the most look like the person with the most left
-   * to do — which is the exact opposite of true.
+   * to do — which is the exact opposite of true. A passed LP is not load either: someone
+   * decided, theirs or ours, and nothing is waiting on the owner (docs/17).
    */
-  const open = state.items.filter((i) => !i.cashReceived);
+  const open = state.items.filter((i) => !i.cashReceived && i.status !== 'passed');
   const owners = [...new Set(open.map((i) => i.ownerName))]
     .sort((a, b) => open.filter((i) => i.ownerName === b).length
       - open.filter((i) => i.ownerName === a).length);
@@ -49,20 +51,21 @@ export function LoadView({ state }: { state: FloorState }) {
           {mine.map((i) => {
             const st = stateOf(i);
             return (
-              <div
+              <button
                 key={i.key}
                 className={`lsbar s-${st} t-${track}`}
+                onClick={() => select({ kind: 'item', key: i.key })}
                 style={{
                   height: `${Math.max(14, ((i.amount ?? 0) / heaviest) * COL_H)}px`,
                   opacity: TEMP_ALPHA[i.temp] * 0.75 + 0.25,
                 }}
-                title={`${i.entityName} · ${i.vehicleName}\n${compactUsd(i.amount)} ${track} — ${i.sizeBasis}\n`
-                  + `${i.rung ? RUNG_LABEL[i.rung] : 'No rung with evidence yet'}\n${i.tempBasis}`
+                title={`${i.entityName} · ${i.vehicleName}\n${standingWords(i)}\n`
+                  + `${compactUsd(i.amount)} ${track} — ${i.sizeBasis}\n${i.tempBasis}`
                   + `${i.blocked ? `\nBlocked: ${i.blocked}` : ''}`}
               >
                 <span className="lsn">{shortName(i.entityName, 20)}</span>
-                <span className="lsv">{compactUsd(i.amount)} {STATE_GLYPH[st]}</span>
-              </div>
+                <span className="lsv">{compactUsd(i.amount)} {i.needsEvidence ? EVIDENCE_GLYPH : ''}{STATE_GLYPH[st]}</span>
+              </button>
             );
           })}
           {mine.length === 0 && <div className="lsnone">nothing</div>}
@@ -77,6 +80,7 @@ export function LoadView({ state }: { state: FloorState }) {
         {owners.map((owner) => {
           const mine = open.filter((i) => i.ownerName === owner);
           const wired = state.items.filter((i) => i.ownerName === owner && i.cashReceived);
+          const passed = state.items.filter((i) => i.ownerName === owner && i.status === 'passed' && !i.cashReceived);
           const stalled = mine.filter((i) => i.stalled).length;
           const blocked = mine.filter((i) => stateOf(i) === 'blocked').length;
           const unsized = mine.filter((i) => i.amount === null).length;
@@ -102,12 +106,18 @@ export function LoadView({ state }: { state: FloorState }) {
                   {compactUsd(wired.reduce((n, i) => n + (i.amount ?? 0), 0))} hard
                 </div>
               )}
+              {passed.length > 0 && (
+                <div className="lpassed" title={passed.map((i) => `${i.entityName} — ${i.statusBasis}`).join('\n')}>
+                  {passed.length} passed and out of the queue
+                </div>
+              )}
               {mine.some((i) => i.amount === null) && (
                 <div className="lunsized">
                   {mine.filter((i) => i.amount === null).map((i) => (
-                    <span key={i.key} className={`lchip s-${stateOf(i)}`} title={i.tempBasis}>
-                      {shortName(i.entityName, 22)}
-                    </span>
+                    <button key={i.key} className={`lchip s-${stateOf(i)}`} title={`${standingWords(i)}\n${i.tempBasis}`}
+                            onClick={() => select({ kind: 'item', key: i.key })}>
+                      {shortName(i.entityName, 22)}{i.needsEvidence ? ` ${EVIDENCE_GLYPH}` : ''}
+                    </button>
                   ))}
                   <span className="lnote">no number from them yet — not drawn to scale, because there is no scale</span>
                 </div>
@@ -146,10 +156,11 @@ export function LoadView({ state }: { state: FloorState }) {
 
       <div className="fllegend light">
         <span>Column = one person · height = money at stake in that track</span>
-        <span>Wired money is not load — it is counted under each column, not in the bars</span>
+        <span>Wired money and passed LPs are not load — they are counted under each column, not in the bars</span>
         <span><i className="sw" style={{ background: 'var(--clay)' }} /> ✕ blocked</span>
         <span><i className="sw" style={{ background: 'var(--amber)' }} /> ! dated soon</span>
         <span><i className="sw" style={{ background: 'var(--green)' }} /> ✓ cash</span>
+        <span>{EVIDENCE_GLYPH} = the status claims more than the ladder shows</span>
         <span>Faint = nothing recorded lately · hard and soft never share a bar</span>
       </div>
     </div>

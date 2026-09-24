@@ -15,7 +15,7 @@ interface Profile {
     summary: string; investorType: string; howTheyInvest?: string; interests?: string[];
     capacity?: { band: string; basis: string }; signals?: Array<{ what: string; on?: string | null; source?: string | null }>; cautions?: string[];
   } | null;
-  researched?: { at: string; by: string };
+  researched?: { at: string; by: string; method?: 'search' | 'pages' };
   coverage?: { searched?: string[]; notFound?: string[]; note?: string } | null;
 }
 interface PathView { other: { type: string; name: string }; kind: string; tier: 'A' | 'B' | 'C' | 'D'; basis: string; source?: string | null }
@@ -116,6 +116,7 @@ export async function PublicProfile({ entityId }: { entityId: string }) {
       <p className="cover">
         <b>What this covers:</b> {d.researched ? `public pages read on ${shortDate(new Date(d.researched.at))} by ${d.researched.by}` : 'our own records only'}
         {d.coverage?.searched?.length ? `, searching ${d.coverage.searched.join(', ')}` : ''}.
+        {d.researched?.method === 'pages' && <> From page reads only, with no web search: a search pass is still owed, and &ldquo;not found&rdquo; here means not named in the pages read.</>}
         {d.coverage?.notFound?.length ? <> Not found: {d.coverage.notFound.join('; ')} — not found in what was searched, which is not the same as not there.</> : null}
         {' '}Nothing here was sent or posted anywhere; nobody on the team has verified it yet.
       </p>

@@ -1,6 +1,6 @@
 'use client';
 
-import { RUNG_LABEL, RUNGS } from '@/modules/strategy/client';
+import { STATUSES, type PursuitStatus } from '@/modules/strategy/client';
 import type { FloorState } from '@/lib/floor-client';
 import { EMPTY_FILTER, SIGNAL_LABEL, type FloorFilter } from './FloorContext';
 
@@ -22,7 +22,7 @@ export function FilterBar({
 }) {
   const owners = [...new Set(state.items.map((i) => i.ownerName))].sort();
   const dirty = filter.find !== '' || filter.owner !== 'everyone'
-    || filter.signal !== 'all' || filter.stage !== 'all';
+    || filter.signal !== 'all' || filter.status !== 'all';
 
   return (
     <div className="filterbar">
@@ -31,7 +31,7 @@ export function FilterBar({
         <input
           type="search"
           value={filter.find}
-          placeholder="Target, owner, blocker, rung…"
+          placeholder="LP, owner, blocker, status, rung…"
           onChange={(e) => onChange({ ...filter, find: e.target.value })}
         />
       </label>
@@ -53,12 +53,16 @@ export function FilterBar({
           ))}
         </select>
       </label>
+      {/* The status (N62), not the rung. The ladder is not a filter here: it is the evidence
+          under the status, and "Needs evidence" under Signal finds where the two part. */}
       <label className="fb">
-        <span className="lbl">Rung</span>
-        <select value={filter.stage} onChange={(e) => onChange({ ...filter, stage: e.target.value })}>
-          <option value="all">All rungs</option>
-          <option value="none">Sourced, no rung</option>
-          {RUNGS.map((r) => <option key={r} value={r}>{RUNG_LABEL[r]}</option>)}
+        <span className="lbl">Status</span>
+        <select
+          value={filter.status}
+          onChange={(e) => onChange({ ...filter, status: e.target.value as PursuitStatus | 'all' })}
+        >
+          <option value="all">All statuses</option>
+          {STATUSES.map((s) => <option key={s.id} value={s.id} title={s.means}>{s.label}</option>)}
         </select>
       </label>
       <button className="btn" disabled={!dirty} onClick={() => onChange(EMPTY_FILTER)}>Reset</button>
