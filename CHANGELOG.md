@@ -4955,3 +4955,15 @@ Checked in a browser: "a/b te" typed into the feedback box stays there; "/" on t
 searches.
 
 109 of 109 properties hold.
+
+## N75 — An update or a touchpoint from one place; context from the team; the calendar's meetings
+
+**Shipped.** Three items from the feedback box (issues 0015, 0016 and 0017).
+
+| | |
+|---|---|
+| ![Update or touchpoint](docs/changelog/shots/n75/01-update-or-touchpoint.webp) | **An update or a touchpoint, from the same place** (issue 0015). The timeline's first row has two icons, and the chosen one is darker: the pencil writes an update, as before; the calendar logs a touchpoint. Choosing the touchpoint turns the row into a larger box for what happened, with the structure below — meeting, call, email and the rest, when, who reached out, which vehicle, their read. The drawer at the bottom of the timeline is gone. |
+| ![Add context](docs/changelog/shots/n75/02-add-context.webp) | **Add context** (issue 0016): more information about an LP, or a correction, from the top of its page's right column. It is kept as research on the LP with the writer's name and the date, and moves no status, no rung and no money. The suggested strategy then says it was written before the newest context, quoting it, and that it is due a re-think. The strategy workflow's export carries the context, its protocol reads it above the research and the notes' readings, and a strategy written before it counts as stale, so the next revision batch re-thinks it. |
+| ![The calendar](docs/changelog/shots/n75/03-the-calendar.webp) | **The vehicle's calendar shows its meetings** (issue 0017). It kept only meetings tied to the vehicle, and Affinity records most meetings with none, so the Neurotech calendar was empty. It now places each LP's meetings and calls by the rule the pipeline and every LP page use (N59: inside the raise's window, and read as about it), counting a meeting shared by colleagues once. On the real data: from 0 dated things to 164. The demo's meetings were always tied to their vehicles, so its calendar looks as it did. |
+
+110 of 110 properties hold.

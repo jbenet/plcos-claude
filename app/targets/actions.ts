@@ -92,6 +92,24 @@ export async function addUpdateAction(formData: FormData): Promise<{ error?: str
   }
 }
 
+/**
+ * Context or a correction about an LP, from the team (issue 0016, real): kept as research on them.
+ * It moves no status, no rung and no money; the strategy written before it is marked due a re-think.
+ */
+export async function addContextAction(formData: FormData): Promise<{ error?: string; ok?: boolean }> {
+  const { addTeamContext } = await import('@/modules/research');
+  const user = await (await auth()).currentUser();
+  const text = (k: string) => String(formData.get(k) ?? '').trim();
+  const pursuitId = text('pursuitId');
+  try {
+    await addTeamContext(text('entityId'), user.id, String(formData.get('body') ?? ''), { pursuitId, vehicleId: text('vehicleId') || null });
+    revalidatePath(`/targets/${pursuitId}`);
+    return { ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
 /** Accept or dismiss a suggested strategy (N64). Accepting sets the next step; nothing else moves. */
 export async function decideSuggestionAction(formData: FormData): Promise<void> {
   const { decideSuggestion } = await import('@/modules/strategy');

@@ -71,7 +71,10 @@ export function isStale(
   finding: { researched: { at: string } } | null | undefined,
   money?: { track: string; state: string; amount: number } | null,
   bestPath?: 'A' | 'B' | 'C' | 'D' | null,
+  /** The team's newest context on this LP (issue 0016): a strategy written before it is due a re-think. */
+  contextAt?: string | null,
 ): boolean {
+  if (contextAt && s.made.at && Date.parse(contextAt) > Date.parse(s.made.at)) return true;
   const pinned = s.made.inputs;
   if (pinned && 'money' in pinned && money !== undefined && (pinned.money ?? null) !== moneyKey(money)) return true;
   // The best path on file when it was written (v1.5, v01's learning): a route resting on a path W3

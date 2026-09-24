@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { addUpdateAction } from '@/app/targets/actions';
 import { READS, READ_LABEL, type Read } from '@/modules/meetings/client';
 import {
@@ -24,7 +24,7 @@ const day = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en
  * for now), and each suggestion fills a field and shows the words it rests on. A field the person
  * sets by hand stops following the words. Nothing happens until Save, which waits for the server.
  */
-export function UpdateBox({ pursuitId, status, today }: { pursuitId: string; status: PursuitStatus; today: string }) {
+export function UpdateBox({ pursuitId, status, today, glyph }: { pursuitId: string; status: PursuitStatus; today: string; glyph?: ReactNode }) {
   const [body, setBody] = useState('');
   const [key, setKey] = useState(newKey);
   const [pending, setPending] = useState(false);
@@ -81,7 +81,7 @@ export function UpdateBox({ pursuitId, status, today }: { pursuitId: string; sta
         if (r.ok) { setBody(''); setPick({}); setKey(newKey()); }
       }}
     >
-      <Glyph name="update" title="An update from the team" />
+      {glyph ?? <Glyph name="update" title="An update from the team" />}
       <div className="anote">
         <input type="hidden" name="pursuitId" value={pursuitId} />
         <input type="hidden" name="key" value={key} />

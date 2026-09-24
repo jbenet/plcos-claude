@@ -12,8 +12,7 @@ import { refOf, type RungRecord } from '@/lib/reconcile';
 import {
   RUNG_LABEL, STATUS_LABEL, rungIndex, type LadderEvent, type LadderRung, type PursuitStatus, type PursuitUpdate,
 } from '@/modules/strategy';
-import { TouchpointForm } from './TouchpointForm';
-import { UpdateBox } from './UpdateBox';
+import { EntryBox } from './EntryBox';
 
 /** A status change from the audit log (N61): what it was, what it became, who, and why. */
 export interface StatusEvent {
@@ -491,7 +490,7 @@ export function Timeline(props: {
           </div>
         )}
         <div className="timeline">
-          <UpdateBox pursuitId={props.pursuitId} status={props.status} today={props.today} />
+          <EntryBox pursuitId={props.pursuitId} entityId={props.entityId} vehicleId={props.vehicleId} vehicleName={props.vehicleName} status={props.status} today={props.today} />
           {items.length === 0 && <p className="muted" style={{ marginTop: 8 }}>Nothing on record yet: no touchpoint, and no note in Affinity.</p>}
           {items.slice(0, SHOWN).map(row)}
           {items.length > SHOWN && (
@@ -514,10 +513,6 @@ export function Timeline(props: {
             {[...key.values()].map((m) => <span key={m.title}><Glyph name={m.name} title={m.title} tone={m.tone} />{m.title}</span>)}
           </div>
         )}
-        <details className="more" style={{ marginTop: 8 }}>
-          <summary>Log a touchpoint</summary>
-          <TouchpointForm pursuitId={props.pursuitId} entityId={props.entityId} vehicleId={props.vehicleId} vehicleName={props.vehicleName} />
-        </details>
       </div>
       <p className="cover">
         <b>What this covers:</b> touchpoints logged here, and those Affinity has — each list

@@ -109,6 +109,25 @@ export async function notesFor(entityId: string, kind?: string): Promise<Note[]>
   return rows.map(toNote);
 }
 
+/**
+ * Context or a correction from the team about an LP (issue 0016, real): kept as research on them,
+ * with who wrote it and when. The strategy workflow reads it above the research and the notes'
+ * readings, and a strategy written before it is due a re-think (lib/enrich/strategy.ts, isStale).
+ */
+export async function addTeamContext(entityId: string, authorId: string, body: string, data: Record<string, unknown> = {}): Promise<Note> {
+  const text = body.trim();
+  if (!text) throw new Error('Nothing to add yet: write the context or the correction first.');
+  if (text.length > 4000) throw new Error('That is longer than 4,000 characters; split it in two.');
+  const db = await getDb();
+  const row = await db.one<{ note_id: string }>(
+    `insert into research.note (entity_id, author_id, kind, body, data) values ($1, $2, 'context', $3, $4) returning note_id`,
+    [entityId, authorId, text, JSON.stringify(data)],
+  );
+  const note = (await notesFor(entityId, 'context')).find((n) => n.noteId === row?.note_id);
+  if (!note) throw new Error('The context was not saved.');
+  return note;
+}
+
 export async function noteKindCounts(): Promise<Array<{ kind: string; n: number }>> {
   const db = await getDb();
   const rows = await db.query<{ kind: string; n: string }>(

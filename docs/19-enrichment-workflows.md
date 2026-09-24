@@ -810,6 +810,11 @@ criteria and a seventh, the last word):
   A firm-level lead is stale when a colleague's finding is newer than it: a filing on one colleague's
   record can change the firm's ask; and a colleague revised first can be ahead of its lead (one call
   read as one, a reply answered first), which a re-pin alone would leave contradicting it.
+- **The team's context comes first** (issue 0016): `candidates.jsonl` carries `context`, what the team
+  wrote on an LP's page to add to or correct what we know, newest first. It outranks the research
+  and the notes' readings; where it contradicts a finding, the strategy follows the team and says so.
+  A strategy written before the newest context is stale (`isStale`), so the next revision batch
+  re-thinks it.
 - **A park carries a date to look again** (the critic's fourth round, on the bulk): "park him until
   the search pass" is a park for good if the pass never runs. `next.lookAgain` holds the date; a gate
   counts a park without one, and `scripts/enrich-look-again.ts` sets it by rule where missing (the

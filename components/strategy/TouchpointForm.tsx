@@ -10,7 +10,7 @@ import {
  * Log a meeting, a call, an email, a research pass (N51). Their read goes with the touchpoint,
  * by whoever was there — the latest one is what the pipeline shows, with its date.
  */
-export function TouchpointForm(props: { pursuitId: string; entityId: string; vehicleId: string; vehicleName: string }) {
+export function TouchpointForm(props: { pursuitId: string; entityId: string; vehicleId: string; vehicleName: string; textFirst?: boolean }) {
   const [channel, setChannel] = useState<Channel>('meeting');
   const [state, setState] = useState<{ error?: string; ok?: boolean } | null>(null);
   const [pending, setPending] = useState(false);
@@ -33,6 +33,17 @@ export function TouchpointForm(props: { pursuitId: string; entityId: string; veh
       <input type="hidden" name="entityId" value={props.entityId} />
       <input type="hidden" name="vehicleId" value={props.vehicleId} />
       <input type="hidden" name="channel" value={channel} />
+      {/* In the timeline's first row (issue 0015) the words come first, in a larger box, and the
+          structure below them — as easy as an update, with the fields when they're wanted. */}
+      {props.textFirst && (
+        <textarea
+          name="summary"
+          rows={3}
+          autoFocus
+          aria-label="What happened"
+          placeholder={channel === 'research' ? 'What was looked at, over what dates' : 'What happened: walked through the fund terms; they asked about reporting…'}
+        />
+      )}
       <div className="choices" role="radiogroup" aria-label="Kind">
         {CHANNELS.map((c) => (
           <button key={c} type="button" role="radio" aria-checked={channel === c} className={channel === c ? 'on' : ''} onClick={() => setChannel(c)}>
@@ -61,10 +72,12 @@ export function TouchpointForm(props: { pursuitId: string; entityId: string; veh
           </select>
         </label>
       </div>
-      <label className="field">
-        <span className="lbl">{channel === 'research' ? 'What was looked at, over what dates' : 'What happened (optional)'}</span>
-        <input name="summary" placeholder={channel === 'research' ? 'Their 13F filings 2023–26, and the foundation’s annual report' : 'Walked through the fund terms; they asked about reporting'} />
-      </label>
+      {!props.textFirst && (
+        <label className="field">
+          <span className="lbl">{channel === 'research' ? 'What was looked at, over what dates' : 'What happened (optional)'}</span>
+          <input name="summary" placeholder={channel === 'research' ? 'Their 13F filings 2023–26, and the foundation’s annual report' : 'Walked through the fund terms; they asked about reporting'} />
+        </label>
+      )}
       {channel !== 'research' && (
         <label className="field">
           <span className="lbl">Their read, if you were there</span>

@@ -1,7 +1,7 @@
 export type { Claim, Confidence, DocStrength, Note, Provenance, SourceDoc } from './types';
 export { CLAIM_LABEL, claimLabel } from './types';
 export {
-  claimCounts, claimsFor, corpusCoverage, getSourceDoc, listSourceDocs, noteKindCounts,
+  addTeamContext, claimCounts, claimsFor, corpusCoverage, getSourceDoc, listSourceDocs, noteKindCounts,
   notesFor, snapshotCount, unverifiedCount, weaklySupportedCount,
 } from './repo';
 export type {

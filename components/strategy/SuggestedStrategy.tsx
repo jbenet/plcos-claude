@@ -12,7 +12,11 @@ import { decideSuggestionAction } from '@/app/targets/actions';
 const LEVEL: Record<string, string> = { high: 'High', medium: 'Medium', low: 'Low', unknown: 'Not known' };
 const VERDICT: Record<string, string> = { strong: 'Strong fit', good: 'Good fit', possible: 'Possible', weak: 'Weak fit', unknown: 'Not known' };
 
-export async function SuggestedStrategy({ pursuitId }: { pursuitId: string }) {
+export async function SuggestedStrategy({ pursuitId, context = [] }: {
+  pursuitId: string;
+  /** The team's context on this LP (issue 0016), newest first: what is newer than the strategy is shown. */
+  context?: Array<{ by: string | null; at: Date; body: string }>;
+}) {
   const all = await suggestionsFor(pursuitId);
   const s = all[0];
   if (!s) return null;
@@ -27,6 +31,17 @@ export async function SuggestedStrategy({ pursuitId }: { pursuitId: string }) {
         </span>
       </div>
       <div className="cbody">
+        {(() => {
+          // Written before the team's newest context (issue 0016): say so, with the words, and that
+          // it is due a re-think — the strategy workflow's next pass reads the context first.
+          const newer = context.filter((c) => c.at.getTime() > s.madeAt.getTime());
+          if (!newer.length) return null;
+          return (
+            <div className="ss-newctx">
+              <b>New context since this was written.</b> {newer.length === 1 ? 'One entry' : `${newer.length} entries`} from the team, the latest {shortDate(newer[0].at)}{newer[0].by ? ` by ${newer[0].by}` : ''}: &ldquo;{newer[0].body.length > 180 ? `${newer[0].body.slice(0, 180)}…` : newer[0].body}&rdquo; This strategy is due a re-think; the next pass reads the context first.
+            </div>
+          );
+        })()}
         <p className="ss-angle"><b>Why they&rsquo;d care.</b> {st.angle}</p>
         <div className="fact"><span>Next</span><span><b>{st.next.what}</b> — {st.next.who}{st.next.when ? `, ${st.next.when}` : ''}{st.next.material ? <span className="muted"> · with {st.next.material}</span> : null}{st.next.lookAgain ? <span className="muted"> · parked: look again {st.next.lookAgain}</span> : null}</span></div>
         <div className="fact"><span>Way in</span><span>{st.route ? <><span className={`tier t${st.route.tier}`}>{st.route.tier}</span> {st.route.via} <span className="muted">— {st.route.why}</span></> : <span className="muted">No path found in what was read: a direct approach, or find a connector first.</span>}</span></div>

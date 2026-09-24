@@ -1939,6 +1939,18 @@ async function main() {
       wrong.length === 0, wrong.length ? `wrong for: ${wrong.join('; ')}` : `${cases.length} cases read right`);
   }
 
+  // Context from the team (issue 0016, real): a strategy written before the newest context is due a
+  // re-think; one written after it is not; with no context, nothing changes.
+  {
+    const { isStale } = await import('../lib/enrich/strategy');
+    const s = { made: { at: '2026-09-24T10:00:00Z', by: 'claude', workflow: 'W5', version: 1.6 } } as never;
+    const newer = isStale(s, null, undefined, undefined, '2026-09-24T13:40:00.123Z');
+    const older = isStale(s, null, undefined, undefined, '2026-09-24T09:59:59.999Z');
+    const none = isStale(s, null, undefined, undefined, null);
+    check('A strategy written before the team’s newest context is due a re-think; one written after it, or with none, is not',
+      newer && !older && !none, `context after it: ${newer}; context before it: ${older}; no context: ${none}`);
+  }
+
   // The default theme is green (issue 0010, real): the page is served with data-theme="green", the
   // boot script takes it away only for a stored choice of clay, and the picker sets what it shows.
   {

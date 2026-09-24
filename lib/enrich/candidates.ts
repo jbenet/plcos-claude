@@ -64,6 +64,12 @@ export interface Candidate extends ResearchIdentity {
   /** Our notes about them, as read (N55): the summaries, dated, health detail already redacted. */
   notes: Array<{ on: string; summary: string | null; read: string | null }>;
   /**
+   * Context or corrections from the team, newest first (issue 0016): their own words about this LP,
+   * which the strategy workflow reads above the research and the notes' readings. `at` is the full
+   * time, so a strategy written before it is stale (isStale).
+   */
+  context: Array<{ at: string; by: string | null; text: string }>;
+  /**
    * Do-not-approach instructions on file (rule 8), list marks included: a blanket one rules them out
    * of any plan, one through a connector rules out that route. The instruction's words stay in the
    * app; the plan needs only its shape.
@@ -126,6 +132,11 @@ export async function researchSet(): Promise<Candidate[]> {
     touchpointSummaries(all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }))),
   ]);
   const readings = await readingsFor(ids);
+  const context = await db.query<{ entity_id: string; at: Date | string; by: string | null; body: string }>(
+    `select n.entity_id::text, n.created_at as at, u.name as by, n.body
+       from research.note n left join platform.app_user u on u.id = n.author_id
+      where n.kind = 'context' and n.entity_id = any($1::uuid[])
+      order by n.created_at desc`, [ids]);
   const restrictions = (await listRestrictions({ includeListMarks: true })).filter((r) => byEntity.has(r.entityId));
   const pairs = all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
   const [touches, tracks] = await Promise.all([touchpointsByPair(pairs), closeStates(pairs)]);
@@ -206,6 +217,8 @@ export async function researchSet(): Promise<Candidate[]> {
         .map((r) => ({ on: r.on.toISOString().slice(0, 10), summary: r.summary, read: r.read })),
       restrictions: restrictions.filter((r) => r.entityId === ent.entity_id)
         .map((r) => ({ scope: r.scope, connector: r.connectorName, channel: r.channel })),
+      context: context.filter((c) => c.entity_id === ent.entity_id)
+        .map((c) => ({ at: new Date(c.at).toISOString(), by: c.by, text: c.body })),
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
   const sentOn = new Map<string, number>();

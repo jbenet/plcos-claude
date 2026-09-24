@@ -92,7 +92,7 @@ async function main() {
   const madeAt = new Map<string, string>();
   const gateCount: Record<string, number> = {};
   const candsByKey = new Map((await readFile(join(process.cwd(), config.data.root, 'enrich', 'candidates.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
-    .map((l) => JSON.parse(l) as { key: string; domains: string[]; location: string | null; contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: { track: string; state: string; amount: number } | null }).map((c) => [c.key, c]));
+    .map((l) => JSON.parse(l) as { key: string; domains: string[]; location: string | null; contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: { track: string; state: string; amount: number } | null; context?: Array<{ at: string }> }).map((c) => [c.key, c]));
   const best = new Map<string, 'A' | 'B' | 'C' | 'D'>();
   for (const l of (await readFile(join(process.cwd(), config.data.root, 'enrich', 'connections.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)) {
     const p = JSON.parse(l) as Path;
@@ -138,7 +138,7 @@ async function main() {
     if ((x as Strategy).made?.at) madeAt.set(f.replace(/\.json$/, ''), (x as Strategy).made.at);
     const key = f.replace(/\.json$/, '');
     const cand = candsByKey.get(key);
-    if ((x as Strategy).made && isStale(x as Strategy, found.get(key), cand ? cand.money : undefined, best.get(key) ?? null)) stale++;
+    if ((x as Strategy).made && isStale(x as Strategy, found.get(key), cand ? cand.money : undefined, best.get(key) ?? null, cand?.context?.[0]?.at ?? null)) stale++;
     // A firm-level strategy repeats its lead's ask and dates (s13): stale once the lead is rewritten.
     const lead = (x as Strategy).made?.inputs?.lead;
     if (lead) leadPins.push({ key, lead });

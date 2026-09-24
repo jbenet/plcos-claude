@@ -120,7 +120,7 @@ async function main() {
     if (mode === 'w1') return !f || (withSearch && pagesOnly(f));
     const resolved = f && (f.identity.match === 'confirmed' || f.identity.match === 'probable');
     const s = strategies.get(c.key);
-    if (s) return isStale(s, f, c.money, best.get(c.key) ?? null) || (revise && flagged(c));
+    if (s) return isStale(s, f, c.money, best.get(c.key) ?? null, c.context?.[0]?.at ?? null) || (revise && flagged(c));
     // Discussing or committed: a strategy from our records even without a resolved finding — a
     // firm's lead can be one of them (v03's learning).
     const engaged = ['discussing', 'committed'].includes(c.pursuits[0]?.status ?? '');

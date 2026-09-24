@@ -3,7 +3,8 @@ import { conditionsFor, listCycles, spvRooms } from '@/modules/close';
 import { listAsks } from '@/modules/coordination';
 import { listOpenTickets } from '@/modules/governance';
 import { listFunders } from '@/modules/grants';
-import { listMeetings, listQuestions } from '@/modules/meetings';
+import { listMeetings, listQuestions, raiseWindows, touchpointsByPair } from '@/modules/meetings';
+import { listPursuits } from '@/modules/strategy';
 import { listAccreditation } from '@/modules/compliance';
 
 /**
@@ -61,6 +62,27 @@ export interface Mark {
 }
 
 const day = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+
+/**
+ * A vehicle's meetings and calls, as its LPs' pages count them (issue 0017, real): Affinity records
+ * most meetings with no vehicle, so a vehicle's calendar that kept only the ones tied to it showed
+ * none. N59's rule places the rest — inside the raise's window and read as about it — the same rule
+ * the pipeline and every LP page use, so the calendar and the pages cannot disagree. A meeting on
+ * a firm's record, shared by colleagues, is one meeting.
+ */
+async function raiseMeetings(vehicleName: string): Promise<Array<{ id: string; who: string; kind: string | null; heldOn: Date | null; scheduledFor: Date | null }>> {
+  const w = [...(await raiseWindows()).values()].find((x) => x.name === vehicleName);
+  if (!w) return [];
+  const pairs = (await listPursuits(w.vehicleId)).map((p) => ({ entityId: p.entityId, vehicleId: w.vehicleId }));
+  const seen = new Map<string, { id: string; who: string; kind: string | null; heldOn: Date | null; scheduledFor: Date | null }>();
+  for (const touches of (await touchpointsByPair(pairs)).values()) {
+    for (const t of touches) {
+      if (t.channel !== 'meeting' && t.channel !== 'call') continue;
+      if (!seen.has(t.touchpointId)) seen.set(t.touchpointId, { id: t.touchpointId, who: t.entityName, kind: t.kind, heldOn: t.on, scheduledFor: t.scheduledFor });
+    }
+  }
+  return [...seen.values()];
+}
 
 export async function timeline(vehicleName: string | null, now = new Date()): Promise<Mark[]> {
   const [periods, cycles, rooms, asks, tickets, meetings, questions, accreditation, funders] =
@@ -144,6 +166,21 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
       from: day(when), to: day(when), vehicleName: m.vehicleName,
       alert: false, past: Boolean(m.heldOn), href: '/meetings',
     });
+  }
+  // One vehicle: the meetings its LPs' pages count for its raise, beside the ones tied to it above.
+  if (vehicleName) {
+    const tied = new Set(marks.map((m) => m.id));
+    for (const m of await raiseMeetings(vehicleName)) {
+      const when = m.heldOn ?? m.scheduledFor;
+      if (!when || tied.has(`meet:${m.id}`)) continue;
+      push({
+        id: `meet:${m.id}`, lane: 'meetings', kind: 'point',
+        label: `${m.who} — ${(m.kind ?? 'meeting').replace(/_/g, ' ')}`,
+        detail: m.heldOn ? 'Held; counted for this raise by its window and what it is about (N59).' : 'Scheduled. An intention, not a fact.',
+        from: day(when), to: day(when), vehicleName,
+        alert: false, past: Boolean(m.heldOn), href: '/meetings',
+      });
+    }
   }
 
   for (const t of tickets) {

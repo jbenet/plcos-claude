@@ -34,6 +34,7 @@ import { onFile } from '@/lib/reconcile';
 import { countContact } from '@/components/entity/ContactHistory';
 import { PublicProfile } from '@/components/entity/PublicProfile';
 import { SuggestedStrategy } from '@/components/strategy/SuggestedStrategy';
+import { AddContext } from '@/components/strategy/AddContext';
 import { BeforeOutreach } from '@/components/strategy/BeforeOutreach';
 import { findOpenTicket } from '@/modules/governance';
 
@@ -332,7 +333,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
           />
 
           <BeforeOutreach entityId={pursuit.entityId} />
-          <SuggestedStrategy pursuitId={pursuit.pursuitId} />
+          <SuggestedStrategy pursuitId={pursuit.pursuitId} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />
           <PublicProfile entityId={pursuit.entityId} />
 
           <div className="card">
@@ -433,6 +434,13 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
         </div>
 
         <div>
+          {/* Context or a correction from the team (issue 0016): research on this LP, read first by the strategy workflow. */}
+          <AddContext
+            pursuitId={pursuit.pursuitId}
+            entityId={pursuit.entityId}
+            vehicleId={pursuit.vehicleId}
+            notes={notes.filter((n) => n.kind === 'context').map((n) => ({ id: n.noteId, by: n.author, on: shortDate(n.createdAt), body: n.body }))}
+          />
           <div className="card">
             <div className="chead">
               <h2>What we know</h2>

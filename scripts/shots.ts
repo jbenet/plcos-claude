@@ -212,6 +212,36 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N75: [
+    {
+      name: '01-update-or-touchpoint',
+      path: '/all/pipeline',
+      prepare: async (page) => {
+        await openLp(page, 'Michael Okonjo');
+        await page.getByRole('radio', { name: /touchpoint/i }).first().click();
+        await page.locator('.entrytouch').first().evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -160));
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '02-add-context',
+      path: '/all/pipeline',
+      prepare: async (page) => {
+        await openLp(page, 'Michael Okonjo');
+        // Fictional, like everything on the demo: one entry, added once.
+        if (!(await page.getByText(/moved the office.s venture allocation/).count())) {
+          await page.getByLabel('Context or a correction').fill('He moved the office’s venture allocation to a new CIO in August: ask her, not him, about fund commitments.');
+          await page.getByRole('button', { name: 'Add it' }).click();
+          await page.getByText(/moved the office.s venture allocation/).first().waitFor({ timeout: 30_000 });
+        }
+        await page.locator('.addcontext').first().evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -90));
+        await page.waitForTimeout(300);
+      },
+    },
+    { name: '03-the-calendar', path: '/neurotech/calendar' },
+  ],
   N74: [
     {
       name: '01-the-org-leads',

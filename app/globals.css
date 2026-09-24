@@ -1861,3 +1861,22 @@ a.vstat:hover{border-color:var(--accent-line);background:var(--accent-wash)}
 .h1second{color:var(--muted);font-size:14px;margin:-2px 0 6px}
 .h1second a{color:inherit}
 .h1second a:hover{color:var(--ink)}
+/* The timeline's first row chooses an update or a touchpoint (issue 0015): the chosen icon is
+   darker; the other waits beside it. */
+.entrymode{display:flex;flex-direction:column;gap:4px}
+.entrymode button{all:unset;cursor:pointer;opacity:.4;border-radius:50%;line-height:0}
+.entrymode button:hover{opacity:.75}
+.entrymode button.on{opacity:1}
+.entrymode button:focus-visible{outline:2px solid var(--accent-halo)}
+.entrytouch textarea{width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;line-height:1.5;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);resize:vertical;min-height:64px;margin-bottom:8px}
+.entrytouch textarea:focus{outline:2px solid var(--accent-halo);border-color:var(--accent-line)}
+/* Context from the team (issue 0016). */
+.addcontext textarea{width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;line-height:1.5;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);resize:vertical}
+.addcontext textarea:focus{outline:2px solid var(--accent-halo);border-color:var(--accent-line)}
+.ctxlist{margin-top:12px;border-top:1px solid var(--hair)}
+.ctx{padding:8px 0;border-bottom:1px solid var(--hair)}
+.ctx:last-child{border-bottom:0}
+.ctxmeta{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.ctxbody{font-size:13px;margin-top:3px;white-space:pre-wrap}
+.ss-newctx{margin:0 0 10px;padding:9px 11px;border:1px solid var(--accent-line);background:var(--accent-wash);border-radius:7px;font-size:12.5px}
+
