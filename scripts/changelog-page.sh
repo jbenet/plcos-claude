@@ -23,4 +23,8 @@ while IFS= read -r f; do
 done < <(find "$SRC" -name '*.webp' | sort)
 
 npx tsx scripts/changelog-html.ts "$OUT/changelog.html"
-echo "shots · $count images in $OUT/shots"
+# A byte-identical shot is referenced through its twin, so its own copy is not published.
+dupes=0
+while IFS= read -r f; do rm -f "$f"; dupes=$((dupes + 1)); done < <(
+  cd "$OUT/shots" && find . -name '*.webp' -exec shasum {} + | sort -k2 | awk 'seen[$1]++ { print $2 }' | sed "s#^\./#$OUT/shots/#")
+echo "shots · $((count - dupes)) images in $OUT/shots ($dupes byte-identical, published once)"

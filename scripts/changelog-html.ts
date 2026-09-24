@@ -8,17 +8,39 @@ import { config } from '../config/deployment';
  *
  *   npx tsx scripts/changelog-html.ts <out.html>
  */
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { groupChangelog, parseInline, parseMarkdown, type Block } from '../lib/markdown';
 
 const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+/**
+ * Byte-identical screenshots are published once: a duplicate points at its twin (the first in
+ * path order). The published page has a file limit, and two shots saying the same thing twice
+ * spent it for nothing.
+ */
+const twins = new Map<string, string>();
+function findTwins(dir: string) {
+  const byHash = new Map<string, string>();
+  const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : e.name.endsWith('.webp') ? [join(d, e.name)] : []));
+  for (const f of walk(dir).sort()) {
+    const h = createHash('sha1').update(readFileSync(f)).digest('hex');
+    const rel = relative(dir, f);
+    const first = byHash.get(h);
+    if (first) twins.set(rel, first); else byHash.set(h, rel);
+  }
+}
+
 const imageSrc = (href: string): string => {
   const marker = 'docs/changelog/shots/';
   const at = href.indexOf(marker);
-  return at === -1 ? href : `shots/${href.slice(at + marker.length)}`;
+  if (at === -1) return href;
+  const rel = href.slice(at + marker.length);
+  return `shots/${twins.get(rel) ?? rel}`;
 };
 
 function inline(src: string): string {
@@ -78,6 +100,7 @@ function render(block: Block): string {
 }
 
 async function main() {
+  findTwins(join(process.cwd(), 'docs', 'changelog', 'shots'));
   const out = process.argv[2] ?? 'changelog.html';
   const src = await readFile(join(process.cwd(), 'CHANGELOG.md'), 'utf8');
   const doc = groupChangelog(parseMarkdown(src));
