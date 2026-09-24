@@ -20,7 +20,12 @@ export interface Strategy {
    * their inputs): the finding's `researched.at`, or null when there was none. A strategy whose LP
    * has a newer finding is stale, and the checker says so.
    */
-  made: { at: string; by: string; workflow: 'W5'; version: number; inputs?: { finding: string | null; money?: string | null; bestPath?: 'A' | 'B' | 'C' | 'D' | null } };
+  made: {
+    at: string; by: string; workflow: 'W5'; version: number;
+    inputs?: { finding: string | null; money?: string | null; bestPath?: 'A' | 'B' | 'C' | 'D' | null; lead?: { key: string; at: string } | null };
+    /** Changes made by rule after it was written — each traceable to the rule that made it. */
+    revised?: Array<{ at: string; by: string; rule: string }>;
+  };
   fit: Record<string, { verdict: 'strong' | 'good' | 'possible' | 'weak' | 'unknown'; why: string; gates?: Array<{ gate: string; answer: 'yes' | 'no' | 'unknown'; basis: string }> }>;
   scores: {
     capacity: { band: string; basis: string };
@@ -34,7 +39,9 @@ export interface Strategy {
   route: { via: string; tier: 'A' | 'B' | 'C' | 'D'; why: string } | null;
   next: { what: string; who: string; when: string; material?: string | null };
   /** `co-invest` (W5 v1.3): a fund in our field that backs our portfolio companies — a co-investor, not an LP. */
-  ask: { vehicle: string; shape: 'fund commitment' | 'SPV' | 're-up or upsize' | 'intro to others' | 'advice' | 'verify first' | 'firm-level ask' | 'co-invest' | 'none yet'; range?: string | null };
+  ask: { vehicle: string; shape: 'fund commitment' | 'SPV' | 're-up or upsize' | 'intro to others' | 'advice' | 'verify first' | 'firm-level ask' | 'co-invest' | 'none yet'; range?: string | null;
+    /** Who would commit (W5 1.5, s16): the unit at the firm, or "personal" for a partner's own check. */
+    unit?: string | null };
   openQuestions: string[];
   risks: string[];
   list: 'this year' | '2027' | 'not now';
@@ -78,25 +85,36 @@ export function isStale(
  * a route can't be better than the best path W3 found for the LP.
  */
 /** What counts as evidence for a capacity band (1.18): money, assets, a check, a filing. */
-export const CAPACITY_EVIDENCE = /\$\s?\d|\b\d+(\.\d+)?\s?(m|mm|million|b|bn|billion|k)\b|\baum\b|assets|net worth|13f|form d|form 4|990|filing|commit|check size|checks? of|holdings|stake|sold|raised|fund size/i;
+export const CAPACITY_EVIDENCE = /\$\s?\d|\b\d+(\.\d+)?\s?(m|mm|million|b|bn|billion|k)\b|\baum\b|assets|net worth|13f|form d|form 4|990|filing|commit|check size|checks? of|holdings|stake|sold|raised|fund size|shares? (held|owned)|holds [\d,]+ shares/i;
 
 /**
  * Evidence in a band's basis, clause by clause (s08, v04): a match inside a denial ("no LP
  * commitment is on record") is the absence of evidence, and a company's valuation or the size of a
  * round it raised is the company's money, not the person's.
  */
-export function hasCapacityEvidence(basis: string): boolean {
-  return basis.split(/(?<=[.;])\s+|,\s+(?:but|and)\s+/).some((clause) => CAPACITY_EVIDENCE.test(clause)
-    && !/\b(no|not|none|never|without|nothing|unknown|unclear|unconfirmed|unverified|n['’]t)\b/i.test(clause)
-    && !/\b(valuation|valued at|round|raised|series [a-f]|company['’]s)\b/i.test(clause)
+export function hasCapacityEvidence(basis: string, today = new Date()): boolean {
+  // Old evidence is no evidence (s19): a clause whose every year is more than six years back.
+  const stale = (clause: string) => {
+    const years = [...clause.matchAll(/\b(19|20)\d{2}\b/g)].map((m) => Number(m[0]));
+    return years.length > 0 && years.every((y) => y < today.getFullYear() - 6);
+  };
+  return basis.split(/(?<=[.;])\s+|,\s+(?:but|and)\s+/).some((clause) => CAPACITY_EVIDENCE.test(clause) && !stale(clause)
+    && !/\b(no|not|none|never|without|nothing|unknown|unclear|unconfirmed|unverified)\b|n['’]t\b/i.test(clause)
+    && !/\b(valuation|valued at|rounds?|raised|series [a-f]|company['’]s)\b/i.test(clause)
+    // A hypothetical is no evidence (s21): "a personal commitment would be his decision".
+    && !/\b(would|could|might|may)\b/i.test(clause)
     && !/\b(under|less than|below|up to)\s+\$/i.test(clause)
-    // A company's sale price and a GP's fund sizes are not the LP's own money (s11).
-    && !/\b(sold for|sale price|acquired for|acquisition price|funds? of \$|fund size|under management|project value)\b/i.test(clause));
+    // A company's sale price and a GP's fund sizes are not the LP's own money (s11) — but their own
+    // shares sold, on a Form 4, are (s16).
+    && !/\b(sold for|sale price|acquired for|acquisition price|funds? of \$|fund size|under management|project value|offered|offering)\b/i.test(clause)
+    // The size of a fund they back is that fund's money (s24): "an LP in Fund III, €90 million".
+    && !/\b(an? LP in|limited partner in|backed|backs|invested in)\b[^.;]*\bfund\b/i.test(clause)
+    && (!/\b(sale|acquisition|acquired|merger|buyout|to [A-Z][\w&.-]*( [A-Z][\w&.-]*)* for \$)\b/.test(clause) || /\b(form 4|shares|proceeds|stake|holding)\b/i.test(clause)));
 }
 
 export function gates(
-  s: Pick<Strategy, 'list' | 'scores' | 'route'>,
-  c: { contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: unknown } | undefined,
+  s: Pick<Strategy, 'list' | 'scores' | 'route'> & { ask?: Strategy['ask'] },
+  c: { contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: unknown; notes?: Array<{ summary: string | null }> } | undefined,
   finding: { profile?: { investorType?: string; capacity?: { band: string; basis?: string } } } | null | undefined,
   bestTier: 'A' | 'B' | 'C' | 'D' | null,
   today = new Date(),
@@ -112,12 +130,17 @@ export function gates(
   // A manager's assets under management are its clients' money, not the LP's own (v08) — except for
   // a family office's principal or a foundation, whose office's money is theirs to direct.
   const ownsItsAssets = ['fo_principal', 'foundation', 'angel'].includes(finding?.profile?.investorType ?? '');
-  const managersMoney = !ownsItsAssets && /\b(aum|assets under management|manages|manager|under management)\b/i.test(fb?.basis ?? '');
-  const evidenced = Boolean(fb && fb.band !== 'unknown' && hasCapacityEvidence(fb.basis ?? '') && !managersMoney);
+  const managersMoney = !ownsItsAssets && /\b(aum|assets under management|manages|managed|manager|under management|supervises|supervised|advises on|advisory assets|client assets)\b/i.test(fb?.basis ?? '');
+  // Our own notes count too (v09): a family office's stated minimum can sit only in a note.
+  const fromNotes = (c?.notes ?? []).some((n) => n.summary && hasCapacityEvidence(n.summary));
+  const evidenced = Boolean((fb && fb.band !== 'unknown' && hasCapacityEvidence(fb.basis ?? '') && !managersMoney) || fromNotes);
   const band = s.scores?.capacity?.band ?? 'unknown';
   if (!/unknown|not known/i.test(band) && !evidenced && !c.money) out.push('capacity ahead of the evidence');
   const rank = { A: 0, B: 1, C: 2, D: 3 } as const;
   if (s.route && (bestTier === null || rank[s.route.tier] < rank[bestTier])) out.push('route better than the best path on file');
+  // A range on the ask with no capacity behind it gets round the capacity gate (the critic, round two).
+  // An amount, not any digit: a rule number or "Fund 3" in the range is no size (s15).
+  if (s.ask?.range && /\$\s?\d|\b\d+(\.\d+)?\s?(k|m|mm|million|b|bn|billion)\b/i.test(s.ask.range) && /unknown|not known/i.test(band) && !c.money) out.push('ask sized without capacity');
   return out;
 }
 
@@ -133,7 +156,8 @@ export function checkStrategy(s: unknown, expectKey?: string): string[] {
   }
   if (!isStr(x.angle)) p.push('no angle');
   if (!x.next || !isStr(x.next.what) || !isStr(x.next.who)) p.push('next needs what and who');
-  if (x.next && /\b(send|email|message|post)\b.*\b(now|automatically)\b/i.test(x.next.what)) p.push('next reads as an automatic send');
+  // The verb beside "now" or "automatically" — not a description ("our email … now redirects", s17).
+  if (x.next && /\b(send|email|message|post)\s+(it|them|this|the \w+)?\s*(now|automatically)\b|\bautomatically\s+(send|email|message|post)/i.test(x.next.what)) p.push('next reads as an automatic send');
   if (!x.ask || !isStr(x.ask.vehicle)) p.push('ask needs a vehicle');
   if (!['this year', '2027', 'not now'].includes(x.list ?? '')) p.push('list must be this year, 2027 or not now');
   if (x.route && !['A', 'B', 'C', 'D'].includes(x.route.tier)) p.push('route tier must be A–D');

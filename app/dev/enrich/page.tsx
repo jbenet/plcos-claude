@@ -18,6 +18,7 @@ const FIRSTS: Array<{ id: NonNullable<Triage['first']>; label: string; means: st
   { id: 'name an owner', label: 'Name an owner', means: 'a way in exists, and nobody on the team owns the pursuit' },
   { id: 'check sent mail', label: 'Check sent mail', means: 'the stage on file claims contact that no touch on record shows' },
   { id: 'first personal note', label: 'A first personal note', means: 'our last word was a mailing, sent the same day to ten or more' },
+  { id: 'reply we owe', label: 'A reply we owe', means: 'Discussing or Committed, and they wrote last, with nothing from us since' },
 ];
 
 export const dynamic = 'force-dynamic';

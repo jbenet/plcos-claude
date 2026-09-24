@@ -20,7 +20,7 @@
  * Writes batches/<prefix>NN.jsonl (w1: identity lines from research-set.jsonl) or .txt (w5: keys),
  * and prints counts only.
  */
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config/deployment';
 import type { Candidate } from '../lib/enrich/candidates';
@@ -59,10 +59,16 @@ async function main() {
   // Keys already in a batch file for this mode and not yet done are left to that batch; once done
   // (a finding, a strategy), they are eligible again — for a search pass, or a stale strategy.
   const batched = new Set<string>();
+  /** w5: keys in a batch of either mode (new or revise) not yet written since the batch was cut (v09). */
+  const openW5 = new Set<string>();
   for (const f of await readdir(join(dir, 'batches')).catch(() => [])) {
     const text = await readFile(join(dir, 'batches', f), 'utf8');
     if (mode === 'w1' && f.endsWith('.jsonl')) for (const l of lines(text)) batched.add(JSON.parse(l).key);
     if (mode === 'w5' && /^s\d+\.txt$/.test(f)) for (const k of lines(text)) batched.add(k.trim());
+    if (mode === 'w5' && /^[sv]\d+\.txt$/.test(f)) {
+      const cut = (await stat(join(dir, 'batches', f))).mtime.getTime();
+      for (const k of lines(text).map((x) => x.trim())) openW5.add(`${k} ${cut}`);
+    }
   }
 
   // Firms: union-find over the keys that share a domain or an organization.
@@ -100,8 +106,16 @@ async function main() {
     const s = strategies.get(c.key);
     return Boolean(s && (s.made.version < 1.3 || nextOverLimit(s) || gates(s, c, findings.get(c.key), best.get(c.key) ?? null).length));
   };
+  // Written since its batch was cut, or never batched: free. Otherwise its open batch keeps it.
+  const inOpenBatch = (key: string) => [...openW5].some((x) => {
+    const [k, cut] = x.split(' ');
+    if (k !== key) return false;
+    const s = strategies.get(key);
+    return !s || new Date(s.made.at).getTime() < Number(cut);
+  });
   let wanted = cands.filter((c) => {
     const f = findings.get(c.key);
+    if (mode === 'w5' && inOpenBatch(c.key)) return false;
     if (batched.has(c.key) && (mode === 'w1' ? !f : !strategies.has(c.key))) return false;
     if (mode === 'w1') return !f || (withSearch && pagesOnly(f));
     const resolved = f && (f.identity.match === 'confirmed' || f.identity.match === 'probable');

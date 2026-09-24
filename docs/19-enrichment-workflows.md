@@ -720,11 +720,24 @@ Never an inferred health reason, never pressure, never a claim the record doesn'
 - **"Raising now," one definition for every strategy and the synthesis:** a Form D, or an amendment,
   with money unsold and dated in the last twelve months, and no later word that it closed. Older
   with nothing newer is a question to ask, never a raise.
+- **`ask.unit` names who would commit** — the unit at a firm, or "personal" for a partner's own
+  check — so "one firm, one ask, made to the unit that commits" stays machine-readable.
+- **An ask carries no range while capacity is unknown** (the critic's round two): a range with no
+  evidence of the LP's own money behind it gets round the capacity gate. The checker counts them;
+  thirty were unsized by rule, each noting the rule in `made.revised`, with sizing an open question.
+- **A firm-level strategy pins its lead:** `made.inputs.lead` is `{ key, at }` — the lead strategy's
+  key and its `made.at` — and the checker counts those whose lead has been rewritten since.
 - **Re-read the paths just before writing each firm** — `connections.jsonl` is regenerated as
   findings land, and a pinned `bestPath` then marks the strategy stale.
 - **An LP outside the US: counsel before any fund material.** What may be sent to, say, a UK
   recipient about a US 506(c) fund, and how a non-US investor is admitted, is a question for
-  counsel. The first note carries no fund terms, and the gate is written into the strategy.
+  counsel. The first note carries no fund terms, and the gate is written into the strategy. It
+  covers where the investing entity is registered as well as where the person lives (an insurer
+  based in the US and registered in Bermuda).
+- **A firm's stated scope is not an exclusion, in the next step too:** "focused on direct deals"
+  never becomes "…, not funds" in a one-line step.
+- **A date an LP was added to our list is not an event:** the list was loaded in bulk on a few days;
+  "why are they on the list" is a question for the team, not a date to chase.
 - **A work domain that now redirects** (a renamed firm, a move) may mean our emails never reached
   them: the next step is a first personal note to a current address, not a follow-up.
 - **A firm that says it doesn't invest in funds** (a quoted exclusion in its finding): the fund
@@ -958,8 +971,32 @@ beside it.
   a D tie used as C). They became W5 1.5, and the checker's gates now count what a strategy claims
   beyond the files. Every strategy written before 1.3, or flagged, is being rewritten at 1.5 — firm
   by firm, the committed LPs first.
+- **The critic, round two.** The same six criteria on 25 strategies written at 1.5: 22 A, 3 B, no C or
+  D (round one: 10 A, 12 B, 3 C). Every strategy in both samples held or rose — the C and four Bs
+  became A. What remains: an ask carrying a range while capacity says unknown (now a gate), a firm's
+  or a founder's rule half applied, a record read for a little more than it says. The critic's
+  verdict: a GP can work the set on Monday, and it is mostly internal checks with notes behind them —
+  and one owner carries most of it.
 - **The litmus test.** As outreach, most of the Connecting list is not ready to act on; as a list of
   internal checks, it is. What is ready now: the committed LPs' signatures, the warm lane once each
   has an owner, and the checks. What no workflow here can supply: who from our side was in each
   meeting, what the last message said, the first-close date, and a search pass for the pages-only
   findings.
+
+### Where the loop stood (24 Sep, 08:43 UTC)
+
+- **Research: every LP in the set is read** — 388 of 388, 60 with web search and 328 from page reads
+  alone (owed the search pass); 304 resolved, 78 not found (mostly staff at firms whose sites name
+  only their leaders), 6 ambiguous. The protocol went from amendment 1.5 to 1.25, each batch's
+  learnings becoming the next.
+- **Strategies: one for every resolved LP and every Discussing or Committed one** — 330, all at W5
+  1.5, with no checker problems, no firm asked for money twice, and every input pinned. The critic's
+  two rounds measured the loop: 10 A, 12 B, 3 C before; 22 A, 3 B after.
+- **What the records need before any outreach** (W9's first steps): replies we owe, sent-mail and
+  bounce checks, owners to name, first personal notes instead of follow-ups. The committed LPs'
+  first step is nearly always an internal check: where the signed documents are.
+- **What only a person can do next:** run the search pass when the budget allows (one command); ask
+  counsel the one question that covers every LP placed outside the US; decide what Committed means
+  (a countersignature, or a yes with an amount); settle the owner rule; and say where the Rails
+  conversation lives, since crypto-native LPs keep landing on the Neurotech list.
+

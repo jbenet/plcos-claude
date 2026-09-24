@@ -407,8 +407,12 @@ export function sharedRecords(candidates: Candidate[], findings: Map<string, Fin
     if (lps.length < 2 || lps.length > 8) continue;
     const shown = names.get(n)!;
     const job = (h: Hit) => h.field === 'role' || h.field === 'prior_role' || h.field === 'affiliation' || h.field === 'fund_gp';
+    // A one-word name joins only like with like (s23): two investments in "Nimbus", two seats on its
+    // board — not a former employer and a fund that happen to share the word.
+    const oneWord = !/\s/.test(shown.trim());
     for (const a of hs) for (const b of hs) {
       if (a.key === b.key) continue;
+      if (oneWord && a.field !== b.field) continue;
       const ca = byKey.get(a.key)!, cb = byKey.get(b.key)!;
       if (ca.org && cb.org && norm(ca.org) === norm(cb.org)) continue;
       // A firm that backs a fund, and someone who runs or works at it: the firm is that fund's LP.

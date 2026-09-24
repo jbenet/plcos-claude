@@ -40,9 +40,14 @@ async function get<T>(path: string): Promise<T | null> {
   }
   return null;
 }
+/** Sites many people and teams share: a GitHub link joins no LP to a team (s22). */
+const GENERIC_DOMAINS = /^(github\.com|gitlab\.com|bitbucket\.org|medium\.com|substack\.com|linkedin\.com|twitter\.com|x\.com|notion\.site|notion\.so|linktr\.ee|youtube\.com|facebook\.com|instagram\.com|google\.com|sites\.google\.com|wordpress\.com|wixsite\.com|squarespace\.com|angel\.co|wellfound\.com|crunchbase\.com)$/;
 const domainOf = (url: string | null | undefined) => {
   if (!url) return null;
-  try { return new URL(/^https?:/.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase(); } catch { return null; }
+  try {
+    const host = new URL(/^https?:/.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase();
+    return GENERIC_DOMAINS.test(host) ? null : host;
+  } catch { return null; }
 };
 
 interface TeamRow { uid: string; name: string; website?: string | null; isFund?: boolean; dateFounded?: number | null; shortDescription?: string | null }
@@ -83,7 +88,11 @@ async function main() {
       const fr = research.get(lp.key);
       const orgs = [lp.org, lp.enriched['Current Organization'], ...(lp.enriched['Organizations'] ?? '').split(/;\s*/), fr?.org].filter((o): o is string => Boolean(o && o.trim()));
       const doms = [...lp.domains, ...(fr?.domains ?? [])];
-      const teams = [...new Set([...orgs.map((o) => byKeyT.get(entityKey(o))), ...doms.map((d) => byDomainT.get(d))].filter(Boolean))] as typeof net.teams;
+      // A one-word organization joins a team only when a domain agrees (s17): "Nimbus" matched a
+      // marketing agency of that name. Several words, or the domain itself, are enough.
+      const byName = orgs.filter((o) => /\s/.test(o.trim())).map((o) => byKeyT.get(entityKey(o)));
+      const oneWord = orgs.filter((o) => !/\s/.test(o.trim())).map((o) => byKeyT.get(entityKey(o))).filter((t) => t && t.domain && doms.includes(t.domain));
+      const teams = [...new Set([...byName, ...oneWord, ...doms.map((d) => byDomainT.get(d))].filter(Boolean))] as typeof net.teams;
       const firmOut = [];
       for (const t of teams.slice(0, 3)) {
         const known = (prior.get(lp.key)?.firmTeams ?? []).find((x) => x.name === t.name);
@@ -129,7 +138,7 @@ async function main() {
     const orgs = [lp.org, lp.enriched['Current Organization'], ...(lp.enriched['Organizations'] ?? '').split(/;\s*/)].filter((o): o is string => Boolean(o && o.trim()));
     const orgKeys = new Set(orgs.map(entityKey).filter((k) => k.length >= 4));
     // Their firm, as a network team: by the organization on file or the work domain.
-    const firm = [...new Set([...orgKeys].map((k) => byKey.get(k)).concat(lp.domains.map((d) => byDomain.get(d))).filter(Boolean))] as typeof teams;
+    const firm = [...new Set([...orgs.filter((o) => /\s/.test(o.trim())).map((o) => byKey.get(entityKey(o))), ...lp.domains.map((d) => byDomain.get(d))].filter(Boolean))] as typeof teams;
     const firmOut = [];
     for (const t of firm.slice(0, 3)) {
       const d = await teamDetail(t.uid);

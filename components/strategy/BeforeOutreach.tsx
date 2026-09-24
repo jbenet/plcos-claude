@@ -3,7 +3,7 @@ import type { Triage } from '@/lib/enrich/triage';
 
 /**
  * The check our records point to before anyone writes to this LP (W9, iteration 3, docs/19): name
- * an owner, check sent mail, or a first personal note rather than a follow-up. Mapped in by the
+ * an owner, check sent mail, a first personal note rather than a follow-up, or a reply we owe. Mapped in by the
  * enrichment import from triage.jsonl; it reads our own records only, and it sends nothing.
  */
 const FIRST: Record<NonNullable<Triage['first']>, { title: string; means: string; match: RegExp }> = {
@@ -16,6 +16,11 @@ const FIRST: Record<NonNullable<Triage['first']>, { title: string; means: string
     title: 'Check sent mail',
     means: 'The stage on file claims contact that no touch on record shows. Check what was sent before writing, so we never cross a note we can’t see.',
     match: /stage on file/i,
+  },
+  'reply we owe': {
+    title: 'A reply we owe',
+    means: 'They wrote last, and nothing from us is on record since. Check sent mail — a reply may have gone from an inbox Affinity doesn’t see — then answer.',
+    match: /wrote last/i,
   },
   'first personal note': {
     title: 'A first personal note',

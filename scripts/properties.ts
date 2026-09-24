@@ -1654,7 +1654,7 @@ async function main() {
           const { hasCapacityEvidence } = await import('../lib/enrich/strategy');
           const evidence = ['990-PF assets of $40M (2024)', 'A 13F reporting $1.2B in holdings'];
           const not = ['No LP commitment is on record', 'Company valuation of $2B; founder stake unknown', 'Raised $30M Series B for the company', 'No assets under management and no commitment sizes'];
-          const missed = evidence.filter((b) => !hasCapacityEvidence(b)).length, passed = not.filter(hasCapacityEvidence).length;
+          const missed = evidence.filter((b) => !hasCapacityEvidence(b)).length, passed = not.filter((b) => hasCapacityEvidence(b)).length;
           check('A capacity band rests on evidence: not a denial, not a company’s valuation or round, not a figure called unknown',
             missed === 0 && passed === 0, `evidence missed: ${missed} of ${evidence.length}; non-evidence accepted: ${passed} of ${not.length}`);
         }

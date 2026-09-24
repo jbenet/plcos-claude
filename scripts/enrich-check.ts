@@ -36,7 +36,8 @@ async function main() {
       conf[fa.confidence] = (conf[fa.confidence] ?? 0) + 1;
       if (fa.quote) sourced++;
     }
-    const words = [...(x.facts ?? []).map((fa) => `${fa.value} ${fa.quote ?? ''}`), x.profile?.summary ?? '', ...(x.profile?.interests ?? [])].join(' ');
+    const words = [...(x.facts ?? []).map((fa) => `${fa.value} ${fa.quote ?? ''}`), x.profile?.summary ?? '', ...(x.profile?.interests ?? []),
+      ...(x.profile?.cautions ?? []), x.coverage?.note ?? '', ...(x.coverage?.notFound ?? [])].join(' ');
     if (SPECIAL.test(words)) special.push(x.key);
     const t = x.profile?.investorType ?? 'none';
     types[t] = (types[t] ?? 0) + 1;
@@ -51,7 +52,18 @@ async function main() {
   // W5: the strategies, if any.
   const sdir = join(process.cwd(), config.data.root, 'enrich', 'strategy');
   const sfiles = (await readdir(sdir).catch(() => [])).filter((f) => f.endsWith('.json'));
-  let sbad = 0, stale = 0, long = 0, over = 0;
+  let sbad = 0, stale = 0, long = 0, over = 0, namesOthers = 0;
+  // Another LP named in a strategy, outside its own paths (v12): a tie W3 no longer supports, and
+  // one careless step from telling one LP about another. Their full names, two words or more.
+  const allNames = (await readFile(join(process.cwd(), config.data.root, 'enrich', 'candidates.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
+    .map((l) => JSON.parse(l) as { key: string; name: string }).filter((c) => c.name.trim().split(/\s+/).length >= 2 && c.name.length >= 7);
+  const pathNames = new Map<string, Set<string>>();
+  for (const l of (await readFile(join(process.cwd(), config.data.root, 'enrich', 'connections.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)) {
+    const p = JSON.parse(l) as Path;
+    pathNames.set(p.lp, new Set([...(pathNames.get(p.lp) ?? []), p.other.name]));
+  }
+  const leadPins: Array<{ key: string; lead: { key: string; at: string } }> = [];
+  const madeAt = new Map<string, string>();
   const gateCount: Record<string, number> = {};
   const candsByKey = new Map((await readFile(join(process.cwd(), config.data.root, 'enrich', 'candidates.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
     .map((l) => JSON.parse(l) as { key: string; domains: string[]; contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: { track: string; state: string; amount: number } | null }).map((c) => [c.key, c]));
@@ -70,11 +82,21 @@ async function main() {
     const problems = checkStrategy(x, f.replace(/\.json$/, ''));
     if (problems.length) { sbad++; console.log(`  strategy ${f.slice(0, 8)}: ${problems.join('; ')}`); }
     const s = x as { list?: string; ask?: { shape?: string } };
+    if ((x as Strategy).made?.at) madeAt.set(f.replace(/\.json$/, ''), (x as Strategy).made.at);
     const key = f.replace(/\.json$/, '');
     const cand = candsByKey.get(key);
     if ((x as Strategy).made && isStale(x as Strategy, found.get(key), cand ? cand.money : undefined, best.get(key) ?? null)) stale++;
+    // A firm-level strategy repeats its lead's ask and dates (s13): stale once the lead is rewritten.
+    const lead = (x as Strategy).made?.inputs?.lead;
+    if (lead) leadPins.push({ key, lead });
     if ((x as Strategy).next?.what && nextTooLong(x as Strategy)) long++;
     if ((x as Strategy).next?.what && nextOverLimit(x as Strategy)) over++;
+    {
+      const st = x as Strategy;
+      const text = [st.angle, st.next?.what, ...(st.risks ?? []), ...(st.openQuestions ?? [])].filter(Boolean).join(' ');
+      const own = pathNames.get(key) ?? new Set<string>();
+      if (allNames.some((c) => c.key !== key && text.includes(c.name) && !own.has(c.name) && !(st.route?.via ?? '').includes(c.name))) namesOthers++;
+    }
     if ((x as Strategy).scores) for (const g of gates(x as Strategy, cand, found.get(key), best.get(key) ?? null)) gateCount[g] = (gateCount[g] ?? 0) + 1;
     if (MONEY_SHAPES.includes((x as Strategy).ask?.shape ?? '')) moneyAsk.set(f.replace(/\.json$/, ''), (x as Strategy).ask.shape);
     lists[s.list ?? '?'] = (lists[s.list ?? '?'] ?? 0) + 1;
@@ -91,7 +113,10 @@ async function main() {
     for (const d of c.domains.filter((x) => !/^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|mac|aol|proton|protonmail|live|msn)\./.test(x))) asksAt.set(d, (asksAt.get(d) ?? 0) + 1);
   }
   const doubled = [...asksAt.values()].filter((n) => n > 1).length;
-  if (sfiles.length) console.log(`${sfiles.length} strategies · ${sbad} with problems · ${stale} older than their LP's finding · ${long} with a next step the import cuts at 400 characters (${over} over v1.5's 300) · ${doubled} firms asked for money twice · gates ${JSON.stringify(gateCount)} · lists ${JSON.stringify(lists)} · asks ${JSON.stringify(shapes)}`);
+  const leadMoved = leadPins.filter((x) => madeAt.get(x.lead.key) && madeAt.get(x.lead.key) !== x.lead.at).length;
+  // A lead carries its firm, so a colleague's newer finding makes the lead stale too (s24).
+  const leadsBehind = new Set(leadPins.filter((x) => { const f = found.get(x.key); const at = madeAt.get(x.lead.key); return f && at && f.researched.at > at; }).map((x) => x.lead.key)).size;
+  if (sfiles.length) console.log(`${sfiles.length} strategies · ${sbad} with problems · ${stale} older than their LP's finding · ${long} with a next step the import cuts at 400 characters (${over} over v1.5's 300) · ${doubled} firms asked for money twice · ${leadMoved} firm-level strategies whose lead was rewritten since · ${leadsBehind} leads older than a colleague's finding · ${namesOthers} naming an LP outside their paths · gates ${JSON.stringify(gateCount)} · lists ${JSON.stringify(lists)} · asks ${JSON.stringify(shapes)}`);
   if (bad || sbad) process.exitCode = 1;
 }
 main();

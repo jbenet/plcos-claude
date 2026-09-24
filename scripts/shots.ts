@@ -212,6 +212,18 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N69: [
+    {
+      name: '01-a-reply-we-owe',
+      path: '/all/pipeline',
+      prepare: async (page) => {
+        await openLp(page, 'Rosa Iglesias');
+        await page.getByRole('heading', { name: 'Before any outreach' }).evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -120));
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N68: [
     {
       name: '01-page-reads-only',

@@ -4719,3 +4719,52 @@ each marked when four or more LPs share it.
 starts with a higher limit and polls for changes.
 
 104 of 104 properties hold.
+
+## N69 — 330 strategies; the replies we owe; the critic's second round
+
+**Shipped.** The round of the enrichment loop that finishes the strategies. Every LP in the
+research set that the research resolved, or that is Discussing or Committed, now has a strategy,
+and the replies we owe are on each LP's own page.
+
+| | |
+|---|---|
+| ![A reply we owe](docs/changelog/shots/n69/01-a-reply-we-owe.webp) | **A reply we owe.** When an LP wrote last — a message, not a meeting — and nothing from us is on record since, the LP's page says so under "Before any outreach": check sent mail (a reply may have gone from an inbox Affinity doesn't see), then answer. It covers every status in the set, from Selected to Committed. The path the message opens shows under "Near us" as B: our own record of an interaction, though who received it isn't recorded. |
+
+**330 strategies.** One for every LP the research identified (304), for every Discussing or
+Committed LP it couldn't (written from our records alone, at low confidence), and for four
+Connecting LPs it couldn't: three through their firm's strategy, one because a way in is open now.
+The 58 without one are Connecting or Selected LPs the research couldn't identify.
+
+The checker reports no problems, no strategy older than what it read, no next step the import would
+cut, and no firm asked for money twice. Most are internal checks with a note behind them, and most
+Connecting LPs go on the 2027 list: nothing on record from them in 90 days, no money, no
+one-to-one meeting. That is the evidence gate, working as intended.
+
+**The critic's second round.** The same six criteria as the first round, on 25 strategies written at
+W5 1.5: 22 A and 3 B, against round one's 10 A, 12 B and 3 C. Every strategy in both samples held or
+rose. What it still found became gates: an ask carrying a range while capacity is unknown, and the
+capacity check itself, now tighter. It no longer accepts a denial, a hypothetical, a company's
+valuation or sale price, a fund's size, a manager's client assets, or a figure more than six years
+old. Our own notes count as evidence.
+
+**Triage reads more before it proposes a note.**
+
+- A reply we owe, at any status.
+- A work domain on our record that no longer works: check whether our mailings bounced first.
+- A later note after a mailing: read that one first.
+- A firm whose own words rule out our field.
+- A look-alike warning from the research.
+- The organization the research found, over ours.
+
+**W3 and the Protocol Labs directory.** One-word names join only like with like: two investments in
+a company, never a former employer and a fund that share a word. Code hosts and other shared sites
+never join an LP to a network team. A firm-level strategy pins its lead, and the checker counts a
+lead that is older than a colleague's finding.
+
+**The synthesis** opens with the replies we owe, one question for counsel that covers every LP placed
+outside the US, and conflicts: a competing position in our own field, listed apart from affinity.
+
+**Both dev servers poll for file changes.** The enrichment files grew past what file watching could
+hold, and each server in turn stopped serving pages.
+
+104 of 104 properties hold.

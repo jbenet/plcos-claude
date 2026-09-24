@@ -71,7 +71,7 @@ async function main() {
   const plB = new Set(paths.filter((p) => p.other.type === 'ours' && p.kind !== 'met' && (p.tier === 'A' || p.tier === 'B')).map((p) => p.lp));
   md.push(`- Neuro, health or biotech signal: ${neuro.length} of ${resolved.length}. A tie to Protocol Labs, its network or our portfolio beyond meetings: ${[...plTie].length} LPs — ${plB.size} documented (A or B), the rest clues to check (C or D).`);
   md.push(`- Strategies: ${strategies.length} (${count(strategies, (s) => s.list)['this year'] ?? 0} this year, ${count(strategies, (s) => s.list)['2027'] ?? 0} for 2027, ${count(strategies, (s) => s.list)['not now'] ?? 0} not now). Asks: ${top(shapes).map(([k, v]) => `${k} ${v}`).join(', ')}.`);
-  md.push(`- Triage of the rest (W9): ${top(count(triage, (t) => t.lane)).map(([k, v]) => `${k} ${v}`).join(', ')}.`);
+  md.push(`- Triage of the rest (W9): ${top(count(triage.filter((t) => t.first !== 'reply we owe'), (t) => t.lane)).map(([k, v]) => `${k} ${v}`).join(', ')}.`);
   md.push(`- How the findings were made: ${top(count(findings, (f) => f.researched?.method ?? 'search')).map(([k, v]) => `${k} ${v}`).join(', ')} (a pages-only finding is owed a pass with search).`, '');
 
   md.push('## This year — the best opportunities, by readiness then capacity', '');
@@ -164,6 +164,15 @@ async function main() {
   }
   md.push('');
 
+  // Conflicts (s22): a competing position in our own field is a gate, listed apart from the
+  // affinity signals — a firm's brain-implant stake can be the reason not to write at all.
+  const conflicts = strategies.filter((x) => Object.values(x.fit ?? {}).some((v) => (v.gates ?? []).some((g) => /conflict|compet/i.test(g.gate) && g.answer === 'yes'))
+    || (x.risks ?? []).some((r) => /\bcompet(ing|itor|es)\b[^.]{0,80}\b(portfolio|position|stake|fund)\b/i.test(r)));
+  md.push('## Conflicts — a competing position in our field', '');
+  if (!conflicts.length) md.push('- None found.');
+  for (const x of conflicts) md.push(`- **${x.name}** — ${(x.risks ?? []).find((r) => /compet/i.test(r))?.slice(0, 160) ?? 'a conflict gate in the fit'}`);
+  md.push('');
+
   // W2n: our own network (iteration 3). People in PL's directory under their own name, and firms
   // that are network teams — the "near us" check the pages-only research couldn't run.
   const dirEntries = lines(await readFile(join(dir, 'us', 'pl-directory.jsonl'), 'utf8').catch(() => '')).map((l) => JSON.parse(l) as PlDirectoryEntry);
@@ -185,6 +194,17 @@ async function main() {
     for (const [t, names] of [...byTeam.entries()].sort((a, b) => b[1].length - a[1].length)) md.push(`- ${t}: ${names.join(', ')}`);
   }
   md.push('');
+  // We owe them a reply (s13): Discussing or Committed, and the last word on record is theirs — a
+  // message, not a meeting — with nothing from us since. Triage covers only the cold; this is the warm.
+  const owe = cands.filter((c) => ['discussing', 'committed'].includes(c.pursuits[0]?.status ?? '')
+    && c.contact.lastFromThem && !c.contact.awaitingSince && Boolean(c.contact.lastTouchChannel) && c.contact.lastTouchChannel !== 'meeting' && c.contact.lastTouchChannel !== 'call')
+    .map((c) => ({ c, days: Math.round((Date.now() - new Date(c.contact.lastFromThem!).getTime()) / 86_400_000) }))
+    .sort((a, b) => b.days - a.days);
+  md.push('## We owe them a reply — the last word on record is theirs', '');
+  md.push(`${owe.length} Discussing or Committed LPs wrote last and have had nothing from us since. Check sent mail first — a reply may have gone from an inbox Affinity doesn't see.`, '');
+  for (const { c, days } of owe) md.push(`- **${c.name}** (${c.pursuits[0]?.status}) — they wrote ${days} days ago (${c.contact.lastFromThem}); owner: ${c.pursuits[0]?.owner || 'nobody on the team'}`);
+  md.push('');
+
   // Lapsing soon (v08): a this-year strategy resting on a word from them passes 90 days on a date.
   const now = Date.now();
   const lapsing = strategies.filter((x) => x.list === 'this year').map((x) => ({ x, c: byKey.get(x.key) }))
@@ -248,11 +268,17 @@ async function main() {
     '## Start here', '',
     `1. **Signatures.** ${signable.map(([k, cs]) => `${cs.length} committed LP${cs.length === 1 ? '' : 's'} ${k}`).join('; ') || 'none waiting'} — the quickest money toward the first close (the close gap, below).`,
     `2. **This week, the five most ready:** ${thisYear.slice(0, 5).map((x) => `${x.name} (${x.next.who.split(/[ (,—]/)[0]})`).join(', ')}.`,
-    `3. **Checks before any note:** ${firsts['check sent mail'] ?? 0} to check sent mail, ${firsts['name an owner'] ?? 0} to give an owner, ${firsts['first personal note'] ?? 0} due a first personal note rather than a follow-up.`,
+    `3. **Replies we owe, and checks before any note:** ${owe.length} warm LPs wrote last and wait on us; ${firsts['check sent mail'] ?? 0} to check sent mail, ${firsts['name an owner'] ?? 0} to give an owner, ${firsts['first personal note'] ?? 0} due a first personal note rather than a follow-up.`,
     `4. **Introductions:** ${plans.length} connectors next to ${new Set(plans.flatMap((x) => x.prospects.map((q) => q.key))).size} prospects; ${plans.filter((x) => x.when === 'after they sign').length} ask once their own commitment is signed.`,
     `5. **Research:** ${findings.length} of ${cands.length} read; ${findings.filter((f) => f.researched?.method === 'pages').length} from pages only and owed a search pass; ${firstNotes.length} Connecting or Selected LPs with a neuro or health signal of their own.`,
     '',
   ];
+  // One question to counsel unblocks every LP outside the US (s24): count them where the record or
+  // the research says where they are.
+  const US = /\b(united states|usa|u\.s\.|alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|district of columbia|san francisco|los angeles|boston|chicago|seattle|miami|austin|denver)\b/i;
+  const whereOf = (c: Candidate) => findings.find((f) => f.key === c.key)?.identity.canonical?.location ?? c.location ?? '';
+  const outsideUs = cands.filter((c) => { const w = whereOf(c); return w.trim() && !US.test(w); });
+  start.splice(start.length - 1, 0, `6. **One question to counsel:** ${outsideUs.length} LPs are placed outside the US — what may a first note to them say about a US 506(c) fund, and how is a non-US investor admitted? One answer unblocks all of them.`);
   md.splice(4, 0, ...start);
   await writeFile(join(dir, 'synthesis.md'), md.join('\n') + '\n', 'utf8');
   console.log(`synthesis: ${cands.length} in the set, ${findings.length} researched (${resolved.length} resolved), ${neuro.length} neuro signals, ${plTie.size} with a PL tie, ${strategies.length} strategies (${thisYear.length} this year), ${clusters.length} firm clusters, triage ${JSON.stringify(count(triage, (t) => t.lane))}`);
