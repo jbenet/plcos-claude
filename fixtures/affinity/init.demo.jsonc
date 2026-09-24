@@ -9,13 +9,19 @@
   ],
   "vehicles": [
     { "slug": "neurotech", "name": "PLC Neurotech I", "kind": "fund", "exemption": "506(c)", "target": 90000000, "firstClose": "2026-12-15",
-      "affinityLists": ["PLC Neurotech I - LP pipeline", "PLC Neurotech I - Fundraising"] },
+      "affinityLists": ["PLC Neurotech I - LP pipeline", "PLC Neurotech I - Fundraising"],
+      "raise": { "opens": "2026-01-01", "closes": null, "note": null }, "aliases": ["PLC Neurotech", "Neurotech I", "Neurotech Fund"] },
     { "slug": "rails", "name": "PLC Crypto/Rails", "kind": "fund", "exemption": "506(c)", "target": 60000000, "firstClose": null,
-      "affinityLists": ["PLC Crypto/Rails LPs"] },
+      "affinityLists": ["PLC Crypto/Rails LPs"],
+      "raise": { "opens": "2026-01-01", "closes": null, "note": null }, "aliases": ["PLC Rails", "Crypto/Rails", "Rails fund"] },
     { "slug": "spv-cortex", "name": "SPV — Cortex", "kind": "spv", "exemption": "506(c)", "target": 8000000, "firstClose": null,
-      "affinityLists": ["SPV — Cortex"] },
+      "affinityLists": ["SPV — Cortex"],
+      "raise": { "opens": "2026-03-01", "closes": "2026-12-31", "note": "Invented for the demo" }, "aliases": ["Cortex"] },
     { "slug": "grants", "name": "Grants rail", "kind": "grant_rail", "exemption": "n/a", "target": null, "firstClose": null,
       "affinityLists": [] }
   ],
+  // The demo team writes from example.com, the demo's stand-in for the fundraising domain (N59).
+  "fundraiseDomains": ["example.com"],
+  "firmNames": ["PL Capital"],
   "answers": {}
 }

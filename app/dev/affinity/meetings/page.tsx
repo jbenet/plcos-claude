@@ -5,7 +5,7 @@ import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
 import { ago } from '@/lib/time';
 import { affinityReady } from '@/lib/connectors/affinity';
-import { MEETINGS_CAP, WINDOW, meetingsInventory, meetingsRunning, type MeetingsRunDetail } from '@/lib/connectors/affinity/meetings';
+import { MEETINGS_CAP, MEETINGS_CAP_REST, WINDOW, meetingsInventory, meetingsRunning, type MeetingsRunDetail } from '@/lib/connectors/affinity/meetings';
 import { latestRun } from '@/modules/sources';
 import { readMeetingsAction, translateAction } from '../actions';
 
@@ -95,8 +95,15 @@ export default async function Meetings() {
           {run && run.id !== lastGood?.id && <div className="fact"><span>{running ? 'So far' : 'Latest'}</span><span>{run.note ?? '—'}</span></div>}
           {d.stoppedAtCap && !running && (
             <div className="warn" style={{ marginTop: 10, fontSize: 12.5 }}>
-              <b>Stopped at the cap.</b> There are more meetings than {n(MEETINGS_CAP)} requests reach. What was read is
+              <b>Stopped at the cap.</b> There are more meetings than {n(d.cap ?? MEETINGS_CAP)} requests reach. What was read is
               kept; reading the rest needs a larger cap, which is your call.
+              {ready.ready && (
+                <form action={readMeetingsAction} style={{ marginTop: 8 }}>
+                  <input type="hidden" name="mode" value="rest" />
+                  <button className="btn p" type="submit">Read the whole window: at most {n(MEETINGS_CAP_REST)} requests</button>
+                  <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>Juan, 23 Sep: &ldquo;you can sync the remaining meetings too&rdquo;.</span>
+                </form>
+              )}
             </div>
           )}
           {interrupted && <div className="warn" style={{ marginTop: 10, fontSize: 12.5 }}><b>Cut off.</b> The server restarted mid-read; what landed is kept.</div>}

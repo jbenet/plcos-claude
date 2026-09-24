@@ -109,6 +109,8 @@ export async function readNotesAction(formData: FormData): Promise<void> {
 export async function readMeetingsAction(formData: FormData): Promise<void> {
   const { startMeetings } = await import('@/lib/connectors/affinity/meetings');
   const user = await (await auth()).currentUser();
-  startMeetings(user.id, { full: formData.get('mode') === 'full' });
+  const mode = formData.get('mode');
+  // 'rest': the whole window again, past the usual cap, when someone has said to (N59).
+  startMeetings(user.id, { full: mode === 'full' || mode === 'rest', rest: mode === 'rest' });
   revalidatePath('/dev/affinity/meetings');
 }

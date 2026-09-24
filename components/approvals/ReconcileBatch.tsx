@@ -53,6 +53,10 @@ export function ReconcileBatch({ proposals, receipt }: {
               );
             })}
           </div>
+          <div style={{ padding: '12px 16px 0' }}>
+            <label className="lbl" htmlFor="batchnote">A note on each decision · optional</label>
+            <input id="batchnote" name="note" type="text" placeholder="Why, or on whose word — kept with every ticket decided here" style={{ marginTop: 6 }} />
+          </div>
           <div className="acts" style={{ padding: '12px 16px' }}>
             <button className="btn p" type="submit" name="decision" value="approve">Approve the checked</button>
             <button className="btn" type="submit" name="decision" value="reject">Reject the checked</button>

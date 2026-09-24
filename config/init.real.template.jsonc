@@ -25,16 +25,20 @@
   //   target       dollars, or null
   //   firstClose   YYYY-MM-DD, or null
   //   affinityLists  the exact names of the Affinity lists that track this raise
+  //   raise        { "opens": YYYY-MM-DD, "closes": YYYY-MM-DD or null while open, "note": why,
+  //                  when the dates are a guess } — an email or a meeting outside this window
+  //                  is not about the raise (N59)
+  //   aliases      words that name the vehicle in a subject line or a meeting title
   "vehicles": [
     {
       "slug": "neurotech", "name": "PLC Neurotech I", "kind": "fund", "exemption": "506(c)",
       "target": null, "firstClose": null,
-      "affinityLists": []
+      "affinityLists": [], "raise": { "opens": null, "closes": null, "note": null }, "aliases": []
     },
     {
       "slug": "rails", "name": "PLC Crypto/Rails", "kind": "fund", "exemption": "506(c)",
       "target": null, "firstClose": null,
-      "affinityLists": []
+      "affinityLists": [], "raise": { "opens": null, "closes": null, "note": null }, "aliases": []
     },
     // SPVs go here once the connection test has listed what is in Affinity. One of them may
     // be 506(b). See answers.spv506b below.
@@ -44,6 +48,12 @@
       "affinityLists": []
     }
   ],
+
+  // The email domains the team raises from. Inside a raise window, an email or a meeting to or
+  // from one of them is taken to be about the raise (N59).
+  "fundraiseDomains": [],
+  // The firm's names, as a subject line would carry them. Naming the firm is speaking of a raise.
+  "firmNames": [],
 
   // Questions that are not about one person or one vehicle. Answer in words; the answers
   // decide how Affinity's fields are read, so a wrong guess here is worse than a null.

@@ -1,6 +1,6 @@
 # 18 — Reconciliation: the current state of affairs, from the records on file
 
-**Status:** built in N57, 24 Sep 2026, from Juan's issue 0002 and his note on staleness (23 Sep).
+**Status:** built in N57, 24 Sep 2026, from Juan's issue 0002 and his note on staleness (23 Sep). Corrected in N59, the same night: only records about the raise count.
 
 > meetings already happened, but the state didnt move fwd. this will be messy and things wont
 > move cleanly, we'll need to tolerate getting "the current state of affairs" from the available
@@ -46,6 +46,43 @@ the team's notes are all claims. They are shown, and never used.
 
 A rung is on file only above an unbroken run: a signature with no meeting on record waits for
 the meeting rung, and the stepper says so.
+
+## What counts: only what is about this raise (N59)
+
+The first run proposed 278 climbs, and Juan corrected it the same night: an LP shown as met had
+never met anyone about the fund, since the meetings on record were about other things; an LP
+shown as opted in had an email from 2021. Affinity's mail and calendar sync brings in everything
+the team has exchanged with a person, and all of it was being counted.
+
+So a record now counts for a vehicle only when it is about that vehicle's raise:
+
+- **Each vehicle has a raise window**, open-ended while it raises. The dates come from the init
+  file, with a GUESS note where they are guessed. A vehicle with no window counts only records
+  that name it.
+- **Each record is read once, at translation, for what it is about**, from what it says: an
+  email's subject and addresses, a meeting's title and who was invited, a note's text
+  (`lib/connectors/affinity/about.ts`). In order:
+  1. An automatic reply is about nothing, and it is not a reply.
+  2. A record that names a vehicle, by name or alias, is about that vehicle.
+  3. A company's update to its investors is about something else.
+  4. A record that speaks of a fund, investing, the data room, the deck and so on, or names the
+     firm, is about any raise open on its date.
+  5. A record from or to the team's fundraising domain is the same. That means the sender or a
+     direct recipient; someone on copy doesn't count. (The first pass counted an email about
+     something else because someone at the domain was copied.)
+  6. Anything else is about something else.
+- **Nothing is dropped.** Contact about something else stays, counted on the LP's own page as
+  contact history (`components/entity/ContactHistory.tsx`), and the LP-for-vehicle page points
+  to it. Juan: "email unrelated to the fundraise may still be useful for intelligence
+  gathering".
+- **Every decision keeps its reason** (`meetings.meeting.about_basis`), and every proposal
+  quotes it. A wrong rule can be traced to every record it touched, and a corrected rule
+  re-reads all of them on the next translation.
+
+After the correction, the same run proposed 62. Reconciliation withdrew each of its own open
+proposals whose records now read differently, and proposed again where a climb still held. An
+approval is of exactly the words shown, so a reworded rule makes a new proposal rather than
+approving old words.
 
 ## What reconciliation does
 
@@ -101,7 +138,8 @@ because a status claims nothing.
 Write a rung without an approval, set a status by itself, change a read, count an Affinity
 field or a note as evidence, or approve its own proposal. Proposals are data for a person.
 
-## On the real account, first run
+## On the real account
 
-278 proposals from 2,143 pursuits: 154 climb to Meeting held and 124 to LP opted in, on a reply
-from them. 1,694 were already in step, and 171 were passed or on a vehicle kept for its history.
+First run (N57): 278 proposals from 2,143 pursuits, 154 to Meeting held and 124 to LP opted in.
+Most of them rested on contact that wasn't about the raise. After N59's windows and reading:
+62, of which 53 climb to Meeting held and 9 to LP opted in.

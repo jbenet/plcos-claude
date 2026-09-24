@@ -292,6 +292,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, showVe
           <form action={moveMetToDiscussing} className="bulkbar">
             {inColumn.map((r) => <input type="hidden" name="pursuitId" value={r.id} key={r.id} />)}
             <span>{inColumn.length === 1 ? 'This LP has met us and is' : `These ${inColumn.length} LPs have met us and are`} still at {info.label}.</span>
+            <input name="note" type="text" aria-label="A note on each change" placeholder="A note on each change · optional" style={{ width: 260 }} />
             <button className="btn p" type="submit">Move {inColumn.length === 1 ? 'it' : `all ${inColumn.length}`} to Discussing</button>
             <span className="muted">One status change each, in the audit log, keeping each next step. No rung moves and no ticket is needed: a status claims nothing.</span>
           </form>

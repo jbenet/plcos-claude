@@ -45,6 +45,13 @@ export interface VehicleInit {
   firstClose: string | null;
   /** Exact Affinity list names. Matched loosely later — dashes and case vary. */
   affinityLists: string[];
+  /**
+   * When it is raising (N59): an email or meeting outside the window is not about this raise.
+   * `closes` null while it is still open. `note` says when the dates are a guess.
+   */
+  raise: { opens: string | null; closes: string | null; note: string | null };
+  /** Words that name it in a subject line or a meeting title, besides its name (N59). */
+  aliases: string[];
   // `importNotes` is retired (N49): every note in the account is kept, whichever list it is
   // on (Juan, 23 Sep). A file that still has it loads; the value is ignored.
 }
@@ -53,6 +60,13 @@ export interface RealInit {
   team: TeamMember[];
   vehicles: VehicleInit[];
   answers: Record<string, string | null>;
+  /**
+   * The email domains the team raises from (N59). An email or a meeting to or from one of them,
+   * inside a raise window, is taken to be about the raise.
+   */
+  fundraiseDomains: string[];
+  /** The firm's names, as a subject line would carry them: naming it is speaking of a raise (N59). */
+  firmNames: string[];
 }
 
 /**
@@ -160,12 +174,26 @@ export function validate(raw: unknown): { init: RealInit | null; problems: strin
       if (firstClose !== null && (typeof firstClose !== 'string' || !DATE.test(firstClose))) problems.push(`${at}.firstClose must be YYYY-MM-DD, or null.`);
       const lists = v?.affinityLists ?? [];
       if (!Array.isArray(lists) || lists.some((l) => typeof l !== 'string')) problems.push(`${at}.affinityLists must be a list of list names.`);
+      const raise = (v?.raise ?? {}) as Record<string, unknown>;
+      const opens = raise.opens ?? null;
+      const closes = raise.closes ?? null;
+      for (const [k, d] of [['opens', opens], ['closes', closes]] as const) {
+        if (d !== null && (typeof d !== 'string' || !DATE.test(d))) problems.push(`${at}.raise.${k} must be YYYY-MM-DD, or null.`);
+      }
+      const aliases = v?.aliases ?? [];
+      if (!Array.isArray(aliases) || aliases.some((a) => typeof a !== 'string')) problems.push(`${at}.aliases must be a list of words.`);
       if (slug && name && KINDS.includes(kind) && EXEMPTIONS.includes(exemption) && PHASES.includes((v?.phase ?? 'active') as VehicleInit['phase'])) {
         vehicles.push({
           slug, name, kind, exemption, phase: (v?.phase ?? 'active') as VehicleInit['phase'],
           target: typeof target === 'number' ? target : null,
           firstClose: typeof firstClose === 'string' ? firstClose : null,
           affinityLists: Array.isArray(lists) ? (lists as string[]).map((l) => l.trim()).filter(Boolean) : [],
+          raise: {
+            opens: typeof opens === 'string' ? opens : null,
+            closes: typeof closes === 'string' ? closes : null,
+            note: str(raise.note),
+          },
+          aliases: Array.isArray(aliases) ? (aliases as string[]).map((a) => a.trim()).filter(Boolean) : [],
         });
       }
     });
@@ -178,7 +206,16 @@ export function validate(raw: unknown): { init: RealInit | null; problems: strin
     if (!(key in QUESTIONS)) problems.push(`answers.${key} is not a question this file asks. A typo?`);
   }
 
-  return problems.length ? { init: null, problems } : { init: { team, vehicles, answers }, problems };
+  const domains = obj.fundraiseDomains ?? [];
+  if (!Array.isArray(domains) || domains.some((d) => typeof d !== 'string' || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(d))) {
+    problems.push('"fundraiseDomains" must be a list of email domains, like "example.com".');
+  }
+  const fundraiseDomains = Array.isArray(domains) ? (domains as string[]).map((d) => d.trim().toLowerCase()) : [];
+  const firm = obj.firmNames ?? [];
+  if (!Array.isArray(firm) || firm.some((f) => typeof f !== 'string')) problems.push('"firmNames" must be a list of names.');
+  const firmNames = Array.isArray(firm) ? (firm as string[]).map((f) => f.trim()).filter(Boolean) : [];
+
+  return problems.length ? { init: null, problems } : { init: { team, vehicles, answers, fundraiseDomains, firmNames }, problems };
 }
 
 /** Every unknown the file still admits to. */
@@ -257,12 +294,16 @@ export async function loadInit(db: Db): Promise<InitReport> {
     }
     for (const [i, v] of vehicles.entries()) {
       await tx.query(
-        `insert into platform.vehicle (slug, name, kind, exemption, target_amount, sort_order, phase)
-         values ($1,$2,$3::platform.vehicle_kind,$4,$5,$6,$7)
+        `insert into platform.vehicle (slug, name, kind, exemption, target_amount, sort_order, phase,
+                                       raise_opens_on, raise_closes_on, raise_window_note, aliases)
+         values ($1,$2,$3::platform.vehicle_kind,$4,$5,$6,$7,$8,$9,$10,$11)
          on conflict (slug) do update set name = excluded.name, kind = excluded.kind,
            exemption = excluded.exemption, target_amount = excluded.target_amount,
-           sort_order = excluded.sort_order, phase = excluded.phase`,
-        [v.slug, v.name, v.kind, v.exemption, v.target, i + 1, v.phase],
+           sort_order = excluded.sort_order, phase = excluded.phase,
+           raise_opens_on = excluded.raise_opens_on, raise_closes_on = excluded.raise_closes_on,
+           raise_window_note = excluded.raise_window_note, aliases = excluded.aliases`,
+        [v.slug, v.name, v.kind, v.exemption, v.target, i + 1, v.phase,
+         v.raise.opens, v.raise.closes, v.raise.note, v.aliases],
       );
     }
     await tx.query(

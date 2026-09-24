@@ -62,12 +62,13 @@ export async function decideMany(formData: FormData): Promise<void> {
   const user = await (await auth()).currentUser();
   const decision = String(formData.get('decision')) === 'approve' ? 'approve' : 'reject';
   const ids = [...new Set(formData.getAll('ticketId').map(String))];
+  const note = String(formData.get('note') ?? '').trim();
   let done = 0;
   const failed: string[] = [];
   for (const id of ids) {
     const ticket = await getTicket(id);
     if (!ticket || ticket.kind !== 'STAGE' || ticket.scope.apply?.command !== 'strategy.recordClimb' || ticket.decision) continue;
-    await decideTicket(user.id, id, decision, `Decided in a batch of ${ids.length}, from the records on file`);
+    await decideTicket(user.id, id, decision, `Decided in a batch of ${ids.length}, from the records on file${note ? `. ${note}` : ''}`);
     if (decision === 'approve') {
       try {
         await applyApprovedTicket(user.id, (await getTicket(id))!);

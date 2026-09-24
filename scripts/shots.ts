@@ -196,6 +196,32 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N59: [
+    {
+      name: '01-only-this-raise',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.getByRole('heading', { name: 'Timeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '02-contact-history',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        const own = await page.locator('.elsewhere a').first().getAttribute('href');
+        await page.goto(new URL(own!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.getByRole('heading', { name: 'Contact history' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N58: [
     {
       name: '01-captured-as-drawn',

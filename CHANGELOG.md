@@ -4310,3 +4310,43 @@ Measured on Nadia Brandt's page at 1440 × 940, the capture differed from the br
 screenshot on 12.5% of pixels before; now 0.04% at the top of the page and 0.05% scrolled
 700 px down. That's anti-aliasing. The design boards and the published build log still load
 Google Fonts, since they are standalone pages. 94 of 94 properties hold.
+
+## N59 — Only what's about the raise counts: raise windows, and contact history on the LP's own page
+
+**Shipped.** Your corrections to the first reconciliation. An LP it showed as met had never met
+anyone about the fund; the meetings on record were about other things. An LP it showed as opted
+in rested on an email from 2021. Affinity's mail and calendar sync brings in everything the team
+has ever exchanged with a person, and all of it was being counted for the raise.
+
+| | |
+|---|---|
+| ![Only this raise](docs/changelog/shots/n59/01-only-this-raise.webp) | **An LP's page for a vehicle counts only what is about that raise.** Here, two of four touchpoints. The other two are still on record, and the page says so: "Also on record: 1 email and 1 meeting with them that aren't about this raise… They're counted on their own page, not here." |
+| ![Contact history](docs/changelog/shots/n59/02-contact-history.webp) | **Contact history, on the LP's own page**: every email and meeting, about anything, by year; how much is about a raise; what each of their pipelines counts; who from our side. You wanted unrelated contact kept for intelligence, and this is where it lives. |
+
+**Raise windows.** Each vehicle now has one, from the init file. Neurotech and Rails run from the
+start of 2026 and are still open. The SPVs' windows are what you remembered, marked as guesses,
+and the exact dates are a TODO. A new SPV that starts raising today is added, with no Affinity
+list yet. A vehicle with no window counts only what names it.
+
+**What a record is about** is read once, at translation, from what it says. That's an email's
+subject and its sender and direct recipients, a meeting's title and who was invited, a note's
+text. In order: an automatic reply is about nothing, and isn't a reply. A record naming a vehicle
+is about that vehicle. A company's update to its investors is about something else. Fund or
+investing talk, or the firm's name, is about any raise open on its date. So is a record from or
+to the fundraising domain, but only as sender or direct recipient: the first pass counted an
+email about something else because someone at the domain was copied. Each decision keeps its reason,
+and a corrected rule re-reads every record on the next translation.
+
+**Reconciliation, again.** It withdrew each of its own proposals whose records now read
+differently, and proposed again where a climb still held. A reworded reason makes a new
+proposal, so an approval is always of the words shown. The batch approval and the bulk status
+move take a note, kept with every decision.
+
+**On the real account**, the whole calendar since 2024 is read: 34,682 meetings in 347 requests,
+under your go-ahead. Of 4,907 touchpoints, 983 read as about a raise, 670 of them this year; the
+other 3,924 are contact history. The 278 proposals fell to 62, then 66 with the full calendar.
+You asked me to take them rather than click through them, so I approved all 66. Each decision
+says it was on your instruction and not reviewed one by one, and every rung carries its ticket
+and the rule behind it: 66 LPs opted in, 57 of them with a meeting held. I also moved to
+Discussing the 21 LPs who have met you about the raise this year but were still at Sourcing or
+Selected, with the same note. 95 of 95 properties hold.

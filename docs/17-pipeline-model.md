@@ -71,6 +71,12 @@ last touch, and "waiting on their reply since…".
 - What Affinity's status word implies but can't date ("Two meetings held") is kept as a claim
   beside the log: "2 meetings on record · Affinity says 2 or more".
 
+**Only what is about this raise (N59, docs/18).** A touchpoint from Affinity counts for a
+vehicle only when it falls inside the vehicle's raise window and was read as about a raise:
+naming the vehicle, speaking of a fund or investing, or from or to the fundraising domain. The
+rest is kept as contact history on the LP's own page, and the LP-for-vehicle page says how much
+there is.
+
 **One timeline (N56).** On an LP's page, the touchpoints and the team's notes in Affinity are one
 thread, newest first, each row with an icon for what happened and the same thing in words: a
 meeting (or one still ahead), a call, an email from them or from us, a deck view, questions

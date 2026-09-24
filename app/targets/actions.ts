@@ -135,13 +135,14 @@ export async function moveMetToDiscussing(formData: FormData): Promise<void> {
   const { summarize, touchpointsFor } = await import('@/modules/meetings');
   const user = await (await auth()).currentUser();
   const ids = [...new Set(formData.getAll('pursuitId').map(String))];
+  const note = String(formData.get('note') ?? '').trim();
   for (const id of ids) {
     const p = await getPursuit(id);
     if (!p || !['new', 'sourcing', 'selected'].includes(p.status)) continue;
     const met = summarize(await touchpointsFor(p.entityId, p.vehicleId)).meetingDates.length;
     if (!met) continue;
     await setStatus(user.id, id, {
-      status: 'discussing', reason: `Met: ${met} ${met === 1 ? 'meeting' : 'meetings'} on record`,
+      status: 'discussing', reason: `Met: ${met} ${met === 1 ? 'meeting' : 'meetings'} on record about this raise${note ? ` · ${note}` : ''}`,
       nextStep: p.nextStep, nextStepOn: p.nextStepOn,
     });
   }

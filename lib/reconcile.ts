@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getDb, type Queryable } from '@/lib/db';
 import { shortDate } from '@/lib/time';
 import { openTicket } from '@/modules/governance';
 import { finishRun, startRun } from '@/modules/sources';
@@ -52,7 +52,9 @@ const refOf = (t: Touchpoint) => (t.sourceRef ? `${t.source}:${t.sourceRef}` : `
 function said(t: Touchpoint): string {
   const who = t.attendees.length ? `, with ${t.attendees.join(', ')}` : '';
   const from = t.source === 'us' ? 'logged here' : t.source === 'affinity' ? 'from Affinity' : `from ${t.source}`;
-  return `${CHANNEL_LABEL[t.channel]} on ${t.on ? shortDate(t.on) : 'an unknown date'}${who} (${from})`;
+  // Why it counts for this raise (N59): the rule that read it, so a correction finds the others.
+  const why = t.source !== 'us' && t.aboutBasis ? `; about the raise: ${t.aboutBasis}` : '';
+  return `${CHANNEL_LABEL[t.channel]} on ${t.on ? shortDate(t.on) : 'an unknown date'}${who} (${from}${why})`;
 }
 
 const money = (n: number | null) => (n ? ` of $${n >= 1e6 ? `${+(n / 1e6).toFixed(2)}M` : `${Math.round(n / 1e3)}K`}` : '');
@@ -119,7 +121,12 @@ export function onFile(pursuit: Pursuit, touches: Touchpoint[], tracks: CloseTra
   const to = climb.length ? climb[climb.length - 1]!.rung : null;
   // A rejection holds for these records. A meeting held since is a new record, and asks again.
   const held = touches.filter((t) => !t.viaOrganization && t.on && t.on.getTime() <= now.getTime() && (t.channel === 'meeting' || t.channel === 'call')).length;
-  return { byRung, climb, to, key: `${pursuit.rung ?? 'none'}>${climb.map((r) => `${r.rung}=${r.ref}`).join(',')}|meetings=${held}` };
+  // And what the proposal says about each record is part of it: an approval is of exactly the
+  // words shown, so a reworded rule makes a new proposal rather than approving old words.
+  const said = climb.map((r) => r.note).join('\u241E');
+  let h = 0;
+  for (let i = 0; i < said.length; i++) h = (Math.imul(h, 31) + said.charCodeAt(i)) | 0;
+  return { byRung, climb, to, key: `${pursuit.rung ?? 'none'}>${climb.map((r) => `${r.rung}=${r.ref}`).join(',')}|meetings=${held}|said=${(h >>> 0).toString(36)}` };
 }
 
 export interface ReconcileCounts {
@@ -132,6 +139,8 @@ export interface ReconcileCounts {
   rejectedBefore: number;
   /** Earlier proposals of the system's that expired undecided, withdrawn and made again. */
   renewed: number;
+  /** Earlier proposals of the system's whose records have changed — withdrawn, and made again if a climb still holds. */
+  withdrawn: number;
   /** The records are no further than the ladder. */
   inStep: number;
   /** Passed, or on a vehicle kept for its history: not proposed. */
@@ -183,7 +192,7 @@ export async function reconcile(runBy: string | null = null): Promise<ReconcileC
     const counts = await propose();
     await finishRun(run, {
       status: 'ok', requests: 0, records: counts.pursuits, newRecords: counts.proposed,
-      note: `${counts.proposed} new ladder ${counts.proposed === 1 ? 'proposal' : 'proposals'} · ${counts.alreadyOpen} already open · ${counts.inStep} in step${counts.rejectedBefore ? ` · ${counts.rejectedBefore} rejected before` : ''}${counts.renewed ? ` · ${counts.renewed} renewed` : ''}`,
+      note: `${counts.proposed} new ladder ${counts.proposed === 1 ? 'proposal' : 'proposals'} · ${counts.alreadyOpen} already open · ${counts.inStep} in step${counts.withdrawn ? ` · ${counts.withdrawn} withdrawn` : ''}${counts.rejectedBefore ? ` · ${counts.rejectedBefore} rejected before` : ''}${counts.renewed ? ` · ${counts.renewed} renewed` : ''}`,
       detail: { ...counts },
     });
     return counts;
@@ -194,7 +203,7 @@ export async function reconcile(runBy: string | null = null): Promise<ReconcileC
 }
 
 async function propose(): Promise<ReconcileCounts> {
-  const counts: ReconcileCounts = { pursuits: 0, proposed: 0, alreadyOpen: 0, rejectedBefore: 0, renewed: 0, inStep: 0, skipped: 0 };
+  const counts: ReconcileCounts = { pursuits: 0, proposed: 0, alreadyOpen: 0, rejectedBefore: 0, renewed: 0, withdrawn: 0, inStep: 0, skipped: 0 };
   const db = await getDb();
   const actor = await systemActor();
   const pursuits = await listPursuits(null);
@@ -204,35 +213,51 @@ async function propose(): Promise<ReconcileCounts> {
   const pairs = live.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
   const [touches, closes] = await Promise.all([touchpointsByPair(pairs), closeStates(pairs)]);
 
-  const open = new Map((await db.query<{ subject_id: string; id: string; mine: boolean; expired: boolean }>(
+  const open = new Map((await db.query<{ subject_id: string; id: string; mine: boolean; expired: boolean; key: string | null }>(
     `select subject_id::text, id::text, requested_by = $1 and scope->'apply'->>'command' = $2 as mine,
-            coalesce(expires_at < now(), false) as expired
+            coalesce(expires_at < now(), false) as expired, scope->'apply'->'args'->>'key' as key
        from governance.approval_ticket where kind = 'STAGE' and subject_type = 'pursuit' and decision is null`,
     [actor, COMMAND],
   )).map((r) => [r.subject_id, r]));
+  const withdraw = (tx: Queryable, id: string, why: string) => tx.query(
+    `update governance.approval_ticket set decision = 'defer', decided_by = $2, decided_at = now(), decision_note = $3
+      where id = $1 and decision is null`,
+    [id, actor, why],
+  );
   const rejected = new Set((await db.query<{ key: string }>(
     `select scope->'apply'->'args'->>'key' as key from governance.approval_ticket
       where kind = 'STAGE' and decision = 'reject' and scope->'apply'->>'command' = $1`,
     [COMMAND],
   )).map((r) => r.key));
 
+  // A proposal of its own whose records no longer read the same is withdrawn — what it rested
+  // on changed, or the rules that read the records did (N59). Withdrawing approves nothing.
+  const changed = 'The records it rested on no longer read the same (N59: only what is about this raise, inside its window, counts). Proposed again from the records on file, if a climb still holds.';
+  const liveIds = new Set(live.map((p) => p.pursuitId));
+  for (const [pursuitId, t] of open) {
+    if (t.mine && !liveIds.has(pursuitId)) {
+      await db.transaction((tx) => withdraw(tx, t.id, 'The pursuit passed or its vehicle is kept for its history; not proposed.'));
+      counts.withdrawn++;
+    }
+  }
   for (const p of live) {
     const k = `${p.entityId}:${p.vehicleId}`;
     const track = closes.get(k);
     const f = onFile(p, touches.get(k) ?? [], track ? [track] : []);
+    const existing = open.get(p.pursuitId);
+    if (existing?.mine && existing.key !== f.key && !(f.climb.length && existing.expired)) {
+      await db.transaction((tx) => withdraw(tx, existing.id, changed));
+      counts.withdrawn++;
+      open.delete(p.pursuitId);
+    }
     if (!f.climb.length) { counts.inStep++; continue; }
     if (rejected.has(f.key)) { counts.rejectedBefore++; continue; }
-    const existing = open.get(p.pursuitId);
-    if (existing && !(existing.mine && existing.expired)) { counts.alreadyOpen++; continue; }
+    const still = open.get(p.pursuitId);
+    if (still && !(still.mine && still.expired)) { counts.alreadyOpen++; continue; }
     await db.transaction(async (tx) => {
-      if (existing) {
+      if (still) {
         // Its own proposal ran out undecided. Withdrawing it approves nothing; it is asked again.
-        await tx.query(
-          `update governance.approval_ticket set decision = 'defer', decided_by = $2, decided_at = now(),
-                  decision_note = 'Expired undecided; proposed again from the records on file.'
-            where id = $1 and decision is null`,
-          [existing.id, actor],
-        );
+        await withdraw(tx, still.id, 'Expired undecided; proposed again from the records on file.');
         counts.renewed++;
       }
       await openTicket(actor, {

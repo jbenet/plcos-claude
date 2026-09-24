@@ -134,7 +134,9 @@ Reconciliation (N57, `docs/18-reconciliation.md`) keeps the ladder in step with 
 after each translation it proposes the climb that records on file support (a meeting on the
 calendar, a reply from them, a signature recorded here), as one STAGE ticket per LP listing each
 rung and its record, requested by the system's inactive "Reconciliation" actor. A person
-approves; claims and notes are never used as records.
+approves; claims and notes are never used as records. Since N59, a record counts for a vehicle
+only when it is about that vehicle's raise: inside its raise window, and naming it, speaking of
+a fund, or from or to the fundraising domain. The rest is contact history, on the LP's own page.
 
 **3. Five approval-ticket kinds gate mutations, before the fact.**
 

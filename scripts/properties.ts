@@ -1325,6 +1325,67 @@ async function main() {
               `after a rejection, proposed again: ${third.proposed} (${third.rejectedBefore} held back)`,
           );
 
+          // What a touchpoint is about (N59): the raise only when it says so, and only inside the
+          // vehicle's window; and a proposal whose records no longer read the same is withdrawn.
+          {
+            const ab = await import('../lib/connectors/affinity/about');
+            const mt = await import('../modules/meetings');
+            const vs = [{ slug: 'neurotech', name: 'PLC Neurotech I', aliases: ['Neurotech I'] }, { slug: 'spv-x', name: 'SPV — X', aliases: ['Xylo'] }];
+            const dom = ['fund.example'];
+            const cases: Array<[string, string[], string, string]> = [
+              ['Re: PLC Neurotech I — data room', [], 'raise', 'neurotech'],
+              ['Acme monthly investor update', ['ceo@acme.example'], 'other', ''],
+              ['Coffee next week?', ['sam@fund.example'], 'raise', ''],
+              ['Coffee next week?', ['sam@research.example'], 'other', ''],
+              ['Intro: would they invest in a first close?', [], 'raise', ''],
+              ['Neuroscience seminar, spring schedule', [], 'other', ''],
+              ['Xylo allocation', [], 'raise', 'spv-x'],
+              ['Automatic reply: Invitation from PL Capital', ['sam@fund.example'], 'other', ''],
+              ['Invitation from PL Capital: a dinner in April', [], 'raise', ''],
+              // Someone at the fundraising domain only on copy: translation passes the sender and
+              // the direct recipients, so here there is none.
+              ['Re: Panel at the spring conference?', ['host@events.example'], 'other', ''],
+            ];
+            const wrong = cases.filter(([text, addrs, about, v]) => {
+              const r = ab.aboutRaise(text, addrs, vs, dom, ['PL Capital']);
+              return r.about !== about || (v ? !r.vehicles.includes(v) : r.vehicles.length > 0);
+            });
+            const w = { vehicleId: 'v1', slug: 'neurotech', name: 'N', opens: new Date('2026-01-01T00:00:00Z'), closes: null, note: null };
+            const touch = (on: string, about: 'raise' | 'other', vehicles: string[] = []) => ({
+              touchpointId: 't', entityId: 'e', entityName: 'E', vehicleId: null, vehicleName: null, channel: 'email' as const, kind: null,
+              on: new Date(on), scheduledFor: null, direction: 'theirs' as const, ownerName: 'x', attendees: [], summary: null,
+              read: null, readByName: null, source: 'affinity', sourceRef: 'r', viaOrganization: null, about, aboutVehicles: vehicles, aboutBasis: null,
+            });
+            const old2021 = mt.aboutThisRaise(touch('2021-05-01T00:00:00Z', 'raise'), w);
+            const in2026 = mt.aboutThisRaise(touch('2026-03-01T00:00:00Z', 'raise'), w);
+            const otherVehicle = mt.aboutThisRaise(touch('2026-03-01T00:00:00Z', 'raise', ['spv-x']), w);
+            const aboutElse = mt.aboutThisRaise(touch('2026-03-01T00:00:00Z', 'other'), w);
+            const noWindow = { ...w, slug: 'spv-x', opens: null };
+            const generalNoWindow = mt.aboutThisRaise(touch('2026-03-01T00:00:00Z', 'raise'), noWindow);
+            const namedNoWindow = mt.aboutThisRaise(touch('2026-03-01T00:00:00Z', 'raise', ['spv-x']), noWindow);
+            const unread = await n(`select count(*)::text as n from meetings.meeting where source = 'affinity' and about is null`);
+            const rows = await n(`select count(*)::text as n from meetings.meeting where source = 'affinity'`);
+            // A proposal still open; its records then read as about something else.
+            const still = await adb.one<{ id: string; subject_id: string }>(
+              `select id::text, subject_id::text from governance.approval_ticket
+                where kind = 'STAGE' and decision is null and scope->'apply'->>'command' = 'strategy.recordClimb' limit 1`);
+            let withdrawn = 0;
+            let deferred = 0;
+            if (still) {
+              await adb.query(`update meetings.meeting set about = 'other' where source = 'affinity' and entity_id = (select entity_id from strategy.pursuit where pursuit_id = $1)`, [still.subject_id]);
+              withdrawn = (await rc.reconcile(null)).withdrawn;
+              deferred = await n(`select count(*)::text as n from governance.approval_ticket where id = $1 and decision = 'defer'`, [still.id]);
+            }
+            check(
+              'A touchpoint counts for a raise only when it says so and falls in its window; a proposal on records that changed is withdrawn',
+              wrong.length === 0 && !old2021 && in2026 && !otherVehicle && !aboutElse && !generalNoWindow && namedNoWindow && unread === 0 && rows > 0 && (!still || (withdrawn >= 1 && deferred === 1)),
+              `classifier: ${cases.length - wrong.length} of ${cases.length} right${wrong.length ? ` (wrong: ${wrong.map((c) => c[0]).join('; ')})` : ''}; ` +
+                `about the raise but from 2021: ${old2021 ? 'COUNTED' : 'not counted'}; in 2026: ${in2026 ? 'counted' : 'NOT COUNTED'}; naming another vehicle: ${otherVehicle ? 'COUNTED' : 'not counted'}; ` +
+                `about something else: ${aboutElse ? 'COUNTED' : 'not counted'}; no window, about a raise in general: ${generalNoWindow ? 'COUNTED' : 'not counted'}, naming it: ${namedNoWindow ? 'counted' : 'NOT COUNTED'}; ${unread} of ${rows} Affinity touchpoints unread after translating; ` +
+                `open proposal whose records changed: ${still ? (deferred ? 'withdrawn' : 'STILL OPEN') : 'none open to test'}`,
+            );
+          }
+
           const { shownRead } = await import('../lib/reads');
           const at = new Date('2026-09-24T00:00:00Z');
           const note = (read: 'interested' | 'not_very_interested', on: string) => ({

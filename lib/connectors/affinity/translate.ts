@@ -9,6 +9,8 @@ import { sliceTargets } from './slice';
 import type { AffinityNote } from './notes';
 import type { AffinityMeeting } from './meetings';
 import { importReadings } from './readings';
+import { aboutRaise, addressOf, type About, type AboutVehicle } from './about';
+import { noteText } from './notes';
 import type { PursuitStatus } from '@/modules/strategy';
 
 /**
@@ -133,6 +135,14 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
         [PLACEHOLDER],
       );
       const users = new Map((await tx.query<{ id: string; handle: string }>(`select id, handle from platform.app_user`)).map((u) => [u.handle, u.id]));
+      // Each vehicle's raise window and aliases, from the init file (N59): what a touchpoint is
+      // counted against. The real profile also loads them at boot; the demo's vehicles are seeded.
+      for (const v of init.vehicles) {
+        await tx.query(
+          `update platform.vehicle set raise_opens_on = $2, raise_closes_on = $3, raise_window_note = $4, aliases = $5 where slug = $1`,
+          [v.slug, v.raise.opens, v.raise.closes, v.raise.note, v.aliases],
+        );
+      }
       const vehicles = new Map((await tx.query<{ id: string; slug: string; kind: string; phase: string }>(`select id, slug, kind::text as kind, phase from platform.vehicle`)).map((v) => [v.slug, v]));
       const teamByAffinity = new Map<number, string>();
       for (const u of found.users as AffinityUser[]) {
@@ -328,6 +338,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
       counts.touchpoints = await touchpoints(
         tx, rawEntries.map((r) => r.payload), rawNotes.map((r) => r.payload), rawMeetings.map((r) => r.payload),
         init.team, users, users.get(PLACEHOLDER)!,
+        init.vehicles.map((v) => ({ slug: v.slug, name: v.name, aliases: v.aliases })), init.fundraiseDomains, init.firmNames,
       );
       counts.readings = (await importReadings(tx, rawNotes.map((r) => r.payload))).loaded;
 
@@ -356,7 +367,11 @@ interface Interaction {
   id: number;
   sentAt?: string;
   startTime?: string;
+  subject?: string | null;
+  title?: string | null;
   from?: { emailAddress?: string; person?: InteractionPerson } | null;
+  to?: unknown[] | null;
+  cc?: unknown[] | null;
   attendees?: Array<{ emailAddress?: string; person?: InteractionPerson }>;
 }
 
@@ -376,7 +391,13 @@ async function touchpoints(
   tx: Queryable, entries: E[], notes: AffinityNote[], meetings: AffinityMeeting[],
   team: Array<{ handle: string; email?: string | null; affinityEmail?: string | null }>,
   users: Map<string, string>, placeholder: string,
+  vehicles: AboutVehicle[] = [], domains: string[] = [], firmNames: string[] = [],
 ): Promise<number> {
+  // What each is about is decided afresh on every translation (N59), so a corrected rule
+  // corrects every record it touched. Several sources can name one touchpoint — a list entry's
+  // field, the calendar, a note — and it is about the raise if any of them says so.
+  await tx.query(`update meetings.meeting set about = null, about_vehicles = '{}', about_basis = null where source = 'affinity'`);
+  const read = (text: string, direct: Array<string | null | undefined>) => aboutRaise(text, direct, vehicles, domains, firmNames);
   const ours = new Map((await tx.query<{ source_id: string; entity_id: string }>(
     `select source_id, entity_id from identity.source_record where source = $1`, [SOURCE],
   )).map((r) => [r.source_id, r.entity_id]));
@@ -394,19 +415,26 @@ async function touchpoints(
   let added = 0;
   const put = async (row: {
     entity: string; ref: string; channel: string; at: string; direction: string | null; owner: string;
-    attendees: string[]; exact: boolean;
+    attendees: string[]; exact: boolean; about: About;
   }) => {
     const future = new Date(row.at).getTime() > now;
+    const merge = `about = case when meetings.meeting.about = 'raise' or excluded.about = 'raise' then 'raise'
+                                else coalesce(excluded.about, meetings.meeting.about) end,
+         about_vehicles = array(select distinct x from unnest(meetings.meeting.about_vehicles || excluded.about_vehicles) x order by x),
+         about_basis = case when meetings.meeting.about = 'raise' then meetings.meeting.about_basis
+                            when excluded.about = 'raise' then excluded.about_basis
+                            else coalesce(meetings.meeting.about_basis, excluded.about_basis) end`;
     const r = await tx.query<{ meeting_id: string }>(
       `insert into meetings.meeting
-         (entity_id, vehicle_id, channel, direction, held_on, scheduled_for, owner_id, attendees, source, source_ref)
-       values ($1, null, $2::meetings.channel, $3, $4, $5, $6, $7, 'affinity', $8)
-       on conflict (source, source_ref) where source_ref is not null do ${row.exact
-         ? 'update set held_on = excluded.held_on, scheduled_for = excluded.scheduled_for, attendees = excluded.attendees'
-         : 'nothing'}
+         (entity_id, vehicle_id, channel, direction, held_on, scheduled_for, owner_id, attendees, source, source_ref,
+          about, about_vehicles, about_basis)
+       values ($1, null, $2::meetings.channel, $3, $4, $5, $6, $7, 'affinity', $8, $9, $10, $11)
+       on conflict (source, source_ref) where source_ref is not null do update set ${row.exact
+         ? 'held_on = excluded.held_on, scheduled_for = excluded.scheduled_for, attendees = excluded.attendees, '
+         : ''}${merge}
        returning (xmax = 0) as fresh`,
       [row.entity, row.channel, row.direction, future ? null : row.at.slice(0, 10), future ? row.at : null,
-       row.owner, row.attendees, row.ref],
+       row.owner, row.attendees, row.ref, row.about.about, row.about.vehicles, row.about.basis],
     );
     if ((r[0] as unknown as { fresh?: boolean } | undefined)?.fresh) added++;
   };
@@ -429,6 +457,10 @@ async function touchpoints(
           : 'both',
         owner: who(d.from?.person, d.from?.emailAddress) ?? internal.map((p) => who(p)).find(Boolean) ?? placeholder,
         attendees: internal.map((p) => [p.firstName, p.lastName].filter(Boolean).join(' ')).filter(Boolean),
+        // The sender and those it was addressed to: someone on copy doesn't make it about the raise.
+        about: read(d.subject ?? d.title ?? '', [
+          addressOf(d.from), ...(d.to ?? []).map(addressOf), ...(d.attendees ?? []).map(addressOf),
+        ]),
       });
     }
   }
@@ -449,6 +481,7 @@ async function touchpoints(
         entity, ref: `interaction:meeting:${mt.id}:${key}`, channel: 'meeting', at: mt.startTime, exact: true,
         direction: 'both', owner: internal.map((x) => who(x)).find(Boolean) ?? placeholder,
         attendees: internal.map((x) => [x.firstName, x.lastName].filter(Boolean).join(' ')).filter(Boolean),
+        about: read(mt.title ?? '', (mt.attendeesPreview?.data ?? []).map((a) => a.person?.primaryEmailAddress ?? a.emailAddress)),
       });
     }
   }
@@ -469,6 +502,7 @@ async function touchpoints(
         entity, ref: `interaction:${i.type}:${i.id}:${key}`, channel: CHANNEL_OF[i.type], at: n.createdAt, exact: false,
         direction: i.type === 'meeting' || i.type === 'call' ? 'both' : null,
         owner: who(n.creator) ?? placeholder, attendees: [],
+        about: read(noteText(n.content?.html ?? ''), [n.creator?.primaryEmailAddress]),
       });
     }
   }

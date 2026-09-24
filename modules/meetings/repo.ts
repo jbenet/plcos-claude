@@ -2,8 +2,9 @@ import { getDb } from '@/lib/db';
 import type { LadderRung } from '@/modules/strategy/client';
 import type {
   Channel, DiligenceQuestion, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
-  QuestionStatus, Read, Touchpoint, TouchpointSummary,
+  QuestionStatus, RaiseWindow, Read, Touchpoint, TouchpointSummary,
 } from './types';
+import { aboutThisRaise } from './types';
 
 type MeetingRow = {
   meeting_id: string; pursuit_id: string | null; entity_id: string; entity_name: string;
@@ -21,8 +22,18 @@ const MEETING_SELECT = `
     left join platform.vehicle v on v.id = m.vehicle_id
     join platform.app_user u on u.id = m.owner_id`;
 
-/** The meeting pages read meetings and calls; an email is a touchpoint, not a meeting (N51). */
-const MEETINGS_ONLY = `m.channel in ('meeting', 'call')`;
+/**
+ * The meeting pages read meetings and calls; an email is a touchpoint, not a meeting (N51). And
+ * only those about a raise (N59): tied to a vehicle, logged here, or read as about a raise and
+ * dated inside the window of a vehicle it names (or of any, if it names none). The same rule as
+ * aboutThisRaise in ./types; change both.
+ */
+const MEETINGS_ONLY = `m.channel in ('meeting', 'call') and (m.vehicle_id is not null or m.source = 'us' or (m.about = 'raise'
+  and exists (select 1 from platform.vehicle w
+               where (w.slug = any(m.about_vehicles)
+                      or (cardinality(m.about_vehicles) = 0 and (w.raise_opens_on is not null or w.raise_closes_on is not null)))
+                 and (w.raise_opens_on is null or coalesce(m.held_on, m.scheduled_for::date) >= w.raise_opens_on)
+                 and (w.raise_closes_on is null or coalesce(m.held_on, m.scheduled_for::date) <= w.raise_closes_on))))`;
 
 const toMeeting = (r: MeetingRow): Meeting => ({
   meetingId: r.meeting_id, pursuitId: r.pursuit_id, entityId: r.entity_id,
@@ -134,6 +145,7 @@ type TouchRow = {
   channel: Channel; kind: MeetingKind | null; held_on: Date | string | null; scheduled_for: Date | string | null;
   direction: Direction | null; owner_name: string; attendees: string[] | null; summary: string | null;
   read: Read | null; read_by_name: string | null; source: string; source_ref: string | null; for_entity: string;
+  about: 'raise' | 'other' | null; about_vehicles: string[] | null; about_basis: string | null;
 };
 
 /**
@@ -152,7 +164,7 @@ const TOUCH_SELECT = `
   select m.meeting_id, m.entity_id, e.display_name as entity_name, m.vehicle_id, v.name as vehicle_name,
          m.channel::text as channel, m.kind::text as kind, m.held_on, m.scheduled_for, m.direction,
          u.name as owner_name, m.attendees, m.summary, m.read::text as read, rb.name as read_by_name,
-         m.source, m.source_ref, r.for_entity
+         m.source, m.source_ref, r.for_entity, m.about, m.about_vehicles, m.about_basis
     from reach r
     join meetings.meeting m on m.entity_id = r.entity_id
     join identity.entity e on e.entity_id = m.entity_id
@@ -169,13 +181,25 @@ const toTouch = (r: TouchRow): Touchpoint => ({
   ownerName: r.owner_name, attendees: r.attendees ?? [], summary: r.summary,
   read: r.read, readByName: r.read_by_name, source: r.source, sourceRef: r.source_ref,
   viaOrganization: r.entity_id === r.for_entity ? null : r.entity_name,
+  about: r.about, aboutVehicles: r.about_vehicles ?? [], aboutBasis: r.about_basis,
 });
+
+/** Each vehicle's raise window (N59), by id. */
+export async function raiseWindows(): Promise<Map<string, RaiseWindow>> {
+  const db = await getDb();
+  const rows = await db.query<{ id: string; slug: string; name: string; opens: Date | string | null; closes: Date | string | null; note: string | null }>(
+    `select id::text, slug, name, raise_opens_on as opens, raise_closes_on as closes, raise_window_note as note from platform.vehicle`,
+  );
+  const date = (d: Date | string | null) => (d ? new Date(`${String(d instanceof Date ? d.toISOString() : d).slice(0, 10)}T00:00:00Z`) : null);
+  return new Map(rows.map((r) => [r.id, { vehicleId: r.id, slug: r.slug, name: r.name, opens: date(r.opens), closes: date(r.closes), note: r.note }]));
+}
 
 const when = (t: Touchpoint) => (t.on ?? t.scheduledFor)?.getTime() ?? 0;
 
 /**
- * The log for one LP on one vehicle, newest first: touchpoints about that vehicle, and those
- * about none in particular. `vehicleId` null: every touchpoint with them.
+ * The log for one LP on one vehicle, newest first: the touchpoints about that vehicle's raise
+ * (N59: tied to it, logged here, or read as about it and inside its window). `vehicleId` null:
+ * every touchpoint with them, about anything — their contact history.
  */
 export async function touchpointsFor(entityId: string, vehicleId: string | null): Promise<Touchpoint[]> {
   const db = await getDb();
@@ -183,7 +207,10 @@ export async function touchpointsFor(entityId: string, vehicleId: string | null)
     `${TOUCH_SELECT} where ($2::uuid is null or m.vehicle_id is null or m.vehicle_id = $2)`,
     [[entityId], vehicleId],
   );
-  return rows.map(toTouch).sort((a, b) => when(b) - when(a));
+  const all = rows.map(toTouch).sort((a, b) => when(b) - when(a));
+  if (!vehicleId) return all;
+  const w = (await raiseWindows()).get(vehicleId);
+  return w ? all.filter((t) => aboutThisRaise(t, w)) : all;
 }
 
 /**
@@ -241,8 +268,11 @@ export async function touchpointsByPair(
   const rows = (await db.query<TouchRow>(TOUCH_SELECT, [[...new Set(pairs.map((p) => p.entityId))]])).map((r) => ({ r, t: toTouch(r) }));
   const byEntity = new Map<string, Touchpoint[]>();
   for (const { r, t } of rows) byEntity.set(r.for_entity, [...(byEntity.get(r.for_entity) ?? []), t]);
+  const windows = await raiseWindows();
   for (const p of pairs) {
-    out.set(`${p.entityId}:${p.vehicleId}`, (byEntity.get(p.entityId) ?? []).filter((t) => !t.vehicleId || t.vehicleId === p.vehicleId));
+    const w = windows.get(p.vehicleId);
+    out.set(`${p.entityId}:${p.vehicleId}`, (byEntity.get(p.entityId) ?? [])
+      .filter((t) => (w ? aboutThisRaise(t, w) : !t.vehicleId || t.vehicleId === p.vehicleId)));
   }
   return out;
 }

@@ -16,6 +16,7 @@ import { restrictionsFor, listAsks } from '@/modules/coordination';
 import { ROLE_LABEL, relationshipRoles, listAffiliations, orgsFor, peopleAt, type RelationshipRole } from '@/modules/identity';
 import { OrgsFor, PeopleAt } from '@/components/entity/People';
 import { EntityLink } from '@/components/entity/EntityLink';
+import { ContactHistory } from '@/components/entity/ContactHistory';
 import { usdM } from '@/lib/money';
 import { shortDate } from '@/lib/time';
 
@@ -469,6 +470,8 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
           </p>
         </div>
       )}
+
+      <ContactHistory entityId={entity.entityId} vehicleIds={theirs.map((p) => p.vehicleId)} />
 
       <div className="grid2">
         <div>

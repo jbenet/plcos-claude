@@ -123,6 +123,38 @@ export interface Touchpoint {
   sourceRef: string | null;
   /** Set when the touchpoint is with the LP's firm rather than with them: the firm's name. */
   viaOrganization: string | null;
+  /**
+   * What it is about (N59), decided when it was translated: 'raise', 'other', or null for one
+   * logged here. With the vehicles it names, and the words the decision rests on.
+   */
+  about: 'raise' | 'other' | null;
+  aboutVehicles: string[];
+  aboutBasis: string | null;
+}
+
+/** When a vehicle is raising (N59), what a touchpoint's date is held against. */
+export interface RaiseWindow { vehicleId: string; slug: string; name: string; opens: Date | null; closes: Date | null; note: string | null }
+
+/**
+ * Whether a touchpoint is about this vehicle's raise (N59, docs/18). One tied to the vehicle
+ * is; one tied to another vehicle isn't; one logged here with no vehicle is about any raise.
+ * One read from Affinity counts when it was read as about a raise, names this vehicle or none,
+ * and falls inside the raise window. Anything else is contact history, kept for the LP's own
+ * page. The same rule is written in SQL in the meetings repo for the lists; change both.
+ */
+export function aboutThisRaise(t: Touchpoint, w: RaiseWindow): boolean {
+  if (t.vehicleId) return t.vehicleId === w.vehicleId;
+  if (t.source === 'us') return true;
+  if (t.about !== 'raise') return false;
+  if (t.aboutVehicles.length && !t.aboutVehicles.includes(w.slug)) return false;
+  // With no window known, a record about a raise in general can't be placed: only one that
+  // names this vehicle counts for it.
+  if (!w.opens && !w.closes && !t.aboutVehicles.includes(w.slug)) return false;
+  const on = t.on ?? t.scheduledFor;
+  if (!on) return false;
+  if (w.opens && on.getTime() < w.opens.getTime()) return false;
+  if (w.closes && on.getTime() >= w.closes.getTime() + 86_400_000) return false;
+  return true;
 }
 
 /** Derived from the log, never stored: what the twelve stages used to try to say. */

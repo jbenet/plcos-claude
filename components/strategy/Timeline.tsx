@@ -235,8 +235,11 @@ export function Timeline(props: {
   calendarPartial?: boolean;
   context?: Record<string, TouchContext>;
   read?: ShownRead | null;
+  /** Contact with them that isn't about this raise (N59): counted on their own page. */
+  elsewhere?: { emails: number; meetings: number; first: Date | null; last: Date | null; href: string };
 }) {
   const { touches, summary: s, notes } = props;
+  const away = props.elsewhere;
   const now = Date.now();
   const inside = new Set(Object.values(props.context ?? {}).map((c) => c.noteId).filter((x): x is number => typeof x === 'number'));
   const alone = notes.filter((n) => !inside.has(n.noteId));
@@ -296,6 +299,14 @@ export function Timeline(props: {
             </details>
           )}
         </div>
+        {away && away.emails + away.meetings > 0 && (
+          <p className="elsewhere">
+            Also on record: {away.emails} {away.emails === 1 ? 'email' : 'emails'} and {away.meetings}{' '}
+            {away.meetings === 1 ? 'meeting' : 'meetings'} with them that aren&rsquo;t about this raise
+            {away.first ? (away.first.getUTCFullYear() === away.last!.getUTCFullYear() ? `, in ${away.first.getUTCFullYear()}` : `, ${away.first.getUTCFullYear()}–${away.last!.getUTCFullYear()}`) : ''}: outside its window, or about
+            something else. They&rsquo;re counted on <Link href={away.href}>their own page</Link>, not here.
+          </p>
+        )}
         {key.size > 1 && (
           <div className="tl-key" aria-label="What the icons mean">
             {[...key.values()].map((m) => <span key={m.title}><Glyph name={m.name} title={m.title} tone={m.tone} />{m.title}</span>)}

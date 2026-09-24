@@ -29,6 +29,7 @@ import { meetingTitles } from '@/lib/connectors/affinity/meetings';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { laterFacts, shownRead } from '@/lib/reads';
 import { onFile } from '@/lib/reconcile';
+import { countContact } from '@/components/entity/ContactHistory';
 import { findOpenTicket } from '@/modules/governance';
 
 export const dynamic = 'force-dynamic';
@@ -43,7 +44,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
   if (!pursuit) notFound();
 
   const user = await (await auth()).currentUser();
-  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches, tracks, calendar, readings] = await Promise.all([
+  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches, tracks, calendar, readings, everything] = await Promise.all([
     claimsFor(pursuit.entityId),
     listSourceDocs(),
     notesFor(pursuit.entityId),
@@ -55,7 +56,11 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     closeTracksFor(pursuit.entityId, pursuit.vehicleId),
     latestRun('affinity', 'meetings'),
     readingsFor([pursuit.entityId]),
+    touchpointsFor(pursuit.entityId, null),
   ]);
+  // Contact that isn't about this raise (N59): counted on their own page, pointed to from here.
+  const counted = new Set(touches.map((t) => t.touchpointId));
+  const elsewhere = countContact(everything.filter((t) => !counted.has(t.touchpointId)));
   const touchSummary = summarize(touches);
   // What the records here support, beside what the ladder has accepted (N57, docs/18).
   const file = onFile(pursuit, touches, tracks);
@@ -265,6 +270,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
             calendarPartial={Boolean((calendar?.detail as { stoppedAtCap?: boolean } | undefined)?.stoppedAtCap)}
             context={context}
             read={theirRead}
+            elsewhere={{ ...elsewhere, href: `/orgs/${pursuit.entityId}` }}
           />
 
           <div className="card">

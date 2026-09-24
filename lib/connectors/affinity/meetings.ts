@@ -45,6 +45,13 @@ const PAGE = 100;
 export const WINDOW = '2024-01-01T00:00:00Z';
 /** Juan's bound, 23 Sep: under a hundred requests. */
 export const MEETINGS_CAP = 99;
+/**
+ * The rest of the calendar, when asked for (N59). Juan, 23 Sep, after the first read stopped at
+ * the cap with 9,900 meetings: "you can sync the remaining meetings too from affinity". A GUESS at
+ * enough: a hundred meetings a request, so up to 100,000 meetings, well inside the account's
+ * monthly limit.
+ */
+export const MEETINGS_CAP_REST = 1000;
 const MARGIN_MS = 86_400_000;
 const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
 
@@ -55,13 +62,16 @@ export interface MeetingsRunDetail {
   through?: string;
   cap?: number;
   stoppedAtCap?: boolean;
+  /** Where a read that stopped at the cap would go next: the page it did not read. */
+  resume?: string | null;
   withAttendees?: number;
   ahead?: number;
   truncatedAttendees?: number;
 }
 
-export async function readMeetings(runBy: string | null, opts: { cap?: number; full?: boolean; overrides?: Parameters<typeof affinity>[0] } = {}): Promise<SyncRun | null> {
-  const cap = Math.min(opts.cap ?? MEETINGS_CAP, MEETINGS_CAP);
+export async function readMeetings(runBy: string | null, opts: { cap?: number; full?: boolean; rest?: boolean; overrides?: Parameters<typeof affinity>[0] } = {}): Promise<SyncRun | null> {
+  const most = opts.rest ? MEETINGS_CAP_REST : MEETINGS_CAP;
+  const cap = Math.min(opts.cap ?? most, most);
   const prior = await latestRun(SOURCE, KIND, 'ok');
   const priorThrough = (prior?.detail as MeetingsRunDetail | undefined)?.through;
   const since = !opts.full && priorThrough ? new Date(new Date(priorThrough).getTime() - MARGIN_MS) : null;
@@ -88,7 +98,7 @@ export async function readMeetings(runBy: string | null, opts: { cap?: number; f
       let query: Query | undefined = { limit: PAGE, filter };
       while (next) {
         if (requests >= cap) {
-          await finish('failed', `Stopped at the cap of ${cap} requests with ${records} meetings read; there are more. Nothing read is lost.`, { stoppedAtCap: true });
+          await finish('failed', `Stopped at the cap of ${cap} requests with ${records} meetings read; there are more. Nothing read is lost.`, { stoppedAtCap: true, resume: next });
           return latestRun(SOURCE, KIND);
         }
         const page: { data?: AffinityMeeting[]; pagination?: { nextUrl?: string | null } } = await client.get(next, query);
@@ -118,7 +128,7 @@ export async function readMeetings(runBy: string | null, opts: { cap?: number; f
 type G = typeof globalThis & { __affinityMeetings?: Promise<unknown> | null };
 const g = globalThis as G;
 
-export function startMeetings(runBy: string | null, opts: { full?: boolean } = {}): 'started' | 'already running' {
+export function startMeetings(runBy: string | null, opts: { full?: boolean; rest?: boolean } = {}): 'started' | 'already running' {
   if (g.__affinityMeetings) return 'already running';
   g.__affinityMeetings = readMeetings(runBy, opts).finally(() => {
     g.__affinityMeetings = null;
