@@ -212,6 +212,17 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N71: [
+    {
+      name: '01-fact-check-rounds',
+      path: '/developer/enrich',
+      prepare: async (page) => {
+        await page.getByRole('heading', { name: /How good it is/ }).evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N70: [
     {
       name: '01-a-few-searches',

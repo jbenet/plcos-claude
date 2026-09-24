@@ -4866,3 +4866,46 @@ line, so a firm's name counted as a person. It now counts the first member of th
 person holds 190 of the 330 next steps, which is the owner rule's question for the team.
 
 107 of 107 properties hold.
+
+## N71 — The facts behind the whole "this year" list, checked at their sources
+
+**Shipped.** The fact check's second round, on every finding behind a "this year" strategy that the
+first round didn't read; the findings corrected to their pages; and the checker comparing a tier a
+strategy cites with the tier W3's file gives.
+
+| | |
+|---|---|
+| ![Fact-check rounds](docs/changelog/shots/n71/01-fact-check-rounds.webp) | **The fact check, by round.** The measurements card now shows each round of the fact check on its own line, with its identities, as it does the critic's rounds — so a second round reads as a second measurement, not as more of the first. A round's halves count as one. The demo's rounds are fictional. |
+
+**The fact check, round two (W1c).** Three agents re-read 128 facts in 19 findings — every finding behind a
+"this year" strategy that round one hadn't read — at their cited pages and nothing else. Of the 116
+whose page loaded, 90 are supported as written (78%, against round one's 87%), 24 partly and 2 not;
+none is about someone else. Of the 19 identities, 15 hold and 4 are in doubt; none is wrong. The
+lower rate has a plain cause: most of these findings were written at version 1, before any
+amendment, and each checker found that 1.26 as written would have prevented nearly every error. Two
+new kinds became rules in 1.26: a quote taken from a colleague's section of a page about several
+people, and words that are on the page but said there of something else ("early-stage fintech"
+written of a person's fund, recorded as their angel deals' focus). Across both rounds: 299 facts in
+39 findings; of the 269 read, 223 supported (83%), 43 partly, 3 not; no identity wrong.
+
+**The findings, corrected to their pages.** 17 of the 19 changed: 24 facts cut to their pages' words, 2 rewritten to what
+the page says, 5 split into facts of their own on pages the finding already cites, 9 moved to the
+cautions as unconfirmed, and 3 `detail` fields removed; no identity changed, and the 4 in doubt say
+why in their cautions. The corrections had touched only the facts, so some findings still repeated
+a cut claim in a summary, an interest or a connection's basis — which the LP page shows — and a last
+pass aligned every corrected finding to its facts: 30 of the 33 findings the two rounds corrected, with 99 claims removed or
+cut down — 38 in summaries, 19 in identities' bases, 14 in interests, 12 in how they invest, 8 in
+signals, 7 in capacity's basis and 1 in a connection's basis. It left for a person 18 identity
+fields that still rest on a page that wasn't read (12 places, 4 roles, 2 organizations: W3 and the
+counsel gate read them, so they wait for a decision), and 3 capacity bands whose basis lost its only
+figure. The checker still ends at no problems, none stale, no gate. Each correction is listed on the finding without
+moving the date it was read, and the LP page says an agent re-read the pages — a fact check, not the
+team's verification.
+
+**Tiers cited as W3 gives them.** A reviser found that a stale citation inside a firm passed the
+checker: "(C, both invested …)" beside a colleague the files do join, when W3's file had since
+given the pair D. The checker now compares every tier cited beside a joined name with the tiers W3's
+file gives that pair. It finds 22 such citations, all agreeing after the night's revisions; it
+guards the next revision, not this one.
+
+107 of 107 properties hold.

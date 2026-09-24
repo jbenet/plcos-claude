@@ -591,8 +591,10 @@ a "this year" strategy, each re-read at the page it cites. Of the 153 whose page
 supported, 19 partly, 1 not; none was about someone else. Of 20 identities, 18 held, 2 were in
 doubt, none was wrong. Every partial had one of three causes, and they become the rules):
 
-- **One fact, one page — every part of it on that page.** Each list item, sector, role word, count,
-  relation and `detail` field is on the page in `source.url`. When a second page contributes (a
+- **One fact, one page — every part of it on that page, said of that subject there.** Each list
+  item, sector, role word, count, relation and `detail` field is on the page in `source.url`, and
+  said there of what the fact says it of: "early-stage fintech" written of a person's fund is not
+  their angel deals' focus, and half of a two-part heading is not a company's sector. When a second page contributes (a
   founding year from the person's own site, a signature from a filing), it is its own fact with its
   own source, or it is left out.
 - **The page's own words for events, relations and descriptions.** "Offered", not "joined"; "joined
@@ -605,6 +607,9 @@ doubt, none was wrong. Every partial had one of three causes, and they become th
 - **A fact cites a page that was read.** A claim seen only in a search summary, a sign-in page's
   snippet, or a page that refused the reader goes under `cautions` or "for a person", not `facts`.
 - **LP-contact databases are brokers,** whatever they call themselves; the checker's list gained one.
+- **On a page about several people, a quote comes from the section under the LP's own name** (the
+  fact check's second round): a colleague's answer on a panel page, quoted as the LP's, is on the
+  cited page and still not theirs.
 
 **Open, for Juan:** an unresolved person at a firm our own records confirm (their work domain is the
 firm's site) can't carry the firm's facts — its mandate, its typical check — because a finding with
@@ -1036,6 +1041,24 @@ beside it.
   meeting, what the last message said, the first-close date, and a search pass for the pages-only
   findings.
 
+### Where the loop stood (24 Sep, 08:43 UTC)
+
+- **Research: every LP in the set is read** — 388 of 388: 54 with web search as the protocol asks,
+  319 from page reads alone and 15 with a few searches, too few to follow it (334 owed the search
+  pass; the 15 are no longer said to have had "no web search"); 304 resolved, 78 not found
+  (mostly staff at firms whose sites name only their leaders), 6 ambiguous. The protocol went from
+  amendment 1.5 to 1.25, each batch's learnings becoming the next.
+- **Strategies: one for every resolved LP and every Discussing or Committed one** — 330, all at W5
+  1.5, with no checker problems, no firm asked for money twice, and every input pinned. The critic's
+  two rounds measured the loop: 10 A, 12 B, 3 C before; 22 A, 3 B after.
+- **What the records need before any outreach** (W9's first steps): replies we owe, sent-mail and
+  bounce checks, owners to name, first personal notes instead of follow-ups. The committed LPs'
+  first step is nearly always an internal check: where the signed documents are.
+- **What only a person can do next:** run the search pass when the budget allows (one command); ask
+  counsel the one question that covers every LP placed outside the US; decide what Committed means
+  (a countersignature, or a yes with an amount); settle the owner rule; and say where the Rails
+  conversation lives, since crypto-native LPs keep landing on the Neurotech list.
+
 ### Iteration 4 — the list we act on first (24 Sep, 08:50 UTC →)
 
 - **Two first steps, measured.** Triage's check and the strategy's next step agree on 174 of the
@@ -1068,21 +1091,22 @@ beside it.
   carry (revised). The special-category review no longer counts a surname or a first name. The
   synthesis counts people, not a firm's name, as owners: one person holds 190 of 330 next steps.
 
-### Where the loop stood (24 Sep, 08:43 UTC)
+### Where the night ended (24 Sep, 11:30 UTC)
 
-- **Research: every LP in the set is read** — 388 of 388: 54 with web search as the protocol asks,
-  319 from page reads alone and 15 with a few searches, too few to follow it (334 owed the search
-  pass; the 15 are no longer said to have had "no web search"); 304 resolved, 78 not found
-  (mostly staff at firms whose sites name only their leaders), 6 ambiguous. The protocol went from
-  amendment 1.5 to 1.25, each batch's learnings becoming the next.
-- **Strategies: one for every resolved LP and every Discussing or Committed one** — 330, all at W5
-  1.5, with no checker problems, no firm asked for money twice, and every input pinned. The critic's
-  two rounds measured the loop: 10 A, 12 B, 3 C before; 22 A, 3 B after.
-- **What the records need before any outreach** (W9's first steps): replies we owe, sent-mail and
-  bounce checks, owners to name, first personal notes instead of follow-ups. The committed LPs'
-  first step is nearly always an internal check: where the signed documents are.
-- **What only a person can do next:** run the search pass when the budget allows (one command); ask
-  counsel the one question that covers every LP placed outside the US; decide what Committed means
-  (a countersignature, or a yes with an amount); settle the owner rule; and say where the Rails
-  conversation lives, since crypto-native LPs keep landing on the Neurotech list.
-
+- **Research:** 388 of 388 LPs read; 304 identified (278 confirmed, 26 probable), 78 not found, 6
+  ambiguous. 54 with web search as the protocol asks; 334 owed the search pass (319 from pages alone,
+  15 with too few searches). The facts behind every "this year" strategy were re-read at their
+  sources and corrected to them: two rounds, 299 facts in 39 findings; of the 269 read, 223
+  supported as written (83%), 43 partly, 3 not, none about someone else; no identity wrong. 18
+  identity fields in the corrected findings still rest on a page that wasn't read (places, roles,
+  organizations that W3 and the counsel gate read): a decision for a person, not a rule's.
+- **Strategies:** 330 — 33 this year, 249 for 2027, 48 not now — with no checker problems, none
+  stale, no gate, every firm-level ask pinned to its lead, every park dated. The critic's rounds,
+  as the loop's measure of itself: 10 A of 25, then 22 of 25, then 27 of 47 on the list we act on
+  first under a stricter seventh criterion (revised since), then 25 of 25 on a fresh sample of the
+  bulk.
+- **What only a person can do next:** decide what Committed means (a countersignature, or a yes with
+  an amount); raise the search budget for the pass 334 findings are owed; settle the owner rule (one
+  person holds 190 of the 330 next steps); ask counsel the one question that covers the 40 LPs placed
+  outside the US; say where the Rails conversation lives; and answer the replies we owe, which our
+  export dates but can't quote.

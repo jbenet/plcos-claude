@@ -553,7 +553,7 @@
   ]
  },
  "reviews": {
-  "note": "Fictional critic rounds and a fictional fact check, for the measurements card (N70).",
+  "note": "Fictional critic rounds and two fictional fact-check rounds, for the measurements card (N70, N71).",
   "strategy": {
    "strategy-review.jsonl": [
     {
@@ -685,6 +685,20 @@
       },
       {
        "i": 1,
+       "grade": "supported",
+       "note": ""
+      }
+     ]
+    }
+   ],
+   "fact-review-02.jsonl": [
+    {
+     "name": "Gordon Whitcomb",
+     "identity": "holds",
+     "identityNote": "The firm's team page names him with the title.",
+     "facts": [
+      {
+       "i": 0,
        "grade": "supported",
        "note": ""
       }

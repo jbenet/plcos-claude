@@ -53,7 +53,7 @@ async function main() {
   // W5: the strategies, if any.
   const sdir = join(process.cwd(), config.data.root, 'enrich', 'strategy');
   const sfiles = (await readdir(sdir).catch(() => [])).filter((f) => f.endsWith('.json'));
-  let sbad = 0, stale = 0, long = 0, over = 0, namesOthers = 0, staleTies = 0;
+  let sbad = 0, stale = 0, long = 0, over = 0, namesOthers = 0, staleTies = 0, tierMismatch = 0;
   // Another LP named in a strategy (v12, refined in N70): one careless step from telling one LP
   // about another. Fine when the files join them — a path either way, or one firm (a work domain,
   // an organization, or one lead) — or when the text only guards the other's privacy. The rest are
@@ -69,6 +69,7 @@ async function main() {
     new Set([...(c?.domains ?? []).filter((d) => !PERSONAL.test(d)), (c?.org ?? '').toLowerCase().trim()].filter(Boolean));
   const firms = new Map(allCands.map((c) => [c.key, firmOf(c)]));
   const pathNames = new Map<string, Set<string>>();
+  const pairTiers = new Map<string, Set<string>>(); // `${lpKey}|${otherName}` → the tiers W3's file gives the pair
   const near = (a: string, b: string) => pathNames.set(a, new Set([...(pathNames.get(a) ?? []), b]));
   for (const l of (await readFile(join(process.cwd(), config.data.root, 'enrich', 'connections.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)) {
     const p = JSON.parse(l) as Path;
@@ -76,7 +77,9 @@ async function main() {
     const base = p.other.name.replace(/\s*\([^)]*\)\s*$/, '');
     near(p.lp, p.other.name);
     near(p.lp, base);
+    for (const n of new Set([p.other.name, base])) pairTiers.set(`${p.lp}|${n}`, new Set([...(pairTiers.get(`${p.lp}|${n}`) ?? []), p.tier]));
     const back = keyByName.get(p.other.name) ?? keyByName.get(base), mine = nameByKey.get(p.lp);
+    if (back && mine) pairTiers.set(`${back}|${mine}`, new Set([...(pairTiers.get(`${back}|${mine}`) ?? []), p.tier]));
     if (back && mine) near(back, mine);
   }
   const leads = new Map<string, string>();
@@ -113,6 +116,15 @@ async function main() {
       }
       if (named) namesOthers++;
       if (cited) { staleTies++; staleTieKeys.push(key); }
+      // A tier cited beside a name the files do join (v15a): "(C, both invested …)" when W3's file
+      // now gives the pair D. The within-firm citations the name check can't see.
+      let wrongTier = false;
+      for (const c of allNames) {
+        const tiers = pairTiers.get(`${key}|${c.name}`);
+        if (!tiers) continue;
+        for (const m of text.matchAll(new RegExp(`${c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^.;()]{0,40}\\(([ABCD])\\b`, 'g'))) if (!tiers.has(m[1] as 'A')) wrongTier = true;
+      }
+      if (wrongTier) { tierMismatch++; staleTieKeys.push(key); }
     }
   };
   const moneyAsk = new Map<string, string>();
@@ -169,7 +181,7 @@ async function main() {
   }
   // A lead carries its firm, so a colleague's newer finding makes the lead stale too (s24).
   const leadsBehind = new Set(leadPins.filter((x) => { const f = found.get(x.key); const at = madeAt.get(x.lead.key); return f && at && f.researched.at > at; }).map((x) => x.lead.key)).size;
-  if (sfiles.length) console.log(`${sfiles.length} strategies · ${sbad} with problems · ${stale} older than their LP's finding · ${long} with a next step the import cuts at 400 characters (${over} over v1.5's 300) · ${doubled} firms asked for money twice · ${leadMoved} firm-level strategies whose lead was rewritten since (${unpinned.length} firm-level asks pin no lead) · ${leadsBehind} leads older than a colleague's finding · ${namesOthers} naming an LP the files don't join to them (${staleTies} citing a W3 tie the files no longer carry) · gates ${JSON.stringify(gateCount)} · lists ${JSON.stringify(lists)} · asks ${JSON.stringify(shapes)}`);
+  if (sfiles.length) console.log(`${sfiles.length} strategies · ${sbad} with problems · ${stale} older than their LP's finding · ${long} with a next step the import cuts at 400 characters (${over} over v1.5's 300) · ${doubled} firms asked for money twice · ${leadMoved} firm-level strategies whose lead was rewritten since (${unpinned.length} firm-level asks pin no lead) · ${leadsBehind} leads older than a colleague's finding · ${namesOthers} naming an LP the files don't join to them (${staleTies} citing a W3 tie the files no longer carry) · ${tierMismatch} citing a tier W3's file doesn't give the pair · gates ${JSON.stringify(gateCount)} · lists ${JSON.stringify(lists)} · asks ${JSON.stringify(shapes)}`);
   if (bad || sbad) process.exitCode = 1;
 }
 main();

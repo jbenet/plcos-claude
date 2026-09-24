@@ -179,25 +179,24 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
           <span className="lbl">the critic (W5c) · the fact check (W1c)</span>
         </div>
         <div className="cbody">
-          {quality.rounds.length === 0 && !quality.facts && <p className="muted">No critic round and no fact check has run on these files yet.</p>}
+          {quality.rounds.length === 0 && quality.facts.length === 0 && <p className="muted">No critic round and no fact check has run on these files yet.</p>}
           {quality.rounds.map((r) => (
             <div className="fact" key={r.round}>
               <span>Critic, round {r.round}</span>
-              <span>{n(r.graded)} strategies graded: {(['A', 'B', 'C', 'D'] as const).map((g) => `${r.grades[g]} ${g}`).join(' · ')}
+              <span>{n(r.graded)} {r.graded === 1 ? 'strategy' : 'strategies'} graded: {(['A', 'B', 'C', 'D'] as const).map((g) => `${r.grades[g]} ${g}`).join(' · ')}
                 {Object.keys(r.byCriterion).length > 0 && <span className="muted"> — issues by criterion: {Object.entries(r.byCriterion).sort(([a], [b]) => Number(a) - Number(b)).map(([c, k]) => `${c}: ${k}`).join(', ')}</span>}
               </span>
             </div>
           ))}
-          {quality.facts && (() => {
-            const f = quality.facts;
+          {quality.facts.map((f) => {
             const read = f.facts.supported + f.facts.partly + f.facts['not supported'] + f.facts['someone else'];
             return (
-              <>
-                <div className="fact"><span>Fact check</span><span>{n(read + f.facts.unavailable)} facts in {n(f.findings)} findings, each re-read at the page it cites: {n(f.facts.supported)} supported, {n(f.facts.partly)} partly, {n(f.facts['not supported'])} not supported, {n(f.facts['someone else'])} about someone else; {n(f.facts.unavailable)} {f.facts.unavailable === 1 ? 'page' : 'pages'} unavailable{read ? ` (${Math.round((100 * f.facts.supported) / read)}% of those read, supported as written)` : ''}</span></div>
-                <div className="fact"><span>Identities</span><span>{n(f.identities.holds)} hold · {n(f.identities.doubt)} in doubt · {n(f.identities.wrong)} wrong</span></div>
-              </>
+              <div key={f.round}>
+                <div className="fact"><span>Fact check, round {f.round}</span><span>{n(read + f.facts.unavailable)} {read + f.facts.unavailable === 1 ? 'fact' : 'facts'} in {n(f.findings)} {f.findings === 1 ? 'finding' : 'findings'}, each re-read at the page it cites: {n(f.facts.supported)} supported, {n(f.facts.partly)} partly, {n(f.facts['not supported'])} not supported, {n(f.facts['someone else'])} about someone else; {n(f.facts.unavailable)} {f.facts.unavailable === 1 ? 'page' : 'pages'} unavailable{read ? ` (${Math.round((100 * f.facts.supported) / read)}% of those read, supported as written)` : ''}</span></div>
+                <div className="fact"><span>Identities, round {f.round}</span><span>{n(f.identities.holds)} hold · {n(f.identities.doubt)} in doubt · {n(f.identities.wrong)} wrong</span></div>
+              </div>
             );
-          })()}
+          })}
         </div>
         <p className="cover">
           <b>What this is:</b> an agent grading against the written protocol (docs/19) — the critic

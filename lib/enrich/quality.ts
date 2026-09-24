@@ -12,7 +12,7 @@ export type FactGrade = 'supported' | 'partly' | 'not supported' | 'someone else
 export type IdentityVerdict = 'holds' | 'doubt' | 'wrong';
 
 export interface CriticRound { round: number; graded: number; grades: Record<Grade, number>; byCriterion: Record<string, number> }
-export interface FactCheck { findings: number; facts: Record<FactGrade, number>; identities: Record<IdentityVerdict, number> }
+export interface FactCheck { round: number; findings: number; facts: Record<FactGrade, number>; identities: Record<IdentityVerdict, number> }
 
 /** `strategy-review.jsonl` is round one, `strategy-review-2.jsonl` round two; `-3a` and `-3b` are two halves of round three. */
 export function roundOf(file: string): number | null {
@@ -20,7 +20,13 @@ export function roundOf(file: string): number | null {
   return m ? Number(m[1] ?? 1) : null;
 }
 
-export async function readQuality(dir: string): Promise<{ rounds: CriticRound[]; facts: FactCheck | null }> {
+/** `fact-review-01a.jsonl` and `fact-review-01b.jsonl` are round one of the fact check; `fact-review-02c.jsonl` is part of round two. */
+export function factRoundOf(file: string): number | null {
+  const m = file.match(/^fact-review-(\d+)[a-z]?\.jsonl$/);
+  return m ? Number(m[1]) : null;
+}
+
+export async function readQuality(dir: string): Promise<{ rounds: CriticRound[]; facts: FactCheck[] }> {
   const files = (await readdir(dir).catch(() => [] as string[])).sort();
   const lines = async (f: string): Promise<Array<Record<string, unknown>>> =>
     (await readFile(join(dir, f), 'utf8').catch(() => '')).split('\n').filter(Boolean)
@@ -41,11 +47,12 @@ export async function readQuality(dir: string): Promise<{ rounds: CriticRound[];
     rounds.set(r, cur);
   }
 
-  const factFiles = files.filter((f) => /^fact-review-.+\.jsonl$/.test(f));
-  let facts: FactCheck | null = null;
-  if (factFiles.length) {
-    const fc: FactCheck = { findings: 0, facts: { supported: 0, partly: 0, 'not supported': 0, 'someone else': 0, unavailable: 0 }, identities: { holds: 0, doubt: 0, wrong: 0 } };
-    for (const f of factFiles) for (const x of await lines(f)) {
+  const facts = new Map<number, FactCheck>();
+  for (const f of files) {
+    const r = factRoundOf(f);
+    if (r === null) continue;
+    const fc = facts.get(r) ?? { round: r, findings: 0, facts: { supported: 0, partly: 0, 'not supported': 0, 'someone else': 0, unavailable: 0 }, identities: { holds: 0, doubt: 0, wrong: 0 } };
+    for (const x of await lines(f)) {
       fc.findings++;
       const id = x.identity as IdentityVerdict;
       if (id in fc.identities) fc.identities[id]++;
@@ -54,7 +61,8 @@ export async function readQuality(dir: string): Promise<{ rounds: CriticRound[];
         if (k in fc.facts) fc.facts[k]++;
       }
     }
-    facts = fc;
+    facts.set(r, fc);
   }
-  return { rounds: [...rounds.values()].sort((a, b) => a.round - b.round), facts };
+  const byRound = <T extends { round: number }>(m: Map<number, T>) => [...m.values()].sort((a, b) => a.round - b.round);
+  return { rounds: byRound(rounds), facts: byRound(facts) };
 }

@@ -1678,20 +1678,23 @@ async function main() {
           const { mkdtemp, writeFile: wfq, rm: rmq } = await import('node:fs/promises');
           const { tmpdir } = await import('node:os');
           const { join: jq } = await import('node:path');
-          const { readQuality, roundOf } = await import('../lib/enrich/quality');
+          const { readQuality, roundOf, factRoundOf } = await import('../lib/enrich/quality');
           const dq = await mkdtemp(jq(tmpdir(), 'quality-'));
           await wfq(jq(dq, 'strategy-review.jsonl'), ['{"key":"a","grade":"B","issues":[{"criterion":2,"what":"x"}]}', '{"key":"b","grade":"C","issues":[]}'].join('\n'));
           await wfq(jq(dq, 'strategy-review-3a.jsonl'), '{"key":"c","grade":"A","issues":[]}\n');
           await wfq(jq(dq, 'strategy-review-3b.jsonl'), '{"key":"d","grade":"A","issues":[]}\nnot json\n');
           await wfq(jq(dq, 'fact-review-01a.jsonl'), '{"key":"a","identity":"holds","facts":[{"i":0,"grade":"supported"},{"i":1,"grade":"partly"},{"i":2,"grade":"unavailable"}]}\n');
+          await wfq(jq(dq, 'fact-review-02b.jsonl'), '{"key":"b","identity":"doubt","facts":[{"i":0,"grade":"supported"}]}\n');
           const q = await readQuality(dq);
           await rmq(dq, { recursive: true, force: true });
           const one = q.rounds.find((r) => r.round === 1), three = q.rounds.find((r) => r.round === 3);
-          check('The loop’s measurements: a round in two halves is one round; grades and facts are counted as written; a broken line is skipped',
+          check('The loop’s measurements: a round in two halves is one round, for the critic and the fact check; grades and facts are counted as written; a broken line is skipped',
             roundOf('strategy-review.jsonl') === 1 && roundOf('strategy-review-2.jsonl') === 2 && roundOf('strategy-review-3b.jsonl') === 3 && roundOf('fact-review-01a.jsonl') === null
               && one?.graded === 2 && one.grades.C === 1 && one.byCriterion['2'] === 1 && three?.graded === 2 && three.grades.A === 2
-              && q.facts?.facts.supported === 1 && q.facts.facts.partly === 1 && q.facts.facts.unavailable === 1 && q.facts.identities.holds === 1,
-            `rounds ${JSON.stringify(q.rounds.map((r) => [r.round, r.graded]))}; facts ${JSON.stringify(q.facts?.facts)}`);
+              && factRoundOf('fact-review-02c.jsonl') === 2 && q.facts.length === 2
+              && q.facts[0].facts.supported === 1 && q.facts[0].facts.partly === 1 && q.facts[0].facts.unavailable === 1 && q.facts[0].identities.holds === 1
+              && q.facts[1].round === 2 && q.facts[1].identities.doubt === 1,
+            `rounds ${JSON.stringify(q.rounds.map((r) => [r.round, r.graded]))}; fact rounds ${JSON.stringify(q.facts.map((f) => [f.round, f.findings]))}`);
         }
 
         // Outside the US, counsel first (W5 1.5, made a gate after the critic's third round): a
