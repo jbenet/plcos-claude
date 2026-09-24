@@ -1,26 +1,36 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-type Tool = 'pen' | 'arrow' | 'box' | 'text';
+type Tool = 'pen' | 'arrow' | 'line' | 'box' | 'text';
 
 interface Stroke { tool: 'pen'; colour: string; width: number; points: Array<[number, number]> }
 interface Arrow { tool: 'arrow'; colour: string; width: number; from: [number, number]; to: [number, number] }
+/** An arrow without its head: for underlining something, or joining two things up. */
+interface Line { tool: 'line'; colour: string; width: number; from: [number, number]; to: [number, number] }
 interface Box { tool: 'box'; colour: string; width: number; from: [number, number]; to: [number, number] }
 interface Label {
   tool: 'text';
   /** Labels are editable after they are placed, so they need identity (issue 0014). */
   id: string;
   colour: string;
+  /** Font size in pixels of the saved image — the number in the size field. */
   size: number;
   at: [number, number];
-  /** Wrap width in image pixels. Dragging the corner changes this, not the font. */
+  /**
+   * Wrap width in image pixels. Until the corner is dragged it follows the text, out to the
+   * edge of the picture; after that it is the width the user chose, and typing leaves it alone.
+   */
   width: number;
+  /** Set once the corner has been dragged. */
+  sized: boolean;
+  /** The height the corner was dragged to, as a floor — text longer than that still shows. */
+  height: number;
   /** Newlines are kept. A one-line-only annotation tool makes people write captions. */
   text: string;
   bold: boolean;
 }
-type Mark = Stroke | Arrow | Box | Label;
+type Mark = Stroke | Arrow | Line | Box | Label;
 
 const COLOURS = [
   { id: '#BF4A16', name: 'Clay' },
@@ -30,19 +40,58 @@ const COLOURS = [
   { id: '#FFFFFF', name: 'White' },
 ];
 
-const TOOLS: Array<{ id: Tool; glyph: string; name: string }> = [
+const TOOLS: Array<{ id: Tool; glyph: React.ReactNode; name: string }> = [
   { id: 'pen', glyph: '✎', name: 'Draw freehand' },
   { id: 'arrow', glyph: '↗', name: 'Point at something' },
+  {
+    id: 'line',
+    glyph: (
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <path d="M3.5 12.5l9-9" />
+      </svg>
+    ),
+    name: 'Draw a line',
+  },
   { id: 'box', glyph: '▢', name: 'Box it' },
   { id: 'text', glyph: 'T', name: 'Add a label' },
 ];
 
-const SIZES: Array<{ label: string; title: string; scale: number }> = [
-  { label: 'S', title: 'Small', scale: 0.7 },
-  { label: 'M', title: 'Medium', scale: 1 },
-  { label: 'L', title: 'Large', scale: 1.5 },
-  { label: 'XL', title: 'Extra large', scale: 2.2 },
-];
+const PIPETTE = (
+  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M9.5 4.5l2 2M10.4 3.6l1.2-1.2a1.4 1.4 0 0 1 2 2l-1.2 1.2M8.8 5.2l-5.3 5.3-.5 2.5 2.5-.5 5.3-5.3" />
+  </svg>
+);
+
+/** Line height of a label, in the field on screen and in the saved image alike. */
+const LEADING = 1.3;
+const PLACEHOLDER = 'Type. Return makes a new line.';
+/**
+ * Sizes are pixels of the saved image: the one unit that means the same thing on any screen
+ * and in the file that gets filed. The list is a shortcut; any whole number from 8 to 400 can
+ * be typed.
+ */
+const SIZE_PRESETS = [12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128];
+const SIZE_MIN = 8;
+const SIZE_MAX = 400;
+
+const fontOf = (size: number, bold: boolean) =>
+  `${bold ? 600 : 400} ${size}px "IBM Plex Sans", system-ui, sans-serif`;
+
+/** `<input type="color">` takes #rrggbb and nothing else, and an eyedropper may say rgb(). */
+const hex6 = (c: string): string => {
+  const s = c.trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(s)) return s;
+  if (/^#[0-9a-f]{3}$/.test(s)) return `#${[...s.slice(1)].map((d) => d + d).join('')}`;
+  const rgb = s.match(/^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/);
+  if (rgb) return `#${rgb.slice(1, 4).map((v) => Number(v).toString(16).padStart(2, '0')).join('')}`;
+  return '#000000';
+};
+const sameColour = (a: string, b: string) => hex6(a) === hex6(b);
+
+type EyeDropperCtor = new () => { open: () => Promise<{ sRGBHex: string }> };
+/** Chromium only, so far. Where it is missing the button is not drawn at all. */
+const eyeDropper = (): EyeDropperCtor | null =>
+  (typeof window === 'undefined' ? null : (window as unknown as { EyeDropper?: EyeDropperCtor }).EyeDropper ?? null);
 
 const isUndo = (e: KeyboardEvent) =>
   (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z';
@@ -50,6 +99,72 @@ const isRedo = (e: KeyboardEvent) =>
   (e.metaKey || e.ctrlKey) && (
     (e.shiftKey && e.key.toLowerCase() === 'z') || (!e.shiftKey && e.key.toLowerCase() === 'y')
   );
+
+/**
+ * A label's size, as a number you can type or pick from a list (Juan, 24 Sep).
+ *
+ * The field keeps a draft of its own, so a half-typed number is not clamped out from under
+ * the typist: on the way to 37, "3" is too small to apply and is simply left alone. A number
+ * in range applies as it is typed; leaving the field or pressing Return settles anything
+ * else to the nearest size there is. The arrow keys step it by one.
+ *
+ * The presets are a plain `<select>` beside it, not a `<datalist>`: Chromium draws a datalist's
+ * button inside a field this narrow, so a click on the number landed on the button and typing
+ * went nowhere. A select behaves the same in every browser.
+ */
+function SizeField({ value, onChange, onDone }: {
+  value: number;
+  onChange: (size: number) => void;
+  onDone?: () => void;
+}) {
+  const ref = useRef<HTMLInputElement | null>(null);
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => {
+    if (document.activeElement !== ref.current) setDraft(String(value));
+  }, [value]);
+  const parse = (s: string) => (s.trim() === '' ? NaN : Number(s));
+  const commit = () => {
+    const n = parse(draft);
+    const next = Number.isFinite(n) ? Math.min(SIZE_MAX, Math.max(SIZE_MIN, Math.round(n))) : value;
+    setDraft(String(next));
+    if (next !== value) onChange(next);
+  };
+  // The size in use is in the list too, in its place, so the list always shows what is set.
+  const options = [...new Set([...SIZE_PRESETS, value])].sort((a, b) => a - b);
+  return (
+    <span className="setsize">
+      <label title="Text size, in pixels of the saved image">
+        <input
+          ref={ref}
+          type="number"
+          min={SIZE_MIN}
+          max={SIZE_MAX}
+          step={1}
+          value={draft}
+          aria-label="Text size in pixels"
+          onChange={(e) => {
+            setDraft(e.target.value);
+            const n = parse(e.target.value);
+            if (Number.isInteger(n) && n >= SIZE_MIN && n <= SIZE_MAX) onChange(n);
+          }}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); onDone?.(); }
+          }}
+        />
+        <span aria-hidden>px</span>
+      </label>
+      <select
+        value={String(value)}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label="Text size presets"
+        title="Pick a size"
+      >
+        {options.map((n) => <option key={n} value={n}>{n} px</option>)}
+      </select>
+    </span>
+  );
+}
 
 /**
  * Annotating a screenshot.
@@ -122,16 +237,22 @@ export function ShotEditor({
   const dragRef = useRef<{ id: string; mode: 'move' | 'size'; ox: number; oy: number } | null>(null);
   /** Read inside the key handler, which must not be rebuilt on every selection change. */
   const activeIdRef = useRef<string | null>(null);
-  /**
-   * Focus is put on the field explicitly rather than with `autoFocus`: the label list
-   * re-renders on every keystroke, and a field that loses focus mid-sentence is worse than
-   * no text tool at all.
-   */
   const fieldRef = useRef<HTMLTextAreaElement | null>(null);
-  /** Text settings live outside the draft so they survive between labels. */
-  const [textScale, setTextScale] = useState(1);
+  /**
+   * Text settings live outside the draft so they survive between labels. The size is null
+   * until somebody picks one, and until then it follows the width of the picture.
+   */
+  const [textSize, setTextSize] = useState<number | null>(null);
   const [bold, setBold] = useState(true);
   const [ready, setReady] = useState(false);
+  /** How wide the picture is on screen. A label's type is drawn at its saved size times this. */
+  const [shownWidth, setShownWidth] = useState(0);
+  const [canPick, setCanPick] = useState(false);
+  /** The eyedropper is open (see pickFromScreen): its Escape must not close the editor. */
+  const eyeOpenRef = useRef(false);
+  const measureRef = useRef<CanvasRenderingContext2D | null>(null);
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const [barWidth, setBarWidth] = useState(0);
 
   // Load the base image once; every redraw paints it first.
   useEffect(() => {
@@ -148,22 +269,51 @@ export function ShotEditor({
     img.src = src;
   }, [src]);
 
+  useEffect(() => {
+    setCanPick(eyeDropper() !== null);
+    // Labels are measured and saved in IBM Plex Sans. If a weight arrives after a label was
+    // measured, measure again rather than keep a width taken from the fallback font.
+    void Promise.all([fontOf(24, false), fontOf(24, true)].map((f) => document.fonts?.load(f)))
+      .then(() => setMarks((prev) => prev.map((m) => (m.tool === 'text' ? fit(m) : m))))
+      .catch(() => { /* the fallback font measures consistently too */ });
+  }, []);
+
+  // The window can be resized with the editor open; a label's type has to follow the picture.
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c || !ready) return;
+    const ro = new ResizeObserver(() => setShownWidth(c.getBoundingClientRect().width));
+    ro.observe(c);
+    return () => ro.disconnect();
+  }, [ready]);
+
+  // The label bar's width, so it can be kept inside the picture (below).
+  useLayoutEffect(() => {
+    const w = barRef.current?.offsetWidth ?? 0;
+    if (w !== barWidth) setBarWidth(w);
+  });
+
   /**
-   * Wrap a label the way the export will draw it: explicit newlines first, then greedy
-   * wrapping inside each paragraph at the label's own width.
+   * Wrap a label the way the field on screen wraps it: explicit newlines first, then greedy
+   * wrapping inside each paragraph at the label's own width. Spaces are kept as typed, since
+   * the box was measured with them, and a word wider than the box breaks inside itself.
    */
   const wrapLines = (ctx: CanvasRenderingContext2D, text: string, width: number): string[] => {
     const out: string[] = [];
+    const fits = (s: string) => ctx.measureText(s).width <= width;
     for (const para of text.split('\n')) {
-      if (para === '') { out.push(''); continue; }
       let line = '';
-      for (const word of para.split(/\s+/)) {
-        const next = line ? `${line} ${word}` : word;
-        if (ctx.measureText(next).width > width && line) {
-          out.push(line);
-          line = word;
-        } else {
-          line = next;
+      for (const token of para.match(/\s*\S+|\s+/g) ?? []) {
+        // Spaces at the end of a line hang past the edge, as they do in the field.
+        if (!token.trim() || !line.trim() || fits(line + token)) line += token;
+        else { out.push(line); line = token.trimStart(); }
+        while (!fits(line)) {
+          const chars = [...line];
+          let cut = 1;
+          while (cut < chars.length && fits(chars.slice(0, cut + 1).join(''))) cut++;
+          if (cut >= chars.length) break;
+          out.push(chars.slice(0, cut).join(''));
+          line = chars.slice(cut).join('');
         }
       }
       out.push(line);
@@ -195,7 +345,7 @@ export function ShotEditor({
       } else if (m.tool === 'box') {
         ctx.lineWidth = m.width;
         ctx.strokeRect(m.from[0], m.from[1], m.to[0] - m.from[0], m.to[1] - m.from[1]);
-      } else if (m.tool === 'arrow') {
+      } else if (m.tool === 'arrow' || m.tool === 'line') {
         ctx.lineWidth = m.width;
         const [x1, y1] = m.from;
         const [x2, y2] = m.to;
@@ -203,21 +353,34 @@ export function ShotEditor({
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
-        const a = Math.atan2(y2 - y1, x2 - x1);
-        const head = Math.max(12, m.width * 4);
-        ctx.beginPath();
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(x2 - head * Math.cos(a - Math.PI / 7), y2 - head * Math.sin(a - Math.PI / 7));
-        ctx.lineTo(x2 - head * Math.cos(a + Math.PI / 7), y2 - head * Math.sin(a + Math.PI / 7));
-        ctx.closePath();
-        ctx.fill();
+        if (m.tool === 'arrow') {
+          const a = Math.atan2(y2 - y1, x2 - x1);
+          const head = Math.max(12, m.width * 4);
+          ctx.beginPath();
+          ctx.moveTo(x2, y2);
+          ctx.lineTo(x2 - head * Math.cos(a - Math.PI / 7), y2 - head * Math.sin(a - Math.PI / 7));
+          ctx.lineTo(x2 - head * Math.cos(a + Math.PI / 7), y2 - head * Math.sin(a + Math.PI / 7));
+          ctx.closePath();
+          ctx.fill();
+        }
       } else if (withText) {
-        ctx.font = `${m.bold ? 600 : 400} ${m.size}px "IBM Plex Sans", system-ui, sans-serif`;
-        ctx.textBaseline = 'top';
+        ctx.font = fontOf(m.size, m.bold);
         const lines = wrapLines(ctx, m.text, m.width);
-        const lh = Math.round(m.size * 1.3);
+        const lh = m.size * LEADING;
         ctx.fillStyle = m.colour;
-        lines.forEach((line, i) => ctx.fillText(line, m.at[0], m.at[1] + i * lh));
+        /**
+         * On the baseline the field uses — half the leading, then the ascent — so a label is
+         * saved where it was typed rather than a few pixels higher.
+         */
+        const met = ctx.measureText('Hg');
+        if (Number.isFinite(met.fontBoundingBoxAscent) && Number.isFinite(met.fontBoundingBoxDescent)) {
+          ctx.textBaseline = 'alphabetic';
+          const base = (lh - met.fontBoundingBoxAscent - met.fontBoundingBoxDescent) / 2 + met.fontBoundingBoxAscent;
+          lines.forEach((line, i) => ctx.fillText(line, m.at[0], m.at[1] + base + i * lh));
+        } else {
+          ctx.textBaseline = 'top';
+          lines.forEach((line, i) => ctx.fillText(line, m.at[0], m.at[1] + (lh - m.size) / 2 + i * lh));
+        }
       }
     }
   };
@@ -240,13 +403,28 @@ export function ShotEditor({
   const width = () => Math.max(3, Math.round((canvasRef.current?.width ?? 1400) / 420));
   /** Base size scales with the image so a label reads the same on any capture. */
   const baseSize = () => Math.max(14, Math.round((canvasRef.current?.width ?? 1400) / 58));
-  const fontSize = () => Math.round(baseSize() * textScale);
-  /** The same size in screen pixels, so the floating field matches what will be drawn. */
-  const screenFontSize = () => {
-    const c = canvasRef.current;
-    if (!c) return 15;
-    const shown = c.getBoundingClientRect().width || c.width;
-    return Math.max(11, Math.round(fontSize() * (shown / c.width)));
+  const penSize = () => textSize ?? baseSize();
+
+  const textWidth = (text: string, size: number, isBold: boolean) => {
+    measureRef.current ??= document.createElement('canvas').getContext('2d');
+    const ctx = measureRef.current;
+    if (!ctx) return 0;
+    ctx.font = fontOf(size, isBold);
+    return ctx.measureText(text).width;
+  };
+
+  /**
+   * A label nobody has sized is as wide as its longest line, out to the edge of the picture;
+   * past the edge it wraps and grows downwards. Once the corner has been dragged the width is
+   * the user's, and typing only ever adds height.
+   */
+  const fit = (l: Label): Label => {
+    if (l.sized) return l;
+    const room = Math.max(l.size * 2, (canvasRef.current?.width ?? 1400) - l.at[0] - l.size * 0.25);
+    const longest = Math.max(...(l.text || PLACEHOLDER).split('\n').map((s) => textWidth(s, l.size, l.bold)));
+    // A fifth of an em over the text: room for the caret, and for the field's own rounding,
+    // so it never wraps a line the saved image would not.
+    return { ...l, width: Math.min(room, Math.ceil(Math.max(l.size, longest + l.size * 0.2))) };
   };
 
   const down = (e: React.PointerEvent) => {
@@ -258,11 +436,10 @@ export function ShotEditor({
       // Stops the browser moving focus out of the field we are about to create.
       e.preventDefault();
       const id = `l${Date.now()}`;
-      addMark({
-        tool: 'text', id, colour, size: fontSize(), at: p,
-        width: Math.round((canvasRef.current?.width ?? 1400) * 0.34),
-        text: '', bold,
-      });
+      addMark(fit({
+        tool: 'text', id, colour, size: penSize(), at: p,
+        width: 0, sized: false, height: 0, text: '', bold,
+      }));
       setActiveId(id);
       setEditingId(id);
       return;
@@ -277,13 +454,13 @@ export function ShotEditor({
     if (d) {
       const p = at(e);
       if (d.mode === 'move') patch(d.id, { at: [p[0] - d.ox, p[1] - d.oy] });
-      else patch(d.id, { width: Math.max(40, p[0] - d.ox) });
+      else patch(d.id, { width: Math.max(40, p[0] - d.ox), height: Math.max(0, p[1] - d.oy), sized: true });
       return;
     }
     if (!drawing) return;
     const p = at(e);
     if (drawing.tool === 'pen') setDrawing({ ...drawing, points: [...drawing.points, p] });
-    else if (drawing.tool === 'arrow' || drawing.tool === 'box') setDrawing({ ...drawing, to: p });
+    else if (drawing.tool !== 'text') setDrawing({ ...drawing, to: p });
   };
 
   const up = () => {
@@ -296,32 +473,32 @@ export function ShotEditor({
   activeIdRef.current = activeId;
 
   /**
-   * Focus the field the moment it attaches, not in an effect — the label list re-renders on
-   * every keystroke and an effect keyed on the id fires before anything useful exists.
+   * Focus the field the moment it attaches, and only then.
+   *
+   * The callback is stable. It used to be a new function on every render, so React detached
+   * and re-attached it on every keystroke, and each re-attach put the caret back at the end:
+   * a word typed into the middle of a label came out with all but its first letter at the
+   * end. Now it runs once when the field appears and once when it goes.
    */
-  const focusedField = useRef<HTMLTextAreaElement | null>(null);
-  const attachField = (el: HTMLTextAreaElement | null) => {
+  const attachField = useCallback((el: HTMLTextAreaElement | null) => {
     fieldRef.current = el;
-    if (el && focusedField.current !== el) {
-      focusedField.current = el;
-      /**
-       * Deferred by a frame. Focusing inside the click that created the field loses the
-       * focus again when the browser finishes handling that same click on the canvas
-       * underneath — which is why the text tool looked like it did nothing at all.
-       */
-      requestAnimationFrame(() => {
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
-      });
-    }
-    if (!el) focusedField.current = null;
-  };
+    if (!el) return;
+    /**
+     * Deferred by a frame. Focusing inside the click that created the field loses the
+     * focus again when the browser finishes handling that same click on the canvas
+     * underneath — which is why the text tool looked like it did nothing at all.
+     */
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  }, []);
 
   const labels = () => marksRef.current.filter((m): m is Label => m.tool === 'text');
   const labelOf = (id: string | null) => (id ? labels().find((l) => l.id === id) ?? null : null);
 
   const patch = (id: string, next: Partial<Label>) => {
-    setMarks((prev) => prev.map((m) => (m.tool === 'text' && m.id === id ? { ...m, ...next } : m)));
+    setMarks((prev) => prev.map((m) => (m.tool === 'text' && m.id === id ? fit({ ...m, ...next }) : m)));
   };
 
   const dropLabel = (id: string) => {
@@ -351,11 +528,16 @@ export function ShotEditor({
     const onKey = (e: KeyboardEvent) => {
       const inText = e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement;
       if (e.key === 'Escape') {
+        if (eyeOpenRef.current) return;
         /**
-         * One level at a time (issue 0014). In a label: keep the text and leave the field.
-         * With a label selected: deselect. Otherwise: close the editor. Escape used to jump
-         * straight out and take the label with it.
+         * One level at a time (issue 0014). In the size or colour field: leave it. In a label:
+         * keep the text and leave the field. With a label selected: deselect. Otherwise: close
+         * the editor. Escape used to jump straight out and take the label with it.
          */
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) {
+          e.target.blur();
+          return;
+        }
         if (inText || editingId) { stopEditing(); return; }
         if (activeIdRef.current) { setActiveId(null); return; }
         onCancel();
@@ -377,6 +559,67 @@ export function ShotEditor({
     paint(out, marksRef.current, true);
     onSave(out.toDataURL('image/png'));
   };
+
+  /**
+   * The browser's own eyedropper, for a colour already in the screenshot. It can take one from
+   * anywhere on the screen, which is more than it needs to.
+   *
+   * Escape cancels it. Whether the browser also hands that Escape to the page is untested, and
+   * if it did, the editor would close and take every mark with it — so Escape is ignored while
+   * the eyedropper is open and for a quarter of a second after. The quarter-second is a GUESS.
+   */
+  const pickFromScreen = (pick: (c: string) => void) => {
+    const Dropper = eyeDropper();
+    if (!Dropper) return;
+    eyeOpenRef.current = true;
+    void new Dropper().open()
+      .then((r) => pick(hex6(r.sRGBHex)))
+      .catch(() => { /* Escape, or nothing picked: nothing changes */ })
+      .finally(() => { window.setTimeout(() => { eyeOpenRef.current = false; }, 250); });
+  };
+
+  /** The presets, then any colour at all, then one copied off the screenshot. */
+  const colourPicks = (value: string, pick: (c: string) => void) => (
+    <>
+      {COLOURS.map((c) => (
+        <button
+          key={c.id}
+          className={`swatch${sameColour(c.id, value) ? ' on' : ''}`}
+          style={{ background: c.id }}
+          onClick={() => pick(c.id)}
+          aria-pressed={sameColour(c.id, value)}
+          title={c.name}
+          aria-label={c.name}
+        />
+      ))}
+      <input
+        type="color"
+        className={`swatch any${COLOURS.some((c) => sameColour(c.id, value)) ? '' : ' on'}`}
+        value={hex6(value)}
+        onChange={(e) => pick(e.target.value)}
+        title="Any colour"
+        aria-label="Any colour"
+      />
+      {canPick && (
+        <button
+          className="setpipette"
+          onClick={() => pickFromScreen(pick)}
+          title="Copy a colour from the screenshot"
+          aria-label="Copy a colour from the screenshot"
+        >
+          {PIPETTE}
+        </button>
+      )}
+    </>
+  );
+
+  const c = canvasRef.current;
+  const W = c?.width || 1;
+  const H = c?.height || 1;
+  /** The picture's width on screen, and screen pixels per image pixel. */
+  const shown = c ? shownWidth || c.getBoundingClientRect().width || c.width : 1;
+  const scale = c && c.width ? shown / c.width : 1;
+  const active = labelOf(activeId);
 
   return (
     <div className="shotedit" role="dialog" aria-label="Annotate the screenshot">
@@ -400,17 +643,7 @@ export function ShotEditor({
               ))}
             </div>
             <div className="setcols" role="group" aria-label="Colour">
-              {COLOURS.map((c) => (
-                <button
-                  key={c.id}
-                  className={`swatch${c.id === colour ? ' on' : ''}`}
-                  style={{ background: c.id }}
-                  onClick={() => setColour(c.id)}
-                  aria-pressed={c.id === colour}
-                  title={c.name}
-                  aria-label={c.name}
-                />
-              ))}
+              {colourPicks(colour, setColour)}
             </div>
             <div className="setacts">
               <button className="btn" onClick={undo} disabled={marks.length === 0} title="⌘Z">
@@ -427,137 +660,153 @@ export function ShotEditor({
             </div>
           </div>
 
-          <canvas
-            ref={canvasRef}
-            className={`setcanvas t-${tool}`}
-            onPointerDown={down}
-            onPointerMove={move}
-            onPointerUp={up}
-            onPointerCancel={up}
-          />
-          {/* Placed labels are DOM objects: move them, resize them, type in them again.
-              They are composited onto the image at export. */}
-          {marks.filter((m): m is Label => m.tool === 'text').map((l) => {
-            const c = canvasRef.current;
-            const shown = c ? (c.getBoundingClientRect().width || c.width) : 1;
-            const scale = c ? shown / c.width : 1;
-            const editing = editingId === l.id;
-            return (
-              <div
-                key={l.id}
-                className={`setlabel${activeId === l.id ? ' on' : ''}${editing ? ' editing' : ''}`}
-                style={{
-                  left: `${(l.at[0] / (c?.width ?? 1)) * 100}%`,
-                  top: `${(l.at[1] / (c?.height ?? 1)) * 100}%`,
-                  width: `${(l.width / (c?.width ?? 1)) * 100}%`,
-                  color: l.colour,
-                  fontWeight: l.bold ? 600 : 400,
-                  fontSize: Math.max(9, Math.round(l.size * scale)),
-                  lineHeight: 1.3,
-                }}
-                onPointerDown={(e) => {
-                  if (editing) return;
-                  e.stopPropagation();
-                  setActiveId(l.id);
-                  const p = at(e);
-                  dragRef.current = { id: l.id, mode: 'move', ox: p[0] - l.at[0], oy: p[1] - l.at[1] };
-                  (e.target as Element).setPointerCapture(e.pointerId);
-                }}
-                /* The label captures the pointer when a drag starts, so the moves arrive
-                   here rather than on the canvas underneath. */
-                onPointerMove={move}
-                onPointerUp={up}
-                onDoubleClick={(e) => { e.stopPropagation(); setActiveId(l.id); setEditingId(l.id); }}
-              >
-                {editing ? (
-                  <textarea
-                    ref={attachField}
-                    className="settext"
-                    value={l.text}
-                    placeholder="Type. Return makes a new line."
-                    style={{ color: l.colour, fontWeight: l.bold ? 600 : 400, fontSize: 'inherit' }}
-                    onChange={(e) => patch(l.id, { text: e.target.value })}
-                    onKeyDown={(e) => {
-                      // Return is a line break. Escape leaves the field and keeps the text.
-                      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopEditing(); }
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); stopEditing(); }
-                    }}
-                  />
-                ) : (
-                  <div className="settextview">{l.text || 'Empty label'}</div>
-                )}
-                {activeId === l.id && (
-                  <span
-                    className="setgrip"
-                    title="Drag to set the wrapping width"
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      const p = at(e);
-                      dragRef.current = { id: l.id, mode: 'size', ox: p[0] - l.width, oy: 0 };
-                      (e.target as Element).setPointerCapture(e.pointerId);
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })}
-
-          {labelOf(activeId) && (
-            <div
-              className="settextbar floating"
-              style={{
-                left: `${((labelOf(activeId)!.at[0]) / (canvasRef.current?.width ?? 1)) * 100}%`,
-                top: `${((labelOf(activeId)!.at[1]) / (canvasRef.current?.height ?? 1)) * 100}%`,
-              }}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              {SIZES.map((sz) => (
-                <button
-                  key={sz.label}
-                  className={Math.abs(labelOf(activeId)!.size - Math.round(baseSize() * sz.scale)) < 2 ? 'on' : ''}
-                  onClick={() => { setTextScale(sz.scale); patch(activeId!, { size: Math.round(baseSize() * sz.scale) }); }}
-                  title={`${sz.title} text`}
+          {/* The picture's own box, and nothing else, so a label's position is a share of the
+              picture. It was a share of the picture and the toolbar together, which drew every
+              label higher on screen than it was saved. */}
+          <div className="setimg">
+            <canvas
+              ref={canvasRef}
+              className={`setcanvas t-${tool}`}
+              onPointerDown={down}
+              onPointerMove={move}
+              onPointerUp={up}
+              onPointerCancel={up}
+            />
+            {/* Placed labels are DOM objects: move them, resize them, type in them again.
+                They are composited onto the image at export. */}
+            {marks.filter((m): m is Label => m.tool === 'text').map((l) => {
+              const editing = editingId === l.id;
+              return (
+                <div
+                  key={l.id}
+                  className={`setlabel${activeId === l.id ? ' on' : ''}${editing ? ' editing' : ''}`}
+                  style={{
+                    left: `${(l.at[0] / W) * 100}%`,
+                    top: `${(l.at[1] / H) * 100}%`,
+                    color: l.colour,
+                    fontWeight: l.bold ? 600 : 400,
+                    // Not rounded: the field wraps where the saved image will.
+                    fontSize: `${l.size * scale}px`,
+                    lineHeight: LEADING,
+                  }}
+                  onPointerDown={(e) => {
+                    if (editing) return;
+                    e.stopPropagation();
+                    if (editingId) stopEditing();
+                    setActiveId(l.id);
+                    const p = at(e);
+                    dragRef.current = { id: l.id, mode: 'move', ox: p[0] - l.at[0], oy: p[1] - l.at[1] };
+                    (e.target as Element).setPointerCapture(e.pointerId);
+                  }}
+                  /* The label captures the pointer when a drag starts, so the moves arrive
+                     here rather than on the canvas underneath. */
+                  onPointerMove={move}
+                  onPointerUp={up}
+                  onDoubleClick={(e) => { e.stopPropagation(); setActiveId(l.id); setEditingId(l.id); }}
                 >
-                  {sz.label}
-                </button>
-              ))}
-              <button
-                className={labelOf(activeId)!.bold ? 'on' : ''}
-                onClick={() => { const b = !labelOf(activeId)!.bold; setBold(b); patch(activeId!, { bold: b }); }}
-                title="Bold"
-                style={{ fontWeight: 700 }}
+                  <div
+                    className="setbody"
+                    style={{
+                      width: `${l.width * scale}px`,
+                      minHeight: l.height ? `${l.height * scale}px` : undefined,
+                    }}
+                  >
+                    {/* The text as it will be saved. While it is being typed it is invisible and
+                        only gives the box its height, so the box grows with the text. The field
+                        used to be two lines tall and scroll, so a longer label snapped back to
+                        two lines the moment it was typed in again. The trailing space holds
+                        open a last line that is still empty. */}
+                    <div className="settextview" aria-hidden={editing || undefined}>
+                      {`${editing ? l.text || PLACEHOLDER : l.text || 'Empty label'} `}
+                    </div>
+                    {editing && (
+                      <textarea
+                        ref={attachField}
+                        className="settext"
+                        value={l.text}
+                        placeholder={PLACEHOLDER}
+                        aria-label="Label text"
+                        onChange={(e) => patch(l.id, { text: e.target.value })}
+                        onKeyDown={(e) => {
+                          // Return is a line break. Escape leaves the field and keeps the text.
+                          if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopEditing(); }
+                          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); stopEditing(); }
+                        }}
+                      />
+                    )}
+                  </div>
+                  {activeId === l.id && (
+                    <span
+                      className="setgrip"
+                      title="Drag to set the size of the box"
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        // Keeps the caret in the field while the box is resized around it.
+                        e.preventDefault();
+                        const p = at(e);
+                        const body = e.currentTarget.parentElement?.querySelector<HTMLElement>('.setbody');
+                        const h = body ? body.getBoundingClientRect().height / scale : l.height;
+                        dragRef.current = { id: l.id, mode: 'size', ox: p[0] - l.width, oy: p[1] - h };
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                      }}
+                    />
+                  )}
+                </div>
+              );
+            })}
+
+            {active && (
+              <div
+                ref={barRef}
+                className="settextbar floating"
+                style={{
+                  // Kept inside the picture: beside a label near the right-hand edge it ran off
+                  // the screen, with Done and × in the part that was cut off.
+                  left: `${Math.max(0, Math.min(active.at[0] * scale - 6, shown - barWidth))}px`,
+                  top: `${(active.at[1] / H) * 100}%`,
+                }}
+                // A button here must not take the caret out of the label. The size, the list
+                // of sizes and the colour field do need the focus they are clicked for.
+                onMouseDown={(e) => {
+                  if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)) e.preventDefault();
+                }}
               >
-                B
-              </button>
-              <span className="sep" />
-              {COLOURS.map((c) => (
-                <button
-                  key={c.id}
-                  className={`swatch${c.id === labelOf(activeId)!.colour ? ' on' : ''}`}
-                  style={{ background: c.id }}
-                  onClick={() => { setColour(c.id); patch(activeId!, { colour: c.id }); }}
-                  title={c.name}
-                  aria-label={c.name}
+                <SizeField
+                  value={active.size}
+                  onChange={(n) => { setTextSize(n); patch(active.id, { size: n }); }}
+                  onDone={() => fieldRef.current?.focus()}
                 />
-              ))}
-              <span className="sep" />
-              {editingId === activeId ? (
-                <button onClick={stopEditing} title="Keep it and stop typing">Done</button>
-              ) : (
-                <button onClick={() => setEditingId(activeId)} title="Type in it again">Edit</button>
-              )}
-              <button onClick={() => dropLabel(activeId!)} title="Delete this label">×</button>
-            </div>
-          )}
+                <button
+                  className={active.bold ? 'on' : ''}
+                  onClick={() => { const b = !active.bold; setBold(b); patch(active.id, { bold: b }); }}
+                  aria-pressed={active.bold}
+                  title="Bold"
+                  style={{ fontWeight: 700 }}
+                >
+                  B
+                </button>
+                <span className="sep" />
+                {colourPicks(active.colour, (next) => { setColour(next); patch(active.id, { colour: next }); })}
+                <span className="sep" />
+                {editingId === active.id ? (
+                  <button onClick={stopEditing} title="Keep it and stop typing">Done</button>
+                ) : (
+                  <button onClick={() => setEditingId(active.id)} title="Type in it again">Edit</button>
+                )}
+                <button onClick={() => dropLabel(active.id)} title="Delete this label" aria-label="Delete this label">×</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       <p className="setnote">
         {marks.length} mark{marks.length === 1 ? '' : 's'} · <b>⌘Z</b> undo · <b>⌘⇧Z</b> redo ·{' '}
-        <b>Esc</b> leaves the text field, then the selection, then the editor. A label can be
-        dragged, retyped and resized by its corner after it is placed; <b>Return</b> inside one
-        is a line break. The annotated image is what gets filed — the original is not kept
-        separately, so circle the thing rather than describing where it was.
+        <b>Esc</b> leaves the text field, then the selection, then the editor. A label widens as
+        you type until it reaches the edge of the picture, then wraps; drag it to move it, drag its
+        corner to set its size, double-click to retype it. <b>Return</b> inside one is a line
+        break. The annotated image is what gets filed — the original is not kept separately, so
+        circle the thing rather than describing where it was.
       </p>
     </div>
   );

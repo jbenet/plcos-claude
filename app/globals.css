@@ -654,8 +654,9 @@ table.list tr.past td:first-child{box-shadow:inset 2px 0 0 var(--line)}
 .shotcheck small{display:block;color:var(--muted);font-size:11px;line-height:1.5;margin-top:2px}
 
 /* the annotation editor */
+/* Dark native controls too: the size field's arrows and list, and the colour picker. */
 .shotedit{position:fixed;inset:0;z-index:60;background:rgba(20,19,18,.93);display:flex;
-          flex-direction:column;padding:14px 18px 10px}
+          flex-direction:column;padding:14px 18px 10px;color-scheme:dark}
 /* Sits directly on top of the image rather than at the top of the overlay, because a
    toolbar a screen away from the thing it edits is a toolbar nobody finds. */
 .setop{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;
@@ -667,29 +668,49 @@ table.list tr.past td:first-child{box-shadow:inset 2px 0 0 var(--line)}
                  color:#EFEBE2;font-size:14px;cursor:pointer;font-family:inherit}
 .settools button:hover{background:#312C25}
 .settools button.on{background:#EFEBE2;color:#1A1917;border-color:#EFEBE2}
+.settools button svg{display:block;margin:auto}
 .swatch{width:22px;height:22px;border-radius:50%;border:2px solid #3B3630;cursor:pointer;padding:0}
 .swatch.on{border-color:#EFEBE2;box-shadow:0 0 0 2px rgba(239,235,226,.35)}
+/* Any colour: the browser's own picker, drawn as one more swatch inside a ring of the palette. */
+input.swatch.any{appearance:none;-webkit-appearance:none;padding:3px;border:0;background:
+  conic-gradient(#BF4A16,#8A6410,#0E7F55,#5F4B9E,#BF4A16)}
+input.swatch.any::-webkit-color-swatch-wrapper{padding:0}
+input.swatch.any::-webkit-color-swatch{border:2px solid #1F1C18;border-radius:50%}
+input.swatch.any::-moz-color-swatch{border:2px solid #1F1C18;border-radius:50%}
+input.swatch.any.on{box-shadow:0 0 0 2px #EFEBE2}
+.setpipette{display:grid;place-items:center;width:26px;height:26px;padding:0;border:1px solid #3B3630;
+  border-radius:7px;background:#242119;color:#EFEBE2;cursor:pointer}
+.setpipette:hover{background:#312C25}
 .setstage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:8px 0}
 .setwrap{position:relative;max-width:100%;max-height:100%;display:flex;flex-direction:column;align-items:stretch}
+/* Exactly the picture's box: a label's position is a share of the picture and nothing else. */
+.setimg{position:relative;align-self:center;max-width:100%}
 .setcanvas{display:block;max-width:100%;max-height:74vh;margin:0 auto;border-radius:8px;
            box-shadow:0 12px 44px rgba(0,0,0,.5);background:#fff;touch-action:none}
-.setcanvas.t-pen,.setcanvas.t-arrow,.setcanvas.t-box{cursor:crosshair}
+.setcanvas.t-pen,.setcanvas.t-arrow,.setcanvas.t-line,.setcanvas.t-box{cursor:crosshair}
 .setcanvas.t-text{cursor:text}
-/* A placed label is a real object: drag it, resize it, type in it again (issue 0014). */
-.setlabel{position:absolute;transform:translate(-4px,-4px);z-index:2;font-family:var(--sans);
-  padding:2px 3px;border:1px solid transparent;border-radius:3px;cursor:move;min-height:1em}
+/* A placed label is a real object: drag it, resize it, type in it again (issue 0014). The
+   offset is the padding and border, so the text itself starts where it will be saved. */
+.setlabel{position:absolute;transform:translate(-4px,-3px);z-index:2;font-family:var(--sans);
+  padding:2px 3px;border:1px solid transparent;border-radius:3px;cursor:move}
 .setlabel.on{border-color:rgba(239,235,226,.55);background:rgba(26,25,23,.12)}
 .setlabel.editing{cursor:text;border-style:dashed}
+/* The text box, at the saved width. The text inside it sizes it; while typing, the field is
+   laid over that text, so the box grows with what is typed instead of scrolling. */
+.setbody{position:relative}
 .settextview{white-space:pre-wrap;word-break:break-word;user-select:none}
-.setlabel:not(.on) .settextview:empty::after{content:'Empty label';opacity:.5}
+.setlabel.editing .settextview{visibility:hidden}
 .setgrip{position:absolute;right:-5px;bottom:-5px;width:11px;height:11px;border-radius:2px;
   background:#EFEBE2;border:1px solid #1A1917;cursor:nwse-resize}
-/* Transparent, so the label reads against the screenshot rather than on a white card. */
-.settext{display:block;width:100%;background:transparent;border:0;outline:none;resize:none;
-  font-family:var(--sans);line-height:1.3;padding:0;overflow:hidden;min-height:2.6em;
-  white-space:pre-wrap;word-break:break-word}
+/* Transparent, so the label reads against the screenshot rather than on a white card. No
+   minimum height and no focus ring of its own: the app's textarea rules give it both, and the
+   dashed border already says the label is being typed in. */
+.settext{position:absolute;inset:0;display:block;width:100%;height:100%;min-height:0;margin:0;padding:0;
+  background:transparent;border:0;border-radius:0;outline:none;resize:none;overflow:hidden;
+  font:inherit;color:inherit;letter-spacing:inherit;white-space:pre-wrap;word-break:break-word}
+.settext:focus{outline:none}
 .settext::placeholder{color:currentColor;opacity:.45}
-.settextbar.floating{position:absolute;transform:translate(-6px,-42px);z-index:4}
+.settextbar.floating{position:absolute;transform:translateY(-42px);z-index:4}
 .settextbar{display:flex;gap:3px;align-items:center;margin-top:6px;padding:4px 5px;
             background:#1F1C18;border:1px solid #3B3630;border-radius:7px;width:max-content}
 .settextbar button{min-width:22px;height:22px;padding:0 5px;border:1px solid transparent;
@@ -699,7 +720,25 @@ table.list tr.past td:first-child{box-shadow:inset 2px 0 0 var(--line)}
 .settextbar button.on{background:#EFEBE2;color:#1A1917}
 .settextbar .swatch{width:16px;height:16px;min-width:16px;border-radius:50%;border:2px solid #3B3630}
 .settextbar .swatch.on{border-color:#EFEBE2;box-shadow:0 0 0 2px rgba(239,235,226,.3)}
+.settextbar input.swatch.any{padding:2px}
+.settextbar input.swatch.any::-webkit-color-swatch{border-width:1.5px}
+.settextbar .setpipette{width:22px;height:22px;padding:0;border-color:transparent;border-radius:5px;background:none;color:#C6C0B4}
 .settextbar .sep{width:1px;height:16px;background:#3B3630;margin:0 3px}
+/* The size, as a number: type it, step it with the arrow keys, or pick one from the list. */
+.setsize{display:inline-flex;align-items:center;height:22px;margin:0 3px 0 1px;border:1px solid #3B3630;
+  border-radius:5px;background:#242119;font-family:var(--mono);font-size:11px;color:#9C968A}
+.setsize:focus-within{border-color:#EFEBE2}
+.setsize label{display:inline-flex;align-items:center;gap:2px;height:100%;padding:0 4px 0 6px;cursor:text}
+.setsize input{width:24px;padding:0;border:0;outline:none;background:none;color:#EFEBE2;font:inherit;
+  appearance:textfield;-moz-appearance:textfield}
+.setsize input::-webkit-inner-spin-button,.setsize input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.setsize select{appearance:none;-webkit-appearance:none;width:17px;height:100%;padding:0;border:0;
+  border-left:1px solid #3B3630;border-radius:0 4px 4px 0;color:transparent;cursor:pointer;background:
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%23C6C0B4' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+  center/8px 5px no-repeat}
+.setsize select:hover{background-color:#312C25}
+.setsize select:focus{outline:none}
+.setsize option{color:#EFEBE2;background:#242119}
 .setnote{flex:none;margin:0;color:#9C968A;font-size:11.5px;text-align:center}
 .issueshot{display:block;width:100%;max-width:900px;height:auto;border:1px solid var(--line);
            border-radius:8px;background:var(--ground)}

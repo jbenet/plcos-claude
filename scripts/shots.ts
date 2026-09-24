@@ -212,6 +212,51 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N63: [
+    {
+      name: '01-type-anywhere-any-size-any-colour',
+      path: '/today',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2800);
+        await page.getByRole('button', { name: /Annotate screenshot 1/ }).click();
+        await page.waitForTimeout(500);
+        await page.getByRole('button', { name: 'Add a label' }).click();
+        const box = (await page.locator('.setcanvas').boundingBox())!;
+        await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.3);
+        await page.waitForTimeout(400);
+        // Typed at the end, then in the middle: the caret stays where it was put (issue 0005).
+        await page.keyboard.type('This number is wrong.', { delay: 3 });
+        for (let i = 0; i < 'is wrong.'.length; i++) await page.keyboard.press('ArrowLeft');
+        await page.keyboard.type('in the header ', { delay: 3 });
+        await page.getByLabel('Text size in pixels').last().fill('37');
+        await page.getByLabel('Any colour').last().fill('#2f6fb3');
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: '02-a-plain-line',
+      path: '/today',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /Feedback/ }).click();
+        await page.waitForTimeout(2800);
+        await page.getByRole('button', { name: /Annotate screenshot 1/ }).click();
+        await page.waitForTimeout(500);
+        const box = (await page.locator('.setcanvas').boundingBox())!;
+        const drag = async (x0: number, y0: number, x1: number, y1: number) => {
+          await page.mouse.move(box.x + box.width * x0, box.y + box.height * y0);
+          await page.mouse.down();
+          await page.mouse.move(box.x + box.width * x1, box.y + box.height * y1, { steps: 10 });
+          await page.mouse.up();
+        };
+        await page.getByRole('button', { name: 'Draw a line' }).click();
+        await drag(0.18, 0.42, 0.52, 0.42);
+        await page.getByRole('button', { name: 'Point at something' }).click();
+        await drag(0.7, 0.62, 0.56, 0.45);
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N62: [
     {
       name: '01-where-the-pursuits-stand',

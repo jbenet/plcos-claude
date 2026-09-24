@@ -4428,3 +4428,31 @@ direct contact on the ladder; 79 at Discussing, 53 with a meeting on the ladder;
 none countersigned yet. 210 LPs from Selected on are waiting two weeks or more on a reply. The
 update reader now takes "emailed Anneliese" as outreach and "they emailed" as a reply. 98 of 98
 properties hold.
+
+## N63 — The annotation editor keeps the caret, the size and the colour you chose
+
+**Shipped.** From your notes on the feedback box's screenshot editor (issue 0005): "while typing,
+cursor sent to end… cant type well", "snaps back to a smaller size when typing again", "typing
+past end should resize the box", "should be able to select actual font size by number", "a
+color-picker for more colors… with a 'hue copy' selector", and "should be able to add a non-arrow
+line".
+
+| | |
+|---|---|
+| ![Type anywhere, any size, any colour](docs/changelog/shots/n63/01-type-anywhere-any-size-any-colour.webp) | **Typing stays where you put the caret.** The text field was being re-attached on every keystroke, which sent the caret to the end; "header" here was typed into the middle of the sentence. **The size is a number**: type it (37 here) or pick one from the list, in pixels of the saved image, from 8 to 400. A half-typed number isn't applied while you're typing it. **Any colour**: the five swatches stay, and beside them are the browser's colour picker and an eyedropper that copies a colour from the screenshot. |
+| ![A plain line](docs/changelog/shots/n63/02-a-plain-line.webp) | **A line without a head**, next to the arrow, for underlining something or joining two things up. **A label keeps its size.** Until you drag its corner it widens as you type, out to the edge of the picture, then wraps and grows down. Once you've set its size, typing only makes it taller. |
+
+**Found along the way.** Labels showed up to about 54 px higher on screen than where they were
+saved, because they were placed against the picture plus the toolbar. They're placed against
+the picture alone now, and the saved image wraps text the way the editor shows it, to within 1.4
+image pixels. The app's textarea styles no longer leak into a label.
+
+**Not checked:** the real eyedropper. Headless Chromium can't open it, so its button was tested
+with a stand-in. Escape is ignored while it's open, and for 250 ms after, so closing the dropper
+can't also close the editor. The 250 ms is a guess. Firefox and Safari don't have an eyedropper,
+so there the button isn't shown. Undo still doesn't step back through a move or a resize, and
+resizing is mouse-only; both predate this change.
+
+A background agent built this in its own worktree, on demo data only. I checked the six fixes
+again here: the two shots, a label growing to the edge (57 px wide to the picture's edge, then
+two lines), and a resized label keeping 350 × 115 while I typed.
