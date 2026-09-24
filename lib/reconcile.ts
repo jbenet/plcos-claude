@@ -143,7 +143,7 @@ export interface ReconcileCounts {
   withdrawn: number;
   /** The records are no further than the ladder. */
   inStep: number;
-  /** Passed, or on a vehicle kept for its history: not proposed. */
+  /** On a vehicle kept for its history: not proposed. */
   skipped: number;
 }
 
@@ -208,7 +208,8 @@ async function propose(): Promise<ReconcileCounts> {
   const actor = await systemActor();
   const pursuits = await listPursuits(null);
   counts.pursuits = pursuits.length;
-  const live = pursuits.filter((p) => !p.historical && p.status !== 'passed');
+  // A passed LP's meetings still happened (N60): only a vehicle kept for its history is skipped.
+  const live = pursuits.filter((p) => !p.historical);
   counts.skipped = pursuits.length - live.length;
   const pairs = live.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
   const [touches, closes] = await Promise.all([touchpointsByPair(pairs), closeStates(pairs)]);
@@ -236,7 +237,7 @@ async function propose(): Promise<ReconcileCounts> {
   const liveIds = new Set(live.map((p) => p.pursuitId));
   for (const [pursuitId, t] of open) {
     if (t.mine && !liveIds.has(pursuitId)) {
-      await db.transaction((tx) => withdraw(tx, t.id, 'The pursuit passed or its vehicle is kept for its history; not proposed.'));
+      await db.transaction((tx) => withdraw(tx, t.id, 'Its vehicle is kept for its history; not proposed.'));
       counts.withdrawn++;
     }
   }

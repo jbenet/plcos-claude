@@ -86,7 +86,7 @@ const IMPLIED_IDS = new Set<string>(IMPLIED.map((x) => x.id));
 const LEGACY_STAGE: Record<string, { status: PursuitStatus; implies?: Implied[] }> = {
   research: { status: 'sourcing' },
   targeted: { status: 'sourcing' },
-  contacted: { status: 'selected', implies: ['reached_out'] },
+  contacted: { status: 'connecting', implies: ['reached_out'] },
   responded: { status: 'discussing', implies: ['replied'] },
   scheduling: { status: 'discussing', implies: ['replied', 'meeting_agreed'] },
   first_meeting: { status: 'discussing', implies: ['met'] },
@@ -151,7 +151,8 @@ export function proposeValue(value: string): ValueMap | null {
   if (/schedul|ready for/.test(v)) return { status: 'discussing', implies: ['replied', 'meeting_agreed'] };
   if (/respond|interested|discussion|replied/.test(v)) return { status: 'discussing', implies: ['replied'] };
   // "In progress" says we are working it, not that they answered.
-  if (/contacted|reached out|intro made|introduced|sent|in progress/.test(v)) return { status: 'selected', implies: ['reached_out'] };
+  // Outreach under way reads as Connecting (N60); silence after it stays Selected (N53).
+  if (/contacted|reached out|intro made|introduced|sent|in progress/.test(v)) return { status: 'connecting', implies: ['reached_out'] };
   // On an outreach list, "not started" is chosen and not yet approached.
   if (/not started|to contact|to reach out/.test(v)) return { status: 'selected' };
   if (/target|enriched|qualified|research|to do|prospect/.test(v)) return { status: 'sourcing' };

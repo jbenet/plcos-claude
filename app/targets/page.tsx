@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
  * earlier. Shown as a question — the status is a person's call, and it is never moved for them.
  */
 function aheadOfStatus(p: Pursuit, s: TouchpointSummary): boolean {
-  return (p.status === 'new' || p.status === 'sourcing' || p.status === 'selected') && s.meetingDates.length > 0;
+  return (p.status === 'new' || p.status === 'sourcing' || p.status === 'selected' || p.status === 'connecting') && s.meetingDates.length > 0;
 }
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);

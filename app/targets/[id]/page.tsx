@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
-import { LadderStepper } from '@/components/strategy/LadderStepper';
+import { StatusStepper } from '@/components/strategy/StatusStepper';
 import { AdvanceForm } from '@/components/strategy/AdvanceForm';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { Coverage } from '@/components/ui/Coverage';
@@ -65,7 +65,6 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
   // What the records here support, beside what the ladder has accepted (N57, docs/18).
   const file = onFile(pursuit, touches, tracks);
   const proposal = file.climb.length ? await findOpenTicket('STAGE', 'pursuit', pursuit.pursuitId) : null;
-  const claimedRung = pursuit.source !== 'us' && pursuit.stageSaid ? impliedRung(pursuit.implied) : null;
   const theirRead = shownRead(touchSummary.read, readings, laterFacts(pursuit, tracks));
   // What each touchpoint was about: the meeting's title from the calendar, and the note Affinity
   // ties to the same interaction — its summary, and all of it a click away.
@@ -197,12 +196,21 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
                   : `read from Affinity${p.sourceAsOf ? ` ${shortDate(p.sourceAsOf)}` : ''} — nobody has set one here yet`}
               </span>
             </div>
+            <div className="said">
+              {/* Why it is what it is (N60): Juan couldn't tell why an LP read as Passed. */}
+              <b>Why:</b>{' '}
+              {p.statusSource === 'us'
+                ? <>{p.statusSetByName ?? 'someone'} set it here{p.statusSetAt ? ` on ${shortDate(p.statusSetAt)}` : ''}{p.statusReason ? <>: &ldquo;{p.statusReason.replace(/_/g, ' ')}&rdquo;</> : ', with no reason given'}.</>
+                : p.stageSaid
+                  ? <>its status in Affinity reads &ldquo;{p.stageSaid}&rdquo;, which the mapping reads as {STATUS_LABEL[p.status]}{p.status === 'passed' && p.passedBy ? ` (${PASSED_BY_LABEL[p.passedBy].toLowerCase()})` : ''}. Someone on the team set it in Affinity; when, and why, Affinity doesn&rsquo;t say.</>
+                  : <>nobody has set one: this is where every LP starts.</>}
+            </div>
             {p.nextStep && (
               <div className="said">
                 <b>Next:</b> {p.nextStep}{p.nextStepOn ? ` — by ${shortDate(p.nextStepOn)}` : ''}
               </div>
             )}
-            {(p.status === 'new' || p.status === 'sourcing' || p.status === 'selected') && touchSummary.meetingDates.length > 0 && (
+            {(p.status === 'new' || p.status === 'sourcing' || p.status === 'selected' || p.status === 'connecting') && touchSummary.meetingDates.length > 0 && (
               <div className="said differs">
                 A meeting is on record, and the status is still {STATUS_LABEL[p.status]} — Discussing? It is yours to set; nothing moves it for you.
               </div>
@@ -248,12 +256,7 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
         );
       })()}
 
-      <LadderStepper
-        pursuit={pursuit}
-        onFile={file}
-        proposalId={proposal?.id ?? null}
-        claimed={claimedRung ? { rung: claimedRung, word: pursuit.stageSaid! } : null}
-      />
+      <StatusStepper pursuit={pursuit} onFile={file} proposalId={proposal?.id ?? null} track={tracks[0] ?? null} />
 
       <div className="grid2">
         <div>

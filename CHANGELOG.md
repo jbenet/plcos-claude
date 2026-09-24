@@ -4350,3 +4350,26 @@ says it was on your instruction and not reviewed one by one, and every rung carr
 and the rule behind it: 66 LPs opted in, 57 of them with a meeting held. I also moved to
 Discussing the 21 LPs who have met you about the raise this year but were still at Sourcing or
 Selected, with the same note. 95 of 95 properties hold.
+
+## N60 — The LP page leads with the status: seven of them, then the close track
+
+**Shipped.** From your note on the page for an LP at Passed: "'Connector willing' — i think
+these are not the states we discussed yesterday", and "maybe let's add 'connecting' (finding
+connectors, reaching out) in between 'selected' and 'discussing'… once we reach committed, we
+can start the closing sub-pipeline".
+
+| | |
+|---|---|
+| ![Status with its evidence](docs/changelog/shots/n60/01-status-with-its-evidence.webp) | **The stepper is the status now**: New, Sourcing, Selected, Connecting, Discussing, Committed, then the close track (soft, signed, hard, closed, and wires as amounts). What you saw before was the consent ladder, the evidence view. Its rungs are now the evidence under the status they belong to. Confirmed ones are green with a check; ones on record but not yet confirmed are grey; nothing shows where nothing is known. No dashed lines. |
+| ![Passed, and why](docs/changelog/shots/n60/02-passed-and-why.webp) | **Why it is what it is.** Every LP page says, in a line, why the status is what it is. Either a person set it here (who, when, what they said), or Affinity's status reads such-and-such and the mapping reads that as this status, with no record of who set it in Affinity or why. A passed LP ends the stepper in clay, with who ended it and why. |
+
+**Connecting, on the real account.** Affinity's words for outreach under way now read as
+Connecting, and 276 LPs moved there from Selected. The word for going quiet after outreach stays
+at Selected: you said silence isn't a step forward (N53). The mapping's proposer does the same
+for new words.
+
+**Passed LPs are reconciled too.** An LP who passed still met us, so their evidence is proposed
+like anyone's. "On file, not accepted, not proposed yet" was showing on those pages because
+they'd been skipped. On your instruction, I approved the 10 new proposals the same way as the
+last 66, with the same note. The pipeline's ladder column is now called Evidence. 95 of 95
+properties hold.

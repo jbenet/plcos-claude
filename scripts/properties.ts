@@ -1055,7 +1055,7 @@ async function main() {
             quiet?.status === 'selected' && !!quiet.implies?.includes('reached_out') &&
             holdAlone?.status === 'passed' && holdAlone.passedBy === 'us' && holdAlone.reason === 'do_not_contact' &&
             held?.status === 'committed' && held.next === 'On hold' &&
-            contacted?.status === 'selected' && impliedRung(contacted.implies ?? []) === null,
+            contacted?.status === 'connecting' && impliedRung(contacted.implies ?? []) === null,
           `second meeting → ${twice?.status} (${twice?.implies}); signed → ${signedWord?.status}, claims ${impliedRung(signedWord?.implies ?? [])}; lost, went dark → ${quiet?.status} (silence is not a pass); on hold alone → ${holdAlone?.status}, ${holdAlone?.reason}; paused, verbal → ${held?.status}, next "${held?.next}"; contacted claims ${impliedRung(contacted?.implies ?? []) ?? 'nothing'}`,
         );
 
@@ -1083,12 +1083,12 @@ async function main() {
 
         // A file written in stages (before N50) still reads: as statuses, the unreviewed lists
         // re-proposed when it is next written.
-        await wf(join(process.cwd(), file), text0.replace(/"status": \[/, '"stage": [').replace(/\{"status":"selected","implies":\["reached_out"\]\}/g, '{"stage":"contacted"}'));
+        await wf(join(process.cwd(), file), text0.replace(/"status": \[/, '"stage": [').replace(/\{"status":"connecting","implies":\["reached_out"\]\}/g, '{"stage":"contacted"}'));
         const old = await map.readMapping(report, file);
         const oldContacted = Object.values(old.lists).flatMap((l) => l.status.flatMap((src) => Object.entries(src.values))).find(([k]) => k === 'Contacted');
         check(
           'A mapping written in stages reads as statuses',
-          old.problems.length === 0 && Object.values(old.lists).some((l) => l.legacy) && oldContacted?.[1]?.status === 'selected',
+          old.problems.length === 0 && Object.values(old.lists).some((l) => l.legacy) && oldContacted?.[1]?.status === 'connecting',
           `legacy lists ${Object.values(old.lists).filter((l) => l.legacy).length}; "Contacted" → ${JSON.stringify(oldContacted?.[1])}; problems ${old.problems.length}`,
         );
         await rm(join(process.cwd(), file), { force: true });
@@ -1188,7 +1188,7 @@ async function main() {
         await wf(join(process.cwd(), file), (await rf(join(process.cwd(), file), 'utf8')).replace(/("Intro made":\s*)\{[^}]*\}/, '$1{"status":"discussing","implies":["replied"]}'));
         await tr.translate(null, { mappingPath: file });
         const now = (await statusOf('person:7002'))?.status;
-        check('A mapping edit takes effect the next time it is translated — no request to Affinity', was === 'selected' && now === 'discussing', `"Intro made" was ${was}, is ${now}`);
+        check('A mapping edit takes effect the next time it is translated — no request to Affinity', was === 'connecting' && now === 'discussing', `"Intro made" was ${was}, is ${now}`);
 
         // Money says yes: an amount on the commitment field makes an entry Committed, whatever the
         // word — here "Diligence", with a committed amount beside it.

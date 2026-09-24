@@ -126,8 +126,11 @@ first rung and nothing more — it is not target interest, not a meeting, not a 
 Render it as a stepper so the gap between claimed and evidenced state is visible.
 
 The ladder is not the pipeline status (N50, `docs/17-pipeline-model.md`). The status — new,
-sourcing, selected, discussing, committed, passed — is our plan: set by a person, any
-direction, no ticket, and it never writes a rung. The second rung displays as "LP opted in";
+sourcing, selected, connecting (N60), discussing, committed, passed — is our plan: set by a
+person, any direction, no ticket, and it never writes a rung. Since N60 the LP page's stepper
+is the status, with the close track after Committed, and each rung of the ladder shows as the
+evidence under the status it belongs to — confirmed in green, on record but unconfirmed in grey
+— so the gap between claimed and evidenced stays visible (Juan, 24 Sep). The second rung displays as "LP opted in";
 "target" means only a vehicle's size goal.
 
 Reconciliation (N57, `docs/18-reconciliation.md`) keeps the ladder in step with the records:

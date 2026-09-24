@@ -10,7 +10,7 @@ import { moveMetToDiscussing } from '@/app/targets/actions';
  * column counts change with it — "12 of 58" — instead of each click asking the server again.
  */
 
-export type Status = 'new' | 'sourcing' | 'selected' | 'discussing' | 'committed' | 'passed';
+export type Status = 'new' | 'sourcing' | 'selected' | 'connecting' | 'discussing' | 'committed' | 'passed';
 
 export interface PipelineRow {
   id: string;
@@ -142,7 +142,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, showVe
   const count = (s: Status, list: PipelineRow[]) => list.reduce((a, r) => a + (r.status === s ? 1 : 0), 0);
 
   // Open on the asked-for column, or the first with somebody in it, most advanced first.
-  const firstFull = (['discussing', 'committed', 'selected', 'sourcing', 'new', 'passed'] as Status[]).find((s) => count(s, rows) > 0) ?? 'discussing';
+  const firstFull = (['discussing', 'committed', 'connecting', 'selected', 'sourcing', 'new', 'passed'] as Status[]).find((s) => count(s, rows) > 0) ?? 'discussing';
   const [status, setStatus] = useState<Status>(initialStatus ?? firstFull);
 
   // The column and the search live in the address, so a link or the back button returns here.
@@ -287,7 +287,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, showVe
             {active ? ` of ${count(status, rows).toLocaleString('en-US')}` : ''} · {info.means}
           </span>
         </div>
-        {f.flag === 'ahead' && inColumn.length > 0 && (status === 'new' || status === 'sourcing' || status === 'selected') && (
+        {f.flag === 'ahead' && inColumn.length > 0 && (status === 'new' || status === 'sourcing' || status === 'selected' || status === 'connecting') && (
           // The log got ahead of the status (N57): move them, as one person's decision per LP.
           <form action={moveMetToDiscussing} className="bulkbar">
             {inColumn.map((r) => <input type="hidden" name="pursuitId" value={r.id} key={r.id} />)}
@@ -316,7 +316,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, showVe
                 <Th k="meetings" width={78}>Meetings</Th>
                 <Th k="touch" width={96}>Last touch</Th>
                 <Th k="read" width={104}>Their read</Th>
-                <Th k="ladder" width={128}>Ladder</Th>
+                <Th k="ladder" width={128}>Evidence</Th>
               </tr>
             </thead>
             <tbody>

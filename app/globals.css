@@ -428,12 +428,6 @@ button.src{background:none;border:0;padding:0;font-family:var(--mono);font-size:
 .step .ev{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.4}
 .step.pend .nm{color:var(--muted);font-weight:400}
 .step .when{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:3px}
-/* On file, not accepted (N57): a dashed ring in the evidence colour, and a dashed line to it. */
-.step.file .bul{border:2px dashed var(--green);background:var(--surface)}
-.step.file.na .bul{border-color:var(--muted)}
-.step.file:not(:last-child):after{background:repeating-linear-gradient(90deg,var(--green) 0 5px,transparent 5px 9px)}
-.step.done:not(:last-child):has(+ .step.file):after{background:repeating-linear-gradient(90deg,var(--green) 0 5px,transparent 5px 9px)}
-.step.file .nm{color:var(--ink)}
 .step .when a{color:var(--green)}
 .step .claim{font-size:10px;color:var(--amber);margin-top:5px;line-height:1.35}
 
@@ -1692,3 +1686,25 @@ details.thread .warnline{font-size:12px;color:var(--amber)}
 .bulkbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--accent-wash);font-size:12.5px}
 .bulkbar .muted{font-size:11.5px;flex-basis:100%}
 .elsewhere{margin:12px 0 0;padding:9px 11px;border:1px dashed var(--line);border-radius:7px;font-size:12px;color:var(--muted);line-height:1.5}
+
+/* Where this stands (N60): the statuses, with the ladder's evidence under them. Solid lines only;
+   the current status in the accent, confirmed evidence in green, on record but unconfirmed in a
+   darker grey, and an empty dot where nothing is known. */
+.stepper .step .bul{border-color:var(--line)}
+.stepper .step.past .bul{background:var(--ink);border-color:var(--ink)}
+.stepper .step.past:not(:last-child):after{background:var(--ink)}
+.stepper .step.now .bul{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-halo)}
+.stepper .step.seen .bul{background:var(--muted);border-color:var(--muted)}
+.stepper .step.off .bul{background:var(--clay);border-color:var(--clay)}
+.stepper .step.off .nm{color:var(--clay)}
+.stepper .step.now .nm{font-weight:600}
+.stepper .proof{font-family:var(--mono);font-size:9.5px;margin-top:4px;line-height:1.35}
+.proof.ok{color:var(--green)}
+.proof.seen{color:var(--label)}
+.stepper .stepkey{margin:12px 0 0;font-size:11px;color:var(--muted)}
+.stepper .stepkey .proof{font-size:10.5px}
+.closeline{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin-top:12px;padding-top:10px;border-top:1px solid var(--hair);font-size:12px;color:var(--muted)}
+.closeline .cstep{display:inline-flex;align-items:center;gap:6px}
+.closeline .cstep i{width:9px;height:9px;border-radius:50%;border:2px solid var(--line);display:inline-block}
+.closeline .cstep.reached{color:var(--ink)}
+.closeline .cstep.reached i{background:var(--green);border-color:var(--green)}

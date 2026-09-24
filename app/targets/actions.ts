@@ -138,7 +138,7 @@ export async function moveMetToDiscussing(formData: FormData): Promise<void> {
   const note = String(formData.get('note') ?? '').trim();
   for (const id of ids) {
     const p = await getPursuit(id);
-    if (!p || !['new', 'sourcing', 'selected'].includes(p.status)) continue;
+    if (!p || !['new', 'sourcing', 'selected', 'connecting'].includes(p.status)) continue;
     const met = summarize(await touchpointsFor(p.entityId, p.vehicleId)).meetingDates.length;
     if (!met) continue;
     await setStatus(user.id, id, {

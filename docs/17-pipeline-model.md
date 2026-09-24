@@ -25,13 +25,14 @@ The **consent ladder** stays. It's the evidence view: each rung is a specific re
 reply, a meeting, a number from them, a countersignature, a wire. Nobody maintains it by hand
 any more than before, and a status never moves it (rule 2).
 
-## 1. Status: six values
+## 1. Status: seven values (six until N60)
 
 | Status | Means |
 |---|---|
 | **New** | On the list. Nobody has researched them or reached out. |
 | **Sourcing** | Picked to research, enrich, or find a way in. Research can happen at any status; this one says it's the work right now. |
-| **Selected** | We've decided to approach. Outreach is next, or under way with no reply yet. |
+| **Selected** | We've decided to approach. Outreach is next. |
+| **Connecting** | Reaching them (N60): finding a connector, asking for an intro, writing to them, waiting on a first reply. |
 | **Discussing** | They've engaged: a reply, a call being set, any number of meetings. |
 | **Committed** | They said yes, with an amount. How far the money has got is the close track's job, not this one's. |
 | **Passed** | Off, for now: someone decided. **Who** (they declined · we stopped) and **why** are kept, and it can reopen. |

@@ -196,6 +196,26 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N60: [
+    {
+      name: '01-status-with-its-evidence',
+      path: '/targets?status=committed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '02-passed-and-why',
+      path: '/targets?status=passed',
+      prepare: async (page) => {
+        const href = await page.getByRole('link', { name: /Ruth Kessler/ }).first().getAttribute('href');
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N59: [
     {
       name: '01-only-this-raise',

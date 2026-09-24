@@ -34,7 +34,7 @@ export const RUNG_REQUIRES: Record<LadderRung, string> = {
  * is still the only place a claim about the LP is made. A status claims nothing, so it moves
  * the ladder never and needs no ticket.
  */
-export type PursuitStatus = 'new' | 'sourcing' | 'selected' | 'discussing' | 'committed' | 'passed';
+export type PursuitStatus = 'new' | 'sourcing' | 'selected' | 'connecting' | 'discussing' | 'committed' | 'passed';
 
 export interface StatusInfo {
   id: PursuitStatus;
@@ -45,7 +45,8 @@ export interface StatusInfo {
 export const STATUSES: StatusInfo[] = [
   { id: 'new', label: 'New', means: 'On the list. Nobody has researched them or reached out.' },
   { id: 'sourcing', label: 'Sourcing', means: 'Picked to research, enrich, or find a way in. Research can happen at any status; this one says it is the work right now.' },
-  { id: 'selected', label: 'Selected', means: 'We have decided to approach. Outreach is next, or under way with no reply yet.' },
+  { id: 'selected', label: 'Selected', means: 'We have decided to approach. Outreach is next.' },
+  { id: 'connecting', label: 'Connecting', means: 'Reaching them: finding a connector, asking for an intro, writing to them, waiting on a first reply (N60).' },
   { id: 'discussing', label: 'Discussing', means: 'They have engaged: a reply, a call being set, any number of meetings.' },
   { id: 'committed', label: 'Committed', means: 'They said yes, with an amount. How far the money has got is the close track, not this.' },
   { id: 'passed', label: 'Passed', means: 'Off, for now. Who ended it and why are kept, and it can reopen.' },
