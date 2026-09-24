@@ -5015,3 +5015,22 @@ Calendar feed by each calendar's private iCal address — no sign-in, nothing th
 a second exception to the no-connectors rule, so it waits for Juan's yes.
 
 111 of 111 properties hold.
+
+## N78 — The feedback box's screenshot on long pages; what's captured, folded away
+
+**Shipped.** Two items from the feedback box (issues 0024 and 0025).
+
+| | |
+|---|---|
+| ![Captured, folded](docs/changelog/shots/n78/01-captured-folded.webp) | **What goes with a report, at the foot and folded** (issue 0025). "Captured with it" — the page, its filters and the device — is there to reproduce a bug, not to read, so it sits at the bottom of the box, closed; one click opens it. It still goes with every report. |
+
+**The automatic screenshot on long pages** (issue 0024). It draws the page in the browser, and it
+cloned all of it — every row of a long page, thousands below the fold — to draw what is on screen.
+On Safari on an iPad that could run past the six-second limit or the browser's own, so it failed
+sometimes. It now leaves out whatever is wholly below or to the right of the screen (not above:
+that would shift what is on screen), which is most of a long page. In Chrome here, the screenshot
+arrives in about half a second on the calendar and the pipeline; on the iPad it is improved, not yet
+proven. "Pick a part" uses the browser's own screen capture instead, and a report's context names
+the device.
+
+111 of 111 properties hold.

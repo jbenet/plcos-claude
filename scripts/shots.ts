@@ -212,6 +212,18 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N78: [
+    {
+      name: '01-captured-folded',
+      path: '/all/calendar',
+      prepare: async (page) => {
+        await page.locator('.rail .railrow button').filter({ hasText: 'Feedback' }).first().click();
+        await page.locator('[aria-label="Give feedback"] .fbshots img').first().waitFor({ timeout: 20_000 });
+        await page.locator('[aria-label="Give feedback"]').evaluate((el) => { el.scrollTop = el.scrollHeight; });
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N77: [
     { name: '01-routes-with-scores', path: '/all/routes' },
     {

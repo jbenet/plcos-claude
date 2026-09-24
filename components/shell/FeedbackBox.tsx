@@ -411,10 +411,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
 
             <div className="fbcols">
             <div className="fbshots">
-            <div className="lbl">Captured with it</div>
-            <div className="ctx">{JSON.stringify(context, null, 2)}</div>
-
-            <div className="lbl" style={{ marginTop: 14 }}>
+            <div className="lbl">
               Screenshots{shots.length > 0 ? ` · ${shots.length}` : ''}
             </div>
 
@@ -598,6 +595,12 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
                 <kbd>?</kbd> all shortcuts
               </button>
             </div>
+            {/* What goes with the report — the page, its filters, the device — is there to repro a bug,
+                not to read (issue 0025, real): at the foot, folded, open on demand. */}
+            <details className="more fbcaptured">
+              <summary>Captured with it: the page, its filters and the device</summary>
+              <div className="ctx">{JSON.stringify(context, null, 2)}</div>
+            </details>
           </>
         )}
       </div>

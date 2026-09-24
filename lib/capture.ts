@@ -229,13 +229,18 @@ async function renderNow(region?: Region): Promise<string | null> {
       filter: (node: Node) => {
         if (!(node instanceof Element)) return true;
         if (node.classList.contains('nocapture')) return false;
+        const r = node.getBoundingClientRect();
         // An image outside the viewport is not in the picture, and inlining it costs the
         // same as one that is. This is what made the changelog page uncapturable.
-        if (node.tagName === 'IMG') {
-          const r = node.getBoundingClientRect();
-          if (r.bottom < 0 || r.top > h || r.right < 0 || r.left > w) return false;
-        }
-        return true;
+        if (node.tagName === 'IMG') return !(r.bottom < 0 || r.top > h || r.right < 0 || r.left > w);
+        // Nor is anything wholly below or right of it, and cloning it costs the same (issue 0024,
+        // real: on Safari on an iPad a long page — thousands of rows — ran out the timeout or the
+        // browser's limits, so the capture failed "sometimes"). Only below and right: dropping
+        // what is above would move what is on screen up in the picture. An element with no box of
+        // its own (display: contents) is kept for its children, and so is anything pinned in place.
+        if (r.width === 0 && r.height === 0) return true;
+        if (node.hasAttribute(SHIFT)) return true;
+        return !(r.top > h || r.left > w);
       },
     });
     if (!region) return full;
