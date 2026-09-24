@@ -212,6 +212,27 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N65: [
+    {
+      name: '01-triage-without-the-web',
+      path: '/developer/enrich',
+      prepare: async (page) => {
+        await page.locator('details summary', { hasText: 'The warm ones' }).first().click().catch(() => {});
+        await page.getByRole('heading', { name: /Triage/ }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: '02-the-suggestions-together',
+      path: '/developer/enrich',
+      prepare: async (page) => {
+        await page.getByRole('heading', { name: 'The suggestions, together' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(200);
+      },
+    },
+  ],
   N64: [
     {
       name: '01-a-suggested-strategy',

@@ -31,20 +31,36 @@ export interface NavModule {
    * The rest still read the cookie — see the N1 entry, this is the first module moved.
    */
   scoped?: boolean;
+  /**
+   * Its name in the address, under the vehicle (N65, issue 0009): /<vehicle>/<path>. The page it
+   * lives on may have an older name — "pipeline" is served by /targets — and the proxy maps one
+   * to the other (proxy.ts).
+   */
+  path: string;
 }
+
+/** The address names that differ from the page's (proxy.ts has the same map). */
+const PATH_OF: Record<string, string> = { targets: 'pipeline', vehicles: 'status' };
 
 const m = (
   num: string, title: string, slug: string, stage: Stage, mechanic: string,
   built = true, kinds?: NavModule['kinds'], scoped = false,
 ): NavModule => ({
   num, title, slug, stage, mechanic, built,
-  href: built ? `/${slug}` : `/m/${slug}`, kinds, scoped,
+  href: built ? `/${slug}` : `/m/${slug}`, kinds, scoped, path: PATH_OF[slug] ?? slug,
 });
 
-/** Where a module lives for one vehicle. Scoped modules carry it in the path. */
+/**
+ * Where a module lives for one vehicle: every one carries the vehicle in its path now (N65), so
+ * a link means the same thing to whoever opens it. The four scoped since N1 live under
+ * app/[vehicle]; the rest are rewritten to their pages by the proxy.
+ */
 export function moduleHref(mod: NavModule, vehicleSlug: string | null): string {
-  return mod.scoped ? `/${vehicleSlug ?? 'all'}/${mod.slug}` : mod.href;
+  return mod.built ? `/${vehicleSlug ?? 'all'}/${mod.path}` : mod.href;
 }
+
+/** A vehicle's overview, where its row in the rail goes. */
+export const vehicleHome = (vehicleSlug: string | null) => `/${vehicleSlug ?? 'all'}/overview`;
 
 /**
  * The modules that answer a question about one vehicle. These appear as a submenu under
@@ -161,18 +177,18 @@ export const STATIC_SECTIONS: NavSection[] = [
     defaultCollapsed: true,
     links: [
       /* Issues are development, so they live with the rest of it (issue 0011). */
-      { label: 'Issues', href: '/issues' },
-      { label: 'Changelog', href: '/dev/changelog' },
-      { label: 'Status', href: '/dev/status' },
-      { label: 'Settings', href: '/dev/settings' },
-      { label: 'Modules', href: '/dev/modules' },
-      { label: 'Agents', href: '/agents' },
-      { label: 'Data', href: '/dev/data' },
-      { label: 'Affinity', href: '/dev/affinity' },
-      { label: 'Enrichment', href: '/dev/enrich' },
-      { label: 'Connectors', href: '/dev/connectors' },
-      { label: 'Logs', href: '/dev/logs' },
-      { label: 'Feedback', href: '/dev/feedback' },
+      { label: 'Issues', href: '/developer/issues' },
+      { label: 'Changelog', href: '/developer/changelog' },
+      { label: 'Status', href: '/developer/status' },
+      { label: 'Settings', href: '/developer/settings' },
+      { label: 'Modules', href: '/developer/modules' },
+      { label: 'Agents', href: '/developer/agents' },
+      { label: 'Data', href: '/developer/data' },
+      { label: 'Affinity', href: '/developer/affinity' },
+      { label: 'Enrichment', href: '/developer/enrich' },
+      { label: 'Connectors', href: '/developer/connectors' },
+      { label: 'Logs', href: '/developer/logs' },
+      { label: 'Feedback', href: '/developer/feedback' },
     ],
   },
 ];

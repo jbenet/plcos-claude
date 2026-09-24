@@ -17,7 +17,7 @@ export async function exportResearchSetAction(): Promise<void> {
   const r = await exportResearchSet();
   await appendAudit({ actorId: user.id, action: 'enrich.exported', subjectType: 'enrich', detail: { candidates: r.candidates, people: r.people, orgs: r.orgs } });
   revalidatePath('/dev/enrich');
-  redirect(`/dev/enrich?exported=${r.candidates}`);
+  redirect(`/developer/enrich?exported=${r.candidates}`);
 }
 
 /** Map the findings in (N64): claims with provenance, profiles, connection candidates. Counts only. */
@@ -27,7 +27,7 @@ export async function importFindingsAction(): Promise<void> {
   await appendAudit({ actorId: user.id, action: 'enrich.imported', subjectType: 'enrich', detail: { mapped: r.mapped, claims: r.claims, rejected: r.rejected, paths: r.paths } });
   revalidatePath('/dev/enrich');
   revalidatePath('/targets');
-  redirect(`/dev/enrich?imported=${r.mapped}&claims=${r.claims}&refused=${r.rejected}`);
+  redirect(`/developer/enrich?imported=${r.mapped}&claims=${r.claims}&refused=${r.rejected}`);
 }
 
-// dev rev 4: bumped so the dev server rebuilds this action with the lib code it imports.
+// dev rev 5: bumped so the dev server rebuilds this action with the lib code it imports.

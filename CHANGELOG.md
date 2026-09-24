@@ -4496,3 +4496,39 @@ batches are running now.
 posted. A search carries a name, a firm, a title and topic words, never a status, an amount or a
 note. The exception is written into CLAUDE.md in your words, and local sub-agents read batch files
 without the prompt carrying real data. 99 of 99 properties hold.
+
+## N65 — Routes that follow the sidebar; triage without the web; our materials graded
+
+**Shipped.** Your issue 0009 ("the route should follow the hierarchy in the sidebar…
+every action from the user that changes the viewable state of the page should properly
+navigate the URL bar"), and the next round of the enrichment loop.
+
+| | |
+|---|---|
+| ![Triage without the web](docs/changelog/shots/n65/01-triage-without-the-web.webp) | **W9, triage without the web.** The session's web-search budget (200 searches, shared with every sub-agent) ran out about fifty LPs in. From there, the LPs we've written to and not heard from are sorted from what we already hold, into four lanes. **Warm now:** a colleague at their firm has met us, they were inside the Protocol Labs network, the team marks them close, or they opened our deck. **Research first:** senior, at a firm that invests, nothing public read yet; this is where the budget should go next. **Long process:** a committee on a quarterly clock. **Cold:** find a connector first. Every lane shows its reasons. |
+| ![The suggestions together](docs/changelog/shots/n65/02-the-suggestions-together.webp) | **The suggestions together (W8).** Every proposed strategy on one table: this year's close first, then by readiness and capacity, with the way in and who the next step falls to. The synthesis script writes the same portfolio view to a local file, with names. It covers firm clusters, connector leverage, what the LPs care about, and what only a person can check. |
+
+**The address says where you are.** Every vehicle module lives under its vehicle:
+`/neurotech/overview`, `/neurotech/pipeline/<LP>`, `/rails/pipeline`, and so on. Developer lives
+under `/developer/…`. The old addresses redirect to their place, so every existing link still
+works. A copied link opens the same view for whoever opens it, and switching vehicle in the rail
+keeps you on the same module. A new proxy rewrites each address to the page that has always
+served it, passing the vehicle in a header, so no page moved. The visualization's ten tabs and
+the pipeline's columns now each get a history entry, so Back steps through them; a filter
+replaces its entry instead of stacking them.
+
+**Our materials, graded (W7).** Our public site, read as an LP would. The thesis and the team hold
+up. How we won the portfolio doesn't show. The weakest point is that there's no way in for an LP:
+nothing says the fund is raising (a 506(c) fund may say so), and every contact is for founders.
+There are six suggestions, led by an LP page for the fund.
+
+**What the strategy batches taught the export (W0).** The candidates now carry the close track:
+its amount, and whether it's soft or signed. A source's "signed" is kept as a claim. Meetings on
+dates that four or more LPs share are marked as likely events. W3 now links colleagues by work
+domain as well as by firm name, which nearly doubled the same-firm paths. W5 rules added:
+
+- One LP's decision is never disclosed to another.
+- "Committed" with no evidence behind it means verifying first.
+- A firm gets one owner and one ask.
+
+100 of 100 properties hold.

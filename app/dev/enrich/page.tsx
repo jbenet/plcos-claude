@@ -8,6 +8,7 @@ import { RESEARCH_STATUSES, enrichDir } from '@/lib/enrich/candidates';
 import Link from 'next/link';
 import { listPursuits, openSuggestions, STATUS_LABEL } from '@/modules/strategy';
 import type { Strategy } from '@/lib/enrich/strategy';
+import type { Triage } from '@/lib/enrich/triage';
 import { latestRun } from '@/modules/sources';
 import { exportResearchSetAction, importFindingsAction } from './actions';
 
@@ -39,6 +40,9 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
   const dir = enrichDir();
   const pursuits = (await listPursuits(null)).filter((p) => !p.historical && RESEARCH_STATUSES.includes(p.status));
   const entities = new Set(pursuits.map((p) => p.entityId)).size;
+  const { readFile } = await import('node:fs/promises');
+  const triage = (await readFile(join(dir, 'triage.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Triage);
+  const lanes = (['warm now', 'research first', 'long process', 'cold'] as const).map((lane) => ({ lane, rows: triage.filter((t) => t.lane === lane) }));
   const [set, cands, raw, strategies, imported, suggestions] = await Promise.all([
     fileInfo(join(dir, 'research-set.jsonl')),
     fileInfo(join(dir, 'candidates.jsonl')),
@@ -138,6 +142,44 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
           (or the day it was read), a confidence, and nobody as its verifier until a person is
           (rule 9). Each connection path keeps its tier: a C or D path is a clue for a person to
           check, not a route (rule 6).
+        </p>
+      </div>
+
+      <div className="card">
+        <div className="chead">
+          <h2>Triage — who we&rsquo;ve written to and not heard from</h2>
+          <span className="lbl">W9 · from our records, no web · {n(triage.length)} at Selected or Connecting</span>
+        </div>
+        {triage.length === 0 ? (
+          <div className="cbody"><p className="muted">Not run yet: <code>scripts/enrich-triage.ts</code> writes it from the files.</p></div>
+        ) : (
+          <div className="cbody">
+            {lanes.map((l) => (
+              <div className="fact" key={l.lane}>
+                <span>{l.lane}</span>
+                <span>
+                  {n(l.rows.length)}
+                  <span className="muted"> — {l.lane === 'warm now' ? 'a way in exists today: a colleague who met us, an insider, a close contact, a deck they opened'
+                    : l.lane === 'research first' ? 'senior, at a firm that invests, nothing public read yet: where research should go next'
+                    : l.lane === 'long process' ? 'decides by committee over quarters: the 2027 list unless a path says otherwise'
+                    : 'no way in on record: find a connector before writing again'}</span>
+                </span>
+              </div>
+            ))}
+            <details className="more" style={{ marginTop: 10 }}>
+              <summary>The warm ones, and why</summary>
+              {lanes[0]!.rows.map((t) => (
+                <div className="pp-fact" key={t.key} style={{ gridTemplateColumns: '200px minmax(0,1fr)' }}>
+                  <span><b>{t.name}</b></span>
+                  <span style={{ fontSize: 12.5 }}>{t.reasons.join(' · ')}</span>
+                </div>
+              ))}
+            </details>
+          </div>
+        )}
+        <p className="cover">
+          <b>What this reads:</b> the pipeline, our notes, and the paths W3 found — nothing public, and
+          nothing sent. A lane is a starting point with its reasons; a person can overrule it.
         </p>
       </div>
 

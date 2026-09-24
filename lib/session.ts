@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { currentUser } from '@/lib/auth';
 import { listVehicles, type Vehicle } from '@/modules/platform';
 import { config } from '@/config/deployment';
@@ -37,6 +37,14 @@ export function parseSelections(raw: string | undefined, fallbackHandle: string)
 
 export async function vehicleSelection(): Promise<VehicleSelection> {
   const all = await listVehicles();
+  // The vehicle in the address wins (N65, issue 0009): the proxy passes it for /<vehicle>/<module>,
+  // so a link someone sends means the same thing on their screen as on yours.
+  const fromPath = (await headers()).get('x-vehicle');
+  if (fromPath) {
+    if (fromPath === 'all') return { current: null, all };
+    const v = all.find((x) => x.slug === fromPath);
+    if (v) return { current: v, all };
+  }
   const user = await currentUser();
   const map = parseSelections((await cookies()).get(VEHICLE_COOKIE)?.value, user.handle);
   const slug = map[user.handle];

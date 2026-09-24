@@ -46,10 +46,9 @@ export function NavList({
    * is the kind of quiet disagreement that makes a reader stop trusting the chrome.
    */
   const [, seg1, seg2] = path.split('/');
-  const fromPath =
-    seg2 && modulesForKind('fund').some((mod) => mod.scoped && mod.slug === seg2)
-      ? (seg1 === 'all' ? null : seg1 ?? null)
-      : undefined;
+  // Every vehicle module carries its vehicle in the path now (N65), and so does the overview.
+  const isModule = (s: string | undefined) => Boolean(s) && (s === 'overview' || modulesForKind('fund').some((mod) => mod.path === s) || s === 'spv' || s === 'grants');
+  const fromPath = isModule(seg2) ? (seg1 === 'all' ? null : seg1 ?? null) : undefined;
   const current = fromPath === undefined ? cookieVehicle : fromPath;
   const [, start] = useTransition();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
@@ -90,14 +89,14 @@ export function NavList({
    */
   const selectVehicle = (slug: string) => {
     const segment = path.split('/')[2];
-    const scoped = modulesForKind('fund').find((mod) => mod.scoped && mod.slug === segment);
+    const stay = isModule(segment) ? segment! : 'overview';
     start(async () => {
       await fetch('/api/session', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ vehicleSlug: slug }),
       });
-      router.push(scoped ? `/${slug}/${scoped.slug}` : '/overview');
+      router.push(`/${slug}/${stay}`);
       router.refresh();
     });
   };
@@ -181,7 +180,7 @@ export function NavList({
                 ? <span className="pip">{approvals}</span>
                 : <span className="ct">0</span>
             )}
-            {l.href === '/issues' && <span className="ct">{issues}</span>}
+            {(l.href === '/issues' || l.href === '/developer/issues') && <span className="ct">{issues}</span>}
           </Link>
         ))}
       </Section>

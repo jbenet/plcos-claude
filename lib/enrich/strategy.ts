@@ -28,7 +28,7 @@ export interface Strategy {
   /** The best path in, from W3 — or none, said so. */
   route: { via: string; tier: 'A' | 'B' | 'C' | 'D'; why: string } | null;
   next: { what: string; who: string; when: string; material?: string | null };
-  ask: { vehicle: string; shape: 'fund commitment' | 'SPV' | 're-up or upsize' | 'intro to others' | 'advice' | 'none yet'; range?: string | null };
+  ask: { vehicle: string; shape: 'fund commitment' | 'SPV' | 're-up or upsize' | 'intro to others' | 'advice' | 'verify first' | 'firm-level ask' | 'none yet'; range?: string | null };
   openQuestions: string[];
   risks: string[];
   list: 'this year' | '2027' | 'not now';

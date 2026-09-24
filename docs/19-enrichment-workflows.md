@@ -217,6 +217,72 @@ portfolio). Write `strategy/<key>.json` (schema: `lib/enrich/strategy.ts`):
 
 Never an inferred health reason, never pressure, never a claim the record doesn't carry.
 
+**Amendments, W5 version 1.1** (from its first two batches):
+
+- **One LP's decision is never disclosed to another** — not a commitment, not a pass, not an amount —
+  even to the connector who introduced them.
+- **"Committed" without evidence is a check, not a win.** A commitment with no signature recorded
+  here, an amount that differs between records, or a note that contradicts the status: the next
+  step is to verify it (ask shape `verify first`), not to write to the LP.
+- **Read the whole firm.** Colleagues at one firm (W3 links them by name and by work domain) get one
+  owner and one ask between them; the ask carried on one strategy is marked `firm-level ask` on the
+  others, so it isn't counted twice.
+- **An owner before an action.** Most pursuits have no owner on the team, and the meeting records
+  don't say who from our side was there. The strategy proposes one and says why; the team's rule
+  for who takes which kind of LP is a decision for the team, and the synthesis proposes one.
+- **What the export now carries** (W0, from these learnings): the close track's amount and state
+  (soft until signed; a source's "signed" is a claim), and meetings on dates four or more LPs share —
+  an event, most likely, not a one-to-one.
+- **Still missing, for a person:** who from our side was in each meeting; what the last message from
+  them said; the first-close date (LPs have asked); the SPV's terms; which LPs are already in the
+  Rails conversation (there is no Rails list).
+
+## Running W1 as a sub-agent
+
+The instructions a research agent follows, so a launch names only its batch. Its prompt carries no
+real data; it reads its batch file.
+
+1. Read, in full: this document's W1 protocol and every amendment; `lib/enrich/schema.ts`; the
+   "Real data" section of `CLAUDE.md`, with the enrichment exception; three finished findings in
+   `data/real/enrich/raw/` for shape and tone.
+2. For each line of `data/real/enrich/batches/<batch>.jsonl` (key, name, org, role, location, work
+   domains, identity fields), research with WebSearch and WebFetch and write
+   `data/real/enrich/raw/<key>.json` in the `Finding` shape, with `researched` set to
+   `{ at: <now>, by: "claude (sub-agent)", workflow: "W1", version: <the protocol's latest amendment> }`
+   and `scope: "firm"` on what is the firm's. Consecutive lines at one firm share its reading.
+3. Rules: read only; no sign-ins, paid services, forms or posts; a query carries only the name,
+   organization, title, location and topic words; contact-data brokers and people-search sites are
+   passed as `blocked_domains` on every search, and no email, phone number or address is recorded;
+   no LinkedIn fetches; no health information about anyone; a fact about the wrong person is worse
+   than none; a key signal is read on its page and quoted before it is `medium` or `high`; about four
+   searches and two good reads per LP, plus one per key signal; staff with no footprint stop at three
+   searches. Write only inside `data/real/enrich/raw/`; no git.
+4. Finish with `DATA_PROFILE=real npx tsx scripts/enrich-check.ts`, fix what it reports in your
+   files, and reply with counts (researched; identity outcomes; facts; neuro signals by scope;
+   Protocol Labs and crypto ties), the checker's summary line, and three to six learnings about the
+   protocol. No names in the reply.
+
+## Running W5 as a sub-agent
+
+1. Read, in full: this document (the W5 protocol and what the earlier research says);
+   `lib/enrich/strategy.ts`; the "Real data" and "Domain rules" sections of `CLAUDE.md`; the finished
+   strategies in `data/real/enrich/strategy/`.
+2. For each key in `data/real/enrich/batches/<batch>.txt`, read its finding, its line in
+   `candidates.jsonl`, its paths in `connections.jsonl`, and our side (`us/team.json`, `us/network.json`,
+   `presence/site.json`); write `data/real/enrich/strategy/<key>.json`, `made` set to
+   `{ at: <now>, by: "claude (sub-agent)", workflow: "W5", version: 1 }`. Skip an unresolved identity unless
+   our own records alone support a strategy. An LP with no finding yet (W9's "warm now" lane) gets a
+   strategy from our records alone — its line in `triage.jsonl` says why it is warm — at `low`
+   confidence, with "research them" among the open questions.
+3. Rules: a proposal for a person, never a decision; one concrete, bounded next step by a named
+   person, with when and which material; never a deck with a first intro, never anything sent
+   without a person, no pressure; soft is soft until signed (rule 1); a C or D path is a clue, not a
+   route; no health inference; capacity is a band and an estimate; two lists, this year and 2027.
+   Web searches only to verify a key fact, on the W1 query rules. Write only inside
+   `data/real/enrich/strategy/`; no git.
+4. Finish with the checker, fix what it reports, and reply with counts (written, skipped; by list; by
+   ask; routes A/B vs C/D vs none), the checker's strategy line, and three to six learnings. No names.
+
 ## Log
 
 ### Iteration 1 — by hand, six LPs (24 Sep, 03:50 UTC)
@@ -278,4 +344,30 @@ the first.
   the team and the portfolio, but no LP path, fund size or check size, and it disclaims any offer
   even though a 506(c) fund may say it is raising — a decision for counsel and the team, noted
   here, not taken.
+
+### The search budget (24 Sep, 06:20 UTC)
+
+The session's web-search budget — 200 searches, shared with its sub-agents — ran out after about 50
+LPs. Page reads still work. A search engine read as a page would get around the budget rather than
+respect it, so the rest of this session works without search:
+
+- **W1d, the domain-first read**, reads an LP's firm from their work domain: the homepage, then a
+  team or about page. Tried on a few Connecting LPs: firm sites are often script-drawn or
+  minimal, and without search the right page is a guess. Its yield is too low to run at scale; it
+  is kept for firms whose site is known to carry bios.
+- **W9, triage the cold**, is new: the Connecting LPs ranked from what we already have — a
+  colleague at their firm who has met us, a Protocol Labs domain, a backer firm, the title's
+  seniority, how long we've waited — into who deserves research first when the budget returns,
+  who has a warm way in now, and who is cold.
+- Raising `CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION` resumes W1 as it was.
+
+### W7 — our materials, graded (24 Sep, 06:40 UTC)
+
+The public site as an LP reads it, against docs/01 §4 and docs/05. Thesis **B** (a clear line, no dated
+memo); evidence of edge **C** (strong portfolio names, nothing that shows how they were won); team
+**B**; **a path for an LP: F** — every contact is for founders, nothing says the fund is raising, and
+there is no route to the deck or to accreditation; how the vehicles relate **C**; reach and primer **C**
+(the February webinar exists but isn't on the site). Six suggestions, led by an LP page for the fund —
+506(c) allows saying it is raising, with counsel on the wording. The deck and the webinar sit on
+DocSend and were not read: a person grades those.
 

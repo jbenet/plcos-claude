@@ -165,14 +165,29 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
 
   // The column, the search and every filter live in the address (N62), so a link — from the
   // overview's counts, or sent to someone — opens this exact view, and back returns to it.
+  // A new column is a new view, with its own history entry (N65): back returns to the last one.
+  // Typing in the search or setting a filter replaces the entry instead of piling them up.
+  const lastStatus = useRef(status);
   useEffect(() => {
     const u = new URL(window.location.href);
     u.searchParams.set('status', status);
     for (const k of Object.keys(EMPTY) as (keyof Filters)[]) {
       if (f[k] !== EMPTY[k]) u.searchParams.set(k, f[k]); else u.searchParams.delete(k);
     }
-    window.history.replaceState(null, '', u.toString());
+    if (u.toString() === window.location.href) return;
+    const moved = lastStatus.current !== status;
+    lastStatus.current = status;
+    window.history[moved ? 'pushState' : 'replaceState'](null, '', u.toString());
   }, [status, f]);
+  // Back or forward to another column: follow the address.
+  useEffect(() => {
+    const onPop = () => {
+      const s = new URL(window.location.href).searchParams.get('status') as Status | null;
+      if (s && statuses.some((x) => x.id === s)) { lastStatus.current = s; setStatus(s); }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [statuses]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); search.current?.focus(); }

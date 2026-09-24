@@ -1716,6 +1716,38 @@ async function main() {
     seeding.out.includes('refused') ? 'refused, with no call on the database' : `not refused: ${seeding.out.slice(0, 200)}`,
   );
 
+  // Routes that follow the sidebar (N65, issue 0009): the proxy rewrites /<vehicle>/<module> and
+  // /developer/<page> to the pages that serve them, and sends the old addresses to their place.
+  {
+    const { NextRequest } = await import('next/server');
+    const { proxy } = await import('../proxy');
+    const call = (path: string, init: { method?: string; cookie?: string; routed?: boolean } = {}) => {
+      const headers = new Headers();
+      if (init.cookie) headers.set('cookie', init.cookie);
+      if (init.routed) headers.set('x-routed', '1');
+      const r = proxy(new NextRequest(`http://127.0.0.1:3100${path}`, { method: init.method ?? 'GET', headers }));
+      return { status: r.status, location: r.headers.get('location'), rewrite: r.headers.get('x-middleware-rewrite'), vehicle: r.headers.get('x-middleware-request-x-vehicle') };
+    };
+    const dev = call('/developer/enrich');
+    const oldDev = call('/dev/enrich?imported=3');
+    const post = call('/dev/enrich', { method: 'POST' });
+    const lp = call('/neurotech/pipeline/abc');
+    const old = call('/targets/abc', { cookie: 'capitalos_user=juan; capitalos_vehicle=' + encodeURIComponent(JSON.stringify({ juan: 'rails' })) });
+    const scoped = call('/neurotech/strategy');
+    const again = call('/dev/enrich', { routed: true });
+    const ok =
+      dev.rewrite?.endsWith('/dev/enrich') === true && oldDev.status === 307 && oldDev.location?.endsWith('/developer/enrich?imported=3') === true &&
+      post.status !== 307 && lp.rewrite?.endsWith('/targets/abc') === true && lp.vehicle === 'neurotech' &&
+      old.status === 307 && old.location?.endsWith('/rails/pipeline/abc') === true && !scoped.rewrite && scoped.status !== 307 && again.status !== 307 && !again.rewrite;
+    check(
+      'The address follows the sidebar: /<vehicle>/<module> and /developer/<page> reach their pages, old addresses redirect to their place, a POST is never redirected, and a rewritten request passes through',
+      ok,
+      `/developer/enrich → ${dev.rewrite?.replace(/^https?:\/\/[^/]+/, '')}; /dev/enrich → ${oldDev.status} ${oldDev.location?.replace(/^https?:\/\/[^/]+/, '')}; POST /dev/enrich → ${post.status}; ` +
+        `/neurotech/pipeline/abc → ${lp.rewrite?.replace(/^https?:\/\/[^/]+/, '')} (vehicle ${lp.vehicle}); /targets/abc with Rails in view → ${old.status} ${old.location?.replace(/^https?:\/\/[^/]+/, '')}; ` +
+        `/neurotech/strategy passes through: ${!scoped.rewrite}; a rewritten request seen again passes through: ${again.status !== 307 && !again.rewrite}`,
+    );
+  }
+
   // ---------------------------------------------------------------- report
 
   const failed = results.filter((r) => !r.ok);

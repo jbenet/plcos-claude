@@ -145,17 +145,23 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
 
   // Colleagues inside the research set: people at the same firm. If one of them has met us, the
   // others are one conversation away.
+  // By organization name and by work domain: two people at one domain are colleagues even when
+  // the list spells their firm differently (W5 learning).
   const byFirm = new Map<string, Candidate[]>();
+  const FREE = /^(gmail|yahoo|hotmail|outlook|icloud|me|mac|aol|proton|protonmail)\./;
   for (const c of candidates) {
+    const keys = new Set<string>();
     const o = c.org ? norm(c.org) : null;
-    if (o && !TOO_COMMON.has(o)) byFirm.set(o, [...(byFirm.get(o) ?? []), c]);
+    if (o && !TOO_COMMON.has(o)) keys.add(`org:${o}`);
+    for (const d of c.domains) if (!FREE.test(d)) keys.add(`domain:${d}`);
+    for (const k of keys) byFirm.set(k, [...(byFirm.get(k) ?? []), c]);
   }
   for (const group of byFirm.values()) {
     if (group.length < 2) continue;
     for (const a of group) for (const b of group) {
       if (a.key === b.key) continue;
       const met = b.contact.meetings > 0;
-      add({ lp: a.key, other: { type: 'lp', name: b.name, key: b.key }, kind: 'same_firm', tier: met ? 'B' : 'C', basis: `Both at ${a.org}${met ? `; ${b.name} has met us (${b.contact.meetings})` : ''}`, source: 'our records' });
+      add({ lp: a.key, other: { type: 'lp', name: b.name, key: b.key }, kind: 'same_firm', tier: met ? 'B' : 'C', basis: `Both at ${a.org ?? b.org ?? 'the same firm'}${met ? `; ${b.name} has met us (${b.contact.meetings})` : ''}`, source: 'our records' });
     }
   }
 

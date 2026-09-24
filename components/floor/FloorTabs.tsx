@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useUrlParam } from '@/lib/url-state';
 import type { BoardState } from '@/lib/board-client';
 import type { FloorState } from '@/lib/floor-client';
 import type { Lenses } from '@/lib/lenses-client';
@@ -124,7 +125,8 @@ const GROUPS: Array<{ title: string; note: string; ids: TabId[] }> = [
 type TabId = typeof TABS[number]['id'];
 
 export function FloorTabs({ state, board, lenses }: { state: FloorState; board: BoardState; lenses: Lenses }) {
-  const [tab, setTab] = useState<TabId>('line');
+  // The tab is in the address (N65, issue 0009): a link opens it, and back steps through them.
+  const [tab, setTab] = useUrlParam<TabId>('view', 'line', TABS.map((t) => t.id));
   const [filter, setFilter] = useState<FloorFilter>(EMPTY_FILTER);
   const [selected, setSelected] = useState<Selected>(null);
   const active = TABS.find((t) => t.id === tab)!;

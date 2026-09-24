@@ -3,7 +3,8 @@ import { join, resolve } from 'node:path';
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { latestRaw } from '@/modules/sources';
-import { touchpointSummaries } from '@/modules/meetings';
+import { touchpointSummaries, touchpointsByPair } from '@/modules/meetings';
+import { closeStates } from '@/modules/pipeline';
 import { listPursuits, type Pursuit, type PursuitStatus } from '@/modules/strategy';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 
@@ -43,7 +44,13 @@ export interface ResearchIdentity {
 
 export interface Candidate extends ResearchIdentity {
   pursuits: Array<{ pursuitId: string; vehicle: string; status: PursuitStatus; rung: string | null; owner: string; stageSaid: string | null; nextStep: string | null }>;
-  contact: { meetings: number; lastTouch: string | null; lastFromThem: string | null; awaitingSince: string | null; read: string | null };
+  contact: {
+    meetings: number; lastTouch: string | null; lastFromThem: string | null; awaitingSince: string | null; read: string | null;
+    /** Meetings on a date that four or more LPs share: an event, most likely, not a one-to-one (W5 learning). */
+    groupMeetings: number;
+  };
+  /** The close track, where there is one: the amount, and how far it has got (rule 1: soft until signed). */
+  money: { amount: number; track: string; state: string; signedOn: string | null; signedPerSource: boolean; wired: number } | null;
   /** Our notes about them, as read (N55): the summaries, dated, health detail already redacted. */
   notes: Array<{ on: string; summary: string | null; read: string | null }>;
 }
@@ -103,6 +110,15 @@ export async function researchSet(): Promise<Candidate[]> {
     touchpointSummaries(all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }))),
   ]);
   const readings = await readingsFor(ids);
+  const pairs = all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
+  const [touches, tracks] = await Promise.all([touchpointsByPair(pairs), closeStates(pairs)]);
+  // A date many LPs share is an event: count who was "in a meeting" each day.
+  const onDay = new Map<string, number>();
+  for (const list of touches.values()) {
+    for (const d of new Set(list.filter((t) => (t.channel === 'meeting' || t.channel === 'call') && t.on && !t.viaOrganization).map((t) => t.on!.toISOString().slice(0, 10)))) {
+      onDay.set(d, (onDay.get(d) ?? 0) + 1);
+    }
+  }
 
   // Affinity's entity ids, and every list entry about each of them.
   const affinityOf = new Map<string, string>();
@@ -151,7 +167,18 @@ export async function researchSet(): Promise<Candidate[]> {
         lastFromThem: latest(sums.map((s) => s!.lastFromThem)),
         awaitingSince: latest(sums.map((s) => s!.awaitingSince)),
         read: sums.map((s) => s!.read?.read).find(Boolean) ?? null,
+        groupMeetings: ps.reduce((n, p) => n + new Set((touches.get(`${p.entityId}:${p.vehicleId}`) ?? [])
+          .filter((t) => (t.channel === 'meeting' || t.channel === 'call') && t.on && !t.viaOrganization && (onDay.get(t.on.toISOString().slice(0, 10)) ?? 0) >= 4)
+          .map((t) => t.on!.toISOString().slice(0, 10))).size, 0),
       },
+      money: (() => {
+        const t = ps.map((p) => tracks.get(`${p.entityId}:${p.vehicleId}`)).find(Boolean);
+        return t ? {
+          amount: t.exposure.amount, track: t.exposure.track, state: t.state,
+          signedOn: t.signature?.on ? t.signature.on.toISOString().slice(0, 10) : null,
+          signedPerSource: Boolean(t.signature && t.signature.bySource !== 'us'), wired: t.wired,
+        } : null;
+      })(),
       notes: readings.filter((r) => r.entityId === ent.entity_id && !r.dismissed && r.summary)
         .sort((a, b) => b.on.getTime() - a.on.getTime()).slice(0, 8)
         .map((r) => ({ on: r.on.toISOString().slice(0, 10), summary: r.summary, read: r.read })),

@@ -80,7 +80,7 @@ export interface Finding {
 }
 
 const isStr = (x: unknown): x is string => typeof x === 'string' && x.trim().length > 0;
-const BROKERS = /zoominfo|rocketreach|contactout|signalhire|apollo\.io|lusha|flashlabs|datanyze|seamless\.ai|leadiq|clearbit|spokeo|success\.ai|wiza|cience|beenverified|whitepages|peoplefinders|aeroleads|adapt\.io|instantcheckmate|connectsafely|voilanorbert|hunter\.io|snov\.io|kaspr|uplead|prospeo|fintrx|alphamaven/i;
+const BROKERS = /zoominfo|rocketreach|contactout|signalhire|apollo\.io|lusha|flashlabs|datanyze|seamless\.ai|leadiq|clearbit|spokeo|success\.ai|wiza|cience\.com|beenverified|whitepages|peoplefinders|aeroleads|adapt\.io|instantcheckmate|connectsafely|voilanorbert|hunter\.io|snov\.io|kaspr|uplead|prospeo|fintrx|alphamaven/i;
 const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/;
 /** A phone number: ten or more digits in a run of digits and separators — once dates and year ranges are set aside. */
 const hasPhone = (t: string) => {
