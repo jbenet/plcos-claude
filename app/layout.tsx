@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { HereProvider } from '@/components/shell/Here';
 import { Rail } from '@/components/shell/Rail';
+import { KeyboardShortcuts } from '@/components/shell/KeyboardShortcuts';
 import { vehicleSelection } from '@/lib/session';
 import { DEFAULT_THEME, THEME_BOOT, themeAttr } from '@/lib/theme';
 import { VIEWPORT_BOOT } from '@/lib/viewport';
@@ -33,6 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className={config.data.profile}>
         <HereProvider asked={asked} vehicle={selection.current?.slug ?? 'all'}>
+          <KeyboardShortcuts />
           <div className="app">
             <Rail />
             <div className="main">{children}</div>

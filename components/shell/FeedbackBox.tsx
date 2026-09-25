@@ -8,6 +8,8 @@ import {
   capturePage, capturePageExact, METHOD_LABEL, type CaptureMethod, type Region,
 } from '@/lib/capture';
 import { RegionPicker } from './RegionPicker';
+import { ShortcutList } from './KeyboardShortcuts';
+import { isShortcutsKey } from '@/lib/keyboard-shortcuts';
 import { MarkdownField, packAttachments, type DroppedImage } from '@/components/ui/MarkdownField';
 import {
   discardDraft, listDrafts, readDraft, readPictures, writeDraft, writePictures, type DraftSummary,
@@ -236,9 +238,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
         if (doneRef.current) againRef.current?.();
         else void submitRef.current?.();
       }
-      if (e.key === '?' && (e.target as HTMLElement | null)?.tagName !== 'TEXTAREA'
-          && (e.target as HTMLElement | null)?.tagName !== 'INPUT'
-          && !(e.target as HTMLElement | null)?.isContentEditable) {
+      if (isShortcutsKey(e)) {
         e.preventDefault();
         setShowKeys((v) => !v);
       }
@@ -425,16 +425,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
       {showKeys && (
         <div className={`keycard nocapture${wide ? ' overdrawer' : ''}`} role="dialog" aria-label="Keyboard shortcuts">
           <div className="lbl">Keyboard · this dialog first</div>
-          <dl>
-            <div><dt><kbd>⌘</kbd><kbd>↵</kbd></dt><dd>File the report</dd></div>
-            <div><dt><kbd>esc</kbd></dt><dd>Close this card, then the annotation editor, then the box</dd></div>
-            <div><dt><kbd>tab</kbd> / <kbd>⇧</kbd><kbd>tab</kbd></dt><dd>Next and previous field — this is how you leave a text box</dd></div>
-            <div><dt><kbd>?</kbd></dt><dd>This card, when the cursor is not in a text box</dd></div>
-          </dl>
-          <div className="lbl" style={{ marginTop: 10 }}>Anywhere</div>
-          <dl>
-            <div><dt><kbd>⌘</kbd><kbd>k</kbd></dt><dd>Not built yet — say so and it will be</dd></div>
-          </dl>
+          <ShortcutList group="feedback" />
           <button className="btn" onClick={() => setShowKeys(false)}>Close</button>
         </div>
       )}
