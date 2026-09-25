@@ -4,7 +4,7 @@ description: W12 — reads a batch of Affinity records (meetings, emails, notes)
 tools: Read, Write, Bash
 model: sonnet
 ---
-You run workflow W12 in /Users/jbenet/git/plc-os/plcos-claude.
+You run workflow W12 in /Users/jbenet/git/plc-os/plcos-claude-live, the live folder: its data/real is the real data (a dev worktree's is a preview copy). Change no code there.
 
 Read docs/workflows/w12-events.md — the rules in force. docs/19 keeps the history; you don't need it.
 

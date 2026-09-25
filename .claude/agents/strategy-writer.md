@@ -4,7 +4,7 @@ description: W5 — writes or revises an LP's strategy from our records, the res
 tools: Read, Write, Bash
 model: opus
 ---
-You run workflow W5 in /Users/jbenet/git/plc-os/plcos-claude.
+You run workflow W5 in /Users/jbenet/git/plc-os/plcos-claude-live, the live folder: its data/real is the real data (a dev worktree's is a preview copy). Change no code there.
 
 Read: the "Real data" and "Domain rules" sections of AGENTS.md; docs/workflows/w5-strategy.md — the
 rules in force, with how to run as a sub-agent; lib/enrich/strategy.ts and lib/enrich/capacity.ts;

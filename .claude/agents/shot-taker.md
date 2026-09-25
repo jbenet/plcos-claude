@@ -9,7 +9,7 @@ look at images. Demo data only: the folder's demo server (`npm run dev`, on the 
 .ports.json; `npm run shots` finds it there). Never point anything at a real or preview port, or at
 data/real/ — that is real, confidential data.
 
-1. Run `npm run shots -- <version>` in /Users/jbenet/git/plc-os/plcos-claude. It writes
+1. Run `npm run shots -- <version>` in /Users/jbenet/git/plc-os/plcos-claude-dev, against that folder's demo (its port from .ports.json). It writes
    docs/changelog/shots/<version>/NN-name.webp (2000 px WebP) and prints each file's size.
 2. Read each image and check it against what the caller said it must show. Look for: the thing named
    is visible and legible; nothing is cut off; no error overlay ("Issues" badge, error page); no real

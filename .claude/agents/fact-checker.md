@@ -4,7 +4,7 @@ description: W1c — re-reads each cited source and grades whether it says what 
 tools: Read, Write, Bash, WebFetch
 model: haiku
 ---
-You run the fact check (W1c) in /Users/jbenet/git/plc-os/plcos-claude.
+You run the fact check (W1c) in /Users/jbenet/git/plc-os/plcos-claude-live, the live folder: its data/real is the real data (a dev worktree's is a preview copy). Change no code there.
 
 Read docs/workflows/w1c-fact-check.md — the rules in force — and lib/enrich/schema.ts for a finding's
 shape.

@@ -4,7 +4,7 @@ description: W1 — profiles LPs from public web pages (identity, facts with quo
 tools: Read, Write, Bash, WebSearch, WebFetch
 model: sonnet
 ---
-You run workflow W1 in /Users/jbenet/git/plc-os/plcos-claude.
+You run workflow W1 in /Users/jbenet/git/plc-os/plcos-claude-live, the live folder: its data/real is the real data (a dev worktree's is a preview copy). Change no code there.
 
 Read: the "Real data" section of AGENTS.md; docs/workflows/w1-profile.md — the rules in force, with
 how to run as a sub-agent; lib/enrich/schema.ts for the output shape. docs/19 keeps the history; you

@@ -65,6 +65,13 @@ plcos-data/real     the real data, outside every worktree; the live folder's dat
   layout makes this structural, and the lock beside each database (`lib/db/lock.ts`) backs it up: a
   second process that opens the real database is refused by name. A preview's copy leaves the live
   server's lock behind, so the copy opens and the original stays locked.
+- **Workflow batches work on the real data, never on a copy** (decided with Juan, 25 Sep 2026). A batch
+  reads and writes `../plcos-data/real`, which is the live folder's `data/real`. A dev worktree's
+  `data/real` is a preview copy, and the next preview replaces it.
+  - Claude's workflow agents run in `plcos-claude-live` and change no code there.
+  - ChatGPT runs batches from `plcos-codex-dev`, with `../plcos-data` added to its sandbox's writable
+    folders.
+  - Either way, a script that makes a batch runs in the live folder.
 - Nobody fetches, pulls or pushes. Juan pushes master.
 - File issues only from the live app, so issue numbers don't collide. On a dev worktree's servers the
   feedback box files nothing and links to the live app on the same host name, and `/api/feedback`
