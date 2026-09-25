@@ -73,6 +73,9 @@ export async function translateAction(): Promise<void> {
   if (run?.status === 'ok') {
     const { reconcile } = await import('@/lib/reconcile');
     await reconcile(user.id);
+    // And the ties the records now show (N82): who on the team has met whom.
+    const { buildNetwork } = await import('@/modules/network');
+    await buildNetwork();
   }
   revalidatePath('/', 'layout');
 }

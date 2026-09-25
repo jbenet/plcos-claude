@@ -56,6 +56,17 @@ The import (`/dev/enrich`) maps W1 to research claims and source documents with 
 tuple (rule 9), W3 to candidate relationship edges that need a person before they route (rule 6),
 and W5 to suggestions a person accepts or dismisses — never a status, a rung or a send.
 
+**The network, built (N82).** Juan, 24 Sep, on "Routes to —": "How do i fix this? you have our names,
+can you set these connections yourself, or suggest some for me to verify?" No route could run on the
+real account: nobody on the team had a person record in the graph, and no edge existed. After every
+translation and every import, `buildNetwork` (modules/network/build.ts) links each active user to a
+person record, makes a tier-A "met" tie for each one-to-one meeting or call held with someone on the
+team (our own events are not meetings), a tier-B "corresponded" tie for a message from them to one of
+us, and an edge for each W3 path to a person — A and B route; C and D are shown with "They know each
+other" and "Not a real tie", and route only once a person confirms them. A tie to one of our
+organizations is no hop: it stays a candidate on the LP's page. A rebuild replaces its own ties and
+never a person's decision.
+
 ### The litmus test
 
 Juan: "step back and look at the info available + current proposed strategies: does this look good

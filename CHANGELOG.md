@@ -5214,3 +5214,42 @@ with a fund's short name — wait for a yes before they are added.
 121 of 121 properties hold, three of them new: Claude's tags lie over the rules, a person's outlive a
 translation, and invitees are never read as evidence; our event is not a meeting; a band by size is the
 table's, and a floor needs five checks. Two older ones now cover the stricter count and "SPV".
+
+## N82 — Routes from our own records: the team in the graph, a meeting held is a tie, and the research's ties to confirm
+
+**Shipped.** Juan, 24 Sep, on "Routes to —": "How do i fix this? you have our names, can you set
+these connections yourself, or suggest some for me to verify?" Real data, so counts only; the example
+below is invented.
+
+| | |
+|---|---|
+| ![Ties to confirm](docs/changelog/shots/n82/01-ties-to-confirm.webp) | **A route now starts from you, through ties our records show.** A one-to-one meeting held with someone on the team is a tier-A tie — "5 meetings held one to one, 18 Jun to 20 Sept 2026" — and a tie the research found is shown with its tier and its evidence. A C or D tie can't carry a route until a person says so: *They know each other* lets it carry one, held rather than recommended; *Not a real tie* ends it. |
+
+**Why there were no routes.** A route is walked from the person record of whoever is looking, and on
+the real account nobody on the team had one — and there was no edge at all. The research's 809 paths
+were notes on each LP, to read, not ties to walk.
+
+**Set by rule, after every translation and import** (`buildNetwork`, modules/network/build.ts):
+- The nine on the team are people in the graph now, each joined to their login.
+- 281 tier-A ties: someone on the team held a one-to-one meeting or call with them. Our own events —
+  four or more of our records on one calendar entry — are not meetings, and make no tie. 46 tier-B
+  ties: a message from them to one of us, now credited to whoever on the team it was addressed to.
+- 27 tier-B ties from the research, and 82 tier-C and 145 tier-D ones waiting for a person: a shared
+  board, a co-investment, an alumni list. A tie to one of our organizations is no hop, and stays a
+  candidate on the LP's page.
+- A rebuild replaces its own ties, never a person's decision. The kinds are new (`met`,
+  `corresponded`, `alumni`, `portfolio`, `other`: migration network/003).
+
+**For Juan to verify:** the C and D ties, on the routes page, where each route shows why it can't be
+used yet. Looked at as Juan, 9 of the first 25 targets there now have paths — every one of them through
+a tie nobody has confirmed yet, so each says so and offers the two buttons.
+
+**Still running:** the re-read of the 126 strategies N81 queued — nine agents, with W5 1.8's tags and
+1.9's capacity rules. Its results come in the next entry.
+
+**Open, for Juan:** the team's own public profiles, which he offered to verify. We hold none: finding
+them means searching the nine names, which puts our names in the queries — a yes, or each person's
+links pasted in, and the ties they show (a former employer, a board, a school) join the ones above.
+
+122 of 122 properties hold, one of them new: the team is in the graph, a one-to-one meeting is a
+tier-A tie, a rebuild changes nothing, and a tie a person turned down stays ended.

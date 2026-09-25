@@ -1399,6 +1399,30 @@ async function main() {
             );
           }
 
+          // The network from our records (N82): every active user is a person in the graph; a meeting
+          // held one to one is a tier-A tie, our event is none; a rebuild changes nothing; a person's
+          // "not a real tie" ends it and a rebuild leaves it ended.
+          {
+            const nw = await import('../modules/network');
+            const first = await nw.buildNetwork();
+            const users = await n(`select count(*)::text as n from platform.app_user where active`);
+            const linked = await n(`select count(*)::text as n from identity.source_record where source = 'app_user'`);
+            const met = await n(`select count(*)::text as n from network.edge where kind = 'met' and tier = 'A' and evidence @> '[{"derived": "records"}]'`);
+            const before = await n(`select count(*)::text as n from network.edge`);
+            const again = await nw.buildNetwork();
+            const after = await n(`select count(*)::text as n from network.edge`);
+            const edge = await adb.one<{ edge_id: string; a: string; b: string }>(
+              `select edge_id::text, from_entity::text as a, to_entity::text as b from network.edge where evidence @> '[{"derived": "records"}]' limit 1`);
+            if (edge) await nw.reviewEdge(juanId, edge.edge_id, 'decline', 'not someone they know');
+            await nw.buildNetwork();
+            const ended = edge ? await n(`select count(*)::text as n from network.edge where from_entity = $1 and to_entity = $2 and valid_to < current_date and reviewed_at is not null`, [edge.a, edge.b]) : 0;
+            const doubled = edge ? await n(`select count(*)::text as n from network.edge where from_entity = $1 and to_entity = $2`, [edge.a, edge.b]) : 0;
+            check('The network from our records: the team in the graph, a one-to-one meeting a tier-A tie, a rebuild the same, a person’s “not a real tie” kept',
+              linked >= users && met >= 1 && before === after && again.fromRecords === first.fromRecords && ended === 1 && doubled === 1,
+              `${users} users, ${linked} linked; ${met} tier-A ties from meetings; edges ${before} → ${after} on a rebuild (${first.fromRecords} → ${again.fromRecords} from records, ${first.fromResearch} from research); ` +
+                `a tie turned down: ${ended ? 'ended, and kept ended' : 'NOT KEPT'} (${doubled} on that pair)`);
+          }
+
           // An event of ours is not a meeting (N81): a calendar entry with four or more of our records
           // on it counts as their opting in, never as a meeting held, and isn't counted as a meeting.
           {

@@ -460,7 +460,12 @@ async function touchpoints(
       const d = f.value.data as Interaction;
       const at = d.sentAt ?? d.startTime;
       if (!at || !CHANNEL_OF[d.type]) continue;
-      const internal = (d.attendees ?? []).map((a) => a.person).filter((p): p is InteractionPerson => p?.type === 'internal');
+      // Who on the team it was with: the attendees, and for a message whoever on the team it was
+      // addressed to (N82) — a reply to one of us is theirs, not nobody's, and says who knows whom.
+      const internal = [
+        ...(d.attendees ?? []).map((a) => a.person),
+        ...(d.type === 'email' || d.type === 'chat-message' ? (d.to ?? []).map((x) => (x as { person?: InteractionPerson } | null)?.person) : []),
+      ].filter((p): p is InteractionPerson => p?.type === 'internal');
       await put({
         entity, ref: `interaction:${d.type}:${d.id}:${key}`, channel: CHANNEL_OF[d.type], at, exact: true,
         direction: d.type === 'email' || d.type === 'chat-message'

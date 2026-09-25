@@ -17,6 +17,7 @@ import { listSourceDocs, notesFor } from '@/modules/research';
 import { directContact, type DirectContact } from '@/modules/meetings';
 import { listVehicles } from '@/modules/platform';
 import { planRoutes, tierCounts, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
+import { buildNetworkAction, reviewEdgeAction } from './actions';
 import { listPursuits } from '@/modules/strategy';
 import { provisionalScores } from '@/lib/strategy-score';
 
@@ -296,10 +297,14 @@ export default async function Routes({
                   {inTouchNearby.length === 1 ? 'person' : 'people'} {isPerson ? 'at their firm' : 'there'} the team deals with.
                 </dd>
                 <dt>Who can act</dt>
-                <dd>Whoever keeps the records, by linking your user to your person record; anyone, by confirming a candidate with its evidence.</dd>
+                <dd>Anyone: building the network links each of the team to a person record and makes the ties our records show — a meeting held one to one is tier A — and those the research found, C and D waiting for a person.</dd>
                 <dt>Safe next step</dt>
-                <dd>Read the candidates below. Where the team is in touch already, approach directly and say so.</dd>
+                <dd>Build it below. Where the team is in touch already, approach directly and say so.</dd>
               </dl>
+              <form action={buildNetworkAction} style={{ marginTop: 12 }}>
+                <input type="hidden" name="target" value={targetId ?? ''} />
+                <button className="btn p" type="submit">Build the network from our records and the research</button>
+              </form>
             </div>
           </div>
         </div>
@@ -362,20 +367,38 @@ export default async function Routes({
                     </b>
                   </Link>
                   {route.hops.map((h) => (
-                    <p key={h.edge.edgeId} style={{ marginBottom: 3 }}>
-                      <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
-                        {h.edge.tier} · {h.edge.kind.replace('_', ' ')} · since {h.edge.validFrom.getFullYear()}
-                      </span>{' '}
-                      {h.edge.evidence[0]?.note}
-                      {h.edge.evidence.map((ev) =>
-                        ev.doc && docMap.has(ev.doc) ? (
-                          <EvidenceRef key={ev.doc} doc={docMap.get(ev.doc)!} />
-                        ) : null,
+                    <div key={h.edge.edgeId}>
+                      <p style={{ marginBottom: 3 }}>
+                        <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
+                          {h.edge.tier} · {h.edge.kind.replace('_', ' ')} · since {h.edge.validFrom.getFullYear()}
+                        </span>{' '}
+                        {h.edge.evidence[0]?.note}
+                        {h.edge.evidence.map((ev) =>
+                          ev.doc && docMap.has(ev.doc) ? (
+                            <EvidenceRef key={ev.doc} doc={docMap.get(ev.doc)!} />
+                          ) : null,
+                        )}
+                        {h.edge.reviewedByName && (
+                          <span className="muted"> · confirmed by {h.edge.reviewedByName}</span>
+                        )}
+                      </p>
+                      {/* A C or D tie waits for a person (rule 6, N82): say whether it is real. Beside the
+                          line, not in it: a form inside a paragraph breaks the page's hydration. */}
+                      {(h.edge.tier === 'C' || h.edge.tier === 'D') && !h.edge.reviewedByName && (
+                        <div className="edgereview">
+                          <form action={reviewEdgeAction}>
+                            <input type="hidden" name="edgeId" value={h.edge.edgeId} />
+                            <input type="hidden" name="decision" value="confirm" />
+                            <button className="btn" type="submit">They know each other</button>
+                          </form>
+                          <form action={reviewEdgeAction}>
+                            <input type="hidden" name="edgeId" value={h.edge.edgeId} />
+                            <input type="hidden" name="decision" value="decline" />
+                            <button className="btn" type="submit">Not a real tie</button>
+                          </form>
+                        </div>
                       )}
-                      {h.edge.reviewedByName && (
-                        <span className="muted"> · confirmed by {h.edge.reviewedByName}</span>
-                      )}
-                    </p>
+                    </div>
                   ))}
                   {route.reasons.map((reason) => (
                     <p key={reason} style={{ color: route.verdict === 'recommend' ? 'var(--muted)' : 'var(--ink)' }}>

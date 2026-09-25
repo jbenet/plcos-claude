@@ -25,6 +25,9 @@ export async function importFindingsAction(): Promise<void> {
   const user = await (await auth()).currentUser();
   const r = await importFindings(user.id);
   await appendAudit({ actorId: user.id, action: 'enrich.imported', subjectType: 'enrich', detail: { mapped: r.mapped, claims: r.claims, rejected: r.rejected, paths: r.paths } });
+  // The research's paths become ties, C and D waiting for a person (N82).
+  const { buildNetwork } = await import('@/modules/network');
+  await buildNetwork();
   revalidatePath('/dev/enrich');
   revalidatePath('/targets');
   redirect(`/developer/enrich?imported=${r.mapped}&claims=${r.claims}&refused=${r.rejected}`);

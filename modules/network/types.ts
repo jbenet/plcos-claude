@@ -1,6 +1,8 @@
 export type EdgeKind =
   | 'connector' | 'colleague' | 'advisor' | 'board' | 'coinvestor' | 'family'
-  | 'event_coattendee' | 'social_public' | 'podcast_guest';
+  | 'event_coattendee' | 'social_public' | 'podcast_guest'
+  // N82: from the team's own records, and from the research's paths.
+  | 'met' | 'corresponded' | 'alumni' | 'portfolio' | 'other';
 
 export type EvidenceTier = 'A' | 'B' | 'C' | 'D';
 

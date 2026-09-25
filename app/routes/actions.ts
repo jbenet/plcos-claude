@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { proposeAsk } from '@/modules/coordination';
@@ -44,4 +45,28 @@ export async function proposeFromRoute(formData: FormData): Promise<void> {
   });
 
   redirect(`/approvals?t=${ticketId}`);
+}
+
+/**
+ * A person says whether a tie the research found is real (N82, rule 6): confirmed, a C or D tie can
+ * carry a route, held; turned down, it is ended and no route walks it.
+ */
+export async function reviewEdgeAction(formData: FormData): Promise<void> {
+  const { reviewEdge } = await import('@/modules/network');
+  const user = await (await auth()).currentUser();
+  const decision = String(formData.get('decision')) === 'confirm' ? 'confirm' : 'decline';
+  await reviewEdge(user.id, String(formData.get('edgeId')), decision, String(formData.get('note') ?? '').trim() || null);
+  revalidatePath('/routes');
+}
+
+/** Link the team to the graph and build its ties from our records and the research (N82). */
+export async function buildNetworkAction(formData: FormData): Promise<void> {
+  const { buildNetwork } = await import('@/modules/network');
+  const { appendAudit } = await import('@/modules/platform');
+  const user = await (await auth()).currentUser();
+  const r = await buildNetwork();
+  await appendAudit({ actorId: user.id, action: 'network.built', subjectType: 'network', detail: { ...r } });
+  const target = String(formData.get('target') ?? '');
+  revalidatePath('/routes');
+  redirect(`/routes${target ? `?target=${target}` : ''}`);
 }
