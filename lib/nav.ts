@@ -179,6 +179,7 @@ export const STATIC_SECTIONS: NavSection[] = [
       /* Issues are development, so they live with the rest of it (issue 0011). */
       { label: 'Issues', href: '/developer/issues' },
       { label: 'Changelog', href: '/developer/changelog' },
+      { label: 'Docs', href: '/developer/docs' },
       { label: 'Status', href: '/developer/status' },
       { label: 'Settings', href: '/developer/settings' },
       { label: 'Modules', href: '/developer/modules' },
