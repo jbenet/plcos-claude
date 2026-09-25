@@ -2391,6 +2391,85 @@ async function main() {
       `only written to: ${c.has(wrote) ? 'in touch' : 'not in touch'}; met: ${c.get(met)?.how ?? 'none'}; wrote back: ${c.get(heard)?.how ?? 'none'}; their firm: ${c.get(firm) ? `through ${c.get(firm)!.via}` : 'none'}`);
   }
 
+  {
+    // Docs is reachable without sign-in: slugs select catalog entries, never filesystem paths.
+    const { docFileForSlug, listSystemDocs, readSystemDoc, docLink } = await import('../lib/docs');
+    const docs = await listSystemDocs();
+    const invalid = [
+      '../data/real/x', '..%2Fdata%2Freal%2Fx', '%2e%2e%2fdata%2freal%2fx',
+      '%252e%252e%252fdata%252freal%252fx', '..\\data\\real\\x', '%2e%2e%5cdata%5creal%5cx',
+      '/data/real/x', 'docs/../data/real/x', 'docs-../data/real/x', 'unknown-doc',
+      'constructor', '__proto__', 'agents%00', 'agents/../../data/real/x',
+    ];
+    const rejected = await Promise.all(invalid.map(async (slug) =>
+      await docFileForSlug(slug) === null && await readSystemDoc(slug) === null));
+    const permitted = docs.every((doc) => /^docs\/[^/]+\.md$/.test(doc.file)
+      || doc.file === 'AGENTS.md' || doc.file === 'issues/README.md');
+    const readable = await Promise.all(docs.map(async (doc) =>
+      await docFileForSlug(doc.slug) === doc.file && Boolean(await readSystemDoc(doc.slug))));
+    check('System docs expose only the catalog: traversal, encoded traversal and unknown slugs find no file',
+      permitted && rejected.every(Boolean) && readable.every(Boolean)
+        && docs[0]?.file === 'AGENTS.md' && docs[1]?.file === 'docs/13-synthesis-r3.md'
+        && docs.filter((doc) => doc.superseded).length === 3,
+      `${rejected.filter(Boolean).length}/${invalid.length} invalid slugs refused; ${readable.filter(Boolean).length}/${docs.length} listed docs readable; allowed paths only: ${permitted}; guide and current plan first`);
+    check('Document links stay in the reader, preserve anchors, and never link arbitrary local files',
+      docLink('docs/09-system-architecture.md', 'AGENTS.md', docs) === '/dev/docs/docs-09-system-architecture'
+      && docLink('15-affinity-integration.md#2-decisions', 'docs/13-synthesis-r3.md', docs) === '/dev/docs/docs-15-affinity-integration#2-decisions'
+      && docLink('../AGENTS.md', 'docs/COLLAB.md', docs) === '/dev/docs/agents'
+      && docLink('../data/real/x', 'docs/COLLAB.md', docs) === null
+      && docLink('javascript:alert(1)', 'AGENTS.md', docs) === null,
+      'repo-root links, sibling docs and parent AGENTS resolve; data paths and script URLs do not');
+
+    const fs = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const sandbox = await fs.mkdtemp(join(tmpdir(), 'plcos-docs-props-'));
+    const cwd = process.cwd();
+    let safeFiles = false;
+    let safeDirectories = false;
+    try {
+      // Fictional sentinel, outside this fixture’s listed locations. Never read real data.
+      await fs.mkdir(join(sandbox, 'docs'));
+      await fs.mkdir(join(sandbox, 'issues'));
+      await fs.mkdir(join(sandbox, 'private'));
+      await fs.writeFile(join(sandbox, 'private', 'secret.md'), 'not a system document');
+      await fs.writeFile(join(sandbox, 'docs', '01-allowed.md'), '# Allowed');
+      await fs.symlink('../private/secret.md', join(sandbox, 'docs', '02-link.md'));
+      await fs.symlink('private/secret.md', join(sandbox, 'AGENTS.md'));
+      await fs.symlink('../private/secret.md', join(sandbox, 'issues', 'README.md'));
+      process.chdir(sandbox);
+      const listed = await listSystemDocs();
+      safeFiles = listed.length === 1 && listed[0]?.file === 'docs/01-allowed.md'
+        && await docFileForSlug('docs-02-link') === null && await docFileForSlug('agents') === null
+        && await docFileForSlug('issues-readme') === null;
+      await fs.rm(join(sandbox, 'docs'), { recursive: true });
+      await fs.rm(join(sandbox, 'issues'), { recursive: true });
+      await fs.symlink('private', join(sandbox, 'docs'));
+      await fs.symlink('private', join(sandbox, 'issues'));
+      safeDirectories = (await listSystemDocs()).length === 0;
+    } finally {
+      process.chdir(cwd);
+      await fs.rm(sandbox, { recursive: true, force: true });
+    }
+    check('A symlink cannot expand the docs catalog, whether it replaces a listed file or a directory',
+      safeFiles && safeDirectories, `symlinked files refused: ${safeFiles}; symlinked directories refused: ${safeDirectories}`);
+  }
+
+  {
+    const { parseMarkdown, parseInline } = await import('../lib/markdown');
+    const sample = '| Location | Meaning |\n|---|---|\n| `data/<demo\\|real>/` | **Local** |';
+    const table = parseMarkdown(sample, { document: true })[0];
+    const example = '```markdown\n# Example\n```json\n{"example": true}\n```\n```\n## After';
+    const blocks = parseMarkdown(example, { document: true });
+    const legacy = parseMarkdown(sample)[0];
+    check('System docs keep escaped table pipes in one cell and nested Markdown examples in their code block',
+      table?.kind === 'table' && table.rows[0]?.length === 2 && table.rows[0]?.[0] === '`data/<demo|real>/`'
+      && blocks[0]?.kind === 'code' && blocks[0].text.includes('```json')
+      && blocks[1]?.kind === 'heading' && blocks[1].text === 'After'
+      && parseInline('**Local**')[0]?.kind === 'strong'
+      && legacy?.kind === 'table' && legacy.rows[0]?.length === 3,
+      'doc tables retain literal pipes; fenced examples stay literal; existing renderers keep their default parsing');
+  }
+
   // ---------------------------------------------------------------- report
 
   const failed = results.filter((r) => !r.ok);

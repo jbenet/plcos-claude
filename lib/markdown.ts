@@ -1,15 +1,14 @@
 /**
  * A very small markdown renderer.
  *
- * Deliberately not a library: this renders exactly one document — our own CHANGELOG.md —
- * and the blast radius of a markdown parser that handles arbitrary input is larger than
- * the feature is worth. It covers what the changelog actually uses and nothing else.
+ * Shared by the changelog, issues and system docs. Document-specific additions are opt-in
+ * so the existing changelog and issue renderings keep their original parsing behavior.
  */
 
 export type Block =
   | { kind: 'heading'; level: number; text: string; id: string }
   | { kind: 'paragraph'; text: string }
-  | { kind: 'list'; ordered: boolean; items: string[] }
+  | { kind: 'list'; ordered: boolean; items: string[]; markers?: string[]; indents?: number[] }
   | { kind: 'code'; text: string }
   | { kind: 'quote'; text: string }
   | { kind: 'table'; head: string[]; rows: string[][] }
@@ -22,10 +21,21 @@ export function slugify(text: string): string {
     .replace(/^-|-$/g, '');
 }
 
-const splitRow = (line: string): string[] =>
-  line.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+const splitRow = (line: string, document: boolean): string[] => {
+  const row = line.replace(/^\||\|$/g, '');
+  if (!document) return row.split('|').map((c) => c.trim());
+  // A backslash-escaped pipe belongs to its cell, including inside inline code.
+  const cells = [''];
+  for (let i = 0; i < row.length; i += 1) {
+    const char = row[i]!;
+    if (char === '\\' && row[i + 1] === '|') { cells[cells.length - 1] += '|'; i += 1; }
+    else if (char === '|') cells.push('');
+    else cells[cells.length - 1] += char;
+  }
+  return cells.map((cell) => cell.trim());
+};
 
-export function parseMarkdown(src: string): Block[] {
+export function parseMarkdown(src: string, options: { document?: boolean } = {}): Block[] {
   const lines = src.split(/\r?\n/);
   const blocks: Block[] = [];
   let i = 0;
@@ -50,7 +60,20 @@ export function parseMarkdown(src: string): Block[] {
       flushParagraph(para);
       const body: string[] = [];
       i += 1;
-      while (i < lines.length && !/^```/.test(lines[i]!)) {
+      // AGENTS.md embeds a fenced JSON sample inside a fenced Markdown sample.
+      // Keep that sample literal. Also accept ordinary longer Markdown fences.
+      const fence = /^(`{3,})(.*)$/.exec(line)!;
+      let nested = 0;
+      while (i < lines.length) {
+        const nextFence = /^(`{3,})(.*)$/.exec(lines[i]!);
+        if (!options.document && nextFence) break;
+        if (options.document && nextFence) {
+          if (fence[2]!.trim() === 'markdown' && nextFence[2]!.trim()) nested += 1;
+          else if (!nextFence[2]!.trim()) {
+            if (nested > 0) nested -= 1;
+            else if (nextFence[1]!.length >= fence[1]!.length) break;
+          }
+        }
         body.push(lines[i]!);
         i += 1;
       }
@@ -88,13 +111,13 @@ export function parseMarkdown(src: string): Block[] {
 
     if (/^\|/.test(line)) {
       flushParagraph(para);
-      const head = splitRow(line);
+      const head = splitRow(line, options.document === true);
       i += 1;
       // The |---|---| separator row, which carries no data.
       if (i < lines.length && /^\|[\s:|-]+\|?$/.test(lines[i]!)) i += 1;
       const rows: string[][] = [];
       while (i < lines.length && /^\|/.test(lines[i]!)) {
-        rows.push(splitRow(lines[i]!));
+        rows.push(splitRow(lines[i]!, options.document === true));
         i += 1;
       }
       blocks.push({ kind: 'table', head, rows });
@@ -106,6 +129,8 @@ export function parseMarkdown(src: string): Block[] {
       flushParagraph(para);
       const ordered = /\d/.test(bullet[1]!);
       const items: string[] = [];
+      const markers: string[] = [];
+      const indents: number[] = [];
       while (i < lines.length) {
         const next = /^\s*([-*]|\d+\.)\s+(.*)$/.exec(lines[i]!);
         if (!next) {
@@ -118,9 +143,11 @@ export function parseMarkdown(src: string): Block[] {
           break;
         }
         items.push(next[2]!);
+        markers.push(next[1]!);
+        indents.push(/^\s*/.exec(lines[i]!)![0].length);
         i += 1;
       }
-      blocks.push({ kind: 'list', ordered, items });
+      blocks.push({ kind: 'list', ordered, items, ...(options.document ? { markers, indents } : {}) });
       continue;
     }
 
