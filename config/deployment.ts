@@ -33,6 +33,24 @@ function dataProfile(): DataProfile {
 const PROFILE = dataProfile();
 
 /**
+ * The port this server answers on. The launcher sets PORT (scripts/serve.ts) and Next sets it once
+ * it listens; a script serves nothing and has none. Digits only, since it goes into cookie names.
+ */
+const PORT = process.env.PORT?.replace(/\D/g, '') || null;
+
+/**
+ * A preview (npm run preview, docs/COLLAB.md): the real profile served in a dev worktree from a
+ * copy of the real data, taken at this time. The launcher sets it; the breadcrumb bar shows it,
+ * and the Affinity key is never read while it is set. A bad value fails loudly, like a bad profile.
+ */
+function copyTakenAt(): string | null {
+  const v = process.env.PREVIEW_COPY_AT?.trim();
+  if (!v || PROFILE !== 'real') return null;
+  if (Number.isNaN(Date.parse(v))) throw new Error(`PREVIEW_COPY_AT must be the time the copy was taken, not "${v}".`);
+  return v;
+}
+
+/**
  * The real profile is this machine only until a deployment is chosen, so a connection string
  * pointing somewhere else is refused rather than quietly obeyed.
  */
@@ -63,11 +81,15 @@ export const config = {
     profile: PROFILE,
     /** Everything this profile keeps on disk is under here, and git ignores all of it. */
     root: `data/${PROFILE}`,
+    port: PORT,
+    /** When this server's copy of the real data was taken; null unless it is a preview. */
+    copyTakenAt: copyTakenAt(),
     /**
-     * Cookies belong to a host, not a port, so the two servers would share who you are and
-     * which vehicle you had open. Local storage is per port already.
+     * Cookies belong to a host, not a port, so every server on this machine — live, preview and
+     * demo, and Juan's iPad reaching any of them by IP — would share who you are and which
+     * vehicle you had open. The name carries the port. Local storage is per port already.
      */
-    cookiePrefix: PROFILE === 'real' ? 'capitalos_real_' : 'capitalos_',
+    cookiePrefix: `${PROFILE === 'real' ? 'capitalos_real_' : 'capitalos_'}${PORT ? `${PORT}_` : ''}`,
   },
   affinity: {
     /**

@@ -2,6 +2,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import { config } from '../config/deployment';
+import { portFor, readLayout } from '../config/ports';
 import { encodeShot, SHOT } from './shot-image';
 
 /**
@@ -2401,7 +2402,8 @@ async function refuseReal(base: string) {
 
 async function main() {
   const version = process.argv[2] ?? 'L1';
-  const base = process.env.BASE_URL ?? 'http://localhost:3000';
+  // This folder's demo server: its port from .ports.json, or PORT (config/ports.ts).
+  const base = process.env.BASE_URL ?? `http://localhost:${portFor('demo', readLayout())}`;
   // `npm run shots -- N57 04` retakes only the shots whose names start with "04".
   const only = process.argv[3];
   const shots = SHOTS[version]?.filter((s) => !only || s.name.startsWith(only));

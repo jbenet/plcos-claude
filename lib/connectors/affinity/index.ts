@@ -14,9 +14,12 @@ export { ReadOnlyViolation, guardedFetch } from './fetch';
 export class AffinityKeyMissing extends Error {
   constructor() {
     super(
-      'No Affinity key in this server. npm run dev:real reads it from one macOS Keychain item, which ' +
-        'npm run key:store creates — it asks for the key without showing it. Then restart the real server ' +
-        'and allow the Keychain to hand it over.',
+      config.data.copyTakenAt
+        ? 'This server is a preview: a copy of the real data, which never talks to Affinity (docs/COLLAB.md). ' +
+            'The live app reads Affinity; run npm run preview again for a newer copy.'
+        : 'No Affinity key in this server. npm run dev:real reads it from one macOS Keychain item, which ' +
+            'npm run key:store creates — it asks for the key without showing it. Then restart the real server ' +
+            'and allow the Keychain to hand it over.',
     );
     this.name = 'AffinityKeyMissing';
   }

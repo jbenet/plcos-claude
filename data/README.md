@@ -6,15 +6,19 @@ what is in force on the server you are looking at.
 
 ```
 data/
-  demo/                 fictional — npm run dev, port 3000
+  demo/                 fictional — npm run dev, on this folder's demo port (.ports.json)
     database/           PGlite, seeded from fixtures/ when empty; npm run demo rebuilds it
     database.lock       the process that has it open
     props/              scratch copy for npm run props, rebuilt on every run
-  real/                 the raise — npm run dev:real, port 3100 (on the LAN since 24 Sep 2026)
+  real/                 the raise — npm run dev:real, on the live folder's real port (on the LAN since 24 Sep 2026)
     database/           PGlite: the Affinity replica and every judgement recorded against it
     init.jsonc          who is on the team, which vehicles exist, which lists track them
     issues/             feedback filed from the real profile, pictures included
 ```
+
+After the move in `docs/COLLAB.md`, the live folder's `real/` is a link to `../../plcos-data/real`,
+outside every worktree. In a dev worktree `real/` is a plain folder: the copy `npm run preview`
+takes, marked by `real/.preview-copy`, which the next preview replaces.
 
 Nothing under `data/real/` goes into a commit, the changelog, a screenshot, the published
 build log or `issues/`. `npm run demo`, `npm run db:reset`, `npm run db:seed` and

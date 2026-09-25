@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
+import { readLayout, type Layout } from '@/config/ports';
 import { getDb } from '@/lib/db';
 import { lockFile } from '@/lib/db/lock';
 import { ago } from '@/lib/time';
@@ -13,17 +14,27 @@ import { reloadInit } from './actions';
 
 export const dynamic = 'force-dynamic';
 
-/** The two profiles, side by side. The current one is marked; the words carry it. */
-const PROFILES: Array<{ fact: string; demo: string; real: string }> = [
-  { fact: 'What it is', demo: 'Fictional people, firms and amounts', real: 'The raise: Affinity’s records, and what we write about them' },
-  { fact: 'Started with', demo: 'npm run dev', real: 'npm run dev:real' },
-  { fact: 'Served at', demo: 'port 3000, reachable from the local network', real: 'port 3100, reachable from the local network (since 24 Sep 2026)' },
-  { fact: 'Kept in', demo: 'data/demo/', real: 'data/real/' },
-  { fact: 'Starts from', demo: 'fixtures/, seeded when the database is empty', real: 'data/real/init.jsonc, which you fill in' },
-  { fact: 'Reset', demo: 'npm run demo, any time', real: 'Refused. It holds judgements that exist nowhere else' },
-  { fact: 'Screenshots', demo: 'npm run shots, committed and published in the build log', real: 'Refused' },
-  { fact: 'Feedback goes to', demo: 'issues/, committed with its fix', real: 'data/real/issues/, never committed' },
-];
+/**
+ * The two profiles, side by side, as this folder serves them (.ports.json, docs/COLLAB.md): the
+ * real data itself in the live folder, a copy of it in a dev worktree. The current one is marked;
+ * the words carry it.
+ */
+function profiles(layout: Layout | null): Array<{ fact: string; demo: string; real: string }> {
+  const row = layout?.row;
+  const copy = layout?.role !== 'live';
+  const at = (port: number | undefined) => (port ? `port ${port}` : 'the port in PORT (this folder has no row in .ports.json)');
+  const files = copy ? 'Not filed here: only the live app files, so issue numbers never collide' : null;
+  return [
+    { fact: 'What it is', demo: 'Fictional people, firms and amounts', real: copy ? 'A copy of the raise, taken for this branch. Changes to it are thrown away' : 'The raise: Affinity’s records, and what we write about them' },
+    { fact: 'Started with', demo: 'npm run dev', real: copy ? 'npm run preview, which takes a fresh copy first' : 'npm run dev:real' },
+    { fact: 'Served at', demo: `${at(row?.demo)}, reachable from the local network`, real: copy ? `${at(row?.preview)}, reachable from the local network` : `${at(row?.real)}, reachable from the local network (since 24 Sep 2026)` },
+    { fact: 'Kept in', demo: 'data/demo/', real: 'data/real/' },
+    { fact: 'Starts from', demo: 'fixtures/, seeded when the database is empty', real: copy ? 'The real data, copied by npm run preview' : 'data/real/init.jsonc, which you fill in' },
+    { fact: 'Reset', demo: 'npm run demo, any time', real: copy ? 'npm run preview takes a fresh copy' : 'Refused. It holds judgements that exist nowhere else' },
+    { fact: 'Screenshots', demo: 'npm run shots, committed and published in the build log', real: 'Refused' },
+    { fact: 'Feedback goes to', demo: files ?? 'issues/, committed with its fix', real: files ?? 'data/real/issues/, never committed' },
+  ];
+}
 
 /** Every place that refuses to move real data somewhere it should not go, and where it lives. */
 const GUARDS: Array<{ rule: string; where: string }> = [
@@ -32,11 +43,12 @@ const GUARDS: Array<{ rule: string; where: string }> = [
   { rule: 'db:reset and npm run demo refuse the real profile.', where: 'scripts/reset.ts' },
   { rule: 'Screenshots ask the server which data it is showing, and stop unless it says demo.', where: 'scripts/shots.ts · /api/profile' },
   { rule: 'Feedback filed from the real profile, pictures included, stays in data/real/issues/.', where: 'config.issues.dir' },
-  { rule: 'The real server listens on the local network (Juan, 24 Sep 2026: a small private network). There is no sign-in, so anyone on it can read and change the real data.', where: 'package.json · next.config.ts' },
+  { rule: 'The real server listens on the local network (Juan, 24 Sep 2026: a small private network). There is no sign-in, so anyone on it can read and change the real data.', where: 'scripts/serve.ts · next.config.ts' },
+  { rule: 'Only the live folder serves the real data; a dev worktree serves a copy. The preview replaces nothing but its own copy, refuses a link, and starts with no Affinity key.', where: '.ports.json · scripts/preview-copy.ts' },
   { rule: 'In the real profile DATABASE_URL is refused and PGLITE_DIR is ignored, so neither can move the data.', where: 'config/deployment.ts' },
   { rule: 'A second process opening the same database is refused by name instead of corrupting it.', where: 'lib/db/lock.ts' },
   { rule: 'The property harness always runs on a scratch copy of the demo.', where: 'scripts/properties.ts' },
-  { rule: 'The two servers keep separate cookies, so who you are in one is not who you are in the other.', where: 'config.data.cookiePrefix' },
+  { rule: 'Every server keeps its own cookies, named with its port, so who you are in one is not who you are in another.', where: 'config.data.cookiePrefix' },
 ];
 
 export default async function DataPage() {
@@ -50,6 +62,8 @@ export default async function DataPage() {
   const initSource = sources.find((s) => s.source === 'init');
   const people = report?.init?.team.length ?? 0;
   const vehicles = report?.init?.vehicles.length ?? 0;
+  const layout = (() => { try { return readLayout(); } catch { return null; } })();
+  const copied = config.data.copyTakenAt ? new Date(config.data.copyTakenAt) : null;
 
   return (
     <Page
@@ -89,11 +103,21 @@ export default async function DataPage() {
       <div className="card">
         <div className="chead">
           <h2>This server</h2>
-          <span className={`profile p-${profile}`}>{profile === 'real' ? 'Real data' : 'Demo data'}</span>
+          <span className={`profile p-${copied ? 'copy' : profile}`}>{copied ? 'Copy of real data' : profile === 'real' ? 'Real data' : 'Demo data'}</span>
         </div>
         <div className="cbody">
           <div className="fact"><span>Profile</span><span>{profile}</span></div>
+          {copied && (
+            <div className="fact">
+              <span>Copy taken</span>
+              <span>{copied.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {ago(copied)} · changes here are thrown away</span>
+            </div>
+          )}
           <div className="fact"><span>Opened as</span><span className="mono">{host}</span></div>
+          <div className="fact">
+            <span>Folder and port</span>
+            <span className="mono">{layout?.folder ?? 'unknown'} · {config.data.port ?? 'unknown'} · {layout?.row ? `${layout.role} row in .ports.json` : 'no row in .ports.json'}</span>
+          </div>
           <div className="fact"><span>Folder</span><span className="mono">{config.data.root}/</span></div>
           <div className="fact">
             <span>Database</span>
@@ -120,7 +144,7 @@ export default async function DataPage() {
             </tr>
           </thead>
           <tbody>
-            {PROFILES.map((p) => (
+            {profiles(layout).map((p) => (
               <tr key={p.fact}>
                 <td className="muted">{p.fact}</td>
                 <td className={profile === 'demo' ? 'here' : undefined}>{p.demo}</td>
@@ -177,7 +201,7 @@ export default async function DataPage() {
               time <span className="mono">npm run dev:real</span> starts, it copies{' '}
               <span className="mono">{TEMPLATE_PATH}</span> to{' '}
               <span className="mono">data/real/init.jsonc</span>. Then open{' '}
-              <span className="mono">http://localhost:3100/dev/data</span> to see what it still asks.
+              <span className="mono">{layout?.live ? `http://localhost:${layout.live.real}/dev/data` : 'Developer → Data on the real server'}</span> to see what it still asks.
             </p>
             <div className="lbl" style={{ margin: '12px 0 6px' }}>Beyond people and vehicles, it asks</div>
             <ol className="asks">

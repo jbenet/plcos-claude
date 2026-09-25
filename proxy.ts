@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { config as deployment } from '@/config/deployment';
 import { canonicalPath, DEV_PAGES, MODULE_PAGES, RESERVED } from '@/lib/paths';
 
 /**
@@ -21,9 +22,9 @@ import { canonicalPath, DEV_PAGES, MODULE_PAGES, RESERVED } from '@/lib/paths';
  * which the links read too, so a click goes straight to the address this would redirect it to.
  */
 
-const PREFIX = process.env.DATA_PROFILE === 'real' ? 'capitalos_real_' : 'capitalos_';
-const USER_COOKIE = `${PREFIX}user`;
-const VEHICLE_COOKIE = `${PREFIX}vehicle`;
+// The same names as lib/auth/local.ts and lib/session.ts, which carry the port.
+const USER_COOKIE = `${deployment.data.cookiePrefix}user`;
+const VEHICLE_COOKIE = `${deployment.data.cookiePrefix}vehicle`;
 
 function currentVehicle(req: NextRequest): string {
   const handle = req.cookies.get(USER_COOKIE)?.value ?? '';

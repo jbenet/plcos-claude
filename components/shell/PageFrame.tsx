@@ -22,13 +22,21 @@ const PROFILE = {
     label: 'Real data',
     title: 'The real raise. This machine only: never committed, screenshotted or published (docs/15).',
   },
+  /** A preview (docs/COLLAB.md): the real data as it was when copied, for a branch in development. */
+  copy: {
+    label: 'Copy of real data',
+    title:
+      'A copy of the real data, served for a branch in development (npm run preview). Changes made here stay in the copy ' +
+      'and are thrown away when it is copied again; the live data never sees them. Real data all the same: never ' +
+      'committed, screenshotted or published (docs/15).',
+  },
 } as const;
 
 export function PageFrame({
   profile, notice, crumbs, syncTone, syncLine, syncTitle, actions, inspector, children,
 }: {
   /** Passed in rather than read from config, which only knows the answer on the server. */
-  profile: 'demo' | 'real';
+  profile: 'demo' | 'real' | 'copy';
   notice?: string;
   crumbs: Array<{ label: string; href?: string }>;
   syncTone: string;

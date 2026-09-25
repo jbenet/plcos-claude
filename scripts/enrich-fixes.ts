@@ -14,6 +14,7 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config/deployment';
+import { liveRow } from '../config/ports';
 import type { RecordToFix } from '../lib/enrich/fixes';
 
 /** What the research says is wrong with our record. */
@@ -58,6 +59,8 @@ async function main() {
   }
 
   const kinds: Record<string, number> = {};
+  // The links open the live app's real server, wherever this runs (.ports.json).
+  const livePort = liveRow()?.real;
   const lines: string[] = [];
   const json: RecordToFix[] = [];
   const sorted = [...rows.entries()].sort((a, b) => (cands.get(a[0])?.name ?? '').localeCompare(cands.get(b[0])?.name ?? ''));
@@ -71,7 +74,7 @@ async function main() {
     lines.push(`### ${c?.name ?? key.slice(0, 8)}${c?.org ? ` · ${c.org}` : ''}`);
     lines.push('');
     const said = [...new Set(r.said)].slice(0, 3).map((t) => (t.length > 360 ? `${t.slice(0, 357)}…` : t));
-    lines.push(`- **Kind:** ${kind}${pid ? ` · [their page](http://localhost:3100/all/pipeline/${pid})` : ''} · key \`${key.slice(0, 8)}\``);
+    lines.push(`- **Kind:** ${kind}${pid && livePort ? ` · [their page](http://localhost:${livePort}/all/pipeline/${pid})` : ''} · key \`${key.slice(0, 8)}\``);
     for (const t of said) lines.push(`- **The research:** ${t}`);
     if (r.step) lines.push(`- **The proposed step:** ${r.step}`);
     lines.push('');
