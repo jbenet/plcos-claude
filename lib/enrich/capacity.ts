@@ -41,10 +41,14 @@ export function bandBySize(kind: string, usd: number): string | null {
   return steps.find(([bound]) => usd < bound)?.[1] ?? null;
 }
 
-/** What a "By size" basis says: the kind, the size, and the band the table gives them. */
+/**
+ * What a "By size" basis says: the kind, the size, and the band the table gives them. The kind is the
+ * one named first — "a multi-family office" is a wealth manager, though "family office" is inside it,
+ * and "an adviser to foundations" is an adviser (a W5 reader, N81: the fixed order read them wrong).
+ */
 export function sizeReading(basis: string): { kind: string; usd: number; band: string } | null {
   if (!BY_SIZE.test(basis)) return null;
-  const kind = KINDS.find(([, re]) => re.test(basis))?.[0];
+  const kind = KINDS.map(([k, re]) => ({ k, at: basis.search(re) })).filter((x) => x.at >= 0).sort((a, b) => a.at - b.at)[0]?.k;
   const usd = parseUsd(basis);
   if (!kind || !usd) return null;
   const band = bandBySize(kind, usd);
@@ -54,7 +58,8 @@ export function sizeReading(basis: string): { kind: string; usd: number; band: s
 /** A "Floor" basis that counts enough angel checks: "Floor: 12 angel checks on record". */
 export function floorHolds(basis: string): boolean {
   if (!FLOOR.test(basis)) return false;
-  const m = /\b(\d{1,3})\s+(?:\w+\s+){0,2}(?:angel\s+)?(?:checks|investments|deals|companies)\b/i.exec(basis);
+  // "12 angel checks", "60 angel/seed investments", "over 50 personal angel investments".
+  const m = /\b(\d{1,3})\+?\s+(?:[\w/-]+\s+){0,3}(?:checks|investments|deals|companies)\b/i.exec(basis);
   return Boolean(m && Number(m[1]) >= config.capacity.angelFloor.checks);
 }
 

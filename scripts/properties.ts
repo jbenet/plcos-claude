@@ -1780,14 +1780,18 @@ async function main() {
           const flags = (band: string, basis: string) => gates({ list: '2027', scores: { capacity: { band, basis } } as never, route: null }, { contact, money: null },
             { profile: { investorType: 'advisor', capacity: { band: 'unknown', basis: '' } } }, null);
           const table = cap.bandBySize('family_office', 800e6) === '$1–5M' && cap.bandBySize('individual', 20e6) === '<$250K' && cap.bandBySize('nothing', 1e9) === null;
+          // The kind named first, not the first in a fixed order; "angel/seed" is counted (N81's readers).
+          const firstNamed = cap.sizeReading('By size: a multi-family office with $4.2B under advice')?.kind === 'wealth_manager'
+            && cap.sizeReading('By size: an adviser to family foundations, $3B')?.kind === 'wealth_manager'
+            && cap.floorHolds('Floor: 60 angel/seed investments on record');
           const bySize = flags('$1–5M', 'By size: a wealth manager with $4.2 billion under management, per its ADV');
           const offTable = flags('$5–25M', 'By size: a wealth manager with $4.2 billion under management, per its ADV');
           const floor = flags('$100K+ (floor)', 'Floor: 12 angel checks on record, sizes unknown');
           const thinFloor = flags('$100K+ (floor)', 'Floor: 3 angel checks on record');
           check('A band by size is the table’s, and a floor needs many angel checks: each held to its rule',
-            table && bySize.length === 0 && offTable.includes('capacity off the size table (it gives $1–5M)') && floor.length === 0 &&
+            table && firstNamed && bySize.length === 0 && offTable.includes('capacity off the size table (it gives $1–5M)') && floor.length === 0 &&
               thinFloor.includes('a floor without the angel checks behind it') && thinFloor.includes('capacity ahead of the evidence'),
-            `table: ${table}; by size, the table's band: ${bySize.join(', ') || 'no flags'}; another band: ${offTable.join(', ')}; floor on 12 checks: ${floor.join(', ') || 'no flags'}; on 3: ${thinFloor.join(', ')}`);
+            `table: ${table}; the kind named first, and angel/seed counted: ${firstNamed}; by size, the table's band: ${bySize.join(', ') || 'no flags'}; another band: ${offTable.join(', ')}; floor on 12 checks: ${floor.join(', ') || 'no flags'}; on 3: ${thinFloor.join(', ')}`);
         }
 
         // The loop's own measurements (N70): the critic's rounds from their files — a round in two
