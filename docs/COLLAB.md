@@ -11,7 +11,7 @@ name says "codex" (a folder, a branch prefix), it means ChatGPT.
 plcos-claude-live   .git + master · real :3000 (the only writer of the real DB) · demo :3001
 plcos-claude-dev    Claude: claude/* branches · preview :3100 (real snapshot) · demo :3101
 plcos-codex-dev     ChatGPT: codex/* branches · preview :3200 (real snapshot) · demo :3201
-plcos-data/real     the real data, outside every worktree
+plcos-data/real     the real data, outside every worktree; the live folder's data/real links here
 ```
 
 - **One repository, three worktrees.** `plcos-claude-live` holds `.git` and `master`; the other two
@@ -24,10 +24,15 @@ plcos-data/real     the real data, outside every worktree
 - **Each dev worktree has two servers.** A demo on its own fresh demo database, and a preview on a
   snapshot — a copy — of the real database, so in-flight work can be seen on real data. Anything
   clicked or written on a preview lands in the copy and is thrown away; the live database never sees
-  it. Ports are `:X00` for the preview and `:X01` for the demo.
-- **The real data lives outside every worktree**, in `plcos-data/real`, found through `DATA_ROOT`. The
-  live server reads and writes it; workflow jobs write their files there (research findings, tags,
-  strategies); a preview copies it.
+  it. Ports are `:X00` for the preview and `:X01` for the demo. Every port comes from `.ports.json`, by
+  folder name; a sub-agent's worktree has no row and starts its demo with `PORT`, from 3110–3119 for
+  Claude's and 3210–3219 for ChatGPT's.
+- **The real data lives outside every worktree**, in `plcos-data/real`. The live folder reaches it
+  through `data/real`, a link to `../../plcos-data/real`, so every path in the code and the docs stays
+  `data/real/...`. In a dev worktree `data/real` is a plain folder holding the preview's copy, so a dev
+  worktree can only ever reach a copy. The live server reads and writes the real data; workflow jobs
+  (research findings, tags, strategies) run in the live folder to write there — run in a dev worktree,
+  they would write into the copy, which the next preview throws away.
 
 ## Who does what
 
@@ -42,6 +47,11 @@ plcos-data/real     the real data, outside every worktree
   Claude triages new issues and requests: it sets `assignee: claude | chatgpt` in the issue's
   frontmatter, and the agent records its branch there. One file per task, so the two never edit the
   same file.
+- **Issue files are committed on master, in the live folder.** The live demo writes each new issue,
+  and each change made on its issues page, into `issues/` in the live folder's working tree: master,
+  uncommitted. Claude commits them there, with its triage, in a commit of issue files only, before
+  each merge — so a merge never meets an uncommitted issue file — and a branch sees them when it next
+  merges master. Issues filed on the real server stay in `data/real/issues/`, never committed.
 - **Rough split.** ChatGPT: self-contained UI fixes and features, workflow batches (research, fact
   checks, tagging), tests. Claude: schema and migrations, the real server's operations (translate,
   import), cross-cutting changes, integration. Juan can always name who.
@@ -51,23 +61,47 @@ plcos-data/real     the real data, outside every worktree
 - AGENTS.md's rules hold for both agents, above all the real-data rules and "no training on this
   data, for anyone".
 - Only the live server opens the real database: PGlite allows one process per database directory,
-  and a second one corrupts it. Everyone else reads files, the live app over HTTP, or a snapshot.
+  and a second one corrupts it. Everyone else reads files, the live app over HTTP, or a snapshot. The
+  layout makes this structural, and the lock beside each database (`lib/db/lock.ts`) backs it up: a
+  second process that opens the real database is refused by name. A preview's copy leaves the live
+  server's lock behind, so the copy opens and the original stays locked.
 - Nobody fetches, pulls or pushes. Juan pushes master.
-- File issues only from the live app (`:3000`, `:3001`), so issue numbers don't collide.
+- File issues only from the live app, so issue numbers don't collide. On a dev worktree's servers the
+  feedback box files nothing and links to the live app on the same host name, and `/api/feedback`
+  refuses.
 
-## To build it (the next session's checklist)
+## Building it
 
-1. `DATA_ROOT`: `config.data.root` may be an absolute path; every use joins it safely (40 uses in 23
-   files — `path.resolve`, not `path.join(cwd, root)`).
-2. Ports from one tracked file, `.ports.json` — a local dev setup, keyed by folder name
-   (`{"plcos-claude-live": {"real": 3000, "demo": 3001}, …}`); the npm scripts, the screenshot tool and
-   the agent files read their folder's row. The cookie name carries the port.
-3. `npm run preview`: copy `plcos-data/real` into the worktree's own data folder and serve it on the
-   preview port, with no Affinity key.
-4. Point the agent files and docs at the new ports and paths, and merge all of it.
-5. Last, because renaming a folder under a running session breaks it: stop the real server; move
-   `data/real` to `plcos-data/real`; rename the folder to `plcos-claude-live` (master); add the worktrees
+Steps 1–4 are built, on the branch `claude/collab-setup`. Step 5 is the move, after it merges.
+
+1. No `DATA_ROOT` and no path rewrite (decided 25 Sep 2026, for simplicity). Every path in the code
+   and the docs stays `data/real/...`. In the live folder `data/real` becomes a link to
+   `../../plcos-data/real` (step 5); in a dev worktree it is a plain folder holding the preview's copy.
+   So "only the live server opens the real database" is structural: a dev worktree can only reach a
+   copy.
+2. `.ports.json`, tracked: a local dev setup for one machine, one row per folder name. A live row has
+   `real` and `demo`; a dev row has `preview`, `demo` and `previewSource`. The row for today's folder,
+   `plcos-claude`, keeps real 3100 and demo 3000, so merging before the move changes nothing.
+   `config/ports.ts` reads it, for the server and the scripts; `PORT` overrides a port, never what a
+   folder may serve. One launcher, `scripts/serve.ts`, is behind `npm run dev`, `dev:real`, `preview`,
+   `start` and `start:real`. It refuses a busy port before the Keychain is asked for the key, and
+   `dev:real` on a dev row refuses with "This folder serves a copy: use npm run preview." Cookie names
+   carry the port, so no two servers on one host share who you are or which vehicle you had open.
+3. `npm run preview`, on a dev row only. It refuses a busy port, a `data/real` that is a link, and one
+   that holds anything but its own copy, which it marks with `data/real/.preview-copy` (the time the
+   copy was taken). It clones `previewSource` into a temporary folder (an APFS clone, `cp -c`; a plain
+   copy where there is none), drops the live server's lock, renames the copy into place, checks that
+   its database opens, and serves it with no Affinity key. The breadcrumb bar says "Copy of real
+   data · Taken 2 h ago · changes here are thrown away". A copy taken while the live server writes can
+   catch a half-written page; running preview again takes a new one.
+4. The agent files and the docs name no ports; they point at `.ports.json`.
+5. Last, because renaming a folder under a running session breaks it: stop the real server; in the
+   live folder run `mkdir ../plcos-data && mv data/real ../plcos-data/real && ln -s ../../plcos-data/real data/real`;
+   remove any other worktrees of it first (`git worktree list`), since the rename breaks their links;
+   rename the folder to `plcos-claude-live` (master); add the worktrees
    (`git worktree add ../plcos-claude-dev -b claude/main`, `../plcos-codex-dev -b codex/main`); restart
-   the real server from the live folder on `:3000` in its terminal loop; link Claude's project memory for
+   the real server from the live folder in its terminal loop, where its row puts it on `:3000` and the
+   demo on `:3001`; point the folder named in `.claude/agents/*.md` at the new paths (the workflow
+   agents at `plcos-claude-live`, where `data/real` is the real data); link Claude's project memory for
    the new folder paths to the existing one (it is filed by path). Then Juan opens Claude's next session
    in `plcos-claude-dev`, and ChatGPT's in `plcos-codex-dev`.

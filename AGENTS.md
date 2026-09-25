@@ -28,10 +28,13 @@ Seven-plus people plus their agents will eventually use this. Right now, one per
 ## Real data — read before touching `data/real/`
 
 Two data profiles since N38 (`docs/15-affinity-integration.md`). `npm run dev` serves
-**demo**: fictional, port 3000, safe to reset, screenshot and publish. `npm run dev:real`
-serves **real**: the Affinity replica and everything written about it, on port 3100, reachable
-from the local network since 24 Sep 2026 (Juan: a small private network). There is no sign-in, so
-anyone on that network can read and change it. `DATA_PROFILE` picks one, in `config/deployment.ts`.
+**demo**: fictional, safe to reset, screenshot and publish. `npm run dev:real` serves **real**: the
+Affinity replica and everything written about it, reachable from the local network since 24 Sep 2026
+(Juan: a small private network). There is no sign-in, so anyone on that network can read and change
+it. `DATA_PROFILE` picks one, in `config/deployment.ts`. Each server's port comes from this folder's
+row in `.ports.json` (docs/COLLAB.md). Only the live folder serves the real data; a dev worktree serves
+a copy of it with `npm run preview`, and a sub-agent's worktree, which has no row, starts its demo with
+`PORT` from 3110–3119 (Claude's) or 3210–3219 (ChatGPT's).
 
 - Everything real lives under `data/real/`, which git ignores. None of it goes into a commit,
   the changelog, a screenshot, the published build log, `issues/`, a web search or a

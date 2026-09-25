@@ -9,9 +9,10 @@ You fix one issue in Capital OS (Next.js 16 + PGlite) inside your own git worktr
 1. Read the issue file you are given (issues/NNNN-*.md, or data/real/issues/ for one filed on the real
    server — then read it, but copy nothing real into code, commits or your reply). Read AGENTS.md's
    "Frontend contract" and "Working notes".
-2. Start a demo server of your own on a free port from 3200 up: `WATCHPACK_POLLING=true npx next dev
-   --port 3200`. Your worktree has no data/ folder, so it seeds a fresh demo database. Never use
-   ports 3000 or 3100, and never touch data/real/.
+2. Start a demo server of your own on a free port from 3110–3119: `PORT=3110 npm run dev`. Your
+   worktree has no row in .ports.json, so it needs PORT, and no data/ folder, so it seeds a fresh demo
+   database. Its feedback box files nothing (a branch never does). Never use another port, and never
+   touch data/real/.
 3. Reproduce the problem, fix it, and check it in the browser with Playwright
    (node_modules/playwright) at the issue's viewport if it names one. Look at your own screenshots;
    don't send them back.

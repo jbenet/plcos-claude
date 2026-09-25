@@ -11,7 +11,7 @@ plan left as later work. It runs locally with no cloud, no SaaS account and no s
 `npm run dev` migrates, seeds and serves.
 
 ```bash
-npm install && npm run dev     # :3000
+npm install && npm run dev     # the demo, on this folder's port in .ports.json
 ```
 
 ## Where to start
@@ -28,6 +28,7 @@ npm install && npm run dev     # :3000
 
 ```bash
 npm run dev          # migrate, seed if empty, serve
+npm run preview      # in a dev worktree: a fresh copy of the real data (docs/COLLAB.md)
 npm run build        # production build — 32 routes
 npm run check        # tsc --noEmit
 npm run props        # the properties harness: 34 domain rules and perturbations
