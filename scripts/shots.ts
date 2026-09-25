@@ -213,6 +213,36 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N85: [
+    {
+      name: '01-shortcuts',
+      path: '/today',
+      prepare: async (page) => {
+        await page.keyboard.press('?');
+        await page.locator('dialog.shortcuts-dialog[open]').waitFor({ timeout: 10_000 });
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '02-docs',
+      path: '/developer/docs',
+      prepare: async (page) => {
+        // A fresh browser has no vehicle cookie, so "All vehicles" is expanded under
+        // PL Capital by default, and its long submodule list pushes the Developer
+        // section below the fold; Developer also defaults to collapsed (lib/nav.ts), so
+        // its "Docs" item never renders on a fresh load. Collapse the sections above it
+        // and expand Developer so Docs stays in view (same collapsing pattern as N84's
+        // 01-network shot).
+        await page.getByRole('button', { name: 'PL Capital' }).click();
+        await page.getByRole('button', { name: 'PL R&D' }).click();
+        await page.getByRole('button', { name: 'Network' }).click();
+        await page.getByRole('button', { name: 'Other' }).click();
+        await page.getByRole('button', { name: 'Developer' }).click();
+        await page.waitForTimeout(400);
+      },
+    },
+    { name: '03-a-doc', path: '/developer/docs/docs-15-affinity-integration' },
+  ],
   N84: [
     {
       name: '01-network',

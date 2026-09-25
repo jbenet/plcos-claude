@@ -5358,3 +5358,39 @@ go to ChatGPT next, and 0031 (a gzip warning in the server log) is Claude's.
 
 131 of 131 properties hold, seven of them new: six for the layout, and one that a status change keeps
 an issue's unmanaged fields.
+
+## N85 — "?" for the keyboard shortcuts, and the system's docs in the app: ChatGPT's second and third
+
+**Shipped.** Two more changes from ChatGPT through the issue queue, each reviewed and merged by Claude:
+`?` opens a dialog of the keyboard shortcuts (issue 0032), and Developer → Docs renders the repo's
+markdown docs (issue 0033).
+
+| | |
+|---|---|
+| ![Keyboard shortcuts](docs/changelog/shots/n85/01-shortcuts.webp) | **Keyboard shortcuts.** `?` anywhere opens it; `?` again, Escape or a click outside closes it, and focus goes back where it was. It lists only shortcuts that exist, grouped by where each works, from one list in `lib/keyboard-shortcuts.ts` that the feedback box's keys panel shows too. |
+| ![Docs](docs/changelog/shots/n85/02-docs.webp) | **Docs**, under Developer: AGENTS.md, the current plan, docs 01–19, COLLAB and the issues README, with 10–12 marked superseded by 13, as AGENTS.md says. |
+| ![A doc](docs/changelog/shots/n85/03-a-doc.webp) | **One doc**, with its tables, code blocks, heading anchors and an "In this document" list. Links between docs go to their page here. |
+
+**The shortcuts.** A `?` typed into a text field stays text, and a `?` with ⌘, Ctrl or Alt held is not
+the shortcut. While the feedback box or another dialog is open, `?` belongs to it, so the feedback box's
+own keys panel still answers. The dialog is a native modal: focus stays inside it and the page behind
+can't be clicked. ⌘ shows on a Mac or an iPad, Ctrl elsewhere; only the Mac was checked on a device.
+
+**The docs page, and why its review was about files.** The real server answers anyone on the local
+network with no sign-in, so a page that reads files by name would be a way into `data/real` if it
+trusted the URL. It doesn't. A fixed catalog — AGENTS.md, the top level of `docs/`, `issues/README.md`,
+and no symlinks at any level — is the only way from a URL to a file, and a URL can only pick an entry by
+exact match. Twelve attempts at `data/` and the repo root (URL-encoded, double-encoded, backslashes, a
+null byte, file names in place of slugs) came back 404 with nothing from outside the list, on the demo
+and on the real server. For these docs only, the markdown renderer learned tables with escaped pipes,
+fences inside fences and nested lists; the changelog and the issues parse as before, and a property
+checks that.
+
+**The loop, second round.** With the session's permissions widened, neither issue waited on Juan: 0032
+took 8 minutes from the task arriving to its ready commit, and 0033 took 13. Claude queued 0033 the
+moment 0032's ready commit landed, and reviewed and merged 0032 while ChatGPT worked. ChatGPT's browser
+checks worked this time. To test the feedback box, which files nothing on a dev worktree, it made a
+temporary demo-only page and removed it before committing. Claude checked again on its own: a browser
+script for the keys on its demo and on the live demo, and HTTP probes for the file access.
+
+135 of 135 properties hold, four of them new, for the docs catalog, its links and the renderer.
