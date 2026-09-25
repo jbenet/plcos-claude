@@ -120,7 +120,7 @@ export default async function Orgs({
         )
       }
     >
-      <div className="lbl">Orgs &amp; people</div>
+      <div className="lbl">Network</div>
       <h1>{spec.title}</h1>
       <p className="sublede">{spec.lede}</p>
 

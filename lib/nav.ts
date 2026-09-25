@@ -149,7 +149,7 @@ export const STATIC_SECTIONS: NavSection[] = [
   },
   {
     id: 'relationships',
-    title: 'Orgs & people',
+    title: 'Network',
     links: [
       { label: 'Everyone', href: '/orgs/g/all' },
       { label: 'LPs', href: '/orgs/g/lps' },
@@ -235,7 +235,7 @@ export const SECTION = {
   overview: 'Overview',
   capital: 'PL Capital',
   rnd: 'PL R&D',
-  orgs: 'Orgs & people',
+  orgs: 'Network',
   other: 'Other',
   developer: 'Developer',
 } as const;
