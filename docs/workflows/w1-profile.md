@@ -364,8 +364,8 @@ basis:
    regulatory assets, a case study's portfolio size, a 13F's holdings, which are a floor), a
    foundation's or endowment's (a 990), a wealth manager's or adviser's assets under management, a fund
    of funds' size — or a person's net worth sets the band read off `config.capacity.bySize`, never
-   picked by feel (1.49 also lists a net worth with a source under 1: which one governs is open, for
-   Juan). The basis begins "By size:" and names the kind and the size with its source ("By size: a
+   picked by feel. A sourced net worth is both — their own money, turned into a band by the table's
+   individual row. The basis begins "By size:" and names the kind and the size with its source ("By size: a
    family office with $800M in assets, per its 2025 filing"). Every step of the table is a GUESS.
 3. **A floor from angel checks:** five or more personal angel investments on record, sizes unknown, give
    `$100K+ (floor)` — at least that, the top not known — with a basis that begins "Floor:" and counts
@@ -406,9 +406,10 @@ their firm's check.
 alone, one name per query, in its public spelling (the handle on file or the confirming page gives it),
 on the allow-list alone — the tool refuses one with a block-list, which every other search carries:
 protocol.ai and pl.xyz (where it now redirects), with their subdomains, filecoin.io, ipfs.tech,
-plneuro.xyz. Never ipfs.io: its gateway serves a copy of Wikipedia that matches any notable name. Not
-juanbenetpodcast.com, though 1.28 added it: its name is Juan's, and 1.48 keeps his name out of every
-request (open, for Juan). No ORed query — not a name with a firm, not a firm with our portfolio's names:
+plneuro.xyz, juanbenetpodcast.com. Never ipfs.io: its gateway serves a copy of Wikipedia that matches
+any notable name. Our own names may be searched when we are what's being researched (Juan, 25 Sep:
+"you can request my name and search for it. i meant dont use my name on other requests when you're not
+explicitly searching for me"); they never ride along on a request about someone else. No ORed query — not a name with a firm, not a firm with our portfolio's names:
 a firm with one or two names, or a topic word; one plain topic query on a firm with a known tie is worth
 it. Search the firm's own blog for Protocol Labs or Filecoin: its post on an investment names who led
 it. For staff with no investing footprint, funding news comes first.

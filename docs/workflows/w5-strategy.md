@@ -53,8 +53,8 @@ its `made.at`. `made.revised` lists each change made by rule after writing, with
 - One LP's decision is never disclosed to another — not a commitment, not a pass, not an amount — even
   to the connector who introduced them. A note to several people never carries one person's amount or
   words.
-- Web: docs/19 allows searches only to verify a key fact, on W1's query rules; the `strategy-writer`
-  agent has no web tools and its definition says no web (which stands is open, for Juan). Any request
+- No web (Juan, 25 Sep: the strategy writer rests on the findings). A fact that needs checking
+  becomes an open question for the fact check (W1c), which has the web and its rules. Any request
   made keeps to these, verbatim from AGENTS.md's "Real data" (CLAUDE.md imports it): A search may carry
   an LP's name with their organization, title, location and topic words, to read public pages. It never
   carries a status, an amount, a note, a list name, or the fact that they are in this pipeline. A

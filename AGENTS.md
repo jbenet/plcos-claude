@@ -36,11 +36,11 @@ anyone on that network can read and change it. `DATA_PROFILE` picks one, in `con
 - Everything real lives under `data/real/`, which git ignores. None of it goes into a commit,
   the changelog, a screenshot, the published build log, `issues/`, a web search or a
   sub-agent prompt. Changelog entries about real-data work use counts and invented examples.
-  Juan is fine with the agent doing the work — Claude, or GPT through Codex — reading real records
-  while working; that is the only exception.
+  Juan is fine with the agent doing the work — Claude, or ChatGPT (OpenAI's coding agent, also
+  called Codex) — reading real records while working; that is the only exception.
 - **No training on this data, for anyone** (Juan, 25 Sep 2026: "training should be off on this
   data/project for everyone"). Every agent works under an account with model training turned off:
-  Anthropic's for Claude, OpenAI's for Codex. Never send this project's data to a service or account
+  Anthropic's for Claude, OpenAI's for ChatGPT. Never send this project's data to a service or account
   that trains on what it is given.
 - **Enrichment research (N64, docs/19), decided 24 Sep 2026.** Juan: "Feel free to use the
   internet to find useful publicly available information… (dont sign up for paid services or
@@ -360,7 +360,7 @@ Sydecar and AngelList API access is gated with a long lead time. Nothing depends
 
 ## Working notes
 
-- **Two agents, one repo:** Claude and GPT (Codex) work in separate git worktrees on their own
+- **Two agents, one repo:** Claude and ChatGPT (Codex) work in separate git worktrees on their own
   branches, the live app runs from master, and Claude integrates. The layout, ports and rules are in
   `docs/COLLAB.md`.
 
