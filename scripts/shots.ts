@@ -212,6 +212,18 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N83: [
+    {
+      name: '01-rungs-to-check-again',
+      path: '/approvals?view=reconcile',
+      prepare: async (page) => {
+        await page.locator('#recheck').waitFor({ timeout: 15_000 });
+        await page.locator('#recheck').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -90));
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N82: [
     {
       name: '01-ties-to-confirm',

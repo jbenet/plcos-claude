@@ -4,7 +4,7 @@ import type {
   Channel, DiligenceQuestion, DirectContact, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
   QuestionStatus, RaiseWindow, Read, Touchpoint, TouchpointSummary,
 } from './types';
-import { aboutThisRaise, isEvent } from './types';
+import { aboutThisRaise, isAutoReply, isEvent } from './types';
 
 type MeetingRow = {
   meeting_id: string; pursuit_id: string | null; entity_id: string; entity_name: string;
@@ -156,13 +156,9 @@ const TOUCH_FROM_REACH = `
          m.channel::text as channel, m.kind::text as kind, m.held_on, m.scheduled_for, m.direction,
          u.name as owner_name, m.attendees, m.summary, m.read::text as read, rb.name as read_by_name,
          m.source, m.source_ref, r.for_entity, m.about, m.about_vehicles, m.about_basis, m.about_by,
-         g.n as group_size
+         m.group_size
     from reach r
     join meetings.meeting m on m.entity_id = r.entity_id
-    -- How many of our records one Affinity interaction is with (N81): four or more is an event.
-    left join (select substring(source_ref from '^(interaction:[a-z-]+:[0-9]+):') as iref, count(distinct entity_id)::int as n
-                 from meetings.meeting where source = 'affinity' and source_ref like 'interaction:%' group by 1) g
-      on g.iref = substring(m.source_ref from '^(interaction:[a-z-]+:[0-9]+):')
     join identity.entity e on e.entity_id = m.entity_id
     left join platform.vehicle v on v.id = m.vehicle_id
     join platform.app_user u on u.id = m.owner_id
@@ -276,7 +272,9 @@ export function summarize(all: Touchpoint[], now = new Date()): TouchpointSummar
   // One meeting recorded twice — a note and a calendar entry for the same day — is one meeting.
   const days = [...new Set(meetings.map((d) => d.toISOString().slice(0, 10)))].sort().map((d) => new Date(`${d}T00:00:00Z`));
   const last = contact.reduce<Touchpoint | null>((a, t) => (!a || when(t) > when(a) ? t : a), null);
-  const fromThem = contact.filter((t) => t.direction === 'theirs' || t.direction === 'both');
+  // An automatic reply is no word from them (N81): nobody wrote it, and nothing is owed. Nor is
+  // coming to our event: twenty people in a room is not their answer to us.
+  const fromThem = contact.filter((t) => (t.direction === 'theirs' || t.direction === 'both') && !isAutoReply(t) && !isEvent(t));
   const lastFromThem = fromThem.reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null);
   const ours = contact.filter((t) => t.direction === 'ours' && (!lastFromThem || t.on! > lastFromThem));
   const awaitingSince = ours.reduce<Date | null>((a, t) => (!a || t.on! < a ? t.on! : a), null);

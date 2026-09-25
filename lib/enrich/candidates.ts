@@ -77,6 +77,12 @@ export interface Candidate extends ResearchIdentity {
     /** The dates of their meetings and calls, oldest first, each marked when four or more LPs share it (v05), and what it was about (N81). */
     meetingDates: Array<{ on: string; group: boolean; about: AboutWords }>;
     /**
+     * Their last eight touches since `since`, newest first, each with what it was about (N81, after a
+     * W5 reader found an email-only LP's emails untagged): a channel, who wrote, the tag, and who from
+     * our side was on it.
+     */
+    recent: Array<{ on: string; channel: string; direction: string | null; about: AboutWords; with: string[] }>;
+    /**
      * How many LPs in the set our last unanswered word went to on the same day (W5, iteration 3):
      * ten or more is a mailing, and the next step is a first personal note, not a follow-up.
      */
@@ -239,6 +245,11 @@ export async function researchSet(): Promise<Candidate[]> {
         read: rel.read?.read ?? null,
         groupMeetings: days.filter((d) => (onDay.get(d) ?? 0) >= 4 || mine.some((t) => day(t.on) === d && isEvent(t))).length,
         outreachShared: 0,
+        recent: (everything.get(ent.entity_id) ?? [])
+          .filter((t) => inPeriod(t) && !t.viaOrganization && t.channel !== 'research' && t.on && t.on.getTime() <= Date.now())
+          .slice(0, 8)
+          // Who from our side was on it: whose contact they are (W5 readers, N81).
+          .map((t) => ({ on: day(t.on)!, channel: t.channel, direction: t.direction, about: aboutWords(eventAbout(t, windows)), with: t.attendees })),
         meetingDates: days.map((on) => ({
           // A date four or more LPs share, or a calendar entry with four or more of ours on it (N81).
           on, group: (onDay.get(on) ?? 0) >= 4 || mine.some((t) => day(t.on) === on && isEvent(t)),

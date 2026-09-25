@@ -1268,8 +1268,10 @@ strategies revised or re-pinned, 51 written for identities the pass had just res
 
 **Amendments, W5 version 1.8** (N81, after Juan found Rails meetings and catch-ups counted for Neurotech):
 
-- **Every meeting date and every note says what it is about** (`about` in `candidates.jsonl`): a
-  vehicle's name, "vehicle unclear", or "general". A vehicle's own rows are evidence of where that
+- **Every meeting date and every note says what it is about** (`about` in `candidates.jsonl`), and
+  so do their last eight touches (`contact.recent`, added after the first re-read: an email-only LP's
+  emails carried no tag), each with who from our side was on it: a vehicle's name, "vehicle unclear",
+  or "general". A vehicle's own rows are evidence of where that
   pursuit stands; general rows are who they are, true for every vehicle; a row tagged with another
   vehicle is context — worth a line when the two asks need coordinating (rule 5), never progress on
   this one. A "vehicle unclear" row is evidence for none: if it decides the next step, the step is to
@@ -1290,6 +1292,30 @@ strategies revised or re-pinned, 51 written for identities the pass had just res
   money still isn't the LP's own, but its size now sets an estimate for what such a firm places.
 - **The ask follows the band, and says it is an estimate:** "an estimate from their size" beside a
   range, never a range as if they had named it.
+
+**Amendments, W5 version 1.10** (from the re-read of 126 strategies on the tagged records, nine readers):
+
+- **"This year" rests on the pursuit's own contact.** The evidence gate reads each pursuit's counted
+  contact — a word from them in 90 days, or a one-to-one meeting, tagged with its vehicle — not the
+  relationship's: a catch-up keeps the relationship warm, it doesn't move the raise. Seven strategies
+  failed the stricter gate and were read again.
+- **A size that is only a lower bound is read at its floor.** A 13F's listed holdings, a "billionaire"
+  with no figure, a vehicle's running total: the table's band for that figure, and the basis says it is
+  a floor. A figure for a parent, a former employer or a fund's target is no size of the unit that
+  commits. The kind is the one named first in the basis ("a multi-family office" is a wealth manager).
+- **What the export now carries:** each LP's last eight touches with their tags and who from our side
+  was on them (`contact.recent`), so an email's vehicle is read from the file, not guessed. And an
+  event is four or more *parties* on one calendar entry — a firm or a person with none — so four people
+  from one family office are a meeting.
+- **Rungs on records now tagged General are for a person.** 103 rungs on 37 LPs were approved on
+  records the re-map reads as not about their vehicle. A strategy says so where it matters and never
+  proposes a stage from them; the list is on Approvals, and withdrawing one is Juan's decision.
+- **The version is a string from "1.10" on.** JSON reads the number 1.10 as 1.1, and the batch cutter
+  took every such strategy for one older than 1.3 (a reader caught it); `versionBefore` compares
+  major and minor, and a strategy writes `"version": "1.10"`.
+- **The table has no row for** a GP's own funds, an insurer, a pension, a health system's investment
+  office, or a corporate venture arm: those stay unknown and say why. Whether to add rows, and whether
+  a self-described size counts, are Juan's.
 
 ## Protocol — W12, what each event is about (version 1)
 

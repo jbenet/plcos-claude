@@ -22,7 +22,8 @@ export interface Strategy {
    * has a newer finding is stale, and the checker says so.
    */
   made: {
-    at: string; by: string; workflow: 'W5'; version: number;
+    /** The protocol version, "1.10" as a string since 1.10: the number 1.10 is 1.1 once parsed. */
+    at: string; by: string; workflow: 'W5'; version: number | string;
     inputs?: { finding: string | null; money?: string | null; bestPath?: 'A' | 'B' | 'C' | 'D' | null; lead?: { key: string; at: string } | null };
     /** Changes made by rule after it was written — each traceable to the rule that made it. */
     revised?: Array<{ at: string; by: string; rule: string }>;
@@ -54,6 +55,23 @@ export interface Strategy {
 }
 
 const isStr = (x: unknown): x is string => typeof x === 'string' && x.trim().length > 0;
+
+/**
+ * A protocol version as [major, minor] (N81). Written as a number up to 1.9 and as a string from
+ * "1.10" on, because JSON reads 1.10 as 1.1: a W5 reader found every 1.10 strategy picked up again
+ * as "older than 1.3". A number keeps its written digits ("1.7" is [1, 7]).
+ */
+export function versionOf(v: number | string | null | undefined): [number, number] {
+  const [a, b] = String(v ?? '0').split('.');
+  return [Number(a) || 0, Number(b ?? 0) || 0];
+}
+
+/** True when `v` comes before `than`: "1.10" is after 1.9, and 1.2 before 1.3. */
+export function versionBefore(v: number | string | null | undefined, than: string): boolean {
+  const [a1, b1] = versionOf(v);
+  const [a2, b2] = versionOf(than);
+  return a1 < a2 || (a1 === a2 && b1 < b2);
+}
 
 /** The import keeps what, who and when together in 400 characters (W5 v1.3); longer is cut, not refused. */
 export const nextTooLong = (s: Pick<Strategy, 'next'>) => `${s.next.what} — ${s.next.who}, ${s.next.when ?? ''}`.length > 400;
@@ -164,15 +182,25 @@ export function parksWithoutDate(s: { next?: { what: string; lookAgain?: string 
 
 export function gates(
   s: Pick<Strategy, 'list' | 'scores' | 'route'> & { ask?: Strategy['ask']; angle?: string; next?: { what: string; lookAgain?: string | null }; risks?: string[]; openQuestions?: string[] },
-  c: { contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: unknown; notes?: Array<{ summary: string | null }>; location?: string | null } | undefined,
+  c: {
+    contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: unknown; notes?: Array<{ summary: string | null }>; location?: string | null;
+    /** N81: each pursuit's own counted contact, when the export carries it. */
+    pursuits?: Array<{ contact?: { lastFromThem: string | null; meetings: number } }>;
+  } | undefined,
   finding: { profile?: { investorType?: string; capacity?: { band: string; basis?: string } }; identity?: { canonical?: { location?: string | null } | null }; facts?: Array<{ field: string; value: string }> } | null | undefined,
   bestTier: 'A' | 'B' | 'C' | 'D' | null,
   today = new Date(),
 ): string[] {
   const out: string[] = [];
   if (!c) return out;
-  const recent = c.contact.lastFromThem && today.getTime() - new Date(c.contact.lastFromThem).getTime() <= 90 * 86_400_000;
-  const oneToOne = c.contact.meetings > c.contact.groupMeetings;
+  // "This year" rests on the pursuit's own contact (W5 1.10): a catch-up about something else is the
+  // relationship, not evidence the raise is moving. The export before N81 carries only the LP's.
+  const counted = (c.pursuits ?? []).map((p) => p.contact).filter((x): x is { lastFromThem: string | null; meetings: number } => Boolean(x));
+  const lastFromThem = counted.length
+    ? counted.map((x) => x.lastFromThem).filter((x): x is string => Boolean(x)).sort().pop() ?? null
+    : c.contact.lastFromThem;
+  const recent = lastFromThem && today.getTime() - new Date(lastFromThem).getTime() <= 90 * 86_400_000;
+  const oneToOne = counted.length ? counted.some((x) => x.meetings > 0) : c.contact.meetings > c.contact.groupMeetings;
   if (s.list === 'this year' && !recent && !c.money && !oneToOne) out.push('this year, without the evidence gate');
   // The finding's own band counts only when its basis is evidence (1.18): assets, a check or a
   // commitment on record, a filing — not a title or a career (v03's learning).

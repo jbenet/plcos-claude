@@ -27,7 +27,7 @@ import { config } from '../config/deployment';
 import type { Candidate } from '../lib/enrich/candidates';
 import { norm } from '../lib/enrich/connect';
 import { pagesOnly, type Finding } from '../lib/enrich/schema';
-import { gates, isStale, nextOverLimit, type Strategy } from '../lib/enrich/strategy';
+import { gates, isStale, nextOverLimit, versionBefore, type Strategy } from '../lib/enrich/strategy';
 import type { Path } from '../lib/enrich/connect';
 import type { Triage } from '../lib/enrich/triage';
 
@@ -114,7 +114,7 @@ async function main() {
   }
   const flagged = (c: Candidate) => {
     const s = strategies.get(c.key);
-    return Boolean(s && (s.made.version < 1.3 || nextOverLimit(s) || gates(s, c, findings.get(c.key), best.get(c.key) ?? null).length));
+    return Boolean(s && (versionBefore(s.made.version, '1.3') || nextOverLimit(s) || gates(s, c, findings.get(c.key), best.get(c.key) ?? null).length));
   };
   // Written since its batch was cut, or never batched: free. Otherwise its open batch keeps it.
   const inOpenBatch = (key: string) => [...openW5].some((x) => {

@@ -5253,3 +5253,54 @@ links pasted in, and the ties they show (a former employer, a board, a school) j
 
 122 of 122 properties hold, one of them new: the team is in the graph, a one-to-one meeting is a
 tier-A tie, a rebuild changes nothing, and a tie a person turned down stays ended.
+
+## N83 — The strategies re-read on the tagged records, capacity by size, and the rungs to check again
+
+**Shipped.** The re-read N81 queued, and what it taught the rules. Real data, so counts only; the
+example below is invented.
+
+| | |
+|---|---|
+| ![Rungs to check again](docs/changelog/shots/n83/01-rungs-to-check-again.webp) | **Rungs to check again**, on Approvals under reconciliation's proposals: rungs approved on a meeting or a reply the old rules read as about the raise, which the re-map now reads as General or vehicle unclear — one LP a row, with what the record says now and who approved the rung. A rung is recorded once and stays; nothing here changes one. On the real account: 103 rungs on 37 LPs, of 218. |
+
+**The re-read.** 126 strategies — the 113 whose inputs the tags or Juan's capacity answers changed, and
+their firms' — read by nine local agents on W5 1.8 and 1.9, then 32 more read again when the rules below
+moved under them. No web: it rests on our records and the findings on file. The checker ends clean on
+all 381. What changed most was not the vehicle but the relationship: meetings the old strategies cited
+as progress were our events, conference partnerships or catch-ups tagged General; replies we owe that
+the raise-only export had hidden came to light; "who from our side isn't recorded" became a named
+colleague to ask. Two strategies had counted our Rails roundtable invitations as Neurotech contact.
+"This year" went from 33 to 24, the rest to 2027.
+
+**Capacity by size**, across all 381: 38 bands read off the table, 8 floors from five or more angel
+checks, 61 from their own money as before, 274 still unknown — mostly venture partners, and units the
+table has no row for.
+
+**What the readers found in the rules,** each fixed, most with a property:
+- "This year" read a word from them about anything; it now needs the pursuit's own tagged contact (W5 1.10).
+- The size check took the first kind of investor in a fixed order ("a multi-family office" read as a
+  family office); the kind named first now wins, and "60 angel/seed investments" counts.
+- An event was four or more *records* on one invite, so four people from one family office were an
+  event: it is four or more *parties* now, a firm or a person with none. Stored at translation
+  (migration meetings/007) — computing it on every query made a long LP page three times slower.
+- An automatic reply counted as a word from them: 3 replies "owed" to out-of-office notes, and ties
+  resting on them. And coming to our event counted as one. Neither does now.
+- The export tagged meeting dates and notes but not emails; each LP's last eight touches now carry their
+  tag and who from our side was on them (`contact.recent`).
+- `version: 1.10` in JSON is the number 1.1, so the batch cutter took every 1.10 strategy for one older
+  than 1.3; versions are compared as major and minor now, and written as a string.
+
+**A lesson about running passes:** the export, the gate and the paths file changed while batches were
+still reading them, so some strategies were read twice. The export should be held steady while a pass
+runs.
+
+**N82's counts, after these fixes:** 289 tier-A ties from meetings and 40 tier-B from messages from them
+(auto replies no longer count), and from the research 33 B, 80 C and 145 D.
+
+**Open, for Juan:** the 103 rungs above — withdrawing one needs a path the ladder doesn't have, a
+STAGE-gated correction, which is his to decide; rows for the table's missing kinds (a GP's own funds,
+insurers, pensions, a health system, corporate venture) and whether a self-described size counts; whether
+a family office's direct investments count as angel checks.
+
+124 of 124 properties hold, three of them new: "this year" needs the pursuit's own evidence; versions
+compare as major and minor; an automatic reply and our event are no word from them.

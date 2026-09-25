@@ -132,16 +132,25 @@ export interface Touchpoint {
   aboutBasis: string | null;
   /** Who said what it is about (N81): the rules, Claude, or a person. Null for one logged here. */
   aboutBy: 'rule' | 'claude' | 'person' | null;
-  /** How many of our records its Affinity interaction is with (N81): 1 for one logged here. */
+  /** How many parties of ours its Affinity interaction is with — firms, or people with none (N81): 1 for one logged here. */
   groupSize: number;
 }
 
 /**
- * A calendar entry with this many of our records on it is an event — a dinner, a salon, a demo day —
- * not a meeting with any one of them (N81). Coming to our event says they opted in; it is not a
- * meeting held. The W5 export's group dates use the same number.
+ * A calendar entry with this many parties of ours on it is an event — a dinner, a salon, a demo day —
+ * not a meeting with any one of them (N81). A party is a firm, or a person with none: four people from
+ * one family office are one party, and their meeting is a meeting (a W5 reader found one counted as
+ * an event). Coming to our event says they opted in; it is not a meeting held.
  */
 export const GROUP_EVENT = 4; // GUESS — the strategy workflow's measure of a group date, never tested against the calendar.
+
+/**
+ * An automatic reply — out of office and the like — is not a word from them (N59's first rule): it
+ * says nothing and asks for nothing. The rules read it from the subject; Claude's tags say it in their
+ * basis. A W5 reader found three "replies we owe" and three ties resting on out-of-office notes (N81).
+ */
+const AUTO = /\b(an automatic reply|automatic(?:ally)? repl(?:y|ied)|auto[- ]?repl(?:y|ies)|autoreply|out[- ]of[- ](?:the[- ])?office|ooo\b|away message|vacation (?:reply|responder))/i;
+export const isAutoReply = (t: Pick<Touchpoint, 'direction' | 'aboutBasis'>) => t.direction === 'theirs' && AUTO.test(t.aboutBasis ?? '');
 
 export const isEvent = (t: Pick<Touchpoint, 'channel' | 'groupSize'>) =>
   (t.channel === 'meeting' || t.channel === 'call') && (t.groupSize ?? 1) >= GROUP_EVENT;

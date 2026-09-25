@@ -189,6 +189,57 @@ export function climbScope(p: Pursuit, f: OnFile) {
  * a pursuit with an open STAGE ticket is left alone, and a climb a person rejected is not proposed
  * again on the same records.
  */
+/**
+ * Rungs to check again (N81). A rung is recorded once, on a person's approval, and stays. Some were
+ * approved on records the rules of N59 read as about the raise and the re-map reads otherwise — a
+ * catch-up now tagged General, a meeting whose vehicle nobody named. Nothing here changes a rung: it
+ * lists them, with what each record now says and who said so, for a person to decide whether the
+ * ladder should say less.
+ */
+export interface RecheckRow {
+  pursuitId: string;
+  name: string;
+  vehicle: string;
+  rung: LadderRung;
+  kind: string;
+  recordedAt: Date;
+  recordedBy: string | null;
+  /** What the record behind it reads as now. */
+  now: 'general' | 'unclear' | 'another vehicle' | 'not found';
+  basis: string | null;
+  by: string | null;
+}
+
+export async function rungsToRecheck(): Promise<RecheckRow[]> {
+  const db = await getDb();
+  const rows = await db.query<{
+    pursuit_id: string; name: string; vehicle: string; rung: LadderRung; kind: string; recorded_at: Date | string; recorded_by: string | null;
+    about: string | null; vehicles: string[] | null; slug: string; basis: string | null; by: string | null; found: boolean;
+  }>(
+    `select l.pursuit_id::text, e.display_name as name, v.name as vehicle, v.slug, l.rung, l.evidence_kind as kind, l.created_at as recorded_at,
+            u.name as recorded_by, m.about, m.about_vehicles as vehicles, m.about_basis as basis, m.about_by as by, m.meeting_id is not null as found
+       from strategy.ladder_event l
+       join strategy.pursuit p on p.pursuit_id = l.pursuit_id
+       join identity.entity e on e.entity_id = p.entity_id
+       join platform.vehicle v on v.id = p.vehicle_id
+       left join platform.app_user u on u.id = l.recorded_by
+       left join meetings.meeting m on m.source = 'affinity' and m.source_ref = substring(l.evidence_ref from '^affinity:(.*)$')
+      where l.evidence_ref like 'affinity:%'
+      order by e.display_name, l.occurred_at`,
+  );
+  const out: RecheckRow[] = [];
+  for (const r of rows) {
+    const vehicles = r.vehicles ?? [];
+    if (r.found && r.about === 'raise' && vehicles.includes(r.slug)) continue;
+    out.push({
+      pursuitId: r.pursuit_id, name: r.name, vehicle: r.vehicle, rung: r.rung, kind: r.kind, recordedAt: new Date(r.recorded_at), recordedBy: r.recorded_by,
+      now: !r.found ? 'not found' : r.about !== 'raise' ? 'general' : vehicles.length ? 'another vehicle' : 'unclear',
+      basis: r.basis, by: r.by,
+    });
+  }
+  return out;
+}
+
 export async function reconcile(runBy: string | null = null): Promise<ReconcileCounts> {
   const run = await startRun('reconcile', 'ladder', runBy);
   try {

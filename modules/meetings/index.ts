@@ -3,7 +3,7 @@ export type {
   EventAbout, PrepBrief, QuestionStatus, RaiseWindow, Read, Touchpoint, TouchpointSummary,
 } from './types';
 export {
-  CHANNELS, CHANNEL_LABEL, DIRECTION_LABEL, GROUP_EVENT, MEETING_LABEL, OBJECTION_LABEL, READS, READ_LABEL, aboutThisRaise, eventAbout, isEvent,
+  CHANNELS, CHANNEL_LABEL, DIRECTION_LABEL, GROUP_EVENT, MEETING_LABEL, OBJECTION_LABEL, READS, READ_LABEL, aboutThisRaise, eventAbout, isAutoReply, isEvent,
 } from './types';
 export {
   listMeetings, listObjections, listQuestions, objectionTally, raiseWindows, summarize, touchpointSummaries, touchpointsByPair, touchpointsByEntity,

@@ -144,6 +144,18 @@ export async function translateTags(
     }
   }
 
+  // How many parties of ours each interaction is with (meetings/007): a firm, or a person with none.
+  await tx.query(
+    `update meetings.meeting m set group_size = g.n
+       from (select substring(m2.source_ref from '^(interaction:[a-z-]+:[0-9]+):') as iref,
+                    count(distinct coalesce(f.org_entity, m2.entity_id))::int as n
+               from meetings.meeting m2
+               left join (select distinct on (person_entity) person_entity, org_entity from identity.affiliation
+                           where ended_on is null order by person_entity, is_primary desc, as_of desc) f on f.person_entity = m2.entity_id
+              where m2.source = 'affinity' and m2.source_ref like 'interaction:%' group by 1) g
+      where m.source = 'affinity' and g.iref = substring(m.source_ref from '^(interaction:[a-z-]+:[0-9]+):') and m.group_size <> g.n`,
+  );
+
   counts.applied = (await tx.query(
     `update meetings.meeting m
         set about = t.about, about_vehicles = t.vehicles, about_basis = t.basis, about_by = t.by_kind

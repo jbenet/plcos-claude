@@ -4,6 +4,8 @@ import { SECTION } from '@/lib/nav';
 import { DecideForm } from '@/components/approvals/DecideForm';
 import { AdjudicateForm } from '@/components/approvals/AdjudicateForm';
 import { ReconcileBatch } from '@/components/approvals/ReconcileBatch';
+import { RecheckRungs } from '@/components/approvals/RecheckRungs';
+import { rungsToRecheck } from '@/lib/reconcile';
 import { config } from '@/config/deployment';
 import { ago, shortDate } from '@/lib/time';
 import {
@@ -124,7 +126,10 @@ export default async function Approvals({
       }
     >
       {batch ? (
-        <ReconcileBatch proposals={proposals} receipt={receipt} />
+        <>
+          <ReconcileBatch proposals={proposals} receipt={receipt} />
+          <RecheckRungs rows={await rungsToRecheck()} />
+        </>
       ) : !selected ? (
         <>
           <div className="lbl">Module 24 · Approvals &amp; compliance</div>

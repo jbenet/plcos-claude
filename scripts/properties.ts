@@ -1438,10 +1438,15 @@ async function main() {
             const onlyEvent = rcx.recordsOnFile([salon], [], new Date('2026-09-01T00:00:00Z'));
             const both = rcx.recordsOnFile([salon, t('2', '2026-04-01T00:00:00Z', 1)], [], new Date('2026-09-01T00:00:00Z'));
             const sum = mtx.summarize([salon, t('2', '2026-04-01T00:00:00Z', 1)], new Date('2026-09-01T00:00:00Z'));
-            check('Our event is not a meeting: coming to it is opting in, not a meeting held, and it isn’t counted as a meeting',
-              !onlyEvent.meeting_held && /came to our event/.test(onlyEvent.target_opted_in?.note ?? '') &&
+            // An automatic reply is no word from them (N81): nothing is owed, and our note still waits.
+            const auto = { ...t('3', '2026-05-01T00:00:00Z', 1), channel: 'email' as const, direction: 'theirs' as const, aboutBasis: 'General: an automatic reply to our mailing (out of office)' };
+            const ours = { ...t('4', '2026-04-30T00:00:00Z', 1), channel: 'email' as const, direction: 'ours' as const };
+            const quiet = mtx.summarize([ours, auto, { ...salon, on: new Date('2026-05-02T00:00:00Z') }], new Date('2026-09-01T00:00:00Z'));
+            const autoIgnored = quiet.lastFromThem === null && quiet.awaitingSince?.toISOString().slice(0, 10) === '2026-04-30';
+            check('Our event is not a meeting, and an automatic reply is no word from them: opting in is not a meeting held, and nothing is owed',
+              autoIgnored && !onlyEvent.meeting_held && /came to our event/.test(onlyEvent.target_opted_in?.note ?? '') &&
                 both.meeting_held?.ref.includes(':2:') === true && /came to our event/.test(both.target_opted_in?.note ?? '') && sum.meetingDates.length === 1,
-              `event alone: held ${onlyEvent.meeting_held ? 'PROPOSED' : 'not proposed'}, opted in "${(onlyEvent.target_opted_in?.note ?? 'none').slice(0, 40)}"; with a later one-to-one: held from ${both.meeting_held?.ref.split(':')[2] ?? 'none'}; meetings counted: ${sum.meetingDates.length}`);
+              `an automatic reply after our note: ${autoIgnored ? 'no word from them, our note still waits' : 'COUNTED AS A REPLY'}; event alone: held ${onlyEvent.meeting_held ? 'PROPOSED' : 'not proposed'}, opted in "${(onlyEvent.target_opted_in?.note ?? 'none').slice(0, 40)}"; with a later one-to-one: held from ${both.meeting_held?.ref.split(':')[2] ?? 'none'}; meetings counted: ${sum.meetingDates.length}`);
           }
 
           // Which vehicles each event is about (N81): the fundraising domain reads a message's
@@ -1792,6 +1797,27 @@ async function main() {
             table && firstNamed && bySize.length === 0 && offTable.includes('capacity off the size table (it gives $1–5M)') && floor.length === 0 &&
               thinFloor.includes('a floor without the angel checks behind it') && thinFloor.includes('capacity ahead of the evidence'),
             `table: ${table}; the kind named first, and angel/seed counted: ${firstNamed}; by size, the table's band: ${bySize.join(', ') || 'no flags'}; another band: ${offTable.join(', ')}; floor on 12 checks: ${floor.join(', ') || 'no flags'}; on 3: ${thinFloor.join(', ')}`);
+        }
+
+        // A protocol version is major and minor (N81): "1.10" comes after 1.9, not before 1.3.
+        {
+          const { versionBefore } = await import('../lib/enrich/strategy');
+          const right = versionBefore('1.10', '1.3') === false && versionBefore(1.9, '1.10') === true && versionBefore(1.2, '1.3') === true && versionBefore('2.0', '1.10') === false;
+          check('A strategy’s version compares as major and minor: “1.10” is after 1.9', right, `1.10 before 1.3: ${versionBefore('1.10', '1.3')}; 1.9 before 1.10: ${versionBefore(1.9, '1.10')}`);
+        }
+
+        // "This year" rests on the pursuit's own contact (W5 1.10): a recent catch-up about something
+        // else keeps the relationship warm, not the raise.
+        {
+          const { gates } = await import('../lib/enrich/strategy');
+          const recent = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
+          const s = { list: 'this year' as const, scores: { capacity: { band: 'unknown', basis: '' } } as never, route: null };
+          const warmOnly = gates(s, { contact: { lastFromThem: recent, meetings: 0, groupMeetings: 0 }, money: null, pursuits: [{ contact: { lastFromThem: null, meetings: 0 } }] }, null, null);
+          const counted = gates(s, { contact: { lastFromThem: recent, meetings: 0, groupMeetings: 0 }, money: null, pursuits: [{ contact: { lastFromThem: recent, meetings: 0 } }] }, null, null);
+          const oldExport = gates(s, { contact: { lastFromThem: recent, meetings: 0, groupMeetings: 0 }, money: null }, null, null);
+          check('“This year” needs the pursuit’s own evidence: a recent word about something else is not enough',
+            warmOnly.includes('this year, without the evidence gate') && !counted.includes('this year, without the evidence gate') && !oldExport.includes('this year, without the evidence gate'),
+            `a word from them about something else: ${warmOnly.join(', ') || 'passes'}; about this vehicle: ${counted.join(', ') || 'passes'}; an export without pursuit contact: ${oldExport.join(', ') || 'passes'}`);
         }
 
         // The loop's own measurements (N70): the critic's rounds from their files — a round in two

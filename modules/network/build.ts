@@ -1,5 +1,5 @@
 import { getDb, type Queryable } from '@/lib/db';
-import { GROUP_EVENT } from '@/modules/meetings';
+import { GROUP_EVENT, isAutoReply } from '@/modules/meetings';
 import type { EdgeKind, EvidenceTier } from './types';
 
 /**
@@ -107,12 +107,9 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   };
 
   // 2. The records: who on the team has met them one to one, or heard from them.
-  const rows = await tx.query<{ entity_id: string; owner_id: string; attendees: string[] | null; channel: string; direction: string | null; on: string; group_size: number | null }>(
-    `select m.entity_id::text, m.owner_id::text, m.attendees, m.channel::text, m.direction, m.held_on::text as on, g.n as group_size
+  const rows = await tx.query<{ entity_id: string; owner_id: string; attendees: string[] | null; channel: string; direction: string | null; on: string; group_size: number | null; basis: string | null }>(
+    `select m.entity_id::text, m.owner_id::text, m.attendees, m.channel::text, m.direction, m.held_on::text as on, m.group_size, m.about_basis as basis
        from meetings.meeting m
-       left join (select substring(source_ref from '^(interaction:[a-z-]+:[0-9]+):') as iref, count(distinct entity_id)::int as n
-                    from meetings.meeting where source = 'affinity' and source_ref like 'interaction:%' group by 1) g
-         on g.iref = substring(m.source_ref from '^(interaction:[a-z-]+:[0-9]+):')
       where m.held_on is not null and m.held_on <= current_date and m.channel in ('meeting', 'call', 'email', 'message')`,
   );
   type Tally = { meetings: string[]; heard: string[] };
@@ -120,7 +117,9 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   for (const r of rows) {
     if (teamEntities.has(r.entity_id)) continue;
     const met = (r.channel === 'meeting' || r.channel === 'call') && (r.group_size ?? 1) < GROUP_EVENT;
-    const heard = (r.channel === 'email' || r.channel === 'message') && r.direction === 'theirs';
+    // An automatic reply is nobody's word (N81): no tie rests on an out-of-office note.
+    const heard = (r.channel === 'email' || r.channel === 'message') && r.direction === 'theirs'
+      && !isAutoReply({ direction: 'theirs', aboutBasis: r.basis });
     if (!met && !heard) continue;
     const who = new Set<string>();
     if (entityOfUser.has(r.owner_id)) who.add(r.owner_id);
