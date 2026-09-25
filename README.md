@@ -18,7 +18,7 @@ npm install && npm run dev     # :3000
 
 | | |
 |---|---|
-| **`CLAUDE.md`** | The handoff. Stack, the five seams, the twelve non-negotiable domain rules, the frontend contract, and an explicit do-not-build list. Read this first. |
+| **`AGENTS.md`** | The handoff, for any coding agent. Stack, the five seams, the twelve non-negotiable domain rules, the frontend contract, and an explicit do-not-build list. Read this first. (`CLAUDE.md` imports it, for Claude Code.) |
 | **`CHANGELOG.md`** | What landed at each stage, with screenshots, and where I disagreed with the plan. |
 | **`docs/13-synthesis-r3.md`** | The plan. Module map, build sequence, and what was deliberately refused. |
 | **`/system`** in the running app | Which seam is running which implementation, and every constant that is still a guess. |
@@ -92,7 +92,7 @@ library       approved answers with their own versioning
 ## Layout
 
 ```
-CLAUDE.md          the handoff — decisions, rules, what not to build
+AGENTS.md          the handoff — decisions, rules, what not to build (CLAUDE.md imports it)
 CHANGELOG.md       what landed at each stage, with screenshots
 config/            deployment.ts — every deferred decision and every labelled guess
 lib/               the five seams, plus seed, session, money and time helpers

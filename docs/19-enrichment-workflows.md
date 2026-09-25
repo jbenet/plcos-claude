@@ -5,6 +5,11 @@ design, the protocol the research follows, and the log of what each iteration tr
 The log here uses counts and invented examples; the specifics are in
 `data/real/enrich/LOG.md`, which git ignores.
 
+**Where the rules live.** The rules in force for W1, W1c, W5 and W12, every amendment folded in, are in
+`docs/workflows/`: `w1-profile.md`, `w1c-fact-check.md`, `w5-strategy.md` and `w12-events.md`, one short
+file per workflow, so a sub-agent reads only its own. This document keeps the design and the history. A
+new amendment is written into its workflow's file, and logged here in one line.
+
 > Please design good workflows for seeding info for the strategy. this might include workflows
 > for data enrichment on LPs (so we know them better, or know connectors, etc), workflows for
 > processing data about LPs to come up with possible actions, workflows to eval our own public
