@@ -1425,6 +1425,26 @@ kbd{font-family:var(--mono);font-size:9.5px;border:1px solid var(--line);border-
 @media (max-width: 900px){ .keycard{right:14px;top:14px} }
 .keycard{right:446px}
 
+/* Native modal supplies focus containment and makes the page behind it inert. */
+.shortcuts-dialog{width:min(640px,calc(100vw - 32px));max-height:calc(100dvh - 48px);
+  box-sizing:border-box;margin:auto;padding:22px 26px;overflow:auto;border:1px solid var(--line);
+  border-radius:12px;background:var(--surface);color:var(--ink);font-family:var(--sans);
+  box-shadow:0 18px 60px rgba(26,25,23,.22)}
+.shortcuts-dialog::backdrop{background:rgba(26,25,23,.42)}
+.shortcuts-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.shortcuts-head h2{margin:0;font-family:var(--display);font-size:25px;font-weight:500}
+.shortcuts-note{font-size:12px;line-height:1.5;color:var(--muted);margin:12px 0 18px}
+.shortcuts-dialog section{border-top:1px solid var(--line);padding:12px 0}
+.shortcuts-dialog h3{margin:0 0 9px}
+.shortcuts-dialog .shortcut-list{margin:0;display:flex;flex-direction:column;gap:8px}
+.shortcuts-dialog .shortcut-list>div{display:grid;grid-template-columns:170px 1fr;gap:14px;align-items:baseline}
+.shortcut-list dt>span{white-space:nowrap}
+.shortcuts-dialog dd{margin:0;font-size:12px;line-height:1.5}
+@media(max-width:520px){
+  .shortcuts-dialog{padding:18px;max-height:calc(100dvh - 24px)}
+  .shortcuts-dialog .shortcut-list>div{grid-template-columns:1fr;gap:4px}
+}
+
 /* ── the filter bar, the console, and the third five ───────────────────────── */
 .filterbar{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:14px 0 12px;
   padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}
