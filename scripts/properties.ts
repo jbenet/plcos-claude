@@ -2038,6 +2038,29 @@ async function main() {
     seeding.out.includes('refused') ? 'refused, with no call on the database' : `not refused: ${seeding.out.slice(0, 200)}`,
   );
 
+  // Triage writes `assignee:` and `branch:` into an issue's frontmatter (docs/COLLAB.md), and the
+  // issues page rewrites the whole file when a status changes. The rewrite keeps what it does not
+  // manage, and turns the old singular `screenshot:` into `screenshots:` without keeping both.
+  {
+    const { parseIssue, serializeIssue } = await import('../lib/issues/format');
+    const filed = [
+      '---', 'id: "0999"', 'title: A made-up issue', 'status: open          # open | triaged',
+      'kind: bug', 'priority: P2', 'reporter: juan', 'page: /today', 'created: 2026-09-25T00:00:00Z',
+      'labels: []', 'screenshot: attachments/0999-screenshot.png',
+      'assignee: chatgpt', 'branch: codex/0999-made-up', 'fixed_in: N99', '---', '', 'Something broke.', '',
+    ].join('\n');
+    const once = serializeIssue({ ...parseIssue(filed, '0999'), status: 'agent-ready' });
+    const twice = serializeIssue(parseIssue(once, '0999'));
+    const keys = once.split('\n').map((l) => /^([a-z_]+):/.exec(l)?.[1]).filter(Boolean);
+    const count = (k: string) => keys.filter((x) => x === k).length;
+    check(
+      'Changing an issue’s status keeps its assignee, branch and other unmanaged fields, once each, and a second rewrite changes nothing',
+      count('assignee') === 1 && count('branch') === 1 && count('fixed_in') === 1 && count('screenshot') === 0 &&
+        count('screenshots') === 1 && /^status: agent-ready /m.test(once) && twice === once,
+      `fields after the rewrite: ${keys.join(', ')}; stable on a second rewrite: ${twice === once}`,
+    );
+  }
+
   // The local layout (docs/COLLAB.md): a checkout's ports come from its row in .ports.json, only the
   // live folder serves the real data, a preview replaces nothing but its own copy, every server keeps
   // its own cookies, and a preview never holds the Affinity key. Fake checkouts, fake data.
@@ -2062,7 +2085,6 @@ async function main() {
       }
       return ports.readLayout(root);
     };
-    const today = await checkout('plcos-claude', false);
     const live = await checkout('plcos-claude-live', false);
     const dev = await checkout('plcos-claude-dev', true);
     const agent = await checkout('agent-a1b2', true);
@@ -2071,10 +2093,10 @@ async function main() {
       try { return ports.portFor(s, l, env); } catch (e) { return e instanceof Error ? e.message : String(e); }
     };
     check(
-      'Ports come from the folder’s row: today’s folder keeps 3100 and 3000, the live folder takes 3000 and 3001, a dev worktree its own two, and PORT changes only the number',
-      port('real', today) === 3100 && port('demo', today) === 3000 && port('real', live) === 3000 && port('demo', live) === 3001 &&
+      'Ports come from the folder’s row: the live folder takes 3000 and 3001, a dev worktree its own two, and PORT changes only the number',
+      port('real', live) === 3000 && port('demo', live) === 3001 &&
         port('preview', dev) === 3100 && port('demo', dev) === 3101 && port('demo', agent, { PORT: '3110' }) === 3110 && port('preview', dev, { PORT: '3290' }) === 3290,
-      `today ${port('real', today)}/${port('demo', today)}; live ${port('real', live)}/${port('demo', live)}; dev ${port('preview', dev)}/${port('demo', dev)}; a sub-agent’s with PORT=3110: ${port('demo', agent, { PORT: '3110' })}`,
+      `live ${port('real', live)}/${port('demo', live)}; dev ${port('preview', dev)}/${port('demo', dev)}; a sub-agent’s with PORT=3110: ${port('demo', agent, { PORT: '3110' })}`,
     );
     const devReal = port('real', dev, { PORT: '3100' });
     const livePreview = port('preview', live);
@@ -2090,7 +2112,7 @@ async function main() {
     const liveFiles = ports.feedbackHome('demo', live.root).filesHere;
     check(
       'Every worktree finds the live app through .git, and only the live folder files feedback; a dev worktree points at the live app instead',
-      liveOf(dev) === '3000/3001' && liveOf(agent) === '3000/3001' && liveOf(today) === '3100/3000' && agent.role === 'dev' &&
+      liveOf(dev) === '3000/3001' && liveOf(agent) === '3000/3001' && liveOf(live) === '3000/3001' && agent.role === 'dev' &&
         liveFiles && !devHome.filesHere && devHome.livePort === 3000 && !ports.feedbackHome('demo', agent.root).filesHere,
       `live app from a dev worktree: ${liveOf(dev)}, from a sub-agent’s: ${liveOf(agent)}; feedback from the live folder: ${liveFiles ? 'filed' : 'refused'}, ` +
         `from a dev worktree: ${devHome.filesHere ? 'filed' : `refused, pointing at :${devHome.livePort}`}`,

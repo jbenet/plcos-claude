@@ -79,7 +79,7 @@ plcos-data/real     the real data, outside every worktree; the live folder's dat
 
 ## Building it
 
-Steps 1–4 are built, on the branch `claude/collab-setup`. Step 5 is the move, after it merges.
+All five steps are done: 1–4 on the branch `claude/collab-setup`, and the move (step 5) on 25 Sep 2026.
 
 1. No `DATA_ROOT` and no path rewrite (decided 25 Sep 2026, for simplicity). Every path in the code
    and the docs stays `data/real/...`. In the live folder `data/real` becomes a link to
@@ -87,8 +87,8 @@ Steps 1–4 are built, on the branch `claude/collab-setup`. Step 5 is the move, 
    So "only the live server opens the real database" is structural: a dev worktree can only reach a
    copy.
 2. `.ports.json`, tracked: a local dev setup for one machine, one row per folder name. A live row has
-   `real` and `demo`; a dev row has `preview`, `demo` and `previewSource`. The row for today's folder,
-   `plcos-claude`, keeps real 3100 and demo 3000, so merging before the move changes nothing.
+   `real` and `demo`; a dev row has `preview`, `demo` and `previewSource`. The old folder's row,
+   `plcos-claude` (real 3100, demo 3000), let the branch merge before the move; it was removed after.
    `config/ports.ts` reads it, for the server and the scripts; `PORT` overrides a port, never what a
    folder may serve. One launcher, `scripts/serve.ts`, is behind `npm run dev`, `dev:real`, `preview`,
    `start` and `start:real`. It refuses a busy port before the Keychain is asked for the key, and

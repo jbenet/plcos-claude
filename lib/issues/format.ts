@@ -25,9 +25,20 @@ export interface ParsedIssue {
   attachments: string[];
   /** The version that closed it, from `fixed_in:` or the closing note (issue 0011). */
   fixedIn: string | null;
+  /**
+   * Frontmatter lines the writer does not manage — `assignee:` and `branch:` from triage
+   * (docs/COLLAB.md), `fixed_in:`, anything a person adds — kept verbatim, in order, so
+   * changing a status on the issues page never drops them.
+   */
+  extra?: string[];
 }
 
 const COMMENTED = new Set(['status', 'kind', 'priority']);
+/** The fields `serializeIssue` writes, plus the earlier spellings it rewrites. */
+const MANAGED = new Set([
+  'id', 'title', 'status', 'kind', 'priority', 'reporter', 'page', 'created', 'labels',
+  'screenshots', 'attachments', 'screenshot', 'attachment',
+]);
 
 export function parseIssue(file: string, fallbackId: string): ParsedIssue {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(file.trim());
@@ -35,10 +46,12 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
   const rest = match ? match[2]! : file;
 
   const fields: Record<string, string | string[]> = {};
+  const extra: string[] = [];
   for (const line of front.split(/\r?\n/)) {
     const m = /^([a-zA-Z_][\w-]*):\s*(.*)$/.exec(line);
     if (!m) continue;
     const key = m[1]!;
+    if (!MANAGED.has(key)) extra.push(line.trimEnd());
     let raw = m[2]!.trim();
     if (COMMENTED.has(key)) raw = raw.replace(/\s+#.*$/, '').trim();
     if (raw.startsWith('[') && raw.endsWith(']')) {
@@ -85,6 +98,7 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
     attachments,
     body,
     context,
+    extra,
   };
 }
 
@@ -135,6 +149,7 @@ export function serializeIssue(issue: ParsedIssue): string {
     `labels: [${issue.labels.join(', ')}]`,
     ...(issue.screenshots.length > 0 ? [`screenshots: [${issue.screenshots.join(', ')}]`] : []),
     ...(issue.attachments.length > 0 ? [`attachments: [${issue.attachments.join(', ')}]`] : []),
+    ...(issue.extra ?? []),
     '---',
     '',
     issue.body.trim(),

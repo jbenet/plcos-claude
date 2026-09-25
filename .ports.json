@@ -3,10 +3,8 @@
     "Local dev setup for one machine (Juan's Mac), not a deployment. Which ports each checkout's",
     "servers use, keyed by the checkout's folder name; read by config/ports.ts, and PORT overrides a",
     "port. A live row serves the real data and the demo; a dev row serves a demo and a preview, a copy",
-    "of previewSource (relative to the checkout). plcos-claude is today's folder, until the move in",
-    "docs/COLLAB.md."
+    "of previewSource (relative to the checkout). The layout is in docs/COLLAB.md."
   ],
-  "plcos-claude": { "role": "live", "real": 3100, "demo": 3000 },
   "plcos-claude-live": { "role": "live", "real": 3000, "demo": 3001 },
   "plcos-claude-dev": { "role": "dev", "preview": 3100, "demo": 3101, "previewSource": "../plcos-data/real" },
   "plcos-codex-dev": { "role": "dev", "preview": 3200, "demo": 3201, "previewSource": "../plcos-data/real" }

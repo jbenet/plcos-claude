@@ -8,6 +8,13 @@ The format is in `CLAUDE.md`. The short version: YAML frontmatter with
 prose, then a fenced ` ```json context ` block capturing route, user, entity, vehicle and
 active filters at the moment the button was pressed.
 
+Triage adds `assignee: claude | chatgpt` and the `branch:` the work goes on
+(`docs/COLLAB.md`). The issues page rewrites a file when its status changes, and keeps every
+frontmatter field it does not manage.
+
+Issues filed on the real server live in `data/real/issues/`, are never committed, and have
+their own numbers.
+
 ## Priority ladder
 
 | | Triaged within | Fixed within |
