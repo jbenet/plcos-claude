@@ -213,6 +213,20 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N84: [
+    {
+      name: '01-network',
+      path: '/orgs/g/connectors',
+      prepare: async (page) => {
+        // A fresh browser has no vehicle cookie, so "All vehicles" is expanded under
+        // PL Capital by default, and its long submodule list pushes the Network section
+        // below the fold. Collapse PL Capital so Network's heading stays in view (same
+        // pattern as N1's 04-nav-collapsed shot).
+        await page.getByRole('button', { name: 'PL Capital' }).click();
+        await page.waitForTimeout(400);
+      },
+    },
+  ],
   N83: [
     {
       name: '01-rungs-to-check-again',

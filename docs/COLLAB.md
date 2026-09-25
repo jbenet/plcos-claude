@@ -45,8 +45,8 @@ plcos-data/real     the real data, outside every worktree; the live folder's dat
 - **Work arrives as issues.** The feedback box files them as it always has — no one filing feedback
   picks an agent. A hint in the text ("I think ChatGPT would be better at this") is taken as a hint.
   Claude triages new issues and requests: it sets `assignee: claude | chatgpt` in the issue's
-  frontmatter, and the agent records its branch there. One file per task, so the two never edit the
-  same file.
+  frontmatter, and the `branch:` the work goes on. One file per task, so the two never edit the same
+  file. How ChatGPT gets its work is below, under *Handing work to ChatGPT*.
 - **Issue files are committed on master, in the live folder.** The live demo writes each new issue,
   and each change made on its issues page, into `issues/` in the live folder's working tree: master,
   uncommitted. Claude commits them there, with its triage, in a commit of issue files only, before
@@ -55,6 +55,28 @@ plcos-data/real     the real data, outside every worktree; the live folder's dat
 - **Rough split.** ChatGPT: self-contained UI fixes and features, workflow batches (research, fact
   checks, tagging), tests. Claude: schema and migrations, the real server's operations (translate,
   import), cross-cutting changes, integration. Juan can always name who.
+
+## Handing work to ChatGPT
+
+First done on 25 Sep 2026, with issue 0030; CHANGELOG N84 has what that round taught.
+
+1. Claude triages: `assignee: chatgpt`, `branch: codex/NNNN-slug`, `status: agent-ready`, and a spec
+   under "Triage" that ends with "Done when".
+2. Claude queues the task into Juan's open ChatGPT session with the Codex CLI that ships inside the
+   ChatGPT app: `/Applications/ChatGPT.app/Contents/Resources/codex queue --thread "<session name or
+   id>" --message "…"`. The message names the issue file and the branch and carries no real data;
+   ChatGPT reads the issue file where it is.
+3. ChatGPT branches from master in `plcos-codex-dev`, does the work, runs the checks, and ends its last
+   commit message with `Ready-for-review: NNNN`. It leaves the issue file alone, merges nothing and
+   touches no other branch. Its questions go to Juan, in the session.
+4. Claude watches the branch and the session's log (`~/.codex/sessions/`), reads the diff, merges the
+   branch into `claude/main`, runs the three checks on the result and moves master. It sets the issue
+   to `review` with a closing note and writes the changelog.
+
+A session that is read-only with approvals on request waits for Juan at the first edit and at the
+commit. Run headless instead (`codex exec`), ChatGPT can commit only with `.git/worktrees/plcos-codex-dev`,
+`.git/objects`, `.git/refs/heads/codex` and `.git/logs/refs/heads/codex` added to its writable folders,
+and with no network `npm run boundaries`, `npm run props` and its demo server don't run.
 
 ## Rules for both
 

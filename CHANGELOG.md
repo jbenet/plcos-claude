@@ -5304,3 +5304,57 @@ a family office's direct investments count as angel checks.
 
 124 of 124 properties hold, three of them new: "this year" needs the pursuit's own evidence; versions
 compare as major and minor; an automatic reply and our event are no word from them.
+
+## N84 — Two agents, one repository: the collab layout, and ChatGPT's first change through the issue queue
+
+**Shipped.** Claude and ChatGPT (OpenAI's coding agent; Juan calls it Astra) now work on this repo
+side by side, each in its own git worktree, and the live app runs from master alone. The first change
+to go all the way round — triaged by Claude, made by ChatGPT, reviewed and merged by Claude — renames
+"Orgs & people" to "Network" (issue 0030).
+
+| | |
+|---|---|
+| ![Network](docs/changelog/shots/n84/01-network.webp) | **Network.** The section that was "Orgs & people", renamed at Juan's request; its routes stay under `/orgs`. The first merge from a `codex/*` branch. |
+
+**The layout** (`docs/COLLAB.md`). One repository, three folders. `plcos-claude-live` holds master and
+runs the live app: the real data on :3000, the demo on :3001. `plcos-claude-dev` is Claude's worktree
+and `plcos-codex-dev` is ChatGPT's, each with a demo and a preview. The real data moved out of every
+worktree, to `plcos-data/real`. The live folder reaches it through a link at `data/real`, so every path
+stays `data/real/...` and a dev worktree can only ever reach a copy.
+- `.ports.json` gives each folder its ports, and `scripts/serve.ts` is the one launcher behind `dev`,
+  `dev:real`, `preview`, `start` and `start:real`. It refuses a busy port before the Keychain is asked
+  for the Affinity key, and `dev:real` in a dev worktree refuses outright.
+- `npm run preview` serves a copy of the real database in a dev worktree: an APFS clone, taken without
+  the live server's lock and served with no Affinity key. The breadcrumb bar dates the copy and says
+  changes to it are thrown away.
+- Cookie names carry the port, so two servers on one host don't share who you are. Feedback is filed
+  only from the live app; on a dev worktree the feedback box points there.
+- Claude integrates. A branch reaches master only after the typecheck, `npm run boundaries` and `npm run
+  props` pass on the merged result.
+
+**The handoff.** Triage writes `assignee:` and `branch:` into an issue's frontmatter. The issues page
+rewrote the whole file from a fixed list of fields whenever a status changed, which would have dropped
+both, and `fixed_in:` with them; it now keeps every line it does not manage. Claude queued issue 0030
+into Juan's open ChatGPT session with `codex queue`. ChatGPT branched from master, made the five
+replacements, ran all three checks and committed with a `Ready-for-review: 0030` line, which is how
+Claude knew it was done. Claude read the diff, loaded the renamed pages on ChatGPT's demo server, merged
+into its own branch, ran the checks again on the result, and moved master.
+
+**What the first round taught:**
+- The session was read-only with approvals on request, so ChatGPT waited 27 minutes for Juan to
+  approve its commit.
+- ChatGPT's own visual check failed because its browser tool found no browser. Claude checked the pages
+  over HTTP instead.
+- Its commits carry the repo's git identity, which is Juan's. The `codex/*` branch and the merge message
+  say who did the work.
+- Run headless (`codex exec`), ChatGPT's default sandbox can edit its worktree but cannot commit, because
+  the git data lives in the live folder's `.git`. Four writable folders let it commit to `codex/*`
+  branches and nothing else: master, other branches, hooks and git config stay refused. With no network
+  it can open no port or socket, so `npm run boundaries`, `npm run props` (tsx opens a socket) and its
+  demo server don't run there.
+
+Triaged alongside: 0032 (`?` opens a keyboard-shortcuts dialog) and 0033 (a Docs page under Developer)
+go to ChatGPT next, and 0031 (a gzip warning in the server log) is Claude's.
+
+131 of 131 properties hold, seven of them new: six for the layout, and one that a status change keeps
+an issue's unmanaged fields.
