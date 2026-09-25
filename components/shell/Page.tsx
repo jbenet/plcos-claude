@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { syncSummary } from '@/lib/sync';
+import { ago } from '@/lib/time';
 import { config } from '@/config/deployment';
 import { PageFrame } from './PageFrame';
 
@@ -27,19 +28,28 @@ export async function Page({
   // Until a connector has delivered, a real page computes its figures from an empty
   // database, and an empty database says $0 with complete confidence.
   const empty = profile === 'real' && !sync.sources.some((s) => s.source !== 'init' && s.status === 'ok');
+  const sources = sync.sources.map((s) => `${s.label}: ${s.status}`).join('\n');
+  // A preview (docs/COLLAB.md) serves a copy that never syncs, so the bar dates the copy instead of
+  // reporting the syncs inside it as if they were this server's.
+  const copied = config.data.copyTakenAt ? new Date(config.data.copyTakenAt) : null;
 
   return (
     <PageFrame
-      profile={profile}
+      profile={copied ? 'copy' : profile}
       notice={
         empty
           ? 'Nothing has been imported yet. Figures on this page come from an empty database: read a zero as not loaded, not as a fact about the raise.'
           : undefined
       }
       crumbs={crumbs.map((c) => ({ label: c.label, href: c.href }))}
-      syncTone={sync.tone}
-      syncLine={sync.line}
-      syncTitle={sync.sources.map((s) => `${s.label}: ${s.status}`).join('\n')}
+      syncTone={copied ? 'amber' : sync.tone}
+      syncLine={copied ? `Taken ${ago(copied)} · changes here are thrown away` : sync.line}
+      syncTitle={
+        copied
+          ? `Copied from the real data at ${copied.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. ` +
+            `Nothing syncs here. In the copy: ${sync.line}.\n${sources}`
+          : sources
+      }
       actions={actions}
       inspector={inspector}
     >

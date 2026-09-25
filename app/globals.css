@@ -163,6 +163,8 @@ button.sec .caret{font-size:9px;opacity:.8}
   padding:3px 7px;border-radius:4px;border:1px solid var(--line);color:var(--label);text-decoration:none;margin-right:4px;white-space:nowrap}
 .profile:hover{border-color:var(--muted)}
 .profile.p-demo{background:var(--purple);border-color:var(--purple);color:#fff}
+/* A preview's copy of the real data (docs/COLLAB.md): amber, like anything that is not current. */
+.profile.p-copy{border-color:var(--amber);color:var(--amber)}
 body.demo::before{content:'';position:fixed;top:0;left:0;right:0;height:3px;background:var(--purple);z-index:60;pointer-events:none}
 .pnotice{flex:none;padding:8px 20px;font-size:12.5px;line-height:1.45;color:var(--ink);background:#F6EBD9;border-bottom:1px solid #E7D3B0}
 .pnotice b{color:var(--amber);font-weight:600}

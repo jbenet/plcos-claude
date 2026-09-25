@@ -1,6 +1,7 @@
 import Link from '@/components/ui/AppLink';
 import { headers } from 'next/headers';
 import { config } from '@/config/deployment';
+import { feedbackHome } from '@/config/ports';
 import { auth } from '@/lib/auth';
 import { issues as issueSink } from '@/lib/issues';
 import { vehicleSelection } from '@/lib/session';
@@ -40,7 +41,7 @@ export async function Rail() {
 
       <div className="railfoot">
         <div className="railrow">
-          <FeedbackButton variant="rail" profile={config.data.profile} />
+          <FeedbackButton variant="rail" profile={config.data.profile} home={feedbackHome(config.data.profile)} />
           <Link className="railgear" href="/settings" aria-label="Your settings" title="Your settings">
             <span aria-hidden>⚙</span>
           </Link>

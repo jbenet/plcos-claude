@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server';
+import { config } from '@/config/deployment';
+import { feedbackHome } from '@/config/ports';
 import { auth } from '@/lib/auth';
 import { fileFeedback } from '@/modules/platform';
 import type { IssueAttachment, IssueKind, IssuePriority } from '@/lib/issues';
 import { titleFrom } from '@/lib/issues/title';
 
 export async function POST(req: Request) {
+  // Only the live app files (docs/COLLAB.md): a branch filing would take numbers the live app
+  // gives out too. The box on a dev worktree says so; this refuses anything that asks anyway.
+  if (!feedbackHome(config.data.profile).filesHere) {
+    return NextResponse.json(
+      { error: 'This server runs a branch in development. Feedback is filed from the live app, so issue numbers never collide (docs/COLLAB.md).' },
+      { status: 403 },
+    );
+  }
   try {
     const body = (await req.json()) as {
       title?: string; body?: string; kind?: IssueKind; priority?: IssuePriority;
