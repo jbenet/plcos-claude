@@ -117,3 +117,7 @@ No script checks the review file yet; the enrichment page reads it and skips a l
 Before replying: each line parses; each finding has one line and each of its facts one grade, spelled as
 above; `counts` match the grades. After corrections, `DATA_PROFILE=real npx tsx scripts/enrich-check.ts`
 reports no problem in the corrected findings.
+
+**No retry loops, and no sub-agents** (round 03): a refusal (403, 429, 503) is retried at most once,
+later, never in a loop; and the fact check runs in one agent per batch — nested agents stalled on the
+concurrency cap and one of them silently lost its fetches.

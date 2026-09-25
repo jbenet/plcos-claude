@@ -380,6 +380,12 @@ Sydecar and AngelList API access is gated with a long lead time. Nothing depends
     export or rule change while its batches run.
   - Never dump long output into the conversation: filter to the lines that matter, and put a
     multi-step shell sequence in one script.
+  - **Measured, 25 Sep 2026:** on the Max plan's limits, Sonnet counts at about 0.9× Opus per token
+    (0.88 on the 5-hour window, 0.87 on the weekly, from a Sonnet-only fact check of 66M weighted
+    tokens). A week is roughly 1,000M weighted Opus tokens (1% ≈ 9.8M; a 5-hour window's 1% ≈ 2.6M),
+    weighting a cache read at 0.1, a cache write at 2 and output at 5. So a smaller model saves little
+    against the cap: the levers are fewer tokens (small contexts, short rule files, no nested agents)
+    and moving bulk work to ChatGPT. Haiku's rate is not measured; it failed the tagging pilot (66%).
 
 - **Changelog screenshots** are 2000 px WebP at quality 80 (`scripts/shot-image.ts`).
   `npm run shots -- <version>` captures against the running demo server, writes
