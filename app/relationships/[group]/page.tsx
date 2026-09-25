@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-/** The section became "Orgs & people", because that is what is in it. */
+/** The section is now called "Network"; its routes stay under /orgs. */
 export default async function MovedRelationships({
   params,
 }: {

@@ -63,7 +63,7 @@ export default async function Enrichment() {
         </>
       }
     >
-      <div className="lbl">Orgs &amp; people · Data enrichment</div>
+      <div className="lbl">Network · Data enrichment</div>
       <h1>How we could find out what we do not know</h1>
       <p className="sublede">
         Half the fit board rests on inferences and guesses, and a ranking built on guesses ranks
