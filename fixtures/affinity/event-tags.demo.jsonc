@@ -1,0 +1,34 @@
+// Invented for the demo (N81): what Claude's tagging pass writes after reading the records, so
+// the demo's timelines show each kind of row — a vehicle the rules missed, one the rules read
+// wrong, and one about a raise that doesn't say which. The real file is
+// data/real/event-tags.jsonc; translation loads whichever the profile has.
+{
+  "by": "claude",
+  "at": "2026-09-25T00:00:00Z",
+  "tags": {
+    "interaction:meeting:20260911": {
+      "about": "raise", "vehicles": ["neurotech"],
+      "basis": "Follows the first meeting, where she asked to see the pipeline of portfolio companies"
+    },
+    "interaction:meeting:55012": {
+      "about": "raise", "vehicles": ["neurotech"],
+      "basis": "The notetaker's summary: the Neurotech fund's size, fees and reporting cadence"
+    },
+    "interaction:meeting:55013": {
+      "about": "raise", "vehicles": ["neurotech"],
+      "basis": "Her side letter on reporting, asked for with her Neurotech soft circle"
+    },
+    "interaction:meeting:55021": {
+      "about": "raise", "vehicles": ["neurotech"],
+      "basis": "The closing checklist after her countersigned Neurotech subscription"
+    },
+    "interaction:meeting:55020": {
+      "about": "raise", "vehicles": ["neurotech"],
+      "basis": "The data room walkthrough she asked for before her IC, after the Neurotech first meeting"
+    },
+    "note:30014": {
+      "about": "raise", "vehicles": [],
+      "basis": "Asked to hear about the next SPV; which one is not said"
+    }
+  }
+}

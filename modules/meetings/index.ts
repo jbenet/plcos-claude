@@ -1,12 +1,12 @@
 export type {
   Channel, DiligenceQuestion, DirectContact, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
-  PrepBrief, QuestionStatus, RaiseWindow, Read, Touchpoint, TouchpointSummary,
+  EventAbout, PrepBrief, QuestionStatus, RaiseWindow, Read, Touchpoint, TouchpointSummary,
 } from './types';
 export {
-  CHANNELS, CHANNEL_LABEL, DIRECTION_LABEL, MEETING_LABEL, OBJECTION_LABEL, READS, READ_LABEL, aboutThisRaise,
+  CHANNELS, CHANNEL_LABEL, DIRECTION_LABEL, GROUP_EVENT, MEETING_LABEL, OBJECTION_LABEL, READS, READ_LABEL, aboutThisRaise, eventAbout, isEvent,
 } from './types';
 export {
-  listMeetings, listObjections, listQuestions, objectionTally, raiseWindows, summarize, touchpointSummaries, touchpointsByPair,
+  listMeetings, listObjections, listQuestions, objectionTally, raiseWindows, summarize, touchpointSummaries, touchpointsByPair, touchpointsByEntity,
   touchpointsFor, colleagueTouchpointsFor, directContact, upcomingMeetings,
 } from './repo';
 export { logTouchpoint, prepBrief, TouchpointRefused, type NewTouchpoint } from './service';

@@ -69,10 +69,11 @@ So a record now counts for a vehicle only when it is about that vehicle's raise:
   2. A record that names a vehicle, by name or alias, is about that vehicle.
   3. A company's update to its investors is about something else.
   4. A record that speaks of a fund, investing, the data room, the deck and so on, or names the
-     firm, is about any raise open on its date.
+     firm, is about any raise open on its date (until N81, below: now about a raise, vehicle
+     unclear, counted for none until tagged).
   5. A record from or to the team's fundraising domain is the same. That means the sender or a
      direct recipient; someone on copy doesn't count. (The first pass counted an email about
-     something else because someone at the domain was copied.)
+     something else because someone at the domain was copied.) Since N81, an email's only.
   6. Anything else is about something else.
 - **Nothing is dropped.** Contact about something else stays, counted on the LP's own page as
   contact history (`components/entity/ContactHistory.tsx`), and the LP-for-vehicle page points
@@ -86,6 +87,35 @@ After the correction, the same run proposed 62. Reconciliation withdrew each of 
 proposals whose records now read differently, and proposed again where a climb still held. An
 approval is of exactly the words shown, so a reworded rule makes a new proposal rather than
 approving old words.
+
+## Which vehicle: tagged, not assumed (N81)
+
+Juan, 24 Sep, on the real account: "some meetings or notes from affinity are getting attributed to
+PLC Neurotech when they may be for PLC Rails, or they may just be general catchups." Two rules
+above did it. Rule 5 read a meeting's invitees as well as an email's addresses, and everyone on the
+team is at the fundraising domain, so a catch-up with a colleague on the invite read as about the
+raise: 124 meetings and calls of the 670 raise records in 2026. And rule 4's "any raise open on its
+date" put every record that named no vehicle on every vehicle raising then — Neurotech and Rails
+both, since both windows open on 1 January.
+
+So, since N81:
+
+- **Rule 5 reads an email's addresses only.** A meeting is read by its title and the note on it; a
+  note by its words, never its author.
+- **A record counts for a vehicle only when it is tagged with it**, inside the window: it names it
+  (the rules), or Claude tagged it after reading it (W12 in docs/19, loaded from
+  `event-tags.jsonc` at translation), or a person tagged it on the LP's timeline. A person's tag
+  counts whatever the date, and stands over the others. A record about a raise that names no vehicle
+  is "vehicle unclear" and counts for none until someone says which.
+- **Tags live in `meetings.event_tag`**, one per Affinity interaction or note, so every LP on a
+  meeting shares it, and a note on a meeting takes the meeting's. `meeting.about_by` says where each
+  touchpoint's reading came from.
+- **The LP's timeline shows everything** — every record with them, about anything — each labelled
+  with its vehicles, "Vehicle unclear" or "General", with a filter by fund. The facts above it are
+  this pursuit's: only what counts for its vehicle.
+
+Accepted rungs stand: a person approved them on the records shown then. Open proposals whose records
+no longer count for their vehicle are withdrawn by the next reconciliation, as in N59.
 
 ## What reconciliation does
 

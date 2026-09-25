@@ -3,11 +3,14 @@ import { join, resolve } from 'node:path';
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { latestRaw } from '@/modules/sources';
-import { touchpointSummaries, touchpointsByPair } from '@/modules/meetings';
+import {
+  eventAbout, isEvent, raiseWindows, summarize, touchpointSummaries, touchpointsByEntity, type EventAbout, type RaiseWindow,
+} from '@/modules/meetings';
 import { closeStates } from '@/modules/pipeline';
 import { listRestrictions } from '@/modules/coordination';
 import { listPursuits, type Pursuit, type PursuitStatus } from '@/modules/strategy';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
+import { noteTags } from '@/lib/connectors/affinity/event-tags';
 
 /**
  * The research set (N64, docs/19): who the enrichment workflows read about, written to files
@@ -43,16 +46,36 @@ export interface ResearchIdentity {
   enriched: Record<string, string>;
 }
 
+/**
+ * What a row is about, in words the strategy step reads (N81): the vehicles' names, or "vehicle
+ * unclear" — about a raise without saying which — or "general": a catch-up, background, another
+ * company, true of them whatever the vehicle. Juan, 24 Sep: "some of the info will apply regardless
+ * of vehicle, but some will be specific."
+ */
+export type AboutWords = string[];
+
 export interface Candidate extends ResearchIdentity {
-  pursuits: Array<{ pursuitId: string; vehicle: string; status: PursuitStatus; rung: string | null; owner: string; stageSaid: string | null; nextStep: string | null }>;
+  pursuits: Array<{
+    pursuitId: string; vehicle: string; status: PursuitStatus; rung: string | null; owner: string; stageSaid: string | null; nextStep: string | null;
+    /** N81: the contact tagged with this pursuit's vehicle, inside its window — all that counts for it. */
+    contact: { meetings: number; lastTouch: string | null; lastFromThem: string | null; awaitingSince: string | null; nextMeeting: string | null };
+  }>;
+  /**
+   * All contact with them since their raises opened, about anything (N81; before, what the loose
+   * rule of N59 counted as about a raise): the relationship, whatever the vehicle — a reply owed is
+   * owed whatever it was about. Each meeting says what it was about. `since` is the earliest opening
+   * of their vehicles' raise windows; what came before is summed in `earlier`.
+   */
   contact: {
+    since: string | null;
+    earlier: { meetings: number; first: string | null; last: string | null };
     meetings: number; lastTouch: string | null; lastFromThem: string | null; awaitingSince: string | null; read: string | null;
     /** How the last touch happened — a meeting counts as "from them", so their last word can be a meeting, not a reply (W5, iteration 3). */
     lastTouchChannel: string | null;
     /** Meetings on a date that four or more LPs share: an event, most likely, not a one-to-one (W5 learning). */
     groupMeetings: number;
-    /** The dates of their meetings and calls, oldest first, each marked when four or more LPs share it (v05). */
-    meetingDates: Array<{ on: string; group: boolean }>;
+    /** The dates of their meetings and calls, oldest first, each marked when four or more LPs share it (v05), and what it was about (N81). */
+    meetingDates: Array<{ on: string; group: boolean; about: AboutWords }>;
     /**
      * How many LPs in the set our last unanswered word went to on the same day (W5, iteration 3):
      * ten or more is a mailing, and the next step is a first personal note, not a follow-up.
@@ -61,8 +84,8 @@ export interface Candidate extends ResearchIdentity {
   };
   /** The close track, where there is one: the amount, and how far it has got (rule 1: soft until signed). */
   money: { amount: number; track: string; state: string; signedOn: string | null; signedPerSource: boolean; wired: number } | null;
-  /** Our notes about them, as read (N55): the summaries, dated, health detail already redacted. */
-  notes: Array<{ on: string; summary: string | null; read: string | null }>;
+  /** Our notes about them, as read (N55): the summaries, dated, health detail already redacted, and what each is about (N81). */
+  notes: Array<{ on: string; summary: string | null; read: string | null; about: AboutWords }>;
   /**
    * Context or corrections from the team, newest first (issue 0016): their own words about this LP,
    * which the strategy workflow reads above the research and the notes' readings. `at` is the full
@@ -139,13 +162,16 @@ export async function researchSet(): Promise<Candidate[]> {
       order by n.created_at desc`, [ids]);
   const restrictions = (await listRestrictions({ includeListMarks: true })).filter((r) => byEntity.has(r.entityId));
   const pairs = all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
-  const [touches, tracks] = await Promise.all([touchpointsByPair(pairs), closeStates(pairs)]);
+  const [everything, tracks, windowMap, tags] = await Promise.all([
+    touchpointsByEntity(ids), closeStates(pairs), raiseWindows(), noteTags(readings.map((r) => r.noteId)),
+  ]);
+  const windows = [...windowMap.values()];
+  // Their own meetings and calls held, about anything (N81): the relationship's.
+  const met = new Map([...everything].map(([id, list]) => [id, list.filter((t) => (t.channel === 'meeting' || t.channel === 'call') && t.on && !t.viaOrganization && t.on.getTime() <= Date.now())]));
   // A date many LPs share is an event: count who was "in a meeting" each day.
   const onDay = new Map<string, number>();
-  for (const list of touches.values()) {
-    for (const d of new Set(list.filter((t) => (t.channel === 'meeting' || t.channel === 'call') && t.on && !t.viaOrganization).map((t) => t.on!.toISOString().slice(0, 10)))) {
-      onDay.set(d, (onDay.get(d) ?? 0) + 1);
-    }
+  for (const list of met.values()) {
+    for (const d of new Set(list.map((t) => t.on!.toISOString().slice(0, 10)))) onDay.set(d, (onDay.get(d) ?? 0) + 1);
   }
 
   // Affinity's entity ids, and every list entry about each of them.
@@ -174,8 +200,14 @@ export async function researchSet(): Promise<Candidate[]> {
         if (d && !FREE_MAIL.test(d)) domains.add(d);
       }
     }
-    const sums = ps.map((p) => contact.get(`${p.entityId}:${p.vehicleId}`)).filter(Boolean);
-    const latest = (xs: Array<Date | null | undefined>) => xs.reduce<Date | null>((a, x) => (x && (!a || x > a) ? x : a), null)?.toISOString().slice(0, 10) ?? null;
+    const day = (d: Date | null | undefined) => d?.toISOString().slice(0, 10) ?? null;
+    const opens = ps.map((p) => windowMap.get(p.vehicleId)?.opens).filter((d): d is Date => !!d);
+    const since = opens.length ? new Date(Math.min(...opens.map((d) => d.getTime()))) : null;
+    const inPeriod = (t: { on: Date | null; scheduledFor: Date | null }) => !since || ((t.on ?? t.scheduledFor)?.getTime() ?? 0) >= since.getTime();
+    const rel = summarize((everything.get(ent.entity_id) ?? []).filter(inPeriod));
+    const mine = (met.get(ent.entity_id) ?? []).filter(inPeriod);
+    const before = [...new Set((met.get(ent.entity_id) ?? []).filter((t) => !inPeriod(t)).map((t) => day(t.on)!))].sort();
+    const days = [...new Set(mine.map((t) => day(t.on)!))].sort();
     return {
       key: ent.entity_id,
       name: ent.display_name,
@@ -185,24 +217,33 @@ export async function researchSet(): Promise<Candidate[]> {
       location: enriched['Location'] ?? null,
       domains: [...domains].sort(),
       enriched,
-      pursuits: ps.map((p) => ({
-        pursuitId: p.pursuitId, vehicle: p.vehicleName, status: p.status, rung: p.rung, owner: p.ownerSaid ?? p.ownerName,
-        stageSaid: p.stageSaid, nextStep: p.nextStep,
-      })),
+      pursuits: ps.map((p) => {
+        const s = contact.get(`${p.entityId}:${p.vehicleId}`);
+        return {
+          pursuitId: p.pursuitId, vehicle: p.vehicleName, status: p.status, rung: p.rung, owner: p.ownerSaid ?? p.ownerName,
+          stageSaid: p.stageSaid, nextStep: p.nextStep,
+          contact: {
+            meetings: s?.meetingDates.length ?? 0, lastTouch: day(s?.lastTouch), lastFromThem: day(s?.lastFromThem),
+            awaitingSince: day(s?.awaitingSince), nextMeeting: day(s?.nextMeeting),
+          },
+        };
+      }),
       contact: {
-        meetings: Math.max(0, ...sums.map((s) => s!.meetingDates.length)),
-        lastTouch: latest(sums.map((s) => s!.lastTouch)),
-        lastTouchChannel: sums.map((s) => s!).filter((s) => s.lastTouch).sort((a, b) => b.lastTouch!.getTime() - a.lastTouch!.getTime())[0]?.lastTouchChannel ?? null,
-        lastFromThem: latest(sums.map((s) => s!.lastFromThem)),
-        awaitingSince: latest(sums.map((s) => s!.awaitingSince)),
-        read: sums.map((s) => s!.read?.read).find(Boolean) ?? null,
-        groupMeetings: ps.reduce((n, p) => n + new Set((touches.get(`${p.entityId}:${p.vehicleId}`) ?? [])
-          .filter((t) => (t.channel === 'meeting' || t.channel === 'call') && t.on && !t.viaOrganization && (onDay.get(t.on.toISOString().slice(0, 10)) ?? 0) >= 4)
-          .map((t) => t.on!.toISOString().slice(0, 10))).size, 0),
+        since: day(since),
+        earlier: { meetings: before.length, first: before[0] ?? null, last: before[before.length - 1] ?? null },
+        meetings: rel.meetingDates.length,
+        lastTouch: day(rel.lastTouch),
+        lastTouchChannel: rel.lastTouchChannel,
+        lastFromThem: day(rel.lastFromThem),
+        awaitingSince: day(rel.awaitingSince),
+        read: rel.read?.read ?? null,
+        groupMeetings: days.filter((d) => (onDay.get(d) ?? 0) >= 4 || mine.some((t) => day(t.on) === d && isEvent(t))).length,
         outreachShared: 0,
-        meetingDates: [...new Set(ps.flatMap((p) => (touches.get(`${p.entityId}:${p.vehicleId}`) ?? [])
-          .filter((t) => (t.channel === 'meeting' || t.channel === 'call') && t.on && !t.viaOrganization)
-          .map((t) => t.on!.toISOString().slice(0, 10))))].sort().map((on) => ({ on, group: (onDay.get(on) ?? 0) >= 4 })),
+        meetingDates: days.map((on) => ({
+          // A date four or more LPs share, or a calendar entry with four or more of ours on it (N81).
+          on, group: (onDay.get(on) ?? 0) >= 4 || mine.some((t) => day(t.on) === on && isEvent(t)),
+          about: [...new Set(mine.filter((t) => day(t.on) === on).flatMap((t) => aboutWords(eventAbout(t, windows))))],
+        })),
       },
       money: (() => {
         const t = ps.map((p) => tracks.get(`${p.entityId}:${p.vehicleId}`)).find(Boolean);
@@ -214,7 +255,7 @@ export async function researchSet(): Promise<Candidate[]> {
       })(),
       notes: readings.filter((r) => r.entityId === ent.entity_id && !r.dismissed && r.summary)
         .sort((a, b) => b.on.getTime() - a.on.getTime()).slice(0, 8)
-        .map((r) => ({ on: r.on.toISOString().slice(0, 10), summary: r.summary, read: r.read })),
+        .map((r) => ({ on: r.on.toISOString().slice(0, 10), summary: r.summary, read: r.read, about: noteWords(tags.get(r.noteId), r.on, windows) })),
       restrictions: restrictions.filter((r) => r.entityId === ent.entity_id)
         .map((r) => ({ scope: r.scope, connector: r.connectorName, channel: r.channel })),
       context: context.filter((c) => c.entity_id === ent.entity_id)
@@ -225,6 +266,18 @@ export async function researchSet(): Promise<Candidate[]> {
   for (const c of out) if (c.contact.awaitingSince) sentOn.set(c.contact.awaitingSince, (sentOn.get(c.contact.awaitingSince) ?? 0) + 1);
   for (const c of out) c.contact.outreachShared = c.contact.awaitingSince ? sentOn.get(c.contact.awaitingSince)! : 0;
   return out;
+}
+
+/** A row's tag as the strategy step reads it (N81). */
+function aboutWords(a: EventAbout): AboutWords {
+  if (a.kind === 'vehicles') return a.vehicles.map((v) => (v.counts ? v.name : `${v.name} (before its raise opened)`));
+  return [a.kind === 'unclear' ? 'vehicle unclear' : 'general'];
+}
+
+function noteWords(t: { about: 'raise' | 'other'; vehicles: string[]; by: 'rule' | 'claude' | 'person' } | undefined, on: Date, windows: RaiseWindow[]): AboutWords {
+  return aboutWords(eventAbout({
+    vehicleId: null, source: 'affinity', about: t?.about ?? 'other', aboutVehicles: t?.vehicles ?? [], aboutBy: t?.by ?? 'rule', on, scheduledFor: null,
+  }, windows));
 }
 
 /** Where the files live; the property harness points it at a scratch directory of its own. */
@@ -241,12 +294,14 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   });
   await writeFile(join(dir, 'research-set.jsonl'), set.map((c) => JSON.stringify(identity(c))).join('\n') + '\n', 'utf8');
   await writeFile(join(dir, 'candidates.jsonl'), set.map((c) => JSON.stringify(c)).join('\n') + '\n', 'utf8');
-  // Our side (W2): the team, for finding who of us is connected to whom. Work domains only.
+  // Our side (W2): the team, for finding who of us is connected to whom. Names and roles only — no
+  // address and no domain, since agents read this file and a personal domain is one step from a
+  // personal address (Juan, 24 Sep: nothing that identifies us goes into a request).
   const db = await getDb();
-  const team = await db.query<{ handle: string; name: string; role: string; email: string }>(
-    `select handle, name, role, email from platform.app_user where active order by name`);
+  const team = await db.query<{ handle: string; name: string; role: string }>(
+    `select handle, name, role from platform.app_user where active order by name`);
   await writeFile(join(dir, 'team.json'), JSON.stringify(team.map((u) => ({
-    handle: u.handle, name: u.name, role: u.role, domain: u.email.split('@')[1] ?? null,
+    handle: u.handle, name: u.name, role: u.role,
   })), null, 1) + '\n', 'utf8');
   const byStatus: Record<string, number> = {};
   for (const c of set) for (const p of c.pursuits) byStatus[p.status] = (byStatus[p.status] ?? 0) + 1;

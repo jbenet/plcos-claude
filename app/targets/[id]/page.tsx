@@ -14,7 +14,7 @@ import {
 import { auditFor } from '@/modules/platform';
 import { StatusForm } from '@/components/strategy/StatusForm';
 import { Timeline, meetingLine, type StatusEvent, type TouchContext } from '@/components/strategy/Timeline';
-import { READ_LABEL, colleagueTouchpointsFor, summarize, touchpointsFor } from '@/modules/meetings';
+import { READ_LABEL, colleagueTouchpointsFor, raiseWindows, summarize, touchpointsFor } from '@/modules/meetings';
 import { lpHeadings } from '@/lib/lp-heading';
 import { latestRun } from '@/modules/sources';
 import { CLOSE_STATE_LABEL, closeTracksFor } from '@/modules/pipeline';
@@ -31,7 +31,6 @@ import { meetingTitles } from '@/lib/connectors/affinity/meetings';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { laterFacts, shownRead } from '@/lib/reads';
 import { onFile } from '@/lib/reconcile';
-import { countContact } from '@/components/entity/ContactHistory';
 import { PublicProfile } from '@/components/entity/PublicProfile';
 import { SuggestedStrategy } from '@/components/strategy/SuggestedStrategy';
 import { AddContext } from '@/components/strategy/AddContext';
@@ -44,8 +43,13 @@ export const dynamic = 'force-dynamic';
 const claimValue = (field: string, value: string) =>
   /_usd$/.test(field) && Number.isFinite(Number(value)) ? usdCompact(Number(value)) : value;
 
-export default async function TargetWorkspace({ params }: { params: Promise<{ id: string }> }) {
+export default async function TargetWorkspace({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  /** The timeline's filter and page size (N81): a vehicle's slug, 'unclear' or 'none'; how many rows. */
+  searchParams: Promise<{ tl?: string; tln?: string }>;
+}) {
   const { id } = await params;
+  const sp = await searchParams;
   const pursuit = await getPursuit(id);
   if (!pursuit) notFound();
 
@@ -80,10 +84,15 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
   // with its other people are on its timeline too — shown with who they were with, and summed
   // apart from this person's own record, which is what the ladder reads.
   const heading = (await lpHeadings([{ pursuitId: pursuit.pursuitId, entityId: pursuit.entityId }])).get(pursuit.pursuitId) ?? null;
-  const colleagues = heading?.orgFirst ? await colleagueTouchpointsFor(pursuit.entityId, pursuit.vehicleId) : [];
-  // Contact that isn't about this raise (N59): counted on their own page, pointed to from here.
-  const counted = new Set(touches.map((t) => t.touchpointId));
-  const elsewhere = countContact(everything.filter((t) => !counted.has(t.touchpointId)));
+  const [colleagues, colleaguesAll, windows] = await Promise.all([
+    heading?.orgFirst ? colleagueTouchpointsFor(pursuit.entityId, pursuit.vehicleId) : Promise.resolve([]),
+    heading?.orgFirst ? colleagueTouchpointsFor(pursuit.entityId, null) : Promise.resolve([]),
+    raiseWindows(),
+  ]);
+  // Every touchpoint with them shows on the timeline, each saying what it is about (N81); those
+  // tagged with this vehicle are counted for it.
+  const shown = [...everything, ...colleaguesAll];
+  const counted = new Set([...touches, ...colleagues].map((t) => t.touchpointId));
   const touchSummary = summarize(touches);
   // What the records here support, beside what the ladder has accepted (N57, docs/18).
   const file = onFile(pursuit, touches, tracks);
@@ -95,10 +104,10 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
     const m = /^interaction:([a-z-]+):(\d+):/.exec(ref ?? '');
     return m ? { type: m[1]!, id: m[2]! } : null;
   };
-  const titles = await meetingTitles(touches.map((t) => interactionOf(t.sourceRef)).filter((x) => x?.type === 'meeting').map((x) => x!.id));
+  const titles = await meetingTitles(shown.map((t) => interactionOf(t.sourceRef)).filter((x) => x?.type === 'meeting').map((x) => x!.id));
   const noteOn = new Map(affinityNotes.filter((x) => x.interaction).map((x) => [`${x.interaction!.type}:${x.interaction!.id}`, x]));
   const context: Record<string, TouchContext> = {};
-  for (const t of touches) {
+  for (const t of shown) {
     const i = interactionOf(t.sourceRef);
     if (!i) continue;
     const note = noteOn.get(`${i.type}:${i.id}`);
@@ -312,7 +321,9 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
           {tracks.map((t) => <CloseTrack key={t.exposure.exposureId} track={t} pursuitId={pursuit.pursuitId} />)}
 
           <Timeline
-            touches={colleagues.length ? [...touches, ...colleagues] : touches}
+            touches={shown}
+            counted={counted}
+            windows={[...windows.values()]}
             summary={touchSummary}
             notes={affinityNotes}
             pursuitId={pursuit.pursuitId}
@@ -322,7 +333,6 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
             calendarPartial={Boolean((calendar?.detail as { stoppedAtCap?: boolean } | undefined)?.stoppedAtCap)}
             context={context}
             read={theirRead}
-            elsewhere={{ ...elsewhere, href: `/orgs/${pursuit.entityId}` }}
             status={pursuit.status}
             today={new Date().toISOString().slice(0, 10)}
             updates={updates}
@@ -330,6 +340,9 @@ export default async function TargetWorkspace({ params }: { params: Promise<{ id
             ladder={pursuit.events}
             onRecord={file.byRung}
             proposalId={proposal?.id ?? null}
+            filter={sp.tl ?? 'all'}
+            limit={Math.max(1, Math.min(5000, Number(sp.tln) || 40))}
+            path={`/targets/${pursuit.pursuitId}`}
           />
 
           <BeforeOutreach entityId={pursuit.entityId} />

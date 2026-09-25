@@ -46,7 +46,7 @@ async function main() {
   const interests = count(resolved.flatMap((f) => (f.profile?.interests ?? []).map((i) => i.toLowerCase().replace(/\s*\(.*\)$/, ''))), (i) => i);
 
   const LEVEL: Record<string, number> = { high: 3, medium: 2, low: 1, unknown: 0 };
-  const BAND: Record<string, number> = { '>$25M': 5, '$5–25M': 4, '$1–5M': 3, '$250K–1M': 2, '<$250K': 1 };
+  const BAND: Record<string, number> = { '>$25M': 5, '$5–25M': 4, '$1–5M': 3, '$250K–1M': 2, '$100K+ (floor)': 1.5, '<$250K': 1 };
   const thisYear = strategies.filter((s) => s.list === 'this year')
     .sort((a, b) => (LEVEL[b.scores.propensity.level] ?? 0) - (LEVEL[a.scores.propensity.level] ?? 0) || (BAND[b.scores.capacity.band] ?? 0) - (BAND[a.scores.capacity.band] ?? 0));
   // Who the next steps fall to: the first person of the team named in `next.who`, by first or full

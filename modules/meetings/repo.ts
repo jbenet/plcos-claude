@@ -4,7 +4,7 @@ import type {
   Channel, DiligenceQuestion, DirectContact, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
   QuestionStatus, RaiseWindow, Read, Touchpoint, TouchpointSummary,
 } from './types';
-import { aboutThisRaise } from './types';
+import { aboutThisRaise, isEvent } from './types';
 
 type MeetingRow = {
   meeting_id: string; pursuit_id: string | null; entity_id: string; entity_name: string;
@@ -146,6 +146,8 @@ type TouchRow = {
   direction: Direction | null; owner_name: string; attendees: string[] | null; summary: string | null;
   read: Read | null; read_by_name: string | null; source: string; source_ref: string | null; for_entity: string;
   about: 'raise' | 'other' | null; about_vehicles: string[] | null; about_basis: string | null;
+  about_by: 'rule' | 'claude' | 'person' | null;
+  group_size: number | null;
 };
 
 /** The touchpoint columns, read through a `reach` CTE of (for_entity, entity_id). */
@@ -153,9 +155,14 @@ const TOUCH_FROM_REACH = `
   select m.meeting_id, m.entity_id, e.display_name as entity_name, m.vehicle_id, v.name as vehicle_name,
          m.channel::text as channel, m.kind::text as kind, m.held_on, m.scheduled_for, m.direction,
          u.name as owner_name, m.attendees, m.summary, m.read::text as read, rb.name as read_by_name,
-         m.source, m.source_ref, r.for_entity, m.about, m.about_vehicles, m.about_basis
+         m.source, m.source_ref, r.for_entity, m.about, m.about_vehicles, m.about_basis, m.about_by,
+         g.n as group_size
     from reach r
     join meetings.meeting m on m.entity_id = r.entity_id
+    -- How many of our records one Affinity interaction is with (N81): four or more is an event.
+    left join (select substring(source_ref from '^(interaction:[a-z-]+:[0-9]+):') as iref, count(distinct entity_id)::int as n
+                 from meetings.meeting where source = 'affinity' and source_ref like 'interaction:%' group by 1) g
+      on g.iref = substring(m.source_ref from '^(interaction:[a-z-]+:[0-9]+):')
     join identity.entity e on e.entity_id = m.entity_id
     left join platform.vehicle v on v.id = m.vehicle_id
     join platform.app_user u on u.id = m.owner_id
@@ -199,7 +206,8 @@ const toTouch = (r: TouchRow): Touchpoint => ({
   ownerName: r.owner_name, attendees: r.attendees ?? [], summary: r.summary,
   read: r.read, readByName: r.read_by_name, source: r.source, sourceRef: r.source_ref,
   viaOrganization: r.entity_id === r.for_entity ? null : r.entity_name,
-  about: r.about, aboutVehicles: r.about_vehicles ?? [], aboutBasis: r.about_basis,
+  about: r.about, aboutVehicles: r.about_vehicles ?? [], aboutBasis: r.about_basis, aboutBy: r.about_by,
+  groupSize: Number(r.group_size ?? 1),
 });
 
 /** Each vehicle's raise window (N59), by id. */
@@ -263,7 +271,8 @@ export function summarize(all: Touchpoint[], now = new Date()): TouchpointSummar
   const firm = all.filter((t) => t.viaOrganization);
   const held = touches.filter((t) => t.on && t.on.getTime() <= now.getTime());
   const contact = held.filter((t) => t.channel !== 'research');
-  const meetings = held.filter((t) => t.channel === 'meeting' || t.channel === 'call').map((t) => t.on!);
+  // An event of ours is not a meeting with them (N81): it is a touch, not a meeting on record.
+  const meetings = held.filter((t) => (t.channel === 'meeting' || t.channel === 'call') && !isEvent(t)).map((t) => t.on!);
   // One meeting recorded twice — a note and a calendar entry for the same day — is one meeting.
   const days = [...new Set(meetings.map((d) => d.toISOString().slice(0, 10)))].sort().map((d) => new Date(`${d}T00:00:00Z`));
   const last = contact.reduce<Touchpoint | null>((a, t) => (!a || when(t) > when(a) ? t : a), null);
@@ -272,7 +281,7 @@ export function summarize(all: Touchpoint[], now = new Date()): TouchpointSummar
   const ours = contact.filter((t) => t.direction === 'ours' && (!lastFromThem || t.on! > lastFromThem));
   const awaitingSince = ours.reduce<Date | null>((a, t) => (!a || t.on! < a ? t.on! : a), null);
   const upcoming = touches
-    .filter((t) => !t.on && t.scheduledFor && t.scheduledFor.getTime() > now.getTime())
+    .filter((t) => !t.on && t.scheduledFor && t.scheduledFor.getTime() > now.getTime() && !isEvent(t))
     .reduce<Date | null>((a, t) => (!a || t.scheduledFor! < a ? t.scheduledFor! : a), null);
   const withRead = held.filter((t) => t.read).sort((a, b) => when(b) - when(a))[0];
   const research = held.filter((t) => t.channel === 'research').reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null);
@@ -314,6 +323,21 @@ export async function touchpointsByPair(
     out.set(`${p.entityId}:${p.vehicleId}`, (byEntity.get(p.entityId) ?? [])
       .filter((t) => (w ? aboutThisRaise(t, w) : !t.vehicleId || t.vehicleId === p.vehicleId)));
   }
+  return out;
+}
+
+/**
+ * Every touchpoint with each of many LPs, about anything (N81): theirs and their firm's, keyed by
+ * the LP. What the strategy export reads for the whole relationship, beside each pursuit's own.
+ */
+export async function touchpointsByEntity(entityIds: string[]): Promise<Map<string, Touchpoint[]>> {
+  const out = new Map<string, Touchpoint[]>();
+  if (!entityIds.length) return out;
+  const db = await getDb();
+  for (const r of await db.query<TouchRow>(TOUCH_SELECT, [[...new Set(entityIds)]])) {
+    out.set(r.for_entity, [...(out.get(r.for_entity) ?? []), toTouch(r)]);
+  }
+  for (const list of out.values()) list.sort((a, b) => when(b) - when(a));
   return out;
 }
 

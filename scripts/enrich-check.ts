@@ -10,6 +10,7 @@ import { config } from '../config/deployment';
 import { check, type Finding } from '../lib/enrich/schema';
 import { CAPACITY_EVIDENCE, checkStrategy, gates, isStale, nextOverLimit, nextTooLong, type Strategy } from '../lib/enrich/strategy';
 import type { Path } from '../lib/enrich/connect';
+import { bandByRule } from '../lib/enrich/capacity';
 
 async function main() {
   const dir = join(process.cwd(), config.data.root, 'enrich', 'raw');
@@ -29,7 +30,8 @@ async function main() {
    * filter, unlike W5's: "an estimate for the firm, not for him: a $6B office" is the firm's evidence.
    */
   // Clients' money too (W5 after the search pass): a wealth manager's supervised or advised assets are
-  // its clients', whatever an office's own totals turn out to be allowed to set (open, for Juan).
+  // its clients', not its own. Since Juan's answer (24 Sep, W1 1.49) they may still set a band — by
+  // size, off the table, in a basis that begins "By size" — which is held to the table below.
   const OTHERS_MONEY = /\b(valuation|valued at|rounds?|raised|raise|series [a-f]|sold (?:it |to .{0,40} )?for|sale (?:to .{0,40} )?for|(?:acquired|bought) (?:by .{0,40} )?for|sale price|exit(?:ed)? (?:at|for)|clients?['’]? (?:assets|money)|on behalf of (?:its )?clients|supervised (?:client )?assets|(?:assets )?under advisement|advised assets)\b/i;
   // A phrase that denies ("his stake and proceeds are not public") names no evidence (1.44). Split
   // first, so "not for him" no longer takes "a $6B office" down with it.
@@ -45,6 +47,7 @@ async function main() {
   const bandHasEvidence = (basis: string) =>
     basis.split(/[.;:]\s+|,\s+|\s+and\s+|\s*[()]\s*/).some((phrase) => !OTHERS_MONEY.test(phrase) && !DENIES.test(phrase) && !oldOnly(phrase) && BAND_EVIDENCE.test(phrase));
   const bareBands: string[] = [];
+  const offRule: string[] = [];
   // "bible", "seminary", "ministry" and the like since the search pass (1.32): a religious-education gift went past it.
   const SPECIAL = /\b(church|synagogue|mosque|temple|parish|diocese|congregation|religious|faith[- ]based|evangelical|catholic|jewish|muslim|christian|hindu|buddhist|bible|biblical|seminary|ministry|ministries|missionary|theolog\w*|yeshiva|republican party|democratic party|political action committee|super pac|campaign donor|donated to .{0,30}campaign)\b/i;
   let facts = 0, sourced = 0, bad = 0, conns = 0;
@@ -70,7 +73,10 @@ async function main() {
     // A person's name is not a category (N70): a surname "Church", a first name "Christian".
     if (SPECIAL.test(words.replace(/\b[A-Z][a-z]+ Church\b|\bChristian [A-Z][a-z]+\b/g, ''))) special.push(x.key);
     const cap = x.profile?.capacity;
-    if (cap?.band && !/unknown|not known/i.test(cap.band) && !bandHasEvidence(cap.basis ?? '')) bareBands.push(x.key);
+    // A band by rule (1.49) is held to its rule: the size table, or the floor from angel checks.
+    const byRule = cap?.band ? bandByRule(cap.band, cap.basis ?? '') : null;
+    if (byRule && !byRule.holds) offRule.push(`${x.key.slice(0, 8)}${byRule.want ? ` (${byRule.want})` : ''}`);
+    else if (!byRule && cap?.band && !/unknown|not known/i.test(cap.band) && !bandHasEvidence(cap.basis ?? '')) bareBands.push(x.key);
     const t = x.profile?.investorType ?? 'none';
     types[t] = (types[t] ?? 0) + 1;
   }
@@ -79,6 +85,7 @@ async function main() {
   // carry it), so these are for a person to review, not refused.
   if (special.length) console.log(`  review under 1.16 — a religious or political term in ${special.length} findings: ${special.map((k) => k.slice(0, 8)).join(', ')}`);
   if (bareBands.length) console.log(`  review under 1.18 — a capacity band with no evidence in its basis in ${bareBands.length} findings: ${bareBands.map((k) => k.slice(0, 8)).join(', ')}`);
+  if (offRule.length) console.log(`  fix under 1.49 — a band by size or a floor that isn't what its rule gives, in ${offRule.length} findings (the rule's band in brackets): ${offRule.join(', ')}`);
   // Near-duplicate names in the research set (1.43): a record one letter from another may be the same
   // person misspelled, and a search on either spelling finds the other's pages. Keys only, for a person.
   const setLines = (await readFile(join(process.cwd(), config.data.root, 'enrich', 'research-set.jsonl'), 'utf8').catch(() => ''))

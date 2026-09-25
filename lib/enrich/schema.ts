@@ -21,7 +21,8 @@ export const INVESTOR_TYPES = [
 ] as const;
 export type InvestorType = (typeof INVESTOR_TYPES)[number];
 
-export const CAPACITY_BANDS = ['<$250K', '$250K–1M', '$1–5M', '$5–25M', '>$25M', 'unknown'] as const;
+/** '$100K+ (floor)' (W1 1.49): at least that much, the top not known — many angel checks, sizes unknown. */
+export const CAPACITY_BANDS = ['<$250K', '$100K+ (floor)', '$250K–1M', '$1–5M', '$5–25M', '>$25M', 'unknown'] as const;
 
 export interface Source { url: string; title?: string; published?: string | null; kind: SourceKind }
 

@@ -18,10 +18,18 @@
  *      it says "investor" — the team receives those, it doesn't raise with them.
  *   4. It speaks of a fund, investing, a commitment, the data room, the deck and so on, or names
  *      the firm raising: about a raise, whichever vehicle is raising on its date.
- *   5. It is from, or addressed to, the team's fundraising domain — the sender or a direct
- *      recipient, not someone copied: the same. (N59, after the first pass: an email about something
- *      else counted because someone at the fundraising domain was on copy.)
+ *   5. It is an email from, or addressed to, the team's fundraising domain — the sender or a
+ *      direct recipient, not someone copied: the same. (N59, after the first pass: an email about
+ *      something else counted because someone at the fundraising domain was on copy.) Only an
+ *      email: since N81 a meeting's invitees and a note's author are not passed in. Juan's rule
+ *      was for mail, and everyone on the team is at that domain, so it made every catch-up with
+ *      a colleague on the invite a meeting about the raise (124 of the 670 in 2026).
  *   6. None of these: about something else.
+ *
+ * A record about a raise that names no vehicle is just that: about a raise, which one unclear.
+ * Since N81 it counts for no vehicle until Claude or a person tags it (meetings.event_tag); before,
+ * it counted for every vehicle raising on its date, which put Rails meetings and catch-ups on
+ * Neurotech's ladder.
  *
  * The date is not read here. Whether a record falls inside a vehicle's raise window is decided
  * per vehicle, where it is counted (modules/meetings). Every decision keeps its reason, so a
@@ -39,9 +47,20 @@ export interface About {
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 const word = (s: string) => new RegExp(`(?<![\\p{L}\\p{N}])${escape(s)}(?![\\p{L}\\p{N}])`, 'iu');
+/**
+ * The firm's name. A short one in capitals — "PLC" — is also how a British company ends its name
+ * ("Barclays PLC"), so it matches only as written, in capitals, and not after a capitalised word
+ * (N81). A longer one matches as any name does.
+ */
+const firmWord = (s: string) => (/^[\p{Lu}]{2,4}$/u.test(s)
+  ? new RegExp(`(?<!\\p{Lu}[\\p{L}.&'-]*\\s+)(?<![\\p{L}\\p{N}])${escape(s)}(?![\\p{L}\\p{N}])`, 'u')
+  : word(s));
 
-/** Words of a raise. A GUESS at the vocabulary, from reading the team's notes and subjects. */
-const RAISE_WORDS = /(?<![\p{L}])(fund|funds|fundrais\w*|LPs?|limited partners?|invest(?:ing|ment|ments|or|ors)?|commitments?|commit|subscriptions?|sub ?docs?|capital calls?|data ?rooms?|pitch decks?|decks?|docsend|allocations?|first close|side letters?|term sheets?|PPM|carried interest|management fees?|soft circle)(?![\p{L}])/iu;
+/**
+ * Words of a raise. A GUESS at the vocabulary, from reading the team's notes and subjects. "SPV"
+ * since N81: W12's readers found SPV outreach the rules had read as about nothing.
+ */
+const RAISE_WORDS = /(?<![\p{L}])(SPVs?|fund|funds|fundrais\w*|LPs?|limited partners?|invest(?:ing|ment|ments|or|ors)?|commitments?|commit|subscriptions?|sub ?docs?|capital calls?|data ?rooms?|pitch decks?|decks?|docsend|allocations?|first close|side letters?|term sheets?|PPM|carried interest|management fees?|soft circle)(?![\p{L}])/iu;
 
 /** An out-of-office or other automatic answer. Not a reply from anyone. */
 const AUTO_REPLY = /^\s*(automatic reply|auto(?:matic)?[- ]?(?:reply|response)|autoreply|out of (?:the )?office|ooo\b|abwesenheit|réponse automatique|respuesta automática|risposta automatica)/iu;
@@ -65,7 +84,7 @@ export function aboutRaise(
   }
   const term = RAISE_WORDS.exec(t)?.[0];
   if (term) return { about: 'raise', vehicles: [], basis: `speaks of “${term.toLowerCase()}”` };
-  const firm = firmNames.find((f) => f.trim().length >= 2 && word(f.trim()).test(t));
+  const firm = firmNames.find((f) => f.trim().length >= 2 && firmWord(f.trim()).test(t));
   if (firm) return { about: 'raise', vehicles: [], basis: `names the firm (“${firm}”)` };
   const domain = direct
     .map((a) => (a ?? '').toLowerCase().trim())

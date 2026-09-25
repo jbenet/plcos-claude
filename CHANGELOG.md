@@ -5136,3 +5136,81 @@ keep asking about; and the records to fix.
 118 of 118 properties hold, four of them new: brokers matched whole; a date in May and a Form D's
 first-sale date read right; a park caught whatever its wording, and only by its own date; a correction
 makes a strategy stale.
+
+## N81 — Every event says which vehicle it is about: the timeline shows everything, filtered by fund, and a record counts for a vehicle only when it is tagged with it
+
+**Shipped.** Juan, 24 Sep: "some meetings or notes from affinity are getting attributed to PLC
+Neurotech when they may be for PLC Rails, or they may just be general catchups. Hmm maybe tag each
+event with which vehicles (if any) it involves, then show that in the UIs/UX." Real data, so counts
+only; the examples below are invented.
+
+| | |
+|---|---|
+| ![Timeline by vehicle](docs/changelog/shots/n81/01-timeline-by-vehicle.webp) | **The LP's timeline shows everything, each row labelled.** Every meeting, email and note with them, whatever it was about, with its vehicle first on the line — a vehicle's name, *Vehicle unclear* or *General* — and a filter by fund with counts. The facts above the rows are this pursuit's: only rows tagged with its vehicle count, and a line beside them sums all contact. Here an invented Neurotech LP's *Crypto/Rails: a first look* is on her timeline and not among her Neurotech meetings. |
+| ![Tag a row](docs/changelog/shots/n81/02-tag-a-row.webp) | **Any row can be tagged by a person.** *Tag* opens what the row says now, and who said so — the rules, Claude, a person — and the vehicles to tick, or *General*. Nothing ticked: about a raise, which one unclear. The tag goes on the interaction, so every LP on the meeting takes it, and the next translation keeps it. |
+
+**Why it was wrong.** Two rules of N59 did it. The fundraising-domain rule read a meeting's invitees
+as well as an email's addresses, and everyone on the team is at that domain, so a catch-up with a
+colleague on the invite read as about the raise: 124 meetings and calls of the 670 raise records in
+2026. And a record about a raise that named no vehicle counted for every vehicle raising on its date —
+Neurotech and Rails both, since both windows open on 1 January. Under the old rules 91 meeting-days
+counted for Neurotech across 66 LPs; under the new ones, before any tag, 3 across 2.
+
+**What counts now.** A record counts for a vehicle only when it is tagged with it — it names it, or
+Claude or a person tagged it — inside the vehicle's raise window; a person's tag counts whatever the
+date. About a raise without saying which: *Vehicle unclear*, counted for none. The domain rule reads an
+email's addresses only. Tags live in `meetings.event_tag` (migration `meetings/006`), one per Affinity
+interaction or note; a note on a meeting takes the meeting's.
+
+**Claude read 2,155 records to tag them** (W12, a new workflow in docs/19): every interaction with an
+LP since the earliest window opened (1 Oct 2025), and every note on one since then or with a reading,
+in fifteen batches by LP, eight local agents, no network. 704 were tagged with a vehicle — 74 of them
+inferred from the LP's one list, each basis beginning "Inferred:" so a search finds them — 42 about a
+raise with the vehicle unclear, and 1,409 General. The readers found what the rules miss: event mail and
+a portfolio company's money words read as our raise; SPVs named by sector or round; meetings titled with
+names only, whose vehicle is in the note beside them. After them, 46 meeting-days count for Neurotech
+across 39 LPs, and 8 for two SPVs. Sixty-seven records are about Rails, which has no pipeline in the
+tool yet: they show as Rails on an LP's timeline and count for none, where before they counted for
+Neurotech.
+
+**One decision made for Juan, to overturn:** our own investor events — a dinner or a salon on one
+fund's theme — are about that fund's raise (W12 1.1). Three readers had filed them General, one under
+the fund. A second look at the 120 event records carrying a fund's theme or our name moved 85 to a
+fund (61 Neurotech, 24 Rails), 8 to *Vehicle unclear* (our events about the firm as a whole) and 3 back
+to General (networking at someone else's event). And a calendar entry with four or more of our records
+on it is an event, not a meeting: coming to one counts as opting in, never as a meeting held
+(`GROUP_EVENT`, a GUESS at four).
+
+**The strategy step reads the tags.** Each meeting date and note in `candidates.jsonl` says what it is
+about; `contact` is now the relationship since their raises opened, about anything, and each pursuit has
+its own counted contact (W5 1.8). On the real data, 29 LPs have meetings that count for their own
+vehicle, where the loose rule showed 57. 113 strategies need a re-read on that — 30 cited meetings that
+no longer count, 84 carry a size the capacity rules below can use — and nine agents are re-reading them
+with their firms' (126); the results come in the next entry.
+
+**Capacity, as Juan answered.** An office's size may set a band, read off a table of what similar
+entities commit to one fund (`config.capacity.bySize`, every step a GUESS); many angel checks with no
+sizes set a floor, `$100K+ (floor)`, at five or more (a GUESS at "many"). Each is held to its rule: the
+gate parses the size and flags a band the table doesn't give (W1 1.49, W5 1.9).
+
+**Added in bulk, nothing else on record.** The "31 May names": that day's import added 625 entries to
+Affinity, and 41 LPs in the research set have nothing but that import — no meeting, no email, no note
+(one more comes from an import on 1 July). The 99 counted earlier had nothing *about the raise*; the
+other 58 have older contact, now on their timelines as General. The 42 are listed on the enrichment
+page, with one field for where a whole import came from and one per row; each answer is saved as the
+team's context, which the strategy step reads first.
+
+**On the way:** a long timeline builds only the rows asked for — one real LP has over a thousand, and
+its page went from ten megabytes to under two hundred kilobytes; a dev server applies a migration added
+while it runs; a short firm name in capitals no longer matches a British company's "PLC"; "SPV" is a
+raise word. A request of ours carries no identity (W1 1.48, CLAUDE.md): the one address for a service
+that insists on a contact is a privacy-preserving one, and government sites are read by their own rules.
+
+**Open, for Juan:** five proposals from reconciliation on the re-mapped records wait on Approvals,
+each quoting the tag it rests on; whether our own events should stay with their fund (above); the
+aliases the readers found missing — a two-word short form of the Neurotech fund's name, the firm's name
+with a fund's short name — wait for a yes before they are added.
+
+121 of 121 properties hold, three of them new: Claude's tags lie over the rules, a person's outlive a
+translation, and invitees are never read as evidence; our event is not a meeting; a band by size is the
+table's, and a floor needs five checks. Two older ones now cover the stricter count and "SPV".

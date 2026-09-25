@@ -11,6 +11,7 @@ import type { AffinityMeeting } from './meetings';
 import { importReadings } from './readings';
 import { aboutRaise, addressOf, type About, type AboutVehicle } from './about';
 import { noteText } from './notes';
+import { translateTags } from './event-tags';
 import type { PursuitStatus } from '@/modules/strategy';
 
 /**
@@ -83,6 +84,8 @@ export interface TranslationCounts {
   unreviewedLists: string[];
   /** Touchpoints added this run (N51); one already there is not counted again. */
   touchpoints: number;
+  /** N81: touchpoints whose vehicles came from a tag — Claude's or a person's — not the rules. */
+  tagged: number;
   /** Readings of notes loaded from data/<profile>/readings.jsonc (N55). */
   readings: number;
 }
@@ -112,7 +115,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
   const run = await startRun(SOURCE, 'translate', runBy);
   const counts: TranslationCounts = {
     people: 0, organizations: 0, affiliations: 0, pursuits: 0, byVehicle: {}, byStatus: {}, keptOurs: 0, unplaced: 0, skipped: 0,
-    exposures: 0, readyToHarden: 0, claims: 0, restrictions: 0, ownersNotOnTeam: 0, unreviewedLists: [], touchpoints: 0, readings: 0,
+    exposures: 0, readyToHarden: 0, claims: 0, restrictions: 0, ownersNotOnTeam: 0, unreviewedLists: [], touchpoints: 0, tagged: 0, readings: 0,
   };
   try {
     const [inv, init, found, targets, rawEntries, rawNotes, rawMeetings] = await Promise.all([
@@ -340,6 +343,11 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
         init.team, users, users.get(PLACEHOLDER)!,
         init.vehicles.map((v) => ({ slug: v.slug, name: v.name, aliases: v.aliases })), init.fundraiseDomains, init.firmNames,
       );
+      // What each note is about, and Claude's and people's tags laid over the rules (N81).
+      const about = init.vehicles.map((v) => ({ slug: v.slug, name: v.name, aliases: v.aliases }));
+      counts.tagged = (await translateTags(
+        tx, rawNotes.map((r) => r.payload), (text) => aboutRaise(text, [], about, [], init.firmNames), init.vehicles.map((v) => v.slug),
+      )).applied;
       counts.readings = (await importReadings(tx, rawNotes.map((r) => r.payload))).loaded;
 
       await tx.query(
@@ -350,7 +358,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
 
     await finishRun(run, {
       status: 'ok', requests: 0, records: counts.pursuits, newRecords: counts.people + counts.organizations,
-      note: `${counts.pursuits} pursuits · ${counts.exposures} soft commitments · ${counts.claims} claims · ${counts.restrictions} do-not-approach · ${counts.touchpoints} new touchpoints${counts.readings ? ` · ${counts.readings} note readings` : ''}${counts.unplaced ? ` · ${counts.unplaced} with no status` : ''}`,
+      note: `${counts.pursuits} pursuits · ${counts.exposures} soft commitments · ${counts.claims} claims · ${counts.restrictions} do-not-approach · ${counts.touchpoints} new touchpoints${counts.tagged ? ` · ${counts.tagged} tagged by vehicle` : ''}${counts.readings ? ` · ${counts.readings} note readings` : ''}${counts.unplaced ? ` · ${counts.unplaced} with no status` : ''}`,
       detail: { ...counts, profile: config.data.profile },
     });
   } catch (err) {
@@ -385,7 +393,9 @@ const CHANNEL_OF: Record<Interaction['type'], string> = { email: 'email', meetin
  *
  * Nothing is copied that the notes page already holds: no subject line, no note text, no
  * outside attendee's name. A touchpoint read from Affinity is tied to no vehicle, because
- * Affinity's interactions are not; it counts for every open pursuit of that LP, and says so.
+ * Affinity's interactions are not. What it is about is read from its words (N59), and since N81
+ * it counts for a vehicle only when it is tagged with it: named there, or tagged by Claude or a
+ * person (./event-tags). One about a raise that names none counts for none, and says so.
  */
 async function touchpoints(
   tx: Queryable, entries: E[], notes: AffinityNote[], meetings: AffinityMeeting[],
@@ -396,7 +406,7 @@ async function touchpoints(
   // What each is about is decided afresh on every translation (N59), so a corrected rule
   // corrects every record it touched. Several sources can name one touchpoint — a list entry's
   // field, the calendar, a note — and it is about the raise if any of them says so.
-  await tx.query(`update meetings.meeting set about = null, about_vehicles = '{}', about_basis = null where source = 'affinity'`);
+  await tx.query(`update meetings.meeting set about = null, about_vehicles = '{}', about_basis = null, about_by = null where source = 'affinity'`);
   const read = (text: string, direct: Array<string | null | undefined>) => aboutRaise(text, direct, vehicles, domains, firmNames);
   const ours = new Map((await tx.query<{ source_id: string; entity_id: string }>(
     `select source_id, entity_id from identity.source_record where source = $1`, [SOURCE],
@@ -423,12 +433,13 @@ async function touchpoints(
          about_vehicles = array(select distinct x from unnest(meetings.meeting.about_vehicles || excluded.about_vehicles) x order by x),
          about_basis = case when meetings.meeting.about = 'raise' then meetings.meeting.about_basis
                             when excluded.about = 'raise' then excluded.about_basis
-                            else coalesce(meetings.meeting.about_basis, excluded.about_basis) end`;
+                            else coalesce(meetings.meeting.about_basis, excluded.about_basis) end,
+         about_by = 'rule'`;
     const r = await tx.query<{ meeting_id: string }>(
       `insert into meetings.meeting
          (entity_id, vehicle_id, channel, direction, held_on, scheduled_for, owner_id, attendees, source, source_ref,
-          about, about_vehicles, about_basis)
-       values ($1, null, $2::meetings.channel, $3, $4, $5, $6, $7, 'affinity', $8, $9, $10, $11)
+          about, about_vehicles, about_basis, about_by)
+       values ($1, null, $2::meetings.channel, $3, $4, $5, $6, $7, 'affinity', $8, $9, $10, $11, 'rule')
        on conflict (source, source_ref) where source_ref is not null do update set ${row.exact
          ? 'held_on = excluded.held_on, scheduled_for = excluded.scheduled_for, attendees = excluded.attendees, '
          : ''}${merge}
@@ -458,9 +469,10 @@ async function touchpoints(
         owner: who(d.from?.person, d.from?.emailAddress) ?? internal.map((p) => who(p)).find(Boolean) ?? placeholder,
         attendees: internal.map((p) => [p.firstName, p.lastName].filter(Boolean).join(' ')).filter(Boolean),
         // The sender and those it was addressed to: someone on copy doesn't make it about the raise.
-        about: read(d.subject ?? d.title ?? '', [
-          addressOf(d.from), ...(d.to ?? []).map(addressOf), ...(d.attendees ?? []).map(addressOf),
-        ]),
+        // A message only (N81): who was invited to a meeting says nothing about what it was for.
+        about: read(d.subject ?? d.title ?? '', d.type === 'email' || d.type === 'chat-message'
+          ? [addressOf(d.from), ...(d.to ?? []).map(addressOf)]
+          : []),
       });
     }
   }
@@ -481,7 +493,8 @@ async function touchpoints(
         entity, ref: `interaction:meeting:${mt.id}:${key}`, channel: 'meeting', at: mt.startTime, exact: true,
         direction: 'both', owner: internal.map((x) => who(x)).find(Boolean) ?? placeholder,
         attendees: internal.map((x) => [x.firstName, x.lastName].filter(Boolean).join(' ')).filter(Boolean),
-        about: read(mt.title ?? '', (mt.attendeesPreview?.data ?? []).map((a) => a.person?.primaryEmailAddress ?? a.emailAddress)),
+        // Its title, not its invitees (N81): everyone on the team is at the fundraising domain.
+        about: read(mt.title ?? '', []),
       });
     }
   }
@@ -502,7 +515,8 @@ async function touchpoints(
         entity, ref: `interaction:${i.type}:${i.id}:${key}`, channel: CHANNEL_OF[i.type], at: n.createdAt, exact: false,
         direction: i.type === 'meeting' || i.type === 'call' ? 'both' : null,
         owner: who(n.creator) ?? placeholder, attendees: [],
-        about: read(noteText(n.content?.html ?? ''), [n.creator?.primaryEmailAddress]),
+        // Its words, not its author (N81): every note is written by someone on the team.
+        about: read(noteText(n.content?.html ?? ''), []),
       });
     }
   }

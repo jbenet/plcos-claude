@@ -30,4 +30,29 @@ export async function importFindingsAction(): Promise<void> {
   redirect(`/developer/enrich?imported=${r.mapped}&claims=${r.claims}&refused=${r.rejected}`);
 }
 
-// dev rev 18: bumped so the dev server rebuilds this action with the lib code it imports.
+/**
+ * Where LPs added in a bulk import came from (N81): one answer for the whole day, and any row's own
+ * answer over it. Each is saved as the team's context on the LP — what the strategy step reads first,
+ * and what makes its strategy due again. Blank rows are left alone.
+ */
+export async function sourceBulkAction(formData: FormData): Promise<void> {
+  const { addTeamContext } = await import('@/modules/research');
+  const user = await (await auth()).currentUser();
+  const day = String(formData.get('day') ?? '');
+  const all = String(formData.get('all') ?? '').trim();
+  let saved = 0;
+  for (const id of formData.getAll('pursuitId').map(String)) {
+    const own = String(formData.get(`src:${id}`) ?? '').trim();
+    const said = own || all;
+    if (!said) continue;
+    const entityId = String(formData.get(`ent:${id}`) ?? '');
+    const vehicleId = String(formData.get(`veh:${id}`) ?? '') || null;
+    await addTeamContext(entityId, user.id, `Where they came from (added to Affinity in the import of ${day}): ${said}`, { pursuitId: id, vehicleId, source: 'bulk-import', day });
+    saved++;
+  }
+  await appendAudit({ actorId: user.id, action: 'enrich.sourced', subjectType: 'enrich', detail: { day, saved, forAll: Boolean(all) } });
+  revalidatePath('/dev/enrich');
+  redirect(`/developer/enrich?sourced=${saved}#bulk`);
+}
+
+// dev rev 19: bumped so the dev server rebuilds this action with the lib code it imports.

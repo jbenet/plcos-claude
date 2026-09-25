@@ -996,7 +996,7 @@ async function main() {
         const windowed = s11.calls[0]?.searchParams.get('filter') ?? '';
         check(
           'The calendar is read in bulk from its window, then only what changed, and stops at its cap',
-          cal?.status === 'ok' && cal.records === 10 && cal.requests === 1 && cal2?.status === 'ok' && cal2.newRecords === 0 &&
+          cal?.status === 'ok' && cal.records === 11 && cal.requests === 1 && cal2?.status === 'ok' && cal2.newRecords === 0 &&
             (cal2.detail as { mode?: string }).mode === 'since' && capped2?.status === 'failed' && capped2.requests === 3 &&
             (capped2.detail as { stoppedAtCap?: boolean }).stoppedAtCap === true && windowed.startsWith('startTime>='),
           `first read ${cal?.records} meetings in ${cal?.requests} request; second ${cal2?.newRecords} new (${(cal2?.detail as { mode?: string })?.mode}); capped read ${capped2?.status} at ${capped2?.requests} requests; window filter "${windowed}"`,
@@ -1209,7 +1209,7 @@ async function main() {
         const touchAfter = await n(`select count(*)::text as n from meetings.meeting where source = 'affinity'`);
         check(
           'Affinity’s interactions become dated touchpoints, one each, and translating again adds none',
-          nadiaSum.meetingDates.map((d) => d.toISOString().slice(0, 10)).join(',') === '2026-06-18,2026-08-21,2026-09-10' &&
+          nadiaSum.meetingDates.map((d) => d.toISOString().slice(0, 10)).join(',') === '2026-06-18,2026-07-09,2026-08-21,2026-09-10' &&
             nadiaSum.nextMeeting?.toISOString().slice(0, 10) === '2026-10-06' &&
             nadiaLog.every((t) => t.vehicleId === null && t.summary === null) && touchBefore > 0 && touchBefore === touchAfter,
           `meetings ${nadiaSum.meetingDates.map((d) => d.toISOString().slice(0, 10)).join(', ')}, next ${nadiaSum.nextMeeting?.toISOString().slice(0, 10)}; ${nadiaLog.length} touchpoints, none tied to a vehicle, no text copied; Affinity touchpoints ${touchBefore} → ${touchAfter}`,
@@ -1345,19 +1345,30 @@ async function main() {
               // Someone at the fundraising domain only on copy: translation passes the sender and
               // the direct recipients, so here there is none.
               ['Re: Panel at the spring conference?', ['host@events.example'], 'other', ''],
+              // N81: a short firm name in capitals is how a British company ends its name.
+              ['Barclays PLC: results call', [], 'other', ''],
+              ['Intro: Sam <> PLC', [], 'raise', ''],
+              ['The Lattice SPV: next steps', [], 'raise', ''],
             ];
             const wrong = cases.filter(([text, addrs, about, v]) => {
-              const r = ab.aboutRaise(text, addrs, vs, dom, ['PL Capital']);
+              const r = ab.aboutRaise(text, addrs, vs, dom, ['PL Capital', 'PLC']);
               return r.about !== about || (v ? !r.vehicles.includes(v) : r.vehicles.length > 0);
             });
             const w = { vehicleId: 'v1', slug: 'neurotech', name: 'N', opens: new Date('2026-01-01T00:00:00Z'), closes: null, note: null };
-            const touch = (on: string, about: 'raise' | 'other', vehicles: string[] = []) => ({
+            const touch = (on: string, about: 'raise' | 'other', vehicles: string[] = [], by: 'rule' | 'claude' | 'person' = 'rule') => ({
               touchpointId: 't', entityId: 'e', entityName: 'E', vehicleId: null, vehicleName: null, channel: 'email' as const, kind: null,
               on: new Date(on), scheduledFor: null, direction: 'theirs' as const, ownerName: 'x', attendees: [], summary: null,
               read: null, readByName: null, source: 'affinity', sourceRef: 'r', viaOrganization: null, about, aboutVehicles: vehicles, aboutBasis: null,
+              aboutBy: by,
             });
-            const old2021 = mt.aboutThisRaise(touch('2021-05-01T00:00:00Z', 'raise'), w);
-            const in2026 = mt.aboutThisRaise(touch('2026-03-01T00:00:00Z', 'raise'), w);
+            const old2021 = mt.aboutThisRaise(touch('2021-05-01T00:00:00Z', 'raise', ['neurotech']), w);
+            const in2026 = mt.aboutThisRaise(touch('2026-03-01T00:00:00Z', 'raise', ['neurotech']), w);
+            // N81: about a raise without saying which counts for no vehicle; a person's tag counts
+            // before the window opens, Claude's doesn't.
+            const unnamed2026 = mt.aboutThisRaise(touch('2026-03-01T00:00:00Z', 'raise'), w);
+            const personEarly = mt.aboutThisRaise(touch('2025-11-01T00:00:00Z', 'raise', ['neurotech'], 'person'), w);
+            const claudeEarly = mt.aboutThisRaise(touch('2025-11-01T00:00:00Z', 'raise', ['neurotech'], 'claude'), w);
+            const shows = [mt.eventAbout(touch('2026-03-01T00:00:00Z', 'raise'), [w]).kind, mt.eventAbout(touch('2021-05-01T00:00:00Z', 'raise'), [w]).kind].join('/');
             const otherVehicle = mt.aboutThisRaise(touch('2026-03-01T00:00:00Z', 'raise', ['spv-x']), w);
             const aboutElse = mt.aboutThisRaise(touch('2026-03-01T00:00:00Z', 'other'), w);
             const noWindow = { ...w, slug: 'spv-x', opens: null };
@@ -1378,11 +1389,74 @@ async function main() {
             }
             check(
               'A touchpoint counts for a raise only when it says so and falls in its window; a proposal on records that changed is withdrawn',
-              wrong.length === 0 && !old2021 && in2026 && !otherVehicle && !aboutElse && !generalNoWindow && namedNoWindow && unread === 0 && rows > 0 && (!still || (withdrawn >= 1 && deferred === 1)),
+              wrong.length === 0 && !old2021 && in2026 && !otherVehicle && !aboutElse && !generalNoWindow && namedNoWindow && unread === 0 && rows > 0 && (!still || (withdrawn >= 1 && deferred === 1)) &&
+                !unnamed2026 && personEarly && !claudeEarly && shows === 'unclear/none',
               `classifier: ${cases.length - wrong.length} of ${cases.length} right${wrong.length ? ` (wrong: ${wrong.map((c) => c[0]).join('; ')})` : ''}; ` +
                 `about the raise but from 2021: ${old2021 ? 'COUNTED' : 'not counted'}; in 2026: ${in2026 ? 'counted' : 'NOT COUNTED'}; naming another vehicle: ${otherVehicle ? 'COUNTED' : 'not counted'}; ` +
                 `about something else: ${aboutElse ? 'COUNTED' : 'not counted'}; no window, about a raise in general: ${generalNoWindow ? 'COUNTED' : 'not counted'}, naming it: ${namedNoWindow ? 'counted' : 'NOT COUNTED'}; ${unread} of ${rows} Affinity touchpoints unread after translating; ` +
+                `about a raise, no vehicle named, in 2026: ${unnamed2026 ? 'COUNTED' : 'not counted'} (shown ${shows}); tagged before the window by a person: ${personEarly ? 'counted' : 'NOT COUNTED'}, by Claude: ${claudeEarly ? 'COUNTED' : 'not counted'}; ` +
                 `open proposal whose records changed: ${still ? (deferred ? 'withdrawn' : 'STILL OPEN') : 'none open to test'}`,
+            );
+          }
+
+          // An event of ours is not a meeting (N81): a calendar entry with four or more of our records
+          // on it counts as their opting in, never as a meeting held, and isn't counted as a meeting.
+          {
+            const rcx = await import('../lib/reconcile');
+            const mtx = await import('../modules/meetings');
+            const t = (id: string, on: string, groupSize: number) => ({
+              touchpointId: id, entityId: 'e', entityName: 'E', vehicleId: null, vehicleName: null, channel: 'meeting' as const, kind: null,
+              on: new Date(on), scheduledFor: null, direction: 'both' as const, ownerName: 'x', attendees: [], summary: null,
+              read: null, readByName: null, source: 'affinity', sourceRef: `interaction:meeting:${id}:person:1`, viaOrganization: null,
+              about: 'raise' as const, aboutVehicles: ['neurotech'], aboutBasis: null, aboutBy: 'claude' as const, groupSize,
+            });
+            const salon = t('1', '2026-03-01T00:00:00Z', 23);
+            const onlyEvent = rcx.recordsOnFile([salon], [], new Date('2026-09-01T00:00:00Z'));
+            const both = rcx.recordsOnFile([salon, t('2', '2026-04-01T00:00:00Z', 1)], [], new Date('2026-09-01T00:00:00Z'));
+            const sum = mtx.summarize([salon, t('2', '2026-04-01T00:00:00Z', 1)], new Date('2026-09-01T00:00:00Z'));
+            check('Our event is not a meeting: coming to it is opting in, not a meeting held, and it isn’t counted as a meeting',
+              !onlyEvent.meeting_held && /came to our event/.test(onlyEvent.target_opted_in?.note ?? '') &&
+                both.meeting_held?.ref.includes(':2:') === true && /came to our event/.test(both.target_opted_in?.note ?? '') && sum.meetingDates.length === 1,
+              `event alone: held ${onlyEvent.meeting_held ? 'PROPOSED' : 'not proposed'}, opted in "${(onlyEvent.target_opted_in?.note ?? 'none').slice(0, 40)}"; with a later one-to-one: held from ${both.meeting_held?.ref.split(':')[2] ?? 'none'}; meetings counted: ${sum.meetingDates.length}`);
+          }
+
+          // Which vehicles each event is about (N81): the fundraising domain reads a message's
+          // addresses only, never a meeting's invitees; Claude's file is laid over the rules; a
+          // person's tag is written at once, to the notes on the meeting too, and the next
+          // translation keeps it; a line naming a vehicle we don't have is refused.
+          {
+            const et = await import('../lib/connectors/affinity/event-tags');
+            // The rule's own words when it fires (about.ts, rule 5); "not to or from" is its absence.
+            const DOMAIN = `about = 'raise' and about_basis like 'from or to the fundraising domain%'`;
+            const byDomain = await n(`select count(*)::text as n from meetings.meeting where source = 'affinity' and channel in ('meeting', 'call') and ${DOMAIN}`);
+            const domainChannels = (await adb.query<{ channel: string; n: string }>(
+              `select channel::text, count(*)::text as n from meetings.meeting where source = 'affinity' and ${DOMAIN} group by 1 order by 1`,
+            )).map((r) => `${r.channel} ${r.n}`).join(', ') || 'none';
+            const ref = 'interaction:meeting:55012';
+            const claudeRows = await n(`select count(*)::text as n from meetings.meeting where source = 'affinity' and about_by = 'claude'
+                                          and source_ref like $1 and about_vehicles = '{neurotech}'`, [`${ref}:%`]);
+            const rails = await n(`select count(*)::text as n from meetings.meeting where source_ref like 'interaction:meeting:55024:%' and about_vehicles = '{rails}'`);
+            await et.tagEvent(juanId, ref, { about: 'other', vehicles: [], basis: 'a walkthrough for her partner, not the raise' });
+            const personNow = await n(`select count(*)::text as n from meetings.meeting where source_ref like $1 and about_by = 'person' and about = 'other'`, [`${ref}:%`]);
+            const noteTook = await n(`select count(*)::text as n from meetings.event_tag where ref = 'note:30008' and by_kind = 'person' and about = 'other'`);
+            await tr.translate(null, { mappingPath: file });
+            const personKept = await n(`select count(*)::text as n from meetings.meeting where source_ref like $1 and about_by = 'person' and about = 'other'`, [`${ref}:%`]);
+            const logged = await n(`select count(*)::text as n from platform.audit_log where action = 'event.tagged' and detail->>'ref' = $1`, [ref]);
+            const slugs = new Set(['neurotech']);
+            const refused = [
+              et.checkLine('interaction:meeting:1', { about: 'raise', vehicles: ['not-ours'] }, slugs),
+              et.checkLine('note:1', { about: 'other', vehicles: ['neurotech'] }, slugs),
+              et.checkLine('interaction:meeting:1:person:7', { about: 'raise', vehicles: [] }, slugs),
+              et.checkLine('note:1', { about: 'raise', vehicles: [], basis: 'recovering from surgery' }, slugs),
+            ].filter((x) => typeof x === 'string').length;
+            // Put it back as Claude read it, for what follows.
+            await adb.query(`delete from meetings.event_tag where ref in ($1, 'note:30008') and by_kind = 'person'`, [ref]);
+            await tr.translate(null, { mappingPath: file });
+            check(
+              'Each event says which vehicles it is about: invitees are not evidence, Claude’s tags lie over the rules, and a person’s tag outlives a translation',
+              byDomain === 0 && claudeRows >= 1 && rails >= 1 && personNow >= 1 && noteTook === 1 && personKept === personNow && logged === 1 && refused === 4,
+              `meetings and calls read as about the raise by the domain: ${byDomain} (all read so: ${domainChannels}); Claude's tag on the fee walkthrough: ${claudeRows} rows; the Crypto/Rails meeting tagged Rails: ${rails}; ` +
+                `a person's tag: ${personNow} rows at once, the note on it ${noteTook ? 'tagged too' : 'NOT TAGGED'}, ${personKept} after translating again, ${logged} logged; bad lines refused: ${refused} of 4`,
             );
           }
 
@@ -1670,6 +1744,26 @@ async function main() {
           const missed = evidence.filter((b) => !hasCapacityEvidence(b)).length, passed = not.filter((b) => hasCapacityEvidence(b)).length;
           check('A capacity band rests on evidence: not a denial, not a company’s valuation or round, not a figure called unknown',
             missed === 0 && passed === 0, `evidence missed: ${missed} of ${evidence.length}; non-evidence accepted: ${passed} of ${not.length}`);
+        }
+
+        // Capacity by rule (W1 1.49, W5 1.9; Juan, 24 Sep): an office's size sets the band the table
+        // gives, and many angel checks a floor — each held to its rule, so a band that says "by size"
+        // and isn't the table's is flagged, and a client-assets size no longer blocks the estimate.
+        {
+          const { gates } = await import('../lib/enrich/strategy');
+          const cap = await import('../lib/enrich/capacity');
+          const contact = { lastFromThem: null, meetings: 0, groupMeetings: 0 };
+          const flags = (band: string, basis: string) => gates({ list: '2027', scores: { capacity: { band, basis } } as never, route: null }, { contact, money: null },
+            { profile: { investorType: 'advisor', capacity: { band: 'unknown', basis: '' } } }, null);
+          const table = cap.bandBySize('family_office', 800e6) === '$1–5M' && cap.bandBySize('individual', 20e6) === '<$250K' && cap.bandBySize('nothing', 1e9) === null;
+          const bySize = flags('$1–5M', 'By size: a wealth manager with $4.2 billion under management, per its ADV');
+          const offTable = flags('$5–25M', 'By size: a wealth manager with $4.2 billion under management, per its ADV');
+          const floor = flags('$100K+ (floor)', 'Floor: 12 angel checks on record, sizes unknown');
+          const thinFloor = flags('$100K+ (floor)', 'Floor: 3 angel checks on record');
+          check('A band by size is the table’s, and a floor needs many angel checks: each held to its rule',
+            table && bySize.length === 0 && offTable.includes('capacity off the size table (it gives $1–5M)') && floor.length === 0 &&
+              thinFloor.includes('a floor without the angel checks behind it') && thinFloor.includes('capacity ahead of the evidence'),
+            `table: ${table}; by size, the table's band: ${bySize.join(', ') || 'no flags'}; another band: ${offTable.join(', ')}; floor on 12 checks: ${floor.join(', ') || 'no flags'}; on 3: ${thinFloor.join(', ')}`);
         }
 
         // The loop's own measurements (N70): the critic's rounds from their files — a round in two

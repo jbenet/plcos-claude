@@ -14,7 +14,8 @@ import type { Triage } from '@/lib/enrich/triage';
 import type { ConnectorPlan } from '@/lib/enrich/connectors';
 import { latestRun } from '@/modules/sources';
 import { readQuality } from '@/lib/enrich/quality';
-import { exportResearchSetAction, importFindingsAction } from './actions';
+import { exportResearchSetAction, importFindingsAction, sourceBulkAction } from './actions';
+import { addedInBulk, BULK_DAY } from '@/lib/enrich/unsourced';
 
 /** The checks the records point to before anyone writes (iteration 3, docs/19). */
 const FIRSTS: Array<{ id: NonNullable<Triage['first']>; label: string; means: string }> = [
@@ -61,7 +62,7 @@ async function pagesOnly(dir: string): Promise<{ pages: number; partial: number 
  * land in files here first, and an import maps them in — so a mapping can change and be run
  * again without anything being searched twice.
  */
-export default async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?: string; imported?: string; claims?: string; refused?: string }> }) {
+export default async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?: string; imported?: string; claims?: string; refused?: string; sourced?: string }> }) {
   const sp = await searchParams;
   const dir = enrichDir();
   const pursuits = (await listPursuits(null)).filter((p) => !p.historical && RESEARCH_STATUSES.includes(p.status));
@@ -80,11 +81,11 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
     latestRun('enrich', 'import'),
     openSuggestions(),
   ]);
-  const fixes = await latestRecordsToFix();
+  const [fixes, bulk] = await Promise.all([latestRecordsToFix(), addedInBulk()]);
   // W8, the portfolio view: every proposal together, this year's close first, then by how much
   // they could do and how ready they are. A person decides each on its LP's page.
   const LEVEL = { high: 3, medium: 2, low: 1, unknown: 0 } as Record<string, number>;
-  const BAND = { '>$25M': 5, '$5–25M': 4, '$1–5M': 3, '$250K–1M': 2, '<$250K': 1 } as Record<string, number>;
+  const BAND = { '>$25M': 5, '$5–25M': 4, '$1–5M': 3, '$250K–1M': 2, '$100K+ (floor)': 1.5, '<$250K': 1 } as Record<string, number>;
   const open = suggestions.filter((x) => x.status === 'proposed');
   const st = (x: (typeof open)[number]) => x.data as unknown as Strategy;
   const ranked = [...open].sort((a, b) =>
@@ -329,6 +330,68 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
           decided on its LP&rsquo;s page: accepting sets the next step, and nothing else moves.
         </p>
       </div>
+
+      {bulk.length > 0 && (
+        <div className="card" id="bulk">
+          <div className="chead">
+            <h2>Added in bulk, nothing else on record</h2>
+            <span className="lbl">{n(bulk.reduce((a, d) => a + d.rows.length, 0))} LPs · {bulk.length} {bulk.length === 1 ? 'import' : 'imports'}</span>
+          </div>
+          <div className="cbody">
+            <p className="p2" style={{ marginTop: 0 }}>
+              These LPs came into Affinity in a bulk import — a day that added {n(Math.min(...bulk.map((d) => d.added)))} or more
+              entries at once — and that import is all we have: no meeting, no email, no note, no word from the team. Nothing
+              says who suggested them or who knows them, so their strategies can&rsquo;t choose a route. Say where they came
+              from — for the whole import, or row by row — and it is saved as the team&rsquo;s context on each, which the
+              strategy step reads first.
+            </p>
+            {sp.sourced && <p className="p2"><b>Saved for {sp.sourced}.</b> Their strategies are due again.</p>}
+          </div>
+          {bulk.map((d) => (
+            <form key={d.day} action={sourceBulkAction} className="bulkday">
+              <input type="hidden" name="day" value={d.day} />
+              <div className="cbody">
+                <div className="fact">
+                  <span>Import of {new Date(`${d.day}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  <span>{n(d.added)} entries that day · {n(d.inSet)} in the research set · {n(d.rows.length)} with nothing else on record</span>
+                </div>
+                <label className="bulkall">
+                  <span>Where the whole import came from</span>
+                  <input name="all" placeholder="e.g. the conference attendee list, a partner's contacts" maxLength={300} />
+                </label>
+              </div>
+              <table className="list sugtable">
+                <thead><tr><th style={{ width: 220 }}>LP</th><th>On</th><th>Owner</th><th style={{ width: '36%' }}>Where from, if not the import&rsquo;s</th></tr></thead>
+                <tbody>
+                  {d.rows.map((r) => (
+                    <tr key={r.pursuitId}>
+                      <td>
+                        <Link href={`/targets/${r.pursuitId}`}><b>{r.name}</b></Link>
+                        <div className="muted" style={{ fontSize: 11 }}>{r.org ?? '—'}</div>
+                        <input type="hidden" name="pursuitId" value={r.pursuitId} />
+                        <input type="hidden" name={`ent:${r.pursuitId}`} value={r.entityId} />
+                        <input type="hidden" name={`veh:${r.pursuitId}`} value={r.vehicleId} />
+                      </td>
+                      <td style={{ fontSize: 12 }}>{r.vehicle} · {r.status}</td>
+                      <td style={{ fontSize: 12 }}>{r.owner ?? <span className="muted">nobody</span>}</td>
+                      <td><input name={`src:${r.pursuitId}`} aria-label={`Where ${r.name} came from`} maxLength={300} className="bulksrc" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="cbody" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button className="btn p" type="submit">Save where they came from</button>
+                <span className="muted" style={{ fontSize: 12 }}>A row left blank takes the import&rsquo;s answer; with no answer at all, nothing is saved.</span>
+              </div>
+            </form>
+          ))}
+          <p className="cover">
+            <b>Found by rule:</b> an LP in the research set whose first entry on any Affinity list was added on a day with{' '}
+            {n(BULK_DAY)} or more additions (<code>BULK_DAY</code>, a GUESS), with no touchpoint, no note in Affinity and no context
+            from the team (<code>lib/enrich/unsourced.ts</code>). Nothing here writes to Affinity.
+          </p>
+        </div>
+      )}
 
       {fixes && (
         <div className="card">

@@ -579,6 +579,61 @@
     ],
     "totalCount": 3
    }
+  },
+  {
+   "id": 55024,
+   "loggingType": "automated",
+   "title": "Crypto/Rails: a first look",
+   "startTime": "2026-07-09T15:00:00Z",
+   "endTime": "2026-07-09T15:30:00Z",
+   "allDay": false,
+   "creator": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "organizer": {
+    "emailAddress": "juan@example.com",
+    "person": {
+     "id": 90001,
+     "firstName": "Juan",
+     "lastName": null,
+     "primaryEmailAddress": "juan@example.com",
+     "type": "internal"
+    }
+   },
+   "createdAt": "2026-07-02T09:00:00Z",
+   "updatedAt": null,
+   "attendeesPreview": {
+    "data": [
+     {
+      "emailAddress": "juan@example.com",
+      "person": {
+       "id": 90001,
+       "firstName": "Juan",
+       "lastName": null,
+       "primaryEmailAddress": "juan@example.com",
+       "type": "internal"
+      }
+     },
+     {
+      "emailAddress": "nadia@brandt-family.example",
+      "person": {
+       "id": 7001,
+       "firstName": "Nadia",
+       "lastName": "Brandt",
+       "primaryEmailAddress": "nadia@brandt-family.example",
+       "type": "external"
+      }
+     }
+    ],
+    "totalCount": 2
+   }
   }
  ],
  "pagination": {

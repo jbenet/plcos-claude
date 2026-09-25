@@ -1,18 +1,21 @@
 import Link from '@/components/ui/AppLink';
 import { ago, shortDate } from '@/lib/time';
 import {
-  CHANNEL_LABEL, DIRECTION_LABEL, READ_LABEL, type Touchpoint, type TouchpointSummary,
+  CHANNEL_LABEL, DIRECTION_LABEL, READ_LABEL, eventAbout, isEvent, type EventAbout, type RaiseWindow, type Touchpoint, type TouchpointSummary,
 } from '@/modules/meetings';
 import type { ShownRead } from '@/lib/reads';
 import type { NoteView } from '@/lib/connectors/affinity/notes';
 import { WHAT_LABEL, type What } from '@/lib/connectors/affinity/readings';
 import { decideReadingAction } from '@/app/targets/actions';
+import { interactionRef, noteRef } from '@/lib/connectors/affinity/event-tags';
 import { Glyph, type GlyphName } from '@/components/ui/Glyph';
 import { refOf, type RungRecord } from '@/lib/reconcile';
 import {
   RUNG_LABEL, STATUS_LABEL, rungIndex, type LadderEvent, type LadderRung, type PursuitStatus, type PursuitUpdate,
 } from '@/modules/strategy';
 import { EntryBox } from './EntryBox';
+import { TIMELINE_PAGE, TimelineRows, type TimelineOption, type TimelineRow } from './TimelineRows';
+import { TagControl, TagVehicles, type TagVehicle } from './TagControl';
 
 /** A status change from the audit log (N61): what it was, what it became, who, and why. */
 export interface StatusEvent {
@@ -37,7 +40,6 @@ export interface TouchContext {
   health?: boolean;
 }
 
-const SHOWN = 12;
 const CLIP = 360;
 const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth'];
 
@@ -70,6 +72,8 @@ const SIGNALS: What[] = ['questions', 'materials', 'indication', 'signed', 'decl
 
 function touchMark(t: Touchpoint, now: number): Mark {
   const upcoming = !t.on && t.scheduledFor && t.scheduledFor.getTime() > now;
+  // Many of ours on one calendar entry (N81): an event, not a meeting with them.
+  if (isEvent(t)) return { name: 'ticket', title: upcoming ? 'An event, still ahead' : 'An event: many of ours on one calendar entry' };
   switch (t.channel) {
     case 'meeting': return upcoming ? { name: 'calendar-next', title: 'Meeting, still ahead' } : { name: 'calendar', title: 'Meeting' };
     case 'call': return { name: 'phone', title: 'Call' };
@@ -173,13 +177,52 @@ function RungState({ rungs, waiting, proposalId }: { rungs: LadderEvent[]; waiti
   );
 }
 
-function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate }: {
+type Tagger = 'rule' | 'claude' | 'person' | null;
+
+/** Who said what a row is about, and on what: for the tag's panel, and a chip's title. */
+function whySaid(by: Tagger, byName: string | null, basis: string | null): string {
+  const who = by === 'person' ? `Tagged by ${byName ?? 'a person'}` : by === 'claude' ? 'Tagged by Claude' : by === 'rule' ? 'Read by the rules' : 'Logged here';
+  return basis ? `${who}: ${basis}` : who;
+}
+
+/**
+ * What a row is about, first on its line (N81): each vehicle it is about — marked when it falls
+ * outside that vehicle's raise window and so is not counted for it — or "Vehicle unclear", or
+ * "General": not about one raise, and so about the LP whatever the vehicle. Words, not colour: colour
+ * only repeats them.
+ */
+function AboutChips({ a, why }: { a: EventAbout; why: string }) {
+  if (a.kind === 'vehicles') {
+    return (
+      <>
+        {a.vehicles.map((v) => (
+          <span key={v.slug} className={`vtag${v.counts ? '' : ' out'}`} title={v.counts ? why : `${why} — outside its raise window, so not counted for it`}>
+            {v.name}{v.counts ? '' : <i> · not counted</i>}
+          </span>
+        ))}
+      </>
+    );
+  }
+  if (a.kind === 'unclear') return <span className="vtag unclear" title={why}>Vehicle unclear</span>;
+  return <span className="vtag none" title={why}>General</span>;
+}
+
+/** What a row is about, in the tag panel's words: "PLC Neurotech I — Tagged by Claude: …". */
+function nowSaid(a: EventAbout, why: string): string {
+  return `${a.kind === 'vehicles' ? a.vehicles.map((v) => v.name).join(', ') : a.kind === 'unclear' ? 'a raise, vehicle unclear' : 'general'} — ${why}`;
+}
+
+function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate, about, tagging }: {
   t: Touchpoint; c?: TouchContext; now: number;
   rungs?: LadderEvent[]; waiting?: LadderRung[]; proposalId?: string | null;
   /** Logged by an update: its words are the update's, shown there. */
   fromUpdate?: PursuitUpdate;
+  about: EventAbout;
+  tagging: { pursuitId: string };
 }) {
   const on = t.on ?? t.scheduledFor;
+  const why = whySaid(t.source === 'us' ? null : t.aboutBy, null, t.aboutBasis);
+  const ref = t.source === 'affinity' ? interactionRef(t.sourceRef) : null;
   const who = t.attendees.length ? `With ${t.attendees.join(', ')}` : t.ownerName === 'Not on the team' ? 'Who from our side: not recorded' : t.ownerName;
   const mark = touchMark(t, now);
   return (
@@ -187,8 +230,10 @@ function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate 
       <Glyph name={mark.name} title={mark.title} tone={mark.tone} />
       <div className="anote">
         <div className="p2">
+          <AboutChips a={about} why={why} />{' '}
           {on ? shortDate(on) : 'undated'}{!t.on && t.scheduledFor ? ' · scheduled' : ''} · {CHANNEL_LABEL[t.channel]}
-          {t.direction ? ` · ${DIRECTION_LABEL[t.direction]}` : ''} · {t.vehicleName ?? 'no vehicle in particular'}
+          {t.direction && !isEvent(t) ? ` · ${DIRECTION_LABEL[t.direction]}` : ''}
+          {isEvent(t) ? ` · an event, ${t.groupSize} of ours on it` : ''}
           {t.viaOrganization ? ` · with ${t.viaOrganization}` : ''} · {source(t)}
           {c?.what && SIGNALS.includes(c.what) ? <> · <b className="whatword">{WHAT_LABEL[c.what]}</b></> : null}
         </div>
@@ -203,6 +248,12 @@ function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate 
         {c?.text && <div className="p2" style={{ marginTop: 3 }}>{who}</div>}
         {t.read && <span className="flag f-mute" style={{ marginTop: 4, display: 'inline-block' }}>{READ_LABEL[t.read]}{t.readByName ? ` — ${t.readByName}` : ''}</span>}
         <RungState rungs={rungs} waiting={waiting} proposalId={proposalId} />
+        {ref && (
+          <TagControl
+            tagRef={ref} now={nowSaid(about, why)} general={about.kind === 'none'} pursuitId={tagging.pursuitId} what={CHANNEL_LABEL[t.channel].toLowerCase()}
+            checked={about.kind === 'vehicles' ? about.vehicles.map((v) => v.slug) : []}
+          />
+        )}
       </div>
     </div>
   );
@@ -211,14 +262,17 @@ function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate 
 const CLIP_UPDATE = 480;
 
 /** An update from the team (N61), with what it changed folded in: the status, a touchpoint, a next step. */
-function UpdateRow({ u }: { u: PursuitUpdate }) {
+/** The chip for a row that belongs to this pursuit — an update, a status, a rung. */
+const own = (v: TagVehicle): EventAbout => ({ kind: 'vehicles', vehicles: [{ slug: v.slug, name: v.name, counts: true }] });
+
+function UpdateRow({ u, vehicle }: { u: PursuitUpdate; vehicle: TagVehicle }) {
   const a = u.applied;
   const long = u.body.length > CLIP_UPDATE;
   return (
     <div className="tl-row upd">
       <Glyph name="update" title="An update from the team" tone="signal" />
       <div className="anote">
-        <div className="p2">{shortDate(u.createdAt)} · <b className="whatword">Update</b> · {u.createdByName}</div>
+        <div className="p2"><AboutChips a={own(vehicle)} why="On this pursuit" /> {shortDate(u.createdAt)} · <b className="whatword">Update</b> · {u.createdByName}</div>
         {long ? (
           <details className="thread">
             <summary><span className="t">{u.body.slice(0, CLIP_UPDATE).trimEnd()}…</span><span className="open">the rest</span></summary>
@@ -256,12 +310,12 @@ function UpdateRow({ u }: { u: PursuitUpdate }) {
 }
 
 /** A status set here without an update (N61): the old words, the new, who, and why. */
-function StatusRow({ s }: { s: StatusEvent }) {
+function StatusRow({ s, vehicle }: { s: StatusEvent; vehicle: TagVehicle }) {
   return (
     <div className="tl-row">
       <Glyph name="status" title="Status changed" />
       <div className="anote">
-        <div className="p2">{shortDate(s.at)} · <b className="whatword">Status</b> · set by {s.byName ?? 'someone'}</div>
+        <div className="p2"><AboutChips a={own(vehicle)} why="On this pursuit" /> {shortDate(s.at)} · <b className="whatword">Status</b> · set by {s.byName ?? 'someone'}</div>
         <div className="t">
           <span className="statechg">{s.from} → <b>{s.to}</b></span>
           {s.reason ? <span className="muted"> · &ldquo;{s.reason.replace(/_/g, ' ')}&rdquo;</span> : null}
@@ -272,12 +326,12 @@ function StatusRow({ s }: { s: StatusEvent }) {
 }
 
 /** A rung whose record isn't a row on this timeline — a signature, a wire (N61). */
-function RungRow({ e }: { e: LadderEvent }) {
+function RungRow({ e, vehicle }: { e: LadderEvent; vehicle: TagVehicle }) {
   return (
     <div className="tl-row">
       <Glyph name="rung" title="On the ladder" tone="good" />
       <div className="anote">
-        <div className="p2">{shortDate(e.occurredAt)} · <b className="whatword">On the ladder</b> · confirmed {shortDate(e.recordedAt)} by {e.recordedByName}</div>
+        <div className="p2"><AboutChips a={own(vehicle)} why="On this pursuit" /> {shortDate(e.occurredAt)} · <b className="whatword">On the ladder</b> · confirmed {shortDate(e.recordedAt)} by {e.recordedByName}</div>
         <div className="t">
           <b>{RUNG_LABEL[e.rung]}</b>{e.evidenceKind === 'not_applicable' ? ' — not applicable' : ''}
           <span className="muted"> · {e.evidenceNote}</span>
@@ -287,14 +341,25 @@ function RungRow({ e }: { e: LadderEvent }) {
   );
 }
 
-function NoteRow({ n }: { n: NoteView }) {
+/** A note's tag, as a touchpoint's (N81): a note counts for no ladder, but says what it is about. */
+export function noteAbout(n: NoteView, windows: RaiseWindow[]): EventAbout {
+  const t = n.tag;
+  return eventAbout({
+    vehicleId: null, source: 'affinity', about: t?.about ?? 'other', aboutVehicles: t?.vehicles ?? [], aboutBy: t?.by ?? 'rule',
+    on: n.createdAt, scheduledFor: null,
+  }, windows);
+}
+
+function NoteRow({ n, about, tagging }: { n: NoteView; about: EventAbout; tagging: { pursuitId: string } }) {
   const mark = noteMark(n);
   const said = n.reading?.what ? WHAT_LABEL[n.reading.what] : n.deckView ? 'Viewed the deck' : null;
+  const why = whySaid(n.tag?.by ?? 'rule', n.tag?.byName ?? null, n.tag?.basis ?? null);
   return (
     <div className="tl-row">
       <Glyph name={mark.name} title={mark.title} tone={mark.tone} />
       <div className="anote">
         <div className="p2">
+          <AboutChips a={about} why={why} />{' '}
           {shortDate(n.createdAt)} · {said ? <><b className="whatword">{said}</b> · {n.kindLabel.toLowerCase()} by</> : `${n.kindLabel} ·`} {n.author}
           {n.via.kind === 'organization' ? ` · on ${n.via.name}` : ''}
           {n.authorOnTeam ? '' : ' (not on the team)'}
@@ -303,6 +368,10 @@ function NoteRow({ n }: { n: NoteView }) {
           {n.alsoAttached ? ` · also on ${n.alsoAttached} other ${n.alsoAttached === 1 ? 'record' : 'records'}` : ''}
         </div>
         <Thread summary={n.reading?.summary ?? null} by={n.reading?.by ?? null} text={n.text} health={n.health} />
+        <TagControl
+          tagRef={noteRef(n.noteId)} now={nowSaid(about, why)} general={about.kind === 'none'} pursuitId={tagging.pursuitId} what="note"
+          checked={about.kind === 'vehicles' ? about.vehicles.map((v) => v.slug) : []}
+        />
       </div>
     </div>
   );
@@ -381,16 +450,24 @@ const MARK: Record<'update' | 'status' | 'rung', Mark> = {
  * And what changed its state (N61, issues 0004 and 0006): the team's updates, with what each
  * changed; status changes made without one; and the ladder, each rung folded into the row that
  * is its record, or a row of its own when its record is not on the timeline.
+ *
+ * All of it, whatever it is about (N81): every row says which vehicle it is about, and a filter
+ * narrows the list to one. The facts above the rows are this pursuit's — what is tagged with its
+ * vehicle — and a line beside them counts everything else.
  */
 export function Timeline(props: {
-  touches: Touchpoint[]; summary: TouchpointSummary; notes: NoteView[];
+  /** Every touchpoint with them, about anything (N81). */
+  touches: Touchpoint[];
+  /** The ones counted for this pursuit's vehicle, by id: what the summary sums. */
+  counted: Set<string>;
+  summary: TouchpointSummary; notes: NoteView[];
   pursuitId: string; entityId: string; vehicleId: string; vehicleName: string;
+  /** Every vehicle's raise window: what a row's tag is held against. */
+  windows: RaiseWindow[];
   /** The last calendar read stopped at its cap: some meetings are not here yet (rule 7). */
   calendarPartial?: boolean;
   context?: Record<string, TouchContext>;
   read?: ShownRead | null;
-  /** Contact with them that isn't about this raise (N59): counted on their own page. */
-  elsewhere?: { emails: number; meetings: number; first: Date | null; last: Date | null; href: string };
   /** N61: the status now, for the update row; the updates; status changes; the ladder. */
   status: PursuitStatus;
   today: string;
@@ -400,14 +477,25 @@ export function Timeline(props: {
   /** The records on file for rungs the ladder hasn't accepted, and the proposal to accept them. */
   onRecord?: Partial<Record<LadderRung, RungRecord>>;
   proposalId?: string | null;
+  /** N81: the rows asked for — a vehicle's slug, 'unclear', 'none' or 'all' — how many, and where the page lives. */
+  filter?: string;
+  limit?: number;
+  path: string;
 }) {
-  const { touches, summary: s, notes } = props;
-  const away = props.elsewhere;
+  const { touches, summary: s, notes, windows } = props;
   const now = Date.now();
   const inside = new Set(Object.values(props.context ?? {}).map((c) => c.noteId).filter((x): x is number => typeof x === 'number'));
   const alone = notes.filter((n) => !inside.has(n.noteId));
   const updates = props.updates ?? [];
   const ladder = props.ladder ?? [];
+  const self = windows.find((w) => w.vehicleId === props.vehicleId);
+  const vehicle: TagVehicle = { slug: self?.slug ?? props.vehicleId, name: props.vehicleName };
+  // The tag form offers this pursuit's vehicle first, then the rest.
+  // …those raising or that raised first, then any with no window (a grants rail).
+  const tagVehicles: TagVehicle[] = [vehicle, ...windows.filter((w) => w.vehicleId !== props.vehicleId)
+    .sort((a, b) => Number(!(a.opens || a.closes)) - Number(!(b.opens || b.closes)) || a.name.localeCompare(b.name))
+    .map((w) => ({ slug: w.slug, name: w.name }))];
+  const tagging = { pursuitId: props.pursuitId };
   // Each rung goes to the row that is its record; one whose record isn't here gets a row.
   const refs = new Map(touches.map((t) => [refOf(t), t.touchpointId]));
   const rungsOn = new Map<string, LadderEvent[]>();
@@ -431,22 +519,40 @@ export function Timeline(props: {
       .map((x, i): Item => ({ kind: 'status', s: x, key: `s:${i}:${x.at.getTime()}`, at: x.at.getTime() })),
     ...ladder.filter((e) => !refs.has(e.evidenceRef)).map((e): Item => ({ kind: 'rung', e, key: `r:${e.eventId}`, at: e.occurredAt.getTime() })),
   ].sort((a, b) => b.at - a.at);
-  const row = (x: Item) => {
+  const aboutOf = (x: Item): EventAbout =>
+    x.kind === 'touch' ? eventAbout(x.t, windows) : x.kind === 'note' ? noteAbout(x.n, windows) : own(vehicle);
+  const groupsOf = (a: EventAbout) => (a.kind === 'vehicles' ? a.vehicles.map((v) => v.slug) : [a.kind]);
+  const row = (x: Item, a: EventAbout) => {
     switch (x.kind) {
       case 'touch':
         return (
           <TouchRow
             key={x.key} t={x.t} c={props.context?.[x.t.touchpointId]} now={now}
             rungs={rungsOn.get(x.t.touchpointId)} waiting={waitingOn.get(x.t.touchpointId)} proposalId={props.proposalId}
-            fromUpdate={byUpdate.get(x.t.touchpointId)}
+            fromUpdate={byUpdate.get(x.t.touchpointId)} about={a} tagging={tagging}
           />
         );
-      case 'note': return <NoteRow key={x.key} n={x.n} />;
-      case 'update': return <UpdateRow key={x.key} u={x.u} />;
-      case 'status': return <StatusRow key={x.key} s={x.s} />;
-      case 'rung': return <RungRow key={x.key} e={x.e} />;
+      case 'note': return <NoteRow key={x.key} n={x.n} about={a} tagging={tagging} />;
+      case 'update': return <UpdateRow key={x.key} u={x.u} vehicle={vehicle} />;
+      case 'status': return <StatusRow key={x.key} s={x.s} vehicle={vehicle} />;
+      case 'rung': return <RungRow key={x.key} e={x.e} vehicle={vehicle} />;
     }
   };
+  const rows: TimelineRow[] = items.map((x) => {
+    const a = aboutOf(x);
+    return { key: x.key, groups: groupsOf(a), node: () => row(x, a) };
+  });
+  // The filter: this pursuit's vehicle first, the others it has rows about, then the two kinds of none.
+  const tally = new Map<string, number>();
+  for (const r of rows) for (const g of r.groups) tally.set(g, (tally.get(g) ?? 0) + 1);
+  const nameOf = new Map(windows.map((w) => [w.slug, w.name]));
+  const options: TimelineOption[] = [
+    ...[vehicle.slug, ...[...tally.keys()].filter((g) => g !== vehicle.slug && nameOf.has(g)).sort((a, b) => nameOf.get(a)!.localeCompare(nameOf.get(b)!))]
+      .filter((g) => tally.has(g))
+      .map((g) => ({ id: g, label: nameOf.get(g) ?? g, n: tally.get(g)!, hint: g === vehicle.slug ? 'Counted for this pursuit' : 'Another vehicle: not counted here' })),
+    ...(tally.has('unclear') ? [{ id: 'unclear', label: 'Vehicle unclear', n: tally.get('unclear')!, hint: 'About a raise, which vehicle not said: counted for none until tagged' }] : []),
+    ...(tally.has('none') ? [{ id: 'none', label: 'General', n: tally.get('none')!, hint: 'Not about a raise: a catch-up, background, another company — true of them whatever the vehicle' }] : []),
+  ];
   // The key: each icon on this timeline once, with its words (colour is never the only signal).
   const key = new Map<string, Mark>();
   for (const x of items) {
@@ -457,17 +563,25 @@ export function Timeline(props: {
   if (!key.has(MARK.update.title)) key.set(MARK.update.title, MARK.update);
   const onOrg = notes.filter((x) => x.via.kind === 'organization').length;
   const notesRead = notes.reduce((a, x) => (x.fetchedAt > a ? x.fetchedAt : a), new Date(0));
+  const counted = touches.filter((t) => props.counted.has(t.touchpointId));
+  // Everything with them, about anything: held, their own, not research.
+  const held = touches.filter((t) => !t.viaOrganization && t.channel !== 'research' && t.on && t.on.getTime() <= now);
+  const allMeetings = held.filter((t) => t.channel === 'meeting' || t.channel === 'call').length;
+  const allLast = held.reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null);
+  const allNext = touches.filter((t) => !t.viaOrganization && !t.on && t.scheduledFor && t.scheduledFor.getTime() > now)
+    .reduce<Date | null>((a, t) => (!a || t.scheduledFor! < a ? t.scheduledFor! : a), null);
 
   return (
-    <div className="card">
+    <div className="card" id="timeline">
       <div className="chead">
         <h2>Timeline</h2>
         <span className="lbl">
-          {touches.length} {touches.length === 1 ? 'touchpoint' : 'touchpoints'} · {s.meetingDates.length} {s.meetingDates.length === 1 ? 'meeting' : 'meetings'} · {notes.length} {notes.length === 1 ? 'note' : 'notes'}
+          {touches.length} {touches.length === 1 ? 'touchpoint' : 'touchpoints'}, {counted.length} about {props.vehicleName} · {notes.length} {notes.length === 1 ? 'note' : 'notes'}
           {updates.length ? ` · ${updates.length} ${updates.length === 1 ? 'update' : 'updates'}` : ''}
         </span>
       </div>
       <div className="cbody">
+        <p className="p2 tl-scope">Counted for {props.vehicleName} — the rows tagged with it:</p>
         <div className="fact"><span>Meetings</span><span>{meetingLine(s)}</span></div>
         <div className="fact">
           <span>Last touch</span>
@@ -489,25 +603,22 @@ export function Timeline(props: {
             </span>
           </div>
         )}
+        {held.length > 0 && (
+          <div className="fact">
+            <span>All contact</span>
+            <span className="muted">
+              {held.length} with them, about anything · {allMeetings} {allMeetings === 1 ? 'meeting or call' : 'meetings and calls'}
+              {allLast ? ` · last ${shortDate(allLast)}` : ''}{allNext ? ` · next ${shortDate(allNext)}` : ''}
+            </span>
+          </div>
+        )}
         <div className="timeline">
           <EntryBox pursuitId={props.pursuitId} entityId={props.entityId} vehicleId={props.vehicleId} vehicleName={props.vehicleName} status={props.status} today={props.today} />
           {items.length === 0 && <p className="muted" style={{ marginTop: 8 }}>Nothing on record yet: no touchpoint, and no note in Affinity.</p>}
-          {items.slice(0, SHOWN).map(row)}
-          {items.length > SHOWN && (
-            <details className="more">
-              <summary>{items.length - SHOWN} older</summary>
-              {items.slice(SHOWN).map(row)}
-            </details>
-          )}
+          <TagVehicles vehicles={tagVehicles}>
+            <TimelineRows rows={rows} options={options} filter={props.filter ?? 'all'} limit={props.limit ?? TIMELINE_PAGE} path={props.path} />
+          </TagVehicles>
         </div>
-        {away && away.emails + away.meetings > 0 && (
-          <p className="elsewhere">
-            Also on record: {away.emails} {away.emails === 1 ? 'email' : 'emails'} and {away.meetings}{' '}
-            {away.meetings === 1 ? 'meeting' : 'meetings'} with them that aren&rsquo;t about this raise
-            {away.first ? (away.first.getUTCFullYear() === away.last!.getUTCFullYear() ? `, in ${away.first.getUTCFullYear()}` : `, ${away.first.getUTCFullYear()}–${away.last!.getUTCFullYear()}`) : ''}: outside its window, or about
-            something else. They&rsquo;re counted on <Link href={away.href}>their own page</Link>, not here.
-          </p>
-        )}
         {key.size > 1 && (
           <div className="tl-key" aria-label="What the icons mean">
             {[...key.values()].map((m) => <span key={m.title}><Glyph name={m.name} title={m.title} tone={m.tone} />{m.title}</span>)}
@@ -516,9 +627,11 @@ export function Timeline(props: {
       </div>
       <p className="cover">
         <b>What this covers:</b> touchpoints logged here, and those Affinity has — each list
-        entry&rsquo;s last email and meetings, and meeting, call and email notes — as of the last
-        translation. One tied to no vehicle counts for every open pursuit of this LP. A meeting
-        nobody logged and no calendar saw is not here.
+        entry&rsquo;s last email and meetings, the calendar, and meeting, call and email notes — as of
+        the last translation, about anything. Each row says which vehicle it is about: named in it,
+        or tagged by Claude or a person. Only rows tagged with {props.vehicleName}, inside its raise
+        window, count for this pursuit and its ladder; a row about a raise that doesn&rsquo;t say which
+        counts for none until someone tags it. A meeting nobody logged and no calendar saw is not here.
         {props.calendarPartial && <> <b>The calendar read stopped at its cap,</b> so some meetings Affinity has are not here yet.</>}
         {notes.length > 0 && (
           <>

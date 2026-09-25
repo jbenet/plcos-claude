@@ -130,31 +130,77 @@ export interface Touchpoint {
   about: 'raise' | 'other' | null;
   aboutVehicles: string[];
   aboutBasis: string | null;
+  /** Who said what it is about (N81): the rules, Claude, or a person. Null for one logged here. */
+  aboutBy: 'rule' | 'claude' | 'person' | null;
+  /** How many of our records its Affinity interaction is with (N81): 1 for one logged here. */
+  groupSize: number;
 }
+
+/**
+ * A calendar entry with this many of our records on it is an event — a dinner, a salon, a demo day —
+ * not a meeting with any one of them (N81). Coming to our event says they opted in; it is not a
+ * meeting held. The W5 export's group dates use the same number.
+ */
+export const GROUP_EVENT = 4; // GUESS — the strategy workflow's measure of a group date, never tested against the calendar.
+
+export const isEvent = (t: Pick<Touchpoint, 'channel' | 'groupSize'>) =>
+  (t.channel === 'meeting' || t.channel === 'call') && (t.groupSize ?? 1) >= GROUP_EVENT;
 
 /** When a vehicle is raising (N59), what a touchpoint's date is held against. */
 export interface RaiseWindow { vehicleId: string; slug: string; name: string; opens: Date | null; closes: Date | null; note: string | null }
 
 /**
- * Whether a touchpoint is about this vehicle's raise (N59, docs/18). One tied to the vehicle
- * is; one tied to another vehicle isn't; one logged here with no vehicle is about any raise.
- * One read from Affinity counts when it was read as about a raise, names this vehicle or none,
- * and falls inside the raise window. Anything else is contact history, kept for the LP's own
- * page. The same rule is written in SQL in the meetings repo for the lists; change both.
+ * Whether a touchpoint is about this vehicle's raise (N59, docs/18; N81). One tied to the vehicle
+ * is; one tied to another vehicle isn't; one logged here with no vehicle is about any raise. One
+ * read from Affinity counts only when it is tagged with this vehicle — it names it, or Claude or a
+ * person tagged it — and falls inside the raise window; a person's tag counts whatever the date,
+ * because a person knows when a conversation began better than a window does. One about a raise
+ * that names no vehicle counts for none: before N81 it counted for every vehicle raising on its
+ * date, and Juan found Rails meetings and catch-ups on Neurotech's ladder. The same rule is
+ * written in SQL in the meetings repo for the lists; change both.
  */
-export function aboutThisRaise(t: Touchpoint, w: RaiseWindow): boolean {
+/** What deciding what a record is about reads: a touchpoint, or a note dressed as one. */
+export type AboutInput = Pick<Touchpoint, 'vehicleId' | 'source' | 'about' | 'aboutVehicles' | 'aboutBy' | 'on' | 'scheduledFor'>;
+
+export function aboutThisRaise(t: AboutInput, w: RaiseWindow): boolean {
   if (t.vehicleId) return t.vehicleId === w.vehicleId;
   if (t.source === 'us') return true;
-  if (t.about !== 'raise') return false;
-  if (t.aboutVehicles.length && !t.aboutVehicles.includes(w.slug)) return false;
-  // With no window known, a record about a raise in general can't be placed: only one that
-  // names this vehicle counts for it.
-  if (!w.opens && !w.closes && !t.aboutVehicles.includes(w.slug)) return false;
+  if (t.about !== 'raise' || !t.aboutVehicles.includes(w.slug)) return false;
+  if (t.aboutBy === 'person') return true;
+  return insideWindow(t, w);
+}
+
+function insideWindow(t: Pick<Touchpoint, 'on' | 'scheduledFor'>, w: RaiseWindow): boolean {
   const on = t.on ?? t.scheduledFor;
   if (!on) return false;
   if (w.opens && on.getTime() < w.opens.getTime()) return false;
   if (w.closes && on.getTime() >= w.closes.getTime() + 86_400_000) return false;
   return true;
+}
+
+/**
+ * What a row on a timeline says it is about (N81): the vehicles, each marked when it counts for
+ * that vehicle's raise; a raise, which one unclear; or no vehicle. "Unclear" only inside some
+ * vehicle's window: a 2021 email about somebody's fund is not a question anyone here needs to
+ * answer.
+ */
+export type EventAbout =
+  | { kind: 'vehicles'; vehicles: Array<{ slug: string; name: string; counts: boolean }> }
+  | { kind: 'unclear' }
+  | { kind: 'none' };
+
+export function eventAbout(t: AboutInput, windows: RaiseWindow[]): EventAbout {
+  const bySlug = new Map(windows.map((w) => [w.slug, w]));
+  if (t.vehicleId) {
+    const w = windows.find((x) => x.vehicleId === t.vehicleId);
+    return w ? { kind: 'vehicles', vehicles: [{ slug: w.slug, name: w.name, counts: true }] } : { kind: 'none' };
+  }
+  // Logged here with no vehicle: about a raise, which one not recorded — it counts for any (N59).
+  if (t.source === 'us') return { kind: 'unclear' };
+  if (t.about !== 'raise') return { kind: 'none' };
+  const named = t.aboutVehicles.map((s) => bySlug.get(s)).filter((w): w is RaiseWindow => !!w);
+  if (named.length) return { kind: 'vehicles', vehicles: named.map((w) => ({ slug: w.slug, name: w.name, counts: aboutThisRaise(t, w) })) };
+  return windows.some((w) => (w.opens || w.closes) && insideWindow(t, w)) ? { kind: 'unclear' } : { kind: 'none' };
 }
 
 /**

@@ -2,7 +2,7 @@ import { getDb, type Queryable } from '@/lib/db';
 import { shortDate } from '@/lib/time';
 import { openTicket } from '@/modules/governance';
 import { finishRun, startRun } from '@/modules/sources';
-import { CHANNEL_LABEL, touchpointsByPair, type Touchpoint } from '@/modules/meetings';
+import { CHANNEL_LABEL, isEvent, touchpointsByPair, type Touchpoint } from '@/modules/meetings';
 import { STEP_LABEL, closeStates, type CloseTrack, type CommitmentEvent } from '@/modules/pipeline';
 import {
   RUNGS, RUNG_LABEL, getPursuit, listPursuits, rungIndex, type ClimbRung, type LadderRung, type Pursuit,
@@ -71,7 +71,9 @@ export function recordsOnFile(touches: Touchpoint[], tracks: CloseTrack[], now =
   const held = touches
     .filter((t) => !t.viaOrganization && t.on && t.on.getTime() <= now.getTime())
     .sort((a, b) => a.on!.getTime() - b.on!.getTime());
-  const meeting = held.find((t) => t.channel === 'meeting' || t.channel === 'call');
+  // A meeting with them, not our event with twenty others (N81): coming to an event is opting in.
+  const meeting = held.find((t) => (t.channel === 'meeting' || t.channel === 'call') && !isEvent(t));
+  const gathering = held.find((t) => isEvent(t));
   const reply = held.find((t) => (t.channel === 'email' || t.channel === 'message') && t.direction === 'theirs');
 
   if (meeting) {
@@ -80,13 +82,13 @@ export function recordsOnFile(touches: Touchpoint[], tracks: CloseTrack[], now =
       note: `${said(meeting)} — the first on record`, on: meeting.on!,
     };
   }
-  // They opted in when they first answered, or first came to a meeting, whichever was earlier.
-  const first = [meeting, reply].filter((t): t is Touchpoint => Boolean(t)).sort((a, b) => a.on!.getTime() - b.on!.getTime())[0];
+  // They opted in when they first answered, or first came to a meeting or to our event, whichever was earlier.
+  const first = [meeting, reply, gathering].filter((t): t is Touchpoint => Boolean(t)).sort((a, b) => a.on!.getTime() - b.on!.getTime())[0];
   if (first) {
     const isReply = first === reply;
     out.target_opted_in = {
       rung: 'target_opted_in', kind: isReply ? 'email' : first.source === 'us' ? 'meeting' : 'calendar', ref: refOf(first),
-      note: isReply ? `A reply from them: ${said(first)}` : `They came to a meeting: ${said(first)}`, on: first.on!,
+      note: isReply ? `A reply from them: ${said(first)}` : first === gathering ? `They came to our event: ${said(first)}` : `They came to a meeting: ${said(first)}`, on: first.on!,
     };
     // In direct contact, the connector's rung has nothing to record: not applicable.
     out.connector_willing = {

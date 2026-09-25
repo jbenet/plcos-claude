@@ -60,9 +60,11 @@ export class TooManyRows extends Error {
   }
 }
 
+import { readdirSync } from 'node:fs';
+import { join as pathJoin } from 'node:path';
 import { config } from '@/config/deployment';
 
-type Global = typeof globalThis & { __capitalOsDb?: Promise<Db> };
+type Global = typeof globalThis & { __capitalOsDb?: Promise<Db>; __capitalOsMigrationCheck?: { at: number; files: string; running: Promise<void> | null } };
 const g = globalThis as Global;
 
 /**
@@ -73,7 +75,58 @@ const g = globalThis as Global;
  */
 export function getDb(): Promise<Db> {
   if (!g.__capitalOsDb) g.__capitalOsDb = boot();
-  return g.__capitalOsDb;
+  if (process.env.NODE_ENV === 'production') return g.__capitalOsDb;
+  return g.__capitalOsDb.then(catchUp);
+}
+
+/**
+ * A dev server applies a migration added while it runs (N81). Its code reloads as it is edited,
+ * but migrations ran once, at boot, so new code could query a column its database doesn't have —
+ * and the real server restarts only when the Keychain hands over the Affinity key, which asks Juan.
+ * So every few seconds the list of migration files is compared with the one last applied, and when
+ * it differs the same idempotent runner applies what is new, once, before the query goes ahead. A
+ * migration that fails is logged and left for a restart: the pages keep what they had.
+ */
+async function catchUp(db: Db): Promise<Db> {
+  // Empty at first, so a server that booted before this code was loaded checks once, at once.
+  const state = (g.__capitalOsMigrationCheck ??= { at: 0, files: '', running: null });
+  if (state.running) {
+    await state.running;
+    return db;
+  }
+  if (Date.now() - state.at < 3000) return db;
+  state.at = Date.now();
+  const files = migrationFiles();
+  if (files === state.files) return db;
+  state.running = (async () => {
+    try {
+      const { migrate } = await import('./migrate');
+      const { applied } = await migrate(db);
+      if (applied.length) console.log(`[db] applied while running: ${applied.join(', ')}`);
+      state.files = files;
+    } catch (err) {
+      console.error('[db] a new migration could not be applied while running; restart to apply it:', err instanceof Error ? err.message : err);
+      state.files = files;
+    } finally {
+      state.running = null;
+    }
+  })();
+  await state.running;
+  return db;
+}
+
+/** The migration files on disk, as one string: what changes when one is added. */
+function migrationFiles(): string {
+  const root = pathJoin(process.cwd(), 'modules');
+  const out: string[] = [];
+  try {
+    for (const m of readdirSync(root)) {
+      try {
+        for (const f of readdirSync(pathJoin(root, m, 'migrations'))) if (f.endsWith('.sql')) out.push(`${m}/${f}`);
+      } catch { /* a module with no migrations */ }
+    }
+  } catch { /* no modules directory: nothing to compare */ }
+  return out.sort().join('|');
 }
 
 async function boot(dir?: string): Promise<Db> {

@@ -9,6 +9,7 @@
  * its evidence, never collapsed into one number; and docs/04 §0's two lists, this year's close
  * and 2027.
  */
+import { bandByRule } from './capacity';
 
 export type Level = 'high' | 'medium' | 'low' | 'unknown';
 
@@ -186,8 +187,14 @@ export function gates(
   // the profile's summary only says "a billionaire". Assets under management count only for an
   // investor whose assets are their own.
   const fromFacts = (finding?.facts ?? []).some((f) => (f.field === 'capacity' || f.field === 'check_size' || (f.field === 'aum' && ownsItsAssets)) && hasCapacityEvidence(f.value));
-  const evidenced = Boolean((fb && fb.band !== 'unknown' && hasCapacityEvidence(fb.basis ?? '') && !managersMoney) || fromNotes || fromFacts);
   const band = s.scores?.capacity?.band ?? 'unknown';
+  // Or a band by rule (W5 1.9, Juan 24 Sep): read off the size table, or the floor from many angel
+  // checks — held to the rule, so a band that says "by size" and isn't the table's is caught.
+  const byRule = bandByRule(band, s.scores?.capacity?.basis ?? '');
+  if (byRule && !byRule.holds) {
+    out.push(byRule.rule === 'size' ? `capacity off the size table${byRule.want ? ` (it gives ${byRule.want})` : ''}` : 'a floor without the angel checks behind it');
+  }
+  const evidenced = Boolean((fb && fb.band !== 'unknown' && hasCapacityEvidence(fb.basis ?? '') && !managersMoney) || fromNotes || fromFacts || byRule?.holds);
   if (!/unknown|not known/i.test(band) && !evidenced && !c.money) out.push('capacity ahead of the evidence');
   const rank = { A: 0, B: 1, C: 2, D: 3 } as const;
   if (s.route && (bestTier === null || rank[s.route.tier] < rank[bestTier])) out.push('route better than the best path on file');

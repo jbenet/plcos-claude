@@ -190,6 +190,26 @@ export async function decideReadingAction(formData: FormData): Promise<void> {
 }
 
 /**
+ * A person says which vehicles an event is about (N81): the vehicles ticked; none ticked, a raise
+ * without saying which; or not about a raise at all, which wins over any box. It stands over the
+ * rules and over Claude's reading, and the next translation keeps it. No ticket: a tag moves no
+ * rung — the reconciliation proposes one from it, and a person approves that.
+ */
+export async function tagEventAction(formData: FormData): Promise<void> {
+  const { tagEvent } = await import('@/lib/connectors/affinity/event-tags');
+  const user = await (await auth()).currentUser();
+  const other = formData.get('other') === 'on';
+  const why = String(formData.get('why') ?? '').trim();
+  await tagEvent(user.id, String(formData.get('ref') ?? ''), {
+    about: other ? 'other' : 'raise',
+    vehicles: other ? [] : [...new Set(formData.getAll('vehicle').map(String).filter(Boolean))],
+    basis: why || null,
+  });
+  revalidatePath(`/targets/${String(formData.get('pursuitId'))}`);
+  revalidatePath('/targets');
+}
+
+/**
  * Move LPs who have met us, and are still at New, Sourcing or Selected, to Discussing (N57): the
  * log got ahead of the status (docs/18). A person's action, one status change each, each in the
  * audit log; no ticket, since a status claims nothing, and no rung moves. Each LP is checked

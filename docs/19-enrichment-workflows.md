@@ -46,6 +46,7 @@ that someone is in the pipeline (CLAUDE.md, real data).
 | W5c | **The critic** — grade strategies against the litmus test and the rules, without rewriting them | W5, W1, W9, W3 | `strategy-review.jsonl` | grades by protocol version; the issues become the next amendment |
 | W1c | **The fact check** — re-read each fact's own source and say whether it says what the fact says | W1's findings; only the URLs they cite | `fact-review-*.jsonl` | facts supported, partly, not, about someone else, or unavailable; each identity holds, in doubt, or wrong |
 | W2n | **The Protocol Labs network** — who is in PL's own directory, and whose firm is a network team | the research set's names; the directory's public API | `us/pl-network.json`, `us/pl-directory.jsonl` | an entry matched to our record of them, or said to need confirming; nothing for contacting anyone kept |
+| W12 | **What each event is about** — which vehicle a meeting, an email or a note is about, if any (N81) | Affinity's records since the earliest raise window, from a copy of the database | `tags/out/tNN.json`, merged to `event-tags.jsonc` | every record tagged; each vehicle from the record's own words, a thread it continues, or an inference marked as one |
 
 Batches are cut by `scripts/enrich-batch.ts`, whole firms together, so colleagues share one
 reading and one plan. The close gap — committed on the pipeline, and what the close track shows,
@@ -979,6 +980,42 @@ tier C ties):
   local tool for binary PDFs (ADV Part 2 brochures included) would save each agent writing one — open.
 - **One more people-records site is on the broker list.**
 
+**Amendments, version 1.48** (Juan, 24 Sep, after the header slip of 1.36: "please dont spam gov
+websites… request from them carefully and according to their restrictions on use", and "never use any
+identifying information for us"):
+
+- **No identity of ours in any request; one address where a service insists.** Juan's address, name
+  and domain never go into a request. Where a service requires a contact — SEC's fair-access policy asks
+  for one in the User-Agent — the User-Agent is `research-reader blue.tunguska@agentmail.to`, a
+  privacy-preserving address Juan gave for this, and nothing else. A service that wants more identity
+  than that (a name, an account, a phone) is asked about first, and not used until Juan says so.
+- **Government sites by their own rules.** SEC allows ten requests a second; we keep to one, with no
+  loops over names and EDGAR full-text search only for a name the finding needs. FINRA, ProPublica and
+  state registries the same: sparingly, stopping at the first 403, 429 or 503 and coming back later,
+  never retrying in a burst. Parallel batches share one address, so a batch spreads its government reads
+  through its run instead of starting with them.
+
+**Amendments, version 1.49** (Juan, 24 Sep, answering the two capacity questions the search pass left
+open):
+
+- **An office's size may set a band, by the table.** "It likely can set an informed capacity limit for
+  us to make an educated guess. I would guess based on what similar entities with similar sizes tend to
+  do in terms of check sizes." So a family office's assets, a foundation's or endowment's, a wealth
+  manager's or adviser's assets under management, a fund of funds' size, or a person's net worth may set
+  the band — read off `config.capacity.bySize`, never picked by feel. The basis begins "By size:" and
+  names the kind and the size with its source ("By size: a family office with $800M in assets, per its
+  2025 filing"). The checker parses the kind and the size, looks up the table, and flags a band that
+  isn't the one it gives. Every step of the table is a GUESS from general practice, to be replaced by
+  what our own closes show.
+- **Many angel checks set a floor.** "Many angel checks probably means at least capacity in the
+  100K-250K range? maybe more? unsure." Five or more personal angel investments on record, sizes
+  unknown, give `$100K+ (floor)` — at least that, the top not known — with a basis that begins "Floor:"
+  and counts them ("Floor: 12 angel checks on record, sizes unknown"). Fewer than five, or a fund's
+  deals rather than their own, set nothing. Five is a GUESS at "many".
+- **A band from their own money still wins.** A check they wrote, a commitment on file, a net worth
+  with a source: those set the band as before (1.18). The table and the floor are for when that is all
+  there is.
+
 **Open, for Juan:** an unresolved person at a firm our own records confirm (their work domain is the
 firm's site) can't carry the firm's facts — its mandate, its typical check — because a finding with
 an unresolved identity carries none. They go into `coverage.note` as prose. Allowing firm-scope
@@ -1217,6 +1254,124 @@ strategies revised or re-pinned, 51 written for identities the pass had just res
 - **Gates fixed on the way:** "(May 2026)" read as the hedge "may"; a Form D's "date of first sale" read as
   a sale; "a parked page" and "Parker" read as parks; triage's "rule out our field" fired on the research's
   own sentences, not the firm's quoted words.
+
+**Amendments, W5 version 1.8** (N81, after Juan found Rails meetings and catch-ups counted for Neurotech):
+
+- **Every meeting date and every note says what it is about** (`about` in `candidates.jsonl`): a
+  vehicle's name, "vehicle unclear", or "general". A vehicle's own rows are evidence of where that
+  pursuit stands; general rows are who they are, true for every vehicle; a row tagged with another
+  vehicle is context — worth a line when the two asks need coordinating (rule 5), never progress on
+  this one. A "vehicle unclear" row is evidence for none: if it decides the next step, the step is to
+  ask its owner which vehicle it was.
+- **Two contact blocks:** `contact` is the relationship since their raises opened, about anything —
+  a reply owed is owed whatever it was about — with what came before summed in `contact.earlier`;
+  each pursuit's `contact` is what counts for its vehicle alone. "Met us" for a pursuit means a
+  meeting tagged with its vehicle.
+- **A strategy written on the old reading is re-read**, not only re-pinned, where its pursuit's
+  counted contact changed: the meetings it cited may now be another vehicle's, or a catch-up.
+
+**Amendments, W5 version 1.9** (Juan's capacity answers of 24 Sep; W1 1.49 has the rules):
+
+- **A band by size or a floor counts as evidence, held to its rule.** A strategy may carry the band the
+  size table gives — basis "By size: …" — or the angel floor — basis "Floor: …". The gate accepts
+  either and flags one that isn't what its rule gives ("capacity off the size table", "a floor without
+  the angel checks behind it"). This settles the open question of 1.7: a wealth manager's clients'
+  money still isn't the LP's own, but its size now sets an estimate for what such a firm places.
+- **The ask follows the band, and says it is an estimate:** "an estimate from their size" beside a
+  range, never a range as if they had named it.
+
+## Protocol — W12, what each event is about (version 1)
+
+Juan, 24 Sep: "some meetings or notes from affinity are getting attributed to PLC Neurotech when they
+may be for PLC Rails, or they may just be general catchups. Hmm maybe tag each event with which
+vehicles (if any) it involves … Important that the info feeding strategy is appropriately tagged for
+the vehicle. some of the info will apply regardless of vehicle, but some will be specific."
+
+The rules (N59, N81; `lib/connectors/affinity/about.ts`) read words. They cannot tell neurotech the
+field from PLC Neurotech I, a portfolio company from its SPV, or which fund "the fund" means, and until
+N81 they read every meeting with a colleague on the invite as about the raise. W12 reads each record
+whole, as a person would, and writes one tag per record. Translation lays the tags over the rules; a
+person's tag on the LP's page stands over any of them. Only a record tagged with a vehicle, inside its
+raise window, counts for that vehicle's pipeline and ladder; the rest are shown, labelled, and count
+for none.
+
+**Input.** `data/real/tags/batches/tNN.json`, cut by `scripts/event-tag-batch.ts` from a copy of the
+database: `vehicles` (slug, name, kind, aliases, raise window) and `records`, each LP's together,
+oldest first. A record: `ref`; `kind` (email, meeting, call, message, note); `on`; `dir`; `words` (an
+email's subject or a meeting's title); `note` (the words of the note on it, or of the note itself);
+`noteBy`; `team` (who from our side); `lps` (the LPs on it, each with the vehicles they are on and the
+status there); `rule` (what the rules read, and why).
+
+**Output.** `data/real/tags/out/tNN.json`:
+`{ "batch": "tNN", "by": "claude (sub-agent)", "at": <now>, "tags": { "<ref>": { "about": "raise" | "other", "vehicles": [<slug>, …], "basis": "<why>" } } }`,
+one line for every record in the batch and none for anything else.
+
+**About a raise** means about raising money for one of *our* vehicles — the batch's `vehicles`: an
+intro to invest, a pitch or a first meeting about investing with us, the deck, the data room, the
+terms, a question about the fund, an indication, a commitment, subscription documents, a side letter,
+a capital call, a close, or a follow-up on any of these. Everything else is **other**, which the page
+shows as *General*: a catch-up, research or science, a portfolio company's business or its own raise,
+someone else's fund (theirs, or one we are an LP in), an event and its logistics, recruiting, an
+investor update a company sends us, an automatic reply. General is not noise: it applies to every
+vehicle, and the strategy step reads it as who they are.
+
+**Which vehicle**, only when the record's own words, or a record it plainly continues, point to it:
+
+1. **It names the vehicle** as our fund or SPV: the name, or an alias used that way. A word that is
+   also a field or a company is not enough — "neurotech" the field, a portfolio company by name
+   ("their board meeting") is not its SPV — unless the talk is about investing in it through us, near
+   the SPV's window.
+2. **It speaks of what only one vehicle is**, when the talk is about investing with us:
+   brain–computer interfaces, neuroscience, neurotech → PLC Neurotech I; crypto, stablecoins,
+   payment rails, blockchain infrastructure → PLC Crypto/Rails.
+3. **It continues a record that points to one**: the same thread ("Re:", the same subject), the note
+   on the same meeting, the follow-up an earlier record asked for. The basis begins "Continues:".
+4. **Inferred.** About raising with us, no word that picks a vehicle, and every LP on it is on the
+   list of exactly one vehicle — the same one — whose raise window covers the date: that vehicle, with
+   a basis that begins "Inferred:" and says why ("Inferred: 'the fund', and they are on PLC Neurotech
+   I's list only"). Juan asked to have bulk decisions made for him, traceable by rule; this is that
+   rule, and a search for the word finds every one of them.
+5. **Otherwise unclear:** about a raise, `vehicles: []`. Say in the basis what it most likely is, if
+   anything ("'the fund'; they are on both lists").
+
+A record about two vehicles gets both. A list is never a reason on its own: a catch-up with someone on
+Neurotech's list is other. The date alone is never a reason. The rules' reading is a hint: often right
+about a named vehicle, often wrong about the rest; confirm or overturn it on the words.
+
+**A record with nothing to read** — no words, no note — is other, "Nothing on record says what it
+was", unless it plainly continues a neighbour (3).
+
+**The basis** is 25 words or fewer and quotes at most 10 of the record's: no health detail (write
+"[health detail]" if it matters), no amount, nothing personal, no name of anyone outside the team.
+
+**The check.** `DATA_PROFILE=real npx tsx scripts/event-tag-merge.ts --check tNN` reads the output
+against the batch — a line for every record, "raise" or "other", only the batch's vehicles, none with
+"other", a basis within bounds and free of health words — the same check translation makes when it
+loads the merged file. Fix what it reports.
+
+**Amendments, W12 version 1.1** (after the first pass: the readers split on our own events):
+
+- **Our own events are about the fund they court.** An investor event we host — a dinner, a breakfast,
+  a salon, a roundtable, a speaker invitation — whose name or theme is one vehicle's (neurotech,
+  brain–computer interfaces → PLC Neurotech I; crypto, stablecoins, payment rails → PLC Crypto/Rails)
+  is about that vehicle's raise: it is how we raise. The basis begins "Our event:". One about the firm
+  as a whole gets both funds only if its words take in both; otherwise the vehicle is unclear. A
+  Protocol Labs or portfolio demo day, a conference, someone else's event and general networking stay
+  General. Three readers had filed our events as General and one as the fund's; Claude decided this on
+  Juan's standing instruction to decide in bulk (24 Sep), for him to overturn — a search for "Our
+  event:" finds every one.
+- **A second copy of a meeting takes the first's tag.** The calendar and a list entry can each hold the
+  same meeting; the readers found the copies read differently. Tag them alike, and say "Continues:".
+
+## Running W12 as a sub-agent
+
+1. Read this protocol and your batch files. Nothing else of the real data is needed.
+2. No web search, no fetch: everything the tag rests on is in the batch. Write only
+   `data/real/tags/out/<batch>.json`; no git.
+3. Run the check on each batch and fix what it reports.
+4. Reply with counts only — records; about a raise with a vehicle (named, continues, inferred); about a
+   raise, vehicle unclear; general — and three learnings about where the rules read wrong. No names, no
+   quotes from the records.
 
 ## Running W1 as a sub-agent
 

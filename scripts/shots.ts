@@ -212,6 +212,35 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  N81: [
+    {
+      name: '01-timeline-by-vehicle',
+      path: '/neurotech/pipeline?status=committed',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: 'Nadia Brandt' }).first().click();
+        await page.waitForLoadState('networkidle');
+        await page.getByRole('heading', { name: 'Timeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -80));
+        await page.waitForTimeout(300);
+      },
+    },
+    {
+      name: '02-tag-a-row',
+      path: '/neurotech/pipeline?status=committed',
+      prepare: async (page) => {
+        await page.getByRole('link', { name: 'Nadia Brandt' }).first().click();
+        await page.waitForLoadState('networkidle');
+        await page.locator('.tl-filter a', { hasText: 'Vehicle unclear' }).click();
+        await page.waitForURL(/tl=unclear/);
+        await page.waitForLoadState('networkidle');
+        const row = page.locator('.tl-row', { has: page.locator('.vtag.unclear') }).first();
+        await row.locator('details.retag > summary').click();
+        await row.locator('.retag-body').waitFor();
+        await row.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+        await page.waitForTimeout(300);
+      },
+    },
+  ],
   N80: [
     {
       name: '01-records-to-fix',

@@ -127,6 +127,35 @@ export const config = {
   },
 
   /**
+   * Capacity from size (W1 1.49, W5 1.9). Juan, 24 Sep, asked whether an office's totals may set a
+   * band: "it likely can set an informed capacity limit for us to make an educated guess. I would
+   * guess based on what similar entities with similar sizes tend to do in terms of check sizes. ofc
+   * it will vary, but it's a well informed guess." So a band may be read off this table: one typical
+   * commitment to one venture fund, by the kind of investor and the size of the unit that commits —
+   * each step's upper bound in dollars. Every band is a GUESS from general practice, not from our
+   * own closes, and none should survive two weeks of real commitments.
+   */
+  capacity: {
+    bySize: {
+      /** A family office's or principal's investable assets. */
+      family_office: [[100e6, '<$250K'], [500e6, '$250K–1M'], [2e9, '$1–5M'], [Infinity, '$5–25M']],
+      /** A foundation's or endowment's assets. */
+      foundation: [[250e6, '$250K–1M'], [2e9, '$1–5M'], [Infinity, '$5–25M']],
+      /** A wealth manager, multi-family office or adviser that places clients' money in funds: its assets under management. */
+      wealth_manager: [[1e9, '$250K–1M'], [10e9, '$1–5M'], [Infinity, '$5–25M']],
+      /** A fund of funds or a fund's LP programme: the fund's size. */
+      fund_of_funds: [[100e6, '$1–5M'], [500e6, '$1–5M'], [Infinity, '$5–25M']],
+      /** A person's net worth. */
+      individual: [[25e6, '<$250K'], [100e6, '$250K–1M'], [1e9, '$1–5M'], [Infinity, '$5–25M']],
+    } as Record<string, Array<[number, string]>>,
+    /**
+     * Juan, 24 Sep, on angel checks whose sizes aren't known: "many angel checks probably means at
+     * least capacity in the 100K-250K range? maybe more? unsure." A floor, not a band.
+     */
+    angelFloor: { checks: 5, band: '$100K+ (floor)' }, // GUESS — "many" read as five or more; the floor is Juan's own guess.
+  },
+
+  /**
    * L10. A signal is a change that crossed a threshold; everything else is noise. These
    * are the thresholds, and every one of them is a judgement rather than a measurement.
    */

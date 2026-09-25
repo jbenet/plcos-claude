@@ -296,6 +296,12 @@ export interface NoteView {
   health: boolean;
   /** Everyone and everything else it is attached to, counted. */
   alsoAttached: number;
+  /**
+   * What it is about (N81): the vehicles, a raise without saying which, or something else — by
+   * the rules, Claude or a person. A note on a meeting or an email takes that interaction's tag
+   * when Claude or a person tagged it and nobody tagged the note itself.
+   */
+  tag: { about: 'raise' | 'other'; vehicles: string[]; basis: string | null; by: 'rule' | 'claude' | 'person'; byName: string | null } | null;
   replies: number;
   fetchedAt: Date;
 }
@@ -330,9 +336,18 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
   if (!persons.length && !companies.length) return [];
   // The newest version of each note first, then the filter: an older version attached to this
   // entity must not show a note that has since been moved off it.
-  const rows = await db.query<{ fetched_at: Date | string; payload: AffinityNote; summary: string | null; read: string | null; basis: string | null; what: string | null; read_by: string | null; confirmed_at: Date | string | null; confirmed_by_name: string | null; dismissed_at: Date | string | null }>(
+  type Tag = { about: 'raise' | 'other'; vehicles: string[]; basis: string | null; by_kind: 'rule' | 'claude' | 'person'; name: string | null } | null;
+  const rows = await db.query<{ fetched_at: Date | string; payload: AffinityNote; summary: string | null; read: string | null; basis: string | null; what: string | null; read_by: string | null; confirmed_at: Date | string | null; confirmed_by_name: string | null; dismissed_at: Date | string | null; note_tag: Tag; on_tag: Tag }>(
     `select n.fetched_at, n.payload, nr.summary, nr.read::text as read, nr.basis, nr.what, nr.read_by, nr.confirmed_at,
-            cu.name as confirmed_by_name, nr.dismissed_at
+            cu.name as confirmed_by_name, nr.dismissed_at,
+            (select jsonb_build_object('about', t.about, 'vehicles', t.vehicles, 'basis', t.basis, 'by_kind', t.by_kind, 'name', u.name)
+               from meetings.event_tag t left join platform.app_user u on u.id = t.tagged_by
+              where t.source = 'affinity' and t.ref = 'note:' || (n.payload->>'id')) as note_tag,
+            (select jsonb_build_object('about', t.about, 'vehicles', t.vehicles, 'basis', t.basis, 'by_kind', t.by_kind, 'name', u.name)
+               from meetings.event_tag t left join platform.app_user u on u.id = t.tagged_by
+              where t.source = 'affinity' and t.by_kind in ('claude', 'person')
+                and t.ref = 'interaction:' || case when n.payload->>'type' = 'ai-notetaker' then 'meeting' else n.payload->'interaction'->>'type' end
+                            || ':' || (n.payload->'interaction'->>'id')) as on_tag
        from (
        select fetched_at, payload from (
        select distinct on (source_id) source_id, fetched_at, payload
@@ -357,6 +372,7 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
     const keys = attachedKeys(n);
     const viaOrg = keys.some((k) => mine.has(k)) ? null : keys.find((k) => orgName.has(k));
     const health = mentionsHealth(html);
+    const t = r.note_tag && r.note_tag.by_kind !== 'rule' ? r.note_tag : r.on_tag ?? r.note_tag;
     return {
       noteId: n.id,
       interaction: n.type === 'ai-notetaker' && n.interaction ? { type: 'meeting', id: n.interaction.id } : n.interaction ? { type: n.interaction.type, id: n.interaction.id } : null,
@@ -376,6 +392,7 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
       text: noteText(html),
       health,
       alsoAttached: keys.filter((k) => !mine.has(k) && k !== viaOrg).length,
+      tag: t ? { about: t.about, vehicles: t.vehicles ?? [], basis: t.basis, by: t.by_kind, byName: t.name } : null,
       replies: n.repliesCount ?? 0,
       fetchedAt: new Date(fetched_at),
     };

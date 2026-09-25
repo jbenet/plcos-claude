@@ -46,7 +46,12 @@ anyone on that network can read and change it. `DATA_PROFILE` picks one, in `con
   still carries no real data, and it never runs remotely. No sign-ins, no paid services, no
   contact-data brokers, nothing posted. Findings land in files first and are mapped in by an import.
   A request carries no identity of ours: no email, name or product name in any header — a
-  User-Agent included (docs/19, W1 1.36).
+  User-Agent included (docs/19, W1 1.36). Where a service requires a contact address (SEC's
+  fair-access policy asks for one in the User-Agent), use `blue.tunguska@agentmail.to` — Juan's
+  privacy-preserving address, 24 Sep 2026 — and nothing else; a service that wants more identity
+  than that is asked about first. Government sites are read sparingly and by their own rules: SEC
+  at most one request a second (its limit is ten), no bursts or loops over names, and a 403, 429
+  or 503 means stop and come back later (W1 1.48). Juan's own address is never used in a request.
 - **Affinity is read-only.** The key can write and cannot be scoped, so read-only is
   enforced in the client: GET only, allowlisted paths, a property test that a write throws.
   Writing back is a later decision, and would go through approval tickets.
@@ -148,9 +153,13 @@ Reconciliation (N57, `docs/18-reconciliation.md`) keeps the ladder in step with 
 after each translation it proposes the climb that records on file support (a meeting on the
 calendar, a reply from them, a signature recorded here), as one STAGE ticket per LP listing each
 rung and its record, requested by the system's inactive "Reconciliation" actor. A person
-approves; claims and notes are never used as records. Since N59, a record counts for a vehicle
-only when it is about that vehicle's raise: inside its raise window, and naming it, speaking of
-a fund, or from or to the fundraising domain. The rest is contact history, on the LP's own page.
+approves; claims and notes are never used as records. Since N81, a record counts for a vehicle
+only when it is tagged with that vehicle — it names it, or Claude (W12, `event-tags.jsonc`) or a
+person on the LP's timeline tagged it — and falls inside its raise window; a person's tag counts
+whatever the date. A record about a raise that names no vehicle is "vehicle unclear" and counts for
+none (before N81 it counted for every vehicle raising on its date). The fundraising-domain rule reads
+an email's addresses only, never a meeting's invitees or a note's author. The LP's timeline shows
+every record, labelled with its vehicle or "General", and filters by fund.
 
 **3. Five approval-ticket kinds gate mutations, before the fact.**
 

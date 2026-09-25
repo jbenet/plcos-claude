@@ -76,8 +76,10 @@ last touch, and "waiting on their reply since…".
 
 - **From Affinity, without asking anyone to re-type it:** meeting, call and email notes carry
   the interaction and a date (N49), and every list entry carries Affinity's first and last
-  email and meeting dates. A meeting that covered two vehicles counts for both; one tied to no
-  vehicle counts for every open pursuit of that LP, labelled as such.
+  email and meeting dates. A meeting that covered two vehicles counts for both. Since N81 one
+  counts for a vehicle only when it is tagged with it — named there, or tagged by Claude or a
+  person (docs/18) — and one about a raise that names no vehicle counts for none until someone
+  says which; before, it counted for every open pursuit of that LP.
 - **Their firm's touchpoints are shown, not counted** (N53). A meeting with a colleague at the
   same firm is not a meeting with this LP; counting it as one invented next meetings that were
   someone else's. The firm's rows appear in the log with its name, summed on one line.

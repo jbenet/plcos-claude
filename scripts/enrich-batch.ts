@@ -13,6 +13,7 @@
  *   w5   a resolved finding with no strategy, or a strategy older than its finding; or W9's warm
  *        lane with no strategy. Within a firm, the colleague with the most contact comes first, so
  *        the lead conversation's strategy is written before the others read it.
+ *        With `--keys <file>` (N81): the strategies of the LPs listed, one key a line, firms whole.
  *        With `--revise` (W5 v1.5): strategies written before version 1.3, or that the critic's
  *        gates flag, or with a next step over 300 characters — and every colleague at their firm,
  *        so a firm is rewritten together.
@@ -44,9 +45,13 @@ async function jsonDir<T extends { key: string }>(dir: string): Promise<Map<stri
 }
 
 async function main() {
-  const [mode, prefix, sizeArg] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+  // `--keys <file>` (N81): exactly these LPs' strategies, and their firms', one key a line.
+  const keysAt = process.argv.indexOf('--keys');
+  const keysFile = keysAt >= 0 ? process.argv[keysAt + 1] : null;
+  const [mode, prefix, sizeArg] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !(keysAt >= 0 && all[i - 1] === '--keys'));
   const withSearch = process.argv.includes('--search');
-  const revise = process.argv.includes('--revise');
+  const revise = process.argv.includes('--revise') || Boolean(keysFile);
+  const only = keysFile ? new Set((await readFile(keysFile, 'utf8')).split('\n').map((k) => k.trim()).filter(Boolean)) : null;
   if ((mode !== 'w1' && mode !== 'w5') || !prefix) {
     console.error('usage: enrich-batch.ts w1|w5 <prefix> [size] [--search]');
     process.exit(2);
@@ -125,6 +130,7 @@ async function main() {
     if (mode === 'w1') return !f || (withSearch && pagesOnly(f));
     const resolved = f && (f.identity.match === 'confirmed' || f.identity.match === 'probable');
     const s = strategies.get(c.key);
+    if (only) return Boolean(s) && only.has(c.key);
     if (s) return isStale(s, f, c.money, best.get(c.key) ?? null, c.context?.[0]?.at ?? null) || (revise && flagged(c));
     // Discussing or committed: a strategy from our records even without a resolved finding — a
     // firm's lead can be one of them (v03's learning).
