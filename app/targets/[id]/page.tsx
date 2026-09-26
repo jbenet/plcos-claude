@@ -31,6 +31,7 @@ import { meetingTitles } from '@/lib/connectors/affinity/meetings';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { laterFacts, shownRead } from '@/lib/reads';
 import { onFile } from '@/lib/reconcile';
+import { ConnectionFeedback } from '@/components/routes/ConnectionFeedback';
 import { PublicProfile } from '@/components/entity/PublicProfile';
 import { SuggestedStrategy } from '@/components/strategy/SuggestedStrategy';
 import { AddContext } from '@/components/strategy/AddContext';
@@ -348,6 +349,7 @@ export default async function TargetWorkspace({ params, searchParams }: {
           <BeforeOutreach entityId={pursuit.entityId} />
           <SuggestedStrategy pursuitId={pursuit.pursuitId} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />
           <PublicProfile entityId={pursuit.entityId} />
+          <ConnectionFeedback key={pursuit.entityId} lp={pursuit.entityId} />
 
           <div className="card">
             <div className="chead">

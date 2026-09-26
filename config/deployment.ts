@@ -159,16 +159,16 @@ export const config = {
    */
   capacity: {
     bySize: {
-      /** A family office's or principal's investable assets. */
-      family_office: [[100e6, '<$250K'], [500e6, '$250K–1M'], [2e9, '$1–5M'], [Infinity, '$5–25M']],
+      /** A family office's or principal's investable assets. Small-band thresholds are GUESSES. */
+      family_office: [[5e6, '<$25K'], [10e6, '$25–50K'], [100e6, '$50–250K'], [500e6, '$250K–1M'], [2e9, '$1–5M'], [Infinity, '$5–25M']],
       /** A foundation's or endowment's assets. */
       foundation: [[250e6, '$250K–1M'], [2e9, '$1–5M'], [Infinity, '$5–25M']],
       /** A wealth manager, multi-family office or adviser that places clients' money in funds: its assets under management. */
       wealth_manager: [[1e9, '$250K–1M'], [10e9, '$1–5M'], [Infinity, '$5–25M']],
       /** A fund of funds or a fund's LP programme: the fund's size. */
       fund_of_funds: [[100e6, '$1–5M'], [500e6, '$1–5M'], [Infinity, '$5–25M']],
-      /** A person's net worth. */
-      individual: [[25e6, '<$250K'], [100e6, '$250K–1M'], [1e9, '$1–5M'], [Infinity, '$5–25M']],
+      /** A person's net worth. Small-band thresholds are GUESSES, including strategic angels. */
+      individual: [[2e6, '<$25K'], [5e6, '$25–50K'], [25e6, '$50–250K'], [100e6, '$250K–1M'], [1e9, '$1–5M'], [Infinity, '$5–25M']],
     } as Record<string, Array<[number, string]>>,
     /**
      * Juan, 24 Sep, on angel checks whose sizes aren't known: "many angel checks probably means at

@@ -1,3 +1,4 @@
+import { capacityBandLabel } from '@/lib/capacity-bands';
 import { shortDate } from '@/lib/time';
 import { suggestionsFor } from '@/modules/strategy';
 import type { Strategy } from '@/lib/enrich/strategy';
@@ -48,7 +49,7 @@ export async function SuggestedStrategy({ pursuitId, context = [] }: {
         <div className="fact"><span>The ask</span><span>{st.ask.shape} · {st.ask.vehicle}{st.ask.range ? ` · ${st.ask.range}` : ''}</span></div>
         <div className="fact"><span>Which list</span><span>{st.list === 'this year' ? 'This year’s close' : st.list === '2027' ? 'The 2027 pipeline' : 'Not now'} <span className="muted">· confidence {st.confidence}</span></span></div>
         <div className="ss-scores">
-          <div><span className="lbl">Capacity</span><b>{st.scores.capacity.band}</b><small>{st.scores.capacity.basis}</small></div>
+          <div><span className="lbl">Capacity</span><b>{capacityBandLabel(st.scores.capacity.band)}</b><small>{st.scores.capacity.basis}</small></div>
           <div><span className="lbl">Affinity</span><b>{LEVEL[st.scores.affinity.level]}</b><small>{st.scores.affinity.basis}</small></div>
           <div><span className="lbl">Propensity</span><b>{LEVEL[st.scores.propensity.level]}</b><small>{st.scores.propensity.basis}</small></div>
           <div><span className="lbl">Time to decide</span><b>{st.scores.timeToDecision.band}</b><small>{st.scores.timeToDecision.basis}</small></div>

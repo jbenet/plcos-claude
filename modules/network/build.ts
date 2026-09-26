@@ -4,6 +4,7 @@ import type { EdgeKind, EvidenceTier } from './types';
 import type { Path } from '@/lib/enrich/connect';
 import { config } from '@/config/deployment';
 import { tieWarmth } from './warmth';
+import { researchEndpoint, researchTie } from './research-path';
 
 /**
  * The network, built from what we already know (N82).
@@ -51,7 +52,7 @@ const KIND: Record<string, EdgeKind> = {
 const norm = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
 const pairKey = (a: string, b: string, kind: string) => `${[a, b].sort().join('|')}|${kind}`;
 
-interface NewEdge { from: string; to: string; kind: EdgeKind; tier: EvidenceTier; band: string; since: string; evidence: Array<Record<string, unknown>> }
+interface NewEdge { reviewedBy?: string; reviewedAt?: string; from: string; to: string; kind: EdgeKind; tier: EvidenceTier; band: string; since: string; evidence: Array<Record<string, unknown>> }
 
 export async function buildNetwork(): Promise<BuildCounts> {
   const db = await getDb();
@@ -109,6 +110,7 @@ async function build(tx: Queryable): Promise<BuildCounts> {
     if (existing) {
       // Keep every basis; take the strongest evidence tier, never derive it from warmth.
       existing.evidence.push(...e.evidence);
+      if (e.reviewedBy && e.reviewedAt) { existing.reviewedBy = e.reviewedBy; existing.reviewedAt = e.reviewedAt; }
       if (e.tier < existing.tier) existing.tier = e.tier;
       if (e.since < existing.since) existing.since = e.since;
       return false;
@@ -177,21 +179,22 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   );
   const people = await tx.query<{ id: string; name: string }>(`select entity_id::text as id, display_name as name from identity.entity where entity_type = 'person'`);
   const known = new Set(people.map((r) => r.id));
+  const roster = people.map((p) => ({ ...p, handle: users.find((u) => entityOfUser.get(u.id) === p.id)?.handle }));
   const alreadyMet = new Set([...edges.values()].map((e) => [e.from, e.to].sort().join('|')));
   for (const n of notes) {
     for (const p of n.data.paths ?? []) {
       const lp = known.has(p.lp) ? p.lp : n.entity_id;
       if (!known.has(lp)) { counts.notPeople++; continue; }
-      const other = p.other.type === 'team'
-        ? entityOfUser.get(userByHandle.get(p.other.handle ?? '') ?? userByName.get(norm(p.other.name)) ?? '')
-        : (p.other.type === 'lp' || p.other.type === 'backer') && p.other.key && known.has(p.other.key) ? p.other.key : undefined;
+      const other = researchEndpoint(p.other, roster);
       if (!other) { counts.notPeople++; continue; }
       const kind = KIND[p.kind] ?? 'other';
-      const tie = p.tie ?? (p.tier === 'C' || p.tier === 'D' || p.kind === 'same_firm' ? { kind: 'proximity' as const } : undefined);
+      const tie = researchTie(p);
       const warmth = tieWarmth(kind, tie);
       // Our own record of meeting them says more than the research's "met".
       if (kind === 'met' && alreadyMet.has([other, lp].sort().join('|'))) continue;
       if (add({
+        reviewedBy: p.reviewedBy && p.reviewedAt ? userByHandle.get(p.reviewedBy) : undefined,
+        reviewedAt: p.reviewedAt,
         from: other, to: lp, kind, tier: p.tier, band: warmth.score >= config.routeWarmth.strongFirstHop ? 'strong' : warmth.score >= config.routeWarmth.priors.repeated_contact ? 'moderate' : 'weak', since: n.at.slice(0, 10),
         evidence: [{ derived: 'research', tie, note: p.basis, source: p.source ?? 'the research (W3)', as_of: n.at.slice(0, 10) }],
       })) {
@@ -203,9 +206,9 @@ async function build(tx: Queryable): Promise<BuildCounts> {
 
   for (const e of edges.values()) {
     await tx.query(
-      `insert into network.edge (from_entity, to_entity, kind, tier, strength, tie_band, evidence, valid_from)
-       values ($1, $2, $3::network.edge_kind, $4::network.evidence_tier, null, $5, $6, $7::date)`,
-      [e.from, e.to, e.kind, e.tier, e.band, JSON.stringify(e.evidence), e.since],
+      `insert into network.edge (from_entity, to_entity, kind, tier, strength, tie_band, evidence, valid_from, reviewed_by, reviewed_at)
+       values ($1, $2, $3::network.edge_kind, $4::network.evidence_tier, null, $5, $6, $7::date, $8::uuid, $9::timestamptz)`,
+      [e.from, e.to, e.kind, e.tier, e.band, JSON.stringify(e.evidence), e.since, e.reviewedBy ?? null, e.reviewedBy ? e.reviewedAt : null],
     );
   }
   return counts;

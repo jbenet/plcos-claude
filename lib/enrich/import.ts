@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getDb } from '@/lib/db';
 import { finishRun, startRun } from '@/modules/sources';
+import { resolveConnectionPeople } from './connection-people';
 import { enrichDir } from './candidates';
 import { check, type Finding, type SourceKind } from './schema';
 import type { Path } from './connect';
@@ -70,7 +71,7 @@ export async function importFindings(runBy: string | null): Promise<ImportCounts
       if (problems.length) { counts.rejected++; counts.problems.push({ key, problems }); continue; }
       findings.push(x as Finding);
     }
-    const paths = (await readFile(join(dir, 'connections.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Path);
+    let paths = (await readFile(join(dir, 'connections.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Path);
     // W9: the lane and the first step before any outreach (iteration 3), shown on the LP's page.
     const triage = (await readFile(join(dir, 'triage.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Triage);
     // W5: one strategy per LP, checked like the findings.
@@ -88,6 +89,7 @@ export async function importFindings(runBy: string | null): Promise<ImportCounts
 
     const db = await getDb();
     await db.transaction(async (tx) => {
+      paths = await resolveConnectionPeople(tx, paths);
       const known = new Set((await tx.query<{ id: string }>(
         `select entity_id::text as id from identity.entity where entity_id = any($1::uuid[])`,
         [[...new Set([...findings.map((f) => f.key), ...paths.map((p) => p.lp), ...triage.map((t) => t.key)])]],
@@ -147,7 +149,7 @@ export async function importFindings(runBy: string | null): Promise<ImportCounts
           await tx.query(
             `insert into research.note (entity_id, kind, body, tags, data) values ($1, 'public_profile', $2, $3, $4)`,
             [f.key, f.profile?.summary ?? f.identity.basis, f.profile?.interests ?? [],
-             JSON.stringify({ identity: f.identity, profile: f.profile ?? null, researched: f.researched, coverage: f.coverage ?? null, connections: f.connections ?? [] })],
+             JSON.stringify({ identity: f.identity, profile: f.profile ?? null, researched: f.researched, coverage: f.coverage ?? null, connections: f.connections ?? [], connectionFeedback: f.connectionFeedback ?? [] })],
           );
           counts.profiles++;
         }

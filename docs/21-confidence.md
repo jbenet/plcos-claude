@@ -274,7 +274,10 @@ exclude that amount and use the next rule. Do not apply an undated FX guess as f
 
 | Existing band / fallback | Proposed representative and planning range, USD — all GUESS |
 |---|---|
-| `<$250K` | 100,000; 25,000–250,000 |
+| `<$25K` | 10,000; 0–25,000 |
+| `$25–50K` | 35,000; 25,000–50,000 |
+| `$50–250K` | 100,000; 50,000–250,000 |
+| `<$250K` (legacy input only) | 100,000; 0–250,000 — range unspecified; never write anew |
 | `$100K+ (floor)` | 150,000; 100,000–500,000; the finite upper value is a planning assumption, not evidence of a ceiling |
 | `$250K–1M` | 500,000; 250,000–1,000,000 |
 | `$1–5M` | 2,000,000; 1,000,000–5,000,000 |
@@ -283,6 +286,12 @@ exclude that amount and use the next rule. Do not apply an undated FX guess as f
 | Kind prior: individual/operator/angel; also universal fallback | 100,000; 25,000–250,000 |
 | Kind prior: family-office committing unit | 500,000; 100,000–1,000,000 |
 | Kind prior: institutional/foundation/corporate/LP allocation programme | 1,000,000; 250,000–5,000,000 |
+
+For size-derived estimates, the small-band thresholds in `config/deployment.ts` are also
+GUESSES: individual net worth below $2M → `<$25K`, $2–5M → `$25–50K`, $5–25M →
+`$50–250K`; family-office investable assets below $5M → `<$25K`, $5–10M → `$25–50K`,
+$10–100M → `$50–250K`. These are possible check sizes, not fund minimums. Keep legacy
+`<$250K` estimates broad until evidence supports a narrower band.
 
 Staff, advisers and GPs with no evidenced committing mandate use the universal fallback for
 the individual; no institutional prior merely because of their job title. Initially use the

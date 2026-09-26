@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Candidate } from './candidates';
@@ -14,18 +15,24 @@ import { tieWarmth, type TieDetails, type Warmth } from '@/modules/network';
  * never route without a person (CLAUDE.md, rule 6) — these are candidates for one to look at.
  */
 
+export interface ConnectionPerson { key: string; name: string; source: string }
+
 export type Tier = 'A' | 'B' | 'C' | 'D';
 
 export interface Path {
   lp: string;
+  /** Sourced person outside the active LP research set; import resolves before building edges. */
+  lpPerson?: ConnectionPerson;
   /** Who or what they are near: a team member, one of our organizations, a backer of ours, another LP. */
-  other: { type: 'team' | 'ours' | 'backer' | 'lp'; name: string; key?: string; handle?: string };
+  other: { type: 'team' | 'ours' | 'backer' | 'lp'; name: string; key?: string; handle?: string; person?: ConnectionPerson };
   kind: 'met' | 'corresponded' | 'colleague' | 'advisor' | 'coinvestor' | 'portfolio' | 'alumni' | 'board' | 'same_firm' | 'other';
   tier: Tier;
   basis: string;
   source?: string | null;
   tie?: TieDetails;
   warmth?: Warmth;
+  reviewedBy?: string;
+  reviewedAt?: string;
 }
 
 export interface Org { name: string; aliases: string[]; domains?: string[]; what?: string; source?: string }
@@ -104,8 +111,23 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
 export function connectionPaths(candidates: Candidate[], findings: Map<string, Finding>, net: Network,
   team: TeamMember[], directory: PlDirectoryEntry[] = [], at = new Date()): { paths: Path[]; lps: number; researched: number } {
 
+  // A connector need not be raising. The sourced personal backer roster is a separate
+  // universe from active LPs; leaving it out made documented co-founder ties dead ends.
+  const connectors = net.backer_people.filter((p) => /^https?:\/\//.test(p.source)
+    && !candidates.some((c) => norm(c.name) === norm(p.name))
+    && !team.some((t) => norm(t.name) === norm(p.name))
+    && net.backer_people.filter((q) => norm(q.name) === norm(p.name)).length === 1)
+    .map((p): Candidate => ({ key: connectionPersonKey(p.name, p.source), name: p.name, type: 'person', org: null, role: null,
+      location: null, domains: [], enriched: {}, pursuits: [], notes: [], context: [], money: null, restrictions: [],
+      contact: { since: null, earlier: { meetings: 0, first: null, last: null }, meetings: 0, lastTouch: null,
+        lastFromThem: null, awaitingSince: null, read: null, lastTouchChannel: null, groupMeetings: 0, meetingDates: [], recent: [], outreachShared: 0 } }));
+  const people = [...candidates, ...connectors];
+  const descriptors = new Map(connectors.map((c) => [c.key, { key: c.key, name: c.name,
+    source: net.backer_people.find((p) => norm(p.name) === norm(c.name))!.source }]));
   const paths: Path[] = [];
   const add = (p: Path) => {
+    if (descriptors.has(p.lp)) p.lpPerson = descriptors.get(p.lp);
+    if (p.other.key && descriptors.has(p.other.key)) p.other = { ...p.other, person: descriptors.get(p.other.key) };
     // Keep distinct supporting records; a weak affiliation must not discard a warm personal tie.
     if (!paths.some((q) => q.lp === p.lp && q.other.name === p.other.name && q.kind === p.kind && q.basis === p.basis)) paths.push(p);
   };
@@ -218,16 +240,21 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
     }
   }
 
+  for (const c of connectors) for (const p of ourSidePaths(c, undefined, net, team, at)) add(p);
+
   // The ties the research itself recorded, on their tier — a firm's tie is C at most for the person.
   for (const f of findings.values()) {
     if (f.identity.match === 'ambiguous' || f.identity.match === 'not_found') continue;
     for (const c of f.connections ?? []) {
       const tier = c.tier === 'B' && (c.scope === 'firm' || !c.source) ? 'C' : c.tier;
-      const resolved = c.scope !== 'firm' ? resolvePerson(c.to, candidates, team) : null;
+      const resolved = c.scope !== 'firm' ? (c.toHandle && team.some((t) => t.handle === c.toHandle)
+        ? { type: 'team' as const, name: team.find((t) => t.handle === c.toHandle)!.name, handle: c.toHandle }
+        : resolvePerson(c.to, people, team)) : null;
       add({ lp: f.key, other: resolved ?? { type: /protocol labs|filecoin|ipfs|pl capital|protocol vc/i.test(c.to) ? 'ours' : 'backer', name: c.to },
         kind: c.kind === 'portfolio' ? 'portfolio' : c.kind === 'board' ? 'board' : c.kind === 'advisor' ? 'advisor' : c.kind === 'coinvestor' ? 'coinvestor' : c.kind === 'colleague' ? 'colleague' : c.kind === 'alumni' ? 'alumni' : 'other',
         tie: c.scope === 'firm' ? { kind: 'proximity' } : c.tie
           ?? (/\bco[ -]?founded\b|\bco[ -]?founders\b/i.test(c.basis) && resolved ? { kind: 'cofounder' } : undefined),
+        reviewedBy: c.reviewedBy, reviewedAt: c.reviewedAt,
         tier, basis: `${c.basis}${c.scope === 'firm' ? ' (the firm’s tie)' : ''}`, source: c.source ?? null });
     }
   }
@@ -334,9 +361,16 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
   lps: candidates.length, researched: findings.size };
 }
 
+/** Stable source identity, never a random new person on every W3 pass. */
+export function connectionPersonKey(name: string, source: string): string {
+  const h = createHash('sha256').update(`w3-person:${norm(name)}:${source}`).digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
 /** Resolve a named personal relationship against the frozen roster, never fuzzy or firm names. */
 export function resolvePerson(name: string, candidates: Candidate[], team: TeamMember[]): Path['other'] | null {
-  const key = norm(name);
+  // A trailing parenthesis describes a known person; never resolve names inside a firm label.
+  const key = norm(name.replace(/\s*\([^()]*\)\s*$/, ''));
   if (!key.includes(' ')) return null;
   const matches: Path['other'][] = [
     ...team.filter((t) => norm(t.name) === key).map((t) => ({ type: 'team' as const, name: t.name, handle: t.handle })),

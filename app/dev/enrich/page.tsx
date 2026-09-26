@@ -1,3 +1,4 @@
+import { capacityBandLabel } from '@/lib/capacity-bands';
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Page } from '@/components/shell/Page';
@@ -85,7 +86,7 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
   // W8, the portfolio view: every proposal together, this year's close first, then by how much
   // they could do and how ready they are. A person decides each on its LP's page.
   const LEVEL = { high: 3, medium: 2, low: 1, unknown: 0 } as Record<string, number>;
-  const BAND = { '>$25M': 5, '$5–25M': 4, '$1–5M': 3, '$250K–1M': 2, '$100K+ (floor)': 1.5, '<$250K': 1 } as Record<string, number>;
+  const BAND = { '>$25M': 5, '$5–25M': 4, '$1–5M': 3, '$250K–1M': 2, '$100K+ (floor)': 1.5, '<$250K': 1, '$50–250K': 1, '$25–50K': 0.5, '<$25K': 0.25 } as Record<string, number>;
   const open = suggestions.filter((x) => x.status === 'proposed');
   const st = (x: (typeof open)[number]) => x.data as unknown as Strategy;
   const ranked = [...open].sort((a, b) =>
@@ -313,7 +314,7 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
               <tbody>
                 {ranked.slice(0, 60).map((x) => (
                   <tr key={x.suggestionId}>
-                    <td><Link href={`/targets/${x.pursuitId}`}><b>{x.entityName}</b></Link><div className="muted" style={{ fontSize: 11 }}>capacity {st(x).scores.capacity.band} · propensity {st(x).scores.propensity.level}</div></td>
+                    <td><Link href={`/targets/${x.pursuitId}`}><b>{x.entityName}</b></Link><div className="muted" style={{ fontSize: 11 }}>capacity {capacityBandLabel(st(x).scores.capacity.band)} · propensity {st(x).scores.propensity.level}</div></td>
                     <td style={{ fontSize: 12.5 }}>{st(x).next.what}<div className="muted" style={{ fontSize: 11 }}>{st(x).next.who}{st(x).next.when ? ` · ${st(x).next.when}` : ''}</div></td>
                     <td>{st(x).route ? <span className={`tier t${st(x).route!.tier}`}>{st(x).route!.tier}</span> : <span className="muted">none</span>}</td>
                     <td style={{ fontSize: 12 }}>{st(x).ask.shape}{st(x).ask.range ? <div className="muted" style={{ fontSize: 11 }}>{st(x).ask.range}</div> : null}</td>

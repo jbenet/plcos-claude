@@ -23,8 +23,8 @@ export const INVESTOR_TYPES = [
 ] as const;
 export type InvestorType = (typeof INVESTOR_TYPES)[number];
 
-/** '$100K+ (floor)' (W1 1.49): at least that much, the top not known — many angel checks, sizes unknown. */
-export const CAPACITY_BANDS = ['<$250K', '$100K+ (floor)', '$250K–1M', '$1–5M', '$5–25M', '>$25M', 'unknown'] as const;
+import { readableCapacityBand, type CapacityBand } from '@/lib/capacity-bands';
+export { CAPACITY_BANDS, readableCapacityBand, capacityBandLabel } from '@/lib/capacity-bands';
 
 export interface Source { url: string; title?: string; published?: string | null; kind: SourceKind }
 
@@ -45,6 +45,10 @@ export interface Fact {
 }
 
 export interface Connection {
+  feedbackId?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  toHandle?: string;
   /** Optional relationship detail for W3; never changes the evidence tier. */
   tie?: import('@/modules/network').TieDetails;
   /** Who or what on our side, or in the ecosystem: a team member, Protocol Labs, a portfolio company. */
@@ -85,11 +89,12 @@ export interface Finding {
     howTheyInvest?: string;
     interests?: string[];
     /** The likely commitment to one fund, as a band (v1.3) — an estimate, with its basis. */
-    capacity?: { band: (typeof CAPACITY_BANDS)[number]; basis: string };
+    capacity?: { band: CapacityBand; basis: string };
     signals?: Array<{ what: string; on?: string | null; source?: string | null }>;
     cautions?: string[];
   };
   connections?: Connection[];
+  connectionFeedback?: Array<{ id: string; text: string; page: string; author: { id: string; handle: string; name: string }; at: string }>;
   queries?: Array<{ q: string; useful?: boolean }>;
   coverage?: { searched?: string[]; notFound?: string[]; note?: string };
 }
@@ -201,6 +206,7 @@ export function check(f: unknown, expectKey?: string): string[] {
     // Each text on its own: joined, a quote ending "in 2014" and a company "Sixth Street Partners" read as an address.
     if ([fact.value, fact.quote ?? '', ...Object.values(fact.detail ?? {}).filter((v): v is string => typeof v === 'string')].some(hasAddress)) p.push(`fact ${i}: carries a street address`);
   }
+  if (x.profile?.capacity && !readableCapacityBand(x.profile.capacity.band)) p.push('profile.capacity: unknown band');
   if (x.profile && !INVESTOR_TYPES.includes(x.profile.investorType)) p.push(`profile.investorType "${x.profile.investorType}" is not one of the types`);
   // Contact details anywhere, not only in facts (v1.16): firm pages hand them to the reader freely.
   const prose: Array<[string, string | null | undefined]> = [
