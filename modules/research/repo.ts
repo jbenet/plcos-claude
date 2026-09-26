@@ -11,9 +11,11 @@ const toDoc = (r: DocRow): SourceDoc => ({
   asOf: new Date(r.as_of), strength: r.strength, supports: r.supports, body: r.body,
 });
 
-export async function listSourceDocs(): Promise<SourceDoc[]> {
+export async function listSourceDocs(ids?: string[]): Promise<SourceDoc[]> {
   const db = await getDb();
-  return (await db.query<DocRow>('select * from research.source_doc order by doc_id')).map(toDoc);
+  if (ids?.length === 0) return [];
+  return (await db.query<DocRow>(`select * from research.source_doc
+    ${ids ? 'where doc_id = any($1::text[])' : ''} order by doc_id`, ids ? [ids] : [])).map(toDoc);
 }
 
 export async function getSourceDoc(docId: string): Promise<SourceDoc | null> {

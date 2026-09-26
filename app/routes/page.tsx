@@ -51,8 +51,8 @@ export default async function Routes({
   const selection = await vehicleSelection();
   const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam, expanded } = await searchParams;
   const user = await (await auth()).currentUser();
-  const [entities, docs, tiers, vehicles, affiliations, fit, asks, team, pursuits] = await Promise.all([
-    listEntities(), listSourceDocs(), tierCounts(), listVehicles(),
+  const [tiers, vehicles, affiliations, fit, asks, team, pursuits] = await Promise.all([
+    tierCounts(), listVehicles(),
     listAffiliations(), listAssessments(selection.current?.id ?? null),
     listAsks(null), (await auth()).listUsers(), listPursuits(selection.current?.id ?? null),
   ]);
@@ -63,6 +63,7 @@ export default async function Routes({
   const teamNames = new Set(team.map((u) => u.name));
   const inPipeline = new Set(pursuits.filter((p) => !p.historical).map((p) => p.entityId));
   for (const a of affiliations) if (a.current && inPipeline.has(a.personId)) inPipeline.add(a.orgId);
+  const entities = await listEntities([...new Set([...inPipeline, ...(target ? [target] : [])])]);
   const targets = entities.filter((e) => inPipeline.has(e.entityId) && !teamNames.has(e.displayName));
   const targetId = target ?? targets.find((t) => t.displayName === 'Delia Roos')?.entityId ?? targets[0]?.entityId;
   const search = targetId
@@ -196,6 +197,8 @@ export default async function Routes({
     return { id: user.id, why: `Nobody here has dealt with this connector or this target before, so it falls to whoever found the route — ${user.name}.` };
   };
 
+  const docs = await listSourceDocs([...new Set((search?.routes ?? [])
+    .flatMap((route) => route.hops.flatMap((hop) => hop.edge.evidence.flatMap((ev) => ev.doc ? [ev.doc] : []))))]);
   const docMap = new Map<string, EvidenceDoc>(
     docs.map((d) => [
       d.docId,

@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getDb, type Db } from '@/lib/db';
 import type { Edge, EdgeKind, EvidenceTier } from './types';
 
 type EdgeRow = {
@@ -46,7 +46,7 @@ export interface RawPath {
 }
 
 /**
- * Enumerate every currently-valid path from `fromEntity` to `targetEntity` up to `maxHops`.
+ * Enumerate up to 300 currently-valid paths from `fromEntity` to `targetEntity`, up to `maxHops`.
  *
  * Deliberately enumerates unusable paths too. A planner that silently drops the
  * proximity-only path returns an empty list, and an empty list reads as "no route exists"
@@ -55,60 +55,125 @@ export interface RawPath {
 export async function enumeratePaths(
   fromEntity: string, targetEntity: string, maxHops = 3,
 ): Promise<RawPath[]> {
+  return enumeratePathsFromSources([fromEntity], targetEntity, maxHops);
+}
+
+/** Same 300 candidates per source (hops, edge IDs), sharing the target-side expansion.
+ * Inline valid so each join can use the endpoint indexes; materializing the entire
+ * bidirectional graph forces repeated scans of every edge even for a tiny target.
+ * Short routes come first. Three-hop paths are read one first edge at a time in
+ * UUID order, stopping at the remaining budget, rather than sorting millions of
+ * complete paths and then discarding them. Prefixes must have a valid suffix so
+ * an unreachable hub does not make the recursive walk visit every dead end.
+ * Prefix arrays give the cursor positional access without rescanning a hub’s
+ * complete adjacency at every step.
+ * PL can start a route but can never be an intermediate connector.
+ */
+export async function enumeratePathsFromSources(
+  fromEntities: string[], targetEntity: string, maxHops = 3,
+): Promise<RawPath[]> {
+  if (!fromEntities.length) return [];
   const db = await getDb();
-  // Searched from the target's side, which has few links, and joined back to the source, which may have
-  // tens of thousands (the PL organization, or a team member tied to the PL network). A walk forward from
-  // the source expanded millions of partial paths once the warehouse joined the graph (26 Sep). The PL
-  // organization is a route source, never a middle hop (AGENTS.md rule 6). Capped: the caller ranks.
   return db.query<RawPath>(
-    `with pl as (
+    `with recursive pl as (
        select e.entity_id from identity.entity e join identity.source_record s on s.entity_id = e.entity_id
         where s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL'),
-     valid as (select a, b, edge_id from network.link where valid_to is null or valid_to >= current_date),
-     y as (
+     valid as not materialized (
+       select a, b, edge_id from network.link where valid_to is null or valid_to >= current_date),
+     y as materialized (
        select l.a as y, l.edge_id as e3 from valid l
-        where l.b = $2 and l.a <> $1 and not exists (select 1 from pl where pl.entity_id = l.a)),
-     p1 as (
-       select array[l.a, l.b] as nodes, array[l.edge_id] as edges, 1 as hops
-         from valid l where l.a = $1 and l.b = $2),
-     p2 as (
-       select array[l.a, y.y, $2::uuid] as nodes, array[l.edge_id, y.e3] as edges, 2 as hops
-         from y join valid l on l.a = $1 and l.b = y.y
-        where $3 >= 2),
-     p3 as (
-       select array[l1.a, l2.a, y.y, $2::uuid] as nodes, array[l1.edge_id, l2.edge_id, y.e3] as edges, 3 as hops
-         from y join valid l2 on l2.b = y.y
-         join valid l1 on l1.a = $1 and l1.b = l2.a
-        where $3 >= 3 and l2.a <> $1 and l2.a <> $2 and l2.a <> y.y
-          and not exists (select 1 from pl where pl.entity_id = l2.a))
-     select nodes, edges, hops from (
-       select * from p1 union all select * from p2 union all select * from p3) paths
-      order by hops, edges limit 300`,
-    [fromEntity, targetEntity, maxHops],
+        where l.b = $2 and not exists (select 1 from pl where pl.entity_id = l.a)),
+     sources as (select distinct unnest($1::uuid[]) as source),
+     short as materialized (
+       select sources.source, paths.* from sources cross join lateral (
+         select * from (
+           select array[l.a, l.b] as nodes, array[l.edge_id] as edges, 1 as hops
+             from valid l where l.a = sources.source and l.b = $2
+           union all
+           select array[l.a, y.y, $2::uuid], array[l.edge_id, y.e3], 2
+             from y join valid l on l.a = sources.source and l.b = y.y
+            where $3 >= 2 and y.y <> l.a
+         ) candidates order by hops, edges limit 300
+       ) paths),
+     prefixes as materialized (
+       select l.a, array_agg(l.b order by l.edge_id) as nodes,
+              array_agg(l.edge_id order by l.edge_id) as edges
+         from valid l where l.a = any($1::uuid[]) and $3 >= 3
+          and l.b <> l.a and l.b <> $2
+          and not exists (select 1 from pl where pl.entity_id = l.b)
+          and exists (select 1 from valid suffix join y on y.y = suffix.b
+                       where suffix.a = l.b and y.y <> l.a and y.y <> l.b)
+        group by l.a),
+     walk as (
+       select source, 0 as position, (select count(*) from short where short.source = sources.source) as used,
+              '[]'::jsonb as batch from sources
+       union all
+       select w.source, w.position + 1, w.used + jsonb_array_length(next.batch), next.batch
+         from walk w join prefixes p on p.a = w.source and w.position < cardinality(p.edges)
+         cross join lateral (
+           select coalesce(jsonb_agg(to_jsonb(candidate)), '[]'::jsonb) as batch from (
+             select array[p.a, p.nodes[w.position + 1], y.y, $2::uuid] as nodes,
+                    array[p.edges[w.position + 1], l.edge_id, y.e3] as edges, 3 as hops
+               from valid l join y on y.y = l.b
+              where l.a = p.nodes[w.position + 1] and y.y <> p.a and y.y <> p.nodes[w.position + 1]
+              order by l.edge_id, y.e3 limit (300 - w.used)
+           ) candidate
+         ) next
+        where w.used < 300),
+     paths as (
+       select nodes, edges, hops from short
+       union all
+       select path.nodes, path.edges, path.hops from walk
+         cross join lateral jsonb_to_recordset(walk.batch) as path(nodes uuid[], edges uuid[], hops int))
+     select nodes, edges, hops from paths
+      order by array_position($1::uuid[], nodes[1]), hops, edges`,
+    [fromEntities, targetEntity, maxHops],
   );
+}
+
+type Summary = {
+  coverage: { edges: number; from: Date | null; to: Date | null };
+  tiers: Array<{ tier: EvidenceTier; n: number; reviewed: number }>;
+};
+const summaries = new WeakMap<Db, { key: string; value: Promise<Summary> }>();
+
+async function edgeSummary(): Promise<Summary> {
+  const db = await getDb();
+  // Include the database date: open-ended evidence coverage advances at midnight.
+  const revision = await db.one<{ key: string }>(
+    `select revision::text || ':' || current_date::text as key from network.edge_revision where singleton`);
+  const key = revision!.key;
+  const cached = summaries.get(db);
+  if (cached?.key === key) return cached.value;
+  const value = (async () => {
+    const rows = await db.query<{
+      tier: EvidenceTier; n: string; reviewed: string; from: Date | string | null; to: Date | string | null;
+    }>(`select tier, count(*)::text as n, count(reviewed_by)::text as reviewed,
+               min(valid_from) as from, max(coalesce(valid_to, current_date)) as to
+          from network.edge group by tier order by tier`);
+    const starts = rows.flatMap((r) => r.from ? [new Date(r.from).getTime()] : []);
+    const ends = rows.flatMap((r) => r.to ? [new Date(r.to).getTime()] : []);
+    return {
+      coverage: { edges: rows.reduce((n, r) => n + Number(r.n), 0),
+        from: starts.length ? new Date(Math.min(...starts)) : null,
+        to: ends.length ? new Date(Math.max(...ends)) : null },
+      tiers: rows.map((r) => ({ tier: r.tier, n: Number(r.n), reviewed: Number(r.reviewed) })),
+    };
+  })();
+  summaries.set(db, { key, value });
+  try { return await value; }
+  catch (err) {
+    if (summaries.get(db)?.value === value) summaries.delete(db);
+    throw err;
+  }
 }
 
 export async function edgeCoverage() {
-  const db = await getDb();
-  const row = await db.one<{ n: string; from: Date | string | null; to: Date | string | null }>(
-    `select count(*)::text as n, min(valid_from) as from,
-            max(coalesce(valid_to, current_date)) as to
-       from network.edge`,
-  );
-  return {
-    edges: Number(row?.n ?? 0),
-    from: row?.from ? new Date(row.from) : null,
-    to: row?.to ? new Date(row.to) : null,
-  };
+  return (await edgeSummary()).coverage;
 }
 
 export async function tierCounts(): Promise<Array<{ tier: EvidenceTier; n: number; reviewed: number }>> {
-  const db = await getDb();
-  const rows = await db.query<{ tier: EvidenceTier; n: string; reviewed: string }>(
-    `select tier, count(*)::text as n, count(reviewed_by)::text as reviewed
-       from network.edge group by tier order by tier`,
-  );
-  return rows.map((r) => ({ tier: r.tier, n: Number(r.n), reviewed: Number(r.reviewed) }));
+  return (await edgeSummary()).tiers;
 }
 
 /** The entity that represents a member of the team. Linked through identity.source_record. */
