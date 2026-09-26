@@ -1,3 +1,4 @@
+import { capacityBandLabel } from '@/lib/capacity-bands';
 import { shortDate } from '@/lib/time';
 import { partialSearch } from '@/lib/enrich/schema';
 import { claimLabel, claimsFor, getSourceDoc, notesFor, type Claim } from '@/modules/research';
@@ -11,6 +12,7 @@ import { claimLabel, claimsFor, getSourceDoc, notesFor, type Claim } from '@/mod
  */
 
 interface Profile {
+  connectionFeedback?: Array<{ id: string; text: string; author: { name: string }; at: string }>;
   identity?: { match: string; basis: string; links?: Array<{ kind: string; url: string }> };
   profile?: {
     summary: string; investorType: string; howTheyInvest?: string; interests?: string[];
@@ -19,7 +21,7 @@ interface Profile {
   researched?: { at: string; by: string; method?: 'search' | 'pages'; corrected?: Array<{ at: string; by: string; what: string }> };
   coverage?: { searched?: string[]; notFound?: string[]; note?: string } | null;
 }
-interface PathView { other: { type: string; name: string }; kind: string; tier: 'A' | 'B' | 'C' | 'D'; basis: string; source?: string | null }
+interface PathView { other: { type: string; name: string }; kind: string; tier: 'A' | 'B' | 'C' | 'D'; basis: string; source?: string | null; reviewedBy?: string; reviewedAt?: string }
 
 const TYPE_LABEL: Record<string, string> = {
   angel: 'Angel investor', fo_principal: 'Family office principal', fo_staff: 'Family office staff', fund_gp: 'Runs a fund',
@@ -52,8 +54,8 @@ export async function PublicProfile({ entityId }: { entityId: string }) {
   return (
     <div className="card pubprof">
       <div className="chead">
-        <h2>From public sources</h2>
-        <span className="lbl">{d.researched ? `read ${shortDate(new Date(d.researched.at))}` : 'our records'} · not verified by the team</span>
+        <h2>Research &amp; connection evidence</h2>
+        <span className="lbl">{d.researched ? `read ${shortDate(new Date(d.researched.at))}` : 'our records'} · public claims need verification</span>
       </div>
       <div className="cbody">
         {d.identity && (
@@ -72,7 +74,7 @@ export async function PublicProfile({ entityId }: { entityId: string }) {
               <div className="fact"><span>What they care about</span><span>{p.interests!.join(' · ')}</span></div>
             )}
             {p.capacity && (
-              <div className="fact"><span>Capacity</span><span>{p.capacity.band === 'unknown' ? 'Not known' : `${p.capacity.band}, an estimate`}<span className="muted"> — {p.capacity.basis}</span></span></div>
+              <div className="fact"><span>Capacity</span><span>{p.capacity.band === 'unknown' ? 'Not known' : `${capacityBandLabel(p.capacity.band)}, an estimate`}<span className="muted"> — {p.capacity.basis}</span></span></div>
             )}
             {(p.signals ?? []).map((s, i) => (
               <div className="fact" key={`s${i}`}><span>Signal</span><span>{s.what}{s.on ? ` (${s.on})` : ''}</span></div>
@@ -101,13 +103,19 @@ export async function PublicProfile({ entityId }: { entityId: string }) {
           </details>
         )}
 
+        {Boolean(d.connectionFeedback?.length) && <div className="pp-paths">
+          <div className="lbl" style={{ marginTop: 12 }}>Team connection feedback</div>
+          {d.connectionFeedback!.map((feedback) => <div className="pp-fact" key={feedback.id}>
+            <span>{feedback.text}<span className="muted"> — {feedback.author.name}, {shortDate(new Date(feedback.at))} · team statement</span></span>
+          </div>)}
+        </div>}
         {paths.length > 0 && (
           <div className="pp-paths">
             <div className="lbl" style={{ marginTop: 12 }}>Near us · {paths.length} {paths.length === 1 ? 'path' : 'paths'}</div>
             {paths.slice(0, 8).map((x, i) => (
               <div className="pp-path" key={i}>
                 <span className={`tier t${x.tier}`} title={TIER_MEANS[x.tier]}>{x.tier}</span>
-                <span><b>{x.other.name}</b> <span className="muted">— {x.basis}</span>{(x.tier === 'C' || x.tier === 'D') && <span className="needs"> · needs a person to check</span>}</span>
+                <span><b>{x.other.name}</b> <span className="muted">— {x.basis}</span>{x.reviewedBy && x.reviewedAt ? <span className="muted"> · confirmed by {x.reviewedBy}, {shortDate(new Date(x.reviewedAt))}</span> : (x.tier === 'C' || x.tier === 'D') && <span className="needs"> · needs a person to check</span>}</span>
               </div>
             ))}
             {paths.length > 8 && <p className="muted" style={{ fontSize: 12 }}>{paths.length - 8} more.</p>}
@@ -122,7 +130,7 @@ export async function PublicProfile({ entityId }: { entityId: string }) {
           : <> From page reads only, with no web search: a search pass is still owed, and &ldquo;not found&rdquo; here means not named in the pages read.</>)}
         {d.researched?.corrected?.length ? <> Corrected on {shortDate(new Date(d.researched.corrected[d.researched.corrected.length - 1].at))} after an agent re-read the pages it cites (a fact check, not the team&rsquo;s verification): {d.researched.corrected.map((c) => c.what).join('; ')}.</> : null}
         {d.coverage?.notFound?.length ? <> Not found: {d.coverage.notFound.join('; ')} — not found in what was searched, which is not the same as not there.</> : null}
-        {' '}Nothing here was sent or posted anywhere; nobody on the team has verified it yet.
+        {' '}Nothing here was sent or posted anywhere; public-source claims need verification; any team confirmation is marked on its connection.
       </p>
     </div>
   );

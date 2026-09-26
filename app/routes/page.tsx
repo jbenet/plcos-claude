@@ -2,6 +2,8 @@ import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
+import { RouteNames } from '@/components/routes/RouteNames';
+import { ConnectionFeedback } from '@/components/routes/ConnectionFeedback';
 import { RouteGraph } from '@/components/routes/RouteGraph';
 import { ProposeButton } from '@/components/routes/ProposeButton';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
@@ -365,11 +367,8 @@ export default async function Routes({
               <div key={i} className={`route${i === selected ? ' best' : ''}`}>
                 <span className={`tier t${route.weakestTier}`}>{route.weakestTier}</span>
                 <div className="rt">
-                  <Link href={`/routes?target=${targetId}&r=${i}${expanded === '1' ? '&expanded=1' : ''}`}>
-                    <b>
-                      {search.fromName} → {route.hops.map((h) => h.toName).join(' → ')}
-                    </b>
-                  </Link>
+                  <RouteNames route={route} alternatives={search.routes.filter((r) => r.foldedUnder === i)} fromName={search.fromName} />
+                  <div><Link href={`/routes?target=${targetId}&r=${i}${expanded === '1' ? '&expanded=1' : ''}`}>Inspect this route</Link></div>
                   {route.hops.map((h) => (
                     <div key={h.edge.edgeId}>
                       <p style={{ marginBottom: 3 }}>
@@ -538,6 +537,8 @@ export default async function Routes({
           </div>
         </>
       )}
+
+      {targetId && <ConnectionFeedback key={targetId} lp={targetId} />}
 
       {candidates.length > 0 && (
         <div className="card nearcard">

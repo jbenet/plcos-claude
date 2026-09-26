@@ -106,6 +106,7 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
     const finding = (p: typeof angel): import('../lib/enrich/schema').Finding => ({ key: p.key, name: p.name,
       researched: { at: '2026-09-26', by: 'fixture', workflow: 'W1', version: '1' }, identity: { match: 'confirmed', basis: 'Invented identity' }, facts: [] });
     const tf = { ...finding(target), connections: [{ to: angel.name, kind: 'colleague' as const, tier: 'B' as const,
+      reviewedBy: team[0]!.handle, reviewedAt: new Date().toISOString(),
       basis: 'They co-founded an invented business together', source: 'https://example.org/history',
       tie: { kind: 'cofounder' as const, lastInteraction: new Date().toISOString().slice(0, 10) } }] };
     const cf = { ...finding(colleague), facts: [{ field: 'prior_role' as const, value: 'Engineer at Protocol Labs', confidence: 'high' as const,
@@ -125,7 +126,7 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
         && cn.resolvePerson(angel.name, [angel, { ...angel, key: 'duplicate' }], team) === null,
       'The weak candidate stays visible; named relationship joins require a unique endpoint.');
     for (const p of inputs) await db.query(`insert into research.note (entity_id, kind, body, data) values ($1, 'connection_candidates', 'Invented connections', $2)`,
-      [p.key, JSON.stringify({ paths: joined.filter((path) => path.lp === p.key) })]);
+      [p.key, JSON.stringify({ paths: joined.filter((path) => path.lp === p.key).map((path) => path.other.key === angel.key ? { ...path, other: { type: 'ours', name: `${angel.name} (sourced personal backer)` } } : path) })]);
     await nw.buildNetwork();
     founderEntity = (await nw.entityForUser(team[0]!.handle))!.entityId;
     const direct = await nw.planRoutes(team[0]!.handle, angel.key);
@@ -133,7 +134,7 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
     check('CONN2 a warm near-them contact becomes a guarded graph route after W3 import/build',
       Boolean(direct?.routes.some((r) => r.verdict === 'recommend' && r.hops.length === 1))
         && Boolean(promoted?.routes.some((r) => r.verdict === 'recommend' && r.connectorIds.includes(angel.key)
-          && r.hops.some((h) => nw.edgeWarmth(h.edge).kind === 'cofounder'))),
+          && r.hops.some((h) => nw.edgeWarmth(h.edge).kind === 'cofounder' && h.edge.reviewedByName === team[0]!.name && Boolean(h.edge.reviewedAt)))),
       'Named endpoints and warmth survive JSONB; the investor is a direct hop and carries the onward route.');
     for (const tier of ['C', 'D']) {
       await db.query(`update network.edge set tier = $1::network.evidence_tier, reviewed_by = null, reviewed_at = null where from_entity = $2 and to_entity = $3`, [tier, angel.key, target.key]);
@@ -157,6 +158,7 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
 
 async function main() {
   const db = await freshDb();
+  await (await import('./issues4-properties')).issues4Properties(check, db);
   const { listEntities } = await import('../modules/identity');
   const { planRoutes } = await import('../modules/network');
   const { RUNGS } = await import('../modules/strategy');
@@ -1906,7 +1908,7 @@ async function main() {
           const contact = { lastFromThem: null, meetings: 0, groupMeetings: 0 };
           const flags = (band: string, basis: string) => gates({ list: '2027', scores: { capacity: { band, basis } } as never, route: null }, { contact, money: null },
             { profile: { investorType: 'advisor', capacity: { band: 'unknown', basis: '' } } }, null);
-          const table = cap.bandBySize('family_office', 800e6) === '$1–5M' && cap.bandBySize('individual', 20e6) === '<$250K' && cap.bandBySize('nothing', 1e9) === null;
+          const table = cap.bandBySize('family_office', 800e6) === '$1–5M' && cap.bandBySize('individual', 20e6) === '$50–250K' && cap.bandBySize('nothing', 1e9) === null;
           // The kind named first, not the first in a fixed order; "angel/seed" is counted (N81's readers).
           const firstNamed = cap.sizeReading('By size: a multi-family office with $4.2B under advice')?.kind === 'wealth_manager'
             && cap.sizeReading('By size: an adviser to family foundations, $3B')?.kind === 'wealth_manager'

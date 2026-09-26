@@ -70,7 +70,7 @@ export function floorHolds(basis: string): boolean {
 export function bandByRule(band: string, basis: string): { rule: 'size' | 'floor'; holds: boolean; want: string | null } | null {
   if (BY_SIZE.test(basis)) {
     const r = sizeReading(basis);
-    return { rule: 'size', holds: Boolean(r && r.band === band), want: r?.band ?? null };
+    return { rule: 'size', holds: Boolean(r && (r.band === band || (band === '<$250K' && ['<$25K', '$25–50K', '$50–250K'].includes(r.band)))), want: r?.band ?? null };
   }
   if (FLOOR.test(basis)) {
     return { rule: 'floor', holds: floorHolds(basis) && band === config.capacity.angelFloor.band, want: config.capacity.angelFloor.band };

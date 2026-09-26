@@ -24,6 +24,9 @@ export function capacityValue(band: string | null | undefined): number | null {
   const one = band.match(/(\d+(?:\.\d+)?)\s?(k|mm|m|bn|b)\b/i);
   const low = range ? Number(range[1]) * unit(range[2] ?? range[4]) : one ? Number(one[1]) * unit(one[2]) : null;
   if (low === null || low < 1000) return null;
+  // GUESS: finer small-check rankings; a legacy broad band keeps its previous score.
+  if (band === '<$25K') return 0.05;
+  if (band === '$25–50K') return 0.15;
   if (/</.test(band)) return 0.25;
   return low >= 25e6 ? 1 : low >= 5e6 ? 0.85 : low >= 1e6 ? 0.65 : low >= 250e3 ? 0.45 : 0.25;
 }
