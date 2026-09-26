@@ -3,9 +3,13 @@
 import { useEffect, useState, useTransition } from 'react';
 import Link from '@/components/ui/AppLink';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Glyph } from '@/components/ui/Glyph';
+import { Glyph, type GlyphName } from '@/components/ui/Glyph';
 
 export interface TargetRow {
+  lpType?: string;
+  lpIcon?: GlyphName;
+  checkBand?: string | null;
+  signals?: Array<{ icon: GlyphName; label: string }>;
   entityId: string;
   name: string;
   isPerson: boolean;
@@ -85,11 +89,12 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
     u.delete('r');
     u.delete('page');
     u.delete('family');
+    for (const key of ['exclude', 'show']) u.delete(key);
     return `/routes?${u.toString()}`;
   };
 
   return (
-    <>
+    <div className="route-picker">
       <div className="qhead">
         <div className="lbl">Route to whom</div>
         <input
@@ -131,16 +136,16 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
         </p>
       </div>
 
+      <div className="route-target-scroll" tabIndex={0} aria-label="Route targets">
       {targets.map((t) => (
         <Link
           key={t.entityId}
           href={href(t.entityId)}
           className={`tix${t.entityId === current ? ' on' : ''}`}
+          aria-current={t.entityId === current ? 'true' : undefined}
         >
           <span className="tixline">
-            <span className="tkind" aria-hidden title={t.isPerson ? 'Person' : 'Organisation'}>
-              {t.isPerson ? '◔' : '▣'}
-            </span>
+            <span className="target-icons"><Glyph name={t.lpIcon ?? (t.isPerson ? 'person' : 'folder')} title={`LP type: ${t.lpType ?? (t.isPerson ? 'Person' : 'Organisation')}`} /></span>
             <b>{t.name}{t.touch && <Glyph name="check" title={`In touch: ${t.touch}`} tone="good" />}</b>
             <span
               className={`tscore${t.score === null ? ' none' : ''}${t.borrowedFrom ? ' borrowed' : ''}${t.provisional ? ' prov' : ''}`}
@@ -151,10 +156,13 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
             >
               {t.score === null ? '—' : `${t.provisional ? '~' : ''}${t.score}`}{t.borrowedFrom ? '*' : ''}
             </span>
+            <span className="target-check" title={t.checkBand ? `Estimated check band: ${t.checkBand}` : 'Check band not recorded'}>{t.checkBand ?? '—'}</span>
           </span>
-          {t.related.length > 0 && <p className="trel">{t.related.join(' · ')}</p>}
-          {t.touch && <p className="ttouch">In touch · {t.touch}</p>}
-          {t.blocker && <p className="tblock">{t.blocker}</p>}
+          <span className="target-second">
+          <span className="target-icons">{t.signals?.map((signal, i) => <Glyph key={i} name={signal.icon} title={signal.label} />)}</span>
+          {t.related.length > 0 && <span className="trel">{t.related.join(' · ')}</span>}
+          </span>
+          <span className="sr-only">{t.touch ? `In touch: ${t.touch}. ` : ''}{t.blocker ? `Fit: ${t.blocker}.` : ''}</span>
         </Link>
       ))}
 
@@ -167,6 +175,7 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
           organisation a person acts for, or the people who act for an organisation.
         </p>
       )}
-    </>
+      </div>
+    </div>
   );
 }
