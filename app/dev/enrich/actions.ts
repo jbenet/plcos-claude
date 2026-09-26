@@ -6,6 +6,31 @@ import { auth } from '@/lib/auth';
 import { exportResearchSet } from '@/lib/enrich/candidates';
 import { importFindings } from '@/lib/enrich/import';
 import { appendAudit } from '@/modules/platform';
+import { getDb } from '@/lib/db';
+import { config } from '@/config/deployment';
+import { readLayout } from '@/config/ports';
+import { addProspects, readProspectFiles, type ProspectResult } from '@/lib/enrich/prospects';
+
+export async function addProspectsAction(): Promise<{ result?: ProspectResult; error?: string }> {
+  // A dev checkout must never open the real DB for an import; demo uses fictional files.
+  if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+    return { error: 'Add prospects from Developer → Enrich on the live server.' };
+  }
+  let result: ProspectResult;
+  try {
+    const user = await (await auth()).currentUser();
+    const files = await readProspectFiles();
+    result = await addProspects(await getDb(), user.id, files);
+    await appendAudit({ actorId: user.id, action: 'enrich.prospects', subjectType: 'enrich', detail: {
+      files: result.files, added: result.added, existing: result.existing, ambiguous: result.ambiguous, invalid: result.invalid.length,
+    } });
+  } catch {
+    return { error: 'The import could not finish. Check the local prospect files and retry; existing pursuits are preserved on retry.' };
+  }
+  revalidatePath('/dev/enrich');
+  revalidatePath('/targets', 'layout');
+  return { result };
+}
 
 /**
  * Write the research set to data/<profile>/enrich/ (N64). Counts go to the audit log and the
