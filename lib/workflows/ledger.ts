@@ -6,6 +6,14 @@ import { mainCheckout, readLayout } from '../../config/ports';
 export const MAX_LINE_BYTES = 4096;
 type Counts = Record<'selected' | 'written' | 'valid' | 'failed' | 'skipped', number | null>;
 type Outcome = 'unknown' | 'succeeded' | 'partial' | 'failed' | 'refused' | 'cancelled' | 'unavailable';
+export interface Usage {
+  input: number | null; output: number | null; cacheRead: number | null; cacheWrite: number | null;
+  reasoning?: number | null;
+  cost: { amount: number; currency: string } | null;
+  source?: 'measured' | 'estimated'; // absent only on historical lines
+  method?: string;
+  sessionCount?: number;
+}
 export interface RunLine {
   event: 'started' | 'finished';
   runId: string;
@@ -23,13 +31,12 @@ export interface RunLine {
   endedAt: string | null;
   counts: Counts;
   checks: Array<{ name: string; status: 'pass' | 'fail' | 'not-run' }>;
-  usage: { input: number | null; output: number | null; cacheRead: number | null; cacheWrite: number | null;
-    cost: { amount: number; currency: string } | null } | null;
+  usage: Usage | null;
   outcome: Outcome;
   reason: string | null;
 }
 export type Begin = Pick<RunLine, 'parentRunId' | 'workflow' | 'operation' | 'protocol' | 'source' | 'agent' | 'model' | 'launchFolder' | 'workerFolder' | 'batch'>;
-export type Finish = Pick<RunLine, 'counts' | 'checks' | 'usage' | 'outcome' | 'reason'>;
+export type Finish = Pick<RunLine, 'counts' | 'checks' | 'outcome' | 'reason'> & { usage: Usage & { source: 'measured' | 'estimated' } };
 export type Context = { cwd?: string; profile?: string };
 
 const object = (v: unknown): Record<string, unknown> => {
@@ -62,7 +69,13 @@ export function validateLine(value: unknown): asserts value is RunLine {
   }), 'checks');
   if (r.usage !== null) {
     const u = object(r.usage);
-    requireValue(['input', 'output', 'cacheRead', 'cacheWrite'].every((k) => count(u[k])), 'usage');
+    const token = (v: unknown) => v === null || (typeof v === 'number' && Number.isFinite(v) && v >= 0
+      && (u.source === 'estimated' || Number.isSafeInteger(v)));
+    requireValue(['input', 'output', 'cacheRead', 'cacheWrite'].every((k) => token(u[k]))
+      && (u.reasoning === undefined || token(u.reasoning)), 'usage');
+    requireValue(u.source === undefined || u.source === 'measured' || u.source === 'estimated', 'usage source');
+    requireValue(u.method === undefined || string(u.method), 'usage method');
+    requireValue(u.sessionCount === undefined || (u.sessionCount !== null && count(u.sessionCount)), 'usage session count');
     if (u.cost !== null) {
       const cost = object(u.cost);
       requireValue(typeof cost.amount === 'number' && Number.isFinite(cost.amount) && cost.amount >= 0 && string(cost.currency), 'cost');
@@ -159,12 +172,13 @@ export async function beginRun(metadata: Begin, context: Context = {}): Promise<
   await append(line, context);
   return line.runId;
 }
-export async function finishRun(runId: string, result: Finish, context: Context = {}): Promise<void> {
+export async function finishRun(runId: string, result: Finish, context: Context & { endedAt?: string } = {}): Promise<void> {
+  requireValue(Boolean(result.usage) && ['measured', 'estimated'].includes(result.usage?.source), 'usage required at finish');
   const ledger = await readRuns(context);
   const run = ledger.runs.find((r) => r.runId === runId);
   if (ledger.issues.length || !run?.start || run.conflict) throw new Error('No unambiguous start; inspect the ledger before finishing.');
   const line: RunLine = { ...run.start, counts: result.counts, checks: result.checks, usage: result.usage,
-    outcome: result.outcome, reason: result.reason, event: 'finished', endedAt: run.finish?.endedAt ?? new Date().toISOString() };
+    outcome: result.outcome, reason: result.reason, event: 'finished', endedAt: run.finish?.endedAt ?? context.endedAt ?? new Date().toISOString() };
   encodeLine(line);
   if (run.finish) {
     if (stable(run.finish) !== stable(line)) throw new Error('Run already finished with different results.');

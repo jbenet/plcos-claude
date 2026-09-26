@@ -157,7 +157,13 @@ is authorized merely by installing these scripts. Demo and preview roots are ref
 4. Read the worker's counts/checks, including failures. Write the result JSON below and call
    `DATA_PROFILE=real npx tsx scripts/workflow-run.ts finish <runId> <result.json>`.
    The launcher owns this step; the sub-agent does not duplicate it. Inspect diagnostics,
-   not just exit codes, before reporting a check passed. Unknown counts/usage stay null.
+   not just exit codes, before reporting a check passed. Unknown item counts stay null.
+   Supply measured usage when available. Otherwise omit `usage` (or pass null) and the CLI
+   estimates it from local session usage metadata for the run's window. The ledger writer
+   refuses a finish without a usage object and `source: "measured" | "estimated"`.
+   If no matching usage exists, it records an estimated object with null token counts and an
+   explicit unavailable method, never an invented zero. Retry the same finish after a recording
+   failure; do not silently leave the run unfinished.
 
 Metadata shape (invented example; replace both hash placeholders with 64 hexadecimal digits):
 
@@ -187,16 +193,20 @@ Result shape (invented):
 {
   "counts": { "selected": 2, "written": 2, "valid": 2, "failed": 0, "skipped": 0 },
   "checks": [{ "name": "coverage", "status": "pass" }],
-  "usage": null,
+  "usage": { "input": 1000, "output": 100, "cacheRead": 400, "cacheWrite": 0,
+    "reasoning": 20, "cost": null, "source": "measured" },
   "outcome": "succeeded",
   "reason": null
 }
 ```
 
 Checks use `pass`, `fail`, `not-run`. Outcomes: `succeeded`, `partial`, `failed`, `refused`,
-`cancelled`, `unavailable`, `unknown`. If available, usage is
-`{input, output, cacheRead, cacheWrite, cost}`, token counts individually nullable; cost is
-null or `{amount, currency}` for measured cost. Subscription tokens are not dollars.
+`cancelled`, `unavailable`, `unknown`. Usage is
+`{input, output, cacheRead, cacheWrite, reasoning?, cost, source}`; counts are individually
+nullable. `input` includes cache reads/writes, `output` includes reasoning: do not add those
+subsets twice. Cost is null or `{amount, currency}` for measured cost. Subscription tokens
+are not dollars. Measured counts are integers; time/shared estimates can be fractional.
+Legacy measured objects supplied without `source` are labelled `measured` by the CLI.
 Finish repeats the start metadata automatically. An identical finish retry is harmless;
 different results for an already finished run are refused. A missing finish is **unknown**:
 inspect the worker/output before retrying, and give a new execution a new run ID.
@@ -208,7 +218,9 @@ DATA_PROFILE=real npx tsx scripts/workflow-script.ts <metadata.json> -- scripts/
 ```
 
 It calls the same begin/finish writer around the script, preserves script arguments and
-records process exit (including failure). It sets source to `script` and model to null.
+records process exit (including failure). It sets source to `script` and model to null,
+and uses the same finish-time usage fallback. Script runs have no matching model provider,
+so their token estimates are unavailable unless a caller supplies measurements.
 Item results remain unknown: a zero exit is not a claim that every output passed a quality
 check. A killed wrapper may leave only a start. Do not wrap an already recorded agent's
 internal check as though it were another batch. Never use this wrapper to open the real DB.
@@ -216,3 +228,31 @@ internal check as though it were another batch. Never use this wrapper to open t
 The reader in `lib/workflows/ledger.ts` folds by run ID and exposes malformed lines and
 conflicts. App pages/DB projection are later slices. No heartbeats, locks, receipts or
 automatic repair: recording errors stop new work until the operator reviews them.
+
+### Retrospective usage estimates
+
+From the live folder, run `DATA_PROFILE=real npx tsx scripts/workflow-usage.ts YYYY-MM-DD`.
+It reads the shared ledger and local `~/.codex/sessions` / `~/.claude/projects` usage metadata,
+including Claude subagent transcripts. Message bodies, prompts and tool contents are skipped
+without decoding. It writes only `workflows/usage-estimates.jsonl` under the shared real root,
+one entry per run ID, preserving other dates and replacing estimates on rerun. `runs.jsonl`
+and the database are unchanged. The table groups totals by workflow and night, where night
+means the run's UTC start date; it includes completed runs and shows unavailable counts.
+
+Each entry is marked `estimated` and carries input, cachedInput, output, reasoning, cacheWrite,
+method and session IDs used. Codex cumulative counter deltas are prorated over time between
+usage updates, including a sample after a window ends when available; the first delta starts
+at session creation (or is a point observation if that timestamp is missing). Repeated totals
+add no tokens but advance the time baseline; counter resets start a new segment. Claude per-message usage is a point observation
+at its last update, deduplicated by message ID using maximum counters. Input includes cache reads
+and writes for both providers. Reasoning absent from a usage report contributes zero, meaning
+not separately reported, not proof that no reasoning tokens were used.
+
+Sessions match by provider and worker/launcher cwd. No historical ledger session ID exists,
+so unrelated activity in the same folder can contribute: these are estimates, not measurements.
+At each overlapping interval/point, usage is split evenly among concurrent matching runs,
+including runs outside the requested date and unfinished runs. Uncovered time is not assigned.
+An unfinished run competes through the estimate's cutoff (the latest selected finish). The CLI's
+live finish captures a single end time before scanning, includes concurrent unfinished runs,
+and reuses a recorded estimate on retry. Future overlapping finishes may gain later usage
+reports; retrospective reruns provide a consistent view once sessions have settled.
