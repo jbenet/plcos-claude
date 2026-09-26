@@ -21,11 +21,12 @@ import type { EvidenceTier } from './types';
  *               substitute fame for.
  *   topic       Credibility is domain-specific and **does not transfer**. A crypto name is
  *               not a route into a neuroscience foundation.
- *   tie         Tie strength, on an inverted U. Moderately weak ties move more than either
+ *   tie         Legacy network-novelty heuristic, on an inverted U. Moderately weak ties move more than either
  *               strangers or close friends — a close tie mostly knows the people we already
  *               know (Rajkumar et al., Science 377:6612, 2022).
  *   willing     Goodwill left this quarter, and whether they have delivered before.
  *
+ * Investment-intro warmth is evaluated separately, ahead of this score in the router.
  * Every component is returned with its own basis sentence. A single number nobody can
  * decompose is a number nobody can argue with.
  */
@@ -263,7 +264,7 @@ export async function influenceFor(
       { key: 'withUs', label: 'Standing with us', score: withUs, weight: w.withUs, basis: withUsBasis },
       { key: 'withTarget', label: 'Standing with them', score: withTarget, weight: w.withTarget, basis: withTargetBasis },
       { key: 'topic', label: 'Credible on this topic', score: topic, weight: w.topic, basis: topicBasis },
-      { key: 'tie', label: 'Tie strength', score: tie, weight: w.tie, basis: tieBasis },
+      { key: 'tie', label: 'Network novelty (legacy)', score: tie, weight: w.tie, basis: `${tieBasis} This diversity heuristic is separate from investment-intro warmth, which ranks routes first.` },
       { key: 'willing', label: 'Goodwill left', score: willing, weight: w.willing, basis: willingBasis },
     ];
     const score = components.reduce((s, c) => s + c.score * c.weight, 0);

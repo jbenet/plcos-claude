@@ -2,6 +2,8 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Candidate } from './candidates';
 import type { Finding } from './schema';
+import { config } from '@/config/deployment';
+import { tieWarmth, type TieDetails, type Warmth } from '@/modules/network';
 
 /**
  * W3, find connections (N64, docs/19): who of us, or of our LPs, is near whom. Deterministic and
@@ -18,13 +20,15 @@ export interface Path {
   lp: string;
   /** Who or what they are near: a team member, one of our organizations, a backer of ours, another LP. */
   other: { type: 'team' | 'ours' | 'backer' | 'lp'; name: string; key?: string; handle?: string };
-  kind: 'met' | 'colleague' | 'coinvestor' | 'portfolio' | 'alumni' | 'board' | 'same_firm' | 'other';
+  kind: 'met' | 'corresponded' | 'colleague' | 'advisor' | 'coinvestor' | 'portfolio' | 'alumni' | 'board' | 'same_firm' | 'other';
   tier: Tier;
   basis: string;
   source?: string | null;
+  tie?: TieDetails;
+  warmth?: Warmth;
 }
 
-interface Org { name: string; aliases: string[]; domains?: string[]; what?: string; source?: string }
+export interface Org { name: string; aliases: string[]; domains?: string[]; what?: string; source?: string }
 /** One LP's line in us/pl-directory.jsonl (scripts/enrich-pl-directory.ts). */
 export interface PlDirectoryEntry {
   key: string; name: string;
@@ -36,8 +40,9 @@ export interface PlDirectoryEntry {
   }>;
   firmTeams: Array<{ name: string; isFund: boolean; focus: string[]; via: 'domain' | 'organization'; sources: string[]; technologies: string[] }>;
 }
-interface Network { orgs: Org[]; backers: Org[]; backer_people: Array<{ name: string; what: string; source: string }>; portfolio?: Array<Org & { vehicle: string }> }
-interface TeamMember { handle: string; name: string; roles: Array<{ org: string }>; prior: Array<{ org: string; role?: string }>; education: Array<{ org: string }> }
+export interface Network { orgs: Org[]; backers: Org[]; backer_people: Array<{ name: string; what: string; source: string }>; portfolio?: Array<Org & { vehicle: string }> }
+export interface TeamRole { org: string; role?: string; since?: string | number; until?: string | number; source?: string }
+export interface TeamMember { handle: string; name: string; roles: TeamRole[]; prior: TeamRole[]; education: Array<{ org: string }> }
 
 const STOP = /\b(llc|l\.l\.c\.|inc|incorporated|co|company|corp|corporation|ltd|limited|lp|l\.p\.|plc|gmbh|ag|sa|the)\b/g;
 /** A firm's name reduced to what identifies it: "Harbor Street Ventures, LLC" → "harbor street ventures". */
@@ -90,10 +95,19 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
   }
   const net = JSON.parse(await readFile(join(dir, 'us', 'network.json'), 'utf8').catch(() => '{"orgs":[],"backers":[],"backer_people":[]}')) as Network;
   const team = (JSON.parse(await readFile(join(dir, 'us', 'team.json'), 'utf8').catch(() => '{"team":[]}')) as { team: TeamMember[] }).team;
+  const directory = (await readFile(join(dir, 'us', 'pl-directory.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
+    .map((l) => JSON.parse(l) as PlDirectoryEntry);
+  return connectionPaths(candidates, findings, net, team, directory);
+}
+
+/** W3's pure join, also used by invented property fixtures. No files or database writes. */
+export function connectionPaths(candidates: Candidate[], findings: Map<string, Finding>, net: Network,
+  team: TeamMember[], directory: PlDirectoryEntry[] = [], at = new Date()): { paths: Path[]; lps: number; researched: number } {
 
   const paths: Path[] = [];
   const add = (p: Path) => {
-    if (!paths.some((q) => q.lp === p.lp && q.other.name === p.other.name && q.kind === p.kind)) paths.push(p);
+    // Keep distinct supporting records; a weak affiliation must not discard a warm personal tie.
+    if (!paths.some((q) => q.lp === p.lp && q.other.name === p.other.name && q.kind === p.kind && q.basis === p.basis)) paths.push(p);
   };
 
   // Where each LP works, and every sentence the research wrote about them.
@@ -113,12 +127,13 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
     const jobs = unsure ? '' : jobsOf(f);
     const orgs = orgsOf(c, unsure ? undefined : f);
 
+    for (const p of ourSidePaths(c, unsure ? undefined : f, net, team, at)) add(p);
+
     // Our own record of an interaction: meetings held with them, and who owns the pursuit.
     for (const p of c.pursuits) {
       if (c.contact.meetings > 0 && p.owner && p.owner !== 'Not on the team') {
-        // B, not A: the meetings are recorded, but who from our side was in them is not — the
-        // owner is who the team assigned, and the likeliest to have been there.
-        add({ lp: c.key, other: { type: 'team', name: p.owner }, kind: 'met', tier: 'B', basis: `${c.contact.meetings} ${c.contact.meetings === 1 ? 'meeting' : 'meetings'} on record; ${p.owner} owns the pursuit`, source: 'our records' });
+        // The owner was assigned to the pursuit; participation still needs a person to confirm.
+        add({ lp: c.key, other: { type: 'team', name: p.owner }, kind: 'met', tier: 'C', tie: { kind: 'proximity' }, basis: `${c.contact.meetings} ${c.contact.meetings === 1 ? 'meeting' : 'meetings'} on record; ${p.owner} owns the pursuit, but participation needs confirmation`, source: 'our records' });
       } else if (c.contact.meetings > 0) {
         add({ lp: c.key, other: { type: 'ours', name: 'PL Capital' }, kind: 'met', tier: 'B', basis: `${c.contact.meetings} ${c.contact.meetings === 1 ? 'meeting' : 'meetings'} on record; who from our side isn't recorded`, source: 'our records' });
       }
@@ -132,11 +147,11 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
         basis: 'The team marks them a close contact; whose contact isn’t recorded', source: 'our records' });
     }
 
-    // B: they wrote to us — our own record of an interaction, though who received it isn't (v08).
+    // They wrote to us, but an unknown recipient cannot establish a personal hop through the owner.
     // A meeting counts as "from them" too, so only when no meeting is on record.
     if (c.contact.meetings === 0 && c.contact.lastFromThem) {
       const owner = c.pursuits[0]?.owner;
-      add({ lp: c.key, other: owner && owner !== 'Not on the team' ? { type: 'team', name: owner } : { type: 'ours', name: 'PL Capital' }, kind: 'met', tier: 'B',
+      add({ lp: c.key, other: owner && owner !== 'Not on the team' ? { type: 'team', name: owner } : { type: 'ours', name: 'PL Capital' }, kind: 'corresponded', tier: 'C', tie: { kind: 'proximity' },
         basis: `They wrote to us on ${c.contact.lastFromThem}; who from our side received it isn't recorded${owner && owner !== 'Not on the team' ? `, and ${owner} owns the pursuit` : ''}`, source: 'our records' });
     }
 
@@ -185,13 +200,13 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
     for (const t of team) {
       for (const r of [...t.roles, ...t.prior]) {
         const o = norm(r.org);
-        if (!o || TOO_COMMON.has(o) || ['protocol labs', 'pl capital', 'protocol labs protocol vc'].includes(o)) continue;
+        if (!o || TOO_COMMON.has(o)) continue;
         if (orgs.some((x) => norm(x) === o) || (jobs && r.org.length > 4 && affirms(jobs, r.org))) {
           // Going through an accelerator is being in a batch, not working there (s08): D, as alumni.
           const accelerator = /y combinator|\byc\b|techstars|500 startups|on deck|entrepreneur first|antler|accelerator/i.test(r.org);
           add(accelerator
             ? { lp: c.key, other: { type: 'team', name: t.name, handle: t.handle }, kind: 'alumni', tier: 'D', basis: `Both went through ${r.org}, in different batches most likely`, source: null }
-            : { lp: c.key, other: { type: 'team', name: t.name, handle: t.handle }, kind: 'colleague', tier: 'C', basis: `Both have worked at ${r.org}`, source: null });
+            : { lp: c.key, other: { type: 'team', name: t.name, handle: t.handle }, kind: 'colleague', tier: 'C', tie: { kind: 'proximity' }, basis: `Both have worked at ${r.org}; collaboration and dates need confirmation`, source: r.source ?? null });
         }
       }
       for (const e of t.education) {
@@ -206,9 +221,12 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
   for (const f of findings.values()) {
     if (f.identity.match === 'ambiguous' || f.identity.match === 'not_found') continue;
     for (const c of f.connections ?? []) {
-      const tier = c.scope === 'firm' && c.tier === 'B' ? 'C' : c.tier;
-      add({ lp: f.key, other: { type: /protocol labs|filecoin|ipfs|pl capital|protocol vc/i.test(c.to) ? 'ours' : 'backer', name: c.to },
-        kind: c.kind === 'portfolio' ? 'portfolio' : c.kind === 'board' ? 'board' : c.kind === 'coinvestor' ? 'coinvestor' : c.kind === 'colleague' ? 'colleague' : c.kind === 'alumni' ? 'alumni' : 'other',
+      const tier = c.tier === 'B' && (c.scope === 'firm' || !c.source) ? 'C' : c.tier;
+      const resolved = c.scope !== 'firm' ? resolvePerson(c.to, candidates, team) : null;
+      add({ lp: f.key, other: resolved ?? { type: /protocol labs|filecoin|ipfs|pl capital|protocol vc/i.test(c.to) ? 'ours' : 'backer', name: c.to },
+        kind: c.kind === 'portfolio' ? 'portfolio' : c.kind === 'board' ? 'board' : c.kind === 'advisor' ? 'advisor' : c.kind === 'coinvestor' ? 'coinvestor' : c.kind === 'colleague' ? 'colleague' : c.kind === 'alumni' ? 'alumni' : 'other',
+        tie: c.scope === 'firm' ? { kind: 'proximity' } : c.tie
+          ?? (/\bco[ -]?founded\b|\bco[ -]?founders\b/i.test(c.basis) && resolved ? { kind: 'cofounder' } : undefined),
         tier, basis: `${c.basis}${c.scope === 'firm' ? ' (the firm’s tie)' : ''}`, source: c.source ?? null });
     }
   }
@@ -263,7 +281,7 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
     for (const a of group) for (const b of group) {
       if (a.key === b.key) continue;
       const met = b.contact.meetings > 0;
-      add({ lp: a.key, other: { type: 'lp', name: b.name, key: b.key }, kind: 'same_firm', tier: met ? 'B' : 'C', basis: `Both at ${a.org ?? b.org ?? 'the same firm'}${met ? `; ${b.name} has met us (${b.contact.meetings})` : ''}`, source: 'our records' });
+      add({ lp: a.key, other: { type: 'lp', name: b.name, key: b.key }, kind: 'same_firm', tier: 'C', tie: { kind: 'proximity' }, basis: `Both at ${a.org ?? b.org ?? 'the same firm'}${met ? `; ${b.name} has met us (${b.contact.meetings}), which does not establish this colleague tie` : ''}`, source: 'our records' });
     }
   }
 
@@ -273,8 +291,6 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
   // record of them is PL's own record that they are in the network — B; under their name alone, C
   // until a person confirms it. Speaking at a PL event is C, attending one D (amendment 1.4). Their
   // firm listed as a network team is the firm's tie, C.
-  const directory = (await readFile(join(dir, 'us', 'pl-directory.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
-    .map((l) => JSON.parse(l) as PlDirectoryEntry);
   const DIRECTORY = 'https://os.pl.xyz';
   for (const e of directory) {
     for (const m of e.members) {
@@ -310,7 +326,92 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
     }
   }
 
-  return { paths, lps: candidates.length, researched: findings.size };
+  return { paths: paths.map((p) => {
+    const tie = p.tie ?? ((p.tier === 'C' || p.tier === 'D') ? { kind: 'proximity' as const } : undefined);
+    return { ...p, tie, warmth: tieWarmth(p.kind, tie, at) };
+  }).sort((a, b) => a.tier.localeCompare(b.tier) || b.warmth.score - a.warmth.score || a.lp.localeCompare(b.lp) || a.other.name.localeCompare(b.other.name)),
+  lps: candidates.length, researched: findings.size };
+}
+
+/** Resolve a named personal relationship against the frozen roster, never fuzzy or firm names. */
+export function resolvePerson(name: string, candidates: Candidate[], team: TeamMember[]): Path['other'] | null {
+  const key = norm(name);
+  if (!key.includes(' ')) return null;
+  const matches: Path['other'][] = [
+    ...team.filter((t) => norm(t.name) === key).map((t) => ({ type: 'team' as const, name: t.name, handle: t.handle })),
+    ...candidates.filter((c) => c.type === 'person' && norm(c.name) === key).map((c) => ({ type: 'lp' as const, name: c.name, key: c.key })),
+  ];
+  return matches.length === 1 ? matches[0]! : null;
+}
+
+/** Conservative interval endpoints: a year-only start/end cannot manufacture overlap. */
+function periodDate(value: unknown, end: boolean): string | null {
+  const s = String(value ?? '');
+  if (/^\d{4}$/.test(s)) return `${s}-${end ? '01-01' : '12-31'}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s))) return s;
+  return null;
+}
+
+/** Our records attach a tie to its actual holder; neither ownership nor PL membership does. */
+function ourSidePaths(c: Candidate, f: Finding | undefined, net: Network, team: TeamMember[], at: Date): Path[] {
+  if (c.type !== 'person') return [];
+  const out: Path[] = [];
+  const other = (t: TeamMember): Path['other'] => ({ type: 'team', name: t.name, handle: t.handle });
+  for (const t of team) {
+    const contacts = (c.contact.recent ?? []).filter((r) => r.with.some((name) => norm(name) === norm(t.name))
+      && r.on <= at.toISOString().slice(0, 10)
+      && (((r.channel === 'meeting' || r.channel === 'call') && !(c.contact.meetingDates ?? []).some((d) => d.on === r.on && d.group))
+        || ((r.channel === 'email' || r.channel === 'message') && r.direction === 'theirs')));
+    const dates = [...new Set(contacts.map((r) => r.on))].sort();
+    if (dates.length) out.push({ lp: c.key, other: other(t), kind: 'met', tier: 'B', source: 'our records',
+      basis: `Named in ${dates.length} dated direct interaction${dates.length === 1 ? '' : 's'} with ${t.name}`,
+      tie: { kind: dates.length >= config.routeWarmth.repeatedContacts ? 'repeated_contact' : 'acquaintance', lastInteraction: dates.at(-1) } });
+  }
+  for (const org of net.orgs) {
+    const aliases = [org.name, ...org.aliases];
+    const isOrg = (s: unknown) => typeof s === 'string' && aliases.some((a) => norm(a) === norm(s));
+    const ours = isOrg(c.org) || (c.enriched['Organizations'] ?? '').split(/;\s*/).some(isOrg)
+      || c.domains.some((d) => org.domains?.includes(d));
+    const investors = net.backer_people.filter((b) => norm(b.name) === norm(c.name) && b.source
+      && aliases.some((a) => affirms(b.what, a)) && /\b(angel|investor|backed|seed)\b/i.test(b.what));
+    const angel = f?.facts.find((x) => x.confidence !== 'low' && x.scope !== 'firm' && x.field === 'investment'
+      && isOrg(x.detail?.company) && /\bangel\b/i.test(x.value) && aliases.some((a) => affirms(x.value, a)));
+    const investorSource = investors.length === 1 ? investors[0]!.source : angel?.source.url;
+    if (investorSource) {
+      for (const t of team) {
+        // The founder is obtained from the team file, never a special case for an LP or person.
+        const founder = [...t.roles, ...t.prior].find((r) => isOrg(r.org) && /\b(co-?founder|founder)\b/i.test(r.role ?? '') && r.source);
+        if (founder) out.push({ lp: c.key, other: other(t), kind: 'portfolio', tier: 'B',
+          basis: `A personal angel/backer of ${org.name}; ${t.name} is its documented founder. Direct investor–founder tie; willingness is not recorded.`,
+          source: investorSource, tie: { kind: 'acquaintance' } });
+      }
+    }
+    // Long service counts only with an own-record employment anchor AND dated overlap.
+    // Public affiliation by itself remains C in the ordinary shared-employer join.
+    if (!ours || !f) continue;
+    for (const job of f.facts.filter((x) => x.confidence !== 'low' && x.scope !== 'firm'
+      && ['role', 'prior_role'].includes(x.field) && isOrg(x.detail?.company))) {
+      const start = periodDate(job.detail?.since ?? job.detail?.from ?? job.detail?.joined, false);
+      const end = periodDate(job.detail?.until ?? job.detail?.to ?? job.detail?.left, true)
+        ?? (job.field === 'role' ? periodDate(job.detail?.as_of, true) : null);
+      if (!start || !end || !job.source.url || start >= end) continue;
+      for (const t of team) for (const role of [...t.roles, ...t.prior]) {
+        if (!isOrg(role.org) || !role.source) continue;
+        const ts = periodDate(role.since, false);
+        const te = periodDate(role.until, true) ?? (t.roles.includes(role) ? at.toISOString().slice(0, 10) : null);
+        if (!ts || !te) continue;
+        const from = [start, ts].sort().at(-1)!;
+        const to = [end, te, at.toISOString().slice(0, 10)].sort()[0]!;
+        const minimum = new Date(from);
+        minimum.setUTCMonth(minimum.getUTCMonth() + config.routeWarmth.colleagueOverlapMonths);
+        if (Date.parse(to) < minimum.getTime()) continue;
+        out.push({ lp: c.key, other: other(t), kind: 'colleague', tier: 'B', source: job.source.url,
+          basis: `Our employment record and dated roles place them with ${t.name} at ${org.name}, ${from} to ${to}. Long-service colleague rule; not intro consent. Team role: ${role.source}`,
+          tie: { kind: 'worked_together', lastInteraction: to } });
+      }
+    }
+  }
+  return out;
 }
 
 /**

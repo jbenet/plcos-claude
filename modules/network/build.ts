@@ -1,6 +1,9 @@
 import { getDb, type Queryable } from '@/lib/db';
 import { GROUP_EVENT, isAutoReply } from '@/modules/meetings';
 import type { EdgeKind, EvidenceTier } from './types';
+import type { Path } from '@/lib/enrich/connect';
+import { config } from '@/config/deployment';
+import { tieWarmth } from './warmth';
 
 /**
  * The network, built from what we already know (N82).
@@ -42,7 +45,7 @@ export interface BuildCounts {
 /** How W3's kinds become edge kinds. "The same firm, now" is a colleague. */
 const KIND: Record<string, EdgeKind> = {
   met: 'met', colleague: 'colleague', same_firm: 'colleague', alumni: 'alumni', coinvestor: 'coinvestor',
-  board: 'board', portfolio: 'portfolio', other: 'other',
+  board: 'board', advisor: 'advisor', corresponded: 'corresponded', portfolio: 'portfolio', other: 'other',
 };
 
 const norm = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -101,7 +104,15 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   const add = (e: NewEdge) => {
     if (e.from === e.to) return false;
     const k = pairKey(e.from, e.to, e.kind);
-    if (kept.has(k) || edges.has(k)) return false;
+    if (kept.has(k)) return false;
+    const existing = edges.get(k);
+    if (existing) {
+      // Keep every basis; take the strongest evidence tier, never derive it from warmth.
+      existing.evidence.push(...e.evidence);
+      if (e.tier < existing.tier) existing.tier = e.tier;
+      if (e.since < existing.since) existing.since = e.since;
+      return false;
+    }
     edges.set(k, e);
     return true;
   };
@@ -142,41 +153,47 @@ async function build(tx: Queryable): Promise<BuildCounts> {
     const [userId, lp] = k.split('|') as [string, string];
     const from = entityOfUser.get(userId)!;
     const last = [...t.meetings, ...t.heard].sort().pop()!;
-    const recent = Date.now() - new Date(last).getTime() < 365 * 86_400_000;
+    const contactCount = new Set([...t.meetings, ...t.heard]).size;
+    const tie = { kind: contactCount >= config.routeWarmth.repeatedContacts ? 'repeated_contact' as const : 'acquaintance' as const, lastInteraction: last };
+    const warmth = tieWarmth('met', tie);
     if (t.meetings.length) {
       const n = new Set(t.meetings).size;
       if (add({
-        from, to: lp, kind: 'met', tier: 'A', band: n >= 3 && recent ? 'strong' : 'moderate', since: [...t.meetings].sort()[0]!,
-        evidence: [{ derived: 'records', note: `${n} ${n === 1 ? 'meeting' : 'meetings'} held one to one, ${span(t.meetings)}`, source: 'Affinity calendar and notes, as translated', as_of: today }],
+        from, to: lp, kind: 'met', tier: 'A', band: warmth.score >= config.routeWarmth.strongFirstHop ? 'strong' : 'moderate', since: [...t.meetings].sort()[0]!,
+        evidence: [{ derived: 'records', tie, note: `${n} ${n === 1 ? 'meeting' : 'meetings'} held one to one, ${span(t.meetings)}`, source: 'Affinity calendar and notes, as translated', as_of: today }],
       })) counts.fromRecords++;
     } else {
       const n = t.heard.length;
       if (add({
-        from, to: lp, kind: 'corresponded', tier: 'B', band: n >= 2 && recent ? 'moderate' : 'weak', since: [...t.heard].sort()[0]!,
-        evidence: [{ derived: 'records', note: `${n} ${n === 1 ? 'message' : 'messages'} from them, ${span(t.heard)}`, source: 'Affinity mail sync, as translated', as_of: today }],
+        from, to: lp, kind: 'corresponded', tier: 'B', band: contactCount >= config.routeWarmth.repeatedContacts ? 'moderate' : 'weak', since: [...t.heard].sort()[0]!,
+        evidence: [{ derived: 'records', tie, note: `${n} ${n === 1 ? 'message' : 'messages'} from them, ${span(t.heard)}`, source: 'Affinity mail sync, as translated', as_of: today }],
       })) counts.fromRecords++;
     }
   }
 
   // 3. The research: W3's paths, as the import left them on each LP.
-  const notes = await tx.query<{ entity_id: string; at: string; data: { paths?: Array<{ lp: string; other: { type: string; name: string; key?: string; handle?: string }; kind: string; tier: EvidenceTier; basis: string; source?: string | null }> } }>(
+  const notes = await tx.query<{ entity_id: string; at: string; data: { paths?: Path[] } }>(
     `select entity_id::text, created_at::text as at, data from research.note where kind = 'connection_candidates'`,
   );
-  const known = new Set((await tx.query<{ id: string }>(`select entity_id::text as id from identity.entity`)).map((r) => r.id));
+  const people = await tx.query<{ id: string; name: string }>(`select entity_id::text as id, display_name as name from identity.entity where entity_type = 'person'`);
+  const known = new Set(people.map((r) => r.id));
   const alreadyMet = new Set([...edges.values()].map((e) => [e.from, e.to].sort().join('|')));
   for (const n of notes) {
     for (const p of n.data.paths ?? []) {
       const lp = known.has(p.lp) ? p.lp : n.entity_id;
+      if (!known.has(lp)) { counts.notPeople++; continue; }
       const other = p.other.type === 'team'
         ? entityOfUser.get(userByHandle.get(p.other.handle ?? '') ?? userByName.get(norm(p.other.name)) ?? '')
         : (p.other.type === 'lp' || p.other.type === 'backer') && p.other.key && known.has(p.other.key) ? p.other.key : undefined;
       if (!other) { counts.notPeople++; continue; }
       const kind = KIND[p.kind] ?? 'other';
+      const tie = p.tie ?? (p.tier === 'C' || p.tier === 'D' || p.kind === 'same_firm' ? { kind: 'proximity' as const } : undefined);
+      const warmth = tieWarmth(kind, tie);
       // Our own record of meeting them says more than the research's "met".
       if (kind === 'met' && alreadyMet.has([other, lp].sort().join('|'))) continue;
       if (add({
-        from: other, to: lp, kind, tier: p.tier, band: p.tier === 'A' ? 'strong' : p.tier === 'B' ? 'moderate' : 'weak', since: n.at.slice(0, 10),
-        evidence: [{ derived: 'research', note: p.basis, source: p.source ?? 'the research (W3)', as_of: n.at.slice(0, 10) }],
+        from: other, to: lp, kind, tier: p.tier, band: warmth.score >= config.routeWarmth.strongFirstHop ? 'strong' : warmth.score >= config.routeWarmth.priors.repeated_contact ? 'moderate' : 'weak', since: n.at.slice(0, 10),
+        evidence: [{ derived: 'research', tie, note: p.basis, source: p.source ?? 'the research (W3)', as_of: n.at.slice(0, 10) }],
       })) {
         counts.fromResearch++;
         if (p.tier === 'C' || p.tier === 'D') counts.toConfirm++;

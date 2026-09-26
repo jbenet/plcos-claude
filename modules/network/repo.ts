@@ -4,7 +4,7 @@ import type { Edge, EdgeKind, EvidenceTier } from './types';
 type EdgeRow = {
   edge_id: string; from_entity: string; to_entity: string; from_name: string; to_name: string;
   kind: EdgeKind; tier: EvidenceTier; strength: string | null; tie_band: string | null;
-  evidence: Array<{ doc?: string; note: string }>; reviewed_by_name: string | null;
+  evidence: Edge['evidence']; reviewed_by_name: string | null;
   reviewed_at: Date | string | null; review_note: string | null;
   valid_from: Date | string; valid_to: Date | string | null;
 };

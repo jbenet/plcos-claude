@@ -16,7 +16,8 @@ import { TargetPicker, type TargetRow } from '@/components/routes/TargetPicker';
 import { listSourceDocs, notesFor } from '@/modules/research';
 import { directContact, type DirectContact } from '@/modules/meetings';
 import { listVehicles } from '@/modules/platform';
-import { planRoutes, tierCounts, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
+import { planRoutes, tierCounts, edgeWarmth, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
+import type { Path } from '@/lib/enrich/connect';
 import { buildNetworkAction, reviewEdgeAction } from './actions';
 import { listPursuits } from '@/modules/strategy';
 import { provisionalScores } from '@/lib/strategy-score';
@@ -35,10 +36,7 @@ const touchWords = (c: DirectContact) => c.via
   : `${c.how === 'met' ? 'Met' : 'Heard from them'} ${shortDate(c.on)}`;
 
 /** A path the research found near a target (docs/19, W3): a candidate for a person to check, never a route. */
-interface CandidatePath {
-  other: { type: 'team' | 'ours' | 'backer' | 'lp'; name: string; handle?: string };
-  kind: string; tier: 'A' | 'B' | 'C' | 'D'; basis: string;
-}
+type CandidatePath = Path;
 const OTHER_LABEL: Record<CandidatePath['other']['type'], string> = {
   team: 'on the team', ours: 'one of ours', backer: 'a backer of ours', lp: 'another LP',
 };
@@ -46,10 +44,10 @@ const OTHER_LABEL: Record<CandidatePath['other']['type'], string> = {
 export default async function Routes({
   searchParams,
 }: {
-  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string }>;
+  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string; expanded?: string }>;
 }) {
   const selection = await vehicleSelection();
-  const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam } = await searchParams;
+  const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam, expanded } = await searchParams;
   const user = await (await auth()).currentUser();
   const [entities, docs, tiers, vehicles, affiliations, fit, asks, team, pursuits] = await Promise.all([
     listEntities(), listSourceDocs(), tierCounts(), listVehicles(),
@@ -134,6 +132,8 @@ export default async function Routes({
   const currentRow = rows.find((t) => t.entityId === targetId);
   if (currentRow && !shown.includes(currentRow)) shown.unshift(currentRow);
   const selected = Math.min(Math.max(0, Number(r ?? 0)), Math.max(0, (search?.routes.length ?? 1) - 1));
+  const displayedRoutes = (search?.routes ?? []).map((route, index) => ({ route, index }))
+    .filter(({ route }) => expanded === '1' || route.foldedUnder == null);
 
   /**
    * What there is besides edges (issues 0027–0028, real). The target's name comes from the records
@@ -158,7 +158,10 @@ export default async function Routes({
     targetId ? notesFor(targetId, 'connection_candidates').then((n) => n[0] ?? null) : Promise.resolve(null),
     directContact([...nearbyPeople.keys()]),
   ]);
-  const candidates = ((pathsNote?.data ?? {}) as { paths?: CandidatePath[] }).paths ?? [];
+  const promotedBases = new Set((search?.routes ?? []).filter((r) => r.verdict === 'recommend' || r.verdict === 'hold')
+    .flatMap((r) => r.hops.flatMap((h) => h.edge.evidence.map((e) => e.note))));
+  const candidates = (((pathsNote?.data ?? {}) as { paths?: CandidatePath[] }).paths ?? [])
+    .filter((p) => !promotedBases.has(p.basis));
   const inTouchNearby = [...nearbyContact.entries()]
     .map(([id, c]) => ({ id, c, name: affiliations.find((a) => a.personId === id)?.personName ?? 'Someone', org: nearbyPeople.get(id)! }))
     .sort((a, b) => b.c.on.getTime() - a.c.on.getTime());
@@ -354,14 +357,15 @@ export default async function Routes({
             <div className="chead">
               <h2>Routes in</h2>
               <span className="lbl">
-                {search.routes.length} path{search.routes.length === 1 ? '' : 's'} · ranked by evidence, then influence
+                {displayedRoutes.length} shown · {search.routes.length} recorded · evidence, warmth, then influence
+                {expanded === '1' && <> · <Link href={`/routes?target=${targetId}`}>Fold redundant alternatives</Link></>}
               </span>
             </div>
-            {search.routes.map((route, i) => (
+            {displayedRoutes.map(({ route, index: i }) => (
               <div key={i} className={`route${i === selected ? ' best' : ''}`}>
                 <span className={`tier t${route.weakestTier}`}>{route.weakestTier}</span>
                 <div className="rt">
-                  <Link href={`/routes?target=${targetId}&r=${i}`}>
+                  <Link href={`/routes?target=${targetId}&r=${i}${expanded === '1' ? '&expanded=1' : ''}`}>
                     <b>
                       {search.fromName} → {route.hops.map((h) => h.toName).join(' → ')}
                     </b>
@@ -370,14 +374,19 @@ export default async function Routes({
                     <div key={h.edge.edgeId}>
                       <p style={{ marginBottom: 3 }}>
                         <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
-                          {h.edge.tier} · {h.edge.kind.replace('_', ' ')} · since {h.edge.validFrom.getFullYear()}
+                          {h.edge.tier} · {h.edge.kind.replace('_', ' ')} · edge dated {h.edge.validFrom.getFullYear()}
                         </span>{' '}
-                        {h.edge.evidence[0]?.note}
-                        {h.edge.evidence.map((ev) =>
-                          ev.doc && docMap.has(ev.doc) ? (
-                            <EvidenceRef key={ev.doc} doc={docMap.get(ev.doc)!} />
-                          ) : null,
-                        )}
+                        <span className="muted" style={{ display: 'block' }}>{edgeWarmth(h.edge).basis}</span>
+                        {h.edge.evidence.map((ev, ei) => (
+                          <span key={ei} style={{ display: 'block' }}>
+                            {ev.note}{' '}
+                            {ev.doc && docMap.has(ev.doc) && <EvidenceRef doc={docMap.get(ev.doc)!} />}
+                            {ev.source && (/^https?:\/\//.test(ev.source)
+                              ? <a href={ev.source} target="_blank" rel="noreferrer">Source</a>
+                              : <span className="muted">{ev.source}</span>)}
+                            {ev.as_of && <span className="muted"> · recorded {ev.as_of}</span>}
+                          </span>
+                        ))}
                         {h.edge.reviewedByName && (
                           <span className="muted"> · confirmed by {h.edge.reviewedByName}</span>
                         )}
@@ -405,6 +414,17 @@ export default async function Routes({
                       {reason}
                     </p>
                   ))}
+                  {expanded !== '1' && search.routes.some((r) => r.foldedUnder === i) && (
+                    <details>
+                      <summary>{search.routes.filter((r) => r.foldedUnder === i).length} longer alternatives to this first connector</summary>
+                      <p>The first hop is warm and usable. These paths add connectors before it; their evidence is retained.</p>
+                      {search.routes.map((alternative, ai) => alternative.foldedUnder === i ? (
+                        <p key={ai}><Link href={`/routes?target=${targetId}&r=${ai}&expanded=1`}>
+                          {search.fromName} → {alternative.hops.map((h) => h.toName).join(' → ')} · inspect evidence
+                        </Link></p>
+                      ) : null)}
+                    </details>
+                  )}
                 </div>
                 <div className="verdict">
                   <b className={route.verdict === 'excluded' || route.verdict === 'not_a_route' ? 'stop' : ''}>
@@ -504,10 +524,10 @@ export default async function Routes({
             </div>
             <div className="cbody">
               <RouteGraph
-                routes={search.routes}
+                routes={displayedRoutes.map(({ route }) => route)}
                 fromName={search.fromName}
                 targetName={search.targetName}
-                selected={selected}
+                selected={Math.max(0, displayedRoutes.findIndex(({ index }) => index === selected))}
               />
             </div>
             <p className="cover">
@@ -532,6 +552,7 @@ export default async function Routes({
                 <span>
                   <b>{x.other.name}{x.other.type === 'team' && x.other.handle === user.handle ? ' (you)' : ''}</b>
                   <span className="muted"> — {OTHER_LABEL[x.other.type] ?? x.other.type}. {x.basis}</span>
+                  <span className="muted" style={{ display: 'block' }}>{tieWarmth(x.kind, x.tie ?? ((x.tier === 'C' || x.tier === 'D') ? { kind: 'proximity' } : undefined)).basis}</span>
                   {(x.tier === 'C' || x.tier === 'D') && <span className="needs"> · needs a person to check</span>}
                 </span>
               </div>
@@ -540,9 +561,9 @@ export default async function Routes({
           </div>
           <p className="cover">
             <b>What this is:</b> the research&rsquo;s path finder{pathsNote ? `, run ${shortDate(pathsNote.createdAt)}` : ''}, over our
-            own records and public sources (docs/19, W3). None of it is a route yet: the paths are held as notes, not
-            edges. An A or B path could carry a route once recorded as an edge, which is a decision still to make; a C or
-            D path needs a person to check it first (rule 6). Not found here means not found by the research.
+            own records and public sources (docs/19, W3). Paths already carried by a usable route appear above.
+            These remaining candidates need resolved people, connected graph edges or stronger evidence.
+            A C or D path needs a person to check it first (rule 6). Not found here means not found by the research.
           </p>
         </div>
       )}
