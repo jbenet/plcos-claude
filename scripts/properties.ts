@@ -303,6 +303,7 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
 async function main() {
   const db = await freshDb();
   await (await import('./issues4-properties')).issues4Properties(check, db);
+  await (await import('./network-nodes-properties')).networkNodesProperties(check, db);
   const { listEntities } = await import('../modules/identity');
   const { planRoutes } = await import('../modules/network');
   const { RUNGS } = await import('../modules/strategy');
@@ -2266,7 +2267,7 @@ async function main() {
   // the real profile. None of them opens the real database.
 
   const inReal = (code: string, env: Record<string, string> = {}) => {
-    const r = spawnSync('npx', ['tsx', '-e', code], {
+    const r = spawnSync(process.execPath, ['--import', 'tsx', '-e', code], {
       env: { ...process.env, DATA_PROFILE: 'real', PGLITE_DIR: '', DATABASE_URL: '', ...env },
       encoding: 'utf8',
     });
@@ -2416,7 +2417,7 @@ async function main() {
   }
 
   const prefixes = [['real', '3100'], ['real', '3290'], ['demo', '3291']].map(([profile, p]) => {
-    const r = spawnSync('npx', ['tsx', '-e', `import('./config/deployment.ts').then(({ config: c }) => console.log(c.data.cookiePrefix))`], {
+    const r = spawnSync(process.execPath, ['--import', 'tsx', '-e', `import('./config/deployment.ts').then(({ config: c }) => console.log(c.data.cookiePrefix))`], {
       env: { ...process.env, DATA_PROFILE: profile, PORT: p, PGLITE_DIR: '', DATABASE_URL: '' },
       encoding: 'utf8',
     });
