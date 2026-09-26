@@ -6,8 +6,8 @@ import { promisify } from 'node:util';
 import { mkdir, readFile, writeFile, rename, stat } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { classifyWarehouseTie, graphKey, matchWarehousePeople, normalizedName, redactWarehouseText,
-  type GraphIdentity, type WarehousePerson, type WarehouseTie, type TieEvidence } from '../lib/enrich/warehouse-graph';
-import { peopleSql, tieQueries, fundingCoverageSql, sourceCoverageQueries, personOrganizationsSql } from '../lib/enrich/warehouse-sql';
+  addWarehouseNetworkTies, addWarehouseMembershipTies, type WarehouseMembership, addWarehouseFirmTies, warehouseCoverage, type GraphIdentity, type WarehousePerson, type WarehouseTie, type TieEvidence } from '../lib/enrich/warehouse-graph';
+import { peopleSql, tieQueries, fundingCoverageSql, sourceCoverageQueries, personOrganizationsSql, coinvestorOrganizationsSql, directoryMembershipSql } from '../lib/enrich/warehouse-sql';
 
 const exec = promisify(execFile);
 const ROOT = resolve(process.cwd(), '../plcos-data/real');
@@ -80,8 +80,11 @@ async function main() {
   const allPeople: WarehousePerson[]=sourceRows.map(r=>({key:String(r.key), name:redactWarehouseText(String(r.name)),org:str(r.org) ? redactWarehouseText(String(r.org)) : null,emailDomain:str(r.email_domain),
     roles:[str(r.role) ? redactWarehouseText(String(r.role)) : null,yes(r.founder)?'founder':null,yes(r.staff)?'PL team':null,yes(r.investor)?'investor':null].filter((r):r is string=>!!r),
     warehouseIds:Object.fromEntries([['dw_member_id',str(r.member_id)],[r.member_id ? 'labos_member_uid' : 'demo_day_member_uid',str(r.labos_member_uid)]].filter((e):e is [string,string]=>!!e[1])),
-    oneHop:yes(r.founder)||yes(r.staff),source:r.member_id?'prod_records.members':'prod_lists.demo_day_investors_funnel',
+    oneHop:yes(r.founder)||yes(r.staff),source:String(r.source)+(r.member_id?'+prod_records.companies':''),
     as_of:asOf,confidence:'warehouse record; not human verified',last_verified_by:'warehouse-graph deterministic SELECT'}));
+  for (const r of await query(coinvestorOrganizationsSql)) allPeople.push({key:String(r.key),name:redactWarehouseText(String(r.name)),
+    org:null,emailDomain:null,roles:['co-investor'],nodeType:'organization',warehouseIds:{},
+    source:'prod_lists.pl_portfolio_coinvestors',as_of:asOf,confidence:'firm attribution; not a personal decision',last_verified_by:'warehouse-graph deterministic SELECT'});
   for (const t of team) {
     const names=[t.name,...aliases.filter(a=>a.handle===t.handle).map(a=>a.name)].map(normalizedName);
     const matches=allPeople.filter(p=>names.includes(normalizedName(p.name)));
@@ -94,12 +97,16 @@ async function main() {
     const result=await query(sql);
     for(const r of result) {
       const classification=classifyWarehouseTie(String(r.evidence) as TieEvidence,Number(r.count));
-      ties.push({key:graphKey([r.a,r.b,r.evidence,r.source].join('|')),from:String(r.a),to:String(r.b),...classification,
-        firstSeen:str(r.first_seen),lastSeen:str(r.last_seen),source:String(r.source),rowIds:r.row_ids as string[],count:Number(r.count)});
+      ties.push({key:graphKey([r.a,r.b,r.evidence,r.source].join('|')),from:String(r.a),to:String(r.b),...classification,...(r.evidence==='portfolio'?{basis:'firm_attribution' as const}:{}),
+        firstSeen:str(r.first_seen),lastSeen:str(r.last_seen),source:String(r.source)+(r.member_id?'+prod_records.companies':''),rowIds:r.row_ids as string[],count:Number(r.count)});
     }
     console.log(`${label}: ${result.length} pairwise ties`);
   }
   const matches=matchWarehousePeople(candidates,allPeople);
+  for (const tie of addWarehouseNetworkTies(allPeople,asOf)) ties.push(tie);
+  const memberships=(await query(directoryMembershipSql)).map(r=>({personKey:String(r.person_key),source:String(r.source) as WarehouseMembership['source'],rowId:String(r.row_id)}));
+  for (const tie of addWarehouseMembershipTies(allPeople,memberships)) ties.push(tie);
+  for (const tie of addWarehouseFirmTies(candidates,matches,allPeople,ties)) ties.push(tie);
   const touched=new Set([...ties.flatMap(t=>[t.from,t.to]),...matches.map(m=>m.personKey)]);
   // Directory founders/staff and investors are useful starting nodes even without a pairwise observation.
   const people=allPeople.filter(p=>touched.has(p.key)||p.teamKey||p.oneHop||p.roles.includes('investor'));
@@ -116,10 +123,10 @@ async function main() {
   const countBy=(field:'kind'|'tier')=>Object.fromEntries([...new Set(ties.map(t=>t[field]))].sort().map(k=>[k,ties.filter(t=>t[field]===k).length]));
   const confident=new Set(matches.filter(m=>m.status==='confident').map(m=>m.lpKey));
   const ambiguous=new Set(matches.filter(m=>m.status==='ambiguous'&&!confident.has(m.lpKey)).map(m=>m.lpKey));
-  const summary={asOf,sourceSnapshotWindow:{first:inputPages.map(p=>p.retrievedAt).sort()[0],last:inputPages.map(p=>p.retrievedAt).sort().at(-1)},sourceCoverage,fundingCoverage,resolvedConfig:{page:PAGE,maximumBytesBilled:10737418240,repeatedContacts:config.routeWarmth.repeatedContacts},people:people.length,ties:ties.length,byKind:countBy('kind'),byTier:countBy('tier'),
-    lps:candidates.length,confident:confident.size,ambiguous:ambiguous.size,unmatched:candidates.length-confident.size-ambiguous.size,
-    tables:[...new Set((peopleSql+fundingCoverageSql+personOrganizationsSql+Object.values(tieQueries).join('\n')).match(/prod_(records|lists)\.[a-z_]+/g))],
-    coverage:'All source dates through extraction time; unknown dates remain null. Campaigns excluded. Calendar guests are proximity. Portfolio records do not identify deal rounds or personal decisions.'};
+  const summary={asOf,sourceSnapshotWindow:{first:inputPages.map(p=>p.retrievedAt).sort()[0],last:inputPages.map(p=>p.retrievedAt).sort().at(-1)},sourceCoverage,fundingCoverage,resolvedConfig:{page:PAGE,maximumBytesBilled:10737418240,repeatedContacts:config.routeWarmth.repeatedContacts,frequentDeals:config.routeWarmth.frequentDeals},people:people.length,ties:ties.length,byKind:countBy('kind'),byTier:countBy('tier'),
+    connectivity:warehouseCoverage(people,ties,matches),lps:candidates.length,confident:confident.size,ambiguous:ambiguous.size,unmatched:candidates.length-confident.size-ambiguous.size,
+    tables:[...new Set((peopleSql+fundingCoverageSql+personOrganizationsSql+coinvestorOrganizationsSql+directoryMembershipSql+Object.values(tieQueries).join('\n')).match(/prod_(records|lists)\.[a-z_]+/g))],
+    coverage:'All source dates through extraction time; unknown dates remain null. Campaigns excluded. Calendar guests are proximity. Demo views and company actions do not prove personal contact. Firm-attributed investments remain tier C. PL directory membership and investor-list rows establish ties to the PL organization. Named team policy ties are reserved for founders and team members. Deal dates and rounds are unknown.'};
   await writeFile(join(OUT,'summary.json'),JSON.stringify(summary,null,2)+'\n',{mode:0o600});
   console.log(JSON.stringify(summary,null,2));
 }

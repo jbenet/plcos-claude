@@ -4,11 +4,12 @@ import type { WarmthKind } from '@/modules/network/warmth';
 
 export interface WarehousePerson {
   key: string; name: string; org: string | null; emailDomain: string | null;
-  roles: string[]; warehouseIds: Record<string, string>; teamKey?: string; oneHop?: boolean;
+  roles: string[]; warehouseIds: Record<string, string>; teamKey?: string; oneHop?: boolean; nodeType?: 'person'|'organization';
   source: string; as_of: string; confidence: string; last_verified_by: string;
 }
 export interface WarehouseTie {
   key: string; from: string; to: string; kind: WarmthKind; tier: 'A'|'B'|'C'|'D';
+  basis?: 'pl_affiliation'|'pl_network'|'firm_attribution'|'registered in the PL network directory'|"on PL's investor list";
   firstSeen: string|null; lastSeen: string|null; source: string; rowIds: string[]; count: number;
 }
 export interface WarehouseMatch {
@@ -49,15 +50,106 @@ export function matchWarehousePeople(lps: GraphIdentity[], people: WarehousePers
   }
   return matches;
 }
-export type TieEvidence = 'direct_contact'|'named_coinvestment'|'shared_company'|'cofounders'|'event'|'portfolio'|'demo_interest';
+export type TieEvidence = 'direct_contact'|'named_coinvestment'|'shared_company'|'cofounders'|'event'|'portfolio'|'demo_interest'|'demo_action';
 export function classifyWarehouseTie(evidence: TieEvidence, count: number): Pick<WarehouseTie, 'tier'|'kind'> {
   switch (evidence) {
     case 'direct_contact': return { tier: 'B', kind: count >= config.routeWarmth.repeatedContacts ? 'repeated_contact' : 'acquaintance' };
-    case 'named_coinvestment': return { tier: 'B', kind: 'joint_investment' };
+    case 'named_coinvestment': return { tier: 'B', kind: count >= config.routeWarmth.frequentDeals ? 'frequent_coinvestment' : 'joint_investment' };
     // A founder flag plus company membership lacks dated collaboration evidence.
     case 'cofounders': return { tier: 'C', kind: 'cofounder' };
     case 'shared_company': return { tier: 'C', kind: 'proximity' };
-    case 'portfolio': return { tier: 'C', kind: 'proximity' };
+    case 'portfolio': return { tier: 'C', kind: count >= config.routeWarmth.frequentDeals ? 'frequent_coinvestment' : 'joint_investment' };
+    // A company action names its actor, but does not establish which employee received it.
+    case 'demo_action': return { tier: 'C', kind: count >= config.routeWarmth.repeatedContacts ? 'repeated_contact' : 'acquaintance' };
     case 'event': case 'demo_interest': return { tier: 'D', kind: 'proximity' };
+    default: throw new Error('Unknown warehouse tie evidence');
   }
+}
+
+
+/** Explicit founder/team policy edges are not claimed meetings. Directory-only ties are separate. */
+export function addWarehouseNetworkTies(people: WarehousePerson[], asOf: string): WarehouseTie[] {
+  const plKey = 'organization:protocol-labs';
+  if (!people.some(p => p.key === plKey)) people.push({ key: plKey, name: 'PL', org: null, emailDomain: null,
+    nodeType: 'organization', roles: ['PL network'], warehouseIds: {}, oneHop: true,
+    source: 'AGENTS.md rule 6 (2026-09-26)', as_of: asOf, confidence: 'PL network affiliation policy',
+    last_verified_by: 'warehouse-graph deterministic policy' });
+  const sources = people.filter(p => p.teamKey || p.roles.includes('PL team') || p.key === plKey);
+  const out = new Map<string, WarehouseTie>();
+  for (const person of people.filter(p => p.oneHop || p.teamKey)) for (const source of sources) {
+    if (source.key === person.key) continue;
+    const [from,to] = [source.key,person.key].sort() as [string,string];
+    const key = graphKey(`${from}|${to}|pl_network`);
+    const colleagues = (person.roles.includes('PL team') || !!person.teamKey)
+      && (source.roles.includes('PL team') || !!source.teamKey);
+    out.set(key,{key,from,to,tier:'B',kind:colleagues?'worked_together':'acquaintance',
+      basis:colleagues?'pl_affiliation':'pl_network',firstSeen:null,lastSeen:null,
+      source:'AGENTS.md rule 6 (2026-09-26); '+person.source,rowIds:[person.key],count:1});
+  }
+  return [...out.values()];
+}
+
+export interface WarehouseMembership {
+  personKey: string; source: 'prod_records.members'|'prod_lists.labos_members'|'prod_lists.investors'; rowId: string;
+}
+/** Membership names the organization, never an unspecified personal contact at PL. */
+export function addWarehouseMembershipTies(people: WarehousePerson[], memberships: WarehouseMembership[]): WarehouseTie[] {
+  const keys=new Set(people.filter(p=>p.nodeType!=='organization').map(p=>p.key));
+  const plKey='organization:protocol-labs';
+  if(!people.some(p=>p.key===plKey)) throw new Error('PL node required before directory membership ties');
+  const ties=new Map<string,WarehouseTie>();
+  for(const m of memberships) {
+    if(!keys.has(m.personKey)) continue; // Excluded test accounts or unnamed rows are not graph identities.
+    if(!['prod_records.members','prod_lists.labos_members','prod_lists.investors'].includes(m.source) || !m.rowId)
+      throw new Error('Unsupported warehouse membership source');
+    const [from,to]=[m.personKey,plKey].sort() as [string,string];
+    const key=graphKey(`${from}|${to}|membership|${m.source}|${m.rowId}`);
+    ties.set(key,{key,from,to,tier:'B',kind:'acquaintance',
+      basis:m.source==='prod_lists.investors'?"on PL's investor list":'registered in the PL network directory',
+      source:m.source,rowIds:[m.rowId],count:1,firstSeen:null,lastSeen:null});
+  }
+  return [...ties.values()];
+}
+
+/** Affiliation only: do not assign a firm's investment decision to an employee at tier B. */
+export function addWarehouseFirmTies(lps: GraphIdentity[], matches: WarehouseMatch[], people: WarehousePerson[], ties: WarehouseTie[]): WarehouseTie[] {
+  const organizations = people.filter(p => p.key.startsWith('coinvestor:'));
+  const byOrg = new Map<string, WarehousePerson[]>();
+  for (const p of organizations) { const k=orgKey(p.name); if(k) byOrg.set(k,[...(byOrg.get(k)??[]),p]); }
+  const candidates = new Map(lps.map(p=>[p.key,p]));
+  const personByKey = new Map(people.map(p=>[p.key,p]));
+  const firmEdges = new Map<string, WarehouseTie[]>();
+  for (const t of ties) for (const key of [t.from,t.to]) if (key.startsWith('coinvestor:')) firmEdges.set(key,[...(firmEdges.get(key)??[]),t]);
+  const out = new Map<string,WarehouseTie>();
+  for (const match of matches.filter(m=>m.status==='confident')) {
+    const lp=candidates.get(match.lpKey), person=personByKey.get(match.personKey);
+    const orgs=new Set([lp?.org,person?.org].filter((s):s is string=>!!s).map(orgKey));
+    for(const org of orgs) for(const firm of byOrg.get(org)??[]) for(const tie of firmEdges.get(firm.key)??[]) {
+      const founder=tie.from===firm.key?tie.to:tie.from;
+      if(founder===match.personKey) continue;
+      const [from,to]=[match.personKey,founder].sort() as [string,string];
+      const key=graphKey(`${from}|${to}|${firm.key}|firm_attribution`);
+      out.set(key,{...tie,key,from,to,tier:'C',basis:'firm_attribution',source:tie.source+'; exact organization affiliation'});
+    }
+  }
+  return [...out.values()];
+}
+
+/** Topological coverage includes weak evidence, not an authorization or a supported-intro claim. */
+export function warehouseCoverage(people: WarehousePerson[], ties: WarehouseTie[], matches: WarehouseMatch[]) {
+  const adjacent=new Map<string,Set<string>>();
+  for(const t of ties) for(const [a,b] of [[t.from,t.to],[t.to,t.from]]) {
+    const set=adjacent.get(a!)??new Set<string>();set.add(b!);adjacent.set(a!,set);
+  }
+  const warm=new Set(people.filter(p=>p.oneHop||p.teamKey).map(p=>p.key));
+  const sources=people.filter(p=>p.teamKey||p.roles.includes('PL team')||p.key==='organization:protocol-labs').map(p=>p.key);
+  const distance=new Map(sources.map(k=>[k,0])); let frontier=sources;
+  for(let hop=1;hop<=2;hop++) { const next:string[]=[];
+    for(const k of frontier) for(const n of adjacent.get(k)??[]) if(!distance.has(n)) {distance.set(n,hop);next.push(n);} frontier=next;
+  }
+  const confident=matches.filter(m=>m.status==='confident');
+  return { matched:new Set(confident.map(m=>m.lpKey)).size,
+    anyTie:new Set(confident.filter(m=>(adjacent.get(m.personKey)?.size??0)>0).map(m=>m.lpKey)).size,
+    tieToOneHopOrPL:new Set(confident.filter(m=>[...(adjacent.get(m.personKey)??[])].some(k=>warm.has(k))).map(m=>m.lpKey)).size,
+    withinTwoHops:new Set(confident.filter(m=>distance.has(m.personKey)).map(m=>m.lpKey)).size };
 }
