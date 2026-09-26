@@ -183,6 +183,33 @@ export function check(f: unknown, expectKey?: string): string[] {
   const p: string[] = [];
   const x = f as Partial<Finding>;
   if (!x || typeof x !== 'object') return ['not an object'];
+  const record = (v: unknown) => v !== null && typeof v === 'object' && !Array.isArray(v);
+  for (const field of ['facts', 'connections', 'queries', 'connectionFeedback'] as const) {
+    if (x[field] !== undefined && (!Array.isArray(x[field]) || x[field]!.some((v) => !record(v)))) p.push(`${field} must be a list of objects`);
+  }
+  const stringList = (value: unknown) => Array.isArray(value) && value.every((v) => typeof v === 'string');
+  const optionalString = (value: unknown) => value == null || typeof value === 'string';
+  for (const [field, value] of [['profile.interests', x.profile?.interests], ['profile.cautions', x.profile?.cautions],
+    ['coverage.searched', x.coverage?.searched], ['coverage.notFound', x.coverage?.notFound]] as const) {
+    if (value !== undefined && !stringList(value)) p.push(`${field} must be a list of strings`);
+  }
+  for (const [field, value] of [['profile.summary', x.profile?.summary], ['profile.howTheyInvest', x.profile?.howTheyInvest],
+    ['identity.basis', x.identity?.basis], ['coverage.note', x.coverage?.note], ['profile.capacity.basis', x.profile?.capacity?.basis]] as const) {
+    if (!optionalString(value)) p.push(`${field} must be text`);
+  }
+  if (x.profile?.signals !== undefined && (!Array.isArray(x.profile.signals) || x.profile.signals.some((v) => !record(v) || !isStr(v.what) || !optionalString(v.source)))) p.push('profile.signals must list text and optional sources');
+  if (x.identity?.links !== undefined && (!Array.isArray(x.identity.links) || x.identity.links.some((v) => !record(v) || !isStr(v.url)))) p.push('identity.links must list URLs');
+  for (const [i, fact] of (Array.isArray(x.facts) ? x.facts : []).entries()) {
+    if (!record(fact)) continue;
+    if (!optionalString(fact.quote)) p.push(`fact ${i}: quote must be text`);
+    if (fact.source && (!record(fact.source) || !optionalString(fact.source.url) || !optionalString(fact.source.title) || !optionalString(fact.source.published))) p.push(`fact ${i}: invalid source fields`);
+    if (fact.detail !== undefined && !record(fact.detail)) p.push(`fact ${i}: detail must be an object`);
+  }
+  for (const [i, c] of (Array.isArray(x.connections) ? x.connections : []).entries()) {
+    if (record(c) && (!optionalString(c.basis) || !optionalString(c.source))) p.push(`connection ${i}: basis and source must be text`);
+  }
+  if (p.length) return p;
+  if (!isStr(x.researched?.at) || !/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(x.researched.at) || !Number.isFinite(Date.parse(x.researched.at)) || !isStr(x.researched?.by)) p.push('researched needs a valid date and author');
   if (!isStr(x.key)) p.push('no key');
   if (expectKey && x.key !== expectKey) p.push(`key ${x.key} does not match its file name`);
   if (!isStr(x.name)) p.push('no name');
@@ -198,6 +225,8 @@ export function check(f: unknown, expectKey?: string): string[] {
     if (!FACT_FIELDS.includes(fact.field)) p.push(`fact ${i}: unknown field "${fact.field}"`);
     if (!isStr(fact.value)) p.push(`fact ${i}: no value`);
     if (!fact.source || !isStr(fact.source.url) || !/^https?:\/\//.test(fact.source.url)) p.push(`fact ${i}: no source URL`);
+    if (fact.source && !['primary', 'filing', 'press', 'podcast', 'database', 'social', 'other'].includes(fact.source.kind)) p.push(`fact ${i}: unknown source kind`);
+    if (fact.source?.published && !Number.isFinite(Date.parse(fact.source.published))) p.push(`fact ${i}: invalid source publication date`);
     if (fact.source && isBroker(fact.source.url)) p.push(`fact ${i}: from a contact-data broker`);
     if (!['high', 'medium', 'low'].includes(fact.confidence)) p.push(`fact ${i}: no confidence`);
     if (fact.quote && fact.quote.split(/\s+/).length > 40) p.push(`fact ${i}: quote longer than 40 words`);
@@ -224,6 +253,7 @@ export function check(f: unknown, expectKey?: string): string[] {
     if (text && hasAddress(text)) p.push(`${where}: carries a street address`);
   }
   for (const [i, c] of (x.connections ?? []).entries()) {
+    if (!['coinvestor', 'colleague', 'board', 'advisor', 'portfolio', 'event_coattendee', 'social_public', 'podcast_guest', 'alumni', 'other'].includes(c.kind)) p.push(`connection ${i}: unknown connection kind (use tie.kind for warmth)`);
     if (c.tie !== undefined) for (const error of tieDetailsProblems(c.tie)) p.push(`connection ${i}: ${error}`);
     if (!isStr(c.to) || !isStr(c.basis)) p.push(`connection ${i}: needs who and why`);
     if (!['B', 'C', 'D'].includes(c.tier)) p.push(`connection ${i}: tier must be B, C or D — A needs our own record of an interaction`);

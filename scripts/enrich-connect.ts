@@ -8,16 +8,17 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config/deployment';
 import { findPaths } from '../lib/enrich/connect';
+import { connectionCoverage } from '../lib/enrich/connection-summary';
 
 async function main() {
   const dir = join(process.cwd(), config.data.root, 'enrich');
-  const { paths, lps, researched } = await findPaths(dir);
+  const { paths, lpKeys, researched } = await findPaths(dir);
   await writeFile(join(dir, 'connections.jsonl'), paths.map((p) => JSON.stringify(p)).join('\n') + '\n', 'utf8');
   const by = (k: (p: (typeof paths)[number]) => string) => paths.reduce<Record<string, number>>((a, p) => ({ ...a, [k(p)]: (a[k(p)] ?? 0) + 1 }), {});
-  const lpsWith = (t: string[]) => new Set(paths.filter((p) => t.includes(p.tier)).map((p) => p.lp)).size;
-  console.log(`${paths.length} paths for ${new Set(paths.map((p) => p.lp)).size} of ${lps} LPs (${researched} researched)`);
-  console.log(`Warehouse paths: ${paths.filter((p) => p.warehouse).length}; LPs reached: ${new Set(paths.filter((p) => p.warehouse).map((p) => p.lp)).size}; via intermediaries: ${new Set(paths.filter((p) => p.warehouse?.ties.length === 2).map((p) => p.lp)).size}`);
+  const coverage = connectionCoverage(paths, lpKeys);
+  console.log(`${paths.length} paths for ${coverage.reached} of ${coverage.total} LPs (${researched} researched); ${coverage.nonLpEndpoints} non-LP endpoints`);
+  console.log(`Warehouse paths: ${paths.filter((p) => p.warehouse).length}; LPs reached: ${coverage.warehouseReached}; via intermediaries: ${coverage.viaIntermediaries}`);
   console.log(`by tier ${JSON.stringify(by((p) => p.tier))} · by kind ${JSON.stringify(by((p) => p.kind))} · by other ${JSON.stringify(by((p) => p.other.type))}`);
-  console.log(`LPs with an A or B path: ${lpsWith(['A', 'B'])} · with only C or D: ${lpsWith(['C', 'D']) - new Set(paths.filter((p) => ['A', 'B'].includes(p.tier) && paths.some((q) => q.lp === p.lp && ['C', 'D'].includes(q.tier))).map((p) => p.lp)).size}`);
+  console.log(`LPs with an A or B path: ${coverage.warm} · with only C or D: ${coverage.onlyCD}`);
 }
 main();
