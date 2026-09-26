@@ -63,6 +63,14 @@ a copy of it with `npm run preview`, and a sub-agent's worktree, which has no ro
 - **Affinity is read-only.** The key can write and cannot be scoped, so read-only is
   enforced in the client: GET only, allowlisted paths, a property test that a write throws.
   Writing back is a later decision, and would go through approval tickets.
+- **PL Polaris, the PL Data Warehouse, is read-only too (26 Sep 2026).** Juan gave Claude and ChatGPT
+  access through Google's hosted BigQuery MCP server, registered as `pl-polaris` by `npm run
+  polaris:connect` from an OAuth client kept in the Keychain (`npm run secret:store -- <name>`). Queries
+  are `SELECT` only: never DML, DDL, exports, scheduled queries or anything that writes. What comes back
+  is real data under Affinity's rules: it stays in `plcos-data/real`, never in a commit, a doc, a prompt
+  to a sub-agent or a search. BigQuery bills by bytes scanned, so read table schemas first, select only
+  the columns needed, filter, and `LIMIT`; no `SELECT *` over a large table. Founders and PL team
+  members registered there count as one hop from our team (Juan, 26 Sep).
 - Affinity fields are claims, not evidence. A stage is not a ladder rung. An amount is soft
   unless a field has been designated as meaning signed. Relationship strength is a tier-C
   edge.
