@@ -98,7 +98,7 @@ export function clip(text: string, max = 200): string {
   return end > 60 ? cut.slice(0, end + 1) : `${cut.replace(/\s+\S*$/, '')}…`;
 }
 
-export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: number; researched: number }> {
+export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: number; lpKeys: string[]; researched: number }> {
   const candidates = (await readFile(join(dir, 'candidates.jsonl'), 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Candidate);
   const findings = new Map<string, Finding>();
   for (const f of (await readdir(join(dir, 'raw')).catch(() => [])).filter((x) => x.endsWith('.json'))) {
@@ -114,7 +114,7 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
 
 /** W3's pure join, also used by invented property fixtures. No files or database writes. */
 export function connectionPaths(candidates: Candidate[], findings: Map<string, Finding>, net: Network,
-  team: TeamMember[], directory: PlDirectoryEntry[] = [], at = new Date(), warehouse?: WarehouseGraph): { paths: Path[]; lps: number; researched: number } {
+  team: TeamMember[], directory: PlDirectoryEntry[] = [], at = new Date(), warehouse?: WarehouseGraph): { paths: Path[]; lps: number; lpKeys: string[]; researched: number } {
 
   // A connector need not be raising. The sourced personal backer roster is a separate
   // universe from active LPs; leaving it out made documented co-founder ties dead ends.
@@ -379,7 +379,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
     }
     return { ...p, tie, warmth: tieWarmth(p.kind, tie, at) };
   }).sort((a, b) => a.tier.localeCompare(b.tier) || b.warmth.score - a.warmth.score || a.lp.localeCompare(b.lp) || a.other.name.localeCompare(b.other.name)),
-  lps: candidates.length, researched: findings.size };
+  lps: candidates.length, lpKeys: candidates.map((c) => c.key), researched: findings.size };
 }
 
 /** Stable source identity, never a random new person on every W3 pass. */

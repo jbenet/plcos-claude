@@ -10,6 +10,7 @@ import { config } from '../config/deployment';
 import { check, type Finding } from '../lib/enrich/schema';
 import { CAPACITY_EVIDENCE, checkStrategy, gates, isStale, nextOverLimit, nextTooLong, type Strategy } from '../lib/enrich/strategy';
 import type { Path } from '../lib/enrich/connect';
+import { connectionIdentityProblems, readPathRecords, type LocatedRecord } from '../lib/enrich/connection-check';
 import { bandByRule } from '../lib/enrich/capacity';
 
 async function main() {
@@ -17,6 +18,8 @@ async function main() {
   const files = (await readdir(dir).catch(() => [])).filter((f) => f.endsWith('.json'));
   const tally: Record<string, number> = {}, method: Record<string, number> = {};
   const found = new Map<string, Finding>();
+  const findingRecords: LocatedRecord[] = [];
+  const badFiles = new Set<string>();
   const special: string[] = [];
   /**
    * A capacity band whose basis names no money, holding or filing at all (1.18), a pattern the search
@@ -54,9 +57,10 @@ async function main() {
   const kinds: Record<string, number> = {}, conf: Record<string, number> = {}, types: Record<string, number> = {};
   for (const f of files) {
     let x: Finding;
-    try { x = JSON.parse(await readFile(join(dir, f), 'utf8')) as Finding; } catch (e) { console.log(`  ${f.slice(0, 8)}: not JSON`); bad++; continue; }
+    try { x = JSON.parse(await readFile(join(dir, f), 'utf8')) as Finding; } catch (e) { console.log(`  raw/${f} index 0: not JSON`); bad++; continue; }
     const problems = check(x, f.replace(/\.json$/, ''));
-    if (problems.length) { bad++; console.log(`  ${f.slice(0, 8)}: ${problems.join('; ')}`); }
+    findingRecords.push({ file: `raw/${f}`, index: 0, value: x });
+    if (problems.length) { badFiles.add(f); console.log(`  raw/${f} index 0: ${problems.join('; ')}`); continue; }
     tally[x.identity?.match ?? '?'] = (tally[x.identity?.match ?? '?'] ?? 0) + 1;
     const m = x.researched?.method ?? 'search';
     method[m] = (method[m] ?? 0) + 1;
@@ -80,6 +84,24 @@ async function main() {
     const t = x.profile?.investorType ?? 'none';
     types[t] = (types[t] ?? 0) + 1;
   }
+  const pathInput = readPathRecords(await readFile(join(dir, '..', 'connections.jsonl'), 'utf8').catch(() => ''));
+  const knownOrgs: string[] = [];
+  const candidateLines = (await readFile(join(dir, '..', 'candidates.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean);
+  for (const line of candidateLines) {
+    const c = JSON.parse(line) as { name: string; type: string; org?: string };
+    if (c.org) knownOrgs.push(c.org);
+    if (c.type === 'org') knownOrgs.push(c.name);
+  }
+  const network = JSON.parse(await readFile(join(dir, '..', 'us', 'network.json'), 'utf8').catch(() => '{}'));
+  for (const org of [...(network.orgs ?? []), ...(network.backers ?? []), ...(network.portfolio ?? [])]) knownOrgs.push(org.name, ...(org.aliases ?? []));
+  const identityProblems = connectionIdentityProblems(findingRecords, pathInput.allRecords, knownOrgs);
+  for (const issue of [...pathInput.skipped, ...identityProblems]) {
+    console.log(`  ${issue.file} index ${issue.index}: ${issue.problems.join('; ')}`);
+    if (issue.file.startsWith('raw/')) badFiles.add(issue.file.slice(4));
+  }
+  bad += badFiles.size;
+  const pathBad = new Set([...pathInput.skipped, ...identityProblems.filter((p) => p.file === 'connections.jsonl')].map((p) => p.index)).size;
+  if (pathBad) console.log(`${pathBad} W3 paths with problems (indices start at zero)`);
   console.log(`${files.length} findings · ${bad} with problems · identity ${JSON.stringify(tally)} · method ${JSON.stringify(method)}`);
   // 1.16: nothing in a special category. A word here isn't always one (an organization's name can
   // carry it), so these are for a person to review, not refused.
@@ -143,8 +165,8 @@ async function main() {
   const pathNames = new Map<string, Set<string>>();
   const pairTiers = new Map<string, Set<string>>(); // `${lpKey}|${otherName}` → the tiers W3's file gives the pair
   const near = (a: string, b: string) => pathNames.set(a, new Set([...(pathNames.get(a) ?? []), b]));
-  for (const l of (await readFile(join(process.cwd(), config.data.root, 'enrich', 'connections.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)) {
-    const p = JSON.parse(l) as Path;
+  for (const record of pathInput.records) {
+    const p = record.value as Path;
     // A row can file its person under a descriptive name, "X (adviser to Y)" (v14b): match on X too.
     const base = p.other.name.replace(/\s*\([^)]*\)\s*$/, '');
     near(p.lp, p.other.name);
@@ -166,8 +188,8 @@ async function main() {
   const candsByKey = new Map((await readFile(join(process.cwd(), config.data.root, 'enrich', 'candidates.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
     .map((l) => JSON.parse(l) as { key: string; domains: string[]; location: string | null; contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: { track: string; state: string; amount: number } | null; context?: Array<{ at: string }> }).map((c) => [c.key, c]));
   const best = new Map<string, 'A' | 'B' | 'C' | 'D'>();
-  for (const l of (await readFile(join(process.cwd(), config.data.root, 'enrich', 'connections.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)) {
-    const p = JSON.parse(l) as Path;
+  for (const record of pathInput.records) {
+    const p = record.value as Path;
     const cur = best.get(p.lp);
     if (!cur || p.tier < cur) best.set(p.lp, p.tier);
   }
@@ -254,6 +276,6 @@ async function main() {
   // A lead carries its firm, so a colleague's newer finding makes the lead stale too (s24).
   const leadsBehind = new Set(leadPins.filter((x) => { const f = found.get(x.key); const at = madeAt.get(x.lead.key); return f && at && f.researched.at > at; }).map((x) => x.lead.key)).size;
   if (sfiles.length) console.log(`${sfiles.length} strategies · ${sbad} with problems · ${stale} older than their LP's finding · ${long} with a next step the import cuts at 400 characters (${over} over v1.5's 300) · ${doubled} firms asked for money twice · ${leadMoved} firm-level strategies whose lead was rewritten since (${unpinned.length} firm-level asks pin no lead) · ${leadsBehind} leads older than a colleague's finding · ${namesOthers} naming an LP the files don't join to them (${staleTies} citing a W3 tie the files no longer carry) · ${tierMismatch} citing a tier W3's file doesn't give the pair · gates ${JSON.stringify(gateCount)} · lists ${JSON.stringify(lists)} · asks ${JSON.stringify(shapes)}`);
-  if (bad || sbad) process.exitCode = 1;
+  if (bad || sbad || pathBad) process.exitCode = 1;
 }
 main();

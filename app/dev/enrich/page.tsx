@@ -97,7 +97,7 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
   const who = tally((s) => s.next.who.split(/[ (,—]/)[0] ?? '?');
   const lists = tally((s) => s.list);
   const routes = tally((s) => s.route?.tier ?? 'none');
-  const last = (imported?.detail ?? {}) as { mapped?: number; claims?: number; docs?: number; withPaths?: number; paths?: number; rejected?: number; problems?: Array<{ key: string; problems: string[] }> };
+  const last = (imported?.detail ?? {}) as Partial<import('@/lib/enrich/import').ImportCounts>;
   return (
     <Page
       crumbs={[{ label: SECTION.developer }, { label: 'Enrichment' }]}
@@ -152,6 +152,7 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
             <>
               <div className="fact"><span>Mapped</span><span>{n(last.mapped ?? 0)} LPs · {n(last.claims ?? 0)} claims from {n(last.docs ?? 0)} public pages</span></div>
               <div className="fact"><span>Connection candidates</span><span>{n(last.paths ?? 0)} paths for {n(last.withPaths ?? 0)} LPs</span></div>
+              {(last.skippedRecords?.length ?? 0) > 0 && <div className="fact"><span>Skipped</span><span>{n(last.skippedPaths ?? 0)} paths · {n(last.skippedRecords!.length)} records total — see below</span></div>}
               {(last.rejected ?? 0) > 0 && <div className="fact"><span>Refused</span><span>{n(last.rejected ?? 0)} files that fail the schema — see below</span></div>}
             </>
           )}
@@ -162,6 +163,13 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
               Replaces what an earlier import wrote; a claim somebody verified is kept.
             </span>
           </form>
+          {(last.skippedRecords ?? []).length > 0 && (
+            <details className="more" style={{ marginTop: 10 }}>
+              <summary>{last.skippedRecords!.length} skipped records — correct these files and import again</summary>
+              <p className="muted">Indices start at zero. Other valid records were imported.</p>
+              <ul style={{ fontSize: 12 }}>{last.skippedRecords!.map((p) => <li key={`${p.file}:${p.index}`}><code>{p.file}</code> · index {p.index} — {p.problems.join('; ')}</li>)}</ul>
+            </details>
+          )}
           {(last.problems ?? []).length > 0 && (
             <details className="more" style={{ marginTop: 10 }}>
               <summary>{last.problems!.length} refused files</summary>

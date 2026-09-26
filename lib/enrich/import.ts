@@ -7,6 +7,7 @@ import { resolveConnectionPeople } from './connection-people';
 import { enrichDir } from './candidates';
 import { check, type Finding, type SourceKind } from './schema';
 import type { Path } from './connect';
+import { readPathRecords, isEntityKey, type ConnectionProblem, type LocatedRecord } from './connection-check';
 import { checkStrategy, type Strategy } from './strategy';
 import type { Triage } from './triage';
 
@@ -37,6 +38,8 @@ export interface ImportCounts {
   profiles: number;
   withPaths: number;
   paths: number;
+  skippedPaths: number;
+  skippedRecords: ConnectionProblem[];
   strategies: number;
   proposed: number;
   withdrawn: number;
@@ -55,25 +58,44 @@ const day = (s: string | null | undefined, fallback: string) => {
   return m ? `${m[1]}-${m[2] ?? '01'}-${m[3] ?? '01'}` : fallback;
 };
 
-export async function importFindings(runBy: string | null): Promise<ImportCounts> {
-  const dir = enrichDir();
-  const counts: ImportCounts = { files: 0, mapped: 0, rejected: 0, unresolved: 0, notInSystem: 0, claims: 0, keptVerified: 0, docs: 0, profiles: 0, withPaths: 0, paths: 0, strategies: 0, proposed: 0, withdrawn: 0, triaged: 0, problems: [] };
+export async function importFindings(runBy: string | null, dir = enrichDir()): Promise<ImportCounts> {
+  const counts: ImportCounts = { files: 0, mapped: 0, rejected: 0, unresolved: 0, notInSystem: 0, claims: 0, keptVerified: 0, docs: 0, profiles: 0, withPaths: 0, paths: 0, skippedPaths: 0, skippedRecords: [], strategies: 0, proposed: 0, withdrawn: 0, triaged: 0, problems: [] };
   const run = await startRun('enrich', 'import', runBy);
   try {
     const files = (await readdir(join(dir, 'raw')).catch(() => [])).filter((f) => f.endsWith('.json'));
     counts.files = files.length;
     const findings: Finding[] = [];
+    const findingRecords: LocatedRecord[] = [];
     for (const f of files) {
       const key = f.replace(/\.json$/, '');
       let x: unknown;
       try { x = JSON.parse(await readFile(join(dir, 'raw', f), 'utf8')); } catch { counts.rejected++; counts.problems.push({ key, problems: ['not JSON'] }); continue; }
-      const problems = check(x, key);
+      findingRecords.push({ file: `raw/${f}`, index: 0, value: x });
+      const problems = [...check(x, key), ...(!isEntityKey(key) ? ['key must be an entity UUID'] : [])];
       if (problems.length) { counts.rejected++; counts.problems.push({ key, problems }); continue; }
       findings.push(x as Finding);
     }
-    let paths = (await readFile(join(dir, 'connections.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Path);
+    const parsedPaths = readPathRecords(await readFile(join(dir, 'connections.jsonl'), 'utf8').catch(() => ''));
+    counts.skippedRecords.push(...parsedPaths.skipped);
+    counts.skippedPaths += parsedPaths.skipped.length;
+    let paths: Path[] = [];
+    const skipPath = (record: LocatedRecord, problems: string[]) => {
+      counts.skippedPaths++;
+      counts.skippedRecords.push({ file: record.file, index: record.index, problems });
+    };
     // W9: the lane and the first step before any outreach (iteration 3), shown on the LP's page.
-    const triage = (await readFile(join(dir, 'triage.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Triage);
+    const triage: Triage[] = [];
+    for (const [index, line] of (await readFile(join(dir, 'triage.jsonl'), 'utf8').catch(() => '')).split('\n').entries()) {
+      if (!line.trim()) continue;
+      let value: Triage;
+      try { value = JSON.parse(line) as Triage; }
+      catch { counts.skippedRecords.push({ file: 'triage.jsonl', index, problems: ['not JSON'] }); continue; }
+      if (!value || !isEntityKey(value.key) || !['warm now', 'research first', 'long process', 'cold'].includes(value.lane)
+        || (value.first != null && typeof value.first !== 'string')) {
+        counts.skippedRecords.push({ file: 'triage.jsonl', index, problems: ['invalid triage key, lane or first step'] }); continue;
+      }
+      triage.push(value);
+    }
     // W5: one strategy per LP, checked like the findings.
     const strategies: Array<{ s: Strategy; hash: string }> = [];
     for (const f of (await readdir(join(dir, 'strategy')).catch(() => [])).filter((x) => x.endsWith('.json'))) {
@@ -81,7 +103,7 @@ export async function importFindings(runBy: string | null): Promise<ImportCounts
       const text = await readFile(join(dir, 'strategy', f), 'utf8');
       let x: unknown;
       try { x = JSON.parse(text); } catch { counts.problems.push({ key, problems: ['strategy: not JSON'] }); continue; }
-      const problems = checkStrategy(x, key);
+      const problems = [...checkStrategy(x, key), ...(!isEntityKey(key) ? ['key must be an entity UUID'] : [])];
       if (problems.length) { counts.problems.push({ key, problems: problems.map((q) => `strategy: ${q}`) }); continue; }
       strategies.push({ s: x as Strategy, hash: createHash('sha1').update(text).digest('hex') });
     }
@@ -89,7 +111,12 @@ export async function importFindings(runBy: string | null): Promise<ImportCounts
 
     const db = await getDb();
     await db.transaction(async (tx) => {
-      paths = await resolveConnectionPeople(tx, paths);
+      const orgs = await tx.query<{ name: string }>("select display_name as name from identity.entity where entity_type = 'org'");
+      const records = parsedPaths.records;
+      const origin = new Map<Path, LocatedRecord>();
+      paths = await resolveConnectionPeople(tx, records.map((r) => r.value as Path),
+        (index, problems) => skipPath(records[index]!, problems),
+        { findings: findingRecords, knownOrgs: orgs.map((o) => o.name), records, onResolved: (index, path) => { origin.set(path, records[index]!); } });
       const known = new Set((await tx.query<{ id: string }>(
         `select entity_id::text as id from identity.entity where entity_id = any($1::uuid[])`,
         [[...new Set([...findings.map((f) => f.key), ...paths.map((p) => p.lp), ...triage.map((t) => t.key)])]],
@@ -102,7 +129,14 @@ export async function importFindings(runBy: string | null): Promise<ImportCounts
         `select count(*)::text as n from research.claim where source like 'pub:%' and entity_id = any($1::uuid[]) and last_verified_by is not null`, [keys],
       ))?.n ?? 0);
       await tx.query(`delete from research.claim where source like 'pub:%' and entity_id = any($1::uuid[]) and last_verified_by is null`, [keys]);
-      await tx.query(`delete from research.note where kind in ('public_profile', 'connection_candidates', 'triage') and author_id is null and entity_id = any($1::uuid[])`, [[...known]]);
+      await tx.query(`delete from research.note where kind in ('public_profile', 'triage') and author_id is null and entity_id = any($1::uuid[])`, [[...known]]);
+      // Preserve the previous candidate note for an endpoint whose new paths were all
+      // refused. A successful sibling path replaces the note with only valid paths.
+      const skippedIndices = new Set(counts.skippedRecords.filter((r) => r.file === 'connections.jsonl').map((r) => r.index));
+      const skippedLps = new Set(parsedPaths.allRecords.filter((r) => skippedIndices.has(r.index)).map((r) => (r.value as Partial<Path> | null)?.lp).filter(isEntityKey));
+      const importedLps = new Set(paths.map((p) => p.lp));
+      await tx.query(`delete from research.note where kind = 'connection_candidates' and author_id is null and entity_id = any($1::uuid[])`,
+        [[...known].filter((key) => !skippedLps.has(key) || importedLps.has(key))]);
       for (const t of triage) {
         if (!known.has(t.key)) continue;
         await tx.query(`insert into research.note (entity_id, kind, body, data) values ($1, 'triage', $2, $3)`,
@@ -177,7 +211,13 @@ export async function importFindings(runBy: string | null): Promise<ImportCounts
       }
 
       const byLp = new Map<string, Path[]>();
-      for (const p of paths) if (known.has(p.lp)) byLp.set(p.lp, [...(byLp.get(p.lp) ?? []), p]);
+      for (const p of paths) {
+        if (known.has(p.lp)) byLp.set(p.lp, [...(byLp.get(p.lp) ?? []), p]);
+        else {
+          const record = origin.get(p)!;
+          skipPath(record, ['LP endpoint is not in the system']);
+        }
+      }
       const rank = { A: 0, B: 1, C: 2, D: 3 } as const;
       for (const [lp, ps] of byLp) {
         ps.sort((a, b) => rank[a.tier] - rank[b.tier]);
@@ -192,7 +232,7 @@ export async function importFindings(runBy: string | null): Promise<ImportCounts
 
     await finishRun(run, {
       status: 'ok', requests: 0, records: counts.files, newRecords: counts.claims,
-      note: `${counts.mapped} findings mapped (${counts.claims} claims, ${counts.docs} pages) · ${counts.withPaths} LPs with paths · ${counts.proposed} strategies proposed${counts.rejected ? ` · ${counts.rejected} files refused` : ''}`,
+      note: `${counts.mapped} findings mapped (${counts.claims} claims, ${counts.docs} pages) · ${counts.withPaths} LPs with paths · ${counts.proposed} strategies proposed${counts.rejected ? ` · ${counts.rejected} files refused` : ''}${counts.skippedRecords.length ? ` · ${counts.skippedPaths} paths skipped · ${counts.skippedRecords.length} records skipped` : ''}`,
       detail: { ...counts, problems: counts.problems.slice(0, 50) },
     });
     return counts;

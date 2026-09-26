@@ -9,6 +9,7 @@ export async function runProperties(check: Check) {
   (await import('../route-presentation-properties')).routePresentationProperties(check);
   await (await import('../path-search-properties')).pathSearchProperties(check);
   const db = await freshDb();
+  await (await import('../import-robustness-properties')).importRobustnessProperties(check, db);
   await (await import('../path-search-properties')).edgeEvidenceCacheProperties(check, db);
   await (await import('../route-scoring-properties')).routeScoringProperties(check, db);
   await (await import('../issues4-properties')).issues4Properties(check, db);
