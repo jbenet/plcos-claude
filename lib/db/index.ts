@@ -69,6 +69,7 @@ const scopedDb = new AsyncLocalStorage<Db>();
 export const withDb = <T>(db: Db, work: () => Promise<T>): Promise<T> => scopedDb.run(db, work);
 import { join as pathJoin } from 'node:path';
 import { config } from '@/config/deployment';
+import { prioritizeDb } from './scheduling';
 
 type Global = typeof globalThis & { __capitalOsDb?: Promise<Db>; __capitalOsMigrationCheck?: { at: number; files: string; running: Promise<void> | null } };
 const g = globalThis as Global;
@@ -81,10 +82,12 @@ const g = globalThis as Global;
  */
 export function getDb(): Promise<Db> {
   const scoped = scopedDb.getStore();
-  if (scoped) return Promise.resolve(scoped);
+  if (scoped) return Promise.resolve(prioritizeDb(scoped));
   if (!g.__capitalOsDb) g.__capitalOsDb = boot();
-  if (process.env.NODE_ENV === 'production') return g.__capitalOsDb;
-  return g.__capitalOsDb.then(catchUp);
+  // An already-running dev server may have opened its handle before scheduling landed.
+  const db = g.__capitalOsDb.then(prioritizeDb);
+  if (process.env.NODE_ENV === 'production') return db;
+  return db.then(catchUp);
 }
 
 /**
@@ -161,5 +164,5 @@ async function boot(dir?: string): Promise<Db> {
 /** Script entry point. Same handle, same lifecycle, explicit about the directory. */
 export async function openFresh(dir?: string): Promise<Db> {
   if (!g.__capitalOsDb) g.__capitalOsDb = boot(dir);
-  return g.__capitalOsDb;
+  return g.__capitalOsDb.then(prioritizeDb);
 }

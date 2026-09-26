@@ -1,8 +1,11 @@
 /** Entirely invented prospects; uses only the harness's demo database. */
+import { mkdtemp, writeFile, utimes, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Check, Db } from './properties/harness';
 import { withDb } from '../lib/db';
-import { addProspects, type Prospect, type ProspectFile } from '../lib/enrich/prospects';
+import { addProspects, readProspectFiles, prospectPersonKey, type Prospect, type ProspectFile } from '../lib/enrich/prospects';
 
 export async function prospectsProperties(check: Check, db: Db) {
   const actor = (await db.one<{ id: string }>('select id::text from platform.app_user where active order by handle limit 1'))!.id;
@@ -18,7 +21,7 @@ export async function prospectsProperties(check: Check, db: Db) {
   const alias = async (source: string, key: string, id: string) => {
     await db.query("insert into identity.source_record (source, source_id, entity_id, resolved_by) values ($1,$2,$3,'invented:prospects-properties')", [source, key, id]);
   };
-  const prospect = (personKey: string, name: string, extra: Partial<Prospect> = {}): Prospect => ({
+  const prospect = (personKey: string | null, name: string, extra: Partial<Prospect> = {}): Prospect => ({
     personKey, name, org: 'Invented Prospect Office', vehicle: vehicle.slug, status: 'new',
     capacity: { band: '$500K–$1M', basis: 'Invented fixture estimate.', guess: true },
     reason: 'An invented allocator whose interests match this vehicle.', strategic: false,
@@ -102,7 +105,7 @@ export async function prospectsProperties(check: Check, db: Db) {
   const unseen = prospect('invented-prospects2:unseen', 'Invented Prospects2 Dawn', { org: newOrg, status: 'sourcing' });
   const noOrg = prospect('invented-prospects2:no-org', 'Invented Prospects2 Ember', { org: null });
   const newResult = await addProspects(db, actor, files(unseen, noOrg));
-  const sourcePerson = async (key: string) => db.one<{ id: string; name: string }>(
+  const sourcePerson = async (key: string | null | undefined) => db.one<{ id: string; name: string }>(
     `select e.entity_id::text id, e.display_name name from identity.entity e join identity.source_record s on s.entity_id = e.entity_id
       where s.source = 'prospect' and s.source_id = $1`, [key]);
   const born = await sourcePerson(unseen.personKey);
@@ -174,21 +177,73 @@ export async function prospectsProperties(check: Check, db: Db) {
     && await n('select count(*)::text n from identity.entity where display_name = $1', [knownOrgRow.org]) === 1,
     'Existing organization retained; a sourced affiliation links the newly created person.');
 
+  const unkeyed = prospect(null, 'Invented Prospects3 Juniper', { org: 'Invented Prospects3 Office',
+    sources: ['https://example.org/juniper', { url: 'https://example.org/juniper-bio', title: 'Invented biography' }] });
+  const absent = { ...unkeyed, personKey: undefined, name: '  INVENTED   Prospects3 Juniper ', org: 'INVENTED PROSPECTS3 OFFICE',
+    vehicle: otherVehicle.slug, sources: [{ title: 'Edited biography', url: 'https://example.org/juniper-bio' }, 'https://example.org/juniper'] };
+  const unkeyedResult = await addProspects(db, actor, files(unkeyed, absent));
+  const unkeyedPerson = await sourcePerson(prospectPersonKey(unkeyed));
+  const unkeyedBefore = await snapshot();
+  const unkeyedRetry = await addProspects(db, actor, [{ file: 'moved.jsonl', text: JSON.stringify({ ...absent, reason: 'Edited reason' }) }]);
+  check('PROSPECTS3 null and absent keys share a stable source identity across vehicles, files and source order',
+    unkeyedResult.added === 2 && unkeyedResult.invalid.length === 0 && !!unkeyedPerson
+    && prospectPersonKey(unkeyed) === prospectPersonKey(absent)
+    && unkeyedRetry.existing === 1 && unkeyedBefore === await snapshot(),
+    `Added ${unkeyedResult.added}; retry existing ${unkeyedRetry.existing}; unchanged counts.`);
+  const canonical = await makePerson(unkeyed.name);
+  await db.query('update identity.entity set merged_into=$2 where entity_id=$1', [unkeyedPerson?.id, canonical]);
+  const redirected = await addProspects(db, actor, files(unkeyed));
+  check('PROSPECTS3 an unkeyed source follows its canonical identity after resolution without a duplicate pursuit',
+    redirected.existing === 1 && redirected.added === 0
+    && await n('select count(*)::text n from strategy.pursuit where identity.canonical_entity_id(entity_id)=$1', [canonical]) === 2,
+    'Canonical redirect preserves the original two vehicle pursuits on retry.');
+  const { identityEvidence } = await import('../modules/identity/resolution-input');
+  const evidence = identityEvidence(null, files(unkeyed, null, { ...unkeyed, status: 'committed' }));
+  check('PROSPECTS3 identity evidence uses the same generated key and ignores invalid rows',
+    evidence.length === 1 && evidence[0]?.sourceId === prospectPersonKey(unkeyed)
+    && evidence[0]?.organizations?.[0] === unkeyed.org,
+    'Unkeyed organization evidence remains available to cross-source resolution.');
+
   const validId = await makePerson('Invented Prospect Batch');
   const valid = prospect(validId, 'Invented Prospect Batch');
+  const partial = await addProspects(db, actor, [{ file: 'mixed.jsonl', text: [
+    JSON.stringify({ ...valid, status: 'committed' }), '{broken', JSON.stringify(valid),
+    JSON.stringify({ ...valid, vehicle: 'invented-absent-vehicle', name: 'Conflicting invalid vehicle row' }),
+    JSON.stringify({ ...valid, personKey: 42 }), JSON.stringify({ ...valid, sources: [] }),
+  ].join('\n') }, { file: 'document.jsonl', text: JSON.stringify(valid, null, 2) },
+  { file: 'array.jsonl', text: JSON.stringify([valid]) }, { file: 'broken.jsonl', text: 'not json at all' }]);
+  check('PROSPECTS3 invalid rows retain file/line while valid rows import despite structural errors in other files',
+    partial.added === 1 && partial.ambiguous === 0 && partial.invalid.length === 8
+    && [1, 2, 4, 5, 6].every(line => partial.invalid.some(p => p.file === 'mixed.jsonl' && p.line === line))
+    && ['document.jsonl', 'array.jsonl', 'broken.jsonl'].every(file => partial.invalid.some(p => p.file === file && p.reason.startsWith('File skipped:'))),
+    `Added ${partial.added}; ${partial.invalid.length} invalid rows/files listed.`);
   const invalidBefore = await snapshot();
-  const malformed = await addProspects(db, actor, [...files(valid), { file: 'broken.jsonl', text: '{broken\n' }]);
-  const badShape = await addProspects(db, actor, files(valid, { ...valid, status: 'committed' }));
-  const badVehicle = await addProspects(db, actor, files(valid, { ...valid, vehicle: 'invented-absent-vehicle' }));
-  const noEvidence = await addProspects(db, actor, files(prospect('invented-prospects2:no-evidence', 'Invented Prospects2 Unsourced', { sources: [] })));
-  check('PROSPECTS malformed JSON, invalid statuses and unknown vehicles reject the entire batch before writes',
-    [malformed, badShape, badVehicle, noEvidence].every(result => result.invalid.length > 0 && result.added === 0)
-    && invalidBefore === await snapshot(),
-    `Invalid rows ${malformed.invalid.length}/${badShape.invalid.length}/${badVehicle.invalid.length}/${noEvidence.invalid.length}; database counts unchanged, including unsourced input.`);
   const contradictory = await addProspects(db, actor, files(valid, { ...valid, name: 'Invented Conflicting Description' }));
   check('PROSPECTS conflicting descriptions cannot select an identity by input order',
     contradictory.ambiguous === 2 && contradictory.added === 0 && invalidBefore === await snapshot(),
     `${contradictory.ambiguous} conflicting descriptions skipped.`);
+
+  const dir = await mkdtemp(join(tmpdir(), 'prospects3-invented-'));
+  try {
+    const fresh = prospect(null, 'Invented Prospects3 Writing', { org: null });
+    await writeFile(join(dir, 'writing.jsonl'), JSON.stringify(fresh));
+    await writeFile(join(dir, 'settled.jsonl'), JSON.stringify(valid));
+    await writeFile(join(dir, 'ignored.txt'), 'not a prospect input');
+    const old = new Date(Date.now() - 180_000);
+    await utimes(join(dir, 'settled.jsonl'), old, old);
+    const inputs = await readProspectFiles(dir);
+    const waiting = await addProspects(db, actor, inputs);
+    check('PROSPECTS3 recent files are listed as in progress, are not read, and do not block settled files',
+      waiting.inProgress.join() === 'writing.jsonl' && waiting.existing === 1 && waiting.invalid.length === 0
+      && inputs.find(f => f.file === 'writing.jsonl')?.text === '' && inputs.length === 2
+      && !await sourcePerson(prospectPersonKey(fresh)),
+      `In progress ${waiting.inProgress.length}; settled existing ${waiting.existing}.`);
+    await utimes(join(dir, 'writing.jsonl'), old, old);
+    const settled = await addProspects(db, actor, await readProspectFiles(dir));
+    check('PROSPECTS3 a file imports on retry once its two-minute quiet period has elapsed',
+      settled.inProgress.length === 0 && settled.added === 1 && settled.existing === 1,
+      `Added ${settled.added} formerly in-progress prospect.`);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 
   const { getPursuit, listPursuits } = await import('../modules/strategy');
   const { researchSet } = await import('../lib/enrich/candidates');

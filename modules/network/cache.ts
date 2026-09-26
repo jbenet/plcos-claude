@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
 import { config } from '@/config/deployment';
 import { getDb, withDb, type Db } from '@/lib/db';
+import { withForegroundDb } from '@/lib/db/scheduling';
 import { computeStructuralRoutes, routeGraph } from './service';
 import { canonicalRouteEntity, routeTouchesChanges } from './repo';
 import type { Edge, RouteSearch } from './types';
@@ -56,6 +57,12 @@ async function touched(db: Db, targetId: string, since: string, search: RouteSea
 /** Only structural graph state is cached. service applies authoritative guards and
  * dynamic scores to a fresh view on every call, never mutating this shared entry. */
 export async function cachedRoutes(targetId: string, kind: string, live: () => Promise<RouteSearch | null>): Promise<RouteSearch | null> {
+  // A resolver mutation changes the generation. Holding maintenance across this
+  // search's yielded reads prevents repeated generation retries from starving a page.
+  // Warm-up calls this once per target; no lease spans the whole warm-up.
+  return withForegroundDb(await getDb(), () => readCachedRoutes(targetId, kind, live));
+}
+async function readCachedRoutes(targetId: string, kind: string, live: () => Promise<RouteSearch | null>): Promise<RouteSearch | null> {
   targetId = await canonicalRouteEntity(targetId);
   const db = await getDb(), version = await revisionFor(db), key = `${targetId}:${kind}`;
   let entries = memory.get(db);
