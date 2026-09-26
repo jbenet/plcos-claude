@@ -63,7 +63,7 @@ First done on 25 Sep 2026, with issue 0030; CHANGELOG N84 has what that round ta
 1. Claude triages: `assignee: chatgpt`, `branch: codex/NNNN-slug`, `status: agent-ready`, and a spec
    under "Triage" that ends with "Done when".
 2. Claude queues the task into Juan's open ChatGPT session with the Codex CLI that ships inside the
-   ChatGPT app: `/Applications/ChatGPT.app/Contents/Resources/codex queue --thread "<session name or
+   ChatGPT app: `/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex queue --thread "<session name or
    id>" --message "…"`. The message names the issue file and the branch and carries no real data;
    ChatGPT reads the issue file where it is.
 3. ChatGPT branches from master in `plcos-codex-dev`, does the work, runs the checks, and ends its last
