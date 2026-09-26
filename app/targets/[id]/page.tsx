@@ -60,7 +60,7 @@ export default async function TargetWorkspace({ params, searchParams }: {
     listSourceDocs(),
     notesFor(pursuit.entityId),
     restrictionsFor(pursuit.entityId),
-    planRoutes(user.handle, pursuit.entityId),
+    planRoutes(user.handle, pursuit.entityId, 3, 'fund', 'team'),
     signalsFor(pursuit.entityId),
     notesAbout(pursuit.entityId),
     touchpointsFor(pursuit.entityId, pursuit.vehicleId),
@@ -359,17 +359,17 @@ export default async function TargetWorkspace({ params, searchParams }: {
             {!routes || routes.routes.length === 0 ? (
               <div className="cbody">
                 <p className="muted">
-                  No supported route from {user.name} in the material available. That is not the
+                  No supported route from the team or PL in the material available. That is not the
                   same as no route existing.
                 </p>
               </div>
             ) : (
-              routes.routes.slice(0, 3).map((route, i) => (
+              routes.routes.filter((r) => r.foldedUnder == null).slice(0, 3).map((route, i) => (
                 <div className="route" key={i}>
                   <span className={`tier t${route.weakestTier}`}>{route.weakestTier}</span>
                   <div className="rt">
                     <b>
-                      {routes.fromName} → {route.hops.map((h) => h.toName).join(' → ')}
+                      {route.fromName ?? routes.fromName} → {route.hops.map((h) => h.toName).join(' → ')}
                     </b>
                     <p>{route.reasons[0]}</p>
                   </div>

@@ -20,7 +20,7 @@ import { directContact, type DirectContact } from '@/modules/meetings';
 import { listVehicles } from '@/modules/platform';
 import { planRoutes, tierCounts, edgeWarmth, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
 import type { Path } from '@/lib/enrich/connect';
-import { buildNetworkAction, reviewEdgeAction } from './actions';
+import { buildNetworkAction } from './actions';
 import { listPursuits } from '@/modules/strategy';
 import { provisionalScores } from '@/lib/strategy-score';
 
@@ -66,7 +66,7 @@ export default async function Routes({
   const targets = entities.filter((e) => inPipeline.has(e.entityId) && !teamNames.has(e.displayName));
   const targetId = target ?? targets.find((t) => t.displayName === 'Delia Roos')?.entityId ?? targets[0]?.entityId;
   const search = targetId
-    ? await planRoutes(user.handle, targetId, 3, selection.current?.kind ?? 'fund')
+    ? await planRoutes(user.handle, targetId, 3, selection.current?.kind ?? 'fund', 'team')
     : null;
 
   /**
@@ -139,7 +139,7 @@ export default async function Routes({
 
   /**
    * What there is besides edges (issues 0027–0028, real). The target's name comes from the records
-   * even when no search ran. A search starts from the user's own person record, and a user with none
+   * even when no search ran. A search starts from the team and PL source records, and a user with none
    * gets no search — which the page says, instead of "Routes to —". And whatever the edges say, what
    * the research found near them (candidates, rule 6) and whom at their firm the team already deals
    * with, since those are where a warm introduction would come from.
@@ -211,7 +211,7 @@ export default async function Routes({
         <>
           <div className="lbl">Evidence tiers</div>
           <div className="ihead">What each tier may carry</div>
-          <div className="imeta">A–D on every edge · C and D need a person</div>
+          <div className="imeta">A–D on every edge · uncertainty stays visible</div>
           {TIERS.map((t) => {
             const count = tiers.find((x) => x.tier === t);
             return (
@@ -228,7 +228,7 @@ export default async function Routes({
                 </div>
                 <div style={{ fontSize: 11, marginTop: 3, color: t === 'C' || t === 'D' ? 'var(--clay)' : 'var(--green)' }}>
                   {TIER_MEANING[t].routable}
-                  {count && (t === 'C' || t === 'D') ? ` ${count.reviewed} of ${count.n} reviewed.` : ''}
+
                 </div>
               </div>
             );
@@ -256,10 +256,10 @@ export default async function Routes({
       <div className="lbl">Module 05 · Warm intro routes</div>
       <h1>Routes to {targetName ?? '—'}</h1>
       <p className="sublede">
-        Two questions, answered in order. <b>May this route be used?</b> — a route is only as good
-        as its worst hop, an unconfirmed tier C or D hop cannot carry one at all, and a restriction
-        on the target excludes every path through the restricted party. Then, among the routes that
-        may be used: <b>how much weight does it actually carry?</b>
+        Routes start with the team or PL. Evidence tiers and relationship warmth show how much
+        weight each path carries; C and D ties stay visible with their uncertainty labelled.
+        A restriction on the target still excludes the approach. Asks and sends need separate approval.
+
       </p>
 
       {targetTouch && (
@@ -302,7 +302,7 @@ export default async function Routes({
                   {inTouchNearby.length === 1 ? 'person' : 'people'} {isPerson ? 'at their firm' : 'there'} the team deals with.
                 </dd>
                 <dt>Who can act</dt>
-                <dd>Anyone: building the network links each of the team to a person record and makes the ties our records show — a meeting held one to one is tier A — and those the research found, C and D waiting for a person.</dd>
+                <dd>Anyone: building the network links each of the team to a person record and makes the ties our records show — a meeting held one to one is tier A — and those the research found, C and D labelled as weaker evidence.</dd>
                 <dt>Safe next step</dt>
                 <dd>Build it below. Where the team is in touch already, approach directly and say so.</dd>
               </dl>
@@ -331,8 +331,7 @@ export default async function Routes({
               </h3>
               <p>
                 That is not the same as &ldquo;no route exists&rdquo;. It means the edges on file do not
-                connect you within {search.coverage.maxHops} hops. Someone else on the team may
-                have a path — switch user in the rail and this page recomputes.
+                connect you within {search.coverage.maxHops} hops. The team and PL organization sources are included; new evidence can add more paths.
               </p>
               <dl>
                 <dt>What is known</dt>
@@ -367,7 +366,7 @@ export default async function Routes({
               <div key={i} className={`route${i === selected ? ' best' : ''}`}>
                 <span className={`tier t${route.weakestTier}`}>{route.weakestTier}</span>
                 <div className="rt">
-                  <RouteNames route={route} alternatives={search.routes.filter((r) => r.foldedUnder === i)} fromName={search.fromName} />
+                  <RouteNames route={route} alternatives={search.routes.filter((r) => r.foldedUnder === i)} fromName={route.fromName ?? search.fromName} />
                   <div><Link href={`/routes?target=${targetId}&r=${i}${expanded === '1' ? '&expanded=1' : ''}`}>Inspect this route</Link></div>
                   {route.hops.map((h) => (
                     <div key={h.edge.edgeId}>
@@ -390,22 +389,7 @@ export default async function Routes({
                           <span className="muted"> · confirmed by {h.edge.reviewedByName}</span>
                         )}
                       </p>
-                      {/* A C or D tie waits for a person (rule 6, N82): say whether it is real. Beside the
-                          line, not in it: a form inside a paragraph breaks the page's hydration. */}
-                      {(h.edge.tier === 'C' || h.edge.tier === 'D') && !h.edge.reviewedByName && (
-                        <div className="edgereview">
-                          <form action={reviewEdgeAction}>
-                            <input type="hidden" name="edgeId" value={h.edge.edgeId} />
-                            <input type="hidden" name="decision" value="confirm" />
-                            <button className="btn" type="submit">They know each other</button>
-                          </form>
-                          <form action={reviewEdgeAction}>
-                            <input type="hidden" name="edgeId" value={h.edge.edgeId} />
-                            <input type="hidden" name="decision" value="decline" />
-                            <button className="btn" type="submit">Not a real tie</button>
-                          </form>
-                        </div>
-                      )}
+
                     </div>
                   ))}
                   {route.reasons.map((reason) => (
@@ -415,11 +399,11 @@ export default async function Routes({
                   ))}
                   {expanded !== '1' && search.routes.some((r) => r.foldedUnder === i) && (
                     <details>
-                      <summary>{search.routes.filter((r) => r.foldedUnder === i).length} longer alternatives to this first connector</summary>
-                      <p>The first hop is warm and usable. These paths add connectors before it; their evidence is retained.</p>
+                      <summary>{search.routes.filter((r) => r.foldedUnder === i).length} alternative paths and evidence</summary>
+                      <p>These paths share the same destination chain or add a weaker detour. Their evidence is retained.</p>
                       {search.routes.map((alternative, ai) => alternative.foldedUnder === i ? (
                         <p key={ai}><Link href={`/routes?target=${targetId}&r=${ai}&expanded=1`}>
-                          {search.fromName} → {alternative.hops.map((h) => h.toName).join(' → ')} · inspect evidence
+                          {alternative.fromName ?? search.fromName} → {alternative.hops.map((h) => h.toName).join(' → ')} · inspect evidence
                         </Link></p>
                       ) : null)}
                     </details>
@@ -544,7 +528,7 @@ export default async function Routes({
         <div className="card nearcard">
           <div className="chead">
             <h2>Near them, from the research</h2>
-            <span className="lbl">{candidates.length} candidate {candidates.length === 1 ? 'path' : 'paths'} · not routes</span>
+            <span className="lbl">{candidates.length} candidate {candidates.length === 1 ? 'path' : 'paths'} · outside the imported routes</span>
           </div>
           <div className="cbody">
             {candidates.slice(0, 12).map((x, i) => (
@@ -554,7 +538,7 @@ export default async function Routes({
                   <b>{x.other.name}{x.other.type === 'team' && x.other.handle === user.handle ? ' (you)' : ''}</b>
                   <span className="muted"> — {OTHER_LABEL[x.other.type] ?? x.other.type}. {x.basis}</span>
                   <span className="muted" style={{ display: 'block' }}>{tieWarmth(x.kind, x.tie ?? ((x.tier === 'C' || x.tier === 'D') ? { kind: 'proximity' } : undefined)).basis}</span>
-                  {(x.tier === 'C' || x.tier === 'D') && <span className="needs"> · needs a person to check</span>}
+                  {(x.tier === 'C' || x.tier === 'D') && <span className="needs"> · weaker evidence</span>}
                 </span>
               </div>
             ))}
@@ -563,8 +547,8 @@ export default async function Routes({
           <p className="cover">
             <b>What this is:</b> the research&rsquo;s path finder{pathsNote ? `, run ${shortDate(pathsNote.createdAt)}` : ''}, over our
             own records and public sources (docs/19, W3). Paths already carried by a usable route appear above.
-            These remaining candidates need resolved people, connected graph edges or stronger evidence.
-            A C or D path needs a person to check it first (rule 6). Not found here means not found by the research.
+            These remaining candidates are not connected to a route source in the imported graph.
+            C and D ties route with labelled uncertainty (rule 6). Not found here means not found by the research.
           </p>
         </div>
       )}

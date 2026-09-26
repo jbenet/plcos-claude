@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Candidate } from './candidates';
 import type { Finding } from './schema';
+import { plNetworkPaths, materializeResearchNodes } from './pl-network';
 import { config } from '@/config/deployment';
 import { tieWarmth, type TieDetails, type Warmth } from '@/modules/network';
 
@@ -12,10 +13,10 @@ import { tieWarmth, type TieDetails, type Warmth } from '@/modules/network';
  * findings (public sources), and our side (`us/`). Every path it writes carries its tier and the
  * evidence behind it (rule 6): A needs our own record of an interaction; B a documented
  * association; C a shared affiliation with no evidence the two ever spoke; D proximity. C and D
- * never route without a person (CLAUDE.md, rule 6) — these are candidates for one to look at.
+ * route with labelled uncertainty (AGENTS.md, rule 6); only actions require approval.
  */
 
-export interface ConnectionPerson { key: string; name: string; source: string }
+export interface ConnectionPerson { key: string; name: string; source: string; entityType?: 'person' | 'org' }
 
 export type Tier = 'A' | 'B' | 'C' | 'D';
 
@@ -154,8 +155,8 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
     // Our own record of an interaction: meetings held with them, and who owns the pursuit.
     for (const p of c.pursuits) {
       if (c.contact.meetings > 0 && p.owner && p.owner !== 'Not on the team') {
-        // The owner was assigned to the pursuit; participation still needs a person to confirm.
-        add({ lp: c.key, other: { type: 'team', name: p.owner }, kind: 'met', tier: 'C', tie: { kind: 'proximity' }, basis: `${c.contact.meetings} ${c.contact.meetings === 1 ? 'meeting' : 'meetings'} on record; ${p.owner} owns the pursuit, but participation needs confirmation`, source: 'our records' });
+        // The owner was assigned to the pursuit; participation is uncertain.
+        add({ lp: c.key, other: { type: 'team', name: p.owner }, kind: 'met', tier: 'C', tie: { kind: 'proximity' }, basis: `${c.contact.meetings} ${c.contact.meetings === 1 ? 'meeting' : 'meetings'} on record; ${p.owner} owns the pursuit, participation is not recorded`, source: 'our records' });
       } else if (c.contact.meetings > 0) {
         add({ lp: c.key, other: { type: 'ours', name: 'PL Capital' }, kind: 'met', tier: 'B', basis: `${c.contact.meetings} ${c.contact.meetings === 1 ? 'meeting' : 'meetings'} on record; who from our side isn't recorded`, source: 'our records' });
       }
@@ -163,7 +164,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
 
     // C: the team marks them a close contact — relationship strength, a tier-C edge that never says
     // whose contact they are (CLAUDE.md). A path of its own, so triage, the pins and the routes
-    // agree (v06); a person names who holds it before it routes anything.
+    // agree (v06); an unnamed holder routes from PL with that uncertainty recorded.
     if (/close/i.test(c.enriched['Relationship Tier'] ?? '')) {
       add({ lp: c.key, other: { type: 'ours', name: 'Someone on the team (unrecorded)' }, kind: 'other', tier: 'C',
         basis: 'The team marks them a close contact; whose contact isn’t recorded', source: 'our records' });
@@ -181,7 +182,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
     // Keep it as C/proximity; ourSidePaths separately handles evidenced personal ties.
     for (const o of net.orgs) {
       const d = c.domains.find((x) => o.domains?.includes(x));
-      if (d) add({ lp: c.key, other: { type: 'ours', name: o.name }, kind: 'colleague', tier: 'C', tie: { kind: 'proximity' }, basis: `Our records hold an email address for them at ${d}; dates and personal ties need confirmation`, source: 'our records' });
+      if (d) add({ lp: c.key, other: { type: 'ours', name: o.name }, kind: 'colleague', tier: 'C', tie: { kind: 'proximity' }, basis: `Our records hold an email address for them at ${d}; dates and personal interaction are not recorded`, source: 'our records' });
       for (const a of o.aliases) {
         if (text && affirms(text, a)) {
           const fact = f!.facts.find((x) => x.confidence !== 'low' && affirms(x.value, a));
@@ -229,7 +230,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
           const accelerator = /y combinator|\byc\b|techstars|500 startups|on deck|entrepreneur first|antler|accelerator/i.test(r.org);
           add(accelerator
             ? { lp: c.key, other: { type: 'team', name: t.name, handle: t.handle }, kind: 'alumni', tier: 'D', basis: `Both went through ${r.org}, in different batches most likely`, source: null }
-            : { lp: c.key, other: { type: 'team', name: t.name, handle: t.handle }, kind: 'colleague', tier: 'C', tie: { kind: 'proximity' }, basis: `Both have worked at ${r.org}; collaboration and dates need confirmation`, source: r.source ?? null });
+            : { lp: c.key, other: { type: 'team', name: t.name, handle: t.handle }, kind: 'colleague', tier: 'C', tie: { kind: 'proximity' }, basis: `Both have worked at ${r.org}; collaboration and dates are not recorded`, source: r.source ?? null });
         }
       }
       for (const e of t.education) {
@@ -246,7 +247,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
   for (const f of findings.values()) {
     if (f.identity.match === 'ambiguous' || f.identity.match === 'not_found') continue;
     for (const c of f.connections ?? []) {
-      const tier = c.tier === 'B' && (c.scope === 'firm' || !c.source) ? 'C' : c.tier;
+      const tier = c.tier === 'B' && c.scope === 'firm' ? 'C' : c.tier;
       const resolved = c.scope !== 'firm' ? (c.toHandle && team.some((t) => t.handle === c.toHandle)
         ? { type: 'team' as const, name: team.find((t) => t.handle === c.toHandle)!.name, handle: c.toHandle }
         : resolvePerson(c.to, people, team)) : null;
@@ -255,7 +256,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
         tie: c.scope === 'firm' ? { kind: 'proximity' } : c.tie
           ?? (/\bco[ -]?founded\b|\bco[ -]?founders\b/i.test(c.basis) && resolved ? { kind: 'cofounder' } : undefined),
         reviewedBy: c.reviewedBy, reviewedAt: c.reviewedAt,
-        tier, basis: `${c.basis}${c.scope === 'firm' ? ' (the firm’s tie)' : ''}`, source: c.source ?? null });
+        tier, basis: `${c.basis}${c.scope === 'firm' ? ' (the firm’s tie)' : ''}`, source: c.source ?? 'research:W3 (source not recorded)' });
     }
   }
 
@@ -317,7 +318,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
 
   // W2n, Protocol Labs' own directory (iteration 3): an entry under their name that matches our
   // record of them is PL's own record that they are in the network — B; under their name alone, C
-  // until a person confirms it. Speaking at a PL event is C, attending one D (amendment 1.4). Their
+  // with uncertain identity. Speaking at a PL event is C, attending one D (amendment 1.4). Their
   // firm listed as a network team is the firm's tie, C.
   const DIRECTORY = 'https://os.pl.xyz';
   for (const e of directory) {
@@ -331,7 +332,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
         if (spoke.length) add({ lp: e.key, other: { type: 'ours', name: 'Protocol Labs events' }, kind: 'other', tier: 'C', basis: `${spoke[0]!.host ? 'Hosted' : 'Spoke'} at ${spoke[0]!.name}${spoke.length > 1 ? ` and ${spoke.length - 1} more PL events` : ''}`, source: DIRECTORY });
         else if (m.events.length) add({ lp: e.key, other: { type: 'ours', name: 'Protocol Labs events' }, kind: 'other', tier: 'D', basis: `Attended ${m.events[0]!.name}${m.events.length > 1 ? ` and ${m.events.length - 1} more PL events` : ''}`, source: DIRECTORY });
       } else {
-        add({ lp: e.key, other: { type: 'ours', name: 'Protocol Labs network' }, kind: 'other', tier: 'C', basis: `Someone of that name is in Protocol Labs’ directory (${where}): confirm it is them`, source: DIRECTORY });
+        add({ lp: e.key, other: { type: 'ours', name: 'Protocol Labs network' }, kind: 'other', tier: 'C', basis: `Someone of that name is in Protocol Labs’ directory (${where}): identity match uncertain`, source: DIRECTORY });
       }
     }
     for (const t of e.firmTeams) {
@@ -354,7 +355,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
     }
   }
 
-  return { paths: paths.map((p) => {
+  return { paths: materializeResearchNodes(plNetworkPaths(paths, candidates, findings, net, team, directory), candidates, net, team).map((p) => {
     const tie = p.tie ?? ((p.tier === 'C' || p.tier === 'D') ? { kind: 'proximity' as const } : undefined);
     return { ...p, tie, warmth: tieWarmth(p.kind, tie, at) };
   }).sort((a, b) => a.tier.localeCompare(b.tier) || b.warmth.score - a.warmth.score || a.lp.localeCompare(b.lp) || a.other.name.localeCompare(b.other.name)),
@@ -481,7 +482,7 @@ const RECORD_KEYS = ['company', 'companies', 'fund', 'organization', 'org', 'fir
  * one invested where the other works (W3, iteration 3). The entities come from the findings' own
  * structured parts (`detail.company` and the like), the firms on file and our portfolio, and are
  * then looked for in every fact's words. A shared record is no evidence the two ever spoke, so it is
- * C and needs a person before it routes (rule 6); two people who only worked at one company, at
+ * C and routes with labelled uncertainty (rule 6); two people who only worked at one company, at
  * times nobody has compared, are D. An entity in the records of more than eight LPs is a hub, not a
  * tie, and is dropped; so are the LPs' own current firms (same_firm covers those). A one-word name
  * ("Science", "Kernel") is too easily a word or another company, so it counts only where a record

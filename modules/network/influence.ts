@@ -11,7 +11,7 @@ import type { EvidenceTier } from './types';
  *
  * The safety rules in `planRoutes` decide whether a route may be used at all. This decides,
  * among the routes that may be used, which one is worth spending. They are separate on
- * purpose: influence must never be able to promote a restricted or unreviewed path.
+ * purpose: influence must never be able to promote a restricted path.
  *
  * Five components, from Report 6 §2–3:
  *
