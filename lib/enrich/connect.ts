@@ -155,10 +155,11 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
         basis: `They wrote to us on ${c.contact.lastFromThem}; who from our side received it isn't recorded${owner && owner !== 'Not on the team' ? `, and ${owner} owns the pursuit` : ''}`, source: 'our records' });
     }
 
-    // B: an address at one of our domains — they were inside the network.
+    // An address at our domain establishes affiliation, not interaction or overlapping service.
+    // Keep it as C/proximity; ourSidePaths separately handles evidenced personal ties.
     for (const o of net.orgs) {
       const d = c.domains.find((x) => o.domains?.includes(x));
-      if (d) add({ lp: c.key, other: { type: 'ours', name: o.name }, kind: 'colleague', tier: 'B', basis: `Our records hold an email address for them at ${d}`, source: 'our records' });
+      if (d) add({ lp: c.key, other: { type: 'ours', name: o.name }, kind: 'colleague', tier: 'C', tie: { kind: 'proximity' }, basis: `Our records hold an email address for them at ${d}; dates and personal ties need confirmation`, source: 'our records' });
       for (const a of o.aliases) {
         if (text && affirms(text, a)) {
           const fact = f!.facts.find((x) => x.confidence !== 'low' && affirms(x.value, a));
@@ -261,7 +262,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
   // the list spells their firm differently (W5 learning).
   const byFirm = new Map<string, Candidate[]>();
   const FREE = /^(gmail|yahoo|hotmail|outlook|icloud|me|mac|aol|proton|protonmail)\./;
-  // An address at one of our own domains says they were inside the network (a B path above), not
+  // An address at one of our own domains is an affiliation clue (a C path above), not evidence
   // that they work together now: it joins nobody as colleagues (v01's learning).
   const OURS = new Set(net.orgs.flatMap((o) => o.domains ?? []));
   for (const c of candidates) {
