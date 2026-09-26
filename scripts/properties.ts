@@ -146,6 +146,150 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
           && Boolean(reviewed?.routes.length && reviewed.routes.every((r) => r.verdict === 'hold')),
         'Co-founder warmth never sets human review or promotes a C/D route.');
     }
+    // WGRAPH: deterministic warehouse hops survive W3, JSONB and the guarded route planner.
+    const warehouseTargetId = (await db.one<{ id: string }>(
+      `insert into identity.entity (entity_type, display_name) values ('person', 'Terry Willow') returning entity_id::text as id`))!.id;
+    ids.push(warehouseTargetId);
+    const warehouseTarget = person(warehouseTargetId, 'Terry Willow');
+    const wp = (key: string, name: string): import('../lib/enrich/warehouse-graph').WarehousePerson => ({
+      key, name, org: 'Invented Ventures', emailDomain: 'example.org', roles: [], warehouseIds: { fixture: key },
+      source: 'invented.members', as_of: recent, confidence: 'high', last_verified_by: 'invented fixture',
+    });
+    const graph: import('../lib/enrich/connect').WarehouseGraph = {
+      people: [{ ...wp('w-team', team[0]!.name), teamKey: team[0]!.handle }, wp('w-via', 'Dana Hawthorn'), wp('w-target', warehouseTarget.name)],
+      ties: [
+        { key: 'w-first', from: 'w-team', to: 'w-via', kind: 'repeated_contact', tier: 'B', firstSeen: recent, lastSeen: recent, source: 'invented.communications', rowIds: ['r1', 'r2'], count: 2 },
+        { key: 'w-last', from: 'w-via', to: 'w-target', kind: 'joint_investment', tier: 'B', firstSeen: recent, lastSeen: recent, source: 'invented.investments', rowIds: ['d1'], count: 1 },
+      ],
+      matches: [{ lpKey: warehouseTargetId, personKey: 'w-target', score: 1, status: 'confident', basis: ['name and organization'] }],
+    };
+    const wg = await import('../lib/enrich/warehouse-graph');
+    check('WGRAPH evidence assigns tiers independently of volume or warmth',
+      wg.classifyWarehouseTie('direct_contact', 1).tier === 'B'
+        && wg.classifyWarehouseTie('direct_contact', 5).kind === 'repeated_contact'
+        && wg.classifyWarehouseTie('named_coinvestment', 4).tier === 'B'
+        && ['shared_company', 'cofounders', 'portfolio'].every((e) => wg.classifyWarehouseTie(e as 'shared_company', 500).tier === 'C')
+        && ['event', 'demo_interest'].every((e) => wg.classifyWarehouseTie(e as 'event', 500).tier === 'D'),
+      'Repeated shared affiliations and event attendance never become evidence of personal contact.');
+    const matchInput = [{ key: 'invented-lp', name: 'Avery Rowan', org: 'Invented Ventures', domains: ['example.org'] }];
+    const matchPeople = [wp('identity-a', 'Avery Rowan'), { ...wp('identity-b', 'Avery Rowan'), org: 'Other Organization', emailDomain: null }];
+    const resolved = wg.matchWarehousePeople(matchInput, matchPeople);
+    const collision = wg.matchWarehousePeople(matchInput, [matchPeople[0]!, { ...matchPeople[0]!, key: 'identity-copy' }]);
+    check('WGRAPH identity matching requires name and organization or work domain; collisions stay separate',
+      resolved.length === 2 && resolved.filter((m) => m.status === 'confident').length === 1
+        && resolved.find((m) => m.personKey === 'identity-b')?.status === 'ambiguous'
+        && collision.length === 2 && collision.every((m) => m.status === 'ambiguous'),
+      'Namesake-only rows and equally supported alternatives remain distinct records.');
+    const suffixOnly = wg.matchWarehousePeople([{ ...matchInput[0]!, org: 'LLC', domains: [] }],
+      [{ ...matchPeople[0]!, org: 'Inc.', emailDomain: null }]);
+    const reverseCollision = wg.matchWarehousePeople([matchInput[0]!, { ...matchInput[0]!, key: 'second-lp-record' }], [matchPeople[0]!]);
+    check('WGRAPH empty organization normalization cannot corroborate a namesake',
+      suffixOnly.length === 1 && suffixOnly[0]?.status === 'ambiguous' && !suffixOnly[0]?.basis.includes('organization'),
+      'Legal suffixes alone carry no organization identity.');
+    check('WGRAPH the matcher keeps reverse collisions separate and ambiguous',
+      reverseCollision.length === 2 && reverseCollision.every((m) => m.status === 'ambiguous')
+        && new Set(reverseCollision.map((m) => m.lpKey)).size === 2,
+      'Two LP records cannot both own one confidently resolved warehouse person.');
+    const redacted = wg.redactWarehouseText('Avery Rowan <avery.rowan+demo@example.org>; CASEY@SUB.EXAMPLE.NET');
+    check('WGRAPH free-text email addresses are removed while domain-only evidence survives',
+      !redacted.includes('@') && redacted.includes('Avery Rowan') && redacted.split('[address removed]').length === 3
+        && wg.redactWarehouseText('example.org') === 'example.org',
+      'Invented embedded addresses, uppercase and plus-addressing are scrubbed from exported text.');
+    const warmthConfig = (await import('../config/deployment')).config.routeWarmth;
+    check('WGRAPH repeated contact uses the configured threshold',
+      wg.classifyWarehouseTie('direct_contact', warmthConfig.repeatedContacts - 1).kind === 'acquaintance'
+        && wg.classifyWarehouseTie('direct_contact', warmthConfig.repeatedContacts).kind === 'repeated_contact',
+      'The extractor and route warmth share one configured boundary.');
+    const warehouseJoin = () => cn.connectionPaths([warehouseTarget], new Map(), { orgs: [], backers: [], backer_people: [] }, team, [], at, graph).paths;
+    const joinedWarehouse = warehouseJoin();
+    check('WGRAPH two joins produce a named intermediary with pairwise provenance',
+      joinedWarehouse.length === 1 && joinedWarehouse[0]?.warehouse?.people[1]?.key === 'w-via'
+        && joinedWarehouse[0]?.warehouse?.ties.length === 2 && joinedWarehouse[0]?.tier === 'B',
+      'The W3 path retains both people and both source-row sets.');
+    const directWarehouse = cn.warehousePaths([warehouseTarget], team, { ...graph,
+      ties: [{ ...graph.ties[0]!, to: 'w-target' }] });
+    check('WGRAPH named direct interactions remain one-hop routes',
+      directWarehouse.length === 1 && directWarehouse[0]?.warehouse?.ties.length === 1 && directWarehouse[0]?.tier === 'B',
+      'A named team-to-LP interaction needs no intermediary.');
+    const ambiguousGraph = { ...graph, matches: [
+      { ...graph.matches[0]!, status: 'ambiguous' as const },
+      { ...graph.matches[0]!, personKey: 'w-via', status: 'ambiguous' as const },
+    ] };
+    check('WGRAPH ambiguous alternatives and duplicate confident matches never merge',
+      cn.warehousePaths([warehouseTarget], team, ambiguousGraph).length === 0
+        && cn.warehousePaths([warehouseTarget], team, { ...graph, matches: [graph.matches[0]!, { ...graph.matches[0]!, personKey: 'w-via' }] }).length === 0,
+      'Separate matches stay separate; neither produces a graph route.');
+    check('WGRAPH one corroborated match can route while its name-only alternatives stay separate',
+      cn.warehousePaths([warehouseTarget], team, { ...graph, matches: [graph.matches[0]!, { ...graph.matches[0]!, personKey: 'w-via', status: 'ambiguous' }] }).length === 1,
+      'Only the unique confident identity becomes the endpoint.');
+    check('WGRAPH one warehouse identity cannot confer routes on two LP records',
+      cn.warehousePaths([warehouseTarget, { ...warehouseTarget, key: 'duplicate-lp' }], team, { ...graph,
+        matches: [graph.matches[0]!, { ...graph.matches[0]!, lpKey: 'duplicate-lp' }] }).length === 0
+        && cn.warehousePaths([warehouseTarget], team, { ...graph, matches: [graph.matches[0]!,
+          { ...graph.matches[0]!, lpKey: 'conflict-a', personKey: 'w-via' },
+          { ...graph.matches[0]!, lpKey: 'conflict-b', personKey: 'w-via' }] }).length === 0,
+      'Reverse collisions are suppressed before W3 counts or materializes routes.');
+    const graphFs = await import('node:fs/promises');
+    const graphOs = await import('node:os');
+    const graphCrypto = await import('node:crypto');
+    const graphFixture = await graphFs.mkdtemp(join(graphOs.tmpdir(), 'wgraph-fixture-'));
+    try {
+      const absent = await cn.readWarehouseGraph(graphFixture);
+      check('WGRAPH an entirely absent extraction remains optional',
+        absent.people.length === 0 && absent.ties.length === 0 && absent.matches.length === 0, 'Old research folders still work.');
+      const fixtureDir = join(graphFixture, 'warehouse');
+      await graphFs.mkdir(fixtureDir);
+      const files = Object.fromEntries(['people', 'ties', 'matches'].map((k) => [
+        `${k}.jsonl`, graph[k as keyof typeof graph].map((row) => JSON.stringify(row)).join('\n') + '\n',
+      ]));
+      const manifest = { files: Object.fromEntries(Object.entries(files).map(([name, content]) => [name, graphCrypto.createHash('sha256').update(content).digest('hex')])) };
+      const refuses = async () => { try { await cn.readWarehouseGraph(graphFixture); return false; } catch { return true; } };
+      await graphFs.writeFile(join(fixtureDir, 'people.jsonl'), files['people.jsonl']!);
+      const partial = await refuses();
+      for (const [name, content] of Object.entries(files)) await graphFs.writeFile(join(fixtureDir, name), content);
+      const unmanifested = await refuses();
+      await graphFs.writeFile(join(fixtureDir, 'graph-manifest.json'), JSON.stringify(manifest));
+      const complete = await cn.readWarehouseGraph(graphFixture);
+      await graphFs.writeFile(join(fixtureDir, 'matches.jsonl'), files['matches.jsonl']! + '\n');
+      const mismatched = await refuses();
+      await graphFs.writeFile(join(fixtureDir, 'matches.jsonl'), files['matches.jsonl']!);
+      await graphFs.rm(join(fixtureDir, 'ties.jsonl'));
+      const missing = await refuses();
+      check('WGRAPH partial, unmanifested and mixed-generation graph files fail closed',
+        partial && unmanifested && mismatched && missing && complete.people.length === graph.people.length
+          && complete.ties.length === graph.ties.length && complete.matches.length === graph.matches.length,
+        'Only all three JSONL files with matching SHA-256 hashes may create routes.');
+    } finally { await graphFs.rm(graphFixture, { recursive: true, force: true }); }
+    check('WGRAPH target restrictions remove every warehouse approach',
+      cn.warehousePaths([{ ...warehouseTarget, restrictions: [{ scope: 'blanket', connector: null, channel: null }] }], team, graph).length === 0,
+      'A new intermediary cannot circumvent a blanket restriction.');
+    const writeWarehousePaths = async () => {
+      await db.query(`delete from research.note where entity_id = $1 and kind = 'connection_candidates'`, [warehouseTargetId]);
+      await db.query(`insert into research.note (entity_id, kind, body, data) values ($1, 'connection_candidates', 'Invented warehouse connections', $2)`,
+        [warehouseTargetId, JSON.stringify({ paths: warehouseJoin() })]);
+      await nw.buildNetwork();
+    };
+    await writeWarehousePaths();
+    const warehouseEntity = (await db.one<{ id: string }>(`select entity_id::text as id from identity.source_record where source = 'warehouse' and source_id = 'w-via'`))!.id;
+    ids.push(warehouseEntity);
+    const warehouseRoutes = await nw.planRoutes(team[0]!.handle, warehouseTargetId);
+    check('WGRAPH guarded route search traverses a warehouse person without inventing a direct shortcut',
+      Boolean(warehouseRoutes?.routes.some((r) => r.hops.length === 2 && r.connectorIds.includes(warehouseEntity) && r.verdict === 'recommend'))
+        && !warehouseRoutes?.routes.some((r) => r.hops.length === 1),
+      'The intermediate identity and the two distinct evidence records survive import/build.');
+    for (const tier of ['C', 'D'] as const) {
+      graph.ties[1] = { ...graph.ties[1]!, tier, kind: 'proximity' };
+      await writeWarehousePaths();
+      const heldWarehouse = await nw.planRoutes(team[0]!.handle, warehouseTargetId);
+      check(`WGRAPH ${tier} remains visible but cannot route without a human`,
+        warehouseJoin()[0]?.tier === tier && Boolean(heldWarehouse?.routes.length)
+          && heldWarehouse!.routes.every((r) => r.verdict === 'not_a_route'), 'Warmth never substitutes for human review.');
+    }
+    const policyGraph = { ...graph, people: graph.people.map((p) => p.key === 'w-via' ? { ...p, oneHop: true } : p), ties: [graph.ties[1]!] };
+    const policy = cn.warehousePaths([warehouseTarget], team, policyGraph);
+    check('WGRAPH the one-hop founder rule is explicit C proximity, never a fabricated interaction',
+      policy.length === 1 && policy[0]?.warehouse?.ties[0]?.tier === 'C' && policy[0]?.warehouse?.ties[0]?.kind === 'proximity',
+      'Policy access supplies a reviewable candidate hop.');
   } finally {
     const all = [...ids, ...(founderEntity ? [founderEntity] : [])];
     await db.query('delete from network.edge where from_entity = any($1::uuid[]) or to_entity = any($1::uuid[])', [all]);
