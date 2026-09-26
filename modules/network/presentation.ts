@@ -1,6 +1,8 @@
 import type { Route } from './types';
 
-export const ROUTES_PER_PAGE = 30;
+// Full evidence cards are expensive to render, even when route search is cached.
+// Keep each response small; the complete ranked result and deep-link indices remain intact.
+export const ROUTES_PER_PAGE = 6;
 const integer = (value: string | undefined) => value !== undefined && /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
 
 /** Bound both equivalent presentations; original indices remain the route identity. */

@@ -51,6 +51,64 @@ export async function profileProperties(check: Check) {
     /refused 0 Refusing to seed/.test(seeding.out),
     seeding.out.includes('refused') ? 'refused, with no call on the database' : `not refused: ${seeding.out.slice(0, 200)}`,
   );
+
+  // Real-profile behavior, entirely fictional input and a new scratch database. Import
+  // and migrate from the checkout, then change cwd before loadInit can read any init file.
+  const init = inReal(`(async () => {
+    const fs = await import('node:fs/promises'), os = await import('node:os'), path = await import('node:path');
+    const { openPglite } = await import('./lib/db/pglite.ts');
+    const { migrate } = await import('./lib/db/migrate.ts');
+    const { loadInit } = await import('./lib/real/init.ts');
+    const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'fictional-init-cache-'));
+    const cwd = process.cwd();
+    let db;
+    try {
+      db = await openPglite(path.join(scratch, 'database'));
+      await migrate(db);
+      process.chdir(scratch);
+      await fs.mkdir('data/real', { recursive: true });
+      const file = { team: [{ handle: 'fixture', name: 'Invented Operator' }],
+        vehicles: [{ slug: 'fixture-fund', name: 'Invented Fund', kind: 'fund', exemption: '506(c)', target: 1000000 }] };
+      const write = () => fs.writeFile('data/real/init.jsonc', JSON.stringify(file));
+      const snapshot = async () => ({
+        revision: (await db.one('select revision::text from network.read_revision where singleton')).revision,
+        sources: JSON.stringify(await db.query('select * from platform.source_sync order by source')),
+        audits: (await db.one("select count(*)::int as n from platform.audit_log where action = 'init.loaded'")).n,
+      });
+      await write();
+      await loadInit(db);
+      const first = await snapshot();
+      await loadInit(db);
+      const second = await snapshot();
+      file.team[0].name = 'Renamed Invented Operator';
+      file.vehicles[0].target = 2000000;
+      await write();
+      await loadInit(db);
+      const changed = await snapshot();
+      const person = await db.one("select name from platform.app_user where handle = 'fixture'");
+      const vehicle = await db.one("select target_amount::text as target from platform.vehicle where slug = 'fixture-fund'");
+      await fs.writeFile('data/real/init.jsonc', '{}');
+      const invalid = await loadInit(db);
+      const afterInvalid = await snapshot();
+      console.log('INIT_RESULT ' + JSON.stringify({
+        stable: JSON.stringify(first) === JSON.stringify(second) && first.audits === 1,
+        changed: changed.revision !== second.revision && changed.audits === 2
+          && person.name === file.team[0].name && Number(vehicle.target) === file.vehicles[0].target,
+        invalid: !invalid.init && invalid.problems.length > 0 && JSON.stringify(changed) === JSON.stringify(afterInvalid),
+      }));
+    } finally {
+      process.chdir(cwd);
+      if (db) await db.close();
+      await fs.rm(scratch, { recursive: true, force: true });
+    }
+  })().catch(e => { console.error(e); process.exitCode = 1; });`);
+  const initResult = (() => { try { return JSON.parse(init.out.match(/INIT_RESULT (.+)/)?.[1] ?? '{}') as Record<string, boolean>; } catch { return {}; } })();
+  check('CACHE loading an unchanged init file preserves revisions, source status and its successful-load audit',
+    init.status === 0 && initResult.stable === true,
+    init.status === 0 ? 'Fictional init loaded twice in an isolated database; the second load wrote nothing.' : init.out.slice(-500));
+  check('CACHE changed init applies and invalidates, while invalid init preserves the last successful state',
+    init.status === 0 && initResult.changed === true && initResult.invalid === true,
+    'Changed fictional name and target apply once; invalid replacement neither writes nor invalidates.');
 }
 
 export async function checkoutProperties(check: Check) {

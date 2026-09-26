@@ -1,3 +1,4 @@
+import { cachedRoutes } from './cache';
 import { config } from '@/config/deployment';
 import { listEntities } from '@/modules/identity';
 import { connectorLoad, restrictionsFor } from '@/modules/coordination';
@@ -29,6 +30,16 @@ const CLUE_REASON: Record<string, string> = {
  *    the exclusion is reported rather than silently dropped.
  */
 export async function planRoutes(
+  fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'current', at?: Date,
+): Promise<RouteSearch | null> {
+  // Explicit historical evaluations and nonstandard searches are never served a build snapshot.
+  if (scope === 'team' && maxHops === 3 && !at) {
+    return cachedRoutes(targetId, vehicleKind, () => planRoutesLive(fromHandle, targetId, maxHops, vehicleKind, scope));
+  }
+  return planRoutesLive(fromHandle, targetId, maxHops, vehicleKind, scope, at);
+}
+
+export async function planRoutesLive(
   fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'current', at = new Date(),
 ): Promise<RouteSearch | null> {
   const me = await entityForUser(fromHandle);

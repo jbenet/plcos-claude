@@ -11,18 +11,14 @@ import { Coverage } from '@/components/ui/Coverage';
 import { Glyph } from '@/components/ui/Glyph';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
-import { listAffiliations, listEntities } from '@/modules/identity';
-import { listAsks } from '@/modules/coordination';
-import { listAssessments, BLOCKER_SHORT } from '@/modules/fit';
-import { TargetPicker, type TargetRow } from '@/components/routes/TargetPicker';
+import { listEntities } from '@/modules/identity';
+import { TargetPicker } from '@/components/routes/TargetPicker';
 import { listSourceDocs, notesFor } from '@/modules/research';
 import { directContact, type DirectContact } from '@/modules/meetings';
-import { listVehicles } from '@/modules/platform';
-import { planRoutes, tierCounts, warmthReader, routePage, ROUTES_PER_PAGE, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
+import { planRoutes, warmthReader, routePage, ROUTES_PER_PAGE, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
 import type { Path } from '@/lib/enrich/connect';
 import { buildNetworkAction } from './actions';
-import { listPursuits } from '@/modules/strategy';
-import { provisionalScores } from '@/lib/strategy-score';
+import { routeInputs, promotedRouteBases } from '@/lib/routes-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,73 +48,15 @@ export default async function Routes({
   const params = await searchParams;
   const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam, expanded, page, family } = params;
   const user = await (await auth()).currentUser();
-  const [tiers, vehicles, affiliations, fit, asks, team, pursuits] = await Promise.all([
-    tierCounts(), listVehicles(),
-    listAffiliations(), listAssessments(selection.current?.id ?? null),
-    listAsks(null), (await auth()).listUsers(), listPursuits(selection.current?.id ?? null),
-  ]);
-
-  // Targets worth showing (issues 0022–0023, real): the LPs in this pipeline and the organisations
-  // they act for — not every person and firm in the replica, which made this page 1.7 MB — and
-  // never a member of the team, by the team's own list.
-  const teamNames = new Set(team.map((u) => u.name));
-  const inPipeline = new Set(pursuits.filter((p) => !p.historical).map((p) => p.entityId));
-  for (const a of affiliations) if (a.current && inPipeline.has(a.personId)) inPipeline.add(a.orgId);
-  const entities = await listEntities([...new Set([...inPipeline, ...(target ? [target] : [])])]);
-  const targets = entities.filter((e) => inPipeline.has(e.entityId) && !teamNames.has(e.displayName));
+  const { tiers, vehicles, affiliations, asks, team, entities: pipelineEntities, targets, contact, rows } =
+    await routeInputs(selection.current?.id ?? '');
+  const entities = target && !pipelineEntities.some((e) => e.entityId === target)
+    ? [...pipelineEntities, ...await listEntities([target])] : pipelineEntities;
   const targetId = target ?? targets.find((t) => t.displayName === 'Delia Roos')?.entityId ?? targets[0]?.entityId;
   const search = targetId
     ? await planRoutes(user.handle, targetId, 3, selection.current?.kind ?? 'fund', 'team')
     : null;
 
-  /**
-   * The picker carries the fit score, because there is no point finding a beautiful route
-   * to somebody nobody has qualified — and the records around each name, so searching
-   * "Kaplan" turns up the trust and the person who signs for it.
-   */
-  const best = new Map<string, { score: number; blocker: string | null; provisional?: boolean }>();
-  // Whom the team already deals with directly (issue 0027, real): a meeting held, or word from them.
-  const [provisional, contact] = await Promise.all([
-    provisionalScores([...inPipeline]), directContact(targets.map((t) => t.entityId)),
-  ]);
-  // Where no fit assessment exists, a provisional score from the proposed strategy (issue 0022).
-  for (const [id, score] of provisional) best.set(id, { score, blocker: null, provisional: true });
-  for (const a of fit) {
-    const hit = best.get(a.entityId);
-    const score = Math.round(a.weightedFit * 100);
-    // An assessment outranks a provisional score, whatever the numbers.
-    if (!hit || hit.provisional || score > hit.score) {
-      best.set(a.entityId, { score, blocker: BLOCKER_SHORT[a.diagnosis.blocker] });
-    }
-  }
-  const rows: TargetRow[] = targets.map((t) => {
-    const related = [
-      ...affiliations.filter((x) => x.personId === t.entityId && x.current).map((x) => x.orgName),
-      ...affiliations.filter((x) => x.orgId === t.entityId && x.current).map((x) => x.personName),
-    ];
-    /**
-     * You route to a person; the fit reading sits on the institution they sign for. So a
-     * person with no reading of their own borrows the best one from an organisation they
-     * currently act for, and the row marks it as borrowed rather than passing it off.
-     */
-    const own = best.get(t.entityId) ?? null;
-    const borrowedFrom = own ? null : affiliations
-      .filter((x) => x.personId === t.entityId && x.current && best.has(x.orgId))
-      .map((x) => ({ org: x.orgName, ...best.get(x.orgId)! }))
-      .sort((a, b) => b.score - a.score)[0] ?? null;
-    const reading = own ?? borrowedFrom;
-    return {
-      entityId: t.entityId,
-      name: t.displayName,
-      isPerson: t.entityType === 'person',
-      score: reading?.score ?? null,
-      provisional: Boolean(reading?.provisional),
-      borrowedFrom: borrowedFrom?.org ?? null,
-      blocker: reading?.blocker ?? null,
-      related: [...new Set(related)].slice(0, 3),
-      touch: contact.has(t.entityId) ? touchWords(contact.get(t.entityId)!) : null,
-    };
-  });
   // The server searches the targets (issue 0023): the page carries only the rows it draws.
   const SHOWN = 80;
   const sort: 'score' | 'name' = sortParam === 'name' ? 'name' : 'score';
@@ -167,8 +105,7 @@ export default async function Routes({
     targetId ? notesFor(targetId, 'connection_candidates').then((n) => n[0] ?? null) : Promise.resolve(null),
     directContact([...nearbyPeople.keys()]),
   ]);
-  const promotedBases = new Set((search?.routes ?? []).filter((r) => r.verdict === 'recommend' || r.verdict === 'hold')
-    .flatMap((r) => r.hops.flatMap((h) => h.edge.evidence.map((e) => e.note))));
+  const promotedBases = promotedRouteBases(search?.routes ?? []);
   const candidates = (((pathsNote?.data ?? {}) as { paths?: CandidatePath[] }).paths ?? [])
     .filter((p) => !promotedBases.has(p.basis));
   const inTouchNearby = [...nearbyContact.entries()]
@@ -203,8 +140,8 @@ export default async function Routes({
     return { id: user.id, why: `Nobody here has dealt with this connector or this target before, so it falls to whoever found the route — ${user.name}.` };
   };
 
-  const docs = await listSourceDocs([...new Set((search?.routes ?? [])
-    .flatMap((route) => route.hops.flatMap((hop) => hop.edge.evidence.flatMap((ev) => ev.doc ? [ev.doc] : []))))]);
+  const docs = await listSourceDocs([...new Set(displayedRoutes
+    .flatMap(({ route }) => route.hops.flatMap((hop) => hop.edge.evidence.flatMap((ev) => ev.doc ? [ev.doc] : []))))]);
   const docMap = new Map<string, EvidenceDoc>(
     docs.map((d) => [
       d.docId,

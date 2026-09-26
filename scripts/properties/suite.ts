@@ -19,6 +19,8 @@ export async function runProperties(check: Check) {
   const seed = { check, db, id };
   await (await import('./research')).researchProperties(seed);
   await (await import('./network')).networkProperties(seed);
+  await (await import('./network')).routeCacheProperties(seed);
+  await (await import('./network')).routeInputCacheProperties(seed);
   await (await import('./strategy')).strategyProperties(seed);
   await (await import('./coordination')).coordinationProperties(seed);
   await (await import('./pipeline')).pipelineProperties(seed);

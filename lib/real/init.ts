@@ -283,6 +283,13 @@ export async function loadInit(db: Db): Promise<InitReport> {
   const { team, vehicles } = report.init;
 
   await db.transaction(async (tx) => {
+    const last = await tx.one<{ hash: string | null }>(
+      `select detail->>'hash' as hash from platform.audit_log
+        where action = 'init.loaded' order by at desc, id desc limit 1`,
+    );
+    // A successful load already applied this exact file. Avoid no-op upserts on boot:
+    // even unchanged rows fire statement triggers and invalidate persisted route caches.
+    if (last?.hash === report.hash) return;
     for (const t of team) {
       await tx.query(
         `insert into platform.app_user (handle, name, initials, role, email)
@@ -317,16 +324,10 @@ export async function loadInit(db: Db): Promise<InitReport> {
        values ('affinity', 'Affinity', 'not_connected', 'Read-only. The connection has not been tested yet.')
        on conflict (source) do nothing`,
     );
-    const last = await tx.one<{ hash: string | null }>(
-      `select detail->>'hash' as hash from platform.audit_log
-        where action = 'init.loaded' order by at desc, id desc limit 1`,
+    await tx.query(
+      `insert into platform.audit_log (action, subject_type, detail) values ('init.loaded', 'init', $1)`,
+      [JSON.stringify({ hash: report.hash, people: team.length, vehicles: vehicles.length, open: report.open.length })],
     );
-    if (last?.hash !== report.hash) {
-      await tx.query(
-        `insert into platform.audit_log (action, subject_type, detail) values ('init.loaded', 'init', $1)`,
-        [JSON.stringify({ hash: report.hash, people: team.length, vehicles: vehicles.length, open: report.open.length })],
-      );
-    }
   });
   return report;
 }

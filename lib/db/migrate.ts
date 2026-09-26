@@ -58,5 +58,12 @@ export async function migrate(db: Db): Promise<{ applied: string[] }> {
       applied.push(id);
     }
   }
+  // Network read dependencies include modules later in manifest order. Install their
+  // invalidation triggers after the complete schema exists, including on a fresh demo.
+  await db.exec(`do $$ begin
+    if to_regprocedure('network.install_read_triggers()') is not null then
+      perform network.install_read_triggers();
+    end if;
+  end $$;`);
   return { applied };
 }

@@ -1,3 +1,4 @@
+import { precomputeRoutes, type PrecomputeCounts } from './cache';
 import { getDb, type Queryable } from '@/lib/db';
 import { GROUP_EVENT, isAutoReply } from '@/modules/meetings';
 import type { EdgeKind, EvidenceTier } from './types';
@@ -32,6 +33,7 @@ import { importNetworkNodes, planNetworkNodes, readNetworkNodeInput } from './no
  */
 
 export interface BuildCounts {
+  precompute?: PrecomputeCounts;
   teamCreated: number;
   fromRecords: number;
   fromResearch: number;
@@ -57,7 +59,9 @@ interface NewEdge { reviewedBy?: string; reviewedAt?: string; reviewNote?: strin
 
 export async function buildNetwork(): Promise<BuildCounts> {
   const db = await getDb();
-  return db.transaction((tx) => build(tx));
+  const counts = await db.transaction((tx) => build(tx));
+  counts.precompute = await precomputeRoutes();
+  return counts;
 }
 
 async function build(tx: Queryable): Promise<BuildCounts> {

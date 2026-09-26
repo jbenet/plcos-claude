@@ -80,4 +80,34 @@ export async function translatedNotesProperties(ctx: AffinityContext) {
       about.some((x) => x.kind === 'interaction:meeting'),
     `${about.length} notes: ${about.map((x) => `${x.noteId}${x.health ? ' (health)' : ''} ${x.kind}`).join(', ')}`,
   );
+  // Attachment filtering must not bring an old version back when the latest moved elsewhere.
+  // Equal fetch times deliberately exercise the ID tie-breaker as well as duplicate versions.
+  if (who && about.length) {
+    const rd = await import('../../lib/connectors/affinity/readings');
+    const noteId = String(about[0]!.noteId);
+    const inserted: string[] = [];
+    try {
+      const duplicate = await adb.one<{ id: string }>(
+        `insert into sources.raw_record (source, kind, source_id, payload_hash, payload, fetched_at)
+         select source, kind, source_id, 'cache-fixture-attached', payload, fetched_at
+           from sources.raw_record where source = 'affinity' and kind = 'note' and source_id = $1
+          order by fetched_at desc, id desc limit 1 returning id::text`, [noteId],
+      );
+      inserted.push(duplicate!.id);
+      const attachedOnce = (await nt.notesAbout(who.entity_id)).filter((x) => String(x.noteId) === noteId).length === 1;
+      const moved = await adb.one<{ id: string }>(
+        `insert into sources.raw_record (source, kind, source_id, payload_hash, payload, fetched_at)
+         select source, kind, source_id, 'cache-fixture-moved',
+                payload || '{"personsPreview":{"data":[]},"companiesPreview":{"data":[]}}'::jsonb, fetched_at
+           from sources.raw_record where id = $1 returning id::text`, [duplicate!.id],
+      );
+      inserted.push(moved!.id);
+      check('Notes and readings use only the latest attachment, including equal fetch timestamps',
+        attachedOnce && !(await nt.notesAbout(who.entity_id)).some((x) => String(x.noteId) === noteId) &&
+          !(await rd.readingsFor([who.entity_id])).some((x) => x.noteId === noteId),
+        'A repeated version shows once; moving its latest version removes both its note and its reading.');
+    } finally {
+      await adb.query('delete from sources.raw_record where id = any($1::bigint[])', [inserted]);
+    }
+  }
 }
