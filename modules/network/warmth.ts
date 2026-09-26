@@ -91,45 +91,76 @@ export function routeWarmth(route: Pick<Route, 'hops'>, at = new Date()): number
   return route.hops.length ? Math.min(...route.hops.map((h) => edgeWarmth(h.edge, at).score)) : 0;
 }
 
+/** Request-local evaluation: the same edge gets the same date and warmth everywhere. */
+export function warmthReader(at = new Date()) {
+  const cache = new Map<Edge, Warmth>();
+  return (edge: Edge): Warmth => {
+    let value = cache.get(edge);
+    if (!value) { value = edgeWarmth(edge, at); cache.set(edge, value); }
+    return value;
+  };
+}
+
 /** Keep every route. Fold dominated parallel evidence and extra prefixes into the same destination chain.
  * A different suffix, weaker first hop, held route or restriction remains independently visible.
  */
-export function foldRoutes(routes: Route[], at = new Date()): Route[] {
+export function foldRoutes(routes: Route[], at = new Date(), readWarmth = warmthReader(at)): Route[] {
   const out = routes.map((r) => ({ ...r, foldedUnder: null as number | null }));
-  const warmth = new Map<Edge, number>();
-  const score = (edge: Edge) => {
-    if (!warmth.has(edge)) warmth.set(edge, edgeWarmth(edge, at).score);
-    return warmth.get(edge)!;
-  };
-  for (const [longerIndex, longer] of out.entries()) {
-    const parent = out.findIndex((shorter, shorterIndex) => {
-      const first = shorter.hops[0];
-      if (!first || shorter.hops.length < 1 || shorter.hops.length > longer.hops.length
-        || shorter.verdict !== 'recommend' || longer.verdict !== 'recommend') return false;
-      if (shorter.fromEntity !== longer.fromEntity) return false;
-      // Parallel evidence edges along the same people are alternatives, not new introductions.
-      if (shorter.hops.length === longer.hops.length) return shorterIndex < longerIndex
-        && shorter.hops.every((h, i) => h.toEntity === longer.hops[i]?.toEntity
-          && h.edge.tier <= longer.hops[i]!.edge.tier
-          && score(h.edge) >= score(longer.hops[i]!.edge));
-      const firstWarmth = score(first.edge);
-      if (first.edge.tier > 'B') return false;
-      // A strong A/B prefix dominates a weaker detour even when the shared suffix is C/D.
-      // Unknown contact dates reduce warmth; they are not a separate eligibility gate.
-
-      const offset = longer.hops.length - shorter.hops.length;
-      const detourWarmth = Math.min(...longer.hops.slice(0, offset + 1).map((h) => score(h.edge)));
-      const detourTier = longer.hops.slice(0, offset + 1).map((h) => h.edge.tier).sort().at(-1)!;
-      if (first.edge.tier > detourTier || firstWarmth < detourWarmth) return false;
-      if (firstWarmth < config.routeWarmth.strongFirstHop && !(first.edge.tier < detourTier && firstWarmth > detourWarmth)) return false;
-      return longer.hops[offset]?.toEntity === first.toEntity
-        && shorter.hops.slice(1).every((h, i) => h.toEntity === longer.hops[offset + i + 1]?.toEntity
-          && h.edge.tier <= longer.hops[offset + i + 1]!.edge.tier
-          && score(h.edge) >= score(longer.hops[offset + i + 1]!.edge));
-    });
-    if (parent >= 0) longer.foldedUnder = parent;
+  const prepared = routes.map((route) => {
+    const scores = route.hops.map((h) => readWarmth(h.edge).score);
+    const prefixWarmth: number[] = [], prefixTier: Edge['tier'][] = [];
+    for (const [i, h] of route.hops.entries()) {
+      prefixWarmth.push(Math.min(prefixWarmth[i - 1] ?? Infinity, scores[i]!));
+      prefixTier.push(h.edge.tier > (prefixTier[i - 1] ?? 'A') ? h.edge.tier : prefixTier[i - 1] ?? 'A');
+    }
+    return { scores, prefixWarmth, prefixTier };
+  });
+  const key = (route: Route, offset = 0) => JSON.stringify([route.fromEntity, ...route.hops.slice(offset).map((h) => h.toEntity)]);
+  const chains = new Map<string, number[]>();
+  for (const [i, route] of routes.entries()) {
+    if (route.verdict !== 'recommend' || !route.hops.length) continue;
+    const chain = key(route);
+    const group = chains.get(chain) ?? [];
+    group.push(i);
+    chains.set(chain, group);
   }
-  // If a parent was itself folded, point at the visible ancestor.
-  for (const r of out) while (r.foldedUnder !== null && out[r.foldedUnder]!.foldedUnder !== null) r.foldedUnder = out[r.foldedUnder]!.foldedUnder;
+  for (const [i, longer] of out.entries()) {
+    if (longer.verdict !== 'recommend') continue;
+    let parent = Infinity;
+    const details = prepared[i]!;
+    // Only routes to the same suffix can dominate. Preserve the original first
+    // matching index, even if the shorter route occurs later in the ranked list.
+    for (let offset = 0; offset < longer.hops.length; offset++) {
+      for (const j of chains.get(key(longer, offset)) ?? []) {
+        if (j >= parent || (offset === 0 && j >= i)) break;
+        const shorter = routes[j]!, first = shorter.hops[0]!;
+        const scores = prepared[j]!.scores;
+        if (offset > 0) {
+          const tier = details.prefixTier[offset]!, warmth = details.prefixWarmth[offset]!;
+          if (first.edge.tier > 'B' || first.edge.tier > tier || scores[0]! < warmth) continue;
+          if (scores[0]! < config.routeWarmth.strongFirstHop && !(first.edge.tier < tier && scores[0]! > warmth)) continue;
+        }
+        if (!shorter.hops.every((h, k) => (offset > 0 && k === 0) ||
+          (h.edge.tier <= longer.hops[offset + k]!.edge.tier && scores[k]! >= details.scores[offset + k]!))) continue;
+        parent = j;
+        break;
+      }
+    }
+    if (Number.isFinite(parent)) longer.foldedUnder = parent;
+  }
+  // Compress ancestor chains. Shorter paths, or earlier equal-length paths,
+  // make this acyclic; every alternative still points to its visible ancestor.
+  for (const route of out) {
+    const trail: Route[] = [];
+    let ancestor = route.foldedUnder;
+    while (ancestor !== null && out[ancestor]!.foldedUnder !== null) {
+      trail.push(out[ancestor]!);
+      ancestor = out[ancestor]!.foldedUnder;
+    }
+    if (ancestor !== null) {
+      route.foldedUnder = ancestor;
+      for (const step of trail) step.foldedUnder = ancestor;
+    }
+  }
   return out;
 }

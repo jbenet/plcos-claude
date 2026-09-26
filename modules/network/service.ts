@@ -4,7 +4,7 @@ import { connectorLoad, restrictionsFor } from '@/modules/coordination';
 import { listSyncSources } from '@/modules/platform';
 import { edgeCoverage, edgesByIds, entityForUser, enumeratePathsFromSources, routeSources } from './repo';
 import { influenceFor } from './influence';
-import { foldRoutes, routeWarmth } from './warmth';
+import { foldRoutes, warmthReader } from './warmth';
 import { CLUE_KINDS, type Edge, type Route, type RouteHop, type RouteSearch, type RouteVerdict } from './types';
 
 const TIER_ORDER = { A: 0, B: 1, C: 2, D: 3 } as const;
@@ -162,7 +162,8 @@ export async function planRoutes(
 
   const at = new Date();
   const rank: Record<RouteVerdict, number> = { recommend: 0, hold: 1, not_a_route: 2, excluded: 3 };
-  const warmth = new Map(routes.map((r) => [r, routeWarmth(r, at)]));
+  const readWarmth = warmthReader(at);
+  const warmth = new Map(routes.map((r) => [r, r.hops.length ? Math.min(...r.hops.map((h) => readWarmth(h.edge).score)) : 0]));
   routes.sort(
     (a, b) =>
       Number(a.verdict === 'excluded') - Number(b.verdict === 'excluded') ||
@@ -178,7 +179,7 @@ export async function planRoutes(
     targetId,
     targetName,
     fromName: scope === 'team' ? 'Team / PL' : me!.name,
-    routes: foldRoutes(routes, at),
+    routes: foldRoutes(routes, at, readWarmth),
     coverage: {
       edges: coverage.edges,
       maxHops,
