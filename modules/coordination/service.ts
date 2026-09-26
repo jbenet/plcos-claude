@@ -78,8 +78,10 @@ export async function evaluateGuards(
   // Rule 8. The restriction attaches to the target. A connector-scoped instruction is not
   // an invitation to find a different connector toward the same approach.
   const restrictions = await restrictionsFor(args.entityId, q);
+  const connector = args.connectorId ? await db.one<{ id: string }>(
+    'select identity.canonical_entity_id($1::uuid)::text as id', [args.connectorId]) : null;
   for (const r of restrictions) {
-    const hitsThisConnector = r.connectorId && r.connectorId === args.connectorId;
+    const hitsThisConnector = r.connectorId && r.connectorId === connector?.id;
     if (r.scope === 'blanket' || hitsThisConnector) {
       blocks.push({
         rule: 'non_circumvention',

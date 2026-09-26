@@ -3,11 +3,11 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { config } from '@/config/deployment';
 import { getDb, withDb, type Db } from '@/lib/db';
 import { computeStructuralRoutes, routeGraph } from './service';
-import { routeTouchesChanges } from './repo';
+import { canonicalRouteEntity, routeTouchesChanges } from './repo';
 import type { Edge, RouteSearch } from './types';
 
 const settings = () => createHash('sha256').update(JSON.stringify([
-  'compact-structural-v4', config.routeScoring, config.routeWarmth,
+  'compact-structural-v5-identity', config.routeScoring, config.routeWarmth,
 ])).digest('hex').slice(0, 16);
 async function revisionFor(db: Db) {
   const row = (await db.one<{ revision: string; epoch: string; day: string }>(
@@ -42,12 +42,13 @@ async function touched(db: Db, targetId: string, since: string, search: RouteSea
     : search?.routes.map((r) => r.fromEntity) ?? []);
   let after = '';
   while (true) {
-    const rows = await db.query<{ id: string }>(`select entity_id::text as id from network.route_changed_entity
+    const rows = await db.query<{ id: string; canonical_id: string }>(`select entity_id::text as id,
+        identity.canonical_entity_id(entity_id)::text as canonical_id from network.route_changed_entity
       where revision > $1::bigint and entity_id::text > $2 order by entity_id limit 256`, [since, after]);
     if (!rows.length) return false;
-    const ids = rows.map((r) => r.id);
+    const ids = rows.map((r) => r.canonical_id);
     if (ids.some((id) => sources.has(id)) || await routeTouchesChanges(targetId, ids)) return true;
-    after = ids.at(-1)!;
+    after = rows.at(-1)!.id;
     await pause(1);
   }
 }
@@ -55,6 +56,7 @@ async function touched(db: Db, targetId: string, since: string, search: RouteSea
 /** Only structural graph state is cached. service applies authoritative guards and
  * dynamic scores to a fresh view on every call, never mutating this shared entry. */
 export async function cachedRoutes(targetId: string, kind: string, live: () => Promise<RouteSearch | null>): Promise<RouteSearch | null> {
+  targetId = await canonicalRouteEntity(targetId);
   const db = await getDb(), version = await revisionFor(db), key = `${targetId}:${kind}`;
   let entries = memory.get(db);
   if (!entries) { entries = new Map(); memory.set(db, entries); }
@@ -128,12 +130,12 @@ export async function precomputeRoutes(at?: Date): Promise<PrecomputeCounts> {
   const work = withDb(db, async () => {
     const start = performance.now(), version = await revisionFor(db);
     const targets = await db.query<{ target_id: string; kind: string }>(`with targets as (
-      select p.entity_id, v.kind::text as kind, 0 as priority from strategy.pursuit p
+      select identity.canonical_entity_id(p.entity_id) as entity_id, v.kind::text as kind, 0 as priority from strategy.pursuit p
         join platform.vehicle v on v.id = p.vehicle_id where p.closed_at is null and v.phase = 'active'
       union all
-      select a.org_entity, v.kind::text, 1 from strategy.pursuit p
+      select identity.canonical_entity_id(a.org_entity), v.kind::text, 1 from strategy.pursuit p
         join platform.vehicle v on v.id = p.vehicle_id
-        join identity.affiliation a on a.person_entity = p.entity_id and a.ended_on is null
+        join identity.affiliation a on identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id(p.entity_id) and a.ended_on is null
         where p.closed_at is null and v.phase = 'active')
       select entity_id::text as target_id, kind from targets group by entity_id, kind order by min(priority), entity_id, kind`);
     let searches = 0;

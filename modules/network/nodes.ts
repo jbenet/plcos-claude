@@ -207,14 +207,16 @@ export async function readNetworkNodeInput(dir:string):Promise<NetworkNodeInput|
 export async function importNetworkNodes(tx:Queryable,plan:NodePlan,at=new Date()):Promise<NodeImportCounts> {
   const today=at.toISOString().slice(0,10), counts:NodeImportCounts={nodesCreated:0,sourceRecords:0,edgesWritten:0,edgePairs:new Set(),warehouseLoaded:plan.warehouseLoaded};
   const existing=await tx.query<{source:string;source_id:string;entity_id:string}>(
-    `select source,source_id,entity_id::text from identity.source_record where source=any($1::text[])`,[[...new Set(plan.nodes.map(n=>n.source))]]);
+    `select source,source_id,identity.canonical_entity_id(entity_id)::text entity_id from identity.source_record where source=any($1::text[])`,[[...new Set(plan.nodes.map(n=>n.source))]]);
   const mapped=new Map(existing.map(r=>[sourceKey(r.source,r.source_id),r.entity_id]));
   const entities=await tx.query<{id:string;type:string;name:string}>(`select entity_id::text id,entity_type::text type,display_name name from identity.entity where merged_into is null`);
   const byId=new Map(entities.map(e=>[e.id,e]));
+  const redirects=new Map((await tx.query<{entity_id:string;canonical_id:string}>(`select entity_id::text,canonical_id::text from identity.entity_resolution`)).map(r=>[r.entity_id,r.canonical_id]));
   const ids=new Map<string,string>(), newEntities=new Map<string,{id:string;type:string;name:string}>(), aliases:Array<{source:string;source_id:string;id:string}>=[];
   for(const n of plan.nodes) {
     const team=n.teamHandle?(ids.get(sourceKey('app_user',n.teamHandle))??mapped.get(sourceKey('app_user',n.teamHandle))):undefined;
-    const explicit=n.entityId && (!byId.has(n.entityId)||byId.get(n.entityId)!.type===n.type) ? n.entityId : undefined;
+    const explicitId=n.entityId ? redirects.get(n.entityId)??n.entityId : undefined;
+    const explicit=explicitId && (!byId.has(explicitId)||byId.get(explicitId)!.type===n.type) ? explicitId : undefined;
     const id=mapped.get(n.key)??team??explicit??randomUUID(); ids.set(n.key,id);
     if(!byId.has(id)&&!newEntities.has(id))newEntities.set(id,{id,type:n.type,name:n.name});
     if(!mapped.has(n.key))aliases.push({source:n.source,source_id:n.sourceId,id});

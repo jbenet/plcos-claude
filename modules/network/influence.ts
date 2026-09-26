@@ -83,7 +83,7 @@ export async function listStandings(): Promise<Standing[]> {
     entity_id: string; domain: StandingDomain; strength: number; basis: string;
     source: string | null; as_of: Date | string; certainty: string;
   }>(
-    `select entity_id, domain::text as domain, strength, basis, source, as_of, certainty
+    `select identity.canonical_entity_id(entity_id) as entity_id, domain::text as domain, strength, basis, source, as_of, certainty
        from network.standing`,
   );
   return rows.map((r) => ({

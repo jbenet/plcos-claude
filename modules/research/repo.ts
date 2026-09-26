@@ -47,7 +47,7 @@ const toClaim = (r: ClaimRow): Claim => ({
 });
 
 const CLAIM_SELECT = `
-  select c.claim_id, c.entity_id, c.field, c.value, c.source, c.as_of, c.confidence,
+  select c.claim_id, identity.canonical_entity_id(c.entity_id) as entity_id, c.field, c.value, c.source, c.as_of, c.confidence,
          c.last_verified_at, c.superseded_by, u.name as verified_by_name
     from research.claim c
     left join platform.app_user u on u.id = c.last_verified_by`;
@@ -55,7 +55,7 @@ const CLAIM_SELECT = `
 export async function claimsFor(entityId: string): Promise<Claim[]> {
   const db = await getDb();
   const rows = await db.query<ClaimRow>(
-    `${CLAIM_SELECT} where c.entity_id = $1 and c.superseded_by is null order by c.field`,
+    `${CLAIM_SELECT} where identity.canonical_entity_id(c.entity_id) = identity.canonical_entity_id($1::uuid) and c.superseded_by is null order by c.field`,
     [entityId],
   );
   return rows.map(toClaim);
@@ -64,7 +64,7 @@ export async function claimsFor(entityId: string): Promise<Claim[]> {
 export async function claimCounts(): Promise<Map<string, number>> {
   const db = await getDb();
   const rows = await db.query<{ entity_id: string; n: string }>(
-    'select entity_id, count(*)::text as n from research.claim where superseded_by is null group by entity_id',
+    'select identity.canonical_entity_id(entity_id) as entity_id, count(*)::text as n from research.claim where superseded_by is null group by identity.canonical_entity_id(entity_id)',
   );
   return new Map(rows.map((r) => [r.entity_id, Number(r.n)]));
 }
@@ -102,9 +102,9 @@ const toNote = (r: NoteRow): Note => ({
 export async function notesFor(entityId: string, kind?: string): Promise<Note[]> {
   const db = await getDb();
   const rows = await db.query<NoteRow>(
-    `select n.note_id, n.entity_id, n.kind, n.body, n.tags, n.data, n.created_at, u.name as author_name
+    `select n.note_id, identity.canonical_entity_id(n.entity_id) as entity_id, n.kind, n.body, n.tags, n.data, n.created_at, u.name as author_name
        from research.note n left join platform.app_user u on u.id = n.author_id
-      where n.entity_id = $1 ${kind ? 'and n.kind = $2' : ''}
+      where identity.canonical_entity_id(n.entity_id) = identity.canonical_entity_id($1::uuid) ${kind ? 'and n.kind = $2' : ''}
       order by n.created_at desc`,
     kind ? [entityId, kind] : [entityId],
   );

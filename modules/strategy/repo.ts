@@ -22,14 +22,14 @@ type EventRow = {
 };
 
 const PURSUIT_SELECT = `
-  select p.pursuit_id, p.entity_id, e.display_name as entity_name, p.vehicle_id,
+  select p.pursuit_id, e.entity_id, e.display_name as entity_name, p.vehicle_id,
          v.name as vehicle_name, u.name as owner_name, p.headline, p.plan,
          p.opened_at, p.closed_at, p.status::text as status, p.status_reason, p.passed_by, p.status_source,
          p.status_said::text as status_said,
          p.status_set_at, su.name as status_set_by_name, p.implied, p.next_step, p.next_step_on,
          p.source, p.source_as_of, p.stage_said, p.owner_said, v.phase as vehicle_phase
     from strategy.pursuit p
-    join identity.entity e on e.entity_id = p.entity_id
+    join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
     join platform.vehicle v on v.id = p.vehicle_id
     join platform.app_user u on u.id = p.owner_id
     left join platform.app_user su on su.id = p.status_set_by`;
@@ -114,7 +114,8 @@ export async function getPursuit(pursuitId: string, q?: Queryable): Promise<Purs
 export async function pursuitFor(entityId: string, vehicleId: string): Promise<Pursuit | null> {
   const db = await getDb();
   const row = await db.one<PursuitRow>(
-    `${PURSUIT_SELECT} where p.entity_id = $1 and p.vehicle_id = $2`,
+    `${PURSUIT_SELECT} where e.entity_id = identity.canonical_entity_id($1::uuid) and p.vehicle_id = $2
+      order by (p.entity_id = e.entity_id) desc, p.opened_at, p.pursuit_id limit 1`,
     [entityId, vehicleId],
   );
   if (!row) return null;

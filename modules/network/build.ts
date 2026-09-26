@@ -1,4 +1,7 @@
 import { startRouteWarmup } from './cache';
+import { resolveIdentities, type ResolutionCounts } from '@/modules/identity/resolution';
+import { identityEvidence } from '@/modules/identity/resolution-input';
+import { readProspectFiles } from '@/lib/enrich/prospects';
 import { getDb, type Queryable } from '@/lib/db';
 import { GROUP_EVENT, isAutoReply } from '@/modules/meetings';
 import type { EdgeKind, EvidenceTier } from './types';
@@ -33,6 +36,7 @@ import { importNetworkNodes, planNetworkNodes, readNetworkNodeInput } from './no
  */
 
 export interface BuildCounts {
+  identityResolution?: ResolutionCounts;
   teamCreated: number;
   fromRecords: number;
   fromResearch: number;
@@ -65,6 +69,7 @@ export async function buildNetwork(): Promise<BuildCounts> {
     await tx.query('update network.route_revision set revision = txid_current(), epoch = txid_current() where singleton');
     return result;
   });
+  counts.identityResolution = await resolveIdentities(db, identityEvidence(await readNetworkNodeInput(enrichDir()), await readProspectFiles()));
   startRouteWarmup(db);
   return counts;
 }
@@ -213,7 +218,7 @@ async function build(tx: Queryable): Promise<BuildCounts> {
     const cached = warehouseEntities.get(p.key);
     if (cached) return cached;
     const existing = await tx.one<{ id: string }>(
-      `select entity_id::text as id from identity.source_record where source = 'warehouse' and source_id = $1`, [p.key]);
+      `select identity.canonical_entity_id(entity_id)::text as id from identity.source_record where source = 'warehouse' and source_id = $1`, [p.key]);
     const id = existing?.id ?? (await tx.one<{ id: string }>(
       `insert into identity.entity (entity_type, display_name) values ('person', $1) returning entity_id::text as id`, [p.name]))!.id;
     if (!existing) await tx.query(

@@ -12,11 +12,11 @@ type Row = {
 };
 
 const SELECT = `
-  select s.signal_id, s.entity_id, e.display_name as entity_name, s.kind, s.headline,
+  select s.signal_id, e.entity_id, e.display_name as entity_name, s.kind, s.headline,
          s.detail, s.source, s.source_ref, s.observed_at, s.confidence, s.threshold_label,
          s.threshold_detail, s.disposition, u.name as claimed_by_name, s.note
     from signals.signal s
-    left join identity.entity e on e.entity_id = s.entity_id
+    left join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id)
     left join platform.app_user u on u.id = s.claimed_by`;
 
 const DAY = 86_400_000;
@@ -55,7 +55,7 @@ export async function allSignals(): Promise<Signal[]> {
 export async function signalsFor(entityId: string): Promise<Signal[]> {
   const db = await getDb();
   return (
-    await db.query<Row>(`${SELECT} where s.entity_id = $1 order by s.observed_at desc`, [entityId])
+    await db.query<Row>(`${SELECT} where e.entity_id = identity.canonical_entity_id($1::uuid) order by s.observed_at desc`, [entityId])
   ).map(toSignal);
 }
 

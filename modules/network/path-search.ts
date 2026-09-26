@@ -5,6 +5,7 @@ import type { RawPath } from './repo';
 export type Link = { edgeId: string; other: string };
 export type GraphSnapshot = {
   adjacency: Map<string, Link[]>;
+  canonicalIds?: Map<string, string>;
   coverage: { edges: number; from: Date | null; to: Date | null };
   tiers: Array<{ tier: EvidenceTier; n: number; reviewed: number }>;
 };
@@ -25,6 +26,50 @@ export async function graphSnapshot(db: Db): Promise<GraphSnapshot> {
   if (previous?.key === key) return previous.value;
   const value = (async (): Promise<GraphSnapshot> => {
     const adjacency = new Map<string, Link[]>();
+    const canonicalIds = new Map<string, string>();
+    const redirects = new Map<string, string | null>();
+    let entityCursor: string | null = null;
+    for (;;) {
+      const rows: Array<{ entity_id: string; merged_into: string | null }> = await db.query(
+        `select entity_id, merged_into from identity.entity
+          ${entityCursor ? 'where entity_id > $1::uuid' : ''} order by entity_id limit 512`, entityCursor ? [entityCursor] : []);
+      for (const row of rows) redirects.set(row.entity_id, row.merged_into);
+      await yieldRouteWork();
+      if (rows.length < 512) break;
+      entityCursor = rows.at(-1)!.entity_id;
+    }
+    // Resolve chains once with path compression. Paging a recursive view repeatedly
+    // would scan and sort the whole source roster for each 512-row slice.
+    const invalid = new Set<string>();
+    let walked = 0;
+    for (const entityId of redirects.keys()) {
+      if (canonicalIds.has(entityId) || invalid.has(entityId)) continue;
+      const path: string[] = [], seen = new Set<string>();
+      let node = entityId, root: string | undefined;
+      for (;;) {
+        if (canonicalIds.has(node)) { root = canonicalIds.get(node)!; break; }
+        if (invalid.has(node) || seen.has(node) || !redirects.has(node)) break;
+        seen.add(node); path.push(node);
+        const next = redirects.get(node);
+        if (next === null) { root = node; break; }
+        node = next!;
+        if (++walked % 512 === 0) await yieldRouteWork();
+      }
+      for (const id of path) {
+        // A cycle has no canonical root, matching the SQL canonical projection.
+        if (root) canonicalIds.set(id, root); else invalid.add(id);
+        if (++walked % 512 === 0) await yieldRouteWork();
+      }
+    }
+    const append = (edgeId: string, originalFrom: string, originalTo: string) => {
+      const from = canonicalIds.get(originalFrom) ?? originalFrom;
+      const to = canonicalIds.get(originalTo) ?? originalTo;
+      if (from === to) return;
+      for (const [node, other] of [[from, to], [to, from]]) {
+        const links = adjacency.get(node), link = { edgeId, other };
+        if (links) links.push(link); else adjacency.set(node, [link]);
+      }
+    };
     const counts = new Map<EvidenceTier, { n: number; reviewed: number }>();
     let cursor: string | null = null, edgeCount = 0, from = Infinity, to = -Infinity;
     for (;;) {
@@ -40,20 +85,36 @@ export async function graphSnapshot(db: Db): Promise<GraphSnapshot> {
         const count = counts.get(edge.tier) ?? { n: 0, reviewed: 0 };
         count.n++; count.reviewed += Number(edge.reviewed); counts.set(edge.tier, count);
         if (edge.valid_to !== null && edge.valid_to < version!.today) continue;
-        for (const [node, other] of [[edge.from_entity, edge.to_entity], [edge.to_entity, edge.from_entity]]) {
-          const links = adjacency.get(node);
-          const link = { edgeId: edge.edge_id, other };
-          if (links) links.push(link); else adjacency.set(node, [link]);
-        }
+        append(edge.edge_id, edge.from_entity, edge.to_entity);
       }
       await yieldRouteWork();
       if (rows.length < 512) break;
       cursor = rows[rows.length - 1].edge_id;
     }
+    cursor = null;
+    for (;;) {
+      const rows: Array<{ edge_id: string; left_entity: string; right_entity: string; created_at: string }> = await db.query(
+        `select edge_id, left_entity, right_entity, created_at::text from identity.possible_match
+          where active ${cursor ? 'and edge_id > $1::uuid' : ''} order by edge_id limit 512`, cursor ? [cursor] : []);
+      for (const edge of rows) {
+        if (canonicalIds.get(edge.left_entity) === canonicalIds.get(edge.right_entity)) continue;
+        append(edge.edge_id, edge.left_entity, edge.right_entity);
+        edgeCount++;
+        from = Math.min(from, new Date(edge.created_at).getTime());
+        to = Math.max(to, new Date(version!.today).getTime());
+        const count = counts.get('D') ?? { n: 0, reviewed: 0 };
+        count.n++; counts.set('D', count);
+      }
+      await yieldRouteWork();
+      if (rows.length < 512) break;
+      cursor = rows.at(-1)!.edge_id;
+    }
+    // Merge the two ordered edge sources deterministically before applying the path cap.
+    for (const links of adjacency.values()) links.sort((a, b) => a.edgeId.localeCompare(b.edgeId));
     const current = await db.one<{ key: string }>(
       `select revision::text || ':' || current_date::text as key from network.edge_revision where singleton`);
     if (current!.key !== key) return graphSnapshot(db);
-    return { adjacency,
+    return { adjacency, canonicalIds,
       coverage: { edges: edgeCount, from: Number.isFinite(from) ? new Date(from) : null,
         to: Number.isFinite(to) ? new Date(to) : null },
       tiers: [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([tier, count]) => ({ tier, ...count })),

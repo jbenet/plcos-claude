@@ -13,12 +13,12 @@ type Row = {
 };
 
 const SELECT = `
-  select x.exposure_id, x.entity_id, e.display_name as entity_name, x.vehicle_id,
+  select x.exposure_id, e.entity_id, e.display_name as entity_name, x.vehicle_id,
          v.name as vehicle_name, v.slug as vehicle_slug, x.instrument, x.track, x.amount,
          x.probability, u.name as owner_name, x.evidence_ref, x.hardened_at,
          x.cash_received_at, x.opened_at, x.source, x.source_as_of, x.claim
     from pipeline.exposure x
-    join identity.entity e on e.entity_id = x.entity_id
+    join identity.entity e on e.entity_id = identity.canonical_entity_id(x.entity_id)
     join platform.vehicle v on v.id = x.vehicle_id
     join platform.app_user u on u.id = x.owner_id
    where x.closed_at is null`;
@@ -216,13 +216,13 @@ export function deriveTrack(x: Exposure, events: CommitmentEvent[], packReturned
 /** The close track for an LP on a vehicle: one per open exposure, usually one. */
 export async function closeTracksFor(entityId: string, vehicleId: string): Promise<CloseTrack[]> {
   const db = await getDb();
-  const rows = await db.query<Row>(`${SELECT} and x.entity_id = $1 and x.vehicle_id = $2 order by x.amount desc`, [entityId, vehicleId]);
+  const rows = await db.query<Row>(`${SELECT} and e.entity_id = identity.canonical_entity_id($1::uuid) and x.vehicle_id = $2 order by x.amount desc`, [entityId, vehicleId]);
   const exposures = rows.map(toExposure);
   const [events, packs] = await Promise.all([
     eventsFor(exposures.map((x) => x.exposureId)),
     db.query<{ returned_at: Date | string | null }>(
       `select max(p.returned_at) as returned_at from close.pack_item p join close.cycle c on c.cycle_id = p.cycle_id
-        where p.entity_id = $1 and c.vehicle_id = $2`, [entityId, vehicleId],
+        where identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id($1::uuid) and c.vehicle_id = $2`, [entityId, vehicleId],
     ),
   ]);
   const returned = packs[0]?.returned_at ? new Date(packs[0].returned_at) : null;
@@ -234,7 +234,7 @@ export async function closeStates(pairs: Array<{ entityId: string; vehicleId: st
   const out = new Map<string, CloseTrack>();
   if (!pairs.length) return out;
   const db = await getDb();
-  const rows = await db.query<Row>(`${SELECT} and x.entity_id = any($1::uuid[]) order by x.amount desc`, [[...new Set(pairs.map((p) => p.entityId))]]);
+  const rows = await db.query<Row>(`${SELECT} and e.entity_id in (select identity.canonical_entity_id(id) from unnest($1::uuid[]) id) order by x.amount desc`, [[...new Set(pairs.map((p) => p.entityId))]]);
   const exposures = rows.map(toExposure);
   const events = await eventsFor(exposures.map((x) => x.exposureId));
   const want = new Set(pairs.map((p) => `${p.entityId}:${p.vehicleId}`));

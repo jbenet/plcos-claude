@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Db, Queryable } from '@/lib/db';
 import { enrichDir } from './candidates';
+import { normalizeIdentityName } from '@/modules/identity/resolution';
 
 export interface Prospect {
   personKey: string; name: string; org: string | null; vehicle: string;
@@ -20,7 +21,7 @@ export interface ProspectResult {
 }
 const object = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const words = (x: unknown): x is string => typeof x === 'string' && !!x.trim();
-const normalized = (s: string) => s.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+const normalized = normalizeIdentityName;
 
 /** Notes retain supplied evidence; this import does not turn estimates into verified claims. */
 export function prospectProblems(x: unknown): string[] {
@@ -67,28 +68,24 @@ async function affiliateProspect(tx: Queryable, personId: string, p: Prospect, i
     [personId, orgId, `prospect:${p.personKey}`]);
 }
 
-/** Stable identity first; otherwise reuse one name match or create a sourced person on zero. */
+/** Stable keys follow canonical identity. Unknown keys get their own reversible source node; names alone never identify a person. */
 async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[]): Promise<string | null> {
   const rows = await tx.query<Identity>(
     `select distinct e.entity_id::text id, e.display_name name, e.entity_type::text type, e.merged_into::text merged, e.retired_at::text retired
-       from identity.entity e left join identity.source_record s on s.entity_id = e.entity_id
-      where e.entity_id::text = $1 or (s.source in ('warehouse', 'w3_person', 'prospect') and s.source_id = $1)`, [p.personKey]);
+       from identity.entity original join identity.entity e on e.entity_id=identity.canonical_entity_id(original.entity_id)
+       left join identity.source_record s on s.entity_id = original.entity_id
+      where original.entity_id::text = $1 or (s.source in ('warehouse', 'w3_person', 'prospect') and s.source_id = $1)`, [p.personKey]);
   if (rows.length) {
     if (rows.length !== 1) return null;
     const row = rows[0]!;
     return row.type === 'person' && current(row) && normalized(row.name) === normalized(p.name) ? row.id : null;
   }
-  const matches = identities.filter(e => e.type === 'person' && normalized(e.name) === normalized(p.name));
-  // Inactive matches remain a conflict: never recreate someone retired or merged away.
-  if (matches.length > 1 || (matches[0] && !current(matches[0]))) return null;
-  const id = matches[0]?.id ?? (await tx.one<{ id: string }>(
+  const id = (await tx.one<{ id: string }>(
     `insert into identity.entity (entity_type, display_name) values ('person', $1) returning entity_id::text id`, [p.name]))!.id;
   await tx.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by)
     values ('prospect', $1, $2, 'rule:sourced-prospect')`, [p.personKey, id]);
-  if (!matches.length) {
-    identities.push({ id, name: p.name, type: 'person', merged: null, retired: null });
-    await affiliateProspect(tx, id, p, identities);
-  }
+  identities.push({ id, name: p.name, type: 'person', merged: null, retired: null });
+  await affiliateProspect(tx, id, p, identities);
   return id;
 }
 
@@ -127,10 +124,11 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
       const entityId = names.get(p.personKey)!.size === 1 ? await resolvePerson(tx, p, identities) : null;
       if (!entityId) {
         result.ambiguous++;
-        result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle, reason: 'Ambiguous name or conflicting identity: supply the correct existing person ID or resolve the conflicting source mapping.' });
+        result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle, reason: 'Conflicting identity: supply the correct existing person ID or resolve the conflicting source mapping.' });
         continue;
       }
       const body = `Added by rule on Juan's instruction (26 Sep): ${p.reason}; capacity ${p.capacity.band} (${p.capacity.guess ? 'guess' : 'not marked as a guess'})`;
+      if (await tx.one('select pursuit_id from strategy.pursuit where identity.canonical_entity_id(entity_id)=$1 and vehicle_id=$2 limit 1', [entityId, vehicles.get(p.vehicle)])) { result.existing++; continue; }
       const pursuit = await tx.one<{ id: string }>(
         `insert into strategy.pursuit (entity_id, vehicle_id, owner_id, status, status_source, status_reason, status_set_at, status_set_by, source)
          values ($1, $2, $3, $4::strategy.pursuit_status, 'rule', $5, now(), $3, 'prospects')

@@ -14,11 +14,11 @@ type MeetingRow = {
 };
 
 const MEETING_SELECT = `
-  select m.meeting_id, m.pursuit_id, m.entity_id, e.display_name as entity_name,
+  select m.meeting_id, m.pursuit_id, e.entity_id, e.display_name as entity_name,
          v.name as vehicle_name, m.kind, m.scheduled_for, m.held_on, m.attendees,
          u.name as owner_name, m.summary, m.justifies_rung, m.justification
     from meetings.meeting m
-    join identity.entity e on e.entity_id = m.entity_id
+    join identity.entity e on e.entity_id = identity.canonical_entity_id(m.entity_id)
     left join platform.vehicle v on v.id = m.vehicle_id
     join platform.app_user u on u.id = m.owner_id`;
 
@@ -73,11 +73,11 @@ type ObjectionRow = {
 };
 
 const OBJECTION_SELECT = `
-  select o.objection_id, o.meeting_id, o.entity_id, e.display_name as entity_name,
+  select o.objection_id, o.meeting_id, e.entity_id, e.display_name as entity_name,
          o.class, o.statement, o.status, o.answer, o.answer_source,
          u.name as answered_by_name, o.answered_at
     from meetings.objection o
-    join identity.entity e on e.entity_id = o.entity_id
+    join identity.entity e on e.entity_id = identity.canonical_entity_id(o.entity_id)
     left join platform.app_user u on u.id = o.answered_by`;
 
 const toObjection = (r: ObjectionRow): Objection => ({
@@ -90,7 +90,7 @@ const toObjection = (r: ObjectionRow): Objection => ({
 export async function listObjections(entityId?: string): Promise<Objection[]> {
   const db = await getDb();
   const rows = entityId
-    ? await db.query<ObjectionRow>(`${OBJECTION_SELECT} where o.entity_id = $1 order by o.created_at`, [entityId])
+    ? await db.query<ObjectionRow>(`${OBJECTION_SELECT} where e.entity_id = identity.canonical_entity_id($1::uuid) order by o.created_at`, [entityId])
     : await db.query<ObjectionRow>(`${OBJECTION_SELECT} order by o.created_at desc`);
   return rows.map(toObjection);
 }
@@ -114,10 +114,10 @@ type QuestionRow = {
 };
 
 const QUESTION_SELECT = `
-  select q.question_id, q.entity_id, e.display_name as entity_name, v.name as vehicle_name,
+  select q.question_id, e.entity_id, e.display_name as entity_name, v.name as vehicle_name,
          q.question, q.asked_on, q.due_on, u.name as owner_name, q.status, q.answer, q.answer_source
     from meetings.diligence_question q
-    join identity.entity e on e.entity_id = q.entity_id
+    join identity.entity e on e.entity_id = identity.canonical_entity_id(q.entity_id)
     join platform.vehicle v on v.id = q.vehicle_id
     left join platform.app_user u on u.id = q.owner_id`;
 
@@ -133,7 +133,7 @@ const toQuestion = (r: QuestionRow): DiligenceQuestion => ({
 export async function listQuestions(entityId?: string): Promise<DiligenceQuestion[]> {
   const db = await getDb();
   const rows = entityId
-    ? await db.query<QuestionRow>(`${QUESTION_SELECT} where q.entity_id = $1 order by q.due_on nulls last`, [entityId])
+    ? await db.query<QuestionRow>(`${QUESTION_SELECT} where e.entity_id = identity.canonical_entity_id($1::uuid) order by q.due_on nulls last`, [entityId])
     : await db.query<QuestionRow>(`${QUESTION_SELECT} order by (q.status <> 'open'), q.due_on nulls last`);
   return rows.map(toQuestion);
 }
@@ -152,14 +152,14 @@ type TouchRow = {
 
 /** The touchpoint columns, read through a `reach` CTE of (for_entity, entity_id). */
 const TOUCH_FROM_REACH = `
-  select m.meeting_id, m.entity_id, e.display_name as entity_name, m.vehicle_id, v.name as vehicle_name,
+  select m.meeting_id, e.entity_id, e.display_name as entity_name, m.vehicle_id, v.name as vehicle_name,
          m.channel::text as channel, m.kind::text as kind, m.held_on, m.scheduled_for, m.direction,
          u.name as owner_name, m.attendees, m.summary, m.read::text as read, rb.name as read_by_name,
          m.source, m.source_ref, r.for_entity, m.about, m.about_vehicles, m.about_basis, m.about_by,
          m.group_size
     from reach r
-    join meetings.meeting m on m.entity_id = r.entity_id
-    join identity.entity e on e.entity_id = m.entity_id
+    join meetings.meeting m on identity.canonical_entity_id(m.entity_id) = identity.canonical_entity_id(r.entity_id)
+    join identity.entity e on e.entity_id = identity.canonical_entity_id(m.entity_id)
     left join platform.vehicle v on v.id = m.vehicle_id
     join platform.app_user u on u.id = m.owner_id
     left join platform.app_user rb on rb.id = m.read_by`;
@@ -174,7 +174,7 @@ const TOUCH_SELECT = `
   reach as (
     select lp.entity_id as for_entity, lp.entity_id as entity_id from lp
     union
-    select a.person_entity, a.org_entity from identity.affiliation a join lp on lp.entity_id = a.person_entity
+    select lp.entity_id, identity.canonical_entity_id(a.org_entity) from identity.affiliation a join lp on identity.canonical_entity_id(lp.entity_id) = identity.canonical_entity_id(a.person_entity)
      where a.ended_on is null
   )
   ${TOUCH_FROM_REACH}`;
@@ -183,13 +183,13 @@ const TOUCH_SELECT = `
 const COLLEAGUE_SELECT = `
   with firm as (
     select a.org_entity from identity.affiliation a
-     where a.person_entity = $1::uuid and a.ended_on is null
+     where identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id($1::uuid) and a.ended_on is null
      order by a.is_primary desc, a.as_of desc limit 1
   ),
   reach as (
-    select distinct $1::uuid as for_entity, c.person_entity as entity_id
-      from firm join identity.affiliation c on c.org_entity = firm.org_entity
-     where c.person_entity <> $1::uuid and c.ended_on is null
+    select distinct $1::uuid as for_entity, identity.canonical_entity_id(c.person_entity) as entity_id
+      from firm join identity.affiliation c on identity.canonical_entity_id(c.org_entity) = identity.canonical_entity_id(firm.org_entity)
+     where identity.canonical_entity_id(c.person_entity) <> identity.canonical_entity_id($1::uuid) and c.ended_on is null
   )
   ${TOUCH_FROM_REACH}`;
 
@@ -250,7 +250,7 @@ export async function colleagueTouchpointsFor(entityId: string, vehicleId: strin
   );
   const org = (await db.one<{ name: string }>(
     `select o.display_name as name from identity.affiliation a join identity.entity o on o.entity_id = a.org_entity
-      where a.person_entity = $1::uuid and a.ended_on is null order by a.is_primary desc, a.as_of desc limit 1`, [entityId]))?.name ?? null;
+      where identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id($1::uuid) and a.ended_on is null order by a.is_primary desc, a.as_of desc limit 1`, [entityId]))?.name ?? null;
   const all = rows.map(toTouch).map((t) => ({ ...t, viaOrganization: org ? `${t.entityName}, ${org}` : t.entityName })).sort((a, b) => when(b) - when(a));
   if (!vehicleId) return all;
   const w = (await raiseWindows()).get(vehicleId);
@@ -370,17 +370,17 @@ export async function directContact(entityIds: string[]): Promise<Map<string, Di
      reach as (
        select t.entity_id as for_entity, t.entity_id as entity_id from t
        union
-       select a.org_entity, a.person_entity from identity.affiliation a join t on t.entity_id = a.org_entity
+       select t.entity_id, identity.canonical_entity_id(a.person_entity) from identity.affiliation a join t on identity.canonical_entity_id(t.entity_id) = identity.canonical_entity_id(a.org_entity)
         where a.ended_on is null
      )
      select distinct on (r.for_entity) r.for_entity::text, m.held_on, m.channel in ('meeting', 'call') as met,
-            case when m.entity_id = r.for_entity then null else e.display_name end as via
+            case when identity.canonical_entity_id(m.entity_id) = identity.canonical_entity_id(r.for_entity) then null else e.display_name end as via
        from reach r
-       join meetings.meeting m on m.entity_id = r.entity_id
-       join identity.entity e on e.entity_id = m.entity_id
+       join meetings.meeting m on identity.canonical_entity_id(m.entity_id) = identity.canonical_entity_id(r.entity_id)
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(m.entity_id)
       where m.held_on is not null and m.held_on <= current_date
         and (m.channel in ('meeting', 'call') or m.direction in ('theirs', 'both'))
-      order by r.for_entity, m.held_on desc, (m.entity_id = r.for_entity) desc`,
+      order by r.for_entity, m.held_on desc, (identity.canonical_entity_id(m.entity_id) = identity.canonical_entity_id(r.for_entity)) desc`,
     [entityIds],
   );
   for (const r of rows) out.set(r.for_entity, { on: new Date(r.held_on), how: r.met ? 'met' : 'heard', via: r.via });

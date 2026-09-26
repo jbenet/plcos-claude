@@ -6,7 +6,7 @@ import { listEntities } from '@/modules/identity';
 import { connectorLoad, restrictionsFor } from '@/modules/coordination';
 import { listSyncSources } from '@/modules/platform';
 import { listExposures } from '@/modules/pipeline';
-import { edgeCoverage, edgesByIds, entityForUser, enumeratePathsFromSources, routeSources, sourceEdges } from './repo';
+import { canonicalRouteEntity, edgeCoverage, edgesByIds, entityForUser, enumeratePathsFromSources, routeSources, sourceEdges } from './repo';
 import { influenceFor } from './influence';
 import { investmentTie, scoreRoute, tieDetailsProblems, warmthReader, type RouteScoreContext } from './warmth';
 import { CLUE_KINDS, type Edge, type Route, type RouteHop, type RouteSearch, type RouteVerdict, type RouteStats, type RouteGraph } from './types';
@@ -14,6 +14,7 @@ import { CLUE_KINDS, type Edge, type Route, type RouteHop, type RouteSearch, typ
 const TIER_ORDER = { A: 0, B: 1, C: 2, D: 3 } as const;
 
 const CLUE_REASON: Record<string, string> = {
+  possible_identity: 'Possible identity match by name only, without corroboration. These may be different people; this is an uncertain identity bridge, not a relationship.',
   event_coattendee:
     'Co-attendance is a discovery clue, not evidence of a relationship. Two people in the same room have not necessarily met.',
   social_public:
@@ -35,6 +36,7 @@ export async function planRoutes(
   fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'current', at?: Date,
   selection: RouteSelectionOptions = {},
 ): Promise<RouteSearch | null> {
+  targetId = await canonicalRouteEntity(targetId);
   // Explicit historical evaluations and nonstandard searches are never served a build snapshot.
   if (scope === 'team' && maxHops === 3 && !at) {
     const structural = await cachedRoutes(targetId, vehicleKind, () => computeStructuralRoutes(fromHandle, targetId, maxHops, vehicleKind, scope));
@@ -62,6 +64,7 @@ export async function computeStructuralRoutes(
 async function calculateRoutes(
   fromHandle: string, targetId: string, maxHops: number, vehicleKind: string, scope: 'current' | 'team', at: Date, structuralOnly: boolean,
 ): Promise<RouteSearch | null> {
+  targetId = await canonicalRouteEntity(targetId);
   const checkpoint = routeCheckpoint();
   const me = await entityForUser(fromHandle);
   const team = await routeSources();

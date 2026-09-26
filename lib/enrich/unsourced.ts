@@ -53,7 +53,7 @@ export async function addedInBulk(): Promise<BulkDay[]> {
   // When each of our entities was first added: its earliest entry on any list.
   const firstAdded = new Map<string, string>();
   const links = await db.query<{ source_id: string; entity_id: string }>(
-    `select source_id, entity_id::text from identity.source_record where source = 'affinity'`,
+    `select source_id, identity.canonical_entity_id(entity_id)::text as entity_id from identity.source_record where source = 'affinity'`,
   );
   const entityOf = new Map(links.map((l) => [l.source_id, l.entity_id]));
   for (const e of entries) {
@@ -65,9 +65,9 @@ export async function addedInBulk(): Promise<BulkDay[]> {
   const ids = [...new Set(pursuits.map((p) => p.entityId))];
   // Anything else on record: a touchpoint, a note in Affinity on them, the team's own context.
   const withRecord = new Set((await db.query<{ id: string }>(
-    `select distinct entity_id::text as id from meetings.meeting where entity_id = any($1::uuid[])
+    `select distinct identity.canonical_entity_id(entity_id)::text as id from meetings.meeting where identity.canonical_entity_id(entity_id) = any($1::uuid[])
      union
-     select distinct entity_id::text from research.note where kind = 'context' and entity_id = any($1::uuid[])`,
+     select distinct identity.canonical_entity_id(entity_id)::text from research.note where kind = 'context' and identity.canonical_entity_id(entity_id) = any($1::uuid[])`,
     [ids],
   )).map((r) => r.id));
   const noted = new Set((await db.query<{ key: string }>(
@@ -78,9 +78,9 @@ export async function addedInBulk(): Promise<BulkDay[]> {
   )).map((r) => r.key));
   for (const l of links) if (noted.has(l.source_id)) withRecord.add(l.entity_id);
   const orgs = new Map((await db.query<{ person: string; org: string }>(
-    `select distinct on (a.person_entity) a.person_entity::text as person, o.display_name as org
-       from identity.affiliation a join identity.entity o on o.entity_id = a.org_entity
-      where a.ended_on is null and a.person_entity = any($1::uuid[]) order by a.person_entity, a.is_primary desc, a.as_of desc`,
+    `select distinct on (identity.canonical_entity_id(a.person_entity)) identity.canonical_entity_id(a.person_entity)::text as person, o.display_name as org
+       from identity.affiliation a join identity.entity o on o.entity_id = identity.canonical_entity_id(a.org_entity)
+      where a.ended_on is null and identity.canonical_entity_id(a.person_entity) = any($1::uuid[]) order by identity.canonical_entity_id(a.person_entity), a.is_primary desc, a.as_of desc`,
     [ids],
   )).map((r) => [r.person, r.org]));
 

@@ -55,7 +55,7 @@ export async function conditionsFor(cycleId: string): Promise<Condition[]> {
     `select c.condition_id, c.cycle_id, e.display_name as entity_name, c.label, c.detail,
             u.name as owner_name, c.due_on, c.status, c.evidence_ref, c.compliance
        from close.condition c
-       left join identity.entity e on e.entity_id = c.entity_id
+       left join identity.entity e on e.entity_id = identity.canonical_entity_id(c.entity_id)
        left join platform.app_user u on u.id = c.owner_id
       where c.cycle_id = $1
       order by (c.status <> 'open'), c.due_on nulls last`,
@@ -78,9 +78,9 @@ export async function packFor(cycleId: string): Promise<PackItem[]> {
     status: PackStatus; sent_at: Date | string | null; returned_at: Date | string | null;
     countersigned_at: Date | string | null; note: string | null;
   }>(
-    `select p.item_id, p.entity_id, e.display_name as entity_name, p.document, p.status,
+    `select p.item_id, e.entity_id, e.display_name as entity_name, p.document, p.status,
             p.sent_at, p.returned_at, p.countersigned_at, p.note
-       from close.pack_item p join identity.entity e on e.entity_id = p.entity_id
+       from close.pack_item p join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
       where p.cycle_id = $1
       order by e.display_name, p.document`,
     [cycleId],
@@ -110,12 +110,12 @@ export async function spvRooms(): Promise<SpvRoom[]> {
     owner_name: string; invited_at: Date | string; ioi_at: Date | string | null;
     allocated_at: Date | string | null; wired_at: Date | string | null; note: string | null;
   }>(
-    `select s.seat_id, s.vehicle_id, v.name as vehicle_name, v.target_amount, s.entity_id,
+    `select s.seat_id, s.vehicle_id, v.name as vehicle_name, v.target_amount, e.entity_id,
             e.display_name as entity_name, s.stage, s.amount, u.name as owner_name,
             s.invited_at, s.ioi_at, s.allocated_at, s.wired_at, s.note
        from close.spv_seat s
        join platform.vehicle v on v.id = s.vehicle_id
-       join identity.entity e on e.entity_id = s.entity_id
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id)
        join platform.app_user u on u.id = s.owner_id
       order by v.sort_order, s.invited_at`,
   );
@@ -183,9 +183,9 @@ export async function bandwidthAlerts(): Promise<BandwidthAlert[]> {
   const investors = await db.query<{ name: string; spv: string; fund: string }>(
     `select e.display_name as name, v1.name as spv, v2.name as fund
        from close.spv_seat s
-       join identity.entity e on e.entity_id = s.entity_id
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id)
        join platform.vehicle v1 on v1.id = s.vehicle_id
-       join pipeline.exposure x on x.entity_id = s.entity_id and x.closed_at is null
+       join pipeline.exposure x on identity.canonical_entity_id(x.entity_id) = e.entity_id and x.closed_at is null
        join platform.vehicle v2 on v2.id = x.vehicle_id and v2.kind = 'fund'
       where s.stage in ('invited','ioi','allocated')`,
   );

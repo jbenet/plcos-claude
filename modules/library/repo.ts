@@ -29,7 +29,7 @@ export async function listAnswers(): Promise<Answer[]> {
             e.display_name as entity_name, c.superseded_by, d.title
        from library.answer_source s
        left join research.claim c on c.claim_id = s.claim_id
-       left join identity.entity e on e.entity_id = c.entity_id
+       left join identity.entity e on e.entity_id = identity.canonical_entity_id(c.entity_id)
        left join research.source_doc d on d.doc_id = s.doc_id
       where s.answer_id = any($1::uuid[])`,
     [ids],
@@ -37,7 +37,7 @@ export async function listAnswers(): Promise<Answer[]> {
   const uses = await db.query<{ answer_id: string; context: string; entity_name: string | null; used_on: Date | string }>(
     `select u.answer_id, u.context, e.display_name as entity_name, u.used_on
        from library.answer_use u
-       left join identity.entity e on e.entity_id = u.entity_id
+       left join identity.entity e on e.entity_id = identity.canonical_entity_id(u.entity_id)
       where u.answer_id = any($1::uuid[]) order by u.used_on desc`,
     [ids],
   );
@@ -84,10 +84,10 @@ export async function coverageGaps(): Promise<CoverageGap[]> {
 
   const raised = await db.query<{ text: string; kind: 'objection' | 'diligence'; entity_name: string }>(
     `select o.statement as text, 'objection'::text as kind, e.display_name as entity_name
-       from meetings.objection o join identity.entity e on e.entity_id = o.entity_id
+       from meetings.objection o join identity.entity e on e.entity_id = identity.canonical_entity_id(o.entity_id)
      union all
      select q.question, 'diligence'::text, e.display_name
-       from meetings.diligence_question q join identity.entity e on e.entity_id = q.entity_id`,
+       from meetings.diligence_question q join identity.entity e on e.entity_id = identity.canonical_entity_id(q.entity_id)`,
   );
 
   /**

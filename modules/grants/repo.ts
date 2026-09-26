@@ -9,10 +9,10 @@ type Row = {
 };
 
 const SELECT = `
-  select f.funder_id, f.entity_id, e.display_name as entity_name, f.programme, f.cycle,
+  select f.funder_id, e.entity_id, e.display_name as entity_name, f.programme, f.cycle,
          f.status, f.invitation_ref, f.invited_on, f.invited_by, f.fit_note, u.name as owner_name
     from grants.funder f
-    join identity.entity e on e.entity_id = f.entity_id
+    join identity.entity e on e.entity_id = identity.canonical_entity_id(f.entity_id)
     left join platform.app_user u on u.id = f.owner_id`;
 
 const toFunder = (r: Row): Funder => ({
@@ -38,7 +38,7 @@ export async function listFunders(): Promise<Funder[]> {
  */
 export async function grantGate(entityId: string, q?: Queryable): Promise<GrantGate> {
   const db = q ?? (await getDb());
-  const rows = await db.query<Row>(`${SELECT} where f.entity_id = $1`, [entityId]);
+  const rows = await db.query<Row>(`${SELECT} where e.entity_id = identity.canonical_entity_id($1::uuid)`, [entityId]);
   if (rows.length === 0) {
     return {
       blocked: true,

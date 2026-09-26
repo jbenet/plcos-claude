@@ -27,7 +27,7 @@ async function decorate(rows: AssetRow[], q?: Queryable): Promise<Asset[]> {
     `select cr.asset_id, c.claim_id, c.field, c.value, c.source, e.display_name as entity_name
        from content.claim_ref cr
        join research.claim c on c.claim_id = cr.claim_id
-       join identity.entity e on e.entity_id = c.entity_id
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(c.entity_id)
       where cr.asset_id = any($1::uuid[])`,
     [ids],
   );
@@ -100,7 +100,7 @@ export async function listSends(): Promise<Send[]> {
             u.name as requested_by_name, s.refusal, s.requested_at, s.sent_at
        from content.send s
        join content.asset a on a.asset_id = s.asset_id
-       join identity.entity e on e.entity_id = s.entity_id
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id)
        join platform.vehicle v on v.id = s.vehicle_id
        join platform.app_user u on u.id = s.requested_by
       order by s.requested_at desc`,

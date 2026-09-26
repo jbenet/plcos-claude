@@ -21,7 +21,7 @@ export async function listEntities(ids?: string[]): Promise<Entity[]> {
   const db = await getDb();
   const rows = await db.query<Row>(
     `select ${COLS} from identity.entity where merged_into is null and retired_at is null
-      ${ids ? 'and entity_id = any($1::uuid[])' : ''} order by display_name`,
+      ${ids ? 'and entity_id in (select identity.canonical_entity_id(id) from unnest($1::uuid[]) id)' : ''} order by display_name`,
     ids ? [ids] : [],
   );
   return rows.map(toEntity);
@@ -30,12 +30,7 @@ export async function listEntities(ids?: string[]): Promise<Entity[]> {
 /** Follows the merge redirect, which is the whole reason merged ids are never reused. */
 export async function getEntity(id: string): Promise<Entity | null> {
   const db = await getDb();
-  let row = await db.one<Row>(`select ${COLS} from identity.entity where entity_id = $1`, [id]);
-  let hops = 0;
-  while (row?.merged_into && hops < 8) {
-    row = await db.one<Row>(`select ${COLS} from identity.entity where entity_id = $1`, [row.merged_into]);
-    hops += 1;
-  }
+  const row = await db.one<Row>(`select ${COLS} from identity.entity where entity_id = identity.canonical_entity_id($1::uuid)`, [id]);
   return row ? toEntity(row) : null;
 }
 
