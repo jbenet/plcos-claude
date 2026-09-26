@@ -8,6 +8,7 @@ export async function runProperties(check: Check) {
   (await import('../warehouse-investor-properties')).warehouseInvestorProperties(check);
   (await import('../route-presentation-properties')).routePresentationProperties(check);
   const db = await freshDb();
+  await (await import('../route-scoring-properties')).routeScoringProperties(check, db);
   await (await import('../issues4-properties')).issues4Properties(check, db);
   await (await import('../plrule-properties')).plRuleProperties(db, check);
   await (await import('../network-nodes-properties')).networkNodesProperties(check, db);

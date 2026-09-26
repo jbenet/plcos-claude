@@ -10,8 +10,10 @@ export async function networkProperties({ check, id }: SeedContext) {
     uncertain.length > 0 && uncertain.every((r) => r.verdict !== 'not_a_route' && r.reasons.some((s) => s.includes('uncertainty'))),
     `${uncertain.length} routes with labelled uncertainty`);
   const informational = roos!.routes.filter((r) => r.verdict !== 'excluded');
-  check('PLRULE evidence tiers rank A/B ahead of C/D', informational.every((r, i) => i === 0 || informational[i - 1]!.weakestTier <= r.weakestTier),
-    'Warmth and action load never raise weak evidence above a stronger tier.');
+  check('SCORE2 routes rank by explained investment strength with evidence confidence', informational.every((r, i) =>
+    Boolean(r.score?.factors.some((f) => f.key === 'confidence'))
+      && (i === 0 || informational[i - 1]!.verdict !== r.verdict || informational[i - 1]!.score!.value >= r.score!.value)),
+    'Tier contributes uncertainty to the score; target relationship strength determines route ranking.');
 
   const restrictedPaths = roos!.routes.filter((r) => r.connectorNames.includes('Jonah Hale'));
   check(
@@ -205,9 +207,14 @@ export async function connectionsV2Properties(db: import('../../lib/db').Queryab
     const inputs = [angel, target, colleague], findings = new Map<string, import('../../lib/enrich/schema').Finding>([[target.key, tf], [colleague.key, cf]]);
     const joined = cn.connectionPaths(inputs, findings, net, team, [], at).paths;
     check('CONN2 a personal PL angel is directly tied to its founder; dated long service reaches overlapping colleagues',
-      joined.some((p) => p.lp === angel.key && p.other.handle === team[0]!.handle && p.tier === 'B')
+      joined.some((p) => p.lp === angel.key && p.other.handle === team[0]!.handle && p.tier === 'B'
+        && p.tie?.kind === 'investor_founder' && p.tie.withUs === 'investor')
         && joined.some((p) => p.lp === colleague.key && p.other.handle === team[0]!.handle && p.tier === 'B' && p.tie?.kind === 'worked_together'),
       'General rules use the backer roster, own employment anchor and sourced overlapping dates.');
+    check('SCORE2 one team roster person remains a source when also present in LP inputs',
+      cn.resolvePerson(team[0]!.name, [person('invented-team-duplicate', team[0]!.name)], team)?.type === 'team'
+        && cn.resolvePerson(team[0]!.name, [person('invented-team-duplicate', team[0]!.name)], team)?.handle === team[0]!.handle,
+      'The duplicate LP entry does not create a second connector identity for the team member.');
     const laterTeam = [{ ...team[0]!, roles: [{ ...team[0]!.roles[0]!, since: '2024-01-01' }] }];
     const noOverlap = cn.connectionPaths(inputs, findings, net, laterTeam, [], at).paths;
     const ambiguous = cn.connectionPaths(inputs, new Map([[target.key, { ...tf, identity: { match: 'ambiguous', basis: 'Namesake' } }]]), net, team, [], at).paths;

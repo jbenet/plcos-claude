@@ -217,7 +217,7 @@ export const config = {
     version: 'warmth-2',
     priors: {
       proximity: 0, acquaintance: 1, repeated_contact: 2, worked_together: 3,
-      joint_investment: 3, cofounder: 4, frequent_coinvestment: 5,
+      joint_investment: 3, cofounder: 4, frequent_coinvestment: 5, investor_founder: 4.5,
     }, // GUESS — uncalibrated strength priors; evidence tier is independent.
     currentMonths: 12, // GUESS
     historicalMonths: 36, // GUESS
@@ -227,6 +227,18 @@ export const config = {
     repeatedContacts: 2, // GUESS — distinct dated interactions.
     colleagueOverlapMonths: 24, // GUESS — long service in our own organization.
     strongFirstHop: 3, // GUESS — folding compares evidence tier and warmth; no human review gate.
+  },
+
+  /** SCORE2: relative investment-route strength, never a calibrated probability or consent. */
+  routeScoring: {
+    version: 'score-2',
+    weights: { lastHop: 70, introducer: 10, history: 15, access: 5 }, // GUESS — target relationship dominates.
+    tierConfidence: { A: 1, B: 0.85, C: 0.5, D: 0.25 }, // GUESS — uncertainty, not an information gate.
+    confidenceFloor: 0.6, // GUESS — confidence discounts strength without lexicographic tier sorting.
+    introducer: { investor: 1, plFounder: 0.8, coinvestor: 0.7 }, // GUESS
+    history: { raisedFrom: 1, investorFounder: 0.9, repeatedContact: 0.5 }, // GUESS
+    bands: { strong: 60, warm: 35 }, // GUESS — uncalibrated thresholds out of 100.
+    routesPerIntroducer: 3, // GUESS — one to three prefixes per last intermediary; no cap on intermediaries.
   },
 
   /** L7. How much of a week has to be lost before it stops counting as a working week. */

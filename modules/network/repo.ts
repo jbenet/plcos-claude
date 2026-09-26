@@ -70,14 +70,15 @@ export async function enumeratePaths(
  * PL can start a route but can never be an intermediate connector.
  */
 export async function enumeratePathsFromSources(
-  fromEntities: string[], targetEntity: string, maxHops = 3,
+  fromEntities: string[], targetEntity: string, maxHops = 3, sourceOnlyEntities: string[] = [],
 ): Promise<RawPath[]> {
   if (!fromEntities.length) return [];
   const db = await getDb();
   return db.query<RawPath>(
     `with recursive pl as (
        select e.entity_id from identity.entity e join identity.source_record s on s.entity_id = e.entity_id
-        where s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL'),
+        where s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL'
+       union select unnest($4::uuid[])),
      valid as not materialized (
        select a, b, edge_id from network.link where valid_to is null or valid_to >= current_date),
      y as materialized (
@@ -127,7 +128,7 @@ export async function enumeratePathsFromSources(
          cross join lateral jsonb_to_recordset(walk.batch) as path(nodes uuid[], edges uuid[], hops int))
      select nodes, edges, hops from paths
       order by array_position($1::uuid[], nodes[1]), hops, edges`,
-    [fromEntities, targetEntity, maxHops],
+    [fromEntities, targetEntity, maxHops, sourceOnlyEntities],
   );
 }
 
@@ -199,4 +200,15 @@ export async function routeSources(): Promise<Array<{ entityId: string; name: st
          or (s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL')
       order by name`);
   return rows.map((r) => ({ entityId: r.id, name: r.name }));
+}
+
+
+/** Role evidence on the source/connector pair, including edges that did not fit a candidate path. */
+export async function sourceEdges(sourceIds: string[], entityIds: string[]): Promise<Edge[]> {
+  if (!sourceIds.length || !entityIds.length) return [];
+  const db = await getDb();
+  return (await db.query<EdgeRow>(`${EDGE_SELECT}
+    where (e.valid_to is null or e.valid_to >= current_date)
+      and ((e.from_entity = any($1::uuid[]) and e.to_entity = any($2::uuid[]))
+        or (e.to_entity = any($1::uuid[]) and e.from_entity = any($2::uuid[])))`, [sourceIds, entityIds])).map(toEdge);
 }

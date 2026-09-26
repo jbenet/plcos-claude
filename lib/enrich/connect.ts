@@ -6,7 +6,7 @@ import type { Finding } from './schema';
 import type { WarehousePerson, WarehouseTie, WarehouseMatch } from './warehouse-graph';
 import { plNetworkPaths, materializeResearchNodes } from './pl-network';
 import { config } from '@/config/deployment';
-import { tieWarmth, type TieDetails, type Warmth } from '@/modules/network';
+import { tieWarmth, investmentTie, type TieDetails, type Warmth } from '@/modules/network';
 
 /**
  * W3, find connections (N64, docs/19): who of us, or of our LPs, is near whom. Deterministic and
@@ -364,7 +364,19 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
   if (warehouse) for (const p of warehousePaths(candidates, team, warehouse, at)) add(p);
 
   return { paths: materializeResearchNodes(plNetworkPaths(paths, candidates, findings, net, team, directory), candidates, net, team).map((p) => {
-    const tie = p.tie ?? ((p.tier === 'C' || p.tier === 'D') ? { kind: 'proximity' as const } : undefined);
+    let tie = p.tie ?? ((p.tier === 'C' || p.tier === 'D') ? { kind: 'proximity' as const } : undefined);
+    const sourceTie = p.other.type === 'team' || p.other.person?.name === 'PL';
+    if (p.other.type === 'team' && p.tier <= 'B' && investmentTie({ evidence: [{ note: p.basis, source: p.source ?? undefined, tie }] })) {
+      tie = { ...tie, kind: 'investor_founder', withUs: 'investor' };
+    }
+    // A pipeline status alone is not investor evidence. Preserve personal versus firm scope.
+    const candidate = candidates.find((c) => c.key === p.lp);
+    const member = directory.find((e) => e.key === p.lp)?.members.find((m) => m.match === 'confirmed'
+      && m.roles.some((r) => /\b(?:co-?founder|founder)\b/i.test(r.role ?? '')));
+    if (sourceTie && tie && candidate?.type === 'person') {
+      if (candidate.money?.track === 'hard' && candidate.money.amount > 0) tie = { ...tie, withUs: 'investor' };
+      else if (member && tie.withUs !== 'investor') tie = { ...tie, withUs: 'pl_founder' };
+    }
     return { ...p, tie, warmth: tieWarmth(p.kind, tie, at) };
   }).sort((a, b) => a.tier.localeCompare(b.tier) || b.warmth.score - a.warmth.score || a.lp.localeCompare(b.lp) || a.other.name.localeCompare(b.other.name)),
   lps: candidates.length, researched: findings.size };
@@ -485,8 +497,11 @@ export function resolvePerson(name: string, candidates: Candidate[], team: TeamM
   // A trailing parenthesis describes a known person; never resolve names inside a firm label.
   const key = norm(name.replace(/\s*\([^()]*\)\s*$/, ''));
   if (!key.includes(' ')) return null;
+  const members = team.filter((t) => norm(t.name) === key);
+  // The same roster person appearing in the LP input is still a source, not a second connector.
+  if (members.length === 1) return { type: 'team', name: members[0]!.name, handle: members[0]!.handle };
   const matches: Path['other'][] = [
-    ...team.filter((t) => norm(t.name) === key).map((t) => ({ type: 'team' as const, name: t.name, handle: t.handle })),
+    ...members.map((t) => ({ type: 'team' as const, name: t.name, handle: t.handle })),
     ...candidates.filter((c) => c.type === 'person' && norm(c.name) === key).map((c) => ({ type: 'lp' as const, name: c.name, key: c.key })),
   ];
   return matches.length === 1 ? matches[0]! : null;
@@ -531,7 +546,7 @@ function ourSidePaths(c: Candidate, f: Finding | undefined, net: Network, team: 
         const founder = [...t.roles, ...t.prior].find((r) => isOrg(r.org) && /\b(co-?founder|founder)\b/i.test(r.role ?? '') && r.source);
         if (founder) out.push({ lp: c.key, other: other(t), kind: 'portfolio', tier: 'B',
           basis: `A personal angel/backer of ${org.name}; ${t.name} is its documented founder. Direct investor–founder tie; willingness is not recorded.`,
-          source: investorSource, tie: { kind: 'acquaintance' } });
+          source: investorSource, tie: { kind: 'investor_founder', withUs: 'investor' } });
       }
     }
     // Long service counts only with an own-record employment anchor AND dated overlap.
