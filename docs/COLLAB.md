@@ -134,3 +134,85 @@ All five steps are done: 1–4 on the branch `claude/collab-setup`, and the move
    agents at `plcos-claude-live`, where `data/real` is the real data); link Claude's project memory for
    the new folder paths to the existing one (it is filed by path). Then Juan opens Claude's next session
    in `plcos-claude-dev`, and ChatGPT's in `plcos-codex-dev`.
+
+## Recording workflow runs (0036, slice A)
+
+Every approved workflow batch uses the shared `plcos-data/real/workflows/runs.jsonl`.
+This records execution, not approval or acceptance. Freeze the inputs and rules, coordinate
+non-overlapping batches, and obtain the run's approval/envelope before starting. No workflow
+is authorized merely by installing these scripts. Demo and preview roots are refused.
+
+**Claude launchers and ChatGPT use the same steps**, from their own checkout:
+
+1. Prepare a private metadata JSON file beside the existing batch under the shared real root.
+   Its fields are below. Hash the exact protocol file (or a fixed concatenation of rule files)
+   and the frozen batch manifest with SHA-256. Record resolved model, or null if unknown.
+   `launchFolder` is the launcher's actual folder; `workerFolder` is the worker's actual cwd.
+2. Run `DATA_PROFILE=real npx tsx scripts/workflow-run.ts begin <metadata.json>`.
+   Save the UUID printed on stdout. If recording fails, **do not launch**.
+3. Launch the bounded work. A Claude session in either folder uses this for each of
+   `lp-researcher`, `fact-checker`, `strategy-writer`, and `event-tagger`; pass the run ID and
+   private batch path, never records in the prompt. ChatGPT follows the same sequence for
+   its own batches, using the shared sibling files, never its `data/real` preview.
+4. Read the worker's counts/checks, including failures. Write the result JSON below and call
+   `DATA_PROFILE=real npx tsx scripts/workflow-run.ts finish <runId> <result.json>`.
+   The launcher owns this step; the sub-agent does not duplicate it. Inspect diagnostics,
+   not just exit codes, before reporting a check passed. Unknown counts/usage stay null.
+
+Metadata shape (invented example; replace both hash placeholders with 64 hexadecimal digits):
+
+```json
+{
+  "parentRunId": null,
+  "workflow": "W1c",
+  "operation": "review",
+  "protocol": { "version": null, "hash": "<SHA-256 of rules>" },
+  "source": "chatgpt",
+  "agent": "ChatGPT",
+  "model": null,
+  "launchFolder": "/path/to/plcos-codex-dev",
+  "workerFolder": "/path/to/plcos-codex-dev",
+  "batch": { "id": "example", "manifest": "enrich/batches/example.txt", "hash": "<SHA-256 of manifest>", "planned": 2 }
+}
+```
+
+`source` is `claude-code`, `chatgpt`, `script` or later `app`. Version is a string (for
+example `"1.10"`), or null for an unversioned protocol. The begin command supplies the UUID,
+UTC start time, initial unknown outcome and null unfinished counts. Keep descriptors private;
+no data records belong in ledger lines, which must be under 4 KB including the newline.
+
+Result shape (invented):
+
+```json
+{
+  "counts": { "selected": 2, "written": 2, "valid": 2, "failed": 0, "skipped": 0 },
+  "checks": [{ "name": "coverage", "status": "pass" }],
+  "usage": null,
+  "outcome": "succeeded",
+  "reason": null
+}
+```
+
+Checks use `pass`, `fail`, `not-run`. Outcomes: `succeeded`, `partial`, `failed`, `refused`,
+`cancelled`, `unavailable`, `unknown`. If available, usage is
+`{input, output, cacheRead, cacheWrite, cost}`, token counts individually nullable; cost is
+null or `{amount, currency}` for measured cost. Subscription tokens are not dollars.
+Finish repeats the start metadata automatically. An identical finish retry is harmless;
+different results for an already finished run are refused. A missing finish is **unknown**:
+inspect the worker/output before retrying, and give a new execution a new run ID.
+
+For existing live-folder scripts, use the wrapper **in `plcos-claude-live`**:
+
+```sh
+DATA_PROFILE=real npx tsx scripts/workflow-script.ts <metadata.json> -- scripts/enrich-connect.ts
+```
+
+It calls the same begin/finish writer around the script, preserves script arguments and
+records process exit (including failure). It sets source to `script` and model to null.
+Item results remain unknown: a zero exit is not a claim that every output passed a quality
+check. A killed wrapper may leave only a start. Do not wrap an already recorded agent's
+internal check as though it were another batch. Never use this wrapper to open the real DB.
+
+The reader in `lib/workflows/ledger.ts` folds by run ID and exposes malformed lines and
+conflicts. App pages/DB projection are later slices. No heartbeats, locks, receipts or
+automatic repair: recording errors stop new work until the operator reviews them.

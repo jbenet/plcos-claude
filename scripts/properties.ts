@@ -2470,6 +2470,9 @@ async function main() {
       'doc tables retain literal pipes; fenced examples stay literal; existing renderers keep their default parsing');
   }
 
+  const { workflowProperties } = await import('./workflow-properties');
+  await workflowProperties(check);
+
   // ---------------------------------------------------------------- report
 
   const failed = results.filter((r) => !r.ok);
