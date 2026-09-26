@@ -42,15 +42,54 @@ export async function readProspectFiles(dir = join(enrichDir(), 'prospects')): P
   return Promise.all(names.filter(n => n.endsWith('.jsonl')).sort().map(async file => ({ file, text: await readFile(join(dir, file), 'utf8') })));
 }
 
-/** No name lookup, node creation or implicit merge. Conflicting aliases are refused. */
-async function resolvePerson(tx: Queryable, p: Prospect): Promise<string | null> {
-  const rows = await tx.query<{ id: string; name: string; type: string; merged: string | null; retired: string | null }>(
+type Identity = { id: string; name: string; type: string; merged: string | null; retired: string | null };
+const current = (e: Identity) => !e.merged && !e.retired;
+
+/** Record the supplied organization as a claimed affiliation, never a decision-making role. */
+async function affiliateProspect(tx: Queryable, personId: string, p: Prospect, identities: Identity[]) {
+  if (!p.org) return;
+  const key = normalized(p.org);
+  const mapped = await tx.one<{ id: string }>(`select entity_id::text id from identity.source_record where source = 'prospect_org' and source_id = $1`, [key]);
+  let orgId = mapped?.id;
+  if (!orgId) {
+    const matches = identities.filter(e => e.type === 'org' && current(e) && normalized(e.name) === key);
+    // Never arbitrarily choose among organization namesakes. Retain a separate sourced node.
+    orgId = matches.length === 1 ? matches[0]!.id : (await tx.one<{ id: string }>(
+      `insert into identity.entity (entity_type, display_name) values ('org', $1) returning entity_id::text id`, [p.org]))!.id;
+    if (matches.length !== 1) identities.push({ id: orgId, name: p.org, type: 'org', merged: null, retired: null });
+    await tx.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by)
+      values ('prospect_org', $1, $2, 'rule:sourced-prospect-organization')`, [key, orgId]);
+  }
+  await tx.query(`insert into identity.affiliation
+    (person_entity, org_entity, kind, role, is_primary, source, as_of, certainty, note)
+    values ($1, $2, 'contact', 'not recorded', true, $3, current_date, 'claimed',
+      'From the sourced prospect row; role and decision-making capacity not established.')`,
+    [personId, orgId, `prospect:${p.personKey}`]);
+}
+
+/** Stable identity first; otherwise reuse one name match or create a sourced person on zero. */
+async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[]): Promise<string | null> {
+  const rows = await tx.query<Identity>(
     `select distinct e.entity_id::text id, e.display_name name, e.entity_type::text type, e.merged_into::text merged, e.retired_at::text retired
        from identity.entity e left join identity.source_record s on s.entity_id = e.entity_id
-      where e.entity_id::text = $1 or (s.source in ('warehouse', 'w3_person') and s.source_id = $1)`, [p.personKey]);
-  if (rows.length !== 1) return null;
-  const row = rows[0]!;
-  return row.type === 'person' && !row.merged && !row.retired && normalized(row.name) === normalized(p.name) ? row.id : null;
+      where e.entity_id::text = $1 or (s.source in ('warehouse', 'w3_person', 'prospect') and s.source_id = $1)`, [p.personKey]);
+  if (rows.length) {
+    if (rows.length !== 1) return null;
+    const row = rows[0]!;
+    return row.type === 'person' && current(row) && normalized(row.name) === normalized(p.name) ? row.id : null;
+  }
+  const matches = identities.filter(e => e.type === 'person' && normalized(e.name) === normalized(p.name));
+  // Inactive matches remain a conflict: never recreate someone retired or merged away.
+  if (matches.length > 1 || (matches[0] && !current(matches[0]))) return null;
+  const id = matches[0]?.id ?? (await tx.one<{ id: string }>(
+    `insert into identity.entity (entity_type, display_name) values ('person', $1) returning entity_id::text id`, [p.name]))!.id;
+  await tx.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by)
+    values ('prospect', $1, $2, 'rule:sourced-prospect')`, [p.personKey, id]);
+  if (!matches.length) {
+    identities.push({ id, name: p.name, type: 'person', merged: null, retired: null });
+    await affiliateProspect(tx, id, p, identities);
+  }
+  return id;
 }
 
 /** Caller supplies the live server's existing handle; there is deliberately no DB-opening CLI. */
@@ -75,15 +114,20 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
     const vehicles = new Map((await tx.query<{ id: string; slug: string }>('select id::text, slug from platform.vehicle')).map(v => [v.slug, v.id]));
     for (const r of records) if (!vehicles.has(r.p.vehicle)) result.invalid.push({ file: r.file, line: r.line, reason: 'Unknown vehicle slug' });
     if (result.invalid.length) return result;
+    // Serialize identity lookup/create, including callers that both initially see zero names.
+    // This also prevents orphan nodes from a competing source-record insert.
+    await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
+    const identities = await tx.query<Identity>(`select entity_id::text id, display_name name, entity_type::text type,
+      merged_into::text merged, retired_at::text retired from identity.entity`);
     // Conflicting descriptions of one key are skipped together, regardless of file order.
     const names = new Map<string, Set<string>>();
     for (const { p } of records) names.set(p.personKey, (names.get(p.personKey) ?? new Set()).add(normalized(p.name)));
     for (const r of records) {
       const p = r.p;
-      const entityId = names.get(p.personKey)!.size === 1 ? await resolvePerson(tx, p) : null;
+      const entityId = names.get(p.personKey)!.size === 1 ? await resolvePerson(tx, p, identities) : null;
       if (!entityId) {
         result.ambiguous++;
-        result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle, reason: 'Identity unresolved or ambiguous: supply an existing person ID or an unambiguous warehouse/W3 mapping with the same name.' });
+        result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle, reason: 'Ambiguous name or conflicting identity: supply the correct existing person ID or resolve the conflicting source mapping.' });
         continue;
       }
       const body = `Added by rule on Juan's instruction (26 Sep): ${p.reason}; capacity ${p.capacity.band} (${p.capacity.guess ? 'guess' : 'not marked as a guess'})`;

@@ -11,12 +11,21 @@ through `data/real/enrich/prospects/`. Each line describes one person–vehicle 
 {"personKey":"warehouse:invented-person","name":"Example Person","org":"Example Organization","vehicle":"neurotech","status":"sourcing","capacity":{"band":"$500K–1M","basis":"Invented fixture: estimated investment capacity","guess":true},"reason":"Their investment interests fit this vehicle.","strategic":false,"route":null,"sources":["Invented fixture only"]}
 ```
 
-`personKey` must be the person's existing entity UUID or the exact stored source ID in
-the `warehouse` or `w3_person` namespace. The example key is illustrative, not a naming
-convention. A matching name alone never resolves an identity. Missing mappings, multiple
-mapped entities, name mismatches, organizations, merged or retired entities are skipped
-as ambiguous or unresolved, with their file and line listed. Import the network records
-first if their identities do not exist yet.
+`personKey` may be the person's existing entity UUID, an exact stored source ID in
+the `warehouse` or `w3_person` namespace, or a stable key assigned by the prospect research.
+The example key is illustrative, not a naming convention. Existing keys take precedence.
+Without a mapped key, one exact normalized person-name match is reused; multiple matches
+are skipped. Zero matches creates a person: a sourced prospect row is enough evidence
+for a network node (rule 6, clarified 26 Sep). A source record in the `prospect` namespace
+uses `personKey`, independent of vehicle, filename, line order, status or reason, so reruns
+reuse the entity. Keep that key stable across research revisions and vehicles.
+
+New people get a claimed organization affiliation when `org` is present: contact, role
+not recorded, no decision-making capacity asserted. One matching current organization is
+reused; otherwise a separate sourced organization is created, with a stable `prospect_org`
+mapping. An affiliation does not assert a warm personal tie. Conflicting key mappings,
+name mismatches, wrong entity types and inactive identities still require correction and
+are listed with their file and line; missing identities alone no longer block import.
 
 `status` is `new` or `sourcing`; `vehicle` is an existing vehicle slug. `org` may be null.
 Capacity requires nonempty `band` and `basis` and a boolean `guess`. `strategic` is boolean.
@@ -28,14 +37,15 @@ capacity or fit judgment and does not impose $500K as a hard cutoff.
 
 On the live server, open **Developer → Enrich → Add prospects to the pipeline**. All files
 and vehicle slugs validate before any pursuit is written. A malformed line prevents the
-whole batch from importing. The response shows added, existing, and ambiguous/unresolved
+whole batch from importing. The response shows added, existing, and ambiguous/conflicting
 counts. Correct invalid inputs or identity mappings, then rerun.
 
 Each new pursuit belongs to the person running the action and gets a context note:
 `Added by rule on Juan's instruction (26 Sep): <reason>; capacity <band> (guess)`
 (or `not marked as a guess`). Its note data retains the full input, vehicle and pursuit
 IDs, file/line, input SHA-256, and rule identifier. The note and pursuit are written in
-one transaction. The unique person–vehicle constraint makes reruns and concurrent clicks
+one transaction with any new identity and affiliation. Identity lookup and creation are
+serialized within the database transaction. The unique person–vehicle constraint makes reruns and concurrent clicks
 safe: any existing pursuit, including a passed or closed one, and its notes stay unchanged.
 
 These are ordinary pursuits on Pipeline and LP pages. W0 also includes imported New and
