@@ -8,6 +8,7 @@ export async function prospectsProperties(check: Check, db: Db) {
   const actor = (await db.one<{ id: string }>('select id::text from platform.app_user where active order by handle limit 1'))!.id;
   const vehicle = (await db.one<{ id: string; slug: string }>("select id::text, slug from platform.vehicle where phase <> 'historical' order by slug limit 1"))!;
   const inventedIds: string[] = [];
+  const initialIds = new Set((await db.query<{ id: string }>('select entity_id::text id from identity.entity')).map(r => r.id));
   const makePerson = async (name: string, type = 'person'): Promise<string> => {
     const id = randomUUID();
     await db.query('insert into identity.entity (entity_id, entity_type, display_name) values ($1, $2::identity.entity_type, $3)', [id, type, name]);
@@ -29,7 +30,9 @@ export async function prospectsProperties(check: Check, db: Db) {
     (select count(*) from strategy.pursuit)::text pursuits,
     (select count(*) from research.note)::text notes,
     (select count(*) from strategy.ladder_event)::text rungs,
-    (select count(*) from identity.entity)::text entities`));
+    (select count(*) from identity.entity)::text entities,
+    (select count(*) from identity.source_record)::text sources,
+    (select count(*) from identity.affiliation)::text affiliations`));
   const ladderBefore = await n('select count(*)::text n from strategy.ladder_event');
 
   const direct = await makePerson('Invented Prospect Alder');
@@ -92,9 +95,79 @@ export async function prospectsProperties(check: Check, db: Db) {
     prospect(wrongType, 'Invented Prospect Organization'),
     prospect(merged, 'Invented Prospect Merged'),
     prospect(retired, 'Invented Prospect Retired')));
-  check('PROSPECTS conflicting aliases, name-only matches, wrong names/types and inactive entities are listed and skipped',
+  check('PROSPECTS conflicting aliases, ambiguous names, wrong names/types and inactive entities are listed and skipped',
     ambiguous.ambiguous === 6 && ambiguous.skipped.length === 6 && ambiguous.added === 0 && ambiguousBefore === await snapshot(),
     `${ambiguous.ambiguous} ambiguous records listed; no pursuits, notes, identities or rungs added.`);
+
+  const newOrg = 'Invented Prospects2 Observatory';
+  const unseen = prospect('invented-prospects2:unseen', 'Invented Prospects2 Dawn', { org: newOrg, status: 'sourcing' });
+  const noOrg = prospect('invented-prospects2:no-org', 'Invented Prospects2 Ember', { org: null });
+  const newResult = await addProspects(db, actor, files(unseen, noOrg));
+  const sourcePerson = async (key: string) => db.one<{ id: string; name: string }>(
+    `select e.entity_id::text id, e.display_name name from identity.entity e join identity.source_record s on s.entity_id = e.entity_id
+      where s.source = 'prospect' and s.source_id = $1`, [key]);
+  const born = await sourcePerson(unseen.personKey);
+  const bornNoOrg = await sourcePerson(noOrg.personKey);
+  const affiliation = born ? await db.one<{ org: string; role: string; certainty: string; source: string; as_of: string }>(
+    `select o.display_name org, a.role, a.certainty, a.source, a.as_of::text from identity.affiliation a
+      join identity.entity o on o.entity_id = a.org_entity where a.person_entity = $1`, [born.id]) : null;
+  check('PROSPECTS2 sourced unseen people become stable identities with optional sourced affiliations',
+    newResult.added === 2 && newResult.ambiguous === 0 && born?.name === unseen.name && bornNoOrg?.name === noOrg.name
+    && affiliation?.org === newOrg && !!affiliation.source && !!affiliation.as_of
+    && await n('select count(*)::text n from identity.affiliation where person_entity = $1', [bornNoOrg?.id]) === 0,
+    `Added ${newResult.added}; sourced person mappings and optional organization checked.`);
+
+  const stableBefore = await snapshot();
+  const bornPursuitBefore = JSON.stringify(await db.query('select * from strategy.pursuit where entity_id = $1', [born?.id]));
+  const bornNotesBefore = JSON.stringify(await db.query('select * from research.note where entity_id = $1', [born?.id]));
+  const reordered = await addProspects(db, actor, [{ file: 'renamed-invented-file.jsonl', text: [noOrg,
+    { ...unseen, status: 'new', reason: 'Edited invented reason must not overwrite the existing pursuit.' }].map(r => JSON.stringify(r)).join('\n') }]);
+  check('PROSPECTS2 row identity survives renamed files, row order and edited planning fields on rerun',
+    reordered.added === 0 && reordered.existing === 2 && stableBefore === await snapshot()
+    && bornPursuitBefore === JSON.stringify(await db.query('select * from strategy.pursuit where entity_id = $1', [born?.id]))
+    && bornNotesBefore === JSON.stringify(await db.query('select * from research.note where entity_id = $1', [born?.id])),
+    `Rerun skipped ${reordered.existing}; identities, affiliations, pursuits and notes unchanged.`);
+
+  const otherVehicle = (await db.one<{ slug: string }>('select slug from platform.vehicle where id <> $1 order by slug limit 1', [vehicle.id]))!;
+  const across = prospect('invented-prospects2:two-vehicles', 'Invented Prospects2 Fern', { org: null });
+  const twoVehicles = await addProspects(db, actor, files(across, { ...across, vehicle: otherVehicle.slug }));
+  const acrossPerson = await sourcePerson(across.personKey);
+  check('PROSPECTS2 one newly discovered person is reused across two vehicles in the same batch',
+    twoVehicles.added === 2 && !!acrossPerson
+    && await n('select count(*)::text n from identity.entity where display_name = $1', [across.name]) === 1
+    && await n('select count(*)::text n from strategy.pursuit where entity_id = $1', [acrossPerson?.id]) === 2,
+    `Added ${twoVehicles.added} pursuits sharing one source-mapped person.`);
+
+  const unseenRace = prospect('invented-prospects2:race', 'Invented Prospects2 Gale', { org: 'Invented Prospects2 Race Office' });
+  const unseenRaced = await Promise.all([addProspects(db, actor, files(unseenRace)), addProspects(db, actor, files(unseenRace))]);
+  const racedPerson = await sourcePerson(unseenRace.personKey);
+  check('PROSPECTS2 concurrent unseen-row imports create one person, affiliation, pursuit and note',
+    unseenRaced.reduce((sum, r) => sum + r.added, 0) === 1 && unseenRaced.reduce((sum, r) => sum + r.existing, 0) === 1
+    && await n('select count(*)::text n from identity.entity where display_name = $1', [unseenRace.name]) === 1
+    && await n('select count(*)::text n from identity.affiliation where person_entity = $1', [racedPerson?.id]) === 1
+    && await n('select count(*)::text n from research.note where entity_id = $1', [racedPerson?.id]) === 1,
+    `Two unseen calls added ${unseenRaced.map(r => r.added).join('/')}.`);
+
+  const single = await makePerson('Invented Prospects2 Hazel');
+  const reused = await addProspects(db, actor, files(prospect('invented-prospects2:single-name', '  INVENTED   Prospects2 Hazel ', { org: null })));
+  check('PROSPECTS2 an unambiguous normalized name reuses the existing person and records its stable prospect key',
+    reused.added === 1 && (await sourcePerson('invented-prospects2:single-name'))?.id === single
+    && await n('select count(*)::text n from identity.entity where lower(display_name) = lower($1)', ['Invented Prospects2 Hazel']) === 1,
+    `Single-name match added ${reused.added} pursuit on the existing entity.`);
+  await makePerson(unseen.name);
+  const explicitProspect = await addProspects(db, actor, files(unseen));
+  check('PROSPECTS2 a stable prospect alias wins over a later same-name entity',
+    explicitProspect.existing === 1 && explicitProspect.ambiguous === 0 && (await sourcePerson(unseen.personKey))?.id === born?.id,
+    `Known source mapping skipped ${explicitProspect.existing} existing pursuit despite a namesake.`);
+  const knownOrg = await makePerson('Invented Prospects2 Known Office', 'org');
+  const knownOrgRow = prospect('invented-prospects2:known-org', 'Invented Prospects2 Iris', { org: 'Invented Prospects2 Known Office' });
+  const knownOrgResult = await addProspects(db, actor, files(knownOrgRow));
+  const knownOrgPerson = await sourcePerson(knownOrgRow.personKey);
+  check('PROSPECTS2 a newly sourced person reuses a single existing organization without duplicating it',
+    knownOrgResult.added === 1
+    && await n('select count(*)::text n from identity.affiliation where person_entity = $1 and org_entity = $2', [knownOrgPerson?.id, knownOrg]) === 1
+    && await n('select count(*)::text n from identity.entity where display_name = $1', [knownOrgRow.org]) === 1,
+    'Existing organization retained; a sourced affiliation links the newly created person.');
 
   const validId = await makePerson('Invented Prospect Batch');
   const valid = prospect(validId, 'Invented Prospect Batch');
@@ -102,10 +175,11 @@ export async function prospectsProperties(check: Check, db: Db) {
   const malformed = await addProspects(db, actor, [...files(valid), { file: 'broken.jsonl', text: '{broken\n' }]);
   const badShape = await addProspects(db, actor, files(valid, { ...valid, status: 'committed' }));
   const badVehicle = await addProspects(db, actor, files(valid, { ...valid, vehicle: 'invented-absent-vehicle' }));
+  const noEvidence = await addProspects(db, actor, files(prospect('invented-prospects2:no-evidence', 'Invented Prospects2 Unsourced', { sources: [] })));
   check('PROSPECTS malformed JSON, invalid statuses and unknown vehicles reject the entire batch before writes',
-    [malformed, badShape, badVehicle].every(result => result.invalid.length > 0 && result.added === 0)
+    [malformed, badShape, badVehicle, noEvidence].every(result => result.invalid.length > 0 && result.added === 0)
     && invalidBefore === await snapshot(),
-    `Invalid rows ${malformed.invalid.length}/${badShape.invalid.length}/${badVehicle.invalid.length}; database counts unchanged.`);
+    `Invalid rows ${malformed.invalid.length}/${badShape.invalid.length}/${badVehicle.invalid.length}/${noEvidence.invalid.length}; database counts unchanged, including unsourced input.`);
   const contradictory = await addProspects(db, actor, files(valid, { ...valid, name: 'Invented Conflicting Description' }));
   check('PROSPECTS conflicting descriptions cannot select an identity by input order',
     contradictory.ambiguous === 2 && contradictory.added === 0 && invalidBefore === await snapshot(),
@@ -125,15 +199,23 @@ export async function prospectsProperties(check: Check, db: Db) {
       && exported.some(c => c.key === warehouse && c.pursuits.some(p => p.status === 'sourcing'))
       && exported.some(c => c.key === direct && c.context.some(note => note.text.startsWith("Added by rule on Juan's instruction"))),
       `${created.length} normal pursuits; LP readable ${lp !== null}; new/sourcing and their notes checked in W0 data.`);
+    check('PROSPECTS2 newly created people and their organization are included in the next W0 export',
+      exported.some(c => c.key === born?.id && c.name === unseen.name && c.org === newOrg && c.pursuits.some(p => p.status === 'sourcing'))
+      && exported.some(c => c.key === bornNoOrg?.id && c.name === noOrg.name && c.pursuits.some(p => p.status === 'new')),
+      'Newly sourced identities export with the supplied organization and pipeline status.');
   });
   check('PROSPECTS never write consent ladder evidence',
     ladderBefore === await n('select count(*)::text n from strategy.ladder_event'),
     'The full suite leaves the ladder event count unchanged.');
   // Restore the shared demo fixture for later suites, including its merged-entity pair.
+  for (const row of await db.query<{ id: string }>('select entity_id::text id from identity.entity')) {
+    if (!initialIds.has(row.id) && !inventedIds.includes(row.id)) inventedIds.push(row.id);
+  }
   await db.transaction(async tx => {
     await tx.query('delete from research.note where entity_id = any($1::uuid[])', [inventedIds]);
     await tx.query('delete from strategy.pursuit where entity_id = any($1::uuid[])', [inventedIds]);
     await tx.query('delete from identity.source_record where entity_id = any($1::uuid[])', [inventedIds]);
+    await tx.query('delete from identity.affiliation where person_entity = any($1::uuid[]) or org_entity = any($1::uuid[])', [inventedIds]);
     await tx.query('delete from identity.entity where entity_id = any($1::uuid[])', [inventedIds]);
   });
 }
