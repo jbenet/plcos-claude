@@ -1,6 +1,6 @@
 /** Invented identities only. Regression coverage for investor extraction and PL policy. */
 import { config } from '../config/deployment';
-import { addWarehouseFirmTies, addWarehouseNetworkTies, classifyWarehouseTie, warehouseCoverage,
+import { addWarehouseFirmTies, addWarehouseNetworkTies, addWarehouseMembershipTies, classifyWarehouseTie, warehouseCoverage,
   type WarehousePerson, type WarehouseMatch, type WarehouseTie } from '../lib/enrich/warehouse-graph';
 
 type Check = (name: string, ok: boolean, detail: string) => void;
@@ -8,13 +8,34 @@ export function warehouseInvestorProperties(check: Check) {
   const person = (key: string, extra: Partial<WarehousePerson> = {}): WarehousePerson => ({key,name:key,org:null,
     emailDomain:null,roles:[],warehouseIds:{},source:'invented fixture',as_of:'2026-09-26',confidence:'fixture',last_verified_by:'fixture',...extra});
   const people = [person('team',{teamKey:'invented-team'}),person('founder',{oneHop:true,roles:['founder']}),
-    person('member',{oneHop:true,roles:['investor']}),person('crm',{roles:['investor']}),
+    person('member',{oneHop:true,roles:['founder']}),person('crm',{roles:['investor']}),
     person('coinvestor:firm',{name:'Invented Ventures LLC',nodeType:'organization'}),person('lp')];
   const policy=addWarehouseNetworkTies(people,'2026-09-26');
-  check('WINV PL membership connects through explicit policy; investor-only CRM records do not',
+  check('WINV founder access connects through explicit policy; investor roles alone do not',
     policy.some(t=>[t.from,t.to].includes('member')&&[t.from,t.to].includes('team'))
     && !policy.some(t=>[t.from,t.to].includes('crm')) && policy.every(t=>t.tier==='B'&&t.lastSeen===null&&!!t.basis),
-    'An approved network member is a first hop. No fabricated interaction dates or CRM membership.');
+    'A founder remains a first hop. An investor role alone carries no source-row evidence.');
+  const directory=[person('directory'),person('labos'),person('listed'),person('unlisted',{roles:['investor']}),person('team',{teamKey:'invented-team'})];
+  const founderPolicy=addWarehouseNetworkTies(directory,'2026-09-26');
+  const membership=addWarehouseMembershipTies(directory,[
+    {personKey:'directory',source:'prod_records.members',rowId:'directory-row'},
+    {personKey:'labos',source:'prod_lists.labos_members',rowId:'labos-row'},
+    {personKey:'listed',source:'prod_lists.investors',rowId:'investor-row'},
+    {personKey:'listed',source:'prod_lists.investors',rowId:'investor-row'}]);
+  check('WINV2 each directory/list source independently establishes a tier B PL organization tie',
+    membership.length===3&&membership.every(t=>t.tier==='B'&&t.kind==='acquaintance'
+      && [t.from,t.to].includes('organization:protocol-labs')&&t.firstSeen===null&&t.lastSeen===null)
+    && membership.some(t=>t.source==='prod_records.members'&&t.basis==='registered in the PL network directory'&&t.rowIds[0]==='directory-row')
+    && membership.some(t=>t.source==='prod_lists.labos_members'&&t.rowIds[0]==='labos-row')
+    && membership.some(t=>t.source==='prod_lists.investors'&&t.basis==="on PL's investor list"&&t.rowIds[0]==='investor-row'),
+    'Membership needs neither account approval nor observed contact; repeated rows are idempotent.');
+  const directoryMatches:WarehouseMatch[]=['directory','labos','listed'].map(k=>({lpKey:k,personKey:k,score:1,status:'confident',basis:['fixture']}));
+  check('WINV2 directory membership reaches PL without inventing a named team contact',
+    membership.every(t=>![t.from,t.to].includes('team')&&![t.from,t.to].includes('unlisted'))
+    && !founderPolicy.some(t=>['directory','labos','listed'].some(k=>[t.from,t.to].includes(k)))
+    && directory.filter(p=>['directory','labos','listed'].includes(p.key)).every(p=>!p.oneHop)
+    && warehouseCoverage(directory,[...founderPolicy,...membership],directoryMatches).withinTwoHops===3,
+    'Membership-only people stay distinct from founder/team first hops; no pair to a named employee is inferred.');
   const matches:WarehouseMatch[]=[{lpKey:'candidate',personKey:'lp',score:1,status:'confident',basis:['fixture']}];
   const source:WarehouseTie={key:'firm-deal',from:'coinvestor:firm',to:'founder',tier:'C',kind:'joint_investment',
     source:'invented portfolio',rowIds:['deal-one'],count:1,firstSeen:null,lastSeen:null};
@@ -89,9 +110,9 @@ export function verifyWarehouseSqlFixtures(results: Record<string,Record<string,
     people.some(p=>String(p.key).startsWith('company-person:')&&p.name==='Faye Missing')
     && people.filter(p=>p.key==='member:investor').length===1&&!people.some(p=>String(p.key).startsWith('demo:')),
     'Invented inline source tables; both named founders survive.');
-  check('WINV SQL keeps pending accounts outside PL membership',
+  check('WINV SQL distinguishes pending accounts from approved account access',
     people.find(p=>p.key==='member:pending')?.network==='false'&&people.find(p=>p.key==='member:approved')?.network==='true',
-    'An investor profile or pending application is not network membership.');
+    'Account approval remains a separate source field; all directory rows receive PL membership ties independently.');
   check('WINV SQL deduplicates actions within a demo/company and preserves view-only evidence',
     demo.filter(t=>t.evidence==='demo_action').length===2&&demo.filter(t=>t.evidence==='demo_interest').length===2
     && demo.every(t=>Number(t.count)===1), 'Two founders, one event: two clicks still count once for each pair.');

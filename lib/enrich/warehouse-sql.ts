@@ -179,3 +179,13 @@ tieQueries.portfolio_organizations = pair(`SELECT CONCAT('coinvestor:',p.investo
  FROM ${table('prod_lists.pl_portfolio_coinvestors')} p,
  UNNEST(SPLIT(p.portfolio_companies_invested,' | ')) company
  JOIN cm ON ${norm('cm.company_name')}=${norm('company')} AND cm.founder`);
+
+/** Directory membership itself is evidence under the WINV2 rule, independent of account approval. */
+export const directoryMembershipSql = `
+ SELECT CONCAT('member:',dw_member_id) person_key, 'prod_records.members' source, dw_member_id row_id
+ FROM ${table('prod_records.members')}
+ WHERE NULLIF(TRIM(name),'') IS NOT NULL AND NOT COALESCE(is_test_account,FALSE)
+ UNION ALL
+ SELECT CONCAT('member:',dw_member_id), 'prod_lists.labos_members', dw_member_id FROM ${table('prod_lists.labos_members')}
+ UNION ALL
+ SELECT CONCAT('member:',dw_member_id), 'prod_lists.investors', dw_member_id FROM ${table('prod_lists.investors')}`;

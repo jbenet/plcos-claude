@@ -9,7 +9,7 @@ export interface WarehousePerson {
 }
 export interface WarehouseTie {
   key: string; from: string; to: string; kind: WarmthKind; tier: 'A'|'B'|'C'|'D';
-  basis?: 'pl_affiliation'|'pl_network'|'firm_attribution';
+  basis?: 'pl_affiliation'|'pl_network'|'firm_attribution'|'registered in the PL network directory'|"on PL's investor list";
   firstSeen: string|null; lastSeen: string|null; source: string; rowIds: string[]; count: number;
 }
 export interface WarehouseMatch {
@@ -67,7 +67,7 @@ export function classifyWarehouseTie(evidence: TieEvidence, count: number): Pick
 }
 
 
-/** Explicit policy edges are not claimed meetings. A CRM record alone never qualifies. */
+/** Explicit founder/team policy edges are not claimed meetings. Directory-only ties are separate. */
 export function addWarehouseNetworkTies(people: WarehousePerson[], asOf: string): WarehouseTie[] {
   const plKey = 'organization:protocol-labs';
   if (!people.some(p => p.key === plKey)) people.push({ key: plKey, name: 'PL', org: null, emailDomain: null,
@@ -87,6 +87,28 @@ export function addWarehouseNetworkTies(people: WarehousePerson[], asOf: string)
       source:'AGENTS.md rule 6 (2026-09-26); '+person.source,rowIds:[person.key],count:1});
   }
   return [...out.values()];
+}
+
+export interface WarehouseMembership {
+  personKey: string; source: 'prod_records.members'|'prod_lists.labos_members'|'prod_lists.investors'; rowId: string;
+}
+/** Membership names the organization, never an unspecified personal contact at PL. */
+export function addWarehouseMembershipTies(people: WarehousePerson[], memberships: WarehouseMembership[]): WarehouseTie[] {
+  const keys=new Set(people.filter(p=>p.nodeType!=='organization').map(p=>p.key));
+  const plKey='organization:protocol-labs';
+  if(!people.some(p=>p.key===plKey)) throw new Error('PL node required before directory membership ties');
+  const ties=new Map<string,WarehouseTie>();
+  for(const m of memberships) {
+    if(!keys.has(m.personKey)) continue; // Excluded test accounts or unnamed rows are not graph identities.
+    if(!['prod_records.members','prod_lists.labos_members','prod_lists.investors'].includes(m.source) || !m.rowId)
+      throw new Error('Unsupported warehouse membership source');
+    const [from,to]=[m.personKey,plKey].sort() as [string,string];
+    const key=graphKey(`${from}|${to}|membership|${m.source}|${m.rowId}`);
+    ties.set(key,{key,from,to,tier:'B',kind:'acquaintance',
+      basis:m.source==='prod_lists.investors'?"on PL's investor list":'registered in the PL network directory',
+      source:m.source,rowIds:[m.rowId],count:1,firstSeen:null,lastSeen:null});
+  }
+  return [...ties.values()];
 }
 
 /** Affiliation only: do not assign a firm's investment decision to an employee at tier B. */
