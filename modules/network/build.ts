@@ -1,7 +1,7 @@
 import { getDb, type Queryable } from '@/lib/db';
 import { GROUP_EVENT, isAutoReply } from '@/modules/meetings';
 import type { EdgeKind, EvidenceTier } from './types';
-import type { Path } from '@/lib/enrich/connect';
+import { warehousePathKind, type Path } from '@/lib/enrich/connect';
 import { config } from '@/config/deployment';
 import { tieWarmth } from './warmth';
 
@@ -177,11 +177,65 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   );
   const people = await tx.query<{ id: string; name: string }>(`select entity_id::text as id, display_name as name from identity.entity where entity_type = 'person'`);
   const known = new Set(people.map((r) => r.id));
+  // Warehouse identities are created only during this existing server-side import/build transaction.
+  // Their stable source keys never merge ambiguous LP matches or people sharing a name.
+  const warehouseEntities = new Map<string, string>();
+  const conflictingMatches = new Set<string>();
+  for (const n of notes) for (const p of n.data.paths ?? []) {
+    const m = p.warehouse?.match;
+    if (!m || m.status !== 'confident' || m.lpKey !== p.lp || !known.has(p.lp)) continue;
+    const previous = warehouseEntities.get(m.personKey);
+    if (previous && previous !== p.lp) conflictingMatches.add(m.personKey);
+    warehouseEntities.set(m.personKey, p.lp);
+  }
+  for (const key of conflictingMatches) warehouseEntities.delete(key);
+  const warehousePerson = async (p: NonNullable<Path['warehouse']>['people'][number]): Promise<string | undefined> => {
+    if (conflictingMatches.has(p.key)) return undefined;
+    if (p.teamKey) return entityOfUser.get(userByHandle.get(p.teamKey) ?? userByName.get(norm(p.name)) ?? '');
+    const cached = warehouseEntities.get(p.key);
+    if (cached) return cached;
+    const existing = await tx.one<{ id: string }>(
+      `select entity_id::text as id from identity.source_record where source = 'warehouse' and source_id = $1`, [p.key]);
+    const id = existing?.id ?? (await tx.one<{ id: string }>(
+      `insert into identity.entity (entity_type, display_name) values ('person', $1) returning entity_id::text as id`, [p.name]))!.id;
+    if (!existing) await tx.query(
+      `insert into identity.source_record (source, source_id, entity_id, resolved_by) values ('warehouse', $1, $2, 'rule:warehouse-id')`, [p.key, id]);
+    warehouseEntities.set(p.key, id);
+    return id;
+  };
+  const builtWarehouseTies = new Set<string>();
   const alreadyMet = new Set([...edges.values()].map((e) => [e.from, e.to].sort().join('|')));
   for (const n of notes) {
     for (const p of n.data.paths ?? []) {
       const lp = known.has(p.lp) ? p.lp : n.entity_id;
       if (!known.has(lp)) { counts.notPeople++; continue; }
+      if (p.warehouse) {
+        const w = p.warehouse;
+        if (w.match.status !== 'confident' || w.match.lpKey !== lp || conflictingMatches.has(w.match.personKey)
+          || w.people.at(-1)?.key !== w.match.personKey || w.ties.length !== w.people.length - 1) continue;
+        for (let i = 0; i < w.ties.length; i++) {
+          const t = w.ties[i]!, left = w.people[i]!, right = w.people[i + 1]!;
+          if (!((t.from === left.key && t.to === right.key) || (t.to === left.key && t.from === right.key))) continue;
+          const from = await warehousePerson(left), to = await warehousePerson(right);
+          if (!from || !to) { counts.notPeople++; continue; }
+          const seenKey = `${t.key}|${[from, to].sort().join('|')}`;
+          if (builtWarehouseTies.has(seenKey)) continue;
+          builtWarehouseTies.add(seenKey);
+          const tie = { kind: t.kind, lastInteraction: t.lastSeen };
+          const kind = KIND[warehousePathKind(t.kind)] ?? 'other';
+          const warmth = tieWarmth(kind, tie);
+          if (add({ from, to, kind, tier: t.tier,
+            band: warmth.score >= config.routeWarmth.strongFirstHop ? 'strong' : warmth.score >= config.routeWarmth.priors.repeated_contact ? 'moderate' : 'weak',
+            since: t.firstSeen ?? n.at.slice(0, 10), evidence: [{ derived: 'research', tie,
+              note: `${t.kind.replaceAll('_', ' ')}; ${t.count} warehouse records`, source: t.source,
+              as_of: right.as_of, rowIds: t.rowIds, warehouseTie: t.key,
+              confidence: right.confidence, last_verified_by: right.last_verified_by }] })) {
+            counts.fromResearch++;
+            if (t.tier === 'C' || t.tier === 'D') counts.toConfirm++;
+          }
+        }
+        continue;
+      }
       const other = p.other.type === 'team'
         ? entityOfUser.get(userByHandle.get(p.other.handle ?? '') ?? userByName.get(norm(p.other.name)) ?? '')
         : (p.other.type === 'lp' || p.other.type === 'backer') && p.other.key && known.has(p.other.key) ? p.other.key : undefined;

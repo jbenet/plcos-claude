@@ -1,7 +1,9 @@
 import { readdir, readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import type { Candidate } from './candidates';
 import type { Finding } from './schema';
+import type { WarehousePerson, WarehouseTie, WarehouseMatch } from './warehouse-graph';
 import { config } from '@/config/deployment';
 import { tieWarmth, type TieDetails, type Warmth } from '@/modules/network';
 
@@ -26,6 +28,8 @@ export interface Path {
   source?: string | null;
   tie?: TieDetails;
   warmth?: Warmth;
+  /** Ordered pairwise evidence; never collapse two hops into a direct relationship. */
+  warehouse?: { match: WarehouseMatch; people: WarehousePerson[]; ties: WarehouseTie[] };
 }
 
 export interface Org { name: string; aliases: string[]; domains?: string[]; what?: string; source?: string }
@@ -97,17 +101,20 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
   const team = (JSON.parse(await readFile(join(dir, 'us', 'team.json'), 'utf8').catch(() => '{"team":[]}')) as { team: TeamMember[] }).team;
   const directory = (await readFile(join(dir, 'us', 'pl-directory.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
     .map((l) => JSON.parse(l) as PlDirectoryEntry);
-  return connectionPaths(candidates, findings, net, team, directory);
+  const warehouse = await readWarehouseGraph(dir);
+  return connectionPaths(candidates, findings, net, team, directory, new Date(), warehouse);
 }
 
 /** W3's pure join, also used by invented property fixtures. No files or database writes. */
 export function connectionPaths(candidates: Candidate[], findings: Map<string, Finding>, net: Network,
-  team: TeamMember[], directory: PlDirectoryEntry[] = [], at = new Date()): { paths: Path[]; lps: number; researched: number } {
+  team: TeamMember[], directory: PlDirectoryEntry[] = [], at = new Date(), warehouse?: WarehouseGraph): { paths: Path[]; lps: number; researched: number } {
 
   const paths: Path[] = [];
+  const pathKeys = new Set<string>();
   const add = (p: Path) => {
     // Keep distinct supporting records; a weak affiliation must not discard a warm personal tie.
-    if (!paths.some((q) => q.lp === p.lp && q.other.name === p.other.name && q.kind === p.kind && q.basis === p.basis)) paths.push(p);
+    const key = JSON.stringify([p.lp, p.other.name, p.kind, p.basis, p.warehouse?.ties.map((t) => t.key)]);
+    if (!pathKeys.has(key)) { pathKeys.add(key); paths.push(p); }
   };
 
   // Where each LP works, and every sentence the research wrote about them.
@@ -327,11 +334,117 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
     }
   }
 
+  if (warehouse) for (const p of warehousePaths(candidates, team, warehouse, at)) add(p);
+
   return { paths: paths.map((p) => {
     const tie = p.tie ?? ((p.tier === 'C' || p.tier === 'D') ? { kind: 'proximity' as const } : undefined);
     return { ...p, tie, warmth: tieWarmth(p.kind, tie, at) };
   }).sort((a, b) => a.tier.localeCompare(b.tier) || b.warmth.score - a.warmth.score || a.lp.localeCompare(b.lp) || a.other.name.localeCompare(b.other.name)),
   lps: candidates.length, researched: findings.size };
+}
+
+export interface WarehouseGraph { people: WarehousePerson[]; ties: WarehouseTie[]; matches: WarehouseMatch[] }
+
+/** An absent graph is optional; a partial or mixed-generation graph must never create routes. */
+export async function readWarehouseGraph(dir: string): Promise<WarehouseGraph> {
+  const names = ['people.jsonl', 'ties.jsonl', 'matches.jsonl'] as const;
+  const read = async (name: string): Promise<string | null> => readFile(join(dir, 'warehouse', name), 'utf8').catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  });
+  const [people, ties, matches, manifest] = await Promise.all([...names, 'graph-manifest.json'].map(read));
+  const contents = [people, ties, matches];
+  if (contents.every((s) => s === null) && manifest === null) return { people: [], ties: [], matches: [] };
+  if (contents.some((s) => s == null) || manifest == null) throw new Error('Warehouse graph is incomplete: all three files and graph-manifest.json are required');
+  const parse = (s: string): unknown => {
+    try { return JSON.parse(s); } catch { throw new Error('Warehouse graph contains invalid JSON'); }
+  };
+  const parsedManifest = parse(manifest) as { files?: Record<string, unknown> } | null;
+  for (const [i, name] of names.entries()) {
+    const expected = parsedManifest?.files?.[name];
+    if (typeof expected !== 'string' || !/^[a-f0-9]{64}$/.test(expected)
+      || createHash('sha256').update(contents[i]!).digest('hex') !== expected) {
+      throw new Error(`Warehouse graph hash mismatch: ${name}; finish extraction before W3`);
+    }
+  }
+  const rows = <T>(s: string) => s.split('\n').filter(Boolean).map((line) => parse(line) as T);
+  return { people: rows<WarehousePerson>(people!), ties: rows<WarehouseTie>(ties!), matches: rows<WarehouseMatch>(matches!) };
+}
+
+export function warehousePathKind(kind: WarehouseTie['kind']): Path['kind'] {
+  return kind === 'joint_investment' || kind === 'frequent_coinvestment' ? 'coinvestor'
+    : kind === 'worked_together' || kind === 'cofounder' ? 'colleague'
+      : kind === 'repeated_contact' ? 'corresponded' : kind === 'acquaintance' ? 'met' : 'other';
+}
+
+/** The two joins are indexed; ambiguous endpoints never become identity merges or routes. */
+export function warehousePaths(candidates: Candidate[], team: TeamMember[], graph: WarehouseGraph, at = new Date()): Path[] {
+  const people = new Map(graph.people.map((p) => [p.key, p]));
+  const adjacency = new Map<string, WarehouseTie[]>();
+  const pairs = new Set<string>();
+  const pair = (a: string, b: string) => JSON.stringify([a, b].sort());
+  const origins = new Map<string, TeamMember>();
+  // The extraction carries exact team keys, so it also works before a local us/team.json exists.
+  for (const p of graph.people) if (p.teamKey) {
+    const t = team.find((t) => t.handle === p.teamKey) ?? { handle: p.teamKey, name: p.name, roles: [], prior: [], education: [] };
+    origins.set(p.key, t);
+  }
+  const put = (tie: WarehouseTie) => {
+    if (tie.from === tie.to || !people.has(tie.from) || !people.has(tie.to)) return;
+    pairs.add(pair(tie.from, tie.to));
+    for (const key of [tie.from, tie.to]) {
+      const incident = adjacency.get(key);
+      if (incident) incident.push(tie); else adjacency.set(key, [tie]);
+    }
+  };
+  graph.ties.forEach(put);
+  // The user's one-hop rule establishes access to founders and team, not a recorded interaction.
+  for (const p of graph.people) if (p.oneHop && !origins.has(p.key)) for (const key of origins.keys()) {
+    if (pairs.has(pair(key, p.key))) continue;
+    put({ key: `policy:${key}:${p.key}`, from: key, to: p.key, kind: 'proximity', tier: 'C',
+      firstSeen: null, lastSeen: null, source: 'warehouse one-hop access rule; personal tie requires confirmation', rowIds: [p.key], count: 1 });
+  }
+  const matches = new Map<string, WarehouseMatch[]>();
+  for (const m of graph.matches) matches.set(m.lpKey, [...(matches.get(m.lpKey) ?? []), m]);
+  const personMatches = new Map<string, Set<string>>();
+  for (const m of graph.matches) if (m.status === 'confident') {
+    const lps = personMatches.get(m.personKey) ?? new Set<string>();
+    lps.add(m.lpKey);
+    personMatches.set(m.personKey, lps);
+  }
+  const out: Path[] = [];
+  const endpoint = (t: WarehouseTie, key: string) => t.from === key ? t.to : t.from;
+  for (const c of candidates) {
+    if (c.type !== 'person' || c.restrictions?.some((r) => r.scope === 'blanket')) continue;
+    const alternatives = (matches.get(c.key) ?? []).filter((m) => m.status === 'confident');
+    if (alternatives.length !== 1) continue;
+    const match = alternatives[0]!;
+    if (personMatches.get(match.personKey)!.size !== 1) continue;
+    const target = people.get(match.personKey);
+    if (!target) continue;
+    const emit = (keys: string[], ties: WarehouseTie[]) => {
+      if (keys.some((key) => (personMatches.get(key)?.size ?? 0) > 1)) return;
+      const origin = origins.get(keys[0]!);
+      if (!origin || keys.slice(0, -1).some((k) => c.restrictions?.some((r) => r.scope === 'connector' && r.connector === people.get(k)?.name))) return;
+      const tier = ties.reduce<Tier>((a, t) => t.tier > a ? t.tier : a, 'A');
+      const score = (t: WarehouseTie) => tieWarmth(warehousePathKind(t.kind), { kind: t.kind, lastInteraction: t.lastSeen }, at).score;
+      const weakest = ties.reduce((a, t) => score(t) < score(a) ? t : a);
+      const routePeople = keys.map((k) => people.get(k)!);
+      out.push({ lp: c.key, other: { type: 'team', name: origin.name, handle: origin.handle },
+        kind: warehousePathKind(weakest.kind), tier, tie: { kind: weakest.kind, lastInteraction: weakest.lastSeen },
+        basis: `${routePeople.map((p) => p.name).join(' → ')}; ${ties.map((t) => `${t.kind.replaceAll('_', ' ')} (${t.tier}, ${t.count} records)`).join('; ')}${tier === 'C' || tier === 'D' ? '; a person must confirm the weak ties before routing' : ''}`,
+        source: [...new Set(ties.map((t) => t.source))].join('; '), warehouse: { match, people: routePeople, ties } });
+    };
+    for (const last of adjacency.get(target.key) ?? []) {
+      const via = endpoint(last, target.key);
+      if (origins.has(via)) emit([via, target.key], [last]);
+      else for (const first of adjacency.get(via) ?? []) {
+        const start = endpoint(first, via);
+        if (start !== target.key && origins.has(start)) emit([start, via, target.key], [first, last]);
+      }
+    }
+  }
+  return out;
 }
 
 /** Resolve a named personal relationship against the frozen roster, never fuzzy or firm names. */

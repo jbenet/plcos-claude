@@ -16,6 +16,7 @@ async function main() {
   const by = (k: (p: (typeof paths)[number]) => string) => paths.reduce<Record<string, number>>((a, p) => ({ ...a, [k(p)]: (a[k(p)] ?? 0) + 1 }), {});
   const lpsWith = (t: string[]) => new Set(paths.filter((p) => t.includes(p.tier)).map((p) => p.lp)).size;
   console.log(`${paths.length} paths for ${new Set(paths.map((p) => p.lp)).size} of ${lps} LPs (${researched} researched)`);
+  console.log(`Warehouse paths: ${paths.filter((p) => p.warehouse).length}; LPs reached: ${new Set(paths.filter((p) => p.warehouse).map((p) => p.lp)).size}; via intermediaries: ${new Set(paths.filter((p) => p.warehouse?.ties.length === 2).map((p) => p.lp)).size}`);
   console.log(`by tier ${JSON.stringify(by((p) => p.tier))} · by kind ${JSON.stringify(by((p) => p.kind))} · by other ${JSON.stringify(by((p) => p.other.type))}`);
   console.log(`LPs with an A or B path: ${lpsWith(['A', 'B'])} · with only C or D: ${lpsWith(['C', 'D']) - new Set(paths.filter((p) => ['A', 'B'].includes(p.tier) && paths.some((q) => q.lp === p.lp && ['C', 'D'].includes(q.tier))).map((p) => p.lp)).size}`);
 }
