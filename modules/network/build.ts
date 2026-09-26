@@ -5,6 +5,8 @@ import { warehousePathKind, type Path } from '@/lib/enrich/connect';
 import { config } from '@/config/deployment';
 import { tieWarmth } from './warmth';
 import { researchEndpoint, researchTie } from './research-path';
+import { enrichDir } from '@/lib/enrich/candidates';
+import { importNetworkNodes, planNetworkNodes, readNetworkNodeInput } from './nodes';
 
 /**
  * The network, built from what we already know (N82).
@@ -39,6 +41,7 @@ export interface BuildCounts {
   keptReviewed: number;
   /** Research paths with no person at the other end: one of our organizations, or someone not in the tool. */
   notPeople: number;
+  allNodes?: { created: number; sourceRecords: number; edges: number };
 }
 
 /** How W3's kinds become edge kinds. "The same firm, now" is a colleague. */
@@ -60,6 +63,7 @@ export async function buildNetwork(): Promise<BuildCounts> {
 async function build(tx: Queryable): Promise<BuildCounts> {
   const counts: BuildCounts = { teamCreated: 0, fromRecords: 0, fromResearch: 0, toConfirm: 0, keptReviewed: 0, notPeople: 0 };
   const today = new Date().toISOString().slice(0, 10);
+  const nodeInput = await readNetworkNodeInput(enrichDir());
 
   // 1. The team, as people in the graph.
   const users = await tx.query<{ id: string; handle: string; name: string; entity_id: string | null }>(
@@ -215,6 +219,7 @@ async function build(tx: Queryable): Promise<BuildCounts> {
       const lp = known.has(p.lp) ? p.lp : n.entity_id;
       if (!known.has(lp)) { counts.notPeople++; continue; }
       if (p.warehouse) {
+        if (nodeInput?.warehouse.people.length) continue; // Complete file graph is imported once below.
         const w = p.warehouse;
         if (w.match.status !== 'confident' || w.match.lpKey !== lp || conflictingMatches.has(w.match.personKey)
           || w.people.at(-1)?.key !== w.match.personKey || w.ties.length !== w.people.length - 1) continue;
@@ -266,6 +271,10 @@ async function build(tx: Queryable): Promise<BuildCounts> {
        values ($1, $2, $3::network.edge_kind, $4::network.evidence_tier, null, $5, $6, $7::date, $8::uuid, $9::timestamptz, $10)`,
       [e.from, e.to, e.kind, e.tier, e.band, JSON.stringify(e.evidence), e.since, e.reviewedBy ?? null, e.reviewedBy ? e.reviewedAt : null, e.reviewNote ?? null],
     );
+  }
+  if (nodeInput) {
+    const imported = await importNetworkNodes(tx, planNetworkNodes(nodeInput));
+    counts.allNodes = { created: imported.nodesCreated, sourceRecords: imported.sourceRecords, edges: imported.edgesWritten };
   }
   return counts;
 }

@@ -305,6 +305,7 @@ async function main() {
   const db = await freshDb();
   await (await import('./issues4-properties')).issues4Properties(check, db);
   await (await import('./plrule-properties')).plRuleProperties(db, check);
+  await (await import('./network-nodes-properties')).networkNodesProperties(check, db);
   const { listEntities } = await import('../modules/identity');
   const { planRoutes } = await import('../modules/network');
   const { RUNGS } = await import('../modules/strategy');
