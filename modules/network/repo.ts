@@ -56,27 +56,34 @@ export async function enumeratePaths(
   fromEntity: string, targetEntity: string, maxHops = 3,
 ): Promise<RawPath[]> {
   const db = await getDb();
+  // Searched from the target's side, which has few links, and joined back to the source, which may have
+  // tens of thousands (the PL organization, or a team member tied to the PL network). A walk forward from
+  // the source expanded millions of partial paths once the warehouse joined the graph (26 Sep). The PL
+  // organization is a route source, never a middle hop (AGENTS.md rule 6). Capped: the caller ranks.
   return db.query<RawPath>(
-    `with recursive walk as (
-       select l.b as node,
-              array[l.a, l.b] as nodes,
-              array[l.edge_id] as edges,
-              1 as hops
-         from network.link l
-        where l.a = $1
-          and (l.valid_to is null or l.valid_to >= current_date)
-       union all
-       select l.b,
-              w.nodes || l.b,
-              w.edges || l.edge_id,
-              w.hops + 1
-         from walk w
-         join network.link l on l.a = w.node
-        where w.hops < $3
-          and not (l.b = any(w.nodes))
-          and (l.valid_to is null or l.valid_to >= current_date)
-     )
-     select nodes, edges, hops from walk where node = $2 order by hops, edges`,
+    `with pl as (
+       select e.entity_id from identity.entity e join identity.source_record s on s.entity_id = e.entity_id
+        where s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL'),
+     valid as (select a, b, edge_id from network.link where valid_to is null or valid_to >= current_date),
+     y as (
+       select l.a as y, l.edge_id as e3 from valid l
+        where l.b = $2 and l.a <> $1 and not exists (select 1 from pl where pl.entity_id = l.a)),
+     p1 as (
+       select array[l.a, l.b] as nodes, array[l.edge_id] as edges, 1 as hops
+         from valid l where l.a = $1 and l.b = $2),
+     p2 as (
+       select array[l.a, y.y, $2::uuid] as nodes, array[l.edge_id, y.e3] as edges, 2 as hops
+         from y join valid l on l.a = $1 and l.b = y.y
+        where $3 >= 2),
+     p3 as (
+       select array[l1.a, l2.a, y.y, $2::uuid] as nodes, array[l1.edge_id, l2.edge_id, y.e3] as edges, 3 as hops
+         from y join valid l2 on l2.b = y.y
+         join valid l1 on l1.a = $1 and l1.b = l2.a
+        where $3 >= 3 and l2.a <> $1 and l2.a <> $2 and l2.a <> y.y
+          and not exists (select 1 from pl where pl.entity_id = l2.a))
+     select nodes, edges, hops from (
+       select * from p1 union all select * from p2 union all select * from p3) paths
+      order by hops, edges limit 300`,
     [fromEntity, targetEntity, maxHops],
   );
 }
