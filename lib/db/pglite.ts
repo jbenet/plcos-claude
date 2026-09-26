@@ -1,6 +1,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { TooManyRows, type Db, type Queryable } from './index';
 import { lock } from './lock';
+import { prioritizeDb } from './scheduling';
 
 function wrap(run: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>): Queryable {
   const query = async <T>(sql: string, params: unknown[] = []): Promise<T[]> => {
@@ -26,7 +27,7 @@ export async function openPglite(dir: string): Promise<Db> {
   const base = wrap((sql, params) =>
     params && params.length ? pg.query(sql, params as never[]) : pg.exec(sql).then((r) => r[r.length - 1] ?? { rows: [] }),
   );
-  return {
+  return prioritizeDb({
     kind: 'pglite',
     query: base.query,
     one: base.one,
@@ -46,5 +47,5 @@ export async function openPglite(dir: string): Promise<Db> {
       await pg.close();
       await release();
     },
-  };
+  });
 }

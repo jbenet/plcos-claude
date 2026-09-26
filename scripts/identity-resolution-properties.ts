@@ -3,9 +3,71 @@ import type { Check, Db } from './properties/harness';
 import { resolveIdentities, undoIdentityMerge, type IdentityEvidence } from '../modules/identity/resolution';
 import { addProspects, type Prospect } from '../lib/enrich/prospects';
 import { poolChecks } from '../modules/pipeline/repo';
+import { prioritizeDb, withBackgroundDb, withForegroundDb } from '../lib/db/scheduling';
+import { cachedRoutes } from '../modules/network/cache';
+
+async function schedulingProperties(check: Check) {
+  const order: string[] = [];
+  let release!: () => void, entered!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const raw: Db = {
+    kind: 'pglite',
+    async query<T>(sql: string) {
+      order.push(sql);
+      if (sql === 'held') { entered(); await held; }
+      if (sql === 'fail') throw new Error('Invented query failure');
+      return [] as T[];
+    },
+    async one<T>(sql: string) { await raw.query(sql); return null as T | null; },
+    async exec(sql: string) { await raw.query(sql); },
+    async transaction(fn) { order.push('begin'); const result = await fn(raw); order.push('commit'); return result; },
+    async close() { order.push('close'); },
+  };
+  const db = prioritizeDb(raw);
+  const first = db.query('held');
+  await started;
+  const low = withBackgroundDb(async () => {
+    await db.query('maintenance-read');
+    await db.transaction(async tx => { await tx.query('maintenance-write'); await tx.exec('maintenance-audit'); });
+  });
+  const high = (async () => {
+    await db.query('page-first');
+    await db.one('page-second');
+    await db.exec('page-third');
+  })();
+  release();
+  await Promise.all([first,low,high]);
+  check('PROSPECTS3 foreground request continuations run before queued identity maintenance',
+    order.join('|') === 'held|page-first|page-second|page-third|maintenance-read|begin|maintenance-write|maintenance-audit|commit',
+    'An invented held operation queues both priorities; all three dependent page queries run before maintenance, whose transaction stays indivisible.');
+  const beforeLease = order.length;
+  const lease = withForegroundDb(db, async () => {
+    await db.query('leased-first');
+    await withForegroundDb(db, async () => {
+      await new Promise<void>(resolve => setTimeout(resolve, 15));
+      await db.one('leased-after-yield');
+    });
+    throw new Error('Invented reader failure');
+  });
+  const waiting = withBackgroundDb(() => db.query('after-lease'));
+  const [leased] = await Promise.allSettled([lease, waiting]);
+  check('PROSPECTS3 nested foreground read scopes hold maintenance across timer yields and release on error',
+    leased.status === 'rejected' && order.slice(beforeLease).join('|') === 'leased-first|leased-after-yield|after-lease'
+      && prioritizeDb(raw) === db && prioritizeDb(db) === db,
+    'Maintenance waits through an idle read gap; nested scopes and an exception release it, and repeated handle upgrades retain the same queue.');
+  let rejected = false;
+  await db.query('fail').catch(() => { rejected = true; });
+  await db.query('after-failure');
+  await db.close();
+  check('PROSPECTS3 a failed database operation releases the priority queue',
+    rejected && order.slice(-3).join('|') === 'fail|after-failure|close',
+    'A rejected query propagates its error without starving later foreground work or close.');
+}
 
 /** Invented source identities only; no fixture contains an actual LP record. */
 export async function identityResolutionProperties(check: Check, db: Db) {
+  await schedulingProperties(check);
   const ids: string[] = [], evidence: IdentityEvidence[] = [];
   const sourceKeys = new Map<string, { source: string; key: string }>();
   const person = async (name: string, source: string, ev: Omit<IdentityEvidence, 'entityId'> = {}, type = 'person') => {
@@ -19,6 +81,22 @@ export async function identityResolutionProperties(check: Check, db: Db) {
   const org = { organizations: ['Invented Harbor Partners'] };
   try {
     const affinity = await person('IDRES Invented Élodie  Harbor', 'affinity', {organizations:['Invented Harbor Partners (formerly known as Invented Cove)']});
+    let calculations = 0, maintenanceFinished = false;
+    let maintenance: Promise<unknown> | undefined;
+    await cachedRoutes(affinity, 'invented-scheduling-probe', async () => {
+      if (++calculations === 1) maintenance = withBackgroundDb(async () => {
+        await db.query('update network.route_revision set revision=txid_current(), epoch=txid_current() where singleton');
+        maintenanceFinished = true;
+      });
+      await new Promise<void>(resolve => setTimeout(resolve, 20));
+      await db.one('select 1 as foreground');
+      return null;
+    });
+    const deferredDuringSearch = !maintenanceFinished;
+    await maintenance;
+    check('PROSPECTS3 a yielded route calculation does not restart for a maintenance generation change',
+      calculations === 1 && deferredDuringSearch && maintenanceFinished,
+      'An invented cache miss queues a topology revision during its timer gap; the revision waits until the complete search has returned.');
     const research = await person('  idres invented elodie Harbor ', 'w3_person', {organizations:['Invented Cove']});
     const nameOnly = await Promise.all(['affinity','warehouse'].map(s=>person('IDRES Invented Namesake',s)));
     const sameSource = await Promise.all(['affinity','affinity'].map(s=>person('IDRES Invented Affinity Namesake',s,org)));
@@ -46,7 +124,24 @@ export async function identityResolutionProperties(check: Check, db: Db) {
       values('not_same_as',$1,$2,$3,$4,'Invented namesake correction also prohibits uncertainty bridge')`,
       [uncertainLeft.source,uncertainLeft.key,uncertainRight.source,uncertainRight.key]);
     const prospectPair=[await person('IDRES Invented Prospect Clean','affinity',org),await person('IDRES Invented Prospect Clean','w3_person',org)];
-    const counts=await resolveIdentities(db,evidence);
+    let finished = false, requests = 0, longestRequestMs = 0;
+    const resolving = resolveIdentities(db,evidence).finally(() => { finished = true; });
+    const foreground = (async () => {
+      while (!finished) {
+        const start = performance.now();
+        // Dependent reads exercise request continuations, not just one lucky fast query.
+        await root(affinity);
+        await db.one('select count(*)::int n from identity.entity');
+        longestRequestMs = Math.max(longestRequestMs, performance.now() - start);
+        requests++;
+        await new Promise<void>(resolve => setTimeout(resolve, 10));
+      }
+    })();
+    const counts=await resolving;
+    await foreground;
+    check('PROSPECTS3 foreground database requests stay below two seconds during fixture identity resolution',
+      requests > 1 && longestRequestMs < 2000,
+      `${requests} invented-fixture request sequences; slowest ${Math.round(longestRequestMs)} ms. This measures DB contention, not live page render time.`);
     check('IDRES matching folds accents, case and whitespace and recognizes formerly known as affiliations',
       await root(research)===affinity && counts.merges>0 && (counts.mergesByRule.affiliation??0)>0,
       'Two invented spellings resolve only with their shared historical organization as recorded corroboration.');

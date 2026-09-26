@@ -143,6 +143,10 @@ export const config = {
   agents: {
     correctionBudgetHoursPerWeek: 12, // GUESS — v3 said 10–15 h/week; circuit-breaker threshold.
   },
+  identityResolution: {
+    batchSize: 50, // GUESS — bound each maintenance read and CPU slice below interactive latency.
+    pauseMs: 50, // GUESS — leave an actual idle interval between slices on the live server.
+  },
   /** Their read (N57, docs/18): past this age a read is shown as old, still counted, dated. */
   reads: {
     staleAfterDays: 180, // GUESS — half a year; nobody has measured how fast an LP's read goes stale.

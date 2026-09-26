@@ -1,7 +1,7 @@
 import type { NetworkNodeInput } from '@/modules/network/nodes';
 import { connectionPersonKey } from '@/lib/enrich/connect';
 import { normalizeIdentityName, type IdentityEvidence } from './resolution';
-import type { ProspectFile } from '@/lib/enrich/prospects';
+import { parseProspectFile, prospectPersonKey, type ProspectFile } from '@/lib/enrich/prospects';
 
 /** Restrict free-text identity references to explicit source IDs (never merely mentioning a source). */
 export function identityEvidence(input: NetworkNodeInput | null, prospects: ProspectFile[] = []): IdentityEvidence[] {
@@ -32,13 +32,13 @@ export function identityEvidence(input: NetworkNodeInput | null, prospects: Pros
       out.push({...owner,organizations:f.identity.canonical?.org?[f.identity.canonical.org]:[],references});
     }
   }
-  for(const file of prospects)for(const line of file.text.split('\n').filter(x=>x.trim())){
-    let p:Record<string,unknown>;try{p=JSON.parse(line);}catch{continue;}
-    if(typeof p.personKey!=='string')continue;
+  for(const file of prospects)for(const record of parseProspectFile(file).records){
+    const p = record.p as unknown as Record<string,unknown>;
+    const personKey = prospectPersonKey(record.p);
     const ids=typeof p.warehouseId==='string'?[p.warehouseId]:Array.isArray(p.warehouseIds)?p.warehouseIds.filter((x):x is string=>typeof x==='string'):p.warehouseIds&&typeof p.warehouseIds==='object'?Object.values(p.warehouseIds).filter((x):x is string=>typeof x==='string'):[];
     // personKey often is the warehouse key itself.
-    if(input?.warehouse.people.some(w=>w.key===p.personKey))ids.push(p.personKey);
-    out.push({source:'prospect',sourceId:p.personKey,organizations:typeof p.org==='string'?[p.org]:[],warehouseIds:ids,
+    if(typeof p.personKey === 'string' && input?.warehouse.people.some(w=>w.key===p.personKey))ids.push(p.personKey);
+    out.push({source:'prospect',sourceId:personKey,organizations:typeof p.org==='string'?[p.org]:[],warehouseIds:ids,
       domains:typeof p.emailDomain==='string'?[p.emailDomain]:[]});
   }
   return out;

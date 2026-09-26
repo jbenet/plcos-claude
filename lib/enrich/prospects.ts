@@ -1,23 +1,23 @@
 import { createHash } from 'node:crypto';
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Db, Queryable } from '@/lib/db';
 import { enrichDir } from './candidates';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
 
 export interface Prospect {
-  personKey: string; name: string; org: string | null; vehicle: string;
+  personKey?: string | null; name: string; org: string | null; vehicle: string;
   status: 'new' | 'sourcing';
   capacity: { band: string; basis: string; guess: boolean };
   reason: string; strategic: boolean;
   route: { best: string; score: number } | null;
   sources: Array<string | Record<string, unknown>>;
 }
-export interface ProspectFile { file: string; text: string }
+export interface ProspectFile { file: string; text: string; inProgress?: boolean }
 export interface ProspectProblem { file: string; line: number; name?: string; vehicle?: string; reason: string }
 export interface ProspectResult {
   files: number; added: number; existing: number; ambiguous: number;
-  invalid: ProspectProblem[]; skipped: ProspectProblem[];
+  invalid: ProspectProblem[]; skipped: ProspectProblem[]; inProgress: string[];
 }
 const object = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const words = (x: unknown): x is string => typeof x === 'string' && !!x.trim();
@@ -27,7 +27,8 @@ const normalized = normalizeIdentityName;
 export function prospectProblems(x: unknown): string[] {
   if (!object(x)) return ['Expected a prospect object'];
   const errors: string[] = [];
-  for (const k of ['personKey', 'name', 'vehicle', 'reason']) if (!words(x[k])) errors.push(`${k} must be nonempty text`);
+  if (x.personKey != null && !words(x.personKey)) errors.push('personKey must be nonempty text, null or absent');
+  for (const k of ['name', 'vehicle', 'reason']) if (!words(x[k])) errors.push(`${k} must be nonempty text`);
   if (x.org !== null && !words(x.org)) errors.push('org must be nonempty text or null');
   if (x.status !== 'new' && x.status !== 'sourcing') errors.push('status must be new or sourcing');
   if (!object(x.capacity) || !words(x.capacity.band) || !words(x.capacity.basis) || typeof x.capacity.guess !== 'boolean') errors.push('capacity needs band, basis and a boolean guess');
@@ -37,10 +38,54 @@ export function prospectProblems(x: unknown): string[] {
   return errors;
 }
 
-/** Read only the local profile's inputs. The live checkout links data/real to plcos-data/real. */
+/** Deterministic source identity: never tied to a vehicle, file, line or planning fields. */
+export function prospectPersonKey(p: Prospect): string {
+  if (p.personKey != null) return p.personKey;
+  const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical)
+    : object(value) ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])])) : value;
+  // Prefer source locators to mutable titles/annotations; opaque sources retain their full value.
+  const sources = [...new Set(p.sources.map(source => JSON.stringify(canonical(
+    typeof source === 'string' ? source.trim() : source.url ?? source.source ?? source
+  ))))].sort();
+  return `unkeyed:v1:${createHash('sha256').update(JSON.stringify([normalized(p.name), normalized(p.org ?? ''), sources])).digest('hex')}`;
+}
+
+/** Read only settled inputs. Recheck after reading so a concurrent append cannot import a prefix. */
 export async function readProspectFiles(dir = join(enrichDir(), 'prospects')): Promise<ProspectFile[]> {
   const names = await readdir(dir).catch((e: NodeJS.ErrnoException) => { if (e.code === 'ENOENT') return []; throw e; });
-  return Promise.all(names.filter(n => n.endsWith('.jsonl')).sort().map(async file => ({ file, text: await readFile(join(dir, file), 'utf8') })));
+  return Promise.all(names.filter(n => n.endsWith('.jsonl')).sort().map(async file => {
+    const path = join(dir, file), before = await stat(path);
+    if (Date.now() - before.mtimeMs < 120_000) return { file, text: '', inProgress: true };
+    const text = await readFile(path, 'utf8'), after = await stat(path);
+    if (after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs || after.size !== before.size
+      || after.ino !== before.ino || Date.now() - after.mtimeMs < 120_000) return { file, text: '', inProgress: true };
+    return { file, text };
+  }));
+}
+
+/** Row errors are isolated; a whole JSON document/array is not a JSON-lines file. */
+export function parseProspectFile(file: ProspectFile): { records: Array<{ p: Prospect; line: number }>; invalid: ProspectProblem[] } {
+  const records: Array<{ p: Prospect; line: number }> = [], invalid: ProspectProblem[] = [];
+  if (file.inProgress) return { records, invalid };
+  const lines = file.text.split('\n');
+  try {
+    const whole: unknown = JSON.parse(file.text);
+    if (Array.isArray(whole) || (object(whole) && lines.filter(l => l.trim()).length > 1)) {
+      return { records, invalid: [{ file: file.file, line: 1, reason: 'File skipped: expected JSON lines, not a JSON document or array' }] };
+    }
+  } catch { /* Multiple JSON values are normal for JSON lines. */ }
+  let parsed = 0;
+  for (const [index, line] of lines.entries()) {
+    if (!line.trim()) continue;
+    let value: unknown;
+    try { value = JSON.parse(line); parsed++; }
+    catch { invalid.push({ file: file.file, line: index + 1, reason: 'Invalid JSON; row skipped' }); continue; }
+    const errors = prospectProblems(value);
+    if (errors.length) invalid.push({ file: file.file, line: index + 1, reason: errors.join('; ') });
+    else records.push({ p: value as Prospect, line: index + 1 });
+  }
+  if (!parsed && invalid.length) return { records: [], invalid: [{ file: file.file, line: 1, reason: 'File skipped: no JSON lines could be read' }] };
+  return { records, invalid };
 }
 
 type Identity = { id: string; name: string; type: string; merged: string | null; retired: string | null };
@@ -65,7 +110,7 @@ async function affiliateProspect(tx: Queryable, personId: string, p: Prospect, i
     (person_entity, org_entity, kind, role, is_primary, source, as_of, certainty, note)
     values ($1, $2, 'contact', 'not recorded', true, $3, current_date, 'claimed',
       'From the sourced prospect row; role and decision-making capacity not established.')`,
-    [personId, orgId, `prospect:${p.personKey}`]);
+    [personId, orgId, `prospect:${prospectPersonKey(p)}`]);
 }
 
 /** Stable keys follow canonical identity. Unknown keys get their own reversible source node; names alone never identify a person. */
@@ -74,7 +119,7 @@ async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[])
     `select distinct e.entity_id::text id, e.display_name name, e.entity_type::text type, e.merged_into::text merged, e.retired_at::text retired
        from identity.entity original join identity.entity e on e.entity_id=identity.canonical_entity_id(original.entity_id)
        left join identity.source_record s on s.entity_id = original.entity_id
-      where original.entity_id::text = $1 or (s.source in ('warehouse', 'w3_person', 'prospect') and s.source_id = $1)`, [p.personKey]);
+      where original.entity_id::text = $1 or (s.source in ('warehouse', 'w3_person', 'prospect') and s.source_id = $1)`, [prospectPersonKey(p)]);
   if (rows.length) {
     if (rows.length !== 1) return null;
     const row = rows[0]!;
@@ -83,7 +128,7 @@ async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[])
   const id = (await tx.one<{ id: string }>(
     `insert into identity.entity (entity_type, display_name) values ('person', $1) returning entity_id::text id`, [p.name]))!.id;
   await tx.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by)
-    values ('prospect', $1, $2, 'rule:sourced-prospect')`, [p.personKey, id]);
+    values ('prospect', $1, $2, 'rule:sourced-prospect')`, [prospectPersonKey(p), id]);
   identities.push({ id, name: p.name, type: 'person', merged: null, retired: null });
   await affiliateProspect(tx, id, p, identities);
   return id;
@@ -91,26 +136,21 @@ async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[])
 
 /** Caller supplies the live server's existing handle; there is deliberately no DB-opening CLI. */
 export async function addProspects(db: Db, actorId: string, files: ProspectFile[]): Promise<ProspectResult> {
-  const result: ProspectResult = { files: files.length, added: 0, existing: 0, ambiguous: 0, invalid: [], skipped: [] };
+  const result: ProspectResult = { files: files.length, added: 0, existing: 0, ambiguous: 0, invalid: [], skipped: [], inProgress: [] };
   const records: Array<{ p: Prospect; file: string; line: number; hash: string }> = [];
   for (const file of files) {
+    if (file.inProgress) { result.inProgress.push(file.file); continue; }
     const hash = createHash('sha256').update(file.text).digest('hex');
-    for (const [index, line] of file.text.split('\n').entries()) {
-      if (!line.trim()) continue;
-      let value: unknown;
-      try { value = JSON.parse(line); }
-      catch { result.invalid.push({ file: file.file, line: index + 1, reason: 'Invalid JSON' }); continue; }
-      const errors = prospectProblems(value);
-      if (errors.length) result.invalid.push({ file: file.file, line: index + 1, reason: errors.join('; ') });
-      else records.push({ p: value as Prospect, file: file.file, line: index + 1, hash });
-    }
+    const parsed = parseProspectFile(file);
+    result.invalid.push(...parsed.invalid);
+    records.push(...parsed.records.map(r => ({ ...r, file: file.file, hash })));
   }
-  // A malformed file never partially imports. Validate vehicle slugs before any mutation too.
-  if (result.invalid.length) return result;
+  if (!records.length) return result;
   return db.transaction(async tx => {
     const vehicles = new Map((await tx.query<{ id: string; slug: string }>('select id::text, slug from platform.vehicle')).map(v => [v.slug, v.id]));
     for (const r of records) if (!vehicles.has(r.p.vehicle)) result.invalid.push({ file: r.file, line: r.line, reason: 'Unknown vehicle slug' });
-    if (result.invalid.length) return result;
+    const valid = records.filter(r => vehicles.has(r.p.vehicle));
+    if (!valid.length) return result;
     // Serialize identity lookup/create, including callers that both initially see zero names.
     // This also prevents orphan nodes from a competing source-record insert.
     await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
@@ -118,10 +158,13 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
       merged_into::text merged, retired_at::text retired from identity.entity`);
     // Conflicting descriptions of one key are skipped together, regardless of file order.
     const names = new Map<string, Set<string>>();
-    for (const { p } of records) names.set(p.personKey, (names.get(p.personKey) ?? new Set()).add(normalized(p.name)));
-    for (const r of records) {
+    for (const { p } of valid) {
+      const key = prospectPersonKey(p);
+      names.set(key, (names.get(key) ?? new Set()).add(normalized(p.name)));
+    }
+    for (const r of valid) {
       const p = r.p;
-      const entityId = names.get(p.personKey)!.size === 1 ? await resolvePerson(tx, p, identities) : null;
+      const entityId = names.get(prospectPersonKey(p))!.size === 1 ? await resolvePerson(tx, p, identities) : null;
       if (!entityId) {
         result.ambiguous++;
         result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle, reason: 'Conflicting identity: supply the correct existing person ID or resolve the conflicting source mapping.' });

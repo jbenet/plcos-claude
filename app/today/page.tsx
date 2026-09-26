@@ -17,10 +17,16 @@ import { listExposures, vehicleTotals } from '@/modules/pipeline';
 import { sprintStrip, urgency } from '@/modules/calendar';
 import { actionableSignals, heldBack } from '@/modules/signals';
 import { SignalRow } from '@/components/signals/SignalRow';
+import { getDb } from '@/lib/db';
+import { withForegroundDb } from '@/lib/db/scheduling';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Today() {
+  return withForegroundDb(await getDb(), todayContent);
+}
+
+async function todayContent() {
   const [user, sink, selection, audit, tickets, conflicts, asks, pursuits, totals, weeks, urgencyState] =
     await Promise.all([
       auth().then((a) => a.currentUser()),
