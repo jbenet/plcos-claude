@@ -303,6 +303,7 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
 
 async function main() {
   (await import('./warehouse-investor-properties')).warehouseInvestorProperties(check);
+  (await import('./route-presentation-properties')).routePresentationProperties(check);
   const db = await freshDb();
   await (await import('./issues4-properties')).issues4Properties(check, db);
   await (await import('./plrule-properties')).plRuleProperties(db, check);

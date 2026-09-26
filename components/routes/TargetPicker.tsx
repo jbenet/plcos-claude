@@ -83,6 +83,8 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
     const u = new URLSearchParams(params.toString());
     u.set('target', id);
     u.delete('r');
+    u.delete('page');
+    u.delete('family');
     return `/routes?${u.toString()}`;
   };
 

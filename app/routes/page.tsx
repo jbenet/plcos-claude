@@ -18,7 +18,7 @@ import { TargetPicker, type TargetRow } from '@/components/routes/TargetPicker';
 import { listSourceDocs, notesFor } from '@/modules/research';
 import { directContact, type DirectContact } from '@/modules/meetings';
 import { listVehicles } from '@/modules/platform';
-import { planRoutes, tierCounts, edgeWarmth, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
+import { planRoutes, tierCounts, warmthReader, routePage, ROUTES_PER_PAGE, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
 import type { Path } from '@/lib/enrich/connect';
 import { buildNetworkAction } from './actions';
 import { listPursuits } from '@/modules/strategy';
@@ -46,10 +46,11 @@ const OTHER_LABEL: Record<CandidatePath['other']['type'], string> = {
 export default async function Routes({
   searchParams,
 }: {
-  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string; expanded?: string }>;
+  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string; expanded?: string; page?: string; family?: string }>;
 }) {
   const selection = await vehicleSelection();
-  const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam, expanded } = await searchParams;
+  const params = await searchParams;
+  const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam, expanded, page, family } = params;
   const user = await (await auth()).currentUser();
   const [tiers, vehicles, affiliations, fit, asks, team, pursuits] = await Promise.all([
     tierCounts(), listVehicles(),
@@ -134,9 +135,14 @@ export default async function Routes({
   const shown = matched.slice(0, SHOWN);
   const currentRow = rows.find((t) => t.entityId === targetId);
   if (currentRow && !shown.includes(currentRow)) shown.unshift(currentRow);
-  const selected = Math.min(Math.max(0, Number(r ?? 0)), Math.max(0, (search?.routes.length ?? 1) - 1));
-  const displayedRoutes = (search?.routes ?? []).map((route, index) => ({ route, index }))
-    .filter(({ route }) => expanded === '1' || route.foldedUnder == null);
+  const presentation = routePage(search?.routes ?? [], { expanded, page, selected: r, family });
+  const { shown: displayedRoutes, selected, alternatives } = presentation;
+  const readWarmth = warmthReader();
+  const routeHref = (changes: Record<string, string | undefined>) => {
+    const values = { ...params, target: targetId, ...changes };
+    const query = new URLSearchParams(Object.entries(values).filter((entry): entry is [string, string] => entry[1] !== undefined));
+    return `/routes?${query}`;
+  };
 
   /**
    * What there is besides edges (issues 0027–0028, real). The target's name comes from the records
@@ -361,23 +367,25 @@ export default async function Routes({
             <div className="chead">
               <h2>Routes in</h2>
               <span className="lbl">
-                {displayedRoutes.length} shown · {search.routes.length} recorded · evidence, warmth, then influence
-                {expanded === '1' && <> · <Link href={`/routes?target=${targetId}`}>Fold redundant alternatives</Link></>}
+                {displayedRoutes.length} shown · {presentation.first}–{presentation.last} of {presentation.eligibleCount} {presentation.family !== null ? 'in this route family' : expanded === '1' ? 'including alternatives' : 'main routes'} · {search.routes.length} recorded
+                <span style={{ display: 'block' }}>Evidence, warmth, then influence</span>
+                {presentation.family !== null && <> · <Link href={routeHref({ family: undefined, page: undefined, r: undefined })}>Back to ranked routes</Link></>}
+                {expanded === '1' && <> · <Link href={routeHref({ expanded: undefined, family: undefined, page: undefined, r: undefined })}>Fold redundant alternatives</Link></>}
               </span>
             </div>
             {displayedRoutes.map(({ route, index: i }) => (
               <div key={i} className={`route${i === selected ? ' best' : ''}`}>
                 <span className={`tier t${route.weakestTier}`}>{route.weakestTier}</span>
                 <div className="rt">
-                  <RouteNames route={route} alternatives={search.routes.filter((r) => r.foldedUnder === i)} fromName={route.fromName ?? search.fromName} />
-                  <div><Link href={`/routes?target=${targetId}&r=${i}${expanded === '1' ? '&expanded=1' : ''}`}>Inspect this route</Link></div>
+                  <RouteNames route={route} alternatives={(alternatives.get(i) ?? []).map((x) => x.route)} fromName={route.fromName ?? search.fromName} />
+                  <div><Link href={routeHref({ r: String(i) })}>Inspect this route</Link></div>
                   {route.hops.map((h) => (
                     <div key={h.edge.edgeId}>
                       <p style={{ marginBottom: 3 }}>
                         <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
                           {h.edge.tier} · {h.edge.kind.replace('_', ' ')} · edge dated {h.edge.validFrom.getFullYear()}
                         </span>{' '}
-                        <span className="muted" style={{ display: 'block' }}>{edgeWarmth(h.edge).basis}</span>
+                        <span className="muted" style={{ display: 'block' }}>{readWarmth(h.edge).basis}</span>
                         {h.edge.evidence.map((ev, ei) => (
                           <span key={ei} style={{ display: 'block' }}>
                             {ev.note}{' '}
@@ -400,15 +408,17 @@ export default async function Routes({
                       {reason}
                     </p>
                   ))}
-                  {expanded !== '1' && search.routes.some((r) => r.foldedUnder === i) && (
+                  {expanded !== '1' && presentation.family === null && alternatives.has(i) && (
                     <details>
-                      <summary>{search.routes.filter((r) => r.foldedUnder === i).length} alternative paths and evidence</summary>
-                      <p>These paths share the same destination chain or add a weaker detour. Their evidence is retained.</p>
-                      {search.routes.map((alternative, ai) => alternative.foldedUnder === i ? (
-                        <p key={ai}><Link href={`/routes?target=${targetId}&r=${ai}&expanded=1`}>
+                      <summary>{alternatives.get(i)!.length} alternative paths and evidence</summary>
+                      <p>These paths share the same destination chain or add a weaker detour. Their evidence is retained.
+                        {alternatives.get(i)!.length > 8 && <> The first 8 are shown here.</>}</p>
+                      {alternatives.get(i)!.slice(0, 8).map(({ route: alternative, index: ai }) => (
+                        <p key={ai}><Link href={routeHref({ r: String(ai), family: String(i), page: undefined })}>
                           {alternative.fromName ?? search.fromName} → {alternative.hops.map((h) => h.toName).join(' → ')} · inspect evidence
                         </Link></p>
-                      ) : null)}
+                      ))}
+                      <p><Link href={routeHref({ family: String(i), r: undefined, page: undefined })}>View all {alternatives.get(i)!.length} alternatives and their evidence</Link></p>
                     </details>
                   )}
                 </div>
@@ -495,6 +505,11 @@ export default async function Routes({
                 </div>
               </div>
             ))}
+            {presentation.pages > 1 && <nav aria-label="Route pages" style={{ padding: 16, display: 'flex', gap: 16 }}>
+              {presentation.page > 0 && <Link href={routeHref({ page: String(presentation.page - 1), r: undefined })}>Previous {ROUTES_PER_PAGE} routes</Link>}
+              <span>Page {presentation.page + 1} of {presentation.pages}</span>
+              {presentation.page + 1 < presentation.pages && <Link href={routeHref({ page: String(presentation.page + 1), r: undefined })}>Show next {Math.min(ROUTES_PER_PAGE, presentation.eligibleCount - presentation.last)} routes</Link>}
+            </nav>}
             <Coverage
               corpus={`${search.coverage.edges} relationship edges, up to ${search.coverage.maxHops} hops`}
               from={search.coverage.from ? shortDate(search.coverage.from) : null}
