@@ -2,7 +2,7 @@ import { config } from '@/config/deployment';
 import { listEntities } from '@/modules/identity';
 import { connectorLoad, restrictionsFor } from '@/modules/coordination';
 import { listSyncSources } from '@/modules/platform';
-import { edgeCoverage, edgesByIds, entityForUser, enumeratePaths, routeSources } from './repo';
+import { edgeCoverage, edgesByIds, entityForUser, enumeratePathsFromSources, routeSources } from './repo';
 import { influenceFor } from './influence';
 import { foldRoutes, routeWarmth } from './warmth';
 import { CLUE_KINDS, type Edge, type Route, type RouteHop, type RouteSearch, type RouteVerdict } from './types';
@@ -34,20 +34,22 @@ export async function planRoutes(
   const fromSources = scope === 'team' ? await routeSources() : me ? [me] : [];
   if (!fromSources.length) return null;
 
-  const [paths, entities, restrictions, loads, coverage, sources] = await Promise.all([
-    Promise.all(fromSources.filter((source) => source.entityId !== targetId).map(async (source) =>
-      (await enumeratePaths(source.entityId, targetId, maxHops)).map((path) => ({ ...path, source })))).then((lists) => lists.flat()),
-    listEntities(),
+  const [rawPaths, restrictions, coverage, sources] = await Promise.all([
+    enumeratePathsFromSources(fromSources.map((s) => s.entityId).filter((id) => id !== targetId), targetId, maxHops),
     restrictionsFor(targetId),
-    connectorLoad(),
     edgeCoverage(),
     listSyncSources(),
   ]);
-
+  const sourceOf = new Map(fromSources.map((s) => [s.entityId, s]));
+  const paths = rawPaths.map((p) => ({ ...p, source: sourceOf.get(p.nodes[0]!)! }));
+  const nodeIds = [...new Set([targetId, ...paths.flatMap((p) => p.nodes)])];
+  const allEdgeIds = [...new Set(paths.flatMap((p) => p.edges))];
+  const carrierIds = [...new Set(paths.flatMap((p) => p.nodes.slice(1, -1).slice(-1)))];
+  const [entities, edgeMap, loads] = await Promise.all([
+    listEntities(nodeIds), edgesByIds(allEdgeIds), connectorLoad(carrierIds),
+  ]);
   const nameOf = new Map(entities.map((e) => [e.entityId, e.displayName]));
   const targetName = nameOf.get(targetId) ?? 'Unknown';
-  const allEdgeIds = [...new Set(paths.flatMap((p) => p.edges))];
-  const edgeMap = await edgesByIds(allEdgeIds);
   const loadOf = new Map(loads.map((l) => [l.connectorId, l.used]));
   const cap = config.guard.asksPerConnectorPerQuarter;
   const blanket = restrictions.find((r) => r.scope === 'blanket');
@@ -160,11 +162,12 @@ export async function planRoutes(
 
   const at = new Date();
   const rank: Record<RouteVerdict, number> = { recommend: 0, hold: 1, not_a_route: 2, excluded: 3 };
+  const warmth = new Map(routes.map((r) => [r, routeWarmth(r, at)]));
   routes.sort(
     (a, b) =>
       Number(a.verdict === 'excluded') - Number(b.verdict === 'excluded') ||
       TIER_ORDER[a.weakestTier] - TIER_ORDER[b.weakestTier] ||
-      routeWarmth(b, at) - routeWarmth(a, at) ||
+      warmth.get(b)! - warmth.get(a)! ||
       rank[a.verdict] - rank[b.verdict] ||
       (b.influence?.score ?? 0) - (a.influence?.score ?? 0) ||
       a.hops.length - b.hops.length ||

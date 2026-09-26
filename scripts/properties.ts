@@ -307,6 +307,7 @@ async function main() {
   await (await import('./issues4-properties')).issues4Properties(check, db);
   await (await import('./plrule-properties')).plRuleProperties(db, check);
   await (await import('./network-nodes-properties')).networkNodesProperties(check, db);
+  await (await import('./routes-perf-properties')).routesPerfProperties(check, db);
   const { listEntities } = await import('../modules/identity');
   const { planRoutes } = await import('../modules/network');
   const { RUNGS } = await import('../modules/strategy');

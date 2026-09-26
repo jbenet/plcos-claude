@@ -2,7 +2,7 @@ export type {
   Edge, EdgeKind, EvidenceTier, Route, RouteHop, RouteSearch, RouteVerdict,
 } from './types';
 export { CLUE_KINDS, TIER_MEANING, VERDICT_LABEL } from './types';
-export { edgeCoverage, entityForUser, enumeratePaths, listEdges, tierCounts, routeSources } from './repo';
+export { edgeCoverage, entityForUser, enumeratePaths, enumeratePathsFromSources, listEdges, tierCounts, routeSources } from './repo';
 export { planRoutes } from './service';
 export { tieWarmth, tieDetailsProblems, edgeWarmth, routeWarmth, foldRoutes } from './warmth';
 export type { TieDetails, Warmth, WarmthKind } from './warmth';

@@ -190,13 +190,16 @@ export async function competingAsks(
   ).map(toAsk);
 }
 
-export async function connectorLoad(): Promise<Array<{ connectorId: string; name: string; used: number }>> {
+export async function connectorLoad(ids?: string[]): Promise<Array<{ connectorId: string; name: string; used: number }>> {
+  if (ids?.length === 0) return [];
   const db = await getDb();
   const rows = await db.query<{ connector_id: string; name: string; n: string }>(
     `select a.connector_id, e.display_name as name, count(*)::text as n
        from coordination.ask a join identity.entity e on e.entity_id = a.connector_id
       where a.connector_id is not null and a.made_at >= now() - interval '3 months'
+        ${ids ? 'and a.connector_id = any($1::uuid[])' : ''}
       group by a.connector_id, e.display_name order by count(*) desc`,
+    ids ? [ids] : [],
   );
   return rows.map((r) => ({ connectorId: r.connector_id, name: r.name, used: Number(r.n) }));
 }

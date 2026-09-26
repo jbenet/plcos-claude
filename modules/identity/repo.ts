@@ -16,11 +16,13 @@ const toEntity = (r: Row): Entity => ({
 
 const COLS = 'entity_id, entity_type, display_name, merged_into, retired_at';
 
-export async function listEntities(): Promise<Entity[]> {
+export async function listEntities(ids?: string[]): Promise<Entity[]> {
+  if (ids?.length === 0) return [];
   const db = await getDb();
   const rows = await db.query<Row>(
     `select ${COLS} from identity.entity where merged_into is null and retired_at is null
-      order by display_name`,
+      ${ids ? 'and entity_id = any($1::uuid[])' : ''} order by display_name`,
+    ids ? [ids] : [],
   );
   return rows.map(toEntity);
 }

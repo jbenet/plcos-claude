@@ -96,6 +96,11 @@ export function routeWarmth(route: Pick<Route, 'hops'>, at = new Date()): number
  */
 export function foldRoutes(routes: Route[], at = new Date()): Route[] {
   const out = routes.map((r) => ({ ...r, foldedUnder: null as number | null }));
+  const warmth = new Map<Edge, number>();
+  const score = (edge: Edge) => {
+    if (!warmth.has(edge)) warmth.set(edge, edgeWarmth(edge, at).score);
+    return warmth.get(edge)!;
+  };
   for (const [longerIndex, longer] of out.entries()) {
     const parent = out.findIndex((shorter, shorterIndex) => {
       const first = shorter.hops[0];
@@ -106,21 +111,21 @@ export function foldRoutes(routes: Route[], at = new Date()): Route[] {
       if (shorter.hops.length === longer.hops.length) return shorterIndex < longerIndex
         && shorter.hops.every((h, i) => h.toEntity === longer.hops[i]?.toEntity
           && h.edge.tier <= longer.hops[i]!.edge.tier
-          && edgeWarmth(h.edge, at).score >= edgeWarmth(longer.hops[i]!.edge, at).score);
-      const warmth = edgeWarmth(first.edge, at);
+          && score(h.edge) >= score(longer.hops[i]!.edge));
+      const firstWarmth = score(first.edge);
       if (first.edge.tier > 'B') return false;
       // A strong A/B prefix dominates a weaker detour even when the shared suffix is C/D.
       // Unknown contact dates reduce warmth; they are not a separate eligibility gate.
 
       const offset = longer.hops.length - shorter.hops.length;
-      const detourWarmth = Math.min(...longer.hops.slice(0, offset + 1).map((h) => edgeWarmth(h.edge, at).score));
+      const detourWarmth = Math.min(...longer.hops.slice(0, offset + 1).map((h) => score(h.edge)));
       const detourTier = longer.hops.slice(0, offset + 1).map((h) => h.edge.tier).sort().at(-1)!;
-      if (first.edge.tier > detourTier || warmth.score < detourWarmth) return false;
-      if (warmth.score < config.routeWarmth.strongFirstHop && !(first.edge.tier < detourTier && warmth.score > detourWarmth)) return false;
+      if (first.edge.tier > detourTier || firstWarmth < detourWarmth) return false;
+      if (firstWarmth < config.routeWarmth.strongFirstHop && !(first.edge.tier < detourTier && firstWarmth > detourWarmth)) return false;
       return longer.hops[offset]?.toEntity === first.toEntity
         && shorter.hops.slice(1).every((h, i) => h.toEntity === longer.hops[offset + i + 1]?.toEntity
           && h.edge.tier <= longer.hops[offset + i + 1]!.edge.tier
-          && edgeWarmth(h.edge, at).score >= edgeWarmth(longer.hops[offset + i + 1]!.edge, at).score);
+          && score(h.edge) >= score(longer.hops[offset + i + 1]!.edge));
     });
     if (parent >= 0) longer.foldedUnder = parent;
   }
