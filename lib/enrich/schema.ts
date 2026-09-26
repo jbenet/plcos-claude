@@ -5,6 +5,8 @@
  * check is reported with its problems and not mapped; nothing half-valid gets in.
  */
 
+import { tieDetailsProblems } from '@/modules/network';
+
 export type Match = 'confirmed' | 'probable' | 'ambiguous' | 'not_found';
 export type Confidence = 'high' | 'medium' | 'low';
 export type SourceKind = 'primary' | 'filing' | 'press' | 'podcast' | 'database' | 'social' | 'other';
@@ -43,6 +45,8 @@ export interface Fact {
 }
 
 export interface Connection {
+  /** Optional relationship detail for W3; never changes the evidence tier. */
+  tie?: import('@/modules/network').TieDetails;
   /** Who or what on our side, or in the ecosystem: a team member, Protocol Labs, a portfolio company. */
   to: string;
   kind: 'coinvestor' | 'colleague' | 'board' | 'advisor' | 'portfolio' | 'event_coattendee' | 'social_public' | 'podcast_guest' | 'alumni' | 'other';
@@ -214,6 +218,7 @@ export function check(f: unknown, expectKey?: string): string[] {
     if (text && hasAddress(text)) p.push(`${where}: carries a street address`);
   }
   for (const [i, c] of (x.connections ?? []).entries()) {
+    if (c.tie !== undefined) for (const error of tieDetailsProblems(c.tie)) p.push(`connection ${i}: ${error}`);
     if (!isStr(c.to) || !isStr(c.basis)) p.push(`connection ${i}: needs who and why`);
     if (!['B', 'C', 'D'].includes(c.tier)) p.push(`connection ${i}: tier must be B, C or D — A needs our own record of an interaction`);
     if (c.scope === 'firm' && c.tier === 'B') p.push(`connection ${i}: a firm's tie is tier C at most for the person`);

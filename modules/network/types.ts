@@ -46,7 +46,7 @@ export interface Edge {
   tier: EvidenceTier;
   strength: number | null;
   tieBand: string | null;
-  evidence: Array<{ doc?: string; note: string }>;
+  evidence: Array<{ doc?: string; note: string; source?: string; as_of?: string; tie?: import('./warmth').TieDetails }>;
   reviewedByName: string | null;
   reviewedAt: Date | null;
   reviewNote: string | null;
@@ -71,6 +71,8 @@ export interface RouteHop {
 }
 
 export interface Route {
+  /** Index of the visible route this alternative is folded beneath; data is retained. */
+  foldedUnder?: number | null;
   hops: RouteHop[];
   /** Everyone between us and the target. The people whose goodwill this spends. */
   connectorNames: string[];

@@ -4,6 +4,7 @@ import { connectorLoad, restrictionsFor } from '@/modules/coordination';
 import { listSyncSources } from '@/modules/platform';
 import { edgeCoverage, edgesByIds, entityForUser, enumeratePaths } from './repo';
 import { influenceFor } from './influence';
+import { foldRoutes, needsHuman, routeWarmth } from './warmth';
 import { CLUE_KINDS, type Edge, type Route, type RouteHop, type RouteSearch, type RouteVerdict } from './types';
 
 const TIER_ORDER = { A: 0, B: 1, C: 2, D: 3 } as const;
@@ -56,7 +57,7 @@ export async function planRoutes(
   const seen = new Set<string>();
 
   for (const p of paths) {
-    const key = p.nodes.join('>');
+    const key = p.edges.join('>');
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -99,7 +100,7 @@ export async function planRoutes(
 
     // A C or D hop nobody has reviewed cannot carry a route.
     const unreviewed = hops.filter(
-      (h) => (h.edge.tier === 'C' || h.edge.tier === 'D') && !h.edge.reviewedByName,
+      (h) => needsHuman(h.edge),
     );
     if (verdict !== 'excluded' && unreviewed.length > 0) {
       verdict = 'not_a_route';
@@ -173,20 +174,23 @@ export async function planRoutes(
     }
   }
 
+  const at = new Date();
   const rank: Record<RouteVerdict, number> = { recommend: 0, hold: 1, not_a_route: 2, excluded: 3 };
   routes.sort(
     (a, b) =>
       rank[a.verdict] - rank[b.verdict] ||
+      TIER_ORDER[a.weakestTier] - TIER_ORDER[b.weakestTier] ||
+      routeWarmth(b, at) - routeWarmth(a, at) ||
       (b.influence?.score ?? 0) - (a.influence?.score ?? 0) ||
       a.hops.length - b.hops.length ||
-      TIER_ORDER[a.weakestTier] - TIER_ORDER[b.weakestTier],
+      a.hops.map((h) => h.edge.edgeId).join('|').localeCompare(b.hops.map((h) => h.edge.edgeId).join('|')),
   );
 
   return {
     targetId,
     targetName,
     fromName: me.name,
-    routes,
+    routes: foldRoutes(routes, at),
     coverage: {
       edges: coverage.edges,
       maxHops,

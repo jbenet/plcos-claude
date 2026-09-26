@@ -212,6 +212,23 @@ export const config = {
     willing: 0.10,    // GUESS — goodwill left, and whether they have delivered before
   },
 
+  /** Investment introductions: ordinal warmth, never confidence or permission to send. */
+  routeWarmth: {
+    version: 'warmth-1',
+    priors: {
+      proximity: 0, acquaintance: 1, repeated_contact: 2, worked_together: 3,
+      joint_investment: 3, cofounder: 4, frequent_coinvestment: 5,
+    }, // GUESS — uncalibrated strength priors; evidence tier is independent.
+    currentMonths: 12, // GUESS
+    historicalMonths: 36, // GUESS
+    agePenalty: { current: 0, ageing: 0.25, historical: 0.75, unknown: 0.5 }, // GUESS
+    frequentDeals: 3, // GUESS — distinct personally attributed deals, not repeated mentions.
+    frequentDealMonths: 36, // GUESS
+    repeatedContacts: 2, // GUESS — distinct dated interactions.
+    colleagueOverlapMonths: 24, // GUESS — long service in our own organization.
+    strongFirstHop: 3, // GUESS — folding also needs a usable, dated first hop.
+  },
+
   /** L7. How much of a week has to be lost before it stops counting as a working week. */
   calendarDeadWeekDays: 3, // GUESS
 
