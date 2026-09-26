@@ -25,3 +25,11 @@ Firm rules:
 - Your reply carries counts and general learnings only — no names.
 
 No training: this project runs only under accounts with model training turned off (AGENTS.md). Never send its data to a service or account that trains on what it is given.
+
+Run recording (docs/COLLAB.md): the launching session calls `scripts/workflow-run.ts begin`
+before launching you and `finish` after your reply, including on failure, using the same run ID.
+Require that ID and the private batch path before starting; never put records in a prompt.
+Return selected/written/valid/failed/skipped counts, named checks (pass/fail/not-run),
+outcome/reason and known token usage (otherwise unknown), without names or record contents.
+The launcher records the line; do not append a second line yourself. A missing finish is
+unknown, never success. This applies whether the launcher is in the live or dev folder.
