@@ -2,10 +2,11 @@ import { config } from '@/config/deployment';
 import { listEntities } from '@/modules/identity';
 import { connectorLoad, restrictionsFor } from '@/modules/coordination';
 import { listSyncSources } from '@/modules/platform';
-import { edgeCoverage, edgesByIds, entityForUser, enumeratePathsFromSources, routeSources } from './repo';
+import { listExposures } from '@/modules/pipeline';
+import { edgeCoverage, edgesByIds, entityForUser, enumeratePathsFromSources, routeSources, sourceEdges } from './repo';
 import { influenceFor } from './influence';
-import { foldRoutes, warmthReader } from './warmth';
-import { CLUE_KINDS, type Edge, type Route, type RouteHop, type RouteSearch, type RouteVerdict } from './types';
+import { investmentTie, scoreRoute, tieDetailsProblems, warmthReader, type RouteScoreContext } from './warmth';
+import { CLUE_KINDS, type Edge, type Route, type RouteHop, type RouteSearch, type RouteVerdict, type RouteStats, type RouteGraph } from './types';
 
 const TIER_ORDER = { A: 0, B: 1, C: 2, D: 3 } as const;
 
@@ -22,26 +23,36 @@ const CLUE_REASON: Record<string, string> = {
  * Rank the routes from a member of the team to a target.
  *
  * Three rules are enforced here rather than left to the ranking:
- *  - A route is only as good as its worst hop.
- *  - C and D hops route with their uncertainty labelled and ranked.
+ *  - Team members are sources, never intermediaries.
+ *  - C and D hops route with uncertainty reflected in score confidence.
  *  - A restriction on the target excludes every path through the restricted party, and
  *    the exclusion is reported rather than silently dropped.
  */
 export async function planRoutes(
-  fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'current',
+  fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'current', at = new Date(),
 ): Promise<RouteSearch | null> {
   const me = await entityForUser(fromHandle);
-  const fromSources = scope === 'team' ? await routeSources() : me ? [me] : [];
+  const team = await routeSources();
+  const fromSources = scope === 'team' ? team : me ? [me] : [];
+  const sourceIds = new Set(team.map((s) => s.entityId));
   if (!fromSources.length) return null;
 
   const [rawPaths, restrictions, coverage, sources] = await Promise.all([
-    enumeratePathsFromSources(fromSources.map((s) => s.entityId).filter((id) => id !== targetId), targetId, maxHops),
+    enumeratePathsFromSources(fromSources.map((s) => s.entityId).filter((id) => id !== targetId), targetId, maxHops, scope === 'team' ? [...sourceIds] : []),
     restrictionsFor(targetId),
     edgeCoverage(),
     listSyncSources(),
   ]);
-  const sourceOf = new Map(fromSources.map((s) => [s.entityId, s]));
-  const paths = rawPaths.map((p) => ({ ...p, source: sourceOf.get(p.nodes[0]!)! }));
+  const sourceOf = new Map([...team, ...fromSources].map((s) => [s.entityId, s]));
+  // In current-user scope a team prefix transfers the source to its last team member.
+  // In team scope SQL already prevents these paths before they spend the candidate budget.
+  const paths = rawPaths.flatMap((p) => {
+    if (sourceIds.has(targetId)) return [];
+    let start = 0;
+    for (let i = 1; i < p.nodes.length - 1; i++) if (sourceIds.has(p.nodes[i]!)) start = i;
+    return [{ ...p, nodes: p.nodes.slice(start), edges: p.edges.slice(start),
+      hops: p.hops - start, source: sourceOf.get(p.nodes[start]!)! }];
+  });
   const nodeIds = [...new Set([targetId, ...paths.flatMap((p) => p.nodes)])];
   const allEdgeIds = [...new Set(paths.flatMap((p) => p.edges))];
   const carrierIds = [...new Set(paths.flatMap((p) => p.nodes.slice(1, -1).slice(-1)))];
@@ -61,7 +72,7 @@ export async function planRoutes(
   const seen = new Set<string>();
 
   for (const p of paths) {
-    const key = p.edges.join('>');
+    const key = `${p.nodes[0]}:${p.edges.join('>')}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -90,7 +101,7 @@ export async function planRoutes(
       verdict = 'excluded';
       reasons.push(`${targetName} asked not to be approached at all: ${blanket.instruction}`);
     } else {
-      const hit = connectorIds.find((id) => restrictedConnectors.has(id));
+      const hit = [p.source.entityId, ...connectorIds].find((id) => restrictedConnectors.has(id));
       if (hit) {
         const r = restrictions.find((x) => x.connectorId === hit);
         verdict = 'excluded';
@@ -106,7 +117,7 @@ export async function planRoutes(
     for (const h of hops.filter((h) => h.edge.tier === 'C' || h.edge.tier === 'D')) {
       reasons.push(`${h.edge.fromName} → ${h.edge.toName}: tier ${h.edge.tier}. ` +
         (CLUE_REASON[h.edge.kind] ?? 'Weak relationship evidence; interaction is not established.') +
-        ' Routes with uncertainty; stronger evidence ranks first.');
+        ' Routes with uncertainty; confidence discounts the investment-route score.');
     }
 
     // Connector goodwill: the load cap is on the connector because that is the scarcer resource.
@@ -160,34 +171,42 @@ export async function planRoutes(
     }
   }
 
-  const at = new Date();
+  const [roles, exposures] = await Promise.all([sourceEdges([...sourceIds], carriers), listExposures(null)]);
+  const roleOf = new Map<string, RouteScoreContext>();
+  for (const id of carriers) {
+    const evidence = roles.filter((e) => e.fromEntity === id || e.toEntity === id);
+    const investorEdges = evidence.filter((e) => investmentTie(e) || e.evidence.some((x) => x.tie?.withUs === 'investor' && !tieDetailsProblems(x.tie).length));
+    const founderEdges = evidence.filter((e) => e.evidence.some((x) => x.tie?.withUs === 'pl_founder' && !tieDetailsProblems(x.tie).length));
+    const hard = exposures.filter((e) => e.entityId === id && e.track === 'hard' && e.amount > 0);
+    roleOf.set(id, { investor: investorEdges.length > 0 || hard.length > 0,
+      plFounder: founderEdges.length > 0, roleEdgeIds: [...investorEdges, ...founderEdges].map((e) => e.edgeId),
+      roleEvidenceRefs: hard.map((e) => e.evidenceRef ?? `pipeline.exposure:${e.exposureId}`) });
+  }
   const rank: Record<RouteVerdict, number> = { recommend: 0, hold: 1, not_a_route: 2, excluded: 3 };
   const readWarmth = warmthReader(at);
-  const warmth = new Map(routes.map((r) => [r, r.hops.length ? Math.min(...r.hops.map((h) => readWarmth(h.edge).score)) : 0]));
-  routes.sort(
-    (a, b) =>
-      Number(a.verdict === 'excluded') - Number(b.verdict === 'excluded') ||
-      TIER_ORDER[a.weakestTier] - TIER_ORDER[b.weakestTier] ||
-      warmth.get(b)! - warmth.get(a)! ||
-      rank[a.verdict] - rank[b.verdict] ||
-      (b.influence?.score ?? 0) - (a.influence?.score ?? 0) ||
-      a.hops.length - b.hops.length ||
-      a.hops.map((h) => h.edge.edgeId).join('|').localeCompare(b.hops.map((h) => h.edge.edgeId).join('|')),
-  );
+  for (const route of routes) route.score = scoreRoute(route, at, roleOf.get(route.connectorIds.at(-1) ?? ''), readWarmth);
+  routes.sort((a, b) => rank[a.verdict] - rank[b.verdict] || b.score!.value - a.score!.value
+    || a.hops.length - b.hops.length || routeKey(a).localeCompare(routeKey(b)));
+  const selected = selectTopRoutes(routes);
 
   return {
     targetId,
     targetName,
     fromName: scope === 'team' ? 'Team / PL' : me!.name,
-    routes: foldRoutes(routes, at, readWarmth),
+    routes: selected,
+    topRoutes: selected.filter((r) => r.foldedUnder == null && r.verdict === 'recommend'),
+    graph: routeGraph(selected, targetId, true),
+    stats: summarizeRoutes(selected),
     coverage: {
       edges: coverage.edges,
       maxHops,
       from: coverage.from,
       to: coverage.to,
-      notInspected: sources
-        .filter((s) => s.status === 'not_connected')
-        .map((s) => ({ source: s.label, why: s.detail ?? 'not connected' })),
+      notInspected: [
+        ...sources.filter((s) => s.status === 'not_connected')
+          .map((s) => ({ source: s.label, why: s.detail ?? 'not connected' })),
+        { source: 'Longer and overflow paths', why: `Search inspects up to ${maxHops} hops and 300 candidate paths per source; best means best among inspected routes.` },
+      ],
     },
     restrictions: restrictions.map((r) => ({
       instruction: r.instruction,
@@ -198,3 +217,93 @@ export async function planRoutes(
 }
 
 export { CLUE_KINDS };
+
+
+const routeKey = (r: Route) => [r.fromEntity ?? '', ...r.hops.map((h) => `${h.toEntity}:${h.edge.edgeId}`)].join('|');
+const chainKey = (r: Route) => [r.fromEntity ?? '', ...r.hops.map((h) => h.toEntity)].join('|');
+
+/** Input is ranked. Keep up to three prefixes per last intermediary, with no cap on
+ * distinct intermediaries or direct sources. Every evidence alternative stays in the data.
+ * foldedUnder points to that group's best visible route for show-more consumers.
+ */
+export function selectTopRoutes(routes: Route[]): Route[] {
+  const out = routes.map((r) => ({ ...r, foldedUnder: null as number | null }));
+  const first = new Map<string, number>();
+  const groups = new Map<string, number[]>();
+  for (const [i, route] of out.entries()) {
+    const chain = `${route.verdict}:${chainKey(route)}`;
+    const prior = first.get(chain);
+    if (prior !== undefined) { route.foldedUnder = out[prior]!.foldedUnder ?? prior; continue; }
+    first.set(chain, i);
+    const carrier = route.hops.length > 1 ? route.hops.at(-2)!.toEntity : null;
+    if (!carrier) continue;
+    // Preserve action classes separately: a held/restricted route cannot hide a usable route.
+    const groupKey = `${route.verdict}:${carrier}`;
+    const visible = groups.get(groupKey) ?? [];
+    if (visible.length < config.routeScoring.routesPerIntroducer) visible.push(i);
+    else route.foldedUnder = visible[0]!;
+    groups.set(groupKey, visible);
+  }
+  return out;
+}
+
+/** Graph identity is the entity, independent of how many routes/evidence records reach it. */
+export function routeGraph(routes: Route[], targetId: string, visibleOnly = false): RouteGraph {
+  const nodes = new Map<string, RouteGraph['nodes'][number]>();
+  const links = new Map<string, RouteGraph['links'][number]>();
+  for (const [index, route] of routes.entries()) {
+    if (visibleOnly && (route.foldedUnder != null || route.verdict !== 'recommend')) continue;
+    let from = route.fromEntity;
+    if (!from) continue;
+    const existing = nodes.get(from);
+    nodes.set(from, { entityId: from, name: route.fromName ?? existing?.name ?? 'Unknown', source: true, target: from === targetId });
+    for (const hop of route.hops) {
+      if (!nodes.has(hop.toEntity)) nodes.set(hop.toEntity, { entityId: hop.toEntity, name: hop.toName, source: false, target: hop.toEntity === targetId });
+      const key = `${from}|${hop.toEntity}`;
+      const link = links.get(key) ?? { fromEntity: from, toEntity: hop.toEntity, edgeIds: [], routeIndices: [] };
+      if (!link.edgeIds.includes(hop.edge.edgeId)) link.edgeIds.push(hop.edge.edgeId);
+      if (!link.routeIndices.includes(index)) link.routeIndices.push(index);
+      links.set(key, link);
+      from = hop.toEntity;
+    }
+  }
+  return { nodes: [...nodes.values()], links: [...links.values()] };
+}
+
+/** Counts distinct usable person chains, not parallel evidence or held/restricted approaches. */
+export function summarizeRoutes(routes: Route[]): RouteStats {
+  return summarizePipelineRoutes([{ targetId: 'target', routes }]);
+}
+
+/** Call with all pipeline targets, including empty searches. Repeated vehicle targets count once. */
+export function summarizePipelineRoutes(searches: Array<Pick<RouteSearch, 'targetId' | 'routes'>>): RouteStats {
+  const targets = new Map<string, Map<string, Route>>();
+  for (const search of searches) {
+    const routes = targets.get(search.targetId) ?? new Map<string, Route>();
+    targets.set(search.targetId, routes);
+    for (const route of search.routes) {
+      if (route.verdict !== 'recommend' || !route.score) continue;
+      const key = chainKey(route), prior = routes.get(key);
+      if (!prior || route.score.value > prior.score!.value) routes.set(key, route);
+    }
+  }
+  const counts = { strong: 0, warm: 0, weak: 0 };
+  const bestRouteCounts = { strong: 0, warm: 0, weak: 0, unavailable: 0 };
+  let bestScore: number | null = null;
+  for (const routes of targets.values()) {
+    let best: Route | undefined;
+    for (const route of routes.values()) {
+      counts[route.score!.band]++;
+      if (!best || route.score!.value > best.score!.value) best = route;
+    }
+    if (!best) bestRouteCounts.unavailable++;
+    else {
+      bestRouteCounts[best.score!.band]++;
+      bestScore = Math.max(bestScore ?? 0, best.score!.value);
+    }
+  }
+  const strongTargets = bestRouteCounts.strong;
+  return { targetCount: targets.size, routeCount: Object.values(counts).reduce((a, b) => a + b, 0), counts, bestRouteCounts,
+    bestScore, strongTargets,
+    confidenceStatement: `${strongTargets} ${strongTargets === 1 ? 'target has' : 'targets have'} at least one strong route in the inspected evidence. Scores are uncalibrated estimates; held and restricted routes are excluded.` };
+}

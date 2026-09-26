@@ -70,7 +70,45 @@ export interface RouteHop {
   toEntity: string;
 }
 
+export type RouteStrength = 'strong' | 'warm' | 'weak';
+export interface RouteScoreFactor {
+  key: 'lastHop' | 'introducer' | 'history' | 'access' | 'recency' | 'confidence';
+  label: string;
+  /** Signed points; factors sum to the route score before rounding. */
+  points: number;
+  basis: string;
+  edgeIds: string[];
+  /** Non-edge support, such as an evidenced LP commitment. */
+  evidenceRefs?: string[];
+}
+export interface RouteScore {
+  version: string;
+  evaluatedAt: string;
+  /** Relative strength 0–100, an uncalibrated estimate, never an investment probability. */
+  value: number;
+  band: RouteStrength;
+  confidence: number;
+  factors: RouteScoreFactor[];
+}
+export interface RouteStats {
+  targetCount: number;
+  routeCount: number;
+  counts: Record<RouteStrength, number>;
+  /** Distinct targets by their best usable route; unavailable includes held/restricted-only. */
+  bestRouteCounts: Record<RouteStrength | 'unavailable', number>;
+  bestScore: number | null;
+  strongTargets: number;
+  confidenceStatement: string;
+}
+export interface RouteGraph {
+  nodes: Array<{ entityId: string; name: string; source: boolean; target: boolean }>;
+  /** Route indices always refer to the full routes array, even for the visible graph. */
+  links: Array<{ fromEntity: string; toEntity: string; edgeIds: string[]; routeIndices: number[] }>;
+}
+
 export interface Route {
+  /** Present on every planned route; optional only for legacy fixture callers. */
+  score?: RouteScore;
   fromEntity?: string;
   fromName?: string;
   /** Index of the visible route this alternative is folded beneath; data is retained. */
@@ -100,6 +138,10 @@ export interface RouteSearch {
   targetName: string;
   fromName: string;
   routes: Route[];
+  /** Best one to three prefixes per last intermediary, plus direct sources; every alternative remains in routes. */
+  topRoutes?: Route[];
+  graph?: RouteGraph;
+  stats?: RouteStats;
   /** What was inspected. Rendered, never only logged. */
   coverage: {
     edges: number;

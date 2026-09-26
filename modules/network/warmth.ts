@@ -1,5 +1,5 @@
 import { config } from '@/config/deployment';
-import type { Edge, Route } from './types';
+import type { Edge, Route, RouteScore, RouteScoreFactor, RouteStrength } from './types';
 
 export type WarmthKind = keyof typeof config.routeWarmth.priors;
 /** Stored in existing evidence JSONB. Dates describe contact, never retrieval or mapping. */
@@ -11,6 +11,10 @@ export interface TieDetails {
   /** Each deal must attribute both people. Firm logos are insufficient. */
   jointInvestments?: Array<{ dealId: string; on: string }>;
   investmentRelevant?: boolean;
+  /** A sourced personal investment with this founder; never inferred from a firm's logo. */
+  raisedFrom?: boolean;
+  /** Describes the non-team endpoint of a team/PL tie, never arbitrary graph endpoints. */
+  withUs?: 'investor' | 'pl_founder';
 }
 export interface Warmth {
   version: string;
@@ -26,7 +30,7 @@ const LABEL: Record<WarmthKind, string> = {
   proximity: 'Affiliation or proximity only', acquaintance: 'Acquaintance',
   repeated_contact: 'Repeated direct contact', worked_together: 'Worked together',
   joint_investment: 'Joint investment', cofounder: 'Co-founded together',
-  frequent_coinvestment: 'Frequent personal co-investment',
+  frequent_coinvestment: 'Frequent personal co-investment', investor_founder: 'Personal investor–founder relationship',
 };
 const monthsAgo = (at: Date, months: number) => {
   const date = new Date(at);
@@ -46,6 +50,8 @@ export function tieDetailsProblems(value: unknown): string[] {
   if (!Object.hasOwn(config.routeWarmth.priors, t.kind)) problems.push('unknown warmth kind');
   if (t.basis !== undefined && !['pl_affiliation', 'pl_network'].includes(t.basis)) problems.push('unknown tie basis');
   if (t.lastInteraction != null && !Number.isFinite(dateOf(t.lastInteraction))) problems.push('lastInteraction must be an actual YYYY-MM-DD contact date');
+  if (t.raisedFrom !== undefined && typeof t.raisedFrom !== 'boolean') problems.push('raisedFrom must be boolean');
+  if (t.withUs !== undefined && !['investor', 'pl_founder'].includes(t.withUs)) problems.push('unknown withUs role');
   if (t.investmentRelevant !== undefined && typeof t.investmentRelevant !== 'boolean') problems.push('investmentRelevant must be boolean');
   if (t.jointInvestments !== undefined && (!Array.isArray(t.jointInvestments) || t.jointInvestments.some((d) =>
     !d || typeof d.dealId !== 'string' || !d.dealId.trim() || !Number.isFinite(dateOf(d.on))))) problems.push('jointInvestments need distinct deal IDs and actual YYYY-MM-DD deal dates');
@@ -82,9 +88,32 @@ export function tieWarmth(kind: string, details?: TieDetails, at = new Date()): 
     basis: `${details?.basis === 'pl_affiliation' ? 'PL colleagues by affiliation policy' : details?.basis === 'pl_network' ? 'PL network tie by affiliation policy' : LABEL[k]}: prior ${prior}/5; ${recency === 'unknown' ? 'contact date unknown' : recency}, −${penalty}. Estimate — guess; not evidence confidence or intro consent.` };
 }
 
+/** Compatibility with already-imported W3 evidence. Only explicit personal investor/founder
+ * statements count; generic investment mentions, firm ties and missing sources do not.
+ * New W3 output writes structured metadata. No person names participate in this rule.
+ */
+function investmentDetails(e: Edge['evidence'][number]): TieDetails | null {
+  if (e.tie && tieDetailsProblems(e.tie).length) return null;
+  if (e.tie?.kind === 'investor_founder') return e.tie;
+  // The known W3 disclaimer denies willingness, not the preceding investment claim.
+  const claim = e.note.replace(/; willingness is not recorded\.?$/i, '');
+  if (!e.source || /\b(?:not|never|no|firm[’']?s)\b/i.test(claim)) return null;
+  if (!/personal angel\/backer.*documented founder.*Direct investor[–-]founder tie/i.test(claim)
+    && !/angel investor in Protocol Labs.*knows (?:them |him |her )?directly/i.test(claim)) return null;
+  return { kind: 'investor_founder', lastInteraction: e.tie?.lastInteraction };
+}
+
+export function investmentTie(edge: Pick<Edge, 'evidence'>): boolean {
+  return edge.evidence.some((e) => investmentDetails(e) !== null);
+}
+
 export function edgeWarmth(edge: Pick<Edge, 'kind' | 'evidence'>, at = new Date()): Warmth {
-  const ties = edge.evidence.flatMap((e) => e.tie ? [tieWarmth(edge.kind, e.tie, at)] : []);
-  return ties.sort((a, b) => b.score - a.score)[0] ?? tieWarmth(edge.kind, undefined, at);
+  const ties = edge.evidence.flatMap((e) => {
+    const investment = investmentDetails(e);
+    return [e.tie, investment].flatMap((tie) => tie ? [tieWarmth(edge.kind, tie, at)] : []);
+  });
+  return ties.sort((a, b) => b.score - a.score || b.prior - a.prior || a.kind.localeCompare(b.kind))[0]
+    ?? tieWarmth(edge.kind, undefined, at);
 }
 
 export function routeWarmth(route: Pick<Route, 'hops'>, at = new Date()): number {
@@ -163,4 +192,62 @@ export function foldRoutes(routes: Route[], at = new Date(), readWarmth = warmth
     }
   }
   return out;
+}
+
+
+export function routeStrength(value: number): RouteStrength {
+  return value >= config.routeScoring.bands.strong ? 'strong' : value >= config.routeScoring.bands.warm ? 'warm' : 'weak';
+}
+
+export interface RouteScoreContext {
+  /** Sourced role of the final introducer, loaded once for the request. */
+  investor?: boolean;
+  plFounder?: boolean;
+  roleEdgeIds?: string[];
+  roleEvidenceRefs?: string[];
+}
+
+/** Deterministic relative strength. Tier discounts confidence; the strongest final relationship
+ * supplies most points. Neither score nor a role changes verdict, evidence tier or consent.
+ */
+export function scoreRoute(route: Pick<Route, 'hops'>, at = new Date(), context: RouteScoreContext = {},
+  readWarmth = warmthReader(at)): RouteScore {
+  const c = config.routeScoring, w = c.weights;
+  const final = route.hops.at(-1)?.edge;
+  const last = final ? readWarmth(final) : null;
+  const maxWarmth = Math.max(...Object.values(config.routeWarmth.priors));
+  const factors: RouteScoreFactor[] = [];
+  const add = (key: RouteScoreFactor['key'], label: string, points: number, basis: string, edgeIds: string[] = []) =>
+    factors.push({ key, label, points, basis, edgeIds });
+  add('lastHop', 'Relationship to target', (last?.prior ?? 0) / maxWarmth * w.lastHop,
+    last?.basis ?? 'No final relationship on file.', final ? [final.edgeId] : []);
+  // Recency belongs to contact evidence, never valid_from/as_of (import and retrieval dates).
+  add('recency', 'Contact recency', ((last?.score ?? 0) - (last?.prior ?? 0)) / maxWarmth * w.lastHop,
+    last ? `Final relationship: ${last.recency}. Policy affiliation has no inferred contact date.` : 'Unknown.', final ? [final.edgeId] : []);
+  const coinvestor = final && (last?.kind === 'joint_investment' || last?.kind === 'frequent_coinvestment');
+  const role = Math.max(context.investor ? c.introducer.investor : 0,
+    context.plFounder ? c.introducer.plFounder : 0, coinvestor ? c.introducer.coinvestor : 0);
+  add('introducer', 'Introducer standing', route.hops.length > 1 ? role * w.introducer : 0,
+    route.hops.length === 1 ? 'Direct route; no introducer required.' :
+      [context.investor ? 'Our personal investor or evidenced LP' : '', context.plFounder ? 'PL network founder' : '',
+        coinvestor ? 'Personal co-investment with target' : ''].filter(Boolean).join('; ') || 'No qualifying introducer role on file.',
+    [...(context.roleEdgeIds ?? []), ...(coinvestor && final ? [final.edgeId] : [])]);
+  factors[factors.length - 1]!.evidenceRefs = context.roleEvidenceRefs ?? [];
+  const raised = final?.evidence.some((e) => e.tie?.raisedFrom === true && !tieDetailsProblems(e.tie).length);
+  const repeated = final?.evidence.some((e) => e.tie?.kind === 'repeated_contact' && !tieDetailsProblems(e.tie).length);
+  const history = raised ? c.history.raisedFrom : final && investmentTie(final) ? c.history.investorFounder
+    : repeated ? c.history.repeatedContact : 0;
+  add('history', 'Direct investment and interaction history', history * w.history,
+    raised ? 'Explicit direct fundraising history.' : final && investmentTie(final) ? 'Sourced personal investor–founder history.'
+      : repeated ? 'Repeated dated direct interactions.' : 'No additional direct history on file.', final ? [final.edgeId] : []);
+  const prefix = route.hops.slice(0, -1);
+  const access = final ? prefix.length ? Math.min(...prefix.map((h) => readWarmth(h.edge).score)) / maxWarmth : 1 : 0;
+  add('access', 'Access to introducer', access * w.access,
+    prefix.length ? 'Weakest access hop to the introducer; the final relationship remains dominant.' : 'Direct access.', prefix.map((h) => h.edge.edgeId));
+  const confidence = route.hops.length ? Math.min(...route.hops.map((h) => c.tierConfidence[h.edge.tier])) : 0;
+  const subtotal = factors.reduce((n, f) => n + f.points, 0);
+  add('confidence', 'Evidence confidence', -subtotal * (1 - c.confidenceFloor) * (1 - confidence),
+    `Weakest evidence tier confidence ${confidence}; uncalibrated estimate, not investment probability or permission.`, route.hops.map((h) => h.edge.edgeId));
+  const value = Math.round(Math.max(0, Math.min(100, factors.reduce((n, f) => n + f.points, 0))) * 100) / 100;
+  return { version: c.version, evaluatedAt: at.toISOString(), value, band: routeStrength(value), confidence, factors };
 }
