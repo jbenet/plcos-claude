@@ -39,7 +39,7 @@ types, source kinds and capacity bands):
                     confidence: high | medium | low, scope?: person | firm }]
     profile      { summary, investorType, howTheyInvest?, interests?, capacity?: { band, basis },
                    signals?: [{ what, on?, source? }], cautions? }
-    connections  [{ to, kind, basis, source?, tier: B | C | D, scope? }]
+    connections  [{ to, toType: person | org, kind, basis, source?, tier: B | C | D, scope? }]
     queries      [{ q, useful? }];  coverage { searched?, notFound?, note? }
 
 `version` is the latest amendment, as a string. `detail` keys: `company`, `fund`, `legal_name`,
@@ -449,6 +449,12 @@ one of our companies, an unrelated company sharing a word with ours. A clean neg
 **A lead placing an LP at one of our portfolio companies,** seen only where facts may not come from (a
 LinkedIn heading; a company site naming no staff), is a check routed to that company — a person asks it
 — not only a tier C clue.
+
+**Target type** (`connections.toType`): set `person` for a named individual and `org` for an organization.
+This is independent of `scope`, which says whose tie it is. A personal board seat at an
+organization has `scope: "person", toType: "org"`; a firm’s tie to a named person has
+`scope: "firm", toType: "person"`. Leave the type unset only when the target is genuinely unclear,
+and explain the uncertainty in the basis. Never change scope to make the target type fit.
 
 **Tiers** (`connections`): B, a documented working relationship — employed, an investor of record, a
 board seat. Speaking at a PL-run event is C; attending, D. A shared affiliation is C and a co-attendance

@@ -26,7 +26,7 @@ export interface Path {
   /** Sourced person outside the active LP research set; import resolves before building edges. */
   lpPerson?: ConnectionPerson;
   /** Who or what they are near: a team member, one of our organizations, a backer of ours, another LP. */
-  other: { type: 'team' | 'ours' | 'backer' | 'lp'; name: string; key?: string; handle?: string; person?: ConnectionPerson };
+  other: { type: 'team' | 'ours' | 'backer' | 'lp'; name: string; key?: string; handle?: string; entityType?: 'person' | 'org'; person?: ConnectionPerson };
   kind: 'met' | 'corresponded' | 'colleague' | 'advisor' | 'coinvestor' | 'portfolio' | 'alumni' | 'board' | 'same_firm' | 'other';
   tier: Tier;
   basis: string;
@@ -254,10 +254,10 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
     if (f.identity.match === 'ambiguous' || f.identity.match === 'not_found') continue;
     for (const c of f.connections ?? []) {
       const tier = c.tier === 'B' && c.scope === 'firm' ? 'C' : c.tier;
-      const resolved = c.scope !== 'firm' ? (c.toHandle && team.some((t) => t.handle === c.toHandle)
+      const resolved = c.toType !== 'org' && c.scope !== 'firm' ? (c.toHandle && team.some((t) => t.handle === c.toHandle)
         ? { type: 'team' as const, name: team.find((t) => t.handle === c.toHandle)!.name, handle: c.toHandle }
         : resolvePerson(c.to, people, team)) : null;
-      add({ lp: f.key, other: resolved ?? { type: /protocol labs|filecoin|ipfs|pl capital|protocol vc/i.test(c.to) ? 'ours' : 'backer', name: c.to },
+      add({ lp: f.key, other: { ...(resolved ?? { type: /protocol labs|filecoin|ipfs|pl capital|protocol vc/i.test(c.to) ? 'ours' as const : 'backer' as const, name: c.to }), ...(c.toType ? { entityType: c.toType } : {}) },
         kind: c.kind === 'portfolio' ? 'portfolio' : c.kind === 'board' ? 'board' : c.kind === 'advisor' ? 'advisor' : c.kind === 'coinvestor' ? 'coinvestor' : c.kind === 'colleague' ? 'colleague' : c.kind === 'alumni' ? 'alumni' : 'other',
         tie: c.scope === 'firm' ? { kind: 'proximity' } : c.tie
           ?? (/\bco[ -]?founded\b|\bco[ -]?founders\b/i.test(c.basis) && resolved ? { kind: 'cofounder' } : undefined),
@@ -283,7 +283,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
       for (const d of from.domains) {
         for (const c of atDomain.get(d) ?? []) {
           if (c.key === f.key) continue;
-          add({ lp: c.key, other: { type: ours ? 'ours' : 'backer', name: conn.to }, kind: conn.kind === 'coinvestor' ? 'coinvestor' : conn.kind === 'portfolio' ? 'portfolio' : 'other',
+          add({ lp: c.key, other: { type: ours ? 'ours' : 'backer', name: conn.to, ...(conn.toType ? { entityType: conn.toType } : {}) }, kind: conn.kind === 'coinvestor' ? 'coinvestor' : conn.kind === 'portfolio' ? 'portfolio' : 'other',
             tier: conn.tier === 'D' ? 'D' : 'C', basis: `${conn.basis} (the firm’s tie, recorded in a colleague’s finding; they work there by our records, at ${d})`, source: conn.source ?? null });
         }
       }

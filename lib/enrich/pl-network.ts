@@ -2,6 +2,8 @@ import type { Candidate } from './candidates';
 import type { Finding } from './schema';
 import { connectionPersonKey, norm, type ConnectionPerson, type Network, type Path, type PlDirectoryEntry, type TeamMember } from './connect';
 
+export const looksLikeOrganization = (name: string) => /\b(capital|partners|ventures|labs|fund|foundation|university|network|inc|llc)\b/i.test(name);
+
 const isPL = (s: string) => /^(?:protocol labs|pl)$/i.test(s.trim());
 const plMention = (s: string) => /\bProtocol Labs\b/i.test(s) && !/\b(?:not|never|no)\b[^.;]*\bProtocol Labs\b/i.test(s);
 export const PL_SOURCE = { name: 'PL', source: 'https://protocol.ai', entityType: 'org' as const };
@@ -76,11 +78,11 @@ export function materializeResearchNodes(paths: Path[], candidates: Candidate[],
   const nodes = paths.map((p): Path => {
     if (p.other.key || p.other.handle) return p;
     const name = p.other.name.replace(/\s*\([^()]*\)\s*$/, '').trim();
-    const members = team.filter((t) => norm(t.name) === norm(name));
-    if (members.length === 1) return { ...p, other: { type: 'team', name: members[0]!.name, handle: members[0]!.handle } };
-    const matches = candidates.filter((c) => norm(c.name) === norm(name));
+    const members = team.filter((t) => p.other.entityType !== 'org' && norm(t.name) === norm(name));
+    if (members.length === 1) return { ...p, other: { ...p.other, type: 'team', name: members[0]!.name, handle: members[0]!.handle } };
+    const matches = candidates.filter((c) => (!p.other.entityType || c.type === p.other.entityType) && norm(c.name) === norm(name));
     if (matches.length === 1) return { ...p, other: { ...p.other, name: matches[0]!.name, key: matches[0]!.key } };
-    if (isPL(name) || /^(?:Someone on the team|PL Capital|Protocol Labs network)/i.test(p.other.name)) {
+    if (p.other.entityType !== 'person' && (isPL(name) || /^(?:Someone on the team|PL Capital|Protocol Labs network)/i.test(p.other.name))) {
       const hub = plSourceNode();
       return { ...p, other: { type: 'ours', name: hub.name, key: hub.key, person: hub } };
     }
@@ -88,16 +90,16 @@ export function materializeResearchNodes(paths: Path[], candidates: Candidate[],
     const backer = net.backer_people.find((b) => norm(b.name) === norm(name));
     // Node identity must not change with the page that happened to mention it.
     // The exact source remains on each edge.
-    const source = backer?.source ?? org?.source ?? 'research:W3';
-    const entityType = backer ? 'person' : org || p.other.type === 'ours' ? 'org'
-      : /\b(capital|partners|ventures|labs|fund|foundation|university|network|inc|llc)\b/i.test(name) ? 'org' : 'person';
+    const source = (p.other.entityType === 'org' ? org?.source : p.other.entityType === 'person' ? backer?.source : backer?.source ?? org?.source) ?? 'research:W3';
+    const entityType = p.other.entityType ?? (backer ? 'person' : org || p.other.type === 'ours' ? 'org'
+      : looksLikeOrganization(name) ? 'org' : 'person');
     const person: ConnectionPerson = { key: connectionPersonKey(name, source), name, source, entityType };
     return { ...p, other: { ...p.other, name, key: person.key, person } };
   });
   const hub = plSourceNode();
   for (const p of [...nodes]) {
     const descriptor = p.other.person;
-    if (!descriptor || descriptor.key === hub.key) continue;
+    if (!descriptor || descriptor.entityType === 'person' || descriptor.key === hub.key) continue;
     const org = organizations.find((o) => norm(o.name) === norm(descriptor.name) || o.aliases.some((a) => norm(a) === norm(descriptor.name)));
     if (!org || nodes.some((q) => q.lp === descriptor.key && q.other.key === hub.key)) continue;
     nodes.push({ lp: descriptor.key, lpPerson: descriptor, other: { type: 'ours', name: hub.name, key: hub.key, person: hub },

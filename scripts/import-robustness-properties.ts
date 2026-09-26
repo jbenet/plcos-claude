@@ -22,7 +22,7 @@ export async function importRobustnessProperties(check: (name: string, ok: boole
     kind: 'other', tier: 'C', basis: 'Invented sourced relationship', source: person.source });
   const finding: Finding = { key: lp, name: 'Robust Willow Vale', researched: { at: '2026-09-26', by: 'fixture', workflow: 'W1', version: '1' },
     identity: { match: 'confirmed', basis: 'Invented identity', canonical: { org: org.name } }, facts: [],
-    connections: [{ to: org.name, kind: 'other', tier: 'C', scope: 'person', basis: 'Invented scope error' }] };
+    connections: [{ to: org.name, kind: 'other', tier: 'C', scope: 'person', toType: 'person', basis: 'Invented target type error' }] };
   const invalid = structuredClone(finding) as any;
   invalid.connections[0].kind = 'investor_founder';
   invalid.connections[0].tie = { kind: 'invented_unsupported_warmth' };
@@ -36,13 +36,13 @@ export async function importRobustnessProperties(check: (name: string, ok: boole
   const locations = [{ file: 'raw/invented.json', index: 0, value: finding }];
   const issues = connectionIdentityProblems(locations, [{ file: 'connections.jsonl', index: 7, value: path(wrong) }]);
   check('ROBUST person targets matching known orgs and cross-file identity conflicts name each location',
-    issues.some((p) => p.file === 'raw/invented.json' && p.problems.some((s) => s.includes('connection 0: scope person target matches a known org')))
+    issues.some((p) => p.file === 'raw/invented.json' && p.problems.some((s) => s.includes('connection 0: toType person conflicts with target identity')))
       && issues.some((p) => p.file === 'connections.jsonl' && p.index === 7 && p.problems.some((s) => s.includes('both person and org'))),
     'Exact normalized identities join findings and W3 paths without exposing names in diagnostics.');
   const otherFinding = { ...finding, key: randomUUID(), name: 'Other Invented Person', identity: { match: 'confirmed', basis: 'Fixture' }, connections: [] };
   const cross = connectionIdentityProblems([{ file: 'raw/a.json', index: 0, value: finding },
     { file: 'raw/b.json', index: 0, value: { ...otherFinding, connections: finding.connections } }], []);
-  check('ROBUST cross-finding organization knowledge diagnoses a person-scope target', cross.some((p) => p.file === 'raw/b.json' && p.problems.some((s) => s.includes('connection 0'))), 'The target organization may be declared in a different file.');
+  check('ROBUST cross-finding organization knowledge diagnoses a person-typed target', cross.some((p) => p.file === 'raw/b.json' && p.problems.some((s) => s.includes('connection 0'))), 'The target organization may be declared in a different file.');
   const badSource = path({ ...good, source: 'https://example.org/different' });
   const parsed = readPathRecords([JSON.stringify(path(good)), '', '{bad', JSON.stringify({ ...path(good), lp: 'not-a-uuid' }), JSON.stringify(badSource)].join('\n'));
   check('ROBUST malformed JSON, invalid UUIDs and mismatched source identities are isolated by physical index',
@@ -100,7 +100,7 @@ export async function importRobustnessProperties(check: (name: string, ok: boole
     });
     check('ROBUST enrich-check reports indexed schema and identity failures without crashing', cli.status === 1 && !cli.stderr
       && cli.stdout.includes(`raw/${lp}.json index 0: connection 0: unknown warmth kind`)
-      && cli.stdout.includes('connections.jsonl index 1:') && cli.stdout.includes('scope person target matches a known org'),
+      && cli.stdout.includes('connections.jsonl index 1:') && cli.stdout.includes('toType person conflicts with target identity'),
       'The CLI composes cross-file checks even when the finding already has a vocabulary problem.');
     await mkdir(join(dir, 'raw'));
     await writeFile(join(dir, 'raw', `${lp}.json`), JSON.stringify({ ...finding, connections: [], facts: [{ field: 'role', value: 'Invented operator', source: { url: 'https://example.org/robust-fixture', kind: 'primary' }, confidence: 'high' }] }));
