@@ -29,6 +29,10 @@ import { noteTags } from '@/lib/connectors/affinity/event-tags';
 
 export const RESEARCH_STATUSES: PursuitStatus[] = ['selected', 'connecting', 'discussing', 'committed'];
 
+/** Juan, 26 Sep: newly added prospects join W0 at New/Sourcing too. Passed stays excluded. */
+export const inResearchSet = (p: Pursuit): boolean => !p.historical &&
+  (RESEARCH_STATUSES.includes(p.status) || (p.source === 'prospects' && (p.status === 'new' || p.status === 'sourcing')));
+
 /** A domain that says nothing about where someone works. */
 const FREE_MAIL = /^(gmail|googlemail|yahoo|ymail|hotmail|outlook|live|msn|icloud|me|mac|aol|protonmail|proton|gmx|yandex|qq|163|126|comcast|verizon|att|sbcglobal|mail|fastmail|hey|pm)\./i;
 
@@ -141,7 +145,7 @@ const IDENTITY_FIELDS = ['Current Organization', 'Current Job Title', 'Organizat
 
 export async function researchSet(): Promise<Candidate[]> {
   const db = await getDb();
-  const all = (await listPursuits(null)).filter((p) => !p.historical && RESEARCH_STATUSES.includes(p.status));
+  const all = (await listPursuits(null)).filter(inResearchSet);
   const byEntity = new Map<string, Pursuit[]>();
   for (const p of all) byEntity.set(p.entityId, [...(byEntity.get(p.entityId) ?? []), p]);
   const ids = [...byEntity.keys()];

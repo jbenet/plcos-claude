@@ -5,7 +5,8 @@ import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
 import { ago } from '@/lib/time';
-import { RESEARCH_STATUSES, enrichDir } from '@/lib/enrich/candidates';
+import { RESEARCH_STATUSES, enrichDir, inResearchSet } from '@/lib/enrich/candidates';
+import { Prospects } from './Prospects';
 import Link from '@/components/ui/AppLink';
 import { latestRecordsToFix } from '@/lib/enrich/fixes';
 import { listPursuits, openSuggestions, STATUS_LABEL } from '@/modules/strategy';
@@ -66,7 +67,7 @@ async function pagesOnly(dir: string): Promise<{ pages: number; partial: number 
 export default async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?: string; imported?: string; claims?: string; refused?: string; sourced?: string }> }) {
   const sp = await searchParams;
   const dir = enrichDir();
-  const pursuits = (await listPursuits(null)).filter((p) => !p.historical && RESEARCH_STATUSES.includes(p.status));
+  const pursuits = (await listPursuits(null)).filter(inResearchSet);
   const entities = new Set(pursuits.map((p) => p.entityId)).size;
   const { readFile } = await import('node:fs/promises');
   const triage = (await readFile(join(dir, 'triage.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Triage);
@@ -119,14 +120,16 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
         Who the research workflows read about, what came back, and the import that maps it in.
       </p>
 
+      <Prospects directory={join(dir, 'prospects')} />
+
       <div className="card">
         <div className="chead">
           <h2>The research set</h2>
-          <span className="lbl">{RESEARCH_STATUSES.map((s) => STATUS_LABEL[s]).join(', ')} · vehicles being raised</span>
+          <span className="lbl">{RESEARCH_STATUSES.map((s) => STATUS_LABEL[s]).join(', ')} + new prospects · vehicles being raised</span>
         </div>
         <div className="cbody">
           <div className="fact"><span>LPs in it now</span><span>{n(entities)} ({n(pursuits.length)} pursuits)</span></div>
-          {RESEARCH_STATUSES.map((s) => (
+          {(['new', 'sourcing', ...RESEARCH_STATUSES] as const).map((s) => (
             <div className="fact" key={s}><span>{STATUS_LABEL[s]}</span><span>{n(pursuits.filter((p) => p.status === s).length)}</span></div>
           ))}
           <div className="fact"><span>Exported</span><span>{set ? `${n(set.lines)} LPs · ${ago(set.at)}` : 'not yet'}{cands && set && cands.lines !== set.lines ? ' · the two files disagree' : ''}</span></div>
