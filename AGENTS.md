@@ -199,10 +199,14 @@ Blocking without the dated follow-up loses the opportunity silently — that is 
 needs coordinating, not winning. Say "coordinate" in copy where the case is only an overlap,
 and keep "conflict" for two asks that would actually collide.
 
-**6. Evidence tiers A–D on relationship edges. C and D always require a human** before the
-edge is trusted for routing. Co-attendance, shared affiliation and a public social
-connection are discovery clues, not proof of a relationship.
-*Juan, 26 Sep 2026:* Protocol Labs is the exception, because it is our own network. Two people who are
+**6. Evidence tiers A–D on relationship edges, modelled as uncertainty, never gated on a person.**
+Co-attendance, shared affiliation and a public social connection are weak evidence, not proof of a
+relationship: a C or D tie routes, ranked below better-evidenced ties and labelled with what it rests on,
+and gains or loses confidence as evidence arrives (docs/21). *Juan, 26 Sep 2026:* "don't have humans
+confirm info. That makes a brittle system. Instead model the uncertainty, and gather more evidence over
+time. If humans see something wrong while using the app, they can flag it there" (the feedback box, issue
+0040). Human sign-off stays on actions (rule 3: sends, intro asks, money), not on information.
+*Juan, 26 Sep 2026:* Protocol Labs is our own network, so affiliation there is strong evidence. Two people who are
 or were at PL are warmly tied, with no email or meeting needed. Every PL team member can be the source of a
 route. Everyone in the PL network is tied to the PL team, and where no particular team member is known, a
 "PL" organization node is the source (`PL → <PL founder> → <target>`). Every person and organization the
