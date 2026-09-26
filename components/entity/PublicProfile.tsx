@@ -7,7 +7,7 @@ import { claimLabel, claimsFor, getSourceDoc, notesFor, type Claim } from '@/mod
  * What public sources say about an LP (N64, docs/19): the enrichment research, mapped in by the
  * import. Every line rests on a page someone can open, with how sure the reading is, and nobody
  * on the team has verified any of it until someone does (rule 9). The paths are candidates: a C
- * or D path is a clue for a person to check before it routes anything (rule 6). And it says what
+ * or D path routes with labelled uncertainty (rule 6). And it says what
  * was searched, and what wasn't found — an empty section is not "nothing exists" (rule 7).
  */
 
@@ -115,7 +115,7 @@ export async function PublicProfile({ entityId }: { entityId: string }) {
             {paths.slice(0, 8).map((x, i) => (
               <div className="pp-path" key={i}>
                 <span className={`tier t${x.tier}`} title={TIER_MEANS[x.tier]}>{x.tier}</span>
-                <span><b>{x.other.name}</b> <span className="muted">— {x.basis}</span>{x.reviewedBy && x.reviewedAt ? <span className="muted"> · confirmed by {x.reviewedBy}, {shortDate(new Date(x.reviewedAt))}</span> : (x.tier === 'C' || x.tier === 'D') && <span className="needs"> · needs a person to check</span>}</span>
+                <span><b>{x.other.name}</b> <span className="muted">— {x.basis}</span>{x.reviewedBy && x.reviewedAt ? <span className="muted"> · confirmed by {x.reviewedBy}, {shortDate(new Date(x.reviewedAt))}</span> : (x.tier === 'C' || x.tier === 'D') && <span className="needs"> · weaker evidence</span>}</span>
               </div>
             ))}
             {paths.length > 8 && <p className="muted" style={{ fontSize: 12 }}>{paths.length - 8} more.</p>}

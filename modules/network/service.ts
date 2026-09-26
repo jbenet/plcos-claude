@@ -2,9 +2,9 @@ import { config } from '@/config/deployment';
 import { listEntities } from '@/modules/identity';
 import { connectorLoad, restrictionsFor } from '@/modules/coordination';
 import { listSyncSources } from '@/modules/platform';
-import { edgeCoverage, edgesByIds, entityForUser, enumeratePaths } from './repo';
+import { edgeCoverage, edgesByIds, entityForUser, enumeratePaths, routeSources } from './repo';
 import { influenceFor } from './influence';
-import { foldRoutes, needsHuman, routeWarmth } from './warmth';
+import { foldRoutes, routeWarmth } from './warmth';
 import { CLUE_KINDS, type Edge, type Route, type RouteHop, type RouteSearch, type RouteVerdict } from './types';
 
 const TIER_ORDER = { A: 0, B: 1, C: 2, D: 3 } as const;
@@ -23,18 +23,20 @@ const CLUE_REASON: Record<string, string> = {
  *
  * Three rules are enforced here rather than left to the ranking:
  *  - A route is only as good as its worst hop.
- *  - A C or D hop that no human has reviewed cannot carry a route at all.
+ *  - C and D hops route with their uncertainty labelled and ranked.
  *  - A restriction on the target excludes every path through the restricted party, and
  *    the exclusion is reported rather than silently dropped.
  */
 export async function planRoutes(
-  fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund',
+  fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'current',
 ): Promise<RouteSearch | null> {
   const me = await entityForUser(fromHandle);
-  if (!me) return null;
+  const fromSources = scope === 'team' ? await routeSources() : me ? [me] : [];
+  if (!fromSources.length) return null;
 
   const [paths, entities, restrictions, loads, coverage, sources] = await Promise.all([
-    enumeratePaths(me.entityId, targetId, maxHops),
+    Promise.all(fromSources.filter((source) => source.entityId !== targetId).map(async (source) =>
+      (await enumeratePaths(source.entityId, targetId, maxHops)).map((path) => ({ ...path, source })))).then((lists) => lists.flat()),
     listEntities(),
     restrictionsFor(targetId),
     connectorLoad(),
@@ -98,30 +100,11 @@ export async function planRoutes(
       }
     }
 
-    // A C or D hop nobody has reviewed cannot carry a route.
-    const unreviewed = hops.filter(
-      (h) => needsHuman(h.edge),
-    );
-    if (verdict !== 'excluded' && unreviewed.length > 0) {
-      verdict = 'not_a_route';
-      for (const h of unreviewed) {
-        reasons.push(
-          `${h.edge.fromName} → ${h.edge.toName} is tier ${h.edge.tier} and no one has confirmed it. ` +
-          (CLUE_REASON[h.edge.kind] ?? 'Shared affiliation is not evidence of a relationship.'),
-        );
-      }
-    }
-
-    // A reviewed C or D hop becomes usable, not good. Human review removes the refusal; it
-    // does not upgrade the evidence, and a route is only as good as its worst hop.
-    if (verdict === 'recommend' && (weakestTier === 'C' || weakestTier === 'D')) {
-      verdict = 'hold';
-      const weak = hops.find((h) => h.edge.tier === weakestTier);
-      reasons.push(
-        `The weakest hop is tier ${weakestTier}${weak ? ` (${weak.edge.fromName} → ${weak.edge.toName})` : ''}. ` +
-        'A person has confirmed it, which is what makes it usable at all — but confirming a ' +
-        'shared affiliation does not turn it into a working relationship.',
-      );
+    // Tiers describe uncertainty, never a human information gate (rule 6).
+    for (const h of hops.filter((h) => h.edge.tier === 'C' || h.edge.tier === 'D')) {
+      reasons.push(`${h.edge.fromName} → ${h.edge.toName}: tier ${h.edge.tier}. ` +
+        (CLUE_REASON[h.edge.kind] ?? 'Weak relationship evidence; interaction is not established.') +
+        ' Routes with uncertainty; stronger evidence ranks first.');
     }
 
     // Connector goodwill: the load cap is on the connector because that is the scarcer resource.
@@ -144,7 +127,7 @@ export async function planRoutes(
     if (verdict === 'recommend') {
       const reviewed = hops.filter((h) => h.edge.reviewedByName).length;
       reasons.push(
-        `Every hop is tier ${weakestTier} or better, with interaction evidence on file` +
+        `Every hop is tier ${weakestTier} or better${weakestTier <= 'B' ? ', with a documented or policy-based tie' : '; the route carries weaker evidence'}` +
         (reviewed > 0 ? ` and ${reviewed} hop${reviewed === 1 ? '' : 's'} confirmed by a person.` : '.') +
         (askLoad && askLoad.used > 0
           ? ` ${askLoad.connector} has goodwill left: ${cap - askLoad.used} of ${cap} asks unused this quarter.`
@@ -153,6 +136,7 @@ export async function planRoutes(
     }
 
     routes.push({
+      fromEntity: p.source.entityId, fromName: p.source.name,
       hops, connectorNames, connectorIds, verdict, reasons, weakestTier, askLoad,
       influence: null,
     });
@@ -178,9 +162,10 @@ export async function planRoutes(
   const rank: Record<RouteVerdict, number> = { recommend: 0, hold: 1, not_a_route: 2, excluded: 3 };
   routes.sort(
     (a, b) =>
-      rank[a.verdict] - rank[b.verdict] ||
+      Number(a.verdict === 'excluded') - Number(b.verdict === 'excluded') ||
       TIER_ORDER[a.weakestTier] - TIER_ORDER[b.weakestTier] ||
       routeWarmth(b, at) - routeWarmth(a, at) ||
+      rank[a.verdict] - rank[b.verdict] ||
       (b.influence?.score ?? 0) - (a.influence?.score ?? 0) ||
       a.hops.length - b.hops.length ||
       a.hops.map((h) => h.edge.edgeId).join('|').localeCompare(b.hops.map((h) => h.edge.edgeId).join('|')),
@@ -189,7 +174,7 @@ export async function planRoutes(
   return {
     targetId,
     targetName,
-    fromName: me.name,
+    fromName: scope === 'team' ? 'Team / PL' : me!.name,
     routes: foldRoutes(routes, at),
     coverage: {
       edges: coverage.edges,

@@ -115,3 +115,16 @@ export async function entityForUser(handle: string): Promise<{ entityId: string;
   );
   return row ? { entityId: row.entity_id, name: row.display_name } : null;
 }
+
+/** People on the active team plus the explicit PL organization source. */
+export async function routeSources(): Promise<Array<{ entityId: string; name: string }>> {
+  const db = await getDb();
+  const rows = await db.query<{ id: string; name: string }>(
+    `select distinct e.entity_id::text as id, e.display_name as name
+       from identity.entity e join identity.source_record s on s.entity_id = e.entity_id
+       left join platform.app_user u on s.source = 'app_user' and s.source_id = u.handle
+      where (s.source = 'app_user' and u.active)
+         or (s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL')
+      order by name`);
+  return rows.map((r) => ({ entityId: r.id, name: r.name }));
+}

@@ -21,23 +21,21 @@ import { researchEndpoint, researchTie } from './research-path';
  *      interaction — tier B, "corresponded". Our own events (GROUP_EVENT or more of our records on
  *      one calendar entry) are not meetings, and say nothing about who knows whom.
  *   3. The research. The paths W3 found (docs/19), as edges with the tier each was given. A and B
- *      carry routes; C and D are shown, and wait for a person to confirm them (rule 6) — the planner
- *      refuses them until then. One of our organizations, rather than a person, is no hop: those
- *      stay candidates on the LP's page.
+ *      carry routes; C and D route with labelled uncertainty (rule 6).
+ *      Organization nodes, including PL, can connect paths too.
  *
  * Idempotent. Each edge built here says where it came from in its evidence — `derived`, with the
- * source and the date — and a rebuild replaces the ones nobody has reviewed. A person's confirmation
- * or "not a real tie" stands: the rebuild keeps that edge and makes no other for the same pair and
- * kind.
+ * source and the date — and a rebuild replaces the ones nobody has reviewed. A reported false tie stays ended. Confirmation remains provenance while
+ * current evidence can change the modelled tier and warmth.
  */
 
 export interface BuildCounts {
   teamCreated: number;
   fromRecords: number;
   fromResearch: number;
-  /** C and D ties built for a person to confirm. */
+  /** C and D ties with weaker evidence (legacy counter name). */
   toConfirm: number;
-  /** Ties a person already confirmed or turned down, kept as they left them. */
+  /** Corrections and confirmations on file, kept as recorded. */
   keptReviewed: number;
   /** Research paths with no person at the other end: one of our organizations, or someone not in the tool. */
   notPeople: number;
@@ -52,7 +50,7 @@ const KIND: Record<string, EdgeKind> = {
 const norm = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
 const pairKey = (a: string, b: string, kind: string) => `${[a, b].sort().join('|')}|${kind}`;
 
-interface NewEdge { reviewedBy?: string; reviewedAt?: string; from: string; to: string; kind: EdgeKind; tier: EvidenceTier; band: string; since: string; evidence: Array<Record<string, unknown>> }
+interface NewEdge { reviewedBy?: string; reviewedAt?: string; reviewNote?: string | null; from: string; to: string; kind: EdgeKind; tier: EvidenceTier; band: string; since: string; evidence: Array<Record<string, unknown>> }
 
 export async function buildNetwork(): Promise<BuildCounts> {
   const db = await getDb();
@@ -90,14 +88,16 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   const userByHandle = new Map(users.map((u) => [u.handle, u.id]));
   const teamEntities = new Set(entityOfUser.values());
 
-  // What stands: a person's decision. Everything else built here before is rebuilt.
-  const reviewed = await tx.query<{ a: string; b: string; kind: string }>(
-    `select from_entity::text as a, to_entity::text as b, kind::text from network.edge where reviewed_at is not null`,
+  // A false-tie correction stays ended. Confirmation is provenance, not a freeze on
+  // the model: rebuild active derived edges from current evidence, retaining attribution.
+  const reviewed = await tx.query<{ a: string; b: string; kind: string; reviewer: string; at: string; note: string | null; ended: string | null }>(
+    `select from_entity::text as a, to_entity::text as b, kind::text, reviewed_by::text as reviewer, reviewed_at::text as at, review_note as note, valid_to::text as ended from network.edge where reviewed_at is not null`,
   );
-  const kept = new Set(reviewed.map((r) => pairKey(r.a, r.b, r.kind)));
+  const kept = new Set(reviewed.filter((r) => r.ended).map((r) => pairKey(r.a, r.b, r.kind)));
+  const priorReview = new Map(reviewed.filter((r) => !r.ended).map((r) => [pairKey(r.a, r.b, r.kind), r]));
   counts.keptReviewed = reviewed.length;
   await tx.query(
-    `delete from network.edge where reviewed_at is null
+    `delete from network.edge where (reviewed_at is null or valid_to is null)
         and (evidence @> '[{"derived": "records"}]'::jsonb or evidence @> '[{"derived": "research"}]'::jsonb)`,
   );
 
@@ -106,6 +106,8 @@ async function build(tx: Queryable): Promise<BuildCounts> {
     if (e.from === e.to) return false;
     const k = pairKey(e.from, e.to, e.kind);
     if (kept.has(k)) return false;
+    const prior = priorReview.get(k);
+    if (prior && !e.reviewedBy) { e.reviewedBy = prior.reviewer; e.reviewedAt = prior.at; e.reviewNote = prior.note; }
     const existing = edges.get(k);
     if (existing) {
       // Keep every basis; take the strongest evidence tier, never derive it from warmth.
@@ -177,7 +179,7 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   const notes = await tx.query<{ entity_id: string; at: string; data: { paths?: Path[] } }>(
     `select entity_id::text, created_at::text as at, data from research.note where kind = 'connection_candidates'`,
   );
-  const people = await tx.query<{ id: string; name: string }>(`select entity_id::text as id, display_name as name from identity.entity where entity_type = 'person'`);
+  const people = await tx.query<{ id: string; name: string }>(`select entity_id::text as id, display_name as name from identity.entity`);
   const known = new Set(people.map((r) => r.id));
   const roster = people.map((p) => ({ ...p, handle: users.find((u) => entityOfUser.get(u.id) === p.id)?.handle }));
   // Warehouse identities are created only during this existing server-side import/build transaction.
@@ -260,18 +262,17 @@ async function build(tx: Queryable): Promise<BuildCounts> {
 
   for (const e of edges.values()) {
     await tx.query(
-      `insert into network.edge (from_entity, to_entity, kind, tier, strength, tie_band, evidence, valid_from, reviewed_by, reviewed_at)
-       values ($1, $2, $3::network.edge_kind, $4::network.evidence_tier, null, $5, $6, $7::date, $8::uuid, $9::timestamptz)`,
-      [e.from, e.to, e.kind, e.tier, e.band, JSON.stringify(e.evidence), e.since, e.reviewedBy ?? null, e.reviewedBy ? e.reviewedAt : null],
+      `insert into network.edge (from_entity, to_entity, kind, tier, strength, tie_band, evidence, valid_from, reviewed_by, reviewed_at, review_note)
+       values ($1, $2, $3::network.edge_kind, $4::network.evidence_tier, null, $5, $6, $7::date, $8::uuid, $9::timestamptz, $10)`,
+      [e.from, e.to, e.kind, e.tier, e.band, JSON.stringify(e.evidence), e.since, e.reviewedBy ?? null, e.reviewedBy ? e.reviewedAt : null, e.reviewNote ?? null],
     );
   }
   return counts;
 }
 
 /**
- * A person confirms a tie, or says it isn't one (N82, rule 6). Confirming lets a C or D tie carry a
- * route — held, not recommended: confirmation doesn't turn a shared board into a friendship. "Not a
- * real tie" ends it today, so no route walks it, and the next rebuild leaves it ended.
+ * Record a voluntary correction, never an information gate. Confirmation adds provenance;
+ * a reported false tie ends the edge, and rebuilds preserve that correction.
  */
 export async function reviewEdge(actorId: string, edgeId: string, decision: 'confirm' | 'decline', note: string | null): Promise<void> {
   const db = await getDb();

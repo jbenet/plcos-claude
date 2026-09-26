@@ -74,9 +74,9 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
   const weak = nw.foldRoutes([route([edge('start-connector', 'acquaintance'), final]), longer], at);
   const held = nw.foldRoutes([{ ...short, verdict: 'hold' }, longer], at);
   const old = nw.foldRoutes([route([{ ...first, evidence: [{ note: 'Old joint work', tie: { kind: 'cofounder', lastInteraction: '2010-01-01' } }] }, final]), longer], at);
-  check('CONN2 a redundant detour folds under a strong first hop and reappears when that hop is weak, held or historical',
+  check('CONN2 a redundant detour folds under a strong first hop and reappears when that hop is weak or action-held; age reduces warmth without a hard gate',
     folded.length === 2 && folded[1]?.foldedUnder === 0 && weak[1]?.foldedUnder === null
-      && held[1]?.foldedUnder === null && old[1]?.foldedUnder === null,
+      && held[1]?.foldedUnder === null && old[1]?.foldedUnder === 0,
     'Both routes retained; only the redundant strong-prefix alternative folds.');
   const warmer = route([edge('start-detour', 'cofounder'), edge('detour-connector', 'cofounder'), final]);
   check('CONN2 a warmer detour stays visible; the route is no warmer than its weakest hop',
@@ -120,11 +120,11 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
     const laterTeam = [{ ...team[0]!, roles: [{ ...team[0]!.roles[0]!, since: '2024-01-01' }] }];
     const noOverlap = cn.connectionPaths(inputs, findings, net, laterTeam, [], at).paths;
     const ambiguous = cn.connectionPaths(inputs, new Map([[target.key, { ...tf, identity: { match: 'ambiguous', basis: 'Namesake' } }]]), net, team, [], at).paths;
-    check('CONN2 no dated overlap, unresolved identity and duplicate names cannot manufacture warm personal paths',
-      !noOverlap.some((p) => p.lp === colleague.key && p.tier === 'B')
+    check('PL affiliation needs no dated overlap; unresolved public identities and duplicate names remain distinct',
+      noOverlap.some((p) => p.lp === colleague.key && p.tier === 'B' && p.tie?.basis === 'pl_affiliation')
         && !ambiguous.some((p) => p.lp === target.key && p.other.key === angel.key)
         && cn.resolvePerson(angel.name, [angel, { ...angel, key: 'duplicate' }], team) === null,
-      'The weak candidate stays visible; named relationship joins require a unique endpoint.');
+      'PL affiliation is sufficient; identity resolution still avoids conflating namesakes.');
     for (const p of inputs) await db.query(`insert into research.note (entity_id, kind, body, data) values ($1, 'connection_candidates', 'Invented connections', $2)`,
       [p.key, JSON.stringify({ paths: joined.filter((path) => path.lp === p.key).map((path) => path.other.key === angel.key ? { ...path, other: { type: 'ours', name: `${angel.name} (sourced personal backer)` } } : path) })]);
     await nw.buildNetwork();
@@ -141,10 +141,10 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
       const blocked = await nw.planRoutes(team[0]!.handle, target.key);
       await db.query(`update network.edge set reviewed_by = $1, reviewed_at = now() where from_entity = $2 and to_entity = $3`, [founderUser, angel.key, target.key]);
       const reviewed = await nw.planRoutes(team[0]!.handle, target.key);
-      check(`CONN2 warmth cannot bypass tier ${tier}: unreviewed refuses; human-reviewed remains held`,
-        Boolean(blocked?.routes.length && blocked.routes.every((r) => r.verdict === 'not_a_route'))
-          && Boolean(reviewed?.routes.length && reviewed.routes.every((r) => r.verdict === 'hold')),
-        'Co-founder warmth never sets human review or promotes a C/D route.');
+      check(`PLRULE tier ${tier} routes with uncertainty, independently of human review`,
+        Boolean(blocked?.routes.length && blocked.routes.every((r) => r.verdict === 'recommend' && r.reasons.some((s) => s.includes('uncertainty'))))
+          && Boolean(reviewed?.routes.length && reviewed.routes.every((r) => r.verdict === 'recommend' && r.reasons.some((s) => s.includes('uncertainty')))),
+        'Review status does not gate or rank information; the C/D label is retained.');
     }
     // WGRAPH: deterministic warehouse hops survive W3, JSONB and the guarded route planner.
     const warehouseTargetId = (await db.one<{ id: string }>(
@@ -281,9 +281,10 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
       graph.ties[1] = { ...graph.ties[1]!, tier, kind: 'proximity' };
       await writeWarehousePaths();
       const heldWarehouse = await nw.planRoutes(team[0]!.handle, warehouseTargetId);
-      check(`WGRAPH ${tier} remains visible but cannot route without a human`,
+      check(`WGRAPH a ${tier} tie routes with its uncertainty labelled, never gated on a person (rule 6)`,
         warehouseJoin()[0]?.tier === tier && Boolean(heldWarehouse?.routes.length)
-          && heldWarehouse!.routes.every((r) => r.verdict === 'not_a_route'), 'Warmth never substitutes for human review.');
+          && heldWarehouse!.routes.some((r) => r.verdict === 'recommend' && r.reasons.some((x) => x.includes(`tier ${tier}`))),
+        'Weak evidence ranks lower and says what it rests on (AGENTS.md rule 6, Juan 26 Sep).');
     }
     const policyGraph = { ...graph, people: graph.people.map((p) => p.key === 'w-via' ? { ...p, oneHop: true } : p), ties: [graph.ties[1]!] };
     const policy = cn.warehousePaths([warehouseTarget], team, policyGraph);
@@ -303,6 +304,7 @@ async function connectionsV2Properties(db: import('../lib/db').Queryable) {
 async function main() {
   const db = await freshDb();
   await (await import('./issues4-properties')).issues4Properties(check, db);
+  await (await import('./plrule-properties')).plRuleProperties(db, check);
   const { listEntities } = await import('../modules/identity');
   const { planRoutes } = await import('../modules/network');
   const { RUNGS } = await import('../modules/strategy');
@@ -324,16 +326,13 @@ async function main() {
   );
 
   const roos = await planRoutes('juan', id('Delia Roos'));
-  const badUnreviewed = roos!.routes.filter(
-    (r) =>
-      r.hops.some((h) => (h.edge.tier === 'C' || h.edge.tier === 'D') && !h.edge.reviewedByName) &&
-      (r.verdict === 'recommend' || r.verdict === 'hold'),
-  );
-  check(
-    'No route with an unreviewed C or D hop is recommended or held',
-    badUnreviewed.length === 0,
-    `${badUnreviewed.length} such routes`,
-  );
+  const uncertain = roos!.routes.filter((r) => r.weakestTier >= 'C' && r.verdict !== 'excluded');
+  check('C/D routes are available without review and carry uncertainty labels',
+    uncertain.length > 0 && uncertain.every((r) => r.verdict !== 'not_a_route' && r.reasons.some((s) => s.includes('uncertainty'))),
+    `${uncertain.length} routes with labelled uncertainty`);
+  const informational = roos!.routes.filter((r) => r.verdict !== 'excluded');
+  check('PLRULE evidence tiers rank A/B ahead of C/D', informational.every((r, i) => i === 0 || informational[i - 1]!.weakestTier <= r.weakestTier),
+    'Warmth and action load never raise weak evidence above a stronger tier.');
 
   const restrictedPaths = roos!.routes.filter((r) => r.connectorNames.includes('Jonah Hale'));
   check(
@@ -640,7 +639,7 @@ async function main() {
     {
       name: 'remove the tier-A route',
       describe: 'Delete the Duettmann → Roos edge.',
-      expect: 'The best remaining route is a Hold, not a Recommend. Nothing is silently promoted.',
+      expect: 'The best remaining route is available with its original evidence tier and uncertainty.',
       perturb: async (d, ids) => {
         await d.query('delete from network.edge where from_entity = $1 and to_entity = $2', [
           ids('Allison Duettmann'), ids('Delia Roos'),
@@ -649,7 +648,7 @@ async function main() {
       assert: (r) => {
         const best = r!.routes[0];
         return {
-          ok: Boolean(best) && best!.verdict === 'hold',
+          ok: Boolean(best) && best!.verdict === 'recommend' && best!.weakestTier >= 'B',
           detail: `best verdict is ${best?.verdict ?? 'none'}`,
         };
       },
@@ -674,8 +673,7 @@ async function main() {
       name: 'a human reviews the tier-D edge',
       describe: 'Mark Navarro → Roos as confirmed by a person.',
       expect:
-        'It becomes usable but not good: Hold, never Recommend. Review removes the refusal; ' +
-        'it does not upgrade the evidence.',
+        'It remains a route with tier D uncertainty; review does not gate or upgrade the evidence.',
       perturb: async (d, ids) => {
         const u = await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'");
         await d.query(
@@ -688,7 +686,7 @@ async function main() {
       assert: (r) => {
         const path = r!.routes.find((x) => x.connectorNames.includes('Elena Navarro'));
         return {
-          ok: path?.verdict === 'hold',
+          ok: path?.verdict === 'recommend' && path.weakestTier === 'D',
           detail: `Navarro route is ${path?.verdict ?? 'missing'}`,
         };
       },
@@ -2266,7 +2264,7 @@ async function main() {
   // the real profile. None of them opens the real database.
 
   const inReal = (code: string, env: Record<string, string> = {}) => {
-    const r = spawnSync('npx', ['tsx', '-e', code], {
+    const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), '-e', code], {
       env: { ...process.env, DATA_PROFILE: 'real', PGLITE_DIR: '', DATABASE_URL: '', ...env },
       encoding: 'utf8',
     });
@@ -2416,7 +2414,7 @@ async function main() {
   }
 
   const prefixes = [['real', '3100'], ['real', '3290'], ['demo', '3291']].map(([profile, p]) => {
-    const r = spawnSync('npx', ['tsx', '-e', `import('./config/deployment.ts').then(({ config: c }) => console.log(c.data.cookiePrefix))`], {
+    const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), '-e', `import('./config/deployment.ts').then(({ config: c }) => console.log(c.data.cookiePrefix))`], {
       env: { ...process.env, DATA_PROFILE: profile, PORT: p, PGLITE_DIR: '', DATABASE_URL: '' },
       encoding: 'utf8',
     });

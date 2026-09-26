@@ -20,6 +20,7 @@ export function RouteGraph({
   targetName: string;
   selected: number;
 }) {
+  const multipleSources = new Set(routes.map((r) => r.fromEntity ?? fromName)).size > 1;
   const maxHops = Math.max(1, ...routes.map((r) => r.hops.length));
   const colX = (i: number) => 76 + (i * 480) / maxHops;
   const rowY = (i: number) => 44 + i * 64;
@@ -35,10 +36,10 @@ export function RouteGraph({
       aria-label={`Route graph from ${fromName} to ${targetName}. The path list beside this carries the same information.`}
       style={{ display: 'block' }}
     >
-      <text x={8} y={rowY(Math.floor((routes.length - 1) / 2)) + 4} className="gn gme" fontSize="11">
-        {fromName}
+      {!multipleSources && <><text x={8} y={rowY(Math.floor((routes.length - 1) / 2)) + 4} className="gn gme" fontSize="11">
+        {routes[0]?.fromName ?? fromName}
       </text>
-      <circle cx={58} cy={rowY(Math.floor((routes.length - 1) / 2))} r={5} fill="var(--ink)" />
+      <circle cx={58} cy={rowY(Math.floor((routes.length - 1) / 2))} r={5} fill="var(--ink)" /></>}
 
       {routes.map((route, ri) => {
         const y = rowY(ri);
@@ -46,12 +47,13 @@ export function RouteGraph({
         const colour = VERDICT_COLOR[route.verdict] ?? 'var(--muted)';
         const mid = rowY(Math.floor((routes.length - 1) / 2));
         const points = [
-          { x: 58, y: mid },
+          { x: 58, y: multipleSources ? y : mid },
           ...route.hops.slice(0, -1).map((_, i) => ({ x: colX(i + 1), y })),
           { x: targetX, y: mid },
         ];
         return (
           <g key={ri} opacity={on ? 1 : 0.42}>
+              {multipleSources && <><text x={8} y={y - 8} fontSize="9" fill="var(--ink)">{route.fromName ?? fromName}</text><circle cx={58} cy={y} r={5} fill="var(--ink)" /></>}
             {points.slice(0, -1).map((p, i) => {
               const q = points[i + 1]!;
               const hop = route.hops[i];

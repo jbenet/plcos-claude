@@ -214,7 +214,7 @@ export const config = {
 
   /** Investment introductions: ordinal warmth, never confidence or permission to send. */
   routeWarmth: {
-    version: 'warmth-1',
+    version: 'warmth-2',
     priors: {
       proximity: 0, acquaintance: 1, repeated_contact: 2, worked_together: 3,
       joint_investment: 3, cofounder: 4, frequent_coinvestment: 5,
@@ -226,7 +226,7 @@ export const config = {
     frequentDealMonths: 36, // GUESS
     repeatedContacts: 2, // GUESS — distinct dated interactions.
     colleagueOverlapMonths: 24, // GUESS — long service in our own organization.
-    strongFirstHop: 3, // GUESS — folding also needs a usable, dated first hop.
+    strongFirstHop: 3, // GUESS — folding compares evidence tier and warmth; no human review gate.
   },
 
   /** L7. How much of a week has to be lost before it stops counting as a working week. */

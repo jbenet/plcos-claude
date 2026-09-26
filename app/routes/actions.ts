@@ -48,8 +48,8 @@ export async function proposeFromRoute(formData: FormData): Promise<void> {
 }
 
 /**
- * A person says whether a tie the research found is real (N82, rule 6): confirmed, a C or D tie can
- * carry a route, held; turned down, it is ended and no route walks it.
+ * Legacy voluntary correction endpoint. Review status never controls route eligibility.
+ * New feedback is recorded through the connection feedback box.
  */
 export async function reviewEdgeAction(formData: FormData): Promise<void> {
   const { reviewEdge } = await import('@/modules/network');

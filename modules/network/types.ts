@@ -17,19 +17,19 @@ export const TIER_MEANING: Record<EvidenceTier, { label: string; means: string; 
     routable: 'Routable.',
   },
   B: {
-    label: 'Documented association',
-    means: 'One strong source places them in a real relationship, with some interaction.',
+    label: 'Documented or PL network association',
+    means: 'A sourced relationship or a warm PL affiliation under the network rule; interaction dates may be unknown.',
     routable: 'Routable.',
   },
   C: {
     label: 'Shared affiliation only',
     means: 'Same board, same firm, same programme — and no evidence they ever spoke.',
-    routable: 'Needs a human before it can carry a route.',
+    routable: 'Routes with uncertainty; ranked below A and B.',
   },
   D: {
     label: 'Proximity only',
     means: 'Co-attendance, or a public social connection. A discovery clue, not a relationship.',
-    routable: 'Needs a human before it can carry a route.',
+    routable: 'Routes with uncertainty; ranked below A and B.',
   },
 };
 
@@ -71,6 +71,8 @@ export interface RouteHop {
 }
 
 export interface Route {
+  fromEntity?: string;
+  fromName?: string;
   /** Index of the visible route this alternative is folded beneath; data is retained. */
   foldedUnder?: number | null;
   hops: RouteHop[];
@@ -87,7 +89,7 @@ export interface Route {
    * How much weight this route carries, once it has passed the safety rules above.
    *
    * Deliberately separate from `verdict`: influence orders the usable routes and can never
-   * promote a restricted or unreviewed one. The scorer runs after the rules, not instead
+   * promote a restricted one. The scorer runs after the rules, not instead
    * of them.
    */
   influence: import('./influence').Influence | null;
