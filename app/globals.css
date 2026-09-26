@@ -2041,3 +2041,65 @@ table.list.dated .ddetail{color:var(--muted);font-size:11.5px;margin:1px 0 0 23p
 .doc-table tr:last-child td{border-bottom:0}
 .doc-contents a{display:block;color:var(--muted);font-size:12px;line-height:1.5;padding:6px 0;text-decoration:none;overflow-wrap:anywhere}
 .doc-contents a:hover{color:var(--accent);text-decoration:underline}
+
+/* Routes: compact, equivalent list and map; the target queue owns its scroll. */
+.queue:has(.route-picker){position:sticky;top:46px;align-self:flex-start;height:calc(100dvh - 46px);overflow:hidden;width:258px}
+.route-picker{display:flex;flex-direction:column;height:100%;min-height:0}
+.route-picker .qhead{flex:none;padding:12px}
+.route-target-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.route-picker .tix{padding:7px 10px}
+.route-picker .tixline{gap:5px;align-items:center}
+.route-picker .tixline b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.target-check{font:9px var(--mono);color:var(--muted);white-space:nowrap;max-width:84px;overflow:hidden;text-overflow:ellipsis}
+.target-icons{display:inline-flex;gap:3px;color:#a5aaa7;flex:none;align-items:center}
+.target-icons .glyph{background:transparent;width:13px;height:13px;color:inherit}
+.target-icons .glyph svg{width:12px;height:12px}
+.target-second{display:flex;gap:5px;align-items:center;min-height:14px}
+.route-picker .trel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+.routes-workspace h1{font-size:30px;margin-bottom:5px}
+.routes-disclosures{display:flex;justify-content:flex-end;gap:10px;margin-bottom:6px}
+.routes-disclosures button{border:0;background:none;color:var(--muted);font:11px var(--sans);cursor:pointer;padding:3px}
+.routes-disclosures button:hover{text-decoration:underline;color:var(--ink)}
+.routes-lede{font-size:12px;color:var(--muted);margin:0 0 12px}
+.route-stats{display:flex;align-items:stretch;flex-wrap:wrap;border:1px solid var(--line);background:var(--surface);margin-bottom:12px;border-radius:6px}
+.route-stats>div{padding:10px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.route-stats strong{font:24px var(--display, var(--sans));color:var(--ink)}
+.route-stats span{font:10px var(--mono);color:var(--muted)}
+.route-stats .route-confidence{flex:1;min-width:220px;border-right:0;font-size:12px}
+.route-confidence p{font-size:11px;line-height:1.4;color:var(--muted);margin:0}
+.route-confidence small{font-size:10px;color:var(--muted)}
+.route-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:12px}
+.route-filters label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);flex:1;min-width:140px}
+.route-filters select{width:100%;border:1px solid var(--line);border-radius:4px;padding:6px;background:var(--surface);color:var(--ink);font:12px var(--sans)}
+.route-filters .route-alternatives{flex-direction:row;align-items:center;min-width:120px;flex:none;padding-bottom:6px}
+.routes-workspace .card{margin-bottom:12px}
+.route-graph-section>summary,.route-aux>summary{padding:10px 14px;font-size:13px;font-weight:500;cursor:pointer}
+.route-graph-section>summary .muted{font-size:11px;font-weight:400}
+.route-map{position:relative;padding:0 12px}
+.route-map-scroll{overflow:auto;max-height:420px}
+.route-map svg{display:block;min-width:620px}
+.route-map svg a:focus-visible path:first-child{stroke:var(--ink);opacity:1}
+.route-map-key{font-size:10px;color:var(--muted);margin:0;padding:8px 0}
+.route-hover{position:absolute;z-index:3;left:16px;bottom:36px;max-width:min(440px,calc(100% - 32px));max-height:250px;overflow:auto;background:var(--surface);border:1px solid var(--line);box-shadow:0 6px 20px #0002;border-radius:6px;padding:12px;font-size:12px}
+.route-hover p{margin:4px 0;font-size:11px}
+.route-hover small{color:var(--muted)}
+.route-comparison .chead{padding:10px 14px}
+.route-comparison-key{font-size:10px;color:var(--muted);padding:0 14px 8px;margin:0;border-bottom:1px solid var(--hair)}
+.route-comparison-row{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;font-size:12px;list-style:none}
+.route-comparison-row:before{content:'▸';color:var(--muted);font-size:10px}
+.route-detail[open]>.route-comparison-row:before{content:'▾'}
+.route-comparison-row::-webkit-details-marker{display:none}
+.route-detail{border-bottom:1px solid var(--hair);scroll-margin-top:60px}
+.route-comparison-row:hover,.route-detail[open]>.route-comparison-row{background:var(--accent-wash)}
+.route-score{font:12px var(--mono);width:32px;flex:none}
+.route-chain{flex:1;min-width:0;line-height:1.4}
+.route-row-verdict{font-size:10px;width:74px;text-align:right;flex:none}
+.route-comparison-row>.mono{font-size:10px;white-space:nowrap}
+.route-comparison-row .tier{font-size:10px;width:20px;height:20px;flex:none}
+.route-detail .route{padding:12px;background:var(--surface);border-top:1px solid var(--hair)}
+.route-more{display:flex;gap:16px;padding:10px 14px;font-size:12px}
+.route-aux .card{border:0;margin:0}
+.route-aux .chead{display:none}
+.routes-workspace :is(button,a,summary,select,input):focus-visible,.route-target-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(max-width:1100px){.route-stats>div{padding:8px 10px}.route-confidence{border-top:1px solid var(--hair)}.route-row-verdict{width:60px}.route-comparison-row{gap:6px}}
+@media(max-width:760px){.queue:has(.route-picker){width:190px}.target-check{max-width:55px}.route-comparison-row{flex-wrap:wrap}.route-chain{flex-basis:calc(100% - 65px)}.routes-workspace h1{font-size:25px}}

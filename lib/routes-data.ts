@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import { listAffiliations, listEntities } from '@/modules/identity';
 import { listAsks } from '@/modules/coordination';
-import { listAssessments, BLOCKER_SHORT } from '@/modules/fit';
+import { listAssessments, listFirmProfiles, FIRM_CLASS_LABEL, BLOCKER_SHORT } from '@/modules/fit';
 import { directContact, type DirectContact } from '@/modules/meetings';
 import { listVehicles } from '@/modules/platform';
 import { tierCounts, type Route } from '@/modules/network';
@@ -17,10 +17,10 @@ const touchWords = (c: DirectContact) => c.via
 /** Whole picker inputs shared across route clicks. Database writes and midnight
  * invalidate the snapshot; user-specific ownership stays in the page. */
 export const routeInputs = buildCache(async (vehicleId: string) => {
-  const [tiers, vehicles, affiliations, fit, asks, team, pursuits] = await Promise.all([
+  const [tiers, vehicles, affiliations, fit, asks, team, pursuits, profiles] = await Promise.all([
     tierCounts(), listVehicles(),
     listAffiliations(), listAssessments(vehicleId || null),
-    listAsks(null), (await auth()).listUsers(), listPursuits(vehicleId || null),
+    listAsks(null), (await auth()).listUsers(), listPursuits(vehicleId || null), listFirmProfiles(),
   ]);
 
   // Targets worth showing (issues 0022–0023, real): the LPs in this pipeline and the organisations
@@ -74,7 +74,24 @@ export const routeInputs = buildCache(async (vehicleId: string) => {
       .map((x) => ({ org: x.orgName, ...best.get(x.orgId)! }))
       .sort((a, b) => b.score - a.score)[0] ?? null;
     const reading = own ?? borrowedFrom;
+    const assessment = fit.find((a) => a.entityId === t.entityId);
+    const profile = profiles.find((p) => p.entityId === t.entityId);
+    const roles = affiliations.filter((a) => a.personId === t.entityId && a.current);
+    const founder = roles.find((a) => /\b(co[ -]?)?founder\b/i.test(a.role) && a.source);
+    const plRole = roles.find((a) => a.orgName === 'Protocol Labs' && a.source);
+    const familiar = assessment?.perceptions.filter((p) => ['familiar', 'deep'].includes(p.familiarity)) ?? [];
+    const amount = (n: number) => new Intl.NumberFormat('en-US', { notation: 'compact', style: 'currency', currency: 'USD', maximumFractionDigits: 1 }).format(n);
     return {
+      lpIcon: profile ? ({ individual: 'person', sfo: 'person', mfo: 'list', ria: 'chart', foundation: 'coin', endowment: 'folder', fof: 'coin', institution: 'folder', corporate: 'folder' } as const)[profile.firmClass] : t.entityType === 'person' ? 'person' : 'folder',
+      lpType: profile ? FIRM_CLASS_LABEL[profile.firmClass] : t.entityType,
+      checkBand: profile?.checkBandMin != null || profile?.checkBandMax != null
+        ? `${profile.checkBandMin != null ? amount(profile.checkBandMin) : '?'}–${profile.checkBandMax != null ? amount(profile.checkBandMax) : '?'}` : null,
+      signals: [
+        ...(founder ? [{ icon: 'status' as const, label: `Active founder role: ${founder.orgName}; ${founder.source}, ${shortDate(founder.asOf)} (${founder.certainty})` }] : []),
+        ...(founder && plRole ? [{ icon: 'link' as const, label: `Founder with recorded PL affiliation: ${plRole.source}, ${shortDate(plRole.asOf)} (${plRole.certainty})` }] : []),
+        ...familiar.filter((p) => p.subjectKind === 'firm' && p.subject === 'Protocol Labs').map((p) => ({ icon: 'eye' as const, label: `Familiar with PL: ${p.evidence}; ${p.source ?? 'assessment'}, ${shortDate(p.asOf)} (${p.certainty})` })),
+        ...familiar.filter((p) => p.subjectKind === 'thesis').map((p) => ({ icon: 'chart' as const, label: `Sector familiarity for ${vehicles.find((v) => v.id === vehicleId)?.name ?? 'this vehicle'}: ${p.subject}; ${p.evidence}; ${p.source ?? 'assessment'}, ${shortDate(p.asOf)} (${p.certainty})` })),
+      ],
       entityId: t.entityId,
       name: t.displayName,
       isPerson: t.entityType === 'person',
@@ -86,7 +103,7 @@ export const routeInputs = buildCache(async (vehicleId: string) => {
       touch: contact.has(t.entityId) ? touchWords(contact.get(t.entityId)!) : null,
     };
   });
-  return { tiers, vehicles, affiliations, asks, team, entities, targets, contact, rows };
+  return { tiers, vehicles, affiliations, fit, asks, team, entities, targets, contact, rows };
 });
 
 const basesByRoutes = new WeakMap<Route[], ReadonlySet<string>>();
