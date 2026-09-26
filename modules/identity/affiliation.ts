@@ -56,11 +56,13 @@ type Row = {
 };
 
 const SELECT = `
-  select a.*, p.display_name as person_name,
+  select a.affiliation_id, a.kind, a.role, a.started_on, a.ended_on, a.is_primary,
+         a.source, a.as_of, a.certainty, a.note, p.entity_id as person_entity,
+         o.entity_id as org_entity, p.display_name as person_name,
          o.display_name as org_name, o.entity_type::text as org_type
     from identity.affiliation a
-    join identity.entity p on p.entity_id = a.person_entity
-    join identity.entity o on o.entity_id = a.org_entity`;
+    join identity.entity p on p.entity_id = identity.canonical_entity_id(a.person_entity)
+    join identity.entity o on o.entity_id = identity.canonical_entity_id(a.org_entity)`;
 
 const toAffiliation = (r: Row): Affiliation => ({
   affiliationId: r.affiliation_id,
@@ -87,14 +89,14 @@ export async function listAffiliations(): Promise<Affiliation[]> {
 /** Everyone who acts for this organisation. Former roles included, and labelled. */
 export async function peopleAt(orgId: string): Promise<Affiliation[]> {
   const db = await getDb();
-  return (await db.query<Row>(`${SELECT} where a.org_entity = $1`, [orgId]))
+  return (await db.query<Row>(`${SELECT} where o.entity_id = identity.canonical_entity_id($1::uuid)`, [orgId]))
     .map(toAffiliation).sort(order);
 }
 
 /** Every organisation this person acts for. More than one is normal, not an error. */
 export async function orgsFor(personId: string): Promise<Affiliation[]> {
   const db = await getDb();
-  return (await db.query<Row>(`${SELECT} where a.person_entity = $1`, [personId]))
+  return (await db.query<Row>(`${SELECT} where p.entity_id = identity.canonical_entity_id($1::uuid)`, [personId]))
     .map(toAffiliation).sort((a, b) =>
       Number(b.current) - Number(a.current)
       || Number(b.isPrimary) - Number(a.isPrimary)

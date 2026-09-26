@@ -13,11 +13,11 @@ type AccRow = {
 };
 
 const ACC_SELECT = `
-  select a.record_id, a.entity_id, e.display_name as entity_name, a.vehicle_id,
+  select a.record_id, e.entity_id, e.display_name as entity_name, a.vehicle_id,
          v.name as vehicle_name, v.exemption, a.method, a.status, a.evidence_ref,
          u.name as verified_by_name, a.verified_on, a.expires_on, a.note
     from compliance.accreditation a
-    join identity.entity e on e.entity_id = a.entity_id
+    join identity.entity e on e.entity_id = identity.canonical_entity_id(a.entity_id)
     join platform.vehicle v on v.id = a.vehicle_id
     left join platform.app_user u on u.id = a.verified_by`;
 
@@ -89,7 +89,7 @@ export async function accreditationGate(
 ): Promise<AccreditationGate> {
   const db = q ?? (await getDb());
   const row = await db.one<AccRow>(
-    `${ACC_SELECT} where a.entity_id = $1 and a.vehicle_id = $2`,
+    `${ACC_SELECT} where e.entity_id = identity.canonical_entity_id($1::uuid) and a.vehicle_id = $2`,
     [entityId, vehicleId],
   );
   if (!row) {
@@ -171,7 +171,7 @@ export async function listSideLetters(): Promise<SideLetter[]> {
     `select l.letter_id, e.display_name as entity_name, v.name as vehicle_name, l.provision,
             l.mfn, l.risk, l.signed_on, u.name as reviewed_by_name
        from compliance.side_letter l
-       join identity.entity e on e.entity_id = l.entity_id
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(l.entity_id)
        join platform.vehicle v on v.id = l.vehicle_id
        left join platform.app_user u on u.id = l.reviewed_by
       order by l.mfn desc, l.signed_on`,

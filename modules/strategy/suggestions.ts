@@ -76,7 +76,7 @@ export async function openSuggestions(): Promise<Array<Suggestion & { entityName
             e.display_name as entity_name, v.name as vehicle_name
        from strategy.suggestion s
        join strategy.pursuit p on p.pursuit_id = s.pursuit_id
-       join identity.entity e on e.entity_id = p.entity_id
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
        join platform.vehicle v on v.id = p.vehicle_id
       where s.status in ('proposed', 'accepted', 'dismissed')`,
   );
@@ -85,4 +85,3 @@ export async function openSuggestions(): Promise<Array<Suggestion & { entityName
     status: r.status, decidedByName: null, decidedAt: null, decisionNote: null, entityName: r.entity_name, vehicleName: r.vehicle_name,
   }));
 }
-

@@ -77,18 +77,22 @@ export async function importRobustnessProperties(check: (name: string, ok: boole
     const alternate = { ...good, source: 'https://example.org/robust-alternate', key: connectionPersonKey(good.name, 'https://example.org/robust-alternate') };
     extraKeys.push(alternate.key);
     const sharedPerson = await resolveConnectionPeople(db, [path(good), path(alternate)]);
-    check('ROBUST different source descriptors reuse one unambiguous existing person', sharedPerson.every((p) => p.other.key === good.key),
-      'Preflight preserves name reuse and maps each source without duplicating an entity.');
+    check('ROBUST name-only source descriptors retain separate identities until corroborated',
+      sharedPerson.length === 2 && sharedPerson[0]!.other.key === good.key && sharedPerson[1]!.other.key === alternate.key,
+      'IDRES supersedes name-only reuse: distinct source records remain reversible and require corroboration to merge.');
     const absent = await db.one<{ n: number }>('select count(*)::int as n from identity.entity where entity_id = $1', [org.key]);
     check('ROBUST skipped descriptors create no entities', absent?.n === 0, 'Preflight happens before materialization.');
     const ambiguous = descriptor('Robust Duplicate Person');
+    extraKeys.push(ambiguous.key);
     for (let i = 0; i < 2; i++) {
       const key = randomUUID(); extraKeys.push(key);
       await db.query("insert into identity.entity (entity_id,entity_type,display_name) values ($1,'person',$2)", [key, ambiguous.name]);
     }
     const ambiguity: string[] = [];
     const unambiguous = await resolveConnectionPeople(db, [path(ambiguous), path(good)], (_, p) => ambiguity.push(...p));
-    check('ROBUST ambiguous existing names are skipped and diagnosed', unambiguous.length === 1 && ambiguity.some((p) => p.includes('Ambiguous')), 'Never substitute a namesake.');
+    check('ROBUST existing namesakes do not prevent materializing a distinct sourced W3 identity',
+      unambiguous.length === 2 && ambiguity.length === 0 && unambiguous[0]!.other.key === ambiguous.key,
+      'IDRES preserves the new source node and its uncertainty; it never substitutes an existing namesake by name alone.');
     const cliRoot = join(dir, 'cli');
     const cliRaw = join(cliRoot, 'data/demo/enrich/raw');
     await mkdir(cliRaw, { recursive: true });

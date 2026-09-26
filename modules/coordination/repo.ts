@@ -11,13 +11,13 @@ type AskRow = {
 };
 
 const ASK_SELECT = `
-  select a.ask_id, a.entity_id, e.display_name as entity_name, a.connector_id,
+  select a.ask_id, e.entity_id, e.display_name as entity_name, identity.canonical_entity_id(a.connector_id) as connector_id,
          c.display_name as connector_name, a.vehicle_id, v.name as vehicle_name,
          a.status, u.name as owner_name, a.ticket_id, a.purpose, a.scheduled_for,
          a.made_at, a.channel, a.outcome, a.outcome_note, a.override_reason, a.created_at
     from coordination.ask a
-    join identity.entity e on e.entity_id = a.entity_id
-    left join identity.entity c on c.entity_id = a.connector_id
+    join identity.entity e on e.entity_id = identity.canonical_entity_id(a.entity_id)
+    left join identity.entity c on c.entity_id = identity.canonical_entity_id(a.connector_id)
     join platform.vehicle v on v.id = a.vehicle_id
     join platform.app_user u on u.id = a.owner_id`;
 
@@ -58,12 +58,12 @@ type ConflictRow = {
 export async function listConflicts(status?: 'open'): Promise<ConflictCase[]> {
   const db = await getDb();
   const rows = await db.query<ConflictRow>(
-    `select c.case_id, c.entity_id, e.display_name as entity_name, c.window_days, c.status,
+    `select c.case_id, e.entity_id, e.display_name as entity_name, c.window_days, c.status,
             c.opened_at, c.claimant_a, c.claimant_b, c.winner_ask_id, c.loser_ask_id,
             c.reason_code, c.loser_followup_at, u.name as adjudicated_by_name,
             c.adjudicated_at, c.note
        from coordination.conflict_case c
-       join identity.entity e on e.entity_id = c.entity_id
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(c.entity_id)
        left join platform.app_user u on u.id = c.adjudicated_by
       ${status ? "where c.status = 'open'" : ''}
       order by c.opened_at desc`,
@@ -99,12 +99,12 @@ type RestrictionRow = {
 };
 
 const RESTRICTION_SELECT = `
-  select r.restriction_id, r.entity_id, e.display_name as entity_name, r.scope,
-         r.connector_id, c.display_name as connector_name, r.channel, r.instruction,
+  select r.restriction_id, e.entity_id, e.display_name as entity_name, r.scope,
+         identity.canonical_entity_id(r.connector_id) as connector_id, c.display_name as connector_name, r.channel, r.instruction,
          r.source, u.name as recorded_by_name, r.recorded_at
     from coordination.restriction r
-    join identity.entity e on e.entity_id = r.entity_id
-    left join identity.entity c on c.entity_id = r.connector_id
+    join identity.entity e on e.entity_id = identity.canonical_entity_id(r.entity_id)
+    left join identity.entity c on c.entity_id = identity.canonical_entity_id(r.connector_id)
     left join platform.app_user u on u.id = r.recorded_by`;
 
 const toRestriction = (r: RestrictionRow): Restriction => ({
@@ -132,8 +132,9 @@ export async function blanketRestricted(entityIds: string[]): Promise<Set<string
   if (!entityIds.length) return new Set();
   const db = await getDb();
   const rows = await db.query<{ entity_id: string }>(
-    `select distinct entity_id from coordination.restriction
-      where entity_id = any($1::uuid[]) and scope = 'blanket' and (expires_at is null or expires_at > current_date)`,
+    `select distinct requested.entity_id from unnest($1::uuid[]) requested(entity_id)
+      join coordination.restriction r on identity.canonical_entity_id(r.entity_id) = identity.canonical_entity_id(requested.entity_id)
+      where scope = 'blanket' and (expires_at is null or expires_at > current_date)`,
     [entityIds],
   );
   return new Set(rows.map((r) => r.entity_id));
@@ -143,7 +144,7 @@ export async function restrictionsFor(entityId: string, q?: Queryable): Promise<
   const db = q ?? (await getDb());
   return (
     await db.query<RestrictionRow>(
-      `${RESTRICTION_SELECT} where r.entity_id = $1 and (r.expires_at is null or r.expires_at > current_date)`,
+      `${RESTRICTION_SELECT} where e.entity_id = identity.canonical_entity_id($1::uuid) and (r.expires_at is null or r.expires_at > current_date)`,
       [entityId],
     )
   ).map(toRestriction);
@@ -154,7 +155,7 @@ export async function asksToEntitySince(entityId: string, since: Date, q?: Query
   const db = q ?? (await getDb());
   return (
     await db.query<AskRow>(
-      `${ASK_SELECT} where a.entity_id = $1 and a.made_at is not null and a.made_at >= $2
+      `${ASK_SELECT} where e.entity_id = identity.canonical_entity_id($1::uuid) and a.made_at is not null and a.made_at >= $2
         order by a.made_at desc`,
       [entityId, since],
     )
@@ -166,7 +167,7 @@ export async function asksViaConnectorSince(connectorId: string, since: Date, q?
   const db = q ?? (await getDb());
   return (
     await db.query<AskRow>(
-      `${ASK_SELECT} where a.connector_id = $1 and a.made_at is not null and a.made_at >= $2
+      `${ASK_SELECT} where c.entity_id = identity.canonical_entity_id($1::uuid) and a.made_at is not null and a.made_at >= $2
         order by a.made_at desc`,
       [connectorId, since],
     )
@@ -181,7 +182,7 @@ export async function competingAsks(
   return (
     await db.query<AskRow>(
       `${ASK_SELECT}
-        where a.entity_id = $1 and a.vehicle_id <> $2
+        where e.entity_id = identity.canonical_entity_id($1::uuid) and a.vehicle_id <> $2
           and a.status in ('proposed','approved','made','blocked')
           and coalesce(a.made_at, a.created_at) >= $3
         order by coalesce(a.made_at, a.created_at) desc`,
@@ -194,11 +195,11 @@ export async function connectorLoad(ids?: string[]): Promise<Array<{ connectorId
   if (ids?.length === 0) return [];
   const db = await getDb();
   const rows = await db.query<{ connector_id: string; name: string; n: string }>(
-    `select a.connector_id, e.display_name as name, count(*)::text as n
-       from coordination.ask a join identity.entity e on e.entity_id = a.connector_id
+    `select e.entity_id as connector_id, e.display_name as name, count(*)::text as n
+       from coordination.ask a join identity.entity e on e.entity_id = identity.canonical_entity_id(a.connector_id)
       where a.connector_id is not null and a.made_at >= now() - interval '3 months'
-        ${ids ? 'and a.connector_id = any($1::uuid[])' : ''}
-      group by a.connector_id, e.display_name order by count(*) desc`,
+        ${ids ? 'and e.entity_id in (select identity.canonical_entity_id(id) from unnest($1::uuid[]) id)' : ''}
+      group by e.entity_id, e.display_name order by count(*) desc`,
     ids ? [ids] : [],
   );
   return rows.map((r) => ({ connectorId: r.connector_id, name: r.name, used: Number(r.n) }));

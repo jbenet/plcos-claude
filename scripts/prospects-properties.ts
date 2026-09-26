@@ -90,13 +90,12 @@ export async function prospectsProperties(check: Check, db: Db) {
   const ambiguousBefore = await snapshot();
   const ambiguous = await addProspects(db, actor, files(
     prospect('invented-prospect:conflict', 'Invented Prospect Namesake'),
-    prospect('invented-prospect:missing', 'Invented Prospect Alder'),
     prospect(direct, 'Invented Wrong Name'),
     prospect(wrongType, 'Invented Prospect Organization'),
     prospect(merged, 'Invented Prospect Merged'),
     prospect(retired, 'Invented Prospect Retired')));
-  check('PROSPECTS conflicting aliases, ambiguous names, wrong names/types and inactive entities are listed and skipped',
-    ambiguous.ambiguous === 6 && ambiguous.skipped.length === 6 && ambiguous.added === 0 && ambiguousBefore === await snapshot(),
+  check('PROSPECTS conflicting aliases, wrong explicit names/types and inactive entities are listed and skipped',
+    ambiguous.ambiguous === 5 && ambiguous.skipped.length === 5 && ambiguous.added === 0 && ambiguousBefore === await snapshot(),
     `${ambiguous.ambiguous} ambiguous records listed; no pursuits, notes, identities or rungs added.`);
 
   const newOrg = 'Invented Prospects2 Observatory';
@@ -150,10 +149,16 @@ export async function prospectsProperties(check: Check, db: Db) {
 
   const single = await makePerson('Invented Prospects2 Hazel');
   const reused = await addProspects(db, actor, files(prospect('invented-prospects2:single-name', '  INVENTED   Prospects2 Hazel ', { org: null })));
-  check('PROSPECTS2 an unambiguous normalized name reuses the existing person and records its stable prospect key',
-    reused.added === 1 && (await sourcePerson('invented-prospects2:single-name'))?.id === single
-    && await n('select count(*)::text n from identity.entity where lower(display_name) = lower($1)', ['Invented Prospects2 Hazel']) === 1,
-    `Single-name match added ${reused.added} pursuit on the existing entity.`);
+  check('PROSPECTS2 a new source key never aliases an existing person on name alone',
+    reused.added === 1 && (await sourcePerson('invented-prospects2:single-name'))?.id !== single,
+    `IDRES preserves distinct sourced identities until corroboration supports a reversible merge; added ${reused.added} pursuit.`);
+  const namesakeRow = prospect('invented-prospect:missing', 'Invented Prospect Alder', { org: null });
+  const namesakes = await addProspects(db, actor, files(namesakeRow));
+  const namesakeRetry = await addProspects(db, actor, files(namesakeRow));
+  check('PROSPECTS2 multiple existing namesakes still permit a separate idempotent source identity',
+    namesakes.added === 1 && namesakes.ambiguous === 0 && namesakeRetry.existing === 1
+      && (await sourcePerson(namesakeRow.personKey))?.id !== direct,
+    'IDRES records the sourced person independently; existing namesakes neither select its identity nor gate the import.');
   await makePerson(unseen.name);
   const explicitProspect = await addProspects(db, actor, files(unseen));
   check('PROSPECTS2 a stable prospect alias wins over a later same-name entity',

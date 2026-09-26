@@ -34,8 +34,11 @@ const toProfile = (r: ProfileRow): FirmProfile => ({
 });
 
 const PROFILE_SELECT = `
-  select p.*, e.display_name as entity_name
-    from fit.firm_profile p join identity.entity e on e.entity_id = p.entity_id`;
+  select e.entity_id, e.display_name as entity_name, p.firm_class, p.iapd_registered,
+         p.est_aum, p.aum_basis, p.aum_certainty, p.decision_arch, p.weeks_min, p.weeks_max,
+         p.who_signs, p.who_can_kill, p.check_band_min, p.check_band_max,
+         p.prior_relationship, p.provenance_note, p.provenance_since, p.updated_at
+    from fit.firm_profile p join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)`;
 
 export async function listFirmProfiles(): Promise<FirmProfile[]> {
   const db = await getDb();
@@ -44,7 +47,8 @@ export async function listFirmProfiles(): Promise<FirmProfile[]> {
 
 export async function firmProfile(entityId: string): Promise<FirmProfile | null> {
   const db = await getDb();
-  const row = await db.one<ProfileRow>(`${PROFILE_SELECT} where p.entity_id = $1`, [entityId]);
+  const row = await db.one<ProfileRow>(`${PROFILE_SELECT} where e.entity_id = identity.canonical_entity_id($1::uuid)
+    order by (p.entity_id = e.entity_id) desc, p.updated_at desc, p.entity_id limit 1`, [entityId]);
   return row ? toProfile(row) : null;
 }
 
@@ -239,13 +243,14 @@ async function assemble(rows: Array<{
       [ids],
     ),
     db.query<{ assessment_id: string; link_id: string; via_entity: string | null; via_name: string | null; kind: LinkKind; statement: string; tie_band: string; opinion_weight: Grade; certainty: Certainty; source: string | null; as_of: Date | string }>(
-      `select l.*, e.display_name as via_name from fit.link l
-         left join identity.entity e on e.entity_id = l.via_entity
+      `select l.assessment_id, l.link_id, e.entity_id as via_entity, e.display_name as via_name,
+              l.kind, l.statement, l.tie_band, l.opinion_weight, l.certainty, l.source, l.as_of
+         from fit.link l left join identity.entity e on e.entity_id = identity.canonical_entity_id(l.via_entity)
         where l.assessment_id = any($1::uuid[])`,
       [ids],
     ),
     db.query<ProfileRow>(
-      `${PROFILE_SELECT} where p.entity_id = any($1::uuid[])`,
+      `${PROFILE_SELECT} where e.entity_id in (select identity.canonical_entity_id(id) from unnest($1::uuid[]) id)`,
       [rows.map((r) => r.entity_id)],
     ),
   ]);
@@ -321,11 +326,11 @@ async function assemble(rows: Array<{
 }
 
 const ASSESSMENT_SELECT = `
-  select a.assessment_id, a.entity_id, e.display_name as entity_name, a.vehicle_id,
+  select a.assessment_id, e.entity_id, e.display_name as entity_name, a.vehicle_id,
          v.name as vehicle_name, v.slug as vehicle_slug, v.exemption,
          u.name as owner_name, a.headline, a.updated_at
     from fit.assessment a
-    join identity.entity e on e.entity_id = a.entity_id
+    join identity.entity e on e.entity_id = identity.canonical_entity_id(a.entity_id)
     join platform.vehicle v on v.id = a.vehicle_id
     left join platform.app_user u on u.id = a.owner_id`;
 
@@ -345,7 +350,7 @@ export async function listAssessments(vehicleId?: string | null): Promise<Assess
 export async function assessmentFor(entityId: string, vehicleId: string): Promise<Assessment | null> {
   const db = await getDb();
   const rows = await db.query<Parameters<typeof assemble>[0][number]>(
-    `${ASSESSMENT_SELECT} where a.entity_id = $1 and a.vehicle_id = $2`, [entityId, vehicleId],
+    `${ASSESSMENT_SELECT} where e.entity_id = identity.canonical_entity_id($1::uuid) and a.vehicle_id = $2`, [entityId, vehicleId],
   );
   return (await assemble(rows))[0] ?? null;
 }
@@ -353,7 +358,7 @@ export async function assessmentFor(entityId: string, vehicleId: string): Promis
 export async function assessmentsForEntity(entityId: string): Promise<Assessment[]> {
   const db = await getDb();
   const rows = await db.query<Parameters<typeof assemble>[0][number]>(
-    `${ASSESSMENT_SELECT} where a.entity_id = $1 order by v.sort_order`, [entityId],
+    `${ASSESSMENT_SELECT} where e.entity_id = identity.canonical_entity_id($1::uuid) order by v.sort_order`, [entityId],
   );
   return assemble(rows);
 }

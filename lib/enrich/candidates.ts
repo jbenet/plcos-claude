@@ -155,20 +155,20 @@ export async function researchSet(): Promise<Candidate[]> {
     db.query<{ entity_id: string; entity_type: string; display_name: string }>(
       `select entity_id::text, entity_type::text, display_name from identity.entity where entity_id = any($1::uuid[])`, [ids]),
     db.query<{ person_entity: string; org: string; role: string }>(
-      `select a.person_entity::text, o.display_name as org, a.role from identity.affiliation a
-         join identity.entity o on o.entity_id = a.org_entity
-        where a.person_entity = any($1::uuid[]) and a.ended_on is null
+      `select identity.canonical_entity_id(a.person_entity)::text as person_entity, o.display_name as org, a.role from identity.affiliation a
+         join identity.entity o on o.entity_id = identity.canonical_entity_id(a.org_entity)
+        where identity.canonical_entity_id(a.person_entity) = any($1::uuid[]) and a.ended_on is null
         order by a.is_primary desc`, [ids]),
     db.query<{ entity_id: string; source_id: string }>(
-      `select entity_id::text, source_id from identity.source_record where source = 'affinity' and entity_id = any($1::uuid[])`, [ids]),
+      `select identity.canonical_entity_id(entity_id)::text as entity_id, source_id from identity.source_record where source = 'affinity' and identity.canonical_entity_id(entity_id) = any($1::uuid[])`, [ids]),
     latestRaw<Entry>('affinity', 'list_entry'),
     touchpointSummaries(all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }))),
   ]);
   const readings = await readingsFor(ids);
   const context = await db.query<{ entity_id: string; at: Date | string; by: string | null; body: string }>(
-    `select n.entity_id::text, n.created_at as at, u.name as by, n.body
+    `select identity.canonical_entity_id(n.entity_id)::text as entity_id, n.created_at as at, u.name as by, n.body
        from research.note n left join platform.app_user u on u.id = n.author_id
-      where n.kind = 'context' and n.entity_id = any($1::uuid[])
+      where n.kind = 'context' and identity.canonical_entity_id(n.entity_id) = any($1::uuid[])
       order by n.created_at desc`, [ids]);
   const restrictions = (await listRestrictions({ includeListMarks: true })).filter((r) => byEntity.has(r.entityId));
   const pairs = all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));

@@ -46,10 +46,10 @@ export async function ranked(vehicleId: string): Promise<Scored[]> {
     dimension: Dimension; value: string; basis: string; source: string | null;
     as_of: Date | string; recorded_by_name: string | null;
   }>(
-    `select f.entity_id, e.display_name as entity_name, f.vehicle_id, v.name as vehicle_name,
+    `select e.entity_id, e.display_name as entity_name, f.vehicle_id, v.name as vehicle_name,
             f.dimension, f.value, f.basis, f.source, f.as_of, u.name as recorded_by_name
        from scoring.factor f
-       join identity.entity e on e.entity_id = f.entity_id
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(f.entity_id)
        join platform.vehicle v on v.id = f.vehicle_id
        left join platform.app_user u on u.id = f.recorded_by
       where f.vehicle_id = $1

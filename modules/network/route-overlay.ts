@@ -118,6 +118,7 @@ const overlays = new WeakMap<StructuralRoutes, { carriers: string[]; edges: Edge
   snapshot?: { signature: string; routes: Route[]; stats: RouteSearch['stats']; candidateCounts: { total: number; unavailable: number }; promotedBasisHashes: string[] } }>();
 
 const clue: Record<string, string> = {
+  possible_identity: 'Possible identity match by name only, without corroboration. These may be different people; this is an uncertain identity bridge, not a relationship.',
   event_coattendee: 'Co-attendance is a discovery clue, not evidence of a relationship. Two people in the same room have not necessarily met.',
   social_public: 'A public social connection proves neither acquaintance nor standing to introduce.',
   podcast_guest: 'Appearing on the same show is proximity, not a relationship.',

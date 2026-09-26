@@ -35,7 +35,7 @@ export async function resolveConnectionPeople(tx: Queryable, paths: Path[],
   for (const person of descriptors.values()) {
     if (badKeys.has(person.key)) continue;
     const type = person.entityType ?? 'person';
-    const mapped = await tx.one<{ id: string; type: string }>(`select e.entity_id::text as id, e.entity_type::text as type from identity.source_record s join identity.entity e on e.entity_id = s.entity_id where s.source = 'w3_person' and s.source_id = $1`, [person.key]);
+    const mapped = await tx.one<{ id: string; type: string }>(`select e.entity_id::text as id, e.entity_type::text as type from identity.source_record s join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id) where s.source = 'w3_person' and s.source_id = $1`, [person.key]);
     if (mapped) {
       if (mapped.type !== type) badKeys.set(person.key, 'Connector type conflicts with its existing source mapping');
       else { ids.set(person.key, mapped.id); mappedKeys.add(person.key); }
@@ -47,9 +47,11 @@ export async function resolveConnectionPeople(tx: Queryable, paths: Path[],
     }
     const opposite = await tx.one<{ n: number }>(`select count(*)::int as n from identity.entity where lower(trim(display_name)) = lower(trim($1)) and entity_type::text <> $2`, [person.name, type]);
     if (opposite && opposite.n > 0) { badKeys.set(person.key, 'Connector name conflicts with an existing entity type'); continue; }
-    const matches = await tx.query<{ id: string }>(`select entity_id::text as id from identity.entity where entity_type::text = $2 and lower(trim(display_name)) = lower(trim($1))`, [person.name, type]);
-    if (matches.length > 1) { badKeys.set(person.key, 'Ambiguous connector name: multiple existing entities'); continue; }
-    if (matches[0] || existing) ids.set(person.key, matches[0]?.id ?? person.key);
+    // Namesakes are separate sourced identities until deterministic corroboration merges them.
+    if (existing) {
+      const canonical = await tx.one<{id:string}>('select identity.canonical_entity_id($1::uuid)::text id', [person.key]);
+      ids.set(person.key, canonical!.id);
+    }
   }
   const usable = paths.filter((p, index) => {
     for (const key of [p?.lp, p?.other?.key]) if (key && badKeys.has(key)) reject(index, badKeys.get(key)!);
@@ -58,16 +60,13 @@ export async function resolveConnectionPeople(tx: Queryable, paths: Path[],
     return false;
   });
   const needed = new Set(usable.flatMap((p) => [p.lp, p.other.key]));
-  const materializedNames = new Map<string, string>();
   for (const person of descriptors.values()) {
     if (!needed.has(person.key)) continue;
-    const nameKey = `${person.entityType ?? 'person'}:${person.name.toLowerCase().trim()}`;
-    let id = ids.get(person.key) ?? materializedNames.get(nameKey);
+    let id = ids.get(person.key);
     if (!id) {
       id = (await tx.one<{ id: string }>(`insert into identity.entity (entity_id, entity_type, display_name) values ($1, $3::identity.entity_type, $2) returning entity_id::text as id`, [person.key, person.name, person.entityType ?? 'person']))!.id;
     }
     ids.set(person.key, id);
-    materializedNames.set(nameKey, id);
     if (mappedKeys.has(person.key)) continue;
     await tx.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by) values ('w3_person', $1, $2, 'rule:sourced-person')`, [person.key, id]);
   }

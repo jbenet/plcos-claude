@@ -16,11 +16,14 @@ type PlayRow = {
 };
 
 const PLAY_SELECT = `
-  select p.*, v.name as vehicle_name, e.display_name as entity_name,
+  select p.play_id, p.vehicle_id, e.entity_id, p.horizon, p.lever, p.title, p.detail,
+         p.because, p.likelihood, p.effort_days, p.reach, p.payoff, p.certainty,
+         p.suggested_owner, p.status, p.assigned_to, p.assigned_at, p.gate, p.sort,
+         v.name as vehicle_name, e.display_name as entity_name,
          so.name as suggested_owner_name, at.name as assigned_to_name
     from plays.play p
     join platform.vehicle v on v.id = p.vehicle_id
-    left join identity.entity e on e.entity_id = p.entity_id
+    left join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
     left join platform.app_user so on so.id = p.suggested_owner
     left join platform.app_user at on at.id = p.assigned_to`;
 
@@ -61,7 +64,7 @@ export async function boardFor(
       ? await db.query<PlayRow>(
           `${PLAY_SELECT} where p.vehicle_id = $1 and p.entity_id is null`, [vehicleId])
       : await db.query<PlayRow>(
-          `${PLAY_SELECT} where p.vehicle_id = $1 and p.entity_id = $2`,
+          `${PLAY_SELECT} where p.vehicle_id = $1 and e.entity_id = identity.canonical_entity_id($2::uuid)`,
           [vehicleId, opts.entityId]);
   return rows
     .map((r) => toPlay(r, weak))
@@ -82,10 +85,10 @@ export async function needsFor(vehicleId: string, entityId: string): Promise<Nee
     statement: string; evidence: string; met: boolean | null; source: string | null;
     as_of: Date | string;
   }>(
-    `select n.need_id, n.entity_id, e.display_name as entity_name, n.kind::text as kind,
+    `select n.need_id, e.entity_id, e.display_name as entity_name, n.kind::text as kind,
             n.statement, n.evidence, n.met, n.source, n.as_of
-       from plays.need n join identity.entity e on e.entity_id = n.entity_id
-      where n.vehicle_id = $1 and n.entity_id = $2 order by n.sort`,
+       from plays.need n join identity.entity e on e.entity_id = identity.canonical_entity_id(n.entity_id)
+      where n.vehicle_id = $1 and e.entity_id = identity.canonical_entity_id($2::uuid) order by n.sort`,
     [vehicleId, entityId],
   );
   return rows.map((r) => ({
@@ -115,19 +118,19 @@ export async function commitmentsFor(
   const where = entityId === undefined
     ? 'c.vehicle_id = $1'
     : entityId === null ? 'c.vehicle_id = $1 and c.entity_id is null'
-      : 'c.vehicle_id = $1 and c.entity_id = $2';
+      : 'c.vehicle_id = $1 and e.entity_id = identity.canonical_entity_id($2::uuid)';
   const args = entityId ? [vehicleId, entityId] : [vehicleId];
   const rows = await db.query<{
     commitment_id: string; vehicle_id: string; entity_id: string | null;
     entity_name: string | null; body: string; written_by_name: string;
     written_at: Date | string; parsed: Commitment['parsed'] | string | null;
   } & Partial<HandoffRow>>(
-    `select c.commitment_id, c.vehicle_id, c.entity_id, e.display_name as entity_name,
+    `select c.commitment_id, c.vehicle_id, e.entity_id, e.display_name as entity_name,
             c.body, u.name as written_by_name, c.written_at, c.parsed,
             h.handoff_id, h.provider, h.payload, h.state, h.external_ref, h.note, h.created_at
        from plays.commitment c
        join platform.app_user u on u.id = c.written_by
-       left join identity.entity e on e.entity_id = c.entity_id
+       left join identity.entity e on e.entity_id = identity.canonical_entity_id(c.entity_id)
        left join plays.handoff h on h.commitment_id = c.commitment_id
       where ${where} order by c.written_at desc`,
     args,

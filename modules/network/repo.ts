@@ -11,13 +11,35 @@ type EdgeRow = {
 };
 
 const EDGE_SELECT = `
-  select e.edge_id, e.from_entity, e.to_entity, f.display_name as from_name,
-         t.display_name as to_name, e.kind, e.tier, e.strength, e.tie_band, e.evidence,
+  select e.edge_id, f.entity_id as from_entity, t.entity_id as to_entity, f.display_name as from_name,
+         t.display_name as to_name, e.kind::text as kind, e.tier::text as tier, e.strength::text as strength, e.tie_band::text as tie_band, e.evidence,
          u.name as reviewed_by_name, e.reviewed_at, e.review_note, e.valid_from, e.valid_to
     from network.edge e
-    join identity.entity f on f.entity_id = e.from_entity
-    join identity.entity t on t.entity_id = e.to_entity
+    join identity.entity f on f.entity_id = identity.canonical_entity_id(e.from_entity)
+    join identity.entity t on t.entity_id = identity.canonical_entity_id(e.to_entity)
     left join platform.app_user u on u.id = e.reviewed_by`;
+
+/** Possible identity is an explicitly uncertain bridge, never a persisted relationship claim. */
+const POSSIBLE_SELECT = `
+  select p.edge_id, f.entity_id as from_entity, t.entity_id as to_entity,
+         f.display_name as from_name, t.display_name as to_name, 'possible_identity' as kind,
+         'D' as tier, p.confidence::text as strength, null::text as tie_band,
+         jsonb_build_array(jsonb_build_object('doc', 'identity.possible_match:' || p.edge_id,
+           'source', 'deterministic identity resolution', 'as_of', p.created_at::date::text,
+           'note', 'Possible identity match: same normalized full name across sources without corroboration. These may be different people; no relationship or consent is established. Confidence ' || p.confidence::text,
+           'tie', jsonb_build_object('kind', 'proximity'))) as evidence,
+         null::text as reviewed_by_name, null::timestamptz as reviewed_at, null::text as review_note,
+         p.created_at as valid_from, null::timestamptz as valid_to
+    from identity.possible_match p
+    join identity.entity f on f.entity_id = identity.canonical_entity_id(p.left_entity)
+    join identity.entity t on t.entity_id = identity.canonical_entity_id(p.right_entity)
+   where p.active and f.entity_id <> t.entity_id`;
+
+/** Canonical identity of a requested node, including callers holding an old source ID. */
+export async function canonicalRouteEntity(id: string): Promise<string> {
+  return (await (await getDb()).one<{ id: string }>(
+    'select identity.canonical_entity_id($1::uuid)::text as id', [id]))!.id;
+}
 
 const toEdge = (r: EdgeRow): Edge => ({
   edgeId: r.edge_id, fromEntity: r.from_entity, toEntity: r.to_entity,
@@ -30,7 +52,7 @@ const toEdge = (r: EdgeRow): Edge => ({
 
 export async function listEdges(): Promise<Edge[]> {
   const db = await getDb();
-  return (await db.query<EdgeRow>(`${EDGE_SELECT} order by e.tier, f.display_name`)).map(toEdge);
+  return (await db.query<EdgeRow>(`${EDGE_SELECT} union all ${POSSIBLE_SELECT} order by tier, from_name`)).map(toEdge);
 }
 
 type EvidenceEntry = { edge: Edge; bytes: number };
@@ -56,7 +78,7 @@ export async function edgesByIds(ids: string[]): Promise<Map<string, Edge>> {
     } else missing.push(id);
   }
   for (let offset = 0; offset < missing.length; offset += 64) {
-    const rows = await db.query<EdgeRow>(`${EDGE_SELECT} where e.edge_id = any($1::uuid[])`, [missing.slice(offset, offset + 64)]);
+    const rows = await db.query<EdgeRow>(`${EDGE_SELECT} where e.edge_id = any($1::uuid[]) union all ${POSSIBLE_SELECT} and p.edge_id = any($1::uuid[])`, [missing.slice(offset, offset + 64)]);
     for (const row of rows) {
       const edge = toEdge(row), bytes = JSON.stringify(edge).length * 2;
       result.set(row.edge_id, edge);
@@ -101,11 +123,12 @@ export async function enumeratePathsFromSources(
   if (!fromEntities.length) return [];
   const db = await getDb();
   const excluded = await db.query<{ entity_id: string }>(
-    `select distinct e.entity_id from identity.entity e join identity.source_record s on s.entity_id = e.entity_id
+    `select distinct e.entity_id from identity.source_record s join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id)
       where s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL'`);
   const graph = await graphSnapshot(db);
-  return pathsFromSnapshot(graph, fromEntities, targetEntity, maxHops,
-    new Set([...sourceOnlyEntities, ...excluded.map((row) => row.entity_id)]));
+  const canonical = (id: string) => graph.canonicalIds?.get(id) ?? id;
+  return pathsFromSnapshot(graph, fromEntities.map(canonical), canonical(targetEntity), maxHops,
+    new Set([...sourceOnlyEntities, ...excluded.map((row) => row.entity_id)].map(canonical)));
 }
 
 async function edgeSummary() { return graphSnapshot(await getDb()); }
@@ -123,7 +146,7 @@ export async function entityForUser(handle: string): Promise<{ entityId: string;
   const db = await getDb();
   const row = await db.one<{ entity_id: string; display_name: string }>(
     `select e.entity_id, e.display_name
-       from identity.source_record s join identity.entity e on e.entity_id = s.entity_id
+       from identity.source_record s join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id)
       where s.source = 'app_user' and s.source_id = $1`,
     [handle],
   );
@@ -135,7 +158,7 @@ export async function routeSources(): Promise<Array<{ entityId: string; name: st
   const db = await getDb();
   const rows = await db.query<{ id: string; name: string }>(
     `select distinct e.entity_id::text as id, e.display_name as name
-       from identity.entity e join identity.source_record s on s.entity_id = e.entity_id
+       from identity.source_record s join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id)
        left join platform.app_user u on s.source = 'app_user' and s.source_id = u.handle
       where (s.source = 'app_user' and u.active)
          or (s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL')
@@ -149,9 +172,10 @@ export async function sourceEdges(sourceIds: string[], entityIds: string[]): Pro
   if (!sourceIds.length || !entityIds.length) return [];
   const db = await getDb();
   const graph = await graphSnapshot(db);
-  const wanted = new Set(entityIds), ids = new Set<string>();
+  const canonical = (id: string) => graph.canonicalIds?.get(id) ?? id;
+  const wanted = new Set(entityIds.map(canonical)), ids = new Set<string>();
   for (const source of sourceIds) {
-    for (const edge of graph.adjacency.get(source) ?? []) {
+    for (const edge of graph.adjacency.get(canonical(source)) ?? []) {
       if (wanted.has(edge.other)) ids.add(edge.edgeId);
     }
     await yieldRouteWork();
@@ -162,10 +186,12 @@ export async function sourceEdges(sourceIds: string[], entityIds: string[]): Pro
 /** A changed endpoint can affect a three-hop route only within two hops of its target.
  * Called only for pending topology changes: ordinary persistent-cache hits need no graph load. */
 export async function routeTouchesChanges(targetId: string, changedIds: string[]): Promise<boolean> {
-  const changed = new Set(changedIds);
-  if (changed.has(targetId)) return true;
-  if (!changed.size) return false;
+  if (!changedIds.length) return false;
   const graph = await graphSnapshot(await getDb());
+  const canonical = (id: string) => graph.canonicalIds?.get(id) ?? id;
+  targetId = canonical(targetId);
+  const changed = new Set(changedIds.map(canonical));
+  if (changed.has(targetId)) return true;
   let checked = 0, slice = performance.now();
   const first = graph.adjacency.get(targetId) ?? [];
   for (const edge of first) {
