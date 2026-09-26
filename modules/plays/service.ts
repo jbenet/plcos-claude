@@ -139,7 +139,7 @@ export async function commit(
       'select name from platform.vehicle where id = $1', [vehicleId]))[0];
     const entity = entityId
       ? (await tx.query<{ display_name: string }>(
-          'select display_name from identity.entity where entity_id = $1', [entityId]))[0]
+          'select display_name from identity.entity where entity_id = identity.canonical_entity_id($1::uuid)', [entityId]))[0]
       : null;
 
     const payload: LinearPayload = {

@@ -105,13 +105,22 @@ export async function poolChecks(): Promise<PoolCheck[]> {
     entity_id: string; entity_name: string; budget: string | null; source: string | null;
     verified: boolean; vehicle_name: string | null; track: Track | null; amount: string | null;
   }>(
-    `select e.entity_id, e.display_name as entity_name, p.budget, p.source,
-            (p.verified_by is not null) as verified,
+    `with budgets as (
+       select identity.canonical_entity_id(entity_id) as entity_id,
+              case when count(*) = 1 then max(budget) end as budget,
+              case when count(*) = 1 then max(source)
+                   else 'Multiple budgets on merged records; reconcile before checking the capital pool' end as source,
+              count(*) = 1 and bool_and(verified_by is not null) as verified
+         from pipeline.capital_pool group by identity.canonical_entity_id(entity_id)
+     )
+     select e.entity_id, e.display_name as entity_name, p.budget, p.source,
+            coalesce(p.verified, false) as verified,
             v.name as vehicle_name, x.track, x.amount
-       from identity.entity e
-       join pipeline.exposure x on x.entity_id = e.entity_id and x.closed_at is null
+       from pipeline.exposure x
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(x.entity_id)
        join platform.vehicle v on v.id = x.vehicle_id
-       left join pipeline.capital_pool p on p.entity_id = e.entity_id
+       left join budgets p on p.entity_id = e.entity_id
+      where x.closed_at is null
       order by e.display_name, v.sort_order`,
   );
 
@@ -244,4 +253,3 @@ export async function closeStates(pairs: Array<{ entityId: string; vehicleId: st
   }
   return out;
 }
-

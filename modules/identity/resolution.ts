@@ -21,7 +21,6 @@ const domain = (s: string) => s.trim().toLowerCase().replace(/^.*@/, '').replace
 const pair = (a: string, b: string) => [a,b].sort().join('|');
 
 /** Uses the server's existing handle. Reads and mutations yield in bounded batches; no long transaction. */
-const running = new WeakMap<Db, Promise<ResolutionCounts>>();
 const mutations = new WeakMap<Db, Promise<unknown>>();
 function serialized<T>(db: Db, work: () => Promise<T>): Promise<T> {
   const next = (mutations.get(db) ?? Promise.resolve()).catch(() => {}).then(work);
@@ -29,10 +28,8 @@ function serialized<T>(db: Db, work: () => Promise<T>): Promise<T> {
   return next.finally(() => { if (mutations.get(db) === next) mutations.delete(db); });
 }
 export async function resolveIdentities(db: Db, evidence: IdentityEvidence[] = [], progress?: (stage: string, count: number) => void): Promise<ResolutionCounts> {
-  // Concurrent builds share the current bounded pass; a subsequent build reads fresh evidence.
-  const prior = running.get(db); if (prior) return prior;
-  const work = serialized(db, () => resolvePass(db, evidence, progress)); running.set(db, work);
-  try { return await work; } finally { if (running.get(db) === work) running.delete(db); }
+  // Passes serialize so a rebuild queued during an earlier pass reads its own evidence.
+  return serialized(db, () => resolvePass(db, evidence, progress));
 }
 async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (stage: string, count: number) => void): Promise<ResolutionCounts> {
   const people: Person[] = [];

@@ -131,7 +131,7 @@ export async function influenceFor(
   const db = await getDb();
   const names = new Map(
     (await db.query<{ entity_id: string; display_name: string }>(
-      'select entity_id, display_name from identity.entity where entity_id = any($1::uuid[])',
+      'select entity_id, display_name from identity.entity where entity_id in (select identity.canonical_entity_id(id) from unnest($1::uuid[]) id)',
       [connectorIds],
     )).map((r) => [r.entity_id, r.display_name]),
   );

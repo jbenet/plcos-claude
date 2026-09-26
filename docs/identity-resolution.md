@@ -1,9 +1,12 @@
 # Cross-source identity resolution
 
-`buildNetwork()` runs `resolveIdentities()` after materializing the network and before
-scheduling route warm-up. It uses the server's existing database handle. The pass reads
-and writes in bounded batches, yields between batches and individual merge transactions,
-and serializes resolution and undo per handle. It opens no database or external connector.
+On the real profile, `buildNetwork()` schedules `resolveIdentities()` after materializing
+the network and returns while it runs. Demo builds await it for deterministic fixtures.
+Route warm-up starts after the resolver settles. The resolver uses
+the server's existing database handle. It reads and writes in bounded batches, yields
+between batches and individual merge transactions, and serializes resolution and undo per
+handle. It opens no database or external connector. A queued rebuild gets a fresh pass
+with its own evidence.
 
 Candidates are person records sharing a full name after case, accent and whitespace
 normalization, with different sources among Affinity, warehouse, W3 and prospects.
@@ -73,7 +76,8 @@ Measured on 26 Sep 2026 from a disposable APFS clone of the real database:
 | LP records with an existing route gaining a higher best score | 14 |
 
 These route counts exclude name-only bridges and count original pursuit entity records,
-not a claim about the number of distinct humans. The identity pass took 51.091 seconds;
-its largest observed event-loop delay was 542 ms in this local measurement, not a server
-latency guarantee. The database remained available between batches. All 355 properties,
-the TypeScript check and boundaries passed. The measurement clone was deleted after close.
+not a claim about the number of distinct humans. The repeated identity pass took 54.586
+seconds; its largest observed event-loop delay was 662 ms in this local measurement,
+not a server latency guarantee. The database remained available between batches. All
+357 properties, the TypeScript check and boundaries passed. The measurement clone was
+deleted after close.

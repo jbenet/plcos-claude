@@ -326,7 +326,7 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
     `select r.source_id, e.display_name as name
        from identity.affiliation a
        join identity.source_record r on r.entity_id = a.org_entity and r.source = $1
-       join identity.entity e on e.entity_id = a.org_entity
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(a.org_entity)
       where a.person_entity = $2 and a.ended_on is null and r.source_id like 'company:%'`,
     [SOURCE, entityId],
   );

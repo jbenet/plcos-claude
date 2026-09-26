@@ -62,7 +62,7 @@ export async function requestSend(
     [args.vehicleId],
   );
   const entity = await db.one<{ display_name: string }>(
-    'select display_name from identity.entity where entity_id = $1',
+    'select display_name from identity.entity where entity_id = identity.canonical_entity_id($1::uuid)',
     [args.entityId],
   );
   if (!vehicle || !entity) throw new Error('Unknown vehicle or entity.');

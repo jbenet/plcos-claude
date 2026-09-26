@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Check, Db } from './properties/harness';
 import { resolveIdentities, undoIdentityMerge, type IdentityEvidence } from '../modules/identity/resolution';
 import { addProspects, type Prospect } from '../lib/enrich/prospects';
+import { poolChecks } from '../modules/pipeline/repo';
 
 /** Invented source identities only; no fixture contains an actual LP record. */
 export async function identityResolutionProperties(check: Check, db: Db) {
@@ -84,6 +85,22 @@ export async function identityResolutionProperties(check: Check, db: Db) {
       assertion.rule==='identity:v1:affiliation' && Boolean(assertion.signals) && undone && !twice && await root(undo[0]!)!==await root(undo[1]!),
       'An audited correction reverses its pointer once and prevents the next build from repeating that merge.');
     const actor=(await db.one<{id:string}>(`select id::text from platform.app_user where active order by handle limit 1`))!.id;
+    const vehicleIds=await db.query<{id:string}>(`select id::text from platform.vehicle where phase<>'historical' order by slug limit 2`);
+    for(const [i,entity] of [affinity,research].entries())await db.query(
+      `insert into pipeline.exposure(entity_id,vehicle_id,instrument,track,amount,owner_id)
+       values($1,$2,'lp_commitment','soft',$3,$4)`,[entity,vehicleIds[i]!.id,i+1,actor]);
+    await db.query(`insert into pipeline.capital_pool(entity_id,budget,source,as_of,verified_by)
+      values($1,10,'Invented merged-record budget',current_date,$2)`,[research,actor]);
+    const pooled=(await poolChecks()).find(p=>p.entityId===affinity);
+    check('IDRES a budget on an alias checks every exposure on the canonical person',
+      pooled?.total===3 && pooled.budget===10 && pooled.status==='ok' && pooled.committed.length===2,
+      'The two separate vehicle exposures remain separate records and consume one documented capital pool.');
+    await db.query(`insert into pipeline.capital_pool(entity_id,budget,source,as_of,verified_by)
+      values($1,20,'Invented conflicting alias budget',current_date,$2)`,[affinity,actor]);
+    const conflicting=(await poolChecks()).find(p=>p.entityId===affinity);
+    check('IDRES conflicting alias budgets are not silently combined or selected',
+      conflicting?.budget===null && conflicting.status==='no_budget' && Boolean(conflicting.budgetSource?.includes('Multiple budgets')),
+      'Two independently recorded budgets require reconciliation before any capital-pool check can pass.');
     const vehicle=(await db.one<{slug:string}>(`select slug from platform.vehicle where phase<>'historical' order by slug limit 1`))!.slug;
     const record:Prospect={personKey:sourceKeys.get(prospectPair[1]!)!.key,name:'IDRES Invented Prospect Clean',org:null,vehicle,status:'new',
       capacity:{band:'$500K–$1M',basis:'Invented fixture capacity.',guess:true},reason:'Invented prospect import after identity resolution.',
@@ -94,6 +111,8 @@ export async function identityResolutionProperties(check: Check, db: Db) {
       imported.added===1 && imported.ambiguous===0 && pursuits.length===1 && pursuits[0]!.entity_id===prospectPair[0],
       'The original Affinity and W3 records remain stored; the import follows the W3 source key to their single canonical identity.');
   } finally {
+    await db.query('delete from pipeline.exposure where entity_id=any($1::uuid[])',[ids]);
+    await db.query('delete from pipeline.capital_pool where entity_id=any($1::uuid[])',[ids]);
     await db.query('delete from research.note where entity_id=any($1::uuid[])',[ids]);
     await db.query('delete from strategy.pursuit where entity_id=any($1::uuid[])',[ids]);
     await db.query('delete from identity.possible_match where left_entity=any($1::uuid[]) or right_entity=any($1::uuid[])',[ids]);

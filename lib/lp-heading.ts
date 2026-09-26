@@ -39,7 +39,7 @@ export async function lpHeadings(rows: Array<{ pursuitId: string; entityId: stri
   const [affiliations, types, units] = await Promise.all([
     db.query<{ entity_id: string; org: string; org_id: string }>(
       `select distinct on (identity.canonical_entity_id(a.person_entity)) identity.canonical_entity_id(a.person_entity)::text as entity_id, o.display_name as org, o.entity_id::text as org_id
-         from identity.affiliation a join identity.entity o on o.entity_id = a.org_entity
+         from identity.affiliation a join identity.entity o on o.entity_id = identity.canonical_entity_id(a.org_entity)
         where identity.canonical_entity_id(a.person_entity) = any($1::uuid[]) and a.ended_on is null
         order by identity.canonical_entity_id(a.person_entity), a.is_primary desc, a.as_of desc`, [entityIds]),
     db.query<{ entity_id: string; t: string | null }>(

@@ -2,7 +2,7 @@ import { startRouteWarmup } from './cache';
 import { resolveIdentities, type ResolutionCounts } from '@/modules/identity/resolution';
 import { identityEvidence } from '@/modules/identity/resolution-input';
 import { readProspectFiles } from '@/lib/enrich/prospects';
-import { getDb, type Queryable } from '@/lib/db';
+import { getDb, withDb, type Db, type Queryable } from '@/lib/db';
 import { GROUP_EVENT, isAutoReply } from '@/modules/meetings';
 import type { EdgeKind, EvidenceTier } from './types';
 import { warehousePathKind, type Path } from '@/lib/enrich/connect';
@@ -36,7 +36,7 @@ import { importNetworkNodes, planNetworkNodes, readNetworkNodeInput } from './no
  */
 
 export interface BuildCounts {
-  identityResolution?: ResolutionCounts;
+  identityResolution?: ResolutionCounts | 'scheduled';
   teamCreated: number;
   fromRecords: number;
   fromResearch: number;
@@ -69,9 +69,35 @@ export async function buildNetwork(): Promise<BuildCounts> {
     await tx.query('update network.route_revision set revision = txid_current(), epoch = txid_current() where singleton');
     return result;
   });
-  counts.identityResolution = await resolveIdentities(db, identityEvidence(await readNetworkNodeInput(enrichDir()), await readProspectFiles()));
-  startRouteWarmup(db);
+  if (config.data.profile === 'real') {
+    // A live pass can take tens of seconds. Return while bounded resolution runs.
+    startIdentityResolution(db);
+    counts.identityResolution = 'scheduled';
+  } else {
+    // Demo builds stay deterministic for local fixtures and tests.
+    counts.identityResolution = await resolveIdentities(db, identityEvidence(await readNetworkNodeInput(enrichDir()), await readProspectFiles()));
+    startRouteWarmup(db);
+  }
   return counts;
+}
+
+const latestResolution = new WeakMap<Db, number>();
+function startIdentityResolution(db: Db): void {
+  const generation = (latestResolution.get(db) ?? 0) + 1;
+  latestResolution.set(db, generation);
+  const timer = setTimeout(() => {
+    void withDb(db, async () => {
+      try {
+        await resolveIdentities(db, identityEvidence(await readNetworkNodeInput(enrichDir()), await readProspectFiles()));
+      } catch {
+        // Keep record details out of the server log; foreground routes still work.
+        console.error('[network] identity resolution failed; retry the network build');
+      } finally {
+        if (latestResolution.get(db) === generation) startRouteWarmup(db);
+      }
+    });
+  }, 25);
+  timer.unref();
 }
 
 async function build(tx: Queryable): Promise<BuildCounts> {

@@ -249,7 +249,7 @@ export async function colleagueTouchpointsFor(entityId: string, vehicleId: strin
     [entityId, vehicleId],
   );
   const org = (await db.one<{ name: string }>(
-    `select o.display_name as name from identity.affiliation a join identity.entity o on o.entity_id = a.org_entity
+    `select o.display_name as name from identity.affiliation a join identity.entity o on o.entity_id = identity.canonical_entity_id(a.org_entity)
       where identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id($1::uuid) and a.ended_on is null order by a.is_primary desc, a.as_of desc limit 1`, [entityId]))?.name ?? null;
   const all = rows.map(toTouch).map((t) => ({ ...t, viaOrganization: org ? `${t.entityName}, ${org}` : t.entityName })).sort((a, b) => when(b) - when(a));
   if (!vehicleId) return all;

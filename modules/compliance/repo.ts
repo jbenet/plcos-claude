@@ -171,7 +171,7 @@ export async function listSideLetters(): Promise<SideLetter[]> {
     `select l.letter_id, e.display_name as entity_name, v.name as vehicle_name, l.provision,
             l.mfn, l.risk, l.signed_on, u.name as reviewed_by_name
        from compliance.side_letter l
-       join identity.entity e on e.entity_id = l.entity_id
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(l.entity_id)
        join platform.vehicle v on v.id = l.vehicle_id
        left join platform.app_user u on u.id = l.reviewed_by
       order by l.mfn desc, l.signed_on`,

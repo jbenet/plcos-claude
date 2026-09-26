@@ -92,7 +92,7 @@ export async function ingestSignals(): Promise<{ read: number; inserted: number 
   const { signalConnector } = await import('./connector');
   const db = await getDb();
   const entities = await db.query<{ entity_id: string; display_name: string }>(
-    'select entity_id, display_name from identity.entity',
+    'select entity_id, display_name from identity.entity where merged_into is null',
   );
   const byName = new Map(entities.map((e) => [e.display_name, e.entity_id]));
 

@@ -115,7 +115,7 @@ export async function logTouchpoint(actorId: string, t: NewTouchpoint, opts: { q
     );
     // Named in the log (N62), so "logged a meeting" can say with whom and on which vehicle.
     const named = await tx.one<{ entity: string | null; vehicle: string | null }>(
-      `select (select display_name from identity.entity where entity_id = $1) as entity,
+      `select (select display_name from identity.entity where entity_id = identity.canonical_entity_id($1::uuid)) as entity,
               (select name from platform.vehicle where id = $2) as vehicle`,
       [t.entityId, t.vehicleId],
     );
