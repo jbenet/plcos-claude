@@ -70,7 +70,9 @@ a copy of it with `npm run preview`, and a sub-agent's worktree, which has no ro
   are `SELECT` only regardless: never DML, DDL, exports or scheduled queries. What comes back is real data
   under Affinity's rules: it stays in `plcos-data/real`, never in a commit, a doc, a prompt to a sub-agent
   or a search. BigQuery bills by bytes scanned, so read table schemas first, select only the columns
-  needed, filter, and `LIMIT`. Founders and PL team members registered there count as one hop from our
+  needed, filter, and `LIMIT`; aggregate in SQL rather than pulling rows. A result holding exactly the
+  row cap (10,000) may have been cut off: say so to Juan, and page with `ORDER BY` and `OFFSET` when
+  every row is needed. Founders and PL team members registered there count as one hop from our
   team (Juan, 26 Sep).
 - Affinity fields are claims, not evidence. A stage is not a ladder rung. An amount is soft
   unless a field has been designated as meaning signed. Relationship strength is a tier-C

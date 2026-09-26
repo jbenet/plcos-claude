@@ -10,12 +10,13 @@ CODEX="/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"
 TOOLBOX="@toolbox-sdk/server@1.13.1"   # pinned: a new version is a reviewed change, not a silent download
 PROJECT="${POLARIS_PROJECT:-plrs-data-platform}"
 MAX_BYTES="${POLARIS_MAX_BYTES:-10737418240}"   # 10 GB billed per query; a GUESS at a safe ceiling
+MAX_ROWS="${POLARIS_MAX_ROWS:-10000}"      # rows returned per query; a result of exactly this many may be cut off
 
 command -v gcloud >/dev/null || { echo "Install the Google Cloud CLI first: brew install --cask google-cloud-sdk" >&2; exit 1; }
 [ -f "$HOME/.config/gcloud/application_default_credentials.json" ] \
   || { echo "Sign in first: gcloud auth application-default login" >&2; exit 1; }
 
-ENV=(BIGQUERY_PROJECT="$PROJECT" BIGQUERY_WRITE_MODE=blocked BIGQUERY_MAXIMUM_BYTES_BILLED="$MAX_BYTES" BIGQUERY_MAX_QUERY_RESULT_ROWS=200)
+ENV=(BIGQUERY_PROJECT="$PROJECT" BIGQUERY_WRITE_MODE=blocked BIGQUERY_MAXIMUM_BYTES_BILLED="$MAX_BYTES" BIGQUERY_MAX_QUERY_RESULT_ROWS="$MAX_ROWS")
 
 claude mcp remove --scope user "$NAME" >/dev/null 2>&1 || true
 claude_env=(); for e in "${ENV[@]}"; do claude_env+=(-e "$e"); done
