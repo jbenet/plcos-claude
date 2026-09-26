@@ -19,7 +19,7 @@ ENV=(BIGQUERY_PROJECT="$PROJECT" BIGQUERY_WRITE_MODE=blocked BIGQUERY_MAXIMUM_BY
 
 claude mcp remove --scope user "$NAME" >/dev/null 2>&1 || true
 claude_env=(); for e in "${ENV[@]}"; do claude_env+=(-e "$e"); done
-claude mcp add --scope user "${claude_env[@]}" "$NAME" -- npx -y "$TOOLBOX" --prebuilt bigquery --stdio
+claude mcp add --scope user "$NAME" "${claude_env[@]}" -- npx -y "$TOOLBOX" --prebuilt bigquery --stdio
 
 "$CODEX" mcp remove "$NAME" >/dev/null 2>&1 || true
 codex_env=(); for e in "${ENV[@]}"; do codex_env+=(--env "$e"); done
