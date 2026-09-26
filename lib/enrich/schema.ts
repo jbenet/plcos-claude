@@ -53,6 +53,8 @@ export interface Connection {
   tie?: import('@/modules/network').TieDetails;
   /** Who or what on our side, or in the ecosystem: a team member, Protocol Labs, a portfolio company. */
   to: string;
+  /** Target identity, independent of whose tie scope describes. Unset only on legacy/uncertain records. */
+  toType?: 'person' | 'org';
   kind: 'coinvestor' | 'colleague' | 'board' | 'advisor' | 'portfolio' | 'event_coattendee' | 'social_public' | 'podcast_guest' | 'alumni' | 'other';
   basis: string;
   source?: string | null;
@@ -206,6 +208,7 @@ export function check(f: unknown, expectKey?: string): string[] {
     if (fact.detail !== undefined && !record(fact.detail)) p.push(`fact ${i}: detail must be an object`);
   }
   for (const [i, c] of (Array.isArray(x.connections) ? x.connections : []).entries()) {
+    if (record(c) && c.toType !== undefined && !['person', 'org'].includes(c.toType)) p.push(`connection ${i}: toType must be person or org`);
     if (record(c) && (!optionalString(c.basis) || !optionalString(c.source))) p.push(`connection ${i}: basis and source must be text`);
   }
   if (p.length) return p;

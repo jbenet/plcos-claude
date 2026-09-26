@@ -18,6 +18,8 @@ export function pathProblems(value: unknown): string[] {
   if (!text(p.basis)) problems.push('path needs a basis');
   const other = object(p.other);
   if (!other || !text(other.name) || !['team', 'ours', 'backer', 'lp'].includes(other.type)) problems.push('invalid other endpoint');
+  if (other?.entityType !== undefined && !['person', 'org'].includes(other.entityType)) problems.push('invalid other.entityType');
+  if (other?.person && other.entityType && (other.person.entityType ?? 'person') !== other.entityType) problems.push('other.entityType conflicts with connector descriptor');
   if (other?.key !== undefined && !isEntityKey(other.key)) problems.push('other.key must be an entity UUID');
   if (p.tie !== undefined) problems.push(...tieDetailsProblems(p.tie));
   for (const [label, key, value] of [['lpPerson', p.lp, p.lpPerson], ['other.person', other?.key, other?.person]] as const) {
@@ -36,7 +38,7 @@ export function pathProblems(value: unknown): string[] {
  * not names, so diagnostics are safe to paste outside the private research files.
  */
 export function connectionIdentityProblems(findings: LocatedRecord[], paths: LocatedRecord[], knownOrgs: string[] = []): ConnectionProblem[] {
-  type Use = { record: LocatedRecord; at: string; type: 'person' | 'org'; personScope?: boolean; key?: string };
+  type Use = { record: LocatedRecord; at: string; type: 'person' | 'org'; explicitTarget?: boolean; key?: string };
   const names = new Map<string, Use[]>();
   const result = new Map<LocatedRecord, string[]>();
   const keys = new Map<LocatedRecord, Set<string>>();
@@ -61,7 +63,7 @@ export function connectionIdentityProblems(findings: LocatedRecord[], paths: Loc
     }
     for (const [i, c] of (Array.isArray(f.connections) ? f.connections : []).entries()) {
       // Firm scope describes whose tie this is; it does not imply the target is an org.
-      if (c?.scope === 'person') add(c.to, { record, at: `connection ${i}`, type: 'person', personScope: true });
+      if (['person', 'org'].includes(c?.toType)) add(c.to, { record, at: `connection ${i}`, type: c.toType, explicitTarget: true });
     }
   }
   for (const record of paths) {
@@ -69,7 +71,7 @@ export function connectionIdentityProblems(findings: LocatedRecord[], paths: Loc
     for (const [at, d] of [['lpPerson', p.lpPerson], ['other.person', p.other?.person]] as const) {
       if (object(d) && ['person', 'org'].includes(d.entityType ?? 'person')) add(d.name, { record, at, type: d.entityType ?? 'person', key: d.key });
     }
-    if (!p.other?.person && text(p.other?.name) && ['ours', 'team', 'lp'].includes(p.other?.type)) add(p.other.name, { record, at: 'other', type: p.other.type === 'ours' || external.has(norm(p.other.name ?? '')) ? 'org' : 'person', key: p.other.key });
+    if (!p.other?.person && text(p.other?.name) && (['person', 'org'].includes(p.other.entityType) || ['ours', 'team', 'lp'].includes(p.other?.type))) add(p.other.name, { record, at: 'other', type: p.other.entityType ?? (p.other.type === 'ours' || external.has(norm(p.other.name ?? '')) ? 'org' : 'person'), key: p.other.key });
   }
   for (const [name, uses] of names) {
     const orgs = uses.filter((u) => u.type === 'org');
@@ -78,7 +80,7 @@ export function connectionIdentityProblems(findings: LocatedRecord[], paths: Loc
     for (const use of uses) {
       const opposite = use.type === 'person' ? orgs[0] : people[0];
       const where = opposite ? `${opposite.record.file} index ${opposite.record.index} ${opposite.at}` : 'known organization roster';
-      report(use, `${use.personScope ? 'scope person target matches a known org' : 'same name used as both person and org'} (${where})`);
+      report(use, `${use.explicitTarget ? `toType ${use.type} conflicts with target identity` : 'same name used as both person and org'} (${where})`);
     }
   }
   return [...result].map(([record, problems]) => ({ file: record.file, index: record.index, problems, conflictingKeys: [...(keys.get(record) ?? [])] }));
