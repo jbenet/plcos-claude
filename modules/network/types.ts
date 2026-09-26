@@ -142,6 +142,10 @@ export interface RouteSearch {
   topRoutes?: Route[];
   graph?: RouteGraph;
   stats?: RouteStats;
+  /** Full inspected candidates, before folding and presentation filters. */
+  candidateCounts?: { total: number; unavailable: number };
+  /** SHA-256 of evidence notes on every usable or held candidate, including hidden paths. */
+  promotedBasisHashes?: string[];
   /** What was inspected. Rendered, never only logged. */
   coverage: {
     edges: number;
@@ -151,4 +155,14 @@ export interface RouteSearch {
     notInspected: Array<{ source: string; why: string }>;
   };
   restrictions: Array<{ instruction: string; connectorName: string | null; source: string | null }>;
+  /** Compact build snapshot. Candidate descriptors preserve guard alternatives and counts;
+   * only routes above carry full evidence. Never send this internal metadata to a client. */
+  structural?: StructuralRoutes;
+}
+
+export interface StructuralRoutes {
+  nodes: Array<{ entityId: string; name: string }>;
+  edges: Array<Pick<Edge, 'edgeId' | 'kind' | 'tier' | 'evidence'> & { basisHashes: string[] }>;
+  candidates: Array<{ nodes: number[]; edges: number[] }>;
+  roles: Record<string, import('./warmth').RouteScoreContext>;
 }

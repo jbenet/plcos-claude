@@ -62,6 +62,8 @@ export async function routeInputCacheProperties({ check, db }: SeedContext) {
 /** Persisted route snapshots are interchangeable with the live, guarded search. */
 export async function routeCacheProperties({ check, db, id }: SeedContext) {
   const { precomputeRoutes, planRoutes, planRoutesLive } = await import('../../modules/network');
+  const { overlayRoutes } = await import('../../modules/network/route-overlay');
+  const { routeGraph } = await import('../../modules/network/service');
   const { cachedRoutes } = await import('../../modules/network/cache');
   const empty = (await db.one<{ id: string }>(`insert into identity.entity (entity_type, display_name)
     values ('person', 'Cache fixture without connections') returning entity_id::text as id`))!.id;
@@ -70,9 +72,14 @@ export async function routeCacheProperties({ check, db, id }: SeedContext) {
       where v.slug = 'rails' and u.handle = 'juan'`, [empty]);
   const at = new Date();
   try {
-    const counts = await precomputeRoutes(at);
+    // Earlier build properties deliberately mutate the graph while detached warming runs.
+    // Join that run, then finish the current generation if it was superseded.
+    let counts = await precomputeRoutes(at);
+    for (let retry = 0; !counts.complete && retry < 3; retry++) counts = await precomputeRoutes(at);
     const persisted = await db.query<{ target_id: string; vehicle_kind: string }>(
-      'select target_id::text, vehicle_kind from network.route_cache order by target_id, vehicle_kind');
+      `select target_id::text, vehicle_kind from network.route_cache
+       where input_revision = (select revision from network.route_revision where singleton)
+       order by target_id, vehicle_kind`);
     let identical = true, dateCount = 0, difference = '';
     const firstDifference = (a: unknown, b: unknown, path = ''): string => {
       if (sameSnapshot(a, b)) return '';
@@ -88,15 +95,22 @@ export async function routeCacheProperties({ check, db, id }: SeedContext) {
     };
     const countDates = (value: unknown): number => value instanceof Date ? 1
       : value && typeof value === 'object' ? Object.values(value).reduce<number>((n, v) => n + countDates(v), 0) : 0;
+    const { withDb } = await import('../../lib/db');
+    const persistedReader = { ...db }; // Distinct handle cache forces JSONB deserialization.
     for (const row of persisted) {
-      const cached = await planRoutes('juan', row.target_id, 3, row.vehicle_kind, 'team');
-      const live = await planRoutesLive('juan', row.target_id, 3, row.vehicle_kind, 'team', at);
+      const base = await withDb(persistedReader, () => cachedRoutes(row.target_id, row.vehicle_kind,
+        async () => { throw new Error('Precompute missed fixture'); }));
+      const cached = base ? await overlayRoutes(base, row.vehicle_kind, at) : null;
+      const full = await planRoutesLive('juan', row.target_id, 3, row.vehicle_kind, 'team', at);
+      const selected = full?.routes.filter((r) => r.foldedUnder == null).map((r) => ({ ...r, foldedUnder: null }));
+      const live = full && selected ? { ...full, routes: selected,
+        topRoutes: selected.filter((r) => r.verdict === 'recommend'), graph: routeGraph(selected, full.targetId, true) } : null;
       identical &&= sameSnapshot(cached, live);
       difference ||= firstDifference(cached, live);
       dateCount += countDates(cached);
     }
-    check('CACHE precomputed scored and folded routes equal live search at the same evaluation time',
-      counts.complete && counts.targets > 0 && counts.searches === counts.targets && identical,
+    check('CACHE2 compact precompute equals visible live routes and full summary at the same evaluation time',
+      counts.complete && counts.targets > 0 && counts.searches === counts.targets && persisted.length === counts.searches && identical,
       `${counts.searches} target/kind searches; routes, scores, folds, graph, restrictions and coverage compared. ${difference}`);
     check('CACHE persisted coverage, edge and influence dates revive as Dates', identical && dateCount > 0,
       `${dateCount} Date values survived the persisted-cache read and deep comparison.`);
@@ -112,6 +126,28 @@ export async function routeCacheProperties({ check, db, id }: SeedContext) {
     check('CACHE an unknown target keeps the live empty-search behavior without a foreign-key failure',
       absent?.routes.length === 0 && !(await db.one('select target_id from network.route_cache where target_id = $1', [missing])),
       'Unknown target URLs retain coverage disclosure; no orphaned cache row is written.');
+
+    const original = await db.one<{ computed: string; payload: string }>(
+      "select computed_at::text as computed, search::text as payload from network.route_cache where target_id = $1 and vehicle_kind = 'fund'", [id('Delia Roos')]);
+    const stranger = (await db.one<{ id: string }>(`insert into identity.entity (entity_type, display_name)
+      values ('person', 'Unrelated cache fixture') returning entity_id::text as id`))!.id;
+    await db.query('update identity.entity set display_name = $2 where entity_id = $1', [stranger, 'Renamed unrelated cache fixture']);
+    await db.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by)
+      values ('w3_person', 'cache2-unrelated-person', $1, 'fixture')`, [stranger]);
+    await db.query("update platform.source_sync set detail = 'Fictional sync progress' where source = 'affinity'");
+    await planRoutes('juan', id('Delia Roos'), 3, 'fund', 'team');
+    const unchanged = await db.one<{ computed: string; payload: string }>(
+      "select computed_at::text as computed, search::text as payload from network.route_cache where target_id = $1 and vehicle_kind = 'fund'", [id('Delia Roos')]);
+    check('CACHE2 unrelated entity writes and sync progress reuse the existing target snapshot',
+      original?.computed === unchanged?.computed && original?.payload === unchanged?.payload,
+      'A changed graph read revision validates dependencies without recomputing unrelated targets.');
+    await db.query('delete from identity.source_record where entity_id = $1', [stranger]);
+    await db.query('delete from identity.entity where entity_id = $1', [stranger]);
+    const { routeWarmupProgress } = await import('../../modules/network/cache');
+    const progress = await routeWarmupProgress();
+    check('CACHE2 warm-up progress is available as one cheap completed counter',
+      progress.status === 'complete' && progress.completed === counts.searches && progress.total === counts.targets,
+      'The progress row exposes completion and elapsed time without scanning cache payloads.');
 
     let attempts = 0, refused = false;
     const retry = () => cachedRoutes(id('Delia Roos'), 'fixture-retry', async () => {
@@ -260,7 +296,7 @@ export async function networkVariations(check: Check) {
     const ids = (n: string) => ents.find((e) => e.displayName === n)!.entityId;
     // Warm the persisted/memory team search before changing evidence or action guards.
     await pr('juan', ids('Delia Roos'), 3, 'fund', 'team');
-    const before = await d.one<{ revision: string }>('select revision from network.route_cache where target_id = $1 and vehicle_kind = $2', [ids('Delia Roos'), 'fund']);
+    const before = await d.one<{ computed_at: string }>('select computed_at::text as computed_at from network.route_cache where target_id = $1 and vehicle_kind = $2', [ids('Delia Roos'), 'fund']);
     await v.perturb(d, ids);
     const r = await pr('juan', ids('Delia Roos'));
     const out = v.assert(r);
@@ -269,10 +305,16 @@ export async function networkVariations(check: Check) {
     const evaluatedAt = cached?.routes[0]?.score?.evaluatedAt;
     const { planRoutesLive } = await import('../../modules/network');
     const live = await planRoutesLive('juan', ids('Delia Roos'), 3, 'fund', 'team', evaluatedAt ? new Date(evaluatedAt) : new Date());
-    const after = await d.one<{ revision: string }>('select revision from network.route_cache where target_id = $1 and vehicle_kind = $2', [ids('Delia Roos'), 'fund']);
-    check(`CACHE invalidates between builds — ${v.name}`,
-      before?.revision !== after?.revision && sameSnapshot(cached, live) && v.assert(cached).ok,
-      'A warm cached route refreshes after the mutation and agrees with current evidence and action guards.');
+    const after = await d.one<{ computed_at: string }>('select computed_at::text as computed_at from network.route_cache where target_id = $1 and vehicle_kind = $2', [ids('Delia Roos'), 'fund']);
+    const { routeGraph } = await import('../../modules/network/service');
+    const selected = live?.routes.filter((r) => r.foldedUnder == null).map((r) => ({ ...r, foldedUnder: null }));
+    const expected = live && selected ? { ...live, routes: selected,
+      topRoutes: selected.filter((r) => r.verdict === 'recommend'), graph: routeGraph(selected, live.targetId, true) } : null;
+    const dynamic = v.name === 'add a blanket do-not-contact' || v.name === 'the connector reaches the cap';
+    const rewrote = String(before?.computed_at) !== String(after?.computed_at);
+    check(`CACHE2 applies changes between builds — ${v.name}`,
+      (dynamic ? !rewrote : true) && sameSnapshot(cached, expected) && v.assert(cached).ok,
+      'Current visible routes and full counts equal live search; action changes do not rewrite the structural snapshot.');
     await d.close();
   }
 }

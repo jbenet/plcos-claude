@@ -15,13 +15,13 @@ import { listEntities } from '@/modules/identity';
 import { TargetPicker } from '@/components/routes/TargetPicker';
 import { listSourceDocs, notesFor } from '@/modules/research';
 import { directContact, type DirectContact } from '@/modules/meetings';
-import { planRoutes, warmthReader, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
+import { planRoutes, warmthReader, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier, type Route } from '@/modules/network';
 import type { Path } from '@/lib/enrich/connect';
 import { buildNetworkAction } from './actions';
-import { routeInputs, promotedRouteBases } from '@/lib/routes-data';
+import { routeInputs, promotedRouteBases, graphRouteInputs, routeComparisonInputs } from '@/lib/routes-data';
 import { RouteSections } from '@/components/routes/RouteSections';
 import { RouteFilters } from '@/components/routes/RouteFilters';
-import { routeReading, routeSummaryFor, routeComparison } from '@/components/routes/route-display';
+import { routeReading, routeSummaryFor } from '@/components/routes/route-display';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,8 +52,21 @@ export default async function Routes({
   const entities = target && !pipelineEntities.some((e) => e.entityId === target)
     ? [...pipelineEntities, ...await listEntities([target])] : pipelineEntities;
   const targetId = target ?? targets.find((t) => t.displayName === 'Delia Roos')?.entityId ?? targets[0]?.entityId;
+  const minimumWarmth = [1, 2, 3, 4].includes(Number(params.warmth)) ? Number(params.warmth) : 0;
+  const preferred = (route: Route) => route.hops.some((h) => {
+    if (params.prefer === 'coinvestor') return h.edge.kind === 'coinvestor';
+    if (params.prefer === 'family') return h.edge.kind === 'family';
+    if (params.prefer === 'cofounder') return h.edge.evidence.some((e) => e.tie?.kind === 'cofounder');
+    // Match explicit relationship records, never names or guessed proximity.
+    if (params.prefer === 'our_investor' && h.edge.evidence.some((e) => (e.tie as { withUs?: string } | undefined)?.withUs === 'investor')) return true;
+    const kinds: Record<string, string> = { our_investor: 'they_lp_in_us', existing_lp: 'they_lp_in_us', friend: 'personal' };
+    return Boolean(kinds[params.prefer ?? ''] && fit.some((a) => route.connectorIds.includes(a.entityId)
+      && a.links.some((l) => l.kind === kinds[params.prefer!] && (params.prefer !== 'friend' || (/friend/i.test(l.statement) && l.viaEntityId != null && [h.edge.fromEntity, h.edge.toEntity].includes(l.viaEntityId))))));
+  });
   const search = targetId
-    ? await planRoutes(user.handle, targetId, 3, selection.current?.kind ?? 'fund', 'team')
+    ? await planRoutes(user.handle, targetId, 3, selection.current?.kind ?? 'fund', 'team', undefined, {
+      exclude: params.exclude, minimumWarmth, preferred: params.prefer ? preferred : undefined,
+    })
     : null;
 
   // The server searches the targets (issue 0023): the page carries only the rows it draws.
@@ -74,20 +87,10 @@ export default async function Routes({
   if (currentRow && !shown.includes(currentRow)) shown.unshift(currentRow);
   const readWarmth = warmthReader();
   const allRoutes = search?.routes ?? [];
-  const routeSummary = search ? routeSummaryFor(search) : null;
+  const routeSummary = search ? { ...routeSummaryFor(search),
+    ...(search.candidateCounts ? { unavailable: search.candidateCounts.unavailable } : {}) } : null;
   const intermediates = [...new Map(allRoutes.flatMap((route) => route.hops.slice(0, -1).map((h) => [h.toEntity, { id: h.toEntity, name: h.toName }] as const))).values()].sort((a, b) => a.name.localeCompare(b.name));
-  const minimumWarmth = [1, 2, 3, 4].includes(Number(params.warmth)) ? Number(params.warmth) : 0;
-  const preferred = (route: typeof allRoutes[number]) => route.hops.some((h) => {
-    if (params.prefer === 'coinvestor') return h.edge.kind === 'coinvestor';
-    if (params.prefer === 'family') return h.edge.kind === 'family';
-    if (params.prefer === 'cofounder') return h.edge.evidence.some((e) => e.tie?.kind === 'cofounder');
-    // Match explicit relationship records, never names or guessed proximity.
-    if (params.prefer === 'our_investor' && h.edge.evidence.some((e) => (e.tie as { withUs?: string } | undefined)?.withUs === 'investor')) return true;
-    const kinds: Record<string, string> = { our_investor: 'they_lp_in_us', existing_lp: 'they_lp_in_us', friend: 'personal' };
-    return Boolean(kinds[params.prefer ?? ''] && fit.some((a) => route.connectorIds.includes(a.entityId)
-      && a.links.some((l) => l.kind === kinds[params.prefer!] && (params.prefer !== 'friend' || (/friend/i.test(l.statement) && l.viaEntityId != null && [h.edge.fromEntity, h.edge.toEntity].includes(l.viaEntityId))))));
-  });
-  const { eligible, familyId, show, pageNumber, displayedRoutes, selected, alternatives } = routeComparison(allRoutes, {
+  const { eligible, familyId, show, pageNumber, displayedRoutes, selected, alternatives } = routeComparisonInputs(allRoutes, {
     expanded, family, selected: r, show: params.show, page, exclude: params.exclude, minimumWarmth,
     lastWarmth: (route) => route.hops.length ? readWarmth(route.hops.at(-1)!.edge).score : 0,
     preferred: (route) => Boolean(params.prefer) && preferred(route),
@@ -121,7 +124,7 @@ export default async function Routes({
     targetId ? notesFor(targetId, 'connection_candidates').then((n) => n[0] ?? null) : Promise.resolve(null),
     directContact([...nearbyPeople.keys()]),
   ]);
-  const promotedBases = promotedRouteBases(search?.routes ?? []);
+  const promotedBases = promotedRouteBases(search?.routes ?? [], search?.promotedBasisHashes);
   const candidates = (((pathsNote?.data ?? {}) as { paths?: CandidatePath[] }).paths ?? [])
     .filter((p) => !promotedBases.has(p.basis));
   const inTouchNearby = [...nearbyContact.entries()]
@@ -221,7 +224,7 @@ export default async function Routes({
         <div><strong>{routeSummary.promising}</strong><span>Promising</span></div>
         <div><strong>{routeSummary.weak}</strong><span>Weak</span></div>
         <div><strong>{routeSummary.unavailable}</strong><span>Held / unavailable</span></div>
-        <div className="route-confidence"><b>{routeSummary.confidence}</b><p>{routeSummary.basis}</p><small>Before filters · {allRoutes.length} paths recorded</small></div>
+        <div className="route-confidence"><b>{routeSummary.confidence}</b><p>{routeSummary.basis}</p><small>Before filters · {search?.candidateCounts?.total ?? allRoutes.length} paths recorded</small></div>
       </section>}
 
       {targetTouch && (
@@ -321,7 +324,7 @@ export default async function Routes({
           {params.prefer && <p className="routes-lede">{eligible.filter((x) => preferred(x.route)).length} routes match the preferred relationship in the available records. Other routes remain below them.</p>}
           <details className="card route-graph-section" open>
             <summary>Route map <span className="muted">· {displayedRoutes.length} paths · one node per person</span></summary>
-            <RouteGraph routes={displayedRoutes.map(({ route }) => route)} fromName={search.fromName} targetName={search.targetName}
+            <RouteGraph routes={graphRouteInputs(displayedRoutes.map(({ route }) => route))} fromName={search.fromName} targetName={search.targetName}
               selected={Math.max(0, displayedRoutes.findIndex(({ index }) => index === selected))} routeIds={displayedRoutes.map((x) => x.index)} />
           </details>
           <div className="card route-comparison">

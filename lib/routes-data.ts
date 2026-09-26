@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { routeComparison, type ComparisonOptions } from '@/components/routes/route-display';
 import { buildCache } from '@/lib/build-cache';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
@@ -16,11 +18,11 @@ const touchWords = (c: DirectContact) => c.via
 
 /** Whole picker inputs shared across route clicks. Database writes and midnight
  * invalidate the snapshot; user-specific ownership stays in the page. */
-export const routeInputs = buildCache(async (vehicleId: string) => {
-  const [tiers, vehicles, affiliations, fit, asks, team, pursuits, profiles] = await Promise.all([
+const pickerInputs = buildCache(async (vehicleId: string) => {
+  const [tiers, vehicles, affiliations, fit, team, pursuits, profiles] = await Promise.all([
     tierCounts(), listVehicles(),
     listAffiliations(), listAssessments(vehicleId || null),
-    listAsks(null), (await auth()).listUsers(), listPursuits(vehicleId || null), listFirmProfiles(),
+    (await auth()).listUsers(), listPursuits(vehicleId || null), listFirmProfiles(),
   ]);
 
   // Targets worth showing (issues 0022–0023, real): the LPs in this pipeline and the organisations
@@ -103,13 +105,23 @@ export const routeInputs = buildCache(async (vehicleId: string) => {
       touch: contact.has(t.entityId) ? touchWords(contact.get(t.entityId)!) : null,
     };
   });
-  return { tiers, vehicles, affiliations, fit, asks, team, entities, targets, contact, rows };
+  return { tiers, vehicles, affiliations, fit, team, entities, targets, contact, rows };
 });
+
+// Ask ownership/status changes on every workflow action, independently of the graph.
+export async function routeInputs(vehicleId: string) {
+  const [picker, asks] = await Promise.all([pickerInputs(vehicleId), listAsks(null)]);
+  return { ...picker, asks };
+}
 
 const basesByRoutes = new WeakMap<Route[], ReadonlySet<string>>();
 /** The route cache returns immutable arrays. Reuse this full-result evidence scan
  * across route clicks; only the displayed cards need work on each request. */
-export function promotedRouteBases(routes: Route[]): ReadonlySet<string> {
+export function promotedRouteBases(routes: Route[], hashes?: string[]): { has: (basis: string) => boolean } {
+  if (hashes) {
+    const promoted = new Set(hashes);
+    return { has: (basis) => promoted.has(createHash('sha256').update(basis).digest('hex')) };
+  }
   const cached = basesByRoutes.get(routes);
   if (cached) return cached;
   const bases = new Set<string>();
@@ -118,4 +130,27 @@ export function promotedRouteBases(routes: Route[]): ReadonlySet<string> {
   }
   basesByRoutes.set(routes, bases);
   return bases;
+}
+
+/** Client graph consumes identities and score summaries, not full source evidence.
+ * The server-rendered comparison below it retains every selected edge's evidence. */
+export function graphRouteInputs(routes: Route[]): Route[] {
+  return routes.map((route) => ({
+    ...route, influence: null, askLoad: null,
+    score: route.score ? { ...route.score, factors: route.score.factors.slice(0, 3) } : undefined,
+    hops: route.hops.map((hop) => ({ ...hop, edge: {
+      ...hop.edge, evidence: [], reviewedByName: null, reviewedAt: null, reviewNote: null,
+    } })),
+  }));
+}
+
+
+/** Keep the merged comparison UI and its explicit show/deep-link controls. Six
+ * full evidence cards bound default SSR; show-more still exposes every retained route. */
+export function routeComparisonInputs(routes: Route[], options: ComparisonOptions) {
+  const comparison = routeComparison(routes, options);
+  const position = comparison.eligible.findIndex((entry) => String(entry.index) === options.selected);
+  if (options.show !== undefined || (position >= 0 && position % 80 >= 6)) return comparison;
+  return { ...comparison, show: 6,
+    displayedRoutes: comparison.eligible.slice(comparison.pageNumber * 80, comparison.pageNumber * 80 + 6) };
 }

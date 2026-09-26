@@ -12,5 +12,5 @@ export { DOMAIN_LABEL, influenceFor, listStandings, VEHICLE_DOMAINS } from './in
 
 export { routePage, ROUTES_PER_PAGE } from './presentation';
 
-export { precomputeRoutes } from './cache';
+export { precomputeRoutes, startRouteWarmup, routeWarmupProgress } from './cache';
 export { planRoutesLive } from './service';

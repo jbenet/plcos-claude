@@ -1,13 +1,9 @@
 import { getDb, type Db } from '@/lib/db';
 
 /** One revision read, never a scan of the graph or picker tables. Writes invalidate at
- * transaction commit; midnight and both rolling ask windows refresh time-sensitive inputs. */
+ * transaction commit; midnight refreshes date-sensitive picker inputs. Guards are read live. */
 export async function readRevision(db: Db): Promise<string> {
-  const row = await db.one<{ revision: string }>(`select revision::text || ':' || current_date::text || ':' ||
-      coalesce((select max(made_at)::text from coordination.ask
-        where connector_id is not null and made_at < now() - interval '3 months'), '') ||
-      coalesce(':' || (select max(made_at)::text from coordination.ask
-        where connector_id is not null and made_at <= now() - interval '92 days'), '') as revision
+  const row = await db.one<{ revision: string }>(`select revision::text || ':' || current_date::text as revision
     from network.read_revision where singleton`);
   return row!.revision;
 }

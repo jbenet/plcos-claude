@@ -1,3 +1,4 @@
+import { routeComparisonInputs, graphRouteInputs } from '../lib/routes-data';
 import { config } from '../config/deployment';
 import { edgeWarmth, foldRoutes, routePage, type Edge, type Route } from '../modules/network';
 
@@ -92,6 +93,17 @@ export function routePresentationProperties(check: Check) {
     all.length === 145 && new Set(all.map((r) => r.index)).size === 145 && first.alternatives.get(0)?.length === 80
       && family.eligibleCount === 81 && family.shown.every((r) => r.index === 0 || r.route.foldedUnder === 0),
     'Every alternative can be inspected through its family; counts cover the complete result.');
+  const options = { minimumWarmth: 0, lastWarmth: () => 3, preferred: () => false };
+  const compact = routeComparisonInputs(pages, options);
+  const more = routeComparisonInputs(pages, { ...options, show: '14' });
+  const selectedBeyond = routeComparisonInputs(pages, { ...options, selected: '10' });
+  const graph = graphRouteInputs(compact.displayedRoutes.map((entry) => entry.route));
+  check('CACHE2 default evidence rendering is bounded while merged UI controls expose every route',
+    compact.displayedRoutes.length === 6 && more.displayedRoutes.length === 14
+      && selectedBeyond.displayedRoutes.some((entry) => entry.index === 10)
+      && graph.every((r, i) => r.hops.every((h, j) => h.toEntity === compact.displayedRoutes[i]!.route.hops[j]!.toEntity
+        && h.edge.evidence.length === 0)) && compact.displayedRoutes.every((r) => r.route.hops.every((h) => h.edge.evidence.length > 0)),
+    'Show-more/deep links preserve route access; client graph omits source payloads while server evidence remains intact.');
   check('PERF2 invalid page parameters stay bounded', routePage(pages, {page:'999999999999999999999'}).shown.length === 6
     && routePage([], {page:'100', selected:'NaN', family:'2'}).shown.length === 0,
     'Empty and malformed queries do not expand the render or produce an invalid selection.');
