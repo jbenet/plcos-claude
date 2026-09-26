@@ -16,6 +16,7 @@ export interface ParsedIssue {
   reporter: string;
   page: string;
   created: string;
+  closedAt?: string | null;
   labels: string[];
   body: string;
   context: Record<string, unknown> | null;
@@ -37,7 +38,7 @@ const COMMENTED = new Set(['status', 'kind', 'priority']);
 /** The fields `serializeIssue` writes, plus the earlier spellings it rewrites. */
 const MANAGED = new Set([
   'id', 'title', 'status', 'kind', 'priority', 'reporter', 'page', 'created', 'labels',
-  'screenshots', 'attachments', 'screenshot', 'attachment',
+  'screenshots', 'attachments', 'screenshot', 'attachment', 'closed_at',
 ]);
 
 export function parseIssue(file: string, fallbackId: string): ParsedIssue {
@@ -87,12 +88,13 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
     fixedIn: str('fixed_in') || fromBody?.[1] || null,
     id: str('id', fallbackId),
     title: str('title', '(untitled)'),
-    status: (str('status', 'open') as IssueStatus),
+    status: (str('status', 'open') === 'review' ? 'done' : str('status', 'open')) as IssueStatus,
     kind: (str('kind', 'bug') as IssueKind),
     priority: (str('priority', 'P2') as IssuePriority),
     reporter: str('reporter', 'unknown'),
     page: str('page', ''),
     created: str('created', ''),
+    closedAt: str('closed_at') || null,
     labels: Array.isArray(fields['labels']) ? (fields['labels'] as string[]) : [],
     screenshots,
     attachments,
@@ -140,12 +142,13 @@ export function serializeIssue(issue: ParsedIssue): string {
     '---',
     `id: ${JSON.stringify(issue.id)}`,
     `title: ${quote(issue.title)}`,
-    `status: ${issue.status.padEnd(14)}# open | triaged | agent-ready | in-progress | review | done`,
+    `status: ${issue.status.padEnd(14)}# open | triaged | agent-ready | in-progress | done`,
     `kind: ${issue.kind.padEnd(16)}# bug | request | question | chore`,
     `priority: ${issue.priority.padEnd(12)}# P0 blocking | P1 serious | P2 normal | P3 someday`,
     `reporter: ${quote(issue.reporter)}`,
     `page: ${quote(issue.page)}`,
     `created: ${issue.created}`,
+    ...(issue.closedAt ? [`closed_at: ${issue.closedAt}`] : []),
     `labels: [${issue.labels.join(', ')}]`,
     ...(issue.screenshots.length > 0 ? [`screenshots: [${issue.screenshots.join(', ')}]`] : []),
     ...(issue.attachments.length > 0 ? [`attachments: [${issue.attachments.join(', ')}]`] : []),

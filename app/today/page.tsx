@@ -45,7 +45,7 @@ export default async function Today() {
       signed: exposures.filter((x) => x.vehicleId === t.vehicleId && /ready to harden/.test(x.claim ?? '')).length,
     }));
 
-  const open = await sink.list({ status: ['open', 'triaged', 'agent-ready', 'in-progress', 'review'] });
+  const open = await sink.list({ status: ['open', 'triaged', 'agent-ready', 'in-progress'] });
   const focus = selection.current ? totals.find((t) => t.vehicleId === selection.current!.id) ?? null : null;
   const blocked = asks.filter((a) => a.status === 'blocked');
   // Waiting on a first reply (N62, issue 0008): LPs at Connecting with nothing from them on

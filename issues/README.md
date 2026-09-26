@@ -12,6 +12,13 @@ Triage adds `assignee: claude | chatgpt` and the `branch:` the work goes on
 (`docs/COLLAB.md`). The issues page rewrites a file when its status changes, and keeps every
 frontmatter field it does not manage.
 
+Statuses are `open`, `triaged`, `agent-ready`, `in-progress` and `done`. Legacy `review`
+reads as `done`. When closing an issue in its file, record `closed_at: <UTC ISO timestamp>`;
+remove it when reopening. The issue writer does this for status transitions automatically.
+The velocity chart uses the latest closure, never a file modification time or release date.
+Older done issues without a closure date remain undated; historical open counts show bounds
+where dates are missing. Earlier close/reopen cycles are not reconstructed.
+
 Issues filed on the real server live in `data/real/issues/`, are never committed, and have
 their own numbers.
 

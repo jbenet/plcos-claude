@@ -40,7 +40,7 @@ export function fileIssueSink(dir: string): IssueSink {
   const toIssue = (file: string, p: ParsedIssue): Issue => ({
     id: p.id, title: p.title, status: p.status, kind: p.kind, priority: p.priority,
     reporter: p.reporter, page: p.page, labels: p.labels, body: p.body,
-    context: p.context, created: p.created, location: `${dir}/${file}`,
+    context: p.context, created: p.created, closedAt: p.closedAt ?? null, location: `${dir}/${file}`,
     screenshots: p.screenshots, attachments: p.attachments, fixedIn: p.fixedIn,
   });
 
@@ -124,6 +124,9 @@ export function fileIssueSink(dir: string): IssueSink {
       const hit = await find(id);
       if (!hit) throw new Error(`No such issue: ${id}`);
       const updated: ParsedIssue = { ...hit.issue, ...patch };
+      if (patch.status && patch.status !== hit.issue.status) {
+        updated.closedAt = patch.status === 'done' ? new Date().toISOString() : null;
+      }
       await writeFile(join(root, hit.file), serializeIssue(updated), 'utf8');
       return toIssue(hit.file, updated);
     },

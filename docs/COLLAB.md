@@ -71,7 +71,7 @@ First done on 25 Sep 2026, with issue 0030; CHANGELOG N84 has what that round ta
    touches no other branch. Its questions go to Juan, in the session.
 4. Claude watches the branch and the session's log (`~/.codex/sessions/`), reads the diff, merges the
    branch into `claude/main`, runs the three checks on the result and moves master. It sets the issue
-   to `review` with a closing note and writes the changelog.
+   to `done` with a `closed_at:` UTC timestamp and a closing note and writes the changelog.
 
 A session that is read-only with approvals on request waits for Juan at the first edit and at the
 commit. Run headless instead (`codex exec`), ChatGPT can commit only with `.git/worktrees/plcos-codex-dev`,

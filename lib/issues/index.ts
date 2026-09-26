@@ -7,7 +7,7 @@
  */
 import { config } from '@/config/deployment';
 
-export type IssueStatus = 'open' | 'triaged' | 'agent-ready' | 'in-progress' | 'review' | 'done';
+export type IssueStatus = 'open' | 'triaged' | 'agent-ready' | 'in-progress' | 'done';
 export type IssueKind = 'bug' | 'request' | 'question' | 'chore';
 export type IssuePriority = 'P0' | 'P1' | 'P2' | 'P3';
 
@@ -49,6 +49,8 @@ export interface Issue extends Omit<IssueDraft, 'attachments'> {
   id: string;
   status: IssueStatus;
   created: string;
+  /** Latest recorded closure; absent on older files. Cleared when reopened. */
+  closedAt?: string | null;
   /** Where this issue actually lives — a repo path for files, a URL for GitHub. */
   location: string;
   /** Screenshots, if any were filed. Rendered in their own card rather than inline. */
