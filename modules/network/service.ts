@@ -1,3 +1,6 @@
+import { cachedRoutes } from './cache';
+import { promotedBasisHashes, compactStructuralRoutes, overlayRoutes, routeCheckpoint, selectDisplayRoutes, sortRouteCandidates, type RouteSelectionOptions } from './route-overlay';
+import { setImmediate } from 'node:timers/promises';
 import { config } from '@/config/deployment';
 import { listEntities } from '@/modules/identity';
 import { connectorLoad, restrictionsFor } from '@/modules/coordination';
@@ -29,8 +32,37 @@ const CLUE_REASON: Record<string, string> = {
  *    the exclusion is reported rather than silently dropped.
  */
 export async function planRoutes(
+  fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'current', at?: Date,
+  selection: RouteSelectionOptions = {},
+): Promise<RouteSearch | null> {
+  // Explicit historical evaluations and nonstandard searches are never served a build snapshot.
+  if (scope === 'team' && maxHops === 3 && !at) {
+    const structural = await cachedRoutes(targetId, vehicleKind, () => computeStructuralRoutes(fromHandle, targetId, maxHops, vehicleKind, scope));
+    return structural ? overlayRoutes(structural, vehicleKind, new Date(), selection) : null;
+  }
+  const live = await planRoutesLive(fromHandle, targetId, maxHops, vehicleKind, scope, at);
+  if (!live || !(selection.exclude || selection.minimumWarmth || selection.preferred)) return live;
+  const routes = await selectDisplayRoutes(live.routes, selection, at ?? new Date());
+  return { ...live, routes, topRoutes: routes.filter((r) => r.verdict === 'recommend'), graph: routeGraph(routes, targetId, true) };
+}
+
+export async function planRoutesLive(
   fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'current', at = new Date(),
 ): Promise<RouteSearch | null> {
+  return calculateRoutes(fromHandle, targetId, maxHops, vehicleKind, scope, at, false);
+}
+
+/** Build-only paths and network scoring. Mutable action guards and money are overlaid on read. */
+export async function computeStructuralRoutes(
+  fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'team', at = new Date(),
+): Promise<RouteSearch | null> {
+  return calculateRoutes(fromHandle, targetId, maxHops, vehicleKind, scope, at, true);
+}
+
+async function calculateRoutes(
+  fromHandle: string, targetId: string, maxHops: number, vehicleKind: string, scope: 'current' | 'team', at: Date, structuralOnly: boolean,
+): Promise<RouteSearch | null> {
+  const checkpoint = routeCheckpoint();
   const me = await entityForUser(fromHandle);
   const team = await routeSources();
   const fromSources = scope === 'team' ? team : me ? [me] : [];
@@ -39,25 +71,40 @@ export async function planRoutes(
 
   const [rawPaths, restrictions, coverage, sources] = await Promise.all([
     enumeratePathsFromSources(fromSources.map((s) => s.entityId).filter((id) => id !== targetId), targetId, maxHops, scope === 'team' ? [...sourceIds] : []),
-    restrictionsFor(targetId),
+    structuralOnly ? Promise.resolve([]) : restrictionsFor(targetId),
     edgeCoverage(),
     listSyncSources(),
   ]);
   const sourceOf = new Map([...team, ...fromSources].map((s) => [s.entityId, s]));
   // In current-user scope a team prefix transfers the source to its last team member.
   // In team scope SQL already prevents these paths before they spend the candidate budget.
-  const paths = rawPaths.flatMap((p) => {
-    if (sourceIds.has(targetId)) return [];
+  const paths: Array<typeof rawPaths[number] & { source: typeof team[number] }> = [];
+  for (const [index, p] of rawPaths.entries()) {
+    if (index % 128 === 0) await checkpoint(index);
+    if (sourceIds.has(targetId)) continue;
     let start = 0;
     for (let i = 1; i < p.nodes.length - 1; i++) if (sourceIds.has(p.nodes[i]!)) start = i;
-    return [{ ...p, nodes: p.nodes.slice(start), edges: p.edges.slice(start),
-      hops: p.hops - start, source: sourceOf.get(p.nodes[start]!)! }];
-  });
-  const nodeIds = [...new Set([targetId, ...paths.flatMap((p) => p.nodes)])];
-  const allEdgeIds = [...new Set(paths.flatMap((p) => p.edges))];
-  const carrierIds = [...new Set(paths.flatMap((p) => p.nodes.slice(1, -1).slice(-1)))];
+    paths.push({ ...p, nodes: p.nodes.slice(start), edges: p.edges.slice(start),
+      hops: p.hops - start, source: sourceOf.get(p.nodes[start]!)! });
+  }
+  const nodeSet = new Set([targetId]), edgeSet = new Set<string>(), carrierSet = new Set<string>();
+  for (const [index, path] of paths.entries()) {
+    for (const node of path.nodes) nodeSet.add(node);
+    for (const edge of path.edges) edgeSet.add(edge);
+    if (path.nodes.length > 2) carrierSet.add(path.nodes.at(-2)!);
+    if (index % 128 === 0) await checkpoint(index);
+  }
+  const nodeIds = [...nodeSet], allEdgeIds = [...edgeSet], carrierIds = [...carrierSet];
+  const loadEntities = async () => {
+    const out: Awaited<ReturnType<typeof listEntities>> = [];
+    for (let i = 0; i < nodeIds.length; i += 256) {
+      out.push(...await listEntities(nodeIds.slice(i, i + 256)));
+      await setImmediate();
+    }
+    return out;
+  };
   const [entities, edgeMap, loads] = await Promise.all([
-    listEntities(nodeIds), edgesByIds(allEdgeIds), connectorLoad(carrierIds),
+    loadEntities(), edgesByIds(allEdgeIds), structuralOnly ? Promise.resolve([]) : connectorLoad(carrierIds),
   ]);
   const nameOf = new Map(entities.map((e) => [e.entityId, e.displayName]));
   const targetName = nameOf.get(targetId) ?? 'Unknown';
@@ -71,7 +118,8 @@ export async function planRoutes(
   const routes: Route[] = [];
   const seen = new Set<string>();
 
-  for (const p of paths) {
+  for (const [index, p] of paths.entries()) {
+    if (index % 128 === 0) await checkpoint(index);
     const key = `${p.nodes[0]}:${p.edges.join('>')}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -163,7 +211,7 @@ export async function planRoutes(
   const carriers = [...new Set(
     routes.map((r) => r.connectorIds[r.connectorIds.length - 1]).filter(Boolean) as string[],
   )];
-  if (carriers.length > 0) {
+  if (!structuralOnly && carriers.length > 0) {
     const influence = await influenceFor(carriers, targetId, vehicleKind);
     for (const r of routes) {
       const carrier = r.connectorIds[r.connectorIds.length - 1];
@@ -171,25 +219,34 @@ export async function planRoutes(
     }
   }
 
-  const [roles, exposures] = await Promise.all([sourceEdges([...sourceIds], carriers), listExposures(null)]);
+  const [roles, exposures] = await Promise.all([sourceEdges([...sourceIds], carriers), structuralOnly ? Promise.resolve([]) : listExposures(null)]);
   const roleOf = new Map<string, RouteScoreContext>();
-  for (const id of carriers) {
-    const evidence = roles.filter((e) => e.fromEntity === id || e.toEntity === id);
+  const edgesForCarrier = new Map<string, Edge[]>();
+  for (const edge of roles) for (const id of new Set([edge.fromEntity, edge.toEntity])) {
+    const list = edgesForCarrier.get(id) ?? []; list.push(edge); edgesForCarrier.set(id, list);
+  }
+  const hardForCarrier = new Map<string, typeof exposures>();
+  for (const exposure of exposures) if (exposure.track === 'hard' && exposure.amount > 0) {
+    const list = hardForCarrier.get(exposure.entityId) ?? []; list.push(exposure); hardForCarrier.set(exposure.entityId, list);
+  }
+  for (const [index, id] of carriers.entries()) {
+    if (index % 128 === 0) await checkpoint(index);
+    const evidence = edgesForCarrier.get(id) ?? [];
     const investorEdges = evidence.filter((e) => investmentTie(e) || e.evidence.some((x) => x.tie?.withUs === 'investor' && !tieDetailsProblems(x.tie).length));
     const founderEdges = evidence.filter((e) => e.evidence.some((x) => x.tie?.withUs === 'pl_founder' && !tieDetailsProblems(x.tie).length));
-    const hard = exposures.filter((e) => e.entityId === id && e.track === 'hard' && e.amount > 0);
+    const hard = hardForCarrier.get(id) ?? [];
     roleOf.set(id, { investor: investorEdges.length > 0 || hard.length > 0,
       plFounder: founderEdges.length > 0, roleEdgeIds: [...investorEdges, ...founderEdges].map((e) => e.edgeId),
       roleEvidenceRefs: hard.map((e) => e.evidenceRef ?? `pipeline.exposure:${e.exposureId}`) });
   }
-  const rank: Record<RouteVerdict, number> = { recommend: 0, hold: 1, not_a_route: 2, excluded: 3 };
   const readWarmth = warmthReader(at);
-  for (const route of routes) route.score = scoreRoute(route, at, roleOf.get(route.connectorIds.at(-1) ?? ''), readWarmth);
-  routes.sort((a, b) => rank[a.verdict] - rank[b.verdict] || b.score!.value - a.score!.value
-    || a.hops.length - b.hops.length || routeKey(a).localeCompare(routeKey(b)));
-  const selected = selectTopRoutes(routes);
+  for (const [index, route] of routes.entries()) {
+    route.score = scoreRoute(route, at, roleOf.get(route.connectorIds.at(-1) ?? ''), readWarmth);
+    if (index % 128 === 0) await checkpoint(index);
+  }
+  const selected = selectTopRoutes(await sortRouteCandidates(routes));
 
-  return {
+  const search: RouteSearch = {
     targetId,
     targetName,
     fromName: scope === 'team' ? 'Team / PL' : me!.name,
@@ -197,6 +254,8 @@ export async function planRoutes(
     topRoutes: selected.filter((r) => r.foldedUnder == null && r.verdict === 'recommend'),
     graph: routeGraph(selected, targetId, true),
     stats: summarizeRoutes(selected),
+    ...(structuralOnly ? {} : { promotedBasisHashes: promotedBasisHashes(selected),
+      candidateCounts: { total: selected.length, unavailable: selected.filter((r) => r.verdict !== 'recommend').length } }),
     coverage: {
       edges: coverage.edges,
       maxHops,
@@ -214,12 +273,12 @@ export async function planRoutes(
       source: r.source,
     })),
   };
+  return structuralOnly ? compactStructuralRoutes(search, roleOf) : search;
 }
 
 export { CLUE_KINDS };
 
 
-const routeKey = (r: Route) => [r.fromEntity ?? '', ...r.hops.map((h) => `${h.toEntity}:${h.edge.edgeId}`)].join('|');
 const chainKey = (r: Route) => [r.fromEntity ?? '', ...r.hops.map((h) => h.toEntity)].join('|');
 
 /** Input is ranked. Keep up to three prefixes per last intermediary, with no cap on

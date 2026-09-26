@@ -1,3 +1,4 @@
+import { startRouteWarmup } from './cache';
 import { getDb, type Queryable } from '@/lib/db';
 import { GROUP_EVENT, isAutoReply } from '@/modules/meetings';
 import type { EdgeKind, EvidenceTier } from './types';
@@ -57,7 +58,15 @@ interface NewEdge { reviewedBy?: string; reviewedAt?: string; reviewNote?: strin
 
 export async function buildNetwork(): Promise<BuildCounts> {
   const db = await getDb();
-  return db.transaction((tx) => build(tx));
+  const counts = await db.transaction(async (tx) => {
+    // One global topology generation for a rebuild, without logging every inserted edge.
+    await tx.query("select set_config('network.building', 'on', true)");
+    const result = await build(tx);
+    await tx.query('update network.route_revision set revision = txid_current(), epoch = txid_current() where singleton');
+    return result;
+  });
+  startRouteWarmup(db);
+  return counts;
 }
 
 async function build(tx: Queryable): Promise<BuildCounts> {

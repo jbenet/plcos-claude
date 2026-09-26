@@ -1,4 +1,5 @@
 import { getDb, type Db } from '@/lib/db';
+import { graphSnapshot, pathsFromSnapshot, yieldRouteWork } from './path-search';
 import type { Edge, EdgeKind, EvidenceTier } from './types';
 
 type EdgeRow = {
@@ -32,11 +33,46 @@ export async function listEdges(): Promise<Edge[]> {
   return (await db.query<EdgeRow>(`${EDGE_SELECT} order by e.tier, f.display_name`)).map(toEdge);
 }
 
+type EvidenceEntry = { edge: Edge; bytes: number };
+type EvidenceCache = { revision: string; entries: Map<string, EvidenceEntry>; bytes: number };
+const evidenceCaches = new WeakMap<Db, EvidenceCache>();
+const evidenceRevision = async (db: Db) => (await db.one<{ revision: string }>(
+  'select revision::text from network.route_revision where singleton'))!.revision;
+
+/** Shared team edges recur across many targets. Retain a bounded, disposable evidence
+ * LRU; topology, entity-label and reviewer changes all advance this revision. */
 export async function edgesByIds(ids: string[]): Promise<Map<string, Edge>> {
   if (ids.length === 0) return new Map();
-  const db = await getDb();
-  const rows = await db.query<EdgeRow>(`${EDGE_SELECT} where e.edge_id = any($1::uuid[])`, [ids]);
-  return new Map(rows.map((r) => [r.edge_id, toEdge(r)]));
+  const db = await getDb(), revision = await evidenceRevision(db);
+  let cache = evidenceCaches.get(db);
+  if (!cache || cache.revision !== revision) {
+    cache = { revision, entries: new Map(), bytes: 0 }; evidenceCaches.set(db, cache);
+  }
+  const result = new Map<string, Edge>(), missing: string[] = [];
+  for (const id of new Set(ids)) {
+    const entry = cache.entries.get(id);
+    if (entry) {
+      cache.entries.delete(id); cache.entries.set(id, entry); result.set(id, entry.edge);
+    } else missing.push(id);
+  }
+  for (let offset = 0; offset < missing.length; offset += 64) {
+    const rows = await db.query<EdgeRow>(`${EDGE_SELECT} where e.edge_id = any($1::uuid[])`, [missing.slice(offset, offset + 64)]);
+    for (const row of rows) {
+      const edge = toEdge(row), bytes = JSON.stringify(edge).length * 2;
+      result.set(row.edge_id, edge);
+      const previous = cache.entries.get(row.edge_id);
+      if (previous) { cache.bytes -= previous.bytes; cache.entries.delete(row.edge_id); }
+      cache.entries.set(row.edge_id, { edge, bytes }); cache.bytes += bytes;
+      while (cache.entries.size > 8192 || cache.bytes > 16 * 1024 * 1024) {
+        const first = cache.entries.keys().next().value!;
+        cache.bytes -= cache.entries.get(first)!.bytes; cache.entries.delete(first);
+      }
+    }
+    await yieldRouteWork();
+  }
+  // Do not return a mixture of generations if a network write ran during a yield.
+  if (missing.length && await evidenceRevision(db) !== revision) return edgesByIds(ids);
+  return result;
 }
 
 export interface RawPath {
@@ -58,116 +94,21 @@ export async function enumeratePaths(
   return enumeratePathsFromSources([fromEntity], targetEntity, maxHops);
 }
 
-/** Same 300 candidates per source (hops, edge IDs), sharing the target-side expansion.
- * Inline valid so each join can use the endpoint indexes; materializing the entire
- * bidirectional graph forces repeated scans of every edge even for a tiny target.
- * Short routes come first. Three-hop paths are read one first edge at a time in
- * UUID order, stopping at the remaining budget, rather than sorting millions of
- * complete paths and then discarding them. Prefixes must have a valid suffix so
- * an unreachable hub does not make the recursive walk visit every dead end.
- * Prefix arrays give the cursor positional access without rescanning a hub’s
- * complete adjacency at every step.
- * PL can start a route but can never be an intermediate connector.
- */
+/** Same 300 candidates per source, with bounded database reads and cooperative CPU slices. */
 export async function enumeratePathsFromSources(
   fromEntities: string[], targetEntity: string, maxHops = 3, sourceOnlyEntities: string[] = [],
 ): Promise<RawPath[]> {
   if (!fromEntities.length) return [];
   const db = await getDb();
-  return db.query<RawPath>(
-    `with recursive pl as (
-       select e.entity_id from identity.entity e join identity.source_record s on s.entity_id = e.entity_id
-        where s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL'
-       union select unnest($4::uuid[])),
-     valid as not materialized (
-       select a, b, edge_id from network.link where valid_to is null or valid_to >= current_date),
-     y as materialized (
-       select l.a as y, l.edge_id as e3 from valid l
-        where l.b = $2 and not exists (select 1 from pl where pl.entity_id = l.a)),
-     sources as (select distinct unnest($1::uuid[]) as source),
-     short as materialized (
-       select sources.source, paths.* from sources cross join lateral (
-         select * from (
-           select array[l.a, l.b] as nodes, array[l.edge_id] as edges, 1 as hops
-             from valid l where l.a = sources.source and l.b = $2
-           union all
-           select array[l.a, y.y, $2::uuid], array[l.edge_id, y.e3], 2
-             from y join valid l on l.a = sources.source and l.b = y.y
-            where $3 >= 2 and y.y <> l.a
-         ) candidates order by hops, edges limit 300
-       ) paths),
-     prefixes as materialized (
-       select l.a, array_agg(l.b order by l.edge_id) as nodes,
-              array_agg(l.edge_id order by l.edge_id) as edges
-         from valid l where l.a = any($1::uuid[]) and $3 >= 3
-          and l.b <> l.a and l.b <> $2
-          and not exists (select 1 from pl where pl.entity_id = l.b)
-          and exists (select 1 from valid suffix join y on y.y = suffix.b
-                       where suffix.a = l.b and y.y <> l.a and y.y <> l.b)
-        group by l.a),
-     walk as (
-       select source, 0 as position, (select count(*) from short where short.source = sources.source) as used,
-              '[]'::jsonb as batch from sources
-       union all
-       select w.source, w.position + 1, w.used + jsonb_array_length(next.batch), next.batch
-         from walk w join prefixes p on p.a = w.source and w.position < cardinality(p.edges)
-         cross join lateral (
-           select coalesce(jsonb_agg(to_jsonb(candidate)), '[]'::jsonb) as batch from (
-             select array[p.a, p.nodes[w.position + 1], y.y, $2::uuid] as nodes,
-                    array[p.edges[w.position + 1], l.edge_id, y.e3] as edges, 3 as hops
-               from valid l join y on y.y = l.b
-              where l.a = p.nodes[w.position + 1] and y.y <> p.a and y.y <> p.nodes[w.position + 1]
-              order by l.edge_id, y.e3 limit (300 - w.used)
-           ) candidate
-         ) next
-        where w.used < 300),
-     paths as (
-       select nodes, edges, hops from short
-       union all
-       select path.nodes, path.edges, path.hops from walk
-         cross join lateral jsonb_to_recordset(walk.batch) as path(nodes uuid[], edges uuid[], hops int))
-     select nodes, edges, hops from paths
-      order by array_position($1::uuid[], nodes[1]), hops, edges`,
-    [fromEntities, targetEntity, maxHops, sourceOnlyEntities],
-  );
+  const excluded = await db.query<{ entity_id: string }>(
+    `select distinct e.entity_id from identity.entity e join identity.source_record s on s.entity_id = e.entity_id
+      where s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL'`);
+  const graph = await graphSnapshot(db);
+  return pathsFromSnapshot(graph, fromEntities, targetEntity, maxHops,
+    new Set([...sourceOnlyEntities, ...excluded.map((row) => row.entity_id)]));
 }
 
-type Summary = {
-  coverage: { edges: number; from: Date | null; to: Date | null };
-  tiers: Array<{ tier: EvidenceTier; n: number; reviewed: number }>;
-};
-const summaries = new WeakMap<Db, { key: string; value: Promise<Summary> }>();
-
-async function edgeSummary(): Promise<Summary> {
-  const db = await getDb();
-  // Include the database date: open-ended evidence coverage advances at midnight.
-  const revision = await db.one<{ key: string }>(
-    `select revision::text || ':' || current_date::text as key from network.edge_revision where singleton`);
-  const key = revision!.key;
-  const cached = summaries.get(db);
-  if (cached?.key === key) return cached.value;
-  const value = (async () => {
-    const rows = await db.query<{
-      tier: EvidenceTier; n: string; reviewed: string; from: Date | string | null; to: Date | string | null;
-    }>(`select tier, count(*)::text as n, count(reviewed_by)::text as reviewed,
-               min(valid_from) as from, max(coalesce(valid_to, current_date)) as to
-          from network.edge group by tier order by tier`);
-    const starts = rows.flatMap((r) => r.from ? [new Date(r.from).getTime()] : []);
-    const ends = rows.flatMap((r) => r.to ? [new Date(r.to).getTime()] : []);
-    return {
-      coverage: { edges: rows.reduce((n, r) => n + Number(r.n), 0),
-        from: starts.length ? new Date(Math.min(...starts)) : null,
-        to: ends.length ? new Date(Math.max(...ends)) : null },
-      tiers: rows.map((r) => ({ tier: r.tier, n: Number(r.n), reviewed: Number(r.reviewed) })),
-    };
-  })();
-  summaries.set(db, { key, value });
-  try { return await value; }
-  catch (err) {
-    if (summaries.get(db)?.value === value) summaries.delete(db);
-    throw err;
-  }
-}
+async function edgeSummary() { return graphSnapshot(await getDb()); }
 
 export async function edgeCoverage() {
   return (await edgeSummary()).coverage;
@@ -207,8 +148,34 @@ export async function routeSources(): Promise<Array<{ entityId: string; name: st
 export async function sourceEdges(sourceIds: string[], entityIds: string[]): Promise<Edge[]> {
   if (!sourceIds.length || !entityIds.length) return [];
   const db = await getDb();
-  return (await db.query<EdgeRow>(`${EDGE_SELECT}
-    where (e.valid_to is null or e.valid_to >= current_date)
-      and ((e.from_entity = any($1::uuid[]) and e.to_entity = any($2::uuid[]))
-        or (e.to_entity = any($1::uuid[]) and e.from_entity = any($2::uuid[])))`, [sourceIds, entityIds])).map(toEdge);
+  const graph = await graphSnapshot(db);
+  const wanted = new Set(entityIds), ids = new Set<string>();
+  for (const source of sourceIds) {
+    for (const edge of graph.adjacency.get(source) ?? []) {
+      if (wanted.has(edge.other)) ids.add(edge.edgeId);
+    }
+    await yieldRouteWork();
+  }
+  return [...(await edgesByIds([...ids])).values()];
+}
+
+/** A changed endpoint can affect a three-hop route only within two hops of its target.
+ * Called only for pending topology changes: ordinary persistent-cache hits need no graph load. */
+export async function routeTouchesChanges(targetId: string, changedIds: string[]): Promise<boolean> {
+  const changed = new Set(changedIds);
+  if (changed.has(targetId)) return true;
+  if (!changed.size) return false;
+  const graph = await graphSnapshot(await getDb());
+  let checked = 0, slice = performance.now();
+  const first = graph.adjacency.get(targetId) ?? [];
+  for (const edge of first) {
+    if (changed.has(edge.other)) return true;
+    for (const next of graph.adjacency.get(edge.other) ?? []) {
+      if (changed.has(next.other)) return true;
+      if (++checked % 1024 === 0 && performance.now() - slice >= 12) {
+        await yieldRouteWork(); slice = performance.now();
+      }
+    }
+  }
+  return false;
 }

@@ -55,9 +55,8 @@ export default async function TargetWorkspace({ params, searchParams }: {
   if (!pursuit) notFound();
 
   const user = await (await auth()).currentUser();
-  const [claims, docs, notes, restrictions, routes, signals, affinityNotes, touches, tracks, calendar, readings, everything, updates, statusLog] = await Promise.all([
+  const [claims, notes, restrictions, routes, signals, affinityNotes, touches, tracks, calendar, readings, everything, updates, statusLog] = await Promise.all([
     claimsFor(pursuit.entityId),
-    listSourceDocs(),
     notesFor(pursuit.entityId),
     restrictionsFor(pursuit.entityId),
     planRoutes(user.handle, pursuit.entityId, 3, 'fund', 'team'),
@@ -71,6 +70,7 @@ export default async function TargetWorkspace({ params, searchParams }: {
     updatesFor(pursuit.pursuitId),
     auditFor('pursuit', pursuit.pursuitId, ['pursuit.status_set']),
   ]);
+  const docs = await listSourceDocs([...new Set(claims.map((c) => c.provenance.source))]);
   // Status changes, for the timeline (N61). Before N61 the log kept a reason only for a pass;
   // the latest change's reason is still on the pursuit, so it is read from there.
   const statusEvents: StatusEvent[] = statusLog.map((a, i) => {

@@ -7,7 +7,9 @@ import type { Check } from './harness';
 export async function runProperties(check: Check) {
   (await import('../warehouse-investor-properties')).warehouseInvestorProperties(check);
   (await import('../route-presentation-properties')).routePresentationProperties(check);
+  await (await import('../path-search-properties')).pathSearchProperties(check);
   const db = await freshDb();
+  await (await import('../path-search-properties')).edgeEvidenceCacheProperties(check, db);
   await (await import('../route-scoring-properties')).routeScoringProperties(check, db);
   await (await import('../issues4-properties')).issues4Properties(check, db);
   await (await import('../plrule-properties')).plRuleProperties(db, check);
@@ -19,6 +21,10 @@ export async function runProperties(check: Check) {
   const seed = { check, db, id };
   await (await import('./research')).researchProperties(seed);
   await (await import('./network')).networkProperties(seed);
+  await (await import('./network')).routeCacheProperties(seed);
+  await (await import('../cache-overlay-properties')).cacheOverlayProperties(check, db);
+  await (await import('../cache-source-properties')).cacheSourceProperties(check, db);
+  await (await import('./network')).routeInputCacheProperties(seed);
   await (await import('./strategy')).strategyProperties(seed);
   await (await import('./coordination')).coordinationProperties(seed);
   await (await import('./pipeline')).pipelineProperties(seed);

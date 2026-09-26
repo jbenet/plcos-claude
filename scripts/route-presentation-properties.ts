@@ -1,3 +1,4 @@
+import { routeComparisonInputs, graphRouteInputs } from '../lib/routes-data';
 import { config } from '../config/deployment';
 import { edgeWarmth, foldRoutes, routePage, type Edge, type Route } from '../modules/network';
 
@@ -84,15 +85,26 @@ export function routePresentationProperties(check: Check) {
   const deep = routePage(pages, {selected:'144', expanded:'1'});
   const family = routePage(pages, {family:'0', page:'2'});
   check('PERF2 bounded pages preserve every ranked route and deep link',
-    first.shown.length === 30 && first.eligibleCount === 65 && first.pages === 3 && second.shown[0]?.index === 30
-    && deep.shown.some((x) => x.index === 144) && deep.selected === 144 && deep.shown.length <= 30,
+    first.shown.length === 6 && first.eligibleCount === 65 && first.pages === 11 && second.shown[0]?.index === 6
+    && deep.shown.some((x) => x.index === 144) && deep.selected === 144 && deep.shown.length <= 6,
     'The graph and list receive the same page; route IDs remain indices in the complete ranked result.');
-  const all = Array.from({length:5}, (_,i) => routePage(pages, {expanded:'1', page:String(i)}).shown).flat();
+  const all = Array.from({length:25}, (_,i) => routePage(pages, {expanded:'1', page:String(i)}).shown).flat();
   check('PERF2 pagination and alternative families lose no evidence',
     all.length === 145 && new Set(all.map((r) => r.index)).size === 145 && first.alternatives.get(0)?.length === 80
       && family.eligibleCount === 81 && family.shown.every((r) => r.index === 0 || r.route.foldedUnder === 0),
     'Every alternative can be inspected through its family; counts cover the complete result.');
-  check('PERF2 invalid page parameters stay bounded', routePage(pages, {page:'999999999999999999999'}).shown.length === 30
+  const options = { minimumWarmth: 0, lastWarmth: () => 3, preferred: () => false };
+  const compact = routeComparisonInputs(pages, options);
+  const more = routeComparisonInputs(pages, { ...options, show: '14' });
+  const selectedBeyond = routeComparisonInputs(pages, { ...options, selected: '10' });
+  const graph = graphRouteInputs(compact.displayedRoutes.map((entry) => entry.route));
+  check('CACHE2 default evidence rendering is bounded while merged UI controls expose every route',
+    compact.displayedRoutes.length === 6 && more.displayedRoutes.length === 14
+      && selectedBeyond.displayedRoutes.some((entry) => entry.index === 10)
+      && graph.every((r, i) => r.hops.every((h, j) => h.toEntity === compact.displayedRoutes[i]!.route.hops[j]!.toEntity
+        && h.edge.evidence.length === 0)) && compact.displayedRoutes.every((r) => r.route.hops.every((h) => h.edge.evidence.length > 0)),
+    'Show-more/deep links preserve route access; client graph omits source payloads while server evidence remains intact.');
+  check('PERF2 invalid page parameters stay bounded', routePage(pages, {page:'999999999999999999999'}).shown.length === 6
     && routePage([], {page:'100', selected:'NaN', family:'2'}).shown.length === 0,
     'Empty and malformed queries do not expand the render or produce an invalid selection.');
 }

@@ -140,8 +140,9 @@ export async function readingsFor(entityIds: string[]): Promise<NoteReading[]> {
         where r.source = 'affinity' and r.entity_id = any($1::uuid[])
      ),
      n as (
-       select distinct on (source_id) source_id, payload from sources.raw_record
-        where source = 'affinity' and kind = 'note' order by source_id, fetched_at desc, id desc
+       select distinct on (r.source_id) r.source_id, r.payload from sources.raw_record r
+         join meetings.note_reading nr on nr.source = r.source and nr.note_id = r.source_id
+        where r.source = 'affinity' and r.kind = 'note' order by r.source_id, r.fetched_at desc, r.id desc
      ),
      att as (
        select n.source_id as note_id, n.payload->>'createdAt' as at, 'person:' || (x->>'id') as key

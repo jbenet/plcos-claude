@@ -11,3 +11,6 @@ export type { Component, Influence, Standing, StandingDomain } from './influence
 export { DOMAIN_LABEL, influenceFor, listStandings, VEHICLE_DOMAINS } from './influence';
 
 export { routePage, ROUTES_PER_PAGE } from './presentation';
+
+export { precomputeRoutes, startRouteWarmup, routeWarmupProgress } from './cache';
+export { planRoutesLive } from './service';

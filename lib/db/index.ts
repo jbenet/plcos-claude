@@ -61,6 +61,12 @@ export class TooManyRows extends Error {
 }
 
 import { readdirSync } from 'node:fs';
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+// Background readers belong to the handle that scheduled them, including during
+// test isolation and dev reloads. Never follow a subsequently replaced global DB.
+const scopedDb = new AsyncLocalStorage<Db>();
+export const withDb = <T>(db: Db, work: () => Promise<T>): Promise<T> => scopedDb.run(db, work);
 import { join as pathJoin } from 'node:path';
 import { config } from '@/config/deployment';
 
@@ -74,6 +80,8 @@ const g = globalThis as Global;
  * handle — PGlite is single-process, and a second handle on the same directory corrupts it.
  */
 export function getDb(): Promise<Db> {
+  const scoped = scopedDb.getStore();
+  if (scoped) return Promise.resolve(scoped);
   if (!g.__capitalOsDb) g.__capitalOsDb = boot();
   if (process.env.NODE_ENV === 'production') return g.__capitalOsDb;
   return g.__capitalOsDb.then(catchUp);

@@ -334,8 +334,8 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
   const persons = ids(own, 'person:');
   const companies = [...ids(own, 'company:'), ...ids(orgs.map((o) => o.source_id), 'company:')];
   if (!persons.length && !companies.length) return [];
-  // The newest version of each note first, then the filter: an older version attached to this
-  // entity must not show a note that has since been moved off it.
+  // Match attachments before sorting payloads, then reject every superseded version. Checking
+  // newer versions without an attachment filter also excludes notes since moved off this LP.
   type Tag = { about: 'raise' | 'other'; vehicles: string[]; basis: string | null; by_kind: 'rule' | 'claude' | 'person'; name: string | null } | null;
   const rows = await db.query<{ fetched_at: Date | string; payload: AffinityNote; summary: string | null; read: string | null; basis: string | null; what: string | null; read_by: string | null; confirmed_at: Date | string | null; confirmed_by_name: string | null; dismissed_at: Date | string | null; note_tag: Tag; on_tag: Tag }>(
     `select n.fetched_at, n.payload, nr.summary, nr.read::text as read, nr.basis, nr.what, nr.read_by, nr.confirmed_at,
@@ -349,15 +349,17 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
                 and t.ref = 'interaction:' || case when n.payload->>'type' = 'ai-notetaker' then 'meeting' else n.payload->'interaction'->>'type' end
                             || ':' || (n.payload->'interaction'->>'id')) as on_tag
        from (
-       select fetched_at, payload from (
-       select distinct on (source_id) source_id, fetched_at, payload
-         from sources.raw_record where source = $1 and kind = 'note'
-        order by source_id, fetched_at desc, id desc
-     ) n
-     where exists (select 1 from jsonb_array_elements($2::jsonb) p
+       select n.fetched_at, n.payload from sources.raw_record n
+     where n.source = $1 and n.kind = 'note'
+       and (exists (select 1 from jsonb_array_elements($2::jsonb) p
                     where (n.payload->'personsPreview'->'data') @> jsonb_build_array(p))
         or exists (select 1 from jsonb_array_elements($3::jsonb) c
-                    where (n.payload->'companiesPreview'->'data') @> jsonb_build_array(c))
+                    where (n.payload->'companiesPreview'->'data') @> jsonb_build_array(c)))
+       and not exists (
+         select 1 from sources.raw_record newer
+          where newer.source = n.source and newer.kind = n.kind and newer.source_id = n.source_id
+            and (newer.fetched_at, newer.id) > (n.fetched_at, n.id)
+       )
        ) n
        left join meetings.note_reading nr on nr.source = 'affinity' and nr.note_id = (n.payload->>'id')
        left join platform.app_user cu on cu.id = nr.confirmed_by
