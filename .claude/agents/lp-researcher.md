@@ -30,6 +30,8 @@ Run recording (docs/COLLAB.md): the launching session calls `scripts/workflow-ru
 before launching you and `finish` after your reply, including on failure, using the same run ID.
 Require that ID and the private batch path before starting; never put records in a prompt.
 Return selected/written/valid/failed/skipped counts, named checks (pass/fail/not-run),
-outcome/reason and known token usage (otherwise unknown), without names or record contents.
+outcome/reason and measured token usage when available (`source: "measured"`); otherwise the
+launcher must use `workflow-run.ts finish` to estimate usage from the session window
+(`source: "estimated"`). Never finish with null usage in the ledger. Return no names or record contents.
 The launcher records the line; do not append a second line yourself. A missing finish is
 unknown, never success. This applies whether the launcher is in the live or dev folder.

@@ -3,7 +3,8 @@ import { spawn } from 'node:child_process';
 import { readFile, realpath } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { mainCheckout, readLayout } from '../config/ports';
-import { beginRun, finishRun, realRoot, type Begin } from '../lib/workflows/ledger';
+import { beginRun, realRoot, type Begin } from '../lib/workflows/ledger';
+import { finishWithUsage } from '../lib/workflows/usage';
 
 async function main() {
   const [metadataFile, separator, script, ...args] = process.argv.slice(2);
@@ -22,7 +23,7 @@ async function main() {
     child.once('error', () => done({ code: null, signal: 'spawn-error' }));
     child.once('exit', (code, signal) => done({ code, signal }));
   });
-  await finishRun(id, {
+  await finishWithUsage(id, {
     counts: { selected: metadata.batch.planned, written: null, valid: null, failed: null, skipped: null },
     checks: [{ name: 'process-exit', status: status.code === 0 ? 'pass' : 'fail' }], usage: null,
     outcome: status.code === 0 ? 'succeeded' : 'failed',

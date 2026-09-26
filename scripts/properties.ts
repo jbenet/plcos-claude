@@ -2596,6 +2596,8 @@ async function main() {
 
   const { workflowProperties } = await import('./workflow-properties');
   await workflowProperties(check);
+  const { workflowUsageProperties } = await import('./workflow-usage-properties');
+  await workflowUsageProperties(check);
 
   // ---------------------------------------------------------------- report
 

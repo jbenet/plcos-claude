@@ -17,7 +17,8 @@ export async function workflowProperties(check: (name: string, ok: boolean, deta
     batch: { id: 'fictional', manifest: 'enrich/batches/fictional.txt', hash: 'b'.repeat(64), planned: 2 },
   };
   const result: Finish = { counts: { selected: 2, written: 2, valid: 2, failed: 0, skipped: 0 },
-    checks: [{ name: 'fixture-check', status: 'pass' }], usage: null, outcome: 'succeeded', reason: null };
+    checks: [{ name: 'fixture-check', status: 'pass' }],
+    usage: { input: 10, output: 2, cacheRead: 3, cacheWrite: 0, reasoning: 1, cost: null, source: 'measured' }, outcome: 'succeeded', reason: null };
   try {
     await mkdir(join(live, '.git'), { recursive: true });
     await mkdir(join(live, 'data'));
@@ -40,6 +41,12 @@ export async function workflowProperties(check: (name: string, ok: boolean, deta
     const id = await beginRun(metadata, context);
     assert.equal((await readRuns(context)).runs[0]?.outcome, 'unknown');
     check('A workflow start without a finish is unknown', true, 'temporary layout only; no success inferred');
+    const beforeFinish = await readFile(file, 'utf8');
+    for (const usage of [null, undefined, {}, { ...result.usage, source: undefined }]) {
+      await assert.rejects(finishRun(id, { ...result, usage } as Finish, context));
+      assert.equal(await readFile(file, 'utf8'), beforeFinish);
+    }
+    check('Workflow finish refuses missing usage or provenance before writing', true, 'null, omitted, empty and unsourced usage refused');
     await finishRun(id, result, { cwd: live, profile: 'real' });
     await finishRun(id, result, context); // retry does not append another finish
     const text = await readFile(file, 'utf8'), folded = await readRuns({ cwd: claude, profile: 'real' });
@@ -94,7 +101,7 @@ export async function workflowProperties(check: (name: string, ok: boolean, deta
     await writeFile(join(temp, 'result.json'), JSON.stringify(result));
     const cli = (script: string, args: string[], cwd = live) => spawnSync(process.execPath,
       ['--import', import.meta.resolve('tsx'), resolve('scripts', script), ...args],
-      { cwd, env: { ...process.env, DATA_PROFILE: 'real' }, encoding: 'utf8' });
+      { cwd, env: { ...process.env, HOME: temp, DATA_PROFILE: 'real' }, encoding: 'utf8' });
     const started = cli('workflow-run.ts', ['begin', join(temp, 'metadata.json')], dev);
     assert.equal(started.status, 0, started.stderr);
     const finished = cli('workflow-run.ts', ['finish', started.stdout.trim(), join(temp, 'result.json')], claude);
@@ -105,8 +112,19 @@ export async function workflowProperties(check: (name: string, ok: boolean, deta
     }
     const refused = cli('workflow-script.ts', [join(temp, 'metadata.json'), '--', join(live, 'scripts/fixture.ts')], dev);
     assert.equal(refused.status, 1);
+    const { finishWithUsage } = await import('../lib/workflows/usage');
+    const automatic = await beginRun(metadata, context);
+    const noSessions = { codex: join(temp, 'no-codex'), claude: join(temp, 'no-claude') };
+    await finishWithUsage(automatic, { ...result, usage: null }, context, noSessions);
+    const afterEstimate = await readFile(file, 'utf8');
+    await finishWithUsage(automatic, { ...result, usage: null }, context, noSessions);
+    assert.equal(await readFile(file, 'utf8'), afterEstimate);
+    const estimated = (await readRuns(context)).runs.find(r => r.runId === automatic)!.finish!.usage!;
+    assert.equal(estimated.source, 'estimated');
+    assert.equal(estimated.input, null);
+    check('Automatic finish records unavailable estimates honestly and retries unchanged', true, 'usage object required even when counts cannot be recovered');
     const all = await readRuns(context);
-    assert.equal(all.runs.length, 4);
+    assert.equal(all.runs.length, 5);
     assert.equal(all.runs.filter((r) => r.outcome === 'failed').length, 1);
     assert.ok(all.runs.every((r) => r.finish));
     assert.deepEqual(all.issues, []);
