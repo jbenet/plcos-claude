@@ -10,11 +10,14 @@ export function RouteGraph({ routes, fromName, targetName, selected, routeIds }:
   routes: Route[]; fromName: string; targetName: string; selected: number; routeIds?: number[];
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
+  // Where the pointer is, inside the map. Keyboard focus has none, so the card keeps its corner (issue 0059).
+  const [at, setAt] = useState<{ x: number; y: number; w: number } | null>(null);
   const { nodes, height, width } = routeGraphLayout(routes);
   const positions = new Map(nodes.map((n) => [n.id, n]));
   const active = hovered === null ? null : routes[hovered];
   const activeReading = active ? routeReading(active) : null;
-  return <div className="route-map" onMouseLeave={() => setHovered(null)} onKeyDown={(e) => { if (e.key === 'Escape') setHovered(null); }}>
+  return <div className="route-map" onMouseLeave={() => { setHovered(null); setAt(null); }}
+    onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt({ x: e.clientX - r.left, y: e.clientY - r.top, w: r.width }); }} onKeyDown={(e) => { if (e.key === 'Escape') setHovered(null); }}>
     <div className="route-map-scroll">
       <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} aria-label={`Routes to ${targetName}. One node per person. Full details in the comparison list.`}>
         {routes.map((route, ri) => {
@@ -31,7 +34,7 @@ export function RouteGraph({ routes, fromName, targetName, selected, routeIds }:
             return `M ${p.x} ${p.y} C ${(p.x + q.x) / 2} ${p.y + bend}, ${(p.x + q.x) / 2} ${q.y + bend}, ${q.x} ${q.y}`;
           }).join(' ');
           return <a key={ri} href={`#route-${routeIds?.[ri] ?? ri}`} aria-label={`Route ${ri + 1}: ${route.fromName ?? fromName} → ${route.hops.map((h) => h.toName).join(' → ')}. Strength ${reading.score}, ${VERDICT_LABEL[route.verdict]}. Inspect in list.`}
-            onMouseEnter={() => setHovered(ri)} onFocus={() => setHovered(ri)} onBlur={() => setHovered(null)}
+            onMouseEnter={() => setHovered(ri)} onFocus={() => { setHovered(ri); setAt(null); }} onBlur={() => setHovered(null)}
             onClick={() => { const detail = document.getElementById(`route-${routeIds?.[ri] ?? ri}`); if (detail instanceof HTMLDetailsElement) detail.open = true; }}>
             <path d={d} fill="none" stroke={colour} strokeWidth={1 + reading.score / 22} opacity={hovered !== null && !on ? 0.18 : on ? 1 : 0.65}
               strokeDasharray={unavailable ? '5 4' : undefined} />
@@ -44,7 +47,8 @@ export function RouteGraph({ routes, fromName, targetName, selected, routeIds }:
         </g>)}
       </svg>
     </div>
-    {active && activeReading && <div className="route-hover" role="status">
+    {active && activeReading && <div className="route-hover" role="status"
+      style={at ? { left: Math.max(8, Math.min(at.x - 24, at.w - 448)), top: at.y + 18, bottom: 'auto', pointerEvents: 'none' } : undefined}>
       <b>{active.fromName ?? fromName} → {active.hops.map((h) => h.toName).join(' → ')}</b>
       <p>{VERDICT_LABEL[active.verdict]} · {activeReading.score}/100 {activeReading.provisional ? 'provisional strength' : 'strength'} · tier {active.weakestTier}</p>
       <p>{active.reasons.join(' ')}</p>
