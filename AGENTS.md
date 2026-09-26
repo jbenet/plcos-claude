@@ -202,6 +202,11 @@ and keep "conflict" for two asks that would actually collide.
 **6. Evidence tiers A–D on relationship edges. C and D always require a human** before the
 edge is trusted for routing. Co-attendance, shared affiliation and a public social
 connection are discovery clues, not proof of a relationship.
+*Juan, 26 Sep 2026:* Protocol Labs is the exception, because it is our own network. Two people who are
+or were at PL are warmly tied, with no email or meeting needed. Every PL team member can be the source of a
+route. Everyone in the PL network is tied to the PL team, and where no particular team member is known, a
+"PL" organization node is the source (`PL → <PL founder> → <target>`). Every person and organization the
+research touches goes into the network as a node, LP or not, so it can serve as a connector.
 
 **7. Coverage disclosure on every search.** State which corpus and date range were
 inspected. Distinguish *"no supported route in the material available"* from *"no route
