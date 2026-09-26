@@ -9,7 +9,7 @@ import {
 } from '@/lib/capture';
 import { RegionPicker } from './RegionPicker';
 import { ShortcutList } from './KeyboardShortcuts';
-import { isShortcutsKey } from '@/lib/keyboard-shortcuts';
+import { isFeedbackKey, isShortcutsKey } from '@/lib/keyboard-shortcuts';
 import { MarkdownField, packAttachments, type DroppedImage } from '@/components/ui/MarkdownField';
 import {
   discardDraft, listDrafts, readDraft, readPictures, writeDraft, writePictures, type DraftSummary,
@@ -52,17 +52,27 @@ export function FeedbackButton({
 }) {
   const [open, setOpen] = useState(false);
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!isFeedbackKey(event) || document.querySelector('dialog[open], [role="dialog"]')) return;
+      event.preventDefault();
+      setOpen(true);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
   /**
-   * Opening the box takes no screenshot.
-   *
-   * It used to ask for one on every press, which meant a browser permission dialog before
-   * the reporter had typed a word. A screenshot is now something you ask for.
+   * The drawer may add an automatic redraw, which needs no browser permission.
+   * An exact screen capture is requested separately from inside the drawer.
    */
   return (
     <>
       <button
         className={variant === 'rail' ? 'railfeedback' : 'btn'}
         onClick={() => setOpen(true)}
+        aria-keyshortcuts="f"
+        title="Give feedback (F)"
       >
         {variant === 'rail' ? <><span aria-hidden>✎</span> Feedback</> : 'Give feedback'}
       </button>
@@ -191,7 +201,6 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'failed'>('idle');
   const [result, setResult] = useState<{ id: string; location: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [includeShot, setIncludeShot] = useState(true);
   const [images, setImages] = useState<DroppedImage[]>([]);
 
   /**
@@ -298,7 +307,8 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
       hydrating.current = true;
       setShots([]);
       void readPictures<Shot, DroppedImage>(page).then((kept) => { hydrating.current = false; fill(kept); });
-    } else fill(null);
+    } else if (d) setShots([]); // A saved draft with no pictures keeps the reporter’s deletion.
+    else fill(null);
   };
   // On opening: this page's draft, if there is one, else a fresh automatic screenshot.
   useEffect(() => {
@@ -354,14 +364,13 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           title, body: packed.body, kind, priority, page: path, context,
-          screenshots: includeShot ? shots.map((x) => x.dataUrl) : [],
+          screenshots: shots.map((x) => x.dataUrl),
           images: packed.images.map((i) => ({ name: i.name, dataUrl: i.dataUrl })),
           /**
            * The server numbers attachments with the screenshot first, so a body written
-           * against `attachment:1` would point at the screenshot once the box is ticked.
-           * The offset is applied here rather than renumbering as the checkbox moves.
+           * against `attachment:1` needs an offset for the screenshots still attached.
            */
-          imageOffset: includeShot ? shots.length : 0,
+          imageOffset: shots.length,
         }),
       });
       const json = (await res.json()) as { id?: string; location?: string; title?: string; error?: string };
@@ -384,7 +393,6 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
    * belongs to the issue it was filed with. The page and filters are captured again anyway.
    */
   const again = () => {
-    setIncludeShot(true);
     setFailed(false);
     setError(null);
     setResult(null);
@@ -528,7 +536,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
               Screenshots{shots.length > 0 ? ` · ${shots.length}` : ''}
             </div>
 
-            <div className={`shotlist${includeShot ? '' : ' off'}`}>
+            <div className="shotlist">
               {shots.map((x, i) => (
                 <div className="shotthumb" key={x.id}>
                   <button
@@ -544,7 +552,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
                     className="shotx"
                     onClick={() => drop(x.id)}
                     aria-label={`Remove screenshot ${i + 1}`}
-                    title="Remove"
+                    title={`Delete screenshot ${i + 1}`}
                   >
                     ×
                   </button>
@@ -600,22 +608,12 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             )}
 
             {shots.length > 0 && (
-              <label className="shotcheck">
-                <input
-                  type="checkbox"
-                  checked={includeShot}
-                  onChange={(e) => setIncludeShot(e.target.checked)}
-                />
-                <span>
-                  Include {shots.length === 1 ? 'the screenshot' : `all ${shots.length} screenshots`}
-                  <small>
-                    {profile === 'real'
-                      ? 'Filed beside the issue as PNGs in data/real/issues/, with the real data — never committed.'
-                      : 'Filed beside the issue as PNGs in this repository.'}{' '}
-                    Click one to draw on it; the × removes it.
-                  </small>
-                </span>
-              </label>
+              <p className="mdhint">
+                {profile === 'real'
+                  ? 'Filed beside the issue with the real data — never committed.'
+                  : 'Filed beside the issue in this repository.'}{' '}
+                Click an image to annotate it; use its × to delete it.
+              </p>
             )}
 
             </div>

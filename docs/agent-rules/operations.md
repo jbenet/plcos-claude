@@ -11,7 +11,7 @@ webhook. The request and its fix travel in one PR. They survive `npm run db:rese
 ---
 id: "0001"
 title: Guard message doesn't say whose ask is blocking
-status: open          # open | triaged | agent-ready | in-progress | review | done
+status: open          # open | triaged | agent-ready | in-progress | done
 kind: bug             # bug | request | question | chore
 priority: P1          # P0 | P1 | P2 | P3 — see issues/README.md for the SLA ladder
 reporter: juan

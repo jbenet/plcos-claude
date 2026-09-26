@@ -18,7 +18,7 @@ export async function Rail() {
     a.currentUser(),
     a.listUsers(),
     vehicleSelection(),
-    issueSink().then((s) => s.list({ status: ['open', 'triaged', 'agent-ready', 'in-progress', 'review'] })),
+    issueSink().then((s) => s.list({ status: ['open', 'triaged', 'agent-ready', 'in-progress'] })),
     ticketCounts(),
   ]);
 

@@ -1,3 +1,4 @@
+import { IssueVelocity } from '@/components/issues/IssueVelocity';
 import { IssueList } from '@/components/issues/IssueList';
 import { Page } from '@/components/shell/Page';
 import { config } from '@/config/deployment';
@@ -71,6 +72,8 @@ export default async function Issues() {
           </div>
         ))}
       </div>
+
+      <IssueVelocity issues={all} />
 
       {all.length === 0 ? (
         <div className="card">

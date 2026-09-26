@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import type { Issue, IssueKind, IssuePriority, IssueStatus } from '@/lib/issues';
 import { ago } from '@/lib/time';
 
-const STATUSES: IssueStatus[] = ['open', 'triaged', 'agent-ready', 'in-progress', 'review', 'done'];
+const STATUSES: IssueStatus[] = ['open', 'triaged', 'agent-ready', 'in-progress', 'done'];
 const PRIORITIES: IssuePriority[] = ['P0', 'P1', 'P2', 'P3'];
 const KINDS: IssueKind[] = ['bug', 'request', 'question', 'chore'];
 

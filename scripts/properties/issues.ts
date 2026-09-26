@@ -1,6 +1,79 @@
 import type { Check } from './harness';
 
 export async function issueProperties(check: Check) {
+  {
+    const { issueVelocity } = await import('../../lib/issues/velocity');
+    const now = new Date('2026-09-26T13:00:00Z');
+    const velocity = issueVelocity([
+      { status: 'open', created: '2026-08-01T00:00:00Z' },
+      { status: 'done', created: '2026-08-28T00:00:00Z', closedAt: '2026-09-02T12:00:00Z' },
+      { status: 'done', created: '2026-09-01T00:00:00Z' },
+      { status: 'in-progress', created: '2026-09-26T00:00:00Z' },
+      { status: 'done', created: '2026-08-01T00:00:00Z', closedAt: '2026-08-27T23:59:59Z' },
+      // Reopened: a stale closure must not count as done.
+      { status: 'open', created: '2026-09-03T00:00:00Z', closedAt: '2026-09-04T00:00:00Z' },
+    ], now);
+    check('Issue velocity has 30 UTC days, counts boundaries and ignores stale closures on reopened issues',
+      velocity.days.length === 30 && velocity.days[0]!.date === '2026-08-28'
+        && velocity.days.at(-1)!.date === '2026-09-26' && velocity.filed === 4
+        && velocity.closed === 1 && velocity.open === 3,
+      `filed ${velocity.filed}, dated closures ${velocity.closed}, open ${velocity.open}`);
+    const sept1 = velocity.days.find((d) => d.date === '2026-09-01')!;
+    const sept2 = velocity.days.find((d) => d.date === '2026-09-02')!;
+    check('Undated closures yield historical open bounds; a dated closure leaves the queue that day',
+      velocity.undatedClosures === 1 && sept1.openMin === 2 && sept1.openMax === 3
+        && sept2.openMin === 1 && sept2.openMax === 2
+        && velocity.days.at(-1)!.openMin === 3 && velocity.days.at(-1)!.openMax === 3,
+      'Fictional closed issue without a date stays unknown; today agrees with the current queue');
+    const invalid = issueVelocity([
+      { status: 'done', created: '2026-09-01', closedAt: '2026-08-01' },
+      { status: 'done', created: '2026-09-01', closedAt: '2026-09-27' },
+      { status: 'open', created: 'not a date' },
+      { status: 'done', created: '2026-02-30', closedAt: '2026-09-20' },
+    ], now);
+    const offset = issueVelocity([{ status: 'done', created: '2026-08-27T23:30:00-02:00', closedAt: '2026-09-01T23:30:00-02:00' }], now);
+    check('Issue timestamps with offsets are grouped by their UTC day',
+      offset.days[0]!.filed === 1 && offset.days.find((d) => d.date === '2026-09-02')!.closed === 1,
+      'Both local dates cross midnight in UTC');
+    const empty = issueVelocity([], now);
+    check('Missing, invalid, future and reversed issue dates never fabricate activity; empty days remain zero',
+      invalid.closed === 1 && invalid.undatedClosures === 2 && invalid.undatedFiled === 2
+        && empty.days.every((d) => d.filed === 0 && d.closed === 0 && d.openMax === 0),
+      'Invalid dates are disclosed, and all 30 empty days are retained');
+  }
+
+  {
+    const { mkdtemp, readFile, rm, writeFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join, relative } = await import('node:path');
+    const { fileIssueSink } = await import('../../lib/issues/file');
+    const { parseIssue } = await import('../../lib/issues/format');
+    const dir = await mkdtemp(join(tmpdir(), 'plcos-fictional-issues-'));
+    try {
+      const sink = fileIssueSink(relative(process.cwd(), dir));
+      const created = await sink.create({ title: 'Invented velocity fixture', body: 'Fixture only.',
+        kind: 'bug', priority: 'P2', reporter: 'fixture', page: '/today', labels: [], context: null });
+      const done = await sink.update(created.id, { status: 'done' });
+      const edited = await sink.update(created.id, { priority: 'P1', status: 'done' });
+      const reopened = await sink.update(created.id, { status: 'open' });
+      check('Issue status writes record closure once, preserve it on edits, and clear it on reopen',
+        Boolean(done.closedAt) && edited.closedAt === done.closedAt && reopened.closedAt === null,
+        'Invented issue in a temporary directory, removed after the check');
+      const legacy = (await readFile(created.location, 'utf8')).replace(/^status:.*$/m, 'status: review');
+      await writeFile(created.location, legacy);
+      const read = await sink.get(created.id);
+      const open = await sink.list({ status: ['open', 'triaged', 'agent-ready', 'in-progress'] });
+      await sink.update(created.id, { priority: 'P3' });
+      const rewritten = await readFile(created.location, 'utf8');
+      check('Legacy review reads as done, is excluded from open counts, and rewrites as done without inventing a closure date',
+        read?.status === 'done' && open.length === 0 && /^status: done\s/m.test(rewritten)
+          && !rewritten.includes('| review') && parseIssue(rewritten, created.id).closedAt === null,
+        'Compatibility is at the file reader, so list, detail and rail counts agree');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
   // Triage writes `assignee:` and `branch:` into an issue's frontmatter (docs/COLLAB.md), and the
   // issues page rewrites the whole file when a status changes. The rewrite keeps what it does not
   // manage, and turns the old singular `screenshot:` into `screenshots:` without keeping both.
