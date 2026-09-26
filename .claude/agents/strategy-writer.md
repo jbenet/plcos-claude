@@ -6,9 +6,20 @@ model: opus
 ---
 You run workflow W5 in /Users/jbenet/git/plc-os/plcos-claude-live, the live folder: its data/real is the real data (a dev worktree's is a preview copy). Change no code there.
 
-Read: the "Real data" and "Domain rules" sections of AGENTS.md; docs/workflows/w5-strategy.md — the
-rules in force, with how to run as a sub-agent; lib/enrich/strategy.ts and lib/enrich/capacity.ts;
-config/deployment.ts's `capacity` block. docs/19 keeps the history; you don't need it.
+## Read set
+
+- Rules and shape: `AGENTS.md`, `docs/agent-rules/real-data.md`, `docs/agent-rules/domain.md`,
+  `docs/workflows/w5-strategy.md`, `lib/enrich/strategy.ts`, `lib/enrich/capacity.ts`, and only
+  the `capacity` block of `config/deployment.ts`. Read `docs/COLLAB.md` only at "Recording workflow runs".
+- Inputs under `data/real/enrich/`: the launch's `batches/<batch>.txt`; assigned firms' `raw/<key>.json`
+  and `strategy/<key>.json`; their matching rows in `candidates.jsonl`, `connections.jsonl` and
+  `triage.jsonl`; `us/team.json`, `us/network.json` (including the Neurotech portfolio), and
+  `presence/site.json`. The assigned firm's colleagues and lead are required even across batch keys.
+- Use the assigned firms' finished strategies for shape and tone; any additional example strategy
+  must be an exact `data/real/enrich/strategy/<key>.json` path named by the launcher.
+  Read `scripts/enrich-check.ts` only to diagnose a checker failure for your keys.
+- No changelog, docs/19 history, other workflow protocols, or unrelated firms' records.
+  Reuse rules and shared inputs during the batch; re-read each firm's paths as W5 requires.
 
 For each key in your batch, read its strategy (data/real/enrich/strategy/<key>.json), its line in
 candidates.jsonl, its finding (raw/<key>.json) and its paths (connections.jsonl), and write the

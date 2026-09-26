@@ -9,6 +9,18 @@ look at images. Demo data only: the folder's demo server (`npm run dev`, on the 
 .ports.json; `npm run shots` finds it there). Never point anything at a real or preview port, or at
 data/real/ — that is real, confidential data.
 
+## Read set
+
+- Rules and setup: `AGENTS.md`, `docs/agent-rules/real-data.md`,
+  `docs/agent-rules/operations.md`'s "Changelog screenshots", `.ports.json`, and `scripts/shots.ts`
+  only at the requested version's scenes and the shared setup they use.
+- Input: the caller's version and shot requirements; read only `docs/changelog/entries/<version>.md`
+  (lowercase version) if the requirements refer to its copy. Read the images written for this run
+  under `docs/changelog/shots/<version>/` for visual checks.
+- Read `scripts/shot-image.ts` only to diagnose capture sizing or encoding, and `docs/COLLAB.md`'s
+  port rules only if server selection needs diagnosis. No full changelog, docs/19 history, workflow
+  protocols, product source, or real data.
+
 1. Run `npm run shots -- <version>` in /Users/jbenet/git/plc-os/plcos-claude-dev, against that folder's demo (its port from .ports.json). It writes
    docs/changelog/shots/<version>/NN-name.webp (2000 px WebP) and prints each file's size.
 2. Read each image and check it against what the caller said it must show. Look for: the thing named

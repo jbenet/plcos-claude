@@ -1,6 +1,6 @@
 import { config } from '../config/deployment';
 /**
- * Render CHANGELOG.md to a standalone HTML page for reading away from the repo.
+ * Render docs/changelog/entries/ to a standalone HTML page for reading away from the repo.
  *
  * Repeatable on purpose: every future version regenerates the same page rather than
  * anyone hand-transcribing a build log. Screenshots are referenced at shots/<stage>/…,
@@ -10,9 +10,10 @@ import { config } from '../config/deployment';
  */
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { groupChangelog, parseInline, parseMarkdown, type Block } from '../lib/markdown';
+import { readChangelog } from '../lib/changelog';
 
 const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -111,10 +112,10 @@ function render(block: Block): string {
 async function main() {
   findTwins(join(process.cwd(), 'docs', 'changelog', 'shots'));
   const out = process.argv[2] ?? 'changelog.html';
-  const src = await readFile(join(process.cwd(), 'CHANGELOG.md'), 'utf8');
+  const src = await readChangelog();
   const doc = groupChangelog(parseMarkdown(src));
 
-  // Newest first. The file stays chronological; reading order is a rendering decision.
+  // Newest first. The index stays chronological; reading order is a rendering decision.
   const entries = [...doc.entries].reverse();
   const stages = entries.filter((e) => !e.divider);
 
@@ -274,7 +275,7 @@ async function main() {
     <span class="mark"><i>${config.product.mark}</i><b>${config.product.name}</b></span>
     <h1>Build log</h1>
     <p class="lede">What landed at each stage, what was deliberately left out, and where the
-      build disagreed with the plan. Generated from <code>CHANGELOG.md</code>.</p>
+      build disagreed with the plan. Generated from <code>docs/changelog/entries/</code>.</p>
     <div class="facts">
       <span>${stages.length} entries</span>
       <span>L1 to L13 complete</span>

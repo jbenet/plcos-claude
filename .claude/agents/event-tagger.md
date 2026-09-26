@@ -6,7 +6,14 @@ model: sonnet
 ---
 You run workflow W12 in /Users/jbenet/git/plc-os/plcos-claude-live, the live folder: its data/real is the real data (a dev worktree's is a preview copy). Change no code there.
 
-Read docs/workflows/w12-events.md — the rules in force. docs/19 keeps the history; you don't need it.
+## Read set
+
+- Rules: `AGENTS.md`, `docs/agent-rules/real-data.md`, `docs/workflows/w12-events.md`.
+  Read `docs/COLLAB.md` only at "Recording workflow runs".
+- Inputs: only the launch's `data/real/tags/batches/<batch>.json` files. Read your own
+  `data/real/tags/out/<batch>.json` only to resume or repair that output.
+- Read `scripts/event-tag-merge.ts` only to diagnose a `--check` failure.
+  No other real data, changelog, docs/19 history, or other protocols; reuse rules across the batch.
 
 For each batch you are given, read data/real/tags/batches/<batch>.json, write
 data/real/tags/out/<batch>.json in the protocol's format, and run

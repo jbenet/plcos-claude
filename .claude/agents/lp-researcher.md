@@ -6,9 +6,19 @@ model: sonnet
 ---
 You run workflow W1 in /Users/jbenet/git/plc-os/plcos-claude-live, the live folder: its data/real is the real data (a dev worktree's is a preview copy). Change no code there.
 
-Read: the "Real data" section of AGENTS.md; docs/workflows/w1-profile.md — the rules in force, with
-how to run as a sub-agent; lib/enrich/schema.ts for the output shape. docs/19 keeps the history; you
-don't need it.
+## Read set
+
+- Rules and shape: `AGENTS.md`, `docs/agent-rules/real-data.md`,
+  `docs/workflows/w1-profile.md`, `lib/enrich/schema.ts`; `config/deployment.ts`'s `capacity` block
+  when assigning capacity by size. Read `docs/COLLAB.md` only at "Recording workflow runs".
+- Inputs: the launch's `data/real/enrich/batches/<batch>.jsonl`,
+  `data/real/enrich/us/pl-directory.jsonl` (matching rows), `data/real/enrich/us/network.json`,
+  and three example `data/real/enrich/raw/<key>.json` files named by the launcher for shape and tone.
+  For a search/revision pass, also read the assigned keys' existing findings at that same path.
+- Public pages and local matches follow W1's "Inputs" and "Near us"; do not load unrelated findings.
+  Read `scripts/enrich-check.ts` only to diagnose a checker failure for your keys.
+- No changelog, docs/19 history, other workflow protocols, or whole research directory reads.
+  Reuse these rules during the batch; do not reload them for every LP.
 
 For each line of your batch file, research that person from public pages and write
 data/real/enrich/raw/<key>.json. Finish with `DATA_PROFILE=real npx tsx scripts/enrich-check.ts` and

@@ -1,5 +1,4 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readChangelog } from '@/lib/changelog';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -136,11 +135,11 @@ function Rendered({ block }: { block: Block }) {
 }
 
 export default async function Changelog() {
-  const src = await readFile(join(process.cwd(), 'CHANGELOG.md'), 'utf8');
+  const src = await readChangelog();
   const doc = groupChangelog(parseMarkdown(src));
 
-  // Newest first, matching the standalone page. CHANGELOG.md stays chronological — the
-  // file is append-only, which keeps its diffs clean; reading order is a rendering choice.
+  // Newest first, matching the standalone page. The index stays chronological;
+  // reading order is a rendering choice.
   const entries = [...doc.entries].reverse();
   const stages = entries.filter((e) => !e.divider);
 
@@ -163,7 +162,7 @@ export default async function Changelog() {
             ))}
           </div>
           <div className="note">
-            Rendered from <code>CHANGELOG.md</code> in this repository. The screenshots come from{' '}
+            Rendered from <code>docs/changelog/entries/</code> in this repository. The screenshots come from{' '}
             <code>docs/changelog/shots/</code> through a route that only serves images from that
             directory — 2000 px WebP since issue 0021.
           </div>
@@ -175,7 +174,7 @@ export default async function Changelog() {
       <h1>Changelog</h1>
       <p className="sublede">
         What landed at each stage, what was deliberately left out, and where the build disagreed
-        with the plan. Newest first. Read from <code>CHANGELOG.md</code>, so it cannot drift from
+        with the plan. Newest first. Read from <code>docs/changelog/entries/</code>, so it cannot drift from
         the repository.
       </p>
 
