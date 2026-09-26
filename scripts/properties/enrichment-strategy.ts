@@ -1,0 +1,167 @@
+import type { Check } from './harness';
+
+export async function enrichmentStrategyProperties(check: Check) {
+  {
+    const { hasCapacityEvidence } = await import('../../lib/enrich/strategy');
+    const evidence = ['990-PF assets of $40M (2024)', 'A 13F reporting $1.2B in holdings', 'A commitment of $2M to a venture fund, per the foundation’s 2024 990-PF'];
+    const not = ['No LP commitment is on record', 'Company valuation of $2B; founder stake unknown', 'Raised $30M Series B for the company', 'No assets under management and no commitment sizes', 'Commits to venture funds as an LP'];
+    const missed = evidence.filter((b) => !hasCapacityEvidence(b)).length, passed = not.filter((b) => hasCapacityEvidence(b)).length;
+    check('A capacity band rests on evidence: not a denial, not a company’s valuation or round, not a figure called unknown',
+      missed === 0 && passed === 0, `evidence missed: ${missed} of ${evidence.length}; non-evidence accepted: ${passed} of ${not.length}`);
+  }
+
+  // Capacity by rule (W1 1.49, W5 1.9; Juan, 24 Sep): an office's size sets the band the table
+  // gives, and many angel checks a floor — each held to its rule, so a band that says "by size"
+  // and isn't the table's is flagged, and a client-assets size no longer blocks the estimate.
+  {
+    const { gates } = await import('../../lib/enrich/strategy');
+    const cap = await import('../../lib/enrich/capacity');
+    const contact = { lastFromThem: null, meetings: 0, groupMeetings: 0 };
+    const flags = (band: string, basis: string) => gates({ list: '2027', scores: { capacity: { band, basis } } as never, route: null }, { contact, money: null },
+      { profile: { investorType: 'advisor', capacity: { band: 'unknown', basis: '' } } }, null);
+    const table = cap.bandBySize('family_office', 800e6) === '$1–5M' && cap.bandBySize('individual', 20e6) === '$50–250K' && cap.bandBySize('nothing', 1e9) === null;
+    // The kind named first, not the first in a fixed order; "angel/seed" is counted (N81's readers).
+    const firstNamed = cap.sizeReading('By size: a multi-family office with $4.2B under advice')?.kind === 'wealth_manager'
+      && cap.sizeReading('By size: an adviser to family foundations, $3B')?.kind === 'wealth_manager'
+      && cap.floorHolds('Floor: 60 angel/seed investments on record');
+    const bySize = flags('$1–5M', 'By size: a wealth manager with $4.2 billion under management, per its ADV');
+    const offTable = flags('$5–25M', 'By size: a wealth manager with $4.2 billion under management, per its ADV');
+    const floor = flags('$100K+ (floor)', 'Floor: 12 angel checks on record, sizes unknown');
+    const thinFloor = flags('$100K+ (floor)', 'Floor: 3 angel checks on record');
+    check('A band by size is the table’s, and a floor needs many angel checks: each held to its rule',
+      table && firstNamed && bySize.length === 0 && offTable.includes('capacity off the size table (it gives $1–5M)') && floor.length === 0 &&
+        thinFloor.includes('a floor without the angel checks behind it') && thinFloor.includes('capacity ahead of the evidence'),
+      `table: ${table}; the kind named first, and angel/seed counted: ${firstNamed}; by size, the table's band: ${bySize.join(', ') || 'no flags'}; another band: ${offTable.join(', ')}; floor on 12 checks: ${floor.join(', ') || 'no flags'}; on 3: ${thinFloor.join(', ')}`);
+  }
+
+  // A protocol version is major and minor (N81): "1.10" comes after 1.9, not before 1.3.
+  {
+    const { versionBefore } = await import('../../lib/enrich/strategy');
+    const right = versionBefore('1.10', '1.3') === false && versionBefore(1.9, '1.10') === true && versionBefore(1.2, '1.3') === true && versionBefore('2.0', '1.10') === false;
+    check('A strategy’s version compares as major and minor: “1.10” is after 1.9', right, `1.10 before 1.3: ${versionBefore('1.10', '1.3')}; 1.9 before 1.10: ${versionBefore(1.9, '1.10')}`);
+  }
+
+  // "This year" rests on the pursuit's own contact (W5 1.10): a recent catch-up about something
+  // else keeps the relationship warm, not the raise.
+  {
+    const { gates } = await import('../../lib/enrich/strategy');
+    const recent = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
+    const s = { list: 'this year' as const, scores: { capacity: { band: 'unknown', basis: '' } } as never, route: null };
+    const warmOnly = gates(s, { contact: { lastFromThem: recent, meetings: 0, groupMeetings: 0 }, money: null, pursuits: [{ contact: { lastFromThem: null, meetings: 0 } }] }, null, null);
+    const counted = gates(s, { contact: { lastFromThem: recent, meetings: 0, groupMeetings: 0 }, money: null, pursuits: [{ contact: { lastFromThem: recent, meetings: 0 } }] }, null, null);
+    const oldExport = gates(s, { contact: { lastFromThem: recent, meetings: 0, groupMeetings: 0 }, money: null }, null, null);
+    check('“This year” needs the pursuit’s own evidence: a recent word about something else is not enough',
+      warmOnly.includes('this year, without the evidence gate') && !counted.includes('this year, without the evidence gate') && !oldExport.includes('this year, without the evidence gate'),
+      `a word from them about something else: ${warmOnly.join(', ') || 'passes'}; about this vehicle: ${counted.join(', ') || 'passes'}; an export without pursuit contact: ${oldExport.join(', ') || 'passes'}`);
+  }
+
+  // The loop's own measurements (N70): the critic's rounds from their files — a round in two
+  // halves is one round — and the fact check's grades, counted as written.
+  {
+    const { mkdtemp, writeFile: wfq, rm: rmq } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join: jq } = await import('node:path');
+    const { readQuality, roundOf, factRoundOf } = await import('../../lib/enrich/quality');
+    const dq = await mkdtemp(jq(tmpdir(), 'quality-'));
+    await wfq(jq(dq, 'strategy-review.jsonl'), ['{"key":"a","grade":"B","issues":[{"criterion":2,"what":"x"}]}', '{"key":"b","grade":"C","issues":[]}'].join('\n'));
+    await wfq(jq(dq, 'strategy-review-3a.jsonl'), '{"key":"c","grade":"A","issues":[]}\n');
+    await wfq(jq(dq, 'strategy-review-3b.jsonl'), '{"key":"d","grade":"A","issues":[]}\nnot json\n');
+    await wfq(jq(dq, 'fact-review-01a.jsonl'), '{"key":"a","identity":"holds","facts":[{"i":0,"grade":"supported"},{"i":1,"grade":"partly"},{"i":2,"grade":"unavailable"}]}\n');
+    await wfq(jq(dq, 'fact-review-02b.jsonl'), '{"key":"b","identity":"doubt","facts":[{"i":0,"grade":"supported"}]}\n');
+    const q = await readQuality(dq);
+    await rmq(dq, { recursive: true, force: true });
+    const one = q.rounds.find((r) => r.round === 1), three = q.rounds.find((r) => r.round === 3);
+    check('The loop’s measurements: a round in two halves is one round, for the critic and the fact check; grades and facts are counted as written; a broken line is skipped',
+      roundOf('strategy-review.jsonl') === 1 && roundOf('strategy-review-2.jsonl') === 2 && roundOf('strategy-review-3b.jsonl') === 3 && roundOf('fact-review-01a.jsonl') === null
+        && one?.graded === 2 && one.grades.C === 1 && one.byCriterion['2'] === 1 && three?.graded === 2 && three.grades.A === 2
+        && factRoundOf('fact-review-02c.jsonl') === 2 && q.facts.length === 2
+        && q.facts[0].facts.supported === 1 && q.facts[0].facts.partly === 1 && q.facts[0].facts.unavailable === 1 && q.facts[0].identities.holds === 1
+        && q.facts[1].round === 2 && q.facts[1].identities.doubt === 1,
+      `rounds ${JSON.stringify(q.rounds.map((r) => [r.round, r.graded]))}; fact rounds ${JSON.stringify(q.facts.map((f) => [f.round, f.findings]))}`);
+  }
+
+  // Outside the US, counsel first (W5 1.5, made a gate after the critic's third round): a
+  // strategy for an LP placed abroad names counsel; one placed in the US, or placed nowhere,
+  // needn't. Assets a firm holds under advice are its clients' money, not the LP's own.
+  {
+    const { gates } = await import('../../lib/enrich/strategy');
+    const contact = { lastFromThem: null, meetings: 2, groupMeetings: 0 };
+    const s = (said: string) => ({ list: '2027' as const, scores: { capacity: { band: 'unknown', basis: 'Not public.' } } as never, route: null, next: { what: said }, risks: [], openQuestions: [] });
+    const flagged = (said: string, where: string | null) => gates(s(said), { contact, money: null, location: where }, null, null).includes('outside the US, no counsel gate');
+    const abroad = flagged('Marc answers his 1 Sep email with the first-close date, by 30 Sep.', 'Berlin, Germany');
+    const withCounsel = flagged('Marc asks counsel how a Berlin-based investor is admitted, then answers his email, by 2 Oct.', 'Berlin, Germany');
+    const home = flagged('Marc answers his email, by 30 Sep.', 'Austin, Texas');
+    const nowhere = flagged('Marc answers his email, by 30 Sep.', null);
+    const territory = flagged('Marc answers his email, by 30 Sep.', 'San Juan, Puerto Rico') || flagged('Marc answers his email, by 30 Sep.', 'Boston, U.S.');
+    // A finding's short place beside our record's full one: the record's "United States" wins.
+    const shortPlace = gates(s('Marc answers his email, by 30 Sep.'), { contact, money: null, location: 'Palo Alto, California, United States' }, { identity: { canonical: { location: 'Palo Alto' } } }, null).includes('outside the US, no counsel gate');
+    const advised = gates({ list: '2027', scores: { capacity: { band: '$1–5M', basis: '$900M of client assets under advice.' } } as never, route: null }, { contact, money: null }, { profile: { investorType: 'fo_staff', capacity: { band: '$1–5M', basis: '$900M of client assets under advice.' } } }, null).includes('capacity ahead of the evidence');
+    // A net worth recorded as a capacity fact is evidence, though the summary only says "a billionaire" (v13a2).
+    const billionaire = { profile: { investorType: 'fo_principal', capacity: { band: '$5–25M', basis: 'A billionaire.' } }, facts: [{ field: 'capacity', value: 'Net worth of $2.1B (2025 list).' }] };
+    const factBacked = !gates({ list: '2027', scores: { capacity: { band: '$5–25M', basis: 'Net worth on file.' } } as never, route: null }, { contact, money: null }, billionaire, null).includes('capacity ahead of the evidence');
+    // A park carries a date to look again (the critic, round four).
+    const { parksWithoutDate } = await import('../../lib/enrich/strategy');
+    const park = (what: string, lookAgain?: string) => parksWithoutDate({ next: { what, lookAgain } });
+    const parks = park('Check sent mail; if nothing went, park him until the search pass.') && !park('Check sent mail; if nothing went, park him until the search pass.', 'Mon 4 Jan 2027')
+      && !park('Park him; look again on 4 Jan.') && !park('Answer her email with the first-close date.');
+    check('Outside the US, a strategy names counsel; in the US, its territories, or placed nowhere it needn’t; assets under advice are clients’ money; a capacity fact is evidence; a park carries a date',
+      abroad && !withCounsel && !home && !nowhere && !territory && !shortPlace && advised && factBacked && parks,
+      `abroad without counsel flagged: ${abroad}; with counsel flagged: ${withCounsel}; in the US flagged: ${home}; a territory or "U.S." flagged: ${territory}; placed nowhere flagged: ${nowhere}; a band on assets under advice flagged: ${advised}; a band on a capacity fact accepted: ${factBacked}; parks read right: ${parks}`);
+  }
+}
+
+export async function strategyContextProperties(check: Check) {
+  // Context from the team (issue 0016, real): a strategy written before the newest context is due a
+  // re-think; one written after it is not; with no context, nothing changes.
+  {
+    const { isStale } = await import('../../lib/enrich/strategy');
+    const s = { made: { at: '2026-09-24T10:00:00Z', by: 'claude', workflow: 'W5', version: 1.6 } } as never;
+    const newer = isStale(s, null, undefined, undefined, '2026-09-24T13:40:00.123Z');
+    const older = isStale(s, null, undefined, undefined, '2026-09-24T09:59:59.999Z');
+    const none = isStale(s, null, undefined, undefined, null);
+    check('A strategy written before the team’s newest context is due a re-think; one written after it, or with none, is not',
+      newer && !older && !none, `context after it: ${newer}; context before it: ${older}; no context: ${none}`);
+  }
+}
+
+export async function strategyRegressionProperties(check: Check) {
+  {
+    // W5 after the search pass: a correction to the finding after the strategy was written makes it
+    // stale, though the finding's date — and so the pin — is unchanged.
+    const { isStale } = await import('../../lib/enrich/strategy');
+    const made = { at: '2026-09-24T12:00:00Z', by: 'claude', workflow: 'W5', version: 1.7, inputs: { finding: '2026-09-24T09:00:00Z' } } as never;
+    const before = isStale({ made }, { researched: { at: '2026-09-24T09:00:00Z', corrected: [{ at: '2026-09-24T10:00:00Z' }] } });
+    const after = isStale({ made }, { researched: { at: '2026-09-24T09:00:00Z', corrected: [{ at: '2026-09-24T13:00:00Z' }] } });
+    check('A strategy written before a correction to its finding is stale; one written after it is not',
+      after && !before, `correction before the strategy: ${before ? 'stale' : 'fresh'}; after it: ${after ? 'stale' : 'fresh'}`);
+  }
+
+  {
+    // W5 after the search pass: "a parked page" is a dead domain, not a park; "Parker" is a name.
+    const { parksWithoutDate } = await import('../../lib/enrich/strategy');
+    const read = (what: string) => parksWithoutDate({ next: { what } });
+    const cases: Array<[string, boolean]> = [
+      ['Check the address first: the domain is a parked page.', false], ['Email Parker Lee this week.', false],
+      ['Park him until the search pass.', true], ['Parked until the fund closes.', true], ['Park him to 4 Jan 2027.', false],
+      ['Park him until the search pass; the Form D was filed 3 Jun 2026.', true], ['Park the pursuit until March 2027, then re-read.', false],
+      ['Park ADIA to 4 Jan 2027; no fund material.', false],
+      ['She waits for the search pass before any note.', true], ['Hold until 4 Jan 2027, then re-read.', false],
+      ['Park him to Mon 4 Jan 2027.', false],
+    ];
+    const wrong = cases.filter(([w, want]) => read(w) !== want);
+    check('A park with no date is caught, and a parked domain or a name is not one',
+      wrong.length === 0, `${cases.length - wrong.length} of ${cases.length} read right${wrong.length ? `; wrong: ${wrong.map((w) => w[0]).join(' | ')}` : ''}`);
+  }
+
+  {
+    // W5 after the search pass: a date in May is not a hedge. The hypothetical filter read "(May 2026)"
+    // as "may", so a capacity fact dated in May never counted.
+    const { hasCapacityEvidence } = await import('../../lib/enrich/strategy');
+    const dated = hasCapacityEvidence('Its 13F reports about $5.2 billion in holdings (May 2026).', new Date('2026-09-24'));
+    const hedged = hasCapacityEvidence('A first commitment may be $1 million.', new Date('2026-09-24'));
+    // And a Form D's "date of first sale" is a date, not a sale.
+    const formD = hasCapacityEvidence('Its Form D reports $2.5 million committed to the feeder, date of first sale 3 Jun 2026.', new Date('2026-09-24'));
+    check('A capacity fact dated in May counts as evidence; a clause that says "may" does not; a Form D\u2019s first-sale date is no sale',
+      dated && !hedged && formD, `dated in May: ${dated ? 'evidence' : 'not evidence'}; "may be": ${hedged ? 'evidence' : 'not evidence'}; a Form D with its first-sale date: ${formD ? 'evidence' : 'not evidence'}`);
+  }
+}

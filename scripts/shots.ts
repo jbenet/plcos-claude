@@ -9,7 +9,7 @@ import { encodeShot, SHOT } from './shot-image';
  * Changelog screenshots. `npm run shots -- L1` against a running dev server.
  * The viewport matches the design boards (1440 × 940) so a shot can be held up next to
  * design/S1-Shell-Today.html without rescaling. Each is stored as a 2000 px WebP
- * (scripts/shot-image.ts, issue 0021) and referenced from CHANGELOG.md by that name.
+ * (scripts/shot-image.ts, issue 0021) and referenced from docs/changelog/entries/<version>.md by that name.
  */
 interface Shot {
   name: string;

@@ -31,6 +31,15 @@ async function docFiles(): Promise<Array<{ slug: string; file: string }>> {
         files.push({ slug: `docs-${entry.name.slice(0, -3)}`, file: `docs/${entry.name}` });
       }
     }
+    // Explicit public documentation folders only; no recursive crawl of arbitrary paths.
+    for (const folder of ['19', 'agent-rules', 'workflows']) {
+      if (!(await regular(`docs/${folder}`, true))) continue;
+      for (const entry of await readdir(join(process.cwd(), 'docs', folder), { withFileTypes: true })) {
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+          files.push({ slug: `docs-${folder}-${entry.name.slice(0, -3)}`, file: `docs/${folder}/${entry.name}` });
+        }
+      }
+    }
   }
   if (await regular('issues', true) && await regular('issues/README.md')) {
     files.push({ slug: 'issues-readme', file: 'issues/README.md' });
@@ -77,7 +86,7 @@ export function docLink(href: string, fromFile: string, docs: readonly SystemDoc
   // Some repo references start at the root (docs/…), others at the current document.
   const file = path.startsWith('docs/') || path === 'AGENTS.md' || path === 'issues/README.md'
     ? path : posix.normalize(posix.join(posix.dirname(fromFile), path));
-  if (file === 'CHANGELOG.md') return `/dev/changelog${suffix}`;
+  if (file === 'CHANGELOG.md' || file === 'docs/changelog/index.md') return `/dev/changelog${suffix}`;
   const doc = docs.find((item) => item.file === file);
   return doc ? `${docHref(doc.slug)}${suffix}` : null;
 }

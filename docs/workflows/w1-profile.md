@@ -1,6 +1,19 @@
 # W1 — Profile an LP: who they are, how they invest, what they care about, from public pages only
 The rules in force, amendments 1.1–1.49 folded in; `docs/19-enrichment-workflows.md` keeps the design and the history.
 
+## Read set for a batch
+
+Read this protocol once, `AGENTS.md`, `docs/agent-rules/real-data.md`, `lib/enrich/schema.ts`,
+and the `capacity` block of `config/deployment.ts` when applying its size rule. Read only the
+"Recording workflow runs" section of `docs/COLLAB.md` for run bookkeeping.
+
+The local input files are `data/real/enrich/batches/<batch>.jsonl`, matching rows in
+`data/real/enrich/us/pl-directory.jsonl`, `data/real/enrich/us/network.json`, and three example
+`data/real/enrich/raw/<key>.json` paths named by the launcher. A search/revision pass also reads the
+assigned keys' existing `data/real/enrich/raw/<key>.json`. Public pages follow "Inputs" and "Near us".
+Read `scripts/enrich-check.ts` only if needed to diagnose a checker failure for those keys.
+Do not load the changelog, docs/19 history, other workflow protocols, or unrelated findings.
+
 ## Inputs
 
 - The batch, `data/real/enrich/batches/<batch>.jsonl`, cut by `scripts/enrich-batch.ts` with whole firms
@@ -10,7 +23,7 @@ The rules in force, amendments 1.1–1.49 folded in; `docs/19-enrichment-workflo
 - Once per batch, matched locally: pl.xyz's sitemap; PL Neuro's allies page (plneuro.xyz); W2n's
   directory list (`us/pl-directory.jsonl`); our portfolio and PL's documented backers
   (`us/network.json`).
-- `lib/enrich/schema.ts`; three finished findings in `raw/`, for shape and tone; AGENTS.md, "Real data".
+- `lib/enrich/schema.ts`; three launcher-named findings in `raw/`, for shape and tone; `docs/agent-rules/real-data.md`.
 
 ## Output
 
@@ -34,7 +47,7 @@ types, source kinds and capacity bands):
 
 ## Firm rules
 
-Verbatim, from AGENTS.md's "Real data" (CLAUDE.md imports it), amendment 1.48 and W1's protocol. They do
+Verbatim, from `docs/agent-rules/real-data.md` (linked from AGENTS.md, which CLAUDE.md imports), amendment 1.48 and W1's protocol. They do
 not bend.
 
 - A search may carry an LP's name with their organization, title, location and topic words, to read
@@ -482,10 +495,10 @@ for the person. A needs our own record of an interaction, which W1 never has.
 
 The `lp-researcher` agent. A local sub-agent may read a research batch under `data/real/enrich/` and
 write its findings back there; its prompt still carries no real data, and it never runs remotely. The
-launch names only the batch.
+launch names only the batch and the three example file paths, never their contents.
 
-1. Read, in full: this file; `lib/enrich/schema.ts`; AGENTS.md's "Real data"; three finished findings in
-   `data/real/enrich/raw/`, for shape and tone.
+1. Read, in full: this file; `lib/enrich/schema.ts`; `docs/agent-rules/real-data.md`; and the three
+   exact example paths named in the read set, for shape and tone.
 2. For each line of the batch, research with WebSearch and WebFetch and write `raw/<key>.json`, with
    `researched: { at: <now>, by: "claude (sub-agent)", workflow: "W1", version: "1.49", method }` and
    `scope: "firm"` on what is the firm's. Write only inside `data/real/enrich/raw/`; no git.

@@ -20,6 +20,11 @@ import { SHOT } from './shot-image';
 const ROOTS = ['app', 'components', 'lib', 'modules', 'config', 'scripts'];
 const DRIVERS = ['@electric-sql/pglite', "from 'pg'", 'from "pg"'];
 const AFFINITY = ['api.affinity.co', 'AFFINITY_API_KEY'];
+// The original harness exception follows only the three files that hold those checks.
+const AFFINITY_PROPERTIES = new Set([
+  'scripts/properties/affinity.ts', 'scripts/properties/affinity-notes.ts',
+  'scripts/properties/deployment.ts',
+]);
 
 async function walk(dir: string, out: string[] = []): Promise<string[]> {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -53,7 +58,7 @@ async function main() {
     }
 
     // The property harness is the one exception: it has to aim at the guard to test it.
-    if (!rel.startsWith(join('lib', 'connectors', 'affinity')) && rel !== 'scripts/boundaries.ts' && rel !== 'scripts/properties.ts') {
+    if (!rel.startsWith(join('lib', 'connectors', 'affinity')) && rel !== 'scripts/boundaries.ts' && !AFFINITY_PROPERTIES.has(rel)) {
       for (const needle of AFFINITY) {
         if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/affinity/ talks to Affinity`);
       }

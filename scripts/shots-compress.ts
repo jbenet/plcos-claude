@@ -1,10 +1,11 @@
 import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { encodeShot, SHOT } from './shot-image';
+import { changelogFiles } from '../lib/changelog';
 
 /**
  * Convert every PNG under docs/changelog/shots/ to the stored format, and point
- * CHANGELOG.md at the new names (issue 0021). Idempotent: with no PNG left it does nothing.
+ * changelog entries at the new names (issue 0021). Idempotent: with no PNG left it does nothing.
  *
  *   npm run shots:compress
  *
@@ -36,15 +37,18 @@ async function main() {
     after += image.length;
   }
 
-  const log = join(process.cwd(), 'CHANGELOG.md');
-  const text = await readFile(log, 'utf8');
-  // Only links into the screenshot folder change; a PNG named in prose is left alone.
-  const rewritten = text.replace(/(docs\/changelog\/shots\/[^)\s]+)\.png\)/g, `$1${SHOT.ext})`);
-  const links = (text.match(/docs\/changelog\/shots\/[^)\s]+\.png\)/g) ?? []).length;
-  if (rewritten !== text) await writeFile(log, rewritten);
+  let links = 0;
+  for (const file of await changelogFiles()) {
+    const log = join(process.cwd(), file);
+    const text = await readFile(log, 'utf8');
+    // Only links into the screenshot folder change; a PNG named in prose is left alone.
+    const rewritten = text.replace(/(docs\/changelog\/shots\/[^)\s]+)\.png\)/g, `$1${SHOT.ext})`);
+    links += (text.match(/docs\/changelog\/shots\/[^)\s]+\.png\)/g) ?? []).length;
+    if (rewritten !== text) await writeFile(log, rewritten);
+  }
 
   const mb = (n: number) => (n / 1024 / 1024).toFixed(1);
-  console.log(`converted ${pngs.length} screenshots · ${mb(before)} MB → ${mb(after)} MB · ${links} links rewritten in CHANGELOG.md`);
+  console.log(`converted ${pngs.length} screenshots · ${mb(before)} MB → ${mb(after)} MB · ${links} links rewritten in docs/changelog/entries/`);
   const big = [];
   for (const f of pngs.map((p) => p.replace(/\.png$/i, SHOT.ext))) {
     if ((await stat(f)).size > SHOT.maxBytes) big.push(relative(process.cwd(), f));

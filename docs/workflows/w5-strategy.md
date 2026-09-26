@@ -1,6 +1,22 @@
 # W5 — Strategy for an LP: fit, scores, angle, route, next step and ask, as a proposal for a person
 The rules in force, amendments 1.1–1.10 folded in; `docs/19-enrichment-workflows.md` keeps the design and the history.
 
+## Read set for a batch
+
+Read this protocol once, `AGENTS.md`, `docs/agent-rules/real-data.md`, `docs/agent-rules/domain.md`,
+`lib/enrich/strategy.ts`, `lib/enrich/capacity.ts`, and only the `capacity` block of
+`config/deployment.ts`. Read only "Recording workflow runs" in `docs/COLLAB.md` for bookkeeping.
+
+All private input paths below are relative to `data/real/enrich/`: the launch's
+`batches/<batch>.txt`; assigned firms' `raw/<key>.json` and `strategy/<key>.json`; their matching
+rows in `candidates.jsonl`, `connections.jsonl` and `triage.jsonl`; `us/team.json`, `us/network.json`
+(including the Neurotech portfolio), and `presence/site.json`. Include each firm's colleagues and
+lead even across batch keys. Use these finished strategies for shape and tone; the launcher must
+name an exact `data/real/enrich/strategy/<key>.json` path for any additional example.
+Read `scripts/enrich-check.ts` only to diagnose a checker failure for your keys.
+Do not load the changelog, docs/19 history, other workflow protocols, or unrelated firms' records.
+Reuse shared rules and inputs; re-read each firm's paths before writing as required below.
+
 ## Inputs
 
 For each key in the batch, `data/real/enrich/batches/<batch>.txt`:
@@ -14,10 +30,9 @@ For each key in the batch, `data/real/enrich/batches/<batch>.txt`:
   first; `restrictions`;
 - its paths in `connections.jsonl`, re-read just before writing each firm (it is regenerated as findings
   land); its line in `triage.jsonl`; its strategy and its colleagues', with their `made.revised`;
-- our side: `us/team.json`, `us/network.json`, `presence/site.json`, the Neurotech portfolio;
+- our side: `us/team.json`, `us/network.json`, `presence/site.json`, the Neurotech portfolio in `us/network.json`;
 - `lib/enrich/strategy.ts` (the shape), `lib/enrich/capacity.ts` and the `capacity` block of
-  `config/deployment.ts` (the size table and the angel floor); AGENTS.md's "Real data" and "Domain
-  rules".
+  `config/deployment.ts` (the size table and the angel floor); `docs/agent-rules/real-data.md` and `docs/agent-rules/domain.md`.
 
 ## Output
 
@@ -46,7 +61,7 @@ its `made.at`. `made.revised` lists each change made by rule after writing, with
 
 - A strategy is a proposal for a person, never a decision: it becomes a suggestion someone accepts or
   dismisses, never a status, a rung, money or a send. Nothing is sent without a person. Soft is soft
-  until signed (AGENTS.md, rule 1).
+  until signed (`docs/agent-rules/domain.md`, rule 1).
 - Never an inferred health reason, never pressure, never a claim the record doesn't carry. Our notes'
   readings arrive with health detail redacted and the redaction marked in the text ("[health detail
   redacted]"); nothing puts it back.
@@ -55,7 +70,7 @@ its `made.at`. `made.revised` lists each change made by rule after writing, with
   words.
 - No web (Juan, 25 Sep: the strategy writer rests on the findings). A fact that needs checking
   becomes an open question for the fact check (W1c), which has the web and its rules. Any request
-  made keeps to these, verbatim from AGENTS.md's "Real data" (CLAUDE.md imports it): A search may carry
+  made keeps to these, verbatim from `docs/agent-rules/real-data.md` (linked from AGENTS.md, which CLAUDE.md imports): A search may carry
   an LP's name with their organization, title, location and topic words, to read public pages. It never
   carries a status, an amount, a note, a list name, or the fact that they are in this pipeline. A
   request carries no identity of ours: no email, name or product name in any header — a User-Agent
@@ -256,13 +271,14 @@ think of more creative ideas to improve our strategy?" What it turns up becomes 
 
 ## Running W5 as a sub-agent
 
-The `strategy-writer` agent. Its prompt names only its batches and what the pass is for. A local
+The `strategy-writer` agent. Its prompt names only its batches, any additional example file paths, and what the pass is for. A local
 sub-agent may read a research batch under `data/real/enrich/` and write its findings back there; its
 prompt still carries no real data, and it never runs remotely.
 
 1. Read, in full: this file; `lib/enrich/strategy.ts` and `lib/enrich/capacity.ts`; the `capacity` block
-   of `config/deployment.ts`; AGENTS.md's "Real data" and "Domain rules"; the finished strategies in
-   `data/real/enrich/strategy/`.
+   of `config/deployment.ts`; `docs/agent-rules/real-data.md` and `docs/agent-rules/domain.md`;
+   the assigned firms' finished strategies and any exact example paths named by the launcher,
+   as scoped in the read set.
 2. For each key in the batch, read its inputs and write `strategy/<key>.json`. Write only inside
    `data/real/enrich/strategy/`; no git.
 3. Run the check and fix what it reports for your keys. Reply with counts (written, skipped; by list; by

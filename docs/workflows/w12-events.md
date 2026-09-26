@@ -8,6 +8,14 @@ person's tag on the LP's page stands over any of them. Only a record tagged with
 raise window, counts for that vehicle's pipeline and ladder; the rest are shown, labelled, and count for
 none.
 
+## Read set for a batch
+
+Read this protocol once, `AGENTS.md`, `docs/agent-rules/real-data.md`, and only "Recording workflow
+runs" in `docs/COLLAB.md`. The only private inputs are the assigned
+`data/real/tags/batches/<batch>.json` files; read your own `data/real/tags/out/<batch>.json` when
+resuming or fixing that output. Read `scripts/event-tag-merge.ts` only to diagnose `--check` failures.
+Do not load other real data, the changelog, docs/19 history or other workflow protocols.
+
 ## Inputs
 
 `data/real/tags/batches/tNN.json`, cut by `scripts/event-tag-batch.ts` from a copy of the database.

@@ -1,11 +1,23 @@
 # W1c — The fact check: re-read each fact's own source, and say whether it says what the fact says
 The rules in force; `docs/19-enrichment-workflows.md` keeps the design and the history (its W1c row, W1 1.26 and 1.46, and the log).
 
+## Read set for a batch
+
+Read this protocol once, `AGENTS.md`, `docs/agent-rules/real-data.md`, `lib/enrich/schema.ts`,
+and only "Facts" in `docs/workflows/w1-profile.md`. Read only "Recording workflow runs" in
+`docs/COLLAB.md` for run bookkeeping.
+
+The inputs are the exact batch file named by the launcher, if any, and the assigned
+`data/real/enrich/raw/<key>.json` files. Fetch only their cited URLs. The launcher names the exact
+`data/real/enrich/fact-review-<NN><part>.jsonl` output; read existing lines only when resuming it.
+Read `scripts/enrich-check.ts` only to diagnose checker failures after assigned corrections.
+Do not load the changelog, docs/19 history, other protocols, or unrelated findings.
+
 ## Inputs
 
 - The findings the launch names, `data/real/enrich/raw/<key>.json` (the shape: `lib/enrich/schema.ts`).
 - Only the URLs they cite: no search, no other page, no sign-in.
-- The standard each fact is held to: W1's rules for a fact, in `w1-profile.md`, "Facts".
+- The standard each fact is held to: W1's rules for a fact, in `docs/workflows/w1-profile.md`, "Facts".
 
 ## Output
 
@@ -24,7 +36,7 @@ fact, and never a verdict on an LP.
 
 ## Firm rules
 
-Verbatim, from AGENTS.md's "Real data" (CLAUDE.md imports it) and W1's rules:
+Verbatim, from `docs/agent-rules/real-data.md` (linked from AGENTS.md, which CLAUDE.md imports) and W1's rules:
 
 - A search may carry an LP's name with their organization, title, location and topic words, to read
   public pages. It never carries a status, an amount, a note, a list name, or the fact that they are in
@@ -105,7 +117,7 @@ The `fact-checker` agent, on a small model: the check is mechanical. A local sub
 research batch under `data/real/enrich/` and write its findings back there; its prompt still carries no
 real data, and it never runs remotely.
 
-1. Read this file, `lib/enrich/schema.ts`, and "Facts" in `w1-profile.md`.
+1. Read this file, `lib/enrich/schema.ts`, and "Facts" in `docs/workflows/w1-profile.md`.
 2. For each finding named, fetch only its cited URLs, grade every fact and the identity, and write one
    line to the review file named. Correct the findings only when the launch asks for that step.
 3. Write only the review file (and, when asked, those findings); no git.
