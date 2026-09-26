@@ -13,22 +13,21 @@ import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import { listAffiliations, listEntities } from '@/modules/identity';
 import { listAsks } from '@/modules/coordination';
-import { listAssessments, BLOCKER_SHORT } from '@/modules/fit';
+import { listAssessments, listFirmProfiles, FIRM_CLASS_LABEL, BLOCKER_SHORT } from '@/modules/fit';
 import { TargetPicker, type TargetRow } from '@/components/routes/TargetPicker';
 import { listSourceDocs, notesFor } from '@/modules/research';
 import { directContact, type DirectContact } from '@/modules/meetings';
 import { listVehicles } from '@/modules/platform';
-import { planRoutes, tierCounts, warmthReader, routePage, ROUTES_PER_PAGE, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
+import { planRoutes, tierCounts, warmthReader, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier } from '@/modules/network';
 import type { Path } from '@/lib/enrich/connect';
 import { buildNetworkAction } from './actions';
 import { listPursuits } from '@/modules/strategy';
+import { RouteSections } from '@/components/routes/RouteSections';
+import { RouteFilters } from '@/components/routes/RouteFilters';
+import { routeReading, routeSummaryFor, routeComparison } from '@/components/routes/route-display';
 import { provisionalScores } from '@/lib/strategy-score';
 
 export const dynamic = 'force-dynamic';
-
-const VERDICT_FLAG: Record<string, string> = {
-  recommend: 'f-ok', hold: 'f-ev', not_a_route: 'f-mute', excluded: 'f-block',
-};
 
 const TIERS: EvidenceTier[] = ['A', 'B', 'C', 'D'];
 
@@ -46,16 +45,16 @@ const OTHER_LABEL: Record<CandidatePath['other']['type'], string> = {
 export default async function Routes({
   searchParams,
 }: {
-  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string; expanded?: string; page?: string; family?: string }>;
+  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string; expanded?: string; page?: string; family?: string; exclude?: string; prefer?: string; warmth?: string; show?: string }>;
 }) {
   const selection = await vehicleSelection();
   const params = await searchParams;
   const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam, expanded, page, family } = params;
   const user = await (await auth()).currentUser();
-  const [tiers, vehicles, affiliations, fit, asks, team, pursuits] = await Promise.all([
+  const [tiers, vehicles, affiliations, fit, asks, team, pursuits, profiles] = await Promise.all([
     tierCounts(), listVehicles(),
     listAffiliations(), listAssessments(selection.current?.id ?? null),
-    listAsks(null), (await auth()).listUsers(), listPursuits(selection.current?.id ?? null),
+    listAsks(null), (await auth()).listUsers(), listPursuits(selection.current?.id ?? null), listFirmProfiles(),
   ]);
 
   // Targets worth showing (issues 0022–0023, real): the LPs in this pipeline and the organisations
@@ -107,7 +106,24 @@ export default async function Routes({
       .map((x) => ({ org: x.orgName, ...best.get(x.orgId)! }))
       .sort((a, b) => b.score - a.score)[0] ?? null;
     const reading = own ?? borrowedFrom;
+    const assessment = fit.find((a) => a.entityId === t.entityId);
+    const profile = profiles.find((p) => p.entityId === t.entityId);
+    const roles = affiliations.filter((a) => a.personId === t.entityId && a.current);
+    const founder = roles.find((a) => /\b(co[ -]?)?founder\b/i.test(a.role) && a.source);
+    const plRole = roles.find((a) => a.orgName === 'Protocol Labs' && a.source);
+    const familiar = assessment?.perceptions.filter((p) => ['familiar', 'deep'].includes(p.familiarity)) ?? [];
+    const amount = (n: number) => new Intl.NumberFormat('en-US', { notation: 'compact', style: 'currency', currency: 'USD', maximumFractionDigits: 1 }).format(n);
     return {
+      lpIcon: profile ? ({ individual: 'person', sfo: 'person', mfo: 'list', ria: 'chart', foundation: 'coin', endowment: 'folder', fof: 'coin', institution: 'folder', corporate: 'folder' } as const)[profile.firmClass] : t.entityType === 'person' ? 'person' : 'folder',
+      lpType: profile ? FIRM_CLASS_LABEL[profile.firmClass] : t.entityType,
+      checkBand: profile?.checkBandMin != null || profile?.checkBandMax != null
+        ? `${profile.checkBandMin != null ? amount(profile.checkBandMin) : '?'}–${profile.checkBandMax != null ? amount(profile.checkBandMax) : '?'}` : null,
+      signals: [
+        ...(founder ? [{ icon: 'status' as const, label: `Active founder role: ${founder.orgName}; ${founder.source}, ${shortDate(founder.asOf)} (${founder.certainty})` }] : []),
+        ...(founder && plRole ? [{ icon: 'link' as const, label: `Founder with recorded PL affiliation: ${plRole.source}, ${shortDate(plRole.asOf)} (${plRole.certainty})` }] : []),
+        ...familiar.filter((p) => p.subjectKind === 'firm' && p.subject === 'Protocol Labs').map((p) => ({ icon: 'eye' as const, label: `Familiar with PL: ${p.evidence}; ${p.source ?? 'assessment'}, ${shortDate(p.asOf)} (${p.certainty})` })),
+        ...familiar.filter((p) => p.subjectKind === 'thesis').map((p) => ({ icon: 'chart' as const, label: `Sector familiarity for ${selection.current?.name ?? 'this vehicle'}: ${p.subject}; ${p.evidence}; ${p.source ?? 'assessment'}, ${shortDate(p.asOf)} (${p.certainty})` })),
+      ],
       entityId: t.entityId,
       name: t.displayName,
       isPerson: t.entityType === 'person',
@@ -135,9 +151,26 @@ export default async function Routes({
   const shown = matched.slice(0, SHOWN);
   const currentRow = rows.find((t) => t.entityId === targetId);
   if (currentRow && !shown.includes(currentRow)) shown.unshift(currentRow);
-  const presentation = routePage(search?.routes ?? [], { expanded, page, selected: r, family });
-  const { shown: displayedRoutes, selected, alternatives } = presentation;
   const readWarmth = warmthReader();
+  const allRoutes = search?.routes ?? [];
+  const routeSummary = search ? routeSummaryFor(search) : null;
+  const intermediates = [...new Map(allRoutes.flatMap((route) => route.hops.slice(0, -1).map((h) => [h.toEntity, { id: h.toEntity, name: h.toName }] as const))).values()].sort((a, b) => a.name.localeCompare(b.name));
+  const minimumWarmth = [1, 2, 3, 4].includes(Number(params.warmth)) ? Number(params.warmth) : 0;
+  const preferred = (route: typeof allRoutes[number]) => route.hops.some((h) => {
+    if (params.prefer === 'coinvestor') return h.edge.kind === 'coinvestor';
+    if (params.prefer === 'family') return h.edge.kind === 'family';
+    if (params.prefer === 'cofounder') return h.edge.evidence.some((e) => e.tie?.kind === 'cofounder');
+    // Match explicit relationship records, never names or guessed proximity.
+    if (params.prefer === 'our_investor' && h.edge.evidence.some((e) => (e.tie as { withUs?: string } | undefined)?.withUs === 'investor')) return true;
+    const kinds: Record<string, string> = { our_investor: 'they_lp_in_us', existing_lp: 'they_lp_in_us', friend: 'personal' };
+    return Boolean(kinds[params.prefer ?? ''] && fit.some((a) => route.connectorIds.includes(a.entityId)
+      && a.links.some((l) => l.kind === kinds[params.prefer!] && (params.prefer !== 'friend' || (/friend/i.test(l.statement) && l.viaEntityId != null && [h.edge.fromEntity, h.edge.toEntity].includes(l.viaEntityId))))));
+  });
+  const { eligible, familyId, show, pageNumber, displayedRoutes, selected, alternatives } = routeComparison(allRoutes, {
+    expanded, family, selected: r, show: params.show, page, exclude: params.exclude, minimumWarmth,
+    lastWarmth: (route) => route.hops.length ? readWarmth(route.hops.at(-1)!.edge).score : 0,
+    preferred: (route) => Boolean(params.prefer) && preferred(route),
+  });
   const routeHref = (changes: Record<string, string | undefined>) => {
     const values = { ...params, target: targetId, ...changes };
     const query = new URLSearchParams(Object.entries(values).filter((entry): entry is [string, string] => entry[1] !== undefined));
@@ -255,21 +288,21 @@ export default async function Routes({
               </p>
             </div>
           )}
-          <div className="note">
-            No graph database. Two- and three-hop enumeration is a recursive CTE over
-            <code> network.link</code>, which is the edge table read in both directions.
-          </div>
+
         </>
       }
     >
+      <RouteSections>
       <div className="lbl">Module 05 · Warm intro routes</div>
       <h1>Routes to {targetName ?? '—'}</h1>
-      <p className="sublede">
-        Routes start with the team or PL. Evidence tiers and relationship warmth show how much
-        weight each path carries; C and D ties stay visible with their uncertainty labelled.
-        A restriction on the target still excludes the approach. Asks and sends need separate approval.
-
-      </p>
+      <p className="routes-lede">Team and PL routes · estimates carry uncertainty · asks and sends need separate approval.</p>
+      {routeSummary && <section className="route-stats" aria-label="Route strength summary">
+        <div><strong>{routeSummary.strong}</strong><span>Strong</span></div>
+        <div><strong>{routeSummary.promising}</strong><span>Promising</span></div>
+        <div><strong>{routeSummary.weak}</strong><span>Weak</span></div>
+        <div><strong>{routeSummary.unavailable}</strong><span>Held / unavailable</span></div>
+        <div className="route-confidence"><b>{routeSummary.confidence}</b><p>{routeSummary.basis}</p><small>Before filters · {allRoutes.length} paths recorded</small></div>
+      </section>}
 
       {targetTouch && (
         <p className="intouch">
@@ -363,18 +396,28 @@ export default async function Routes({
         </div>
       ) : (
         <>
-          <div className="card">
-            <div className="chead">
-              <h2>Routes in</h2>
-              <span className="lbl">
-                {displayedRoutes.length} shown · {presentation.first}–{presentation.last} of {presentation.eligibleCount} {presentation.family !== null ? 'in this route family' : expanded === '1' ? 'including alternatives' : 'main routes'} · {search.routes.length} recorded
-                <span style={{ display: 'block' }}>Evidence, warmth, then influence</span>
-                {presentation.family !== null && <> · <Link href={routeHref({ family: undefined, page: undefined, r: undefined })}>Back to ranked routes</Link></>}
-                {expanded === '1' && <> · <Link href={routeHref({ expanded: undefined, family: undefined, page: undefined, r: undefined })}>Fold redundant alternatives</Link></>}
-              </span>
-            </div>
+          <RouteFilters intermediates={intermediates} />
+          {familyId !== null && <p className="routes-lede">Viewing one route family · <Link href={routeHref({ family: undefined, page: undefined, r: undefined, show: undefined })}>Back to ranked routes</Link></p>}
+          {params.prefer && <p className="routes-lede">{eligible.filter((x) => preferred(x.route)).length} routes match the preferred relationship in the available records. Other routes remain below them.</p>}
+          <details className="card route-graph-section" open>
+            <summary>Route map <span className="muted">· {displayedRoutes.length} paths · one node per person</span></summary>
+            <RouteGraph routes={displayedRoutes.map(({ route }) => route)} fromName={search.fromName} targetName={search.targetName}
+              selected={Math.max(0, displayedRoutes.findIndex(({ index }) => index === selected))} routeIds={displayedRoutes.map((x) => x.index)} />
+          </details>
+          <div className="card route-comparison">
+            <div className="chead"><h2>Compare routes</h2><span className="lbl">{displayedRoutes.length} shown · {eligible.length} match</span></div>
+            <p className="route-comparison-key">Strength /100 · evidence tier · last-hop warmth /5 · open a row for evidence and actions</p>
+            {displayedRoutes.length === 0 && <p className="cbody">No recorded routes match these filters. Clear the excluded intermediate or lower the warmth minimum to inspect the available material.</p>}
             {displayedRoutes.map(({ route, index: i }) => (
-              <div key={i} className={`route${i === selected ? ' best' : ''}`}>
+              <details key={i} id={`route-${i}`} className="route-detail" open={r === String(i)}>
+                <summary className="route-comparison-row">
+                  <span className="route-score" title={routeReading(route).provisional ? 'Provisional influence / tier estimate; not probability' : 'Route strength'}>{routeReading(route).provisional ? '~' : ''}{routeReading(route).score}</span>
+                  <span className="route-chain">{route.fromName ?? search.fromName} → {route.hops.map((h) => h.toName).join(' → ')}</span>
+                  <span className={`tier t${route.weakestTier}`}>{route.weakestTier}</span>
+                  <span className="mono">{route.hops.length ? readWarmth(route.hops.at(-1)!.edge).score : '—'}/5</span>
+                  <span className="route-row-verdict">{VERDICT_LABEL[route.verdict]}</span>
+                </summary>
+              <div className={`route${i === selected ? ' best' : ''}`}>
                 <span className={`tier t${route.weakestTier}`}>{route.weakestTier}</span>
                 <div className="rt">
                   <RouteNames route={route} alternatives={(alternatives.get(i) ?? []).map((x) => x.route)} fromName={route.fromName ?? search.fromName} />
@@ -408,7 +451,7 @@ export default async function Routes({
                       {reason}
                     </p>
                   ))}
-                  {expanded !== '1' && presentation.family === null && alternatives.has(i) && (
+                  {expanded !== '1' && !family && alternatives.has(i) && (
                     <details>
                       <summary>{alternatives.get(i)!.length} alternative paths and evidence</summary>
                       <p>These paths share the same destination chain or add a weaker detour. Their evidence is retained.
@@ -450,41 +493,11 @@ export default async function Routes({
                     its width down the whole card was squeezing the sentences that
                     actually need the room. */}
                 <div className="rwide">
-                  {route.influence && (
-                    <div className="infl">
-                      <div className="inflhead">
-                        <span className="lbl">How much weight this carries</span>
-                        <span className="inflscore">{Math.round(route.influence.score * 100)}</span>
-                      </div>
-                      {/* The label with its number, the bar under it, the reason beside
-                          both. Reading a bar and then hunting for its sentence somewhere
-                          below is work nobody does. */}
-                      <table className="inflt">
-                        <tbody>
-                          {route.influence.components.map((c) => (
-                            <tr key={c.key}>
-                              <th scope="row">
-                                <span className="ilab">
-                                  {c.label}
-                                  <span className="inum mono">
-                                    {Math.round(c.score * 100)}
-                                    <small>w{Math.round(c.weight * 100)}</small>
-                                  </span>
-                                </span>
-                                <span className="ib">
-                                  <i style={{ width: `${Math.round(c.score * 100)}%` }} />
-                                </span>
-                              </th>
-                              <td className="iwhy">{c.basis}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <p className="theask">
-                        <b>The ask to make.</b> {route.influence.theAsk}
-                      </p>
-                    </div>
-                  )}
+                  {routeReading(route).factors.length > 0 && <div className="infl">
+                    <div className="inflhead"><span className="lbl">{routeReading(route).provisional ? 'Provisional influence factors' : 'Route score factors'}</span><span className="inflscore">{routeReading(route).score}</span></div>
+                    <table className="inflt"><tbody>{routeReading(route).factors.map((f, index) => <tr key={index}><th scope="row">{f.label} <span className="mono">{f.value}</span></th><td className="iwhy">{f.basis}</td></tr>)}</tbody></table>
+                    {route.influence && <p className="theask"><b>The ask to make.</b> {route.influence.theAsk}</p>}
+                  </div>}
                   {(route.verdict === 'recommend' || route.verdict === 'hold') && (
                     (() => {
                       const carrier = route.connectorIds[route.connectorIds.length - 1] ?? null;
@@ -504,12 +517,14 @@ export default async function Routes({
                   )}
                 </div>
               </div>
+              </details>
             ))}
-            {presentation.pages > 1 && <nav aria-label="Route pages" style={{ padding: 16, display: 'flex', gap: 16 }}>
-              {presentation.page > 0 && <Link href={routeHref({ page: String(presentation.page - 1), r: undefined })}>Previous {ROUTES_PER_PAGE} routes</Link>}
-              <span>Page {presentation.page + 1} of {presentation.pages}</span>
-              {presentation.page + 1 < presentation.pages && <Link href={routeHref({ page: String(presentation.page + 1), r: undefined })}>Show next {Math.min(ROUTES_PER_PAGE, presentation.eligibleCount - presentation.last)} routes</Link>}
-            </nav>}
+            <nav className="route-more" aria-label="More routes">
+              {show < 80 && pageNumber * 80 + displayedRoutes.length < eligible.length && <Link href={routeHref({ show: String(show + 8), r: undefined })}>Show more routes (+{Math.min(8, eligible.length - pageNumber * 80 - show)})</Link>}
+              {show > 8 && <Link href={routeHref({ show: '8', r: undefined })}>Show fewer</Link>}
+              {pageNumber > 0 && <Link href={routeHref({ page: String(pageNumber - 1), r: undefined })}>Previous routes</Link>}
+              {show === 80 && (pageNumber + 1) * 80 < eligible.length && <Link href={routeHref({ page: String(pageNumber + 1), r: undefined })}>Next routes</Link>}
+            </nav>
             <Coverage
               corpus={`${search.coverage.edges} relationship edges, up to ${search.coverage.maxHops} hops`}
               from={search.coverage.from ? shortDate(search.coverage.from) : null}
@@ -518,36 +533,14 @@ export default async function Routes({
             />
           </div>
 
-          <div className="card">
-            <div className="chead">
-              <h2>The same paths, drawn</h2>
-              <span className="lbl">equal presentation, not a fallback</span>
-            </div>
-            <div className="cbody">
-              <RouteGraph
-                routes={displayedRoutes.map(({ route }) => route)}
-                fromName={search.fromName}
-                targetName={search.targetName}
-                selected={Math.max(0, displayedRoutes.findIndex(({ index }) => index === selected))}
-              />
-            </div>
-            <p className="cover">
-              The list above is the primary view: it is keyboard-navigable, it carries every hop&rsquo;s
-              tier and evidence, and it says why each verdict was reached. This drawing adds shape and
-              nothing else. Dashed lines are paths that cannot be used.
-            </p>
-          </div>
         </>
       )}
 
-      {targetId && <ConnectionFeedback key={targetId} lp={targetId} />}
+      {targetId && <details className="card route-aux"><summary>Connection feedback</summary><ConnectionFeedback key={targetId} lp={targetId} /></details>}
 
       {candidates.length > 0 && (
-        <div className="card nearcard">
-          <div className="chead">
-            <h2>Near them, from the research</h2>
-            <span className="lbl">{candidates.length} candidate {candidates.length === 1 ? 'path' : 'paths'} · outside the imported routes</span>
-          </div>
+        <details className="card nearcard route-aux">
+          <summary>Near them, from the research · {candidates.length} candidate {candidates.length === 1 ? 'path' : 'paths'}</summary>
           <div className="cbody">
             {candidates.slice(0, 12).map((x, i) => (
               <div className="pp-path" key={i}>
@@ -568,15 +561,12 @@ export default async function Routes({
             These remaining candidates are not connected to a route source in the imported graph.
             C and D ties route with labelled uncertainty (rule 6). Not found here means not found by the research.
           </p>
-        </div>
+        </details>
       )}
 
       {inTouchNearby.length > 0 && (
-        <div className="card nearcard">
-          <div className="chead">
-            <h2>{isPerson ? 'At their firm, in touch with the team' : 'There, in touch with the team'}</h2>
-            <span className="lbl">{inTouchNearby.length} {inTouchNearby.length === 1 ? 'person' : 'people'} · our own records</span>
-          </div>
+        <details className="card nearcard route-aux">
+          <summary>{isPerson ? 'At their firm, in touch with the team' : 'There, in touch with the team'} · {inTouchNearby.length} people</summary>
           <div className="cbody">
             {inTouchNearby.slice(0, 8).map((x) => (
               <div className="pp-path" key={x.id}>
@@ -589,8 +579,9 @@ export default async function Routes({
           <p className="cover">
             A meeting held or word from them, by the team&rsquo;s own record. {isPerson ? 'Working at the same firm is a shared affiliation, not proof that they speak (tier C): someone who knows both should say whether an introduction through them makes sense.' : 'Whoever the team deals with there is the natural way in.'}
           </p>
-        </div>
+        </details>
       )}
+      </RouteSections>
     </Page>
   );
 }

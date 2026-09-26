@@ -1,115 +1,56 @@
+'use client';
+
+import { useState } from 'react';
 import type { Route } from '@/modules/network/client';
+import { VERDICT_LABEL } from '@/modules/network/client';
+import { routeGraphLayout, routeNodeIds, routeReading } from './route-display';
 
-const VERDICT_COLOR: Record<string, string> = {
-  recommend: 'var(--green)',
-  hold: 'var(--amber)',
-  not_a_route: '#B8B2A6',
-  excluded: 'var(--clay)',
-};
-
-/**
- * The canvas. It is the second presentation, not the first — the path list beside it
- * carries the same information, is keyboard-navigable, and is what this screen is
- * designed around. Selecting a path in either one highlights it in both.
- */
-export function RouteGraph({
-  routes, fromName, targetName, selected,
-}: {
-  routes: Route[];
-  fromName: string;
-  targetName: string;
-  selected: number;
+/** Shared entity nodes; every drawn route has an adjacent keyboard-accessible disclosure. */
+export function RouteGraph({ routes, fromName, targetName, selected, routeIds }: {
+  routes: Route[]; fromName: string; targetName: string; selected: number; routeIds?: number[];
 }) {
-  const multipleSources = new Set(routes.map((r) => r.fromEntity ?? fromName)).size > 1;
-  const maxHops = Math.max(1, ...routes.map((r) => r.hops.length));
-  const colX = (i: number) => 76 + (i * 480) / maxHops;
-  const rowY = (i: number) => 44 + i * 64;
-  const height = Math.max(180, rowY(routes.length - 1) + 44);
-  const targetX = colX(maxHops);
-
-  return (
-    <svg
-      viewBox={`0 0 660 ${height}`}
-      width="100%"
-      height={height}
-      role="img"
-      aria-label={`Route graph from ${fromName} to ${targetName}. The path list beside this carries the same information.`}
-      style={{ display: 'block' }}
-    >
-      {!multipleSources && <><text x={8} y={rowY(Math.floor((routes.length - 1) / 2)) + 4} className="gn gme" fontSize="11">
-        {routes[0]?.fromName ?? fromName}
-      </text>
-      <circle cx={58} cy={rowY(Math.floor((routes.length - 1) / 2))} r={5} fill="var(--ink)" /></>}
-
-      {routes.map((route, ri) => {
-        const y = rowY(ri);
-        const on = ri === selected;
-        const colour = VERDICT_COLOR[route.verdict] ?? 'var(--muted)';
-        const mid = rowY(Math.floor((routes.length - 1) / 2));
-        const points = [
-          { x: 58, y: multipleSources ? y : mid },
-          ...route.hops.slice(0, -1).map((_, i) => ({ x: colX(i + 1), y })),
-          { x: targetX, y: mid },
-        ];
-        return (
-          <g key={ri} opacity={on ? 1 : 0.42}>
-              {multipleSources && <><text x={8} y={y - 8} fontSize="9" fill="var(--ink)">{route.fromName ?? fromName}</text><circle cx={58} cy={y} r={5} fill="var(--ink)" /></>}
-            {points.slice(0, -1).map((p, i) => {
-              const q = points[i + 1]!;
-              const hop = route.hops[i];
-              return (
-                <g key={i}>
-                  <path
-                    d={`M ${p.x} ${p.y} C ${(p.x + q.x) / 2} ${p.y}, ${(p.x + q.x) / 2} ${q.y}, ${q.x} ${q.y}`}
-                    fill="none"
-                    stroke={colour}
-                    strokeWidth={on ? 2 : 1.25}
-                    strokeDasharray={route.verdict === 'not_a_route' || route.verdict === 'excluded' ? '4 3' : undefined}
-                  />
-                  {hop && (
-                    <text
-                      x={(p.x + q.x) / 2}
-                      y={(p.y + q.y) / 2 - 5}
-                      textAnchor="middle"
-                      fontFamily="var(--mono)"
-                      fontSize="9"
-                      fill={colour}
-                    >
-                      {hop.edge.tier}
-                    </text>
-                  )}
-                </g>
-              );
-            })}
-            {route.hops.slice(0, -1).map((hop, i) => (
-              <g key={hop.edge.edgeId}>
-                <circle cx={colX(i + 1)} cy={y} r={on ? 5 : 4} fill={colour} />
-                <text
-                  x={colX(i + 1)}
-                  y={y - 11}
-                  textAnchor="middle"
-                  fontFamily="var(--sans)"
-                  fontSize="10.5"
-                  fill="var(--ink)"
-                >
-                  {hop.toName}
-                </text>
-              </g>
-            ))}
-          </g>
-        );
-      })}
-
-      <circle cx={targetX} cy={rowY(Math.floor((routes.length - 1) / 2))} r={6} fill="var(--clay)" />
-      <text
-        x={targetX + 12}
-        y={rowY(Math.floor((routes.length - 1) / 2)) + 4}
-        fontFamily="var(--sans)"
-        fontSize="11"
-        fill="var(--ink)"
-      >
-        {targetName}
-      </text>
-    </svg>
-  );
+  const [hovered, setHovered] = useState<number | null>(null);
+  const { nodes, height, width } = routeGraphLayout(routes);
+  const positions = new Map(nodes.map((n) => [n.id, n]));
+  const active = hovered === null ? null : routes[hovered];
+  const activeReading = active ? routeReading(active) : null;
+  return <div className="route-map" onMouseLeave={() => setHovered(null)} onKeyDown={(e) => { if (e.key === 'Escape') setHovered(null); }}>
+    <div className="route-map-scroll">
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} aria-label={`Routes to ${targetName}. One node per person. Full details in the comparison list.`}>
+        {routes.map((route, ri) => {
+          const points = routeNodeIds(route).map((id) => positions.get(id)!);
+          const reading = routeReading(route);
+          const unavailable = route.verdict !== 'recommend';
+          const strong = !unavailable && reading.band === 'strong';
+          const on = ri === (hovered ?? selected);
+          const colour = unavailable ? 'var(--muted)' : strong ? 'var(--green)' : 'var(--accent)';
+          // Separate overlapping paths slightly so each route remains individually hoverable.
+          const d = points.slice(0, -1).map((p, i) => {
+            const q = points[i + 1]!;
+            const bend = (ri - (routes.length - 1) / 2) * 7;
+            return `M ${p.x} ${p.y} C ${(p.x + q.x) / 2} ${p.y + bend}, ${(p.x + q.x) / 2} ${q.y + bend}, ${q.x} ${q.y}`;
+          }).join(' ');
+          return <a key={ri} href={`#route-${routeIds?.[ri] ?? ri}`} aria-label={`Route ${ri + 1}: ${route.fromName ?? fromName} → ${route.hops.map((h) => h.toName).join(' → ')}. Strength ${reading.score}, ${VERDICT_LABEL[route.verdict]}. Inspect in list.`}
+            onMouseEnter={() => setHovered(ri)} onFocus={() => setHovered(ri)} onBlur={() => setHovered(null)}
+            onClick={() => { const detail = document.getElementById(`route-${routeIds?.[ri] ?? ri}`); if (detail instanceof HTMLDetailsElement) detail.open = true; }}>
+            <path d={d} fill="none" stroke={colour} strokeWidth={1 + reading.score / 22} opacity={hovered !== null && !on ? 0.18 : on ? 1 : 0.65}
+              strokeDasharray={unavailable ? '5 4' : undefined} />
+            <path d={d} fill="none" stroke="transparent" strokeWidth={14} />
+          </a>;
+        })}
+        {nodes.map((n) => <g key={n.id} data-entity={n.id} pointerEvents="none">
+          <circle cx={n.x} cy={n.y} r={5} fill="var(--surface)" stroke="var(--ink)" strokeWidth={2} />
+          <text x={n.x} y={n.y - 13} textAnchor="middle" fill="var(--ink)" fontSize="11" fontFamily="var(--sans)" paintOrder="stroke" stroke="var(--surface)" strokeWidth={4}>{n.name}</text>
+        </g>)}
+      </svg>
+    </div>
+    {active && activeReading && <div className="route-hover" role="status">
+      <b>{active.fromName ?? fromName} → {active.hops.map((h) => h.toName).join(' → ')}</b>
+      <p>{VERDICT_LABEL[active.verdict]} · {activeReading.score}/100 {activeReading.provisional ? 'provisional strength' : 'strength'} · tier {active.weakestTier}</p>
+      <p>{active.reasons.join(' ')}</p>
+      {activeReading.factors.slice(0, 3).map((f, i) => <p key={i}>{f.label}: {f.value} · {f.basis}</p>)}
+      <small>Activate the path to open its evidence in the list. Escape dismisses this card.</small>
+    </div>}
+    <p className="route-map-key">Thicker = stronger estimate · strong routes highlighted · dashed = held or unavailable. Hover or focus a path for details.</p>
+  </div>;
 }
