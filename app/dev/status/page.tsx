@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -18,7 +19,7 @@ import { listConflicts } from '@/modules/coordination';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Status() {
+async function Status() {
   const [db, a, sink, ag, sources, signals, held, breaker, wrongWrap, pools, conflicts] =
     await Promise.all([
       getDb(), auth(), issueSink(), agent(), listSyncSources(), allSignals(), heldBack(),
@@ -218,3 +219,5 @@ export default async function Status() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/status', Status);

@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { PrefsReset } from '@/components/shell/PrefsReset';
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic';
  * was configured with, including nine constants labelled as guesses. Putting a theme
  * picker next to a circuit-breaker threshold would have been a category error.
  */
-export default async function Preferences() {
+async function Preferences() {
   const a = await auth();
   const user = await a.currentUser();
 
@@ -101,3 +102,5 @@ export default async function Preferences() {
     </Page>
   );
 }
+
+export default coalescePage('/settings', Preferences);

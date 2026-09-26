@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -22,7 +23,7 @@ import { withForegroundDb } from '@/lib/db/scheduling';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Today() {
+async function Today() {
   return withForegroundDb(await getDb(), todayContent);
 }
 
@@ -351,3 +352,5 @@ async function todayContent() {
     </Page>
   );
 }
+
+export default coalescePage('/today', Today);

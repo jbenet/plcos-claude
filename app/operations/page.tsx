@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic';
  * of any one vehicle. Conflicts between vehicles, connector goodwill spent across all of
  * them, the calendar everyone shares, and the budget one actor has for all of us.
  */
-export default async function Operations() {
+async function Operations() {
   const [asks, conflicts, load, restrictions, weeks, urgencyState, cycles, alerts, pools] =
     await Promise.all([
       listAsks(), listConflicts(), connectorLoad(), listRestrictions(),
@@ -199,3 +200,5 @@ export default async function Operations() {
     </Page>
   );
 }
+
+export default coalescePage('/operations', Operations);

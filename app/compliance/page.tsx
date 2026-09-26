@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
@@ -10,7 +11,7 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-export default async function Compliance() {
+async function Compliance() {
   const selection = await vehicleSelection();
   const [accreditation, claims, solicitations, letters] = await Promise.all([
     listAccreditation(), listPublicClaims(), listSolicitations(), listSideLetters(),
@@ -266,3 +267,5 @@ export default async function Compliance() {
     </Page>
   );
 }
+
+export default coalescePage('/compliance', Compliance);

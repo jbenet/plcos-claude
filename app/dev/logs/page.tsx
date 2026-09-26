@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { ago, shortDate } from '@/lib/time';
@@ -5,7 +6,7 @@ import { auditLog } from '@/modules/platform';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Logs() {
+async function Logs() {
   const rows = await auditLog(300);
   const byAction = new Map<string, number>();
   for (const r of rows) byAction.set(r.action, (byAction.get(r.action) ?? 0) + 1);
@@ -85,3 +86,5 @@ export default async function Logs() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/logs', Logs);

@@ -1,10 +1,11 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 
 export const dynamic = 'force-dynamic';
 
-export default async function PlNeuro() {
+async function PlNeuro() {
   return (
     <Page
       crumbs={[{ label: SECTION.rnd }, { label: 'PL Neuro' }]}
@@ -52,3 +53,5 @@ export default async function PlNeuro() {
     </Page>
   );
 }
+
+export default coalescePage('/rnd/neuro', PlNeuro);

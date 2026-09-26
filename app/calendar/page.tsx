@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { SprintStrip } from '@/components/calendar/SprintStrip';
@@ -10,7 +11,7 @@ const KIND_FLAG: Record<string, string> = {
   sprint: 'f-mute', holiday: 'f-ev', dead_zone: 'f-block', milestone: 'f-ok',
 };
 
-export default async function Calendar() {
+async function Calendar() {
   const [weeks, periods, urgencyState] = await Promise.all([
     sprintStrip(18), listPeriods(), urgency(),
   ]);
@@ -119,3 +120,5 @@ export default async function Calendar() {
     </Page>
   );
 }
+
+export default coalescePage('/calendar', Calendar);

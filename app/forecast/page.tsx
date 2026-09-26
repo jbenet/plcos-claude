@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { usdM, multiple } from '@/lib/money';
@@ -6,7 +7,7 @@ import { poolChecks, vehicleTotals } from '@/modules/pipeline';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Forecast() {
+async function Forecast() {
   const [totals, pools] = await Promise.all([vehicleTotals(), poolChecks()]);
   const over = pools.filter((p) => p.status === 'over');
   const unverified = pools.filter((p) => p.status === 'unverified');
@@ -235,3 +236,5 @@ export default async function Forecast() {
     </Page>
   );
 }
+
+export default coalescePage('/forecast', Forecast);

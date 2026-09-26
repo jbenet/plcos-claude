@@ -1,9 +1,10 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { Coverage } from '@/components/ui/Coverage';
-import { listEntities } from '@/modules/identity';
-import { claimCounts, corpusCoverage, listSourceDocs, unverifiedCount, weaklySupportedCount } from '@/modules/research';
+import { countEntities, listEntityPreview } from '@/modules/identity';
+import { activeClaimCount, claimCounts, corpusCoverage, unverifiedCount, weaklySupportedCount } from '@/modules/research';
 import { listSyncSources } from '@/modules/platform';
 import { shortDate } from '@/lib/time';
 
@@ -14,16 +15,19 @@ const TYPE_LABEL: Record<string, string> = {
   foundation: 'Foundation', vehicle: 'Vehicle',
 };
 
-export default async function Research() {
-  const [entities, counts, coverage, docs, unverified, weak, sources] = await Promise.all([
-    listEntities(),
-    claimCounts(),
+async function Research() {
+  const limit = 100;
+  const [entities, entityCount, claimCount, coverage, unverified, weak, sources] = await Promise.all([
+    listEntityPreview([], limit),
+    countEntities(),
+    activeClaimCount(),
     corpusCoverage(),
-    listSourceDocs(),
     unverifiedCount(),
     weaklySupportedCount(),
     listSyncSources(),
   ]);
+
+  const counts = await claimCounts(entities.map((entity) => entity.entityId));
 
   const notInspected = sources
     .filter((s) => s.status === 'not_connected' && s.source !== 'seed')
@@ -57,7 +61,7 @@ export default async function Research() {
             Read the corpus
           </Link>
           <div className="note">
-            {docs.filter((d) => d.strength === 'weak').length} of {docs.length} documents are weak
+            {coverage.byStrength.find((entry) => entry.strength === 'weak')?.n ?? 0} of {coverage.documents} documents are weak
             evidence. They are kept, labelled, and never allowed to carry a claim on their own.
           </div>
         </>
@@ -74,12 +78,12 @@ export default async function Research() {
       <div className="kpis">
         <div className="kpi">
           <span className="tag t-plain">Entities</span>
-          <div className="n">{entities.length}</div>
+          <div className="n">{entityCount}</div>
           <div className="f">Surrogate ids, minted once. A merge redirects; ids are never reused.</div>
         </div>
         <div className="kpi">
           <span className="tag t-plain">Claims on file</span>
-          <div className="n">{[...counts.values()].reduce((a, b) => a + b, 0)}</div>
+          <div className="n">{claimCount}</div>
           <div className="f">Each one carries a full provenance tuple or it does not exist.</div>
         </div>
         <div className="kpi">
@@ -99,7 +103,7 @@ export default async function Research() {
       <div className="card">
         <div className="chead">
           <h2>The universe</h2>
-          <span className="lbl">{entities.length} entities · seed corpus</span>
+          <span className="lbl">First {entities.length} of {entityCount} entities · ordered by name · limit {limit}</span>
         </div>
         <table className="list">
           <thead>
@@ -133,7 +137,7 @@ export default async function Research() {
           </tbody>
         </table>
         <Coverage
-          corpus={`${coverage.documents} seed source documents`}
+          corpus={`${coverage.documents} source documents on file`}
           from={coverage.from ? shortDate(coverage.from) : null}
           to={coverage.to ? shortDate(coverage.to) : null}
           notInspected={notInspected}
@@ -142,3 +146,5 @@ export default async function Research() {
     </Page>
   );
 }
+
+export default coalescePage('/research', Research);

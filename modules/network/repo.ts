@@ -131,7 +131,44 @@ export async function enumeratePathsFromSources(
     new Set([...sourceOnlyEntities, ...excluded.map((row) => row.entity_id)].map(canonical)));
 }
 
-async function edgeSummary() { return graphSnapshot(await getDb()); }
+// Counts do not need a 437K-edge adjacency graph. Cache only four aggregate rows,
+// under the same graph revision/date as graphSnapshot (never page contents).
+const summaries = new WeakMap<Db, { key: string; value: Promise<{
+  coverage: { edges: number; from: Date | null; to: Date | null };
+  tiers: Array<{ tier: EvidenceTier; n: number; reviewed: number }>;
+}> }>();
+async function edgeSummary(): Promise<{ coverage: { edges: number; from: Date | null; to: Date | null }; tiers: Array<{ tier: EvidenceTier; n: number; reviewed: number }> }> {
+  const db = await getDb();
+  const key = (await db.one<{ key: string }>(`select revision::text || ':' || current_date::text as key
+    from network.edge_revision where singleton`))!.key;
+  const prior = summaries.get(db);
+  if (prior?.key === key) return prior.value;
+  const value = (async () => {
+    const rows = await db.query<{ tier: EvidenceTier; n: number; reviewed: number; since: string | null; until: string | null }>(`
+      with totals as (
+        select tier::text tier, count(*)::int n, count(reviewed_by)::int reviewed,
+          min(valid_from)::text since, max(coalesce(valid_to,current_date))::text until
+        from network.edge group by tier
+        union all
+        select 'D', count(*)::int, 0, min(created_at)::text, current_date::text
+        from identity.possible_match
+        where active and identity.canonical_entity_id(left_entity) <> identity.canonical_entity_id(right_entity)
+      ) select tier, sum(n)::int n, sum(reviewed)::int reviewed,
+          min(since::timestamptz)::text since, max(until::timestamptz)::text until
+        from totals where n > 0 group by tier order by tier limit 4`);
+    const dates = rows.flatMap(r => r.since ? [new Date(r.since).getTime()] : []);
+    const ends = rows.flatMap(r => r.until ? [new Date(r.until).getTime()] : []);
+    const current = (await db.one<{ key: string }>(`select revision::text || ':' || current_date::text as key
+      from network.edge_revision where singleton`))!.key;
+    if (current !== key) return edgeSummary();
+    return { coverage: { edges: rows.reduce((n,r) => n+r.n,0),
+      from: dates.length ? new Date(Math.min(...dates)) : null,
+      to: ends.length ? new Date(Math.max(...ends)) : null },
+      tiers: rows.map(({ tier,n,reviewed }) => ({ tier,n,reviewed })) };
+  })();
+  summaries.set(db,{ key,value });
+  try { return await value; } catch(error) { if (summaries.get(db)?.value === value) summaries.delete(db); throw error; }
+}
 
 export async function edgeCoverage() {
   return (await edgeSummary()).coverage;
@@ -204,4 +241,49 @@ export async function routeTouchesChanges(targetId: string, changedIds: string[]
     }
   }
   return false;
+}
+
+const WANTED = `with recursive wanted(id) as (
+  select identity.canonical_entity_id(id) from unnest($1::uuid[]) id
+  union select e.entity_id from identity.entity e join wanted w on e.merged_into = w.id
+)`;
+async function edgeIdsForEntities(ids: string[], limit: number): Promise<string[]> {
+  if (!ids.length) return [];
+  const rows = await (await getDb()).query<{ edge_id: string }>(`${WANTED}
+    select edge_id from (
+      select e.edge_id from wanted w cross join lateral (select edge_id from network.edge where from_entity = w.id order by edge_id limit $2) e
+      union select e.edge_id from wanted w cross join lateral (select edge_id from network.edge where to_entity = w.id order by edge_id limit $2) e
+      union select edge_id from identity.possible_match where active and left_entity in(select id from wanted)
+      union select edge_id from identity.possible_match where active and right_entity in(select id from wanted)
+    ) edges order by edge_id limit $2`, [ids, limit]);
+  return rows.map(r => r.edge_id);
+}
+/** Detail panels load a bounded neighborhood, never every edge's full evidence. */
+export async function listEdgesForEntities(ids: string[], limit = 100): Promise<Edge[]> {
+  return [...(await edgesByIds(await edgeIdsForEntities(ids, Math.max(1, Math.min(1000, limit))))).values()];
+}
+export async function edgeCountsForEntities(ids: string[]): Promise<Map<string, number>> {
+  if (!ids.length) return new Map();
+  const rows = await (await getDb()).query<{ id: string; n: number }>(`with recursive wanted(id,root) as (
+    select identity.canonical_entity_id(id), identity.canonical_entity_id(id) from unnest($1::uuid[]) id
+    union select e.entity_id,w.root from identity.entity e join wanted w on e.merged_into = w.id
+  ), endpoints as (
+    select w.root id,e.edge_id from wanted w cross join lateral (select edge_id from network.edge where from_entity = w.id offset 0) e
+    union select w.root,e.edge_id from wanted w cross join lateral (select edge_id from network.edge where to_entity = w.id offset 0) e
+    union select w.root,p.edge_id from identity.possible_match p join wanted w on p.left_entity = w.id where p.active
+      and identity.canonical_entity_id(p.left_entity) <> identity.canonical_entity_id(p.right_entity)
+    union select w.root,p.edge_id from identity.possible_match p join wanted w on p.right_entity = w.id where p.active
+      and identity.canonical_entity_id(p.left_entity) <> identity.canonical_entity_id(p.right_entity)
+  ) select id::text, count(*)::int n from endpoints group by id limit 2000`, [ids]);
+  return new Map(rows.map(r => [r.id,r.n]));
+}
+export async function listEdgeSummariesForEntities(ids: string[], limit = 1000) {
+  limit = Math.min(1000,Math.max(1,limit));
+  const keys = await edgeIdsForEntities(ids, limit + 1);
+  if (!keys.length) return { edges: [], truncated: false };
+  const db = await getDb();
+  const select = EDGE_SELECT.replace('e.evidence,', "'[]'::jsonb as evidence,");
+  const rows = await db.query<EdgeRow>(`${select} where e.edge_id = any($1::uuid[])
+    union all ${POSSIBLE_SELECT} and p.edge_id = any($1::uuid[])`, [keys.slice(0,limit)]);
+  return { edges: rows.map(toEdge), truncated: keys.length > limit };
 }

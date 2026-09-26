@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { redirect } from 'next/navigation';
 
 /**
@@ -5,7 +6,9 @@ import { redirect } from 'next/navigation';
  * module's view of them. The old URL is kept because links to it exist in earlier
  * changelog entries and in issues filed against it.
  */
-export default async function MovedDossier({ params }: { params: Promise<{ id: string }> }) {
+async function MovedDossier({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   redirect(`/orgs/${id}`);
 }
+
+export default coalescePage('/research/[id]', MovedDossier);

@@ -3,6 +3,8 @@ import { headers } from 'next/headers';
 import { config } from '@/config/deployment';
 import { feedbackHome } from '@/config/ports';
 import { auth } from '@/lib/auth';
+import { isDbBusy } from '@/lib/db/scheduling';
+import { shareRequestWork } from '@/lib/page-render';
 import { issues as issueSink } from '@/lib/issues';
 import { vehicleSelection } from '@/lib/session';
 import { ticketCounts } from '@/modules/governance';
@@ -11,6 +13,21 @@ import { UserSwitcher } from './UserSwitcher';
 import { FeedbackButton } from './FeedbackBox';
 
 export async function Rail() {
+  try { return await shareRequestWork('shell:Rail', {}, LoadedRail); }
+  catch (error) {
+    if (!isDbBusy(error)) throw error;
+    return <nav className="rail" aria-label="Navigation unavailable">
+      <div role="alert" style={{ padding: 20 }}>
+        <p>The server is busy, try again.</p>
+        <p>Navigation could not load. You can still file feedback.</p>
+        <a className="btn" href="">Try again</a>
+      </div>
+      <div className="railfoot"><FeedbackButton variant="rail" profile={config.data.profile} home={feedbackHome(config.data.profile)} /></div>
+    </nav>;
+  }
+}
+
+async function LoadedRail() {
   const a = await auth();
   // The address the browser asked for, when the proxy rewrote it (proxy.ts, ASKED_PATH).
   const asked = (await headers()).get('x-asked-path');

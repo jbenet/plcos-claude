@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
@@ -16,7 +17,7 @@ const PACK_FLAG: Record<string, string> = {
   not_sent: 'f-mute', sent: 'f-ev', returned: 'f-ev', countersigned: 'f-ok',
 };
 
-export default async function CloseRoom() {
+async function CloseRoom() {
   const selection = await vehicleSelection();
   const cycles = await listCycles();
   const cycle = cycles[0];
@@ -220,3 +221,5 @@ export default async function CloseRoom() {
     </Page>
   );
 }
+
+export default coalescePage('/close', CloseRoom);

@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -24,7 +25,7 @@ async function guardFor(ticket: ApprovalTicket): Promise<GuardReport | null> {
   return evaluateGuards({ entityId: ask.entityId, connectorId: ask.connectorId, vehicleId: ask.vehicleId });
 }
 
-export default async function Approvals({
+async function Approvals({
   searchParams,
 }: {
   searchParams: Promise<{ t?: string; view?: string; approved?: string; rejected?: string; failed?: string }>;
@@ -317,3 +318,5 @@ export default async function Approvals({
     </Page>
   );
 }
+
+export default coalescePage('/approvals', Approvals);

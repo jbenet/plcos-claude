@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -34,7 +35,7 @@ function Window({ label, w, unit }: { label: string; w: RateWindow; unit: string
   );
 }
 
-export default async function AffinityPage() {
+async function AffinityPage() {
   const demo = config.data.profile === 'demo';
   const ready = affinityReady();
   const [test, log, ours, lists] = await Promise.all([
@@ -252,3 +253,5 @@ export default async function AffinityPage() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/affinity', AffinityPage);

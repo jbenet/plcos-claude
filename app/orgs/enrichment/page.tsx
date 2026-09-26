@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -8,7 +9,7 @@ import { gapsFor, listMethods } from '@/modules/research';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Enrichment() {
+async function Enrichment() {
   const selection = await vehicleSelection();
   const gaps = await gapsFor(selection.current?.id ?? null);
   const methods = await listMethods(gaps);
@@ -144,3 +145,5 @@ export default async function Enrichment() {
     </Page>
   );
 }
+
+export default coalescePage('/orgs/enrichment', Enrichment);

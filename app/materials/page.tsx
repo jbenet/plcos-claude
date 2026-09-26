@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
@@ -17,7 +18,7 @@ const SEND_FLAG: Record<string, string> = {
   proposed: 'f-ev', approved: 'f-ev', sent: 'f-ok', refused: 'f-block',
 };
 
-export default async function Materials() {
+async function Materials() {
   const selection = await vehicleSelection();
   const [assets, rules, sends, entities, vehicles, wrongWrap] = await Promise.all([
     listAssets(), listWrapRules(), listSends(), listEntities(), listVehicles(), wrongWrapSends(),
@@ -174,3 +175,5 @@ export default async function Materials() {
     </Page>
   );
 }
+
+export default coalescePage('/materials', Materials);

@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { PrefsReset } from '@/components/shell/PrefsReset';
@@ -6,7 +7,7 @@ import { auth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Settings() {
+async function Settings() {
   const a = await auth();
   const [user, users] = await Promise.all([a.currentUser(), a.listUsers()]);
 
@@ -141,3 +142,5 @@ export default async function Settings() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/settings', Settings);

@@ -8,6 +8,9 @@ import { vehicleSelection } from '@/lib/session';
 import { DEFAULT_THEME, THEME_BOOT, themeAttr } from '@/lib/theme';
 import { VIEWPORT_BOOT } from '@/lib/viewport';
 import { config } from '@/config/deployment';
+import { feedbackHome } from '@/config/ports';
+import { FeedbackButton } from '@/components/shell/FeedbackBox';
+import { isDbBusy } from '@/lib/db/scheduling';
 
 // Every page reads the live database, so none is rendered at build time (issue 0023): a production
 // build otherwise opened the real database while the running server held it.
@@ -22,7 +25,22 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // The address the browser asked for, when the proxy rewrote it (proxy.ts), and the vehicle in view:
   // what AppLink needs to put an old address in its place on the server as on the client.
-  const [asked, selection] = await Promise.all([headers().then((h) => h.get('x-asked-path')), vehicleSelection()]);
+  let context: [string | null, Awaited<ReturnType<typeof vehicleSelection>>];
+  try {
+    context = await Promise.all([headers().then((h) => h.get('x-asked-path')), vehicleSelection()]);
+  } catch (error) {
+    if (!isDbBusy(error)) throw error;
+    // Root-layout errors otherwise show Next's development overlay. This needs no DB.
+    return <html lang="en" data-theme={themeAttr(DEFAULT_THEME)}><body className={config.data.profile}>
+      <main role="alert" style={{ padding: 32 }}>
+        <h1>The server is busy, try again.</h1>
+        <p>This request waited too long for the database and was dropped before it started.</p>
+        <a className="btn" href="">Try again</a>{' '}
+        <FeedbackButton profile={config.data.profile} home={feedbackHome(config.data.profile)} />
+      </main>
+    </body></html>;
+  }
+  const [asked, selection] = context;
   return (
     <html lang="en" data-theme={themeAttr(DEFAULT_THEME)} suppressHydrationWarning>
       <head>

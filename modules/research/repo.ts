@@ -61,12 +61,29 @@ export async function claimsFor(entityId: string): Promise<Claim[]> {
   return rows.map(toClaim);
 }
 
-export async function claimCounts(): Promise<Map<string, number>> {
+export async function claimCounts(entityIds?: string[]): Promise<Map<string, number>> {
+  if (entityIds?.length === 0) return new Map();
   const db = await getDb();
   const rows = await db.query<{ entity_id: string; n: string }>(
-    'select identity.canonical_entity_id(entity_id) as entity_id, count(*)::text as n from research.claim where superseded_by is null group by identity.canonical_entity_id(entity_id)',
+    entityIds ? `with recursive aliases as (
+      select identity.canonical_entity_id(id) as entity_id, identity.canonical_entity_id(id) as canonical_id
+        from unnest($1::uuid[]) id
+      union
+      select e.entity_id, a.canonical_id from identity.entity e join aliases a on e.merged_into = a.entity_id
+    )
+    select a.canonical_id as entity_id, count(*)::text as n
+      from aliases a join research.claim c on c.entity_id = a.entity_id
+      where c.superseded_by is null group by a.canonical_id`
+      : 'select identity.canonical_entity_id(entity_id) as entity_id, count(*)::text as n from research.claim where superseded_by is null group by identity.canonical_entity_id(entity_id)',
+    entityIds ? [[...new Set(entityIds)]] : [],
   );
   return new Map(rows.map((r) => [r.entity_id, Number(r.n)]));
+}
+
+export async function activeClaimCount(): Promise<number> {
+  const row = await (await getDb()).one<{ n: string }>(
+    'select count(*)::text as n from research.claim where superseded_by is null');
+  return Number(row?.n ?? 0);
 }
 
 /** Claims whose only support is a weak document — the ones a brief must not lean on. */
@@ -99,14 +116,23 @@ const toNote = (r: NoteRow): Note => ({
   body: r.body, tags: r.tags ?? [], data: r.data ?? {}, createdAt: new Date(r.created_at),
 });
 
-export async function notesFor(entityId: string, kind?: string): Promise<Note[]> {
+export async function notesFor(entityId: string, kind?: string, limit?: number): Promise<Note[]> {
   const db = await getDb();
+  const params: unknown[] = kind ? [entityId, kind] : [entityId];
+  if (limit !== undefined) params.push(Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.trunc(limit))) : 100);
+  const bounded = limit === undefined ? '' : ` limit $${params.length}`;
   const rows = await db.query<NoteRow>(
-    `select n.note_id, identity.canonical_entity_id(n.entity_id) as entity_id, n.kind, n.body, n.tags, n.data, n.created_at, u.name as author_name
-       from research.note n left join platform.app_user u on u.id = n.author_id
-      where identity.canonical_entity_id(n.entity_id) = identity.canonical_entity_id($1::uuid) ${kind ? 'and n.kind = $2' : ''}
-      order by n.created_at desc`,
-    kind ? [entityId, kind] : [entityId],
+    `with recursive aliases as (
+      select identity.canonical_entity_id($1::uuid) as entity_id
+      union
+      select e.entity_id from identity.entity e join aliases a on e.merged_into = a.entity_id
+    )
+    select n.note_id, identity.canonical_entity_id($1::uuid) as entity_id, n.kind, n.body, n.tags, n.data, n.created_at, u.name as author_name
+       from aliases a join research.note n on n.entity_id = a.entity_id
+       left join platform.app_user u on u.id = n.author_id
+      ${kind ? 'where n.kind = $2' : ''}
+      order by n.created_at desc, n.note_id${bounded}`,
+    params,
   );
   return rows.map(toNote);
 }

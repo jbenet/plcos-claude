@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
@@ -12,7 +13,7 @@ const STAGE_FLAG: Record<string, string> = {
   invited: 'f-mute', ioi: 'f-ev', allocated: 'f-ev', wired: 'f-ok', passed: 'f-mute',
 };
 
-export default async function SpvWarRoom() {
+async function SpvWarRoom() {
   const selection = await vehicleSelection();
   const [rooms, alerts] = await Promise.all([spvRooms(), bandwidthAlerts()]);
   const wiredDays = rooms.map((r) => r.daysToWire).filter((d): d is number => d !== null);
@@ -212,3 +213,5 @@ export default async function SpvWarRoom() {
     </Page>
   );
 }
+
+export default coalescePage('/spv', SpvWarRoom);

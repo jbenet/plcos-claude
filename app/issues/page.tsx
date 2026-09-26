@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { IssueVelocity } from '@/components/issues/IssueVelocity';
 import { IssueList } from '@/components/issues/IssueList';
 import { Page } from '@/components/shell/Page';
@@ -9,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 const ORDER: IssuePriority[] = ['P0', 'P1', 'P2', 'P3'];
 
-export default async function Issues() {
+async function Issues() {
   const sink = await issueSink();
   const all = await sink.list();
   const open = all.filter((i) => i.status !== 'done');
@@ -99,3 +100,5 @@ export default async function Issues() {
     </Page>
   );
 }
+
+export default coalescePage('/issues', Issues);

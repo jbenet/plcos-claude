@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -18,7 +19,7 @@ const CROSS_CUTTING = [
   { num: '22', title: 'Sprint calendar', href: '/calendar', note: 'Holiday overlay and the December dead zone.' },
 ];
 
-export default async function Modules() {
+async function Modules() {
   const db = await getDb();
   const counts = await db.query<{ schema: string; tables: string }>(
     `select table_schema as schema, count(*)::text as tables
@@ -129,3 +130,5 @@ export default async function Modules() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/modules', Modules);

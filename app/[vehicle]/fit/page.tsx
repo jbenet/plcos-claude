@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -38,7 +39,7 @@ const WORK: Record<Blocker, string> = {
 
 const ORDER: Blocker[] = ['none', 'awareness', 'conviction', 'evidence', 'access', 'timing', 'fit', 'gated'];
 
-export default async function FitRollup({
+async function FitRollup({
   params, searchParams,
 }: {
   params: Promise<{ vehicle: string }>;
@@ -213,3 +214,5 @@ export default async function FitRollup({
     </Page>
   );
 }
+
+export default coalescePage('/[vehicle]/fit', FitRollup);

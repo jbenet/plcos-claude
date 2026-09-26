@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -31,7 +32,7 @@ const INVARIANTS = [
   },
 ];
 
-export default async function Connectors() {
+async function Connectors() {
   const [db, a, sink, ag, sources, signals] = await Promise.all([
     getDb(), auth(), issueSink(), agent(), listSyncSources(), allSignals(),
   ]);
@@ -181,3 +182,5 @@ export default async function Connectors() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/connectors', Connectors);

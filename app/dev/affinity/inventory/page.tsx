@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -51,7 +52,7 @@ function What({ f }: { f: FieldStat }) {
   return <span className="muted">{f.filled ? 'filled; contents not shown' : ''}</span>;
 }
 
-export default async function Inventory() {
+async function Inventory() {
   const demo = config.data.profile === 'demo';
   const inv = await inventory();
   const [mapping, compared] = await Promise.all([readMapping(inv), compareLists()]);
@@ -263,3 +264,5 @@ export default async function Inventory() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/affinity/inventory', Inventory);

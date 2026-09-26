@@ -24,8 +24,8 @@
     "demo": "tsx scripts/reset.ts && tsx scripts/seed.ts",
     "shots": "tsx scripts/shots.ts",
     "shots:compress": "tsx scripts/shots-compress.ts",
-    "boundaries": "tsx scripts/boundaries.ts",
-    "props": "tsx scripts/properties.ts",
+    "boundaries": "node --import tsx scripts/boundaries.ts",
+    "props": "node --import tsx scripts/properties.ts",
     "changelog:html": "tsx scripts/changelog-html.ts",
     "changelog:page": "scripts/changelog-page.sh"
   },

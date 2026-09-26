@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { notFound } from 'next/navigation';
 import { FloorTabs } from '@/components/floor/FloorTabs';
 import { Page } from '@/components/shell/Page';
@@ -18,7 +19,7 @@ export const dynamic = 'force-dynamic';
  * The rail used to point two different entries at the same URL, which meant one of the two
  * labels was wrong.
  */
-export default async function Visualizations({ params }: { params: Promise<{ vehicle: string }> }) {
+async function Visualizations({ params }: { params: Promise<{ vehicle: string }> }) {
   const { vehicle: slug } = await params;
   const { all } = await vehicleSelection();
   const everything = slug === 'everything';
@@ -152,3 +153,5 @@ export default async function Visualizations({ params }: { params: Promise<{ veh
     </Page>
   );
 }
+
+export default coalescePage('/[vehicle]/visualizations', Visualizations);

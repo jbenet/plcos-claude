@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { InvitationForm } from '@/components/grants/InvitationForm';
@@ -10,7 +11,7 @@ const STATUS_FLAG: Record<string, string> = {
   sourced: 'f-mute', invited: 'f-ok', applied: 'f-ev', awarded: 'f-ok', declined: 'f-mute',
 };
 
-export default async function Grants() {
+async function Grants() {
   const funders = await listFunders();
   const blocked = funders.filter((f) => !f.mayApproach);
 
@@ -133,3 +134,5 @@ export default async function Grants() {
     </Page>
   );
 }
+
+export default coalescePage('/grants', Grants);

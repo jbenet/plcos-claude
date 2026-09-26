@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { AudienceVariants } from '@/components/content/AudienceVariants';
@@ -6,7 +7,7 @@ import { AUDIENCE_LABEL, listAssets, USE_LABEL } from '@/modules/content';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ContentStudio() {
+async function ContentStudio() {
   const assets = await listAssets();
   const canonicals = assets.filter((a) => a.parentId === null);
   const flagged = assets.filter((a) => a.flags.length > 0);
@@ -111,3 +112,5 @@ export default async function ContentStudio() {
     </Page>
   );
 }
+
+export default coalescePage('/content', ContentStudio);

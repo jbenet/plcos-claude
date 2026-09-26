@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -6,7 +7,7 @@ import { shortDate } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Sources() {
+async function Sources() {
   const [docs, coverage, snapshots] = await Promise.all([listSourceDocs(), corpusCoverage(), snapshotCount()]);
 
   return (
@@ -100,3 +101,5 @@ export default async function Sources() {
     </Page>
   );
 }
+
+export default coalescePage('/research/sources', Sources);

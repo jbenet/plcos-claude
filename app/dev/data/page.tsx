@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { headers } from 'next/headers';
@@ -51,7 +52,7 @@ const GUARDS: Array<{ rule: string; where: string }> = [
   { rule: 'Every server keeps its own cookies, named with its port, so who you are in one is not who you are in another.', where: 'config.data.cookiePrefix' },
 ];
 
-export default async function DataPage() {
+async function DataPage() {
   const profile = config.data.profile;
   const [host, lockPid, sources, report] = await Promise.all([
     headers().then((h) => h.get('host') ?? 'unknown'),
@@ -257,3 +258,5 @@ export default async function DataPage() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/data', DataPage);

@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { AutoRefresh } from '@/components/ui/AutoRefresh';
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic';
 const n = (x: number) => x.toLocaleString('en-US');
 const day = (s: string | null | undefined) => (s ? s.slice(0, 10) : '—');
 
-export default async function Meetings() {
+async function Meetings() {
   const demo = config.data.profile === 'demo';
   const ready = affinityReady();
   const [run, lastGood, inv, translated] = await Promise.all([
@@ -155,3 +156,5 @@ export default async function Meetings() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/affinity/meetings', Meetings);

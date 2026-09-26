@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
@@ -17,7 +18,7 @@ const Q_FLAG: Record<string, string> = {
   open: 'f-ev', answered: 'f-ok', blocked: 'f-block', withdrawn: 'f-mute',
 };
 
-export default async function DecisionRoom({
+async function DecisionRoom({
   searchParams,
 }: {
   searchParams: Promise<{ e?: string }>;
@@ -278,3 +279,5 @@ export default async function DecisionRoom({
     </Page>
   );
 }
+
+export default coalescePage('/decisions', DecisionRoom);
