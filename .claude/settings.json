@@ -9,6 +9,9 @@
       "Bash(git status)",
       "Bash(git diff *)",
       "Bash(git log *)"
+    ],
+    "additionalDirectories": [
+      "../plcos-data"
     ]
   }
 }
