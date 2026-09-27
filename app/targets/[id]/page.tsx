@@ -11,14 +11,16 @@ import { Coverage } from '@/components/ui/Coverage';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import {
-  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, statusNeedsEvidence, strategyPursuitsFor, updatesFor,
+  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, spvMarks, statusNeedsEvidence, strategyPursuitsFor, updatesFor,
 } from '@/modules/strategy';
+import { getDb } from '@/lib/db';
 import { auditFor } from '@/modules/platform';
 import { StatusForm } from '@/components/strategy/StatusForm';
 import { Timeline, meetingLine, type StatusEvent, type TouchContext } from '@/components/strategy/Timeline';
 import { READ_LABEL, aboutThisRaise, type Touchpoint, raiseWindows, summarize, touchpointsFor } from '@/modules/meetings';
 import { relatedLpHeadings } from '@/lib/lp-heading';
 import { LpUnitCard, LpUnitLine } from '@/components/strategy/LpUnit';
+import { SpvCard } from '@/components/strategy/SpvCard';
 import { latestRun } from '@/modules/sources';
 import { CLOSE_STATE_LABEL, closeTracksFor } from '@/modules/pipeline';
 import { CloseTrack } from '@/components/strategy/CloseTrack';
@@ -79,7 +81,11 @@ async function TargetWorkspace({ params, searchParams }: {
     updatesFor(pursuit.pursuitId),
     auditFor('pursuit', pursuit.pursuitId, ['pursuit.status_set']),
   ]);
-  const docs = await listSourceDocs([...new Set(claims.map((c) => c.provenance.source))]);
+  const [docs, spvMarkMap] = await Promise.all([
+    listSourceDocs([...new Set(claims.map((c) => c.provenance.source))]),
+    spvMarks(await getDb(), [pursuit.entityId]),
+  ]);
+  const spvHere = spvMarkMap.get(pursuit.entityId);
   // Status changes, for the timeline (N61). Before N61 the log kept a reason only for a pass;
   // the latest change's reason is still on the pursuit, so it is read from there.
   const statusEvents: StatusEvent[] = statusLog.map((a, i) => {
@@ -287,6 +293,11 @@ async function TargetWorkspace({ params, searchParams }: {
                 <b>Next:</b> {p.nextStep}{p.nextStepOn ? ` — by ${shortDate(p.nextStepOn)}` : ''}
               </div>
             )}
+            {vehicleKind === 'spv' && spvHere?.stance === 'does-not' && (
+              <div className="said differs">
+                <b>Doesn’t do SPVs</b>{spvHere.short ? ` (${spvHere.short})` : ''}, and this is an SPV. Check the SPVs card before moving them to Selected or further.
+              </div>
+            )}
             {(p.status === 'new' || p.status === 'sourcing' || p.status === 'selected' || p.status === 'connecting') && touchSummary.meetingDates.length > 0 && (
               <div className="said differs">
                 A meeting is on record, and the status is still {STATUS_LABEL[p.status]} — Discussing? It is yours to set; nothing moves it for you.
@@ -486,6 +497,8 @@ async function TargetWorkspace({ params, searchParams }: {
                   capacity={pursuit.lpCapacity} review={pursuit.lpReview} historical={pursuit.historical} />
               : <OrgPeople orgId={pursuit.entityId} orgName={pursuit.entityName} vehicleId={pursuit.vehicleId} currentPursuitId={pursuit.pursuitId} />;
           })()}
+          {/* Whether they do SPVs (Juan, 27 Sep 2026): the stance, its evidence, and a person's setting. */}
+          <SpvCard entityId={pursuit.entityId} entityName={pursuit.entityName} spvVehicle={vehicleKind === 'spv'} />
           <div className="card">
             <div className="chead">
               <h2>What we know</h2>

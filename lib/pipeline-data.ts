@@ -4,7 +4,7 @@ import { listEntities } from '@/modules/identity';
 import { buildCache } from '@/lib/build-cache';
 import { listVehicles } from '@/modules/platform';
 import { listAssessments } from '@/modules/fit';
-import { capacityEstimate, vehicleStrategy } from '@/modules/strategy';
+import { capacityEstimate, spvMarks, vehicleStrategy } from '@/modules/strategy';
 import { provisionalParts, provisionalScore } from '@/lib/strategy-score';
 import type { Strategy } from '@/lib/enrich/strategy';
 import { GRADE_LABEL, GRADE_SCORE } from '@/modules/fit/client';
@@ -105,9 +105,11 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   const firmsFor = (p: Pursuit): PipelineRow['firms'] =>
     (firmsOf.get(p.entityId) ?? []).map(f => ({ ...f, lpRow: lpRow.get(`${f.id}:${p.vehicleId}`) ?? null }));
   const touchesBy = await touchpointsByPair(pairs);
-  const [sums, closes, restricted, readings] = await Promise.all([
+  const [sums, closes, restricted, readings, spv] = await Promise.all([
     touchpointSummaries(pairs, new Date(), touchesBy), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
+    spvMarks(db, entityIds),
   ]);
+  const spvKind = new Set(vehicles.filter(v => v.kind === 'spv').map(v => v.id));
   const readsOf = new Map<string, NoteReading[]>();
   for (const r of readings) readsOf.set(r.entityId, [...(readsOf.get(r.entityId) ?? []), r]);
   const sum = (p: Pursuit) => sums.get(`${p.entityId}:${p.vehicleId}`)!;
@@ -172,6 +174,8 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
       setHere: p.statusSource === 'us' && p.statusSetAt ? `set here ${shortDate(p.statusSetAt)}${p.statusSetByName ? ` by ${p.statusSetByName}` : ''}` : null,
       ahead: aheadOfStatus(p, s),
       doNotContact: restricted.has(p.entityId),
+      spv: spv.get(p.entityId)!,
+      spvVehicle: spvKind.has(p.vehicleId),
       money: c
         ? {
             state: CLOSE_STATE_LABEL[c.state], amount: c.exposure.amount, wired: c.wired, hard: c.exposure.track === 'hard',

@@ -14,3 +14,5 @@ export { vehicleStrategy, capacityEstimate, actionScore, conversionFor, statusId
 export { consolidatePursuits, consolidatePursuitsInTransaction, reversePursuitMerge, pursuitReferences, type PursuitMergeReport } from './merge';
 export { repointPursuits, repointPursuitsInTransaction, reverseLpRepoint, decideLpUnitByPerson, recentLpRepoints, type LpUnitReport, type LpUnitDecisionRow } from './lp-units';
 export { LP_RULE, isPseudoOrg, decideLpUnit, combineStatus, type LpDecision, type LpFacts, type Firm as LpFirm, type Evidence as LpEvidence } from './lp-unit-rules';
+export { spvReadings, spvMarks, spvHistory, setSpvStance, withdrawSpvStance, deriveSpvStance, recordResearchSpv, researchSpvEvidence, SpvRefused, type SpvDeriveReport, type SpvSettingHistory, type SpvFact } from './spv';
+export * from './spv-rules';

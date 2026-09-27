@@ -14,7 +14,7 @@ import { Propose } from '@/components/plays/Propose';
 import { vehicleSelection } from '@/lib/session';
 import { dateLabel, shortDate } from '@/lib/time';
 import { config } from '@/config/deployment';
-import { vehicleStrategy, STATUS_LABEL, type StrategyAction } from '@/modules/strategy';
+import { spvMarks, vehicleStrategy, STATUS_LABEL, type StrategyAction } from '@/modules/strategy';
 import { presenceFor, utilityOf } from '@/modules/strategy/move-utility';
 import { gapAdvice, pipelineAdvice, type GapId, type Sentence } from '@/modules/strategy/advice';
 import { StatusMark } from '@/components/ui/StatusMark';
@@ -126,6 +126,8 @@ async function VehicleStrategyPage({ params, searchParams }: {
   const topMax = Math.max(0, ...top.map(o => o.utility ?? 0));
   const ranks = new Map(queue.map((o, i) => [o.id, i + 1]));
 
+  // SPV stance (Juan, 27 Sep 2026), per LP unit: the same mark as the fit list and selection.
+  const spv = await spvMarks(db, rows.map(r => r.pursuit.entityId));
   const viewIds = new Map(rows.map(r => [r.pursuit.pursuitId, views.filter(v => v.rows.includes(r)).map(v => v.id)]));
   const tableRows: StrategyTableRow[] = rows.map(r => {
     const effort = lpEffortScore(r);
@@ -134,7 +136,7 @@ async function VehicleStrategyPage({ params, searchParams }: {
       status: r.pursuit.status, owner: r.pursuit.ownerSaid ?? r.pursuit.ownerName, rank: ranks.get(r.pursuit.pursuitId) ?? null,
       priority: effort.priority, expected: effort.expected, evidencePriority: r.workPriority,
       capacity: r.capacity, likelihood: r.likelihood, route: r.routeWeight, days: r.days, views: viewIds.get(r.pursuit.pursuitId)!,
-      risks: r.risks, held: r.held,
+      risks: r.risks, held: r.held, spv: spv.get(r.pursuit.entityId)!,
       basis: {
         angle: r.suggestion?.data.angle ?? r.pursuit.headline ?? null,
         capacity: `${r.capacityBasis}${r.capacityBand ? ` ${r.capacityBand}` : ''}`,
@@ -300,7 +302,8 @@ async function VehicleStrategyPage({ params, searchParams }: {
     <section className="card" id="actions" aria-labelledby="actions-h">
       <div className="chead"><h2 id="actions-h">LPs by next action</h2><span className="lbl">{count(rows.length)} LPs · search with /</span></div>
       <StrategyTable table={packRows(tableRows, views.map(v => v.id), `/${slug}/pipeline/`)} asOf={now.toISOString()} initialFilters={query} views={views.map(v => ({ id: v.id, label: v.label }))}
-        rules={{ hours: config.strategyRanking.actionTeamHours, share: config.strategyRanking.actionValueFraction, prior: config.strategyRanking.conversionPriorWeight }} />
+        rules={{ hours: config.strategyRanking.actionTeamHours, share: config.strategyRanking.actionValueFraction, prior: config.strategyRanking.conversionPriorWeight }}
+        spvVehicle={vehicle.kind === 'spv'} />
     </section>
 
     <details className="card"><summary className={`chead ${s.summary}`}><h2>Saved plays and proposals</h2><span className="lbl">{plays.length} plays</span></summary>

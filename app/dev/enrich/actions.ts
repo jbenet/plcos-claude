@@ -195,3 +195,11 @@ export async function reverseLpRepointAction(id: string, reason: string): Promis
     return {};
   } catch (error) { return { error: error instanceof Error ? error.message : 'Reversal failed.' }; }
 }
+
+/** Derive SPV stance (Juan, 27 Sep 2026): our SPVs, Dakota's flag and research text. A queued job on the live server. */
+export async function deriveSpvStanceAction(): Promise<{ error?: string; message?: string }> {
+  if (liveOnly()) return { error: 'Derive SPV stance on the live server.' };
+  const user = await (await auth()).currentUser();
+  try { await queueImportJob(await getDb(), 'spv-stance', user.id); return { message: 'SPV stance queued. Progress appears above; reload for its counts.' }; }
+  catch { return { error: 'SPV stance could not be queued. Retry after the active import finishes.' }; }
+}

@@ -1,4 +1,5 @@
 import { lpSections, type LpSections } from '@/lib/lp-groups';
+import type { SpvRowMark } from '@/modules/strategy/client';
 
 /**
  * The rows both LP tables show — the pipeline (module 04) and selection (module 03) — and the
@@ -55,6 +56,10 @@ export interface PipelineRow {
   /** A meeting on record for an LP still at Selected or earlier. */
   ahead: boolean;
   doNotContact: boolean;
+  /** Whether the LP unit does SPVs (Juan, 27 Sep 2026): a person's setting, research, or derived signals. */
+  spv: SpvRowMark;
+  /** The row's vehicle is an SPV: a "doesn't do SPVs" LP is dimmed and flagged before it is selected. */
+  spvVehicle: boolean;
   money: { state: string; amount: number; wired: number; hard: boolean; signedPer: string | null } | null;
   meetings: number;
   lastMeeting: string | null;
@@ -74,10 +79,14 @@ export interface PipelineRow {
   rungLabel: string;
 }
 
-export type SortKey = 'score' | 'priority' | 'name' | 'vehicle' | 'owner' | 'status' | 'where' | 'capacity' | 'route' | 'meetings' | 'touch' | 'read' | 'ladder';
-export const SORT_KEYS: SortKey[] = ['score','priority','name','vehicle','owner','status','where','capacity','route','meetings','touch','read','ladder'];
+export type SortKey = 'score' | 'priority' | 'name' | 'vehicle' | 'owner' | 'status' | 'where' | 'capacity' | 'route' | 'meetings' | 'touch' | 'read' | 'ladder' | 'spv';
+export const SORT_KEYS: SortKey[] = ['score','priority','name','vehicle','owner','status','where','capacity','route','meetings','touch','read','ladder','spv'];
 /** Keys whose natural first click is biggest first. */
-export const numeric = new Set<SortKey>(['score','priority','capacity','route','meetings','touch','ladder','read','where']);
+export const numeric = new Set<SortKey>(['score','priority','capacity','route','meetings','touch','ladder','read','where','spv']);
+/** An LP on record as not doing SPVs, on a pursuit of an SPV vehicle: dimmed and flagged before a move to Selected. */
+export const spvFlagged = (r: Pick<PipelineRow, 'spv' | 'spvVehicle'>) => r.spvVehicle && r.spv.stance === 'does-not';
+/** Does, with the larger known count first; then unknown; doesn't last. */
+export const spvOrder = (m: SpvRowMark) => (m.stance === 'does' ? 2 + (m.minDeals ?? 0) / 1e4 : m.stance === 'unknown' ? 1 : 0);
 export const STATUS_ORDER: Status[] = ['new', 'sourcing', 'selected', 'connecting', 'discussing', 'committed', 'passed'];
 const READ_ORDER: Record<string, number> = { 'Very interested': 3, Interested: 2, 'Not very interested': 1 };
 const MONEY_ORDER: Record<string, number> = { Closed: 5, Hard: 4, Signed: 3, Soft: 2, Withdrawn: 0 };
@@ -102,6 +111,7 @@ export function compareRows(a: PipelineRow, b: PipelineRow, key: SortKey, dir: 1
       case 'meetings': return r.meetings || null;
       case 'ladder': return r.rung;
       case 'read': { const read = theirRead(r); return read ? READ_ORDER[read] ?? 0 : null; }
+      case 'spv': return spvOrder(r.spv);
       default: return r[key];
     }
   };
@@ -134,16 +144,18 @@ export interface Filters {
   read: 'any' | 'very' | 'interested' | 'not' | 'none';
   money: 'any' | 'soft' | 'signed' | 'hard' | 'none';
   flag: 'any' | 'ahead' | 'dnc' | 'flagged' | 'scored' | 'unscored';
+  spv: 'any' | 'open' | 'does' | 'unknown' | 'not';
 }
-export const EMPTY: Filters = { q: '', owner: '', vehicle: '', meetings: 'any', touch: 'any', read: 'any', money: 'any', flag: 'any' };
+export const EMPTY: Filters = { q: '', owner: '', vehicle: '', meetings: 'any', touch: 'any', read: 'any', money: 'any', flag: 'any', spv: 'any' };
 export const CHOICES = {
   meetings: [['any', 'Any'], ['some', 'Has met'], ['none', 'Never met']],
   touch: [['any', 'Any'], ['recent', 'Last 30 days'], ['stale', 'Over 90 days'], ['waiting', 'Waiting on them'], ['none', 'Never']],
   read: [['any', 'Any'], ['very', 'Very interested'], ['interested', 'Interested'], ['not', 'Not very'], ['none', 'No read']],
   money: [['any', 'Any'], ['soft', 'Soft'], ['signed', 'Signed'], ['hard', 'Hard or closed'], ['none', 'No amount']],
   flag: [['any', 'Any'], ['scored', 'Scored'], ['unscored', 'Unscored'], ['flagged', 'Has flags'], ['ahead', 'Met, status behind'], ['dnc', 'Do not contact']],
+  spv: [['any', 'Any'], ['open', 'Does or unknown'], ['does', 'Does SPVs'], ['unknown', 'Unknown'], ['not', 'Doesn’t do SPVs']],
 } as const satisfies Partial<Record<keyof Filters, ReadonlyArray<readonly [string, string]>>>;
-export const FILTER_LABEL: Record<keyof typeof CHOICES, string> = { meetings: 'Meetings', touch: 'Last touch', read: 'Their read', money: 'Money', flag: 'Flags' };
+export const FILTER_LABEL: Record<keyof typeof CHOICES, string> = { meetings: 'Meetings', touch: 'Last touch', read: 'Their read', money: 'Money', flag: 'Flags', spv: 'SPVs' };
 
 /** Only values the filters have: an address someone edited by hand can't put the table in a state it can't show. */
 export function filtersFrom(given: Record<string, string | undefined> = {}): Filters {
@@ -195,5 +207,9 @@ export function matches(r: PipelineRow, f: Filters, words: string[], now: number
   if (f.flag === 'flagged' && !r.riskCount) return false;
   if (f.flag === 'scored' && r.score === null) return false;
   if (f.flag === 'unscored' && r.score !== null) return false;
+  if (f.spv === 'open' && r.spv.stance === 'does-not') return false;
+  if (f.spv === 'does' && r.spv.stance !== 'does') return false;
+  if (f.spv === 'unknown' && r.spv.stance !== 'unknown') return false;
+  if (f.spv === 'not' && r.spv.stance !== 'does-not') return false;
   return true;
 }

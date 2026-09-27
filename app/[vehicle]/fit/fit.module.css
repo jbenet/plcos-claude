@@ -90,3 +90,7 @@
 .head .actions:has(.confirm, .saved, .bad), .head .actions:has(.confirm, .saved, .bad) > .status { display: contents; }
 .head .status > select { margin-left: auto; }
 .confirmHead { white-space: nowrap; }
+
+/* SPV stance (Juan, 27 Sep 2026): a column on the right of every row, before the status. */
+.spvCell { display: inline-flex; justify-content: flex-end; min-width: 104px; margin-right: 10px; }
+@media (max-width: 700px) { .spvCell { min-width: 0; } }

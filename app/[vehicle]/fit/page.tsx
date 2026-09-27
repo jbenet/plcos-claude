@@ -12,6 +12,8 @@ import { vehicleReadings } from '@/lib/vehicle-readings';
 import { listAssessments, type Assessment } from '@/modules/fit';
 import { FitBoard, FitInspector } from './FitBoard';
 import { isPseudoOrg } from '@/modules/strategy/client';
+import { spvMarks } from '@/modules/strategy';
+import { getDb } from '@/lib/db';
 import { GROUP_LABEL, ORDER, groupFitRows, fitGroupCategory, type FitRow, type FitSection, type Group } from './fit-model';
 import s from './fit.module.css';
 
@@ -90,10 +92,12 @@ async function FitRollup({ params, searchParams }: {
     });
   }
 
-  const [headings, entities] = await Promise.all([
+  const [headings, entities, spv] = await Promise.all([
     lpHeadings(rows.map(r => ({ pursuitId: r.pursuitId ?? r.entityId, entityId: r.entityId }))),
     listEntities([...new Set(rows.map(r => r.entityId))]),
+    spvMarks(await getDb(), [...new Set(rows.map(r => r.entityId))]),
   ]);
+  const spvKind = new Set(all.filter(v => v.kind === 'spv').map(v => v.id));
   const organisations = new Set(entities.filter(e => e.entityType !== 'person').map(e => e.entityId));
   for (const r of rows) {
     const h = headings.get(r.pursuitId ?? r.entityId);
@@ -102,6 +106,8 @@ async function FitRollup({ params, searchParams }: {
     r.org = r.isOrg ? r.name : h?.org && !isPseudoOrg(h.org) ? h.org : null;
     // The row is the LP unit's own (docs/23): a person's firm is context, never the heading.
     r.orgFirst = r.isOrg;
+    r.spv = spv.get(r.entityId);
+    r.spvVehicle = spvKind.has(r.vehicleId);
   }
   // One row per LP unit (docs/23): each keeps its own fit, gates and actions.
   const byFit = (a: FitRow, b: FitRow) => ORDER.indexOf(a.group) - ORDER.indexOf(b.group)

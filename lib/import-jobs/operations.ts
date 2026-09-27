@@ -21,6 +21,21 @@ async function repointJob(db: Db, actor: string): Promise<Record<string, unknown
   }
 }
 
+/** Derive SPV stance (Juan, 27 Sep 2026): our SPVs, Dakota's flag and research text, as its own run. */
+async function spvJob(db: Db, actor: string): Promise<Record<string, unknown>> {
+  const run = await startRun('enrich','spv-stance',actor);
+  try {
+    const r = await (await import('@/modules/strategy')).deriveSpvStance(db);
+    await finishRun(run,{status:'ok',requests:0,records:r.lps,newRecords:r.pipeline+r.dakota+r.text,
+      note:`${r.lps} LPs read: ${r.stances.does} do SPVs, ${r.stances['does-not']} don't, ${r.stances.unknown} unknown · signals: ${r.pipeline} from our SPVs, ${r.dakota} from Dakota, ${r.text} from research text${r.conflicts ? ` · ${r.conflicts} in conflict` : ''}`,
+      detail:{...r}});
+    return {...r};
+  } catch (err) {
+    await finishRun(run,{status:'failed',requests:0,records:0,newRecords:0,note:'SPV stance stopped; nothing from this pass was kept.'});
+    throw err;
+  }
+}
+
 /** Worker operations use the actor captured by the human's request, never a cookie or action context. */
 export async function runImportOperation(db: Db, job: ImportJob, progress: ImportProgress): Promise<Record<string, unknown>> {
   const actor = job.actor;
@@ -38,13 +53,13 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
       return {...result};
     }
     case 'findings': {
-      await progress('Repairing team identities',0,4);
+      await progress('Repairing team identities',0,5);
       const { enrichDir } = await import('@/lib/enrich/candidates');
       const { readNetworkNodeInput } = await import('@/modules/network/nodes');
       const { repairTeamIdentities } = await import('@/modules/identity/team');
       const input = await readNetworkNodeInput(enrichDir());
       if (input) await repairTeamIdentities(db,input);
-      await progress('Importing findings',1,4);
+      await progress('Importing findings',1,5);
       const { importFindings } = await import('@/lib/enrich/import');
       const r = await importFindings(actor);
       const counts = { mapped:r.mapped,claims:r.claims,rejected:r.rejected,paths:r.paths,organizationLps:r.organizationLps,
@@ -52,16 +67,23 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
         entityTypes:{corrected:r.entityTypes?.corrected.length??0,ambiguous:r.entityTypes?.ambiguous.length??0} };
       await appendAudit({actorId:actor,action:'enrich.imported',subjectType:'enrich',detail:counts});
       // The LP is the committing unit (docs/23): new findings can settle whose pursuit a person's is.
-      await progress('Re-pointing pursuits to their LP',2,4);
+      await progress('Re-pointing pursuits to their LP',2,5);
       // Its own transaction: a failure here keeps the imported findings and says so.
       const lpUnits = await repointJob(db,actor).catch(() => ({error:'Re-point stopped; run it again from Developer → Enrich.'}));
-      await progress('Rebuilding research ties',3,4);
+      // SPV stance: research facts are in; derived signals follow the LP units just settled.
+      await progress('Deriving SPV stance',3,5);
+      const spv = await spvJob(db,actor).catch(() => ({error:'SPV stance stopped; run Derive SPV stance from Developer → Enrich.'}));
+      await progress('Rebuilding research ties',4,5);
       await (await import('@/modules/network')).buildNetwork({awaitBackground:true});
-      return {...counts,lpUnits};
+      return {...counts,lpUnits,spv};
     }
     case 'lp-units': {
       await progress('Re-pointing pursuits to their LP',0,1);
       return repointJob(db,actor);
+    }
+    case 'spv-stance': {
+      await progress('Deriving SPV stance',0,1);
+      return spvJob(db,actor);
     }
     case 'prospects': {
       await progress('Reading prospect files',0,2);

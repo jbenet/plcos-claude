@@ -7,3 +7,7 @@ export {
   STATUS_LABEL, rungIndex, statusNeedsEvidence,
 } from './types';
 export { isPseudoOrg } from './lp-unit-rules';
+export {
+  SPV_BASIS_LABEL, SPV_KIND_LABEL, SPV_STANCES, spvAppetite, spvDeals, spvMark, spvWords,
+  type SpvEvidence, type SpvReading, type SpvRowMark, type SpvStance,
+} from './spv-rules';

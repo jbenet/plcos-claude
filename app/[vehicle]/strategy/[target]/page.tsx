@@ -14,6 +14,7 @@ import { assessmentFor, BLOCKER_LABEL, LINK_LABEL } from '@/modules/fit';
 import { gapsForTarget, METHOD_KIND_LABEL } from '@/modules/research';
 import { listExposures } from '@/modules/pipeline';
 import { listPursuits, RUNG_LABEL, RUNG_REQUIRES, RUNGS, STATUS_LABEL, rungIndex } from '@/modules/strategy';
+import { SpvNote } from '@/components/strategy/SpvCard';
 import { listAsks, restrictionsFor } from '@/modules/coordination';
 import { listMeetings } from '@/modules/meetings';
 import {
@@ -210,6 +211,9 @@ async function TargetStrategy({
           </div>
         </div>
       )}
+
+      {/* Approaching for an SPV (Juan, 27 Sep 2026): whether they do SPVs, before the plan. */}
+      {vehicle.kind === 'spv' && <SpvNote entityId={target} entityName={entity.displayName} lpHref={pursuit ? `/${slug}/pipeline/${pursuit.pursuitId}` : null} />}
 
       {/* ---------- 1. state of play ---------- */}
       <div className="card">
