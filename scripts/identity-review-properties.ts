@@ -11,11 +11,15 @@ import { correctEntityType, reverseEntityTypeCorrection } from '../modules/ident
 import type { Check, Db } from './properties/harness';
 import { identityContextProperties } from './properties/identity-context';
 
+// Fixture labels and public URLs must not accidentally resemble phone numbers.
+// Preserve the UUID prefix's entropy, but map its digits to letters g–p.
+const fixtureTag = (uuid: string) => uuid.slice(0, 8).replace(/\d/g, digit => String.fromCharCode(103 + Number(digit)));
+
 export async function identityReviewProperties(check: Check, db: Db) {
   await identityContextProperties(check, db);
   const actor = (await db.one<{ id: string }>('select id::text from platform.app_user where active limit 1'))!.id;
   const vehicle = (await db.one<{ id: string }>("select id::text from platform.vehicle where phase='active' and kind='fund' limit 1"))!.id;
-  const ids: string[] = [], tag = randomUUID().slice(0, 8);
+  const ids: string[] = [], tag = fixtureTag(randomUUID());
   const scratch = await mkdtemp(join(tmpdir(), 'invented-identity-review-'));
   const document = `identity-review-fixture:${tag}`;
   const label = (suffix: string) => `Invented Identity Review ${tag} ${suffix}`;
@@ -40,6 +44,9 @@ export async function identityReviewProperties(check: Check, db: Db) {
     notes: await db.query("select * from research.note where entity_id=any($1::uuid[]) or kind='identity_review_decision' order by note_id", [ids]),
   });
   try {
+    check('IDENTITY REVIEW fixture labels never contain phone-shaped random tags',
+      ['78287679', 'a1234567', '1234567f', 'ffffffff'].every(prefix => /^[a-p]{8}$/.test(fixtureTag(prefix))),
+      'The observed all-digit failure and seven-digit runs become alphabetic; contact redaction remains enabled.');
     const plain = await pair('Name Only');
     check('IDENTITY REVIEW group IDs are stable across ordering and distinguish membership',
       identityReviewGroupId(plain) === identityReviewGroupId([...plain].reverse()) && identityReviewGroupId(plain) !== identityReviewGroupId([plain[0]!, randomUUID()]),
@@ -57,11 +64,12 @@ export async function identityReviewProperties(check: Check, db: Db) {
     const org = await entity('Privacy Office', 'org');
     const secretEmail = 'invented.private@example.org', secretPhone = '+1 202 555 0199';
     const linkedin = `https://www.linkedin.com/in/invented-review-${tag}`;
+    const numericUrl = 'https://example.org/bio/78287679';
     await db.query(`insert into identity.affiliation(person_entity,org_entity,kind,role,source,as_of) values($1,$2,'staff','Partner','fixture','2026-09-27')`, [privacy[0], org]);
     await db.query("insert into strategy.pursuit(entity_id,vehicle_id,owner_id,status,status_source) values($1,$2,$3,'new','rule')", [privacy[0], vehicle, actor]);
     await db.query("insert into research.source_doc(doc_id,title,kind,origin,as_of,strength,supports,body) values($1,'Invented identity source','fixture','https://example.org/invented','2026-09-27','moderate','Invented data','Invented data')", [document]);
     await db.query("insert into research.claim(entity_id,field,value,source,as_of,confidence) values($1,'title','Partner',$2,'2026-09-27','high')", [privacy[0], document]);
-    await db.query("insert into research.note(entity_id,kind,body,data) values($1,'public_profile',$2,$3::jsonb)", [privacy[0], `Private ${secretEmail} ${secretPhone}`, JSON.stringify({ email: secretEmail, phone: secretPhone, title: `Partner ${secretEmail} ${secretPhone}`, identity: { links: [{ kind: 'linkedin', url: linkedin }, { kind: 'bio', url: `https://example.org/bio?email=${encodeURIComponent(secretEmail)}&phone=${encodeURIComponent(secretPhone)}` }, { kind: 'bio', url: `mailto:${secretEmail}` }] } })]);
+    await db.query("insert into research.note(entity_id,kind,body,data) values($1,'public_profile',$2,$3::jsonb)", [privacy[0], `Private ${secretEmail} ${secretPhone}`, JSON.stringify({ email: secretEmail, phone: secretPhone, title: `Partner ${secretEmail} ${secretPhone}`, identity: { links: [{ kind: 'linkedin', url: linkedin }, { kind: 'bio', url: numericUrl }, { kind: 'bio', url: `https://example.org/bio?email=${encodeURIComponent(secretEmail)}&phone=${encodeURIComponent(secretPhone)}` }, { kind: 'bio', url: `mailto:${secretEmail}` }] } })]);
     await db.query("insert into research.note(entity_id,kind,body,data) values($1,'connection_candidates','Invented path',$2::jsonb)", [privacy[0], JSON.stringify({ paths: [{ lp: privacy[0], other: { key: org, name: label('Privacy Office') } }] })]);
     const pathAlias = await entity('Path Alias');
     await db.query('update identity.entity set merged_into=$2 where entity_id=$1', [pathAlias, privacy[0]]);
@@ -81,7 +89,7 @@ export async function identityReviewProperties(check: Check, db: Db) {
       'Allowlisted context is useful for an agent without database access.');
     check('IDENTITY REVIEW excludes contact details even when embedded in URLs or text', !!privateGroup
       && !serialized.includes(secretEmail) && !serialized.includes(encodeURIComponent(secretEmail)) && !serialized.includes(secretPhone)
-      && !serialized.includes(encodeURIComponent(secretPhone)) && !serialized.includes('mailto:') && !serialized.includes('Private '),
+      && !serialized.includes(encodeURIComponent(secretPhone)) && !serialized.includes(numericUrl) && !serialized.includes('mailto:') && !serialized.includes('Private '),
       'Contact values and arbitrary note bodies never leave in the review set.');
     check('IDENTITY REVIEW counts each path once per root across aliases and colliding source keys',
       member?.counts.paths === 3 && privateGroup?.members.find(m => m.entityId === privacy[1])?.counts.paths === 2,

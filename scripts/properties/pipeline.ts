@@ -59,7 +59,9 @@ export async function pipelineProperties({ check, db }: SeedContext) {
   let matches = true;
   for (const row of status.rows) {
     const individual = await closeTracksFor(row.entity_id, row.vehicle_id);
-    matches &&= JSON.stringify(individual) === JSON.stringify(row.tracks);
+    // Equal-amount exposures have no relative-order contract in either reader.
+    const byExposure = (tracks: typeof individual) => [...tracks].sort((a, b) => a.exposure.exposureId.localeCompare(b.exposure.exposureId));
+    matches &&= JSON.stringify(byExposure(individual)) === JSON.stringify(byExposure(row.tracks));
   }
   check('Batched status close tracks preserve pack signatures, dates and cash semantics', matches,
     'Bulk details match the established per-LP reader, including returned packs.');

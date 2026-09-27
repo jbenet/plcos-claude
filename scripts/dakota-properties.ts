@@ -153,7 +153,7 @@ export async function dakotaProperties(check: Check, db: Db) {
         (select jsonb_agg(to_jsonb(x) order by pursuit_id) from strategy.pursuit x) pursuits,
         (select jsonb_agg(to_jsonb(x) order by asserted_at,assertion_id) from identity.match_assertion x) assertions,
         (select jsonb_agg(to_jsonb(x) order by entity_id,kind,value,source) from identity.external_identifier x) identifiers,
-        (select jsonb_agg(to_jsonb(x)) from network.edge_revision x) edge_revision`));
+        (select jsonb_agg(to_jsonb(x) order by to_jsonb(x)) from network.edge_revision x) edge_revision`));
       const before = await snapshot(), repeated = await translateDakota(local, actor, [accounts, contacts]);
       check('DAKOTA translating the same replica is idempotent including timestamps and source facts', before === await snapshot()
         && Object.values(repeated).every(v => v === 0), 'Full rows, IDs, provenance and timestamps remain unchanged; the cap does not drain on repeated clicks.');

@@ -191,7 +191,7 @@ async function main() {
       s.source,s.source_id key,identity.canonical_entity_id(s.entity_id)::text id,e.entity_type::text type
       from identity.source_record s join identity.entity e on e.entity_id=identity.canonical_entity_id(s.entity_id)
       where (s.source='network_org' and s.source_id='pl') or (s.source='warehouse' and s.source_id=$1)
-        or (s.source='w3_person' and s.source_id=$2)`, [institutionKey, w3InstitutionKey]);
+        or (s.source='w3_person' and s.source_id=$2) order by s.source,s.source_id`, [institutionKey, w3InstitutionKey]);
     await test('Reserved warehouse institution is planned as an organization, never a team member', () => {
       const plan = planNetworkNodes(institutionalInput, at);
       assert.equal(plan.nodes.find(node => node.source === 'warehouse' && node.sourceId === institutionKey)?.type, 'org');
