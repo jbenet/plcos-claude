@@ -7,6 +7,8 @@ export interface Estimate { value: number; basis: string; label: 'GUESS' }
 export interface MoveEstimates {
   reach: Estimate; check: Estimate; baseline: Estimate; conversionLift: Estimate;
   checkLift: Estimate; confidence: Estimate; teamHours: Estimate; cashCost: Estimate; effectDays: Estimate;
+  /** 0097, optional: lasting presence (0–5) beyond this raise. Absent means the kind's default. */
+  presence?: Estimate;
   audience: string; dependencies: string;
 }
 export interface MoveEvidence { source: string; as_of: string; confidence: string; last_verified_by: string; supports: string }
@@ -29,6 +31,7 @@ export function validateMoves(raw: unknown): MoveFile {
       slugs.add(v.slug); const e = v.estimates;
       if (!e?.audience?.trim() || !e.dependencies?.trim()) throw Error('Missing effect basis.');
       for (const k of fields) if (e[k]?.label !== 'GUESS' || !e[k].basis?.trim() || !Number.isFinite(e[k].value) || e[k].value < 0) throw Error('Invalid GUESS estimate.');
+      if (e.presence !== undefined && (e.presence?.label !== 'GUESS' || !e.presence.basis?.trim() || !Number.isFinite(e.presence.value) || e.presence.value < 0 || e.presence.value > 5)) throw Error('Invalid GUESS estimate.');
       if (e.teamHours.value <= 0 || e.baseline.value + e.conversionLift.value > 1 || e.confidence.value > 1 || !Number.isInteger(e.reach.value)) throw Error('Invalid effect bounds.');
       const scored = moveScore(e);
       if (!Number.isFinite(scored.expected) || !Number.isFinite(scored.priority)) throw Error('Estimate overflow.');

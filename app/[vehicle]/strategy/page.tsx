@@ -15,6 +15,9 @@ import { vehicleSelection } from '@/lib/session';
 import { dateLabel, shortDate } from '@/lib/time';
 import { config } from '@/config/deployment';
 import { vehicleStrategy, STATUS_LABEL, type StrategyAction } from '@/modules/strategy';
+import { presenceFor, utilityOf } from '@/modules/strategy/move-utility';
+import { gapAdvice, pipelineAdvice, type GapId, type Sentence } from '@/modules/strategy/advice';
+import { StatusMark } from '@/components/ui/StatusMark';
 import { boardFor, listUsers, LEVER_LABEL, LEVER_MEANS, type Play } from '@/modules/plays';
 import s from './strategy.module.css';
 
@@ -63,8 +66,14 @@ function ChooseVehicle({ vehicles }: { vehicles: Array<{ slug: string; name: str
 }
 
 /** One option on the shared scale: a single-LP action or a whole-raise move. */
-interface Option { id: string; kind: 'lp' | 'move'; tag: string; title: string; text: string; href: string;
-  priority: number | null; expected: number | null; hours: number | null; work: number; position: number | null; chosen: boolean }
+interface Option { id: string; kind: 'lp' | 'move'; tag: string; status: string | null; title: string; text: string; href: string;
+  utility: number | null; priority: number | null; hours: number | null; work: number; position: number | null; chosen: boolean }
+
+/** A computed recommendation: plain text with links into the table. */
+function Say({ sentences }: { sentences: Sentence[] }) {
+  return <>{sentences.map((sentence, i) => <span key={i}>{i > 0 ? ' ' : ''}{sentence.map((seg, j) => typeof seg === 'string' ? seg
+    : <Link key={j} className={s.inline} href={seg.href}>{seg.text}</Link>)}</span>)}</>;
+}
 
 async function VehicleStrategyPage({ params, searchParams }: {
   params: Promise<{ vehicle: string }>;
@@ -95,20 +104,26 @@ async function VehicleStrategyPage({ params, searchParams }: {
   ];
   const filterLink = (view: string) => `${path}?${new URLSearchParams({ view })}#actions`;
 
-  // One queue, one scale (0082): GUESS incremental capital per team hour. Unscored LP work follows
-  // scored options by evidence points; manual positions from audited move decisions override.
+  // One queue, one scale (0082), ranked by utility created (0097): GUESS capital plus lasting
+  // presence at a configured capital-equivalent. Capital per team hour is the efficiency beside it.
+  // Unscored LP work follows scored options by evidence points; audited manual positions override.
+  const rules = config.strategyRanking;
+  const moveUtility = new Map(moves.map(m => {
+    const e = moveScore(m.estimates); const presence = presenceFor(rules, m.category, m.estimates.presence);
+    return [m.id, { ...utilityOf(rules, { reach: m.estimates.reach.value, capital: e.expected, presence: presence.value }), priority: e.priority, presenceEstimate: presence }];
+  }));
   const ranked: Option[] = [
-    ...active.map(r => { const e = lpEffortScore(r); return { id: r.pursuit.pursuitId, kind: 'lp' as const, tag: `LP · ${STATUS_LABEL[r.pursuit.status]}`, title: r.pursuit.entityName, text: r.action, href: lpPath(r),
-      priority: e.priority, expected: e.expected, hours: e.teamHours, work: r.workPriority, position: null, chosen: false }; }),
-    ...moves.filter(m => m.state !== 'dismissed').map(m => { const e = moveScore(m.estimates); return { id: m.id, kind: 'move' as const, tag: m.category, title: m.title, text: m.detail, href: `#move-${m.id}`,
-      priority: e.priority, expected: e.expected, hours: m.estimates.teamHours.value, work: 0, position: m.position, chosen: m.state === 'chosen' }; }),
-  ].sort((a, b) => (b.priority ?? -1) - (a.priority ?? -1) || b.work - a.work || a.id.localeCompare(b.id));
+    ...active.map(r => { const e = lpEffortScore(r); return { id: r.pursuit.pursuitId, kind: 'lp' as const, tag: 'LP', status: r.pursuit.status, title: r.pursuit.entityName, text: r.action, href: lpPath(r),
+      utility: e.expected, priority: e.priority, hours: e.teamHours, work: r.workPriority, position: null, chosen: false }; }),
+    ...moves.filter(m => m.state !== 'dismissed').map(m => { const u = moveUtility.get(m.id)!; return { id: m.id, kind: 'move' as const, tag: m.category, status: null, title: m.title, text: m.detail, href: `#move-${m.id}`,
+      utility: u.utility, priority: u.priority, hours: m.estimates.teamHours.value, work: 0, position: m.position, chosen: m.state === 'chosen' }; }),
+  ].sort((a, b) => (b.utility ?? -1) - (a.utility ?? -1) || (b.priority ?? -1) - (a.priority ?? -1) || b.work - a.work || a.id.localeCompare(b.id));
   const manual = ranked.filter(r => r.position !== null).sort((a, b) => a.position! - b.position! || a.id.localeCompare(b.id));
   const queue = ranked.filter(r => r.position === null);
   // Apply from the end so ties retain a stable ID order; manual positions include LP rows.
   for (const row of manual.reverse()) queue.splice(Math.min(row.position! - 1, queue.length), 0, row);
   const top = queue.slice(0, 10);
-  const topMax = Math.max(0, ...top.map(o => o.priority ?? 0));
+  const topMax = Math.max(0, ...top.map(o => o.utility ?? 0));
   const ranks = new Map(queue.map((o, i) => [o.id, i + 1]));
 
   const viewIds = new Map(rows.map(r => [r.pursuit.pursuitId, views.filter(v => v.rows.includes(r)).map(v => v.id)]));
@@ -135,7 +150,32 @@ async function VehicleStrategyPage({ params, searchParams }: {
       },
     };
   });
-  const moveRows: MoveTableRow[] = moves.map(m => { const e = moveScore(m.estimates); return { ...m, rank: ranks.get(m.id) ?? null, expected: e.expected, priority: e.priority }; });
+  const moveRows: MoveTableRow[] = moves.map(m => { const u = moveUtility.get(m.id)!; return { ...m, rank: ranks.get(m.id) ?? null,
+    expected: u.capital, priority: u.priority, utility: u.utility, presence: u.presenceEstimate, presenceValue: u.presenceValue }; });
+
+  // Recommendations (0097), computed from the same records as the counts beside them.
+  const n0 = (id: string) => counts.find(c => c.id === id)?.count ?? 0;
+  const statusLink = (status: string) => `${path}?${new URLSearchParams({ status })}#actions`;
+  const committedIds = new Set(active.filter(r => r.pursuit.status === 'committed').map(r => r.pursuit.entityId));
+  const softCommitted = data.exposures.filter(x => x.track === 'soft' && committedIds.has(x.entityId));
+  const discussing = active.filter(r => r.pursuit.status === 'discussing' && r.capacity !== null && !r.limits.length)
+    .sort((a, b) => b.capacity! - a.capacity! || a.pursuit.entityName.localeCompare(b.pursuit.entityName));
+  const pipelineSay = pipelineAdvice({
+    counts: { new: n0('new'), sourcing: n0('sourcing'), selected: n0('selected'), connecting: n0('connecting'), discussing: n0('discussing'), committed: n0('committed') },
+    softCommitted: { lps: new Set(softCommitted.map(x => x.entityId)).size, amount: softCommitted.reduce((sum, x) => sum + x.amount, 0) },
+    gap: total.historical ? null : total.gapToTarget, meanSoft: total.softCount ? total.soft / total.softCount : null,
+    discussingKey: discussing.slice(0, 3).map(r => ({ text: r.pursuit.entityName, href: lpPath(r) })),
+    connectingWithRoute: active.filter(r => r.pursuit.status === 'connecting' && (r.route?.count ?? 0) > 0).length,
+    introBatch: rules.introBatch,
+    links: { discussing: statusLink('discussing'), connecting: statusLink('connecting'), selection: `/${slug}/selection` },
+    money,
+  });
+  const nearMoney = new Set(['selected', 'connecting', 'discussing', 'committed']);
+  const gapSay = gapAdvice({
+    active: active.length, near: active.filter(r => nearMoney.has(r.pursuit.status)).length,
+    gaps: views.filter(v => v.id !== 'all' && v.id !== 'risk').map(v => ({ id: v.id as GapId, total: v.rows.length,
+      near: v.rows.filter(r => nearMoney.has(r.pursuit.status)).length, href: filterLink(v.id) })),
+  });
 
   // Where the raise stands, in sentences that each rest on a record shown lower on the page.
   const scored = active.filter(r => lpEffortScore(r).priority !== null).length;
@@ -164,9 +204,9 @@ async function VehicleStrategyPage({ params, searchParams }: {
     <div className="kv"><span>Moves on the menu</span><span>{liveMoves}</span></div>
     <div className="kv"><span>Chosen for planning</span><span>{moves.filter(m => m.state === 'chosen').length}</span></div>
     <div className="scope"><div className="lbl">How options are ranked</div>
-      <p>Every option, an LP action or a whole-raise move, sits on one scale: <b>GUESS capital moved per team hour</b>.</p>
-      <p>LP action: capacity × likelihood × route weight × conversion adjustment × a {config.strategyRanking.actionValueFraction} action share, over {config.strategyRanking.actionTeamHours} team hours.</p>
-      <p>Move: LPs reached × (check × conversion lift + check lift × conversion) × effect discount, over its team hours.</p>
+      <p>Every option, an LP action or a whole-raise move, sits on one scale: <b>GUESS utility created</b>, capital this raise plus lasting presence. Capital per team hour sits beside it as the efficiency.</p>
+      <p>LP action: capacity × likelihood × route weight × conversion adjustment × a {rules.actionValueFraction} action share.</p>
+      <p>Move: LPs reached × (check × conversion lift + check lift × conversion) × effect discount, plus presence (0–5) × {money(rules.presencePointValue)}.</p>
       <p>Every input is a guess and is shown on its row. Options overlap the same LPs, so their capital is never added up.</p>
     </div>
     <div className="note">A ranking authorizes nothing. Sends, intro requests, spend and publication each need their own approval.</div>
@@ -198,26 +238,26 @@ async function VehicleStrategyPage({ params, searchParams }: {
           : 'No stage exits are recorded yet, so stage-to-stage conversion is unknown, not zero.'}{' '}
         <Ref label="Conversion basis" href="#funnel" at={now} basis="Vehicle-scoped status-change audit. Distinct LPs with recorded exits; history is incomplete, so these are not cohort conversion rates." /></p>
       {gaps.length > 0 && <p><b>Gaps.</b> {gaps.map((g, i) => <span key={g.id}>{i > 0 ? '; ' : ''}<Link className={s.inline} href={filterLink(g.id)}>{count(g.rows.length)} {g.label.toLowerCase()}</Link></span>)}. Missing records are unknown, not evidence of absence.</p>}
-      {top[0] ? <p><b>Next.</b> Highest on the scale: <a className={s.inline} href={top[0].href}>{top[0].title}</a>{top[0].priority !== null ? `, GUESS ${money(top[0].priority)} per team hour` : ', unscored'}.{' '}
+      {top[0] ? <p><b>Next.</b> Highest on the scale: <a className={s.inline} href={top[0].href}>{top[0].title}</a>{top[0].utility !== null ? `, GUESS ${money(top[0].utility)} of utility` : ', unscored'}.{' '}
         {movesInTop} of the top {top.length} are whole-raise moves and {top.length - movesInTop} are single-LP actions. {count(scored)} of {plural(active.length, 'LP action')} have the inputs for a score; the rest follow, ordered by evidence work.{scored < active.length ? ' An LP action is scored once it has a capacity, a likelihood and a current route.' : ''}</p>
         : <p><b>Next.</b> No active LP actions or moves are recorded. Add pursuits in the pipeline or import a move menu below.</p>}
       {total.historical && <p className="muted">Historical vehicle: these records describe a past raise.</p>}
     </section>
 
     <section className={`card ${s.nextCard}`} aria-labelledby="so-next">
-      <div className="chead"><h2 id="so-next">So next</h2><span className="lbl">{top.length ? `top ${top.length} of ${count(queue.length)} options · GUESS $ per team hour` : 'nothing ranked yet'}</span></div>
+      <div className="chead"><h2 id="so-next">So next</h2><span className="lbl">{top.length ? `top ${top.length} of ${count(queue.length)} options · by GUESS utility created` : 'nothing ranked yet'}</span></div>
       {top.length ? <div className="tscroll"><table className={`list ${s.next}`}>
-        <thead><tr><th className={s.num}>#</th><th className={s.hideS}>Kind</th><th>Option</th><th className={`${s.r} ${s.hideS}`}>GUESS capital</th><th className={`${s.r} ${s.hideS}`}>Team h</th><th className={s.score}>GUESS $ / team h</th></tr></thead>
+        <thead><tr><th className={s.num}>#</th><th className={s.hideS}>Kind</th><th>Option</th><th className={s.score}>GUESS utility</th><th className={`${s.r} ${s.hideS}`}>$ / team h</th><th className={`${s.r} ${s.hideS}`}>Team h</th></tr></thead>
         <tbody>{top.map((o, i) => <tr key={o.id}>
           <td className={s.num}>{i + 1}</td>
-          <td className={s.hideS}><span className={`tag ${o.kind === 'lp' ? s.tagLp : s.tagMove}`}>{o.tag}</span></td>
+          <td className={s.hideS}>{o.status ? <span className={s.kindLp}><span className={`tag ${s.tagLp}`}>LP</span><StatusMark status={o.status} /></span> : <span className={`tag ${s.tagMove}`}>{o.tag}</span>}</td>
           <td className={s.what}><span className={s.t1}><a href={o.href}><b>{o.title}</b></a>{o.chosen && <span className={s.chosen}>chosen</span>}{o.position !== null && <span className={s.manual}>placed #{o.position}</span>}</span><span className={s.text}>{o.text}</span></td>
-          <td className={`${s.r} ${s.hideS}`}>{o.expected === null ? '—' : money(o.expected)}</td>
+          <td className={s.score}>{o.utility === null ? <span className="muted">Unscored · {o.work} evidence pts</span> : <><span className={s.bar} aria-hidden><i style={{ width: `${topMax ? Math.max(3, o.utility / topMax * 100) : 0}%` }} /></span><b>{money(o.utility)}</b></>}</td>
+          <td className={`${s.r} ${s.hideS}`}>{o.priority === null ? '—' : money(o.priority)}</td>
           <td className={`${s.r} ${s.hideS}`}>{o.hours ?? '—'}</td>
-          <td className={s.score}>{o.priority === null ? <span className="muted">Unscored · {o.work} evidence pts</span> : <><span className={s.bar} aria-hidden><i style={{ width: `${topMax ? Math.max(3, o.priority / topMax * 100) : 0}%` }} /></span><b>{money(o.priority)}</b></>}</td>
         </tr>)}</tbody>
       </table></div> : <div className="cbody"><div className="empty"><h3>Nothing to rank yet</h3><p>No active pursuits or moves are recorded for this raise. The raise owner can add LPs in the pipeline or import a move menu below.</p></div></div>}
-      <p className="cover"><b>One scale for every option.</b> Each estimate is a labelled guess; open an LP or a move to see its factors. A manual position from a recorded decision overrides model order. Alternatives overlap the same LPs, so their capital is never summed into a forecast, into hard capital, or across vehicles.</p>
+      <p className="cover"><b>One scale for every option: utility created.</b> Each estimate is a labelled guess; open an LP or a move to see its factors. A manual position from a recorded decision overrides model order. Alternatives overlap the same LPs, so their capital is never summed into a forecast, into hard capital, or across vehicles.</p>
     </section>
 
     <div className={s.pair}>
@@ -226,11 +266,12 @@ async function VehicleStrategyPage({ params, searchParams }: {
         <table className={`list ${s.funnel}`}>
           <thead><tr><th>Status</th><th className={s.r}>LPs</th><th aria-label="Share of pursuits" /><th>Recorded exits moving forward</th></tr></thead>
           <tbody>{counts.map(c => <tr key={c.id}>
-            <td>{c.label}</td><td className={s.r}>{count(c.count)}</td>
+            <td><StatusMark status={c.id} label={c.label} /></td><td className={s.r}>{count(c.count)}</td>
             <td className={s.fbar}><span className={s.bar} aria-hidden><i style={{ width: `${rows.length ? Math.max(c.count ? 2 : 0, c.count / Math.max(...counts.map(x => x.count)) * 100) : 0}%` }} /></span></td>
             <td className="muted">{c.id === 'passed' ? '—' : c.conversion.observed ? `${c.conversion.forward} of ${c.conversion.observed}` : 'none recorded'}</td>
           </tr>)}</tbody>
         </table>
+        <div className={s.advice}><div className="lbl">What to do</div><p><Say sentences={pipelineSay} /></p></div>
         <div className="cbody"><details className={s.weekly}><summary>This week: {plural(data.added, 'LP')} added · {plural(weekly.length, 'status change')} · {money(data.hardened)} hardened</summary>
           {weekly.length ? <ul>{weekly.map((t, i) => { const r = rows.find(r => r.pursuit.pursuitId === t.pursuitId); return <li key={i}><span className="mono">{date(t.at)}</span> {r ? <Link href={lpPath(r)}>{r.pursuit.entityName}</Link> : 'Pursuit'} · {STATUS_LABEL[t.from]} → {STATUS_LABEL[t.to]}</li>; })}</ul>
             : <p className="muted">No status changes recorded since {date(since)}. Missing history is not evidence of no activity.</p>}
@@ -241,18 +282,19 @@ async function VehicleStrategyPage({ params, searchParams }: {
         <div className="chead"><h2 id="gaps-h">Gaps and risks</h2><span className="lbl">active LPs</span></div>
         <div className={s.gaps}>{views.slice(1).map(v => <Link key={v.id} href={filterLink(v.id)} className={v.rows.length ? undefined : s.zero}>
           <b>{count(v.rows.length)}</b><span>{v.label}</span><i aria-hidden>→</i></Link>)}</div>
+        <div className={s.advice}><div className="lbl">What to do</div><p><Say sentences={gapSay} /></p></div>
         <p className="cover">Each opens the LP table below, filtered. Stalled means {config.strategyRanking.stalledDays}+ days without recorded activity (GUESS); silence is not a decline. Route counts describe dated stored searches, not every possible route.</p>
       </section>
     </div>
 
     <section className="card" id="moves" aria-labelledby="moves-h">
       <div className="chead"><h2 id="moves-h">Menu of moves</h2><div className={s.chead}><span className="lbl">whole-raise options · {liveMoves} live</span><ImportMoves /></div></div>
-      <MoveTable moves={moveRows} vehicleId={vehicle.id} />
+      <MoveTable moves={moveRows} vehicleId={vehicle.id} pointValue={rules.presencePointValue} />
       <details className={s.history}><summary>Recorded move decisions · {history.length}</summary>
         {history.length ? <ul>{history.map((h, i) => <li key={i}><span className="mono">{date(new Date(h.at))}</span> {h.actor ?? 'Unknown person'} · <b>{h.title}</b>: {h.detail.before.state} → {h.detail.after.state}; position {h.detail.before.position ?? 'model'} → {h.detail.after.position ?? 'model'}. <span className="muted">{h.detail.note}</span></li>)}</ul>
           : <p className="muted">No one has chosen, dismissed or placed a move for this raise yet.</p>}
       </details>
-      <p className="cover">Every figure is a GUESS scenario for this raise alone, never a commitment. Chosen means selected for planning; it authorizes no send, introduction, spend or publication.</p>
+      <p className="cover"><b>Ranked by utility created</b>: capital this raise plus presence (0–5, dashed marks are the kind’s default) at {money(rules.presencePointValue)} a point (GUESS). Reach, capital and presence are the three scores; $ per team hour is how cheaply the utility comes. Every figure is a GUESS scenario for this raise alone, never a commitment. Chosen means selected for planning; it authorizes no send, introduction, spend or publication.</p>
     </section>
 
     <section className="card" id="actions" aria-labelledby="actions-h">

@@ -307,7 +307,12 @@
               "label": "GUESS"
             },
             "audience": "Invented Cedar cohort; overlaps other alternatives.",
-            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization.",
+            "presence": {
+              "value": 4,
+              "basis": "Invented: a short video keeps working after the raise; fictional audience response.",
+              "label": "GUESS"
+            }
           }
         },
         {
@@ -359,7 +364,12 @@
               "label": "GUESS"
             },
             "audience": "Invented Cedar cohort; overlaps other alternatives.",
-            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization.",
+            "presence": {
+              "value": 4,
+              "basis": "Invented: a short video keeps working after the raise; fictional audience response.",
+              "label": "GUESS"
+            }
           }
         }
       ]
@@ -428,7 +438,12 @@
               "label": "GUESS"
             },
             "audience": "Invented Cedar cohort; overlaps other alternatives.",
-            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization.",
+            "presence": {
+              "value": 3,
+              "basis": "Invented: a dated post is cited in later calls; fictional.",
+              "label": "GUESS"
+            }
           }
         },
         {
@@ -480,7 +495,12 @@
               "label": "GUESS"
             },
             "audience": "Invented Cedar cohort; overlaps other alternatives.",
-            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization.",
+            "presence": {
+              "value": 3,
+              "basis": "Invented: a dated post is cited in later calls; fictional.",
+              "label": "GUESS"
+            }
           }
         }
       ]
@@ -670,7 +690,12 @@
               "label": "GUESS"
             },
             "audience": "Invented Cedar cohort; overlaps other alternatives.",
-            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization.",
+            "presence": {
+              "value": 3,
+              "basis": "Invented: a hosted roundtable builds standing with attendees; fictional.",
+              "label": "GUESS"
+            }
           }
         },
         {
@@ -722,7 +747,12 @@
               "label": "GUESS"
             },
             "audience": "Invented Cedar cohort; overlaps other alternatives.",
-            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization.",
+            "presence": {
+              "value": 3,
+              "basis": "Invented: a hosted roundtable builds standing with attendees; fictional.",
+              "label": "GUESS"
+            }
           }
         }
       ]
@@ -1396,7 +1426,12 @@
               "label": "GUESS"
             },
             "audience": "Invented Cedar cohort; overlaps other alternatives.",
-            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization.",
+            "presence": {
+              "value": 1,
+              "basis": "Invented: a clean close is remembered by committed LPs; fictional.",
+              "label": "GUESS"
+            }
           }
         },
         {
@@ -1448,7 +1483,12 @@
               "label": "GUESS"
             },
             "audience": "Invented Cedar cohort; overlaps other alternatives.",
-            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization.",
+            "presence": {
+              "value": 1,
+              "basis": "Invented: a clean close is remembered by committed LPs; fictional.",
+              "label": "GUESS"
+            }
           }
         }
       ]

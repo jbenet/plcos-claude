@@ -40,6 +40,11 @@
 .bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
 
 /* ---------- Pipeline and gaps, side by side ---------- */
+/* The computed recommendation under each: a tinted band, set apart from the counts above it. */
+.advice { padding: 11px 15px 12px; background: var(--accent-soft); border-top: 1px solid var(--accent-line); border-bottom: 1px solid var(--accent-line); }
+.advice :global(.lbl) { color: var(--accent); margin-bottom: 4px; }
+.advice p { margin: 0; font-size: 12.5px; line-height: 1.55; }
+.kindLp { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 11.5px; }
 .pair { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; margin-bottom: 16px; }
 .pair > section { margin-bottom: 0; }
 .funnel:global(.list) { font-size: 12px; }

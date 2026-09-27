@@ -152,6 +152,13 @@ export const config = {
     // GUESS — separate points for evidence work when a monetary score is unavailable.
     evidenceWork: { restriction: 100, overdue: 40, soft: 30, staleStrategy: 20, staleRoute: 15, noOwner: 10, missingResearch: 5, missingStrategy: 5 },
     conversionPriorWeight: 5, // GUESS — damp sparse observed transitions with a neutral prior.
+    // Issue 0097: options rank by utility created = capital + presence × this. GUESS — the
+    // capital-equivalent of one point (of 5) of lasting presence: how LPs see us in later calls and
+    // the next vehicle. Not this raise's capital, and never added to it in a headline.
+    presencePointValue: 10000,
+    introBatch: 20, // GUESS — introductions or replies one team can chase in a week (0097's "10–20").
+    // GUESS — presence (0–5) of a move that has no estimate of its own, by kind of work.
+    presenceDefaults: { presence: 3, events: 2, materials: 1, conversion: 0, sourcing: 0, other: 0 },
   },
   agents: {
     correctionBudgetHoursPerWeek: 12, // GUESS — v3 said 10–15 h/week; circuit-breaker threshold.
