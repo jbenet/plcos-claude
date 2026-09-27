@@ -4,7 +4,7 @@ import { shortDate } from '@/lib/time';
 import { REGION_LABEL, regionOf } from '@/lib/lp-stats/geo';
 import {
   CHECK_BASIS_LABEL, CHECK_LABEL, DIMENSIONS, FIT_LABEL, LP_TYPE_LABEL, SOURCE_LABEL, STATUS_WORD, TYPE_BASIS_LABEL,
-  coverage, filterQuery, recencyOf, toggle, without, RECENCY_LABEL,
+  chosenBasis, coverage, filterQuery, ourCount, recencyOf, toggle, without, RECENCY_LABEL,
   type Filters, type LpFact, type Panel, type Reference, type Segment,
 } from '@/lib/lp-stats/model';
 import s from './stats.module.css';
@@ -14,6 +14,8 @@ const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean)
 const num = (n: number) => n.toLocaleString('en-US');
 const share = (x: number) => (x > 0 && x < 0.005 ? '<1%' : `${Math.round(x * 100)}%`);
 /** Values that are a gap in the record rather than a segment: drawn muted, never as a finding. */
+const COUNTRY_BASIS: Record<NonNullable<LpFact['countryBasis']>, string> = { dakota: 'Dakota', research: 'research', firm: 'their firm’s', people: 'their people’s' };
+const SPV_SHORT: Record<LpFact['spv'], string> = { d10: '≥10', d5: '≥5', d2: '≥2', d1: '≥1', d0: 'Does', no: 'Doesn’t', unknown: 'Unknown' };
 const GAPS = new Set(['unknown', 'none', 'unsearched', 'missing', 'never', 'no', 'Unassigned']);
 
 // ── The filter bar ──────────────────────────────────────────────────────────────────────────────
@@ -162,28 +164,77 @@ export function PanelCard({ panel, filters, at, n, money }: {
 // ── Coverage against a reference ────────────────────────────────────────────────────────────────
 /** GUESS: below this many LPs with a known segment, a few points of gap is one LP either way. */
 const FEW = 20;
-export function CoverageCard({ rows, reference, now, filtered }: { rows: LpFact[]; reference: Reference | null; now: Date; filtered: boolean }) {
+/** A source address as its host, for a short label; the full address is the link. */
+const host = (url: string) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } };
+const SourceRef = ({ source }: { source: string }) =>
+  /^https?:\/\//.test(source) ? <a href={source} target="_blank" rel="noreferrer">{host(source)}</a> : <>{source}</>;
+
+export function CoverageCard({ rows, reference, now, filters, at }: {
+  rows: LpFact[]; reference: Reference | null; now: Date; filters: Filters; at: (f: Filters) => string;
+}) {
   if (!reference) {
     return (
       <div className="card">
         <div className="chead"><h2>Coverage</h2></div>
         <div className="cbody"><p className="muted">
-          No reference distribution could be read from config/lp-market-reference.json, so there is nothing to compare with.
+          No reference could be read from config/lp-market-reference.json, so there is nothing to compare with.
         </p></div>
       </div>
     );
   }
-  const asOf = new Date(`${reference.asOf}T00:00:00Z`);
+  const filtered = DIMENSIONS.some((d) => filters.sel[d.key]?.length) || Boolean(filters.q);
   const block = (key: 'region' | 'type', title: string) => {
-    const c = coverage(rows, key, reference, now);
-    const top = Math.max(0.01, ...c.rows.flatMap((r) => [r.ours, r.reference]));
+    const basis = chosenBasis(reference, key, filters.cov?.[key]);
+    const all = reference.bases.filter((b) => b.dimension === key);
+    const pick = (id: string) => at({ ...filters, cov: { ...filters.cov, [key]: id } });
+    if (!basis) return <div className={s.cov}><h3>{title}</h3><p className={s.covNone}>No public figure to compare with for this.</p></div>;
+    const switcher = all.length > 1 && (
+      <div className={s.bases} role="group" aria-label={`Compare ${key === 'region' ? 'places' : 'types'} with`}>
+        {all.map((b) => (
+          <a data-keep key={b.id} href={pick(b.id)} className={cx(s.basisPick, b.id === basis.id && s.basisOn, !b.shares && s.basisFig)} aria-pressed={b.id === basis.id}>{b.label}</a>
+        ))}
+      </div>
+    );
+    const what = (
+      <p className={s.covWhat}>
+        <b>{basis.shares ? 'Counts:' : 'Figure:'}</b> {basis.figure ? <><b>{basis.figure}.</b> </> : null}{basis.what}{' '}
+        <span className={s.covSrc}>Source: <SourceRef source={basis.source} />{basis.asOf ? ` · ${basis.asOf}` : ''}{basis.confidence ? ` · ${basis.confidence} confidence` : ''}</span>
+      </p>
+    );
+    if (!basis.shares) {
+      return (
+        <div className={s.cov}>
+          <h3>{title}</h3>
+          {switcher}
+          {what}
+          <p className={s.covNote}>A single figure, not a distribution: shown beside our own count, with no share or gap.</p>
+          <table className={s.covTable}>
+            <tbody>
+              {(basis.compare ?? []).map((cmp) => {
+                const o = ourCount(rows, cmp.members, reference.groups, key, now);
+                return (
+                  <tr key={cmp.label}>
+                    <th scope="row">{cmp.label}</th>
+                    <td className={s.cnum}>{num(o.count)} of {num(o.known)} with a known {key === 'region' ? 'country' : 'type'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    const c = coverage(rows, basis, reference.groups, now);
+    const top = Math.max(0.01, ...c.rows.flatMap((r) => [r.ours, r.reference ?? 0]));
     return (
       <div className={s.cov}>
         <h3>{title}</h3>
+        {switcher}
+        {what}
         <p className={s.covNote}>
-          Among the {num(c.known)} LPs whose {key === 'region' ? 'region' : 'type'} is known{c.unknown ? `; ${num(c.unknown)} without one are left out` : ''}.
+          Ours: the {num(c.known)} LPs whose {key === 'region' ? 'country' : 'type'} is known{c.unknown ? `; ${num(c.unknown)} without one are left out` : ''}.
         </p>
-        {c.known === 0 ? <p className={s.covNone}>Nothing to compare: no LP here has a known {key === 'region' ? 'region' : 'type'}.</p> : <>
+        {c.known === 0 ? <p className={s.covNone}>Nothing to compare: no LP here has a known {key === 'region' ? 'country' : 'type'}.</p> : <>
         {c.known < FEW && <p className={s.covFew}>Only {num(c.known)} known: too few for a gap to mean much.</p>}
         <table className={s.covTable}>
           <thead>
@@ -191,19 +242,19 @@ export function CoverageCard({ rows, reference, now, filtered }: { rows: LpFact[
           </thead>
           <tbody>
             {c.rows.map((r) => {
-              const size = Math.abs(r.gap);
-              const words = size < 3 ? 'in line' : r.gap > 0 ? `${Math.round(size)} pts over` : `${Math.round(size)} pts under`;
+              const size = r.gap === null ? 0 : Math.abs(r.gap);
+              const words = r.gap === null ? 'not compared' : size < 3 ? 'in line' : r.gap > 0 ? `${Math.round(size)} pts over` : `${Math.round(size)} pts under`;
               return (
-                <tr key={r.value}>
-                  <th scope="row">{r.label}</th>
+                <tr key={r.value || 'outside'} className={r.gap === null ? s.outside : undefined}>
+                  <th scope="row" title={r.label}>{r.label}</th>
                   <td className={s.covBars} aria-hidden>
                     <span className={s.barOurs}><i style={{ width: `${(r.ours / top) * 100}%` }} /></span>
-                    <span className={s.barRef}><i style={{ width: `${(r.reference / top) * 100}%` }} /></span>
+                    <span className={s.barRef}><i style={{ width: `${((r.reference ?? 0) / top) * 100}%` }} /></span>
                   </td>
                   <td className={s.cnum}>{share(r.ours)}</td>
-                  <td className={cx(s.cnum, s.muted)}>{share(r.reference)}</td>
-                  <td className={cx(s.cnum, s.gapCell, c.known < FEW ? s.small : size >= 10 ? s.big : size >= 3 ? s.mid : s.small)}>
-                    {size >= 3 && <span aria-hidden>{r.gap > 0 ? '▲' : '▼'} </span>}{words}
+                  <td className={cx(s.cnum, s.muted)}>{r.reference === null ? '—' : share(r.reference)}</td>
+                  <td className={cx(s.cnum, s.gapCell, r.gap === null || c.known < FEW ? s.small : size >= 10 ? s.big : size >= 3 ? s.mid : s.small)}>
+                    {r.gap !== null && size >= 3 && <span aria-hidden>{r.gap > 0 ? '▲' : '▼'} </span>}{words}
                   </td>
                 </tr>
               );
@@ -214,13 +265,14 @@ export function CoverageCard({ rows, reference, now, filtered }: { rows: LpFact[
       </div>
     );
   };
+  const asOf = new Date(`${reference.asOf}T00:00:00Z`);
   return (
     <section className="card" aria-labelledby="coverage-title">
       <div className="chead">
-        <h2 id="coverage-title">Coverage against a reference</h2>
+        <h2 id="coverage-title">Coverage against public figures</h2>
         <span className={s.refLabel}>
           {reference.placeholder && <span className="tag t-clay">placeholder</span>}
-          Reference: {reference.source} · {Number.isNaN(asOf.getTime()) ? reference.asOf : shortDate(asOf)}
+          {reference.source} · {Number.isNaN(asOf.getTime()) ? reference.asOf : shortDate(asOf)}
         </span>
       </div>
       <div className={s.covBody}>
@@ -228,10 +280,11 @@ export function CoverageCard({ rows, reference, now, filtered }: { rows: LpFact[
         {block('type', 'By LP type')}
       </div>
       <p className="cover">
-        <b>How to read it:</b> our share of the {filtered ? 'LPs matching the filters' : 'LPs in view'} beside the reference’s share of the
-        LP universe, in percentage points; “over” means more of ours are there than the reference would suggest. The reference is a
-        labelled file (config/lp-market-reference.json)
-        {reference.placeholder ? <>, and its values are <b>invented placeholders</b> until a research run replaces them: read no gap as a finding yet.</> : '.'}
+        <b>How to read it:</b> our share of the {filtered ? 'LPs matching the filters' : 'LPs in view'} beside the basis’s share, in
+        percentage points; “over” means more of ours sit there than the basis would suggest. <b>Different bases count different
+        things</b> — family offices by number, venture fundraising by capital, one region’s funds or the world’s — and none of them
+        is the universe we raise from, so read a gap as a question to ask, not a finding.
+        {reference.placeholder ? <> These values are <b>invented placeholders</b> until a research run replaces them.</> : ''}
         {reference.note ? ` ${reference.note}` : ''}
       </p>
     </section>
@@ -274,6 +327,7 @@ export function LpTable({ rows, filters, at, pages, showVehicle, money, vehicleN
                 <th scope="col">Country</th>
                 <th scope="col">Status</th>
                 <th scope="col" className={s.hideM}>Best path</th>
+                <th scope="col" className={s.hideM}>SPVs</th>
                 <th scope="col" className={s.hideM}>Owner</th>
                 <th scope="col">{sortLink('touch', 'Last touch')}</th>
                 {showVehicle && <th scope="col">Vehicles</th>}
@@ -306,10 +360,11 @@ export function LpTable({ rows, filters, at, pages, showVehicle, money, vehicleN
                     <td className={s.hideM}><span className={r.fit === 'missing' || r.fit === 'unknown' ? s.muted : undefined}>{FIT_LABEL[r.fit]}</span></td>
                     <td>
                       {r.country ?? <span className={s.muted}>Not known</span>}
-                      {r.country && <span className={s.sub}>{REGION_LABEL[regionOf(r.country)]} · {r.countryBasis === 'dakota' ? 'Dakota' : 'research'}</span>}
+                      {r.country && <span className={s.sub}>{REGION_LABEL[regionOf(r.country)]} · {COUNTRY_BASIS[r.countryBasis ?? 'research']}</span>}
                     </td>
                     <td>{STATUS_WORD[r.status]}</td>
                     <td className={s.hideM}><span className={r.tier === 'none' || r.tier === 'unsearched' ? s.muted : undefined}>{r.tier.length === 1 ? `Tier ${r.tier}` : r.tier === 'none' ? 'None found' : 'Not searched'}</span></td>
+                    <td className={s.hideM}><span className={r.spv === 'unknown' ? s.muted : undefined}>{SPV_SHORT[r.spv]}</span></td>
                     <td className={s.hideM} title={`Source: ${SOURCE_LABEL[r.source]}`}>{r.owner}</td>
                     <td className={s.nowrap}>
                       {r.lastTouch ? shortDate(new Date(r.lastTouch)) : <span className={s.muted}>None</span>}

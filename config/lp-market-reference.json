@@ -1,41 +1,118 @@
 {
   "//": [
-    "The reference distribution LP stats compares our LPs with (Coverage panel, app/[vehicle]/stats).",
-    "Shares of the LP universe a venture Fund I raises from, by region and by LP type; each set is",
-    "normalised when read, so the numbers need only be in proportion. Keys are those of lib/lp-stats.",
-    "PLACEHOLDER: every value below is invented for the demo. A research run replaces them with sourced",
-    "values, sets placeholder to false, and names its sources and date in source and asOf."
+    "Public figures the Coverage panel on LP stats compares our LPs with (app/[vehicle]/stats, lib/lp-stats).",
+    "Converted on 27 Sep 2026 from a research run's compilation of public sources; nothing from our records is here.",
+    "Each basis says what it counts and where it comes from. A basis with shares is a distribution over lib/lp-stats keys",
+    "or over the groups below (read as fractions; normalised when read). A basis without shares is a figure that is not",
+    "a distribution, shown for context beside our own count, never compared as a share. Different bases count different",
+    "things (family offices by number, venture fundraising by capital) and must not be summed or blended."
   ],
-  "placeholder": true,
-  "source": "Invented placeholder for the demo, not market data",
+  "placeholder": false,
+  "source": "Public figures compiled by a research run (Deloitte Private, Invest Europe, MAS, InvestHK, Stanford AI Index, ECB)",
   "asOf": "2026-09-27",
-  "note": "Replace with a sourced distribution (a research run) before reading any gap as a finding.",
-  "region": {
-    "north_america": 48,
-    "europe": 24,
-    "middle_east": 7,
-    "asia_sg": 4,
-    "asia_hk": 3,
-    "asia_jp": 3,
-    "asia_cn": 2,
-    "asia_in": 2,
-    "asia_other": 2,
-    "latam": 3,
-    "other": 2
+  "note": "The first basis of each kind is the default.",
+  "groups": {
+    "asia_pacific": { "label": "Asia-Pacific (with Australia and New Zealand)", "members": ["asia_sg", "asia_hk", "asia_jp", "asia_cn", "asia_in", "asia_other", "country:Australia", "country:New Zealand"] },
+    "south_america": { "label": "Latin America (South America in the source)", "members": ["latam"] },
+    "africa": { "label": "Africa", "members": ["country:South Africa", "country:Nigeria", "country:Kenya", "country:Mauritius", "country:Morocco"] },
+    "government": { "label": "Government agencies and sovereign funds", "members": ["sovereign_government"] },
+    "family_offices": { "label": "Family offices (single and multi)", "members": ["family_office", "multi_family_office"] },
+    "endowments_foundations": { "label": "Endowments, foundations, academic institutions", "members": ["endowment", "foundation"] },
+    "banks": { "label": "Banks (our RIA, wealth and private-bank type)", "members": ["wealth_platform"] },
+    "capital_markets": { "label": "Capital markets (our other institution)", "members": ["other_institution"] }
   },
+  "region": { "north_america": 0.396, "asia_pacific": 0.285, "europe": 0.252, "middle_east": 0.036, "south_america": 0.024, "africa": 0.007 },
   "type": {
-    "family_office": 22,
-    "multi_family_office": 5,
-    "individual": 24,
-    "fund_of_funds": 12,
-    "fund_manager": 6,
-    "foundation": 7,
-    "endowment": 5,
-    "corporate": 6,
-    "wealth_platform": 5,
-    "pension_insurance": 3,
-    "sovereign_government": 3,
-    "crypto_treasury": 1,
-    "other_institution": 1
-  }
+    "government": 0.26, "corporate": 0.17, "pension_insurance": 0.16, "individual": 0.09, "fund_of_funds": 0.08, "fund_manager": 0.08,
+    "family_offices": 0.06, "banks": 0.05, "endowments_foundations": 0.04, "capital_markets": 0.01
+  },
+  "bases": [
+    {
+      "id": "sfo-count-2024",
+      "dimension": "region",
+      "label": "Single-family offices, by number (world, 2024)",
+      "what": "Estimated single-family offices by region, 2024: 8,030 worldwide; each region's count over the total. Asia-Pacific and South America are the source's regions; the UK is inside Europe.",
+      "source": "https://www.deloitte.com/global/en/services/deloitte-private/research/defining-the-family-office-landscape.html",
+      "asOf": "2024",
+      "confidence": "high",
+      "shares": { "north_america": 0.396, "asia_pacific": 0.285, "europe": 0.252, "middle_east": 0.036, "south_america": 0.024, "africa": 0.007 }
+    },
+    {
+      "id": "sfo-singapore",
+      "dimension": "region",
+      "label": "Singapore family offices",
+      "figure": "more than 2,000 single-family offices",
+      "what": "Single-family offices receiving the section 13O/13U tax incentives (MAS written parliamentary reply, 5 Aug 2026): incentive holders, not all family offices.",
+      "source": "https://www.mas.gov.sg/news/parliamentary-replies/2026/written-reply-on-sfos",
+      "asOf": "2025-12-31",
+      "confidence": "high",
+      "shares": null,
+      "compare": [{ "label": "Ours in Singapore", "members": ["asia_sg"] }]
+    },
+    {
+      "id": "sfo-hong-kong",
+      "dimension": "region",
+      "label": "Hong Kong family offices",
+      "figure": "more than 3,380 single-family offices (2,703 at the end of 2023, 885 of them with USD 100M+)",
+      "what": "Single-family offices in Hong Kong, Deloitte market study for InvestHK; counts families from about USD 10M of wealth, a wider definition than the world count.",
+      "source": "https://www.info.gov.hk/gia/general/202602/10/P2026021000234.htm",
+      "asOf": "2025-12-31",
+      "confidence": "high",
+      "shares": null,
+      "compare": [{ "label": "Ours in Hong Kong", "members": ["asia_hk"] }]
+    },
+    {
+      "id": "ai-investment-2024",
+      "dimension": "region",
+      "label": "Private AI investment (2024)",
+      "figure": "United States USD 109.1bn, China 9.3bn, United Kingdom 4.5bn",
+      "what": "Private investment in AI companies by country, 2024 (Stanford AI Index 2025): where AI companies raised money, not LP capital.",
+      "source": "https://hai.stanford.edu/ai-index/2025-ai-index-report/economy",
+      "asOf": "2024",
+      "confidence": "high",
+      "shares": null,
+      "compare": [
+        { "label": "Ours in the United States", "members": ["country:United States"] },
+        { "label": "Ours in China", "members": ["country:China"] },
+        { "label": "Ours in the United Kingdom", "members": ["country:United Kingdom"] }
+      ]
+    },
+    {
+      "id": "eu-vc-from-asia-2024",
+      "dimension": "region",
+      "label": "European VC raised from Asia and Australia",
+      "figure": "2.1% in 2024 (4.5% in 2023)",
+      "what": "Share of capital raised by European venture funds that came from LPs in Australia and Asia, read from a map in the Invest Europe 2024 activity report.",
+      "source": "https://www.investeurope.eu/media/li0b2ruj/20250508_invest-europe_pe-activity-data-2024-report.pdf",
+      "asOf": "2024",
+      "confidence": "medium",
+      "shares": null,
+      "compare": [{ "label": "Ours in Asia-Pacific", "members": ["asia_pacific"] }]
+    },
+    {
+      "id": "eu-vc-lp-types-2024",
+      "dimension": "type",
+      "label": "European venture fundraising, by capital (2024)",
+      "what": "Share of capital raised by European venture funds in 2024 by type of LP (328 funds, 271 firms; Invest Europe / EDC, p. 22): capital-weighted, Europe-domiciled funds. Government agencies 25% and sovereign funds 1% are one row; pension funds 11% and insurers 5% are one; endowments and foundations 3% and academic institutions 1% are one.",
+      "source": "https://www.investeurope.eu/media/li0b2ruj/20250508_invest-europe_pe-activity-data-2024-report.pdf",
+      "asOf": "2024",
+      "confidence": "high",
+      "shares": {
+        "government": 0.26, "corporate": 0.17, "pension_insurance": 0.16, "individual": 0.09, "fund_of_funds": 0.08, "fund_manager": 0.08,
+        "family_offices": 0.06, "banks": 0.05, "endowments_foundations": 0.04, "capital_markets": 0.01
+      }
+    },
+    {
+      "id": "us-vc-government-share",
+      "dimension": "type",
+      "label": "Government LPs in US venture funds",
+      "figure": "about 4% of LPs, by number of fund investments (2015–2025)",
+      "what": "Government entities' share of LPs in US VC funds (PitchBook data, ECB calculations); the ECB notes pension funds and foundations are the dominant US institutional LP groups.",
+      "source": "https://www.ecb.europa.eu/press/fie/box/html/ecb.fiebox202605_04.en.html",
+      "asOf": "2015–2025",
+      "confidence": "high",
+      "shares": null,
+      "compare": [{ "label": "Ours that are government-backed", "members": ["sovereign_government"] }]
+    }
+  ]
 }

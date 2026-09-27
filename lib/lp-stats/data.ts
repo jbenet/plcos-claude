@@ -7,7 +7,7 @@ import { listAssessments, type Assessment } from '@/modules/fit';
 import { ticketEstimate } from '@/lib/connectors/dakota/rules';
 import { countryOf } from './geo';
 import {
-  bandOfAmount, bandOfText, lpTypeOf, sourceOf,
+  bandOfAmount, bandOfText, lpTypeOf, sourceOf, spvBandOf,
   type CheckBand, type CheckBasis, type FitGroup, type LpFact, type Money, type PursuitStatus, type Tier,
 } from './model';
 
@@ -44,25 +44,41 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
   const pursuitIds = rows.map((r) => r.id);
   const vehicleIds = [...new Set(rows.map((r) => r.vehicleId))];
   const orgIds = [...new Set(rows.filter((r) => r.isOrg).map((r) => r.entityId))];
+  // A firm's people now: their research can say what the firm is, and where it is. `speaks` marks the
+  // ones whose word counts for the firm's type — its contacts on a pursuit, or people whose primary
+  // affiliation it is and who are not on it only as a board member, adviser or investor (a family-office
+  // principal on a company's board does not make the company a family office).
+  const orgPeople = await db.query<{ org: string; person: string; speaks: boolean }>(
+    `select identity.canonical_entity_id(a.org_entity)::text org, identity.canonical_entity_id(a.person_entity)::text person,
+       bool_or((a.is_primary and coalesce(a.role,'') !~* '(board|advis|investor|limited partner|member)')
+         or exists(select 1 from strategy.pursuit_contact c join strategy.active_pursuit p using(pursuit_id)
+           where identity.canonical_entity_id(p.entity_id)=identity.canonical_entity_id(a.org_entity)
+             and identity.canonical_entity_id(c.person_entity)=identity.canonical_entity_id(a.person_entity))) speaks
+     from identity.affiliation a where identity.canonical_entity_id(a.org_entity)=any($1::uuid[]) and a.ended_on is null
+     group by 1,2`, [orgIds]);
+  const people = [...new Set(orgPeople.map((p) => p.person))];
+  const firmIds = [...new Set(rows.filter((r) => !r.isOrg && r.orgId).map((r) => r.orgId!))];
+  /** Everyone whose place or type may be read: the LPs, individuals' firms, and firms' people. */
+  const allIds = [...new Set([...ids, ...firmIds, ...people])];
 
-  const [types, accounts, contactsOwn, profiles, claims, claimCounts, pursuits, prospects, strategies, exposures, routes, orgPeople] = await Promise.all([
+  const [types, accounts, contactsOwn, profiles, claims, claimCounts, pursuits, prospects, strategies, exposures, routes] = await Promise.all([
     db.query<{ id: string; t: string }>(`select entity_id::text id, entity_type::text t from identity.entity where entity_id=any($1::uuid[])`, [ids]),
     db.query<{ id: string; type: string | null; country: string | null; average_ticket_size__c: string | null; check_size_from__c: string | null;
       private_equity_average_ticket_size__c: string | null; lastmodifieddate: Date }>(
       `${WANTED} select w.target::text id, a.type, a.billingcountry country, a.average_ticket_size__c, a.check_size_from__c,
          a.private_equity_average_ticket_size__c, a.lastmodifieddate
-       from wanted w join dakota.account a on a.entity_id=w.entity_id order by a.lastmodifieddate desc, a.id`, [ids]),
+       from wanted w join dakota.account a on a.entity_id=w.entity_id order by a.lastmodifieddate desc, a.id`, [allIds]),
     db.query<{ id: string; country: string | null }>(
       `${WANTED} select w.target::text id, c.mailingcountry country from wanted w join dakota.contact c on c.entity_id=w.entity_id
-       where c.mailingcountry is not null order by c.lastmodifieddate desc, c.id`, [ids]),
+       where c.mailingcountry is not null order by c.lastmodifieddate desc, c.id`, [allIds]),
     db.query<{ id: string; itype: string | null; loc: string | null }>(
       `${WANTED} select distinct on (w.target) w.target::text id, n.data#>>'{profile,investorType}' itype, n.data#>>'{identity,canonical,location}' loc
        from wanted w join research.note n on n.entity_id=w.entity_id and n.kind='public_profile'
-       order by w.target, n.created_at desc, n.note_id`, [ids]),
+       order by w.target, n.created_at desc, n.note_id`, [allIds]),
     db.query<{ id: string; field: string; value: string }>(
       `${WANTED} select w.target::text id, c.field, c.value from wanted w join research.claim c on c.entity_id=w.entity_id
        where c.superseded_by is null and c.field in ('public.location','typical_check_usd')
-       order by c.as_of desc, c.created_at desc`, [ids]),
+       order by c.as_of desc, c.created_at desc`, [allIds]),
     db.query<{ id: string; n: string }>(
       `${WANTED} select w.target::text id, count(*)::text n from wanted w join research.claim c on c.entity_id=w.entity_id
        where c.superseded_by is null group by 1`, [ids]),
@@ -85,15 +101,7 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
       `select c.target_id::text id, c.vehicle_kind kind,
          (select min(r->>'weakestTier') from jsonb_array_elements(case when jsonb_typeof(c.search->'routes')='array' then c.search->'routes' else '[]'::jsonb end) r) tier
        from network.route_cache c where c.target_id=any($1::uuid[])`, [ids]),
-    db.query<{ org: string; person: string }>(
-      `select distinct identity.canonical_entity_id(a.org_entity)::text org, identity.canonical_entity_id(a.person_entity)::text person
-       from identity.affiliation a where identity.canonical_entity_id(a.org_entity)=any($1::uuid[]) and a.ended_on is null`, [orgIds]),
   ]);
-  const people = [...new Set(orgPeople.map((p) => p.person))];
-  const peopleProfiles = people.length ? await db.query<{ id: string; itype: string | null }>(
-    `${WANTED} select distinct on (w.target) w.target::text id, n.data#>>'{profile,investorType}' itype
-     from wanted w join research.note n on n.entity_id=w.entity_id and n.kind='public_profile'
-     order by w.target, n.created_at desc, n.note_id`, [people]) : [];
 
   const first = <T extends { id: string }>(list: T[]) => { const m = new Map<string, T>(); for (const x of list) if (!m.has(x.id)) m.set(x.id, x); return m; };
   const typeOf = new Map(types.map((t) => [t.id, t.t]));
@@ -105,10 +113,10 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
   const claimCount = new Map(claimCounts.map((c) => [c.id, Number(c.n)]));
   const pursuitOf = new Map(pursuits.map((p) => [p.id, p]));
   const hasStrategy = new Set(strategies.map((s) => s.id));
-  const itypeOf = new Map(peopleProfiles.map((p) => [p.id, p.itype]));
+  const itypeOf = new Map(profiles.map((p) => [p.id, p.itype]));
   const contactTypes = new Map<string, string[]>();
-  for (const { org, person } of orgPeople) {
-    const t = itypeOf.get(person);
+  for (const { org, person, speaks } of orgPeople) {
+    const t = speaks ? itypeOf.get(person) : undefined;
     if (t && t !== 'unknown') contactTypes.set(org, [...(contactTypes.get(org) ?? []), t]);
   }
   const mostCommon = (list: string[]) => {
@@ -127,6 +135,15 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
   }
   const prospectsOf = new Map<string, typeof prospects>();
   for (const x of prospects) prospectsOf.set(x.id, [...(prospectsOf.get(x.id) ?? []), x]);
+  /** An entity's own place: Dakota's country (an account's billing, a person's mailing), else research. */
+  const placeOf = (id: string, unit: 'organisation' | 'individual'): { country: string; basis: 'dakota' | 'research' } | null => {
+    const dakota = countryOf(unit === 'organisation' ? accountOf.get(id)?.country : contactOf.get(id)?.country ?? accountOf.get(id)?.country);
+    if (dakota) return { country: dakota, basis: 'dakota' };
+    const research = countryOf(profileOf.get(id)?.loc) ?? countryOf(claimOf.get(`${id}:public.location`));
+    return research ? { country: research, basis: 'research' } : null;
+  };
+  const peopleOf = new Map<string, string[]>();
+  for (const { org, person } of orgPeople) peopleOf.set(org, [...(peopleOf.get(org) ?? []), person]);
   const formal = new Map(assessments.map((a) => [`${a.entityId}:${a.vehicleId}`, a]));
   const readingOf = new Map(readings.map((r) => [r.pursuit_id, r]));
 
@@ -152,9 +169,12 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
     else if (prospect && bandOfText(prospect.band) !== 'unknown') { check = bandOfText(prospect.band); checkBasis = 'prospect'; checkText = `${prospect.band} (guess)`; }
 
     // Country: Dakota's, else the research profile's place, else a sourced location claim.
-    const dakotaCountry = countryOf(unit === 'organisation' ? account?.country : contactOf.get(r.entityId)?.country);
-    const researchCountry = countryOf(profile?.loc) ?? countryOf(claimOf.get(`${r.entityId}:public.location`));
-    const country = dakotaCountry ?? researchCountry;
+    const own = placeOf(r.entityId, unit);
+    const borrowed = own ? null : unit === 'individual'
+      ? (r.orgId ? placeOf(r.orgId, 'organisation') : null)
+      : mostCommon((peopleOf.get(r.entityId) ?? []).map((x) => placeOf(x, 'individual')?.country).filter((x): x is string => !!x))[0] ?? null;
+    const country = own?.country ?? (typeof borrowed === 'string' ? borrowed : borrowed?.country) ?? null;
+    const countryBasis = own ? own.basis : country ? (unit === 'individual' ? 'firm' as const : 'people' as const) : null;
 
     const reading = readingOf.get(r.id);
     const a = formal.get(`${r.entityId}:${r.vehicleId}`);
@@ -174,7 +194,7 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
       pursuits: [{ vehicle: slug, id: r.id, status: r.status as PursuitStatus }],
       type, typeBasis: basis, check, checkBasis, checkText,
       score: r.score, scoreKind: r.score === null ? null : r.scoreKind,
-      fit, country, countryBasis: dakotaCountry ? 'dakota' : researchCountry ? 'research' : null,
+      fit, country, countryBasis, spv: spvBandOf(r.spv?.stance ?? 'unknown', r.spv?.minDeals ?? null),
       status: r.status as PursuitStatus, tier,
       source: sourceOf(p?.source ?? null, prospect?.key ?? listedAsProspect[0]?.key ?? null),
       owner: r.owner || 'Unassigned', strategy: hasStrategy.has(r.id),

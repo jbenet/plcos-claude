@@ -83,6 +83,48 @@ const PLACES: Record<string, string> = {
   bangalore: 'India', bengaluru: 'India', 'new delhi': 'India', delhi: 'India', seoul: 'South Korea', taipei: 'Taiwan', jakarta: 'Indonesia',
   'kuala lumpur': 'Malaysia', bangkok: 'Thailand', manila: 'Philippines', sydney: 'Australia', melbourne: 'Australia', auckland: 'New Zealand',
   'são paulo': 'Brazil', 'sao paulo': 'Brazil', 'mexico city': 'Mexico', 'buenos aires': 'Argentina', santiago: 'Chile', bogota: 'Colombia',
+  // Added after the first real pass (27 Sep): the cities and forms LP records give for Asia and the Gulf,
+  // and European cities that otherwise fell to a two-letter code ("Frankfurt, DE" was read as Delaware).
+  'raffles place': 'Singapore', 'marina bay': 'Singapore', 'orchard road': 'Singapore', '新加坡': 'Singapore',
+  kowloon: 'Hong Kong', 'wan chai': 'Hong Kong', 'causeway bay': 'Hong Kong', 'tsim sha tsui': 'Hong Kong', 'sheung wan': 'Hong Kong',
+  '香港': 'Hong Kong',
+  kyoto: 'Japan', yokohama: 'Japan', nagoya: 'Japan', fukuoka: 'Japan', kobe: 'Japan', sapporo: 'Japan', minato: 'Japan', 'minato-ku': 'Japan',
+  shibuya: 'Japan', 'shibuya-ku': 'Japan', chiyoda: 'Japan', 'chiyoda-ku': 'Japan', '日本': 'Japan', '東京': 'Japan', '东京': 'Japan',
+  busan: 'South Korea', incheon: 'South Korea', seongnam: 'South Korea', pangyo: 'South Korea', gangnam: 'South Korea', daejeon: 'South Korea',
+  '한국': 'South Korea', '서울': 'South Korea', 'south korean': 'South Korea',
+  sharjah: 'United Arab Emirates', 'ras al khaimah': 'United Arab Emirates', difc: 'United Arab Emirates', adgm: 'United Arab Emirates',
+  jeddah: 'Saudi Arabia', dammam: 'Saudi Arabia', khobar: 'Saudi Arabia', 'al khobar': 'Saudi Arabia', dhahran: 'Saudi Arabia', neom: 'Saudi Arabia',
+  'kuwait city': 'Kuwait', manama: 'Bahrain', muscat: 'Oman', amman: 'Jordan', beirut: 'Lebanon', istanbul: 'Turkey', jerusalem: 'Israel', herzliya: 'Israel', haifa: 'Israel',
+  guangzhou: 'China', chengdu: 'China', suzhou: 'China', nanjing: 'China', '中国': 'China', '北京': 'China', '上海': 'China', '深圳': 'China',
+  hyderabad: 'India', chennai: 'India', pune: 'India', gurgaon: 'India', gurugram: 'India', noida: 'India', kolkata: 'India',
+  'ho chi minh city': 'Vietnam', hanoi: 'Vietnam', 'hsinchu': 'Taiwan',
+  frankfurt: 'Germany', hamburg: 'Germany', cologne: 'Germany', düsseldorf: 'Germany', dusseldorf: 'Germany', stuttgart: 'Germany',
+  lausanne: 'Switzerland', basel: 'Switzerland', bern: 'Switzerland', rotterdam: 'Netherlands', 'the hague': 'Netherlands', antwerp: 'Belgium',
+  brussels: 'Belgium', gothenburg: 'Sweden', malmö: 'Sweden', lyon: 'France', vaduz: 'Liechtenstein', valletta: 'Malta', nicosia: 'Cyprus',
+  limassol: 'Cyprus', athens: 'Greece', budapest: 'Hungary', bucharest: 'Romania', vilnius: 'Lithuania', riga: 'Latvia', kyiv: 'Ukraine',
+  'st. helier': 'Jersey', 'st helier': 'Jersey', 'st peter port': 'Guernsey', manchester: 'United Kingdom', cambridgeshire: 'United Kingdom',
+  brisbane: 'Australia', perth: 'Australia', canberra: 'Australia', wellington: 'New Zealand', 'cape town': 'South Africa', johannesburg: 'South Africa',
+  lagos: 'Nigeria', nairobi: 'Kenya', 'rio de janeiro': 'Brazil', lima: 'Peru', montevideo: 'Uruguay', 'george town, cayman': 'Cayman Islands',
+  'grand cayman': 'Cayman Islands', calgary: 'Canada', ottawa: 'Canada',
+  'new york, ny': 'United States', manhattan: 'United States', brooklyn: 'United States', 'los altos': 'United States', 'woodside': 'United States',
+  atherton: 'United States', 'redwood city': 'United States', berkeley: 'United States', oakland: 'United States', 'santa monica': 'United States',
+  'san mateo': 'United States', sunnyvale: 'United States', philadelphia: 'United States', pittsburgh: 'United States', houston: 'United States',
+  dallas: 'United States', atlanta: 'United States', nashville: 'United States', 'salt lake city': 'United States', phoenix: 'United States',
+  portland: 'United States', minneapolis: 'United States', detroit: 'United States', 'palm beach': 'United States', 'west palm beach': 'United States',
+  aspen: 'United States', 'jackson hole': 'United States', stamford: 'United States', princeton: 'United States',
+  'new haven': 'United States', 'd.c': 'United States', honolulu: 'United States', 'las vegas': 'United States',
+};
+/**
+ * ISO country codes read as a country when they stand alone after a comma ("Frankfurt, DE" aside —
+ * that one is also a US state, see US_CODES). Codes that are also a US state's are left to US_CODES.
+ */
+const ISO2: Record<string, string> = {
+  gb: 'United Kingdom', sg: 'Singapore', hk: 'Hong Kong', jp: 'Japan', kr: 'South Korea', ae: 'United Arab Emirates', sa: 'Saudi Arabia',
+  ch: 'Switzerland', fr: 'France', nl: 'Netherlands', se: 'Sweden', dk: 'Denmark', fi: 'Finland', au: 'Australia', nz: 'New Zealand',
+  br: 'Brazil', mx: 'Mexico', cn: 'China', tw: 'Taiwan', qa: 'Qatar', kw: 'Kuwait', bh: 'Bahrain', om: 'Oman', th: 'Thailand',
+  ie: 'Ireland', es: 'Spain', it: 'Italy', pt: 'Portugal', at: 'Austria', be: 'Belgium', lu: 'Luxembourg', pl: 'Poland', cz: 'Czech Republic',
+  gr: 'Greece', tr: 'Turkey', eg: 'Egypt', za: 'South Africa', ng: 'Nigeria', ke: 'Kenya', cl: 'Chile', pe: 'Peru', uy: 'Uruguay',
+  li: 'Liechtenstein', mc: 'Monaco', cy: 'Cyprus', ee: 'Estonia', vn: 'Vietnam', ph: 'Philippines', my: 'Malaysia',
 };
 const US_CODES = new Set(['al', 'ak', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'fl', 'ga', 'hi', 'id', 'il', 'in', 'ia', 'ks', 'ky', 'la', 'me', 'md', 'ma', 'mi', 'mn', 'ms', 'mo', 'mt', 'ne', 'nv', 'nh', 'nj', 'nm', 'ny', 'nc', 'nd', 'oh', 'ok', 'or', 'pa', 'ri', 'sc', 'sd', 'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv', 'wi', 'wy', 'dc']);
 
@@ -95,6 +137,8 @@ for (const [name, region, aliases] of COUNTRIES) {
 
 /** Every name read inside a phrase: countries and their other names, then places. */
 const WHOLE: Array<[string, string]> = [...NAME_OF.entries(), ...Object.entries(PLACES)];
+
+const CJK = Object.entries(PLACES).filter(([n]) => /[\u3000-\u9fff\uac00-\ud7af]/.test(n));
 
 /** The region a country (as named by countryOf) rolls up to; unknown for anything else. */
 export const regionOf = (country: string | null): Region => (country ? REGION_OF.get(country) ?? 'other' : 'unknown');
@@ -117,11 +161,15 @@ export function countryOf(text: string | null | undefined): string | null {
     }
     const place = PLACES[p];
     if (place) return place;
+    if (i > 0 && ISO2[p]) return ISO2[p]!;
   }
   // A whole phrase ("based in the Greater London area"): the longest known name inside it, so
   // "New Jersey" is read before "Jersey".
   const whole = ` ${text.toLowerCase().replace(/[^\p{L}\s.']/gu, ' ').replace(/\s+/g, ' ')} `;
   let best: { name: string; len: number } | null = null;
   for (const [n, country] of WHOLE) if (n.length > (best?.len ?? 3) && whole.includes(` ${n} `)) best = { name: country, len: n.length };
-  return best?.name ?? null;
+  if (best) return best.name;
+  // Scripts written without spaces between words (東京都港区): a known name anywhere in the text.
+  for (const [n, country] of CJK) if (text.includes(n)) return country;
+  return null;
 }
