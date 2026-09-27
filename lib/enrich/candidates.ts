@@ -145,10 +145,10 @@ const IDENTITY_FIELDS = ['Current Organization', 'Current Job Title', 'Organizat
 
 export async function researchSet(): Promise<Candidate[]> {
   const db = await getDb();
-  // Dakota-derived identity and planning fields must never become research files/prompts.
-  const privateEntities = new Set((await db.query<{id:string}>(`select identity.canonical_entity_id(entity_id)::text id
-    from identity.source_record where source='dakota'`)).map(r=>r.id));
-  const all = (await listPursuits(null)).filter(inResearchSet).filter(p=>!privateEntities.has(p.entityId));
+  // Juan, 27 Sep: names and entities may be searched, Dakota-sourced ones included. What stays out of
+  // research files is Dakota's private or aggregated fields: none are read here (the affiliation read
+  // below skips Dakota's, and nothing from dakota.* is exported).
+  const all = (await listPursuits(null)).filter(inResearchSet);
   const byEntity = new Map<string, Pursuit[]>();
   for (const p of all) byEntity.set(p.entityId, [...(byEntity.get(p.entityId) ?? []), p]);
   const ids = [...byEntity.keys()];
