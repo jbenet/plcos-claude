@@ -136,6 +136,9 @@ needs a precise input, or performance becomes a demonstrated problem.
 ## Working discipline
 
 Claude integrates; work on your assigned branch and leave other builders' files alone.
+On long unattended stretches, follow the throughput rules in
+[Working practices](docs/agent-rules/operations.md): every slot busy, a heartbeat instead of watch loops,
+end-to-end research runs, and the most important and urgent work first.
 One session per workstream. Delegate screenshots, visual checks, trial-and-error and code
 search to scoped agents as specified in [Working practices](docs/agent-rules/operations.md).
 Keep workflow inputs and rules fixed during a pass. Never dump long output into context.

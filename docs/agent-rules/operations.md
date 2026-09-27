@@ -33,6 +33,40 @@ The in-app feedback box writes these files. `IssueSink` stays an interface so
 
 ---
 
+## Throughput: nights and long unattended stretches (Juan, 27 Sep 2026)
+
+Juan: nights are long stretches without his feedback and should produce a lot, at high quality
+and fast ("important and urgent"). The night of 26–27 Sep produced 252 new LPs and 138 strategies, but
+most builder slots sat idle most of the time. Measured causes:
+- **Concurrency averaged 2–3 of 7 ChatGPT slots.** Claude's own research agents (`lp-researcher`,
+  `strategy-writer`) were not used at all.
+- **Idle gaps:** 3.5 h (10:30–14:10) with nothing running and no summary. About 1 h (08:00–09:05) was
+  spent waiting on a watch loop instead of launching work.
+- **A serial pipeline with Claude in every hop:** source → add prospects → export → W3 → W5 → import,
+  each waiting for the one before, and every live import blocking the next.
+- **Launches were reactive,** one after a notification, with no queue of next runs ready.
+
+Rules:
+1. **Keep every slot busy.** Overnight, run 6+ ChatGPT runs (b1–b6, build) and 2–4 Claude
+   sub-agents at once. Keep a ready queue of briefs, at least the next three, so a finished run is
+   replaced within minutes. An empty slot is a defect to report in the summary.
+2. **Heartbeat, not watch loops.** Every wait gets a timeout. A 10–15 minute heartbeat checks every
+   run, relaunches finished slots, and imports. The 30-minute summary is a hard timer, and a missed
+   one is reported as missed.
+3. **End-to-end runs.** A sourcing run writes the W1 profiles and the W5 strategies in the same pass,
+   and the Netholabs-style rounds prove the quality holds. Claude runs Add prospects, export, W3 and
+   Import the findings once per wave (about hourly), not once per run.
+4. **Work on what moves money first.** Before a night starts, rank the work by importance × urgency
+   and write the order down, for example: meetings and events in the next two weeks, then warm
+   paths to Discussing and Committed LPs, then sourcing, then tooling. Design and logic run beside
+   it, never instead of it.
+5. **Measure output, not activity.** Every summary shows:
+   - slots busy versus idle;
+   - qualified LPs added, strategies written, new warm paths, and issues closed;
+   - the tactic yield per round, with the next round's tactic chosen from it.
+6. **Quality still gates live:** tsc, boundaries and props before every merge, and a self-graded
+   sample on every research round. Speed comes from parallel work, not from skipping checks.
+
 ## Working notes
 
 - **Two agents, one repo:** Claude and ChatGPT (Codex) work in separate git worktrees on their own
