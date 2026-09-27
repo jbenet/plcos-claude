@@ -166,3 +166,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Identity review export performance](entries/identity-export-perf.md)
 - [LP units — the firm is the LP, individuals apart](entries/lp-units-0111.md)
 - [SPV stance — whether an LP does SPVs, and how many we know of](entries/spv-stance.md)
+- [LP stats — who the LPs are, counted, with every count a filter](entries/lp-stats.md)

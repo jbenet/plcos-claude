@@ -73,7 +73,7 @@ export const VEHICLE_MODULES: NavModule[] = [
     'Everything trying to happen at once, drawn ten ways: stations, people, drop-off, the fortnight ahead, instruments, the map, the plant, the moves, the grid, the economy.',
     true, undefined, true),
   // Order: Juan, issues 0102 and 0110 (27 Sep): strategy, pipeline, selection, then fit under selection;
-  // calendar before routes.
+  // calendar before routes. LP stats sits under fit.
   m('S', 'Strategy', 'strategy', 'L9',
     'Where the raise stands, the option space against it, and a place to commit.',
     true, undefined, true),
@@ -81,6 +81,10 @@ export const VEHICLE_MODULES: NavModule[] = [
   m('03', 'Selection', 'selection', 'L9', 'The capacity/affinity/propensity rubric, with weights visible and editable.'),
   m('03b', 'Funder–vehicle fit', 'fit', 'L9',
     'Hard gates, graded dimensions, what they value, what they think of us, and who we know in common.',
+    true, undefined, true),
+  // LP stats (Juan, 27 Sep): after fit, the counts behind the lists above it.
+  m('03c', 'LP stats', 'stats', 'L9',
+    'The LPs counted by type, check size, score, place, status, path, source and owner; every count filters the list.',
     true, undefined, true),
   m('22', 'Calendar', 'calendar', 'L7',
     'Everything dated for this vehicle on one compressed timeline, projected from the records that own it.',
