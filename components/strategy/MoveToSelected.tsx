@@ -87,31 +87,31 @@ export function useMove() {
 }
 export type MoveState = ReturnType<typeof useMove>;
 
-/** The large button, for the ticked LPs or the one in focus. */
+/**
+ * The main button, for the ticked LPs or the one in focus: the app's black primary, full width
+ * (issue 0109: the green one was too big). The heading above it says what it acts on.
+ */
 export function MoveButton({ state, rows, ticked, onMove }: { state: MoveState; rows: PipelineRow[]; ticked: boolean; onMove: () => void }) {
   const todo = rows.filter((r) => r.status !== 'selected');
-  const already = rows.length - todo.length;
-  const one = rows.length === 1 ? rows[0]! : null;
-  const label = !rows.length ? 'Move to Selected'
-    : !todo.length ? (one ? 'Already Selected' : 'All ticked are Selected')
-    : ticked && todo.length > 1 ? `Move ${n(todo.length)} to Selected` : 'Move to Selected';
-  const what = !rows.length ? 'Tick LPs or pick one in the list.'
-    : one ? <>{ticked && '1 ticked · '}<b>{lead(one)}</b> · now {WORD[one.status]}</>
-    : <><b>{n(rows.length)} ticked</b>{todo.length > 0 && <> · {froms(todo)}</>}{already > 0 && <> · {n(already)} already Selected</>}</>;
+  const label = !todo.length ? (rows.length === 1 ? 'Already Selected' : 'All ticked are Selected')
+    : ticked && rows.length > 1 ? `Move ${n(todo.length)} to Selected` : 'Move to Selected';
   return (
     <div className={s.move}>
-      <div className={s.moveWhat} aria-live="polite">{what}</div>
-      <button type="button" className={s.moveBtn} disabled={!todo.length || state.busy} onClick={onMove}
-        aria-keyshortcuts="s">
-        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.2 3L13 4.5" /></svg>
+      <button type="button" className={s.moveBtn} disabled={!todo.length || state.busy} onClick={onMove} aria-keyshortcuts="s">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.2 3L13 4.5" /></svg>
         <span>{state.busy ? 'Moving…' : label}</span>
         {todo.length > 0 && !state.busy && <kbd className={s.kbd} aria-hidden>S</kbd>}
       </button>
       {state.error && <p role="alert" className={s.moveErr}>{state.error}</p>}
-      <p className={s.moveNote}>A plan, not a rung: nothing is sent. The log keeps who moved it and when; Undo puts it back.</p>
     </div>
   );
 }
+
+/** Where the given LPs would move from: "from Sourcing", or "2 Sourcing, 1 New". */
+export function statusMix(rows: PipelineRow[]) {
+  return froms(rows);
+}
+export const statusWord = (st: Status) => WORD[st];
 
 const froms = (rows: PipelineRow[]) => {
   const count = new Map<Status, number>();
