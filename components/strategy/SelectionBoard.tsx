@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { scoreDetailAction } from '@/app/selection/actions';
 import type { ScoreDetail } from '@/lib/pipeline-data';
 import { BulkLpActions } from './BulkLpActions';
-import { MoveButton, UndoToast, useMove } from './MoveToSelected';
+import { MoveButton, statusMix, statusWord, UndoToast, useMove } from './MoveToSelected';
 import { groupRows, EMPTY, lead, second, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { cx, Disclose, fmt, fmtShort, FilterLine, Icon, Ladder, n, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
@@ -144,9 +144,30 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   const toggle = (id: Status) => setEnabled(enabled.includes(id) ? enabled.filter((x) => x !== id) : statuses.map((x) => x.id).filter((x) => x === id || enabled.includes(x)));
   const open = (r: PipelineRow) => router.push(`/${r.vehicleSlug}/pipeline/${r.id}`);
 
-  const moveBar = targets.length > 0 && <MoveButton state={mv} rows={targets} ticked={ticked} onMove={() => void moveNow()} />;
-  const detail = focus && <Why key={focus.id} r={focus} position={position} sortLabel={SORT_LABEL[sort.key] ?? 'score'} rungNames={rungNames} now={now}
-    picked={picked.has(focus.id)} onPick={(on) => pick([focus.id], on)} />;
+  // One panel for what to do (issues 0104, 0109): Move to Selected as the black primary, then the
+  // ways in and the other actions, secondary. For the ticked LPs when some are ticked, else the one in focus.
+  const single = !ticked && focus ? focus : null;
+  const todo = targets.filter((r) => r.status !== 'selected');
+  const moveBar = targets.length > 0 && (
+    <BulkLpActions key={ticked ? 'ticked' : focus?.id} rows={targets} statuses={statuses} initialStatus={null} place="selection"
+      onClear={ticked ? view.clearPicked : undefined} onStatusSaved={mv.remember} hidden={ticked ? pickedRows.filter((r) => !shownIds.has(r.id)).length : 0}
+      heading={single ? lead(single) : `${n(targets.length)} ticked`}
+      sub={single ? <>{second(single) && <>{second(single)} · </>}now <b>{statusWord(single.status)}</b><span className={m.owner}> · owner {single.owner}</span></>
+        : undefined}
+      primary={<>
+        <MoveButton state={mv} rows={targets} ticked={ticked} onMove={() => void moveNow()} />
+        {ticked && <p className={m.mix}>{todo.length ? statusMix(todo) : 'all Selected already'}{todo.length < targets.length && todo.length > 0 ? ` · ${n(targets.length - todo.length)} already Selected` : ''}</p>}
+      </>}
+      links={single && (
+        <div className={m.links} role="group" aria-label={`Open ${lead(single)}`}>
+          <a className="btn" href={`/${single.vehicleSlug}/pipeline/${single.id}`}>LP page</a>
+          <a className="btn" href={`/${single.vehicleSlug}/strategy/${single.entityId}`}>Strategy</a>
+          <a className="btn" href={`/${single.vehicleSlug}/fit/${single.entityId}`}>Fit &amp; standing</a>
+          <a className="btn" href={`/${single.vehicleSlug}/routes?target=${single.entityId}`}>Routes</a>
+        </div>
+      )} />
+  );
+  const detail = focus && <Why key={focus.id} r={focus} position={position} sortLabel={SORT_LABEL[sort.key] ?? 'score'} rungNames={rungNames} now={now} />;
 
   return (
     <section ref={wrap} className={s.wrap} aria-label="LP selection">
@@ -244,10 +265,6 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
 
         <aside className={s.side} aria-label="The LP in focus">
           {!narrow && moveBar}
-          {pickedRows.length > 0 && (
-            <BulkLpActions rows={pickedRows} statuses={statuses} initialStatus="selected" onClear={view.clearPicked} place="selection"
-              onStatusSaved={mv.remember} hidden={pickedRows.filter((r) => !shownIds.has(r.id)).length} />
-          )}
           {detail && !narrow && <div className={cx('card', s.sideWhy)} style={{ marginBottom: 0 }}>{detail}</div>}
         </aside>
       </div>
@@ -300,8 +317,8 @@ const STATUS_WORD: Record<Status, string> = {
 };
 
 /** Why the LP in focus ranks where it does, read from the server when it comes into focus. */
-function Why({ r, position, sortLabel, rungNames, now, picked, onPick }: {
-  r: PipelineRow; position: number; sortLabel: string; rungNames: string[]; now: number; picked: boolean; onPick: (on: boolean) => void;
+function Why({ r, position, sortLabel, rungNames, now }: {
+  r: PipelineRow; position: number; sortLabel: string; rungNames: string[]; now: number;
 }) {
   const [detail, setDetail] = useState<ScoreDetail | null | 'loading' | 'failed'>('loading');
   useEffect(() => {
@@ -324,14 +341,6 @@ function Why({ r, position, sortLabel, rungNames, now, picked, onPick }: {
           <div className={cx(s.big, r.score === null && s.none)}>{r.score ?? '—'}</div>
           <span className={cx(s.scoreKind, stale && s.stale)}>{r.score === null ? 'unscored' : r.scoreKind}</span>
           {r.scoreAt && <span className={s.scoreKind} style={{ display: 'block' }}>{fmt(r.scoreAt)}</span>}
-        </div>
-      </div>
-
-      <div className={s.go}>
-        <a className="btn" href={`/${r.vehicleSlug}/pipeline/${r.id}`}>Open {lead(r)}&rsquo;s strategy</a>
-        <div className={s.goRow}>
-          <button type="button" className="btn" aria-pressed={picked} onClick={() => onPick(!picked)}>{picked ? 'Untick' : 'Tick for a batch'}</button>
-          <a className="btn" href={`/${r.vehicleSlug}/fit/${r.entityId}`}>Fit &amp; standing</a>
         </div>
       </div>
 

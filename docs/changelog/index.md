@@ -152,3 +152,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Triage export — recorded contact for reply drafts](entries/triage-export.md)
 - [Postgres preparation — separate import processes, live switch deferred](entries/postgres-prep.md)
 - [Feedback journal — File never waits on the server](entries/feedback-journal.md)
+
+- [Selection 0109 — a smaller main button, and the other actions back](entries/selection-0109.md)

@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { bulkLpAction } from '@/app/targets/bulk-actions';
 import type { BulkInput, BulkPlace } from '@/lib/pipeline-bulk';
@@ -36,8 +36,11 @@ const HINT: Record<Action, string> = {
  * Actions on the selected LPs (issue 0067): audited, one transaction, one idempotency key per
  * request, so a double tap cannot record anything twice. Nothing is sent and nothing is accepted.
  */
-export function BulkLpActions({ rows, statuses, initialStatus = 'selected', onClear, hidden = 0, place = 'pipeline', onStatusSaved }: {
-  rows: PipelineRow[]; statuses: Array<{ id: Status; label: string }>; initialStatus?: Status; onClear: () => void;
+export function BulkLpActions({ rows, statuses, initialStatus = 'selected', onClear, hidden = 0, place = 'pipeline', onStatusSaved, heading, sub, primary, links }: {
+  /** null starts "Set status" on no status, so one has to be chosen (Selection, issue 0109: Selected has its own button). */
+  rows: PipelineRow[]; statuses: Array<{ id: Status; label: string }>; initialStatus?: Status | null; onClear?: () => void;
+  /** Selection (issue 0109) puts its own heading, line, main button and links around the actions. */
+  heading?: ReactNode; sub?: ReactNode; primary?: ReactNode; links?: ReactNode;
   /** Where this is, named in the log when a status change has no note (issue 0104). */
   place?: BulkPlace;
   /** Told of a saved status change, so the page can offer to undo it. */
@@ -47,7 +50,7 @@ export function BulkLpActions({ rows, statuses, initialStatus = 'selected', onCl
 }) {
   const router = useRouter();
   const [action, setAction] = useState<Action | null>(null);
-  const [status, setStatus] = useState<Status>(initialStatus);
+  const [status, setStatus] = useState<Status | ''>(initialStatus ?? '');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [message, setMessage] = useState<{ text: string; bad?: boolean } | null>(null);
@@ -59,17 +62,21 @@ export function BulkLpActions({ rows, statuses, initialStatus = 'selected', onCl
   const workflow = action === 'research' || action === 'connections' || action === 'strategy';
 
   return (
-    <section className={s.tray} aria-label="Actions on the selected LPs">
+    <section className={s.tray} aria-label={heading ? 'Actions on the LP in focus or the ticked LPs' : 'Actions on the selected LPs'}>
       <div className={s.trayHead}>
-        <h3>{n(rows.length)} ticked</h3>
-        <button type="button" className={s.linkBtn} onClick={onClear}>Clear</button>
+        <h3>{heading ?? `${n(rows.length)} ticked`}</h3>
+        {onClear && <button type="button" className={s.linkBtn} onClick={onClear}>Clear</button>}
       </div>
       <p className={s.trayNames}>
-        {names.map((x, i) => <span key={i}>{i > 0 && ', '}<b>{x}</b></span>)}
-        {rows.length > names.length && <> and {n(rows.length - names.length)} more</>}
+        {sub ?? <>
+          {names.map((x, i) => <span key={i}>{i > 0 && ', '}<b>{x}</b></span>)}
+          {rows.length > names.length && <> and {n(rows.length - names.length)} more</>}
+        </>}
         {hidden > 0 && <>. {n(hidden)} of them {hidden === 1 ? 'is' : 'are'} not in this view, and still included</>}
       </p>
-      <div className={s.actions} role="group" aria-label="Choose an action">
+      {primary}
+      {links}
+      <div className={s.actions} role="group" aria-label={primary ? 'Other actions' : 'Choose an action'}>
         {ACTIONS.map((a) => (
           <button key={a.id} type="button" className={cx(s.action, action === a.id && s.on)} aria-pressed={action === a.id} onClick={() => choose(a.id)}>
             <Glyph name={a.glyph} title={a.label} />{a.label}
@@ -93,13 +100,13 @@ export function BulkLpActions({ rows, statuses, initialStatus = 'selected', onCl
             }
             key.current ??= newRequestKey();
             frozen.current ??= { key: key.current, rows: rows.map((r) => ({ id: r.id, vehicleId: r.vehicleId, status: r.status })),
-              action, body: text('body'), status, passedBy: text('passedBy') as BulkInput['passedBy'], passReason: text('passReason'),
+              action, body: text('body'), status: status || undefined, passedBy: text('passedBy') as BulkInput['passedBy'], passReason: text('passReason'),
               channel: text('channel') as BulkInput['channel'], direction: (text('direction') || null) as BulkInput['direction'], on: text('on'), place };
             const result = await bulkLpAction(frozen.current);
             if (!result.ok) { frozen.current = null; throw new Error(result.error); }
             if (action === 'status' && result.written > 0 && onStatusSaved) {
               const changed = rows.filter((r) => r.status !== status);
-              onStatusSaved({ key: frozen.current.key, to: status, state: 'done', rows: changed.map((r) => ({ id: r.id, name: lead(r), from: r.status })) });
+              onStatusSaved({ key: frozen.current.key, to: status as Status, state: 'done', rows: changed.map((r) => ({ id: r.id, name: lead(r), from: r.status })) });
             }
             setMessage({ text: `${n(result.written)} saved${result.alreadySaved ? `; ${n(result.alreadySaved)} already saved` : ''}.${workflow ? ' Each request awaits review on the LP’s timeline; no workflow has started.' : ''}${result.proposals ? ` ${result.proposals} draft approval tickets created.` : ''}${result.reconciliationPending ? ` ${result.reconciliationPending} touchpoints saved, but reconciliation needs a retry on the LP page.` : ''}` });
             setDone(true); router.refresh();
@@ -112,7 +119,10 @@ export function BulkLpActions({ rows, statuses, initialStatus = 'selected', onCl
             {action === 'status' && (
               <div className={s.formRow}>
                 <label>New status
-                  <select value={status} onChange={(e) => setStatus(e.target.value as Status)}>{statuses.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select>
+                  <select value={status} required onChange={(e) => setStatus(e.target.value as Status)}>
+                    {status === '' && <option value="" disabled>Choose…</option>}
+                    {statuses.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                  </select>
                 </label>
                 {status === 'passed' && <>
                   <label>Who ended it<select name="passedBy" required defaultValue=""><option value="" disabled>Choose…</option>{PASSED_BY_CHOICES.map((id) => <option key={id} value={id}>{PASSED_BY_LABEL[id]}</option>)}</select></label>
