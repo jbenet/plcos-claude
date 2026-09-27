@@ -45,6 +45,7 @@ export async function runProperties(check: Check) {
   await (await import('./network')).routeInputCacheProperties(seed);
   await (await import('./strategy')).strategyProperties(seed);
   await (await import('./vehicle-strategy')).vehicleStrategyProperties(check, db);
+  await (await import('./strategy-per-vehicle')).strategyPerVehicleProperties(check, db);
   await (await import('./strategy-moves')).strategyMoveProperties(check, db);
   (await import('./strategy-table-pack')).strategyTablePackProperties(check);
   (await import('./strategy-advice')).strategyAdviceProperties(check);

@@ -36,7 +36,18 @@ For each key in the batch, `data/real/enrich/batches/<batch>.txt`:
 
 ## Output
 
-`data/real/enrich/strategy/<key>.json`, a `Strategy`:
+`data/real/enrich/strategy/<key>.json`, a `Strategy`. Keep the existing file for its vehicle.
+For a second vehicle, write `data/real/enrich/strategy/<vehicle-slug>/<key>.json` — for example,
+`strategy/spv-netholabs/<key>.json`. Only one folder level is supported. The folder must be a
+known vehicle slug, and `ask.vehicle` must equal that slug exactly. The legacy top-level file
+continues to accept a vehicle name or slug.
+
+Each file attaches to the open pursuit for the canonical LP and its vehicle. Write at most one
+file for that pair across both layouts: duplicate files (including identity aliases) are refused
+as a conflict, with neither chosen. Keep each vehicle's angle, ask and next step in its own file;
+read the companion strategies when coordinating overlapping asks.
+
+The shape:
 
     key, name
     made    { at, by: "claude (sub-agent)", workflow: "W5", version: "1.10",
@@ -279,7 +290,8 @@ prompt still carries no real data, and it never runs remotely.
    of `config/deployment.ts`; `docs/agent-rules/real-data.md` and `docs/agent-rules/domain.md`;
    the assigned firms' finished strategies and any exact example paths named by the launcher,
    as scoped in the read set.
-2. For each key in the batch, read its inputs and write `strategy/<key>.json`. Write only inside
+2. For each key in the batch, read its inputs and write `strategy/<key>.json`, or
+   `strategy/<vehicle-slug>/<key>.json` for its second vehicle as specified above. Write only inside
    `data/real/enrich/strategy/`; no git.
 3. Run the check and fix what it reports for your keys. Reply with counts (written, skipped; by list; by
    ask; routes A/B vs C/D vs none), the checker's strategy line, and three to six learnings. No names.

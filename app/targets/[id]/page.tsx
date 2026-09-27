@@ -11,7 +11,7 @@ import { Coverage } from '@/components/ui/Coverage';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import {
-  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, statusNeedsEvidence, updatesFor,
+  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, statusNeedsEvidence, strategyPursuitsFor, updatesFor,
 } from '@/modules/strategy';
 import { auditFor } from '@/modules/platform';
 import { StatusForm } from '@/components/strategy/StatusForm';
@@ -93,10 +93,11 @@ async function TargetWorkspace({ params, searchParams }: {
   // with its other people are on its timeline too — shown with who they were with, and summed
   // apart from this person's own record, which is what the ladder reads.
   const heading = (await lpHeadings([{ pursuitId: pursuit.pursuitId, entityId: pursuit.entityId }])).get(pursuit.pursuitId) ?? null;
-  const [colleaguesAll, windows, relatedLps] = await Promise.all([
+  const [colleaguesAll, windows, relatedLps, strategyPursuits] = await Promise.all([
     heading?.orgFirst ? colleagueTouchpointsFor(pursuit.entityId, null) : Promise.resolve([]),
     raiseWindows(),
     relatedLpHeadings(pursuit.entityId, pursuit.vehicleId),
+    strategyPursuitsFor(pursuit.entityId),
   ]);
   const window = windows.get(pursuit.vehicleId);
   const forRaise = (t: Touchpoint) => (!t.vehicleId || t.vehicleId === pursuit.vehicleId)
@@ -366,7 +367,7 @@ async function TargetWorkspace({ params, searchParams }: {
           />
 
           <BeforeOutreach entityId={pursuit.entityId} />
-          <SuggestedStrategy pursuitId={pursuit.pursuitId} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />
+          {strategyPursuits.map((p) => <SuggestedStrategy key={p.pursuitId} pursuitId={p.pursuitId} vehicleName={p.vehicleName} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />)}
           <DakotaClaims entityId={pursuit.entityId} />
           <PublicProfile entityId={pursuit.entityId} />
           <ConnectionFeedback key={pursuit.entityId} lp={pursuit.entityId} />

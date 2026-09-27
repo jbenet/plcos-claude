@@ -13,7 +13,7 @@ import { enrichDir } from './candidates';
 import { check, type Finding, type SourceKind } from './schema';
 import type { Path } from './connect';
 import { readPathRecords, isEntityKey, type ConnectionProblem, type LocatedRecord } from './connection-check';
-import { checkStrategy, type Strategy } from './strategy';
+import { readStrategyFiles } from './strategy-files';
 import type { Triage } from './triage';
 
 /**
@@ -128,17 +128,11 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       }
       triage.push(value);
     }
-    // W5: one strategy per LP, checked like the findings.
-    let strategies: Array<{ s: Strategy; hash: string; fileKey: string }> = [];
-    for (const f of (await readdir(join(dir, 'strategy')).catch(() => [])).filter((x) => x.endsWith('.json'))) {
-      const key = f.replace(/\.json$/, '');
-      const text = await readFile(join(dir, 'strategy', f), 'utf8');
-      let x: unknown;
-      try { x = JSON.parse(text); } catch { counts.problems.push({ key, problems: ['strategy: not JSON'] }); continue; }
-      const problems = checkStrategy(x, key);
-      if (problems.length) { counts.problems.push({ key, problems: problems.map((q) => `strategy: ${q}`) }); continue; }
-      strategies.push({ s: x as Strategy, hash: createHash('sha1').update(text).digest('hex'), fileKey: key });
-    }
+    // W5: one strategy per canonical LP and vehicle, across both supported layouts.
+    const refuseStrategy = (file: string, problems: string[]) => {
+      counts.problems.push({ key: file.includes('/') ? `strategy/${file}` : file.replace(/\.json$/, ''), problems: problems.map(p => `strategy: ${p}`) });
+    };
+    let strategies = await readStrategyFiles(dir, refuseStrategy);
     const db = await getDb();
     await db.transaction(async (tx) => {
       // The same lock used by prospect/portfolio identity writers keeps resolution and writes
@@ -155,10 +149,9 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       strategies = strategies.flatMap(record => {
         const id = keysByFile.get(record.s.key);
         if (id) return [{ ...record, s: { ...record.s, key: id } }];
-        counts.problems.push({ key: record.fileKey, problems: [`strategy: ${unmappedKey(record.fileKey)}`] });
+        refuseStrategy(record.file, [unmappedKey(record.fileKey)]);
         return [];
       });
-      counts.strategies = strategies.length;
       counts.entityTypes = await correctPipelineEntityTypes(tx, findings, parsedPaths.records.map(r => r.value as Path), runBy ?? 'system:identity-import');
       counts.duplicateIdentities = await mergeImportDuplicatesInTransaction(tx, runBy ?? 'system:identity-import', findings, parsedPaths.records.map(r => r.value as Path));
       // The duplicate pass can resolve the earlier type pass's multiple-org ambiguity.
@@ -174,6 +167,39 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       const canonicalKeys = await importEntityKeys(tx, [...findings.map(f => f.key), ...strategies.map(r => r.s.key), ...triage.map(t => t.key)]);
       findings = findings.map(f => ({ ...f, key: canonicalKeys.get(f.key) ?? f.key }));
       strategies = strategies.map(r => ({ ...r, s: { ...r.s, key: canonicalKeys.get(r.s.key) ?? r.s.key } }));
+      const vehicles = await tx.query<{ id: string; slug: string; name: string }>('select id, slug, name from platform.vehicle');
+      const scoped = strategies.flatMap(record => {
+        if (record.folder && !vehicles.some(v => v.slug === record.folder)) {
+          refuseStrategy(record.file, [`unknown vehicle folder "${record.folder}"; use a known vehicle slug`]);
+          return [];
+        }
+        if (record.folder && record.folder !== record.s.ask.vehicle) {
+          refuseStrategy(record.file, [`vehicle folder "${record.folder}" must equal ask.vehicle "${record.s.ask.vehicle}"`]);
+          return [];
+        }
+        // Legacy top-level files may still name the vehicle by its display name.
+        const named = record.s.ask.vehicle.trim().toLowerCase();
+        const matches = vehicles.filter(v => [v.name.toLowerCase(), v.slug.toLowerCase()].includes(named));
+        if (matches.length !== 1) {
+          refuseStrategy(record.file, ['ask.vehicle must identify exactly one known vehicle']);
+          return [];
+        }
+        return [{ ...record, vehicleId: matches[0]!.id }];
+      });
+      const byPair = new Map<string, typeof scoped>();
+      for (const record of scoped) {
+        const pair = `${record.s.key}:${record.vehicleId}`;
+        byPair.set(pair, [...(byPair.get(pair) ?? []), record]);
+      }
+      // Check the whole batch before writing: neither file in a conflict wins, including
+      // aliases that became the same canonical entity during this import's identity pass.
+      const acceptedStrategies = [...byPair.values()].flatMap(records => {
+        if (records.length === 1) return records;
+        for (const record of records) refuseStrategy(record.file,
+          [`conflict: multiple files for the same canonical entity and vehicle: ${records.map(r => `strategy/${r.file}`).join(', ')}; none imported`]);
+        return [];
+      });
+      counts.strategies = acceptedStrategies.length;
       for (const t of triage) t.key = canonicalKeys.get(t.key) ?? t.key;
       counts.pursuitMerges = await consolidatePursuitsInTransaction(tx, runBy);
       const orgs = await tx.query<{ name: string }>("select display_name as name from identity.entity where entity_type = 'org'");
@@ -258,16 +284,15 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
 
       // Strategies become suggestions on the LP's open pursuit: the same file again changes
       // nothing; a new one withdraws the open proposal it replaces; decided ones stay as they are.
-      for (const { s: st, hash, fileKey } of strategies) {
+      for (const { s: st, hash, file, vehicleId } of acceptedStrategies) {
         const pursuit = await tx.one<{ id: string }>(
           `select p.pursuit_id::text as id from strategy.active_pursuit p
-             join platform.vehicle v on v.id = p.vehicle_id
             where identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id($1::uuid)
-              and p.closed_at is null and lower(trim($2)) in (lower(v.name), lower(v.slug))
+              and p.closed_at is null and p.vehicle_id = $2::uuid
             order by (p.entity_id = identity.canonical_entity_id(p.entity_id)) desc, p.opened_at, p.pursuit_id limit 1`,
-          [st.key, st.ask.vehicle]);
+          [st.key, vehicleId]);
         if (!pursuit) {
-          counts.problems.push({ key: fileKey, problems: ['strategy: no open pursuit in the named vehicle; not imported; retried on the next import once the pursuit exists'] });
+          refuseStrategy(file, ['no open pursuit in the named vehicle; not imported; retried on the next import once the pursuit exists']);
           continue;
         }
         const seen = await tx.one<{ n: string }>(`select count(*)::text as n from strategy.suggestion where pursuit_id = $1 and file_hash = $2`, [pursuit.id, hash]);

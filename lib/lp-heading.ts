@@ -47,9 +47,13 @@ export async function lpHeadings(rows: Array<{ pursuitId: string; entityId: stri
          from research.note where kind = 'public_profile' and identity.canonical_entity_id(entity_id) = any($1::uuid[])
         order by identity.canonical_entity_id(entity_id), created_at desc`, [entityIds]),
     db.query<{ pursuit_id: string; unit: string | null }>(
-      `select distinct on (pursuit_id) pursuit_id::text, data->'ask'->>'unit' as unit
-         from strategy.suggestion where pursuit_id = any($1::uuid[]) and status in ('proposed', 'accepted')
-        order by pursuit_id, made_at desc`, [pursuitIds]),
+      `select distinct on (s.pursuit_id) s.pursuit_id::text, s.data->'ask'->>'unit' as unit
+         from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id)
+         join platform.vehicle v on v.id=p.vehicle_id
+        where s.pursuit_id = any($1::uuid[]) and s.status in ('proposed', 'accepted')
+          and (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null
+            or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))
+        order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [pursuitIds]),
   ]);
   const orgOf = new Map(affiliations.map((a) => [a.entity_id, a.org]));
   const orgIdOf = new Map(affiliations.map((a) => [a.entity_id, a.org_id]));
