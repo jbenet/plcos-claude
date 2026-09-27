@@ -173,7 +173,7 @@ export function NavList({
     return <div className="submods">
       {modules.filter((mod) => !WIP_MODULES.has(mod.slug)).map(link)}
       <details className={`nav-wip${active ? ' has-current' : ''}`}>
-        <summary>WIP pages <span>{active ? 'Current page · incomplete' : 'May be incomplete'}</span></summary>
+        <summary>WIP pages{active && <span>Current page</span>}</summary>
         {wip.map(link)}
       </details>
     </div>;

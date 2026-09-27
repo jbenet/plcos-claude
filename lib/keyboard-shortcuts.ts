@@ -3,7 +3,7 @@ export const SHORTCUT_GROUPS = [
   { id: 'anywhere', title: 'Anywhere', shortcuts: [
     { keys: [['?']], description: 'Open or close keyboard shortcuts, outside text fields' },
     { keys: [['Esc']], description: 'Close keyboard shortcuts' },
-    { keys: [['Alt/Option', 'F']], description: 'Open feedback, outside text fields and dialogs' },
+    { keys: [['Alt', 'F']], description: 'Open feedback, outside text fields and dialogs' },
   ] },
   { id: 'pipeline', title: 'Pipeline table', shortcuts: [
     { keys: [['/']], description: 'Focus the filter, outside text fields and dialogs' },

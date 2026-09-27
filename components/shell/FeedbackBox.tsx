@@ -8,7 +8,7 @@ import {
   capturePage, capturePageExact, METHOD_LABEL, type CaptureMethod, type Region,
 } from '@/lib/capture';
 import { RegionPicker } from './RegionPicker';
-import { ShortcutList } from './KeyboardShortcuts';
+import { ShortcutList, useShortcutPlatform } from './KeyboardShortcuts';
 import { isFeedbackKey, isShortcutsKey } from '@/lib/keyboard-shortcuts';
 import { MarkdownField, packAttachments, type DroppedImage } from '@/components/ui/MarkdownField';
 import {
@@ -51,6 +51,7 @@ export function FeedbackButton({
   home?: { filesHere: boolean; livePort: number | null };
 }) {
   const [open, setOpen] = useState(false);
+  const { alt } = useShortcutPlatform();
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -72,10 +73,10 @@ export function FeedbackButton({
         className={variant === 'rail' ? 'railfeedback' : 'btn'}
         onClick={() => setOpen(true)}
         aria-keyshortcuts="Alt+F"
-        title="Give feedback (Alt/Option+F)"
+        title="Give feedback"
       >
         {variant === 'rail' ? <><span aria-hidden>✎</span> Feedback</> : 'Give feedback'}
-        <span className="feedbackkey">Alt/Option+F</span>
+        <span className="feedbackkey">{alt}+F</span>
       </button>
       {open && (home.filesHere
         ? <FeedbackDrawer profile={profile} onClose={() => setOpen(false)} />

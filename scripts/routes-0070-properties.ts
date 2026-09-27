@@ -167,6 +167,7 @@ async function main() {
     });
     await test('Repeated import preserves entity IDs and creates no duplicate rows, aliases or possible matches', async () => {
       const repeated = input('invented-name-only', 'Invented Name Only Company', ['Invented Name Only Founder']);
+      await importPortfolio(db, repeated); // A file is now an authoritative snapshot, not an append.
       const before = await counts();
       const founderBefore = await mapping('invented-name-only:founder:invented name only founder');
       await importPortfolio(db, repeated);
