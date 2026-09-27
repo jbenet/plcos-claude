@@ -11,17 +11,24 @@ export interface Prospect {
   entityId?: string | null; entityType?: 'person' | 'org';
   personKey?: string | null; name: string; org: string | null; vehicle: string;
   status: 'new' | 'sourcing' | 'passed';
+  decidedAt?: string;
   capacity: { band: string; basis: string; guess: boolean };
   reason: string; strategic: boolean;
   route: { best: string; score: number } | null;
   sources: Array<string | Record<string, unknown>>;
 }
-export interface ProspectFile { file: string; text: string; inProgress?: boolean }
+export interface ProspectFile { file: string; text: string; mtimeMs?: number; inProgress?: boolean }
 export interface ProspectProblem { file: string; line: number; name?: string; vehicle?: string; reason: string }
+export interface ProspectLoser extends ProspectProblem {
+  status: Prospect['status'];
+  winner: { file: string; line: number; status: Prospect['status'] };
+}
 export interface ProspectResult {
   files: number; added: number; existing: number; ambiguous: number;
   moved: number; toSourcing: number; toPassed: number; kept: number;
   invalid: ProspectProblem[]; skipped: ProspectProblem[]; inProgress: string[];
+  perFile: Array<{ file: string; won: number; lost: number }>;
+  losers: ProspectLoser[];
 }
 const object = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const words = (x: unknown): x is string => typeof x === 'string' && !!x.trim();
@@ -38,6 +45,9 @@ export function prospectProblems(x: unknown): string[] {
   for (const k of ['name', 'vehicle', 'reason']) if (!words(x[k])) errors.push(`${k} must be nonempty text`);
   if (x.org !== null && !words(x.org)) errors.push('org must be nonempty text or null');
   if (x.status !== 'new' && x.status !== 'sourcing' && x.status !== 'passed') errors.push('status must be new, sourcing or passed');
+  if (x.decidedAt !== undefined && (typeof x.decidedAt !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(x.decidedAt)
+    || !Number.isFinite(Date.parse(x.decidedAt)))) errors.push('decidedAt must be an ISO timestamp with a timezone');
   if (!object(x.capacity) || !words(x.capacity.band) || !words(x.capacity.basis) || typeof x.capacity.guess !== 'boolean') errors.push('capacity needs band, basis and a boolean guess');
   if (typeof x.strategic !== 'boolean') errors.push('strategic must be boolean');
   if (x.route !== null && (!object(x.route) || !words(x.route.best) || typeof x.route.score !== 'number' || !Number.isFinite(x.route.score))) errors.push('route must be null or have best text and a finite score');
@@ -66,7 +76,7 @@ export async function readProspectFiles(dir = join(enrichDir(), 'prospects')): P
     const text = await readFile(path, 'utf8'), after = await stat(path);
     if (after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs || after.size !== before.size
       || after.ino !== before.ino || Date.now() - after.mtimeMs < 120_000) return { file, text: '', inProgress: true };
-    return { file, text };
+    return { file, text, mtimeMs: after.mtimeMs };
   }));
 }
 
@@ -157,24 +167,31 @@ async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[],
   return { id, candidates: [] };
 }
 
-/** Dated filenames win, then the later line; lexical filename breaks a remaining tie. */
-function compareSource(a: { file: string; line: number }, b: { file: string; line: number }): number {
-  const date = (file: string) => file.match(/(?:^|\D)(\d{4}-\d{2}-\d{2})(?:\D|$)/)?.[1] ?? '';
-  return date(a.file).localeCompare(date(b.file)) || a.line - b.line || a.file.localeCompare(b.file);
+type ProspectSource = { p: Prospect; file: string; line: number; mtimeMs: number };
+/** Research beats intake. Explicit decision times outrank absent ones, then file mtime/name/line. */
+function compareSource(a: ProspectSource, b: ProspectSource): number {
+  const researched = (p: Prospect) => Number((p.status === 'sourcing' || p.status === 'passed') && !!p.reason.trim());
+  const decisionTime = (p: Prospect) => p.decidedAt === undefined ? -Infinity : Date.parse(p.decidedAt);
+  return researched(a.p) - researched(b.p)
+    || decisionTime(a.p) - decisionTime(b.p)
+    || a.mtimeMs - b.mtimeMs || a.file.localeCompare(b.file) || a.line - b.line;
 }
 
 /** Caller supplies the live server's existing handle; there is deliberately no DB-opening CLI. */
 export async function addProspects(db: Db, actorId: string, files: ProspectFile[]): Promise<ProspectResult> {
   const activityAt = new Date().toISOString();
   const result: ProspectResult = { files: files.length, added: 0, existing: 0, ambiguous: 0,
-    moved: 0, toSourcing: 0, toPassed: 0, kept: 0, invalid: [], skipped: [], inProgress: [] };
-  const records: Array<{ p: Prospect; file: string; line: number; hash: string }> = [];
+    moved: 0, toSourcing: 0, toPassed: 0, kept: 0, invalid: [], skipped: [], inProgress: [],
+    perFile: [...new Set(files.map(f => f.file))].sort().map(file => ({ file, won: 0, lost: 0 })), losers: [] };
+  const counts = new Map(result.perFile.map(f => [f.file, f]));
+  const records: Array<ProspectSource & { hash: string }> = [];
   for (const file of files) {
     if (file.inProgress) { result.inProgress.push(file.file); continue; }
     const hash = createHash('sha256').update(file.text).digest('hex');
     const parsed = parseProspectFile(file);
     result.invalid.push(...parsed.invalid);
-    records.push(...parsed.records.map(r => ({ ...r, file: file.file, hash })));
+    // In-memory fixtures without filesystem metadata tie at zero; disk reads always supply mtime.
+    records.push(...parsed.records.map(r => ({ ...r, file: file.file, mtimeMs: file.mtimeMs ?? 0, hash })));
   }
   if (!records.length) return result;
   await db.transaction(async tx => {
@@ -225,6 +242,15 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
     for (const r of resolved) {
       const key = `${r.entityId}:${r.p.vehicle}`, prior = winners.get(key);
       if (!prior || compareSource(r, prior) > 0 || (compareSource(r, prior) === 0 && r.hash > prior.hash)) winners.set(key, r);
+    }
+    for (const r of resolved) {
+      const winner = winners.get(`${r.entityId}:${r.p.vehicle}`)!;
+      if (r === winner) { counts.get(r.file)!.won++; continue; }
+      counts.get(r.file)!.lost++;
+      result.losers.push({ file: r.file, line: r.line, name: r.p.name, vehicle: r.p.vehicle, status: r.p.status,
+        winner: { file: winner.file, line: winner.line, status: winner.p.status },
+        reason: r.p.status === 'new' && winner.p.status !== 'new'
+          ? 'Researched decision takes precedence over intake.' : 'Superseded by decision timestamp, file modification time, filename, then line.' });
     }
     for (const r of winners.values()) {
       const { p, entityId } = r;

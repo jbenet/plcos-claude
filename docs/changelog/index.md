@@ -157,3 +157,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Selection 0109 — a smaller main button, and the other actions back](entries/selection-0109.md)
 
 - [Connectors — EDGAR folded into search, and a page that stops repeating itself · issues 0106–0108](entries/connectors-0106-0108.md)
+
+- [Prospect precedence — researched decisions survive intake conflicts](entries/prospect-precedence.md)

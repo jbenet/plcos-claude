@@ -179,7 +179,7 @@ export async function prospectDispositionProperties(check: Check, db: Awaited<Re
       reopen.toPassed === 1 && reopenNew.moved === 1 && reopened?.status === 'new'
       && reopened.passed_by === null && reopened.closed_at === null && reopened.close_reason === null,
       'Rule-only Passed → New is reversible without a ticket.');
-    const conflicting = files(rows[5]!, { ...rows[5]!, status: 'sourcing' });
+    const conflicting = files({ ...rows[5]!, status: 'passed' }, { ...rows[5]!, status: 'sourcing' });
     const conflict = await addProspects(db, actor, conflicting);
     const afterConflict = await snapshot();
     const conflictRetry = await addProspects(db, actor, conflicting);
@@ -187,18 +187,77 @@ export async function prospectDispositionProperties(check: Check, db: Awaited<Re
       conflict.skipped.length === 0 && conflict.moved === 1 && conflictRetry.existing === 1 && afterConflict === await snapshot(),
       'Later line selects Sourcing and records its winning file; repeated inputs are silent.');
     const dated = [
-      { file: 'z-invented-2026-09-26.jsonl', text: JSON.stringify({ ...rows[5]!, status: 'passed' }) },
-      { file: 'a-invented-2026-09-27.jsonl', text: JSON.stringify({ ...rows[5]!, status: 'new' }) },
+      { file: '2026-09-27-z-invented.jsonl', mtimeMs: 1000, text: '\n\n' + JSON.stringify({ ...rows[5]!, status: 'sourcing' }) },
+      { file: '2026-09-27-a-invented.jsonl', mtimeMs: 2000, text: JSON.stringify({ ...rows[5]!, status: 'passed' }) },
     ];
     await addProspects(db, actor, dated);
     const datedBefore = await snapshot();
     const datedRetry = await addProspects(db, actor, [...dated].reverse());
     const winner = await db.one<{ detail: Record<string, unknown> }>(`select detail from platform.audit_log
       where subject_id=$1 and action='pursuit.status_set' and detail->>'file'=$2`, [await pursuit(5), dated[1]!.file]);
-    check('DISPOSITION filename date wins ahead of filename sort and import order, with recorded provenance',
+    check('DISPOSITION same-date files use modification time before filename and line, independently of import order',
       datedRetry.existing === 1 && datedRetry.moved === 0 && datedBefore === await snapshot()
-      && winner?.detail.toId === 'new' && winner.detail.line === 1,
-      '27 Sep beats 26 Sep despite reverse lexical filenames; the winning file and line are audited.');
+      && winner?.detail.toId === 'passed' && winner.detail.line === 1,
+      'Later modification time beats the longer file and reverse lexical filenames; winning file/line audited.');
+    check('DISPOSITION every superseded row is counted by file and linked to its winner even on unchanged reruns',
+      datedRetry.losers.length === 1 && datedRetry.losers[0]?.file === dated[0]!.file
+      && datedRetry.losers[0]?.line === 3 && datedRetry.losers[0]?.winner.file === dated[1]!.file
+      && datedRetry.perFile.find(f => f.file === dated[0]!.file)?.lost === 1
+      && datedRetry.perFile.find(f => f.file === dated[0]!.file)?.won === 0
+      && datedRetry.perFile.find(f => f.file === dated[1]!.file)?.won === 1
+      && datedRetry.perFile.find(f => f.file === dated[1]!.file)?.lost === 0,
+      'One winner and one loser reported with source lines, including an unchanged winning status.');
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const { createElement } = await import('react');
+    const { ProspectPrecedence } = await import('../../components/import-jobs/ProspectPrecedence');
+    const many = await addProspects(db, actor, files(...Array.from({ length: 8 }, () => rows[5]!), { ...rows[5]!, status: 'passed' }));
+    const report = { perFile: many.perFile, losers: many.losers, lost: many.losers.length };
+    const directHtml = renderToStaticMarkup(createElement(ProspectPrecedence, { report }));
+    const queuedHtml = renderToStaticMarkup(createElement(ProspectPrecedence, { report: { ...report, losers: report.losers.slice(0, 5) } }));
+    check('DISPOSITION immediate and background receipts show file counts and the first five losers with the full count',
+      many.perFile[0]?.won === 1 && many.perFile[0]?.lost === 8 && directHtml === queuedHtml
+      && directHtml.includes('8 rows lost precedence') && directHtml.includes('showing 5 of 8')
+      && directHtml.includes('1 won') && directHtml.includes('8 lost') && directHtml.includes('line 5')
+      && !directHtml.includes('line 6'),
+      'Both receipt paths share the same bounded rendering; every loser remains counted.');
+
+    const selectedStatus = async () => (await db.one<{ status: string }>(
+      'select status::text from strategy.pursuit where entity_id=$1 and vehicle_id=$2', [ids[5], vehicle.id]))!.status;
+    const explicit = { file: 'a-explicit.jsonl', mtimeMs: 1, text: JSON.stringify({ ...rows[5]!, status: 'sourcing', decidedAt: '2026-09-27T12:00:00Z' }) };
+    const laterFile = { file: 'z-recent.jsonl', mtimeMs: 9999999999999, text: JSON.stringify({ ...rows[5]!, status: 'passed' }) };
+    await addProspects(db, actor, [laterFile, explicit]);
+    const explicitWins = await selectedStatus() === 'sourcing';
+    await addProspects(db, actor, [explicit, { ...laterFile, text: JSON.stringify({ ...rows[5]!, status: 'passed', decidedAt: '2026-09-27T12:30:00+01:00' }) }]);
+    check('DISPOSITION explicit decidedAt wins over absent timestamps and earlier decisions despite later mtime',
+      explicitWins && await selectedStatus() === 'sourcing', 'Timestamp priority uses actual instants, including timezone offsets.');
+
+    const tie = [
+      { file: 'a-tie.jsonl', mtimeMs: 3000, text: '\n\n' + JSON.stringify({ ...rows[5]!, status: 'sourcing' }) },
+      { file: 'z-tie.jsonl', mtimeMs: 3000, text: JSON.stringify({ ...rows[5]!, status: 'passed' }) },
+    ];
+    await addProspects(db, actor, tie);
+    check('DISPOSITION filename breaks equal-time ties before line number', await selectedStatus() === 'passed',
+      'Line 1 in z-tie wins over line 3 in a-tie.');
+
+    for (const status of ['sourcing', 'passed'] as const) {
+      const research = { file: 'a-research.jsonl', mtimeMs: 1, text: JSON.stringify({ ...rows[5]!, status }) };
+      const intake = { file: 'z-intake.jsonl', mtimeMs: 9000, text: '\n\n' + JSON.stringify({ ...rows[5]!, decidedAt: '2026-09-28T00:00:00Z' }) };
+      const first = await addProspects(db, actor, [research, intake]);
+      const second = await addProspects(db, actor, [intake, research]);
+      check(`DISPOSITION researched ${status} beats New regardless of order, timestamp, mtime and line`,
+        await selectedStatus() === status && first.losers[0]?.file === intake.file && second.losers[0]?.file === intake.file,
+        'New intake cannot silently replace a supplied researched decision.');
+    }
+    const humanWithConflicts = await addProspects(db, actor, files(
+      rows[0]!, { ...sourcing, decidedAt: '2026-09-29T00:00:00Z' }));
+    check('DISPOSITION person-set status survives researched winners and still reports input losers',
+      humanWithConflicts.kept === 1 && humanWithConflicts.moved === 0 && humanWithConflicts.losers.length === 1
+      && (await db.one<{ status: string }>('select status::text from strategy.pursuit where pursuit_id=$1', [a]))?.status === 'new',
+      'Input selection does not override a person.');
+    const badTimes = await addProspects(db, actor, files(...['not-a-date', '2026-09-27', '2026-09-27T12:00:00', null].map(decidedAt => ({ ...rows[5]!, decidedAt }))));
+    check('DISPOSITION invalid decidedAt is reported instead of silently changing precedence',
+      badTimes.invalid.length === 4 && badTimes.moved === 0 && badTimes.perFile[0]?.won === 0,
+      'Only ISO timestamps with a timezone are accepted.');
     // A newly inserted Passed row needs the same closing semantics as a moved one.
     await db.query('delete from research.note where entity_id=$1', [ids[5]]);
     await db.query('delete from strategy.pursuit where entity_id=$1', [ids[5]]);

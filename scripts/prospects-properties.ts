@@ -315,6 +315,9 @@ export async function prospectsProperties(check: Check, db: Db) {
     const old = new Date(Date.now() - 180_000);
     await utimes(join(dir, 'settled.jsonl'), old, old);
     const inputs = await readProspectFiles(dir);
+    check('PROSPECTS settled file reader preserves modification time for precedence',
+      Math.abs((inputs.find(f => f.file === 'settled.jsonl')?.mtimeMs ?? 0) - old.getTime()) < 1,
+      'Filesystem modification time accompanies the settled text.');
     const waiting = await addProspects(db, actor, inputs);
     check('PROSPECTS3 recent files are listed as in progress, are not read, and do not block settled files',
       waiting.inProgress.join() === 'writing.jsonl' && waiting.existing === 1 && waiting.invalid.length === 0
