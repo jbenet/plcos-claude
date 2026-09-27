@@ -56,7 +56,7 @@ export function LeverageView({ leverage }: { leverage: Leverage }) {
         <p className="levnote">{leverage.note}</p>
       </div>
 
-      <Pager {...paging} label="prerequisites, most dependents first" />
+      <Pager {...paging} label="prerequisites, most dependents first" quiet />
       {ORDER.map((family) => {
         const mine = paging.rows.filter((p) => p.family === family);
         if (mine.length === 0) return null;
@@ -83,7 +83,7 @@ export function LeverageView({ leverage }: { leverage: Leverage }) {
                 <div className="levright">
                   <div className="levbecause">{p.because}</div>
                   <div className="levdeps">
-                    <PagedRows rows={p.dependents} size={5} label="dependent pursuits">{page => page.map((d) => (
+                    <PagedRows rows={p.dependents} size={5} label="waiting" quiet>{page => page.map((d) => (
                       <button
                         key={d.key}
                         className={`levdep${d.blocked ? ' blocked' : ''}${d.urgent ? ' urgent' : ''}`}

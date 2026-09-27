@@ -40,17 +40,22 @@ async function Visualizations({ params }: { params: Promise<{ vehicle: string }>
       crumbs={moduleCrumbs('visualizations', vehicle?.name ?? null)}
       inspector={
         <>
-          <div className="lbl">How to read all fifteen</div>
-          <div className="ihead">One vocabulary, fifteen layouts</div>
+          <div className="lbl">How to read all fourteen</div>
+          <div className="ihead">One vocabulary, fourteen layouts</div>
           <div className="imeta">Switching tabs should not mean relearning the colours</div>
 
-          <div className="kv"><span>Counts</span><span>Pursuits or records, labelled in each view</span></div>
-          <div className="kv"><span>Groups</span><span>Select a count or bin to inspect its members</span></div>
-          <div className="kv"><span>◇</span><span>Needs evidence — status and ladder disagree</span></div>
-          <div className="kv"><span>Money</span><span>Separate by vehicle, hard and soft never combined</span></div>
-          <div className="kv"><span>Unknown</span><span>Missing records stay separate from zero</span></div>
-          <div className="kv"><span>Lists</span><span>Page through every matching record</span></div>
-          <div className="kv"><span>Scope</span><span>LP filters apply where shown; shared-resource views say full page scope</span></div>
+          <div className="kv"><span>Column</span><span>The status: our plan, not a claim</span></div>
+          <div className="kv"><span>◇</span><span>Needs evidence — the status claims more than the ladder shows</span></div>
+          <div className="kv"><span>Size</span><span>Money at stake, square-root scale</span></div>
+          <div className="kv"><span>No size</span><span>Nobody has a number from them yet</span></div>
+          <div className="kv"><span>Fill</span><span>How recently anything was recorded</span></div>
+          <div className="kv"><span>Clay ✕</span><span>Blocked, restricted or in a collision</span></div>
+          <div className="kv"><span>Amber !</span><span>Something dated in the next fortnight</span></div>
+          <div className="kv"><span>Green ✓</span><span>Cash actually received</span></div>
+          <div className="kv"><span>Dashed</span><span>Soft — their words, never added to hard</span></div>
+          <div className="kv"><span>+N more</span><span>A crowd, counted: the few that most need a look are named, the rest open in the list</span></div>
+          <div className="kv"><span>Fogged</span><span>Nobody has scored them. Not weak — unopened</span></div>
+          <div className="kv"><span>Valve</span><span>An approval gate, with tickets open on it</span></div>
 
           <div className="scope">
             <div className="lbl">Status first, the ladder under it</div>
@@ -95,10 +100,13 @@ async function Visualizations({ params }: { params: Promise<{ vehicle: string }>
         {everything
           ? 'Every vehicle on file, the grants rail included. '
           : vehicle ? 'One raise. ' : 'PL Capital’s vehicles. The grants rail is on the organisation-wide page. '}
-        Fifteen drawings, one vocabulary. The first five read what is happening; the second five
-        read the ground it happens on and the moves available; the third five read who can reach
+        Fourteen drawings, one vocabulary. The first five read what is happening; the second five
+        read the ground it happens on and the moves available; the last four read who can reach
         whom, what to unblock, and what is simply not on file. Click anything to open it.
-        Start with counts and bins, then expand a group or page through its records. Each view states its scope; money stays separate by vehicle and by hard or soft track.
+        Size is money at stake, fill is how recently anything was recorded, and colour is
+        reserved for the exceptions — so a floor with nothing wrong has almost no colour on it.
+        Where a group is too crowded to draw, it names the few that most need a look and counts
+        the rest; the list under every drawing holds them all.
       </p>
 
       <div className="kpis six">
@@ -109,7 +117,7 @@ async function Visualizations({ params }: { params: Promise<{ vehicle: string }>
         </div>
         <div className="kpi">
           <span className="tag t-plain">In flight</span>
-          <div className="n">{state.items.length - passed}</div>
+          <div className="n">{(state.items.length - passed).toLocaleString('en-US')}</div>
           <div className="f">
             Entity × vehicle pairs with a pursuit, an exposure, or both.
             {passed ? ` ${passed} passed are drawn but not counted.` : ''}
@@ -117,22 +125,22 @@ async function Visualizations({ params }: { params: Promise<{ vehicle: string }>
         </div>
         <div className="kpi">
           <span className={`tag ${blocked ? 't-clay' : 't-plain'}`}>Blocked</span>
-          <div className="n">{blocked}</div>
+          <div className="n">{blocked.toLocaleString('en-US')}</div>
           <div className="f">Something stops these today. Each one names what.</div>
         </div>
         <div className="kpi">
           <span className={`tag ${stalled ? 't-clay' : 't-plain'}`}>Stalled</span>
-          <div className="n">{stalled}</div>
+          <div className="n">{stalled.toLocaleString('en-US')}</div>
           <div className="f">Nothing recorded for more than three weeks.</div>
         </div>
         <div className="kpi">
           <span className={`tag ${unbacked ? 't-clay' : 't-plain'}`}>Needs evidence</span>
-          <div className="n">{unbacked}</div>
+          <div className="n">{unbacked.toLocaleString('en-US')}</div>
           <div className="f">The status claims a rung the ladder doesn&rsquo;t have yet. Marked ◇.</div>
         </div>
         <div className="kpi">
           <span className="tag t-plain">No number</span>
-          <div className="n">{unsized}</div>
+          <div className="n">{unsized.toLocaleString('en-US')}</div>
           <div className="f">Pursuits nobody has a figure for. Shown as unknown, never guessed.</div>
         </div>
       </div>

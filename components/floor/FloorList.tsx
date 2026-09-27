@@ -50,10 +50,10 @@ export function FloorList({ state }: { state: FloorState }) {
   );
 
   return (
-    <div className="card floorlist-wrap">
+    <div className="card floorlist-wrap" id="floorlist">
       <div className="chead">
         <h2>The same floor, as a list</h2>
-        <span className="lbl">{rows.length} items · every encoded dimension in words</span>
+        <span className="lbl">{rows.length.toLocaleString('en-US')} items · every encoded dimension in words</span>
       </div>
       <Pager {...paging} label="pursuits" />
       <div className="scroller">
