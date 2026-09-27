@@ -1,171 +1,67 @@
 import { coalescePage } from '@/lib/page-render';
-import { readChangelog } from '@/lib/changelog';
+import { changelogBatches, changelogBody, changelogItems, BATCH_SIZE } from '@/lib/changelog';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { ShotLightbox } from '@/components/dev/ShotLightbox';
-import { groupChangelog, parseInline, parseMarkdown, type Block, type Inline } from '@/lib/markdown';
+import { Blocks } from '@/components/dev/ChangelogBlocks';
+import s from './changelog.module.css';
 
 export const dynamic = 'force-dynamic';
 
-/** Rewrite a repo-relative screenshot path onto the route that can serve it. */
-function imageSrc(href: string): string {
-  const marker = 'docs/changelog/shots/';
-  const at = href.indexOf(marker);
-  return at === -1 ? href : `/dev/shot/${href.slice(at + marker.length)}`;
-}
-
-function Spans({ src }: { src: string }) {
-  return (
-    <>
-      {parseInline(src).map((s: Inline, i) => {
-        if (s.kind === 'code') return <code key={i}>{s.text}</code>;
-        if (s.kind === 'strong') return <b key={i}>{s.text}</b>;
-        if (s.kind === 'em') return <i key={i}>{s.text}</i>;
-        if (s.kind === 'image') {
-          return (
-            // eslint-disable-next-line @next/next/no-img-element
-            <a
-              key={i}
-              className="clshotlink"
-              href={imageSrc(s.href ?? '')}
-              target="_blank"
-              rel="noreferrer"
-              title="Expand here · ⌘-click for a new tab"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="clshot" src={imageSrc(s.href ?? '')} alt={s.text} loading="lazy" />
-            </a>
-          );
-        }
-        if (s.kind === 'link') {
-          const href = s.href ?? '';
-          return href.startsWith('http') ? (
-            <a key={i} href={href} target="_blank" rel="noreferrer">
-              {s.text}
-            </a>
-          ) : (
-            <span key={i} className="mono" style={{ fontSize: 11.5 }}>
-              {s.text}
-            </span>
-          );
-        }
-        return <span key={i}>{s.text}</span>;
-      })}
-    </>
-  );
-}
-
-function Rendered({ block }: { block: Block }) {
-  switch (block.kind) {
-    case 'heading': {
-      // Entry headings are rendered by the grouper, which controls reading order.
-      if (block.level <= 2) return null;
-      return (
-        <h3
-          id={block.id}
-          style={{
-            fontFamily: 'var(--display)', fontSize: block.level === 3 ? 16 : 14,
-            fontWeight: 600, margin: '18px 0 6px', scrollMarginTop: 60,
-          }}
-        >
-          <Spans src={block.text} />
-        </h3>
-      );
-    }
-    case 'paragraph':
-      return (
-        <p style={{ fontSize: 13.5, lineHeight: 1.65, margin: '0 0 12px' }}>
-          <Spans src={block.text} />
-        </p>
-      );
-    case 'list': {
-      const Tag = block.ordered ? 'ol' : 'ul';
-      return (
-        <Tag style={{ fontSize: 13.5, lineHeight: 1.65, margin: '0 0 12px', paddingLeft: 20 }}>
-          {block.items.map((item, i) => (
-            <li key={i} style={{ marginBottom: 5 }}>
-              <Spans src={item} />
-            </li>
-          ))}
-        </Tag>
-      );
-    }
-    case 'code':
-      return <pre className="block" style={{ margin: '0 0 14px' }}>{block.text}</pre>;
-    case 'quote':
-      return (
-        <blockquote className="scope" style={{ margin: '0 0 14px' }}>
-          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
-            <Spans src={block.text} />
-          </p>
-        </blockquote>
-      );
-    case 'table':
-      return (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <table className="list">
-            {block.head.some((h) => h !== '') && (
-              <thead>
-                <tr>
-                  {block.head.map((h, i) => (
-                    <th key={i}>
-                      <Spans src={h} />
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-            )}
-            <tbody>
-              {block.rows.map((row, i) => (
-                <tr key={i}>
-                  {row.map((cell, j) => (
-                    <td key={j}>
-                      <Spans src={cell} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
-    case 'rule':
-      return <hr style={{ border: 0, borderTop: '1px solid var(--line)', margin: '26px 0' }} />;
-  }
-}
-
-async function Changelog() {
-  const src = await readChangelog();
-  const doc = groupChangelog(parseMarkdown(src));
-
-  // Newest first, matching the standalone page. The index stays chronological;
-  // reading order is a rendering choice.
-  const entries = [...doc.entries].reverse();
-  const stages = entries.filter((e) => !e.divider);
+/**
+ * The changelog, ten entries at a time (issue 0098). The page holds the latest batch, the one still
+ * growing; older batches are one click away and scroll the same way; every entry opens on its own
+ * page. Newest first inside a batch, as before.
+ */
+async function Changelog({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams;
+  const items = await changelogItems();
+  const batches = changelogBatches(items);
+  const latest = batches.at(-1)!;
+  const asked = Number(Array.isArray(sp.batch) ? sp.batch[0] : sp.batch);
+  const batch = batches.find((b) => b.n === asked) ?? latest;
+  const bodies = await Promise.all([...batch.items].reverse().map(changelogBody));
+  const older = batches.find((b) => b.n === batch.n - 1);
+  const newer = batches.find((b) => b.n === batch.n + 1);
+  const href = (n: number) => (n === latest.n ? '/dev/changelog' : `/dev/changelog?batch=${n}`);
 
   return (
     <Page
       crumbs={[{ label: SECTION.developer }, { label: 'Changelog' }]}
       inspector={
         <>
-          <div className="lbl">Contents · newest first</div>
-          <div className="ihead">{stages.length} entries</div>
-          <div className="imeta">The last thing that happened is at the top</div>
-          <div style={{ marginTop: 10 }}>
-            {stages.map((e) => (
-              <a key={e.id} href={`#${e.id}`} className="prov" style={{ display: 'block', color: 'var(--ink)' }}>
-                <div className="p1" style={{ fontSize: 12 }}>
-                  <span className="mono" style={{ color: 'var(--clay)', marginRight: 6 }}>{e.key}</span>
-                  {e.rest === e.key ? '' : e.rest}
-                </div>
-              </a>
-            ))}
+          <div className="lbl">{batch.latest ? 'Latest batch' : `Batch ${batch.n}`} · newest first</div>
+          <div className="ihead">{batch.range}</div>
+          <div className="imeta">
+            {batch.items.length} of {BATCH_SIZE} entries{batch.latest && batch.items.length < BATCH_SIZE ? ' · still growing' : ''}
           </div>
+          <ul className={s.toc}>
+            {bodies.map(({ item, divider }) => (
+              <li key={item.slug}>
+                <a href={`#${item.slug}`}>
+                  {item.key && <span className={s.k}>{item.key}</span>}
+                  {divider ? <i>{item.title}</i> : item.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+
+          <div className="lbl" style={{ marginTop: 22 }}>Every batch</div>
+          <ul className={s.batches}>
+            {[...batches].reverse().map((b) => (
+              <li key={b.n}>
+                <Link href={href(b.n)} className={b.n === batch.n ? s.on : undefined} aria-current={b.n === batch.n ? 'page' : undefined}>
+                  <span>{b.range}</span>
+                  <span className={s.n}>{b.latest ? 'latest' : `batch ${b.n}`} · {b.items.length}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
           <div className="note">
-            Rendered from <code>docs/changelog/entries/</code> in this repository. The screenshots come from{' '}
-            <code>docs/changelog/shots/</code> through a route that only serves images from that
-            directory — 2000 px WebP since issue 0021.
+            One file per entry in <code>docs/changelog/entries/</code>, in the order of{' '}
+            <code>docs/changelog/index.md</code>. Batches are cut from that order, ten at a time, oldest first, so a
+            batch never changes once it is full: the eleventh entry starts the next one.
           </div>
         </>
       }
@@ -174,42 +70,75 @@ async function Changelog() {
       <div className="lbl">Developer</div>
       <h1>Changelog</h1>
       <p className="sublede">
-        What landed at each stage, what was deliberately left out, and where the build disagreed
-        with the plan. Newest first. Read from <code>docs/changelog/entries/</code>, so it cannot drift from
-        the repository.
+        What landed, what was left out, and where the build disagreed with the plan — ten entries at a time,
+        newest first. This page holds the latest batch while it grows; every entry opens on its own page.
       </p>
 
-      <div className="card">
-        <div className="cbody" style={{ maxWidth: '88ch' }}>
-          {doc.preamble.map((block, i) => (
-            <Rendered key={`p${i}`} block={block} />
-          ))}
-        </div>
+      <nav className={s.batchbar} aria-label="Batches">
+        <span className="lbl">Batch</span>
+        {[...batches].reverse().map((b) => (
+          <Link
+            key={b.n}
+            href={href(b.n)}
+            className={`${s.pill} ${b.n === batch.n ? s.on : ''}`}
+            aria-current={b.n === batch.n ? 'page' : undefined}
+            aria-label={`Batch ${b.n}${b.latest ? ', latest' : ''}: ${b.range}`}
+          >
+            {b.latest ? <><span className={s.small}>Latest</span>{b.n}</> : b.n}
+          </Link>
+        ))}
+      </nav>
+
+      <div className={s.batchhead}>
+        <h2>{batch.latest ? `Latest batch · ${batch.n}` : `Batch ${batch.n}`}</h2>
+        <span className={s.meta}>
+          {batch.range} · entries {batch.items[0]!.n}–{batch.items.at(-1)!.n} of {items.length}
+          {batch.latest && batch.items.length < BATCH_SIZE ? ` · ${batch.items.length} of ${BATCH_SIZE}, still growing` : ''}
+        </span>
       </div>
 
-      {entries.map((entry) =>
-        entry.divider ? (
-          <div key={entry.id} id={entry.id} className="lbl" style={{ margin: '26px 0 10px' }}>
-            {entry.title}
+      {bodies.map(({ item, blocks, divider }) =>
+        divider ? (
+          <div key={item.slug} id={item.slug} className={`${s.era} ${s.entry}`}>
+            <Link href={`/dev/changelog/${item.slug}`} className="lbl">{item.title}</Link>
+            <Blocks blocks={blocks} />
           </div>
         ) : (
-          <div className="card" key={entry.id} id={entry.id} style={{ scrollMarginTop: 60 }}>
+          <article className={`card ${s.entry}`} key={item.slug} id={item.slug}>
             <div className="chead">
-              <h2>{entry.rest}</h2>
-              <span className="lbl">{entry.key}</span>
+              <h2 className={s.title}>
+                <Link href={`/dev/changelog/${item.slug}`}>{item.title}</Link>
+              </h2>
+              <span className={s.side}>
+                {item.key && <span className={s.key}>{item.key}</span>}
+                <Link href={`/dev/changelog/${item.slug}`} className={s.open} aria-label={`Open ${item.label}`}>Open</Link>
+              </span>
             </div>
-            <div className="cbody" style={{ maxWidth: '88ch' }}>
-              {entry.blocks.map((block, i) => (
-                <Rendered key={i} block={block} />
-              ))}
+            <div className={`cbody ${s.body}`}>
+              <Blocks blocks={blocks} />
             </div>
-          </div>
+          </article>
         ),
       )}
 
+      <nav className={s.pager} aria-label="Older and newer batches">
+        {newer ? (
+          <Link href={href(newer.n)}>
+            <span className={s.dir}>← Newer</span>
+            <span className={s.what}>{newer.latest ? 'Latest' : `Batch ${newer.n}`} · {newer.range}</span>
+          </Link>
+        ) : <span className={s.blank} />}
+        {older ? (
+          <Link href={href(older.n)} className={s.next}>
+            <span className={s.dir}>Older →</span>
+            <span className={s.what}>Batch {older.n} · {older.range}</span>
+          </Link>
+        ) : <span className={s.blank} />}
+      </nav>
+
       <p className="note">
-        <Link href="/dev/status">Status</Link> shows what is running right now; this is the history
-        of how it got there.
+        <Link href="/dev/status">Status</Link> shows what is running right now, <Link href="/dev/logs">Logs</Link> every
+        commit, run and import as it happened; this is the history of how it got there.
       </p>
     </Page>
   );

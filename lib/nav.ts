@@ -189,6 +189,7 @@ export const STATIC_SECTIONS: NavSection[] = [
       { label: 'Status', href: '/developer/status' },
       { label: 'Settings', href: '/developer/settings' },
       { label: 'Modules', href: '/developer/modules' },
+      { label: 'Workflows', href: '/developer/workflows' },
       { label: 'Agents', href: '/developer/agents' },
       { label: 'Data', href: '/developer/data' },
       { label: 'Affinity', href: '/developer/affinity' },

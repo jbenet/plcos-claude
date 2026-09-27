@@ -1,4 +1,5 @@
 import { coalescePage } from '@/lib/page-render';
+import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
@@ -70,6 +71,10 @@ async function Agents() {
         every tool call is checked against it, and the run record pins the config, the input and
         the prompt by hash — so editing a prompt cannot retroactively change what a finished run
         meant.
+      </p>
+      <p className="sublede">
+        This is the app’s own runtime. The workflow runs that Claude, ChatGPT and scripts record in the run ledger —
+        research, imports and dev tasks — are on <Link href="/dev/workflows">Workflows</Link>.
       </p>
 
       <div className="kpis">

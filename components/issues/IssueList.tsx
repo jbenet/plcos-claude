@@ -103,7 +103,7 @@ export function IssueList({ issues }: { issues: Issue[] }) {
                 <td><span className="flag f-mute">{i.status}</span></td>
                 <td className="mono">
                   {i.fixedIn
-                    ? <Link href={`/dev/changelog#${i.fixedIn.toLowerCase()}`} title="Open the changelog entry">{i.fixedIn}</Link>
+                    ? <Link href={`/dev/changelog/${i.fixedIn.toLowerCase()}`} title="Open the changelog entry">{i.fixedIn}</Link>
                     : <span className="muted">—</span>}
                 </td>
                 <td className="muted nowrap">{i.created ? ago(new Date(i.created)) : '—'}</td>

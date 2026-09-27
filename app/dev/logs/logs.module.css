@@ -1,0 +1,68 @@
+/* Developer → Logs (issue 0101): one timeline of commits, runs, imports, records and feedback. */
+
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 11px;
+  border: 1px solid var(--line); border-radius: 16px; background: var(--surface);
+  font-size: 12.5px; color: var(--muted);
+}
+.chip b { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--ink); }
+.chip:hover { border-color: var(--accent-line); color: var(--ink); }
+.chip.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--ink); }
+
+/* Kind colours; the word is always beside them. */
+.dev { --k: var(--purple); }
+.workflow { --k: var(--green); }
+.import { --k: var(--amber); }
+.record { --k: var(--muted); }
+.feedback { --k: var(--clay); }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 2px; background: var(--k); margin-right: 7px; vertical-align: 1px; }
+
+.day :global(.chead) { flex-wrap: wrap; row-gap: 4px; }
+.day :global(.chead) h2 { font-size: 15px; }
+.list { list-style: none; margin: 0; padding: 0; }
+.ev {
+  display: grid; grid-template-columns: 44px 76px minmax(0, 1fr) auto; gap: 12px; align-items: baseline;
+  padding: 9px 15px; border-bottom: 1px solid var(--hair);
+}
+.ev:last-child { border-bottom: 0; }
+.time { font-family: var(--mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.kind {
+  justify-self: start; font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--k); border: 1px solid color-mix(in srgb, var(--k) 35%, transparent);
+  background: color-mix(in srgb, var(--k) 7%, var(--surface)); border-radius: 4px; padding: 2px 6px; white-space: nowrap;
+}
+.main { min-width: 0; }
+.what { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.what a { color: var(--ink); border-bottom: 1px solid var(--line); }
+.what a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.what :global(.flag) { margin-left: 4px; font-size: 10px; vertical-align: 1px; }
+.about { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 2px; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.about > span:first-child { overflow-wrap: anywhere; }
+.issue { font-family: var(--mono); font-size: 11px; color: var(--accent); border-bottom: 1px dotted var(--accent); }
+.code { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.actor { font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; }
+
+.times { margin-left: 7px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.detail { margin-top: 1px; }
+.detail > summary { cursor: pointer; font-size: 11px; color: var(--muted); min-height: 24px; display: inline-flex; align-items: center; list-style: none; }
+.detail > summary::before { content: '▸'; font-size: 9px; margin-right: 5px; }
+.detail[open] > summary::before { content: '▾'; }
+.detail > summary::-webkit-details-marker { display: none; }
+.detail[open] > summary { color: var(--ink); }
+.detail dl { margin: 4px 0 2px; display: grid; gap: 2px; font-size: 11px; font-family: var(--mono); }
+.detail dl > div { display: grid; grid-template-columns: minmax(80px, max-content) 1fr; gap: 10px; }
+.detail dt { color: var(--muted); }
+.detail dd { margin: 0; overflow-wrap: anywhere; }
+
+.src { font-size: 12px; padding: 7px 0; border-bottom: 1px solid var(--hair); line-height: 1.45; }
+.src b { font-weight: 500; }
+.src div { color: var(--muted); font-size: 11.5px; margin-top: 2px; overflow-wrap: anywhere; }
+.older { display: flex; align-items: center; gap: 12px; font-size: 12.5px; margin: 4px 0 18px; }
+
+@media (max-width: 640px) {
+  .ev { grid-template-columns: 40px minmax(0, 1fr); gap: 4px 10px; }
+  .kind { grid-column: 2; grid-row: 1; }
+  .main { grid-column: 2; }
+  .actor { grid-column: 2; text-align: left; font-size: 11px; }
+}

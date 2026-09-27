@@ -5,6 +5,11 @@ The app and published build log concatenate the files below in this order;
 append each new version here. Keep heading text and screenshot paths relative
 to the repository root to preserve existing anchors and rendered output.
 
+Developer → Changelog reads this list in batches of ten, oldest first (issue 0098): batch 1 is the
+first ten entries after the preamble, and the page shows the latest, still-growing batch; the
+eleventh entry of a batch starts the next one. Each entry opens on its own page at
+`/developer/changelog/<file name>`. An entry that is not listed here is not shown anywhere.
+
 - [Changelog](entries/preamble.md)
 - [L1 — Shell, the five seams, and the feedback loop](entries/l1.md)
 - [L2 — Entities, provenance, and the corpus](entries/l2.md)
@@ -124,7 +129,9 @@ to the repository root to preserve existing anchors and rendered output.
 - [Portfolio tables and quieter navigation — issues 0079, 0080, 0081](entries/portfolio-0079.md)
 - [Strategy 0082 — compare LP actions and whole-raise moves](entries/strategy-0082.md)
 - [Pipeline and Selection, redesigned · issues 0083 and 0089 (asks from 0067 and 0071)](entries/tables-0083-0089.md)
-
+- [Routes 0084–0088 — source, identity and path correctness](entries/routes-0084.md)
 - [Dakota translation, enrichment and sourcing — review candidate](entries/dakota-translate.md)
 - [0096 — Act from the funder–vehicle fit list](entries/fit-0096.md)
+- [Selection as a table, organisations as rows, a warm intro box · issues 0091–0093](entries/tables-0091-0093.md)
 - [0097 / 0102 — Strategy recommendations, utility created, status marks; rail order](entries/strategy-0097.md)
+- [The Developer pages, redesigned — changelog, status, workflows and logs · issues 0098–0101 (and 0036)](entries/developer-0098-0101.md)
