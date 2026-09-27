@@ -154,6 +154,21 @@ export const config = {
   agents: {
     correctionBudgetHoursPerWeek: 12, // GUESS — v3 said 10–15 h/week; circuit-breaker threshold.
   },
+  dakota: {
+    perVehicleCap: 150, // GUESS — maximum rule-sourced candidates per vehicle, including prior passes.
+    minimumTicketUsd: 500_000, // Juan's sourcing rule, 27 Sep 2026.
+    claimConfidence: 'medium', // GUESS — vendor claim, tier C, never verified evidence.
+    identityConfidence: 0.8, // GUESS — corroborated identifier match.
+    possibleConfidence: 0.25, // GUESS — a name alone never merges.
+    fitWeights: { topic: 2, flag: 1 }, // GUESS — transparent relative ranking, not a probability.
+    theses: {
+      neurotech: ['venture', 'healthcare', 'health care', 'life sciences', 'neurotech', 'deep tech'],
+      rails: ['cryptocurrency', 'crypto', 'digital assets', 'fintech', 'blockchain'],
+      'prime-intellect': ['artificial intelligence', 'ai'],
+      'persona-ai': ['robotics', 'artificial intelligence', 'ai'],
+      netholabs: ['neurotech', 'neuroscience'],
+    } as Record<string, string[]>,
+  },
   identityResolution: {
     batchSize: 50, // GUESS — bound each maintenance read and CPU slice below interactive latency.
     pauseMs: 50, // GUESS — leave an actual idle interval between slices on the live server.

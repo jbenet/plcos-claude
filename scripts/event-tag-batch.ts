@@ -79,12 +79,13 @@ async function main() {
   const ents = new Map((await q<{ entity_id: string; name: string; org: string | null }>(
     `select e.entity_id::text, e.display_name as name,
             (select o.display_name from identity.affiliation a join identity.entity o on o.entity_id = a.org_entity
-              where a.person_entity = e.entity_id and a.ended_on is null order by a.is_primary desc, a.as_of desc limit 1) as org
-       from identity.entity e`,
+              where a.person_entity = e.entity_id and a.ended_on is null and a.source is distinct from 'dakota'
+              and not exists(select 1 from identity.source_record ds where ds.source='dakota' and identity.canonical_entity_id(ds.entity_id)=identity.canonical_entity_id(a.org_entity)) order by a.is_primary desc, a.as_of desc limit 1) as org
+       from identity.entity e where not exists(select 1 from identity.source_record ds where ds.source='dakota' and identity.canonical_entity_id(ds.entity_id)=identity.canonical_entity_id(e.entity_id))`,
   )).map((r) => [r.entity_id, r]));
   const onLists = new Map<string, string[]>();
   for (const r of await q<{ entity_id: string; vehicle: string; status: string }>(
-    `select p.entity_id::text, v.name as vehicle, p.status::text from strategy.pursuit p join platform.vehicle v on v.id = p.vehicle_id`,
+    `select p.entity_id::text, v.name as vehicle, p.status::text from strategy.pursuit p join platform.vehicle v on v.id = p.vehicle_id where p.source <> 'dakota'`,
   )) onLists.set(r.entity_id, [...(onLists.get(r.entity_id) ?? []), `${r.vehicle} · ${r.status}`]);
   const byKey = new Map((await q<{ source_id: string; entity_id: string }>(
     `select source_id, entity_id::text from identity.source_record where source = 'affinity'`,

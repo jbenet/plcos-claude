@@ -1,3 +1,4 @@
+import { DakotaClaims } from '@/components/entity/DakotaClaims';
 import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
@@ -349,6 +350,7 @@ async function TargetWorkspace({ params, searchParams }: {
 
           <BeforeOutreach entityId={pursuit.entityId} />
           <SuggestedStrategy pursuitId={pursuit.pursuitId} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />
+          <DakotaClaims entityId={pursuit.entityId} />
           <PublicProfile entityId={pursuit.entityId} />
           <ConnectionFeedback key={pursuit.entityId} lp={pursuit.entityId} />
 

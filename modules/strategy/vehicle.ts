@@ -1,3 +1,4 @@
+import { dakotaCapacities } from '@/lib/connectors/dakota/view';
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { isStale, type Strategy } from '@/lib/enrich/strategy';
@@ -73,6 +74,7 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
     db.query<{ entity_id: string; at: Date }>(`select identity.canonical_entity_id(entity_id) entity_id,max(created_at) at
       from research.note where kind='context' and identity.canonical_entity_id(entity_id)=any($1::uuid[]) group by 1`, [ids]),
   ]);
+  const dakota = await dakotaCapacities(db, ids);
   const transitions = history.flatMap(r => {
     const from = statusId(r.detail.fromId ?? r.detail.from), to = statusId(r.detail.toId ?? r.detail.to);
     return from && to && from !== to ? [{ pursuitId: r.subject_id, from, to, at: new Date(r.at) }] : [];
@@ -100,8 +102,9 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
         undefined, undefined, byContext.get(p.entityId))) || (profileAt && profileAt > strategyAt)));
     const routeStale = Boolean(route && (!route.current || (now.getTime() - route.at.getTime()) / DAY > rules.staleDays));
     const capacityBand = strategy?.scores?.capacity?.band ?? profile?.data.profile?.capacity?.band;
-    const capacity = soft.length ? soft.reduce((n, x) => n + x.amount, 0) : capacityEstimate(capacityBand);
-    const capacityBasis = soft.length ? 'Recorded soft amount in this vehicle; not hard committed.' : strategy?.scores?.capacity?.basis ?? profile?.data.profile?.capacity?.basis ?? 'No supported capacity estimate.';
+    const capacity = soft.length ? soft.reduce((n, x) => n + x.amount, 0) : capacityEstimate(capacityBand) ?? dakota.get(p.entityId)?.amount ?? null;
+    const usingDakota = !soft.length && capacityEstimate(capacityBand) === null && dakota.has(p.entityId);
+    const capacityBasis = soft.length ? 'Recorded soft amount in this vehicle; not hard committed.' : usingDakota ? dakota.get(p.entityId)!.basis : strategy?.scores?.capacity?.basis ?? profile?.data.profile?.capacity?.basis ?? dakota.get(p.entityId)?.basis ?? 'No supported capacity estimate.';
     const propensity = strategy?.scores?.propensity;
     const likelihood = propensity && propensity.level !== 'unknown' ? rules.likelihood[propensity.level] : null;
     const decision = strategy?.scores?.timeToDecision;

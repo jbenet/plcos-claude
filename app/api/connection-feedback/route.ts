@@ -1,3 +1,5 @@
+import { getDb } from '@/lib/db';
+import { hasDakota, DAKOTA_FILE_REFUSAL } from '@/lib/connectors/dakota/privacy';
 import { NextResponse } from 'next/server';
 import { join } from 'node:path';
 import { config } from '@/config/deployment';
@@ -6,6 +8,7 @@ import { getEntity } from '@/modules/identity';
 import { feedbackInput, saveConnectionFeedback } from '@/lib/enrich/feedback';
 
 export async function POST(req: Request) {
+  if (config.data.profile === 'real' && await hasDakota(await getDb())) return NextResponse.json({error:DAKOTA_FILE_REFUSAL},{status:403});
   const origin = req.headers.get('origin');
   if (origin && origin !== new URL(req.url).origin) return NextResponse.json({ error: 'Use the feedback box on this server.' }, { status: 403 });
   let input;

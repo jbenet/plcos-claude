@@ -51,6 +51,15 @@ export function FeedbackButton({
   home?: { filesHere: boolean; livePort: number | null };
 }) {
   const [open, setOpen] = useState(false);
+  const [policy,setPolicy]=useState<{allowed:boolean;error?:string}|null>(null);
+  useEffect(()=>{
+    if(!open||profile!=='real')return;
+    let live=true;
+    void fetch('/api/feedback').then(r=>r.json()).then((p:{allowed:boolean;error?:string})=>{if(live)setPolicy(p);})
+      .catch(()=>{if(live)setPolicy({allowed:false,error:'Feedback capture policy is unavailable. Retry later.'});});
+    return ()=>{live=false;};
+  },[open,profile]);
+
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -77,9 +86,11 @@ export function FeedbackButton({
         {variant === 'rail' ? <><span aria-hidden>✎</span> Feedback</> : 'Give feedback'}
         <span className="feedbackkey">Alt/Option+F</span>
       </button>
-      {open && (home.filesHere
-        ? <FeedbackDrawer profile={profile} onClose={() => setOpen(false)} />
-        : <FiledFromLive livePort={home.livePort} onClose={() => setOpen(false)} />)}
+      {open && profile==='real' && !policy?.allowed
+        ? <div className="drawer nocapture" role="dialog" aria-label="Feedback unavailable"><p>{policy?.error??'Checking feedback capture policy…'}</p><button className="btn" onClick={()=>{setOpen(false);setPolicy(null);}}>Close</button></div>
+        : open && (home.filesHere
+        ? <FeedbackDrawer profile={profile} onClose={() => {setOpen(false);setPolicy(null);}} />
+        : <FiledFromLive livePort={home.livePort} onClose={() => {setOpen(false);setPolicy(null);}} />)}
     </>
   );
 }
@@ -136,10 +147,13 @@ interface Shot {
 }
 
 function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClose: () => void }) {
+  // A Dakota import can happen after preflight. Real feedback stays in memory even
+  // while this drawer remains open; no capture or browser draft can race that import.
+  const keepBrowserDrafts = profile === 'demo';
   /**
    * Screenshots are a list.
    *
-   * The first is taken automatically when the box opens — a redraw, no dialog, and the
+   * In demo, the first is taken automatically when the box opens — a redraw, no dialog, and the
    * feedback panel redacted out of it. The buttons **add** rather than replace, because a
    * second shot of a different part of the page is a second piece of evidence, and one
    * somebody has already annotated must not vanish because they pressed the button again.
@@ -165,7 +179,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   };
 
   /** The automatic one. Its failure is silent — it was never asked for. */
-  const seedShot = () => { void capturePage().then((c) => { if (c) add(c.dataUrl, c.method); }); };
+  const seedShot = () => { if (keepBrowserDrafts) void capturePage().then((c) => { if (c) add(c.dataUrl, c.method); }); };
 
   /**
    * A retake, using the browser's own screen capture. It shows a permission dialog and it
@@ -173,6 +187,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
    * got the layout wrong.
    */
   const take = (region?: Region) => {
+    if (!keepBrowserDrafts) return;
     setShooting(true);
     setPicking(false);
     setFailed(false);
@@ -272,7 +287,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   }, []);
 
   /**
-   * Drafts (issues 0018 and 0026, real). The box edits one draft at a time, named by the page it was
+   * Demo drafts. The box edits one draft at a time, named by the page it was
    * started on: this page's, until another is picked from the list beside Wider. Its words and its
    * pictures are kept in this browser as they change (lib/feedback-drafts.ts) and dropped once it is
    * filed. A draft is words, or a picture somebody drew on or dropped in; the automatic screenshot
@@ -291,7 +306,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
    * to show when it brings no pictures — the screenshot already on screen, or (null) a fresh one.
    */
   const load = (page: string, carry: Shot[] | null) => {
-    const d = readDraft(page);
+    const d = keepBrowserDrafts ? readDraft(page) : null;
     setDraftPage(page);
     setTitle(d?.title ?? '');
     setBody(d?.body ?? '');
@@ -300,6 +315,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
     setRestored(d ? { at: d.at ?? '', pictures: d.pictures ?? 0 } : null);
     setImages([]);
     setGeneration((g) => g + 1);
+    if (!keepBrowserDrafts) { setShots([]); return; }
     const fill = (kept: { shots: Shot[]; images: DroppedImage[] } | null) => {
       if (kept) { setShots(kept.shots); setImages(kept.images); }
       else if (carry) setShots(carry);
@@ -321,20 +337,21 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   }, []);
 
   useEffect(() => {
-    if (hydrating.current || state === 'done') return;
+    if (!keepBrowserDrafts || hydrating.current || state === 'done') return;
     writeDraft(draftPage, worthKeeping
       ? { title, body, kind, priority, at: new Date().toISOString(), pictures: shots.length + images.length }
       : null);
-  }, [title, body, kind, priority, shots, images, draftPage, state, worthKeeping]);
+  }, [title, body, kind, priority, shots, images, draftPage, state, worthKeeping, keepBrowserDrafts]);
   // Pictures change rarely — taken, drawn on, removed — so each change is written as it happens.
   useEffect(() => {
-    if (hydrating.current || state === 'done') return;
+    if (!keepBrowserDrafts || hydrating.current || state === 'done') return;
     void writePictures<Shot, DroppedImage>(draftPage, worthKeeping ? { shots, images } : null);
-  }, [shots, images, draftPage, state, worthKeeping]);
-  useEffect(() => { if (state === 'done') void discardDraft(draftPage); }, [state, draftPage]);
+  }, [shots, images, draftPage, state, worthKeeping, keepBrowserDrafts]);
+  useEffect(() => { if (keepBrowserDrafts && state === 'done') void discardDraft(draftPage); }, [state, draftPage, keepBrowserDrafts]);
   useEffect(() => {
+    if (!keepBrowserDrafts) return;
     setOthers(listDrafts().filter((d) => d.page !== draftPage));
-  }, [draftPage, showDrafts, state]);
+  }, [draftPage, showDrafts, state, keepBrowserDrafts]);
 
   /** The one in the box is already kept, as it stands; its pictures stay with it. */
   const switchTo = (page: string) => {
@@ -342,6 +359,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
     setShowDrafts(false);
   };
   const discard = (page: string) => {
+    if (!keepBrowserDrafts) return;
     if (!window.confirm(`Discard the unsent draft started on ${page}? Its words and pictures go, and this cannot be undone.`)) return;
     void discardDraft(page).then(() => setOthers(listDrafts().filter((d) => d.page !== draftPage)));
   };
@@ -359,10 +377,10 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
     setState('sending');
     setError(null);
     // A picture deleted from the text is not sent (issue 0020) — it may be the wrong one.
-    const packed = packAttachments(body, images);
+    const packed = keepBrowserDrafts ? packAttachments(body, images) : { body, images: [] };
     try {
       // Finish saving this exact picture set before a request can stall or fail.
-      await writePictures<Shot, DroppedImage>(draftPage, { shots, images });
+      if (keepBrowserDrafts) await writePictures<Shot, DroppedImage>(draftPage, { shots, images });
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -371,13 +389,13 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
         signal: AbortSignal.timeout(30_000),
         body: JSON.stringify({
           title, body: packed.body, kind, priority, page: path, context,
-          screenshots: shots.map((x) => x.dataUrl),
+          screenshots: keepBrowserDrafts ? shots.map((x) => x.dataUrl) : [],
           images: packed.images.map((i) => ({ name: i.name, dataUrl: i.dataUrl })),
           /**
            * The server numbers attachments with the screenshot first, so a body written
            * against `attachment:1` needs an offset for the screenshots still attached.
            */
-          imageOffset: shots.length,
+          imageOffset: keepBrowserDrafts ? shots.length : 0,
         }),
       });
       const json = (await res.json()) as { id?: string; location?: string; title?: string; error?: string };
@@ -452,7 +470,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
       >
         <div className="drawerhead">
           <div className="lbl">Feedback</div>
-          {others.length > 0 && state !== 'done' && (
+          {keepBrowserDrafts && others.length > 0 && state !== 'done' && (
             <button
               type="button"
               className="drawerwide"
@@ -473,7 +491,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             {wide ? '⇥ Narrower' : '⇤ Wider'}
           </button>
         </div>
-        {showDrafts && others.length > 0 && state !== 'done' && (
+        {keepBrowserDrafts && showDrafts && others.length > 0 && state !== 'done' && (
           <div className="draftlist">
             <div className="lbl">Unsent, kept in this browser · {others.length}</div>
             {others.map((d) => (
@@ -537,8 +555,9 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
               filled in for you.
             </p>
 
-            <div className="fbcols">
-            <div className="fbshots">
+            {!keepBrowserDrafts && <p className="note">Screenshots, image attachments and saved browser drafts are disabled on real data to protect Dakota records. Unsent text stays only in this open dialog.</p>}
+            <div className="fbcols" style={keepBrowserDrafts ? undefined : { gridTemplateColumns: 'minmax(0, 1fr)' }}>
+            {keepBrowserDrafts && <div className="fbshots">
             <div className="lbl">
               Screenshots{shots.length > 0 ? ` · ${shots.length}` : ''}
             </div>
@@ -619,17 +638,15 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
 
             {shots.length > 0 && (
               <p className="mdhint">
-                {profile === 'real'
-                  ? 'Filed beside the issue with the real data — never committed.'
-                  : 'Filed beside the issue in this repository.'}{' '}
+                Filed beside the issue in this repository.{' '}
                 Click an image to annotate it; use its × to delete it.
               </p>
             )}
 
-            </div>
+            </div>}
 
             <div className="fbtext">
-            {restored !== null && state === 'idle' && worthKeeping && (
+            {keepBrowserDrafts && restored !== null && state === 'idle' && worthKeeping && (
               <p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
                 Your unsent draft {draftPage === path ? 'for this page' : <>started on <span className="mono">{draftPage}</span></>},
                 kept in this browser{restored.at ? ` since ${savedAt(restored.at)}` : ''}
@@ -648,7 +665,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
 
             <div className="field">
               <span className="lbl">What happened</span>
-              <MarkdownField
+              {keepBrowserDrafts ? <MarkdownField
                 key={generation}
                 value={body}
                 onChange={setBody}
@@ -660,7 +677,14 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
                   'What you expected, what happened instead.\n\n'
                   + 'Markdown works. Drop a screenshot from somewhere else in here if you have one.'
                 }
-              />
+              /> : <textarea
+                aria-label="What happened"
+                value={body}
+                onChange={(event) => setBody(event.target.value)}
+                rows={8}
+                placeholder="What you expected, what happened instead."
+                style={{ width: '100%', font: 'inherit' }}
+              />}
             </div>
 
             <div className="fieldrow">
@@ -693,7 +717,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
                 <div className="lbl" style={{ color: 'var(--clay)' }}>
                   Filing not confirmed
                 </div>
-                <p>{error}. Your text and pictures are still in this draft. Check the issues list before retrying; the server may have saved the report.</p>
+                <p>{error}. {keepBrowserDrafts ? 'Your text and pictures are still in this draft.' : 'Your text remains in this open dialog and will be lost when it closes.'} Check the issues list before retrying; the server may have saved the report.</p>
               </div>
             )}
             </div>

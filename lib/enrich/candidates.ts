@@ -145,7 +145,10 @@ const IDENTITY_FIELDS = ['Current Organization', 'Current Job Title', 'Organizat
 
 export async function researchSet(): Promise<Candidate[]> {
   const db = await getDb();
-  const all = (await listPursuits(null)).filter(inResearchSet);
+  // Dakota-derived identity and planning fields must never become research files/prompts.
+  const privateEntities = new Set((await db.query<{id:string}>(`select identity.canonical_entity_id(entity_id)::text id
+    from identity.source_record where source='dakota'`)).map(r=>r.id));
+  const all = (await listPursuits(null)).filter(inResearchSet).filter(p=>!privateEntities.has(p.entityId));
   const byEntity = new Map<string, Pursuit[]>();
   for (const p of all) byEntity.set(p.entityId, [...(byEntity.get(p.entityId) ?? []), p]);
   const ids = [...byEntity.keys()];
@@ -157,7 +160,8 @@ export async function researchSet(): Promise<Candidate[]> {
     db.query<{ person_entity: string; org: string; role: string }>(
       `select identity.canonical_entity_id(a.person_entity)::text as person_entity, o.display_name as org, a.role from identity.affiliation a
          join identity.entity o on o.entity_id = identity.canonical_entity_id(a.org_entity)
-        where identity.canonical_entity_id(a.person_entity) = any($1::uuid[]) and a.ended_on is null
+        where identity.canonical_entity_id(a.person_entity) = any($1::uuid[]) and a.ended_on is null and a.source is distinct from 'dakota'
+        and not exists(select 1 from identity.source_record ds where ds.source='dakota' and identity.canonical_entity_id(ds.entity_id)=identity.canonical_entity_id(a.org_entity))
         order by a.is_primary desc`, [ids]),
     db.query<{ entity_id: string; source_id: string }>(
       `select identity.canonical_entity_id(entity_id)::text as entity_id, source_id from identity.source_record where source = 'affinity' and identity.canonical_entity_id(entity_id) = any($1::uuid[])`, [ids]),

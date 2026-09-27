@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
 export function ConnectionFeedback({ lp }: { lp: string }) {
@@ -11,6 +11,14 @@ export function ConnectionFeedback({ lp }: { lp: string }) {
   const [receiptKey, setReceiptKey] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [failed, setFailed] = useState(false);
+  const [policy,setPolicy]=useState<{allowed:boolean;error?:string}|null>(null);
+  useEffect(()=>{
+    let live=true;
+    void fetch('/api/feedback').then(r=>r.json()).then((p:{allowed:boolean;error?:string})=>{if(live)setPolicy(p);})
+      .catch(()=>{if(live)setPolicy({allowed:false,error:'Feedback policy is unavailable. Retry later.'});});
+    return ()=>{live=false;};
+  },[page]);
+  if(!policy?.allowed)return <section className="card"><div className="chead"><h2>Connection feedback</h2></div><p className="cbody muted">{policy?.error??'Checking feedback policy…'}</p></section>;
   return <section className="card">
     <div className="chead"><h2>Connection feedback</h2></div>
     <form className="cbody" onSubmit={async (event) => {

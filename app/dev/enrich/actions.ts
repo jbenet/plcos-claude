@@ -99,3 +99,21 @@ export async function importPortfolioAction(): Promise<{ result?: import('@/lib/
     return {result};
   } catch { return {error:'Portfolio import failed. Check the file’s required sources, vehicle slugs and stable row IDs, then retry.'}; }
 }
+
+/** Dakota records never leave the database; errors and receipts carry counts only. */
+export async function importDakotaAction(): Promise<{ result?: import('@/lib/connectors/dakota/translate').DakotaCounts; error?: string }> {
+  if (config.data.profile !== 'real' || config.data.copyTakenAt || readLayout().role !== 'live') {
+    return {error:'Import Dakota from Developer → Enrichment on the live server.'};
+  }
+  try {
+    const { readReplicas } = await import('@/lib/connectors/dakota/replica');
+    const { translateDakota } = await import('@/lib/connectors/dakota/translate');
+    const replicas = await readReplicas('data/real/dakota/raw');
+    if(!replicas.length) return {error:'No complete Dakota replicas found. Complete the read-only pull, then retry.'};
+    const user=await (await auth()).currentUser();
+    const result=await translateDakota(await getDb(),user.id,replicas);
+    if(result.replicas||result.sourced||result.claims) await appendAudit({actorId:user.id,action:'dakota.translated',subjectType:'enrich',detail:{...result}});
+    revalidatePath('/dev/enrich');revalidatePath('/targets','layout');revalidatePath('/routes');revalidatePath('/vehicles','layout');
+    return {result};
+  } catch {return {error:'Dakota import failed. No record details were exported. Check the complete replica manifests on the live server, then retry.'};}
+}

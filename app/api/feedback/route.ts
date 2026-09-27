@@ -1,3 +1,5 @@
+import { getDb } from '@/lib/db';
+import { hasDakota, DAKOTA_FILE_REFUSAL } from '@/lib/connectors/dakota/privacy';
 import type { Queryable } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { config } from '@/config/deployment';
@@ -9,7 +11,17 @@ import { titleFrom } from '@/lib/issues/title';
 import { cookies } from 'next/headers';
 import { USER_COOKIE } from '@/lib/auth/local';
 
+/** Check before mounting the capture/draft UI; a DB failure refuses captures on real. */
+export async function GET() {
+  if(config.data.profile !== 'real') return NextResponse.json({allowed:true});
+  try { const blocked=await hasDakota(await getDb());return NextResponse.json({allowed:!blocked,error:blocked?DAKOTA_FILE_REFUSAL:null}); }
+  catch {return NextResponse.json({allowed:false,error:'Feedback capture policy is unavailable. Retry after the database is available.'});}
+}
 export async function POST(req: Request) {
+  if(config.data.profile === 'real') {
+    try {if(await hasDakota(await getDb()))return NextResponse.json({error:DAKOTA_FILE_REFUSAL},{status:403});}
+    catch {return NextResponse.json({error:'Feedback capture policy is unavailable.'},{status:503});}
+  }
   // Only the live app files (docs/COLLAB.md): a branch filing would take numbers the live app
   // gives out too. The box on a dev worktree says so; this refuses anything that asks anyway.
   if (!feedbackHome(config.data.profile).filesHere) {

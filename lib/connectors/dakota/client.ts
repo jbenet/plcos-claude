@@ -21,6 +21,9 @@ const OPS = new Set(['$equals', '$not_equals', '$contains', '$gt', '$gte', '$lt'
 
 /** Throws on anything that is not a plain read: the only guard between us and a write. */
 export function readBody(q: ListQuery & { countOnly?: boolean }): string {
+  const allowed = new Set(['module','fields','filter','orderBy','offset','maxNum','countOnly']);
+  if (Object.keys(q).some(k => !allowed.has(k))) throw new Error('Dakota: non-read body refused');
+  if (q.orderBy && !/^[A-Za-z0-9_.]+:(ASC|DESC)$/i.test(q.orderBy)) throw new Error('Dakota: invalid read order');
   if (!MODULE.test(q.module)) throw new Error(`Dakota: module "${q.module}" is not a plain module name`);
   for (const f of q.fields ?? []) if (!FIELD.test(f)) throw new Error(`Dakota: field "${f}" is not a plain field name`);
   const walk = (v: unknown): void => {

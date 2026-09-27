@@ -1,3 +1,5 @@
+import { config } from '@/config/deployment';
+import { hasDakota, DAKOTA_FILE_REFUSAL } from '@/lib/connectors/dakota/privacy';
 import { getDb, type Queryable } from '@/lib/db';
 import { issues as issueSink } from '@/lib/issues';
 import type { IssueAttachment, IssueKind, IssuePriority, IssueSink } from '@/lib/issues';
@@ -26,6 +28,7 @@ export interface FeedbackCommand {
  * the complaint behind a busy connection, including reporter lookup.
  */
 export async function fileFeedback(user: AppUser | { handle: string; resolveUser: (q: Queryable) => Promise<AppUser> }, cmd: FeedbackCommand, options: { clock?: QueueClock; sink?: IssueSink } = {}) {
+  if (config.data.profile === 'real' && await hasDakota(await getDb())) throw new Error(DAKOTA_FILE_REFUSAL);
   const verified = !('resolveUser' in user);
   const context = {
     ...cmd.context,
