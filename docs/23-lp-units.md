@@ -67,3 +67,11 @@ it wrote. A reversal restores them by compare-and-restore and refuses if anythin
 undo a later re-point into the same LP first. The rule never re-applies a reversed decision and
 never overrides a person's own decision, made on a person's LP page ("Who is the LP?"). A second
 pass over unchanged records writes nothing.
+
+**Research decisions.** Export the research set also writes `enrich/lp-unit-review.jsonl`, one
+row per unresolved pursuit with firm candidates, rule evidence and amount presence only. W14
+(`docs/workflows/w14-lp-unit-review.md`) researches public pages and existing findings without
+database access. Both re-point and Import the findings accept `enrich/lp-unit-decisions.jsonl`.
+Valid answers use the same journal and reversal as the LP page, attributed to a file, with pinned
+evidence and a retry key. Invalid lines are listed with reasons. A person's answer always wins;
+reversals block replay. Every move path refuses money in the person's name or a high ladder rung.

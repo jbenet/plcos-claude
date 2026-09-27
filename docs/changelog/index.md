@@ -165,3 +165,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Responsive server — PGlite and imports leave the request thread](entries/responsive-server.md)
 - [Identity review export performance](entries/identity-export-perf.md)
 - [LP units — the firm is the LP, individuals apart](entries/lp-units-0111.md)
+- [LP-unit research decisions — public evidence, reversible answers](entries/lp-unit-decisions.md)

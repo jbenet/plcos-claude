@@ -5,6 +5,7 @@ import { join } from 'node:path';
 export interface ResearchExportStatus {
   at: string;
   identityReviewError: 'timeout' | 'failed' | null;
+  lpUnitReviewError?: 'timeout' | 'failed' | null;
 }
 
 export async function readResearchExportStatus(dir: string): Promise<ResearchExportStatus | null> {

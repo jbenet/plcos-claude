@@ -3,6 +3,7 @@
 import { useActionState, useState, useTransition } from 'react';
 import Link from '@/components/ui/AppLink';
 import type { LpUnitDecisionRow } from '@/modules/strategy';
+import type { LpUnitFileReport } from '@/lib/enrich/lp-unit-decisions';
 import { repointPursuitsAction, reverseLpRepointAction } from './actions';
 
 const WORD = { moved: 'Moved to its organisation', personal: 'Individual LP', review: 'To review' } as const;
@@ -11,7 +12,7 @@ const WORD = { moved: 'Moved to its organisation', personal: 'Individual LP', re
  * Re-point pursuits to their LP (issues 0111, 0112; docs/23): the button, what the last pass did,
  * and each standing decision with its reversal. Runs on its own and inside Import the findings.
  */
-export function LpUnits({ last, decisions }: { last: string | null; decisions: LpUnitDecisionRow[] }) {
+export function LpUnits({ last, decisions, fileDecisions }: { last: string | null; decisions: LpUnitDecisionRow[]; fileDecisions?: LpUnitFileReport }) {
   const [state, action, pending] = useActionState(repointPursuitsAction, {});
   const [shown, setShown] = useState<'all' | LpUnitDecisionRow['decision']>('all');
   const counts = { moved: 0, personal: 0, review: 0 };
@@ -25,6 +26,13 @@ export function LpUnits({ last, decisions }: { last: string | null; decisions: L
       {state.message && <p role="status">{state.message}</p>}
       {state.error && <p role="alert">{state.error}</p>}
       {last && <p>Last pass: {last}</p>}
+      {fileDecisions && <details className="more">
+        <summary>{fileDecisions.applied} file decisions applied, {fileDecisions.skipped} already applied, {fileDecisions.refused.length} refused</summary>
+        <p className="muted">Reads lp-unit-decisions.jsonl. A person’s LP-page decision always wins. Money in the person’s name prevents a move to a firm.</p>
+        <ul>{fileDecisions.refused.map((r, i) => <li key={`${r.line}:${i}`}>
+          Line {r.line}{r.pursuitId && <> · <Link href={`/targets/${r.pursuitId}`}>Pursuit</Link></>} — {r.reason}
+        </li>)}</ul>
+      </details>}
       {decisions.length > 0 && <details className="more">
         <summary>{decisions.length} standing decisions: {counts.moved} moved, {counts.personal} individual, {counts.review} to review</summary>
         <p className="muted">Each is reversible: a reversal restores exactly what it changed and refuses if something changed since. Undo a later
@@ -51,7 +59,7 @@ function Decision({ d }: { d: LpUnitDecisionRow }) {
     <p style={{ margin: 0 }}>
       <b>{WORD[d.decision]}</b> · <Link href={d.decision === 'moved' ? `/orgs/${d.personId}` : `/targets/${d.pursuitId}`}>{d.person}</Link>
       {d.org && <> → <Link href={`/targets/${d.orgPursuitId}`}>{d.org}</Link>{d.created ? ' (its pursuit created)' : ''}</>} · {d.vehicle}
-      {d.decidedBy === 'person' ? ' · decided by a person' : ''}
+      {d.decidedBy === 'person' ? ' · decided by a person' : d.decidedBy === 'file' ? ' · research decision from file' : ''}
     </p>
     <p className="muted" style={{ margin: '2px 0 4px' }}>{d.reason}</p>
     {reversed ? <p>Reversed.</p> : <>
