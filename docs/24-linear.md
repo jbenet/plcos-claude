@@ -191,3 +191,7 @@ Rules:
   and proven by the properties; the key lives only in the live server's environment. An OAuth app
   with the `read` scope would make it true on Linear's side too — worth doing before writes, when
   the write path gets its own `write`-scoped credential.
+
+## Decision, 27 Sep 2026 (Juan)
+
+**Read-only, fewer pages:** only Developer → Linear, Connectors and Status for now. The vehicle Workstreams card and "My Linear" on Today are not built. The read-write phase is not started. Revisit once the fundraising team's Linear use has settled.
