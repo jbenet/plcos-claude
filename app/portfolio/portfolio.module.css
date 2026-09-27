@@ -1,0 +1,89 @@
+/* The vehicle portfolio (issues 0069, 0079). Builds on the shared card, table.list and cover styles. */
+
+/* Layout follows the card's width, not the window's: the rail and any pane take their share first. */
+.gap { margin-top: 14px; }
+.scroll { overflow-x: auto; container-type: inline-size; }
+
+.table { table-layout: auto; }
+.table tbody + tbody { border-top: 1px solid var(--line); }
+.table td, .table tbody th { border-bottom: 0; }
+.table thead th { white-space: nowrap; }
+.table tbody th { text-align: left; font: 400 12.5px/1.4 var(--sans); letter-spacing: normal; text-transform: none; color: var(--ink); padding: 12px 15px; vertical-align: top; }
+.table tbody tr + tr td.inv { border-top: 1px solid var(--hair); }
+.table td { padding-top: 12px; padding-bottom: 12px; }
+
+.colCompany { width: 22%; min-width: 150px; }
+.colFounders { width: 30%; min-width: 200px; }
+.namesOnly .colCompany { width: 32%; }
+.namesOnly .colFounders { width: auto; }
+.namesOnly .founders { display: flex; flex-wrap: wrap; gap: 5px 22px; }
+
+.company { font-family: var(--display); font-size: 15px; font-weight: 600; line-height: 1.3; }
+.company a { border-bottom: 1px solid var(--line); }
+.company a:hover { border-bottom-color: currentColor; }
+.cite { font-family: var(--mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; margin-top: 3px; }
+.rownote { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 4px; max-width: 46ch; white-space: normal; font-family: var(--sans); }
+
+.founders { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.founders li { line-height: 1.4; }
+.person { white-space: nowrap; font-weight: 500; color: var(--ink); border-bottom: 1px solid var(--accent-line, var(--line)); }
+.person:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.unlinked { color: var(--ink); white-space: nowrap; }
+.role { color: var(--muted); font-size: 11.5px; margin-left: 7px; white-space: nowrap; }
+.match { margin-left: 7px; font-family: var(--mono); font-size: 10px; letter-spacing: .02em; color: var(--muted); white-space: nowrap; }
+.match a + a { margin-left: 6px; }
+.match a { margin-left: 4px; color: var(--amber); border-bottom: 1px dotted var(--amber); }
+.match a:hover { border-bottom-style: solid; }
+
+.inv { white-space: nowrap; }
+.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+th.num { text-align: right; }
+.multiple { font-weight: 600; color: var(--ink); }
+.round { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.nr { font-family: var(--sans); font-weight: 400; color: var(--muted); font-size: 11.5px; }
+.none { color: var(--muted); font-size: 12px; }
+
+.sources td { vertical-align: top; }
+.sources td.cite { width: 36px; padding-top: 12px; }
+.file { overflow-wrap: anywhere; }
+.meta { color: var(--muted); font-size: 12px; }
+.more { padding: 12px 15px 14px; border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.55; }
+.more p { margin: 0 0 8px; max-width: 110ch; }
+.more p:last-child { margin-bottom: 0; }
+.more b { font-weight: 500; }
+.more details { margin: 0 0 10px; }
+.more summary { cursor: pointer; color: var(--muted); font-size: 12px; min-height: 28px; display: flex; align-items: center; }
+.more ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; display: grid; gap: 3px; }
+
+/* iPad landscape: about 900 px for up to seven columns, so the cells tighten. */
+@container (max-width: 1000px) {
+  .table th, .table td, .table tbody th { padding-left: 10px; padding-right: 10px; }
+  .table thead th { white-space: normal; }
+  .colCompany { min-width: 130px; }
+  .colFounders { min-width: 180px; }
+}
+
+/* iPad portrait and phones: the table becomes one block per company, and each investment one
+   line of labelled cells. Nothing depends on hover. */
+@container (max-width: 640px) {
+  .table, .table thead, .table tbody, .table tr, .table th, .table td { display: block; width: auto; min-width: 0; }
+  .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .table tbody { padding: 14px 15px; }
+  .table.table tbody th, .table.table td { padding: 0; border: 0; }
+  .colFounders { margin-top: 8px; }
+  .withInvestments tr { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 6px 12px; }
+  .withInvestments tr > .colCompany, .withInvestments tr > .colFounders, .withInvestments tr > .none { grid-column: 1 / -1; }
+  .withInvestments tr > .colFounders { margin-bottom: 6px; }
+  .table tbody tr + tr td.inv { border-top: 0; }
+  .withInvestments tbody tr + tr { border-top: 1px solid var(--hair); padding-top: 8px; margin-top: 8px; }
+  .inv { white-space: normal; }
+  .table .num { text-align: left; }
+  .inv::before { content: attr(data-label); display: block; font: 400 9px/1.4 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+  .none { margin-top: 6px; }
+  .rownote { max-width: none; }
+  .sources, .sources tbody, .sources tr, .sources td { display: block; }
+  .sources tr { padding: 10px 15px; border-bottom: 1px solid var(--hair); }
+  .sources.sources td { padding: 0; border: 0; width: auto; }
+  .sources td.cite { display: inline; margin-right: 8px; }
+  .sources td.file { display: inline; }
+}

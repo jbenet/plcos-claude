@@ -2245,28 +2245,9 @@ table.list.dated .ddetail{color:var(--muted);font-size:11.5px;margin:1px 0 0 23p
 @media (max-width: 1000px) { .status-work { grid-template-columns: 1fr; gap: 16px; } .status-money { grid-template-columns: repeat(2, minmax(0, 1fr)); } .status-counts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .status-progress { grid-template-columns: 1fr; } .status-progress li { border-top: 0; border-left: 3px solid var(--line); } .status-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .status-lp { padding: 16px; } }
 
-/* Issues 0079, 0080, 0081 — compact vehicle portfolio and contextual shortcut hints. */
+/* Issues 0080, 0081 — contextual shortcut hints. The portfolio page (0079) has its own module. */
 .feedbackkey{display:none}
 body:has(.shortcuts-dialog[open]) .feedbackkey{display:inline}
-.portfolio-simple{display:grid;gap:16px}
-.portfolio-summary{font-size:13px;color:var(--muted);max-width:1000px}
-.portfolio-summary p{margin:0 0 8px}
-.portfolio-simple summary{cursor:pointer;font-size:12px;color:var(--muted)}
-.portfolio-company{overflow:hidden}
-.portfolio-company-head{display:grid;grid-template-columns:minmax(180px,1fr) minmax(0,2fr);gap:20px;padding:16px 18px;align-items:start}
-.portfolio-company-head h2{font-size:19px;margin:0}
-.portfolio-people{display:flex;gap:12px;align-items:baseline;font-size:14px}
-.portfolio-people ul{display:flex;flex-wrap:wrap;gap:4px 18px;list-style:none;padding:0;margin:0}
-.portfolio-investments{overflow-x:auto;border-top:1px solid var(--line)}
-.portfolio-investments table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}
-.portfolio-investments caption{text-align:left;padding:10px 18px 0;font-size:12px;color:var(--muted)}
-.portfolio-investments th,.portfolio-investments td{padding:9px 18px;border-bottom:1px solid var(--line);white-space:nowrap}
-.portfolio-investments th{font-size:11px;font-weight:500;color:var(--muted)}
-.portfolio-number{font-variant-numeric:tabular-nums}
-.portfolio-no-investments{font-size:12px;margin:0;padding:0 18px 12px}
-.portfolio-evidence{padding:10px 18px;font-size:12px;overflow-wrap:anywhere}
-.portfolio-evidence p{margin:10px 0;color:var(--muted)}
-@media(max-width:700px){.portfolio-company-head{grid-template-columns:1fr;gap:10px}.portfolio-people{display:block}.portfolio-people ul{margin-top:5px}.portfolio-investments th,.portfolio-investments td{padding:9px 12px}}
 
 /* Issue 0082 — vehicle strategy compact actions and move decisions. */
 .strategy-compact { font-size:12px; line-height:1.4; }

@@ -252,6 +252,47 @@ export async function listPortfolio(vehicleId?: string): Promise<PortfolioRow[]>
   return (await getDb()).query<PortfolioRow>(`select portfolio_id id,vehicle_id::text "vehicleId",identity.canonical_entity_id(company_entity)::text "companyId",
     company_name company,founders,source,fund_labels "fundLabels",note,investments,portfolio_status "portfolioStatus" from network.portfolio ${vehicleId ? 'where vehicle_id=$1' : ''} order by company_name`, vehicleId ? [vehicleId] : []);
 }
+export interface PortfolioIdentity {
+  /** The record the source key resolves to now, after any merge. */
+  canonicalId: string;
+  /** False while the record is still the placeholder the import made for a name it could not corroborate. */
+  corroborated: boolean;
+  /** Namesakes still open as possible matches, never the record itself. */
+  possible: Array<{ id: string; name: string }>;
+}
+/**
+ * How each imported founder or company stands today. The import stores a snapshot; a later merge,
+ * a rejected match or a corroboration changes the answer, so the page asks the identity tables.
+ * A placeholder merged into an independent record counts as corroborated: someone joined them.
+ */
+export async function portfolioIdentities(people: Array<{ id: string; possible: string[] }>): Promise<Map<string, PortfolioIdentity>> {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const ids = [...new Set(people.flatMap(p => [p.id, ...p.possible]))].filter(id => uuid.test(id));
+  const result = new Map<string, PortfolioIdentity>();
+  if (!ids.length) return result;
+  const db = await getDb();
+  const [records, open] = await Promise.all([
+    db.query<{ id: string; canonical: string; name: string; placeholder: boolean }>(`select i.id::text id,c.entity_id::text canonical,c.display_name name,
+      exists(select 1 from identity.source_record s where s.source='portfolio_placeholder' and s.source_id=c.entity_id::text) placeholder
+      from unnest($1::uuid[]) i(id) join identity.entity c on c.entity_id=identity.canonical_entity_id(i.id)
+      where c.retired_at is null`, [ids]),
+    db.query<{ a: string; b: string }>(`select left_entity::text a,right_entity::text b from identity.possible_match
+      where active and signals->>'rule'='portfolio-name-only' and (left_entity=any($1::uuid[]) or right_entity=any($1::uuid[]))`, [ids]),
+  ]);
+  const byId = new Map(records.map(r => [r.id, r]));
+  const pairs = new Set(open.map(p => [p.a, p.b].sort().join('|')));
+  for (const p of people) {
+    const self = byId.get(p.id); if (!self) continue;
+    const seen = new Set([self.canonical]);
+    const possible = p.possible.flatMap(other => {
+      const match = byId.get(other);
+      if (!match || seen.has(match.canonical) || !pairs.has([p.id, other].sort().join('|'))) return [];
+      seen.add(match.canonical); return [{ id: match.canonical, name: match.name }];
+    });
+    result.set(p.id, { canonicalId: self.canonical, corroborated: !self.placeholder, possible });
+  }
+  return result;
+}
 /** Warehouse classification alone is not verified fund membership or an In touch assertion. */
 export async function portfolioFounders(): Promise<Record<string, string[]>> {
   const rows = await (await getDb()).query<{ id: string; company: string }>(`select identity.canonical_entity_id((f->>'entityId')::uuid)::text id,p.company_name company
