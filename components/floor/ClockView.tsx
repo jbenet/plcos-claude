@@ -1,5 +1,7 @@
 'use client';
 
+import { PagedRows } from './Paging';
+
 import type { Dated, FloorState } from '@/lib/floor-client';
 import { shortName, standingWords } from './shared';
 
@@ -21,16 +23,13 @@ const LEFT = 150;
 const W = 1000;
 const TOP = 40;
 
-const KIND_MARK: Record<Dated['kind'], string> = {
-  meeting: '●', expiry: '◆', followup: '■', close: '▲', seat: '◇',
-};
 const KIND_LABEL: Record<Dated['kind'], string> = {
   meeting: 'Meeting', expiry: 'Expiry', followup: 'Dated follow-up', close: 'Ask due', seat: 'Seat',
 };
 
 export function ClockView({ state }: { state: FloorState }) {
   const now = new Date(state.asOf);
-  now.setHours(0, 0, 0, 0);
+  now.setUTCHours(0, 0, 0, 0);
   const dayIndex = (d: Date) => Math.floor((d.getTime() - now.getTime()) / 86_400_000);
 
   const byVehicle = state.scopeSlug === null;
@@ -70,7 +69,7 @@ export function ClockView({ state }: { state: FloorState }) {
              aria-label="Everything dated in the next three weeks">
           {Array.from({ length: DAYS }, (_, d) => {
             const day = new Date(now.getTime() + d * 86_400_000);
-            const weekend = day.getDay() === 0 || day.getDay() === 6;
+            const weekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
             return (
               <g key={d}>
                 {weekend && (
@@ -80,7 +79,7 @@ export function ClockView({ state }: { state: FloorState }) {
                   <line x1={LEFT + d * colW} y1={TOP - 18} x2={LEFT + d * colW} y2={height - 20} className="cweek" />
                 )}
                 <text x={LEFT + d * colW + colW / 2} y={TOP - 22} className="cday" textAnchor="middle">
-                  {d === 0 ? 'today' : day.getDate()}
+                  {d === 0 ? 'today' : day.getUTCDate()}
                 </text>
               </g>
             );
@@ -94,18 +93,12 @@ export function ClockView({ state }: { state: FloorState }) {
                 <line x1={0} y1={y + ROW_H - 6} x2={W} y2={y + ROW_H - 6} className="crow" />
                 <text x={2} y={y + 14} className="clane">{lane}</text>
                 <text x={2} y={y + 27} className="clanes">{marks.length} dated</text>
-                {marks.map((m, k) => {
-                  const d = dayIndex(new Date(m.at));
-                  if (d < 0 || d >= DAYS) return null;
-                  const cx = LEFT + d * colW + colW / 2;
-                  return (
-                    <g key={m.key} className={`cmark k-${m.kind}`}>
-                      <title>{`${KIND_LABEL[m.kind]} · ${new Date(m.at).toISOString().slice(0, 10)}\n${m.label}`}</title>
-                      <text x={cx} y={y + 16 + (k % 2) * 11} textAnchor="middle" className="cglyph">
-                        {KIND_MARK[m.kind]}
-                      </text>
-                    </g>
-                  );
+                {Array.from({ length: DAYS }, (_, d) => {
+                  const here = marks.filter(m => dayIndex(new Date(m.at)) === d);
+                  if (!here.length) return null;
+                  return <g key={d}><title>{`${here.length} dated records; full details in the dated-record list below.`}</title>
+                    <text x={LEFT + d * colW + colW / 2} y={y + 18} textAnchor="middle" className="cglyph">{here.length}</text>
+                  </g>;
                 })}
               </g>
             );
@@ -114,6 +107,10 @@ export function ClockView({ state }: { state: FloorState }) {
         </svg>
       </div>
 
+      <div className="vizsummary">
+        <p>One count per lane and day; overlapping records are combined. All dated records are available in this list.</p>
+        <PagedRows rows={[...state.schedule].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())} label="dated records">{page => <table className="list"><thead><tr><th>Date</th><th>Kind</th><th>Record</th><th>Vehicle / owner</th></tr></thead><tbody>{page.map(m => <tr key={m.key}><td>{new Date(m.at).toISOString().slice(0, 10)}</td><td>{KIND_LABEL[m.kind]}</td><td>{m.label}</td><td>{m.vehicleName ?? 'Across vehicles'} · {m.ownerName ?? 'Unassigned'}</td></tr>)}</tbody></table>}</PagedRows>
+      </div>
       <div className="fllegend">
         <span>● meeting</span>
         <span>◆ ticket expiry</span>

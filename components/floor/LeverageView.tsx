@@ -1,5 +1,7 @@
 'use client';
 
+import { PagedRows, Pager, usePage } from './Paging';
+
 import Link from '@/components/ui/AppLink';
 import type { Leverage, Prerequisite } from '@/lib/lenses-client';
 import { useFloor } from './FloorContext';
@@ -33,6 +35,7 @@ const ORDER: Array<Prerequisite['family']> = [
 ];
 
 export function LeverageView({ leverage }: { leverage: Leverage }) {
+  const paging = usePage([...leverage.prerequisites].sort((a, b) => b.dependents.length - a.dependents.length), 8);
   const { select } = useFloor();
 
   return (
@@ -53,8 +56,9 @@ export function LeverageView({ leverage }: { leverage: Leverage }) {
         <p className="levnote">{leverage.note}</p>
       </div>
 
+      <Pager {...paging} label="prerequisites, most dependents first" />
       {ORDER.map((family) => {
-        const mine = leverage.prerequisites.filter((p) => p.family === family);
+        const mine = paging.rows.filter((p) => p.family === family);
         if (mine.length === 0) return null;
         return (
           <section className="levgroup" key={family}>
@@ -79,7 +83,7 @@ export function LeverageView({ leverage }: { leverage: Leverage }) {
                 <div className="levright">
                   <div className="levbecause">{p.because}</div>
                   <div className="levdeps">
-                    {p.dependents.map((d) => (
+                    <PagedRows rows={p.dependents} size={5} label="dependent pursuits">{page => page.map((d) => (
                       <button
                         key={d.key}
                         className={`levdep${d.blocked ? ' blocked' : ''}${d.urgent ? ' urgent' : ''}`}
@@ -89,7 +93,7 @@ export function LeverageView({ leverage }: { leverage: Leverage }) {
                         <span className="ldv">{d.vehicleName}</span>
                         <span className="ldm mono">{compactUsd(d.amount)}</span>
                       </button>
-                    ))}
+                    ))}</PagedRows>
                   </div>
                   <Link className="btn" href={p.href}>Go and unblock it →</Link>
                 </div>

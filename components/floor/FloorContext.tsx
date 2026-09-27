@@ -22,6 +22,8 @@ export type Selected =
 export interface FloorFilter {
   /** Matches a target, an owner, an advocate or a piece of work, case-insensitively. */
   find: string;
+  vehicle: string;
+  band: string;
   owner: string | 'everyone';
   signal: 'all' | 'hot' | 'quiet' | 'blocked' | 'urgent' | 'stalled' | 'evidence' | 'unsized' | 'wired';
   /** The pipeline status (N62, issue 0008), not the rung: the ladder is the evidence under it. */
@@ -29,8 +31,23 @@ export interface FloorFilter {
 }
 
 export const EMPTY_FILTER: FloorFilter = {
-  find: '', owner: 'everyone', signal: 'all', status: 'all',
+  find: '', vehicle: 'all', band: 'all', owner: 'everyone', signal: 'all', status: 'all',
 };
+
+/** URL state is untrusted input: malformed or old links fall back to explicit defaults. */
+export function parseFloorFilter(raw: string): FloorFilter {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return EMPTY_FILTER;
+    const input = value as Record<string, unknown>;
+    const string = (key: keyof FloorFilter) => typeof input[key] === 'string' ? input[key] as string : EMPTY_FILTER[key];
+    return {
+      find: string('find'), owner: string('owner'), vehicle: string('vehicle'), band: string('band'),
+      signal: typeof input.signal === 'string' && Object.hasOwn(SIGNAL_LABEL, input.signal) ? input.signal as FloorFilter['signal'] : 'all',
+      status: typeof input.status === 'string' && Object.hasOwn(STATUS_LABEL, input.status) ? input.status as FloorFilter['status'] : 'all',
+    };
+  } catch { return EMPTY_FILTER; }
+}
 
 export const SIGNAL_LABEL: Record<FloorFilter['signal'], string> = {
   all: 'All signals',
@@ -45,6 +62,7 @@ export const SIGNAL_LABEL: Record<FloorFilter['signal'], string> = {
 };
 
 export function matches(item: FloorItem, f: FloorFilter): boolean {
+  if (f.vehicle !== 'all' && item.vehicleSlug !== f.vehicle) return false;
   if (f.owner !== 'everyone' && item.ownerName !== f.owner) return false;
   if (f.status !== 'all' && item.status !== f.status) return false;
   switch (f.signal) {
@@ -74,9 +92,10 @@ interface FloorCtx {
   selected: Selected;
   select: (next: Selected) => void;
   filter: FloorFilter;
+  setFilter: (next: FloorFilter) => void;
 }
 
-const Ctx = createContext<FloorCtx>({ selected: null, select: () => {}, filter: EMPTY_FILTER });
+const Ctx = createContext<FloorCtx>({ selected: null, select: () => {}, filter: EMPTY_FILTER, setFilter: () => {} });
 
 export const FloorProvider = Ctx.Provider;
 

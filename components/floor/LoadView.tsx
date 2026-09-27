@@ -1,168 +1,31 @@
 'use client';
 
-import type { FloorItem, FloorState } from '@/lib/floor-client';
+import type { FloorState } from '@/lib/floor-client';
 import { useFloor } from './FloorContext';
-import { compactUsd, EVIDENCE_GLYPH, shortName, standingWords, stateOf, STATE_GLYPH, TEMP_ALPHA } from './shared';
-
-/**
- * View 2 — the load.
- *
- * Not "where is the work" but "who is carrying it". One column per person, and inside a
- * column the two tracks stand side by side rather than stacked: **a stack of soft on top
- * of hard is a blended total drawn instead of written**, and it is the same lie either way.
- *
- * Block height is the money at stake in that track. The header counts what is in flight and
- * how much of it has not moved in three weeks, because a person holding eleven things that
- * are all stalled is not busy — they are stuck, and the two look identical on a list.
- */
-
-const COL_H = 300;
-const WIP_LINE = 6;
+import { Pager, usePage } from './Paging';
+import { compactUsd, stateOf } from './shared';
 
 export function LoadView({ state }: { state: FloorState }) {
-  const { select } = useFloor();
-  /**
-   * Wired money is not load. It was work once; it is now a fact, and leaving it in the
-   * bars makes the person who closed the most look like the person with the most left
-   * to do — which is the exact opposite of true. A passed LP is not load either: someone
-   * decided, theirs or ours, and nothing is waiting on the owner (docs/17).
-   */
-  const open = state.items.filter((i) => !i.cashReceived && i.status !== 'passed');
-  const owners = [...new Set(open.map((i) => i.ownerName))]
-    .sort((a, b) => open.filter((i) => i.ownerName === b).length
-      - open.filter((i) => i.ownerName === a).length);
-
-  /** Scale on the heaviest column, so the tallest stack fills the view and no more. */
-  const heaviest = Math.max(1, ...owners.map((o) => Math.max(
-    open.filter((i) => i.ownerName === o && i.track === 'hard').reduce((n, i) => n + (i.amount ?? 0), 0),
-    open.filter((i) => i.ownerName === o && i.track === 'soft').reduce((n, i) => n + (i.amount ?? 0), 0),
-  )));
-
-  const column = (items: FloorItem[], track: 'hard' | 'soft') => {
-    const mine = items.filter((i) => i.track === track).sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0));
-    const total = mine.reduce((n, i) => n + (i.amount ?? 0), 0);
-    return (
-      <div className="lstack">
-        <div className="lstrack">
-          {track === 'hard' ? 'Hard' : 'Soft'}
-          <b>{mine.length ? compactUsd(total) : '—'}</b>
-        </div>
-        <div className="lsbars">
-          {mine.map((i) => {
-            const st = stateOf(i);
-            return (
-              <button
-                key={i.key}
-                className={`lsbar s-${st} t-${track}`}
-                onClick={() => select({ kind: 'item', key: i.key })}
-                style={{
-                  height: `${Math.max(14, ((i.amount ?? 0) / heaviest) * COL_H)}px`,
-                  opacity: TEMP_ALPHA[i.temp] * 0.75 + 0.25,
-                }}
-                title={`${i.entityName} · ${i.vehicleName}\n${standingWords(i)}\n`
-                  + `${compactUsd(i.amount)} ${track} — ${i.sizeBasis}\n${i.tempBasis}`
-                  + `${i.blocked ? `\nBlocked: ${i.blocked}` : ''}`}
-              >
-                <span className="lsn">{shortName(i.entityName, 20)}</span>
-                <span className="lsv">{compactUsd(i.amount)} {i.needsEvidence ? EVIDENCE_GLYPH : ''}{STATE_GLYPH[st]}</span>
-              </button>
-            );
-          })}
-          {mine.length === 0 && <div className="lsnone">nothing</div>}
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="loadview">
-      <div className="lcols">
-        {owners.map((owner) => {
-          const mine = open.filter((i) => i.ownerName === owner);
-          const wired = state.items.filter((i) => i.ownerName === owner && i.cashReceived);
-          const passed = state.items.filter((i) => i.ownerName === owner && i.status === 'passed' && !i.cashReceived);
-          const stalled = mine.filter((i) => i.stalled).length;
-          const blocked = mine.filter((i) => stateOf(i) === 'blocked').length;
-          const unsized = mine.filter((i) => i.amount === null).length;
-          const over = mine.length > WIP_LINE;
-          return (
-            <div className={`lcol${over ? ' over' : ''}`} key={owner}>
-              <div className="lhead">
-                <b>{owner}</b>
-                <span className="lwip">
-                  {mine.length} in flight{over ? ` · over ${WIP_LINE}` : ''}
-                </span>
-                <span className="lsub">
-                  {stalled} stalled · {blocked} blocked{unsized ? ` · ${unsized} with no number` : ''}
-                </span>
-              </div>
-              <div className="ltracks">
-                {column(mine, 'hard')}
-                {column(mine, 'soft')}
-              </div>
-              {wired.length > 0 && (
-                <div className="lwired">
-                  ✓ {wired.length} wired and out of the queue ·{' '}
-                  {compactUsd(wired.reduce((n, i) => n + (i.amount ?? 0), 0))} hard
-                </div>
-              )}
-              {passed.length > 0 && (
-                <div className="lpassed" title={passed.map((i) => `${i.entityName} — ${i.statusBasis}`).join('\n')}>
-                  {passed.length} passed and out of the queue
-                </div>
-              )}
-              {mine.some((i) => i.amount === null) && (
-                <div className="lunsized">
-                  {mine.filter((i) => i.amount === null).map((i) => (
-                    <button key={i.key} className={`lchip s-${stateOf(i)}`} title={`${standingWords(i)}\n${i.tempBasis}`}
-                            onClick={() => select({ kind: 'item', key: i.key })}>
-                      {shortName(i.entityName, 22)}{i.needsEvidence ? ` ${EVIDENCE_GLYPH}` : ''}
-                    </button>
-                  ))}
-                  <span className="lnote">no number from them yet — not drawn to scale, because there is no scale</span>
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        <div className="lcol agents">
-          <div className="lhead">
-            <b>Agents</b>
-            <span className="lwip">{state.agents.running} running</span>
-            <span className="lsub">
-              {state.agents.awaitingAcceptance} waiting on a human · {state.agents.refused} refused
-            </span>
-          </div>
-          <div className="lqueue">
-            {state.agents.queue.map((q, i) => (
-              <div className={`lq q-${q.state}`} key={i}>
-                <span className="lqs">{q.state}</span>
-                <span className="lqt">{q.label}</span>
-                <span className="lqw">{q.who}</span>
-              </div>
-            ))}
-            {state.agents.queue.length === 0 && <div className="lsnone">no runs on file</div>}
-          </div>
-          <div className="lunsized">
-            <span className="lnote">
-              Enrichment queue: {state.agents.humanQueued}/{state.agents.humanWip} human,{' '}
-              {state.agents.agentQueued}/{state.agents.agentWip} agent.{' '}
-              {state.agents.breaker.statement}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="fllegend light">
-        <span>Column = one person · height = money at stake in that track</span>
-        <span>Wired money and passed LPs are not load — they are counted under each column, not in the bars</span>
-        <span><i className="sw" style={{ background: 'var(--clay)' }} /> ✕ blocked</span>
-        <span><i className="sw" style={{ background: 'var(--amber)' }} /> ! dated soon</span>
-        <span><i className="sw" style={{ background: 'var(--green)' }} /> ✓ cash</span>
-        <span>{EVIDENCE_GLYPH} = the status claims more than the ladder shows</span>
-        <span>Faint = nothing recorded lately · hard and soft never share a bar</span>
-      </div>
-    </div>
-  );
+  const { filter, setFilter } = useFloor();
+  const open = state.items.filter(i => !i.cashReceived && i.status !== 'passed');
+  // Each monetary row belongs to exactly one vehicle; there is no cross-vehicle AUM sum.
+  const groups = new Map<string, typeof open>();
+  for (const item of open) {
+    const key = JSON.stringify([item.ownerName, item.vehicleSlug]);
+    const group = groups.get(key) ?? []; group.push(item); groups.set(key, group);
+  }
+  const rows = [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  const paging = usePage(rows, 10);
+  const max = Math.max(1, ...rows.map(([, items]) => items.length));
+  return <div className="vizsummary"><p>Open pursuits by owner and vehicle, largest load first. Wired and passed pursuits are excluded. Counts measure work, not capacity. Hard and soft amounts stay separate within each vehicle.</p>
+    <Pager {...paging} label="owner / vehicle groups" />
+    <div className="scroller"><table className="list"><thead><tr><th>Owner / vehicle</th><th>In flight</th><th>Stalled</th><th>Blocked</th><th>No number</th><th>Hard</th><th>Soft</th></tr></thead><tbody>
+      {paging.rows.map(([key, items]) => { const first = items[0]!; return <tr key={key}>
+        <th><button className="covname" onClick={() => setFilter({ ...filter, owner: first.ownerName, vehicle: first.vehicleSlug })}>{first.ownerName} · {first.vehicleName}</button></th>
+        <td>{items.length}<span className="vizbar" aria-hidden><i style={{ width: `${items.length / max * 100}%` }} /></span></td>
+        <td>{items.filter(i => i.stalled).length}</td><td>{items.filter(i => stateOf(i) === 'blocked').length}</td><td>{items.filter(i => i.amount === null).length}</td>
+        {(['hard', 'soft'] as const).map(track => <td key={track}>{compactUsd(items.filter(i => i.track === track).reduce((sum, i) => sum + (i.amount ?? 0), 0))}</td>)}
+      </tr>; })}
+    </tbody></table></div>{!open.length && <p>No open pursuits match these filters.</p>}
+  </div>;
 }

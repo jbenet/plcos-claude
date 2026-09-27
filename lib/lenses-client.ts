@@ -12,7 +12,7 @@ export type LinkState = 'confirmed' | 'unconfirmed' | 'restricted';
 
 export const LINK_STATE_LABEL: Record<LinkState, string> = {
   confirmed: 'Permission or evidence on file',
-  unconfirmed: 'Not confirmed — a clue, not a route',
+  unconfirmed: 'Weaker evidence — tier C or D',
   restricted: 'A restriction stands in the way',
 };
 
@@ -40,6 +40,9 @@ export interface NetLink {
 }
 
 export interface NetPath {
+  targetKey: string;
+  fromId: string;
+  viaId: string;
   label: string;
   owner: string;
   advocate: string;

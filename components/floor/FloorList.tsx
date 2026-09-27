@@ -1,5 +1,6 @@
 'use client';
 
+import { Pager, usePage } from './Paging';
 import Link from '@/components/ui/AppLink';
 import { useState } from 'react';
 import type { FloorState } from '@/lib/floor-client';
@@ -38,20 +39,23 @@ export function FloorList({ state }: { state: FloorState }) {
     }
   });
 
+  const paging = usePage(rows);
+
   const head = (key: Key, label: string, cls = '') => (
     <th className={`sortable ${cls}${sort === key ? ' on' : ''}`}
-        onClick={() => { if (sort === key) setAsc(!asc); else { setSort(key); setAsc(false); } }}
+        onClick={() => { paging.setPage(0); if (sort === key) setAsc(!asc); else { setSort(key); setAsc(false); } }}
         aria-sort={sort === key ? (asc ? 'ascending' : 'descending') : 'none'}>
-      {label}<span className="caret" aria-hidden>{sort === key ? (asc ? '▲' : '▼') : ''}</span>
+      <button type="button" className="covname">{label}</button><span className="caret" aria-hidden>{sort === key ? (asc ? '▲' : '▼') : ''}</span>
     </th>
   );
 
   return (
-    <div className="card">
+    <div className="card floorlist-wrap">
       <div className="chead">
         <h2>The same floor, as a list</h2>
         <span className="lbl">{rows.length} items · every encoded dimension in words</span>
       </div>
+      <Pager {...paging} label="pursuits" />
       <div className="scroller">
         <table className="list floorlist">
           <thead>
@@ -67,7 +71,7 @@ export function FloorList({ state }: { state: FloorState }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((i) => {
+            {paging.rows.map((i) => {
               const st = stateOf(i);
               const claim = claimWords(i);
               return (

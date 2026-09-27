@@ -13,19 +13,32 @@ import { EMPTY_FILTER, SIGNAL_LABEL, type FloorFilter } from './FloorContext';
  * an unfiltered one is the most expensive kind of mistake this page could make.
  */
 export function FilterBar({
-  state, filter, onChange, shown,
+  state, filter, onChange, shown, bands,
 }: {
   state: FloorState;
   filter: FloorFilter;
   onChange: (next: FloorFilter) => void;
   shown: number;
+  bands: string[];
 }) {
   const owners = [...new Set(state.items.map((i) => i.ownerName))].sort();
-  const dirty = filter.find !== '' || filter.owner !== 'everyone'
+  const dirty = filter.vehicle !== 'all' || filter.band !== 'all' || filter.find !== '' || filter.owner !== 'everyone'
     || filter.signal !== 'all' || filter.status !== 'all';
 
   return (
     <div className="filterbar">
+      <label className="fb"><span className="lbl">Vehicle</span>
+        <select value={filter.vehicle} onChange={e => onChange({ ...filter, vehicle: e.target.value })}>
+          <option value="all">All in this scope</option>
+          {state.money.map(v => <option key={v.slug} value={v.slug}>{v.name}</option>)}
+        </select>
+      </label>
+      <label className="fb"><span className="lbl">Rubric band</span>
+        <select title="Best recorded rubric band within the page scope; not inspected means outside the bounded discovery preview." value={filter.band} onChange={e => onChange({ ...filter, band: e.target.value })}>
+          <option value="all">All bands</option>
+          {bands.map(b => <option key={b}>{b}</option>)}
+        </select>
+      </label>
       <label className="fb">
         <span className="lbl">Find</span>
         <input

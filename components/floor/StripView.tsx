@@ -92,6 +92,7 @@ export function StripView({ strip }: { strip: Strip }) {
                                 lines: [
                                   { label: 'Day', value: dateLabel(d) },
                                   { label: 'Records', value: String(cell.count) },
+                                  { label: 'Preview', value: `Showing ${cell.labels.length} example labels of ${cell.count} records. Open the vehicle calendar for dated activity and Agents for run history.` },
                                   ...cell.labels.map((l, k) => ({ label: `#${k + 1}`, value: l })),
                                 ],
                               })}
@@ -121,7 +122,7 @@ export function StripView({ strip }: { strip: Strip }) {
         <span>◇ the latest agent run update</span>
         <span>Amber = urgent · clay = blocked · the number is how many records that day carries</span>
       </div>
-      <p className="cover dark">{strip.note}</p>
+      <p className="cover dark">{strip.note} Each cell previews at most six labels. <a href="/all/calendar">Open calendar records</a> · <a href="/agents">Open agent runs</a>.</p>
     </div>
   );
 }

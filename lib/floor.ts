@@ -1,15 +1,11 @@
-import { circuitBreaker, listRuns } from '@/modules/agents';
+import { circuitBreaker, listAsks, listConflicts, listRestrictions, listOpenTickets, listVehicles, listMethods, listPursuits } from './visualization-inputs';
+import { listRuns } from '@/modules/agents';
 import { bandwidthAlerts } from '@/modules/close';
-import { listAsks, listConflicts, listRestrictions } from '@/modules/coordination';
-import { listOpenTickets } from '@/modules/governance';
 import { upcomingMeetings } from '@/modules/meetings';
 import { listExposures } from '@/modules/pipeline';
-import { listVehicles } from '@/modules/platform';
-import { DEFAULT_PARAMS, listMethods, scoreMethods } from '@/modules/research';
+import { DEFAULT_PARAMS, scoreMethods } from '@/modules/research';
 import { actionableSignals } from '@/modules/signals';
-import {
-  listPursuits, PASSED_BY_LABEL, rungIndex, RUNGS, statusNeedsEvidence, type LadderRung, type Pursuit,
-} from '@/modules/strategy';
+import { PASSED_BY_LABEL, rungIndex, RUNGS, statusNeedsEvidence, type LadderRung, type Pursuit } from '@/modules/strategy';
 import type { Alarm, Dated, FloorAgents, FloorItem, FloorState, Temp } from './floor-client';
 import { shortDate } from './time';
 
@@ -404,7 +400,7 @@ export async function floorState(
 
   return {
     scopeSlug,
-    scopeName: scopeSlug ? vehicleBySlug.get(scopeSlug)?.name ?? scopeSlug : 'All of PL Capital',
+    scopeName: scopeSlug ? vehicleBySlug.get(scopeSlug)?.name ?? scopeSlug : opts.includeGrants ? 'PL Capital and PL R&D' : 'All of PL Capital',
     vehicles: vehicles.filter((v) => inScope(v.slug)).map((v) => ({ slug: v.slug, name: v.name, kind: v.kind })),
     items: list.sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0)),
     agents,
@@ -417,7 +413,7 @@ export async function floorState(
         + `${meetings.length} scheduled meetings, ${tickets.length} open tickets, ${runs.length} agent runs`,
       notInspected: [
         'Anything nobody recorded. A conversation that happened and was not written down is not on this floor.',
-        'No connector is attached, so nothing here came from a mailbox, a CRM or a calendar feed.',
+        'Sources outside the available records and any activity after this copy was taken.',
       ],
     },
   };

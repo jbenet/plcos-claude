@@ -1,13 +1,13 @@
 import { coalescePage } from '@/lib/page-render';
-import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
-import { timeline, LANE_LABEL, LANE_MEANS, type Lane, type Mark } from '@/lib/timeline';
+import { timeline, LANE_LABEL, type Lane } from '@/lib/timeline';
 import type { DatedRow } from '@/lib/lanes';
 import { DatedList } from '@/components/calendar/DatedList';
+import { CalendarWindow } from '@/components/calendar/CalendarWindow';
 import { CalendarStats } from '@/components/calendar/CalendarStats';
 
 export const dynamic = 'force-dynamic';
@@ -54,56 +54,8 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
   });
   const first = weeks[0]!.start.getTime();
   const last = weeks.at(-1)!.end.getTime();
-  const span = last - first;
-
-  const pct = (t: number) => Math.max(0, Math.min(100, ((t - first) / span) * 100));
-  const inWindow = (m: Mark) => m.to.getTime() >= first && m.from.getTime() <= last;
-
-  const visible = marks.filter(inWindow);
-  const outside = marks.length - visible.length;
-  /**
-   * Greedy interval packing per lane.
-   *
-   * Two bars on one row overlap and their labels eat each other, which is how a gantt
-   * chart stops being readable. Each mark takes the first sub-row that is free at its
-   * start, where "free" allows for the label a short bar still has to carry.
-   */
-  const MIN_SPAN_DAYS = 11;
-  const MIN_POINT_DAYS = 5;
-  const packLane = (rows: Mark[]) => {
-    const ends: number[] = [];
-    const placed = rows.map((m) => {
-      const startT = m.from.getTime();
-      const pad = (m.kind === 'span' ? MIN_SPAN_DAYS : MIN_POINT_DAYS) * 86_400_000;
-      const endT = Math.max(m.to.getTime(), startT) + pad;
-      let row = ends.findIndex((e) => e <= startT);
-      if (row === -1) {
-        row = ends.length;
-        ends.push(endT);
-      } else {
-        ends[row] = endT;
-      }
-      return { m, row };
-    });
-    return { placed, rows: Math.max(ends.length, 1) };
-  };
-
-  const byLane = LANES
-    .map((lane) => {
-      const rows = visible.filter((m) => m.lane === lane);
-      const packed = packLane(rows);
-      return { lane, rows, placed: packed.placed, rows_: packed.rows };
-    })
-    .filter((g) => g.rows.length > 0);
-
-  /** Month boundaries, so twelve weeks of columns still read as a year. */
-  const months: Array<{ label: string; left: number }> = [];
-  for (const w of weeks) {
-    const label = w.start.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' });
-    if (months.length === 0 || months.at(-1)!.label !== label) {
-      months.push({ label, left: pct(w.start.getTime()) });
-    }
-  }
+  const visible = marks.filter(m => m.to.getTime() >= first && m.from.getTime() <= last);
+  const byLane = LANES.map(lane => ({ lane, rows: visible.filter(m => m.lane === lane) })).filter(g => g.rows.length);
 
   return (
     <Page
@@ -128,7 +80,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
           <div className="scope">
             <div className="lbl">Projected, not kept</div>
             <p>
-              Nothing on this calendar is stored here. Every bar is a dated row that already
+              Nothing on this calendar is stored here. Every count comes from dated rows that already
               exists in the close room, the ask log, the approval queue or the compliance
               registry. A second copy of the plan is the copy that goes stale, so this one reads
               the originals and cannot disagree with them.
@@ -147,8 +99,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
       </div>
       <h1>What is happening, and when</h1>
       <p className="sublede">
-        {WEEKS_BACK} weeks back and {WEEKS_FORWARD} forward, compressed to one screen. Bars are
-        spans, diamonds are deadlines, dots are things that happened on a day. Everything is read
+        {WEEKS_BACK} weeks back and {WEEKS_FORWARD} forward, compressed to one screen. Weekly counts group overlapping spans, deadlines and dated activity. Everything is read
         from the record that owns it — this page keeps nothing of its own.
       </p>
 
@@ -175,63 +126,8 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
             </span>
           </div>
 
-          <div className="gscroll">
-            <div className="gmonths">
-              {months.map((m) => (
-                <span key={m.label + m.left} style={{ left: `${m.left}%` }}>{m.label}</span>
-              ))}
-            </div>
-            <div className="gweeks">
-              {weeks.map((w) => (
-                <span
-                  key={w.start.toISOString()}
-                  className={w.current ? 'now' : ''}
-                  style={{ left: `${pct(w.start.getTime())}%`, width: `${(7 * 86_400_000 / span) * 100}%` }}
-                >
-                  {w.start.getUTCDate()}
-                </span>
-              ))}
-            </div>
+          <CalendarWindow rows={rows} first={weeks[0]!.start.toISOString()} weeks={weeks.length} />
 
-            {byLane.map((g) => (
-              <div className="glane" key={g.lane}>
-                <div className="gname" title={LANE_MEANS[g.lane]}>{LANE_LABEL[g.lane]}</div>
-                <div className="gtrack" style={{ minHeight: 14 + g.rows_ * 14 }}>
-                  <span className="gnow" style={{ left: `${pct(now.getTime())}%` }} />
-                  {g.placed.map(({ m, row }) => {
-                    const left = pct(m.from.getTime());
-                    const width = Math.max(
-                      m.kind === 'span' ? ((m.to.getTime() - m.from.getTime()) / span) * 100 : 0,
-                      0,
-                    );
-                    const cls = `gmark g-${m.kind}${m.alert ? ' alert' : ''}${m.past ? ' past' : ''}`;
-                    const title = `${m.label}${m.vehicleName ? ` · ${m.vehicleName}` : ''} · ${shortDate(m.from)}${m.kind === 'span' ? ` → ${shortDate(m.to)}` : ''}\n${m.detail}`;
-                    return (
-                      <span
-                        key={m.id}
-                        className={cls}
-                        style={{
-                          left: `${left}%`,
-                          width: m.kind === 'span' ? `${width}%` : undefined,
-                          top: `${row * 14}px`,
-                        }}
-                        title={title}
-                      >
-                        {m.kind === 'span' && <i>{m.label}</i>}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <p className="cover">
-            <b>The list below carries the same information.</b> It is not a fallback: a bar
-            three pixels wide is unreadable and unreachable by keyboard, and half of what is on
-            this chart is a single day. <b>Today</b> is the vertical line.
-            {outside > 0 && <> {outside} dated thing{outside === 1 ? '' : 's'} sit outside this window and are in the list.</>}
-          </p>
         </div>
       )}
 

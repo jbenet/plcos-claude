@@ -1,18 +1,11 @@
+import { circuitBreaker, connectorLoad, listAsks, listConflicts, listRestrictions, listAssets, listOpenTickets, coverageGaps, listMeetings, listObjections, poolChecks, listVehicles, listMethods, listPursuits } from './visualization-inputs';
 import { config } from '@/config/deployment';
-import { circuitBreaker } from '@/modules/agents';
-import { connectorLoad, listAsks, listConflicts, listRestrictions } from '@/modules/coordination';
-import { listAssets } from '@/modules/content';
 import { FIRM_CLASS_LABEL, listFirmProfiles } from '@/modules/fit';
-import { listOpenTickets } from '@/modules/governance';
 import { listEntityPreview } from '@/modules/identity';
-import { coverageGaps } from '@/modules/library';
-import { listMeetings, listObjections } from '@/modules/meetings';
 import { edgeCountsForEntities } from '@/modules/network';
-import { poolChecks } from '@/modules/pipeline';
-import { listVehicles } from '@/modules/platform';
-import { DEFAULT_PARAMS, listMethods, scoreMethods } from '@/modules/research';
+import { DEFAULT_PARAMS, scoreMethods } from '@/modules/research';
 import { BAND_LABEL, ranked } from '@/modules/scoring';
-import { listPursuits, RUNG_LABEL, RUNG_REQUIRES, RUNGS, type LadderRung, type PursuitStatus } from '@/modules/strategy';
+import { RUNG_LABEL, RUNG_REQUIRES, RUNGS, type LadderRung, type PursuitStatus } from '@/modules/strategy';
 import type {
   BoardRow, BoardState, CellState, Explored, Holding, Move, Resource, Station, Territory,
 } from './board-client';
@@ -50,7 +43,8 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
     circuitBreaker(), coverageGaps(),
   ]);
 
-  const inScope = (slug: string | null) => scopeSlug === null || slug === scopeSlug;
+  const scopeSlugs = new Set(floor.vehicles.map(v => v.slug));
+  const inScope = (slug: string | null) => slug !== null && scopeSlugs.has(slug);
   const scopedVehicles = vehicles.filter((v) => inScope(v.slug));
 
   /** The rubric, per vehicle in scope, merged by taking each entity's best reading. */

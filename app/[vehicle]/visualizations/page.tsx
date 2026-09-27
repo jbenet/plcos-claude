@@ -27,8 +27,7 @@ async function Visualizations({ params }: { params: Promise<{ vehicle: string }>
   if (!vehicle && !everything && slug !== 'all') notFound();
 
   const state = await floorState(vehicle?.slug ?? null, { includeGrants: everything });
-  const board = await boardState(vehicle?.slug ?? null, state);
-  const lens = await lenses(vehicle?.slug ?? null, state);
+  const [board, lens] = await Promise.all([boardState(vehicle?.slug ?? null, state), lenses(vehicle?.slug ?? null, state)]);
   const scopeName = vehicle ? vehicle.name : everything ? 'PL Capital and PL R&D' : 'All of PL Capital';
   const passed = state.items.filter((i) => i.status === 'passed').length;
   const blocked = state.items.filter((i) => i.blocked || i.restricted || i.conflict).length;
@@ -45,17 +44,13 @@ async function Visualizations({ params }: { params: Promise<{ vehicle: string }>
           <div className="ihead">One vocabulary, fifteen layouts</div>
           <div className="imeta">Switching tabs should not mean relearning the colours</div>
 
-          <div className="kv"><span>Column</span><span>The status: our plan, not a claim</span></div>
-          <div className="kv"><span>◇</span><span>Needs evidence — the status claims more than the ladder shows</span></div>
-          <div className="kv"><span>Size</span><span>Money at stake, square-root scale</span></div>
-          <div className="kv"><span>No size</span><span>Nobody has a number from them yet</span></div>
-          <div className="kv"><span>Fill</span><span>How recently anything was recorded</span></div>
-          <div className="kv"><span>Clay ✕</span><span>Blocked, restricted or in a collision</span></div>
-          <div className="kv"><span>Amber !</span><span>Something dated in the next fortnight</span></div>
-          <div className="kv"><span>Green ✓</span><span>Cash actually received</span></div>
-          <div className="kv"><span>Dashed</span><span>Soft — their words, never added to hard</span></div>
-          <div className="kv"><span>Fogged</span><span>Nobody has scored them. Not weak — unopened</span></div>
-          <div className="kv"><span>Valve</span><span>An approval gate, with tickets open on it</span></div>
+          <div className="kv"><span>Counts</span><span>Pursuits or records, labelled in each view</span></div>
+          <div className="kv"><span>Groups</span><span>Select a count or bin to inspect its members</span></div>
+          <div className="kv"><span>◇</span><span>Needs evidence — status and ladder disagree</span></div>
+          <div className="kv"><span>Money</span><span>Separate by vehicle, hard and soft never combined</span></div>
+          <div className="kv"><span>Unknown</span><span>Missing records stay separate from zero</span></div>
+          <div className="kv"><span>Lists</span><span>Page through every matching record</span></div>
+          <div className="kv"><span>Scope</span><span>LP filters apply where shown; shared-resource views say full page scope</span></div>
 
           <div className="scope">
             <div className="lbl">Status first, the ladder under it</div>
@@ -83,9 +78,7 @@ async function Visualizations({ params }: { params: Promise<{ vehicle: string }>
           <div className="warn" style={{ marginTop: 14 }}>
             <div className="lbl" style={{ color: 'var(--clay)' }}>What is not on any of these</div>
             <p>
-              Anything nobody wrote down. No connector is attached, so no mailbox, CRM or
-              calendar feeds this — a conversation that happened and was not recorded does not
-              appear, and a calm picture is not evidence of a calm quarter.
+              Anything nobody wrote down. Only records available to this copy appear. A conversation that happened but was not recorded does not appear, and a calm picture is not evidence of a calm quarter.
             </p>
           </div>
 
@@ -105,15 +98,14 @@ async function Visualizations({ params }: { params: Promise<{ vehicle: string }>
         Fifteen drawings, one vocabulary. The first five read what is happening; the second five
         read the ground it happens on and the moves available; the third five read who can reach
         whom, what to unblock, and what is simply not on file. Click anything to open it.
-        Size is money at stake, fill is how recently anything was recorded, and colour is
-        reserved for the exceptions — so a floor with nothing wrong has almost no colour on it.
+        Start with counts and bins, then expand a group or page through its records. Each view states its scope; money stays separate by vehicle and by hard or soft track.
       </p>
 
       <div className="kpis six">
         <div className="kpi">
           <span className="tag t-plain">On the map</span>
           <div className="n">{board.fog.scored}<span className="of"> of {board.territories.length}</span></div>
-          <div className="f">Names scored on all four rubric dimensions. The rest are in the fog.</div>
+          <div className="f">Names in the bounded discovery preview with rubric records. The map shows missing dimensions separately.</div>
         </div>
         <div className="kpi">
           <span className="tag t-plain">In flight</span>
@@ -141,7 +133,7 @@ async function Visualizations({ params }: { params: Promise<{ vehicle: string }>
         <div className="kpi">
           <span className="tag t-plain">No number</span>
           <div className="n">{unsized}</div>
-          <div className="f">Real pursuits nobody has a figure for. Drawn at minimum size, never guessed.</div>
+          <div className="f">Pursuits nobody has a figure for. Shown as unknown, never guessed.</div>
         </div>
       </div>
 

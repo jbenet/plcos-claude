@@ -2116,3 +2116,33 @@ table.list.dated .ddetail{color:var(--muted);font-size:11.5px;margin:1px 0 0 23p
 .velocity-note{font-size:12px;margin:8px 0}
 
 @media(pointer:coarse){.shotthumb .shotx{width:44px;height:44px}}
+
+/* Bounded visualizations: summaries keep full counts; detail pages cap rendered rows. */
+.vizsummary { padding: 16px; }
+.vizsummary > p { max-width: 90ch; color: var(--muted); }
+.vizpager { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 0; }
+.vizpager > span { margin-right: auto; font-size: 12px; }
+.vizpager label { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.vizbins { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; margin: 12px 0; }
+.vizcell { display: flex; flex-direction: column; gap: 6px; width: 100%; min-height: 68px; padding: 10px; text-align: left; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; font: inherit; }
+.vizcell b { font-size: 20px; }
+.vizcell small { color: var(--muted); font-size: 11px; }
+.vizcell[aria-pressed="true"] { outline: 2px solid var(--accent); }
+.vizcell:disabled { opacity: .55; cursor: default; }
+.vizbar { display: block; height: 6px; width: 100%; min-width: 45px; background: var(--line); }
+.vizbar i { display: block; height: 100%; background: var(--accent); }
+.vizmatrix { min-width: 740px; }
+.vizmatrix td { padding: 4px; }
+.viznetwork { max-height: 480px; }
+.filterbar { flex-wrap: wrap; }
+.filterbar .fb { min-width: 130px; }
+.floordark .vizpager { color: var(--fl-text); }
+.floorcard, .floorsplit > *, .vizsummary { min-width: 0; }
+.floorcard .scroller, .floorlist-wrap, .vizsummary { overflow-x: auto; }
+.floorlist-wrap .scroller { overflow-x: auto; }
+@media (max-width: 900px) {
+  .floorsplit.open { grid-template-columns: minmax(0, 1fr); }
+  .floortabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .viznetwork { min-width: 740px; }
+}
+.floorlist-wrap .scroller, .floorcard .scroller { max-height: 640px; overflow: auto; }
