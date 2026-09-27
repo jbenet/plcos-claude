@@ -20,6 +20,15 @@ export interface Suggestion {
   decisionNote: string | null;
 }
 
+/** Vehicle sections on an LP page, including aliases resolved to the same entity. */
+export async function strategyPursuitsFor(entityId: string): Promise<Array<{ pursuitId: string; vehicleName: string }>> {
+  const db = await getDb();
+  return db.query(`select p.pursuit_id::text as "pursuitId", v.name as "vehicleName"
+    from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id
+    where identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id($1::uuid)
+    order by v.sort_order, v.name, p.pursuit_id`, [entityId]);
+}
+
 export async function suggestionsFor(pursuitId: string): Promise<Suggestion[]> {
   const db = await getDb();
   const rows = await db.query<{
@@ -28,8 +37,12 @@ export async function suggestionsFor(pursuitId: string): Promise<Suggestion[]> {
   }>(
     `select s.suggestion_id::text, s.pursuit_id::text, s.body, s.data, s.made_by, s.made_at, s.status, u.name, s.decided_at, s.decision_note
        from strategy.suggestion s left join platform.app_user u on u.id = s.decided_by
+       join strategy.active_pursuit p on p.pursuit_id = s.pursuit_id
+       join platform.vehicle v on v.id = p.vehicle_id
       where s.pursuit_id = $1 and s.status <> 'withdrawn'
-      order by s.created_at desc`,
+        and (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null
+          or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))
+      order by s.created_at desc, s.suggestion_id`,
     [pursuitId],
   );
   return rows.map((r) => ({
@@ -83,7 +96,9 @@ export async function openSuggestions(): Promise<Array<Suggestion & { entityName
        join strategy.active_pursuit p on p.pursuit_id = s.pursuit_id
        join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
        join platform.vehicle v on v.id = p.vehicle_id
-      where s.status in ('proposed', 'accepted', 'dismissed')`,
+      where s.status in ('proposed', 'accepted', 'dismissed')
+        and (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null
+          or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))`,
   );
   return rows.map((r) => ({
     suggestionId: r.suggestion_id, pursuitId: r.pursuit_id, body: r.body, data: r.data ?? {}, madeBy: r.made_by, madeAt: new Date(r.made_at),

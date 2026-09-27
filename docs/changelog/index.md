@@ -142,3 +142,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Prospect keys — import research after creating the person](entries/prospect-keys.md)
 
 - [Import duplicate identities](entries/import-dupes.md)
+
+- [Strategy per vehicle — import companion strategies](entries/strategy-per-vehicle.md)

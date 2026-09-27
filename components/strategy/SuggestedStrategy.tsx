@@ -13,8 +13,9 @@ import { decideSuggestionAction } from '@/app/targets/actions';
 const LEVEL: Record<string, string> = { high: 'High', medium: 'Medium', low: 'Low', unknown: 'Not known' };
 const VERDICT: Record<string, string> = { strong: 'Strong fit', good: 'Good fit', possible: 'Possible', weak: 'Weak fit', unknown: 'Not known' };
 
-export async function SuggestedStrategy({ pursuitId, context = [] }: {
+export async function SuggestedStrategy({ pursuitId, vehicleName, context = [] }: {
   pursuitId: string;
+  vehicleName: string;
   /** The team's context on this LP (issue 0016), newest first: what is newer than the strategy is shown. */
   context?: Array<{ by: string | null; at: Date; body: string }>;
 }) {
@@ -25,7 +26,7 @@ export async function SuggestedStrategy({ pursuitId, context = [] }: {
   return (
     <div className="card sugstrat">
       <div className="chead">
-        <h2>Suggested strategy</h2>
+        <h2>Suggested strategy · {vehicleName}</h2>
         <span className="lbl">
           {s.status === 'proposed' ? 'ready for review' : s.status === 'accepted' ? `accepted${s.decidedByName ? ` by ${s.decidedByName}` : ''}` : `dismissed${s.decidedByName ? ` by ${s.decidedByName}` : ''}`}
           {' · '}{s.madeBy}, {shortDate(s.madeAt)}

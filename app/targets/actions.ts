@@ -118,7 +118,8 @@ export async function decideSuggestionAction(formData: FormData): Promise<void> 
   const user = await (await auth()).currentUser();
   const decision = String(formData.get('decision')) === 'accept' ? 'accept' : 'dismiss';
   await decideSuggestion(user.id, String(formData.get('suggestionId')), decision, String(formData.get('note') ?? '') || null);
-  revalidatePath(`/targets/${String(formData.get('pursuitId'))}`);
+  // Each vehicle's LP page now also shows this LP's companion strategies.
+  revalidatePath('/targets/[id]', 'page');
   revalidatePath('/targets');
 }
 

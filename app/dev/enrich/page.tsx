@@ -205,7 +205,7 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
           {(last.problems ?? []).length > 0 && (
             <details className="more" style={{ marginTop: 10 }}>
               <summary>{last.problems!.length} refused files</summary>
-              <ul style={{ fontSize: 12 }}>{last.problems!.map((p) => <li key={p.key}><code>{p.key.slice(0, 8)}</code> — {p.problems.join('; ')}</li>)}</ul>
+              <ul style={{ fontSize: 12 }}>{last.problems!.map((p) => <li key={p.key}><code>{p.key}</code> — {p.problems.join('; ')}</li>)}</ul>
             </details>
           )}
         </div>
