@@ -22,6 +22,8 @@ import { exportResearchSetAction, importFindingsAction, sourceBulkAction } from 
 import { addedInBulk, BULK_DAY } from '@/lib/enrich/unsourced';
 import { readResearchExportStatus } from '@/lib/enrich/export-status';
 import { ExportStatus } from './ExportStatus';
+import { LpUnits } from './LpUnits';
+import { recentLpRepoints } from '@/modules/strategy';
 
 /** The checks the records point to before anyone writes (iteration 3, docs/19). */
 const FIRSTS: Array<{ id: NonNullable<Triage['first']>; label: string; means: string }> = [
@@ -37,10 +39,11 @@ const n = (x: number) => x.toLocaleString('en-US');
 
 
 const enrichmentDbInputs = buildCache(async () => {
-  const [pursuits,suggestions,imported,bulk,mergeRun,duplicateRun] = await Promise.all([
+  const [pursuits,suggestions,imported,bulk,mergeRun,duplicateRun,lpDecisions] = await Promise.all([
     listPursuits(null),openSuggestions(),latestRun('enrich','import'),addedInBulk(),latestRun('enrich','pursuit-merge'),latestRun('enrich','import-duplicates'),
+    recentLpRepoints(),
   ]);
-  return {pursuits:pursuits.filter(inResearchSet),suggestions,imported,bulk,mergeRun,duplicateRun};
+  return {pursuits:pursuits.filter(inResearchSet),suggestions,imported,bulk,mergeRun,duplicateRun,lpDecisions};
 });
 
 /**
@@ -53,7 +56,9 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
   const sp = await searchParams;
   const dir = enrichDir();
   const exportStatus = await readResearchExportStatus(dir);
-  const {pursuits,suggestions,imported,bulk,mergeRun,duplicateRun} = await enrichmentDbInputs();
+  const {pursuits,suggestions,imported,bulk,mergeRun,duplicateRun,lpDecisions} = await enrichmentDbInputs();
+  // Read live: a pass that changes nothing leaves the cached page inputs' revision where it was.
+  const lpRun = await latestRun('enrich','lp-units');
   const entities = new Set(pursuits.map((p) => p.entityId)).size;
   const {readEnrichmentSummary}=await import('@/lib/enrich/file-worker');
   const {triage,plans,quality,set,cands,raw,pages,strategies}=await readEnrichmentSummary(dir);
@@ -158,6 +163,7 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
               && (duplicateRun?.status !== 'ok' || mergeRun.startedAt > duplicateRun.startedAt)
             ? mergeRun.detail as unknown as import('@/modules/strategy').PursuitMergeReport : duplicateRun?.status === 'ok' && (!imported || duplicateRun.startedAt > imported.startedAt)
               ? (duplicateRun.detail as unknown as import('@/lib/enrich/import-dupes').ImportDuplicateReport).pursuitMerges : last.pursuitMerges} />
+          <LpUnits last={lpRun ? `${lpRun.status === 'ok' ? '' : 'stopped · '}${lpRun.note ?? ''}` : null} decisions={lpDecisions} />
           {(last.skippedRecords ?? []).length > 0 && (
             <details className="more" style={{ marginTop: 10 }}>
               <summary>{last.skippedRecords!.length} skipped records — correct these files and import again</summary>

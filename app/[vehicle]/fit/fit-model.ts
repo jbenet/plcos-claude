@@ -1,4 +1,4 @@
-import { groupLps, type LpGroup } from '@/lib/lp-groups';
+import { unitGroups, type LpGroup } from '@/lib/lp-groups';
 import type { PursuitStatus } from '@/modules/strategy/client';
 
 /** The fit page's groups and rows, shared by the server page and its client list (issues 0073, 0096). */
@@ -46,9 +46,9 @@ export interface FitRow {
   };
 }
 
-export function groupFitRows(rows: FitRow[], compare: (a: FitRow, b: FitRow) => number, universe: FitRow[] = rows): LpGroup<FitRow>[] {
-  return groupLps(rows, r => ({ id: r.key, entityId: r.entityId, vehicleId: r.vehicleId,
-    isOrg: r.isOrg ?? false, orgId: r.orgId ?? null, org: r.org ?? null, orgFirst: r.orgFirst }), compare, universe);
+/** One group per LP unit (docs/23): organisations, then individuals, each in the given order. */
+export function groupFitRows(rows: FitRow[], compare: (a: FitRow, b: FitRow) => number): LpGroup<FitRow>[] {
+  return unitGroups(rows, r => r.key, r => r.isOrg ?? false, compare);
 }
 
 /** A failing child gate must remain visible in the organisation's work queue. A filtered

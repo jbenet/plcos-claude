@@ -234,7 +234,7 @@ function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate,
           {on ? shortDate(on) : 'undated'}{!t.on && t.scheduledFor ? ' · scheduled' : ''} · {CHANNEL_LABEL[t.channel]}
           {t.direction && !isEvent(t) ? ` · ${DIRECTION_LABEL[t.direction]}` : ''}
           {isEvent(t) ? ` · an event, ${t.groupSize} of ours on it` : ''}
-          {t.viaOrganization ? ` · with ${t.viaOrganization}` : ''} · {source(t)}
+          {t.viaOrganization ? ` · with ${t.viaOrganization}` : t.viaContact ? ` · with ${t.viaContact}` : ''} · {source(t)}
           {c?.what && SIGNALS.includes(c.what) ? <> · <b className="whatword">{WHAT_LABEL[c.what]}</b></> : null}
         </div>
         {c?.title && <div className="t"><b>{c.title}</b></div>}

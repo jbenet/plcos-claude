@@ -173,3 +173,25 @@ export async function reverseIdentitySeparationAction(assertionId: string, reaso
     return {};
   } catch (error) { return { error: error instanceof Error ? error.message : 'Reversal failed.' }; }
 }
+
+const liveOnly = () => config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live');
+
+/** Re-point pursuits to their LP (issues 0111, 0112; docs/23): a queued job on the live server. */
+export async function repointPursuitsAction(): Promise<{ error?: string; message?: string }> {
+  if (liveOnly()) return { error: 'Re-point pursuits on the live server.' };
+  const user = await (await auth()).currentUser();
+  try { await queueImportJob(await getDb(), 'lp-units', user.id); return { message: 'Re-point queued. Progress appears above; reload for its decisions.' }; }
+  catch { return { error: 'The re-point could not be queued. Retry after the active import finishes.' }; }
+}
+
+export async function reverseLpRepointAction(id: string, reason: string): Promise<{ error?: string }> {
+  if (liveOnly()) return { error: 'Reverse re-points on the live server.' };
+  try {
+    const { reverseLpRepoint } = await import('@/modules/strategy');
+    const user = await (await auth()).currentUser();
+    await reverseLpRepoint(await getDb(), id, user.id, reason);
+    revalidatePath('/dev/enrich');
+    revalidatePath('/targets', 'layout');
+    return {};
+  } catch (error) { return { error: error instanceof Error ? error.message : 'Reversal failed.' }; }
+}

@@ -7,9 +7,9 @@ export interface PursuitMergeReport {
   merges: Array<{ id: string; survivorId: string; loserIds: string[] }>;
   ambiguous: Array<{ entityId: string; vehicleId: string; pursuitIds: string[]; reason: string }>;
 }
-type Row = Record<string, unknown>;
-type Change = { table: string; key: Row; before: Row | null; after: Row };
-type Reference = { table: string; column: string };
+export type Row = Record<string, unknown>;
+export type Change = { table: string; key: Row; before: Row | null; after: Row };
+export type Reference = { table: string; column: string };
 type Candidate = {
   id: string; entity: string; vehicle: string; status: PursuitStatus; status_source: string;
   human_protected: boolean; human_at: string | null; human_status: string | null; opened_at: string;
@@ -38,7 +38,7 @@ async function keyFor(tx: Queryable, table: string, row: Row): Promise<Row> {
   if (!keys.length) throw new Error(`Cannot journal ${table} without a primary key`);
   return Object.fromEntries(keys.map(k => [k.name, row[k.name]]));
 }
-async function write(tx: Queryable, changes: Change[], table: string, before: Row, patch: Row) {
+export async function write(tx: Queryable, changes: Change[], table: string, before: Row, patch: Row) {
   const key = await keyFor(tx, table, before), name = tableSql(table);
   const after = (await tx.one<{ row: Row }>(`update ${name} t set
     ${Object.keys(patch).map(k => `${ident(k)}=v.${ident(k)}`).join(',')}
@@ -46,7 +46,7 @@ async function write(tx: Queryable, changes: Change[], table: string, before: Ro
     where to_jsonb(t) @> $2::jsonb returning to_jsonb(t) as row`, [JSON.stringify({ ...before, ...patch }), JSON.stringify(key)]))!.row;
   changes.push({ table, key, before, after });
 }
-async function inserted(tx: Queryable, changes: Change[], table: string, row: Row) {
+export async function inserted(tx: Queryable, changes: Change[], table: string, row: Row) {
   changes.push({ table, key: await keyFor(tx, table, row), before: null, after: row });
 }
 function redirectJson(value: unknown, losers: Set<string>, survivor: string): unknown {
@@ -56,12 +56,74 @@ function redirectJson(value: unknown, losers: Set<string>, survivor: string): un
     (k === 'pursuitId' || k === 'pursuit_id') && typeof v === 'string' && losers.has(v)
       ? survivor : redirectJson(v, losers, survivor)]));
 }
-async function lockMergeTables(tx: Queryable, refs: Reference[]) {
+export async function lockMergeTables(tx: Queryable, refs: Reference[], extra: string[] = []) {
   // Match identity import's lock order. Locks cover inserts as well as rows already seen.
   await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
   const names = [...new Set(['strategy.pursuit', 'strategy.pursuit_merge', 'platform.audit_log',
-    'research.note', 'governance.approval_ticket', ...refs.map(r => r.table)])].sort();
+    'research.note', 'governance.approval_ticket', ...extra, ...refs.map(r => r.table)])].sort();
   await tx.exec(`lock table ${names.map(tableSql).join(',')} in share row exclusive mode`);
+}
+
+/**
+ * Fold pursuits into a survivor, journalling every row it writes (shared by the merge and the
+ * LP re-point, docs/23): the owner ledger, every foreign key, approval tickets (retargeted and
+ * expired), notes naming a loser, the losers' plans, an update carrying each loser's own words,
+ * and the redirect itself. Returns the retargeted ticket ids.
+ */
+export async function absorbPursuits(tx: Queryable, changes: Change[], refs: Reference[], survivorId: string, originals: Row[],
+  actorId: string | null, rule: string, ledger: 'all' | 'losers', noteFor: (row: Row, owner: string) => string): Promise<unknown[]> {
+  const losers = originals.map(r => String(r.pursuit_id)).filter(id => id !== survivorId), loserSet = new Set(losers);
+  for (const row of originals) {
+    if (ledger === 'losers' && !loserSet.has(String(row.pursuit_id))) continue;
+    const owner = (await tx.one<{ row: Row }>(`insert into strategy.pursuit_owner(pursuit_id,owner_id,origin_pursuit_id,owner_said)
+      values($1,$2,$3,$4) returning to_jsonb(pursuit_owner) row`, [survivorId,row.owner_id,row.pursuit_id,row.owner_said]))!.row;
+    await inserted(tx, changes, 'strategy.pursuit_owner', owner);
+  }
+  for (const ref of refs) {
+    const rows = await tx.query<{ row: Row }>(`select to_jsonb(t) row from ${tableSql(ref.table)} t where ${ident(ref.column)}=any($1::uuid[])`, [losers]);
+    for (const { row } of rows) await write(tx, changes, ref.table, row, { [ref.column]: survivorId });
+  }
+  // Tickets describe a bounded action against the original pursuit. Retarget the record
+  // but expire authorization; pending proposals are deferred, preserving the open-ticket gate.
+  const tickets = await tx.query<{ row: Row }>(`select to_jsonb(t) row from governance.approval_ticket t
+    where subject_type='pursuit' and subject_id=any($1::uuid[])`, [losers]);
+  for (const { row } of tickets) {
+    await write(tx, changes, 'governance.approval_ticket', row, {
+      subject_id: survivorId, scope: redirectJson(row.scope, loserSet, survivorId),
+      expires_at: new Date().toISOString(),
+      ...(row.decision === null ? { decision: 'defer', decision_note: 'Pursuit merged; review and request fresh approval.', decided_by: actorId, decided_at: new Date().toISOString() } : {}),
+    });
+  }
+  for (const { row } of await tx.query<{ row: Row }>(`select to_jsonb(n) row from research.note n where data::text like any($1::text[])`, [losers.map(id => `%${id}%`)])) {
+    const data = redirectJson(row.data, loserSet, survivorId);
+    if (!same(data,row.data)) await write(tx, changes, 'research.note', row, { data });
+  }
+  const survivorRow = (await tx.one<{ row: Row }>('select to_jsonb(p) row from strategy.pursuit p where pursuit_id=$1', [survivorId]))!.row;
+  const plans = originals.filter(r => loserSet.has(String(r.pursuit_id))).flatMap(r => Array.isArray(r.plan) ? r.plan : []);
+  if (plans.length) await write(tx, changes, 'strategy.pursuit', survivorRow, { plan: [...(survivorRow.plan as unknown[]), ...plans] });
+  for (const row of originals.filter(r => loserSet.has(String(r.pursuit_id)))) {
+    const owner = await tx.one<{ name: string }>('select name from platform.app_user where id=$1', [row.owner_id]);
+    const note = (await tx.one<{ row: Row }>(`insert into strategy.pursuit_update(pursuit_id,body,suggested,created_by,idempotency_key)
+      values($1,$2,$3::jsonb,$4,$5) returning to_jsonb(pursuit_update) row`, [survivorId,
+      noteFor(row, owner?.name ?? String(row.owner_id)),
+      JSON.stringify({ rule, original: row }), actorId ?? row.owner_id, `${rule}:${row.pursuit_id}`]))!.row;
+    await inserted(tx, changes, 'strategy.pursuit_update', note);
+    const current = (await tx.one<{ row: Row }>('select to_jsonb(p) row from strategy.pursuit p where pursuit_id=$1', [row.pursuit_id]))!.row;
+    await write(tx, changes, 'strategy.pursuit', current, { merged_into: survivorId });
+  }
+  return tickets.map(t => t.row.id);
+}
+
+/** Undo journalled changes in reverse order, checking each exact postimage first. Any
+ * conflict throws, and the caller's transaction rolls back every earlier step. */
+export async function restoreChanges(tx: Queryable, changes: Change[], label: string): Promise<void> {
+  for (const change of [...changes].reverse()) {
+    const table = tableSql(change.table);
+    const current = await tx.one<{ row: Row }>(`select to_jsonb(t) row from ${table} t where to_jsonb(t) @> $1::jsonb`,[JSON.stringify(change.key)]);
+    if (!current || !same(current.row,change.after)) throw new Error(`Reversal conflicts with later edits in ${change.table}; ${label}`);
+    if (!change.before) await tx.query(`delete from ${table} t where to_jsonb(t) @> $1::jsonb`,[JSON.stringify(change.key)]);
+    else await write(tx,[],change.table,current.row,change.before);
+  }
 }
 
 /** Transaction-owned identity pass. No files or external systems are opened here. */
@@ -109,49 +171,15 @@ export async function consolidatePursuitsInTransaction(tx: Queryable, actorId: s
     group.sort((a,b) => rank(b.status)-rank(a.status)
       || (b.human_at ? Date.parse(b.human_at) : -Infinity)-(a.human_at ? Date.parse(a.human_at) : -Infinity)
       || Date.parse(a.opened_at)-Date.parse(b.opened_at) || a.id.localeCompare(b.id));
-    const survivor = group[0]!, losers = group.slice(1).map(p => p.id), loserSet = new Set(losers);
+    const survivor = group[0]!, losers = group.slice(1).map(p => p.id);
     const changes: Change[] = [];
     const originals = await tx.query<{ row: Row }>('select to_jsonb(p) row from strategy.pursuit p where pursuit_id=any($1::uuid[]) order by pursuit_id', [group.map(p => p.id)]);
-    for (const { row } of originals) {
-      const owner = (await tx.one<{ row: Row }>(`insert into strategy.pursuit_owner(pursuit_id,owner_id,origin_pursuit_id,owner_said)
-        values($1,$2,$3,$4) returning to_jsonb(pursuit_owner) row`, [survivor.id,row.owner_id,row.pursuit_id,row.owner_said]))!.row;
-      await inserted(tx, changes, 'strategy.pursuit_owner', owner);
-    }
-    for (const ref of refs) {
-      const rows = await tx.query<{ row: Row }>(`select to_jsonb(t) row from ${tableSql(ref.table)} t where ${ident(ref.column)}=any($1::uuid[])`, [losers]);
-      for (const { row } of rows) await write(tx, changes, ref.table, row, { [ref.column]: survivor.id });
-    }
-    // Tickets describe a bounded action against the original pursuit. Retarget the record
-    // but expire authorization; pending proposals are deferred, preserving the open-ticket gate.
-    const tickets = await tx.query<{ row: Row }>(`select to_jsonb(t) row from governance.approval_ticket t
-      where subject_type='pursuit' and subject_id=any($1::uuid[])`, [losers]);
-    for (const { row } of tickets) {
-      await write(tx, changes, 'governance.approval_ticket', row, {
-        subject_id: survivor.id, scope: redirectJson(row.scope, loserSet, survivor.id),
-        expires_at: new Date().toISOString(),
-        ...(row.decision === null ? { decision: 'defer', decision_note: 'Pursuit merged; review and request fresh approval.', decided_by: actorId, decided_at: new Date().toISOString() } : {}),
-      });
-    }
-    for (const { row } of await tx.query<{ row: Row }>(`select to_jsonb(n) row from research.note n where data::text like any($1::text[])`, [losers.map(id => `%${id}%`)])) {
-      const data = redirectJson(row.data, loserSet, survivor.id);
-      if (!same(data,row.data)) await write(tx, changes, 'research.note', row, { data });
-    }
-    const survivorRow = originals.find(r => r.row.pursuit_id === survivor.id)!.row;
-    const plans = originals.filter(r => loserSet.has(String(r.row.pursuit_id))).flatMap(r => Array.isArray(r.row.plan) ? r.row.plan : []);
-    if (plans.length) await write(tx, changes, 'strategy.pursuit', survivorRow, { plan: [...(survivorRow.plan as unknown[]), ...plans] });
-    for (const { row } of originals.filter(r => loserSet.has(String(r.row.pursuit_id)))) {
-      const owner = await tx.one<{ name: string }>('select name from platform.app_user where id=$1', [row.owner_id]);
-      const note = (await tx.one<{ row: Row }>(`insert into strategy.pursuit_update(pursuit_id,body,suggested,created_by,idempotency_key)
-        values($1,$2,$3::jsonb,$4,$5) returning to_jsonb(pursuit_update) row`, [survivor.id,
-        `Merged pursuit ${row.pursuit_id}. Owner: ${owner?.name ?? row.owner_id}${row.owner_said ? ` (${row.owner_said})` : ''}. Status: ${row.status}. ${row.headline ?? ''}${row.next_step ? ` Next step: ${row.next_step}${row.next_step_on ? ` (${row.next_step_on})` : ''}.` : ''}`,
-        JSON.stringify({ rule: RULE, original: row }), actorId ?? row.owner_id, `${RULE}:${row.pursuit_id}`]))!.row;
-      await inserted(tx, changes, 'strategy.pursuit_update', note);
-      await write(tx, changes, 'strategy.pursuit', row, { merged_into: survivor.id });
-    }
+    const tickets = await absorbPursuits(tx, changes, refs, survivor.id, originals.map(r => r.row), actorId, RULE, 'all',
+      (row, owner) => `Merged pursuit ${row.pursuit_id}. Owner: ${owner}${row.owner_said ? ` (${row.owner_said})` : ''}. Status: ${row.status}. ${row.headline ?? ''}${row.next_step ? ` Next step: ${row.next_step}${row.next_step_on ? ` (${row.next_step_on})` : ''}.` : ''}`);
     const merge = (await tx.one<{ id: string }>(`insert into strategy.pursuit_merge(survivor_id,loser_ids,rule,actor_id,changes)
       values($1,$2,$3,$4,$5::jsonb) returning id::text`, [survivor.id,losers,RULE,actorId,JSON.stringify(changes)]))!;
     await tx.query(`insert into platform.audit_log(actor_id,action,subject_type,subject_id,detail)
-      values($1,'pursuit.merged','pursuit',$2,$3::jsonb)`, [actorId,survivor.id,JSON.stringify({rule:RULE,mergeId:merge.id,loserIds:losers,expiredTickets:tickets.map(t=>t.row.id)})]);
+      values($1,'pursuit.merged','pursuit',$2,$3::jsonb)`, [actorId,survivor.id,JSON.stringify({rule:RULE,mergeId:merge.id,loserIds:losers,expiredTickets:tickets})]);
     report.merged += losers.length;
     report.merges.push({ id:merge.id,survivorId:survivor.id,loserIds:losers });
   }
@@ -172,13 +200,7 @@ export async function reversePursuitMerge(db: Db, id: string, actorId: string, r
     if (!active) throw new Error('Reverse the newer merge first');
     // Undo in reverse order, checking the exact postimage at each step. Any conflict rolls
     // back the entire reversal, including earlier steps in this loop.
-    for (const change of [...merge.changes].reverse()) {
-      const table = tableSql(change.table);
-      const current = await tx.one<{ row: Row }>(`select to_jsonb(t) row from ${table} t where to_jsonb(t) @> $1::jsonb`,[JSON.stringify(change.key)]);
-      if (!current || !same(current.row,change.after)) throw new Error(`Reversal conflicts with later edits in ${change.table}; review them first`);
-      if (!change.before) await tx.query(`delete from ${table} t where to_jsonb(t) @> $1::jsonb`,[JSON.stringify(change.key)]);
-      else await write(tx,[],change.table,current.row,change.before);
-    }
+    await restoreChanges(tx, merge.changes, 'review them first');
     await tx.query('update strategy.pursuit_merge set reversed_at=now(),reversed_by=$2,reversal_reason=$3 where id=$1',[id,actorId,reason]);
     await tx.query(`insert into platform.audit_log(actor_id,action,subject_type,subject_id,detail)
       values($1,'pursuit.merge_reversed','pursuit',$2,$3::jsonb)`,[actorId,merge.survivor_id,JSON.stringify({rule:RULE,mergeId:id,reason})]);

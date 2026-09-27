@@ -160,15 +160,16 @@ type TouchRow = {
   about: 'raise' | 'other' | null; about_vehicles: string[] | null; about_basis: string | null;
   about_by: 'rule' | 'claude' | 'person' | null;
   group_size: number | null;
+  via_contact: boolean | null;
 };
 
-/** The touchpoint columns, read through a `reach` CTE of (for_entity, entity_id). */
-const TOUCH_FROM_REACH = `
+/** The touchpoint columns, read through a `reach` CTE of (for_entity, entity_id[, contact]). */
+const fromReach = (contact: string) => `
   select m.meeting_id, e.entity_id, e.display_name as entity_name, m.vehicle_id, v.name as vehicle_name,
          m.channel::text as channel, m.kind::text as kind, m.held_on, m.scheduled_for, m.direction,
          u.name as owner_name, m.attendees, m.summary, m.read::text as read, rb.name as read_by_name,
          m.source, m.source_ref, r.for_entity, m.about, m.about_vehicles, m.about_basis, m.about_by,
-         m.group_size
+         m.group_size, ${contact} as via_contact
     from reach r
     join meetings.meeting m on identity.canonical_entity_id(m.entity_id) = identity.canonical_entity_id(r.entity_id)
     join identity.entity e on e.entity_id = identity.canonical_entity_id(m.entity_id)
@@ -184,12 +185,18 @@ const TOUCH_FROM_REACH = `
 const TOUCH_SELECT = `
   with lp as (select unnest($1::uuid[]) as entity_id),
   reach as (
-    select lp.entity_id as for_entity, lp.entity_id as entity_id from lp
+    select lp.entity_id as for_entity, lp.entity_id as entity_id, false as contact from lp
     union
-    select lp.entity_id, identity.canonical_entity_id(a.org_entity) from identity.affiliation a join lp on identity.canonical_entity_id(lp.entity_id) = identity.canonical_entity_id(a.person_entity)
+    select lp.entity_id, identity.canonical_entity_id(a.org_entity), false from identity.affiliation a join lp on identity.canonical_entity_id(lp.entity_id) = identity.canonical_entity_id(a.person_entity)
      where a.ended_on is null
+    union
+    -- An organisation's contacts speak for it (docs/23): a person re-pointed to their firm's
+    -- pursuit brings their meetings with them, as they counted before the move.
+    select lp.entity_id, identity.canonical_entity_id(c.person_entity), true from strategy.pursuit_contact c
+      join strategy.active_pursuit p on p.pursuit_id = c.pursuit_id
+      join lp on identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id(lp.entity_id)
   )
-  ${TOUCH_FROM_REACH}`;
+  ${fromReach('r.contact')}`;
 
 /** Colleagues: the others acting now for the organisation an LP deals with us through (issue 0013). */
 const COLLEAGUE_SELECT = `
@@ -203,7 +210,7 @@ const COLLEAGUE_SELECT = `
       from firm join identity.affiliation c on identity.canonical_entity_id(c.org_entity) = identity.canonical_entity_id(firm.org_entity)
      where identity.canonical_entity_id(c.person_entity) <> identity.canonical_entity_id($1::uuid) and c.ended_on is null
   )
-  ${TOUCH_FROM_REACH}`;
+  ${fromReach('false')}`;
 
 const day = (d: Date | string | null) => (d ? new Date(d) : null);
 
@@ -213,7 +220,9 @@ const toTouch = (r: TouchRow, project: (labels: readonly string[]) => string[]):
   on: day(r.held_on), scheduledFor: day(r.scheduled_for), direction: r.direction,
   ownerName: r.owner_name, attendees: project(r.attendees ?? []), summary: r.summary,
   read: r.read, readByName: r.read_by_name, source: r.source, sourceRef: r.source_ref,
-  viaOrganization: r.entity_id === r.for_entity ? null : r.entity_name,
+  // A contact on the LP's pursuit speaks for it (docs/23): their touchpoints count as the LP's own.
+  viaOrganization: r.entity_id === r.for_entity || r.via_contact ? null : r.entity_name,
+  viaContact: r.via_contact && r.entity_id !== r.for_entity ? r.entity_name : null,
   about: r.about, aboutVehicles: r.about_vehicles ?? [], aboutBasis: r.about_basis, aboutBy: r.about_by,
   groupSize: Number(r.group_size ?? 1),
 });

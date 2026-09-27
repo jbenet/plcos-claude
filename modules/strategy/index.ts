@@ -12,3 +12,5 @@ export { decideSuggestion, openSuggestions, SuggestionRefused, suggestionsFor, s
 export { READER, dateIn, readUpdate, type TouchChannel, type UpdateSuggestion } from './reader';
 export { vehicleStrategy, capacityEstimate, actionScore, conversionFor, statusId, type VehicleStrategy, type StrategyAction, type Transition } from './vehicle';
 export { consolidatePursuits, consolidatePursuitsInTransaction, reversePursuitMerge, pursuitReferences, type PursuitMergeReport } from './merge';
+export { repointPursuits, repointPursuitsInTransaction, reverseLpRepoint, decideLpUnitByPerson, recentLpRepoints, type LpUnitReport, type LpUnitDecisionRow } from './lp-units';
+export { LP_RULE, isPseudoOrg, decideLpUnit, combineStatus, type LpDecision, type LpFacts, type Firm as LpFirm, type Evidence as LpEvidence } from './lp-unit-rules';

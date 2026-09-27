@@ -6,15 +6,21 @@ import { scoreDetailAction } from '@/app/selection/actions';
 import type { ScoreDetail } from '@/lib/pipeline-data';
 import { BulkLpActions } from './BulkLpActions';
 import { MoveButton, statusMix, statusWord, UndoToast, useMove } from './MoveToSelected';
-import { groupRows, EMPTY, lead, second, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { sectionRows, EMPTY, lead, second, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { CapacityTag, LpWho, units } from './LpWho';
 import { cx, Disclose, fmt, fmtShort, FilterLine, Icon, Ladder, n, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
 import m from './selection.module.css';
+import u from './lp-units.module.css';
 
 /**
  * Selection (module 03; issues 0071 and 0089): who to work next. A ranked list beside the reasons
  * for the one in focus, after the M03 board — the score, what it rests on, and a way in. New and
  * Sourcing are shown to start; any other status can be toggled in, or all of them at once.
+ *
+ * Every row is an LP unit (issues 0111, 0112; docs/23): organisations first, each once, with their
+ * people named inside the row; then individuals, people in their own capacity, with their firms as
+ * context. The two lists are ranked apart and the keyboard runs through both.
  */
 
 const PAGE = 60;
@@ -36,19 +42,27 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   const router = useRouter();
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'selection' });
   const { enabled, setEnabled, counts, active, shown, sort, picked, pick, pickedRows, now } = view;
-  const [limit, setLimit] = useState(PAGE);
+  const [limits, setLimits] = useState({ org: PAGE, ind: PAGE });
   const shownIds = useMemo(() => new Set(shown.map((r) => r.id)), [shown]);
-  useEffect(() => setLimit(PAGE), [enabled, view.f, sort]);
-  const groups = useMemo(() => groupRows(shown, sort.key, sort.dir, rows), [shown, sort, rows]);
-  const ranked = useMemo(() => groups.flatMap(g => g.people), [groups]);
-  const visible = groups.slice(0, limit);
-  const groupPosition = (id: string) => groups.findIndex(g => g.people.some(r => r.id === id)) + 1;
+  useEffect(() => setLimits({ org: PAGE, ind: PAGE }), [enabled, view.f, sort]);
+  const sections = useMemo(() => sectionRows(shown, sort.key, sort.dir), [shown, sort]);
+  const ranked = useMemo(() => [...sections.organisations, ...sections.individuals], [sections]);
+  const orgsShown = sections.organisations.slice(0, limits.org), indsShown = sections.individuals.slice(0, limits.ind);
+  const place = (r: PipelineRow) => (r.isOrg ? sections.organisations : sections.individuals).indexOf(r) + 1;
   const [focusId, setFocusId] = useState<string | null>(() => initialFilters?.lp ?? null);
   const focus = ranked.find((r) => r.id === focusId) ?? ranked[0] ?? null;
-  const position = focus ? groupPosition(focus.id) : 0;
+  const position = focus ? place(focus) : 0;
   const all = enabled.length === statuses.length;
   const byVehicle = showVehicle && new Set(rows.map((r) => r.vehicle)).size > 1;
   const scored = useMemo(() => shown.filter((r) => r.score !== null).length, [shown]);
+  /** Bring a row into view and focus: its section grows to include it. */
+  const reveal = (r: PipelineRow) => {
+    const i = place(r) - 1, key = r.isOrg ? 'org' : 'ind';
+    if (i >= limits[key]) setLimits((x) => ({ ...x, [key]: Math.ceil((i + 1) / PAGE) * PAGE }));
+    setFocusId(r.id);
+    requestAnimationFrame(() => document.querySelector(`[data-lp="${r.id}"]`)?.scrollIntoView({ block: 'nearest' }));
+  };
+  const jump = (id: string) => { const r = ranked.find((x) => x.id === id); if (r) reveal(r); };
 
   // Keep the focused LP in the address, so back and a shared link return to it.
   useEffect(() => {
@@ -68,7 +82,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
     return () => watch.disconnect();
   }, []);
 
-  const visibleIds = visible.flatMap(g => g.people.map(r => r.id));
+  const visibleIds = [...orgsShown, ...indsShown].map((r) => r.id);
   const allTicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
 
   // Move to Selected (issue 0104): the ticked LPs when some are ticked, otherwise the one in focus.
@@ -83,10 +97,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
     const done = await mv.move(targets);
     if (!done) return;
     if (ticked) view.clearPicked();
-    else if (next) {
-      setFocusId(next.id);
-      requestAnimationFrame(() => document.querySelector(`[data-lp="${next.id}"]`)?.scrollIntoView({ block: 'nearest' }));
-    }
+    else if (next) reveal(next);
   };
   const undoNow = async () => {
     const done = await mv.undo();
@@ -95,14 +106,14 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
 
   // The keyboard (issues 0091, 0104): up and down move the focus through the table, x ticks the LP
   // in focus, s moves to Selected, u undoes that, Enter opens it. Not while typing in a field or a dialog.
-  const keys = useRef({ ranked, focus, limit, picked, groups, moveNow, undoNow });
-  keys.current = { ranked, focus, limit, picked, groups, moveNow, undoNow };
+  const keys = useRef({ ranked, focus, picked, moveNow, undoNow, reveal });
+  keys.current = { ranked, focus, picked, moveNow, undoNow, reveal };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target instanceof HTMLElement ? e.target : null;
       if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && !(el as HTMLInputElement).type?.match(/checkbox/) || el.closest('dialog, [role="dialog"]'))) return;
-      const { ranked, focus, limit, picked, groups, moveNow, undoNow } = keys.current;
+      const { ranked, focus, picked, moveNow, undoNow, reveal } = keys.current;
       if (e.key === 'u' && !e.shiftKey) { e.preventDefault(); void undoNow(); return; }
       if (!focus) return;
       const i = ranked.indexOf(focus);
@@ -110,16 +121,14 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
         const next = ranked[Math.max(0, Math.min(ranked.length - 1, i + (e.key === 'ArrowDown' || e.key === 'j' ? 1 : -1)))];
         if (!next) return;
         e.preventDefault();
-        if (groups.findIndex(g => g.people.some(r => r.id === next.id)) >= limit) setLimit((x) => x + PAGE);
-        setFocusId(next.id);
-        requestAnimationFrame(() => document.querySelector(`[data-lp="${next.id}"]`)?.scrollIntoView({ block: 'nearest' }));
+        reveal(next);
       } else if (e.key === 's' && !e.shiftKey) {
         e.preventDefault();
         void moveNow();
       } else if (e.key === 'x') {
         e.preventDefault();
         pick([focus.id], !picked.has(focus.id));
-      } else if (e.key === 'Enter' && (!el || el === document.body || el.closest('[data-lp]'))) {
+      } else if (e.key === 'Enter' && (!el || el === document.body || el.closest('[data-lp]')) && !el?.closest('a,button')) {
         e.preventDefault();
         open(focus);
       }
@@ -167,7 +176,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
         </div>
       )} />
   );
-  const detail = focus && <Why key={focus.id} r={focus} position={position} sortLabel={SORT_LABEL[sort.key] ?? 'score'} rungNames={rungNames} now={now} />;
+  const detail = focus && <Why key={focus.id} r={focus} position={position} sortLabel={SORT_LABEL[sort.key] ?? 'score'} rungNames={rungNames} now={now} onJump={jump} />;
 
   return (
     <section ref={wrap} className={s.wrap} aria-label="LP selection">
@@ -196,7 +205,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
           <div className={s.head}>
             <h2>Ranked</h2>
             <div className={s.headMeta}>
-              {n(groups.length)} LP groups · {n(shown.length)} pursuits · {n(scored)} scored
+              {units(sections.organisations.length, sections.individuals.length)} · {n(scored)} scored
               {enabled.length > 0 && !all && <span> · {enabled.map((id) => statuses.find((x) => x.id === id)?.label).join(', ')}</span>}
             </div>
             <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>s</kbd> to Selected · <kbd>↵</kbd> open</div>
@@ -228,32 +237,27 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
                     <Th k="touch" className={s.cTouch}>Last touch</Th>
                   </tr>
                 </thead>
-                <tbody>
-                  {visible.map((g, i) => {
-                    const own = g.people[0]!.isOrg ? g.people[0]! : null;
-                    const grouped = Boolean(g.org) && (g.people.length > 1 || !own);
-                    const ids = g.people.map(r => r.id);
-                    return <Fragment key={g.id}>
-                      {grouped && !own && <tr className={s.lead}>
-                        <td className={s.cCheck}><input type="checkbox" aria-label={`Select people at ${g.org}`} checked={ids.every(id => picked.has(id))} onChange={e => pick(ids, e.target.checked)} /></td>
-                        <td className={s.cPos}>{i + 1}</td>
-                        <td className={s.cLp} colSpan={7}><div className={s.lpName}>{g.org}</div><div className={s.second}>{n(g.people.length)} people pursued, below</div></td>
-                      </tr>}
-                      {g.people.map((r, j) => <Fragment key={r.id}>
-                        <RankRow r={r} position={grouped && !r.isOrg ? null : i + 1} member={grouped && !r.isOrg} last={j === g.people.length - 1}
-                          focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now} onFocus={setFocusId} onPick={pick} />
-                        {narrow && r.id === focus?.id && detail && <tr className={s.inlineRow}><td colSpan={9}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>}
-                      </Fragment>)}
-                    </Fragment>;
-                  })}
-                </tbody>
+                {([['org', 'Organisations', orgsShown, sections.organisations,
+                  'Funds, family offices, foundations, companies and vehicles that commit as one. Their people are named in the row.'],
+                  ['ind', 'Individuals', indsShown, sections.individuals,
+                  'People who invest in their own capacity. Their firms are context; a firm with its own row here is marked.']] as const).map(([key, title, list, whole, note]) => (
+                  <tbody key={key} aria-label={title}>
+                    <tr className={u.sectionRow}><td colSpan={9}><div className={u.sectionHead}>
+                      <span className={u.sectionName}>{title}</span><span className={u.sectionCount}>{n(whole.length)}</span><span className={u.sectionNote}>{note}</span>
+                    </div></td></tr>
+                    {whole.length === 0 && <tr className={u.sectionEmpty}><td colSpan={9}>{key === 'org' ? 'No organisation' : 'No individual'} at {active ? 'these statuses and filters' : 'these statuses'}.</td></tr>}
+                    {list.map((r, i) => <Fragment key={r.id}>
+                      <RankRow r={r} position={i + 1} focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now}
+                        onFocus={setFocusId} onPick={pick} onJump={jump} />
+                      {narrow && r.id === focus?.id && detail && <tr className={s.inlineRow}><td colSpan={9}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>}
+                    </Fragment>)}
+                    {whole.length > list.length && <tr className={u.moreRow}><td colSpan={9}>
+                      <button type="button" className="btn" onClick={() => setLimits((x) => ({ ...x, [key]: x[key] + PAGE }))}>Show {n(Math.min(PAGE, whole.length - list.length))} more {key === 'org' ? 'organisations' : 'individuals'}</button>
+                      {n(list.length)} of {n(whole.length)} shown. Search covers all of them.
+                    </td></tr>}
+                  </tbody>
+                ))}
               </table>
-            </div>
-          )}
-          {groups.length > limit && (
-            <div className={s.more}>
-              <button type="button" className="btn" onClick={() => setLimit((x) => x + PAGE)}>Show {n(Math.min(PAGE, groups.length - limit))} more</button>
-              <span>{n(limit)} of {n(groups.length)} groups shown. Search covers all of them.</span>
             </div>
           )}
           <p className="cover">
@@ -273,24 +277,23 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   );
 }
 
-const RankRow = memo(function RankRow({ r, position, member = false, last = false, focused, picked, byVehicle, now, onFocus, onPick }: {
-  r: PipelineRow; position: number | null; member?: boolean; last?: boolean; focused: boolean; picked: boolean; byVehicle: boolean; now: number;
-  onFocus: (id: string) => void; onPick: (ids: string[], on: boolean) => void;
+const RankRow = memo(function RankRow({ r, position, focused, picked, byVehicle, now, onFocus, onPick, onJump }: {
+  r: PipelineRow; position: number; focused: boolean; picked: boolean; byVehicle: boolean; now: number;
+  onFocus: (id: string) => void; onPick: (ids: string[], on: boolean) => void; onJump: (id: string) => void;
 }) {
-  const other = member ? null : second(r);
   const touch = fmtShort(r.lastTouch, now);
   const stale = /stale/i.test(r.scoreKind);
   const cap = r.capacity && !/unknown/i.test(r.capacity) ? r.capacity : null;
   return (
-    <tr data-lp={r.id} className={cx(s.row, member && s.member, member && last && s.last, focused && s.focus, picked && s.picked)} aria-selected={focused}
+    <tr data-lp={r.id} className={cx(s.row, focused && s.focus, picked && s.picked)} aria-selected={focused}
       onClick={(e) => { if ((e.target as HTMLElement).closest('a,button,input,label')) return; onFocus(r.id); }}>
-      <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${member ? r.name : lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
+      <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
       <td className={s.cPos}>{position}</td>
       <td className={s.cLp}>
-        <div className={s.lpName}><span className={s.lpText}>{member ? r.name : lead(r)}</span></div>
-        {(other || byVehicle || r.money || r.doNotContact || r.riskCount > 0) && (
+        <div className={s.lpName}><span className={s.lpText}>{lead(r)}<CapacityTag r={r} /></span></div>
+        <LpWho r={r} onJump={onJump} />
+        {(byVehicle || r.money || r.doNotContact || r.riskCount > 0) && (
           <div className={s.whoLine}>
-            {other && <span>{other}</span>}
             {byVehicle && <span>{r.vehicle}</span>}
             {r.money && <span>{r.money.state} {usdM(r.money.amount)}</span>}
             {r.doNotContact && <span style={{ color: 'var(--clay)' }}>do not contact</span>}
@@ -317,8 +320,8 @@ const STATUS_WORD: Record<Status, string> = {
 };
 
 /** Why the LP in focus ranks where it does, read from the server when it comes into focus. */
-function Why({ r, position, sortLabel, rungNames, now }: {
-  r: PipelineRow; position: number; sortLabel: string; rungNames: string[]; now: number;
+function Why({ r, position, sortLabel, rungNames, now, onJump }: {
+  r: PipelineRow; position: number; sortLabel: string; rungNames: string[]; now: number; onJump: (id: string) => void;
 }) {
   const [detail, setDetail] = useState<ScoreDetail | null | 'loading' | 'failed'>('loading');
   useEffect(() => {
@@ -333,8 +336,8 @@ function Why({ r, position, sortLabel, rungNames, now }: {
     <div className={s.why}>
       <div className={s.whyHead}>
         <div style={{ minWidth: 0 }}>
-          <div className="lbl">#{n(position)} by {sortLabel}</div>
-          <h3>{lead(r)}</h3>
+          <div className="lbl">#{n(position)} of {r.isOrg ? 'organisations' : 'individuals'} by {sortLabel}</div>
+          <h3>{lead(r)}<CapacityTag r={r} /></h3>
           {other && <div className={s.second}>{other}</div>}
         </div>
         <div className={s.whyScore}>
@@ -367,6 +370,22 @@ function Why({ r, position, sortLabel, rungNames, now }: {
       )}
 
       <div className={s.facts}>
+        {/* Whose row it is (docs/23): an organisation's people, or an individual's capacity and firms. */}
+        {r.isOrg && r.people.length > 0 && <div className={s.fact}><span>People</span><span><ul className={u.detailPeople}>
+          {r.people.slice(0, 8).map((p) => <li key={p.id}><span className={p.contact ? u.contact : undefined}>{p.name}</span>{p.role && <small> · {p.role}</small>}
+            {p.contact && <small> · contact on this LP</small>}
+            {p.individual && <button type="button" className={u.jump} onClick={() => onJump(p.individual!)}>also individual ↓</button>}</li>)}
+          {r.people.length > 8 && <li><small>and {n(r.people.length - 8)} more on the LP page</small></li>}
+        </ul></span></div>}
+        {!r.isOrg && <div className={s.fact}><span>Capacity</span><span>
+          {r.lpReview ? <>Firm or personal? <span className={s.small}>{r.lpReview}</span></>
+            : r.lpCapacity === 'personal' ? <>Their own account<span className={s.small}>Evidence on file that they invest personally.</span></>
+            : <>An individual<span className={s.small}>Whether they invest personally is not established yet.</span></>}
+        </span></div>}
+        {!r.isOrg && r.firms.length > 0 && <div className={s.fact}><span>Firms</span><span><ul className={u.detailPeople}>
+          {r.firms.map((f) => <li key={f.id}>{f.name}{f.role && <small> · {f.role}</small>}
+            {f.lpRow && <button type="button" className={u.jump} onClick={() => onJump(f.lpRow!)}>firm’s row ↑</button>}</li>)}
+        </ul></span></div>}
         {d?.angle && <div className={s.fact}><span>Angle</span><span>{d.angle}</span></div>}
         {d?.route && <div className={s.fact}><span>Best path</span><span>{d.route.via} <span className={s.none}>· tier {d.route.tier}</span>{d.route.why && <span className={s.small}>{d.route.why}</span>}</span></div>}
         {d?.ask && <div className={s.fact}><span>Ask</span><span>{d.ask}{d.list && <span className={s.small}>List: {d.list}{d.confidence ? ` · ${d.confidence} confidence` : ''}</span>}</span></div>}

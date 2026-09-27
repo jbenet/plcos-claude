@@ -6,3 +6,4 @@ export {
   IMPLIED_LABEL, PASSED_BY_CHOICES, PASSED_BY_LABEL, REASONS, RUNGS, RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_BACKED_BY,
   STATUS_LABEL, rungIndex, statusNeedsEvidence,
 } from './types';
+export { isPseudoOrg } from './lp-unit-rules';

@@ -4,7 +4,7 @@ import { withDb, type Db } from '../../lib/db';
 import { applyBulk, type BulkInput } from '../../lib/pipeline-bulk';
 import { pipelineData, scoreDetail } from '../../lib/pipeline-data';
 import { provisionalScore } from '../../lib/strategy-score';
-import { compareRows, groupRows, orgSummary, SORT_KEYS } from '../../components/strategy/pipeline-model';
+import { compareRows, SORT_KEYS } from '../../components/strategy/pipeline-model';
 import { groupFitRows, fitGroupCategory, type FitRow } from '../../app/[vehicle]/fit/fit-model';
 import type { Check } from './harness';
 export async function tableProperties(check: Check, db: Db) {
@@ -36,49 +36,10 @@ export async function tableProperties(check: Check, db: Db) {
         values($1,'Wrong vehicle strategy',$2,'fixture',now(),'0067-wrong')`,[ids[0],JSON.stringify({ scores, ask: { vehicle: second.name } })]);
       check('0067/0071 wrongly attached vehicle strategies cannot supply a score',
         (await pipelineData(first.id)).rows.find(r => r.id === ids[0])?.score === null, 'The existing vehicle projection rejects a mismatched ask.vehicle.');
-      const grouped = groupRows([{...a, orgFirst: true, orgId: 'org', org: 'Invented Org'}, {...b, orgFirst: true, orgId: 'org', org: 'Invented Org'}], 'score', -1);
-      check('0067 groups never combine the same organisation across vehicles', grouped.length === 2, 'Grouping uses organisation identity plus vehicle identity.');
+      // Grouping moved to the LP-unit model (issues 0111, 0112; docs/23): scripts/properties/lp-units.ts.
       const orgRow = { ...a, id: 'org-pursuit', entityId: 'org', isOrg: true, orgFirst: true, orgId: 'org', org: 'Invented Org', name: 'Invented Org', score: 10 };
       const person = { ...a, id: 'person-pursuit', orgFirst: false, orgId: 'org', org: 'Invented Org', score: 90 };
-      const withOrg = groupRows([person, orgRow], 'score', -1);
-      const members = [{ ...person, orgFirst: true, score: 40, route: 2 }, { ...person, id: 'p2', orgFirst: true, score: 70, route: 3 }, { ...person, id: 'p3', orgFirst: true, score: null, route: null }];
-      const sum = orgSummary(members);
-      check('0092 an organisation pursued in its own right leads its people, and an organisation row reads its people without inventing',
-        withOrg.length === 1 && withOrg[0]!.people[0]!.id === 'org-pursuit' && sum.score === 70 && sum.scoreFrom === members[1]!.name
-          && sum.route === 5 && sum.count === 3,
-        'The org pursuit comes first whatever its score; a summary row takes its best person’s score, names them, and adds up routes.');
       const peer = { ...person, id: 'peer-pursuit', entityId: 'peer', name: 'Invented Rowan', status: 'sourcing' as const, score: 30 };
-      const withoutOwn = groupRows([person, peer], 'score', -1);
-      check('0105 two distinct people at one organisation share one LP heading without an org pursuit',
-        withoutOwn.length === 1 && withoutOwn[0]!.org === 'Invented Org' && withoutOwn[0]!.people.length === 2,
-        'No investor-type or ask-unit claim is needed; current affiliation supplies canonical organisation identity.');
-      const withPeers = groupRows([peer, orgRow, person], 'score', -1);
-      check('0105 an organisation appears once and retains each person under its own pursuit',
-        withPeers.length === 1 && withPeers[0]!.people[0] === orgRow
-          && withPeers[0]!.people.slice(1).every(r => !r.isOrg)
-          && withPeers[0]!.people.find(r => r.id === peer.id)?.status === 'sourcing',
-        'An organisation row leads even with a lower score; child status and action IDs stay their own.');
-      check('0105 grouping never joins same-name organisations, vehicles or unaffiliated people',
-        groupRows([person, { ...peer, orgId: 'another-org' }], 'score', -1).length === 2
-          && groupRows([person, { ...peer, vehicleId: 'another-vehicle' }], 'score', -1).length === 2
-          && groupRows([{ ...person, orgId: null }, { ...peer, orgId: null }], 'score', -1).length === 2,
-        'Only canonical org identity within a single vehicle determines the group.');
-      check('0105 a filtered group keeps organisation context without inventing or hiding a pursuit',
-        groupRows([peer], 'score', -1, [person, peer, orgRow])[0]!.org === 'Invented Org'
-          && groupRows([peer], 'score', -1, [person, peer, orgRow])[0]!.people[0] === peer,
-        'Filtering the organisation out leaves a heading for the surviving real person.');
-      const groupingInput = [person, peer, orgRow];
-      const snapshot = JSON.stringify(groupingInput);
-      const moneyGroup = orgSummary([
-        { ...person, money: { state: 'Soft', amount: 1_000_000, wired: 0, hard: false, signedPer: null } },
-        { ...peer, money: { state: 'Hard', amount: 2_000_000, wired: 0, hard: true, signedPer: null } },
-      ]);
-      check('0105 organisation summaries never blend soft and hard child amounts', moneyGroup.money === null,
-        'Mixed close tracks remain on their individual rows instead of becoming one misleading group amount.');
-      check('0105 grouping is repeatable and leaves all source rows unchanged',
-        JSON.stringify(groupRows(groupingInput, 'score', -1)) === JSON.stringify(groupRows(groupingInput, 'score', -1))
-          && JSON.stringify(groupingInput) === snapshot,
-        'The projection writes no identity, status, evidence or money and does not mutate caller arrays.');
       const fitRows: FitRow[] = [person, peer, orgRow].map(r => ({
         key: r.id, entityId: r.entityId, name: r.name, vehicleId: r.vehicleId, vehicleName: r.vehicle,
         vehicleSlug: r.vehicleSlug, pursuitId: r.id, status: r.status, owner: r.owner, score: r.score,
@@ -88,16 +49,16 @@ export async function tableProperties(check: Check, db: Db) {
         detail: { bases: [], gateList: [], angle: null, next: null, nextStep: null, toFind: [], by: null, confidence: null },
       }));
       const fitGroups = groupFitRows(fitRows, (x, y) => (y.score ?? -1) - (x.score ?? -1));
-      check('0105 Fit shares organisation grouping without replacing child scores or failing gates',
-        fitGroups.length === 1 && fitGroups[0]!.people[0]!.isOrg === true
-          && fitGroups[0]!.people.find(r => r.key === peer.id)?.group === 'gate'
-          && fitGroups[0]!.people.find(r => r.key === person.id)?.score === person.score,
-        'Paging whole groups keeps the organisation with its individual readings; no score is inherited.');
-      check('0105 Fit group work queues preserve failing gates and the selected category',
-        fitGroupCategory(fitGroups[0]!) === 'gate' && fitGroupCategory(fitGroups[0]!, 'gate') === 'gate'
-          && fitGroupCategory(fitGroups[0]!, 'strong') === 'strong'
-          && fitGroups[0]!.people.find(r => r.key === peer.id)?.group === 'gate',
-        'A failing person puts an unfiltered organisation in the gate queue; filtering uses that category without rewriting any reading.');
+      check('0111 the fit list has one row per LP unit: organisations, then individuals, each keeping its own score and gates',
+        fitGroups.length === 3 && fitGroups[0]!.section === 'organisation' && fitGroups[0]!.people[0]!.key === orgRow.id
+          && fitGroups.slice(1).every(g => g.section === 'individual' && g.people.length === 1)
+          && fitGroups.find(g => g.id === peer.id)?.people[0]!.group === 'gate'
+          && fitGroups.find(g => g.id === person.id)?.people[0]!.score === person.score,
+        'No person is nested under an organisation; nothing is inherited between rows.');
+      check('0111 fit work queues read each LP unit’s own category',
+        fitGroupCategory(fitGroups.find(g => g.id === peer.id)!) === 'gate' && fitGroupCategory(fitGroups[0]!) === 'strong'
+          && fitGroupCategory(fitGroups[0]!, 'gate') === 'strong',
+        'A person’s failing gate no longer moves their firm’s row into the gate queue.');
       check('0067 every column compares deterministically and missing scores sort last both ways',
         SORT_KEYS.every(k => Number.isFinite(compareRows(a,b,k,1))) && compareRows(a,b,'score',1) > 0 && compareRows(a,b,'score',-1) > 0,
         'Unscored is not a zero; all displayed columns have a comparator.');

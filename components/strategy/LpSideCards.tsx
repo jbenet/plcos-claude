@@ -1,7 +1,6 @@
 import Link from '@/components/ui/AppLink';
 import { routeReading, routeSummaryFor } from '@/components/routes/route-display';
 import type { RouteSearch } from '@/modules/network';
-import { affiliationsFor } from '@/modules/identity';
 import { pipelineData } from '@/lib/pipeline-data';
 import { STATUS_LABEL } from '@/modules/strategy';
 import s from './lp-tables.module.css';
@@ -69,40 +68,41 @@ export function WarmIntroBox({ search, entityId }: { search: RouteSearch | null;
 }
 
 /**
- * The people of an organisation that is the LP (issue 0092): who is on record there, and which of
- * them we are pursuing in this vehicle, with their status and score. Each opens their own page.
+ * The people of an organisation that is the LP (issues 0092, 0111; docs/23): its contacts on this
+ * pursuit first — the people a re-pointed pursuit came from — then everyone on record there. Anyone
+ * who also invests in their own capacity has an individual LP row here, linked with its status.
  */
 export async function OrgPeople({ orgId, orgName, vehicleId, currentPursuitId }: {
   orgId: string; orgName: string; vehicleId: string; currentPursuitId: string;
 }) {
-  const [affiliations, pipeline] = await Promise.all([affiliationsFor([orgId], 400), pipelineData(vehicleId)]);
-  const people = [...new Map(affiliations.filter((a) => a.orgId === orgId && !a.endedOn).map((a) => [a.personId, a])).values()];
-  const pursued = new Map(pipeline.rows.filter((r) => !r.isOrg).map((r) => [r.entityId, r]));
-  const list = people
-    .map((a) => ({ a, p: pursued.get(a.personId) ?? null }))
-    .sort((x, y) => Number(Boolean(y.p)) - Number(Boolean(x.p)) || (y.p?.score ?? -1) - (x.p?.score ?? -1) || x.a.personName.localeCompare(y.a.personName));
+  const pipeline = await pipelineData(vehicleId);
+  const byId = new Map(pipeline.rows.map((r) => [r.id, r]));
+  const list = byId.get(currentPursuitId)?.people ?? [];
   if (!list.length) return null;
   const SHOWN = 12;
-  const pursuedCount = list.filter((x) => x.p).length;
+  const contacts = list.filter((p) => p.contact).length, individuals = list.filter((p) => p.individual).length;
   return (
     <div className="card">
       <div className="chead">
         <h2>People at {orgName}</h2>
-        <span className="lbl">{list.length} on record · {pursuedCount} pursued</span>
+        <span className="lbl">{list.length} on record{contacts ? ` · ${contacts} ${contacts === 1 ? 'contact' : 'contacts'} here` : ''}{individuals ? ` · ${individuals} also individual` : ''}</span>
       </div>
       <ul className={s.orgPeople}>
-        {list.slice(0, SHOWN).map(({ a, p }) => (
-          <li key={a.personId} className={p?.id === currentPursuitId ? s.here : undefined}>
-            <span>
-              {p ? <Link href={`/targets/${p.id}`}>{a.personName}</Link> : <Link href={`/orgs/${a.personId}`}>{a.personName}</Link>}
-              {a.role && <small>{a.role}</small>}
-            </span>
-            <span className={s.orgPeopleStatus}>
-              {p ? <>{STATUS_LABEL[p.status]}{p.score !== null && <b>{p.score}</b>}</> : <span className="muted">not pursued</span>}
-              {p?.id === currentPursuitId && <small>this page</small>}
-            </span>
-          </li>
-        ))}
+        {list.slice(0, SHOWN).map((p) => {
+          const own = p.individual ? byId.get(p.individual) ?? null : null;
+          return (
+            <li key={p.id}>
+              <span>
+                <Link href={`/orgs/${p.id}`}>{p.name}</Link>
+                <small>{[p.role, p.contact ? 'a contact on this LP' : null].filter(Boolean).join(' · ') || 'at the organisation'}</small>
+              </span>
+              <span className={s.orgPeopleStatus}>
+                {own ? <><Link href={`/targets/${own.id}`}>Individual LP</Link> · {STATUS_LABEL[own.status]}{own.score !== null && <b>{own.score}</b>}</>
+                  : <span className="muted">{p.contact ? 'contact' : 'not an LP here'}</span>}
+              </span>
+            </li>
+          );
+        })}
       </ul>
       {list.length > SHOWN && (
         <div className={s.orgPeopleMore}><Link href={`/orgs/${orgId}`}>All {list.length} people at {orgName}</Link></div>

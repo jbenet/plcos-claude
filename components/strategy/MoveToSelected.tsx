@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { bulkLpAction, undoBulkLpAction } from '@/app/targets/bulk-actions';
 import { newRequestKey } from '@/lib/request-key';
+import type { BulkPlace } from '@/lib/pipeline-bulk';
 import { lead, type PipelineRow, type Status } from './pipeline-model';
 import { cx, n } from './lp-view';
 import s from './selection.module.css';
@@ -29,7 +30,7 @@ export interface Moved {
 }
 
 /** The move, its undo and their receipt, shared by the button, the keyboard and the toast. */
-export function useMove() {
+export function useMove(place: BulkPlace = 'selection') {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState<Moved | null>(null);
@@ -42,7 +43,7 @@ export function useMove() {
     lock.current = true; setBusy(true); setError(null);
     const key = newRequestKey();
     try {
-      const res = await bulkLpAction({ key, action: 'status', status: 'selected', body: '', place: 'selection',
+      const res = await bulkLpAction({ key, action: 'status', status: 'selected', body: '', place,
         rows: todo.map((r) => ({ id: r.id, vehicleId: r.vehicleId, status: r.status })) });
       if (!res.ok) { setError(res.error); return null; }
       const moved: Moved = { key, to: 'selected', state: 'done', rows: todo.map((r) => ({ id: r.id, name: lead(r), from: r.status })) };
@@ -54,7 +55,7 @@ export function useMove() {
       router.refresh();
       return null;
     } finally { lock.current = false; setBusy(false); }
-  }, [router]);
+  }, [router, place]);
 
   // A move keeps its Undo until the next one or a dismissal; the receipt for an undo fades by itself.
   useEffect(() => {
@@ -71,7 +72,7 @@ export function useMove() {
     if (!m || m.state !== 'done' || lock.current) return null;
     lock.current = true; setLast({ ...m, state: 'undoing' });
     try {
-      const res = await undoBulkLpAction({ of: m.key, place: 'selection' });
+      const res = await undoBulkLpAction({ of: m.key, place });
       const next: Moved = res.ok ? { ...m, state: 'undone' } : { ...m, state: 'failed', error: res.error };
       setLast(next);
       router.refresh();
@@ -81,7 +82,7 @@ export function useMove() {
       router.refresh();
       return null;
     } finally { lock.current = false; }
-  }, [last, router]);
+  }, [last, router, place]);
 
   return { busy, last, error, move, undo, remember, dismiss: () => { setLast(null); setError(null); } };
 }

@@ -11,7 +11,7 @@ import { GRADE_LABEL, GRADE_SCORE } from '@/modules/fit/client';
 import { shortDate } from '@/lib/time';
 import {
   IMPLIED_LABEL, PASSED_BY_LABEL, RUNGS, RUNG_LABEL,
-  impliedRung, listPursuits, rungIndex, type Pursuit,
+  impliedRung, isPseudoOrg, listPursuits, rungIndex, type Pursuit,
 } from '@/modules/strategy';
 import { READ_LABEL, touchpointSummaries, touchpointsByPair, type TouchpointSummary } from '@/modules/meetings';
 import { CLOSE_STATE_LABEL, closeStates } from '@/modules/pipeline';
@@ -19,7 +19,6 @@ import { blanketRestricted } from '@/modules/coordination';
 import { readingsFor, type NoteReading } from '@/lib/connectors/affinity/readings';
 import { laterFacts, shownRead } from '@/lib/reads';
 import { onFile } from '@/lib/reconcile';
-import { lpHeadings } from '@/lib/lp-heading';
 
 /**
  * The log has got ahead of the status: a meeting on record for an LP still at Selected or
@@ -66,20 +65,49 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   const entityIds = [...new Set(pursuits.map((p) => p.entityId))];
   const entities = await listEntities(entityIds);
   const organisations = new Set(entities.filter(e => e.entityType !== 'person').map(e => e.entityId));
-  const people = await (await getDb()).query<{ org_id: string; id: string; name: string; role: string }>(
-    `select distinct identity.canonical_entity_id(a.org_entity)::text as org_id,
-      e.entity_id::text as id, e.display_name as name, a.role
-      from identity.affiliation a join identity.entity e on e.entity_id=identity.canonical_entity_id(a.person_entity)
-      where identity.canonical_entity_id(a.org_entity)=any($1::uuid[]) and a.ended_on is null
-      order by name`, [[...organisations]]);
-  const peopleByOrg = new Map<string, Array<{ id: string; name: string; role: string }>>();
-  for (const person of people) peopleByOrg.set(person.org_id, [...(peopleByOrg.get(person.org_id) ?? []), person]);
+  // The LP is the committing unit (docs/23): an organisation's row names its people — its contacts on
+  // this pursuit first, then everyone acting for it now — and a person's row names their firms.
+  const db = await getDb();
+  const orgPursuits = pursuits.filter(p => organisations.has(p.entityId)).map(p => p.pursuitId);
+  const personIds = entityIds.filter(id => !organisations.has(id));
+  const [people, contacts, affiliations] = await Promise.all([
+    db.query<{ org_id: string; id: string; name: string; role: string }>(
+      `select distinct identity.canonical_entity_id(a.org_entity)::text as org_id,
+        e.entity_id::text as id, e.display_name as name, coalesce(a.role, '') as role
+        from identity.affiliation a join identity.entity e on e.entity_id=identity.canonical_entity_id(a.person_entity)
+        where identity.canonical_entity_id(a.org_entity)=any($1::uuid[]) and a.ended_on is null
+        order by name`, [[...organisations]]),
+    db.query<{ pursuit_id: string; id: string; name: string; role: string }>(
+      `select c.pursuit_id::text, e.entity_id::text id, e.display_name name, coalesce(c.role, '') role
+         from strategy.pursuit_contact c join identity.entity e on e.entity_id=identity.canonical_entity_id(c.person_entity)
+        where c.pursuit_id=any($1::uuid[]) order by c.created_at, name`, [orgPursuits]),
+    db.query<{ person: string; id: string; name: string; role: string | null }>(
+      `select identity.canonical_entity_id(a.person_entity)::text person, o.entity_id::text id, o.display_name name, a.role
+         from identity.affiliation a join identity.entity o on o.entity_id=identity.canonical_entity_id(a.org_entity)
+        where identity.canonical_entity_id(a.person_entity)=any($1::uuid[]) and a.ended_on is null
+          and o.entity_type<>'person' and o.retired_at is null
+        order by 1, a.is_primary desc, a.as_of desc nulls last`, [personIds]),
+  ]);
+  const lpRow = new Map(pursuits.map(p => [`${p.entityId}:${p.vehicleId}`, p.pursuitId]));
+  const peopleFor = (p: Pursuit): PipelineRow['people'] => {
+    const out = new Map<string, PipelineRow['people'][number]>();
+    for (const c of contacts) if (c.pursuit_id === p.pursuitId && !out.has(c.id)) out.set(c.id, { id: c.id, name: c.name, role: c.role, contact: true, individual: lpRow.get(`${c.id}:${p.vehicleId}`) ?? null });
+    for (const a of people) if (a.org_id === p.entityId && !out.has(a.id)) out.set(a.id, { id: a.id, name: a.name, role: a.role, contact: false, individual: lpRow.get(`${a.id}:${p.vehicleId}`) ?? null });
+    return [...out.values()];
+  };
+  const firmsOf = new Map<string, Array<{ id: string; name: string; role: string | null }>>();
+  for (const a of affiliations) {
+    if (isPseudoOrg(a.name)) continue;
+    const list = firmsOf.get(a.person) ?? [];
+    if (!list.some(f => f.id === a.id)) list.push({ id: a.id, name: a.name, role: a.role });
+    firmsOf.set(a.person, list);
+  }
+  const firmsFor = (p: Pursuit): PipelineRow['firms'] =>
+    (firmsOf.get(p.entityId) ?? []).map(f => ({ ...f, lpRow: lpRow.get(`${f.id}:${p.vehicleId}`) ?? null }));
   const touchesBy = await touchpointsByPair(pairs);
   const [sums, closes, restricted, readings] = await Promise.all([
     touchpointSummaries(pairs, new Date(), touchesBy), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
   ]);
-  // Whose name leads each row: the organisation's when it is the LP we're targeting (issue 0013).
-  const headings = await lpHeadings(pursuits.map((p) => ({ pursuitId: p.pursuitId, entityId: p.entityId })));
   const readsOf = new Map<string, NoteReading[]>();
   for (const r of readings) readsOf.set(r.entityId, [...(readsOf.get(r.entityId) ?? []), r]);
   const sum = (p: Pursuit) => sums.get(`${p.entityId}:${p.vehicleId}`)!;
@@ -109,11 +137,14 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
       id: p.pursuitId,
       entityId: p.entityId,
       isOrg: organisations.has(p.entityId),
-      people: peopleByOrg.get(p.entityId) ?? [],
+      people: organisations.has(p.entityId) ? peopleFor(p) : [],
+      firms: organisations.has(p.entityId) ? [] : firmsFor(p),
+      lpCapacity: organisations.has(p.entityId) ? 'organisation' : p.lpCapacity === 'personal' ? 'personal' : null,
+      lpReview: organisations.has(p.entityId) ? null : p.lpReview,
       capacitySort: capacityEstimate(plan?.capacityBand),
       vehicleId: p.vehicleId,
       vehicleSlug: vehicles.find(v => v.id === p.vehicleId)!.slug,
-      orgId: organisations.has(p.entityId) ? p.entityId : headings.get(p.pursuitId)?.orgId ?? null,
+      orgId: organisations.has(p.entityId) ? p.entityId : firmsOf.get(p.entityId)?.[0]?.id ?? null,
       score: reading.score,
       scoreKind: reading.kind,
       scoreAt: reading.at,
@@ -124,8 +155,9 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
       list: plan?.suggestion?.data.list ?? null,
       nextKind: plan?.group ?? null,
       name: p.entityName,
-      org: organisations.has(p.entityId) ? p.entityName : headings.get(p.pursuitId)?.org ?? null,
-      orgFirst: organisations.has(p.entityId) || (headings.get(p.pursuitId)?.orgFirst ?? false),
+      org: organisations.has(p.entityId) ? p.entityName : firmsOf.get(p.entityId)?.[0]?.name ?? null,
+      // The row is the LP unit's own: its name leads, whoever it is (docs/23).
+      orgFirst: organisations.has(p.entityId),
       headline: p.headline,
       vehicle: p.vehicleName,
       owner: p.ownerSaid ?? p.ownerName,

@@ -16,8 +16,9 @@ import {
 import { auditFor } from '@/modules/platform';
 import { StatusForm } from '@/components/strategy/StatusForm';
 import { Timeline, meetingLine, type StatusEvent, type TouchContext } from '@/components/strategy/Timeline';
-import { READ_LABEL, aboutThisRaise, type Touchpoint, colleagueTouchpointsFor, raiseWindows, summarize, touchpointsFor } from '@/modules/meetings';
-import { lpHeadings, relatedLpHeadings } from '@/lib/lp-heading';
+import { READ_LABEL, aboutThisRaise, type Touchpoint, raiseWindows, summarize, touchpointsFor } from '@/modules/meetings';
+import { relatedLpHeadings } from '@/lib/lp-heading';
+import { LpUnitCard, LpUnitLine } from '@/components/strategy/LpUnit';
 import { latestRun } from '@/modules/sources';
 import { CLOSE_STATE_LABEL, closeTracksFor } from '@/modules/pipeline';
 import { CloseTrack } from '@/components/strategy/CloseTrack';
@@ -89,12 +90,13 @@ async function TargetWorkspace({ params, searchParams }: {
       reason: d.reason ?? (last ? pursuit.statusReason : null), updateId: d.updateId ?? null,
     };
   });
-  // When the organisation is the LP we're targeting (issue 0013), its name leads, and meetings
-  // with its other people are on its timeline too — shown with who they were with, and summed
-  // apart from this person's own record, which is what the ladder reads.
-  const heading = (await lpHeadings([{ pursuitId: pursuit.pursuitId, entityId: pursuit.entityId }])).get(pursuit.pursuitId) ?? null;
+  // The page's LP is the pursuit's own unit (issue 0111, docs/23): a person's page is theirs as an
+  // individual, with their firm as context. Before, a person whose firm was the LP led with the firm
+  // and borrowed its other people's meetings (issue 0013); that pursuit now belongs to the firm.
+  const isPerson = entity?.entityType === 'person';
   const [colleaguesAll, windows, relatedLps, strategyPursuits] = await Promise.all([
-    heading?.orgFirst ? colleagueTouchpointsFor(pursuit.entityId, null) : Promise.resolve([]),
+    // An organisation's contacts' meetings reach its timeline through the touchpoint read itself.
+    Promise.resolve([] as Touchpoint[]),
     raiseWindows(),
     relatedLpHeadings(pursuit.entityId, pursuit.vehicleId),
     strategyPursuitsFor(pursuit.entityId),
@@ -153,8 +155,8 @@ async function TargetWorkspace({ params, searchParams }: {
       crumbs={[
         { label: pursuit.vehicleName, href: '/overview' },
         { label: 'Pipeline', href: `/targets?status=${pursuit.status}` },
-        // The name that leads the page (issue 0013): the organisation's when it is the LP we're targeting.
-        { label: heading?.orgFirst && heading.org && relatedLps.length === 0 ? `${heading.org} · ${pursuit.entityName}` : pursuit.entityName },
+        // The name that leads the page: the LP unit's own (docs/23).
+        { label: pursuit.entityName },
       ]}
       inspector={
         <>
@@ -237,19 +239,17 @@ async function TargetWorkspace({ params, searchParams }: {
         {pursuit.historical ? ' · a vehicle kept for its history' : ''}
       </div>
       <h1 style={{ marginTop: 4 }}>
-        {heading?.orgFirst && heading.org && relatedLps.length === 0
-          ? <Link href={`/orgs/${heading.orgId}`}>{heading.org}</Link>
-          : <Link href={`/orgs/${pursuit.entityId}`}>{pursuit.entityName}</Link>}
+        <Link href={`/orgs/${pursuit.entityId}`}>{pursuit.entityName}</Link>
       </h1>
-      {relatedLps.length > 0 ? (
+      {isPerson ? (
         <div className="h1second">
-          {relatedLps.map((lp, i) => <span key={lp.pursuitId}>{i > 0 ? ' · ' : ''}<Link href={`/targets/${lp.pursuitId}`}>{lp.name}</Link></span>)}
+          <LpUnitLine pursuitId={pursuit.pursuitId} personId={pursuit.entityId} vehicleId={pursuit.vehicleId}
+            capacity={pursuit.lpCapacity} review={pursuit.lpReview} />
         </div>
-      ) : heading?.org && (
+      ) : relatedLps.length > 0 && (
         <div className="h1second">
-          {heading.orgFirst
-            ? <Link href={`/orgs/${pursuit.entityId}`}>{pursuit.entityName}</Link>
-            : <Link href={`/orgs/${heading.orgId}`}>{heading.org}</Link>}
+          <span className="muted">Also individual LPs here: </span>
+          {relatedLps.map((lp, i) => <span key={lp.pursuitId}>{i > 0 ? ' · ' : ''}<Link href={`/targets/${lp.pursuitId}`}>{lp.name}</Link></span>)}
         </div>
       )}
       <p className="sublede">{pursuit.headline}</p>
@@ -480,10 +480,11 @@ async function TargetWorkspace({ params, searchParams }: {
           />
           {/* An organisation that is the LP lists its people (issue 0092). */}
           {(() => {
-            const isOrg = entity && entity.entityType !== 'person';
-            const orgId = isOrg ? pursuit.entityId : heading?.orgFirst ? heading.orgId : null;
-            const orgName = isOrg ? pursuit.entityName : heading?.org ?? null;
-            return orgId && orgName ? <OrgPeople orgId={orgId} orgName={orgName} vehicleId={pursuit.vehicleId} currentPursuitId={pursuit.pursuitId} /> : null;
+            // The LP unit (docs/23): an organisation's page lists its people; a person's asks who the LP is.
+            return isPerson
+              ? <LpUnitCard pursuitId={pursuit.pursuitId} personId={pursuit.entityId} personName={pursuit.entityName} vehicleId={pursuit.vehicleId}
+                  capacity={pursuit.lpCapacity} review={pursuit.lpReview} historical={pursuit.historical} />
+              : <OrgPeople orgId={pursuit.entityId} orgName={pursuit.entityName} vehicleId={pursuit.vehicleId} currentPursuitId={pursuit.pursuitId} />;
           })()}
           <div className="card">
             <div className="chead">

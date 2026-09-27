@@ -6,6 +6,21 @@ import { appendAudit } from '@/modules/platform';
 import { startRun, finishRun } from '@/modules/sources';
 import type { ImportJob, ImportProgress } from './types';
 
+/** Re-point pursuits to their LP (docs/23), recorded as its own run so the enrichment page shows it. */
+async function repointJob(db: Db, actor: string): Promise<Record<string, unknown>> {
+  const run = await startRun('enrich','lp-units',actor);
+  try {
+    const r = await (await import('@/modules/strategy')).repointPursuits(db,actor);
+    await finishRun(run,{status:'ok',requests:0,records:r.moved+r.personal+r.review,newRecords:r.created,
+      note:`${r.moved} moved to their organisation (${r.created} organisation pursuits created), ${r.personal} individual LPs, ${r.review} to review, ${r.unchanged} unchanged`,
+      detail:{...r}});
+    return {examined:r.examined,moved:r.moved,created:r.created,personal:r.personal,review:r.review,unchanged:r.unchanged,unaffiliated:r.unaffiliated};
+  } catch (err) {
+    await finishRun(run,{status:'failed',requests:0,records:0,newRecords:0,note:'Re-point stopped; nothing from this pass was kept.'});
+    throw err;
+  }
+}
+
 /** Worker operations use the actor captured by the human's request, never a cookie or action context. */
 export async function runImportOperation(db: Db, job: ImportJob, progress: ImportProgress): Promise<Record<string, unknown>> {
   const actor = job.actor;
@@ -23,22 +38,30 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
       return {...result};
     }
     case 'findings': {
-      await progress('Repairing team identities',0,3);
+      await progress('Repairing team identities',0,4);
       const { enrichDir } = await import('@/lib/enrich/candidates');
       const { readNetworkNodeInput } = await import('@/modules/network/nodes');
       const { repairTeamIdentities } = await import('@/modules/identity/team');
       const input = await readNetworkNodeInput(enrichDir());
       if (input) await repairTeamIdentities(db,input);
-      await progress('Importing findings',1,3);
+      await progress('Importing findings',1,4);
       const { importFindings } = await import('@/lib/enrich/import');
       const r = await importFindings(actor);
       const counts = { mapped:r.mapped,claims:r.claims,rejected:r.rejected,paths:r.paths,organizationLps:r.organizationLps,
         duplicateIdentities:{merged:r.duplicateIdentities?.merged??0,ambiguous:r.duplicateIdentities?.ambiguous.length??0},
         entityTypes:{corrected:r.entityTypes?.corrected.length??0,ambiguous:r.entityTypes?.ambiguous.length??0} };
       await appendAudit({actorId:actor,action:'enrich.imported',subjectType:'enrich',detail:counts});
-      await progress('Rebuilding research ties',2,3);
+      // The LP is the committing unit (docs/23): new findings can settle whose pursuit a person's is.
+      await progress('Re-pointing pursuits to their LP',2,4);
+      // Its own transaction: a failure here keeps the imported findings and says so.
+      const lpUnits = await repointJob(db,actor).catch(() => ({error:'Re-point stopped; run it again from Developer → Enrich.'}));
+      await progress('Rebuilding research ties',3,4);
       await (await import('@/modules/network')).buildNetwork({awaitBackground:true});
-      return counts;
+      return {...counts,lpUnits};
+    }
+    case 'lp-units': {
+      await progress('Re-pointing pursuits to their LP',0,1);
+      return repointJob(db,actor);
     }
     case 'prospects': {
       await progress('Reading prospect files',0,2);
