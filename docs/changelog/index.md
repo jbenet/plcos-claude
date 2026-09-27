@@ -124,3 +124,5 @@ to the repository root to preserve existing anchors and rendered output.
 - [Portfolio tables and quieter navigation — issues 0079, 0080, 0081](entries/portfolio-0079.md)
 - [Strategy 0082 — compare LP actions and whole-raise moves](entries/strategy-0082.md)
 - [Pipeline and Selection, redesigned · issues 0083 and 0089 (asks from 0067 and 0071)](entries/tables-0083-0089.md)
+
+- [Dakota translation, enrichment and sourcing — review candidate](entries/dakota-translate.md)

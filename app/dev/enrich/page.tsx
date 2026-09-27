@@ -1,3 +1,4 @@
+import { DakotaImport } from './DakotaImport';
 import { buildCache } from '@/lib/build-cache';
 import { PortfolioImport } from './PortfolioImport';
 import { portfolioFile } from '@/lib/enrich/portfolio';
@@ -131,6 +132,7 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
         Who the research workflows read about, what came back, and the import that maps it in.
       </p>
 
+      <DakotaImport />
       <PortfolioImport file={portfolioFile()} />
       <Prospects directory={join(dir, 'prospects')} />
 

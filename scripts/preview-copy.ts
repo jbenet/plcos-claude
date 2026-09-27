@@ -77,7 +77,13 @@ export function takeCopy(source: string, root: string): { takenAt: string; how: 
   const takenAt = new Date().toISOString();
   let how: 'clone' | 'copy';
   try {
-    how = copyTree(source, tmp);
+    // Never traverse/copy Dakota's raw replica into a preview. Only its DB projection is copied.
+    mkdirSync(tmp, {recursive:true});
+    how='clone';
+    for(const entry of readdirSync(source)) {
+      if(entry==='dakota')continue;
+      if(copyTree(join(source,entry),join(tmp,entry))==='copy')how='copy';
+    }
     // A lock names the process that has a database open (lib/db/lock.ts): in the source, the live
     // server. Carried into the copy it would make the copy refuse to open, so it stays behind.
     for (const f of readdirSync(tmp)) if (f.endsWith('.lock')) rmSync(join(tmp, f), { force: true });

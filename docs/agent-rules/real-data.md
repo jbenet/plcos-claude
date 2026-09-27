@@ -54,6 +54,9 @@ a copy of it with `npm run preview`, and a sub-agent's worktree, which has no ro
   candidate LPs. Code that maps it is built and tested on invented fixtures from the public schema, never
   by an agent reading the raw files; the mapping runs on the live server. The sign-in is two Keychain
   items (`npm run dakota:store`), read by `scripts/with-dakota-key.sh`.
+  The feedback box stays open on the real server: an issue and its screenshots live in
+  `plcos-data/real/issues`, inside our system, like every other real record (decided 27 Sep, when a
+  branch tried to refuse all feedback once Dakota data was in the database).
 - **PL Polaris, the PL Data Warehouse, is read-only too (26 Sep 2026).** Juan gave Claude and ChatGPT
   access to BigQuery project `plrs-data-platform` through Google's MCP Toolbox, run locally and
   registered as `pl-polaris` by `npm run polaris:connect`. It signs in with Juan's gcloud

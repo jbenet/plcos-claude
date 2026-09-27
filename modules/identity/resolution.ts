@@ -153,7 +153,7 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
   cursor = '';
   for (;;) {
     const old=await db.query<{edge_id:string;left_entity:string;right_entity:string;active:boolean}>(`select edge_id::text,left_entity::text,right_entity::text,active from identity.possible_match
-      where edge_id > coalesce(nullif($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
+      where signals->>'source' is distinct from 'dakota' and edge_id > coalesce(nullif($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
       order by edge_id limit $2`,[cursor,batchSize]);
     for(const p of old)if(p.active&&!active.has(pair(p.left_entity,p.right_entity))){await db.query('update identity.possible_match set active=false where edge_id=$1',[p.edge_id]);await pause();}
     await pause();if(old.length<batchSize)break;cursor=old.at(-1)!.edge_id;
