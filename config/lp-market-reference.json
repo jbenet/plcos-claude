@@ -1,0 +1,41 @@
+{
+  "//": [
+    "The reference distribution LP stats compares our LPs with (Coverage panel, app/[vehicle]/stats).",
+    "Shares of the LP universe a venture Fund I raises from, by region and by LP type; each set is",
+    "normalised when read, so the numbers need only be in proportion. Keys are those of lib/lp-stats.",
+    "PLACEHOLDER: every value below is invented for the demo. A research run replaces them with sourced",
+    "values, sets placeholder to false, and names its sources and date in source and asOf."
+  ],
+  "placeholder": true,
+  "source": "Invented placeholder for the demo, not market data",
+  "asOf": "2026-09-27",
+  "note": "Replace with a sourced distribution (a research run) before reading any gap as a finding.",
+  "region": {
+    "north_america": 48,
+    "europe": 24,
+    "middle_east": 7,
+    "asia_sg": 4,
+    "asia_hk": 3,
+    "asia_jp": 3,
+    "asia_cn": 2,
+    "asia_in": 2,
+    "asia_other": 2,
+    "latam": 3,
+    "other": 2
+  },
+  "type": {
+    "family_office": 22,
+    "multi_family_office": 5,
+    "individual": 24,
+    "fund_of_funds": 12,
+    "fund_manager": 6,
+    "foundation": 7,
+    "endowment": 5,
+    "corporate": 6,
+    "wealth_platform": 5,
+    "pension_insurance": 3,
+    "sovereign_government": 3,
+    "crypto_treasury": 1,
+    "other_institution": 1
+  }
+}
