@@ -60,7 +60,7 @@ export async function discoverLists(runBy: string | null, overrides?: Parameters
   };
   const notes: string[] = [];
   try {
-    const client = affinity(overrides);
+    const client = affinity({ ...overrides, runId: String(run) });
     const lists: AffinityList[] = [];
     for await (const page of client.pages<AffinityList>('/v2/lists', { limit: 100 })) {
       pages++;

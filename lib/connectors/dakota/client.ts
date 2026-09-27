@@ -5,6 +5,8 @@
  * in bulk to keep the query count down, within Dakota's limits, from workflows only; Dakota's
  * data stays in plcos-data/real and our database and goes nowhere else.
  */
+import { recordActivity } from '@/lib/activity/log';
+
 const BASE = 'https://marketplace-as-a-service.herokuapp.com/index.php/api';
 /** Dakota documents no rate limit. One request a second is our own GUESS at polite. */
 export const MIN_INTERVAL_MS = 1000;
@@ -49,7 +51,8 @@ export class DakotaClient {
   private last = 0;
   requests = 0;
   constructor(private readonly username: string, private readonly password: string,
-    private readonly fetcher: typeof fetch = fetch) {}
+    private readonly fetcher: typeof fetch = fetch,
+    private readonly activity: { runId?: string; root?: string } = {}) {}
 
   private async pace() {
     const wait = this.last + MIN_INTERVAL_MS - Date.now();
@@ -57,14 +60,40 @@ export class DakotaClient {
     this.last = Date.now();
   }
 
-  private async post(path: 'oauth2' | 'dakota', body: string, headers: Record<string, string> = {}): Promise<unknown> {
+  private async exchange(path: 'oauth2' | 'dakota', body: string, headers: Record<string, string>, module: string) {
     await this.pace();
     this.requests++;
-    // No identity of ours in the request: no User-Agent naming us (docs/agent-rules/real-data.md).
-    const res = await this.fetcher(`${BASE}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers }, body });
+    const at = new Date().toISOString();
+    let bytesIn: number | null = null, records: number | null = null;
+    // The caller can supply arbitrary module strings, so never put those in telemetry.
+    const segment = path === 'oauth2' ? 'authentication' : ['account', 'contact', 'investment', 'investment_strategy'].includes(module) ? module : 'other';
+    try {
+      // No identity of ours in the request: no User-Agent naming us (docs/agent-rules/real-data.md).
+      const res = await this.fetcher(`${BASE}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers }, body });
+      let text: string;
+      try { text = await res.text(); }
+      catch (error) {
+        if (res.ok) throw error;
+        return { status: res.status, ok: false, payload: null };
+      }
+      bytesIn = Buffer.byteLength(text, 'utf8');
+      if (!res.ok) { records = 0; return { status: res.status, ok: false, payload: null }; }
+      const payload: unknown = JSON.parse(text);
+      const rows = (payload as { records?: unknown } | null)?.records;
+      records = Array.isArray(rows) ? rows.length : 0;
+      return { status: res.status, ok: true, payload };
+    } finally {
+      // Decoded application payload bytes, excluding headers. Never log the body or credentials.
+      await recordActivity({ source: 'dakota', at, segment, runId: this.activity.runId,
+        requests: 1, bytesIn, bytesOut: Buffer.byteLength(body, 'utf8'), records }, this.activity.root).catch(() => {});
+    }
+  }
+
+  private async post(path: 'oauth2' | 'dakota', body: string, headers: Record<string, string> = {}, module = 'auth'): Promise<unknown> {
+    const res = await this.exchange(path, body, headers, module);
     if (res.status === 429 || res.status >= 500) throw new Error(`Dakota answered ${res.status}: stop and come back later`);
     if (!res.ok) throw new Error(`Dakota answered ${res.status} on ${path}`);
-    return res.json();
+    return res.payload;
   }
 
   private async auth(): Promise<string> {
@@ -76,22 +105,22 @@ export class DakotaClient {
   }
 
   async count(module: string, filter?: Filter[]): Promise<number> {
-    const r = await this.post('dakota', readBody({ module, filter, countOnly: true }), { 'Oauth-Token': await this.auth() }) as { record_count?: number | string };
+    const r = await this.post('dakota', readBody({ module, filter, countOnly: true }), { 'Oauth-Token': await this.auth() }, module) as { record_count?: number | string };
     return Number(r.record_count ?? NaN);
   }
 
   /** A small read that reports its status instead of throwing: for finding a query shape Dakota accepts. */
   async probe(q: ListQuery): Promise<{ status: number; records: number; keys: number }> {
-    await this.pace(); this.requests++;
-    const res = await this.fetcher(`${BASE}/dakota`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'Oauth-Token': await this.auth() }, body: readBody({ ...q, maxNum: Math.min(q.maxNum ?? 2, 2) }) });
+    const body = readBody({ ...q, maxNum: Math.min(q.maxNum ?? 2, 2) });
+    const res = await this.exchange('dakota', body, { 'Oauth-Token': await this.auth() }, q.module);
     if (res.status === 429) throw new Error('Dakota answered 429: stop and come back later');
     if (!res.ok) return { status: res.status, records: 0, keys: 0 };
-    const r = await res.json() as { records?: Record<string, unknown>[] };
+    const r = res.payload as { records?: Record<string, unknown>[] };
     return { status: res.status, records: r.records?.length ?? 0, keys: Object.keys(r.records?.[0] ?? {}).length };
   }
 
   async page<T = Record<string, unknown>>(q: ListQuery): Promise<Page<T>> {
-    const r = await this.post('dakota', readBody(q), { 'Oauth-Token': await this.auth() }) as { records?: T[]; next_offset?: number };
+    const r = await this.post('dakota', readBody(q), { 'Oauth-Token': await this.auth() }, q.module) as { records?: T[]; next_offset?: number };
     return { records: r.records ?? [], nextOffset: Number(r.next_offset ?? -1) };
   }
 }

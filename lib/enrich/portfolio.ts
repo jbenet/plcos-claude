@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { recordActivity } from '@/lib/activity/log';
 import { readFile } from 'node:fs/promises';
 import { config } from '@/config/deployment';
 import { getDb, type Db } from '@/lib/db';
@@ -91,13 +92,14 @@ const legacyAffiliationNote = 'Portfolio materials explicitly name this founder.
 /** The file is an authoritative snapshot, including explicit exclusions. Source-owned facts remain separate
  * from independent graph evidence; a rematch redirects this import's source key, never another entity's facts. */
 export async function importPortfolio(db: Db, input: PortfolioInput): Promise<PortfolioResult> {
+  const activityAt = new Date().toISOString();
   const errors = portfolioProblems(input); if (errors.length) throw new Error(errors.join(' '));
   const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
   const excluded = new Set(input.excluded?.map(r => r.id));
   const rows = rowsOf(input).filter(r => !excluded.has(r.id));
   // One verified graph-file read per import, never one disk/graph scan per founder.
   const warehouse = await readWarehouseGraph(`data/${config.data.profile}/enrich`);
-  return db.transaction(async tx => {
+  const imported = await db.transaction(async tx => {
     await tx.exec('lock table identity.entity, identity.source_record, network.portfolio in share row exclusive mode');
     const vehicles = new Map((await tx.query<{ id: string; slug: string; kind: string }>('select id::text,slug,kind::text from platform.vehicle')).map(v => [v.slug, v]));
     if (rows.some(r => !['fund', 'spv'].includes(vehicles.get(r.vehicle)?.kind ?? ''))
@@ -247,6 +249,9 @@ export async function importPortfolio(db: Db, input: PortfolioInput): Promise<Po
     for (const p of previousPossible) if (!desiredPossible.has(`${p.a}:${p.b}`)) await tx.query('update identity.possible_match set active=false where edge_id=$1', [p.id]);
     return result;
   });
+  await recordActivity({ source: 'intake', at: activityAt, segment: 'portfolio', requests: 0,
+    bytesIn: null, bytesOut: 0, records: imported.rows });
+  return imported;
 }
 export async function listPortfolio(vehicleId?: string): Promise<PortfolioRow[]> {
   return (await getDb()).query<PortfolioRow>(`select portfolio_id id,vehicle_id::text "vehicleId",identity.canonical_entity_id(company_entity)::text "companyId",

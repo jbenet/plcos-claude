@@ -32,6 +32,8 @@ async function main() {
   await (await import('./properties/perf-viz')).perfVizProperties(check);
   await (await import('./properties/perf4')).perf4Properties(check);
   await (await import('./properties/activity')).activityProperties(check);
+  await (await import('./properties/activity-data')).activityDataProperties(check);
+  await (await import('./properties/activity-connectors')).activityConnectorProperties(check);
 
   const failed = results.filter((r) => !r.ok);
   for (const r of results) {

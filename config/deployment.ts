@@ -91,6 +91,10 @@ export const config = {
      */
     cookiePrefix: `${PROFILE === 'real' ? 'capitalos_real_' : 'capitalos_'}${PORT ? `${PORT}_` : ''}`,
   },
+  activity: {
+    bytesPerToken: 4, // GUESS — token usage is a payload-size estimate, never measured network bytes.
+    legacyMatchWindowMs: 60_000, // GUESS — legacy Dakota manifests were written immediately before ledger finish.
+  },
   affinity: {
     /**
      * Juan doesn't know the tier (22 Sep). Developer → Affinity → Test the connection reads

@@ -1,6 +1,7 @@
 import type { RateWindow, RequestLogEntry } from '@/modules/sources';
 import { allowed } from './allowlist';
 import { AFFINITY_ORIGIN, guardedFetch, type FetchLike } from './fetch';
+import { recordActivity } from '@/lib/activity/log';
 
 /**
  * The read-only Affinity client (N39, docs/15). Transport-agnostic: the real profile sends
@@ -78,6 +79,9 @@ export interface ClientOptions {
   usedThisMonth: () => Promise<number>;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  /** Counts-only activity context; explicit roots are for invented fixtures. */
+  activityRoot?: string;
+  runId?: string;
 }
 
 export interface AffinityClient {
@@ -191,55 +195,74 @@ export function affinityClient(opts: ClientOptions): AffinityClient {
       const started = now();
       sent.push(started);
       if (ours !== null) ours++;
-      let res: TransportResponse;
+      let bytesIn: number | null = null;
+      let records: number | null = null;
+      // Only fixed endpoint categories, never ids, query strings or response fields.
+      const segment = endpoint.template.includes('/relationships') ? 'relationships' : endpoint.template.startsWith('/v2/auth/') ? 'authentication' : endpoint.template.split('/')[2]!;
       try {
-        res = await opts.transport.get(url, { Authorization: `Bearer ${opts.key}`, Accept: 'application/json' });
-      } catch (err) {
-        // undici's "fetch failed" says nothing on its own; the cause says which failure it was.
-        const cause = (err as { cause?: { code?: string; message?: string } } | null)?.cause;
-        const detail = cause?.code ?? cause?.message;
-        const why = err instanceof Error ? `${err.name}: ${err.message}${detail ? ` (${detail})` : ''}` : 'unknown';
-        networkFailures++;
-        const again = networkFailures < MAX_NETWORK_TRIES;
-        await log({ endpoint: endpoint.template, path, outcome: 'network_error', status: null, durationMs: now() - started, note: again ? `${why}; trying again` : why });
-        if (again) {
-          await sleep(1000 * networkFailures);
+        let res: TransportResponse;
+        try {
+          res = await opts.transport.get(url, { Authorization: `Bearer ${opts.key}`, Accept: 'application/json' });
+        } catch (err) {
+          // undici's "fetch failed" says nothing on its own; the cause says which failure it was.
+          const cause = (err as { cause?: { code?: string; message?: string } } | null)?.cause;
+          const detail = cause?.code ?? cause?.message;
+          const why = err instanceof Error ? `${err.name}: ${err.message}${detail ? ` (${detail})` : ''}` : 'unknown';
+          networkFailures++;
+          const again = networkFailures < MAX_NETWORK_TRIES;
+          await log({ endpoint: endpoint.template, path, outcome: 'network_error', status: null, durationMs: now() - started, note: again ? `${why}; trying again` : why });
+          if (again) {
+            await sleep(1000 * networkFailures);
+            continue;
+          }
+          throw new AffinityError(0, redact(`Could not reach Affinity (${why})`));
+        }
+        readHeaders(res.headers, res.status >= 200 && res.status < 300);
+        const durationMs = now() - started;
+
+        if (res.status === 429) {
+          // A rejected response still consumed a request and response payload.
+          try { bytesIn = Buffer.byteLength(await res.text(), 'utf8'); } catch { /* body unavailable */ }
+          records = 0;
+          const month = state.perMonth;
+          const spent = month && month !== 'none' && month.remaining <= 0;
+          await log({ endpoint: endpoint.template, path, outcome: 'rate_limited', status: 429, durationMs, note: spent ? 'monthly quota spent' : `attempt ${attempt} of ${MAX_TRIES}` });
+          if (spent) {
+            throw new AffinityError(429, `The account's monthly Affinity quota is spent. It resets in ${Math.ceil((month as RateWindow).reset / 86_400)} days.`);
+          }
+          if (attempt >= MAX_TRIES) throw new AffinityError(429, `Affinity kept saying too many requests; gave up after ${MAX_TRIES} tries.`);
+          const reset = num(res.headers, 'x-ratelimit-limit-user-reset');
+          await sleep(Math.min(MAX_WAIT_MS, reset !== null ? Math.max(1, reset) * 1000 : 2 ** attempt * 1000));
           continue;
         }
-        throw new AffinityError(0, redact(`Could not reach Affinity (${why})`));
-      }
-      readHeaders(res.headers, res.status >= 200 && res.status < 300);
-      const durationMs = now() - started;
 
-      if (res.status === 429) {
-        const month = state.perMonth;
-        const spent = month && month !== 'none' && month.remaining <= 0;
-        await log({ endpoint: endpoint.template, path, outcome: 'rate_limited', status: 429, durationMs, note: spent ? 'monthly quota spent' : `attempt ${attempt} of ${MAX_TRIES}` });
-        if (spent) {
-          throw new AffinityError(429, `The account's monthly Affinity quota is spent. It resets in ${Math.ceil((month as RateWindow).reset / 86_400)} days.`);
+        const text = await res.text();
+        bytesIn = Buffer.byteLength(text, 'utf8');
+        await log({ endpoint: endpoint.template, path, outcome: 'sent', status: res.status, durationMs, note: null });
+        if (res.status < 200 || res.status >= 300) {
+          records = 0;
+          let message = text.slice(0, 300);
+          try {
+            const body = JSON.parse(text) as { errors?: Array<{ message?: string }>; message?: string };
+            message = body.errors?.[0]?.message ?? body.message ?? message;
+          } catch {
+            /* not JSON; the first few hundred characters will do */
+          }
+          throw new AffinityError(res.status, redact(`Affinity answered ${res.status} for ${endpoint.template}: ${message}`));
         }
-        if (attempt >= MAX_TRIES) throw new AffinityError(429, `Affinity kept saying too many requests; gave up after ${MAX_TRIES} tries.`);
-        const reset = num(res.headers, 'x-ratelimit-limit-user-reset');
-        await sleep(Math.min(MAX_WAIT_MS, reset !== null ? Math.max(1, reset) * 1000 : 2 ** attempt * 1000));
-        continue;
-      }
-
-      const text = await res.text();
-      await log({ endpoint: endpoint.template, path, outcome: 'sent', status: res.status, durationMs, note: null });
-      if (res.status < 200 || res.status >= 300) {
-        let message = text.slice(0, 300);
         try {
-          const body = JSON.parse(text) as { errors?: Array<{ message?: string }>; message?: string };
-          message = body.errors?.[0]?.message ?? body.message ?? message;
+          const parsed = JSON.parse(text) as T;
+          const data = (parsed as { data?: unknown } | null)?.data;
+          records = Array.isArray(data) ? data.length : Array.isArray(parsed) ? parsed.length
+            : endpoint.template === '/v2/lists/{listId}' && parsed !== null && typeof parsed === 'object' ? 1 : 0;
+          return parsed;
         } catch {
-          /* not JSON; the first few hundred characters will do */
+          throw new AffinityError(res.status, `Affinity answered ${endpoint.template} with something that is not JSON.`);
         }
-        throw new AffinityError(res.status, redact(`Affinity answered ${res.status} for ${endpoint.template}: ${message}`));
-      }
-      try {
-        return JSON.parse(text) as T;
-      } catch {
-        throw new AffinityError(res.status, `Affinity answered ${endpoint.template} with something that is not JSON.`);
+      } finally {
+        // Body bytes only: headers, credentials and GET query contents never enter the log.
+        await recordActivity({ source: 'affinity', at: new Date(started).toISOString(), segment,
+          runId: opts.runId, requests: 1, bytesIn, bytesOut: 0, records }, opts.activityRoot).catch(() => {});
       }
     }
   }

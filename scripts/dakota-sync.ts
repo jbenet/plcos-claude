@@ -28,7 +28,7 @@ async function main() {
   const runId = await beginRun({ parentRunId: null, workflow: 'dakota', operation: 'test', protocol: { version: 'v1', hash: protocol },
     source: 'script', agent: 'Claude', model: null, launchFolder: resolve('.'), workerFolder: resolve('.'),
     batch: { id: 'dakota-test', manifest: 'modules:' + MODULES.join(','), hash: createHash('sha256').update(MODULES.join(',')).digest('hex'), planned: MODULES.length } });
-  const client = new DakotaClient(user, pass);
+  const client = new DakotaClient(user, pass, fetch, { runId, root });
   const counts: Record<string, number | string> = {};
   let failed = 0;
   for (const m of MODULES) {
@@ -37,7 +37,7 @@ async function main() {
   }
   await mkdir(join(root, 'dakota'), { recursive: true });
   const file = join(root, 'dakota', `test-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
-  await writeFile(file, JSON.stringify({ at: new Date().toISOString(), requests: client.requests, counts }, null, 2) + '\n');
+  await writeFile(file, JSON.stringify({ at: new Date().toISOString(), runId, requests: client.requests, counts }, null, 2) + '\n');
   await finishRun(runId, { counts: { selected: MODULES.length, written: MODULES.length - failed, valid: MODULES.length - failed, failed, skipped: 0 },
     checks: [{ name: 'signed in', status: failed === MODULES.length ? 'fail' : 'pass' }], outcome: failed === 0 ? 'succeeded' : failed === MODULES.length ? 'failed' : 'partial',
     reason: failed ? `${failed} module(s) refused` : null,
@@ -59,7 +59,7 @@ async function pull() {
   const runId = await beginRun({ parentRunId: null, workflow: 'dakota', operation: 'pull', protocol: { version: 'v1', hash: createHash('sha256').update('dakota-pull-v2: needed fields only, changed since last complete pull, max_num 50, 1 req/s').digest('hex') },
     source: 'script', agent: 'Claude', model: null, launchFolder: resolve('.'), workerFolder: resolve('.'),
     batch: { id: `dakota-pull-${stamp}`, manifest: 'modules:' + mods.join(','), hash: createHash('sha256').update(mods.join(',')).digest('hex'), planned: mods.length } });
-  const client = new DakotaClient(user, pass);
+  const client = new DakotaClient(user, pass, fetch, { runId, root });
   const out: Record<string, { expected: number; written: number; fields: string; error?: string }> = {};
   for (const m of mods) {
     const dir = join(root, 'dakota', 'raw', m); await mkdir(dir, { recursive: true });
@@ -92,7 +92,7 @@ async function pull() {
       out[m] = { expected, written, fields: mode };
     } catch (err) { out[m] = { expected, written, fields: mode, error: err instanceof Error ? err.message : String(err) }; break; }
   }
-  await writeFile(join(root, 'dakota', 'raw', `${stamp}.manifest.json`), JSON.stringify({ at: new Date().toISOString(), requests: client.requests, modules: out }, null, 2) + '\n');
+  await writeFile(join(root, 'dakota', 'raw', `${stamp}.manifest.json`), JSON.stringify({ at: new Date().toISOString(), runId, requests: client.requests, modules: out }, null, 2) + '\n');
   const failed = Object.values(out).filter((x) => x.error || x.written < x.expected).length;
   await finishRun(runId, { counts: { selected: mods.length, written: Object.values(out).reduce((a, x) => a + x.written, 0), valid: mods.length - failed, failed, skipped: mods.length - Object.keys(out).length },
     checks: [{ name: 'every record read', status: failed ? 'fail' : 'pass' }], outcome: failed ? 'partial' : 'succeeded', reason: failed ? JSON.stringify(out).slice(0, 300) : null,
