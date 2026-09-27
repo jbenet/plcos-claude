@@ -140,3 +140,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Entity type corrections — issue 0063](entries/entity-type-0063.md)
 - [Pursuit duplicates — canonical identity consolidation](entries/pursuit-dupes.md)
 - [Prospect keys — import research after creating the person](entries/prospect-keys.md)
+
+- [Import duplicate identities](entries/import-dupes.md)

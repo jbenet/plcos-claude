@@ -1,3 +1,4 @@
+import { canonicalPaths } from '@/lib/enrich/canonical-paths';
 import { syncTeamRoster } from '@/modules/identity/team';
 import { startRouteWarmup } from './cache';
 import { resolveIdentities, type ResolutionCounts } from '@/modules/identity/resolution';
@@ -223,8 +224,9 @@ async function build(tx: Queryable): Promise<BuildCounts> {
 
   // 3. The research: W3's paths, as the import left them on each LP.
   const notes = await tx.query<{ entity_id: string; at: string; data: { paths?: Path[] } }>(
-    `select entity_id::text, created_at::text as at, data from research.note where kind = 'connection_candidates'`,
+    `select identity.canonical_entity_id(entity_id)::text entity_id, created_at::text as at, data from research.note where kind = 'connection_candidates'`,
   );
+  for (const note of notes) note.data = { ...note.data, paths: await canonicalPaths(tx, note.data.paths ?? []) };
   const people = await tx.query<{ id: string; name: string }>(`select entity_id::text as id, display_name as name from identity.entity`);
   const known = new Set(people.map((r) => r.id));
   const roster = people.map((p) => ({ ...p, handle: users.find((u) => entityOfUser.get(u.id) === p.id)?.handle }));

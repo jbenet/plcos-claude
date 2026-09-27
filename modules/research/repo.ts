@@ -1,3 +1,5 @@
+import { canonicalPaths } from '@/lib/enrich/canonical-paths';
+import type { Path } from '@/lib/enrich/connect';
 import { getDb } from '@/lib/db';
 import type { Claim, Confidence, DocStrength, Note, SourceDoc } from './types';
 
@@ -134,6 +136,9 @@ export async function notesFor(entityId: string, kind?: string, limit?: number):
       order by n.created_at desc, n.note_id${bounded}`,
     params,
   );
+  for (const row of rows) if (row.kind === 'connection_candidates' && Array.isArray(row.data?.paths)) {
+    row.data = { ...row.data, paths: await canonicalPaths(db, row.data.paths as Path[]) };
+  }
   return rows.map(toNote);
 }
 

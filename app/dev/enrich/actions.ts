@@ -1,5 +1,6 @@
 'use server';
 
+import { mergeImportDuplicates, type ImportDuplicateReport } from '@/lib/enrich/import-dupes';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
@@ -57,7 +58,7 @@ export async function importFindingsAction(): Promise<void> {
   const inputs = await readNetworkNodeInput(enrichDir());
   if (inputs) await repairTeamIdentities(await getDb(), inputs);
   const r = await importFindings(user.id);
-  await appendAudit({ actorId: user.id, action: 'enrich.imported', subjectType: 'enrich', detail: { mapped: r.mapped, claims: r.claims, rejected: r.rejected, paths: r.paths, organizationLps: r.organizationLps, entityTypes: { corrected: r.entityTypes?.corrected.length ?? 0, ambiguous: r.entityTypes?.ambiguous.length ?? 0 } } });
+  await appendAudit({ actorId: user.id, action: 'enrich.imported', subjectType: 'enrich', detail: { mapped: r.mapped, claims: r.claims, rejected: r.rejected, paths: r.paths, organizationLps: r.organizationLps, duplicateIdentities: { merged: r.duplicateIdentities?.merged ?? 0, ambiguous: r.duplicateIdentities?.ambiguous.length ?? 0 }, entityTypes: { corrected: r.entityTypes?.corrected.length ?? 0, ambiguous: r.entityTypes?.ambiguous.length ?? 0 } } });
   // Research paths become ties with their evidence tiers.
   const { buildNetwork } = await import('@/modules/network');
   await buildNetwork();
@@ -151,6 +152,51 @@ export async function reversePursuitMergeAction(id: string, reason: string): Pro
     await reversePursuitMerge(await getDb(), id, user.id, reason);
     revalidatePath('/dev/enrich');
     revalidatePath('/targets', 'layout');
+    return {};
+  } catch (error) { return { error: error instanceof Error ? error.message : 'Reversal failed.' }; }
+}
+
+/** Uses the live server handle; no file reads or external connector traffic. */
+export async function mergeImportDuplicatesAction(): Promise<{ result?: ImportDuplicateReport; error?: string }> {
+  if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+    return { error: 'Merge duplicate identities on the live server.' };
+  }
+  const user = await (await auth()).currentUser();
+  const run = await startRun('enrich', 'import-duplicates', user.id);
+  try {
+    const result = await mergeImportDuplicates(await getDb(), user.id);
+    await finishRun(run, { status: 'ok', requests: 0, records: result.merged, newRecords: 0,
+      note: `${result.merged} duplicate identities merged, ${result.ambiguous.length} ambiguous`, detail: { ...result } });
+    revalidatePath('/dev/enrich'); revalidatePath('/orgs', 'layout'); revalidatePath('/targets', 'layout');
+    return { result };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Duplicate identity pass failed.';
+    await finishRun(run, { status: 'failed', requests: 0, records: 0, newRecords: 0, note: message });
+    return { error: message };
+  }
+}
+
+export async function reverseImportDuplicateAction(assertionId: string, reason: string): Promise<{ error?: string }> {
+  if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+    return { error: 'Reverse duplicate identities on the live server.' };
+  }
+  try {
+    const { undoIdentityMergeInTransaction } = await import('@/modules/identity/resolution');
+    const db = await getDb();
+    const user = await (await auth()).currentUser();
+    await db.transaction(async tx => {
+      await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
+      const merge = await tx.one<{ loser: string; survivor: string }>(`select merged_entity::text loser,canonical_entity::text survivor
+        from identity.match_assertion where assertion_id=$1 and rule='identity:v1:import-duplicates'`, [assertionId]);
+      if (!merge) throw new Error('Duplicate merge not found.');
+      const pursuit = await tx.one(`select id from strategy.pursuit_merge m where reversed_at is null
+        and exists(select 1 from strategy.pursuit p where (p.pursuit_id=m.survivor_id or p.pursuit_id=any(m.loser_ids))
+          and identity.canonical_entity_id(p.entity_id)=identity.canonical_entity_id($1::uuid)) limit 1`, [merge.survivor]);
+      if (pursuit) throw new Error('Reverse the related pursuit consolidation first, below.');
+      await undoIdentityMergeInTransaction(tx, assertionId, reason);
+    });
+    await appendAudit({ actorId: user.id, action: 'identity.import_duplicate_reversed', subjectType: 'identity', detail: { assertionId, reason } });
+    revalidatePath('/dev/enrich'); revalidatePath('/orgs', 'layout'); revalidatePath('/targets', 'layout');
     return {};
   } catch (error) { return { error: error instanceof Error ? error.message : 'Reversal failed.' }; }
 }

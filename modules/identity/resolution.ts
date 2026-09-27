@@ -217,13 +217,17 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
 
 /** Undo just this recorded redirect. Source facts never moved; a subsequent pass respects the correction. */
 export async function undoIdentityMerge(db: Db, assertionId: string, reason: string): Promise<boolean> {
-  if(!reason.trim())throw new Error('An undo reason is required');
   db = prioritizeDb(db);
-  return serialized(db, () => db.transaction(async(tx:Queryable)=>{
-    const a=await tx.one<{merged_entity:string;canonical_entity:string}>(`select merged_entity::text,canonical_entity::text from identity.match_assertion where assertion_id=$1 and rule like 'identity:v1:%' and undone_at is null for update`,[assertionId]);
-    if(!a)return false;
-    const row=await tx.one(`update identity.entity set merged_into=null where entity_id=$1 and merged_into=$2 returning entity_id`,[a.merged_entity,a.canonical_entity]);
-    if(!row)throw new Error('Redirect changed since assertion; undo the newer merge first');
-    await tx.query(`update identity.match_assertion set undone_at=now(),undo_reason=$2 where assertion_id=$1`,[assertionId,reason]);return true;
-  }));
+  return serialized(db, () => db.transaction(tx => undoIdentityMergeInTransaction(tx, assertionId, reason)));
+}
+
+/** For a caller that also needs to check related pursuit state under the identity lock. */
+export async function undoIdentityMergeInTransaction(tx: Queryable, assertionId: string, reason: string): Promise<boolean> {
+  if (!reason.trim()) throw new Error('An undo reason is required');
+  await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
+  const a=await tx.one<{merged_entity:string;canonical_entity:string}>(`select merged_entity::text,canonical_entity::text from identity.match_assertion where assertion_id=$1 and rule like 'identity:v1:%' and undone_at is null for update`,[assertionId]);
+  if(!a)return false;
+  const row=await tx.one(`update identity.entity set merged_into=null where entity_id=$1 and merged_into=$2 returning entity_id`,[a.merged_entity,a.canonical_entity]);
+  if(!row)throw new Error('Redirect changed since assertion; undo the newer merge first');
+  await tx.query(`update identity.match_assertion set undone_at=now(),undo_reason=$2 where assertion_id=$1`,[assertionId,reason]);return true;
 }

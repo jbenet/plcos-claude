@@ -1,3 +1,4 @@
+import { mergeImportDuplicatesInTransaction, type ImportDuplicateReport } from './import-dupes';
 import { consolidatePursuitsInTransaction, type PursuitMergeReport } from '@/modules/strategy';
 import { correctPipelineEntityTypes, type EntityTypeReport } from './entity-types';
 import { createHash } from 'node:crypto';
@@ -32,6 +33,7 @@ import type { Triage } from './triage';
 
 export interface ImportCounts {
   entityTypes?: EntityTypeReport;
+  duplicateIdentities?: ImportDuplicateReport;
   pursuitMerges?: PursuitMergeReport;
   organizationLps?: OrganizationLpCounts;
   files: number;
@@ -158,6 +160,21 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       });
       counts.strategies = strategies.length;
       counts.entityTypes = await correctPipelineEntityTypes(tx, findings, parsedPaths.records.map(r => r.value as Path), runBy ?? 'system:identity-import');
+      counts.duplicateIdentities = await mergeImportDuplicatesInTransaction(tx, runBy ?? 'system:identity-import', findings, parsedPaths.records.map(r => r.value as Path));
+      // The duplicate pass can resolve the earlier type pass's multiple-org ambiguity.
+      // Report the final outcome, while retaining every recorded correction ID.
+      const correctedIds = counts.duplicateIdentities.corrected.map(c => c.entityId);
+      const correctedNames = new Map((await tx.query<{ id: string; name: string }>(
+        'select entity_id::text id,display_name name from identity.entity where entity_id=any($1::uuid[])', [correctedIds]))
+        .map(e => [e.id, e.name]));
+      counts.entityTypes.ambiguous = counts.entityTypes.ambiguous.filter(c => !correctedNames.has(c.entityId));
+      counts.entityTypes.corrected.push(...counts.duplicateIdentities.corrected.map(c => ({ ...c, name: correctedNames.get(c.entityId)! })));
+      // Keys resolved before the identity pass may now be aliases. File validation remains
+      // tied to the original keys; every subsequent write uses the resulting canonical ID.
+      const canonicalKeys = await importEntityKeys(tx, [...findings.map(f => f.key), ...strategies.map(r => r.s.key), ...triage.map(t => t.key)]);
+      findings = findings.map(f => ({ ...f, key: canonicalKeys.get(f.key) ?? f.key }));
+      strategies = strategies.map(r => ({ ...r, s: { ...r.s, key: canonicalKeys.get(r.s.key) ?? r.s.key } }));
+      for (const t of triage) t.key = canonicalKeys.get(t.key) ?? t.key;
       counts.pursuitMerges = await consolidatePursuitsInTransaction(tx, runBy);
       const orgs = await tx.query<{ name: string }>("select display_name as name from identity.entity where entity_type = 'org'");
       const records = parsedPaths.records;
