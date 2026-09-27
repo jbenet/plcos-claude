@@ -90,11 +90,14 @@ export const VEHICLE_MODULES: NavModule[] = [
   m('08', 'Soft → Hard', 'soft-hard', 'L6', 'Two separate tracks. Convertible soft is shown and never added to hard.'),
   m('09', 'Vehicle status', 'vehicles', 'L6', 'Per-vehicle pipeline, velocity, and how the bottleneck moved.'),
   m('16', 'Materials & send gate', 'materials', 'L12', 'SEND ticket; wrong-wrap matrix; staleness.'),
-  m('18', 'Close room', 'close', 'L8', 'Fund-cycle close: subscription pack, conditions, committee clock.', true, ['fund']),
+  m('18', 'Close room', 'close', 'L8', 'Fund-cycle close: subscription pack, conditions, committee clock.'),
   m('19', 'SPV war room', 'spv', 'L8', 'invite → IOI → allocate → wire, with days-to-wire as the headline.', true, ['spv']),
   m('20', 'Grants rail', 'grants', 'L13', 'No-unsolicited gate until a funder invitation exists.', true, ['grant_rail']),
   m('24', 'Compliance', 'compliance', 'L13', 'Accreditation, public claims, the solicitation log and side-letter risk.'),
 ];
+
+/** Pages explicitly marked incomplete (issues 0075–0076). */
+export const WIP_MODULES = new Set(['asks', 'decisions', 'vehicles', 'materials', 'close', 'compliance']);
 
 export function modulesForKind(kind: string, vehicleSlug?: string): NavModule[] {
   return VEHICLE_MODULES.filter((x) => (!x.kinds || x.kinds.includes(kind as 'fund')) && (!vehicleSlug || !x.vehicleSlugs || x.vehicleSlugs.includes(vehicleSlug)));

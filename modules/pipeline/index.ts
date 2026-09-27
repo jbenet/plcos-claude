@@ -6,3 +6,4 @@ export { closeStates, closeTracksFor, deriveTrack, getExposure, listExposures, p
 export {
   CloseRefused, harden, recordCash, recordClosing, recordSignature, recordWire, requestHardening, reviseSoft, withdraw,
 } from './service';
+export { vehicleStatusCounts, vehicleCloseStatus, CLOSE_PAGE_SIZE } from './status';

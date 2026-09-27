@@ -1,190 +1,94 @@
 import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
+import { CloseProgress } from '@/components/status/CloseProgress';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
-import { usdM, multiple } from '@/lib/money';
+import { usdM } from '@/lib/money';
 import { shortDate } from '@/lib/time';
-import { INSTRUMENT_LABEL, listExposures, vehicleTotals } from '@/modules/pipeline';
-import { STATUSES, STATUS_LABEL, impliedRung, listPursuits, RUNG_LABEL, rungIndex } from '@/modules/strategy';
+import { CLOSE_PAGE_SIZE, vehicleCloseStatus, vehicleStatusCounts, vehicleTotals } from '@/modules/pipeline';
+import { STATUSES } from '@/modules/strategy';
 
 export const dynamic = 'force-dynamic';
 
-const KIND_LABEL: Record<string, string> = { fund: 'Fund', spv: 'SPV', grant_rail: 'Grants rail' };
-
-async function Vehicles() {
+async function Vehicles({ searchParams }: { searchParams: Promise<{ closePage?: string }> }) {
   const selection = await vehicleSelection();
-  const [totals, exposures, pursuits] = await Promise.all([
-    vehicleTotals(), listExposures(), listPursuits(),
+  const vehicleId = selection.current?.id ?? null;
+  const search = await searchParams;
+  const [allTotals, counts, close] = await Promise.all([
+    vehicleTotals(), vehicleStatusCounts(vehicleId), vehicleCloseStatus(vehicleId, Number(search.closePage ?? 1)),
   ]);
-  // Two thousand rows help nobody: the ones furthest along — by status, then by evidence, then
-  // by what the source's word says happened.
-  const statusRank = (p: (typeof pursuits)[number]) => STATUSES.findIndex((s) => s.id === p.status);
-  const open = pursuits.filter((p) => !p.closedAt);
-  const openCount = open.length;
-  const furthest = [...open]
-    .sort((a, b) =>
-      statusRank(b) - statusRank(a) || rungIndex(b.rung) - rungIndex(a.rung) ||
-      rungIndex(impliedRung(b.implied)) - rungIndex(impliedRung(a.implied)) || a.entityName.localeCompare(b.entityName))
-    .slice(0, 25);
+  const totals = allTotals.filter(t => !vehicleId || t.vehicleId === vehicleId);
+  const base = `/${selection.current?.slug ?? 'all'}/status`;
+  return <Page crumbs={moduleCrumbs('vehicles', selection.current?.name ?? null)}>
+    <div className="lbl">Module 09 · Convert &amp; coordinate · WIP</div>
+    <h1>Vehicle status</h1>
+    <p className="sublede">{selection.current?.name ?? 'All vehicles'} · Pipeline counts, close records and work still open.
+      This page is a work in progress and may be incomplete.</p>
 
-  return (
-    <Page
-      crumbs={moduleCrumbs('vehicles', selection.current?.name ?? null)}
-      inspector={
-        <>
-          <div className="lbl">Why there is no total</div>
-          <div className="ihead">Four raises, four numbers</div>
-          <div className="imeta">Neurotech, Rails, the SPVs, the grants rail</div>
-          <div className="scope">
-            <p>
-              No blended AUM figure across these vehicles appears anywhere in this system. Not on
-              this page, not in a tooltip, not in an export. They have different targets, different
-              instruments, different investors and — in one case — a different exemption.
-            </p>
-          </div>
-          <div className="kv">
-            <span>506(c) vehicles</span>
-            <span>{totals.filter((t) => t.exemption === '506(c)').length}</span>
-          </div>
-          <div className="kv">
-            <span>506(b) vehicles</span>
-            <span>{totals.filter((t) => t.exemption === '506(b)').length}</span>
-          </div>
-          <div className="note">
-            One 506(b) SPV among four 506(c) vehicles is open question 4 — integration risk, and a
-            conversation for counsel rather than a data model.
-          </div>
-        </>
-      }
-    >
-      <div className="lbl">Module 09 · Convert &amp; coordinate</div>
-      <h1>Vehicle status</h1>
-      <p className="sublede">
-        Per vehicle, hard-only headline, soft beside it and never inside it. Coverage is a pipeline
-        measure — hard plus soft over target — and is labelled as such rather than read as money.
-      </p>
+    {totals.map(t => <section className="card status-summary" key={t.vehicleId}>
+      <div className="chead"><h2>{t.vehicleName}{t.historical ? ' · history' : ''}</h2>
+        <Link href={`/${t.vehicleSlug}/pipeline`}>Open pipeline →</Link></div>
+      <dl className="status-money">
+        <div><dt>Hard · signed &amp; countersigned</dt><dd>{usdM(t.hard)}</dd></div>
+        <div><dt>Soft · must convert</dt><dd>{usdM(t.soft)}</dd></div>
+        <div><dt>Cash received · within hard</dt><dd>{usdM(t.cash)}</dd></div>
+        <div><dt>Gap to target · hard only</dt><dd>{t.gapToTarget === null ? 'Target not set' : usdM(t.gapToTarget)}</dd></div>
+      </dl>
+      <h3 className="status-section-label">Pipeline stats</h3>
+      <dl className="status-counts">{STATUSES.map(s => {
+        const count = counts.find(c => c.vehicle_id === t.vehicleId && c.status === s.id);
+        return <div key={s.id}><dt>{s.label}</dt><dd>{count?.n ?? 0}</dd>
+          {Boolean(count?.archived) && <small>{count!.archived} archived</small>}</div>;
+      })}</dl>
+      <p className="cover">Counts include archived pursuits, labelled above. Pipeline status is our plan; it does not establish consent, a legal close or cash receipt.
+        Hard and soft stay separate. Each vehicle stands on its own.</p>
+    </section>)}
 
-      <div className="card">
-        <div className="chead">
-          <h2>All vehicles</h2>
-          <span className="lbl">{totals.length} · no row sums the others</span>
-        </div>
-        <table className="list">
-          <thead>
-            <tr>
-              <th>Vehicle</th>
-              <th style={{ width: 90 }}>Kind</th>
-              <th style={{ width: 80 }}>Exemption</th>
-              <th style={{ width: 90 }} className="right">
-                Hard
-              </th>
-              <th style={{ width: 90 }} className="right">
-                Soft
-              </th>
-              <th style={{ width: 90 }} className="right">
-                Cash
-              </th>
-              <th style={{ width: 90 }} className="right">
-                Gap
-              </th>
-              <th style={{ width: 90 }} className="right">
-                Coverage
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {totals.map((t) => (
-              <tr key={t.vehicleId}>
-                <td>
-                  <b>{t.vehicleName}</b>
-                  <div className="muted" style={{ fontSize: 11.5 }}>
-                    target {t.target ? usdM(t.target, 0) : 'none set'} ·{' '}
-                    {(() => {
-                      const mine = pursuits.filter((p) => p.vehicleId === t.vehicleId);
-                      // A historical vehicle's pursuits are history, not work in progress.
-                      return t.historical
-                        ? `history · ${mine.length} pursuits`
-                        : `${mine.filter((p) => !p.closedAt).length} pursuits open`;
-                    })()}
-                  </div>
-                </td>
-                <td className="muted">{KIND_LABEL[t.kind]}</td>
-                <td className="mono muted">{t.exemption}</td>
-                <td className="right mono" style={{ color: 'var(--green)' }}>
-                  {usdM(t.hard)}
-                </td>
-                <td className="right mono muted">{usdM(t.soft)}</td>
-                <td className="right mono muted">{usdM(t.cash)}</td>
-                <td className="right mono">{t.gapToTarget === null ? '—' : usdM(t.gapToTarget)}</td>
-                <td className="right mono muted">{t.coverage === null ? '—' : multiple(t.coverage)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="cover">
-          <b>There is no total row.</b> Adding these together would produce a number that is not
-          true of anything — four raises chasing an overlapping investor universe, one of them on a
-          different exemption, one of them a grants rail with no dollar target at all.
-        </p>
-      </div>
-
-      <div className="grid-even">
-        <div className="card">
-          <div className="chead">
-            <h2>Where the pursuits stand</h2>
-            <span className="lbl">furthest along, by status</span>
+    <section className="card status-close-list">
+      <div className="chead"><h2>LP close progress</h2><span className="lbl">{close.total} LP–vehicle {close.total === 1 ? 'pair' : 'pairs'}</span></div>
+      <p className="cover">LPs with an open commitment record or an active Committed pursuit. Every commitment is shown separately.
+        Missing milestones remain unknown; a later milestone does not fill them in.</p>
+      {close.rows.length === 0 && <div className="status-empty"><h3>No LPs in close states yet</h3>
+        <p>There are no open commitments or active Committed pursuits in this scope. The vehicle owner can review the pipeline and record the next step in an LP workspace.</p>
+        <Link href={`/${selection.current?.slug ?? 'all'}/pipeline`}>Review pipeline →</Link></div>}
+      {close.rows.map(lp => {
+        const href = lp.pursuit_id ? `/${lp.vehicle_slug}/pipeline/${lp.pursuit_id}` : `/orgs/${lp.entity_id}`;
+        return <article className="status-lp" key={`${lp.entity_id}:${lp.vehicle_id}`}>
+          <header><div><h3><Link href={href}>{lp.entity_name}</Link></h3><p className="muted">{lp.vehicle_name} · Owner: {lp.owner_name ?? lp.tracks[0]?.exposure.ownerName ?? 'not assigned'}</p></div>
+            <Link href={href}>Open LP →</Link></header>
+          {lp.tracks.map(track => <CloseProgress key={track.exposure.exposureId} track={track} />)}
+          {lp.tracks.length === 0 && <div className="status-track"><p><b>Committed in the pipeline · close record missing</b></p>
+            <p>No soft, signed, hard, legal-close or cash record is modelled here. Dates are not modelled yet.</p>
+            {lp.stage_said && <p className="muted">Source says: {lp.stage_said} · {lp.source} · as of {lp.source_as_of ? shortDate(new Date(lp.source_as_of)) : 'not recorded'}. This is a claim, not close evidence.</p>}
+          </div>}
+          <div className="status-work">
+            <section><h4>Next steps</h4>
+              <p>{lp.next_step ?? 'No next step recorded. The owner can add one in the LP workspace.'}
+                {lp.next_step_on && <> · Due {shortDate(new Date(lp.next_step_on))}</>}</p>
+              {lp.conditions.map((c, i) => <p key={i}><b>{c.entity_id === null ? 'Vehicle condition' : 'Close condition'}: {c.label}</b>
+                {c.detail && ` · ${c.detail}`} · Owner: {c.owner_name ?? 'not assigned'} · {c.due_on ? `Due ${shortDate(new Date(c.due_on))}` : 'No due date'}</p>)}
+            </section>
+            <section><h4>Open questions ({lp.questions.length})</h4>
+              {lp.questions.length ? <ul>{lp.questions.map(q => <li key={q.question_id}>{q.question} · {q.status}
+                {q.due_on && ` · Due ${shortDate(new Date(q.due_on))}`}</li>)}</ul> : <p className="muted">No open diligence questions recorded for this LP and vehicle.</p>}
+              <Link href={`/${lp.vehicle_slug}/decisions`}>Decision room →</Link>
+            </section>
+            <section><h4>Notes</h4>
+              {lp.headline && <p>{lp.headline}</p>}{lp.status_reason && <p>{lp.status_reason}</p>}
+              {lp.note && <><p className="muted">Latest LP-wide context · {shortDate(new Date(lp.note.created_at))} · applies across vehicles</p><p className="status-note">{lp.note.body}</p></>}
+              {!lp.headline && !lp.status_reason && !lp.note && <p className="muted">No strategy or context note recorded.</p>}
+            </section>
           </div>
-          {furthest.map((p) => (
-            <Link className="row" key={p.pursuitId} href={`/targets/${p.pursuitId}`}>
-              <div className="t">
-                <b>{p.entityName}</b>
-                <span>
-                  {p.vehicleName} · owner {p.ownerSaid ?? p.ownerName}
-                </span>
-              </div>
-              <div className="state">
-                <b>{STATUS_LABEL[p.status]}</b>
-                {p.rung ? `${RUNG_LABEL[p.rung]} on the ladder` : 'nothing on the ladder'}
-                {p.stageSaid && p.source !== 'us' ? <> · Affinity: {p.stageSaid}</> : <> · opened {shortDate(p.openedAt)}</>}
-              </div>
-            </Link>
-          ))}
-          {openCount > furthest.length && (
-            <p className="cover">
-              The {furthest.length} furthest along of {openCount.toLocaleString('en-US')} open pursuits,
-              by status. The ladder is what is evidenced; the status is our plan, and the word beside
-              it is what the source says. The gap between them is work to do.
-            </p>
-          )}
-        </div>
-
-        <div className="card">
-          <div className="chead">
-            <h2>Largest positions</h2>
-            <span className="lbl">hard track only</span>
-          </div>
-          {exposures
-            .filter((x) => x.track === 'hard')
-            .slice(0, 8)
-            .map((x) => (
-              <div className="row" key={x.exposureId}>
-                <div className="t">
-                  <b>{x.entityName}</b>
-                  <span>
-                    {x.vehicleName} · {INSTRUMENT_LABEL[x.instrument]} · {x.evidenceRef}
-                  </span>
-                </div>
-                <div className="state">
-                  <b>{usdM(x.amount)}</b>
-                  {x.cashReceivedAt ? `wired ${shortDate(x.cashReceivedAt)}` : 'not yet wired'}
-                </div>
-              </div>
-            ))}
-        </div>
-      </div>
-    </Page>
-  );
+        </article>;
+      })}
+      {close.total > CLOSE_PAGE_SIZE && <nav className="status-pagination" aria-label="Close progress pages">
+        {close.page > 1 && <Link href={`${base}?closePage=${close.page - 1}`}>← Previous</Link>}
+        <span>Page {close.page} of {Math.ceil(close.total / CLOSE_PAGE_SIZE)} · up to {CLOSE_PAGE_SIZE} LPs per page</span>
+        {close.page * CLOSE_PAGE_SIZE < close.total && <Link href={`${base}?closePage=${close.page + 1}`}>Next →</Link>}
+      </nav>}
+    </section>
+  </Page>;
 }
 
 export default coalescePage('/vehicles', Vehicles);

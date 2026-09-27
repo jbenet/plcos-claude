@@ -2236,3 +2236,43 @@ table.list.dated .ddetail{color:var(--muted);font-size:11.5px;margin:1px 0 0 23p
 .meeting-context .warn { margin-bottom: 14px; }
 @media (max-width: 1100px) { .meetings0074 { grid-template-columns: 1fr; } .meeting-list { max-height: 420px; overflow: auto; } }
 @media (max-width: 650px) { .meeting-facts, .meeting-scores { grid-template-columns: 1fr 1fr; } }
+
+/* Issues 0075–0076: vehicle close status and touch-accessible WIP rail. */
+.nav-wip summary { cursor: pointer; min-height: 44px; padding: 9px 8px; color: var(--rail-text, #EFEBE2); font-size: 12px; }
+.nav-wip summary span { display: block; padding-left: 14px; font-size: 10px; opacity: .75; }
+.nav-wip.has-current summary { font-weight: 600; background: #ffffff0c; border-radius: 4px; }
+.nav-wip summary:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.nav-wip .subsub { min-height: 44px; display: flex; align-items: center; }
+.status-summary { margin-bottom: 20px; }
+.status-money, .status-counts { display: grid; gap: 12px; margin: 0; padding: 18px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.status-money dt, .status-counts dt { color: var(--muted); font-size: 12px; }
+.status-money dd, .status-counts dd { margin: 5px 0 0; font-family: var(--mono); font-size: 23px; }
+.status-money > div:first-child dd { color: var(--green); }
+.status-section-label { margin: 0; padding: 8px 18px 0; font-size: 15px; }
+.status-counts { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.status-counts small { color: var(--muted); }
+.status-lp { padding: 22px; border-top: 1px solid var(--line); }
+.status-lp header { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.status-lp h3 { margin: 0; font-size: 20px; }
+.status-lp p { margin: 8px 0; overflow-wrap: anywhere; }
+.status-track { padding: 12px 0; }
+.status-progress { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); list-style: none; padding: 0; margin: 14px 0; gap: 8px; }
+.status-progress li { border-top: 3px solid var(--line); padding: 10px; background: var(--ground); min-width: 0; }
+.status-progress li.recorded { border-color: var(--green); }
+.status-progress b, .status-progress span, .status-progress small { display: block; }
+.status-progress span, .status-progress small { font-size: 12px; margin-top: 5px; color: var(--muted); }
+.status-work { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; border-top: 1px solid var(--line); padding-top: 16px; }
+.status-work h4 { margin: 0 0 8px; font-size: 14px; }
+.status-work ul, .status-event-log ul { padding-left: 18px; }
+.status-work li { margin-bottom: 8px; }
+.status-note { white-space: pre-wrap; max-height: 220px; overflow-y: auto; }
+.status-timeline summary, .status-event-log summary { min-height: 44px; padding: 12px 0; cursor: pointer; }
+.status-timeline-axis { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.status-timeline-row { padding: 8px 0; font-size: 12px; }
+.status-timeline-line { position: relative; margin-top: 8px; height: 14px; border-bottom: 1px solid var(--line); }
+.status-timeline-line i { position: absolute; width: 10px; height: 10px; border: 2px solid var(--ink); border-radius: 50%; transform: translateX(-50%); }
+.status-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding: 18px; border-top: 1px solid var(--line); }
+.status-pagination a { min-height: 44px; display: inline-flex; align-items: center; }
+.status-empty { padding: 22px; }
+@media (max-width: 1000px) { .status-work { grid-template-columns: 1fr; gap: 16px; } .status-money { grid-template-columns: repeat(2, minmax(0, 1fr)); } .status-counts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .status-progress { grid-template-columns: 1fr; } .status-progress li { border-top: 0; border-left: 3px solid var(--line); } .status-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .status-lp { padding: 16px; } }
