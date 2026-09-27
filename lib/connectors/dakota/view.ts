@@ -18,12 +18,21 @@ export async function dakotaFor(tx: Queryable,entityId: string) {
   return {claims,contacts,capacity};
 }
 export async function dakotaCapacities(tx: Queryable,entityIds: string[]) {
-  const rows=await tx.query<RecordFields & {target:string;last_verified_by:string}>(`select a.*,r.canonical_id::text target from dakota.account a
-    join identity.entity_resolution r on r.entity_id=a.entity_id where r.canonical_id=any($1::uuid[])
-    union all select a.*,r.canonical_id::text target from dakota.contact c join dakota.account a on a.id=c.accountid
-    join identity.entity_resolution r on r.entity_id=c.entity_id where r.canonical_id=any($1::uuid[])
-    order by lastmodifieddate desc,id`,[entityIds]);
   const result=new Map<string,{amount:number;basis:string;asOf:string;verifiedBy:string}>();
+  if (!entityIds.length) return result;
+  // Start at the requested roots, then visit only their aliases. The global resolution
+  // view walks every identity twice, even when this page needs a handful of accounts.
+  // Keep only fields used by ticketEstimate; commentary and contact details stay unread.
+  const ticketColumns = `a.id,a.average_ticket_size__c,a.check_size_from__c,
+    a.private_equity_average_ticket_size__c,a.lastmodifieddate,a.last_verified_by`;
+  const rows=await tx.query<RecordFields & {target:string;last_verified_by:string}>(`with recursive wanted(entity_id,target) as (
+      select entity_id,entity_id from identity.entity where entity_id=any($1::uuid[]) and merged_into is null
+      union all select e.entity_id,w.target from wanted w join identity.entity e on e.merged_into=w.entity_id
+    )
+    select ${ticketColumns},r.target::text target from wanted r join dakota.account a on a.entity_id=r.entity_id
+    union all select ${ticketColumns},r.target::text target from wanted r
+    join dakota.contact c on c.entity_id=r.entity_id join dakota.account a on a.id=c.accountid
+    order by lastmodifieddate desc,id`,[entityIds]);
   for(const r of rows) {
     const estimate=ticketEstimate(r);if(estimate&&!result.has(r.target))result.set(r.target,{...estimate,basis:`${estimate.basis} The basis belongs to the matched account; for a contact it describes their employer, not personal wealth.`,asOf:new Date(r.lastmodifieddate).toISOString(),verifiedBy:r.last_verified_by});
   }

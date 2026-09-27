@@ -30,7 +30,10 @@
     "boundaries": "node --import tsx scripts/boundaries.ts",
     "props": "node --import tsx scripts/properties.ts",
     "changelog:html": "tsx scripts/changelog-html.ts",
-    "changelog:page": "scripts/changelog-page.sh"
+    "changelog:page": "scripts/changelog-page.sh",
+    "perf4:seed": "node --import tsx scripts/perf4-fixture.ts",
+    "perf4:profile": "node --import tsx scripts/perf4-profile.ts",
+    "perf4:guards": "node --import tsx scripts/perf4-guards.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
