@@ -35,7 +35,7 @@ async function walk(dir: string, out: string[] = []): Promise<string[]> {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const p = join(dir, entry.name);
     if (entry.isDirectory()) await walk(p, out);
-    else if (/\.tsx?$/.test(entry.name)) out.push(p);
+    else if (/\.(?:tsx?|mjs|cjs)$/.test(entry.name)) out.push(p);
   }
   return out;
 }

@@ -7,8 +7,9 @@ The development checks use invented records only.
 
 ## Database selection and process ownership
 
-`DATABASE_URL` selects the `pg` adapter. Leaving it unset preserves PGlite, its directory
-lock, and the existing in-process imports. Both adapters implement `Queryable` and use the
+`DATABASE_URL` selects the `pg` adapter. Leaving it unset selects PGlite in a Node worker thread owned by the Next process,
+with the existing directory lock. Import computation runs in additional threads that borrow
+the owner’s database connection over message ports; they never open the directory themselves. Both adapters implement `Queryable` and use the
 same immutable migration files and checksum ledger. `pg` stays inside `lib/db/`.
 
 Postgres 17 runs on the same machine. The real profile accepts only loopback connections;
@@ -38,16 +39,22 @@ files must never be edited to accommodate a driver difference.
 
 ## Background imports
 
-On Postgres, Import the findings, Add prospects, Merge duplicate identities, Consolidate
-pursuits, Import Dakota, strategy moves, and the Affinity sync run outside the Next process.
+Import the findings, Add prospects, Merge duplicate identities, Consolidate pursuits,
+Import Dakota, strategy moves, Affinity sync, network build and research export use background
+jobs. On Postgres these run outside the Next process with independent pools. On PGlite they
+run in worker threads inside the Next process, with database operations forwarded to its
+single database worker. PGlite transactions still serialize database access; DB-free requests
+and the parent’s active-job progress mirror remain available while they run.
 The page polls `/api/import-jobs`. `platform.import_job` records `queued`, `running`,
 `completed` or `failed`, phase, completed/total counters, heartbeat, result counts and a
 sanitized error. Progress is phase-level except Dakota, which reports committed record batches.
 Kinds are `findings`, `prospects`, `duplicates`, `pursuits`, `dakota`,
-`strategy-moves` and `affinity`. The worker
-uses a Postgres advisory lock for its job kind so repeated clicks or two server processes
+`strategy-moves`, `affinity`, `network` and `export`. The Postgres worker
+uses an advisory lock for its job kind so repeated clicks or two server processes
 cannot run that kind concurrently. The advisory lock must stay on one connection for the
 whole job; releasing a pooled connection while retaining a session lock is unsafe.
+PGlite uses its directory lock, a process-local launch guard and the same persisted
+one-active-receipt-per-kind constraint. No separate process opens its database directory.
 
 The parent starts only the job the human requested. Moving execution to a child grants no
 new connector permissions: Affinity remains read-only, Dakota remains inside the private
@@ -190,7 +197,7 @@ under the existing authorization and read-only rules.
   successful results, a controlled worker failure, restart behavior and safe retry. Submit
   duplicate starts from two processes and prove only one writer for that job kind runs.
 - Verify rollback before accepting live writes. Confirm the original PGlite still opens,
-  and that the unset-URL path continues to use its existing in-process behavior.
+  and that the unset-URL path uses the PGlite worker without starting another server.
 
 Preparation checks passed: **767/767 PGlite** and **779/779 Postgres 17.11** properties,
 plus TypeScript and boundaries. The recorded details and remaining limitations are in

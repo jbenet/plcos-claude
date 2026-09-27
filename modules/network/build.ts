@@ -1,6 +1,6 @@
 import { canonicalPaths } from '@/lib/enrich/canonical-paths';
 import { syncTeamRoster } from '@/modules/identity/team';
-import { startRouteWarmup } from './cache';
+import { precomputeRoutes, startRouteWarmup } from './cache';
 import { resolveIdentities, type ResolutionCounts } from '@/modules/identity/resolution';
 import { identityEvidence } from '@/modules/identity/resolution-input';
 import { readProspectFiles } from '@/lib/enrich/prospects';
@@ -62,7 +62,7 @@ const pairKey = (a: string, b: string, kind: string) => `${[a, b].sort().join('|
 
 interface NewEdge { reviewedBy?: string; reviewedAt?: string; reviewNote?: string | null; from: string; to: string; kind: EdgeKind; tier: EvidenceTier; band: string; since: string; evidence: Array<Record<string, unknown>> }
 
-export async function buildNetwork(): Promise<BuildCounts> {
+export async function buildNetwork(options: { awaitBackground?: boolean } = {}): Promise<BuildCounts> {
   const db = await getDb();
   const counts = await db.transaction(async (tx) => {
     // One global topology generation for a rebuild, without logging every inserted edge.
@@ -71,7 +71,11 @@ export async function buildNetwork(): Promise<BuildCounts> {
     await tx.query('update network.route_revision set revision = txid_current(), epoch = txid_current() where singleton');
     return result;
   });
-  if (config.data.profile === 'real') {
+  if (options.awaitBackground) {
+    // A job thread/process closes its DB proxy at completion; finish its dependent work first.
+    counts.identityResolution = await resolveIdentities(db, identityEvidence(await readNetworkNodeInput(enrichDir()), await readProspectFiles()));
+    await precomputeRoutes();
+  } else if (config.data.profile === 'real') {
     // A live pass can take tens of seconds. Return while bounded resolution runs.
     startIdentityResolution(db);
     counts.identityResolution = 'scheduled';

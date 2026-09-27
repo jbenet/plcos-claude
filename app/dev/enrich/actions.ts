@@ -1,42 +1,27 @@
 'use server';
 
 import { queueImportJob } from '@/lib/import-jobs/server';
-import { mergeImportDuplicates, type ImportDuplicateReport } from '@/lib/enrich/import-dupes';
+import { type ImportDuplicateReport } from '@/lib/enrich/import-dupes';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { enrichDir, exportResearchSet } from '@/lib/enrich/candidates';
-import { importFindings } from '@/lib/enrich/import';
 import { appendAudit } from '@/modules/platform';
 import { getDb } from '@/lib/db';
-import { consolidatePursuits, reversePursuitMerge, type PursuitMergeReport } from '@/modules/strategy';
-import { startRun, finishRun } from '@/modules/sources';
+import { reversePursuitMerge, type PursuitMergeReport } from '@/modules/strategy';
 import { config } from '@/config/deployment';
 import { readLayout } from '@/config/ports';
-import { addProspects, readProspectFiles, type ProspectResult } from '@/lib/enrich/prospects';
+import { type ProspectResult } from '@/lib/enrich/prospects';
 
 export async function addProspectsAction(): Promise<{ result?: ProspectResult; error?: string; message?: string }> {
   // A dev checkout must never open the real DB for an import; demo uses fictional files.
   if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
     return { error: 'Add prospects from Developer → Enrich on the live server.' };
   }
-  let result: ProspectResult;
   try {
     const user = await (await auth()).currentUser();
-    const db = await getDb();
-    if (db.kind === 'postgres') { await queueImportJob(db,'prospects',user.id); return {message:'Prospect import queued. Progress appears above.'}; }
-    const files = await readProspectFiles();
-    result = await addProspects(await getDb(), user.id, files);
-    await appendAudit({ actorId: user.id, action: 'enrich.prospects', subjectType: 'enrich', detail: {
-      files: result.files, added: result.added, existing: result.existing, ambiguous: result.ambiguous, invalid: result.invalid.length, inProgress: result.inProgress.length,
-      moved: result.moved, toSourcing: result.toSourcing, toPassed: result.toPassed, kept: result.kept,
-    } });
-  } catch {
-    return { error: 'The import could not finish. Check the local prospect files and retry; person-set statuses are preserved on retry.' };
-  }
-  revalidatePath('/dev/enrich');
-  revalidatePath('/targets', 'layout');
-  return { result };
+    await queueImportJob(await getDb(),'prospects',user.id);
+    return {message:'Prospect import queued. Progress appears above.'};
+  } catch { return {error:'Prospect import could not be queued. Retry after the active import finishes.'}; }
 }
 
 /**
@@ -46,34 +31,18 @@ export async function addProspectsAction(): Promise<{ result?: ProspectResult; e
  */
 export async function exportResearchSetAction(): Promise<void> {
   const user = await (await auth()).currentUser();
-  const r = await exportResearchSet();
-  await appendAudit({ actorId: user.id, action: 'enrich.exported', subjectType: 'enrich', detail: { candidates: r.candidates, people: r.people, orgs: r.orgs } });
+  await queueImportJob(await getDb(),'export',user.id);
   revalidatePath('/dev/enrich');
-  redirect(`/developer/enrich?exported=${r.candidates}`);
+  redirect('/developer/enrich');
 }
 
 /** Map the findings in (N64): claims with provenance, profiles, connection candidates. Counts only. */
 export async function importFindingsAction(): Promise<void> {
   const user = await (await auth()).currentUser();
   const db = await getDb();
-  if (db.kind === 'postgres') {
-    await queueImportJob(db,'findings',user.id);
-    revalidatePath('/dev/enrich');
-    redirect('/developer/enrich');
-  }
-  // Repair team aliases before the identity pass consolidates their pursuits.
-  const { readNetworkNodeInput } = await import('@/modules/network/nodes');
-  const { repairTeamIdentities } = await import('@/modules/identity/team');
-  const inputs = await readNetworkNodeInput(enrichDir());
-  if (inputs) await repairTeamIdentities(await getDb(), inputs);
-  const r = await importFindings(user.id);
-  await appendAudit({ actorId: user.id, action: 'enrich.imported', subjectType: 'enrich', detail: { mapped: r.mapped, claims: r.claims, rejected: r.rejected, paths: r.paths, organizationLps: r.organizationLps, duplicateIdentities: { merged: r.duplicateIdentities?.merged ?? 0, ambiguous: r.duplicateIdentities?.ambiguous.length ?? 0 }, entityTypes: { corrected: r.entityTypes?.corrected.length ?? 0, ambiguous: r.entityTypes?.ambiguous.length ?? 0 } } });
-  // Research paths become ties with their evidence tiers.
-  const { buildNetwork } = await import('@/modules/network');
-  await buildNetwork();
+  await queueImportJob(db,'findings',user.id);
   revalidatePath('/dev/enrich');
-  revalidatePath('/targets');
-  redirect(`/developer/enrich?imported=${r.mapped}&claims=${r.claims}&refused=${r.rejected}`);
+  redirect('/developer/enrich');
 }
 
 /**
@@ -119,15 +88,14 @@ export async function importPortfolioAction(): Promise<{ result?: import('@/lib/
 
 /** Return a queued receipt; the local worker commits progress independently. */
 export async function importDakotaAction(): Promise<{job?:import('@/lib/connectors/dakota/translate').DakotaStatus|null;error?:string}> {
-  const {dakotaLiveServer,resumeDakotaJob}=await import('@/lib/connectors/dakota/job');
+  const {dakotaLiveServer}=await import('@/lib/connectors/dakota/job');
   if(!dakotaLiveServer())return {error:'Import Dakota from Developer → Enrichment on the live server.'};
   try {
     const {queueDakota,dakotaStatus}=await import('@/lib/connectors/dakota/translate');
     const user=await (await auth()).currentUser(),db=await getDb();
     await queueDakota(db,user.id);
     const job=await dakotaStatus(db);
-    if (db.kind === 'postgres') await queueImportJob(db,'dakota',user.id);
-    else resumeDakotaJob(db);
+    await queueImportJob(db,'dakota',user.id);
     return {job};
   } catch {return {error:'Dakota could not be queued. Try again; committed batches are preserved.'};}
 }
@@ -139,23 +107,8 @@ export async function consolidatePursuitsAction(): Promise<{ result?: PursuitMer
   }
   const user = await (await auth()).currentUser();
   const db = await getDb();
-  if (db.kind === 'postgres') {
-    try { await queueImportJob(db,'pursuits',user.id); return {message:'Pursuit consolidation queued. Progress appears above.'}; }
-    catch { return {error:'Pursuit consolidation could not be queued. Retry after the active import finishes.'}; }
-  }
-  const run = await startRun('enrich', 'pursuit-merge', user.id);
-  try {
-    const result = await consolidatePursuits(await getDb(), user.id);
-    await finishRun(run, { status: 'ok', requests: 0, records: result.merged, newRecords: 0,
-      note: `${result.merged} pursuits merged, ${result.ambiguous.length} ambiguous`, detail: { ...result } });
-    revalidatePath('/dev/enrich');
-    revalidatePath('/targets', 'layout');
-    return { result };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Pursuit consolidation failed.';
-    await finishRun(run, { status: 'failed', requests: 0, records: 0, newRecords: 0, note: message });
-    return { error: message };
-  }
+  try { await queueImportJob(db,'pursuits',user.id); return {message:'Pursuit consolidation queued. Progress appears above.'}; }
+  catch { return {error:'Pursuit consolidation could not be queued. Retry after the active import finishes.'}; }
 }
 
 export async function reversePursuitMergeAction(id: string, reason: string): Promise<{ error?: string }> {
@@ -178,22 +131,8 @@ export async function mergeImportDuplicatesAction(): Promise<{ result?: ImportDu
   }
   const user = await (await auth()).currentUser();
   const db = await getDb();
-  if (db.kind === 'postgres') {
-    try { await queueImportJob(db,'duplicates',user.id); return {message:'Duplicate identity import queued. Progress appears above.'}; }
-    catch { return {error:'Duplicate import could not be queued. Retry after the active import finishes.'}; }
-  }
-  const run = await startRun('enrich', 'import-duplicates', user.id);
-  try {
-    const result = await mergeImportDuplicates(await getDb(), user.id);
-    await finishRun(run, { status: 'ok', requests: 0, records: result.merged, newRecords: 0,
-      note: `${result.merged} duplicate identities merged, ${result.ambiguous.length} ambiguous`, detail: { ...result } });
-    revalidatePath('/dev/enrich'); revalidatePath('/orgs', 'layout'); revalidatePath('/targets', 'layout');
-    return { result };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Duplicate identity pass failed.';
-    await finishRun(run, { status: 'failed', requests: 0, records: 0, newRecords: 0, note: message });
-    return { error: message };
-  }
+  try { await queueImportJob(db,'duplicates',user.id); return {message:'Duplicate identity import queued. Progress appears above.'}; }
+  catch { return {error:'Duplicate identity import could not be queued. Retry after the active import finishes.'}; }
 }
 
 export async function reverseImportDuplicateAction(assertionId: string, reason: string): Promise<{ error?: string }> {

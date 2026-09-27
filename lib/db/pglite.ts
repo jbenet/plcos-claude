@@ -1,52 +1,99 @@
-import { PGlite } from '@electric-sql/pglite';
+import { Worker } from 'node:worker_threads';
+import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { TooManyRows, type Db, type Queryable } from './index';
 import { lock } from './lock';
 import { prioritizeDb } from './scheduling';
 import { timeQuery } from './timing';
 
-function wrap(run: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>): Queryable {
-  const query = async <T>(sql: string, params: unknown[] = []): Promise<T[]> => {
-    const res = await timeQuery(sql, () => run(sql, params));
-    return res.rows as T[];
-  };
-  return {
-    query,
-    async one<T>(sql: string, params: unknown[] = []): Promise<T | null> {
-      const rows = await query<T>(sql, params);
-      if (rows.length > 1) throw new TooManyRows(rows.length);
-      return rows[0] ?? null;
-    },
-    async exec(sql: string) {
-      await run(sql, []);
-    },
-  };
+interface WorkerError { name: string; message: string; count?: number; code?: string }
+function deserialize(error: WorkerError): Error {
+  return Object.assign(error.name === 'TooManyRows' ? new TooManyRows(error.count ?? 2) : new Error(error.message), error);
 }
 
+/** One worker, one connection, owned by this process. No caller loads WASM on the
+ * request thread. The existing scheduler owns admission and transaction isolation. */
 export async function openPglite(dir: string): Promise<Db> {
   const release = await lock(dir);
-  const pg = await PGlite.create(dir);
-  const base = wrap((sql, params) =>
-    params && params.length ? pg.query(sql, params as never[]) : pg.exec(sql).then((r) => r[r.length - 1] ?? { rows: [] }),
-  );
+  let worker: Worker;
+  try {
+    worker = new Worker(resolve(process.cwd(), 'lib/db/pglite-worker.mjs'), { workerData: { dir }, execArgv: [] });
+  } catch (error) { await release(); throw error; }
+  let sequence = 0, failed: Error | undefined, closed = false;
+  const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+  // An idle database must not keep a CLI alive. Startup and each in-flight call
+  // retain the worker, so a process cannot exit halfway through an awaited write.
+  const unrefWhenIdle = () => { if (pending.size === 0) worker.unref(); };
+  let readyResolve: () => void, readyReject: (error: Error) => void;
+  const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
+  const fail = (error: Error) => {
+    failed ??= error;
+    readyReject(error);
+    for (const request of pending.values()) request.reject(error);
+    pending.clear();
+    unrefWhenIdle();
+  };
+  worker.on('message', message => {
+    if (message.ready) { readyResolve(); unrefWhenIdle(); return; }
+    if (message.startupError) { fail(deserialize(message.startupError)); return; }
+    const request = pending.get(message.id);
+    if (!request) return;
+    pending.delete(message.id);
+    if (message.error) request.reject(deserialize(message.error));
+    else request.resolve(message.value);
+    unrefWhenIdle();
+  });
+  worker.on('error', fail);
+  worker.on('exit', code => {
+    if (!closed) fail(new Error(`Database worker exited (${code}); restart the server`));
+  });
+  try { await ready; }
+  catch (error) { worker.ref(); await worker.terminate(); await release(); throw error; }
+  function call<T>(op: string, sql?: string, params?: unknown[], tx?: string): Promise<T> {
+    if (failed) return Promise.reject(failed);
+    if (closed) return Promise.reject(new Error('Database is closed'));
+    const id = ++sequence;
+    return new Promise<T>((resolve, reject) => {
+      pending.set(id, { resolve: value => resolve(value as T), reject });
+      worker.ref();
+      try { worker.postMessage({ id, op, sql, params, tx }); }
+      catch (error) { pending.delete(id); reject(error); unrefWhenIdle(); }
+    });
+  }
+  function on(tx?: string): Queryable {
+    return {
+      query: (sql, params = []) => timeQuery(sql, () => call('query', sql, params, tx)),
+      one: (sql, params = []) => timeQuery(sql, () => call('one', sql, params, tx)),
+      exec: sql => call('exec', sql, [], tx),
+    };
+  }
+  let closing: Promise<void> | undefined;
   return prioritizeDb({
     kind: 'pglite',
-    query: base.query,
-    one: base.one,
-    exec: async (sql: string) => {
-      await pg.exec(sql);
-    },
+    ...on(),
     async transaction<T>(fn: (tx: Queryable) => Promise<T>): Promise<T> {
-      const out = await pg.transaction(async (tx) => {
-        const q = wrap((sql, params) =>
-          params && params.length ? tx.query(sql, params as never[]) : tx.exec(sql).then((r) => r[r.length - 1] ?? { rows: [] }),
-        );
-        return fn(q);
-      });
-      return out as T;
+      const tx = randomUUID();
+      await call('begin', undefined, undefined, tx);
+      try {
+        const value = await fn(on(tx));
+        await call('commit', undefined, undefined, tx);
+        return value;
+      } catch (error) {
+        try { await call('rollback', undefined, undefined, tx); }
+        catch { /* A failed worker stays failed; preserve the original exception. */ }
+        throw error;
+      }
     },
-    async close() {
-      await pg.close();
-      await release();
+    close() {
+      return closing ??= (async () => {
+        try { if (!failed) await call('close'); }
+        finally {
+          closed = true;
+          worker.ref();
+          await worker.terminate();
+          await release();
+        }
+      })();
     },
   });
 }

@@ -95,6 +95,11 @@ export const config = {
      */
     cookiePrefix: `${PROFILE === 'real' ? 'capitalos_real_' : 'capitalos_'}${PORT ? `${PORT}_` : ''}`,
   },
+  responsiveness: {
+    resolutionMs: 10, // GUESS — enough resolution to detect the 50 ms synchronous-slice target.
+    reportIntervalMs: 60_000, // GUESS — one small local activity record per minute.
+    alertP99Ms: 200, // Requested responsiveness budget; histogram lag is not HTTP request latency.
+  },
   activity: {
     bytesPerToken: 4, // GUESS — token usage is a payload-size estimate, never measured network bytes.
     legacyMatchWindowMs: 60_000, // GUESS — legacy Dakota manifests were written immediately before ledger finish.

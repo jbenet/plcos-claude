@@ -1,5 +1,8 @@
 /** Invented rows only. A real child process proves that pages and jobs do not share a JS process. */
 import { spawn } from 'node:child_process';
+import { MessageChannel } from 'node:worker_threads';
+import { launchImportJob } from '../../lib/import-jobs/server';
+import { connectJobDb,hostJobDb } from '../../lib/db/job-bridge';
 import { randomUUID } from 'node:crypto';
 import { openTestDb } from './database';
 import { migrate } from '../../lib/db/migrate';
@@ -33,9 +36,35 @@ export async function importJobProperties(check:Check) {
     const error=await db.one<ImportJob>('select * from platform.import_job where id=$1',[failed.id]);
     check('IMPORT JOB error receipts contain no raw exception data',error?.status==='failed'&&error.error===IMPORT_FAILURE,'Fixed safe message; committed work remains reviewable.');
     if(db.kind==='pglite') {
-      let refused=false;
-      try {await createImportJob(db,'pursuits',actor);} catch {refused=true;}
-      check('IMPORT JOB PGlite cannot enqueue a separate DB writer',refused,'Existing PGlite action and Dakota paths remain in process.');
+      const together=await Promise.all([createImportJob(db,'pursuits',actor),createImportJob(db,'pursuits',actor)]);
+      check('IMPORT JOB PGlite concurrent clicks share one active receipt',together[0].id===together[1].id,'Worker threads use the one owner handle and the same partial unique index.');
+      const id=together[0].id;
+      launchImportJob(db,id);launchImportJob(db,id);
+      const wait=async(id:string)=>{
+        const until=Date.now()+30000;
+        while(Date.now()<until){
+          const job=await db.one<ImportJob>('select * from platform.import_job where id=$1',[id]);
+          if(job&&['completed','failed'].includes(job.status))return job;
+          await new Promise(resolve=>setTimeout(resolve,25));
+        }
+        throw new Error('Invented thread timeout');
+      };
+      const result=await wait(id);
+      check('IMPORT JOB PGlite worker completes through the original DB owner',result.status==='completed'&&result.result?.merged===0,'Duplicate launch runs a single receipt; no second PGlite open, seed or connector request.');
+      const bad=await createImportJob(db,'affinity',actor,{operation:'invented-invalid'});
+      launchImportJob(db,bad.id);
+      const stopped=await wait(bad.id);
+      check('IMPORT JOB PGlite worker failure has a safe persisted receipt',stopped.status==='failed'&&stopped.error===IMPORT_FAILURE,'An invalid operation fails before any connector request.');
+      const {port1,port2}=new MessageChannel(),closeHost=hostJobDb(db,port1),remote=connectJobDb(port2,'pglite');
+      await db.exec('create table public.thread_atomic (value integer)');
+      await remote.transaction(async tx=>{await tx.query('insert into public.thread_atomic values (1)');});
+      let entered!:()=>void;
+      const begun=new Promise<void>(resolve=>{entered=resolve;});
+      const abandoned=remote.transaction(async tx=>{await tx.query('insert into public.thread_atomic values (2)');entered();await new Promise(resolve=>setTimeout(resolve,25));});
+      const outcome=abandoned.catch(()=>{});
+      await begun;closeHost();await outcome;
+      const rows=await db.query<{value:number}>('select value from public.thread_atomic');
+      check('IMPORT JOB disconnected transaction rolls back without undoing prior commits',rows.length===1&&rows[0]?.value===1,'A worker port loss releases the transaction and preserves only committed work.');
       return;
     }
     const queuedTogether=await Promise.all([createImportJob(db,'pursuits',actor),createImportJob(db,'pursuits',actor)]);

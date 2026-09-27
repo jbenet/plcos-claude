@@ -25,15 +25,13 @@ export async function runDiscovery(): Promise<void> {
 
 /** Starts the first slice in this server's process and returns at once; the page watches it. */
 export async function runSliceAction(formData: FormData): Promise<void> {
-  const { startSlice } = await import('@/lib/connectors/affinity/slice');
   const user = await (await auth()).currentUser();
   // A go-ahead on a held run carries the estimate it was shown, and the run proceeds only
   // within that estimate plus a quarter — an approval of a number, not of whatever it costs.
   const approved = Number(formData.get('approvedEstimate') ?? 0);
   const options = approved > 0 ? { approvedUpTo: Math.ceil(approved * 1.25) } : {};
   const db=await getDb();
-  if(db.kind==='postgres') await queueImportJob(db,'affinity',user.id,{operation:'slice',options});
-  else startSlice(user.id,options);
+  await queueImportJob(db,'affinity',user.id,{operation:'slice',options});
   revalidatePath('/dev/affinity/slice');
 }
 
@@ -70,20 +68,9 @@ export async function writeComparisonAction(): Promise<void> {
 
 /** Reads the landed copy through the mapping into the tool's own tables. Not one request to Affinity. */
 export async function translateAction(): Promise<void> {
-  const { translate } = await import('@/lib/connectors/affinity/translate');
   const user = await (await auth()).currentUser();
   const db=await getDb();
-  if(db.kind==='postgres') {await queueImportJob(db,'affinity',user.id,{operation:'translate'});revalidatePath('/', 'layout');return;}
-  const run = await translate(user.id);
-  // With the records translated, propose the ladder climbs they support (N57). Proposals only:
-  // nothing is recorded until someone approves them.
-  if (run?.status === 'ok') {
-    const { reconcile } = await import('@/lib/reconcile');
-    await reconcile(user.id);
-    // And the ties the records now show (N82): who on the team has met whom.
-    const { buildNetwork } = await import('@/modules/network');
-    await buildNetwork();
-  }
+  await queueImportJob(db,'affinity',user.id,{operation:'translate'});
   revalidatePath('/', 'layout');
 }
 
@@ -102,13 +89,11 @@ export async function countNotesAction(): Promise<void> {
  * it, a read after the first asks only for what changed.
  */
 export async function readNotesAction(formData: FormData): Promise<void> {
-  const { startNotes } = await import('@/lib/connectors/affinity/notes');
   const user = await (await auth()).currentUser();
   const approved = Number(formData.get('approvedEstimate') ?? 0);
   const options={...(approved > 0 ? { approvedUpTo: Math.ceil(approved * 1.25) } : {}),full:formData.get('mode')==='full'};
   const db=await getDb();
-  if(db.kind==='postgres') await queueImportJob(db,'affinity',user.id,{operation:'notes',options});
-  else startNotes(user.id,options);
+  await queueImportJob(db,'affinity',user.id,{operation:'notes',options});
   revalidatePath('/dev/affinity/notes');
 }
 
@@ -117,13 +102,11 @@ export async function readNotesAction(formData: FormData): Promise<void> {
  * server's process while the page watches. After a complete read, only what changed.
  */
 export async function readMeetingsAction(formData: FormData): Promise<void> {
-  const { startMeetings } = await import('@/lib/connectors/affinity/meetings');
   const user = await (await auth()).currentUser();
   const mode = formData.get('mode');
   // 'rest': the whole window again, past the usual cap, when someone has said to (N59).
   const options={full:mode==='full'||mode==='rest',rest:mode==='rest'};
   const db=await getDb();
-  if(db.kind==='postgres') await queueImportJob(db,'affinity',user.id,{operation:'meetings',options});
-  else startMeetings(user.id,options);
+  await queueImportJob(db,'affinity',user.id,{operation:'meetings',options});
   revalidatePath('/dev/affinity/meetings');
 }
