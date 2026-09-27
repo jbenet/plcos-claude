@@ -17,3 +17,6 @@ tsconfig.tsbuildinfo
 # everything written about it. Only the README that explains the layout is tracked.
 data/*
 !data/README.md
+
+# The feedback journal (lib/feedback-inbox.ts): reports waiting to be filed, and the filed records.
+issues/inbox/

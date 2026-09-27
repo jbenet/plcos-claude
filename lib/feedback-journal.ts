@@ -1,10 +1,13 @@
 /**
  * The feedback journal's rules (Juan, 27 Sep: "can't submit feedback" while an import pegs the
- * server). Pressing File puts the report in this browser first; a sender posts it until the server
- * confirms an issue number. This file is the part with no browser in it — the backoff, what counts
- * as a confirmation, and what a response does to the journal — so the properties can hold it to
- * them (scripts/properties/feedback-journal.ts). The storage and the sender are in
- * lib/feedback-outbox.ts.
+ * server; then "it should journal to the server. the page may die or close forever").
+ *
+ * File posts the report to /api/feedback, which journals it on the server and answers 202 at once
+ * (lib/feedback-inbox.ts); the server files it afterwards. The browser's outbox is the fallback for
+ * when the request cannot reach the server at all — a restart, the network — and keeps resending
+ * until the server accepts. This file is the part with no browser in it — the backoff, what counts
+ * as acceptance, and what a response does to the outbox — so the properties can hold it to them
+ * (scripts/properties/feedback-journal.ts). The storage and the sender are in lib/feedback-outbox.ts.
  */
 
 /** What the feedback route takes, as the box sends it. */
@@ -61,8 +64,12 @@ export type JournalEntry = EntryBase & (
  */
 export const BACKOFF_MS = [5_000, 15_000, 60_000] as const;
 export const BACKOFF_CAP_MS = 120_000;
-/** One send's patience. GUESS: a healthy local server files in well under a second. */
-export const SEND_TIMEOUT_MS = 8_000;
+/**
+ * One send's patience: 3 s, plus 1 s for every megabyte of pictures to upload, at most 20 s. GUESS:
+ * the journal answers in well under 100 ms; the rest is the upload over the local network.
+ */
+export const SEND_TIMEOUT_MS = 3_000;
+export const sendTimeout = (bodyChars: number) => Math.min(20_000, SEND_TIMEOUT_MS + Math.floor(bodyChars / 1_000_000) * 1_000);
 
 export function retryDelay(attempts: number): number {
   if (!Number.isFinite(attempts) || attempts < 1) return BACKOFF_MS[0];
@@ -77,31 +84,37 @@ export const isClientId = (v: unknown): v is string => typeof v === 'string' && 
 const ISSUE_ID = /^\d{1,9}$/;
 
 export type SendOutcome =
+  /** Journaled on the server: safe there, filed shortly. `id` when it was already filed. */
+  | { kind: 'journaled'; id: string | null; repeat: boolean }
   /** `id` is the issue number; a connection note has none, and says `null`. */
   | { kind: 'filed'; id: string | null; repeat: boolean }
   | { kind: 'retry'; error: string }
   | { kind: 'refused'; error: string };
 
 /**
- * What one response means. Only a 2xx that names an issue and echoes this entry's client id is a
- * confirmation — for a connection note, one whose receipt id is the client id and has a time;
- * anything else — a 200 from a proxy, an HTML error page, a response for another report — leaves
- * the entry in the journal. 408 and 429 are the server asking for later, not no.
+ * What one response means. Acceptance is a 2xx that says it journaled and echoes this entry's
+ * client id; a server from before the journal confirmed with an issue number and the client id
+ * (for a connection note, its own id and a time), and that still counts. Anything else — a 200 from
+ * a proxy, an HTML error page, a response for another report — leaves the entry in the outbox.
+ * 408 and 429 are the server asking for later, not no.
  */
 export function classify(
   clientId: string, status: number | null, json: unknown, networkError?: string, target: 'issue' | 'connection' = 'issue',
 ): SendOutcome {
   if (status === null) return { kind: 'retry', error: networkError || 'No answer from the server' };
-  const body = (json && typeof json === 'object' ? json : {}) as { id?: unknown; clientId?: unknown; at?: unknown; error?: unknown; repeat?: unknown };
+  const body = (json && typeof json === 'object' ? json : {}) as { id?: unknown; clientId?: unknown; at?: unknown; error?: unknown; repeat?: unknown; journaled?: unknown };
   const said = typeof body.error === 'string' && body.error ? body.error : null;
   if (status >= 200 && status < 300) {
+    if (body.journaled === true && body.clientId === clientId) {
+      return { kind: 'journaled', id: typeof body.id === 'string' && ISSUE_ID.test(body.id) ? body.id : null, repeat: body.repeat === true };
+    }
     if (target === 'connection' && body.id === clientId && typeof body.at === 'string' && body.at) {
       return { kind: 'filed', id: null, repeat: false };
     }
     if (target === 'issue' && typeof body.id === 'string' && ISSUE_ID.test(body.id) && body.clientId === clientId) {
       return { kind: 'filed', id: body.id, repeat: body.repeat === true };
     }
-    return { kind: 'retry', error: 'The server answered without confirming an issue number' };
+    return { kind: 'retry', error: 'The server answered without confirming it kept the report' };
   }
   if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
     return { kind: 'refused', error: said ?? `The server refused it (${status})` };
@@ -110,11 +123,11 @@ export function classify(
 }
 
 /**
- * The journal after one send. The entry leaves only on a confirmed issue number; every other
- * outcome keeps it, counted and rescheduled. Entries other than this one are untouched.
+ * The outbox after one send. The entry leaves only when the server confirmed it kept it (journaled,
+ * or filed); every other outcome keeps it, counted and rescheduled. Others are untouched.
  */
 export function settle(entries: JournalEntry[], clientId: string, outcome: SendOutcome, now: number): JournalEntry[] {
-  if (outcome.kind === 'filed') return entries.filter((e) => e.clientId !== clientId);
+  if (outcome.kind === 'filed' || outcome.kind === 'journaled') return entries.filter((e) => e.clientId !== clientId);
   return entries.map((e) => {
     if (e.clientId !== clientId) return e;
     const attempts = e.attempts + 1;

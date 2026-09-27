@@ -4,7 +4,9 @@ import { getUserByHandle, listUsers } from '@/modules/platform';
 import { config } from '@/config/deployment';
 import type { AppUser, AuthProvider } from './index';
 
-export const USER_COOKIE = `${config.data.cookiePrefix}user`;
+import { USER_COOKIE } from './cookie';
+
+export { USER_COOKIE };
 
 /**
  * The local provider. Identity is a cookie holding a handle; the dropdown in the rail

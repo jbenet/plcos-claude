@@ -48,9 +48,16 @@ async function copy(text: string): Promise<boolean> {
 }
 
 /**
- * The feedback outbox, where it can be seen (Juan, 27 Sep). Quiet and absent at zero: in the rail's
- * footer, "2 notes waiting to file", or "Saved. Filing…" just after File, or the issue number for a
- * few seconds once one files. It opens the list: each report's state, Retry now and Copy text. At
+ * Where filed feedback stands (Juan, 27 Sep), so he knows when it is safe to close the tab. Quiet
+ * and absent at zero, in the rail's footer:
+ *
+ *   "Saving…"                          the first send, up to 3 s
+ *   "Saved on server · filing…"        journaled there; safe to close
+ *   "1 note only on this device"       the server was not reached; keep this browser, it resends
+ *   "Filed as issue 0123"              for a few seconds, once filed
+ *
+ * "Only on this device" wins over the others, and looks different (solid, with "!"), because it is
+ * the one that is not yet safe. It opens the list: each report's state, Retry now and Copy text. At
  * phone widths the rail is a sheet, so the same line also sits in the top bar (`variant="bar"`).
  */
 export function OutboxIndicator({ variant = 'rail' }: { variant?: 'rail' | 'bar' }) {
@@ -60,21 +67,29 @@ export function OutboxIndicator({ variant = 'rail' }: { variant?: 'rail' | 'bar'
   const [anchor, setAnchor] = useState<{ left: number; bottom: number } | null>(null);
   useEffect(() => { startOutbox(); }, []);
 
-  const waiting = out.entries.length;
+  const device = out.entries.filter((e) => !(out.justSaved === e.clientId && out.sending.includes(e.clientId)));
+  const saving = out.entries.length - device.length;
+  const server = out.onServer.length;
   const latest = out.filed.at(-1);
-  if (!waiting && !latest) return open ? <OutboxList anchor={anchor} onClose={() => setOpen(false)} /> : null;
+  if (!out.entries.length && !server && !latest) return open ? <OutboxList anchor={anchor} onClose={() => setOpen(false)} /> : null;
 
   // The top bar on a phone shares its line with the menu and the name, so it says the same in fewer words.
   let label: string;
   let short: string;
-  let tone: 'wait' | 'send' | 'done' | 'refused';
-  if (out.justSaved && out.sending.includes(out.justSaved) && waiting === 1) {
-    label = 'Saved. Filing…'; short = 'Filing…'; tone = 'send';
-  } else if (waiting) {
-    const refused = out.entries.filter((e) => e.refused).length;
-    label = `${plural(waiting)} waiting to file${refused ? ` · ${refused} refused` : ''}`;
-    short = `${waiting} waiting`;
-    tone = refused ? 'refused' : out.sending.length ? 'send' : 'wait';
+  let tone: 'device' | 'send' | 'server' | 'done' | 'refused';
+  if (device.length) {
+    const refused = device.filter((e) => e.refused).length;
+    label = `${plural(device.length)} only on this device${refused ? ` · ${refused} refused` : ''}${server ? ` · ${server} on the server` : ''}`;
+    short = `${device.length} on this device`;
+    tone = refused ? 'refused' : 'device';
+  } else if (saving) {
+    label = 'Saving…'; short = 'Saving…'; tone = 'send';
+  } else if (server) {
+    label = server === 1 ? 'Saved on server · filing…' : `${server} saved on server · filing…`;
+    short = 'On the server';
+    tone = 'server';
+  } else if (latest!.error) {
+    label = `Not filed: ${latest!.error}`; short = 'Not filed'; tone = 'refused';
   } else {
     label = latest!.id ? `Filed as issue ${latest!.id}` : 'Connection note saved';
     short = latest!.id ? `Filed ${latest!.id}` : 'Saved';
@@ -93,10 +108,12 @@ export function OutboxIndicator({ variant = 'rail' }: { variant?: 'rail' | 'bar'
         }}
         aria-expanded={open}
         aria-haspopup="dialog"
-        title="Feedback kept in this browser until the server confirms it"
+        title={tone === 'device' || tone === 'refused'
+          ? 'Kept only in this browser until the server accepts it: keep this browser, it resends on its own'
+          : 'Saved on the server: safe to close this tab'}
         aria-label={variant === 'bar' ? label : undefined}
       >
-        <span className={s.mark} aria-hidden>{tone === 'done' ? '✓' : tone === 'refused' ? '!' : '↑'}</span>
+        <span className={s.mark} aria-hidden>{tone === 'done' || tone === 'server' ? '✓' : tone === 'refused' || tone === 'device' ? '!' : '↑'}</span>
         <span className={s.text}>{variant === 'bar' ? short : label}</span>
       </button>
       {open && <OutboxList anchor={anchor} onClose={() => setOpen(false)} />}
@@ -140,15 +157,29 @@ function OutboxList({ anchor, onClose }: { anchor: { left: number; bottom: numbe
         style={anchor ? ({ '--at-left': `${anchor.left}px`, '--at-bottom': `${anchor.bottom}px` } as CSSProperties) : undefined}
       >
         <div className={s.head}>
-          <div className="lbl">Feedback outbox{out.entries.length ? ` · ${out.entries.length} waiting` : ''}</div>
+          <div className="lbl">Feedback{out.entries.length ? ` · ${out.entries.length} only on this device` : ''}</div>
           <button type="button" className={s.x} onClick={onClose} aria-label="Close">×</button>
         </div>
         <p className={s.lede}>
-          Kept in this browser until the server confirms an issue number, through reloads and
-          restarts. Sending a note twice files it once.
+          {out.entries.length
+            ? 'The server could not be reached, so these are kept in this browser, through reloads, and sent as soon as it answers. Keep this browser until they say saved. Sending one twice files it once.'
+            : 'Saved on the server as soon as you file; it is filed from there, so the tab can be closed.'}
         </p>
+        {out.onServer.map((n) => (
+          <div key={n.clientId} className={`${s.row} ${s.onServer}`}>
+            <b>Saved on the server</b>
+            <span>{n.title}</span>
+            <span className={s.state}>Filing… Safe to close this tab.</span>
+          </div>
+        ))}
         {out.filed.map((f) => (
-          f.id ? (
+          f.error ? (
+            <div key={f.clientId} className={s.row}>
+              <b>Not filed</b>
+              <span>{f.title}</span>
+              <span className={s.bad}>{f.error}</span>
+            </div>
+          ) : f.id ? (
             <a key={f.clientId} className={`${s.row} ${s.filed}`} href={`/developer/issues/${f.id}`}>
               <b>Filed as issue <span className="mono">{f.id}</span></b>
               <span>{f.title || 'Untitled'}</span>
@@ -167,7 +198,7 @@ function OutboxList({ anchor, onClose }: { anchor: { left: number; bottom: numbe
               Written {writtenAt(e.createdAt)} · <span className="mono">{e.request.page}</span>
               {entryPictures(e) > 0 ? ` · ${entryPictures(e)} ${entryPictures(e) === 1 ? 'picture' : 'pictures'}` : ''}
             </span>
-            <span className={e.refused ? s.bad : s.state}>{status(e)}</span>
+            <span className={e.refused ? s.bad : s.state}>Only on this device · {status(e)}</span>
             {e.textOnly && (
               <span className={s.bad}>Kept without its pictures: this browser&rsquo;s database was unavailable.</span>
             )}
@@ -199,7 +230,7 @@ function OutboxList({ anchor, onClose }: { anchor: { left: number; bottom: numbe
             </div>
           </div>
         ))}
-        {!out.entries.length && !out.filed.length && <p className={s.lede}>Nothing waiting. Everything has been filed.</p>}
+        {!out.entries.length && !out.onServer.length && !out.filed.length && <p className={s.lede}>Nothing waiting. Everything has been filed.</p>}
       </div>
     </>,
     document.body,

@@ -27,8 +27,9 @@
 .send .mark { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .send .mark { animation: none; } }
-.done { border-style: solid; color: var(--rail-ink); }
-.refused { border-style: solid; }
+.done, .server { border-style: solid; color: var(--rail-ink); }
+/* Not yet safe: solid, brighter, and the "!" mark. */
+.device, .refused { border-style: solid; border-color: var(--rail-ink); color: var(--rail-ink); font-weight: 600; }
 
 /* In the phone top bar: one short line, the same words. */
 .bar { width: auto; max-width: 58vw; border-color: var(--rail-line); }
@@ -68,6 +69,7 @@
 .state { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
 .bad { font-family: var(--mono); font-size: 10.5px; color: var(--clay); }
 .filed { text-decoration: none; }
+.onServer b { color: var(--green); }
 .filed b { color: var(--green); }
 .filed:hover b { text-decoration: underline; }
 .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }

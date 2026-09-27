@@ -16,9 +16,12 @@ const EXT: Record<string, string> = {
 /**
  * One create at a time per folder. Numbers are taken by reading the folder, so two creates at once
  * could take the same one; and a resend of a report that is still being written must find it
- * (lib/feedback-journal.ts). Held in-process — only the live server files (docs/COLLAB.md).
+ * (lib/feedback-journal.ts). Held in-process — only the live server files (docs/COLLAB.md) — and on
+ * globalThis, because Next can load this module more than once in one process (the route, and the
+ * journal's ingester started from instrumentation.ts).
  */
-const creating = new Map<string, Promise<unknown>>();
+const creating = ((globalThis as typeof globalThis & { __capitalOsIssueCreates?: Map<string, Promise<unknown>> })
+  .__capitalOsIssueCreates ??= new Map<string, Promise<unknown>>());
 function serially<T>(root: string, work: () => Promise<T>): Promise<T> {
   const result = (creating.get(root) ?? Promise.resolve()).then(work);
   creating.set(root, result.catch(() => undefined));

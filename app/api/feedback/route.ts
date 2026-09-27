@@ -1,14 +1,32 @@
-import type { Queryable } from '@/lib/db';
+/**
+ * The feedback box's route: journal first, file after (Juan, 27 Sep: "it should journal to the
+ * server. the page may die or close forever").
+ *
+ * POST validates the report, writes it to the server's journal as one atomic file
+ * (lib/feedback-inbox.ts) and answers 202 { journaled, clientId } — it awaits nothing else. No
+ * database, no auth lookup, no issue numbering: those happen after the response, in the ingester
+ * (lib/feedback-ingest.ts), so a pegged database or a busy import never holds a report.
+ *
+ * Keep this file's static imports light. A property walks them and fails if any reaches the
+ * database or a module's service code; the ingester is loaded with a dynamic import, after the
+ * response.
+ */
+import { join } from 'node:path';
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { config } from '@/config/deployment';
 import { feedbackHome } from '@/config/ports';
-import { auth } from '@/lib/auth';
-import { fileFeedback } from '@/modules/platform';
-import type { IssueAttachment, IssueKind, IssuePriority } from '@/lib/issues';
-import { titleFrom } from '@/lib/issues/title';
+import { USER_COOKIE } from '@/lib/auth/cookie';
 import { isClientId } from '@/lib/feedback-journal';
-import { cookies } from 'next/headers';
-import { USER_COOKIE } from '@/lib/auth/local';
+import { checkReport, inboxStatus, journal } from '@/lib/feedback-inbox';
+import { newRequestKey } from '@/lib/request-key';
+
+const issuesRoot = () => join(process.cwd(), config.issues.dir);
+
+/** Filing happens here, after the response: the ingester's own module, loaded when first needed. */
+const fileLater = () => setImmediate(() => {
+  void import('@/lib/feedback-ingest').then((m) => m.kickIngest()).catch(() => undefined);
+});
 
 export async function POST(req: Request) {
   // Only the live app files (docs/COLLAB.md): a branch filing would take numbers the live app
@@ -19,101 +37,47 @@ export async function POST(req: Request) {
       { status: 403 },
     );
   }
+  let raw: Record<string, unknown>;
   try {
-    const body = (await req.json()) as {
-      title?: string; body?: string; kind?: IssueKind; priority?: IssuePriority;
-      page?: string; context?: Record<string, unknown>; screenshots?: string[];
-      images?: Array<{ name?: string; dataUrl?: string }>;
-      imageOffset?: number;
-      /** The browser journal's id for this report (lib/feedback-journal.ts). */
-      clientId?: unknown;
-    };
-    // A resend after a timeout that did reach this server must not file twice: the sink answers a
-    // client id it has seen with the issue it already made. Anything else is refused, not ignored.
-    if (body.clientId !== undefined && !isClientId(body.clientId)) {
-      return NextResponse.json({ error: 'The report\'s client id is malformed.' }, { status: 400 });
-    }
-    const clientId = body.clientId as string | undefined;
-    /**
-     * Intake writes the title when the reporter did not (issue 0012).
-     *
-     * Making somebody name a bug before they can describe it is a tax on the complaint, and
-     * the name they invent under that pressure is usually worse than the first line of what
-     * they actually wrote. What intake cannot do is invent the *complaint* — a report with
-     * neither a title nor a body is still refused.
-     */
-    const title = body.title?.trim() || titleFrom(body.body ?? '');
-    if (!title) {
-      return NextResponse.json(
-        { error: 'Say what happened. A title or a description — either is enough, neither is not.' },
-        { status: 400 },
-      );
-    }
-    /**
-     * Everything arrives as a data URL from the reporter's own browser. Only the four
-     * image types are accepted, only the base64 body is kept, and the sink names the
-     * files — so nothing here can choose a path and nothing here is executed.
-     *
-     * Order matters: the screenshot is attachment 1 when it is included, and the body's
-     * `attachment:N` tokens are numbered against this array.
-     */
-    const TYPES = /^data:(image\/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/=]+)$/;
-    const MAX_B64 = 12_000_000;
-    const attachments: IssueAttachment[] = [];
+    raw = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: 'The report did not arrive whole. It is still in your browser; it will be sent again.' }, { status: 400 });
+  }
+  // A resend after a timeout must not file twice: the client id names the journal file, and the
+  // writer dedupes on it. A malformed one is refused, not replaced; none at all (an old tab) gets one.
+  if (raw.clientId !== undefined && !isClientId(raw.clientId)) {
+    return NextResponse.json({ error: 'The report\'s client id is malformed.' }, { status: 400 });
+  }
+  const clientId = (raw.clientId as string | undefined) ?? newRequestKey();
+  const checked = checkReport(raw);
+  if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: checked.status });
 
-    for (const shot of body.screenshots ?? []) {
-      const m = TYPES.exec(shot);
-      if (!m || m[1] !== 'image/png') {
-        return NextResponse.json({ error: 'A screenshot was not a PNG.' }, { status: 400 });
-      }
-      if (m[2]!.length > MAX_B64) {
-        return NextResponse.json({ error: 'A screenshot is too large.' }, { status: 413 });
-      }
-      attachments.push({ kind: 'screenshot', contentType: 'image/png', base64: m[2]! });
-    }
-
-    for (const img of body.images ?? []) {
-      const m = TYPES.exec(img.dataUrl ?? '');
-      if (!m) {
-        return NextResponse.json(
-          { error: 'An attached file was not a PNG, JPEG, GIF or WebP.' }, { status: 400 },
-        );
-      }
-      if (m[2]!.length > MAX_B64) {
-        return NextResponse.json({ error: 'An attached file is too large.' }, { status: 413 });
-      }
-      attachments.push({
-        kind: 'image',
-        contentType: m[1] as IssueAttachment['contentType'],
-        base64: m[2]!,
-        name: img.name,
-      });
-    }
-
-    // Reading the local cookie needs no DB. Do not make filing depend on auth's lookup.
-    const user = {
-      handle: (await cookies()).get(USER_COOKIE)?.value || 'unknown reporter',
-      resolveUser: async (q: Queryable) => (await auth()).currentUser(q),
-    };
-    const issue = await fileFeedback(user, {
-      title,
-      body: body.body ?? '',
-      kind: body.kind ?? 'bug',
-      priority: body.priority ?? 'P2',
-      page: body.page ?? '/',
-      context: body.context ?? {},
-      attachments,
-      imageOffset: body.imageOffset ?? 0,
-      ...(clientId ? { clientId } : {}),
+  try {
+    const reporter = (await cookies()).get(USER_COOKIE)?.value || null;
+    const done = await journal(issuesRoot(), {
+      kind: 'issue', clientId, receivedAt: new Date().toISOString(), reporter, request: checked.value,
     });
+    fileLater();
     return NextResponse.json({
-      id: issue.id, title: issue.title, location: issue.location, attachments: issue.attachments,
-      ...(clientId ? { clientId, repeat: Boolean(issue.repeat) } : {}),
-    });
+      journaled: true, clientId, repeat: done.already !== null,
+      ...(done.filed?.issueId ? { id: done.filed.issueId } : {}),
+    }, { status: 202 });
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
+      { error: `The server could not save it: ${err instanceof Error ? err.message : 'unknown error'}. It is still in your browser and will be sent again.` },
       { status: 500 },
     );
   }
+}
+
+/** Where a journaled report stands: { state: 'journaled' | 'filed' | 'refused', id? }. Reads the journal only. */
+export async function GET(req: Request) {
+  const clientId = new URL(req.url).searchParams.get('clientId') ?? '';
+  if (!isClientId(clientId)) return NextResponse.json({ error: 'Give a clientId.' }, { status: 400 });
+  const status = await inboxStatus(issuesRoot(), clientId);
+  if (!status) return NextResponse.json({ state: 'unknown' }, { status: 404 });
+  if (status.state === 'journaled') fileLater();
+  return NextResponse.json(status.state === 'filed'
+    ? { state: 'filed', id: status.issueId }
+    : status.state === 'refused' ? { state: 'refused', error: status.reason } : { state: 'journaled' });
 }
