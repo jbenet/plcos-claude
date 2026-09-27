@@ -6,6 +6,10 @@ import { storedPersonEvidence } from './entity-types';
 import type { Finding } from './schema';
 import type { Path } from './connect';
 import { mergeImportPeople } from './import-person-dupes';
+import { applyIdentityDecisions, readIdentityDecisions, suppressSeparatedIdentityGroups,
+  type IdentityDecisionInput, type IdentityDecisionReport } from './identity-decisions';
+import { config } from '@/config/deployment';
+import { join } from 'node:path';
 
 const RULE = 'identity:v1:import-duplicates';
 const TYPE_RULE = 'rule:import-duplicate-org';
@@ -20,6 +24,7 @@ export interface ImportDuplicateReport {
   corrected: Array<{ entityId: string; correctionId: string }>;
   ambiguous: Array<{ name: string; entityIds: string[]; reason: string }>;
   pursuitMerges?: PursuitMergeReport;
+  decisions?: IdentityDecisionReport;
 }
 
 /** Local imported organizations and corroborated imported people. Whole components are checked before any mutation.
@@ -27,7 +32,8 @@ export interface ImportDuplicateReport {
  * Caller owns the transaction; there is deliberately no DB-opening command line script.
  */
 export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: string,
-  findings: Finding[] = [], paths: Path[] = []): Promise<ImportDuplicateReport> {
+  findings: Finding[] = [], paths: Path[] = [],
+  options: { decisions?: IdentityDecisionInput[]; reviewOnly?: boolean } = {}): Promise<ImportDuplicateReport> {
   if (!by.trim()) throw new Error('An actor is required');
   await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
   const report: ImportDuplicateReport = { merged: 0, merges: [], corrected: [], ambiguous: [] };
@@ -123,13 +129,29 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     }
   }
   await mergeImportPeople(tx, by, report, findings, paths);
+  await suppressSeparatedIdentityGroups(tx, report);
+  if (!options.reviewOnly) await applyIdentityDecisions(tx, by, report, options.decisions ?? []);
+  if (report.decisions?.applied) {
+    // A partial merge or retype changes the remaining group. Report current roots and
+    // reasons, without silently applying a second round of automatic repairs.
+    await tx.exec('savepoint identity_review_remaining');
+    try {
+      report.ambiguous = (await mergeImportDuplicatesInTransaction(tx, by, findings, paths, { reviewOnly: true })).ambiguous;
+    } finally {
+      await tx.exec('rollback to savepoint identity_review_remaining');
+      await tx.exec('release savepoint identity_review_remaining');
+    }
+  }
   await tx.query(`update identity.possible_match set active=false where active
     and identity.canonical_entity_id(left_entity)=identity.canonical_entity_id(right_entity)`);
   return report;
 }
 
-export const mergeImportDuplicates = (db: Db, by: string) => db.transaction(async tx => {
-  const report = await mergeImportDuplicatesInTransaction(tx, by);
-  report.pursuitMerges = await consolidatePursuitsInTransaction(tx, by);
-  return report;
-});
+export async function mergeImportDuplicates(db: Db, by: string, decisionDir = join(config.data.root, 'enrich')) {
+  const decisions = await readIdentityDecisions(decisionDir);
+  return db.transaction(async tx => {
+    const report = await mergeImportDuplicatesInTransaction(tx, by, [], [], { decisions });
+    report.pursuitMerges = await consolidatePursuitsInTransaction(tx, by);
+    return report;
+  });
+}

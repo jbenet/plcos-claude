@@ -12,6 +12,7 @@ import { listPursuits, type Pursuit, type PursuitStatus } from '@/modules/strate
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { noteTags } from '@/lib/connectors/affinity/event-tags';
 import { makeTriageExport, writeTriageExport } from './triage-export';
+import { exportIdentityReview } from './identity-review-export';
 
 /**
  * The research set (N64, docs/19): who the enrichment workflows read about, written to files
@@ -332,6 +333,8 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   // address and no domain, since agents read this file and a personal domain is one step from a
   // personal address (Juan, 24 Sep: nothing that identifies us goes into a request).
   const db = await getDb();
+  const identityReview = await db.transaction(tx => exportIdentityReview(tx));
+  await writeFile(join(dir, 'identity-review.jsonl'), identityReview.map(row => JSON.stringify(row)).join('\n') + (identityReview.length ? '\n' : ''), 'utf8');
   const team = await db.query<{ handle: string; name: string; role: string }>(
     `select handle, name, role from platform.app_user where active order by name`);
   await writeFile(join(dir, 'team.json'), JSON.stringify(team.map((u) => ({

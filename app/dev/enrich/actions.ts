@@ -171,7 +171,7 @@ export async function reversePursuitMergeAction(id: string, reason: string): Pro
   } catch (error) { return { error: error instanceof Error ? error.message : 'Reversal failed.' }; }
 }
 
-/** Uses the live server handle; no file reads or external connector traffic. */
+/** Uses the server handle and local decision file; no external connector traffic. */
 export async function mergeImportDuplicatesAction(): Promise<{ result?: ImportDuplicateReport; error?: string; message?: string }> {
   if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
     return { error: 'Merge duplicate identities on the live server.' };
@@ -207,7 +207,8 @@ export async function reverseImportDuplicateAction(assertionId: string, reason: 
     await db.transaction(async tx => {
       await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
       const merge = await tx.one<{ loser: string; survivor: string }>(`select merged_entity::text loser,canonical_entity::text survivor
-        from identity.match_assertion where assertion_id=$1 and rule='identity:v1:import-duplicates'`, [assertionId]);
+        from identity.match_assertion where assertion_id=$1 and kind='same_as'
+          and (rule='identity:v1:import-duplicates' or rule like 'identity:v1:decision:%' or rule='decision:affinity-duplicate')`, [assertionId]);
       if (!merge) throw new Error('Duplicate merge not found.');
       const pursuit = await tx.one(`select id from strategy.pursuit_merge m where reversed_at is null
         and exists(select 1 from strategy.pursuit p where (p.pursuit_id=m.survivor_id or p.pursuit_id=any(m.loser_ids))
@@ -217,6 +218,19 @@ export async function reverseImportDuplicateAction(assertionId: string, reason: 
     });
     await appendAudit({ actorId: user.id, action: 'identity.import_duplicate_reversed', subjectType: 'identity', detail: { assertionId, reason } });
     revalidatePath('/dev/enrich'); revalidatePath('/orgs', 'layout'); revalidatePath('/targets', 'layout');
+    return {};
+  } catch (error) { return { error: error instanceof Error ? error.message : 'Reversal failed.' }; }
+}
+
+export async function reverseIdentitySeparationAction(assertionId: string, reason: string): Promise<{ error?: string }> {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+    return { error: 'Reverse identity separations on the live server.' };
+  }
+  try {
+    const user = await (await auth()).currentUser();
+    const { reverseIdentitySeparation } = await import('@/lib/enrich/identity-decisions');
+    await reverseIdentitySeparation(await getDb(), assertionId, user.id, reason);
+    revalidatePath('/dev/enrich');
     return {};
   } catch (error) { return { error: error instanceof Error ? error.message : 'Reversal failed.' }; }
 }
