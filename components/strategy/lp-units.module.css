@@ -1,18 +1,35 @@
-/* LP units in the LP tables (issues 0111, 0112; docs/23): section heads, the people named inside an
-   organisation's row, an individual's firms, and the capacity marks. */
+/* LP units in the LP tables (issues 0111–0113; docs/23): the type icon and toggles, the people named
+   inside an organisation's row, an individual's firms, and the capacity marks. */
 
-.sectionRow td {
-  padding: 16px 14px 8px; background: var(--ground); border-bottom: 1px solid var(--line);
-  border-top: 1px solid var(--line); vertical-align: baseline;
-}
-tbody:first-of-type .sectionRow:first-child td { border-top: 0; padding-top: 12px; }
-.sectionHead { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
-.sectionName { font-family: var(--display); font-size: 15px; font-weight: 600; color: var(--ink); }
-.sectionCount { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
-.sectionNote { font-size: 12px; color: var(--muted); flex: 1 1 320px; min-width: 0; }
-.sectionEmpty td { padding: 10px 14px 14px; font-size: 12.5px; color: var(--muted); }
+/* The unit's type at the start of each row (issue 0113): a building or a person, small and quiet. */
+.unit { display: inline-flex; align-items: center; color: var(--muted); flex: none; margin-top: 2px; }
+.unit[data-unit="individual"] { color: var(--label); }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .moreRow td { padding: 8px 14px 12px; font-size: 12px; color: var(--muted); }
 .moreRow button { margin-right: 10px; }
+
+/* The Firms and Individuals toggles in the filter line (issue 0113): both on to start. */
+.units { display: flex; flex-direction: column; gap: 3px; flex: none; }
+.unitLabel { font-family: var(--mono); font-size: 9px; font-weight: 500; letter-spacing: .11em; text-transform: uppercase; color: var(--label); white-space: nowrap; }
+.unitButtons { display: flex; gap: 4px; }
+.unitBtn {
+  display: inline-flex; align-items: center; gap: 5px; height: 30px; box-sizing: border-box; padding: 0 9px;
+  font: inherit; font-size: 12px; color: var(--muted); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 7px; cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent;
+}
+.unitBtn b { font-family: var(--mono); font-size: 11px; font-weight: 500; }
+.unitBtn[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+.unitBtn[aria-pressed="false"] { text-decoration: line-through; text-decoration-color: var(--muted); }
+.unitBtn[aria-pressed="false"] .unit { opacity: .55; }
+.unitBtn .unit { margin-top: 0; color: inherit; }
+.unitBtn:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 1px; }
+@media (hover: hover) { .unitBtn:hover { background: var(--accent-wash); } }
+@media (pointer: coarse) { .unitBtn { height: 36px; padding: 0 11px; } }
+@container lp (max-width: 700px) { .units { flex: 1 1 100%; } .unitButtons > * { flex: 1 1 0; justify-content: center; } }
+
+/* The name line: the type icon, then the name and its marks. */
+.nameLine { display: flex; align-items: flex-start; gap: 6px; }
+.nameLine > :last-child { min-width: 0; }
 
 /* The people inside an organisation's row, and an individual's firms: one quiet line. */
 .who { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.5; }

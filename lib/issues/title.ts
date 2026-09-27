@@ -14,10 +14,11 @@
 const MAX = 80;
 
 export function titleFrom(body: string): string {
-  const line = body
+  const line = continuations(body)
     .split(/\n/)
     .map((l) => l.replace(/^\s*(?:[-*+]|\d+[.)]|>|#{1,6})\s*/, '').trim())
-    .find((l) => l.length > 0 && !l.startsWith('```') && !l.startsWith('!['));
+    // A line with no letter or digit names nothing (issue 0113: a lone backslash became the title).
+    .find((l) => /[\p{L}\p{N}]/u.test(l) && !l.startsWith('```') && !l.startsWith('!['));
   if (!line) return '';
 
   let t = line
@@ -41,4 +42,13 @@ export function titleFrom(body: string): string {
     t = clause >= 32 ? head.slice(0, clause) : `${head.replace(/\s+\S*$/, '')}…`;
   }
   return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/**
+ * A backslash at the end of a line is the terminal's way to type a newline (issue 0113: a
+ * backslash then Enter, as in a shell or Claude Code), not a character anybody meant to file.
+ * It is removed from the end of each line; a backslash anywhere else is kept.
+ */
+export function continuations(text: string): string {
+  return text.replace(/[ \t]*\\[ \t]*(?=\r?\n|$)/g, '');
 }

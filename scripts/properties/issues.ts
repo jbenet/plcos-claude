@@ -95,5 +95,24 @@ export async function issueProperties(check: Check) {
         count('screenshots') === 1 && /^status: agent-ready /m.test(once) && twice === once,
       `fields after the rewrite: ${keys.join(', ')}; stable on a second rewrite: ${twice === once}`,
     );
+
+    // Issue 0113: a title with quotes or a backslash reads back as itself, and a line-end
+    // backslash (a typed newline, as in a terminal) is not a title.
+    const { titleFrom } = await import('../../lib/issues/title');
+    const { checkReport } = await import('../../lib/feedback-inbox');
+    const titles = ['\\', '"rail" is "odd"', "'quoted'", 'C:\\path\\to', 'Fix: the "rail"', '[not a list]', 'ends with a backslash \\',
+      'a # hash', ' leading space', 'trailing space ', '#1 first', "it's fine", '{braces}', '"'];
+    const base = parseIssue(filed, '0999');
+    const lost = titles.filter((t) => parseIssue(serializeIssue({ ...base, title: t }), '0999').title !== t);
+    const typed = checkReport({ body: '\\\nFirms and individuals in one list, please\\\nwith toggles' });
+    check('0113 an issue title with quotes, a backslash, a bracket or a hash reads back exactly as written',
+      lost.length === 0, lost.length ? `lost: ${lost.map((t) => JSON.stringify(t)).join(', ')}` : `${titles.length} awkward titles round-trip.`);
+    check('0113 a backslash typed as a newline never becomes the title, and is dropped from the line ends it sat on',
+      titleFrom('\\\nThe real first line') === 'The real first line' && titleFrom('\\') === '' && titleFrom('\\\n  \\\n') === ''
+        && typed.ok && typed.value.title === 'Firms and individuals in one list, please'
+        && typed.value.body === '\nFirms and individuals in one list, please\nwith toggles'
+        && checkReport({ title: 'A title with a path C:\\temp inside', body: '' }).ok
+        && (checkReport({ title: 'A title with a path C:\\temp inside', body: '' }) as { value: { title: string } }).value.title === 'A title with a path C:\\temp inside',
+      'Only a backslash at the end of a line is read as a newline; one inside the text is kept.');
   }
 }

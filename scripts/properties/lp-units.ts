@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { withDb, type Db } from '../../lib/db';
 import { pipelineData } from '../../lib/pipeline-data';
-import { sectionRows } from '../../components/strategy/pipeline-model';
+import { EMPTY, filtersFrom, matches, rankRows, unitsFrom, type PipelineRow } from '../../components/strategy/pipeline-model';
 import {
   combineStatus, decideLpUnit, decideLpUnitByPerson, isPseudoOrg, repointPursuits, reverseLpRepoint, STATUSES,
   type LpFacts, type LpFirm, type PursuitStatus,
@@ -164,8 +164,23 @@ export async function lpUnitProperties(check: Check, db: Db) {
         && !hp1!.merged_into && hp1!.status === 'passed' && !!hp1!.lp_review && h1!.status === 'sourcing',
       'The furthest status stands, a person’s own is carried with its source, and a person’s Passed against a live firm is left for review.');
 
-    // Grouping, as both tables draw it.
-    const { organisations, individuals } = sectionRows(rows, 'score', -1);
+    // One ranked list, as both tables draw it (issue 0113), and the Firms/Individuals toggles.
+    const ranked = rankRows(rows, 'score', -1);
+    const organisations = ranked.filter((r) => r.isOrg), individuals = ranked.filter((r) => !r.isOrg);
+    const shownWith = (units: string) => rows.filter((r) => matches(r, filtersFrom({ units }), [], Date.now())).map((r) => r.id).sort().join();
+    const idsOf = (list: PipelineRow[]) => list.map((r) => r.id).sort().join();
+    const firstInd = ranked.findIndex((r) => !r.isOrg), lastOrg = ranked.map((r) => r.isOrg).lastIndexOf(true);
+    check('0113 one ranked list: organisations and individuals interleave by the chosen order, each row once',
+      ranked.length === rows.length && new Set(ranked.map((r) => r.id)).size === rows.length
+        && ranked.every((r, i) => i === 0 || rankRows([ranked[i - 1]!, r], 'score', -1)[0] === ranked[i - 1])
+        && firstInd >= 0 && lastOrg >= 0,
+      `${organisations.length} organisations and ${individuals.length} individuals in one order; none is held back for a section.`);
+    check('0113 the Firms and Individuals toggles: both on to start, each hides only its own type, and the address round-trips them',
+      EMPTY.units === 'both' && shownWith('both') === idsOf(rows) && shownWith('firms') === idsOf(organisations)
+        && shownWith('individuals') === idsOf(individuals) && shownWith('none') === ''
+        && filtersFrom({ units: 'bogus' }).units === 'both'
+        && unitsFrom(true, true) === 'both' && unitsFrom(true, false) === 'firms' && unitsFrom(false, true) === 'individuals' && unitsFrom(false, false) === 'none',
+      'An edited address falls back to both; each toggle state reads back as itself.');
     const jointRow = organisations.filter((r) => r.entityId === joint);
     check('0111 grouping: an organisation is listed once, individuals apart, and a person who invests both ways is in both places',
       jointRow.length === 1 && organisations.every((r) => r.isOrg) && individuals.every((r) => !r.isOrg)
