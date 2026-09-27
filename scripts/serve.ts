@@ -12,8 +12,8 @@
  * iPad reach it (next.config.ts), and a dev server polls for file changes. The npm scripts raise
  * the open-file limit for the real data and the preview, as they always have.
  */
-import { spawn } from 'node:child_process';
-import { statSync, readFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { statSync, readFileSync, existsSync } from 'node:fs';
 import { connect, createServer } from 'node:net';
 import { constants } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -31,6 +31,26 @@ const refuse = (why: string): never => {
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** Whether anything answers on the port, or holds it: a connection, then a bind like Next's. */
+
+/** The local Postgres cluster the live server uses (docs/21-postgres.md): Homebrew's postgresql@17. */
+const PG_BIN = process.env.PG_BIN ?? '/opt/homebrew/opt/postgresql@17/bin';
+let pgCluster: string | null = null;
+const pgEnv = { ...process.env, LC_ALL: 'en_US.UTF-8', LANG: 'en_US.UTF-8' };
+
+function startPostgres(dir: string, port: number): string {
+  if (!existsSync(join(dir, 'PG_VERSION'))) refuse(`No Postgres cluster at ${dir}; see docs/21-postgres.md.`);
+  const running = spawnSync(join(PG_BIN, 'pg_ctl'), ['-D', dir, 'status'], { env: pgEnv }).status === 0;
+  if (running) { say(`postgres already running on :${port}`); return dir; }
+  const r = spawnSync(join(PG_BIN, 'pg_ctl'), ['-D', dir, '-l', join(dir, 'server.log'), '-w', '-t', '60', 'start'], { env: pgEnv, stdio: 'ignore' });
+  if (r.status !== 0) refuse(`Postgres did not start (see ${join(dir, 'server.log')}).`);
+  say(`postgres started on :${port}`);
+  return dir;
+}
+
+function stopPostgres(dir: string) {
+  spawnSync(join(PG_BIN, 'pg_ctl'), ['-D', dir, '-m', 'fast', '-w', '-t', '30', 'stop'], { env: pgEnv, stdio: 'ignore' });
+}
+
 async function busy(port: number): Promise<boolean> {
   const answers = await new Promise<boolean>((done) => {
     const socket = connect({ port, host: '127.0.0.1' });
@@ -110,6 +130,10 @@ async function main() {
       if (/^postgres(ql)?:\/\/[^@\s]+@(127\.0\.0\.1|localhost|\[::1\]):\d+\/[a-z0-9_]+$/.test(url)) {
         env.DATABASE_URL = url;
         say('database: local Postgres (data/real/postgres.url)');
+        // Juan, 27 Sep: Postgres comes up and goes down with our dev server, never as a login item.
+        // The cluster lives beside the real data (data/real/postgres); start it if it isn't running,
+        // and stop it when this launcher exits. A SIGKILLed launcher leaves it up; the next start reuses it.
+        pgCluster = startPostgres(join(layout.root, 'data', 'real', 'postgres'), Number(new URL(url).port));
       } else if (url) refuse('data/real/postgres.url must be a loopback postgres:// URL with a database name.');
     } catch { /* No file: PGlite. */ }
   }
@@ -129,7 +153,10 @@ async function main() {
   // The terminal sends Ctrl-C to both; a signal sent to this process alone is passed on, so the
   // server never outlives its launcher with a database open.
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(sig, () => child.kill(sig));
-  child.on('exit', (code, signal) => process.exit(code ?? 128 + (signal ? constants.signals[signal] : 0)));
+  child.on('exit', (code, signal) => {
+    if (pgCluster) stopPostgres(pgCluster);
+    process.exit(code ?? 128 + (signal ? constants.signals[signal] : 0));
+  });
 }
 
 main().catch((err: unknown) => refuse(message(err)));

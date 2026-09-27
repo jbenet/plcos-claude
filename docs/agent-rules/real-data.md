@@ -26,7 +26,9 @@ a copy of it with `npm run preview`, and a sub-agent's worktree, which has no ro
   internet to find useful publicly available information… (dont sign up for paid services or
   write any info into the world, only read!)". So a search may carry an LP's name with their
   organization, title, location and topic words, to read public pages. It never carries a status,
-  an amount, a note, a list name, or the fact that they are in this pipeline. A local sub-agent may
+  an amount from our records, a note, a list name, or the fact that they are in this pipeline. A
+  public amount read on a public page (a published round size, a grant, a fund size) may be searched
+  (Juan, 27 Sep 2026: "Yeah that's fine"). A local sub-agent may
   read a research batch under `data/real/enrich/` and write its findings back there; its prompt
   still carries no real data, and it never runs remotely. No sign-ins, no paid services, no
   contact-data brokers, nothing posted. Findings land in files first and are mapped in by an import.
