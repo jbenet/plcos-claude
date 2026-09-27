@@ -7,3 +7,30 @@
  * in: a pinch shrinks innerHeight, and the rail would shrink with it.
  */
 export const VIEWPORT_BOOT = `(function(){var d=document.documentElement;function s(){var v=window.visualViewport;if(v&&v.scale>1.01)return;d.style.setProperty('--app-h',window.innerHeight+'px')}s();window.addEventListener('resize',s);window.addEventListener('orientationchange',s);window.addEventListener('pageshow',s)})();`;
+
+/**
+ * The shell's two narrow layouts (issue 0090). Widths, never the user agent: an iPad in split view is
+ * as narrow as a phone and says it is a Mac. Shell.module.css repeats these numbers in its media
+ * queries, and a property checks that the two agree.
+ *
+ * Up to PHONE_MAX the rail folds into a top bar with a menu, and the side pane opens as a bottom
+ * sheet. Up to PANE_MAX (portrait tablets) the rail stays, and the side pane, which there left the
+ * page a column about 230 px wide, opens over the page from the right. Above PANE_MAX nothing changes.
+ * Both numbers are judgement, not measurement of Juan's devices: 760 is below every iPad's portrait
+ * width, and 1023 keeps an iPad in landscape (1180) on the desktop layout.
+ */
+export const PHONE_MAX = 760;
+export const PANE_MAX = 1023;
+export const PHONE_QUERY = `(max-width: ${PHONE_MAX}px)`;
+export const PANE_QUERY = `(max-width: ${PANE_MAX}px)`;
+
+/**
+ * Where Tab goes inside an open sheet: forward from the last control to the first, back from the
+ * first to the last, and to the first (or last, going back) when focus is outside the sheet
+ * (index -1). Null when the sheet has nothing to focus, and the sheet itself should hold focus.
+ */
+export function nextFocusIndex(count: number, index: number, back: boolean): number | null {
+  if (count <= 0) return null;
+  if (index < 0 || index >= count) return back ? count - 1 : 0;
+  return back ? (index - 1 + count) % count : (index + 1) % count;
+}

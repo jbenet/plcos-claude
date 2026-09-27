@@ -1,8 +1,9 @@
 import './globals.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import { HereProvider } from '@/components/shell/Here';
 import { Rail } from '@/components/shell/Rail';
+import { AppShell } from '@/components/shell/AppShell';
 import { KeyboardShortcuts } from '@/components/shell/KeyboardShortcuts';
 import { vehicleSelection } from '@/lib/session';
 import { DEFAULT_THEME, THEME_BOOT, themeAttr } from '@/lib/theme';
@@ -21,6 +22,12 @@ export const metadata: Metadata = {
   title: config.data.profile === 'real' ? `Real · ${config.product.name}` : config.product.name,
   description: 'Fundraising strategy and operations for PLC Neurotech I, PLC Crypto/Rails, the SPVs and the grants rail.',
 };
+
+/**
+ * `viewport-fit=cover` lets the phone layout (issue 0090) reach the screen's edges and pad itself by
+ * the safe-area insets, which are zero everywhere but on a phone or a tablet with a home indicator.
+ */
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // The address the browser asked for, when the proxy rewrote it (proxy.ts), and the vehicle in view:
@@ -53,10 +60,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className={config.data.profile}>
         <HereProvider asked={asked} vehicle={selection.current?.slug ?? 'all'}>
           <KeyboardShortcuts />
-          <div className="app">
-            <Rail />
-            <div className="main">{children}</div>
-          </div>
+          <AppShell rail={<Rail />} mark={config.product.mark} name={config.product.name}>
+            {children}
+          </AppShell>
         </HereProvider>
       </body>
     </html>

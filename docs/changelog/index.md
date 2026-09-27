@@ -128,3 +128,4 @@ to the repository root to preserve existing anchors and rendered output.
 - [Dakota translation, enrichment and sourcing — review candidate](entries/dakota-translate.md)
 - [0096 — Act from the funder–vehicle fit list](entries/fit-0096.md)
 - [0097 / 0102 — Strategy recommendations, utility created, status marks; rail order](entries/strategy-0097.md)
+- [0090 — The shell on a phone and a narrow tablet](entries/shell-phone-0090.md)

@@ -8,6 +8,7 @@ import {
   capturePage, capturePageExact, METHOD_LABEL, type CaptureMethod, type Region,
 } from '@/lib/capture';
 import { RegionPicker } from './RegionPicker';
+import shell from './Shell.module.css';
 import { ShortcutList, useShortcutPlatform } from './KeyboardShortcuts';
 import { isFeedbackKey, isShortcutsKey } from '@/lib/keyboard-shortcuts';
 import { MarkdownField, packAttachments, type DroppedImage } from '@/components/ui/MarkdownField';
@@ -105,7 +106,7 @@ function FiledFromLive({ livePort, onClose }: { livePort: number | null; onClose
   return createPortal(
     <>
       <div className="scrim nocapture" onClick={onClose} />
-      <div className="drawer nocapture" role="dialog" aria-label="Give feedback">
+      <div className={`drawer nocapture ${shell.drawer}`} role="dialog" aria-label="Give feedback">
         <div className="drawerhead"><div className="lbl">Feedback</div></div>
         <h2>Feedback is filed from the live app</h2>
         <p className="sublede">
@@ -447,7 +448,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
       )}
       <div className={`scrim nocapture${picking || shooting ? ' away' : ''}`} onClick={onClose} />
       <div
-        className={`drawer nocapture${wide ? ' wide' : ''}${picking || shooting ? ' away' : ''}`}
+        className={`drawer nocapture ${shell.drawer}${wide ? ' wide' : ''}${picking || shooting ? ' away' : ''}`}
         role="dialog"
         aria-label="Give feedback"
       >
