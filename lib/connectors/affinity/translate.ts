@@ -411,15 +411,26 @@ async function touchpoints(
   const ours = new Map((await tx.query<{ source_id: string; entity_id: string }>(
     `select source_id, entity_id from identity.source_record where source = $1`, [SOURCE],
   )).map((r) => [r.source_id, r.entity_id]));
+  const displayByUser = new Map((await tx.query<{ id: string; name: string }>(
+    'select id::text,name from platform.app_user where active')).map(u => [u.id, u.name]));
   const byEmail = new Map<string, string>();
+  const ambiguousEmails = new Set<string>();
   for (const t of team) {
     const id = users.get(t.handle);
     if (!id) continue;
-    for (const e of [t.email, t.affinityEmail]) if (e) byEmail.set(e.toLowerCase(), id);
+    for (const e of [t.email, t.affinityEmail]) if (e) {
+      const email = e.trim().toLowerCase();
+      if (byEmail.has(email) && byEmail.get(email) !== id) ambiguousEmails.add(email);
+      byEmail.set(email, id);
+    }
   }
   const who = (p?: InteractionPerson | null, email?: string) => {
     const e = (p?.primaryEmailAddress ?? email ?? '').toLowerCase();
-    return e ? byEmail.get(e) : undefined;
+    return e && !ambiguousEmails.has(e) ? byEmail.get(e) : undefined;
+  };
+  const attendeeName = (p: InteractionPerson) => {
+    const id = who(p);
+    return (id && displayByUser.get(id)) || [p.firstName, p.lastName].filter(Boolean).join(' ');
   };
   const now = Date.now();
   let added = 0;
@@ -472,7 +483,7 @@ async function touchpoints(
           ? d.from?.person?.type === 'internal' ? 'ours' : d.from?.person?.type === 'external' ? 'theirs' : null
           : 'both',
         owner: who(d.from?.person, d.from?.emailAddress) ?? internal.map((p) => who(p)).find(Boolean) ?? placeholder,
-        attendees: internal.map((p) => [p.firstName, p.lastName].filter(Boolean).join(' ')).filter(Boolean),
+        attendees: [...new Set(internal.map(attendeeName).filter(Boolean))],
         // The sender and those it was addressed to: someone on copy doesn't make it about the raise.
         // A message only (N81): who was invited to a meeting says nothing about what it was for.
         about: read(d.subject ?? d.title ?? '', d.type === 'email' || d.type === 'chat-message'
@@ -497,7 +508,7 @@ async function touchpoints(
       await put({
         entity, ref: `interaction:meeting:${mt.id}:${key}`, channel: 'meeting', at: mt.startTime, exact: true,
         direction: 'both', owner: internal.map((x) => who(x)).find(Boolean) ?? placeholder,
-        attendees: internal.map((x) => [x.firstName, x.lastName].filter(Boolean).join(' ')).filter(Boolean),
+        attendees: [...new Set(internal.map(attendeeName).filter(Boolean))],
         // Its title, not its invitees (N81): everyone on the team is at the fundraising domain.
         about: read(mt.title ?? '', []),
       });

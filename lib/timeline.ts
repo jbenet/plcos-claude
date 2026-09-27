@@ -1,3 +1,5 @@
+import { getDb } from '@/lib/db';
+import { teamLabels } from '@/modules/identity/team';
 import { listPeriods } from '@/modules/calendar';
 import { conditionsFor, listCycles, spvRooms } from '@/modules/close';
 import { listAsks } from '@/modules/coordination';
@@ -76,7 +78,8 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
     ]);
 
   const users = await listUsers();
-  const team = (owner: string, attendees: string[], source: string) => [...new Set([owner, ...attendees.filter(a => source === 'affinity' || users.some(u => u.name === a))])];
+  const projectTeam = await teamLabels(await getDb());
+  const team = (owner: string, attendees: string[], source: string) => projectTeam([owner, ...attendees.filter(a => source === 'affinity' || users.some(u => u.name === a))]);
   const marks: Mark[] = [];
   const push = (m: Mark) => {
     if (vehicleName && m.vehicleName && m.vehicleName !== vehicleName) return;
@@ -107,7 +110,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
       if (!cond.dueOn) continue;
       push({
         id: `cond:${cond.conditionId}`, lane: 'close', kind: 'deadline',
-        label: cond.label, team: cond.ownerName ? [cond.ownerName] : [],
+        label: cond.label, team: projectTeam(cond.ownerName ? [cond.ownerName] : []),
         detail: `${cond.status}${cond.ownerName ? ` · ${cond.ownerName}` : ''}${cond.compliance ? ' · compliance condition' : ''}`,
         from: day(cond.dueOn), to: day(cond.dueOn), vehicleName: c.vehicleName,
         alert: cond.overdue, past: cond.status === 'satisfied', href: '/close',
@@ -135,7 +138,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
     const when = a.madeAt ?? a.scheduledFor!;
     push({
       id: `ask:${a.askId}`, lane: 'outreach', kind: 'point',
-      team: [a.ownerName], lp: a.entityName,
+      team: projectTeam([a.ownerName]), lp: a.entityName,
       label: `${a.entityName}${a.connectorName ? ` via ${a.connectorName}` : ''}`,
       detail: `${a.status}${a.outcome ? ` · ${a.outcome}` : ''} · ${a.ownerName}`,
       from: day(when), to: day(when), vehicleName: a.vehicleName,
@@ -188,7 +191,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
     if (!q.dueOn || q.status === 'answered') continue;
     push({
       id: `dq:${q.questionId}`, lane: 'deadlines', kind: 'deadline',
-      team: q.ownerName ? [q.ownerName] : [], lp: q.entityName,
+      team: projectTeam(q.ownerName ? [q.ownerName] : []), lp: q.entityName,
       label: `Diligence — ${q.question.slice(0, 54)}${q.question.length > 54 ? '…' : ''}`,
       detail: `${q.ownerName ?? 'unowned'} · ${q.entityName}`,
       from: day(q.dueOn), to: day(q.dueOn), vehicleName: q.vehicleName,

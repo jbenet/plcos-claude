@@ -15,8 +15,10 @@ export async function runProperties(check: Check) {
   const db = await freshDb();
   await (await import('../dakota-properties')).dakotaProperties(check, db);
   await (await import('../prospects-properties')).prospectsProperties(check, db);
+  await (await import('../organization-lps-properties')).organizationLpsProperties(check, db);
   await prospectDispositionProperties(check, db);
   await (await import('../identity-resolution-properties')).identityResolutionProperties(check, db);
+  await (await import('../team-identity-properties')).teamIdentityProperties(check, db);
   await (await import('../identity-route-properties')).identityRouteProperties(check, db);
   await (await import('../routes-policy-0084-properties')).routesPolicy0084Properties(check, db);
   await (await import('../import-robustness-properties')).importRobustnessProperties(check, db);

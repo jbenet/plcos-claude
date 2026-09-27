@@ -294,7 +294,11 @@ export async function loadInit(db: Db): Promise<InitReport> {
       await tx.query(
         `insert into platform.app_user (handle, name, initials, role, email)
          values ($1,$2,$3,$4,$5)
-         on conflict (handle) do update set name = excluded.name, initials = excluded.initials,
+         on conflict (handle) do update set name = coalesce((
+           select a.detail->>'name' from platform.audit_log a
+           where a.subject_type='app_user' and a.subject_id=app_user.id::text
+             and a.action='identity.team_roster_updated'
+           order by a.at desc,a.id desc limit 1), excluded.name), initials = excluded.initials,
            role = excluded.role, email = excluded.email`,
         [t.handle, t.name, t.initials, t.role ?? '', t.email ?? ''],
       );

@@ -17,7 +17,7 @@ import { auditFor } from '@/modules/platform';
 import { StatusForm } from '@/components/strategy/StatusForm';
 import { Timeline, meetingLine, type StatusEvent, type TouchContext } from '@/components/strategy/Timeline';
 import { READ_LABEL, aboutThisRaise, type Touchpoint, colleagueTouchpointsFor, raiseWindows, summarize, touchpointsFor } from '@/modules/meetings';
-import { lpHeadings } from '@/lib/lp-heading';
+import { lpHeadings, relatedLpHeadings } from '@/lib/lp-heading';
 import { latestRun } from '@/modules/sources';
 import { CLOSE_STATE_LABEL, closeTracksFor } from '@/modules/pipeline';
 import { CloseTrack } from '@/components/strategy/CloseTrack';
@@ -93,9 +93,10 @@ async function TargetWorkspace({ params, searchParams }: {
   // with its other people are on its timeline too — shown with who they were with, and summed
   // apart from this person's own record, which is what the ladder reads.
   const heading = (await lpHeadings([{ pursuitId: pursuit.pursuitId, entityId: pursuit.entityId }])).get(pursuit.pursuitId) ?? null;
-  const [colleaguesAll, windows] = await Promise.all([
+  const [colleaguesAll, windows, relatedLps] = await Promise.all([
     heading?.orgFirst ? colleagueTouchpointsFor(pursuit.entityId, null) : Promise.resolve([]),
     raiseWindows(),
+    relatedLpHeadings(pursuit.entityId, pursuit.vehicleId),
   ]);
   const window = windows.get(pursuit.vehicleId);
   const forRaise = (t: Touchpoint) => (!t.vehicleId || t.vehicleId === pursuit.vehicleId)
@@ -152,7 +153,7 @@ async function TargetWorkspace({ params, searchParams }: {
         { label: pursuit.vehicleName, href: '/overview' },
         { label: 'Pipeline', href: `/targets?status=${pursuit.status}` },
         // The name that leads the page (issue 0013): the organisation's when it is the LP we're targeting.
-        { label: heading?.orgFirst && heading.org ? `${heading.org} · ${pursuit.entityName}` : pursuit.entityName },
+        { label: heading?.orgFirst && heading.org && relatedLps.length === 0 ? `${heading.org} · ${pursuit.entityName}` : pursuit.entityName },
       ]}
       inspector={
         <>
@@ -235,11 +236,15 @@ async function TargetWorkspace({ params, searchParams }: {
         {pursuit.historical ? ' · a vehicle kept for its history' : ''}
       </div>
       <h1 style={{ marginTop: 4 }}>
-        {heading?.orgFirst && heading.org
+        {heading?.orgFirst && heading.org && relatedLps.length === 0
           ? <Link href={`/orgs/${heading.orgId}`}>{heading.org}</Link>
           : <Link href={`/orgs/${pursuit.entityId}`}>{pursuit.entityName}</Link>}
       </h1>
-      {heading?.org && (
+      {relatedLps.length > 0 ? (
+        <div className="h1second">
+          {relatedLps.map((lp, i) => <span key={lp.pursuitId}>{i > 0 ? ' · ' : ''}<Link href={`/targets/${lp.pursuitId}`}>{lp.name}</Link></span>)}
+        </div>
+      ) : heading?.org && (
         <div className="h1second">
           {heading.orgFirst
             ? <Link href={`/orgs/${pursuit.entityId}`}>{pursuit.entityName}</Link>
