@@ -122,7 +122,7 @@ async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[])
     `select distinct e.entity_id::text id, e.display_name name, e.entity_type::text type, e.merged_into::text merged, e.retired_at::text retired
        from identity.entity original join identity.entity e on e.entity_id=identity.canonical_entity_id(original.entity_id)
        left join identity.source_record s on s.entity_id = original.entity_id
-      where original.entity_id::text = $1 or (s.source in ('warehouse', 'w3_person', 'prospect') and s.source_id = $1)`, [prospectPersonKey(p)]);
+      where original.entity_id::text = $1 or (s.source in ('warehouse', 'w3_person', 'prospect', 'prospect_key') and s.source_id = $1)`, [prospectPersonKey(p)]);
   if (rows.length) {
     if (rows.length !== 1) return null;
     const row = rows[0]!;
@@ -175,6 +175,13 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
         result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle, reason: 'Conflicting identity: supply the correct existing person ID or resolve the conflicting source mapping.' });
         continue;
       }
+      // Include matched and previously imported prospects, even when their pursuit is kept.
+      // resolvePerson checks every existing mapping against the canonical person while the
+      // identity tables are locked. Existing aliases (including pre-merge IDs) stay untouched.
+      if (p.personKey != null) await tx.query(
+        `insert into identity.source_record (source, source_id, entity_id, resolved_by)
+         values ('prospect_key', $1, $2, 'rule:sourced-prospect-key')
+         on conflict (source, source_id) do nothing`, [p.personKey, entityId]);
       resolved.push({ ...r, entityId });
     }
     // Conflicting dispositions must not oscillate on each rerun or depend on file order.

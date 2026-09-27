@@ -16,6 +16,7 @@ export async function runProperties(check: Check) {
   await (await import('../dakota-properties')).dakotaProperties(check, db);
   await (await import('../dakota-batched-properties')).dakotaBatchedProperties(check);
   await (await import('../prospects-properties')).prospectsProperties(check, db);
+  await (await import('../prospect-keys-properties')).prospectKeysProperties(check, db);
   await (await import('../organization-lps-properties')).organizationLpsProperties(check, db);
   await prospectDispositionProperties(check, db);
   await (await import('../identity-resolution-properties')).identityResolutionProperties(check, db);
@@ -189,6 +190,7 @@ async function prospectDispositionProperties(check: Check, db: Awaited<ReturnTyp
   } finally {
     await db.query('delete from research.note where entity_id = any($1::uuid[])', [ids]);
     await db.query('delete from strategy.pursuit where entity_id = any($1::uuid[])', [ids]);
+    await db.query('delete from identity.source_record where entity_id = any($1::uuid[])', [ids]);
     await db.query('delete from identity.entity where entity_id = any($1::uuid[])', [ids]);
   }
 }

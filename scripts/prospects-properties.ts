@@ -50,6 +50,14 @@ export async function prospectsProperties(check: Check, db: Db) {
     prospect('invented-prospect:w3', 'Invented Prospect Cedar', { strategic: true, route: null }));
   const first = await addProspects(db, actor, inputs);
   const second = await addProspects(db, actor, inputs);
+  const matchedAliases = await db.query<{ key: string; id: string }>(
+    `select source_id key, entity_id::text id from identity.source_record
+      where source = 'prospect_key' and source_id = any($1::text[])`, [[direct, 'invented-prospect:warehouse', 'invented-prospect:w3']]);
+  check('PROSPECT-KEYS matched people record each supplied personKey exactly once on retry',
+    matchedAliases.length === 3 && matchedAliases.some(r => r.key === direct && r.id === direct)
+    && matchedAliases.some(r => r.key === 'invented-prospect:warehouse' && r.id === warehouse)
+    && matchedAliases.some(r => r.key === 'invented-prospect:w3' && r.id === w3),
+    'Direct, warehouse and W3 matches all have stable prospect_key aliases.');
   const notes = await db.query<{ body: string; kind: string; data: Record<string, unknown> }>(
     'select body, kind, data from research.note where entity_id = any($1::uuid[])', [[direct, warehouse, w3]]);
   check('PROSPECTS keyed entity, warehouse and W3 imports create once, with traceable capacity notes',
@@ -110,6 +118,15 @@ export async function prospectsProperties(check: Check, db: Db) {
       where s.source = 'prospect' and s.source_id = $1`, [key]);
   const born = await sourcePerson(unseen.personKey);
   const bornNoOrg = await sourcePerson(noOrg.personKey);
+  const bornAliasBefore = JSON.stringify(await db.query(
+    `select * from identity.source_record where source = 'prospect_key' and source_id = $1`, [unseen.personKey]));
+  await db.query(`delete from identity.source_record where source = 'prospect_key' and source_id = $1`, [unseen.personKey]);
+  const backfill = await addProspects(db, actor, files(unseen));
+  const bornAlias = await db.one<{ id: string }>(
+    `select entity_id::text id from identity.source_record where source = 'prospect_key' and source_id = $1`, [unseen.personKey]);
+  check('PROSPECT-KEYS new people record aliases and old prospect imports backfill them without new pursuits',
+    bornAliasBefore !== '[]' && bornAlias?.id === born?.id && backfill.existing === 1 && backfill.added === 0,
+    'Rerunning Add prospects repairs pre-existing prospect mappings.');
   const affiliation = born ? await db.one<{ org: string; role: string; certainty: string; source: string; as_of: string }>(
     `select o.display_name org, a.role, a.certainty, a.source, a.as_of::text from identity.affiliation a
       join identity.entity o on o.entity_id = a.org_entity where a.person_entity = $1`, [born.id]) : null;
@@ -167,6 +184,27 @@ export async function prospectsProperties(check: Check, db: Db) {
   check('PROSPECTS2 a stable prospect alias wins over a later same-name entity',
     explicitProspect.existing === 1 && explicitProspect.ambiguous === 0 && (await sourcePerson(unseen.personKey))?.id === born?.id,
     `Known source mapping skipped ${explicitProspect.existing} existing pursuit despite a namesake.`);
+  const conflictingAliasKey = 'invented-prospect:alias-conflict';
+  await alias('prospect', conflictingAliasKey, conflictA);
+  await alias('prospect_key', conflictingAliasKey, conflictB);
+  const conflictBefore = await snapshot();
+  const conflictingAlias = await addProspects(db, actor, files(prospect(conflictingAliasKey, 'Invented Prospect Namesake')));
+  check('PROSPECT-KEYS conflicting mappings are listed and never overwritten',
+    conflictingAlias.ambiguous === 1 && conflictingAlias.skipped.length === 1 && conflictBefore === await snapshot()
+    && (await db.one<{ id: string }>(`select entity_id::text id from identity.source_record
+      where source = 'prospect_key' and source_id = $1`, [conflictingAliasKey]))?.id === conflictB,
+    'Different canonical people under prospect and prospect_key refuse the row without writes.');
+  const mergedAlias = await makePerson(unseen.name);
+  await db.query('update identity.entity set merged_into=$2 where entity_id=$1', [born?.id, mergedAlias]);
+  const aliasBeforeMergeRetry = JSON.stringify(await db.query(
+    `select * from identity.source_record where source = 'prospect_key' and source_id = $1`, [unseen.personKey]));
+  const mergeRetry = await addProspects(db, actor, files(unseen));
+  check('PROSPECT-KEYS aliases follow merges without overwriting the original source record',
+    mergeRetry.existing === 1 && mergeRetry.ambiguous === 0 && aliasBeforeMergeRetry === JSON.stringify(await db.query(
+      `select * from identity.source_record where source = 'prospect_key' and source_id = $1`, [unseen.personKey])),
+    'Canonical comparison recognizes equal identities while leaving the alias row untouched.');
+  // Keep the existing reader assertions below anchored to their original fixture person.
+  await db.query('update identity.entity set merged_into=null where entity_id=$1', [born?.id]);
   const knownOrg = await makePerson('Invented Prospects2 Known Office', 'org');
   const knownOrgRow = prospect('invented-prospects2:known-org', 'Invented Prospects2 Iris', { org: 'Invented Prospects2 Known Office' });
   const knownOrgResult = await addProspects(db, actor, files(knownOrgRow));
