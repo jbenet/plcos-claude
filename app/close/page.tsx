@@ -20,12 +20,15 @@ const PACK_FLAG: Record<string, string> = {
 async function CloseRoom() {
   const selection = await vehicleSelection();
   const cycles = await listCycles();
-  const cycle = cycles[0];
+  // The scoped address must never display another vehicle's close cycle (0076).
+  const cycle = cycles.find(c => c.status === 'open' && (!selection.current || c.vehicleId === selection.current.id));
   if (!cycle) {
     return (
       <Page crumbs={moduleCrumbs('close', selection.current?.name ?? null)}>
-        <h1>No close cycle is open.</h1>
+        <h1>No close cycle is open{selection.current ? ` for ${selection.current.name}` : ''}.</h1>
         <p className="sublede">A close room exists once someone opens a cycle with a target date.</p>
+        {selection.current?.kind === 'spv' && <Link href={`/${selection.current.slug}/spv`}>Open SPV war room →</Link>}
+        {selection.current?.kind === 'grant_rail' && <Link href={`/${selection.current.slug}/grants`}>Open grants rail →</Link>}
       </Page>
     );
   }

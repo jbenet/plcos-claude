@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import Link from '@/components/ui/AppLink';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  moduleHref, modulesForKind, OVERVIEW_SECTION, STATIC_SECTIONS, type NavSection,
+  moduleHref, modulesForKind, OVERVIEW_SECTION, STATIC_SECTIONS, WIP_MODULES, type NavSection,
 } from '@/lib/nav';
 
 /**
@@ -155,25 +155,28 @@ export function NavList({
         >
           <span className="nm">{v.name}</span>
         </button>
-        {selected && (
-          <div className="submods">
-            {modulesForKind(v.kind).map((mod) => {
-              const href = moduleHref(mod, v.slug);
-              return (
-                <Link
-                  key={mod.slug}
-                  href={href}
-                  title={mod.mechanic}
-                  className={`subsub${on(href) ? ' on' : ''}`}
-                >
-                  {mod.title}
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        {selected && vehicleModules(v.kind, v.slug)}
       </div>
     );
+  };
+
+  const vehicleModules = (kind: string, slug: string | null) => {
+    const modules = modulesForKind(kind);
+    const link = (mod: (typeof modules)[number]) => {
+      const href = moduleHref(mod, slug);
+      return <Link key={mod.slug} href={href} title={mod.mechanic}
+        aria-current={on(href) ? 'page' : undefined}
+        className={`subsub${on(href) ? ' on' : ''}`}>{mod.title}</Link>;
+    };
+    const wip = modules.filter((mod) => WIP_MODULES.has(mod.slug));
+    const active = wip.some((mod) => on(moduleHref(mod, slug)));
+    return <div className="submods">
+      {modules.filter((mod) => !WIP_MODULES.has(mod.slug)).map(link)}
+      <details className={`nav-wip${active ? ' has-current' : ''}`}>
+        <summary>WIP pages <span>{active ? 'Current page · incomplete' : 'May be incomplete'}</span></summary>
+        {wip.map(link)}
+      </details>
+    </div>;
   };
 
   const capitalVehicles = vehicles.filter((v) => v.kind !== 'grant_rail');
@@ -209,23 +212,7 @@ export function NavList({
           <span className="nm">All vehicles</span>
           <span className="ct">{vehicles.length}</span>
         </button>
-        {current === null && (
-          <div className="submods">
-            {modulesForKind('fund').map((mod) => {
-              const href = moduleHref(mod, null);
-              return (
-                <Link
-                  key={mod.slug}
-                  href={href}
-                  title={mod.mechanic}
-                  className={`subsub${on(href) ? ' on' : ''}`}
-                >
-                  {mod.title}
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        {current === null && vehicleModules('fund', null)}
       </Section>
 
       {STATIC_SECTIONS.map((section) => (

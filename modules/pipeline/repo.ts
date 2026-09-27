@@ -253,3 +253,32 @@ export async function closeStates(pairs: Array<{ entityId: string; vehicleId: st
   }
   return out;
 }
+
+/** Batched close details for a status page, including every exposure and pack fallback. */
+async function tracksForExposures(exposures: Exposure[]): Promise<CloseTrack[]> {
+  if (!exposures.length) return [];
+  const db = await getDb();
+  const [events, packs] = await Promise.all([
+    eventsFor(exposures.map((x) => x.exposureId)),
+    db.query<{ entity_id: string; vehicle_id: string; returned_at: Date | string }>(
+      `select identity.canonical_entity_id(p.entity_id) as entity_id, c.vehicle_id, max(p.returned_at) as returned_at
+         from close.pack_item p join close.cycle c on c.cycle_id = p.cycle_id
+        where identity.canonical_entity_id(p.entity_id) = any($1::uuid[])
+          and c.vehicle_id = any($2::uuid[]) and p.returned_at is not null
+        group by identity.canonical_entity_id(p.entity_id), c.vehicle_id`,
+      [[...new Set(exposures.map(x => x.entityId))], [...new Set(exposures.map(x => x.vehicleId))]],
+    ),
+  ]);
+  const returned = new Map(packs.map(p => [`${p.entity_id}:${p.vehicle_id}`, new Date(p.returned_at)]));
+  return exposures.map(x => deriveTrack(x, events.get(x.exposureId) ?? [], returned.get(`${x.entityId}:${x.vehicleId}`) ?? null));
+}
+
+/** Load only the LP/vehicle pairs on the current status page. */
+export async function closeTracksForPairs(pairs: Array<{ entity_id: string; vehicle_id: string }>): Promise<CloseTrack[]> {
+  if (!pairs.length) return [];
+  const db = await getDb();
+  const rows = await db.query<Row>(`${SELECT}
+    and (e.entity_id, x.vehicle_id) in (select * from unnest($1::uuid[], $2::uuid[]))
+    order by x.amount desc`, [pairs.map(p => p.entity_id), pairs.map(p => p.vehicle_id)]);
+  return tracksForExposures(rows.map(toExposure));
+}

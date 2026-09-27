@@ -42,6 +42,32 @@ export async function pipelineProperties({ check, db }: SeedContext) {
     `${danglingApply[0]!.n} tickets with a dangling subject`,
   );
 
+  const { vehicleCloseStatus, vehicleStatusCounts, closeTracksFor } = await import('../../modules/pipeline');
+  const vehicle = totals.find(t => t.vehicleSlug === 'neurotech')!;
+  const status = await vehicleCloseStatus(vehicle.vehicleId, 1);
+  const stats = await vehicleStatusCounts(vehicle.vehicleId);
+  const expected = await db.one<{ n: number }>('select count(*)::int as n from strategy.pursuit where vehicle_id = $1', [vehicle.vehicleId]);
+  const expectedExposures = await db.one<{ n: number }>(`select count(*)::int as n from pipeline.exposure
+    where vehicle_id = $1 and closed_at is null and identity.canonical_entity_id(entity_id) = any($2::uuid[])`,
+    [vehicle.vehicleId, status.rows.map(r => r.entity_id)]);
+  check('Vehicle status keeps counts, close records and questions in the selected vehicle',
+    status.rows.length > 0 && status.rows.every(r => r.vehicle_id === vehicle.vehicleId &&
+      r.questions.every(q => q.vehicle_id === vehicle.vehicleId) && r.tracks.every(t => t.exposure.vehicleId === vehicle.vehicleId)) &&
+      stats.reduce((sum, c) => sum + c.n, 0) === expected?.n &&
+      status.rows.reduce((sum, r) => sum + r.tracks.length, 0) === expectedExposures?.n,
+    'All statuses counted; every open exposure for displayed LPs included; no cross-vehicle questions.');
+  let matches = true;
+  for (const row of status.rows) {
+    const individual = await closeTracksFor(row.entity_id, row.vehicle_id);
+    matches &&= JSON.stringify(individual) === JSON.stringify(row.tracks);
+  }
+  check('Batched status close tracks preserve pack signatures, dates and cash semantics', matches,
+    'Bulk details match the established per-LP reader, including returned packs.');
+  const last = await vehicleCloseStatus(vehicle.vehicleId, Number.MAX_SAFE_INTEGER);
+  const first = await vehicleCloseStatus(vehicle.vehicleId, NaN);
+  check('Close status clamps invalid and out-of-range pages', first.page === 1 && last.page >= 1 && last.rows.length > 0,
+    'Malformed and oversized page requests retain a reachable result page.');
+
 }
 
 export async function hardeningVariations(check: Check) {
@@ -112,6 +138,25 @@ export async function hardeningVariations(check: Check) {
         noReason instanceof pl.CloseRefused && wireSoft instanceof pl.CloseRefused,
       `state ${nt?.state} on the ${nt?.exposure.track} track; re-signed ${nt?.resigned}; latest ${nt?.signature?.document}; second signature with no reason ${noReason ? 'refused' : 'ALLOWED'}; a wire on soft ${wireSoft ? 'refused' : 'ALLOWED'}`,
     );
+    // A second instrument must not disappear behind the LP's largest position.
+    await d.query(`insert into pipeline.exposure (entity_id, vehicle_id, instrument, track, amount, owner_id)
+      select entity_id, vehicle_id, 'direct', 'soft', 1234, owner_id from pipeline.exposure where exposure_id = $1`, [northwood.exposure_id]);
+    const statusPage = await pl.vehicleCloseStatus(northwood.vehicle_id, 1);
+    const statusLp = statusPage.rows.find(r => r.entity_id === northwood.entity_id);
+    check('Status keeps multiple instruments and does not promote a signature into hard money',
+      statusLp?.tracks.length === 2 && statusLp.tracks.every(t => t.exposure.track === 'soft') &&
+      statusLp.tracks.some(t => t.signature?.document === 'Subscription agreement v2'),
+      'A signed soft position and a second soft position both remain visible and soft.');
+    const noExposure = await d.one<{ pursuit_id: string; entity_id: string; vehicle_id: string }>(`
+      select p.pursuit_id, p.entity_id, p.vehicle_id from strategy.pursuit p
+       where not exists (select 1 from pipeline.exposure x where x.entity_id = p.entity_id and x.vehicle_id = p.vehicle_id)
+       limit 1`);
+    if (!noExposure) throw new Error('Status fixture needs an LP without an exposure.');
+    await d.query(`update strategy.pursuit set status = 'committed', closed_at = null where pursuit_id = $1`, [noExposure.pursuit_id]);
+    const missing = await pl.vehicleCloseStatus(noExposure.vehicle_id, 1);
+    check('Committed pipeline status remains visible when the close record is missing',
+      missing.rows.some(r => r.entity_id === noExposure.entity_id && r.tracks.length === 0),
+      'The candidate is included without manufacturing a soft/hard amount or close date.');
     await d.close();
   }
 }
