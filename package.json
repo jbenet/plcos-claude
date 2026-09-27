@@ -33,7 +33,10 @@
     "changelog:page": "scripts/changelog-page.sh",
     "perf4:seed": "node --import tsx scripts/perf4-fixture.ts",
     "perf4:profile": "node --import tsx scripts/perf4-profile.ts",
-    "perf4:guards": "node --import tsx scripts/perf4-guards.ts"
+    "perf4:guards": "node --import tsx scripts/perf4-guards.ts",
+    "backup": "bash scripts/backup-real.sh run",
+    "backup:key": "bash scripts/backup-real.sh key",
+    "backup:restore": "bash scripts/backup-real.sh restore"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
