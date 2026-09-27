@@ -1,96 +1,446 @@
 import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
+import { CloseSteps } from '@/components/status/CloseSteps';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
+import { usdM } from '@/lib/money';
+import { capacityBandLabel } from '@/lib/capacity-bands';
 import { vehicleReadings } from '@/lib/vehicle-readings';
-import { pursuitFor, STATUS_LABEL, RUNG_LABEL } from '@/modules/strategy';
+import { pursuitFor, RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_LABEL } from '@/modules/strategy';
 import { closeTracksFor, CLOSE_STATE_LABEL } from '@/modules/pipeline';
 import { claimLabel } from '@/modules/research';
-import { listMeetings, MEETING_LABEL, prepBrief, touchpointsFor, CHANNEL_LABEL } from '@/modules/meetings';
+import {
+  CHANNEL_LABEL, listMeetings, MEETING_LABEL, OBJECTION_LABEL, prepBrief, summarize, touchpointsFor, type Meeting,
+} from '@/modules/meetings';
+import s from './meetings.module.css';
 
 export const dynamic = 'force-dynamic';
-const SIZE = 15; // Presentation limit, not a limit on history.
-async function Meetings({ searchParams }: { searchParams: Promise<{ e?: string; m?: string; view?: string; q?: string; page?: string }> }) {
+
+/** Presentation limits, not limits on history: the rest is one click away. */
+const HELD_STEP = 25;
+const BRIEF_CLAIMS = 3;
+const TOUCHES = 5;
+
+const LEVEL: Record<string, string> = { high: 'High', medium: 'Medium', low: 'Low', unknown: 'Not known' };
+const VERDICT: Record<string, string> = { strong: 'Strong fit', good: 'Good fit', possible: 'Possible fit', weak: 'Weak fit', unknown: 'Fit not known' };
+/** The claims a meeting most needs first: who they are, what they can do, what they back. */
+const CLAIM_ORDER = ['role', 'investor_type', 'check_size', 'capacity', 'aum', 'aum_usd', 'typical_check_usd', 'fund_lp', 'interest', 'investment', 'fund_gp', 'board', 'prior_role'];
+const claimRank = (field: string) => {
+  const i = CLAIM_ORDER.indexOf(field.replace(/^public\./, ''));
+  return i === -1 ? CLAIM_ORDER.length : i;
+};
+const shortLabel = (field: string) => claimLabel(field).replace(/ \(public source\)$/, '').replace(/ — their claim, not verified$/, '');
+const when = (m: Meeting) => m.heldOn ?? m.scheduledFor;
+const kindOf = (m: Meeting) => (m.kind ? MEETING_LABEL[m.kind] : 'Meeting');
+
+/**
+ * Meetings (module 11, issue 0074). The queue on the left is the meetings — coming up, then held,
+ * newest first — and the pane is what the next conversation needs: a short brief, where the LP
+ * stands on the way to closing, the four readings and the latest contact. It points at the LP
+ * workspace for everything else rather than copying it. A generated brief is not built yet (0078).
+ */
+async function Meetings({ searchParams }: { searchParams: Promise<{ e?: string; m?: string; q?: string; held?: string }> }) {
   const selection = await vehicleSelection();
   const vehicle = selection.current;
   const slug = vehicle?.slug ?? 'all';
   const sp = await searchParams;
-  const all = await listMeetings(vehicle?.id ?? null);
   const now = new Date();
-  const upcoming = all.filter(m => !m.heldOn && m.scheduledFor && m.scheduledFor >= now).sort((a,b)=>a.scheduledFor!.getTime()-b.scheduledFor!.getTime());
-  const held = all.filter(m => m.heldOn);
-  const unconfirmed = all.filter(m => !m.heldOn && (!m.scheduledFor || m.scheduledFor < now));
-  const view = ['upcoming','held','unconfirmed'].includes(sp.view ?? '') ? sp.view! : upcoming.length ? 'upcoming' : 'held';
-  const pool = view === 'upcoming' ? upcoming : view === 'held' ? held : unconfirmed;
+
+  const all = await listMeetings(vehicle?.id ?? null);
   const words = (sp.q ?? '').toLowerCase().split(/\s+/).filter(Boolean);
-  const filtered = pool.filter(m => words.every(w => `${m.entityName} ${m.ownerName} ${m.attendees.join(' ')}`.toLowerCase().includes(w)));
-  const page = Math.min(Math.max(0,Number.parseInt(sp.page ?? '0',10)||0),Math.max(0,Math.ceil(filtered.length/SIZE)-1));
-  const shown = filtered.slice(page*SIZE,(page+1)*SIZE);
-  // A meeting id selects a meeting, even when two meetings share an LP. Scope is already applied.
-  const selected = sp.m ? all.find(m=>m.meetingId===sp.m) : sp.e ? all.find(m=>m.entityId===sp.e) : shown[0];
-  const focusVehicle = vehicle ?? selection.all.find(v=>v.name===selected?.vehicleName);
-  const entityId = selected?.entityId;
-  const [pursuit, brief, touches, tracks, readings] = entityId && focusVehicle ? await Promise.all([
-    pursuitFor(entityId,focusVehicle.id),prepBrief(entityId,focusVehicle.id),touchpointsFor(entityId,focusVehicle.id),
-    closeTracksFor(entityId,focusVehicle.id),vehicleReadings(focusVehicle.id,entityId),
-  ]) : [null,null,[],[],[]];
-  const reading = readings.find(r=>r.pursuit_id===pursuit?.pursuitId);
-  const lpHref = entityId && focusVehicle ? pursuit ? `/${focusVehicle.slug}/pipeline/${pursuit.pursuitId}` : `/orgs/${entityId}` : null;
-  const link = (changes: Record<string,string>) => `/${slug}/meetings?${new URLSearchParams({view,q:sp.q ?? '',page:String(page),...changes})}`;
-  const claims = [...(brief?.supported ?? [])].sort((a,b)=> {
-    const priority=(f:string)=> /role|investor_type|interest|capacity|check_size/.test(f) ? 0 : 1;
-    return priority(a.field)-priority(b.field) || b.asOf.getTime()-a.asOf.getTime();
-  });
-  return <Page crumbs={moduleCrumbs('meetings',vehicle?.name ?? null)}>
-    <div className="lbl">Meetings · {vehicle?.name ?? 'all vehicles'}</div><h1>Prepare for the next conversation</h1>
-    <p className="sublede">Upcoming meetings and recorded history, with the LP context needed for each conversation.</p>
-    <div className="meetings0074">
-      <section className="card meeting-list">
-        <div className="dfilters" role="navigation" aria-label="Meeting views">
-          {[['upcoming','Upcoming',upcoming.length],['held','Held',held.length],['unconfirmed','Unconfirmed',unconfirmed.length]].map(([key,label,n]) => <Link className={`btn${view===key?' p':''}`} aria-current={view===key?'page':undefined} key={key} href={link({view:String(key),page:'0'})}>{label} · {n}</Link>)}
-        </div>
-        <form className="dfilters" action={`/${slug}/meetings`}><input type="hidden" name="view" value={view}/><input type="search" name="q" defaultValue={sp.q} placeholder="Search LP or team" aria-label="Search meetings"/><button className="btn">Search</button></form>
-        <nav className="vizpager" aria-label="Meeting pages"><span>{filtered.length?page*SIZE+1:0}–{Math.min((page+1)*SIZE,filtered.length)} of {filtered.length}</span>{page>0 && <Link className="btn" href={link({page:String(page-1)})}>Previous</Link>}{(page+1)*SIZE<filtered.length && <Link className="btn" href={link({page:String(page+1)})}>Next</Link>}</nav>
-        {shown.length===0 && <div className="cbody"><p>No {view} meetings match. Try another view or clear the search. A scheduled date that passed stays unconfirmed until a held record exists.</p></div>}
-        {shown.map(m=><Link className={`meeting-item${selected?.meetingId===m.meetingId?' selected':''}`} key={m.meetingId} href={link({m:m.meetingId,e:m.entityId})}>
-          <span className="mono muted">{m.heldOn || m.scheduledFor ? shortDate((m.heldOn ?? m.scheduledFor)!) : 'Undated'} · {m.kind ? MEETING_LABEL[m.kind] : 'Meeting'}</span>
-          <b>{m.entityName}</b><span>Owner: {m.ownerName}</span>{m.attendees.length>0 && <span className="muted">With {m.attendees.join(', ')}</span>}{!vehicle && <span className="muted">{m.vehicleName ?? 'Vehicle not specified'}</span>}
-        </Link>)}
-      </section>
-      <div className="meeting-context">
-        {!selected ? <div className="card cbody"><h2>{sp.m || sp.e ? 'Meeting not in this vehicle’s records' : 'No meeting selected'}</h2><p>Select a recorded meeting to see preparation notes and LP context.</p></div> : <>
-          <div className="meeting-heading"><div><div className="lbl">{selected.heldOn ? 'Held' : selected.scheduledFor && selected.scheduledFor>=now ? 'Upcoming' : 'Unconfirmed'} · {focusVehicle?.name ?? 'Vehicle not specified'}</div><h2>{selected.entityName}</h2><p>{selected.heldOn || selected.scheduledFor ? shortDate((selected.heldOn ?? selected.scheduledFor)!) : 'Undated'} · Owner: {selected.ownerName}</p></div>{lpHref && <Link className="btn" href={lpHref}>Open LP →</Link>}</div>
-          {brief?.restriction && <div className="warn"><b>Restriction on file</b><p>{brief.restriction}</p></div>}
-          <section className="card meeting-summary"><div className="chead"><h2>At a glance</h2><span className="lbl">Preparation notes</span></div><div className="cbody">
-            <div className="meeting-facts"><div><span className="lbl">LP status</span><b>{pursuit ? STATUS_LABEL[pursuit.status] : 'No pursuit recorded'}</b></div><div><span className="lbl">Next step</span><span>{pursuit?.nextStep ?? reading?.data?.next?.what ?? 'No next step recorded'}{!pursuit?.nextStep && reading?.data?.next?.what ? ' (proposed)' : ''}</span>{pursuit?.nextStepOn && <span className="muted">Due {shortDate(pursuit.nextStepOn)}</span>}</div></div>
-            {claims.length ? <ul className="meeting-highlights">{claims.slice(0,2).map((c,i)=><li key={i}><span>{c.value}</span><small>{claimLabel(c.field)} · {shortDate(c.asOf)} · {c.confidence} confidence · {c.verifiedBy ? `verified by ${c.verifiedBy}` : 'unverified'}</small></li>)}</ul> : <p className="muted">No supported background claims are available for this LP and vehicle.</p>}
-            <details><summary>Expand background and sources · {claims.length} claims{brief?.refused.length ? ` · ${brief.refused.length} withheld` : ''}</summary>
-              {claims.map((c,i)=><div className="meeting-evidence" key={i}><b>{claimLabel(c.field)}</b><p>{c.value}</p><small>Source: {c.source} · {shortDate(c.asOf)} · {c.confidence} confidence · {c.verifiedBy ? `verified by ${c.verifiedBy}` : 'unverified'}</small></div>)}
-              {brief?.refused.map((r,i)=><p key={i}><b>Withheld: {claimLabel(r.field)}.</b> {r.why}</p>)}
-            </details>
-          </div></section>
-          {!focusVehicle && <p className="cover">This meeting has no recorded vehicle. Open it from a vehicle calendar if it has a supported tag; no cross-vehicle LP status is substituted here.</p>}
-          <section className="card"><div className="chead"><h2>Path to closing</h2>{lpHref && <Link href={lpHref}>Full LP record →</Link>}</div><div className="cbody">
-            <p>{pursuit?.headline ?? 'No closing plan recorded.'}</p>
-            {pursuit?.plan.length ? <ol>{pursuit.plan.slice(0,3).map((s,i)=><li key={i}>{s.move}{s.blockedBy ? ` — blocked by ${s.blockedBy}` : ''}</li>)}</ol> : reading?.data?.next && <p><b>Proposed:</b> {reading.data.next.what} · {reading.data.next.who} · {reading.data.next.when}</p>}
-            <p className="muted">Consent evidence: {pursuit?.rung ? RUNG_LABEL[pursuit.rung] : 'Nothing recorded'}. Pipeline status is separate.</p>
-            {tracks.length ? tracks.map(t=><p key={t.exposure.exposureId}><b>{CLOSE_STATE_LABEL[t.state]}</b> · {t.closedOn ? `Legal close ${shortDate(t.closedOn)}` : 'Legal close not recorded'} · {t.wires.length ? 'Cash receipt recorded' : 'Cash receipt not recorded'}</p>) : <p className="muted">No commitment or closing record for this vehicle.</p>}
-          </div></section>
-          <section className="card"><div className="chead"><h2>Score readings</h2><span className="flag f-mute">Provisional strategy</span></div><div className="cbody meeting-scores">
-            {([['Capacity',reading?.data?.scores?.capacity?.band,reading?.data?.scores?.capacity?.basis],['Affinity',reading?.data?.scores?.affinity?.level,reading?.data?.scores?.affinity?.basis],['Propensity',reading?.data?.scores?.propensity?.level,reading?.data?.scores?.propensity?.basis],['Decision time',reading?.data?.scores?.timeToDecision?.band,reading?.data?.scores?.timeToDecision?.basis]]).map(([label,value,basis])=><div key={label}><span className="lbl">{label}</span><b>{value ?? 'Unknown'}</b>{basis && <details><summary>Basis</summary><p>{basis}</p></details>}</div>)}
-          </div>{reading?.made_at && <p className="cover">Strategy by {reading.made_by} · {shortDate(reading.made_at)} · {reading.data?.confidence ?? 'unknown'} confidence. These are estimates, not approvals.</p>}</section>
-          <section className="card"><div className="chead"><h2>Recent touchpoints</h2>{lpHref && <Link href={lpHref}>Full timeline →</Link>}</div><div className="cbody">
-            {touches.filter(t=>t.on && t.on<=now).slice(0,4).map(t=><div className="meeting-touch" key={t.touchpointId}><b>{CHANNEL_LABEL[t.channel]} · {shortDate(t.on!)}</b><p>{t.summary ?? 'No summary recorded.'}</p><small>{t.ownerName} · {t.source}{t.viaOrganization ? ` · via ${t.viaOrganization}` : ''}</small></div>)}
-            {!touches.some(t=>t.on && t.on<=now) && <p className="muted">No dated touchpoints recorded for this raise.</p>}
-          </div></section>
-          {(brief?.openObjections.length || brief?.openQuestions.length) ? <section className="card"><div className="chead"><h2>Questions to resolve</h2></div><div className="cbody">{brief.openObjections.map(o=><p key={o.objectionId}><b>{o.status} objection:</b> {o.statement}</p>)}{brief.openQuestions.map(q=><p key={q.questionId}>{q.question} · {q.ownerName ?? 'Unassigned'}{q.dueOn ? ` · due ${shortDate(q.dueOn)}` : ''}</p>)}</div></section> : null}
-          {selected.summary && <details className="card cbody"><summary>Selected meeting notes</summary><p>{selected.summary}</p></details>}
-        </>}
+  const matches = (m: Meeting) => words.every((w) => `${m.entityName} ${m.ownerName} ${m.attendees.join(' ')} ${m.vehicleName ?? ''}`.toLowerCase().includes(w));
+  const pool = all.filter(matches);
+  const upcoming = pool.filter((m) => !m.heldOn && m.scheduledFor && m.scheduledFor >= now)
+    .sort((a, b) => a.scheduledFor!.getTime() - b.scheduledFor!.getTime());
+  const unconfirmed = pool.filter((m) => !m.heldOn && (!m.scheduledFor || m.scheduledFor < now));
+  const held = pool.filter((m) => m.heldOn);
+  const heldShown = Math.max(HELD_STEP, Number.parseInt(sp.held ?? '', 10) || HELD_STEP);
+
+  // A meeting id picks one meeting even when two share an LP; scope is already applied.
+  const selected = (sp.m && all.find((m) => m.meetingId === sp.m))
+    || (sp.e && (all.find((m) => m.entityId === sp.e && !m.heldOn && m.scheduledFor && m.scheduledFor >= now) ?? all.find((m) => m.entityId === sp.e)))
+    || upcoming[0] || held[0] || unconfirmed[0] || null;
+  const focusVehicle = vehicle ?? selection.all.find((v) => v.name === selected?.vehicleName) ?? null;
+  const entityId = selected?.entityId ?? null;
+
+  const [pursuit, brief, touches, tracks, readings] = entityId && focusVehicle
+    ? await Promise.all([
+      pursuitFor(entityId, focusVehicle.id), prepBrief(entityId, focusVehicle.id), touchpointsFor(entityId, focusVehicle.id),
+      closeTracksFor(entityId, focusVehicle.id), vehicleReadings(focusVehicle.id, entityId),
+    ])
+    : [null, null, [], [], []] as const;
+  const reading = readings.find((r) => r.pursuit_id === pursuit?.pursuitId) ?? readings[0] ?? null;
+  const st = reading?.data ?? null;
+  const past = touches.filter((t) => t.on && t.on <= now);
+  const summary = touches.length ? summarize([...touches], now) : null;
+  const lpHref = entityId && focusVehicle ? (pursuit ? `/${focusVehicle.slug}/pipeline/${pursuit.pursuitId}` : `/orgs/${entityId}`) : null;
+
+  // The brief: a few lines, each one the record can carry.
+  const claims = [...(brief?.supported ?? [])].sort((a, b) => claimRank(a.field) - claimRank(b.field) || b.asOf.getTime() - a.asOf.getTime());
+  const headline: typeof claims = [];
+  for (const c of claims) {
+    if (headline.length >= BRIEF_CLAIMS) break;
+    if (!headline.some((h) => h.field === c.field)) headline.push(c);
+  }
+  // Before a held meeting, the contact before it; before an upcoming one, the latest contact.
+  const lastBefore = selected?.heldOn
+    ? past.find((t) => t.on! < selected.heldOn! && t.touchpointId !== selected.meetingId) ?? null
+    : past[0] ?? null;
+  const fit = st?.fit ? Object.entries(st.fit).find(([k]) => [focusVehicle?.name, focusVehicle?.slug].some((v) => v?.toLowerCase() === k.trim().toLowerCase()))?.[1] : undefined;
+  const statusIdx = pursuit ? STATUSES.findIndex((x) => x.id === pursuit.status) : -1;
+  const openItems = (brief?.openObjections.length ?? 0) + (brief?.openQuestions.length ?? 0);
+
+  const qs = (changes: Record<string, string | undefined>) => {
+    const p = new URLSearchParams();
+    const merged = { q: sp.q, held: sp.held, m: selected?.meetingId, ...changes };
+    for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
+    const out = p.toString();
+    return `/${slug}/meetings${out ? `?${out}` : ''}`;
+  };
+
+  const item = (m: Meeting, tone: 'k-intro' | 'k-chore' | 'k-stage') => (
+    <Link key={m.meetingId} href={qs({ m: m.meetingId })} className={`tix${selected?.meetingId === m.meetingId ? ' on' : ''}`}
+      aria-current={selected?.meetingId === m.meetingId ? 'true' : undefined}>
+      <div className="tixtop">
+        <span className={`kind ${tone}`}>{kindOf(m)}</span>
+        <span className="age">{when(m) ? shortDate(when(m)!) : 'undated'}</span>
       </div>
-    </div>
-    <p className="cover">Coverage: recorded meetings and calls for {vehicle?.name ?? 'all vehicles'}{all.length ? `, ${all.length} records` : ''}. Upcoming dates are plans; held records are history. Full generated briefs await the review of the existing brief workflows.</p>
-  </Page>;
+      <b>{m.entityName}</b>
+      <p>{m.attendees.length ? m.attendees.join(', ') : m.ownerName}{!vehicle && m.vehicleName ? ` · ${m.vehicleName}` : ''}</p>
+    </Link>
+  );
+
+  const queue = (
+    <>
+      <div className="qhead">
+        <div className="lbl">Module 11 · meetings</div>
+        <h2>{upcoming.length} coming up</h2>
+        <p>{held.length.toLocaleString('en-US')} held{unconfirmed.length ? ` · ${unconfirmed.length} not confirmed` : ''}{words.length ? ' matching the search' : ''}.</p>
+        <form action={`/${slug}/meetings`} className={s.search} role="search">
+          <input type="search" name="q" defaultValue={sp.q} placeholder="LP or person…" aria-label="Search meetings by LP or person" />
+        </form>
+      </div>
+      {upcoming.length > 0 && <div className={s.group}>Coming up</div>}
+      {upcoming.map((m) => item(m, 'k-intro'))}
+      {unconfirmed.length > 0 && <div className={s.group}>Date passed · not confirmed held</div>}
+      {unconfirmed.map((m) => item(m, 'k-stage'))}
+      {held.length > 0 && <div className={s.group}>Held · newest first</div>}
+      {held.slice(0, heldShown).map((m) => item(m, 'k-chore'))}
+      {held.length > heldShown && (
+        <Link className={s.more} href={qs({ held: String(heldShown + HELD_STEP) })}>
+          Show {Math.min(HELD_STEP, held.length - heldShown)} older · {held.length - heldShown} more
+        </Link>
+      )}
+      {pool.length === 0 && (
+        <p className={s.none}>{words.length ? 'No meeting matches the search.' : 'No meetings or calls recorded for this raise.'}</p>
+      )}
+    </>
+  );
+
+  return (
+    <Page crumbs={moduleCrumbs('meetings', vehicle?.name ?? null)}>
+      <div className={s.split}>
+        <aside className={s.queue} aria-label="Meetings"><div className={s.queueIn}>{queue}</div></aside>
+        <div className={s.pane}>
+          {!selected ? (
+            <>
+              <div className="lbl">Meetings · {vehicle?.name ?? 'all vehicles'}</div>
+              <h1>{sp.m || sp.e ? 'That meeting is not in this vehicle’s record.' : 'Nothing is scheduled.'}</h1>
+              <p className="sublede">
+                A brief exists for a meeting. Meetings appear here once one is logged in an LP workspace or read from Affinity
+                and tied to this raise.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="lbl">
+                {selected.heldOn ? 'Held' : selected.scheduledFor && selected.scheduledFor >= now ? 'Prep brief' : 'Not confirmed held'}
+                {' · '}{focusVehicle?.name ?? 'no vehicle recorded'}
+                {when(selected) ? ` · ${shortDate(when(selected)!)}` : ''}
+              </div>
+              <div className={s.titleRow}>
+                <h1>{selected.entityName}</h1>
+                {lpHref && <Link className="btn" href={lpHref}>LP workspace →</Link>}
+              </div>
+              <p className="sublede">
+                {kindOf(selected)}{selected.attendees.length ? ` with ${selected.attendees.join(', ')}` : ''}. Owner {selected.ownerName}.
+                {selected.scheduledFor && !selected.heldOn && selected.scheduledFor < now && ' The date has passed and nobody has recorded it as held.'}
+              </p>
+
+              {brief?.restriction && (
+                <div className="warn" style={{ marginBottom: 14 }}>
+                  <div className="lbl" style={{ color: 'var(--clay)' }}>Restriction on file</div>
+                  <p>{brief.restriction}</p>
+                </div>
+              )}
+
+              {/* At a glance: four cells, each a pointer to where the full story lives. */}
+              <div className={s.glance}>
+                <div>
+                  <span className="lbl">Status</span>
+                  <b>{pursuit ? STATUS_LABEL[pursuit.status] : 'No pursuit'}</b>
+                  <small>{pursuit?.rung ? `Ladder: ${RUNG_LABEL[pursuit.rung]}` : 'Nothing on the ladder'}</small>
+                </div>
+                <div>
+                  <span className="lbl">Close</span>
+                  <b>{tracks[0] ? `${CLOSE_STATE_LABEL[tracks[0].state]} · ${usdM(tracks[0].exposure.amount)}` : 'No commitment'}</b>
+                  <small>{tracks[0] ? (tracks[0].exposure.track === 'hard' ? 'hard' : 'soft — must convert') : 'nothing soft or hard on file'}</small>
+                </div>
+                <div>
+                  <span className="lbl">Contact</span>
+                  <b>{summary?.meetingDates.length ? `${summary.meetingDates.length} meeting${summary.meetingDates.length === 1 ? '' : 's'} held` : 'No meeting held'}</b>
+                  <small>
+                    {summary?.lastTouch ? `last ${shortDate(summary.lastTouch)}` : 'no dated contact'}
+                    {summary?.awaitingSince ? ` · awaiting reply since ${shortDate(summary.awaitingSince)}` : summary?.lastFromThem ? ` · from them ${shortDate(summary.lastFromThem)}` : ''}
+                  </small>
+                </div>
+                <div>
+                  <span className="lbl">Score</span>
+                  <b>{reading?.score != null ? <>{reading.score}<span className={s.of}> / 100</span></> : 'No score'}</b>
+                  <small>{reading?.score != null ? 'provisional · from the strategy' : st ? 'fewer than two readings known' : 'no strategy on file'}</small>
+                </div>
+              </div>
+
+              <div className={s.cols}>
+                <div className={s.main}>
+                  {selected.heldOn && (selected.summary || selected.justification) && (
+                    <div className="card">
+                      <div className="chead">
+                        <h2>What happened</h2>
+                        <span className="lbl">{shortDate(selected.heldOn)}</span>
+                      </div>
+                      <div className="cbody">
+                        {selected.summary && <p>{selected.summary}</p>}
+                        {selected.justification && <p className="muted">{selected.justification}</p>}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="card">
+                    <div className="chead">
+                      <h2>{selected.heldOn ? 'Brief for the next one' : 'Brief'}</h2>
+                      <span className="lbl">from the record · {claims.length} sourced claim{claims.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <dl className={s.brief}>
+                      {(lastBefore || !selected.heldOn) && <div>
+                        <dt>{selected.heldOn ? 'Before this' : 'Where we left it'}</dt>
+                        <dd>
+                          {lastBefore ? (
+                            <>
+                              <span className="mono muted">{shortDate(lastBefore.on!)} · {CHANNEL_LABEL[lastBefore.channel]}</span>{' '}
+                              <span className={s.clamp}>{lastBefore.summary ?? 'No summary recorded.'}</span>
+                            </>
+                          ) : <span className="muted">No earlier contact on file for this raise.</span>}
+                        </dd>
+                      </div>}
+                      <div>
+                        <dt>Next step</dt>
+                        <dd>
+                          {pursuit?.nextStep
+                            ? <>{pursuit.nextStep}{pursuit.nextStepOn && <span className="muted"> · due {shortDate(pursuit.nextStepOn)}</span>}</>
+                            : st?.next?.what
+                              ? <>{st.next.what}<span className="muted"> · proposed by the strategy, not yet accepted</span></>
+                              : <span className="muted">None recorded.</span>}
+                        </dd>
+                      </div>
+                      {st?.angle && (
+                        <div>
+                          <dt>Why they’d care</dt>
+                          <dd><span className={s.clamp}>{st.angle}</span></dd>
+                        </div>
+                      )}
+                      <div>
+                        <dt>What we know</dt>
+                        <dd>
+                          {headline.length ? (
+                            <ul className={s.claims}>
+                              {headline.map((c, i) => (
+                                <li key={i}>
+                                  <b>{shortLabel(c.field)}.</b> <span className={s.clamp}>{c.value}</span>
+                                  <small>{c.source} · {shortDate(c.asOf)} · {c.verifiedBy ? `verified by ${c.verifiedBy}` : 'unverified'}</small>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : <span className="muted">Nothing with a source, a date and a confidence. The brief says nothing rather than guess.</span>}
+                        </dd>
+                      </div>
+                      {(brief?.refused.length ?? 0) > 0 && (
+                        <div>
+                          <dt className={s.warnDt}>Do not assert</dt>
+                          <dd>{brief!.refused.length} claim{brief!.refused.length === 1 ? '' : 's'} on file without full provenance: ask, don’t state.</dd>
+                        </div>
+                      )}
+                    </dl>
+                    {(claims.length > headline.length || (brief?.refused.length ?? 0) > 0) && (
+                      <details className={s.more2}>
+                        <summary>All {claims.length} sourced claims{brief?.refused.length ? ` and ${brief.refused.length} withheld` : ''}</summary>
+                        <div className={s.allClaims}>
+                          {claims.map((c, i) => (
+                            <div key={i}>
+                              <span>{shortLabel(c.field)}</span>
+                              <p>{c.value}<small>{c.source} · {shortDate(c.asOf)} · {c.confidence} confidence · {c.verifiedBy ? `verified by ${c.verifiedBy}` : 'unverified'}</small></p>
+                            </div>
+                          ))}
+                          {brief?.refused.map((r, i) => (
+                            <div key={`r${i}`} className={s.refused}>
+                              <span>{shortLabel(r.field)}</span>
+                              <p>{r.why}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                    <p className="cover">
+                      A short brief from what the record can support; every line carries its source or says it has none.
+                      Generated briefs that read the history and earlier notes are not built yet (issue 0078).
+                    </p>
+                  </div>
+
+                  <div className="card">
+                    <div className="chead">
+                      <h2>Path to closing</h2>
+                      {lpHref && <Link className="xref" href={lpHref}>full record →</Link>}
+                    </div>
+                    <div className="cbody">
+                      <ol className={s.path} aria-label="Pipeline status">
+                        {STATUSES.filter((x) => x.id !== 'passed').map((x, i) => (
+                          <li key={x.id} className={pursuit?.status === x.id ? s.now : i < statusIdx && pursuit?.status !== 'passed' ? s.past : ''}>
+                            {x.label}
+                          </li>
+                        ))}
+                      </ol>
+                      {pursuit?.status === 'passed' && <p className={s.passed}>Passed{pursuit.statusReason ? ` — ${pursuit.statusReason}` : ''}.</p>}
+                      {pursuit?.headline && <p className={s.headline}>{pursuit.headline}</p>}
+                      {pursuit?.plan.length ? (
+                        <ol className={s.plan}>
+                          {pursuit.plan.slice(0, 3).map((p, i) => (
+                            <li key={i}>{p.move}{p.blockedBy && <span className="muted"> — blocked by {p.blockedBy}</span>}</li>
+                          ))}
+                        </ol>
+                      ) : null}
+                      {tracks.map((t) => (
+                        <div className={s.track} key={t.exposure.exposureId}>
+                          <div className={s.trackHead}>
+                            <b>{usdM(t.exposure.amount)}</b>
+                            <span className="muted">{t.exposure.track === 'hard' ? 'hard' : 'soft'} · {t.exposure.source === 'us' ? 'recorded here' : `per ${t.exposure.source}`}</span>
+                          </div>
+                          <CloseSteps track={t} />
+                        </div>
+                      ))}
+                      <div className={s.ladder}>
+                        <div>
+                          <span className="lbl">On the ladder</span>
+                          <b>{pursuit?.rung ? RUNG_LABEL[pursuit.rung] : 'Nothing yet'}</b>
+                        </div>
+                        {pursuit?.nextRung && (
+                          <div>
+                            <span className="lbl">This meeting could justify</span>
+                            <b>{RUNG_LABEL[pursuit.nextRung]}</b>
+                            <small>{RUNG_REQUIRES[pursuit.nextRung]}</small>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <p className="cover">
+                      The status is our plan; the ladder is what the evidence shows; the close track is where the money is. They are
+                      kept apart, and none of them fills in another.
+                    </p>
+                  </div>
+                </div>
+
+                <div className={s.side}>
+                  <div className="card">
+                    <div className="chead">
+                      <h2>Readings</h2>
+                      <span className="lbl">{st ? 'provisional' : 'none'}</span>
+                    </div>
+                    <div className="cbody">
+                      {st?.scores ? (
+                        <>
+                          {fit && (
+                            <div className={s.fit}>
+                              <b>{VERDICT[fit.verdict] ?? fit.verdict}</b>
+                              <span className={s.clamp}>{fit.why}</span>
+                            </div>
+                          )}
+                          {([
+                            ['Capacity', st.scores.capacity?.band ? capacityBandLabel(st.scores.capacity.band) : null, st.scores.capacity?.basis],
+                            ['Affinity', st.scores.affinity?.level ? LEVEL[st.scores.affinity.level] : null, st.scores.affinity?.basis],
+                            ['Propensity', st.scores.propensity?.level ? LEVEL[st.scores.propensity.level] : null, st.scores.propensity?.basis],
+                            ['Time to decide', st.scores.timeToDecision?.band ?? null, st.scores.timeToDecision?.basis],
+                          ] as Array<[string, string | null, string | undefined]>).map(([label, value, basis]) => (
+                            <details className={s.reading} key={label}>
+                              <summary><span>{label}</span><b>{value && value !== 'unknown' ? value : 'Not known'}</b></summary>
+                              <p>{basis || 'No basis given.'}</p>
+                            </details>
+                          ))}
+                          <p className={s.readNote}>
+                            {reading?.made_by} · {reading?.made_at ? shortDate(reading.made_at) : 'undated'} · {st.confidence ?? 'unknown'} confidence. A proposal, not an assessment.
+                          </p>
+                        </>
+                      ) : (
+                        <p className="muted">
+                          No strategy has been written for this LP on {focusVehicle?.name ?? 'this vehicle'}, so there are no readings. That is
+                          a gap in our work, not a low score.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <div className="chead">
+                      <h2>Open questions</h2>
+                      <span className="lbl">{openItems}</span>
+                    </div>
+                    <div className="cbody">
+                      {openItems === 0 && <p className="muted">None outstanding.</p>}
+                      {brief?.openObjections.map((o) => (
+                        <div className={s.q} key={o.objectionId}>
+                          <p>{o.statement}</p>
+                          <span className="flag f-block">{OBJECTION_LABEL[o.class]} objection · {o.status}</span>
+                        </div>
+                      ))}
+                      {brief?.openQuestions.map((q) => (
+                        <div className={s.q} key={q.questionId}>
+                          <p>{q.question}</p>
+                          <span className={`flag ${q.overdue ? 'f-block' : 'f-mute'}`}>{q.status}{q.dueOn ? ` · ${shortDate(q.dueOn)}` : ''}</span>
+                          <span className="muted"> {q.ownerName ?? 'unowned'}</span>
+                        </div>
+                      ))}
+                      {st?.openQuestions?.length ? (
+                        <div className={s.q}>
+                          <span className="lbl">To find out, per the strategy</span>
+                          <ul>{st.openQuestions.slice(0, 3).map((q, i) => <li key={i}>{q}</li>)}</ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <div className="chead">
+                      <h2>Latest contact</h2>
+                      <span className="lbl">{past.length}</span>
+                    </div>
+                    {past.slice(0, TOUCHES).map((t) => (
+                      <div className={s.touch} key={t.touchpointId}>
+                        <span className="mono">{shortDate(t.on!)} · {CHANNEL_LABEL[t.channel]}</span>
+                        <p className={s.clamp}>{t.summary ?? 'No summary recorded.'}</p>
+                        <small>{t.ownerName}{t.viaOrganization ? ` · with ${t.viaOrganization}` : ''}{t.source !== 'us' ? ` · ${t.source === 'affinity' ? 'Affinity' : t.source}` : ''}</small>
+                      </div>
+                    ))}
+                    {past.length === 0 && <div className="cbody"><p className="muted">No dated contact on file.</p></div>}
+                    {past.length > TOUCHES && lpHref && <p className="cover"><Link href={lpHref}>The full timeline is in the LP workspace →</Link></p>}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </Page>
+  );
 }
-export default coalescePage('/meetings',Meetings);
+
+export default coalescePage('/meetings', Meetings);

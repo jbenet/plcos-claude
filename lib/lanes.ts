@@ -58,11 +58,16 @@ export interface DatedRow {
   href: string | null;
 }
 
-/** Presentation order only: no domain state changes when a user reverses the list. */
+/**
+ * Presentation order only: no domain state changes when a user reverses the list (issue 0072).
+ * By LP or by our team, a row with neither recorded goes last in either direction; ties fall back
+ * to newest first.
+ */
 export function orderDatedRows(rows: DatedRow[], sort: string, ascending: boolean): DatedRow[] {
+  const key = (r: DatedRow) => (sort === 'lp' ? r.lp ?? '' : sort === 'team' ? (r.team ?? []).join(', ') : r.from);
   return [...rows].sort((a, b) => {
-    const cmp = sort === 'date' ? a.from.localeCompare(b.from)
-      : (sort === 'lp' ? a.lp ?? '' : (a.team ?? []).join(', ')).localeCompare(sort === 'lp' ? b.lp ?? '' : (b.team ?? []).join(', '));
-    return (ascending ? 1 : -1) * cmp || b.from.localeCompare(a.from) || a.id.localeCompare(b.id);
+    const ka = key(a), kb = key(b);
+    if (sort !== 'date' && !ka !== !kb) return ka ? -1 : 1;
+    return (ascending ? 1 : -1) * ka.localeCompare(kb) || b.from.localeCompare(a.from) || a.id.localeCompare(b.id);
   });
 }

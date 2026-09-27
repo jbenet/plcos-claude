@@ -117,3 +117,4 @@ to the repository root to preserve existing anchors and rendered output.
 - [0068–0070 — Routes and portfolio](entries/routes-0070.md)
 - [0072–0074 — Calendar, fit and meeting preparation](entries/meetings-0074.md)
 - [0075–0076 — Vehicle status and WIP navigation](entries/status-0075.md)
+- [0072–0075, redesigned — Meetings, calendar, fit and vehicle status on the earlier look](entries/redesign-0072-0075.md)

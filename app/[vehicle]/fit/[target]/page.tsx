@@ -11,6 +11,8 @@ import { usdM } from '@/lib/money';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
 import { getEntity } from '@/modules/identity';
+import { vehicleReadings } from '@/lib/vehicle-readings';
+import { ProvisionalReading } from './ProvisionalReading';
 import { listSourceDocs } from '@/modules/research';
 import {
   assessmentFor, assessmentsForEntity, contributions, listAssessments,
@@ -78,6 +80,9 @@ async function FunderVehicleFit({
   ];
 
   if (!a) {
+    // No formal assessment: the pursuit's latest strategy reading for this vehicle, if one exists (0073).
+    const reading = vehicle ? (await vehicleReadings(vehicle.id, entity.entityId)).find((r) => r.suggestion_id && r.data) : null;
+    if (reading) return <ProvisionalReading reading={reading} crumbs={crumbs} />;
     return (
       <Page crumbs={crumbs}>
         <div className="lbl">Funder–vehicle fit</div>

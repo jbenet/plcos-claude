@@ -1,0 +1,22 @@
+/* A provisional fit reading (issue 0073). */
+.verdict {
+  display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 13px;
+}
+.score { padding: 14px 16px; border-right: 1px solid var(--hair); }
+.score b { display: block; font-size: 34px; font-weight: 500; line-height: 1.1; margin: 6px 0 2px; }
+.score small { font-size: 11px; color: var(--muted); }
+.what { padding: 14px 16px; min-width: 0; }
+.what p { margin: 8px 0 10px; font-size: 13.5px; line-height: 1.55; max-width: 80ch; }
+.links { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.reading { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 2px 12px; padding: 10px 15px; border-bottom: 1px solid var(--hair); font-size: 12.5px; }
+.reading:last-child { border-bottom: 0; }
+.reading span { color: var(--muted); }
+.reading b { font-weight: 500; }
+.reading p { grid-column: 2; margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+@media (max-width: 600px) {
+  .verdict { grid-template-columns: minmax(0, 1fr); }
+  .score { border-right: 0; border-bottom: 1px solid var(--hair); }
+  .reading { grid-template-columns: minmax(0, 1fr); }
+  .reading p { grid-column: 1; }
+}

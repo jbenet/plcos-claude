@@ -1,0 +1,135 @@
+/* Meetings (issue 0074): the queue beside the brief, as the earlier design had it. */
+.split {
+  display: grid; grid-template-columns: 270px minmax(0, 1fr);
+  margin: -22px -24px; min-height: calc(100dvh - 46px);
+}
+.queue { border-right: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.queueIn { position: sticky; top: 46px; max-height: calc(100dvh - 46px); overflow-y: auto; }
+.pane { min-width: 0; padding: 22px 24px; }
+
+.search { margin-top: 9px; }
+.search input {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; padding: 6px 9px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--ground); color: var(--ink);
+}
+.group {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  padding: 12px 12px 6px; border-bottom: 1px solid var(--hair); background: #FCFBF8;
+}
+.more {
+  display: block; padding: 11px 12px; font-size: 12px; color: var(--accent); border-bottom: 1px solid var(--hair);
+}
+.none { padding: 14px 12px; font-size: 12px; color: var(--muted); margin: 0; }
+
+.titleRow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.titleRow h1 { margin-bottom: 4px; }
+.titleRow :global(.btn) { flex: none; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 13px; align-items: start; }
+.main, .side { min-width: 0; }
+
+/* Four cells in one strip. */
+.glance {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 13px;
+}
+.glance > div { padding: 11px 14px; border-left: 1px solid var(--hair); min-width: 0; }
+.glance > div:first-child { border-left: 0; }
+.glance b { display: block; font-family: var(--display); font-size: 18px; font-weight: 600; margin: 5px 0 2px; line-height: 1.2; }
+.glance small { display: block; font-size: 11px; color: var(--muted); line-height: 1.4; }
+.of { font-family: var(--sans, inherit); font-size: 12px; color: var(--muted); font-weight: 400; }
+
+/* The brief: label on the left, one or two lines on the right (design/M12). */
+.brief { margin: 0; padding: 4px 15px 8px; }
+.brief > div { display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--hair); }
+.brief > div:last-child { border-bottom: 0; }
+.brief dt { font-family: var(--mono); font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--label); padding-top: 3px; }
+.brief dd { margin: 0; font-size: 13px; line-height: 1.5; }
+.warnDt { color: var(--clay) !important; }
+.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.brief dd > .clamp { display: -webkit-inline-box; }
+.claims { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.claims b { font-weight: 500; }
+.claims .clamp { display: inline; }
+.claims small { display: block; font-family: var(--mono); font-size: 9.5px; color: var(--muted); margin-top: 1px; }
+
+.more2 { border-top: 1px solid var(--line); }
+.more2 > summary { cursor: pointer; padding: 10px 15px; font-size: 12px; color: var(--accent); }
+.allClaims { padding: 0 15px 8px; }
+.allClaims > div { display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: 14px; padding: 8px 0; border-top: 1px solid var(--hair); font-size: 12.5px; }
+.allClaims span { color: var(--muted); }
+.allClaims p { margin: 0; line-height: 1.5; }
+.allClaims small { display: block; font-family: var(--mono); font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+.refused span { color: var(--clay); }
+
+/* Path to closing. */
+.path { list-style: none; margin: 0 0 12px; padding: 0; display: flex; gap: 3px; }
+.path li {
+  flex: 1; min-width: 0; font-size: 11px; color: var(--muted); padding: 5px 4px 0; border-top: 3px solid var(--line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.path li.past { border-top-color: var(--accent-line); color: var(--ink); }
+.path li.now { border-top-color: var(--accent); color: var(--ink); font-weight: 600; }
+.passed { font-size: 12.5px; color: var(--clay); }
+.headline { font-size: 13px; }
+.plan { margin: 0 0 12px; padding-left: 18px; font-size: 12.5px; line-height: 1.55; }
+.track { padding: 10px 0 12px; border-top: 1px solid var(--hair); }
+.trackHead { display: flex; gap: 10px; align-items: baseline; margin-bottom: 8px; font-size: 12.5px; }
+.trackHead b { font-family: var(--mono); font-weight: 500; }
+.trackHead span { font-size: 11.5px; }
+.ladder { display: grid; grid-template-columns: 1fr 2fr; gap: 14px; padding-top: 10px; border-top: 1px solid var(--hair); }
+.ladder b { display: block; font-size: 13px; font-weight: 500; margin-top: 4px; }
+.ladder small { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
+
+/* Readings: tap a row for its basis — nothing hides behind a hover. */
+.fit { padding-bottom: 9px; margin-bottom: 2px; border-bottom: 1px solid var(--hair); font-size: 12.5px; line-height: 1.45; }
+.fit b { display: block; font-weight: 600; }
+.fit span { color: var(--muted); }
+.reading { border-bottom: 1px solid var(--hair); }
+.reading > summary {
+  list-style: none; cursor: pointer; display: flex; justify-content: space-between; gap: 10px;
+  padding: 8px 0; font-size: 12.5px; min-height: 20px;
+}
+.reading > summary::-webkit-details-marker { display: none; }
+.reading > summary span { color: var(--muted); }
+.reading > summary span::after { content: ' ›'; color: var(--line); }
+.reading[open] > summary span::after { content: ' ⌄'; }
+.reading > summary b { font-weight: 500; text-align: right; }
+.reading p { margin: 0 0 9px; font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+.readNote { margin: 9px 0 0 !important; font-size: 10.5px !important; color: var(--muted); line-height: 1.45; }
+
+.q { padding: 8px 0; border-bottom: 1px solid var(--hair); font-size: 12px; }
+.q:first-child { padding-top: 0; }
+.q:last-child { border-bottom: 0; padding-bottom: 0; }
+.q p { margin: 0 0 5px !important; font-size: 12.5px !important; line-height: 1.5; }
+.q ul { margin: 5px 0 0; padding-left: 16px; font-size: 12px; line-height: 1.5; }
+
+.touch { padding: 9px 15px; border-bottom: 1px solid var(--hair); }
+.touch:last-child { border-bottom: 0; }
+.touch > span { font-size: 10px; color: var(--muted); }
+.touch p { margin: 3px 0 2px; font-size: 12.5px; line-height: 1.45; }
+.touch small { font-size: 10.5px; color: var(--muted); }
+
+@media (max-width: 1320px) {
+  .split { grid-template-columns: 240px minmax(0, 1fr); }
+  .cols { grid-template-columns: minmax(0, 1fr); }
+  .side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 13px; align-items: start; }
+  .glance b { font-size: 16px; }
+}
+@media (max-width: 1000px) {
+  .split { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .queue { border-right: 0; border-bottom: 1px solid var(--line); }
+  .queueIn { position: static; max-height: 340px; }
+  .glance { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .glance > div:nth-child(3) { border-left: 0; }
+  .glance > div:nth-child(n+3) { border-top: 1px solid var(--hair); }
+}
+@media (max-width: 560px) {
+  .pane { padding: 18px 14px; }
+  .brief > div, .allClaims > div { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  .ladder { grid-template-columns: minmax(0, 1fr); }
+  .side { grid-template-columns: minmax(0, 1fr); }
+  .path li { font-size: 0; }
+  .path li.now { font-size: 11px; flex: 3; }
+  .titleRow { flex-wrap: wrap; }
+}

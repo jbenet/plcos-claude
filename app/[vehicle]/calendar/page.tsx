@@ -9,6 +9,7 @@ import type { DatedRow } from '@/lib/lanes';
 import { DatedList } from '@/components/calendar/DatedList';
 import { CalendarWindow } from '@/components/calendar/CalendarWindow';
 import { CalendarStats } from '@/components/calendar/CalendarStats';
+import windowLook from './window.module.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -99,8 +100,9 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
       </div>
       <h1>What is happening, and when</h1>
       <p className="sublede">
-        {WEEKS_BACK} weeks back and {WEEKS_FORWARD} forward, compressed to one screen. Weekly counts group overlapping spans, deadlines and dated activity. Everything is read
-        from the record that owns it — this page keeps nothing of its own.
+        {WEEKS_BACK} weeks back and {WEEKS_FORWARD} forward as weekly counts, then every dated thing, newest first,
+        with who on our team and which LP. Everything is read from the record that owns it — this page keeps
+        nothing of its own.
       </p>
 
       {visible.length === 0 ? (
@@ -126,7 +128,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
             </span>
           </div>
 
-          <CalendarWindow rows={rows} first={weeks[0]!.start.toISOString()} weeks={weeks.length} />
+          <CalendarWindow rows={rows} first={weeks[0]!.start.toISOString()} weeks={weeks.length} now={now.toISOString()} look={windowLook} />
 
         </div>
       )}
