@@ -16,6 +16,12 @@ import { circuitBreaker } from '@/modules/agents';
 import { wrongWrapSends } from '@/modules/content';
 import { poolChecks } from '@/modules/pipeline';
 import { listConflicts } from '@/modules/coordination';
+import { loadLedger } from '@/lib/workflows/view';
+import { dakotaStatus, polarisStatus, type SourceState } from '@/lib/dev/sources';
+import st from './status.module.css';
+
+const STATE_FLAG: Record<SourceState | string, string> = { ok: 'f-ok', partial: 'f-ev', failed: 'f-block', not_attached: 'f-mute' };
+const STATE_WORD: Record<SourceState | string, string> = { ok: 'ok', partial: 'partial', failed: 'failed', not_attached: 'not attached' };
 
 export const dynamic = 'force-dynamic';
 
@@ -26,9 +32,12 @@ async function Status() {
       circuitBreaker(), wrongWrapSends(), poolChecks(), listConflicts('open'),
     ]);
 
-  const migrations = await db.query<{ id: string; applied_at: Date | string }>(
-    'select id, applied_at from platform.migration order by applied_at',
-  );
+  const [migrations, ledger] = await Promise.all([
+    db.query<{ id: string; applied_at: Date | string }>('select id, applied_at from platform.migration order by applied_at'),
+    loadLedger(),
+  ]);
+  const [dakota, polaris] = await Promise.all([dakotaStatus(), polarisStatus(ledger.runs)]);
+  const lastMigration = migrations.at(-1);
   const over = pools.filter((p) => p.status === 'over');
 
   /** Anything a person should look at, computed rather than curated. */
@@ -43,9 +52,17 @@ async function Status() {
     { name: 'Database', now: db.kind === 'pglite' ? 'PGlite, file on disk' : 'Postgres', ok: true, detail: `${migrations.length} migrations applied` },
     { name: 'Auth', now: `${a.kind} — user switcher`, ok: true, detail: a.switchable ? 'Switchable; no password simulated' : 'Fixed identity' },
     { name: 'Issue sink', now: sink.kind, ok: true, detail: sink.destination },
-    { name: 'Connectors', now: 'fixture only', ok: true, detail: 'No external source before L13, by design' },
+    config.data.profile === 'real'
+      ? { name: 'Connectors', now: 'Affinity, read-only', ok: true, detail: 'The one connector this server runs (N38); Dakota and the warehouse reach it through workflows, below' }
+      : { name: 'Connectors', now: 'fixture only', ok: true, detail: 'The demo attaches no external source; its Affinity is a fixture' },
     { name: 'Agent runtime', now: `${ag.kind} — ${ag.available ? 'available' : 'refuses'}`, ok: true, detail: ag.available ? 'A key is present' : 'No key, or no runtime: it refuses rather than guessing' },
+    {
+      name: 'Workflow ledger', now: ledger.where === 'demo' ? 'invented runs' : 'runs.jsonl, append-only', ok: !ledger.error,
+      detail: ledger.error ?? `${ledger.runs.length} runs from ${ledger.label}${ledger.lastWrite ? ` · last write ${ago(ledger.lastWrite)}` : ''}${ledger.issues.length ? ` · ${ledger.issues.length} lines need review` : ''}`,
+      href: '/dev/workflows',
+    },
   ];
+  const extra = [dakota, polaris];
 
   return (
     <Page
@@ -71,6 +88,12 @@ async function Status() {
               {breaker.hoursThisWeek.toFixed(1)} / {breaker.budgetHours} h
             </span>
           </div>
+          {[...sources.map((x) => ({ k: x.source, label: x.label, w: x.status.replace('_', ' ') })), ...extra.map((x) => ({ k: x.key, label: x.label.replace(' (Polaris)', ''), w: STATE_WORD[x.state] }))].map((x) => (
+            <div className="kv" key={x.k}>
+              <span>{x.label}</span>
+              <span>{x.w}</span>
+            </div>
+          ))}
           <div className="kv">
             <span>Module schemas</span>
             <span>{MODULES.length}</span>
@@ -119,6 +142,61 @@ async function Status() {
 
       <div className="card">
         <div className="chead">
+          <h2>Sources</h2>
+          <span className="lbl">every source read-only · {sources.length + extra.length} attached or expected</span>
+        </div>
+        <div className={st.scroll}>
+          <table className={`list ${st.sources}`}>
+            <thead>
+              <tr>
+                <th style={{ width: 118 }}>State</th>
+                <th>Source</th>
+                <th className={st.hideS}>What is here</th>
+                <th className="right" style={{ width: 110 }}>Last</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sources.map((x) => (
+                <tr key={x.source}>
+                  <td><span className={`flag ${x.status === 'ok' ? 'f-ok' : x.status === 'stale' ? 'f-ev' : x.status === 'failed' ? 'f-block' : 'f-mute'} ${st.state}`}>{x.status.replace('_', ' ')}</span></td>
+                  <td>
+                    <b className={st.name}>{x.label}</b>
+                    <div className={st.access}>{x.source === 'init' ? 'Our own file, read at start' : x.source === 'seed' ? 'Invented fixtures' : x.source === 'affinity' && x.status !== 'not_connected' ? 'Read-only · synced by this server' : 'Planned · nothing reads it yet'}</div>
+                    <div className={`${st.facts} ${st.showS}`}>{x.detail}</div>
+                  </td>
+                  <td className={`${st.hideS} ${st.facts}`}>{x.detail}</td>
+                  <td className={`right ${st.when}`}>{x.lastSyncAt ? ago(x.lastSyncAt) : '—'}</td>
+                </tr>
+              ))}
+              {extra.map((x) => (
+                <tr key={x.key}>
+                  <td><span className={`flag ${STATE_FLAG[x.state]} ${st.state}`}>{STATE_WORD[x.state]}</span></td>
+                  <td>
+                    <b className={st.name}>{x.label}</b>
+                    <div className={st.access}>{x.access}</div>
+                    <ul className={`${st.factlist} ${st.showS}`}>{x.facts.map((f) => <li key={f}>{f}</li>)}</ul>
+                  </td>
+                  <td className={st.hideS}>
+                    <ul className={st.factlist}>{x.facts.map((f) => <li key={f}>{f}</li>)}</ul>
+                    <div className={st.fnote}>{x.note}</div>
+                  </td>
+                  <td className={`right ${st.when}`}>
+                    {x.lastAt ? ago(x.lastAt) : '—'}
+                    {x.lastWhat && <div className={st.what}>{x.lastWhat}</div>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="cover">
+          <b>Nothing here writes back.</b> Affinity is synced by this server through its read-only client; Dakota and the
+          warehouse are read by workflows, recorded on <Link href="/dev/workflows">Workflows</Link>, and land in files first.
+        </p>
+      </div>
+
+      <div className="card">
+        <div className="chead">
           <h2>Services</h2>
           <span className="lbl">what each seam resolved to</span>
         </div>
@@ -134,11 +212,11 @@ async function Status() {
           <tbody>
             {services.map((s) => (
               <tr key={s.name}>
-                <td><b>{s.name}</b></td>
+                <td><b>{'href' in s && s.href ? <Link href={s.href}>{s.name}</Link> : s.name}</b></td>
                 <td className="muted">{s.now}</td>
                 <td className="muted" style={{ fontSize: 11.5 }}>{s.detail}</td>
                 <td>
-                  <span className="flag f-ok">up</span>
+                  <span className={`flag ${s.ok ? 'f-ok' : 'f-mute'}`}>{s.ok ? 'up' : 'unavailable'}</span>
                 </td>
               </tr>
             ))}
@@ -148,25 +226,6 @@ async function Status() {
           <Link href="/dev/connectors">Connectors</Link> has the detail on what each seam swaps to
           and why the swap stays cheap.
         </p>
-      </div>
-
-      <div className="card">
-        <div className="chead">
-          <h2>Sources</h2>
-          <span className="lbl">no connector before L13</span>
-        </div>
-        {sources.map((s) => (
-          <div className="row" key={s.source}>
-            <span className={`flag ${s.status === 'ok' ? 'f-ok' : 'f-mute'}`} style={{ width: 110, textAlign: 'center' }}>
-              {s.status.replace('_', ' ')}
-            </span>
-            <div className="t">
-              <b>{s.label}</b>
-              <span>{s.detail}</span>
-            </div>
-            <div className="state">{s.lastSyncAt ? ago(s.lastSyncAt) : '—'}</div>
-          </div>
-        ))}
       </div>
 
       <div className="card">
@@ -205,16 +264,26 @@ async function Status() {
           <h2>Migrations</h2>
           <span className="lbl">manifest order, then filename order</span>
         </div>
-        <table className="list">
-          <tbody>
-            {migrations.map((m) => (
-              <tr key={m.id}>
-                <td className="mono">{m.id}</td>
-                <td className="muted right">{ago(new Date(m.applied_at))}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="cbody">
+          <p className={st.mline}>
+            <b>{migrations.length} applied</b>
+            {lastMigration && <> · the latest, <code>{lastMigration.id}</code>, {ago(new Date(lastMigration.applied_at))}</>}.
+            {' '}Applied migrations are never edited; a change is a new file.
+          </p>
+        </div>
+        <details className={st.more}>
+          <summary>Every migration, in the order applied</summary>
+          <table className={`list ${st.migrations}`}>
+            <tbody>
+              {migrations.map((m) => (
+                <tr key={m.id}>
+                  <td className="mono">{m.id}</td>
+                  <td className="muted right">{ago(new Date(m.applied_at))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
       </div>
     </Page>
   );

@@ -75,6 +75,7 @@ export async function runProperties(check: Check) {
   await (await import('./scoring')).provisionalScoreProperties(check);
   await (await import('./theme')).themeProperties(check);
   await (await import('./navigation')).pathProperties(check);
+  await (await import('./developer')).developerProperties(check);
   await (await import('./enrichment-strategy')).strategyRegressionProperties(check);
   await (await import('./enrichment')).brokerProperties(check);
   await (await import('./viewport')).viewportProperties(check);

@@ -62,7 +62,7 @@ async function IssueDetail({ params }: { params: Promise<{ id: string }> }) {
               <p>
                 {fixedIn
                   ? <><b>{fixedIn.title}.</b>{' '}
-                      <Link href={`/dev/changelog#${fixedIn.id}`}>Read what changed →</Link></>
+                      <Link href={`/dev/changelog/${fixedIn.slug}`}>Read what changed →</Link></>
                   : <>Recorded against {issue.fixedIn}, which is not in the changelog. One of the
                       two is wrong and the file is the one to trust.</>}
               </p>
