@@ -46,6 +46,8 @@ export interface DatedRow {
   id: string;
   lane: Lane;
   label: string;
+  team?: string[];
+  lp?: string | null;
   /** Printed under the label only when it says more than the standing does. */
   detail: string | null;
   from: string;
@@ -54,4 +56,13 @@ export interface DatedRow {
   vehicle: string | null;
   standing: 'pressing' | 'ahead' | 'done';
   href: string | null;
+}
+
+/** Presentation order only: no domain state changes when a user reverses the list. */
+export function orderDatedRows(rows: DatedRow[], sort: string, ascending: boolean): DatedRow[] {
+  return [...rows].sort((a, b) => {
+    const cmp = sort === 'date' ? a.from.localeCompare(b.from)
+      : (sort === 'lp' ? a.lp ?? '' : (a.team ?? []).join(', ')).localeCompare(sort === 'lp' ? b.lp ?? '' : (b.team ?? []).join(', '));
+    return (ascending ? 1 : -1) * cmp || b.from.localeCompare(a.from) || a.id.localeCompare(b.id);
+  });
 }

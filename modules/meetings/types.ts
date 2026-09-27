@@ -28,6 +28,8 @@ export interface Meeting {
   heldOn: Date | null;
   attendees: string[];
   ownerName: string;
+  /** Imported attendees are team members; local attendees may include LPs. */
+  source: string;
   summary: string | null;
   justifiesRung: LadderRung | null;
   justification: string | null;
@@ -69,7 +71,7 @@ export interface PrepBrief {
   vehicleName: string;
   meeting: Meeting | null;
   /** Claims with a complete provenance tuple. Everything else is excluded by construction. */
-  supported: Array<{ field: string; value: string; source: string; asOf: Date; verifiedBy: string | null }>;
+  supported: Array<{ field: string; value: string; source: string; asOf: Date; confidence: string; verifiedBy: string | null }>;
   /** Named, so the gap is visible rather than absent. */
   refused: Array<{ field: string; why: string }>;
   openObjections: Objection[];
