@@ -157,6 +157,8 @@ export const config = {
     correctionBudgetHoursPerWeek: 12, // GUESS — v3 said 10–15 h/week; circuit-breaker threshold.
   },
   dakota: {
+    translationBatchRecords: 200, // GUESS — hard maximum source rows per transaction.
+    translationBatchWorkMs: 100, // GUESS — yield the connection sooner when per-record work grows.
     perVehicleCap: 150, // GUESS — maximum rule-sourced candidates per vehicle, including prior passes.
     minimumTicketUsd: 500_000, // Juan's sourcing rule, 27 Sep 2026.
     claimConfidence: 'medium', // GUESS — vendor claim, tier C, never verified evidence.
