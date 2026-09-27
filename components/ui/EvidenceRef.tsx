@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from '@/components/ui/AppLink';
 
 export interface EvidenceDoc {
   docId: string;
@@ -9,6 +10,7 @@ export interface EvidenceDoc {
   asOf: string;
   strength: 'strong' | 'moderate' | 'weak';
   supports: string;
+  href?: string;
 }
 
 /**
@@ -22,12 +24,13 @@ export function EvidenceRef({ doc }: { doc: EvidenceDoc }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <span className="evref">
+    <span className="evref" onMouseLeave={() => setOpen(false)}
+      onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}
+      onKeyDown={event => { if (event.key === 'Escape') setOpen(false); }}>
       <button
         className="src"
         onClick={() => setOpen(!open)}
         onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
         aria-expanded={open}
         aria-label={`Source ${doc.docId}: ${doc.title}`}
       >
@@ -43,6 +46,7 @@ export function EvidenceRef({ doc }: { doc: EvidenceDoc }) {
             {doc.origin} · as of {doc.asOf}
           </span>
           <span className="s">{doc.supports}</span>
+          {doc.href && <Link href={doc.href}>Open evidence</Link>}
         </span>
       )}
     </span>

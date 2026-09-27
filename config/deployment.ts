@@ -140,6 +140,17 @@ export const config = {
   scoring: {
     weights: { capacity: 0.25, affinity: 0.3, propensity: 0.25, timeToDecision: 0.2 },
   },
+  strategyRanking: {
+    // GUESS — planning estimates, never calibrated commitment probabilities.
+    likelihood: { high: 0.6, medium: 0.3, low: 0.1 },
+    decisionDays: { weeks: 21, '1–2 months': 45, 'a quarter or more': 120 },
+    routeWeight: { A: 1, B: 0.8, C: 0.45, D: 0.2 },
+    stalledDays: 21, // GUESS — inactivity warning, not evidence of a decline.
+    staleDays: 30, // GUESS — refresh strategy and route evidence after this age.
+    // GUESS — separate points for evidence work when a monetary score is unavailable.
+    evidenceWork: { restriction: 100, overdue: 40, soft: 30, staleStrategy: 20, staleRoute: 15, noOwner: 10, missingResearch: 5, missingStrategy: 5 },
+    conversionPriorWeight: 5, // GUESS — damp sparse observed transitions with a neutral prior.
+  },
   agents: {
     correctionBudgetHoursPerWeek: 12, // GUESS — v3 said 10–15 h/week; circuit-breaker threshold.
   },

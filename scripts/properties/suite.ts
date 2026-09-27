@@ -33,6 +33,7 @@ export async function runProperties(check: Check) {
   await (await import('../cache-source-properties')).cacheSourceProperties(check, db);
   await (await import('./network')).routeInputCacheProperties(seed);
   await (await import('./strategy')).strategyProperties(seed);
+  await (await import('./vehicle-strategy')).vehicleStrategyProperties(check, db);
   await (await import('./coordination')).coordinationProperties(seed);
   await (await import('./pipeline')).pipelineProperties(seed);
   await (await import('./scoring')).scoringProperties(seed);

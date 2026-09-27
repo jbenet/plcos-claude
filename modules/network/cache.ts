@@ -10,7 +10,7 @@ import type { Edge, RouteSearch } from './types';
 const settings = () => createHash('sha256').update(JSON.stringify([
   'compact-structural-v5-identity', config.routeScoring, config.routeWarmth,
 ])).digest('hex').slice(0, 16);
-async function revisionFor(db: Db) {
+export async function revisionFor(db: Db) {
   const row = (await db.one<{ revision: string; epoch: string; day: string }>(
     `select revision::text, epoch::text, current_date::text as day from network.route_revision where singleton`))!;
   return { revision: row.revision, generation: `${row.epoch}:${row.day}:${settings()}` };

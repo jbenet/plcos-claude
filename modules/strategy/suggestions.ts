@@ -46,9 +46,14 @@ export class SuggestionRefused extends Error {
 export async function decideSuggestion(actorId: string, suggestionId: string, decision: 'accept' | 'dismiss', note: string | null): Promise<void> {
   const db = await getDb();
   await db.transaction(async (tx) => {
-    const s = await tx.one<{ pursuit_id: string; body: string; status: string }>(
-      `select pursuit_id::text, body, status from strategy.suggestion where suggestion_id = $1 for update`, [suggestionId]);
+    const s = await tx.one<{ pursuit_id: string; body: string; status: string; scope_ok: boolean }>(
+      `select s.pursuit_id::text, s.body, s.status,
+              (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null
+                or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug))) as scope_ok
+         from strategy.suggestion s join strategy.pursuit p using(pursuit_id)
+         join platform.vehicle v on v.id=p.vehicle_id where s.suggestion_id = $1 for update of s`, [suggestionId]);
     if (!s) throw new SuggestionRefused('No such suggestion.');
+    if (decision === 'accept' && !s.scope_ok) throw new SuggestionRefused('Strategy names another vehicle. Resolve its pursuit before accepting.');
     if (s.status !== 'proposed') throw new SuggestionRefused(`Already ${s.status}; nothing changed.`);
     await tx.query(
       `update strategy.suggestion set status = $2, decided_by = $3, decided_at = now(), decision_note = $4 where suggestion_id = $1`,

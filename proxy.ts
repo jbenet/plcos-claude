@@ -89,7 +89,7 @@ export function proxy(req: NextRequest) {
   }
 
   // A vehicle's module, with the vehicle in the path.
-  if (seg.length >= 2 && !RESERVED.has(seg[0]!) && Object.hasOwn(MODULE_PAGES, seg[1]!)) {
+  if (seg.length >= 2 && (!RESERVED.has(seg[0]!) || seg[0] === 'grants') && Object.hasOwn(MODULE_PAGES, seg[1]!)) {
     return rememberVehicle(req, rewrite(req, `/${MODULE_PAGES[seg[1]!]}${rest(2)}`, { 'x-vehicle': seg[0]! }), seg[0]!);
   }
   // An old address: to its place in the hierarchy, under the vehicle in view.

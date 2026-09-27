@@ -10,3 +10,4 @@ export { LadderRefused, recordAdvance, recordClimb, requestAdvance, setNextStep,
 export { insertUpdate, recordApplied, updatesFor, type PursuitUpdate, type UpdateApplied } from './updates';
 export { decideSuggestion, openSuggestions, SuggestionRefused, suggestionsFor, type Suggestion } from './suggestions';
 export { READER, dateIn, readUpdate, type TouchChannel, type UpdateSuggestion } from './reader';
+export { vehicleStrategy, capacityEstimate, actionScore, conversionFor, statusId, type VehicleStrategy, type StrategyAction, type Transition } from './vehicle';

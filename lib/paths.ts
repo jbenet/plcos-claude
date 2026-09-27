@@ -30,7 +30,7 @@ export const DEV_PAGES: Record<string, string> = { issues: '/issues', agents: '/
 /** The vehicle an address is about, when it names one: /neurotech/pipeline → neurotech. */
 export function vehicleOfPath(pathname: string): string | null {
   const seg = pathname.split('/').filter(Boolean);
-  if (seg.length < 2 || RESERVED.has(seg[0]!)) return null;
+  if (seg.length < 2 || (RESERVED.has(seg[0]!) && seg[0] !== 'grants')) return null;
   return Object.hasOwn(MODULE_PAGES, seg[1]!) || VEHICLE_ROUTES.has(seg[1]!) ? seg[0]! : null;
 }
 
@@ -44,6 +44,9 @@ export function canonicalPath(href: string, vehicle: string): string {
   const path = cut < 0 ? href : href.slice(0, cut);
   const tail = cut < 0 ? '' : href.slice(cut);
   const seg = path.split('/').filter(Boolean);
+  // Grants is both a vehicle slug and an old module address. Preserve a scoped
+  // vehicle URL before interpreting its first segment as an old page.
+  if (seg[0] === 'grants' && seg[1] && (Object.hasOwn(MODULE_PAGES, seg[1]) || VEHICLE_ROUTES.has(seg[1]))) return href;
   const rest = (from: number) => (seg.length > from ? `/${seg.slice(from).join('/')}` : '');
   if (seg[0] === 'dev') return `/developer${rest(1)}${tail}`;
   if (seg[0] === 'issues' || seg[0] === 'agents') return `/developer${rest(0)}${tail}`;
