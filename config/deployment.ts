@@ -245,6 +245,12 @@ export const config = {
     strongFirstHop: 3, // GUESS — folding compares evidence tier and warmth; no human review gate.
   },
 
+  routePolicy: {
+    maxOrganizationMembers: 8, // GUESS — conservative fan-out limit in a sparsely covered graph, not actual headcount.
+    maxOrganizationHeadcount: 500, // GUESS — public employee upper bound where recorded.
+    organizationPenaltyScale: 50, // GUESS — half the score at this organization size.
+  },
+
   /** SCORE2: relative investment-route strength, never a calibrated probability or consent. */
   routeScoring: {
     version: 'score-3',

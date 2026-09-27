@@ -174,7 +174,7 @@ export async function routeScoringProperties(check: Check, db: Queryable) {
   const handles = ['score2-morgan', 'score2-robin'];
   try {
     await db.query(`insert into identity.entity (entity_id,entity_type,display_name)
-      select id,'person','Invented SCORE2 person' from unnest($1::uuid[]) id`, [ids]);
+      select id,'person','Invented SCORE2 person ' || ord::text from unnest($1::uuid[]) with ordinality as fixture(id,ord)`, [ids]);
     for (const [i, handle] of handles.entries()) {
       await db.query(`insert into platform.app_user(handle,name,initials,role,email)
         values ($1,$2,'ST','test',$3)`, [handle, `Invented SCORE2 team ${i}`, `${handle}@example.org`]);

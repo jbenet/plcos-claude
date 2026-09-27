@@ -10,12 +10,14 @@ export async function runProperties(check: Check) {
   (await import('../connection-target-properties')).connectionTargetProperties(check);
   (await import('../warehouse-investor-properties')).warehouseInvestorProperties(check);
   (await import('../route-presentation-properties')).routePresentationProperties(check);
+  (await import('./routes-layout-0086')).routesLayout0086Properties(check);
   await (await import('../path-search-properties')).pathSearchProperties(check);
   const db = await freshDb();
   await (await import('../prospects-properties')).prospectsProperties(check, db);
   await prospectDispositionProperties(check, db);
   await (await import('../identity-resolution-properties')).identityResolutionProperties(check, db);
   await (await import('../identity-route-properties')).identityRouteProperties(check, db);
+  await (await import('../routes-policy-0084-properties')).routesPolicy0084Properties(check, db);
   await (await import('../import-robustness-properties')).importRobustnessProperties(check, db);
   await (await import('../path-search-properties')).edgeEvidenceCacheProperties(check, db);
   await (await import('../route-scoring-properties')).routeScoringProperties(check, db);

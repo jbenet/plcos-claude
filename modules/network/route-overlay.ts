@@ -1,3 +1,5 @@
+import { routePolicyFacts, routeIdentityGroups } from './route-policy';
+import { emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
 import { createHash } from 'node:crypto';
 import { config } from '@/config/deployment';
 import { setImmediate } from 'node:timers/promises';
@@ -73,6 +75,7 @@ const tiers = { A: 0, B: 1, C: 2, D: 3 } as const;
 
 /** Bound uninterrupted sorting work as well as scoring; route identity keys are computed once. */
 export interface RouteSelectionOptions {
+  vehicleId?: string;
   exclude?: string;
   minimumWarmth?: number;
   /** A preference affects presentation order, never the action verdict or score. */
@@ -115,7 +118,7 @@ export async function sortRouteCandidates(routes: Route[], preferred?: (route: R
 // One derived snapshot per structural object. Weak ownership follows the bounded route
 // cache; no full scored candidate list survives a request. Always validate live inputs.
 const overlays = new WeakMap<StructuralRoutes, { carriers: string[]; edges: Edge[];
-  snapshot?: { signature: string; routes: Route[]; stats: RouteSearch['stats']; candidateCounts: { total: number; unavailable: number }; promotedBasisHashes: string[] } }>();
+  snapshot?: { ruleCounts: NonNullable<RouteSearch['ruleCounts']>; removedRoutes: NonNullable<RouteSearch['removedRoutes']>; signature: string; routes: Route[]; stats: RouteSearch['stats']; candidateCounts: { total: number; unavailable: number }; promotedBasisHashes: string[] } }>();
 
 const clue: Record<string, string> = {
   possible_identity: 'Possible identity match by name only, without corroboration. These may be different people; this is an uncertain identity bridge, not a relationship.',
@@ -153,8 +156,10 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
     overlays.set(structural, memo);
   }
   const { carriers, edges: scoreEdges } = memo;
-  const [restrictions, loads, exposures, coverage, sources] = await Promise.all([
+  const [restrictions, loads, exposures, coverage, sources, policy, identityGroups] = await Promise.all([
     restrictionsFor(search.targetId), connectorLoad(carriers), listExposures(null), edgeCoverage(), listSyncSources(),
+    routePolicyFacts(structural.nodes.map(n => n.entityId), selection.vehicleId),
+    routeIdentityGroups(structural.nodes.map(n => n.entityId)),
   ]);
   const loadOf = new Map(loads.map((l) => [l.connectorId, l.used]));
   const hard = new Map<string, typeof exposures>();
@@ -174,33 +179,45 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
   // Exact derived warmth facts, rather than a time bucket: monthsAgo preserves the
   // time of day, so a dated contact can age immediately after midnight on a boundary.
   const signature = selection.preferred ? null : JSON.stringify([
-    Boolean(blanket), [...restricted].sort(), carriers.map((id) => [id, loadOf.get(id) ?? 0, roles.get(id)]),
+    Boolean(blanket), [...restricted].sort(), [...policy.blocked].sort(), [...policy.organizations], selection.vehicleId, config.routePolicy, carriers.map((id) => [id, loadOf.get(id) ?? 0, roles.get(id)]),
     cap, config.routeScoring, config.routeWarmth, selection.exclude ?? null, selection.minimumWarmth ?? 0,
     scoreEdges.map((edge) => { const w = readWarmth(edge); return [w.kind, w.prior, w.score, w.recency]; }),
   ]);
   let snapshot = signature !== null && memo.snapshot?.signature === signature ? memo.snapshot : undefined;
   if (!snapshot) {
     const candidates: Route[] = [];
+    const ruleCounts = { ...emptyRuleCounts(), ...search.ruleCounts };
+    const removedRoutes: NonNullable<RouteSearch['removedRoutes']> = [];
     const usableEdges = new Set<number>();
     const checkpoint = routeCheckpoint();
     for (const [candidateIndex, candidate] of structural.candidates.entries()) {
       if (candidateIndex % 128 === 0) await checkpoint(candidateIndex);
       const nodes = candidate.nodes.map((i) => structural.nodes[i]!);
       const connectorIds = nodes.slice(1, -1).map((n) => n.entityId), carrier = connectorIds.at(-1);
+      const restrictedMiddle = nodes.slice(0, -1).some(n => policy.blocked.has(n.entityId));
+      const largeMiddle = connectorIds.some(id => policy.organizations.has(id) && oversizedOrganization(policy.organizations.get(id)!));
+      if (restrictedMiddle || largeMiddle) {
+        if (restrictedMiddle) ruleCounts.restricted++; else ruleCounts.largeOrganizations++;
+        removedRoutes.push({ fromName: nodes[0]!.name, names: nodes.slice(1).map(n => n.name),
+          reason: restrictedMiddle ? 'restricted' : 'large_organization' });
+        continue;
+      }
       const hops = candidate.edges.map((e, i) => ({ edge: scoreEdges[e]!, toEntity: nodes[i + 1]!.entityId, toName: nodes[i + 1]!.name }));
       const askLoad = carrier ? { connector: nodes.at(-2)!.name, used: loadOf.get(carrier) ?? 0, cap } : null;
-      const excluded = blanket || [nodes[0]!.entityId, ...connectorIds].some((id) => restricted.has(id));
+      const excluded = blanket || policy.blocked.has(search.targetId) || [nodes[0]!.entityId, ...connectorIds].some((id) => restricted.has(id));
       if (!excluded) for (const edgeIndex of candidate.edges) usableEdges.add(edgeIndex);
-      const route: Route = { fromEntity: nodes[0]!.entityId, fromName: nodes[0]!.name, hops, connectorIds,
+      const route: Route = { identityGroups: Object.fromEntries(nodes.map(n => [n.entityId, identityGroups.get(n.entityId) ?? n.entityId])), fromEntity: nodes[0]!.entityId, fromName: nodes[0]!.name, hops, connectorIds,
         connectorNames: nodes.slice(1, -1).map((n) => n.name), verdict: excluded ? 'excluded' : askLoad && askLoad.used >= cap ? 'hold' : 'recommend',
         reasons: [], askLoad, influence: null,
         weakestTier: hops.reduce<Edge['tier']>((tier, h) => tiers[h.edge.tier] > tiers[tier] ? h.edge.tier : tier, 'A') };
       // Factors are reconstructed only for visible routes; candidate ranking needs numbers.
-      const score = scoreRoute(route, at, roles.get(carrier ?? ''), readWarmth);
+      const baseScore = scoreRoute(route, at, roles.get(carrier ?? ''), readWarmth);
+      const score = organizationPenalty(baseScore, route, policy.organizations);
+      if (score.value < baseScore.value) ruleCounts.organizationPenalties++;
       route.score = { ...score, factors: [] };
       candidates.push(route);
     }
-    snapshot = { signature: signature ?? '', stats: summarizeRoutes(candidates),
+    snapshot = { ruleCounts, removedRoutes, signature: signature ?? '', stats: summarizeRoutes(candidates),
       candidateCounts: { total: candidates.length, unavailable: candidates.filter((r) => r.verdict !== 'recommend').length },
       promotedBasisHashes: [...new Set([...usableEdges].flatMap((i) => structural.edges[i]!.basisHashes))].sort(),
       routes: await selectDisplayRoutes(candidates, selection, at) };
@@ -220,15 +237,16 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
   ]);
   for (const [id, edge] of loaded) fullEdges.set(id, edge);
   for (const route of selected) {
+    route.identityGroups = Object.fromEntries([route.fromEntity!, ...route.hops.map(h => h.toEntity)].map(id => [id, identityGroups.get(id) ?? id]));
     route.hops = route.hops.map((h) => {
       const edge = fullEdges.get(h.edge.edgeId);
       if (!edge) throw new Error('Route evidence changed while applying live guards; retry with the current network build.');
       return { ...h, edge };
     });
     const carrier = route.connectorIds.at(-1);
-    route.score = scoreRoute(route, at, roles.get(carrier ?? ''), readWarmth);
+    route.score = organizationPenalty(scoreRoute(route, at, roles.get(carrier ?? ''), readWarmth), route, policy.organizations);
     route.influence = carrier ? influences.get(carrier) ?? null : null;
-    if (blanket) route.reasons.push(`${search.targetName} asked not to be approached at all: ${blanket.instruction}`);
+    if (blanket || policy.blocked.has(search.targetId)) route.reasons.push(`${search.targetName} asked not to be approached at all: ${blanket?.instruction ?? 'A do-not-contact instruction applies in this vehicle.'}`);
     else {
       const hit = [route.fromEntity!, ...route.connectorIds].find((id) => restricted.has(id));
       if (hit) route.reasons.push(`${restrictions.find((r) => r.connectorId === hit)?.instruction ?? 'A restriction applies to this route.'} `
@@ -249,7 +267,7 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
     }
   }
   const { structural: _internal, ...publicSearch } = search;
-  return { ...publicSearch, routes: selected, topRoutes: selected.filter((r) => r.verdict === 'recommend'),
+  return { ...publicSearch, ruleCounts: { ...snapshot.ruleCounts }, removedRoutes: snapshot.removedRoutes.map(r => ({ ...r, names: [...r.names] })), routes: selected, topRoutes: selected.filter((r) => r.verdict === 'recommend'),
     graph: routeGraph(selected, search.targetId, true), stats, candidateCounts: { ...snapshot.candidateCounts }, promotedBasisHashes: [...snapshot.promotedBasisHashes],
     coverage: { edges: coverage.edges, from: coverage.from, to: coverage.to, maxHops: search.coverage.maxHops,
       notInspected: [...sources.filter((s) => s.status === 'not_connected').map((s) => ({ source: s.label, why: s.detail ?? 'not connected' })),

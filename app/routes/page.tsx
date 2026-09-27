@@ -1,3 +1,4 @@
+import { config } from '@/config/deployment';
 import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
@@ -42,7 +43,7 @@ const OTHER_LABEL: Record<CandidatePath['other']['type'], string> = {
 async function Routes({
   searchParams,
 }: {
-  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string; expanded?: string; page?: string; family?: string; exclude?: string; prefer?: string; warmth?: string; show?: string }>;
+  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string; expanded?: string; page?: string; family?: string; exclude?: string; prefer?: string; warmth?: string; show?: string; removedPage?: string }>;
 }) {
   const selection = await vehicleSelection();
   const params = await searchParams;
@@ -84,10 +85,13 @@ async function Routes({
   });
   const search = targetId
     ? await planRoutes(user.handle, targetId, 3, selection.current?.kind ?? 'fund', 'team', undefined, {
-      exclude: params.exclude, minimumWarmth, preferred: params.prefer ? preferred : undefined,
+      vehicleId: selection.current?.id, exclude: params.exclude, minimumWarmth, preferred: params.prefer ? preferred : undefined,
     })
     : null;
 
+  const removedPageCount = Math.ceil((search?.removedRoutes?.length ?? 0) / 50);
+  const removedPage = /^\d+$/.test(params.removedPage ?? '') ? Math.min(Number(params.removedPage), Math.max(0, removedPageCount - 1)) : 0;
+  const removedRows = search?.removedRoutes?.slice(removedPage * 50, (removedPage + 1) * 50) ?? [];
   const readWarmth = warmthReader();
   const allRoutes = search?.routes ?? [];
   const routeSummary = search ? { ...routeSummaryFor(search),
@@ -221,6 +225,24 @@ async function Routes({
       <h1>Routes to {targetName ?? '—'}</h1>
       <p className="routes-lede">Team and PL routes · estimates carry uncertainty · asks and sends need separate approval.</p>
       {(pickerAffiliations.length === 2000 || ownAffiliations.length === 2000 || firmAffiliations.length === 2000) && <p className="cover">Showing the first 2,000 affiliations per selected group. Other colleagues may not have been inspected.</p>}
+      {search?.ruleCounts && <details id="route-checks" className="card route-aux" open={params.removedPage !== undefined}>
+        <summary>Route checks · {search.ruleCounts.restricted} removed for restrictions · {search.ruleCounts.largeOrganizations} organization hub paths removed</summary>
+        <div className="cbody">
+          <p>{search.ruleCounts.inspected} candidate paths inspected before these checks. {search.ruleCounts.sourcePrefixes} team prefixes shortened; {search.ruleCounts.duplicates} duplicates removed; {search.ruleCounts.repeatedPeople} repeated-person paths removed; {search.ruleCounts.plFallbacks} redundant PL fallback paths removed. {search.ruleCounts.organizationPenalties} remaining organization paths scored down by size.</p>
+          <p>Team members start their own routes. PL supplies access only where no particular team member is known. Same-name and possible-match records share one map node and are checked conservatively; their identities and evidence remain separate in the list. Restrictions apply to every person in a path and to the selected vehicle. Organization hops stop at {config.routePolicy.maxOrganizationMembers} known graph members or {config.routePolicy.maxOrganizationHeadcount} recorded employees; these limits are estimates.</p>
+          {Boolean(removedRows.length) && <ul>{removedRows.map((removed, i) => <li key={i}>
+            {removed.fromName} → {removed.names.join(' → ')} — {removed.reason === 'restricted'
+              ? 'Removed: a person in this path has a do-not-contact instruction. The instruction must be respected.'
+              : 'Removed: an organization in this path exceeds the configured graph-member or public headcount limit.'}
+          </li>)}</ul>}
+          {removedPageCount > 1 && <nav aria-label="Removed route pages">
+            <span>Page {removedPage + 1} of {removedPageCount} · {search.removedRoutes!.length} removed paths </span>
+            {removedPage > 0 && <Link href={`${routeHref({ removedPage: String(removedPage - 1) })}#route-checks`}>Previous removed paths</Link>}
+            {' '}{removedPage + 1 < removedPageCount && <Link href={`${routeHref({ removedPage: String(removedPage + 1) })}#route-checks`}>Next removed paths</Link>}
+          </nav>}
+        </div>
+      </details>}
+
       {routeSummary && <section className="route-stats" aria-label="Route strength summary">
         <div><strong>{routeSummary.strong}</strong><span>Strong</span></div>
         <div><strong>{routeSummary.promising}</strong><span>Promising</span></div>
@@ -332,7 +354,7 @@ async function Routes({
           </details>
           <div className="card route-comparison">
             <div className="chead"><h2>Compare routes</h2><span className="lbl">{displayedRoutes.length} shown · {eligible.length} match</span></div>
-            <p className="route-comparison-key">Route score /100 · every hop’s grade · weakest hop /5 · open a row for evidence and actions</p>
+            <p className="route-comparison-key">Matching identity records share one map node; the list retains each record’s evidence. Route score /100 · every hop’s grade · weakest hop /5 · open a row for evidence and actions</p>
             {displayedRoutes.length === 0 && <p className="cbody">No recorded routes match these filters. Clear the excluded intermediate or lower the warmth minimum to inspect the available material.</p>}
             {displayedRoutes.map(({ route, index: i }) => (
               <details key={i} id={`route-${i}`} className="route-detail" open={r === String(i)}>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { Route } from '@/modules/network/client';
 import { VERDICT_LABEL } from '@/modules/network/client';
 import { Pager, usePage } from '@/components/floor/Paging';
@@ -19,7 +19,18 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
   const arrowId = useId().replaceAll(':', '');
   // Where the pointer is, inside the map. Keyboard focus has none, so the card keeps its corner (issue 0059).
   const [at, setAt] = useState<{ x: number; y: number; w: number } | null>(null);
-  const { nodes, height, width } = routeGraphLayout(routes);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [availableWidth, setAvailableWidth] = useState(0);
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setAvailableWidth(Math.floor(entry.contentRect.width));
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+  const { nodes, height, width } = routeGraphLayout(routes, availableWidth);
   const arcs = routeGraphArcs(routes);
   const labels = routeGraphArcLabels(arcs, nodes, height);
   const positions = new Map(nodes.map((n) => [n.id, n]));
@@ -30,8 +41,8 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
   return <div className="route-map" onMouseLeave={() => { setHovered(null); setAt(null); }}
     onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt({ x: e.clientX - r.left, y: e.clientY - r.top, w: r.width }); }} onKeyDown={(e) => { if (e.key === 'Escape') setHovered(null); }}>
     <Pager {...paging} setPage={page => { paging.setPage(page); setHovered(null); }} label="routes in map; full comparison below" />
-    <div className="route-map-scroll">
-      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} aria-label={`Routes to ${targetName}. One node per entity and one scored arc per directed relationship. Full details in the comparison list.`}>
+    <div className="route-map-scroll" ref={scrollRef}>
+      <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-label={`Routes to ${targetName}. One node per entity and one scored arc per directed relationship. Possible matching identity records share a node; source records remain separate. Full details in the comparison list.`}>
         <defs><marker id={arrowId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="context-stroke" /></marker></defs>
         {arcs.map((arc) => {
           const ri = arc.routeIndices.includes(selected) ? selected : arc.routeIndices[0]!;
@@ -39,11 +50,9 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
           const on = hovered !== null ? hovered === arc.key : arc.routeIndices.includes(selected);
           const colour = unavailable ? 'var(--muted)' : on ? 'var(--green)' : 'var(--accent)';
           const p = positions.get(arc.from)!, q = positions.get(arc.to)!;
-          // Same-column links curve around their labels; reverse links take the opposite side.
-          const bend = p.x === q.x ? (p.y < q.y ? 42 : -42) : 0;
           const midX = (p.x + q.x) / 2;
           const position = labels.get(arc.key)!;
-          const d = `M ${p.x} ${p.y} C ${midX + bend} ${p.y}, ${midX + bend} ${q.y}, ${q.x} ${q.y}`;
+          const d = `M ${p.x} ${p.y} C ${midX} ${p.y}, ${midX} ${q.y}, ${q.x} ${q.y}`;
           const scoreLabel = arc.score === null ? 'Unscored' : `${Number(arc.score.toFixed(2))}/5`;
           const label = `${p.name} → ${q.name}: ${scoreLabel}, grade ${arc.grade}. ${arc.routeIndices.length} ${arc.routeIndices.length === 1 ? 'route' : 'routes'} use this relationship. Inspect in list.`;
           return <a key={arc.key} data-from={arc.from} data-to={arc.to} href={`#route-${routeIds[ri]}`} aria-label={label}
@@ -60,7 +69,7 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
             </text>
           </a>;
         })}
-        {nodes.map((n) => <g key={n.id} data-entity={n.id} pointerEvents="none">
+        {nodes.map((n) => <g key={n.id} data-entity={n.id} data-layer={n.depth} pointerEvents="none">
           <title>{`${n.name}${portfolioFounders[n.id]?.length ? ` · PLC portfolio founder: ${portfolioFounders[n.id]!.join(', ')}` : ''}`}</title>
           <circle cx={n.x} cy={n.y} r={portfolioFounders[n.id]?.length ? 7 : 5} fill="var(--surface)" stroke={portfolioFounders[n.id]?.length ? 'var(--green)' : 'var(--ink)'} strokeWidth={2} />
           <text x={n.x} y={n.y - 13} textAnchor="middle" fill="var(--ink)" fontSize="11" fontFamily="var(--sans)" paintOrder="stroke" stroke="var(--surface)" strokeWidth={4}>{n.name}</text>
@@ -77,6 +86,6 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
       {activeReading.factors.slice(0, 3).map((f, i) => <p key={i}>{f.label}: {f.value} · {f.basis}</p>)}
       <small>Activate the arc to open a route and its evidence in the list. Escape dismisses this card.</small>
     </div>}
-    <p className="route-map-key">Hop score /5 first, grade second · one arrow per relationship · thicker = stronger tie · dashed = all routes held or unavailable. Hover or focus an arc for details.</p>
+    <p className="route-map-key">Possible matching records share one node; identities remain unmerged. Hop score /5 first, grade second · one arrow per relationship · thicker = stronger tie · dashed = all routes held or unavailable. Hover or focus an arc for details.</p>
   </div>;
 }

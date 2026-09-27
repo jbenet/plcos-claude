@@ -74,7 +74,7 @@ export interface RouteHop {
 
 export type RouteStrength = 'strong' | 'warm' | 'weak';
 export interface RouteScoreFactor {
-  key: 'lastHop' | 'introducer' | 'history' | 'access' | 'recency' | 'confidence' | 'weakestHop';
+  key: 'lastHop' | 'introducer' | 'history' | 'access' | 'recency' | 'confidence' | 'weakestHop' | 'organizationSize';
   label: string;
   /** Signed points; factors sum to the route score before rounding. */
   points: number;
@@ -109,6 +109,8 @@ export interface RouteGraph {
 }
 
 export interface Route {
+  /** Presentation-only safety groups for unmerged possible identities. Evidence IDs stay intact. */
+  identityGroups?: Record<string, string>;
   /** Present on every planned route; optional only for legacy fixture callers. */
   score?: RouteScore;
   fromEntity?: string;
@@ -135,7 +137,25 @@ export interface Route {
   influence: import('./influence').Influence | null;
 }
 
+export interface RouteRuleCounts {
+  inspected: number;
+  sourcePrefixes: number;
+  duplicates: number;
+  repeatedPeople: number;
+  plFallbacks: number;
+  restricted: number;
+  largeOrganizations: number;
+  organizationPenalties: number;
+}
+export interface RemovedRoute {
+  fromName: string;
+  names: string[];
+  reason: 'restricted' | 'large_organization';
+}
+
 export interface RouteSearch {
+  ruleCounts?: RouteRuleCounts;
+  removedRoutes?: RemovedRoute[];
   targetId: string;
   targetName: string;
   fromName: string;

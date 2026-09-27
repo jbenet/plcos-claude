@@ -98,6 +98,14 @@ export async function edgesByIds(ids: string[]): Promise<Map<string, Edge>> {
   return result;
 }
 
+/** Search nodes already use canonical IDs; names need no whole identity projection. */
+export async function routeNodeNames(ids: string[]): Promise<Array<{ entityId: string; displayName: string }>> {
+  if (!ids.length) return [];
+  const rows = await (await getDb()).query<{ entity_id: string; display_name: string }>(
+    'select entity_id::text, display_name from identity.entity where entity_id = any($1::uuid[])', [ids]);
+  return rows.map(r => ({ entityId: r.entity_id, displayName: r.display_name }));
+}
+
 export interface RawPath {
   nodes: string[];
   edges: string[];
@@ -123,12 +131,10 @@ export async function enumeratePathsFromSources(
 ): Promise<RawPath[]> {
   if (!fromEntities.length) return [];
   const db = await getDb();
-  const excluded = await db.query<{ entity_id: string }>(
-    `select distinct e.entity_id from identity.source_record s join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id)
-      where ((s.source = 'w3_person' and e.display_name = 'PL' and e.entity_type = 'org') or (s.source = 'network_org' and s.source_id = 'pl') or (s.source='warehouse' and s.source_id='organization:protocol-labs'))`);
+  const excluded = (await routeSources()).filter(s => s.sourceOnly);
   const graph = await graphSnapshot(db);
   const canonical = (id: string) => graph.canonicalIds?.get(id) ?? id;
-  const pl = new Set(excluded.map(row=>canonical(row.entity_id)));
+  const pl = new Set(excluded.map(row=>canonical(row.entityId)));
   if (pl.has(canonical(targetEntity))) return [];
   const sources = fromEntities.map(canonical);
   const regular = await pathsFromSnapshot(graph, sources.filter(id=>!pl.has(id)), canonical(targetEntity), maxHops,
@@ -196,9 +202,21 @@ export async function entityForUser(handle: string): Promise<{ entityId: string;
   return row ? { entityId: row.entity_id, name: row.display_name } : null;
 }
 
-/** People on the active team plus the explicit PL organization source. */
-export async function routeSources(): Promise<Array<{ entityId: string; name: string; sourceOnly: boolean }>> {
+type RouteSource = { entityId: string; name: string; sourceOnly: boolean };
+const sourceRosters = new WeakMap<Db, { revision: string; value: Promise<RouteSource[]> }>();
+/** A roster is shared across targets, not rebuilt from every identity on each search. */
+export async function routeSources(): Promise<RouteSource[]> {
   const db = await getDb();
+  const revision = await evidenceRevision(db);
+  const previous = sourceRosters.get(db);
+  if (previous?.revision === revision) return previous.value;
+  const value = readRouteSources(db);
+  sourceRosters.set(db, { revision, value });
+  try { return await value; }
+  catch (error) { if (sourceRosters.get(db)?.value === value) sourceRosters.delete(db); throw error; }
+}
+/** People on the active team, evidenced PL staff, and the explicit PL source. */
+async function readRouteSources(db: Db): Promise<RouteSource[]> {
   const rows = await db.query<{ id: string; name: string }>(
     `select distinct e.entity_id::text as id, e.display_name as name
        from identity.source_record s join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id)
@@ -207,7 +225,20 @@ export async function routeSources(): Promise<Array<{ entityId: string; name: st
          or (((s.source = 'w3_person' and e.display_name = 'PL' and e.entity_type = 'org') or (s.source = 'network_org' and s.source_id = 'pl') or (s.source='warehouse' and s.source_id='organization:protocol-labs')))
       order by name`);
   const pl = new Set((await db.query<{ id: string }>(`select identity.canonical_entity_id(entity_id)::text id from identity.source_record where (source='network_org' and source_id='pl') or (source='warehouse' and source_id='organization:protocol-labs') or (source='w3_person' and entity_id in(select entity_id from identity.entity where entity_type='org' and display_name='PL'))`)).map(r => r.id));
-  return rows.map((r) => ({ entityId: r.id, name: r.name, sourceOnly: pl.has(r.id) }));
+  // Recorded PL employment makes someone a source even without an app login.
+  // Keep these affiliation edges as evidence, but never draw PL as their introducer.
+  const plAliases = pl.size ? (await db.query<{ id: string }>(
+    'select entity_id::text id from identity.entity where identity.canonical_entity_id(entity_id) = any($1::uuid[])', [[...pl]])).map(r => r.id) : [];
+  const staff = pl.size ? await db.query<{ id: string; name: string }>(`
+    select distinct person.entity_id::text id, person.display_name name
+    from network.edge edge
+    join identity.entity person on person.entity_id = identity.canonical_entity_id(
+      case when identity.canonical_entity_id(edge.from_entity) = any($1::uuid[]) then edge.to_entity else edge.from_entity end)
+    where (edge.from_entity = any($1::uuid[]) or edge.to_entity = any($1::uuid[]))
+      and person.entity_type = 'person' and (edge.valid_to is null or edge.valid_to >= current_date)
+      and edge.evidence @> '[{"tie":{"kind":"worked_together","basis":"pl_affiliation"}}]'::jsonb`, [plAliases]) : [];
+  return [...new Map([...rows, ...staff].map(r => [r.id, r])).values()]
+    .map((r) => ({ entityId: r.id, name: r.name, sourceOnly: pl.has(r.id) }));
 }
 
 
