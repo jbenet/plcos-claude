@@ -11,11 +11,11 @@ export function Prospects({ directory }: { directory: string }) {
     <div className="cbody">
       <p>Research decisions use a $500K-or-more check size, or strategic value for the vehicle.
         Reads <code>{directory}/*.jsonl</code>. Each new pursuit is owned by the person running the import.</p>
-      <p className="muted">Rule-set pursuits from this import can move to the row’s status; Passed requires a reason.
-        A status set by a person is kept. Each change records the rule and reason and can be reversed on the LP page.
+      <p className="muted">Rule-set pursuits can move to the row’s status; Passed requires a reason.
+        The later filename date, then line, wins conflicting rule dispositions; the winning file is recorded. A status set by a person is kept. Each change records the rule and reason and can be reversed on the LP page.
         Sourced prospects with no matching person are added to the network,
         with their organization as an affiliation when given. Ambiguous source mappings or conflicting identities are skipped and listed.
-        Invalid rows are skipped and listed. Files modified in the last two minutes are in progress; retry after writing finishes. New prospects appear in the next W0 export; consent evidence does not change.</p>
+        An optional entityId pins an existing match; use entityType: "org" for an organization. Invalid rows are skipped and listed. Files modified in the last two minutes are in progress; retry after writing finishes. New prospects appear in the next W0 export; consent evidence does not change.</p>
       <form action={action}><button className="btn p" type="submit" disabled={pending}>{pending ? 'Adding prospects…' : 'Add prospects to the pipeline'}</button></form>
       <div aria-live="polite" aria-busy={pending}>
         {state.error && <p role="alert">{state.error}</p>}

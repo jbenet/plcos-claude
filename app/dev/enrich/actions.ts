@@ -7,6 +7,8 @@ import { enrichDir, exportResearchSet } from '@/lib/enrich/candidates';
 import { importFindings } from '@/lib/enrich/import';
 import { appendAudit } from '@/modules/platform';
 import { getDb } from '@/lib/db';
+import { consolidatePursuits, reversePursuitMerge, type PursuitMergeReport } from '@/modules/strategy';
+import { startRun, finishRun } from '@/modules/sources';
 import { config } from '@/config/deployment';
 import { readLayout } from '@/config/ports';
 import { addProspects, readProspectFiles, type ProspectResult } from '@/lib/enrich/prospects';
@@ -49,13 +51,13 @@ export async function exportResearchSetAction(): Promise<void> {
 /** Map the findings in (N64): claims with provenance, profiles, connection candidates. Counts only. */
 export async function importFindingsAction(): Promise<void> {
   const user = await (await auth()).currentUser();
-  const r = await importFindings(user.id);
-  await appendAudit({ actorId: user.id, action: 'enrich.imported', subjectType: 'enrich', detail: { mapped: r.mapped, claims: r.claims, rejected: r.rejected, paths: r.paths, organizationLps: r.organizationLps, entityTypes: { corrected: r.entityTypes?.corrected.length ?? 0, ambiguous: r.entityTypes?.ambiguous.length ?? 0 } } });
-  // Reconcile the roster's stable handles before calendar/meeting readers return the imported data.
+  // Repair team aliases before the identity pass consolidates their pursuits.
   const { readNetworkNodeInput } = await import('@/modules/network/nodes');
   const { repairTeamIdentities } = await import('@/modules/identity/team');
   const inputs = await readNetworkNodeInput(enrichDir());
   if (inputs) await repairTeamIdentities(await getDb(), inputs);
+  const r = await importFindings(user.id);
+  await appendAudit({ actorId: user.id, action: 'enrich.imported', subjectType: 'enrich', detail: { mapped: r.mapped, claims: r.claims, rejected: r.rejected, paths: r.paths, organizationLps: r.organizationLps, entityTypes: { corrected: r.entityTypes?.corrected.length ?? 0, ambiguous: r.entityTypes?.ambiguous.length ?? 0 } } });
   // Research paths become ties with their evidence tiers.
   const { buildNetwork } = await import('@/modules/network');
   await buildNetwork();
@@ -117,4 +119,38 @@ export async function importDakotaAction(): Promise<{job?:import('@/lib/connecto
     resumeDakotaJob(db);
     return {job};
   } catch {return {error:'Dakota could not be queued. Try again; committed batches are preserved.'};}
+}
+
+/** The existing server handle is the only live writer. No DB-opening CLI. */
+export async function consolidatePursuitsAction(): Promise<{ result?: PursuitMergeReport; error?: string }> {
+  if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+    return { error: 'Consolidate pursuits on the live server.' };
+  }
+  const user = await (await auth()).currentUser();
+  const run = await startRun('enrich', 'pursuit-merge', user.id);
+  try {
+    const result = await consolidatePursuits(await getDb(), user.id);
+    await finishRun(run, { status: 'ok', requests: 0, records: result.merged, newRecords: 0,
+      note: `${result.merged} pursuits merged, ${result.ambiguous.length} ambiguous`, detail: { ...result } });
+    revalidatePath('/dev/enrich');
+    revalidatePath('/targets', 'layout');
+    return { result };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Pursuit consolidation failed.';
+    await finishRun(run, { status: 'failed', requests: 0, records: 0, newRecords: 0, note: message });
+    return { error: message };
+  }
+}
+
+export async function reversePursuitMergeAction(id: string, reason: string): Promise<{ error?: string }> {
+  if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+    return { error: 'Reverse pursuit merges on the live server.' };
+  }
+  try {
+    const user = await (await auth()).currentUser();
+    await reversePursuitMerge(await getDb(), id, user.id, reason);
+    revalidatePath('/dev/enrich');
+    revalidatePath('/targets', 'layout');
+    return {};
+  } catch (error) { return { error: error instanceof Error ? error.message : 'Reversal failed.' }; }
 }

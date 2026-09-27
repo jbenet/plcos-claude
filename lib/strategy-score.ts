@@ -83,7 +83,7 @@ export async function provisionalScores(entityIds: string[]): Promise<Map<string
   const db = await getDb();
   const rows = await db.query<{ entity_id: string; scores: StrategyScores | null }>(
     `select distinct on (s.pursuit_id) p.entity_id::text, s.data->'scores' as scores
-       from strategy.suggestion s join strategy.pursuit p on p.pursuit_id = s.pursuit_id
+       from strategy.suggestion s join strategy.active_pursuit p on p.pursuit_id = s.pursuit_id
       where p.entity_id = any($1::uuid[]) and s.status in ('proposed', 'accepted')
       order by s.pursuit_id, s.made_at desc`, [entityIds]);
   for (const r of rows) {

@@ -11,3 +11,4 @@ export { insertUpdate, recordApplied, updatesFor, type PursuitUpdate, type Updat
 export { decideSuggestion, openSuggestions, SuggestionRefused, suggestionsFor, type Suggestion } from './suggestions';
 export { READER, dateIn, readUpdate, type TouchChannel, type UpdateSuggestion } from './reader';
 export { vehicleStrategy, capacityEstimate, actionScore, conversionFor, statusId, type VehicleStrategy, type StrategyAction, type Transition } from './vehicle';
+export { consolidatePursuits, consolidatePursuitsInTransaction, reversePursuitMerge, pursuitReferences, type PursuitMergeReport } from './merge';

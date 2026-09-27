@@ -1,4 +1,4 @@
-import { getDb, type Queryable } from '@/lib/db';
+import { getDb, type Db, type Queryable } from '@/lib/db';
 import { openTicket, requireApprovedTicket } from '@/modules/governance';
 import { getPursuit } from './repo';
 import {
@@ -89,6 +89,7 @@ export async function recordAdvance(
 ): Promise<void> {
   const db = await getDb();
   await db.transaction(async (tx) => {
+    await tx.exec('lock table strategy.pursuit in row exclusive mode');
     await requireApprovedTicket(tx, {
       kind: 'STAGE', subjectType: 'pursuit', subjectId: args.pursuitId, ticketId: args.ticketId,
     });
@@ -141,6 +142,7 @@ export async function recordClimb(
 ): Promise<void> {
   const db = await getDb();
   await db.transaction(async (tx) => {
+    await tx.exec('lock table strategy.pursuit in row exclusive mode');
     await requireApprovedTicket(tx, {
       kind: 'STAGE', subjectType: 'pursuit', subjectId: args.pursuitId, ticketId: args.ticketId,
     });
@@ -228,6 +230,8 @@ export async function setStatus(
   if (change.nextStepOn && !nextStep) throw new StatusRefused('A date needs a next step to be the date of.');
 
   const write = async (tx: Queryable) => {
+    // Serialize the read and person decision against pursuit consolidation.
+    await tx.exec('lock table strategy.pursuit in row exclusive mode');
     const pursuit = await getPursuit(pursuitId, tx);
     if (!pursuit) throw new Error(`No pursuit ${pursuitId}`);
     await tx.query(
@@ -257,7 +261,7 @@ export async function setStatus(
       })],
     );
   };
-  if (opts.q) return write(opts.q);
+  if (opts.q) return 'transaction' in opts.q ? (opts.q as Db).transaction(write) : write(opts.q);
   const db = await getDb();
   await db.transaction(write);
 }
@@ -274,6 +278,8 @@ export async function setNextStep(
   const nextStep = step.nextStep.trim();
   if (!nextStep) throw new StatusRefused('A next step needs words.');
   const write = async (tx: Queryable) => {
+    // Serialize the read and person decision against pursuit consolidation.
+    await tx.exec('lock table strategy.pursuit in row exclusive mode');
     const pursuit = await getPursuit(pursuitId, tx);
     if (!pursuit) throw new Error(`No pursuit ${pursuitId}`);
     await tx.query(`update strategy.pursuit set next_step = $2, next_step_on = $3 where pursuit_id = $1`, [pursuitId, nextStep, step.nextStepOn]);
@@ -287,7 +293,7 @@ export async function setNextStep(
       })],
     );
   };
-  if (opts.q) return write(opts.q);
+  if (opts.q) return 'transaction' in opts.q ? (opts.q as Db).transaction(write) : write(opts.q);
   const db = await getDb();
   await db.transaction(write);
 }

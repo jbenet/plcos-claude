@@ -53,7 +53,7 @@ export async function listMeetings(vehicleId: string | null = null): Promise<Mee
     await db.query<MeetingRow>(
       `${MEETING_SELECT} where ${MEETINGS_ONLY}
         and ($1::uuid is null or m.vehicle_id=$1 or (m.vehicle_id is null and m.source='us' and exists (
-          select 1 from strategy.pursuit p where p.vehicle_id=$1 and identity.canonical_entity_id(p.entity_id)=e.entity_id))
+          select 1 from strategy.active_pursuit p where p.vehicle_id=$1 and identity.canonical_entity_id(p.entity_id)=e.entity_id))
           or (m.vehicle_id is null and exists (
           select 1 from platform.vehicle w where w.id=$1 and w.slug=any(m.about_vehicles)
             and m.about='raise' and (m.about_by='person' or (

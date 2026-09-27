@@ -1,3 +1,4 @@
+import { PursuitMerges } from './PursuitMerges';
 import { DakotaImport } from './DakotaImport';
 import { buildCache } from '@/lib/build-cache';
 import { PortfolioImport } from './PortfolioImport';
@@ -66,10 +67,10 @@ async function pagesOnly(dir: string): Promise<{ pages: number; partial: number 
 }
 
 const enrichmentDbInputs = buildCache(async () => {
-  const [pursuits,suggestions,imported,bulk] = await Promise.all([
-    listPursuits(null),openSuggestions(),latestRun('enrich','import'),addedInBulk(),
+  const [pursuits,suggestions,imported,bulk,mergeRun] = await Promise.all([
+    listPursuits(null),openSuggestions(),latestRun('enrich','import'),addedInBulk(),latestRun('enrich','pursuit-merge'),
   ]);
-  return {pursuits:pursuits.filter(inResearchSet),suggestions,imported,bulk};
+  return {pursuits:pursuits.filter(inResearchSet),suggestions,imported,bulk,mergeRun};
 });
 
 /**
@@ -81,7 +82,7 @@ const enrichmentDbInputs = buildCache(async () => {
 async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?: string; imported?: string; claims?: string; refused?: string; sourced?: string }> }) {
   const sp = await searchParams;
   const dir = enrichDir();
-  const {pursuits,suggestions,imported,bulk} = await enrichmentDbInputs();
+  const {pursuits,suggestions,imported,bulk,mergeRun} = await enrichmentDbInputs();
   const entities = new Set(pursuits.map((p) => p.entityId)).size;
   const { readFile } = await import('node:fs/promises');
   const triage = (await readFile(join(dir, 'triage.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Triage);
@@ -188,6 +189,8 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
               Replaces what an earlier import wrote; a claim somebody verified is kept.
             </span>
           </form>
+          <PursuitMerges report={mergeRun?.status === 'ok' && (!imported || mergeRun.startedAt > imported.startedAt)
+            ? mergeRun.detail as unknown as import('@/modules/strategy').PursuitMergeReport : last.pursuitMerges} />
           {(last.skippedRecords ?? []).length > 0 && (
             <details className="more" style={{ marginTop: 10 }}>
               <summary>{last.skippedRecords!.length} skipped records — correct these files and import again</summary>

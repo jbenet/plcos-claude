@@ -24,7 +24,7 @@ async function main(){
     }
     db=await openPglite(join(copy,'database'));await migrate(db);
     await withDb(db,async()=>{
-      const targets=await db!.query<{id:string;kind:string}>(`select distinct p.entity_id::text id,v.kind::text from strategy.pursuit p join platform.vehicle v on v.id=p.vehicle_id order by id,kind`);
+      const targets=await db!.query<{id:string;kind:string}>(`select distinct p.entity_id::text id,v.kind::text from strategy.active_pursuit p join platform.vehicle v on v.id=p.vehicle_id order by id,kind`);
       const at=new Date();
       console.log(JSON.stringify({phase:'before',total:targets.length}));
       const measure=async()=>{

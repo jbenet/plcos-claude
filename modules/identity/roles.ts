@@ -68,7 +68,7 @@ export async function relationshipRoles(ids?: string[], group: RelationshipGroup
     select * from base where ${ids ? 'entity_id = any($1::uuid[])' : `not is_team and ${filters[group]} and $1::uuid[] is null`}
     order by hard desc, name, entity_id limit ${RELATIONSHIP_PAGE_SIZE} offset $2
   ), pursuits as materialized (
-    select p.*, identity.canonical_entity_id(p.entity_id) canonical_id from strategy.pursuit p
+    select p.*, identity.canonical_entity_id(p.entity_id) canonical_id from strategy.active_pursuit p
   ) select s.*,
     (select l.rung::text from pursuits p join strategy.ladder_event l using(pursuit_id)
       where p.canonical_id = s.entity_id order by l.occurred_at desc limit 1) rung,

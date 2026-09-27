@@ -138,3 +138,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [0090 — The shell on a phone and a narrow tablet](entries/shell-phone-0090.md)
 - [perf4 — Scaled page-query profiling](entries/perf4.md)
 - [Entity type corrections — issue 0063](entries/entity-type-0063.md)
+- [Pursuit duplicates — canonical identity consolidation](entries/pursuit-dupes.md)

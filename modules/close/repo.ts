@@ -173,7 +173,7 @@ export async function bandwidthAlerts(): Promise<BandwidthAlert[]> {
             count(distinct p.pursuit_id)::text as fund_pursuits
        from platform.app_user u
        left join close.spv_seat s on s.owner_id = u.id
-       left join strategy.pursuit p on p.owner_id = u.id and p.closed_at is null
+       left join strategy.active_pursuit p on p.owner_id = u.id and p.closed_at is null
           and p.vehicle_id in (select id from platform.vehicle where kind = 'fund')
       group by u.name
      having count(distinct s.seat_id) filter (where s.stage in ('invited','ioi','allocated')) > 0

@@ -237,14 +237,14 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
                stage_said = excluded.stage_said, owner_said = excluded.owner_said, implied = excluded.implied,
                status_said = excluded.status_said,
                -- A status a person set here is theirs: Affinity's word is kept beside it, not over it.
-               status = case when strategy.pursuit.status_source = 'affinity' and $5::text is not null then excluded.status else strategy.pursuit.status end,
-               passed_by = case when strategy.pursuit.status_source = 'affinity' then excluded.passed_by else strategy.pursuit.passed_by end,
-               status_reason = case when strategy.pursuit.status_source = 'affinity' then excluded.status_reason else strategy.pursuit.status_reason end,
-               next_step = case when strategy.pursuit.status_source = 'affinity' then excluded.next_step else strategy.pursuit.next_step end,
-               closed_at = case when strategy.pursuit.status_source = 'affinity' or $16 then excluded.closed_at else strategy.pursuit.closed_at end,
-               close_reason = case when strategy.pursuit.status_source = 'affinity' or $16 then excluded.close_reason else strategy.pursuit.close_reason end
-             where strategy.pursuit.source = 'affinity'
-             returning (status_source = 'us') as ours, closed_at is not null as closed`,
+               status = case when (strategy.pursuit.status_source = 'affinity' and not strategy.pursuit_has_human_status(strategy.pursuit.pursuit_id)) and $5::text is not null then excluded.status else strategy.pursuit.status end,
+               passed_by = case when (strategy.pursuit.status_source = 'affinity' and not strategy.pursuit_has_human_status(strategy.pursuit.pursuit_id)) then excluded.passed_by else strategy.pursuit.passed_by end,
+               status_reason = case when (strategy.pursuit.status_source = 'affinity' and not strategy.pursuit_has_human_status(strategy.pursuit.pursuit_id)) then excluded.status_reason else strategy.pursuit.status_reason end,
+               next_step = case when (strategy.pursuit.status_source = 'affinity' and not strategy.pursuit_has_human_status(strategy.pursuit.pursuit_id)) then excluded.next_step else strategy.pursuit.next_step end,
+               closed_at = case when (strategy.pursuit.status_source = 'affinity' and not strategy.pursuit_has_human_status(strategy.pursuit.pursuit_id)) or $16 then excluded.closed_at else strategy.pursuit.closed_at end,
+               close_reason = case when (strategy.pursuit.status_source = 'affinity' and not strategy.pursuit_has_human_status(strategy.pursuit.pursuit_id)) or $16 then excluded.close_reason else strategy.pursuit.close_reason end
+             where strategy.pursuit.source = 'affinity' and strategy.pursuit.merged_into is null
+             returning strategy.pursuit_has_human_status(pursuit_id) as ours, closed_at is not null as closed`,
             [
               entity, vehicle.id, owner ?? users.get(PLACEHOLDER)!, null, status, passedBy, reason,
               implied, map?.next ? `${map.next} (Affinity)` : null,
@@ -539,4 +539,3 @@ async function touchpoints(
   }
   return added;
 }
-

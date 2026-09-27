@@ -1,3 +1,4 @@
+import { consolidatePursuitsInTransaction, type PursuitMergeReport } from '@/modules/strategy';
 import { correctPipelineEntityTypes, type EntityTypeReport } from './entity-types';
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
@@ -31,6 +32,7 @@ import type { Triage } from './triage';
 
 export interface ImportCounts {
   entityTypes?: EntityTypeReport;
+  pursuitMerges?: PursuitMergeReport;
   organizationLps?: OrganizationLpCounts;
   files: number;
   mapped: number;
@@ -117,6 +119,7 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
     const db = await getDb();
     await db.transaction(async (tx) => {
       counts.entityTypes = await correctPipelineEntityTypes(tx, findings, parsedPaths.records.map(r => r.value as Path), runBy ?? 'system:identity-import');
+      counts.pursuitMerges = await consolidatePursuitsInTransaction(tx, runBy);
       const orgs = await tx.query<{ name: string }>("select display_name as name from identity.entity where entity_type = 'org'");
       const records = parsedPaths.records;
       const origin = new Map<Path, LocatedRecord>();
@@ -201,7 +204,7 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       // nothing; a new one withdraws the open proposal it replaces; decided ones stay as they are.
       for (const { s: st, hash } of strategies) {
         const pursuit = await tx.one<{ id: string }>(
-          `select p.pursuit_id::text as id from strategy.pursuit p
+          `select p.pursuit_id::text as id from strategy.active_pursuit p
              join platform.vehicle v on v.id = p.vehicle_id
             where identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id($1::uuid)
               and p.closed_at is null and lower(trim($2)) in (lower(v.name), lower(v.slug))

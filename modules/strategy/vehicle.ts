@@ -54,7 +54,7 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
   const ids = [...new Set(pursuits.map(p => p.entityId))];
   const [suggestions, profiles, claims, restrictions, owners, history, touches, routes, contexts] = await Promise.all([
     db.query<SuggestionRow>(`select distinct on (s.pursuit_id) s.pursuit_id, s.suggestion_id, s.data, s.body, s.made_at, s.made_by, s.status
-      from strategy.suggestion s join strategy.pursuit p using(pursuit_id) join platform.vehicle v on v.id=p.vehicle_id
+      from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id) join platform.vehicle v on v.id=p.vehicle_id
       where p.vehicle_id=$1 and s.status in ('proposed','accepted')
         and (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))
       order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [vehicleId]),
@@ -67,9 +67,12 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
     db.query<{ entity_id: string; instruction: string; scope: string; at: Date }>(`select identity.canonical_entity_id(entity_id) entity_id,
       instruction,scope::text,recorded_at as at from coordination.restriction
       where identity.canonical_entity_id(entity_id)=any($1::uuid[]) and (expires_at is null or expires_at > $2::date)`, [ids, now]),
-    db.query<{ pursuit_id: string; active: boolean }>(`select p.pursuit_id,u.active from strategy.pursuit p join platform.app_user u on u.id=p.owner_id where p.vehicle_id=$1`, [vehicleId]),
-    db.query<{ subject_id: string; at: Date; detail: Record<string, unknown> }>(`select a.subject_id,a.at,a.detail from platform.audit_log a
-      join strategy.pursuit p on p.pursuit_id::text=a.subject_id where p.vehicle_id=$1 and a.action='pursuit.status_set' and a.at <= $2 order by a.at,a.id`, [vehicleId, now]),
+    db.query<{ pursuit_id: string; active: boolean }>(`select p.pursuit_id,u.active from strategy.active_pursuit p join platform.app_user u on u.id=p.owner_id where p.vehicle_id=$1`, [vehicleId]),
+    db.query<{ subject_id: string; at: Date; detail: Record<string, unknown> }>(`select p.pursuit_id::text as subject_id,a.at,a.detail from platform.audit_log a
+      join strategy.active_pursuit p on p.pursuit_id = case when a.subject_type='pursuit'
+        and a.subject_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        then strategy.canonical_pursuit_id(a.subject_id::uuid) end
+      where p.vehicle_id=$1 and a.action='pursuit.status_set' and a.at <= $2 order by a.at,a.id`, [vehicleId, now]),
     touchpointSummaries(pursuits, now), strategyRouteSummaries(ids, total.kind),
     db.query<{ entity_id: string; at: Date }>(`select identity.canonical_entity_id(entity_id) entity_id,max(created_at) at
       from research.note where kind='context' and identity.canonical_entity_id(entity_id)=any($1::uuid[]) group by 1`, [ids]),

@@ -219,7 +219,7 @@ export async function rungsToRecheck(): Promise<RecheckRow[]> {
     `select l.pursuit_id::text, e.display_name as name, v.name as vehicle, v.slug, l.rung, l.evidence_kind as kind, l.created_at as recorded_at,
             u.name as recorded_by, m.about, m.about_vehicles as vehicles, m.about_basis as basis, m.about_by as by, m.meeting_id is not null as found
        from strategy.ladder_event l
-       join strategy.pursuit p on p.pursuit_id = l.pursuit_id
+       join strategy.active_pursuit p on p.pursuit_id = l.pursuit_id
        join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
        join platform.vehicle v on v.id = p.vehicle_id
        left join platform.app_user u on u.id = l.recorded_by

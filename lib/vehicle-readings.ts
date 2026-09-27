@@ -14,7 +14,7 @@ export async function vehicleReadings(vehicleId: string | null, entityId: string
   }>(`with latest as (
     select distinct on (s.pursuit_id) s.pursuit_id,s.suggestion_id,s.made_at,s.made_by,
       s.data - 'body' as data
-    from strategy.suggestion s join strategy.pursuit p using(pursuit_id)
+    from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id)
     join platform.vehicle v on v.id=p.vehicle_id
     where ($1::uuid is null or p.vehicle_id=$1) and ($2::uuid is null or identity.canonical_entity_id(p.entity_id)=$2)
       and s.status in ('proposed','accepted')
@@ -23,7 +23,7 @@ export async function vehicleReadings(vehicleId: string | null, entityId: string
     order by s.pursuit_id,s.created_at desc,s.suggestion_id
   ) select p.pursuit_id,e.entity_id,e.display_name entity_name,v.id vehicle_id,v.name vehicle_name,v.slug vehicle_slug,
       p.status,u.name owner_name,p.next_step,s.suggestion_id,s.made_at,s.made_by,s.data
-    from strategy.pursuit p join identity.entity e on e.entity_id=identity.canonical_entity_id(p.entity_id)
+    from strategy.active_pursuit p join identity.entity e on e.entity_id=identity.canonical_entity_id(p.entity_id)
     join platform.vehicle v on v.id=p.vehicle_id join platform.app_user u on u.id=p.owner_id
     left join latest s using(pursuit_id)
     where ($1::uuid is null or p.vehicle_id=$1) and ($2::uuid is null or e.entity_id=$2)
