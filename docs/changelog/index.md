@@ -158,3 +158,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 
 - [Connectors — EDGAR folded into search, and a page that stops repeating itself · issues 0106–0108](entries/connectors-0106-0108.md)
 - [Activity performance — persisted file digests and background refresh](entries/activity-perf.md)
+
+- [Prospect precedence — researched decisions survive intake conflicts](entries/prospect-precedence.md)

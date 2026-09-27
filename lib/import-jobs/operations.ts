@@ -35,9 +35,9 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
       await progress('Adding prospects',1,2);
       const r = await addProspects(db,actor,files);
       const counts = {files:r.files,added:r.added,existing:r.existing,ambiguous:r.ambiguous,invalid:r.invalid.length,inProgress:r.inProgress.length,
-        moved:r.moved,toSourcing:r.toSourcing,toPassed:r.toPassed,kept:r.kept};
-      await appendAudit({actorId:actor,action:'enrich.prospects',subjectType:'enrich',detail:counts});
-      return counts;
+        moved:r.moved,toSourcing:r.toSourcing,toPassed:r.toPassed,kept:r.kept,lost:r.losers.length};
+      await appendAudit({actorId:actor,action:'enrich.prospects',subjectType:'enrich',detail:{...counts,perFile:r.perFile}});
+      return {...counts,precedence:{perFile:r.perFile,losers:r.losers.slice(0,5),lost:r.losers.length}};
     }
     case 'duplicates':
     case 'pursuits': {

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { IMPORT_LABELS, type ImportJob } from '@/lib/import-jobs/types';
+import { ProspectPrecedence, type ProspectPrecedenceReport } from './ProspectPrecedence';
 type Status = Pick<ImportJob,'id'|'kind'|'status'|'phase'|'done'|'total'|'result'|'error'>;
 
 /** One status area follows the user across pages. Closing a page does not cancel a child. */
@@ -37,6 +38,8 @@ export function ImportJobs() {
         {' · '}{job.phase}{job.total!==null?` · ${job.done} of ${job.total} ${job.kind==='dakota'?'records':'steps'}`:''}
         {job.error&&<p role="alert">{job.error}</p>}
         {job.status==='completed'&&job.result&&<p className="muted">{Object.entries(job.result).filter(([,value])=>typeof value==='number').map(([key,value])=>`${key}: ${value}`).join(' · ')}</p>}
+        {job.status==='completed'&&job.kind==='prospects'&&!!job.result?.precedence&&
+          <ProspectPrecedence report={job.result.precedence as ProspectPrecedenceReport} />}
       </div>)}
     </div>
   </section>;
