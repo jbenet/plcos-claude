@@ -215,7 +215,7 @@ Live has run on Postgres since 27 Sep 19:57 UTC. `data/real/postgres.url` select
 
 ## Scope and access (Juan, 27 Sep 2026: "scope it just to this project … lock it down with auth")
 
-**This project's own cluster.** It is not a machine-wide server. Its files are in `plcos-data/real/postgres`, it listens on 127.0.0.1:5433, and its socket lives in that folder, not `/tmp`. Homebrew's default cluster is never started. Another project runs its own cluster from the same binaries: `initdb -D <its folder>`, a different port, and its own `pg_ctl`. Astra's test cluster (`plcos-pg-dev`, port 5434, invented data only) is separate again.
+**This project's own cluster.** It is not a machine-wide server. Its files are in `plcos-data/real/postgres`, it listens on 127.0.0.1:57433, and its socket lives in that folder, not `/tmp`. Homebrew's default cluster is never started. Another project runs its own cluster from the same binaries: `initdb -D <its folder>`, a different port, and its own `pg_ctl`. Astra's test cluster (`plcos-pg-dev`, port 5434, invented data only) is separate again.
 
 **Roles.** Each role's password is in the login Keychain under service `plcos-postgres`, with accounts `app`, `ro` and `admin`. No password is ever written in a file.
 
