@@ -138,6 +138,18 @@ export async function networkNodesProperties(check: Check, db: Queryable) {
       second.nodesCreated === 0 && ids.size === idsAgain.size && [...ids].every(([key, value]) => idsAgain.get(key) === value)
         && countBefore?.n === countAfter?.n,
       'The canonical identities and pairwise graph are stable across retries.');
+    let repeatedEdgeWrites=0;
+    const unchanged:Queryable={
+      query:async<T>(sql:string,params?:unknown[])=>{
+        if(/insert into network\.edge/i.test(sql)) repeatedEdgeWrites++;
+        return db.query<T>(sql,params);
+      },
+      one:(sql,params)=>db.one(sql,params),exec:sql=>db.exec(sql),
+    };
+    const repeated=await importNetworkNodes(unchanged,plan,AT);
+    check('NODES unchanged imports preserve edges without topology writes',
+      repeatedEdgeWrites===0&&repeated.edgesWritten===second.edgesWritten,
+      'Equivalent JSONB evidence preserves existing rows and the complete graph counters.');
     const externalAfter = await db.one<{ tier: string; evidence: Array<{ note?: string }> }>(
       `select tier::text,evidence from network.edge where edge_id=$1`, [externalEdge.id]);
     check('NODES weaker managed evidence preserves stronger external evidence',

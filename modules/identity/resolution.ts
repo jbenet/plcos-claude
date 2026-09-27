@@ -72,13 +72,16 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
   const people: Person[] = [];
   let sourceCursor = ['00000000-0000-0000-0000-000000000000', '', ''];
   for (;;) {
+    // Both joined IDs are equal. Bound each index explicitly: a tuple mixing e's
+    // ID with s's source columns becomes a join filter and rescans earlier pages.
     const rows = await db.query<{ id:string; name:string; source:string; source_id:string; root:string }>(
       `select e.entity_id::text id,e.display_name name,s.source,s.source_id,identity.canonical_entity_id(e.entity_id)::text root
        from identity.entity e join identity.source_record s using(entity_id)
        where e.entity_type='person' and e.retired_at is null and ${scoped ? '(e.entity_id=any($6::uuid[]) and $1::text[] is not null)' : 's.source=any($1::text[])'}
        ${scoped ? '' : `and (s.source<>'app_user' or exists(select 1 from platform.app_user u where u.handle=s.source_id and u.active))`}
-       and (e.entity_id,s.source,s.source_id)>($2::uuid,$3::text,$4::text)
-       order by e.entity_id,s.source,s.source_id limit $5`, [Object.keys(priority),...sourceCursor,batchSize,...(scoped ? [scoped.ids] : [])]);
+       and e.entity_id >= $2::uuid
+       and (s.entity_id,s.source,s.source_id)>($2::uuid,$3::text,$4::text)
+       order by s.entity_id,s.source,s.source_id limit $5`, [Object.keys(priority),...sourceCursor,batchSize,...(scoped ? [scoped.ids] : [])]);
     people.push(...rows.map(r=>({id:r.id,name:r.name,source:r.source,sourceId:r.source_id,root:r.root,orgs:new Set<string>(),domains:new Set<string>(),warehouse:new Set(r.source==='warehouse'?[r.source_id]:[]),references:new Set<string>(),teamReferences:new Set<string>()})));
     await pause(); if(rows.length<batchSize)break;
     const last=rows.at(-1)!;sourceCursor=[last.id,last.source,last.source_id];
