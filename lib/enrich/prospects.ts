@@ -7,6 +7,7 @@ import { normalizeIdentityName } from '@/modules/identity/resolution';
 import { STATUS_LABEL, type PursuitStatus } from '@/modules/strategy';
 
 export interface Prospect {
+  entityId?: string | null; entityType?: 'person' | 'org';
   personKey?: string | null; name: string; org: string | null; vehicle: string;
   status: 'new' | 'sourcing' | 'passed';
   capacity: { band: string; basis: string; guess: boolean };
@@ -31,6 +32,8 @@ export function prospectProblems(x: unknown): string[] {
   if (!object(x)) return ['Expected a prospect object'];
   const errors: string[] = [];
   if (x.personKey != null && !words(x.personKey)) errors.push('personKey must be nonempty text, null or absent');
+  if (x.entityId != null && !words(x.entityId)) errors.push('entityId must be nonempty text, null or absent');
+  if (x.entityType !== undefined && x.entityType !== 'person' && x.entityType !== 'org') errors.push('entityType must be person or org');
   for (const k of ['name', 'vehicle', 'reason']) if (!words(x[k])) errors.push(`${k} must be nonempty text`);
   if (x.org !== null && !words(x.org)) errors.push('org must be nonempty text or null');
   if (x.status !== 'new' && x.status !== 'sourcing' && x.status !== 'passed') errors.push('status must be new, sourcing or passed');
@@ -117,24 +120,46 @@ async function affiliateProspect(tx: Queryable, personId: string, p: Prospect, i
 }
 
 /** Stable keys follow canonical identity. Unknown keys get their own reversible source node; names alone never identify a person. */
-async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[]): Promise<string | null> {
+async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[], conflictingNames = false): Promise<{ id?: string; candidates: Identity[]; reason?: string }> {
+  const expectedType = p.entityType ?? 'person';
+  if (p.entityId != null) {
+    // Text comparison safely rejects malformed UUIDs without aborting the whole import.
+    const pinned = await tx.one<Identity>(`select e.entity_id::text id, e.display_name name,
+      e.entity_type::text type, e.merged_into::text merged, e.retired_at::text retired
+      from identity.entity original join identity.entity e on e.entity_id = identity.canonical_entity_id(original.entity_id)
+      where original.entity_id::text = $1`, [p.entityId.trim()]);
+    if (!pinned) return { candidates: [], reason: `entityId ${p.entityId} does not exist` };
+    if (pinned.type !== expectedType || !current(pinned)) return { candidates: [pinned],
+      reason: `entityId must resolve to an active ${expectedType}; found ${pinned.type}${pinned.retired ? ' (retired)' : ''}` };
+    // A reviewed explicit pin intentionally resolves stale names and conflicting source mappings.
+    return { id: pinned.id, candidates: [pinned] };
+  }
   const rows = await tx.query<Identity>(
     `select distinct e.entity_id::text id, e.display_name name, e.entity_type::text type, e.merged_into::text merged, e.retired_at::text retired
        from identity.entity original join identity.entity e on e.entity_id=identity.canonical_entity_id(original.entity_id)
        left join identity.source_record s on s.entity_id = original.entity_id
       where original.entity_id::text = $1 or (s.source in ('warehouse', 'w3_person', 'prospect') and s.source_id = $1)`, [prospectPersonKey(p)]);
+  const candidates = [...new Map([...rows, ...identities.filter(e => current(e)
+    && e.type === expectedType && normalized(e.name) === normalized(p.name))].map(e => [e.id, e])).values()];
+  if (conflictingNames) return { candidates };
   if (rows.length) {
-    if (rows.length !== 1) return null;
+    if (rows.length !== 1) return { candidates };
     const row = rows[0]!;
-    return row.type === 'person' && current(row) && normalized(row.name) === normalized(p.name) ? row.id : null;
+    return { id: row.type === expectedType && current(row) && normalized(row.name) === normalized(p.name) ? row.id : undefined, candidates };
   }
   const id = (await tx.one<{ id: string }>(
-    `insert into identity.entity (entity_type, display_name) values ('person', $1) returning entity_id::text id`, [p.name]))!.id;
+    `insert into identity.entity (entity_type, display_name) values ($2::identity.entity_type, $1) returning entity_id::text id`, [p.name, expectedType]))!.id;
   await tx.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by)
     values ('prospect', $1, $2, 'rule:sourced-prospect')`, [prospectPersonKey(p), id]);
-  identities.push({ id, name: p.name, type: 'person', merged: null, retired: null });
-  await affiliateProspect(tx, id, p, identities);
-  return id;
+  identities.push({ id, name: p.name, type: expectedType, merged: null, retired: null });
+  if (expectedType === 'person') await affiliateProspect(tx, id, p, identities);
+  return { id, candidates: [] };
+}
+
+/** Dated filenames win, then the later line; lexical filename breaks a remaining tie. */
+function compareSource(a: { file: string; line: number }, b: { file: string; line: number }): number {
+  const date = (file: string) => file.match(/(?:^|\D)(\d{4}-\d{2}-\d{2})(?:\D|$)/)?.[1] ?? '';
+  return date(a.file).localeCompare(date(b.file)) || a.line - b.line || a.file.localeCompare(b.file);
 }
 
 /** Caller supplies the live server's existing handle; there is deliberately no DB-opening CLI. */
@@ -169,32 +194,32 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
     const resolved = [];
     for (const r of valid) {
       const p = r.p;
-      const entityId = names.get(prospectPersonKey(p))!.size === 1 ? await resolvePerson(tx, p, identities) : null;
+      const conflictingNames = p.entityId == null && names.get(prospectPersonKey(p))!.size > 1;
+      const resolution = await resolvePerson(tx, p, identities, conflictingNames);
+      const entityId = resolution.id;
       if (!entityId) {
         result.ambiguous++;
-        result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle, reason: 'Conflicting identity: supply the correct existing person ID or resolve the conflicting source mapping.' });
+        const candidates = resolution.candidates.map(e => `${e.id} (${e.name}; ${e.type})`).join('; ');
+        result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle,
+          reason: `${resolution.reason ?? 'Conflicting identity'}: supply entityId for the correct existing ${p.entityType ?? 'person'} or resolve the conflicting source mapping. Candidates: ${candidates || 'none in the database'}.` });
         continue;
       }
       resolved.push({ ...r, entityId });
     }
-    // Conflicting dispositions must not oscillate on each rerun or depend on file order.
+    // Select once across canonical identities so file iteration order cannot cause oscillation.
     const dispositions = new Map<string, Set<string>>();
     for (const { p, entityId } of resolved) {
       const key = `${entityId}:${p.vehicle}`;
       dispositions.set(key, (dispositions.get(key) ?? new Set()).add(p.status));
     }
-    const seen = new Set<string>();
+    const winners = new Map<string, (typeof resolved)[number]>();
     for (const r of resolved) {
+      const key = `${r.entityId}:${r.p.vehicle}`, prior = winners.get(key);
+      if (!prior || compareSource(r, prior) > 0 || (compareSource(r, prior) === 0 && r.hash > prior.hash)) winners.set(key, r);
+    }
+    for (const r of winners.values()) {
       const { p, entityId } = r;
       const key = `${entityId}:${p.vehicle}`;
-      if (dispositions.get(key)!.size > 1) {
-        result.ambiguous++;
-        result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle,
-          reason: 'Conflicting dispositions for this person and vehicle; supply one status before retrying.' });
-        continue;
-      }
-      if (seen.has(key)) continue;
-      seen.add(key);
       const body = `Added by rule on Juan's instruction (26 Sep): ${p.reason}; capacity ${p.capacity.band} (${p.capacity.guess ? 'guess' : 'not marked as a guess'})`;
       const reason = `${RULE}: ${p.reason.trim()}`;
       const existing = await tx.query<{ id: string; status: PursuitStatus; source: string; status_source: string; entity: string; vehicle: string; historical: boolean }>(
@@ -202,7 +227,7 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
            e.display_name entity, v.name vehicle, v.phase = 'historical' historical
          from strategy.pursuit p join identity.entity e on e.entity_id = p.entity_id
          join platform.vehicle v on v.id = p.vehicle_id
-         where identity.canonical_entity_id(p.entity_id)=$1 and p.vehicle_id=$2
+         where identity.canonical_entity_id(p.entity_id)=$1 and p.vehicle_id=$2 and p.merged_into is null
          order by p.pursuit_id for update of p`, [entityId, vehicles.get(p.vehicle)]);
       if (existing.length > 1) {
         result.ambiguous++;
@@ -214,11 +239,24 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
       if (prior) {
         // Legacy UI audits have no statusSource. Treat every unmarked change as human.
         // Read after locking the pursuit so a concurrent UI change cannot slip past this guard.
-        const human = await tx.one(`select 1 from platform.audit_log where subject_type = 'pursuit'
-          and subject_id = $1 and action = 'pursuit.status_set'
-          and detail->>'statusSource' is distinct from 'rule' limit 1`, [prior.id]);
-        if (prior.source !== 'prospects' || prior.status_source !== 'rule' || human) { result.kept++; continue; }
-        if (prior.status === p.status) { result.existing++; continue; }
+        const human = await tx.one<{ protected: boolean }>(
+          'select strategy.pursuit_has_human_status($1::uuid) as protected', [prior.id]);
+        if (prior.status_source !== 'rule' || human?.protected) { result.kept++; continue; }
+        if (prior.status === p.status) {
+          if (dispositions.get(key)!.size > 1) {
+            // Status need not change to record which conflicting file won. Reruns are silent.
+            await tx.query(`insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
+              select $1, 'pursuit.prospect_disposition_selected', 'pursuit', $2, $3::jsonb
+              where not exists (select 1 from platform.audit_log where subject_id=$2
+                and action in ('pursuit.prospect_disposition_selected', 'pursuit.status_set') and detail->>'file'=$4
+                and detail->>'line'=$5 and detail->>'toId'=$6)
+              and not exists (select 1 from research.note where data->>'pursuitId'=$2
+                and data->>'source'='prospects' and data->>'file'=$4 and data->>'line'=$5 and data->>'status'=$6)`,
+              [actorId, prior.id, JSON.stringify({ rule: RULE, statusSource: 'rule', file: r.file, line: r.line,
+                inputHash: r.hash, toId: p.status }), r.file, String(r.line), p.status]);
+          }
+          result.existing++; continue;
+        }
         await tx.query(`update strategy.pursuit set status = $2::strategy.pursuit_status,
           status_source = 'rule', status_reason = $3, status_set_at = now(), status_set_by = $4,
           passed_by = case when $2 = 'passed' then 'us' else null end,

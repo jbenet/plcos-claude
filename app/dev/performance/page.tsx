@@ -16,7 +16,7 @@ async function Performance() {
       select v.slug, c.target_id, p.pursuit_id, c.n,
         row_number() over (partition by v.id order by c.n desc, c.target_id) as most,
         row_number() over (partition by v.id, (c.n = 0) order by c.target_id) as zero
-      from counts c join strategy.pursuit p on p.entity_id = c.target_id
+      from counts c join strategy.active_pursuit p on p.entity_id = c.target_id
       join platform.vehicle v on v.id = p.vehicle_id and v.kind::text = c.vehicle_kind
     ) select slug, target_id, pursuit_id, n from ranked where most = 1 or (n = 0 and zero = 1)
       order by slug, n desc limit 32`);

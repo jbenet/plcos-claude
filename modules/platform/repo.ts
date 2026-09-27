@@ -183,7 +183,12 @@ export async function auditFor(subjectType: string, subjectId: string, actions: 
   }>(
     `select a.at, a.action, a.subject_type, a.subject_id, u.name, a.detail
        from platform.audit_log a left join platform.app_user u on u.id = a.actor_id
-      where a.subject_type = $1 and a.subject_id = $2 and a.action = any($3::text[])
+      where a.subject_type = $1
+        and (case when a.subject_type = 'pursuit'
+                   and a.subject_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+             then strategy.canonical_pursuit_id(a.subject_id::uuid)::text
+             else a.subject_id end) = $2
+        and a.action = any($3::text[])
       order by a.at`,
     [subjectType, subjectId, actions],
   );

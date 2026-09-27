@@ -76,11 +76,11 @@ async function enrich(tx: Queryable,module: Module,records: Stored[],counts: Dak
   // Source-owned claims follow canonical identity at read time, so undo never moves source facts.
   const pipeline=new Set((await tx.query<{id:string}>(`with roots as materialized (select * from identity.entity_resolution)
     select distinct r.entity_id::text id from roots r join roots p on p.canonical_id=r.canonical_id
-    join strategy.pursuit pursuit on pursuit.entity_id=p.entity_id`)).map(x=>x.id));
+    join strategy.active_pursuit pursuit on pursuit.entity_id=p.entity_id`)).map(x=>x.id));
   if(module==='account')for(const r of await tx.query<{id:string}>(`with roots as materialized (select * from identity.entity_resolution)
     select distinct a.entity_id::text id from dakota.contact c join dakota.account a on a.id=c.accountid
     join roots r on r.entity_id=c.entity_id join roots p on p.canonical_id=r.canonical_id
-    join strategy.pursuit pursuit on pursuit.entity_id=p.entity_id`))pipeline.add(r.id);
+    join strategy.active_pursuit pursuit on pursuit.entity_id=p.entity_id`))pipeline.add(r.id);
   const values:Array<{record_id:string;entity_id:string;field:string;value:string|null;as_of:string;last_verified_by:string;replica_file:string}>=[];
   for(const r of records) {
     if(!pipeline.has(r.entity_id))continue;
@@ -114,7 +114,7 @@ async function sourceContext(tx: Queryable, restrictionsOnly=false): Promise<Sou
   const roots=new Map((await tx.query<{id:string;root:string}>('select entity_id::text id,canonical_id::text root from identity.entity_resolution')).map(r=>[r.id,r.root]));
   const canonical=(id:string)=>roots.get(id)??id;
   const blocked=new Set((await tx.query<{id:string}>(`select entity_id::text id from coordination.restriction where expires_at is null or expires_at>current_date`)).map(r=>canonical(r.id)));
-  const pursuits=await tx.query<{id:string;vehicle:string;source:string}>(`select entity_id::text id,vehicle_id::text vehicle,source from strategy.pursuit`);
+  const pursuits=await tx.query<{id:string;vehicle:string;source:string}>(`select entity_id::text id,vehicle_id::text vehicle,source from strategy.active_pursuit`);
   const excluded=new Set([...blocked,...pursuits.filter(p=>!restrictionsOnly||p.source!=='dakota').map(p=>canonical(p.id))]);
   // Freeze the base set: uncertainty is one-hop, not transitive name propagation.
   const base=new Set(excluded);
@@ -300,8 +300,8 @@ export async function translateDakota(db: Db,actor: string,replicas: Replica[],o
             if(!blocked) {
               const row=await tx.one(`insert into strategy.pursuit(entity_id,vehicle_id,owner_id,status,status_source,status_reason,status_set_at,status_set_by,source)
                 select identity.canonical_entity_id($1),$2,$3,'new','rule',$4,now(),$3,'dakota'
-                where (select count(*) from strategy.pursuit where vehicle_id=$2 and source='dakota')<$5
-                  and not exists(select 1 from strategy.pursuit where identity.canonical_entity_id(entity_id)=identity.canonical_entity_id($1) and vehicle_id=$2)
+                where (select count(*) from strategy.active_pursuit where vehicle_id=$2 and source='dakota')<$5
+                  and not exists(select 1 from strategy.active_pursuit where identity.canonical_entity_id(entity_id)=identity.canonical_entity_id($1) and vehicle_id=$2)
                 on conflict(entity_id,vehicle_id) do nothing returning pursuit_id`,[c.id,c.vehicle,actor,c.reason,config.dakota.perVehicleCap]);
               if(row)next.counts.sourced++;
             }

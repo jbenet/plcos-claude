@@ -72,6 +72,6 @@ export async function relatedLpHeadings(entityId: string, vehicleId: string): Pr
       where identity.canonical_entity_id(a.org_entity)=identity.canonical_entity_id($1::uuid) and a.ended_on is null
   ) select distinct e.display_name name,p.pursuit_id::text "pursuitId" from related r
     join identity.entity e on e.entity_id=r.id
-    join strategy.pursuit p on identity.canonical_entity_id(p.entity_id)=r.id
+    join strategy.active_pursuit p on identity.canonical_entity_id(p.entity_id)=r.id
     where p.vehicle_id=$2 order by name,"pursuitId"`,[entityId,vehicleId]);
 }

@@ -50,7 +50,7 @@ export async function decideSuggestion(actorId: string, suggestionId: string, de
       `select s.pursuit_id::text, s.body, s.status,
               (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null
                 or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug))) as scope_ok
-         from strategy.suggestion s join strategy.pursuit p using(pursuit_id)
+         from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id)
          join platform.vehicle v on v.id=p.vehicle_id where s.suggestion_id = $1 for update of s`, [suggestionId]);
     if (!s) throw new SuggestionRefused('No such suggestion.');
     if (decision === 'accept' && !s.scope_ok) throw new SuggestionRefused('Strategy names another vehicle. Resolve its pursuit before accepting.');
@@ -80,7 +80,7 @@ export async function openSuggestions(): Promise<Array<Suggestion & { entityName
     `select s.suggestion_id::text, s.pursuit_id::text, s.body, s.data, s.made_by, s.made_at, s.status,
             e.display_name as entity_name, v.name as vehicle_name
        from strategy.suggestion s
-       join strategy.pursuit p on p.pursuit_id = s.pursuit_id
+       join strategy.active_pursuit p on p.pursuit_id = s.pursuit_id
        join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
        join platform.vehicle v on v.id = p.vehicle_id
       where s.status in ('proposed', 'accepted', 'dismissed')`,

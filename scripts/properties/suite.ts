@@ -24,6 +24,7 @@ export async function runProperties(check: Check) {
   await (await import('../routes-policy-0084-properties')).routesPolicy0084Properties(check, db);
   await (await import('../import-robustness-properties')).importRobustnessProperties(check, db);
   await (await import('../entity-type-properties')).entityTypeProperties(check, db);
+  await (await import('../pursuit-merge-properties')).pursuitMergeProperties(check, db);
   await (await import('../path-search-properties')).edgeEvidenceCacheProperties(check, db);
   await (await import('../route-scoring-properties')).routeScoringProperties(check, db);
   await (await import('../issues4-properties')).issues4Properties(check, db);
@@ -95,7 +96,7 @@ export async function runProperties(check: Check) {
 }
 
 /** Dispositions are delegated planning decisions, tested only with invented records. */
-async function prospectDispositionProperties(check: Check, db: Awaited<ReturnType<typeof freshDb>>) {
+export async function prospectDispositionProperties(check: Check, db: Awaited<ReturnType<typeof freshDb>>) {
   const { addProspects } = await import('../../lib/enrich/prospects');
   const { setStatus } = await import('../../modules/strategy');
   const actor = (await db.one<{ id: string }>('select id::text from platform.app_user where active order by handle limit 1'))!.id;
@@ -156,10 +157,14 @@ async function prospectDispositionProperties(check: Check, db: Awaited<ReturnTyp
     await db.query("update strategy.pursuit set source='affinity' where pursuit_id=$1", [c]);
     await db.query("update strategy.pursuit set status_source='us' where pursuit_id=$1", [d]);
     const beforeHuman = await snapshot();
-    const kept = await addProspects(db, actor, files(sourcing, passed, ...rows.slice(2, 4).map(r => ({ ...r, status: 'passed' }))));
+    const kept = await addProspects(db, actor, files(sourcing, passed, { ...rows[3]!, status: 'passed' }));
     check('DISPOSITION a person-set status is never overwritten, including when provenance later says rule',
-      kept.kept === 4 && kept.moved === 0 && beforeHuman === await snapshot(),
-      'UI reversal, legacy unmarked status history, nonimport source and human provenance all protected.');
+      kept.kept === 3 && kept.moved === 0 && beforeHuman === await snapshot(),
+      'UI reversal, legacy unmarked status history and human provenance all protected.');
+    const otherSource = await addProspects(db, actor, files({ ...rows[2]!, status: 'passed' }));
+    check('DISPOSITION later rule dispositions apply independently of the pursuit source',
+      otherSource.moved === 1 && otherSource.toPassed === 1,
+      'A rule-set pursuit imported from Affinity is eligible; human decisions remain protected.');
 
     const reopen = await addProspects(db, actor, files({ ...rows[4]!, status: 'passed' }));
     const reopenNew = await addProspects(db, actor, files(rows[4]!));
@@ -168,13 +173,26 @@ async function prospectDispositionProperties(check: Check, db: Awaited<ReturnTyp
       reopen.toPassed === 1 && reopenNew.moved === 1 && reopened?.status === 'new'
       && reopened.passed_by === null && reopened.closed_at === null && reopened.close_reason === null,
       'Rule-only Passed → New is reversible without a ticket.');
-    const beforeConflict = await snapshot();
     const conflicting = files(rows[5]!, { ...rows[5]!, status: 'sourcing' });
     const conflict = await addProspects(db, actor, conflicting);
-    await addProspects(db, actor, conflicting);
-    check('DISPOSITION conflicting input statuses cannot oscillate on rerun',
-      conflict.skipped.length === 2 && conflict.moved === 0 && beforeConflict === await snapshot(),
-      'Conflicting dispositions are listed for correction and write nothing.');
+    const afterConflict = await snapshot();
+    const conflictRetry = await addProspects(db, actor, conflicting);
+    check('DISPOSITION later line wins conflicting input statuses without oscillating on rerun',
+      conflict.skipped.length === 0 && conflict.moved === 1 && conflictRetry.existing === 1 && afterConflict === await snapshot(),
+      'Later line selects Sourcing and records its winning file; repeated inputs are silent.');
+    const dated = [
+      { file: 'z-invented-2026-09-26.jsonl', text: JSON.stringify({ ...rows[5]!, status: 'passed' }) },
+      { file: 'a-invented-2026-09-27.jsonl', text: JSON.stringify({ ...rows[5]!, status: 'new' }) },
+    ];
+    await addProspects(db, actor, dated);
+    const datedBefore = await snapshot();
+    const datedRetry = await addProspects(db, actor, [...dated].reverse());
+    const winner = await db.one<{ detail: Record<string, unknown> }>(`select detail from platform.audit_log
+      where subject_id=$1 and action='pursuit.status_set' and detail->>'file'=$2`, [await pursuit(5), dated[1]!.file]);
+    check('DISPOSITION filename date wins ahead of filename sort and import order, with recorded provenance',
+      datedRetry.existing === 1 && datedRetry.moved === 0 && datedBefore === await snapshot()
+      && winner?.detail.toId === 'new' && winner.detail.line === 1,
+      '27 Sep beats 26 Sep despite reverse lexical filenames; the winning file and line are audited.');
     // A newly inserted Passed row needs the same closing semantics as a moved one.
     await db.query('delete from research.note where entity_id=$1', [ids[5]]);
     await db.query('delete from strategy.pursuit where entity_id=$1', [ids[5]]);

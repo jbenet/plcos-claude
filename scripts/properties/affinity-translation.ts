@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { translatedNotesProperties } from './affinity-notes';
 import { readingProperties } from './readings';
@@ -94,6 +95,46 @@ export async function affinityTranslationProperties(ctx: AffinityContext & { rep
   await tr.translate(null, { mappingPath: file });
   const now = (await statusOf('person:7002'))?.status;
   check('A mapping edit takes effect the next time it is translated — no request to Affinity', was === 'connecting' && now === 'discussing', `"Intro made" was ${was}, is ${now}`);
+
+  // A source-owned survivor must inherit a merged person's protection on the real
+  // translation path, even though the survivor's status_source is still 'affinity'.
+  const inherited = (await statusOf('person:7002'))!;
+  const original = (await adb.one<{ row: Record<string, unknown> }>('select to_jsonb(p) row from strategy.pursuit p where pursuit_id=$1',[inherited.pursuit_id]))!.row;
+  const mappingBefore = await rf(join(process.cwd(),file),'utf8');
+  const alias = randomUUID(), duplicate = randomUUID();
+  const actor = (await adb.one<{id:string}>("select id::text from platform.app_user where handle='juan'"))!.id;
+  const mergeService = await import('../../modules/strategy/merge');
+  let mergeId: string | null = null;
+  try {
+    await adb.query("insert into identity.entity(entity_id,entity_type,display_name,merged_into) values($1,'person','Invented inherited-status alias',$2)",[alias,original.entity_id]);
+    await adb.query(`insert into strategy.pursuit(pursuit_id,entity_id,vehicle_id,owner_id,status,status_source)
+      values($1,$2,$3,$4,'new','rule')`,[duplicate,alias,original.vehicle_id,actor]);
+    const strategy = await import('../../modules/strategy');
+    await strategy.setStatus(actor,duplicate,{status:'discussing',reason:'Invented person decision before identity consolidation'});
+    await adb.query("update strategy.pursuit set status='committed',status_source='affinity' where pursuit_id=$1",[inherited.pursuit_id]);
+    const merged = await mergeService.consolidatePursuits(adb,actor);
+    mergeId = merged.merges.find(m=>m.survivorId===inherited.pursuit_id)?.id ?? null;
+    await wf(join(process.cwd(),file),mappingBefore.replace(/("Intro made":\s*)\{[^}]*\}/,'$1{"status":"selected","implies":[]}'));
+    const translated = await tr.translate(null,{mappingPath:file});
+    const protectedSurvivor = await statusOf('person:7002');
+    check('Affinity translation preserves the human status inherited from a merged pursuit',
+      !!mergeId && translated?.status==='ok' && protectedSurvivor?.status==='committed'
+      && protectedSurvivor.status_source==='affinity' && protectedSurvivor.status_said==='selected',
+      'The actual source translation reads Selected but cannot lower the committed survivor below its merged person-set Discussing decision.');
+  } finally {
+    await wf(join(process.cwd(),file),mappingBefore);
+    if (mergeId) {
+      await mergeService.reversePursuitMerge(adb,mergeId,actor,'Restore invented translation fixture');
+      await adb.query('delete from strategy.pursuit_merge where id=$1',[mergeId]);
+      await adb.query("delete from platform.audit_log where detail->>'mergeId'=$1",[mergeId]);
+    }
+    await adb.query("delete from platform.audit_log where subject_type='pursuit' and subject_id=$1",[duplicate]);
+    await adb.query('delete from strategy.pursuit where pursuit_id=$1',[duplicate]);
+    await adb.query('delete from identity.entity where entity_id=$1',[alias]);
+    const columns = Object.keys(original).filter(k=>k!=='pursuit_id');
+    await adb.query(`update strategy.pursuit p set ${columns.map(k=>`"${k}"=v."${k}"`).join(',')}
+      from jsonb_populate_record(null::strategy.pursuit,$1::jsonb) v where p.pursuit_id=$2`,[JSON.stringify(original),inherited.pursuit_id]);
+  }
 
   // Money says yes: an amount on the commitment field makes an entry Committed, whatever the
   // word — here "Diligence", with a committed amount beside it.

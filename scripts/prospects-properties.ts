@@ -100,6 +100,51 @@ export async function prospectsProperties(check: Check, db: Db) {
   check('PROSPECTS conflicting aliases, wrong explicit names/types and inactive entities are listed and skipped',
     ambiguous.ambiguous === 5 && ambiguous.skipped.length === 5 && ambiguous.added === 0 && ambiguousBefore === await snapshot(),
     `${ambiguous.ambiguous} ambiguous records listed; no pursuits, notes, identities or rungs added.`);
+  check('PROSPECTS identity conflicts list database candidate IDs and names for row repair',
+    ambiguous.skipped[0]!.reason.includes(conflictA) && ambiguous.skipped[0]!.reason.includes(conflictB)
+    && ambiguous.skipped[0]!.reason.includes('Invented Prospect Namesake') && ambiguous.skipped[0]!.reason.includes('entityId'),
+    'Both candidates in the conflicting source mapping are shown with their database names.');
+  const pinned = await addProspects(db, actor, files(
+    prospect('invented-prospect:conflict', 'Stale supplied name', { entityId: conflictA }),
+    prospect(merged, 'Stale merged name', { entityId: merged }),
+    prospect(wrongType, 'Invented Prospect Organization', { entityId: wrongType, entityType: 'org' })));
+  check('PROSPECTS entityId pins resolve conflicting keys, canonical redirects and explicitly typed organizations',
+    pinned.added === 2 && pinned.existing === 1 && pinned.ambiguous === 0
+    && await n('select count(*)::text n from strategy.pursuit where entity_id=$1', [conflictB]) === 0
+    && await n('select count(*)::text n from strategy.pursuit where entity_id=$1', [wrongType]) === 1,
+    'Explicit pins pick one known canonical entity; org requires entityType org.');
+  const pinBefore = await snapshot();
+  const invalidPins = await addProspects(db, actor, files(
+    prospect(direct, 'Invented Prospect Alder', { entityId: 'not-a-uuid' }),
+    prospect(direct, 'Invented Prospect Alder', { entityId: randomUUID() }),
+    prospect(wrongType, 'Invented Prospect Organization', { entityId: wrongType }),
+    prospect(direct, 'Invented Prospect Alder', { entityId: direct, entityType: 'org' }),
+    prospect(retired, 'Invented Prospect Retired', { entityId: retired })));
+  check('PROSPECTS malformed, absent, retired and wrong-type entityId pins skip without creating fallback identities',
+    invalidPins.ambiguous === 5 && invalidPins.skipped.every(r => r.reason.includes('entityId')) && pinBefore === await snapshot(),
+    'Every rejected pin has a reason; no fallback alias, person, pursuit or note is written.');
+  const redirectedSource = await makePerson('Invented Consolidated Prospect');
+  const redirectedTarget = await makePerson('Invented Consolidated Prospect');
+  const redirectedRow = prospect(redirectedSource, 'Invented Consolidated Prospect', { org: null });
+  await addProspects(db, actor, files(redirectedRow));
+  const survivor = (await db.one<{ id: string }>('select pursuit_id::text id from strategy.pursuit where entity_id=$1', [redirectedSource]))!.id;
+  const loser = (await db.one<{ id: string }>(`insert into strategy.pursuit
+    (entity_id,vehicle_id,owner_id,status,status_source,merged_into)
+    values ($1,$2,$3,'new','rule',$4) returning pursuit_id::text id`, [redirectedTarget, vehicle.id, actor, survivor]))!.id;
+  await db.query('update identity.entity set merged_into=$2 where entity_id=$1', [redirectedSource, redirectedTarget]);
+  const consolidated = await addProspects(db, actor, files({ ...redirectedRow, status: 'sourcing' }));
+  check('PROSPECTS canonical identity resolves exactly one active pursuit despite retained merged losers',
+    consolidated.moved === 1 && consolidated.added === 0 && consolidated.ambiguous === 0,
+    'A source identity redirect selects the active survivor and ignores the retained pursuit redirect.');
+  await db.query("update strategy.pursuit set status_source='us' where pursuit_id=$1", [loser]);
+  const humanLoser = await addProspects(db, actor, files({ ...redirectedRow, status: 'passed' }));
+  await db.query("update strategy.pursuit set status_source='rule' where pursuit_id=$1", [loser]);
+  await db.query(`insert into platform.audit_log (actor_id,action,subject_type,subject_id,detail)
+    values ($1,'pursuit.status_set','pursuit',$2,'{"fromId":"new","toId":"sourcing"}'::jsonb)`, [actor, loser]);
+  const humanLoserAudit = await addProspects(db, actor, files({ ...redirectedRow, status: 'passed' }));
+  check('PROSPECTS merged member person provenance and immutable human status history each protect the survivor',
+    humanLoser.kept === 1 && humanLoserAudit.kept === 1 && humanLoser.moved === 0 && humanLoserAudit.moved === 0,
+    'Both unaudited legacy person statuses and original loser audit subjects remain protected through redirects.');
 
   const newOrg = 'Invented Prospects2 Observatory';
   const unseen = prospect('invented-prospects2:unseen', 'Invented Prospects2 Dawn', { org: newOrg, status: 'sourcing' });

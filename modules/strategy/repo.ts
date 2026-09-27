@@ -28,7 +28,7 @@ const PURSUIT_SELECT = `
          p.status_said::text as status_said,
          p.status_set_at, su.name as status_set_by_name, p.implied, p.next_step, p.next_step_on,
          p.source, p.source_as_of, p.stage_said, p.owner_said, v.phase as vehicle_phase
-    from strategy.pursuit p
+    from strategy.active_pursuit p
     join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
     join platform.vehicle v on v.id = p.vehicle_id
     join platform.app_user u on u.id = p.owner_id
@@ -145,7 +145,7 @@ export async function pursuitCount(): Promise<number> {
 export async function statusCounts(): Promise<Array<{ vehicleId: string; status: PursuitStatus; n: number }>> {
   const db = await getDb();
   const rows = await db.query<{ vehicle_id: string; status: PursuitStatus; n: string }>(
-    `select vehicle_id, status::text as status, count(*)::text as n from strategy.pursuit group by vehicle_id, status`,
+    `select vehicle_id, status::text as status, count(*)::text as n from strategy.active_pursuit group by vehicle_id, status`,
   );
   return rows.map((r) => ({ vehicleId: r.vehicle_id, status: r.status, n: Number(r.n) }));
 }

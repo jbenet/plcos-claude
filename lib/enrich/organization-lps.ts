@@ -133,10 +133,10 @@ export async function addOrganizationLps(db: Db, findings: Finding[], actorId: s
     const counts:OrganizationLpCounts = {candidates:proposed.length,added:0,existing:0,ambiguous:0,affiliations:0,ties:0};
     // Resolve the small LP universe once; never re-walk every pursuit for each finding.
     const activePursuits = await tx.query<{person:string;vehicle:string;owner:string}>(`select identity.canonical_entity_id(p.entity_id)::text person,
-      p.vehicle_id::text vehicle,p.owner_id::text owner from strategy.pursuit p join platform.vehicle v on v.id=p.vehicle_id
+      p.vehicle_id::text vehicle,p.owner_id::text owner from strategy.active_pursuit p join platform.vehicle v on v.id=p.vehicle_id
       join identity.entity e on e.entity_id=p.entity_id where e.entity_type='person' and e.retired_at is null
       and p.closed_at is null and v.phase='active' and v.kind<>'grant_rail'`);
-    const existingPursuits = new Set((await tx.query<{person:string;vehicle:string}>(`select identity.canonical_entity_id(entity_id)::text person,vehicle_id::text vehicle from strategy.pursuit`)).map(p=>`${p.person}:${p.vehicle}`));
+    const existingPursuits = new Set((await tx.query<{person:string;vehicle:string}>(`select identity.canonical_entity_id(entity_id)::text person,vehicle_id::text vehicle from strategy.active_pursuit`)).map(p=>`${p.person}:${p.vehicle}`));
     const ownedAffiliations = new Map((await tx.query<{person:string;org:string;source:string}>(`select identity.canonical_entity_id(person_entity)::text person,
       identity.canonical_entity_id(org_entity)::text org,source from identity.affiliation where source like $1`,[`${RULE}:%`])).map(a=>[`${a.person}:${a.org}`,a.source]));
     const seen = new Set<string>();

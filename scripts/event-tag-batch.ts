@@ -85,7 +85,7 @@ async function main() {
   )).map((r) => [r.entity_id, r]));
   const onLists = new Map<string, string[]>();
   for (const r of await q<{ entity_id: string; vehicle: string; status: string }>(
-    `select p.entity_id::text, v.name as vehicle, p.status::text from strategy.pursuit p join platform.vehicle v on v.id = p.vehicle_id where p.source <> 'dakota'`,
+    `select p.entity_id::text, v.name as vehicle, p.status::text from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id where p.source <> 'dakota'`,
   )) onLists.set(r.entity_id, [...(onLists.get(r.entity_id) ?? []), `${r.vehicle} · ${r.status}`]);
   const byKey = new Map((await q<{ source_id: string; entity_id: string }>(
     `select source_id, entity_id::text from identity.source_record where source = 'affinity'`,

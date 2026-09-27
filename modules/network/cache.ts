@@ -149,10 +149,10 @@ export async function precomputeRoutes(at?: Date): Promise<PrecomputeCounts> {
   const work = withDb(db, async () => {
     const start = performance.now(), version = await revisionFor(db);
     const targets = await db.query<{ target_id: string; kind: string }>(`with targets as (
-      select identity.canonical_entity_id(p.entity_id) as entity_id, v.kind::text as kind, 0 as priority from strategy.pursuit p
+      select identity.canonical_entity_id(p.entity_id) as entity_id, v.kind::text as kind, 0 as priority from strategy.active_pursuit p
         join platform.vehicle v on v.id = p.vehicle_id where p.closed_at is null and v.phase = 'active'
       union all
-      select identity.canonical_entity_id(a.org_entity), v.kind::text, 1 from strategy.pursuit p
+      select identity.canonical_entity_id(a.org_entity), v.kind::text, 1 from strategy.active_pursuit p
         join platform.vehicle v on v.id = p.vehicle_id
         join identity.affiliation a on identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id(p.entity_id) and a.ended_on is null
         where p.closed_at is null and v.phase = 'active')

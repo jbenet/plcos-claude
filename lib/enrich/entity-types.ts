@@ -51,7 +51,7 @@ export async function correctPipelineEntityTypes(tx: Queryable, findings: Findin
   await tx.exec('lock table identity.entity in share row exclusive mode');
   const report: EntityTypeReport = { corrected: [], ambiguous: [] };
   const people = await tx.query<{ id: string; name: string }>(`select distinct e.entity_id::text id,e.display_name name
-    from strategy.pursuit p join identity.entity e on e.entity_id=identity.canonical_entity_id(p.entity_id)
+    from strategy.active_pursuit p join identity.entity e on e.entity_id=identity.canonical_entity_id(p.entity_id)
     where e.entity_type='person' and e.retired_at is null`);
   if (!people.length) return report;
   const organizations = new Map<string, Set<string>>();

@@ -10,7 +10,7 @@ export async function vehicleStatusCounts(vehicleId: string | null) {
   return db.query<{ vehicle_id: string; status: PursuitStatus; n: number; archived: number }>(
     `select vehicle_id, status::text as status, count(*)::int as n,
             count(*) filter (where closed_at is not null)::int as archived
-       from strategy.pursuit where ($1::uuid is null or vehicle_id = $1)
+       from strategy.active_pursuit where ($1::uuid is null or vehicle_id = $1)
       group by vehicle_id, status`, [vehicleId],
   );
 }
@@ -20,7 +20,7 @@ export async function vehicleCloseStatus(vehicleId: string | null, requestedPage
   const db = await getDb();
   const candidates = `with candidates as (
     select identity.canonical_entity_id(entity_id) as entity_id, vehicle_id
-      from strategy.pursuit where status = 'committed' and closed_at is null
+      from strategy.active_pursuit where status = 'committed' and closed_at is null
         and ($1::uuid is null or vehicle_id = $1)
     union
     select identity.canonical_entity_id(entity_id), vehicle_id from pipeline.exposure
@@ -40,7 +40,7 @@ export async function vehicleCloseStatus(vehicleId: string | null, requestedPage
       from candidates c join identity.entity e on e.entity_id = c.entity_id
       join platform.vehicle v on v.id = c.vehicle_id
       left join lateral (
-        select p.* from strategy.pursuit p
+        select p.* from strategy.active_pursuit p
          where identity.canonical_entity_id(p.entity_id) = c.entity_id and p.vehicle_id = c.vehicle_id
          order by (p.closed_at is null) desc, (p.entity_id = c.entity_id) desc, p.opened_at, p.pursuit_id limit 1
       ) p on true
