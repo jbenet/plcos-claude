@@ -38,6 +38,7 @@ export async function affinitySliceProperties(ctx: AffinityContext) {
   );
 
   await affinityNotesProperties(ctx);
+  await (await import('./affinity-history')).affinityHistoryProperties(ctx);
 
   const inv = await import('../../lib/connectors/affinity/inventory');
   const flagged = ['Her husband is recovering from surgery.', 'Mentioned a death in the family.'].every(inv.mentionsHealth);

@@ -172,3 +172,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Linear, read-only — a connector, a replica, and a plan to approve](entries/linear-readonly.md)
 - [Findings import performance](entries/findings-perf.md)
 - [Identity review — deterministic fixture labels and row comparisons](entries/flaky-identity-review.md)
+- [Interaction history — bounded backfill and canonical participant links](entries/interactions-0045.md)

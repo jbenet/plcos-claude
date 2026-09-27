@@ -71,6 +71,7 @@ export async function affinityTranslationProperties(ctx: AffinityContext & { rep
   );
 
   await translatedNotesProperties(ctx);
+  await (await import('./affinity-participants')).affinityParticipantProperties(ctx);
 
   const counted = async () => [
     await n(`select count(*)::text as n from strategy.pursuit where source = 'affinity'`),

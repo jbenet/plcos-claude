@@ -13,6 +13,7 @@ import { aboutRaise, addressOf, type About, type AboutVehicle } from './about';
 import { noteText } from './notes';
 import { translateTags } from './event-tags';
 import type { PursuitStatus } from '@/modules/strategy';
+import { participantIndex, type PersonIdentity, type Participant } from './participants';
 
 /**
  * Translation (N47, docs/16 §4): the landed copy, read through the mapping, into the tool's
@@ -44,7 +45,7 @@ interface E {
   type: 'person' | 'company' | 'opportunity';
   listId: number;
   createdAt: string;
-  entity: { id: number; name?: string; firstName?: string; lastName?: string | null; fields?: F[] };
+  entity: PersonIdentity & { id: number; name?: string; fields?: F[] };
 }
 
 const SOURCE = 'affinity';
@@ -119,9 +120,11 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
     exposures: 0, readyToHarden: 0, claims: 0, restrictions: 0, ownersNotOnTeam: 0, unreviewedLists: [], touchpoints: 0, tagged: 0, readings: 0,
   };
   try {
-    const [inv, init, found, targets, rawEntries, rawNotes, rawMeetings] = await Promise.all([
+    const [inv, init, found, targets, rawEntries, rawNotes, rawMeetings, rawPersons, rawEmails, rawCalls, rawChats] = await Promise.all([
       inventory(), initForMatching(), discovered(), sliceTargets(), latestRaw<E>(SOURCE, 'list_entry'),
       latestRaw<AffinityNote>(SOURCE, 'note'), latestRaw<AffinityMeeting>(SOURCE, 'meeting'),
+      latestRaw<PersonIdentity>(SOURCE, 'person'), latestRaw<Interaction>(SOURCE, 'email'),
+      latestRaw<Interaction>(SOURCE, 'call'), latestRaw<Interaction>(SOURCE, 'chat-message'),
     ]);
     const mapping = await readMapping(inv, opts.mappingPath);
     if (!init) throw new Error('The init file does not load; translation needs its team and vehicles.');
@@ -343,6 +346,10 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
         tx, rawEntries.map((r) => r.payload), rawNotes.map((r) => r.payload), rawMeetings.map((r) => r.payload),
         init.team, users, users.get(PLACEHOLDER)!,
         init.vehicles.map((v) => ({ slug: v.slug, name: v.name, aliases: v.aliases })), init.fundraiseDomains, init.firmNames,
+        rawPersons.map(r => ({ ...r.payload, replicaAsOf: r.fetchedAt.toISOString().slice(0, 10) })),
+        [...rawEmails.map(r => ({ ...r.payload, type: 'email' as const })),
+         ...rawCalls.map(r => ({ ...r.payload, type: 'call' as const })),
+         ...rawChats.map(r => ({ ...r.payload, type: 'chat-message' as const }))],
       );
       // What each note is about, and Claude's and people's tags laid over the rules (N81).
       const about = init.vehicles.map((v) => ({ slug: v.slug, name: v.name, aliases: v.aliases }));
@@ -370,7 +377,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
 
 // ---------------------------------------------------------------- touchpoints (N51)
 
-interface InteractionPerson { type?: string; firstName?: string | null; lastName?: string | null; primaryEmailAddress?: string | null }
+type InteractionPerson = PersonIdentity;
 interface Interaction {
   type: 'email' | 'meeting' | 'call' | 'chat-message';
   id: number;
@@ -382,6 +389,10 @@ interface Interaction {
   to?: unknown[] | null;
   cc?: unknown[] | null;
   attendees?: Array<{ emailAddress?: string; person?: InteractionPerson }>;
+  attendeesPreview?: { data: Participant[]; totalCount: number };
+  toPreview?: { data: Participant[]; totalCount: number };
+  ccPreview?: { data: Participant[]; totalCount: number };
+  participantsPreview?: { data: Participant[]; totalCount: number };
 }
 
 const CHANNEL_OF: Record<Interaction['type'], string> = { email: 'email', meeting: 'meeting', call: 'call', 'chat-message': 'message' };
@@ -398,20 +409,20 @@ const CHANNEL_OF: Record<Interaction['type'], string> = { email: 'email', meetin
  * it counts for a vehicle only when it is tagged with it: named there, or tagged by Claude or a
  * person (./event-tags). One about a raise that names none counts for none, and says so.
  */
-async function touchpoints(
+export async function touchpoints(
   tx: Queryable, entries: E[], notes: AffinityNote[], meetings: AffinityMeeting[],
   team: Array<{ handle: string; email?: string | null; affinityEmail?: string | null }>,
   users: Map<string, string>, placeholder: string,
   vehicles: AboutVehicle[] = [], domains: string[] = [], firmNames: string[] = [],
+  persons: PersonIdentity[] = [], interactions: Interaction[] = [],
 ): Promise<number> {
   // What each is about is decided afresh on every translation (N59), so a corrected rule
   // corrects every record it touched. Several sources can name one touchpoint — a list entry's
   // field, the calendar, a note — and it is about the raise if any of them says so.
   await tx.query(`update meetings.meeting set about = null, about_vehicles = '{}', about_basis = null, about_by = null where source = 'affinity'`);
   const read = (text: string, direct: Array<string | null | undefined>) => aboutRaise(text, direct, vehicles, domains, firmNames);
-  const ours = new Map((await tx.query<{ source_id: string; entity_id: string }>(
-    `select source_id, entity_id from identity.source_record where source = $1`, [SOURCE],
-  )).map((r) => [r.source_id, r.entity_id]));
+  const index = await participantIndex(tx, [...entries.filter(e => e.type === 'person').map(e => e.entity), ...persons]);
+  const ours = index.byId;
   const displayByUser = new Map((await tx.query<{ id: string; name: string }>(
     'select id::text,name from platform.app_user where active')).map(u => [u.id, u.name]));
   const byEmail = new Map<string, string>();
@@ -425,20 +436,30 @@ async function touchpoints(
       byEmail.set(email, id);
     }
   }
-  const who = (p?: InteractionPerson | null, email?: string) => {
-    const e = (p?.primaryEmailAddress ?? email ?? '').toLowerCase();
-    return e && !ambiguousEmails.has(e) ? byEmail.get(e) : undefined;
+  const who = (p?: InteractionPerson | null, email?: string | null) => {
+    const ids = new Set([p?.primaryEmailAddress, ...(p?.emailAddresses ?? []), email]
+      .filter((e): e is string => !!e).map(e => e.trim().toLowerCase())
+      .filter(e => !ambiguousEmails.has(e)).map(e => byEmail.get(e)).filter(Boolean));
+    return ids.size === 1 ? [...ids][0] : undefined;
   };
   const attendeeName = (p: InteractionPerson) => {
     const id = who(p);
     return (id && displayByUser.get(id)) || [p.firstName, p.lastName].filter(Boolean).join(' ');
   };
   const now = Date.now();
+  // Preserve stable source refs while resolving multiple Affinity IDs to one canonical LP.
+  const existing = await tx.query<{ source_ref: string; entity: string }>(
+    `select source_ref, identity.canonical_entity_id(entity_id) as entity from meetings.meeting
+      where source = 'affinity' and source_ref like 'interaction:%'`);
+  const refs = new Map(existing.map(r => [`${r.source_ref.split(':').slice(0, 3).join(':')}:${r.entity}`, r.source_ref]));
   let added = 0;
   const put = async (row: {
     entity: string; ref: string; channel: string; at: string; direction: string | null; owner: string;
     attendees: string[]; exact: boolean; about: About;
   }) => {
+    const eventKey = `${row.ref.split(':').slice(0, 3).join(':')}:${row.entity}`;
+    row.ref = refs.get(eventKey) ?? row.ref;
+    refs.set(eventKey, row.ref);
     const future = new Date(row.at).getTime() > now;
     const merge = `about = case when meetings.meeting.about = 'raise' or excluded.about = 'raise' then 'raise'
                                 else coalesce(excluded.about, meetings.meeting.about) end,
@@ -452,8 +473,8 @@ async function touchpoints(
          (entity_id, vehicle_id, channel, direction, held_on, scheduled_for, owner_id, attendees, source, source_ref,
           about, about_vehicles, about_basis, about_by)
        values ($1, null, $2::meetings.channel, $3, $4, $5, $6, $7, 'affinity', $8, $9, $10, $11, 'rule')
-       on conflict (source, source_ref) where source_ref is not null do update set ${row.exact
-         ? 'held_on = excluded.held_on, scheduled_for = excluded.scheduled_for, attendees = excluded.attendees, '
+       on conflict (source, source_ref) where source_ref is not null do update set entity_id = excluded.entity_id, ${row.exact
+         ? 'owner_id = excluded.owner_id, direction = excluded.direction, held_on = excluded.held_on, scheduled_for = excluded.scheduled_for, attendees = excluded.attendees, '
          : ''}${merge}
        returning (xmax = 0) as fresh`,
       [row.entity, row.channel, row.direction, future ? null : row.at.slice(0, 10), future ? row.at : null,
@@ -499,19 +520,43 @@ async function touchpoints(
   // "Next Event" field or by a note is one touchpoint. No title is copied: the LP page reads it
   // from the landed meeting when it shows the row.
   for (const mt of meetings) {
-    const people = (mt.attendeesPreview?.data ?? []).map((a) => a.person).filter((p): p is NonNullable<typeof p> => !!p);
-    const internal = people.filter((p) => p.type === 'internal');
-    for (const p of people) {
-      if (p.type === 'internal') continue;
-      const key = `person:${p.id}`;
-      const entity = ours.get(key);
-      if (!entity) continue;
+    const attendees = [...(mt.attendeesPreview?.data ?? []), ...(mt.organizer ? [mt.organizer] : [])];
+    const internal = attendees.filter(a => who(a.person, a.emailAddress));
+    const linked = new Set<string>();
+    for (const a of attendees) {
+      const entity = index.person(a);
+      if (!entity || linked.has(entity)) continue;
+      linked.add(entity);
+      const key = a.person?.id ? `person:${a.person.id}` : `entity:${entity}`;
       await put({
         entity, ref: `interaction:meeting:${mt.id}:${key}`, channel: 'meeting', at: mt.startTime, exact: true,
-        direction: 'both', owner: internal.map((x) => who(x)).find(Boolean) ?? placeholder,
-        attendees: [...new Set(internal.map(attendeeName).filter(Boolean))],
+        direction: 'both', owner: internal.map((x) => who(x.person, x.emailAddress)).find(Boolean) ?? placeholder,
+        attendees: [...new Set(internal.map(x => displayByUser.get(who(x.person, x.emailAddress)!) ?? '').filter(Boolean))],
         // Its title, not its invitees (N81): everyone on the team is at the fundraising domain.
         about: read(mt.title ?? '', []),
+      });
+    }
+  }
+
+  // Complete account-wide mail/call/chat metadata, including people absent from every list.
+  for (const d of interactions) {
+    const at = d.sentAt ?? d.startTime;
+    if (!at || !CHANNEL_OF[d.type]) continue;
+    const to = (d.to ?? d.toPreview?.data ?? []) as Participant[];
+    const participants: Participant[] = [d.from, ...to, ...(d.cc ?? d.ccPreview?.data ?? []) as Participant[],
+      ...(d.attendees ?? d.attendeesPreview?.data ?? d.participantsPreview?.data ?? [])].filter((p): p is Participant => !!p);
+    const internal = participants.map(a => who(a.person, a.emailAddress)).filter((x): x is string => !!x);
+    const linked = new Set<string>();
+    for (const a of participants) {
+      const entity = index.person(a);
+      if (!entity || linked.has(entity)) continue;
+      linked.add(entity);
+      const key = a.person?.id ? `person:${a.person.id}` : `entity:${entity}`;
+      await put({ entity, ref: `interaction:${d.type}:${d.id}:${key}`, channel: CHANNEL_OF[d.type], at, exact: true,
+        direction: d.type === 'call' ? 'both' : who(d.from?.person, d.from?.emailAddress) ? 'ours' : d.from?.person?.type === 'external' ? 'theirs' : null,
+        owner: who(d.from?.person, d.from?.emailAddress) ?? internal[0] ?? placeholder,
+        attendees: [...new Set(internal.map(id => displayByUser.get(id) ?? '').filter(Boolean))],
+        about: read(d.subject ?? d.title ?? '', d.type === 'email' || d.type === 'chat-message' ? [addressOf(d.from), ...to.map(addressOf)] : []),
       });
     }
   }

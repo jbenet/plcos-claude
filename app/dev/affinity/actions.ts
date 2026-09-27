@@ -110,3 +110,13 @@ export async function readMeetingsAction(formData: FormData): Promise<void> {
   await queueImportJob(db,'affinity',user.id,{operation:'meetings',options});
   revalidatePath('/dev/affinity/meetings');
 }
+
+/** Account-wide historical metadata; each human-started continuation keeps its request cap. */
+export async function readHistoryAction(formData: FormData): Promise<void> {
+  const user = await (await auth()).currentUser();
+  const db = await getDb();
+  await queueImportJob(db, 'affinity', user.id, { operation: 'history', options: {
+    full: formData.get('mode') === 'full', rest: formData.get('rest') === 'true',
+  } });
+  revalidatePath('/dev/affinity/meetings');
+}

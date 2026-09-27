@@ -126,11 +126,12 @@ export async function startRun(source: string, kind: string, runBy: string | nul
 }
 
 /** While a long run is going: what it has done so far, so the page can say so. */
-export async function progressRun(id: number, r: { requests: number; records: number; newRecords: number; note: string | null }): Promise<void> {
+export async function progressRun(id: number, r: { requests: number; records: number; newRecords: number; note: string | null; detail?: Record<string, unknown> }): Promise<void> {
   const db = await getDb();
   await db.query(
-    `update sources.sync_run set requests = $2, records = $3, new_records = $4, note = $5 where id = $1 and status = 'running'`,
-    [id, r.requests, r.records, r.newRecords, r.note],
+    `update sources.sync_run set requests = $2, records = $3, new_records = $4, note = $5,
+            detail = coalesce($6::jsonb, detail) where id = $1 and status = 'running'`,
+    [id, r.requests, r.records, r.newRecords, r.note, r.detail === undefined ? null : JSON.stringify(r.detail)],
   );
 }
 
