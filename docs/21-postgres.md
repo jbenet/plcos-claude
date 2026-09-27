@@ -203,3 +203,12 @@ Preparation checks passed: **767/767 PGlite** and **779/779 Postgres 17.11** pro
 plus TypeScript and boundaries. The recorded details and remaining limitations are in
 [the preparation changelog](changelog/entries/postgres-prep.md). A passing invented-data
 suite is necessary; the private snapshot rehearsal and switch remain Claude's work.
+
+## Running it day to day (Juan, 27 Sep 2026)
+
+Live has run on Postgres since 27 Sep 19:57 UTC. `data/real/postgres.url` selects it; delete the file to go back to PGlite.
+- **Starting:** `npm run dev:start` starts the cluster (`data/real/postgres`) if it's down. `npm run dev:real` also starts it if needed.
+- **Restarts:** restarting or killing the dev server never stops Postgres.
+- **Stopping:** `npm run dev:stop` (live folder only) stops the dev server, then Postgres. Use it when you stop development.
+- **Checking:** `npm run dev:status` says what's running.
+- **No login item:** nothing starts at boot. After a reboot, run `npm run dev:start` or `npm run dev:real`.
