@@ -55,7 +55,7 @@ export interface PlDirectoryEntry {
 }
 export interface Network { orgs: Org[]; backers: Org[]; backer_people: Array<{ name: string; what: string; source: string }>; portfolio?: Array<Org & { vehicle: string }> }
 export interface TeamRole { org: string; role?: string; since?: string | number; until?: string | number; source?: string }
-export interface TeamMember { handle: string; name: string; roles: TeamRole[]; prior: TeamRole[]; education: Array<{ org: string }> }
+export interface TeamMember { handle: string; name: string; roles: TeamRole[]; prior: TeamRole[]; education: Array<{ org: string }>; sources?: string[] }
 
 const STOP = /\b(llc|l\.l\.c\.|inc|incorporated|co|company|corp|corporation|ltd|limited|lp|l\.p\.|plc|gmbh|ag|sa|the)\b/g;
 /** A firm's name reduced to what identifies it: "Harbor Street Ventures, LLC" → "harbor street ventures". */

@@ -45,15 +45,28 @@ const namesOf = (f: Finding) => [...new Set([
 ].map(s => s.trim()).filter(Boolean))];
 const names = (s: string, org: string) => normalize(s).includes(normalize(org));
 
+/** A sourced investing division can be the LP even when the bio names its parent institute. */
+function foundationDivision(f: Finding, parent: string) {
+  const stem = parent.replace(/\s+(?:institute|institution|organization|organisation)$/i, '').trim();
+  if (stem === parent || !stem) return null;
+  const fact = f.facts.find(x => x.scope === 'firm' && x.confidence !== 'low' && x.source.kind === 'primary'
+    && organizationFields.some(k => typeof x.detail?.[k] === 'string' && normalize(String(x.detail[k])) === normalize(parent))
+    && new RegExp(`\\b${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[^.;:]{0,120}\\bits Foundation\\b`, 'i').test(x.value)
+    && investmentBusiness.test(x.value) && !uncertain.test(x.value));
+  return fact ? { name: `${stem} Foundation`, fact } : null;
+}
+
 /** No amounts, consent, decision rights, or investor approval are inferred by this rule. */
 export function findingOrganizations(f: Finding): OrganizationEvidence[] {
   if (!['confirmed', 'probable'].includes(f.identity.match)) return [];
   const asOf = date(f.researched.at);
   if (!asOf) return [];
   const out: OrganizationEvidence[] = [];
-  for (const org of namesOf(f)) {
+  for (const parent of namesOf(f)) {
+    const division = foundationDivision(f, parent);
+    const org = division?.name ?? parent;
     const facts = f.facts.filter(x => x.confidence !== 'low' &&
-      (organizationFields.some(k => typeof x.detail?.[k] === 'string' && String(x.detail[k]).split(/\s*;\s*/).some(n => normalize(n) === normalize(org))) || names(x.value, org)));
+      (organizationFields.some(k => typeof x.detail?.[k] === 'string' && String(x.detail[k]).split(/\s*;\s*/).some(n => normalize(n) === normalize(parent))) || names(x.value, parent)));
     const statements = facts.map(x => ({ text: x.value, source: x.source.url, as_of: date(x.source.published ?? '') ?? asOf,
       confidence: x.confidence, personal: x.scope !== 'firm', firm: x.scope === 'firm', prior: x.field === 'prior_role' }));
     for (const c of f.connections ?? []) if (c.toType === 'org' && normalize(c.to) === normalize(org) && c.source) {
@@ -65,13 +78,15 @@ export function findingOrganizations(f: Finding): OrganizationEvidence[] {
         text: sentence, source: `enrich/raw/${f.key}.json`, as_of: asOf, confidence: 'medium', personal: true, firm: false, prior: false,
       });
     }
-    const led = statements.find(x => x.personal && !x.prior && leadership(x.text, org));
+    const led = statements.find(x => x.personal && !x.prior && leadership(x.text, parent));
     // A foundation may only make grants. Require positive investment evidence, attached to this org.
-    const invests = statements.find(x => !uncertain.test(x.text) && investing.test(x.text)
-      && (investsItself(x.text, org) || (x.firm && investmentBusiness.test(x.text))));
+    const invests = division ? statements.find(x => x.text === division.fact.value)
+      : statements.find(x => !uncertain.test(x.text) && investing.test(x.text)
+        && (investsItself(x.text, org) || (x.firm && investmentBusiness.test(x.text))));
     if (!led || !invests || !(institution.test(org) || institution.test(invests.text))) continue;
-    const relation = leadership(led.text, org)!;
+    const relation = leadership(led.text, parent)!;
     out.push({ person: f.key, organization: org, ...relation,
+      role: division ? `${relation.role} of ${parent}; ${org} is its investing division` : relation.role,
       tier: led.confidence === 'low' ? 'C' : 'B',
       evidence: [...new Set([led, invests])].map(x => ({source:x.source,as_of:x.as_of,confidence:x.confidence,last_verified_by:null,note:x.text})),
     });

@@ -4,8 +4,18 @@ import type { Check, Db } from './properties/harness';
 import { syncTeamRoster, teamLabels, teamLabelProjector } from '../modules/identity/team';
 import { listMeetings, touchpointsFor, touchpointsByEntity } from '../modules/meetings/repo';
 import { resolveIdentities, undoIdentityMerge } from '../modules/identity/resolution';
+import { identityEvidence } from '../modules/identity/resolution-input';
 
 export async function teamIdentityProperties(check: Check, db: Db) {
+  const profile = 'https://example.org/person/invented-roster-full';
+  const profileInput = { warehouse: {people:[{key:`coinvestor:${profile}`,name:'Invented Roster Full',org:null,emailDomain:null,
+    roles:[],warehouseIds:{},source:'invented',as_of:'2026-09-20',confidence:'high',last_verified_by:'fixture'}],ties:[],matches:[]},
+    candidates:[],team:[{handle:'invented',name:'Invented Roster Full',roles:[{org:'Invented Firm',source:profile}],prior:[],education:[]}],
+    graph:[],direct:[],findings:[] };
+  check('TEAMIDENT roster profile URL explicitly links a sourced person to one account',
+    identityEvidence(profileInput).some(e => e.sourceId===`coinvestor:${profile}` && e.teamReferences?.[0]==='app_user:invented')
+    && !identityEvidence({...profileInput,team:[{...profileInput.team[0]!,name:'Different Person'}]}).some(e => e.teamReferences?.length),
+    'A unique person-profile URL and full roster name are required; a name alone never links an account.');
   const suffix = randomUUID(), handle = `invented-team-${suffix}`;
   const user = randomUUID(), staff = randomUUID(), warehouse = randomUUID(), namesake = randomUUID(), outsideA = randomUUID(), outsideB = randomUUID(), correctionAlias = randomUUID();
   const source = `invented-roster:${suffix}`;

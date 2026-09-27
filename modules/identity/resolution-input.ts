@@ -7,6 +7,11 @@ import { parseProspectFile, prospectPersonKey, type ProspectFile } from '@/lib/e
 export function identityEvidence(input: NetworkNodeInput | null, prospects: ProspectFile[] = []): IdentityEvidence[] {
   const out:IdentityEvidence[]=[];
   if(input){
+    const rosterProfiles = new Map<string, string[]>();
+    for (const t of input.team) for (const url of [...(t.sources ?? []), ...t.roles.map(r => r.source), ...t.prior.map(r => r.source)]) {
+      if (!url || !/^https:\/\/[^/]+\/person\//i.test(url)) continue;
+      rosterProfiles.set(url, [...new Set([...(rosterProfiles.get(url) ?? []), t.handle])]);
+    }
     const warehouseByName = new Map<string, typeof input.warehouse.people>();
     const warehouseIds = new Set<string>();
     for (const p of input.warehouse.people) {
@@ -17,8 +22,13 @@ export function identityEvidence(input: NetworkNodeInput | null, prospects: Pros
     for(const m of input.warehouse.matches)if(m.status==='confident')out.push({entityId:m.lpKey,warehouseIds:[m.personKey]});
     for(const c of input.candidates)out.push({entityId:c.key,organizations:c.org?[c.org]:[],domains:c.domains});
     for(const p of input.warehouse.people) {
+      const profile = p.key.startsWith('coinvestor:') ? p.key.slice('coinvestor:'.length) : '';
+      const handles = rosterProfiles.get(profile) ?? [];
+      const profileHandle = handles.length === 1 && input.team.some(t => t.handle === handles[0]
+        && normalizeIdentityName(t.name) === normalizeIdentityName(p.name)) ? handles[0] : null;
       out.push({source:'warehouse',sourceId:p.key,organizations:p.org?[p.org]:[],domains:p.emailDomain?[p.emailDomain]:[],warehouseIds:[p.key,...Object.values(p.warehouseIds)],
-        teamReferences: p.teamKey && input.team.some(t => t.handle === p.teamKey) ? [`app_user:${p.teamKey}`] : []});
+        teamReferences: p.teamKey && input.team.some(t => t.handle === p.teamKey) ? [`app_user:${p.teamKey}`]
+          : profileHandle ? [`app_user:${profileHandle}`] : []});
     }
     for(const r of input.graph)for(const e of [r.from,r.to])if(e.type==='person'){
       const source=r.sources?.find(s=>s.url)?.url??r.provenance.source;

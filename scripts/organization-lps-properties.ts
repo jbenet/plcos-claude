@@ -18,6 +18,12 @@ export async function organizationLpsProperties(check: Check, db: Db) {
     ]};
   const candidates = findingOrganizations(finding);
   check('organization LP rule requires sourced leadership plus investing',candidates.length===1&&candidates[0]!.tier==='B','Separate role and investment facts are retained.');
+  const division = findingOrganizations({...finding,identity:{...finding.identity,canonical:{org:'Invented Science Institute'}},facts:[
+    {...finding.facts[0]!,value:'Founder of Invented Science Institute.',detail:{company:'Invented Science Institute'}},
+    {...finding.facts[1]!,value:'Invented Science Institute says its Foundation has a Head of Strategic Investments.',detail:{company:'Invented Science Institute'}},
+  ]});
+  check('a sourced investing foundation division becomes the LP',division.length===1&&division[0]!.organization==='Invented Science Foundation'
+    && division[0]!.evidence.length===2,'The parent founder role and the division investment fact travel together.');
   check('grant-only foundations and ordinary employees are excluded',findingOrganizations({...finding,facts:[finding.facts[0]!] }).length===0 &&
     findingOrganizations({...finding,facts:[{...finding.facts[0]!,value:'Works at Invented Science Foundation.'},finding.facts[1]!] }).length===0,'A foundation name and staff role are insufficient.');
   check('uncertain identities and former roles are excluded',findingOrganizations({...finding,identity:{match:'ambiguous',basis:'unknown'}}).length===0 &&
