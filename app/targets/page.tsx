@@ -28,6 +28,8 @@ async function Pipeline({ searchParams }: { searchParams: Promise<Record<string,
       ]}
       inspector={
         <>
+          {/* The ticked LPs' actions appear here (components/strategy/PipelineTable.tsx). */}
+          <div id="lp-pane-actions" />
           <div className="lbl">Seven statuses</div>
           <div className="ihead">Where our effort is</div>
           <div className="imeta">Our plan, set by a person, any direction</div>
@@ -49,9 +51,10 @@ async function Pipeline({ searchParams }: { searchParams: Promise<Record<string,
           <div className="scope">
             <div className="lbl">Searching</div>
             <p>
-              Press <kbd>/</kbd> to search. Filters narrow every column at once, and each count then
-              reads &ldquo;N of M&rdquo;. Click a column heading to sort by it; click an LP name to open
-              the LP.
+              Press <kbd>/</kbd> to search. Filters narrow every status at once, and each count then
+              reads &ldquo;N of M&rdquo;. The table starts in score order; tap any column heading to
+              sort by it, and again to reverse. Tap a row to open the LP; tick rows to act on them
+              together, and the actions appear here.
             </p>
           </div>
           <div className="note">
@@ -78,6 +81,7 @@ async function Pipeline({ searchParams }: { searchParams: Promise<Record<string,
         initialFilters={filters}
         showVehicle={!current}
       />
+
 
       <p className="cover" style={{ marginTop: -6 }}>
         {onHistory > 0 && <>{onHistory.toLocaleString('en-US')} pursuits on vehicles kept for their history are not counted here; select one in the rail to see them. </>}

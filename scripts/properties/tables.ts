@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { withDb, type Db } from '../../lib/db';
 import { applyBulk, type BulkInput } from '../../lib/pipeline-bulk';
-import { pipelineData } from '../../lib/pipeline-data';
+import { pipelineData, scoreDetail } from '../../lib/pipeline-data';
 import { provisionalScore } from '../../lib/strategy-score';
 import { compareRows, groupRows, SORT_KEYS } from '../../components/strategy/pipeline-model';
 import type { Check } from './harness';
@@ -26,6 +26,11 @@ export async function tableProperties(check: Check, db: Db) {
       const b = (await pipelineData(second.id)).rows.find(r => r.id === ids[1])!;
       check('0067/0071 pursuits without manual factors stay visible and scores stay vehicle-specific',
         a.status === 'new' && a.score === null && b.score === provisionalScore(scores), 'No factor rows; same person in two vehicles; only the second has a strategy.');
+      const detail = await scoreDetail(second.id, ids[1]!);
+      check('0089 the selection detail shows each reading behind a provisional score, and only inside its vehicle',
+        detail?.kind === 'provisional' && detail.parts.length === 4 && detail.parts.every(p => p.value !== null && p.weight > 0)
+          && await scoreDetail(first.id, ids[1]!) === null && (await scoreDetail(first.id, ids[0]!))?.kind === 'none',
+        'Four weighted readings for the scored pursuit; another vehicle cannot read it; no strategy means no readings.');
       await db.query(`insert into strategy.suggestion(pursuit_id,body,data,made_by,made_at,file_hash)
         values($1,'Wrong vehicle strategy',$2,'fixture',now(),'0067-wrong')`,[ids[0],JSON.stringify({ scores, ask: { vehicle: second.name } })]);
       check('0067/0071 wrongly attached vehicle strategies cannot supply a score',

@@ -46,6 +46,20 @@ export interface StrategyScores {
   timeToDecision?: { band?: string | null } | null;
 }
 
+/**
+ * The four readings behind a provisional score, each with its weight and 0–1 value (null when
+ * unknown), for a page that shows the argument rather than only the number (issue 0089).
+ */
+export function provisionalParts(s: StrategyScores | null | undefined) {
+  const w = config.scoring.weights;
+  return [
+    { key: 'capacity', label: 'Capacity', weight: w.capacity, level: s?.capacity?.band ?? null, value: capacityValue(s?.capacity?.band) },
+    { key: 'affinity', label: 'Affinity', weight: w.affinity, level: s?.affinity?.level ?? null, value: s?.affinity?.level ? LEVEL[s.affinity.level] ?? null : null },
+    { key: 'propensity', label: 'Propensity', weight: w.propensity, level: s?.propensity?.level ?? null, value: s?.propensity?.level ? LEVEL[s.propensity.level] ?? null : null },
+    { key: 'timeToDecision', label: 'Time to decision', weight: w.timeToDecision, level: s?.timeToDecision?.band ?? null, value: decideValue(s?.timeToDecision?.band) },
+  ];
+}
+
 /** 0–100, or null when fewer than two readings are known. */
 export function provisionalScore(s: StrategyScores | null | undefined): number | null {
   if (!s) return null;

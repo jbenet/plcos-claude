@@ -1,11 +1,13 @@
-import type { PipelineRow } from '@/components/strategy/PipelineTable';
+import type { PipelineRow } from '@/components/strategy/pipeline-model';
 import { getDb } from '@/lib/db';
 import { listEntities } from '@/modules/identity';
 import { buildCache } from '@/lib/build-cache';
 import { listVehicles } from '@/modules/platform';
 import { listAssessments } from '@/modules/fit';
 import { capacityEstimate, vehicleStrategy } from '@/modules/strategy';
-import { provisionalScore } from '@/lib/strategy-score';
+import { provisionalParts, provisionalScore } from '@/lib/strategy-score';
+import type { Strategy } from '@/lib/enrich/strategy';
+import { GRADE_LABEL, GRADE_SCORE } from '@/modules/fit/client';
 import { shortDate } from '@/lib/time';
 import {
   IMPLIED_LABEL, PASSED_BY_LABEL, RUNGS, RUNG_LABEL,
@@ -29,6 +31,16 @@ function aheadOfStatus(p: Pursuit, s: TouchpointSummary): boolean {
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
+
+/**
+ * The first few flags, each cut short, and how many there are. The whole list is on the LP's page
+ * and in the selection page's detail (scoreDetail); sending every flag of 2,000 LPs to the browser
+ * made them the largest part of the page (issue 0083).
+ */
+const FLAGS_SENT = 3, FLAG_CHARS = 160;
+function flags(all: string[]) {
+  return { risks: all.slice(0, FLAGS_SENT).map((f) => (f.length > FLAG_CHARS ? `${f.slice(0, FLAG_CHARS - 1).trimEnd()}…` : f)), riskCount: all.length };
+}
 
 const strategyFor = buildCache(async (vehicleId: string) => vehicleStrategy(vehicleId));
 /** Both tables start from pursuits, never the sparse manual-factor table. */
@@ -108,7 +120,8 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
       priority: strategies.get(p.pursuitId)?.score?.priority ?? null,
       capacity: strategies.get(p.pursuitId)?.capacityBand ?? null,
       route: strategies.get(p.pursuitId)?.route?.count ?? null,
-      risks: [...(plan?.risks ?? []), ...(assessment && assessment.gateStatus !== 'clear' ? [assessment.diagnosis.statement] : [])],
+      ...flags([...(plan?.risks ?? []), ...(assessment && assessment.gateStatus !== 'clear' ? [assessment.diagnosis.statement] : [])]),
+      list: plan?.suggestion?.data.list ?? null,
       nextKind: plan?.group ?? null,
       name: p.entityName,
       org: organisations.has(p.entityId) ? p.entityName : headings.get(p.pursuitId)?.org ?? null,
@@ -158,3 +171,55 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
 
   return { rows, onHistory: all.length - pursuits.length, asOf: new Date().toISOString() };
 });
+
+const assessmentsFor = buildCache(async (vehicleId: string) => listAssessments(vehicleId));
+
+export interface ScorePart { label: string; weight: number; value: number | null; level: string | null; basis: string | null }
+export interface ScoreDetail {
+  kind: 'fit' | 'provisional' | 'none';
+  stale: boolean;
+  at: string | null;
+  parts: ScorePart[];
+  angle: string | null;
+  route: { via: string; tier: string; why: string } | null;
+  ask: string | null;
+  list: string | null;
+  confidence: string | null;
+  next: string | null;
+  risks: string[];
+}
+
+/**
+ * Why one LP scores what it does, read when someone opens it on the selection page (issue 0089):
+ * the fit assessment's graded dimensions where one exists, otherwise the proposed strategy's four
+ * readings, each with the sentence it rests on. Read-only; null when the pursuit is not in the vehicle.
+ */
+export async function scoreDetail(vehicleId: string, pursuitId: string): Promise<ScoreDetail | null> {
+  const [plan, assessments] = await Promise.all([strategyFor(vehicleId), assessmentsFor(vehicleId)]);
+  const row = plan?.rows.find((r) => r.pursuit.pursuitId === pursuitId);
+  if (!row) return null;
+  const a = assessments.find((x) => x.entityId === row.pursuit.entityId && x.vehicleId === vehicleId);
+  const data = (row.suggestion?.data ?? null) as Partial<Strategy> | null;
+  const bases = data?.scores as Record<string, { basis?: string } | undefined> | undefined;
+  let parts: ScorePart[];
+  let kind: ScoreDetail['kind'];
+  if (a?.dimensions.length) {
+    kind = 'fit';
+    const total = a.dimensions.reduce((n, d) => n + d.weightUs, 0) || 1;
+    parts = a.dimensions.map((d) => ({ label: d.label, weight: d.weightUs / total, value: GRADE_SCORE[d.grade], level: GRADE_LABEL[d.grade], basis: d.finding || null }));
+  } else {
+    parts = provisionalParts(data?.scores).map((p) => ({ label: p.label, weight: p.weight, value: p.value, level: p.level, basis: bases?.[p.key]?.basis ?? null }));
+    kind = provisionalScore(data?.scores) === null ? 'none' : 'provisional';
+  }
+  return {
+    kind, stale: row.stale, parts,
+    at: a?.dimensions.length ? iso(a.updatedAt) : iso(row.suggestion ? new Date(row.suggestion.made_at) : null),
+    angle: data?.angle ?? null,
+    route: data?.route ?? null,
+    ask: data?.ask && data.ask.shape !== 'none yet' ? [data.ask.shape, data.ask.range].filter(Boolean).join(' · ') : null,
+    list: data?.list ?? null,
+    confidence: data?.confidence ?? null,
+    next: row.action,
+    risks: [...row.risks, ...(a && a.gateStatus !== 'clear' ? [a.diagnosis.statement] : [])],
+  };
+}
