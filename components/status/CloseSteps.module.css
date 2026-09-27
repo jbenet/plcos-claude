@@ -1,0 +1,35 @@
+/* One commitment's close track on one line (issues 0074, 0075). */
+.steps {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  position: relative;
+}
+.steps li { position: relative; padding: 14px 4px 0 0; min-width: 0; }
+/* The rail between dots: solid up to a recorded step, dashed for a claim. */
+.steps li::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 4px; height: 2px; background: var(--line);
+}
+.steps li:first-child::before { left: 5px; }
+.steps li:last-child::before { right: calc(100% - 6px); }
+.steps li i {
+  position: absolute; left: 0; top: 0; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--line); box-sizing: border-box;
+}
+.steps li.done i { background: var(--green); border-color: var(--green); }
+.steps li.done::before { background: var(--green); }
+.steps li.claim i { background: var(--surface); border: 2px dashed var(--amber); }
+.steps b { display: block; font-size: 12px; font-weight: 500; line-height: 1.3; }
+.steps li.none b { color: var(--muted); font-weight: 400; }
+.when {
+  display: block; font-family: var(--mono); font-size: 10px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.steps li.claim .when { color: var(--amber); }
+
+.compact li { padding-top: 12px; }
+.compact b { font-size: 11px; }
+.compact .when { font-size: 9.5px; }
+
+@media (max-width: 520px) {
+  .when { white-space: normal; }
+}

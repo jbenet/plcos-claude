@@ -5,13 +5,13 @@ import Link from '@/components/ui/AppLink';
 import { useMemo, useState } from 'react';
 import { Glyph } from '@/components/ui/Glyph';
 import { LANE_LOOK, orderDatedRows, type DatedRow, type LaneLook } from '@/lib/lanes';
+import s from './DatedList.module.css';
 
 /**
- * Every dated thing, filtered as you type (issue 0020, real): a search over what, who and vehicle,
- * a chip per lane with its count, and a standing. Rows are tight, and each carries its lane's icon
- * and colour — the ones the chart above uses, and the timeline's where the thing is the same (a
- * meeting is the calendar mark everywhere). A detail that only repeats the standing ("Held.") is
- * not printed.
+ * Every dated thing, filtered as you type (issues 0020, 0072): a search over what, who, LP and
+ * vehicle; a chip per lane; standing, LP and our-team filters; newest first by default, with the
+ * direction one tap away, and the When, LP and Our team headers sort the list. Tight rows carry
+ * their lane's icon and colour. A detail that only repeats the standing ("Held.") is not printed.
  */
 const STANDING: Record<DatedRow['standing'], { label: string; flag: string }> = {
   pressing: { label: 'Pressing', flag: 'f-block' },
@@ -19,20 +19,28 @@ const STANDING: Record<DatedRow['standing'], { label: string; flag: string }> = 
   done: { label: 'Done', flag: 'f-mute' },
 };
 
+type Sort = 'date' | 'lp' | 'team';
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+/** The label without the LP's name, which has its own column: "Cedar Trust — meeting" reads "Meeting". */
+function what(r: DatedRow): string {
+  if (!r.lp) return r.label;
+  const esc = r.lp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const out = r.label.replace(new RegExp(`^${esc}\\s+[—-]\\s+`), '').replace(new RegExp(`\\s+[—-]\\s+${esc}$`), '');
+  return out === r.label || !out ? r.label : out.charAt(0).toUpperCase() + out.slice(1);
+}
 
 export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: string[] }) {
   const [q, setQ] = useState('');
   const [lanes, setLanes] = useState<Set<string>>(new Set());
   const [standing, setStanding] = useState<'all' | DatedRow['standing']>('all');
   const [vehicle, setVehicle] = useState('all');
-
   const [team, setTeam] = useState('all');
   const [lp, setLp] = useState('all');
-  const [sort, setSort] = useState('date');
+  const [sort, setSort] = useState<Sort>('date');
   const [ascending, setAscending] = useState(false);
-  const teams = [...new Set(rows.flatMap(r => r.team ?? []))].sort();
-  const lps = [...new Set(rows.flatMap(r => r.lp ? [r.lp] : []))].sort();
+  const teams = useMemo(() => [...new Set(rows.flatMap((r) => r.team ?? []))].sort(), [rows]);
+  const lps = useMemo(() => [...new Set(rows.flatMap((r) => (r.lp ? [r.lp] : [])))].sort(), [rows]);
 
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = useMemo(() => orderDatedRows(rows.filter((r) => {
@@ -52,49 +60,54 @@ export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: stri
     for (const r of rows) c.set(r.lane, (c.get(r.lane) ?? 0) + 1);
     return c;
   }, [rows]);
-  const toggle = (lane: string) => { paging.setPage(0); setLanes((prev) => {
+  const reset = () => paging.setPage(0);
+  const toggle = (lane: string) => { reset(); setLanes((prev) => {
     const next = new Set(prev);
     if (next.has(lane)) next.delete(lane); else next.add(lane);
     return next;
   }); };
   const present = (Object.entries(LANE_LOOK) as Array<[string, LaneLook]>).filter(([lane]) => counts.get(lane));
+  /** A header sorts by its column; tapping the active one reverses it. Dates start newest first, names A–Z. */
+  const sortBy = (next: Sort) => {
+    reset();
+    if (next === sort) setAscending(!ascending);
+    else { setSort(next); setAscending(next !== 'date'); }
+  };
+  const dir = (col: Sort) => (sort === col ? (ascending ? 'ascending' : 'descending') : 'none');
+  const arrow = (col: Sort) => (sort === col ? (ascending ? ' ↑' : ' ↓') : '');
+  const filtered = standing !== 'all' || vehicle !== 'all' || team !== 'all' || lp !== 'all' || lanes.size > 0 || words.length > 0;
 
   return (
     <>
-      <Pager {...paging} label="dated records" />
-      <div className="dfilters">
+      <div className={s.box}>
+      <div className={`dfilters ${s.filters}`}>
         <input
           type="search"
           value={q}
-          onChange={(e) => { setQ(e.target.value); paging.setPage(0); }}
-          placeholder="Search what, who, vehicle…"
+          onChange={(e) => { setQ(e.target.value); reset(); }}
+          placeholder="Search what, who, LP, vehicle…"
           aria-label="Search the dated things"
         />
-        <select value={standing} onChange={(e) => { setStanding(e.target.value as typeof standing); paging.setPage(0); }} aria-label="Standing">
+        <select value={lp} onChange={(e) => { setLp(e.target.value); reset(); }} aria-label="LP">
+          <option value="all">Every LP</option>
+          {lps.map((x) => <option key={x} value={x}>{x}</option>)}
+        </select>
+        <select value={team} onChange={(e) => { setTeam(e.target.value); reset(); }} aria-label="Our team">
+          <option value="all">Anyone on our team</option>
+          {teams.map((x) => <option key={x} value={x}>{x}</option>)}
+        </select>
+        <select value={standing} onChange={(e) => { setStanding(e.target.value as typeof standing); reset(); }} aria-label="Standing">
           <option value="all">Any standing</option>
           <option value="ahead">Ahead</option>
           <option value="pressing">Pressing</option>
           <option value="done">Done</option>
         </select>
         {vehicles.length > 1 && (
-          <select value={vehicle} onChange={(e) => { setVehicle(e.target.value); paging.setPage(0); }} aria-label="Vehicle">
+          <select value={vehicle} onChange={(e) => { setVehicle(e.target.value); reset(); }} aria-label="Vehicle">
             <option value="all">Every vehicle</option>
             {vehicles.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         )}
-        <select aria-label="Our team" value={team} onChange={e => { setTeam(e.target.value); paging.setPage(0); }}>
-          <option value="all">All team members</option>{teams.map(t => <option key={t}>{t}</option>)}
-        </select>
-        <select aria-label="LP" value={lp} onChange={e => { setLp(e.target.value); paging.setPage(0); }}>
-          <option value="all">All LPs</option>{lps.map(t => <option key={t}>{t}</option>)}
-        </select>
-        <select aria-label="Sort calendar" value={sort} onChange={e => { setSort(e.target.value); setAscending(e.target.value !== 'date'); paging.setPage(0); }}>
-          <option value="date">Date</option><option value="team">Our team</option><option value="lp">LP</option>
-        </select>
-        <button className="btn" onClick={() => { setAscending(!ascending); paging.setPage(0); }} aria-label="Toggle sort direction">
-          {sort === 'date' ? ascending ? 'Oldest first ↑' : 'Newest first ↓' : ascending ? 'A–Z ↑' : 'Z–A ↓'}
-        </button>
-        <span className="dcount">{shown.length === rows.length ? `${rows.length} rows` : `${shown.length} of ${rows.length}`}</span>
         <div className="dchips" role="group" aria-label="Lanes">
           {present.map(([lane, look]) => (
             <button
@@ -108,45 +121,71 @@ export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: stri
               <Glyph name={look.glyph} title={look.label} /> {look.label} <span className="n">{counts.get(lane)}</span>
             </button>
           ))}
+          <span className={s.right}>
+            {/* Where the LP and team columns fold under the label, their sort is here instead. */}
+            <select className={s.sortSelect} value={sort} aria-label="Sort by"
+              onChange={(e) => { reset(); const next = e.target.value as Sort; setSort(next); setAscending(next !== 'date'); }}>
+              <option value="date">By date</option>
+              <option value="lp">By LP, A–Z</option>
+              <option value="team">By our team, A–Z</option>
+            </select>
+            <span className={s.count}>{filtered ? `${shown.length} of ${rows.length}` : `${rows.length} rows`}</span>
+            <span className={s.seg} role="group" aria-label="Order by date">
+              <button type="button" aria-pressed={sort === 'date' && !ascending} onClick={() => { reset(); setSort('date'); setAscending(false); }}>Newest first</button>
+              <button type="button" aria-pressed={sort === 'date' && ascending} onClick={() => { reset(); setSort('date'); setAscending(true); }}>Oldest first</button>
+            </span>
+          </span>
         </div>
       </div>
       {shown.length === 0 ? (
         <p className="muted" style={{ padding: '10px 18px' }}>Nothing matches the search and filters; the other rows are still there.</p>
       ) : (
-        <table className="list dated">
-          <thead>
-            <tr>
-              <th style={{ width: 118 }}>When</th>
-              <th>What</th><th>LP</th><th>Our team / owner</th>
-              {vehicles.length > 1 && <th style={{ width: 150 }}>Vehicle</th>}
-              <th style={{ width: 92 }}>Standing</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paging.rows.map((r) => {
-              const look = LANE_LOOK[r.lane];
-              return (
-                <tr key={r.id} className={`lane-${r.lane}`}>
-                  <td className="mono dwhen">
-                    {day(r.from)}
-                    {r.to && <span className="muted"> → {day(r.to)}</span>}
-                  </td>
-                  <td>
-                    <span className="dwhat">
-                      <Glyph name={look.glyph} title={look.label} tone={r.standing === 'pressing' ? 'stop' : undefined} />
-                      {r.href ? <Link href={r.href}>{r.label}</Link> : <span>{r.label}</span>}
-                    </span>
-                    {r.detail && <div className="ddetail">{r.detail}</div>}
-                  </td>
-                  <td>{r.lp ?? 'Not recorded'}</td><td>{r.team?.join(', ') || 'Not recorded'}</td>
-                  {vehicles.length > 1 && <td className="muted">{r.vehicle ?? '—'}</td>}
-                  <td><span className={`flag ${STANDING[r.standing].flag}`}>{STANDING[r.standing].label}</span></td>
+        <>
+          <div className={s.scroll}>
+            <table className={`list dated ${s.table}`}>
+              <thead>
+                <tr>
+                  <th className={s.when} aria-sort={dir('date')}><button type="button" onClick={() => sortBy('date')}>When{arrow('date')}</button></th>
+                  <th>What</th>
+                  <th className={s.lp} aria-sort={dir('lp')}><button type="button" onClick={() => sortBy('lp')}>LP{arrow('lp')}</button></th>
+                  <th className={s.team} aria-sort={dir('team')}><button type="button" onClick={() => sortBy('team')}>Our team{arrow('team')}</button></th>
+                  {vehicles.length > 1 && <th className={s.veh}>Vehicle</th>}
+                  <th className={s.standing}>Standing</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {paging.rows.map((r) => {
+                  const look = LANE_LOOK[r.lane];
+                  return (
+                    <tr key={r.id} className={`lane-${r.lane}`}>
+                      <td className="mono dwhen">
+                        {day(r.from)}
+                        {r.to && <span className="muted"> → {day(r.to)}</span>}
+                      </td>
+                      <td>
+                        <span className="dwhat">
+                          <Glyph name={look.glyph} title={look.label} tone={r.standing === 'pressing' ? 'stop' : undefined} />
+                          {r.href ? <Link href={r.href}>{what(r)}</Link> : <span>{what(r)}</span>}
+                        </span>
+                        {r.detail && <div className="ddetail">{r.detail}</div>}
+                        {(r.lp || r.team?.length) && (
+                          <div className={s.inlineMeta}>{[r.lp, r.team?.length ? `with ${r.team.join(', ')}` : null].filter(Boolean).join(' · ')}</div>
+                        )}
+                      </td>
+                      <td className={s.lpCell}>{r.lp ?? <span className={s.none}>—</span>}</td>
+                      <td className={s.teamCell}>{r.team?.length ? r.team.join(', ') : <span className={s.none}>—</span>}</td>
+                      {vehicles.length > 1 && <td className="muted">{r.vehicle ?? '—'}</td>}
+                      <td><span className={`flag ${STANDING[r.standing].flag}`}>{STANDING[r.standing].label}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className={s.pager}><Pager {...paging} label="dated records" /></div>
+        </>
       )}
+      </div>
     </>
   );
 }
