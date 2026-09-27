@@ -13,7 +13,8 @@ export function neededRecord(module: Module, raw: unknown): RecordFields {
   const r = raw as Record<string,unknown>, result: Record<string,string|null> = {};
   for (const key of needed(module)) {
     const alias = (FIELDS.responseNames[module] as Record<string, string>)[key];
-    const value = key === 'id' ? r[`${module}_id`] ?? r.id : r[key] ?? (alias ? r[alias] : undefined);
+    // Present-but-null clears a field, so test presence, not value.
+    const value = key === 'id' ? r[`${module}_id`] ?? r.id : key in r ? r[key] : alias && alias in r ? r[alias] : undefined;
     if (value === undefined) continue; // Missing fields from partial pulls do not erase prior fields.
     if (value === null) result[key] = null;
     else if (['string','number','boolean'].includes(typeof value)) result[key] = String(value);
