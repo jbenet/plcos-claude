@@ -1,0 +1,184 @@
+/* The visualisations at volume (issue 0066). The house styles for the floor live in
+   app/globals.css; these are the additions for counting what no longer fits as marks. */
+
+/* ── shared: a count that stands in for marks, and a small bar list ─────────── */
+.bars { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 2px; }
+.bar {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(40px, 1.2fr) auto; gap: 8px; align-items: center;
+  font-size: 11px; line-height: 1.3; width: 100%; padding: 2px 0; border: 0; background: none;
+  color: inherit; font-family: inherit; text-align: left;
+}
+button.bar { cursor: pointer; }
+button.bar:hover .barname, button.bar:focus-visible .barname { text-decoration: underline; }
+.barname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bartrack { height: 6px; border-radius: 2px; background: var(--hair, #EDEAE2); overflow: hidden; }
+.bartrack i { display: block; height: 100%; background: var(--ink); border-radius: 2px; }
+.barn { font-family: var(--mono); font-size: 10.5px; text-align: right; min-width: 3ch; }
+.dark .bartrack { background: #2E2B27; }
+.dark .bartrack i { background: var(--fl-ink); }
+.dark .bar { color: var(--fl-text); }
+.dark .barn { color: var(--fl-text); }
+
+.listhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 14px 0 4px; }
+.listhead h3 { margin: 0; font-family: var(--display); font-size: 15px; font-weight: 600; }
+.listhead span { font-size: 11.5px; color: var(--muted); }
+.lightpanel { background: var(--surface, #fff); margin: 0 -12px; padding: 4px 15px 12px; border-top: 1px solid var(--fl-line); }
+.lightpanel :global(.vizpager) { color: var(--ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.chip {
+  font: inherit; font-size: 11px; border: 1px solid var(--line); background: var(--surface, #fff); color: var(--ink);
+  border-radius: 999px; padding: 3px 10px; cursor: pointer; min-height: 28px;
+}
+.chip b { font-family: var(--mono); font-weight: 500; margin-left: 4px; }
+.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--rail-ink, #EFEBE2); }
+.dark .chip { background: #211F1D; border-color: var(--fl-line); color: var(--fl-text); }
+.dark .chip[aria-pressed="true"] { background: var(--fl-text); color: var(--fl-bg); border-color: var(--fl-text); }
+
+/* ── 1 · the line ─────────────────────────────────────────────────────────── */
+/* (the +N more bar is drawn in the SVG; its hover comes from .flblk) */
+
+/* ── 2 · the load ─────────────────────────────────────────────────────────── */
+.lname {
+  display: block; font: inherit; font-size: 13px; font-weight: 500; color: var(--ink); background: none;
+  border: 0; padding: 0; cursor: pointer; text-align: left;
+}
+.lname:hover, .lname:focus-visible { text-decoration: underline; }
+.lmix { display: flex; height: 5px; gap: 1px; border-radius: 2px; overflow: hidden; margin: 2px 0 3px; background: var(--hair, #EDEAE2); }
+.lmix i { display: block; background: var(--ink); min-width: 2px; }
+.lmixw { display: block; font-family: var(--mono); font-size: 9.5px; color: var(--muted); margin-bottom: 8px; }
+.lsrest { background: repeating-linear-gradient(135deg, #5E5A52 0 3px, #4E4A43 3px 6px) !important; }
+.lunsizedn {
+  font: inherit; font-size: 10px; font-family: var(--mono); border: 0; background: none; padding: 1px 0;
+  color: var(--ink); cursor: pointer; text-align: left; width: 100%;
+}
+.lunsizedn:hover, .lunsizedn:focus-visible { text-decoration: underline; }
+
+/* ── 3 · the flow ─────────────────────────────────────────────────────────── */
+.flowtable { margin: 4px 15px 8px; font-size: 12px; }
+.flowtable summary { cursor: pointer; color: var(--muted); font-size: 11.5px; padding: 6px 0; min-height: 28px; }
+.flowtable table { margin-top: 4px; }
+
+/* ── the strip, with the clock's pile under it ───────────────────────────── */
+/* Narrow enough that "No date" is on screen at 1440 wide with the inspector open. */
+.strip :global(.striptable) { min-width: 800px; }
+.strip :global(.striptable th:first-child), .strip :global(.striptable td.striplane) { width: 92px; }
+.strip :global(.stripoff) { width: 42px; }
+.strip :global(th.stripoff) { font-size: 6px; letter-spacing: 0; }
+.pile {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 18px; border-top: 1px solid var(--fl-line); padding: 12px 2px 12px;
+}
+.pilehead p { margin: 4px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--fl-muted); }
+.pilehead p b { color: var(--fl-text); font-weight: 500; }
+.pilen { font-family: var(--mono); font-size: 26px; color: var(--fl-amber); line-height: 1.1; margin: 2px 0 2px; }
+.pilen span { font-size: 11px; color: var(--fl-muted); margin-left: 6px; }
+.pile :global(.vizpager) { padding: 4px 0 6px; font-size: 10.5px; }
+.pile :global(.vizpager .btn) { padding: 2px 8px; font-size: 10.5px; min-height: 28px; }
+.pilelist { display: flex; flex-direction: column; }
+.pilerow {
+  display: grid; grid-template-columns: 8px minmax(0, 1fr) 62px 44px; gap: 7px; align-items: center;
+  font: inherit; font-size: 10.5px; color: var(--fl-text); background: none; border: 0;
+  border-bottom: 1px solid #2A2724; padding: 4px 0; text-align: left; cursor: pointer; min-height: 26px;
+}
+.pilerow:hover .pilename, .pilerow:focus-visible .pilename { text-decoration: underline; }
+.pilename { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pilev { font-family: var(--mono); font-size: 9.5px; color: var(--fl-muted); text-align: right; }
+@media (max-width: 900px) { .pile { grid-template-columns: 1fr; } }
+.lrow {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 8px; align-items: baseline; width: 100%;
+  font: inherit; font-size: 11.5px; color: var(--ink); background: var(--surface, #fff); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 7px; text-align: left; cursor: pointer; min-height: 32px;
+}
+.lrow:hover .barname, .lrow:focus-visible .barname { text-decoration: underline; }
+.lrowsub { grid-column: 1 / -1; font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
+
+/* ── 9 · the grid ─────────────────────────────────────────────────────────── */
+.gbtn {
+  font: inherit; color: inherit; background: none; border: 0; cursor: pointer;
+  min-width: 32px; min-height: 32px; border-radius: 6px; padding: 0;
+}
+.gbtn:hover, .gbtn:focus-visible { background: var(--hair); }
+.chip:disabled { opacity: .5; cursor: default; }
+
+/* ── 6 · the map ──────────────────────────────────────────────────────────── */
+.mapempty { margin: 4px 2px 10px; font-size: 12px; line-height: 1.5; color: var(--fl-muted); max-width: 80ch; }
+.mapempty b { color: var(--fl-amber); font-weight: 500; }
+.foggrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; margin-top: 6px; }
+.fogbtn { font: inherit; font-size: 10px; cursor: pointer; text-align: left; min-height: 30px; }
+.fogbtn:hover, .fogbtn:focus-visible { border-color: var(--fl-text) !important; }
+@media (max-width: 900px) { .foggrid { grid-template-columns: 1fr; } }
+
+/* ── 11 · the network ─────────────────────────────────────────────────────── */
+.netbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+.netcount { font-size: 10px; fill: var(--fl-text); font-family: var(--mono); }
+.netnote { margin: 4px 2px 0; font-size: 10.5px; line-height: 1.5; color: var(--fl-muted); }
+.netnote b { color: var(--fl-amber); font-weight: 500; }
+.netnote a { color: var(--fl-text); }
+
+/* ── 14 · the radar ───────────────────────────────────────────────────────── */
+.radcluster { fill: var(--fl-ink); fill-opacity: .22; stroke: var(--fl-ink); stroke-opacity: .7; }
+.radclustern { font-size: 11px; fill: var(--fl-text); font-family: var(--mono); }
+.radof { font-size: 12px; color: var(--fl-muted); margin-left: 4px; }
+.radmore {
+  font: inherit; font-size: 10px; font-family: var(--mono); color: var(--fl-text); background: none; border: 0;
+  padding: 6px 0 2px; cursor: pointer; text-align: left; min-height: 28px;
+}
+.radmore:hover, .radmore:focus-visible { text-decoration: underline; }
+.dark :global(.radbands) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* ── 13 · the coverage ────────────────────────────────────────────────────── */
+.patterns { margin: 4px 0 12px; }
+.pathead, .patrow {
+  display: grid; grid-template-columns: repeat(6, 56px) minmax(60px, 1fr) 56px; gap: 0 4px; align-items: center;
+}
+.pathead span { font-family: var(--mono); font-size: 8.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); text-align: center; }
+.patrow {
+  width: 100%; font: inherit; background: none; border: 0; border-bottom: 1px solid var(--hair);
+  padding: 4px 0; cursor: pointer; text-align: left; color: var(--ink); min-height: 34px;
+}
+.patrow[aria-pressed="true"] { background: var(--hair); outline: 1px solid var(--line); }
+.patrow:hover .bartrack i, .patrow:focus-visible .bartrack i { background: var(--accent); }
+.patcell { display: inline-flex; align-items: center; justify-content: center; justify-self: center; }
+.patrare { grid-column: 1 / span 6; font-size: 11.5px; color: var(--muted); padding-left: 6px; }
+@media (max-width: 540px) { .pathead, .patrow { grid-template-columns: repeat(6, 30px) minmax(40px, 1fr) 48px; } .pathead span { font-size: 6.5px; letter-spacing: 0; } }
+/* In a fixed-layout table the first row sets the widths, and that row is the zone header. */
+.strip :global(.stripzones th.off) { width: 126px; }
+.strip :global(.stripzones th:first-child) { width: 92px; }
+.dark :global(.vizpager .btn) { background: #211F1D; color: var(--fl-text); border-color: var(--fl-line); }
+.dark :global(.vizpager .btn:disabled) { opacity: .4; }
+/* A light panel inside a dark view speaks the light dialect again. */
+.dark .lightpanel .chip { background: var(--surface, #fff); border-color: var(--line); color: var(--ink); }
+.dark .lightpanel .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--rail-ink, #EFEBE2); }
+.dark .lightpanel :global(.vizpager .btn) { background: var(--surface, #fff); color: var(--ink); border-color: var(--line); }
+.strip :global(.stripzones .today) { overflow: visible; }
+/* Several vehicles in one track: a figure per vehicle, a labelled group per vehicle, no sum. */
+.lsveh { display: block; font-size: 10px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.load :global(.lstack) { min-width: 0; }
+.load :global(.ltracks) { min-width: 0; }
+.lsveh span { font-family: var(--sans); font-weight: 400; color: var(--muted); font-size: 9px; }
+.lsgroup {
+  display: block; font-family: var(--mono); font-size: 8px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--muted); padding: 6px 0 1px; border-bottom: 1px solid var(--line); margin-bottom: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Wide drawings keep a legible size and scroll sideways on a narrow screen, rather than
+   shrinking their text to four pixels. */
+.wide { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.wide > svg { min-width: 560px; }
+.load :global(.lcols) { flex-wrap: wrap; }
+.load :global(.lcol) { flex: 1 1 150px; }
+/* The radar and its pile side by side where there is room, stacked where there is not. */
+.dark :global(.radgrid) { display: flex; flex-wrap: wrap; }
+.dark :global(.radgrid) > svg { flex: 3 1 440px; min-width: 0; }
+.dark :global(.radgrid) > :global(.radoff) { flex: 1 1 260px; }
+/* Six totals in a row need 600 pixels; below that they wrap to two or three per row. */
+.cov :global(.covtotals) { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+.cov :global(.covgrid) { grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); }
+/* With the console open the drawing keeps about 500 pixels, or the console moves under it
+   (an iPad with the rail and the inspector leaves the drawing under 300 otherwise). */
+.split { container-type: inline-size; }
+@container (max-width: 800px) {
+  .split :global(.floorsplit.open) { grid-template-columns: minmax(0, 1fr); }
+  .split :global(.floorsplit.open .console) { position: static; }
+}

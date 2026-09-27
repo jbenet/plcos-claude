@@ -4,7 +4,10 @@ import { LineView } from '../components/floor/LineView';
 import { MapView } from '../components/floor/MapView';
 import { RadarView } from '../components/floor/RadarView';
 import { NetworkView } from '../components/floor/NetworkView';
-import { CalendarWindow } from '../components/calendar/CalendarWindow';
+import { Gantt } from '../components/calendar/Gantt';
+import { LoadView } from '../components/floor/LoadView';
+import { CoverageView } from '../components/floor/CoverageView';
+import { StripView } from '../components/floor/StripView';
 import { EMPTY_FILTER, parseFloorFilter } from '../components/floor/FloorContext';
 import { filterProjection } from '../components/floor/projection';
 import type { FloorItem, FloorState } from '../lib/floor-client';
@@ -50,16 +53,23 @@ export function visualizationScaleProperties(check: Check) {
     ['Map', createElement(MapView, { board })],
     ['Radar', createElement(RadarView, { radar: lenses.radar })],
     ['Network', createElement(NetworkView, { network: lenses.network })],
+    ['Load', createElement(LoadView, { state })],
+    ['Coverage', createElement(CoverageView, { coverage: lenses.coverage })],
+    ['Strip', createElement(StripView, { strip: lenses.strip, floor: state })],
   ] as const) {
     const html = renderToStaticMarkup(element);
     check(`0066 ${name} renders a bounded summary for 2400 pursuits`, html.length < 50000 && [...html.matchAll(/<tr\b/g)].length < 40,
       'Actual rendered markup stays small; detail lists page instead of expanding with the fixture.');
   }
-  const calendar = renderToStaticMarkup(createElement(CalendarWindow, {
-    rows: items.map(i => ({ id: i.key, lane: 'meetings' as const, label: i.entityName, detail: null, from: '2026-09-21T00:00:00Z', to: null, vehicle: i.vehicleName, standing: 'ahead' as const, href: null })),
-    first: '2026-09-21T00:00:00Z', weeks: 16,
+  const monday = new Date('2026-09-21T00:00:00Z');
+  const weeks = Array.from({ length: 16 }, (_, i) => ({
+    start: new Date(monday.getTime() + i * 7 * 86_400_000), end: new Date(monday.getTime() + (i * 7 + 6) * 86_400_000), current: i === 3,
   }));
-  check('0066 coincident calendar records collapse into one weekly count', calendar.includes('2400') && calendar.length < 10000 && [...calendar.matchAll(/<tr\b/g)].length === 2,
-    '2400 invented meetings in one week produce one activity row, not 2400 overlapping Gantt rows.');
+  const calendar = renderToStaticMarkup(createElement(Gantt, {
+    marks: items.map(i => ({ id: i.key, lane: 'meetings' as const, kind: 'point' as const, label: i.entityName, detail: 'Invented fixture', from: monday, to: monday, vehicleName: i.vehicleName, alert: false, past: false, href: null })),
+    lanes: ['meetings'], weeks, now: monday,
+  }));
+  check('0066 coincident calendar records are counted past a lane\'s row cap', calendar.includes('+2,394 more') && calendar.length < 20000,
+    '2400 invented meetings on one day draw six rows and count the rest, not 2400 stacked Gantt rows.');
 
 }

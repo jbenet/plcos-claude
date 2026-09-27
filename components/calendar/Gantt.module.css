@@ -1,0 +1,5 @@
+/* A lane that has more than it can draw says how many, under its name. */
+.more {
+  display: block; margin-top: 2px; font-family: var(--mono); font-size: 9px; letter-spacing: 0;
+  text-transform: none; color: var(--amber); font-weight: 400;
+}

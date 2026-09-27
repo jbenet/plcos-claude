@@ -1,6 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { Pager, usePage } from './Paging';
+import { n } from './scale';
+import css from './floor.module.css';
 
 import type { BoardState, CellState } from '@/lib/board-client';
 import { CELL_GLYPH, CELL_LABEL, LEVERS } from '@/lib/board-client';
@@ -26,13 +29,27 @@ import { claimWords, compactUsd, EVIDENCE_GLYPH, rungShort, standingWords } from
 const ORDER: CellState[] = ['open', 'spent', 'done', 'blocked', 'locked'];
 
 export function GridView({ board }: { board: BoardState }) {
-  const paging = usePage(board.rows);
+  const [onlyStuck, setOnlyStuck] = useState(false);
+  const openCount = (r: BoardState['rows'][number]) => LEVERS.filter((l) => r.cells[l.key]?.state === 'open').length;
+  const stuck = board.rows.filter((r) => openCount(r) === 0);
+  const rows = onlyStuck ? stuck : board.rows;
+  const paging = usePage(rows);
   const { select } = useFloor();
   const count = (key: string, state: CellState) =>
     board.rows.filter((r) => r.cells[key]?.state === state).length;
 
   return (
-    <div className="gridview"><Pager {...paging} label="LP lever rows" />
+    <div className="gridview">
+      {/* The finding first: how many rows have no open lever, and a way to see only them. */}
+      <div className={css.chips} role="group" aria-label="Which LPs">
+        <button className={css.chip} aria-pressed={!onlyStuck} onClick={() => { setOnlyStuck(false); paging.setPage(0); }}>
+          Every LP on the grid<b>{n(board.rows.length)}</b>
+        </button>
+        <button className={css.chip} aria-pressed={onlyStuck} disabled={stuck.length === 0} onClick={() => { setOnlyStuck(true); paging.setPage(0); }}>
+          No open lever left<b>{n(stuck.length)}</b>
+        </button>
+      </div>
+      <Pager {...paging} label={onlyStuck ? 'LPs with no open lever' : 'LPs, largest stake first'} quiet />
       <div className="scroller">
         <table className="list gridtable">
           <thead>
@@ -68,7 +85,19 @@ export function GridView({ board }: { board: BoardState }) {
                     return (
                       <td key={l.key} className={`gcell s-${cell.state}`}
                           title={`${l.label} — ${CELL_LABEL[cell.state]}\n${cell.note}`}>
-                        <details><summary aria-label={`${l.label}: ${CELL_LABEL[cell.state]}`}>{CELL_GLYPH[cell.state]}</summary><span>{CELL_LABEL[cell.state]} · {cell.note}</span></details>
+                        {/* A button, not a hover: on a tablet the reason has to open with a tap. */}
+                        <button className={css.gbtn} aria-label={`${r.name}, ${l.label}: ${CELL_LABEL[cell.state]}`}
+                                onClick={() => select({
+                                  kind: 'note',
+                                  title: `${r.name} · ${l.label}`,
+                                  lines: [
+                                    { label: 'Lever', value: l.means },
+                                    { label: 'State', value: CELL_LABEL[cell.state] },
+                                    { label: 'Why', value: cell.note },
+                                  ],
+                                })}>
+                          {CELL_GLYPH[cell.state]}
+                        </button>
                       </td>
                     );
                   })}

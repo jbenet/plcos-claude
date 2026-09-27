@@ -55,7 +55,7 @@ export function EconomyView({ board }: { board: BoardState }) {
           <h2>Goodwill, per connector</h2>
           <span className="lbl">the resource people forget is finite</span>
         </div>
-        <Pager {...paging} label="connectors, most used first" /><div className="cbody">
+        <Pager {...paging} label="connectors, most used first" quiet /><div className="cbody">
           {board.goodwill.length === 0 ? (
             <p className="muted">
               No ask has been carried through a connector in the last three months. That is a

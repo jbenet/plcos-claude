@@ -135,8 +135,9 @@ export function RoomView({ state }: { state: FloorState }) {
         </div>
       </div>
 
-      <div className="ralarmboard"><Pager {...paging} label="alarms" />
+      <div className="ralarmboard">
         <div className="lbl">Everything asking for a person, newest first</div>
+        <Pager {...paging} label="alarms" quiet />
         {state.alarms.length === 0 ? (
           <p className="muted">Nothing is asking for a person right now.</p>
         ) : (
