@@ -29,6 +29,7 @@ async function main() {
   };
   const { runProperties } = await import('./properties/suite');
   await runProperties(check);
+  await (await import('./properties/perf-viz')).perfVizProperties(check);
 
   const failed = results.filter((r) => !r.ok);
   for (const r of results) {

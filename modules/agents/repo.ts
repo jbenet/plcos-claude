@@ -63,11 +63,11 @@ export async function listRuns(limit = 20): Promise<Run[]> {
     'select run_id, call_id, tool, allowed, refusal, at from agents.tool_call where run_id = any($1::uuid[]) order by at',
     [rows.map((r) => r.run_id)],
   );
-  const envelopes = new Map<string, Envelope>();
-  for (const id of new Set(rows.map((r) => r.envelope_id))) {
-    const env = await getEnvelope(id);
-    if (env) envelopes.set(id, env);
-  }
+  const envelopeRows = await db.query<EnvelopeRow>(
+    `${ENVELOPE_SELECT} where e.envelope_id = any($1::uuid[])`,
+    [[...new Set(rows.map((r) => r.envelope_id))]],
+  );
+  const envelopes = new Map(envelopeRows.map((r) => [r.envelope_id, toEnvelope(r)]));
 
   return rows.map((r) => ({
     runId: r.run_id,

@@ -16,7 +16,7 @@ import {
 import { auditFor } from '@/modules/platform';
 import { StatusForm } from '@/components/strategy/StatusForm';
 import { Timeline, meetingLine, type StatusEvent, type TouchContext } from '@/components/strategy/Timeline';
-import { READ_LABEL, colleagueTouchpointsFor, raiseWindows, summarize, touchpointsFor } from '@/modules/meetings';
+import { READ_LABEL, aboutThisRaise, type Touchpoint, colleagueTouchpointsFor, raiseWindows, summarize, touchpointsFor } from '@/modules/meetings';
 import { lpHeadings } from '@/lib/lp-heading';
 import { latestRun } from '@/modules/sources';
 import { CLOSE_STATE_LABEL, closeTracksFor } from '@/modules/pipeline';
@@ -57,14 +57,13 @@ async function TargetWorkspace({ params, searchParams }: {
   if (!pursuit) notFound();
 
   const user = await (await auth()).currentUser();
-  const [claims, notes, restrictions, routes, signals, affinityNotes, touches, tracks, calendar, readings, everything, updates, statusLog] = await Promise.all([
+  const [claims, notes, restrictions, routes, signals, affinityNotes, tracks, calendar, readings, everything, updates, statusLog] = await Promise.all([
     claimsFor(pursuit.entityId),
     notesFor(pursuit.entityId),
     restrictionsFor(pursuit.entityId),
     planRoutes(user.handle, pursuit.entityId, 3, 'fund', 'team'),
     signalsFor(pursuit.entityId),
     notesAbout(pursuit.entityId),
-    touchpointsFor(pursuit.entityId, pursuit.vehicleId),
     closeTracksFor(pursuit.entityId, pursuit.vehicleId),
     latestRun('affinity', 'meetings'),
     readingsFor([pursuit.entityId]),
@@ -87,11 +86,15 @@ async function TargetWorkspace({ params, searchParams }: {
   // with its other people are on its timeline too — shown with who they were with, and summed
   // apart from this person's own record, which is what the ladder reads.
   const heading = (await lpHeadings([{ pursuitId: pursuit.pursuitId, entityId: pursuit.entityId }])).get(pursuit.pursuitId) ?? null;
-  const [colleagues, colleaguesAll, windows] = await Promise.all([
-    heading?.orgFirst ? colleagueTouchpointsFor(pursuit.entityId, pursuit.vehicleId) : Promise.resolve([]),
+  const [colleaguesAll, windows] = await Promise.all([
     heading?.orgFirst ? colleagueTouchpointsFor(pursuit.entityId, null) : Promise.resolve([]),
     raiseWindows(),
   ]);
+  const window = windows.get(pursuit.vehicleId);
+  const forRaise = (t: Touchpoint) => (!t.vehicleId || t.vehicleId === pursuit.vehicleId)
+    && (!window || aboutThisRaise(t, window));
+  const touches = everything.filter(forRaise);
+  const colleagues = colleaguesAll.filter(forRaise);
   // Every touchpoint with them shows on the timeline, each saying what it is about (N81); those
   // tagged with this vehicle are counted for it.
   const shown = [...everything, ...colleaguesAll];

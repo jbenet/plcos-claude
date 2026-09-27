@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { getDb } from '@/lib/db';
 import type { LadderRung } from '@/modules/strategy/client';
 import type {
@@ -215,14 +216,14 @@ const toTouch = (r: TouchRow): Touchpoint => ({
 });
 
 /** Each vehicle's raise window (N59), by id. */
-export async function raiseWindows(): Promise<Map<string, RaiseWindow>> {
+export const raiseWindows = cache(async (): Promise<Map<string, RaiseWindow>> => {
   const db = await getDb();
   const rows = await db.query<{ id: string; slug: string; name: string; opens: Date | string | null; closes: Date | string | null; note: string | null }>(
     `select id::text, slug, name, raise_opens_on as opens, raise_closes_on as closes, raise_window_note as note from platform.vehicle`,
   );
   const date = (d: Date | string | null) => (d ? new Date(`${String(d instanceof Date ? d.toISOString() : d).slice(0, 10)}T00:00:00Z`) : null);
   return new Map(rows.map((r) => [r.id, { vehicleId: r.id, slug: r.slug, name: r.name, opens: date(r.opens), closes: date(r.closes), note: r.note }]));
-}
+});
 
 const when = (t: Touchpoint) => (t.on ?? t.scheduledFor)?.getTime() ?? 0;
 

@@ -1,11 +1,11 @@
-import { circuitBreaker, listAsks, listConflicts, listRestrictions, listOpenTickets, listVehicles, listMethods, listPursuits } from './visualization-inputs';
-import { listRuns } from '@/modules/agents';
+import { pursuitCount, listRuns, circuitBreaker, listAsks, listConflicts, listRestrictions, listOpenTickets, listVehicles, listMethods, listPursuits } from './visualization-inputs';
+
 import { bandwidthAlerts } from '@/modules/close';
 import { upcomingMeetings } from '@/modules/meetings';
 import { listExposures } from '@/modules/pipeline';
 import { DEFAULT_PARAMS, scoreMethods } from '@/modules/research';
 import { actionableSignals } from '@/modules/signals';
-import { PASSED_BY_LABEL, rungIndex, RUNGS, statusNeedsEvidence, type LadderRung, type Pursuit } from '@/modules/strategy';
+import { PASSED_BY_LABEL, rungIndex, RUNGS, statusNeedsEvidence, type LadderRung, type VisualizationPursuit } from '@/modules/strategy';
 import type { Alarm, Dated, FloorAgents, FloorItem, FloorState, Temp } from './floor-client';
 import { shortDate } from './time';
 
@@ -31,7 +31,7 @@ const DAY = 86_400_000;
 const days = (from: Date, to: Date) => Math.floor((to.getTime() - from.getTime()) / DAY);
 
 /** Where a pursuit's status came from, in one line: who set it, or the source it was read from. */
-function statusBasis(p: Pursuit): string {
+function statusBasis(p: VisualizationPursuit): string {
   const set = p.statusSource === 'us'
     ? p.statusSetAt ? `Set ${shortDate(p.statusSetAt)}${p.statusSetByName ? ` by ${p.statusSetByName}` : ''}.` : 'Set here.'
     : `Read from Affinity${p.stageSaid ? `, which says “${p.stageSaid}”` : ''}. Nobody has set one here yet.`;
@@ -68,10 +68,12 @@ export async function floorState(
     vehicles, pursuits, exposures, asks, conflicts, restrictions,
     meetings, tickets, runs, breaker, signals, methods, bandwidth,
   ] = await Promise.all([
-    listVehicles(), listPursuits(null), listExposures(null), listAsks(null),
+    listVehicles(), listPursuits(scopeSlug), listExposures(null), listAsks(null),
     listConflicts('open'), listRestrictions(), upcomingMeetings(), listOpenTickets(),
     listRuns(40), circuitBreaker(), actionableSignals(12), listMethods(), bandwidthAlerts(),
   ]);
+
+  const totalPursuits = scopeSlug ? await pursuitCount() : pursuits.length;
 
   const vehicleBySlug = new Map(vehicles.map((v) => [v.slug, v]));
   /**
@@ -409,7 +411,7 @@ export async function floorState(
     money,
     asOf: now,
     coverage: {
-      corpus: `${pursuits.length} pursuits, ${exposures.length} exposures, ${asks.length} asks, `
+      corpus: `${totalPursuits} pursuits, ${exposures.length} exposures, ${asks.length} asks, `
         + `${meetings.length} scheduled meetings, ${tickets.length} open tickets, ${runs.length} agent runs`,
       notInspected: [
         'Anything nobody recorded. A conversation that happened and was not written down is not on this floor.',

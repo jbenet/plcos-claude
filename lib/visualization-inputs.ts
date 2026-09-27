@@ -1,7 +1,7 @@
 /** Request-local sharing for the three visualization projections. React cache expires with
  * the render: a later request always reads current records, never a completed-page cache. */
 import { cache } from 'react';
-import { circuitBreaker as breaker } from '@/modules/agents';
+import { listRuns as runs, circuitBreaker as breaker } from '@/modules/agents';
 import { listAsks as asks, listConflicts as conflicts, listRestrictions as restrictions, connectorLoad as load } from '@/modules/coordination';
 import { listAssets as assets } from '@/modules/content';
 import { listOpenTickets as tickets } from '@/modules/governance';
@@ -10,7 +10,7 @@ import { listMeetings as meetings, listObjections as objections } from '@/module
 import { poolChecks as pools } from '@/modules/pipeline';
 import { listVehicles as vehicles } from '@/modules/platform';
 import { listMethods as methods } from '@/modules/research';
-import { listPursuits as pursuits } from '@/modules/strategy';
+import { visualizationPursuits as pursuits, pursuitCount as countPursuits } from '@/modules/strategy';
 
 export const circuitBreaker = cache(breaker);
 export const listAsks = cache(asks);
@@ -25,4 +25,11 @@ export const listObjections = cache(objections);
 export const poolChecks = cache(pools);
 export const listVehicles = cache(vehicles);
 export const listMethods = cache(methods);
-export const listPursuits = cache(pursuits);
+export const pursuitCount = cache(countPursuits);
+export const listPursuits = cache(async (scopeSlug: string | null) => {
+  const vehicleId = scopeSlug ? (await listVehicles()).find(v => v.slug === scopeSlug)?.id ?? null : null;
+  return pursuits(vehicleId);
+});
+
+// Preserve each reader’s exact window, including ties at its LIMIT.
+export const listRuns = cache(runs);

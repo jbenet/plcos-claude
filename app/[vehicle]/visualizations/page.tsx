@@ -4,7 +4,7 @@ import { FloorTabs } from '@/components/floor/FloorTabs';
 import { Page } from '@/components/shell/Page';
 import { boardState } from '@/lib/board';
 import { floorState } from '@/lib/floor';
-import { lenses } from '@/lib/lenses';
+import { lenses, emptyLenses } from '@/lib/lenses';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
@@ -19,15 +19,21 @@ export const dynamic = 'force-dynamic';
  * The rail used to point two different entries at the same URL, which meant one of the two
  * labels was wrong.
  */
-async function Visualizations({ params }: { params: Promise<{ vehicle: string }> }) {
+async function Visualizations({ params, searchParams }: { params: Promise<{ vehicle: string }>; searchParams: Promise<{ view?: string }> }) {
   const { vehicle: slug } = await params;
   const { all } = await vehicleSelection();
   const everything = slug === 'everything';
   const vehicle = slug === 'all' || everything ? null : all.find((v) => v.slug === slug);
   if (!vehicle && !everything && slug !== 'all') notFound();
 
+  const asked = (await searchParams).view;
+  const view = asked === 'clock' ? 'strip'
+    : typeof asked === 'string' && ['line', 'load', 'flow', 'strip', 'room', 'map', 'plant', 'moves', 'grid', 'economy', 'network', 'leverage', 'coverage', 'radar'].includes(asked)
+      ? asked : 'line';
   const state = await floorState(vehicle?.slug ?? null, { includeGrants: everything });
-  const [board, lens] = await Promise.all([boardState(vehicle?.slug ?? null, state), lenses(vehicle?.slug ?? null, state)]);
+  const [board, lens] = await Promise.all([boardState(vehicle?.slug ?? null, state, view),
+    ['strip', 'network', 'leverage', 'coverage', 'radar'].includes(view)
+      ? lenses(vehicle?.slug ?? null, state, view) : emptyLenses(state.asOf)]);
   const scopeName = vehicle ? vehicle.name : everything ? 'PL Capital and PL R&D' : 'All of PL Capital';
   const passed = state.items.filter((i) => i.status === 'passed').length;
   const blocked = state.items.filter((i) => i.blocked || i.restricted || i.conflict).length;
