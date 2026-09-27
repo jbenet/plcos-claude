@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { newRequestKey } from '@/lib/request-key';
 
 export function ConnectionFeedback({ lp }: { lp: string }) {
   const label = useId();
@@ -24,7 +25,7 @@ export function ConnectionFeedback({ lp }: { lp: string }) {
     <form className="cbody" onSubmit={async (event) => {
       event.preventDefault();
       if (pending) return;
-      const id = receiptKey ?? crypto.randomUUID();
+      const id = receiptKey ?? newRequestKey();
       setReceiptKey(id); setPending(true); setMessage('Saving…'); setFailed(false);
       try {
         const res = await fetch('/api/connection-feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, lp, page, text }) });

@@ -144,3 +144,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Import duplicate identities](entries/import-dupes.md)
 
 - [Strategy per vehicle — import companion strategies](entries/strategy-per-vehicle.md)
+
+- [Selection 0104 — Move to Selected, no note, and Undo](entries/selection-0104.md)

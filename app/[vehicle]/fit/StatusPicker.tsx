@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { bulkLpAction } from '@/app/targets/bulk-actions';
+import { newRequestKey } from '@/lib/request-key';
 import { PASSED_BY_CHOICES, PASSED_BY_LABEL, REASONS, STATUSES, type PassedBy, type PursuitStatus } from '@/modules/strategy/client';
 import s from './fit.module.css';
 
@@ -12,7 +13,9 @@ const REASON_WORD = (r: string) => r.replace(/_/g, ' ');
  * Change an LP's status from the fit list (issue 0096). The same audited path as the pipeline
  * table's "Set status": one transaction, an idempotency key per attempt so a double tap records
  * once, the next step kept, and a refusal if the status changed since the page loaded. A status is
- * our plan: no rung is written and nothing is sent. It waits for the server's answer.
+ * our plan: no rung is written and nothing is sent. It waits for the server's answer. The line for
+ * the log is optional (issue 0104): without one the log records "set on Funder–vehicle fit by <user>".
+ * Passed still needs who ended it and why.
  */
 export function StatusPicker({ name, pursuitId, vehicleId, status }: {
   name: string; pursuitId: string; vehicleId: string; status: PursuitStatus;
@@ -34,13 +37,14 @@ export function StatusPicker({ name, pursuitId, vehicleId, status }: {
   const save = async () => {
     if (!target || busy) return;
     if (target === 'passed' && !passedBy) { setMessage({ text: 'Say who ended it.', bad: true }); return; }
-    key.current ??= crypto.randomUUID();
+    if (target === 'passed' && !passReason) { setMessage({ text: 'Say why it ended.', bad: true }); return; }
+    key.current ??= newRequestKey();
     setBusy(true); setMessage(null);
     const res = await bulkLpAction({
       key: key.current, rows: [{ id: pursuitId, vehicleId, status }], action: 'status', status: target,
-      body: why.trim() || `Status set to ${label(target)} from Funder–vehicle fit.`,
-      ...(target === 'passed' ? { passedBy: passedBy as PassedBy, passReason: passReason || undefined } : {}),
-    });
+      body: why.trim(), place: 'fit',
+      ...(target === 'passed' ? { passedBy: passedBy as PassedBy, passReason } : {}),
+    }).catch(() => ({ ok: false as const, error: 'Not confirmed. Saving again with the same request records it once.' }));
     setBusy(false);
     if (!res.ok) { setMessage({ text: res.error, bad: true }); return; }
     setMessage({ text: res.written ? `Saved: ${label(status)} → ${label(target)}.` : 'Already saved.' });
@@ -68,7 +72,7 @@ export function StatusPicker({ name, pursuitId, vehicleId, status }: {
                 {PASSED_BY_CHOICES.map((p) => <option key={p} value={p}>{PASSED_BY_LABEL[p]}</option>)}
               </select>
               <select aria-label="Why it passed" value={passReason} onChange={(e) => setPassReason(e.target.value)}>
-                <option value="">Reason (optional)</option>
+                <option value="">Why it ended…</option>
                 {REASONS.map((r) => <option key={r} value={r}>{REASON_WORD(r)}</option>)}
               </select>
             </>

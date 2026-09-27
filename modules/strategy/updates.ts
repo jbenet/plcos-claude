@@ -1,5 +1,5 @@
 import { getDb, type Queryable } from '@/lib/db';
-import type { PursuitStatus } from './types';
+import type { PassedBy, PursuitStatus } from './types';
 import type { UpdateSuggestion } from './reader';
 
 /**
@@ -8,7 +8,13 @@ import type { UpdateSuggestion } from './reader';
  * with what it changes.
  */
 export interface UpdateApplied {
-  status?: { from: PursuitStatus; to: PursuitStatus };
+  /**
+   * `was` is what the status carried before the change, kept so an undo (issue 0104) can put a
+   * Passed back with who ended it and why. Older rows have none.
+   */
+  status?: { from: PursuitStatus; to: PursuitStatus; was?: { passedBy: PassedBy | null; reason: string | null } };
+  /** Set on an undo: the request whose status change this one reversed. */
+  undoes?: string;
   /** The touchpoint the update logged, and what it was. */
   touchpointId?: string;
   touch?: { channel: string; on: string; ahead: boolean; read: string | null };

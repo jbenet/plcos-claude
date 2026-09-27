@@ -60,6 +60,7 @@ export async function runProperties(check: Check) {
   await (await import('./coordination')).restrictionProperties(seed);
   await (await import('./fit')).fitProperties(seed);
   await (await import('./tables')).tableProperties(check, db);
+  await (await import('./selection-0104')).selection0104Properties(check, db);
   await db.close();
 
   await (await import('./pipeline')).hardeningVariations(check);
