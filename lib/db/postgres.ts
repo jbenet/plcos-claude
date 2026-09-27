@@ -22,13 +22,18 @@ const parsers = { getTypeParser(oid: number, format?: 'text' | 'binary') {
 
 /** Real PostgreSQL connections; query/one/exec have the same shape as the local adapter. */
 export async function openPostgres(url: string, options: PostgresOptions = {}): Promise<Db> {
+  const worker = process.env.PLCOS_IMPORT_WORKER === '1';
   const pool = new Pool({
     connectionString: url,
     max: options.max ?? 8,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
-    statement_timeout: options.statementTimeoutMs ?? 20_000,
-    idle_in_transaction_session_timeout: 60_000,
+    // Import jobs run in their own process (PLCOS_IMPORT_WORKER=1, scripts/import-worker.ts) and compute
+    // between statements inside long transactions: no statement limit and 30 min idle there (GUESS).
+    // The foreground keeps 20 s and 60 s. Before 27 Sep the worker inherited the foreground limits,
+    // and "Merge duplicate identities" was killed at 60 s idle every time.
+    statement_timeout: options.statementTimeoutMs ?? (worker ? 0 : 20_000),
+    idle_in_transaction_session_timeout: worker ? 1_800_000 : 60_000,
     application_name: 'plcos',
     types: parsers,
   });
