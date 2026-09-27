@@ -2,7 +2,7 @@
 
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import Link from '@/components/ui/AppLink';
-import { TableFilters } from './TableControls';
+import { StatusMark } from '@/components/ui/StatusMark';
 import { unpackRows, type PackedTable } from './pack';
 import s from './strategy.module.css';
 
@@ -125,22 +125,27 @@ export function StrategyTable({ table, asOf, initialFilters = {}, views = [{ id:
   const filtering = JSON.stringify(filters) !== JSON.stringify(EMPTY);
 
   return <div className={s.lpTable}>
-    <div className={s.filters}><TableFilters query={filters.q} onQuery={value => set('q', value)} searchRef={search} placeholder="Names, next actions, owners… /">
-      <label><span>Show</span><select aria-label="Coverage" value={filters.view} onChange={e => set('view', e.target.value)}>{views.map(v => <option value={v.id} key={v.id}>{v.label}</option>)}</select></label>
-      <label><span>Status</span><select aria-label="Status" value={filters.status} onChange={e => set('status', e.target.value)}><option value="">Any</option>{values.status.map(v => <option value={v} key={v}>{label(v)}</option>)}</select></label>
-      <label><span>Next action</span><select aria-label="Next action" value={filters.action} onChange={e => set('action', e.target.value)}><option value="">Any</option>{values.group.map(v => <option key={v}>{v}</option>)}</select></label>
-      <label><span>Owner</span><select aria-label="Owner" value={filters.owner} onChange={e => set('owner', e.target.value)}><option value="">Any</option>{values.owner.map(v => <option key={v}>{v}</option>)}</select></label>
-    </TableFilters></div>
+    <div className={s.filterLine} role="search">
+      <label className={s.searchBox}>
+        <span className={s.fieldLabel}>Search</span>
+        <span className={s.searchIcon} aria-hidden><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="4" /><path d="M10 10l3.5 3.5" /></svg></span>
+        <input ref={search} type="search" value={filters.q} onChange={e => set('q', e.target.value)} placeholder="Names, next actions, owners… /" aria-label="Search LPs" enterKeyHint="search" />
+      </label>
+      <Field label="Show" set={filters.view !== 'all'}><select aria-label="Coverage" value={filters.view} onChange={e => set('view', e.target.value)}>{views.map(v => <option value={v.id} key={v.id}>{v.label}</option>)}</select></Field>
+      <Field label="Status" set={!!filters.status}><select aria-label="Status" value={filters.status} onChange={e => set('status', e.target.value)}><option value="">Any</option>{values.status.map(v => <option value={v} key={v}>{label(v)}</option>)}</select></Field>
+      <Field label="Next action" set={!!filters.action}><select aria-label="Next action" value={filters.action} onChange={e => set('action', e.target.value)}><option value="">Any</option>{values.group.map(v => <option key={v}>{v}</option>)}</select></Field>
+      <Field label="Owner" set={!!filters.owner}><select aria-label="Owner" value={filters.owner} onChange={e => set('owner', e.target.value)}><option value="">Any</option>{values.owner.map(v => <option key={v}>{v}</option>)}</select></Field>
+      {filtering && <button type="button" className={s.clearBtn} onClick={() => { setFilters(EMPTY); setPage(1); updateAddress(EMPTY, sort, true); }}>Clear</button>}
+    </div>
     <div className={s.bar2} aria-live="polite">
       <span><b>{filtered.length.toLocaleString('en-US')}</b> of {rows.length.toLocaleString('en-US')} LPs{pages > 1 ? ` · page ${current} of ${pages}` : ''}</span>
-      {filtering && <button type="button" className="btn" onClick={() => { setFilters(EMPTY); setPage(1); updateAddress(EMPTY, sort, true); }}>Clear filters</button>}
       <span className={s.legend}>Scores are GUESSes · tap a row for its basis</span>
     </div>
     {filtered.length > 0 && <div className="tscroll"><table className={`list ${s.lp}`}>
       <thead><tr>
         <th className={s.tog} aria-label="Detail" />
         <Th k="name">LP</Th><Th k="action" className={s.actionCol}>Next action</Th><Th k="status">Status</Th><Th k="owner" className={s.midOnly}>Owner</Th>
-        <Th k="priority" className={s.r}>$ / team h</Th><Th k="evidencePriority" className={`${s.r} ${s.midOnly}`}>Evidence pts</Th>
+        <Th k="priority" className={s.r}>Utility</Th><Th k="evidencePriority" className={`${s.r} ${s.midOnly}`}>Evidence pts</Th>
         <Th k="capacity" className={`${s.r} ${s.opt} ${s.midOnly}`}>Capacity</Th><Th k="likelihood" className={`${s.r} ${s.opt} ${s.wideOnly}`}>Likelihood</Th><Th k="route" className={`${s.r} ${s.opt} ${s.wideOnly}`}>Route</Th>
       </tr></thead>
       <tbody>{shown.map(row => {
@@ -150,11 +155,11 @@ export function StrategyTable({ table, asOf, initialFilters = {}, views = [{ id:
             <td className={s.tog}><button type="button" className={s.chev} aria-label={`${open ? 'Hide' : 'Show'} the basis for ${row.name}`} aria-expanded={open} aria-controls={`lp-basis-${row.id}`} onClick={() => toggle(row.id)}><i aria-hidden /></button></td>
             <td className={s.name}><Link href={row.href}>{row.name}</Link></td>
             <td className={s.actionCol}><span className={s.clip} title={row.action}>{row.risks.length > 0 && <span className={s.risk} title={row.risks.join('; ')}>{row.risks.length} risk{row.risks.length === 1 ? '' : 's'}</span>}{row.action}</span></td>
-            <td className={s.nowrap}>{label(row.status)}</td>
+            <td className={s.nowrap}><StatusMark status={row.status} /></td>
             <td className={`${s.owner} ${s.midOnly}`}>{row.owner}</td>
             <td className={`${s.r} ${s.scoreCell}`}>{row.priority === null
               ? <span className="muted">{row.held ? 'Held' : 'Unscored'}<span className={s.narrowOnly}> · {row.evidencePriority} pts</span></span>
-              : <><span className={s.bar} aria-hidden><i style={{ width: `${maxPriority ? Math.max(4, row.priority / maxPriority * 100) : 0}%` }} /></span><b>{money(row.priority)}</b></>}</td>
+              : <><span className={s.bar} aria-hidden><i style={{ width: `${maxPriority ? Math.max(4, row.priority / maxPriority * 100) : 0}%` }} /></span><b>{money(row.expected!)}</b></>}</td>
             <td className={`${s.r} ${s.midOnly} mono`}>{row.evidencePriority || <span className="muted">0</span>}</td>
             <td className={`${s.r} ${s.opt} ${s.midOnly}`}>{row.capacity === null ? <span className="muted">—</span> : money(row.capacity)}</td>
             <td className={`${s.r} ${s.opt} ${s.wideOnly}`}>{row.likelihood === null ? <span className="muted">—</span> : `${Math.round(row.likelihood * 100)}%`}</td>
@@ -166,8 +171,12 @@ export function StrategyTable({ table, asOf, initialFilters = {}, views = [{ id:
     </table></div>}
     {!filtered.length && <div className="cbody"><div className="empty"><h3>{rows.length ? 'No LPs match these filters' : 'No pursuits recorded'}</h3><p>{rows.length ? 'Clear the filters to see every recorded LP. No match means no match in this vehicle’s records.' : 'The raise owner can add LPs and record next actions in the pipeline.'}</p></div></div>}
     {pages > 1 && <div className={s.pager}><button type="button" className="btn" disabled={current === 1} onClick={() => setPage(current - 1)}>Previous</button><span>Page {current} of {pages}</span><button type="button" className="btn" disabled={current === pages} onClick={() => setPage(current + 1)}>Next</button></div>}
-    <p className="cover">Search covers all {rows.length.toLocaleString('en-US')} pursuits in this vehicle’s records as of {asOf.slice(0, 10)}. <b>$ / team h</b> is GUESS capital moved per team hour, on the same scale as the moves above; <b>evidence points</b> order the follow-up work that has no capital score. Neither is a commitment or a forecast.</p>
+    <p className="cover">Search covers all {rows.length.toLocaleString('en-US')} pursuits in this vehicle’s records as of {asOf.slice(0, 10)}. <b>Utility</b> is GUESS capital this action moves, on the same scale as the moves above; <b>evidence points</b> order the follow-up work that has no capital score. Neither is a commitment or a forecast.</p>
   </div>;
+}
+
+function Field({ label: name, set, children }: { label: string; set: boolean; children: ReactNode }) {
+  return <label className={`${s.field}${set ? ` ${s.fieldSet}` : ''}`}><span className={s.fieldLabel}>{name}</span>{children}</label>;
 }
 
 function Basis({ row, rules }: { row: StrategyTableRow; rules: { hours: number; share: number; prior: number } }) {
@@ -196,7 +205,7 @@ function Basis({ row, rules }: { row: StrategyTableRow; rules: { hours: number; 
       </dl>
       <p className={s.formula}>{row.expected === null || row.priority === null
         ? `${row.held ? 'Held (closed, restricted, stale, parked or already hard)' : 'Missing an input'}: no capital score.`
-        : <>= <b>{money(row.expected)}</b> GUESS capital ÷ {rules.hours} h = <b>{money(row.priority)}</b> per team hour{row.rank ? ` · #${row.rank} in the queue` : ''}</>}</p>
+        : <>= <b>{money(row.expected)}</b> GUESS utility (capital; one LP’s action adds no presence) · ÷ {rules.hours} h = <b>{money(row.priority)}</b> per team hour{row.rank ? ` · #${row.rank} in the queue` : ''}</>}</p>
     </div>
     <div>
       <div className="lbl">Evidence work · {row.evidencePriority} pts</div>

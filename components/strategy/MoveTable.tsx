@@ -2,30 +2,38 @@
 
 import { Fragment, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import type { MoveRow } from '@/modules/strategy/moves';
+import { MOVE_FAMILIES, moveFamily, type PresenceEstimate } from '@/modules/strategy/move-utility';
 import { MoveControls } from './MoveControls';
 import s from './strategy.module.css';
 
-export interface MoveTableRow extends MoveRow { rank: number | null; expected: number; priority: number }
+export interface MoveTableRow extends MoveRow {
+  rank: number | null; expected: number; priority: number;
+  /** 0097: capital + presence × its capital-equivalent. GUESS, and the menu's order. */
+  utility: number; presence: PresenceEstimate & { source: 'move' | 'default' }; presenceValue: number;
+}
 
 const money = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(n);
 const pct = (n: number) => `${(n * 100).toFixed(n < 0.1 ? 1 : 0)}%`;
-/** The kinds of work Juan named in 0082, beyond advancing one LP. A family with nothing
- * estimated still shows, at zero, so a gap in the option space is visible. */
-const FAMILIES: Array<{ id: string; label: string; test: RegExp }> = [
-  { id: 'conversion', label: 'Convert and close', test: /intro|syndicat|close|co-?invest|convert|follow/i },
-  { id: 'materials', label: 'Materials', test: /material|deck|memo|pack|data ?room/i },
-  { id: 'presence', label: 'Public presence', test: /presence|video|writ|post|blog|talk|press|podcast|market/i },
-  { id: 'events', label: 'Events', test: /event|host|attend|conference|dinner|roundtable/i },
-  { id: 'sourcing', label: 'Source and enrich', test: /sourc|enrich|research|list|cohort/i },
-];
-const familyOf = (category: string) => FAMILIES.find(f => f.test.test(category))?.id ?? 'other';
+/** The kinds of work named in 0082. A family with nothing estimated still shows, at zero, so a gap
+ * in the option space is visible. */
+const FAMILIES = MOVE_FAMILIES;
+const familyOf = moveFamily;
 const STATE: Record<MoveRow['state'], { label: string; cls: string }> = {
   proposed: { label: 'Proposed', cls: 'waiting' }, chosen: { label: 'Chosen', cls: 'ready' }, dismissed: { label: 'Dismissed', cls: 'unavailable' },
 };
-type SortKey = 'rank' | 'title' | 'expected' | 'hours' | 'priority' | 'cost' | 'days';
+type SortKey = 'rank' | 'title' | 'utility' | 'reach' | 'presence' | 'expected' | 'hours' | 'priority' | 'cost' | 'days';
 const value = (m: MoveTableRow, k: SortKey): number | string => k === 'rank' ? m.rank ?? Infinity : k === 'title' ? m.title
+  : k === 'utility' ? m.utility : k === 'reach' ? m.estimates.reach.value : k === 'presence' ? m.presence.value
   : k === 'expected' ? m.expected : k === 'priority' ? m.priority : k === 'hours' ? m.estimates.teamHours.value
   : k === 'cost' ? m.estimates.cashCost.value : m.estimates.effectDays.value;
+
+/** Presence, 0–5, as five marks: filled for the estimate; dashed when it is the kind's default. */
+function Pips({ p }: { p: MoveTableRow['presence'] }) {
+  return <span className={`${s.pips}${p.source === 'default' ? ` ${s.pipsDefault}` : ''}`} role="img"
+    aria-label={`Presence ${p.value} of 5${p.source === 'default' ? ', default for its kind' : ''}`}>
+    {[1, 2, 3, 4, 5].map(i => <i key={i} className={i <= Math.round(p.value) ? s.on : undefined} />)}
+  </span>;
+}
 
 /** The inputs in the order the formula uses them. A basis repeated from the line above is shown once. */
 function factorRows(m: MoveTableRow) {
@@ -40,11 +48,12 @@ function factorRows(m: MoveTableRow) {
     { label: 'Team time', value: `${e.teamHours.value} h`, basis: e.teamHours.basis },
     { label: 'Cash cost', value: e.cashCost.value ? money(e.cashCost.value) : '$0', basis: e.cashCost.basis },
     { label: 'Days to effect', value: `${e.effectDays.value} d`, basis: e.effectDays.basis },
+    { label: 'Presence', value: `${m.presence.value} of 5`, basis: m.presence.basis },
   ];
   return rows.map((r, i) => ({ ...r, basis: i > 0 && rows[i - 1]!.basis === r.basis ? '' : r.basis }));
 }
 
-export function MoveTable({ moves, vehicleId }: { moves: MoveTableRow[]; vehicleId: string }) {
+export function MoveTable({ moves, vehicleId, pointValue }: { moves: MoveTableRow[]; vehicleId: string; pointValue: number }) {
   const [family, setFamily] = useState('all');
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'rank', dir: 1 });
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -76,7 +85,7 @@ export function MoveTable({ moves, vehicleId }: { moves: MoveTableRow[]; vehicle
       const order = typeof av === 'number' && typeof bv === 'number' ? (av === bv ? 0 : av < bv ? -1 : 1) : String(av).localeCompare(String(bv));
       return order * sort.dir || a.title.localeCompare(b.title);
     }), [moves, family, sort, showDismissed]);
-  const max = Math.max(0, ...moves.map(m => m.priority));
+  const max = Math.max(0, ...moves.map(m => m.utility));
   const toggle = (id: string) => setExpanded(before => { const next = new Set(before); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const rowClick = (id: string) => (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('a,button,input,select,form')) toggle(id); };
   const Th = ({ k, children, className }: { k: SortKey; children: ReactNode; className?: string }) =>
@@ -102,7 +111,8 @@ export function MoveTable({ moves, vehicleId }: { moves: MoveTableRow[]; vehicle
       <thead><tr>
         <th className={s.tog} aria-label="Detail" />
         <Th k="rank" className={s.num}>#</Th><Th k="title" className={s.what}>Move</Th><th className={s.midOnly}>Decision</th>
-        <Th k="priority" className={s.r}>$ / team h</Th><Th k="expected" className={`${s.r} ${s.midOnly}`}>Capital</Th><Th k="hours" className={`${s.r} ${s.midOnly}`}>Team h</Th>
+        <Th k="utility" className={s.r}>Utility</Th><Th k="reach" className={s.r}>Reach</Th><Th k="expected" className={`${s.r} ${s.midOnly}`}>Capital</Th>
+        <Th k="presence">Presence</Th><Th k="priority" className={`${s.r} ${s.midOnly}`}>$ / team h</Th><Th k="hours" className={`${s.r} ${s.opt} ${s.wideOnly}`}>Team h</Th>
         <Th k="cost" className={`${s.r} ${s.opt} ${s.wideOnly}`}>Cash cost</Th><Th k="days" className={`${s.r} ${s.opt} ${s.wideOnly}`}>Days</Th>
       </tr></thead>
       <tbody>{shown.map(m => {
@@ -114,13 +124,16 @@ export function MoveTable({ moves, vehicleId }: { moves: MoveTableRow[]; vehicle
             <td className={`${s.num} mono`}>{m.rank ?? '—'}</td>
             <td className={s.what}><span className={s.clip}><b>{m.title}</b><span className={s.cat}>{m.category}</span></span>{m.state !== 'proposed' && <small className={`${s.narrowOnly} ${s.manual}`}>{STATE[m.state].label}{m.position !== null ? ` · placed #${m.position}` : ''}</small>}</td>
             <td className={`${s.nowrap} ${s.midOnly}`}><span className={`stat ${STATE[m.state].cls}`}><i />{STATE[m.state].label}</span>{m.position !== null && <small className={s.manual}>placed #{m.position}</small>}</td>
-            <td className={`${s.r} ${s.scoreCell}`}><span className={s.bar} aria-hidden><i style={{ width: `${max ? Math.max(4, m.priority / max * 100) : 0}%` }} /></span><b>{money(m.priority)}</b></td>
+            <td className={`${s.r} ${s.scoreCell}`}><span className={s.bar} aria-hidden><i style={{ width: `${max ? Math.max(4, m.utility / max * 100) : 0}%` }} /></span><b>{money(m.utility)}</b></td>
+            <td className={`${s.r} mono`}>{e.reach.value}</td>
             <td className={`${s.r} ${s.midOnly}`}>{money(m.expected)}</td>
-            <td className={`${s.r} ${s.midOnly}`}>{e.teamHours.value}</td>
+            <td><Pips p={m.presence} /></td>
+            <td className={`${s.r} ${s.midOnly}`}>{money(m.priority)}</td>
+            <td className={`${s.r} ${s.opt} ${s.wideOnly}`}>{e.teamHours.value}</td>
             <td className={`${s.r} ${s.opt} ${s.wideOnly}`}>{e.cashCost.value ? money(e.cashCost.value) : '—'}</td>
             <td className={`${s.r} ${s.opt} ${s.wideOnly}`}>{e.effectDays.value}</td>
           </tr>
-          {open && <tr className={s.basisRow} id={`move-basis-${m.id}`}><td colSpan={9}>
+          {open && <tr className={s.basisRow} id={`move-basis-${m.id}`}><td colSpan={12}>
             <div className={s.basis}>
               <div>
                 <div className="lbl">What it is · {m.category}</div>
@@ -132,7 +145,9 @@ export function MoveTable({ moves, vehicleId }: { moves: MoveTableRow[]; vehicle
               <div>
                 <div className="lbl">Score · GUESS</div>
                 <dl className={s.factors}>{factorRows(m).map(f => <Fragment key={f.label}><dt>{f.label}</dt><dd><b>{f.value}</b>{f.basis && <small>{f.basis}</small>}</dd></Fragment>)}</dl>
-                <p className={s.formula}>Cash and days are constraints, not in the score.<br />{e.reach.value} × ({money(e.check.value)} × {pct(e.conversionLift.value)} + {money(e.checkLift.value)} × {pct(e.baseline.value + e.conversionLift.value)}) × {e.confidence.value} = <b>{money(m.expected)}</b> ÷ {e.teamHours.value} h = <b>{money(m.priority)}</b> per team hour</p>
+                <p className={s.formula}>Capital {e.reach.value} × ({money(e.check.value)} × {pct(e.conversionLift.value)} + {money(e.checkLift.value)} × {pct(e.baseline.value + e.conversionLift.value)}) × {e.confidence.value} = <b>{money(m.expected)}</b><br />
+                  Utility {money(m.expected)} + presence {m.presence.value} × {money(pointValue)} = <b>{money(m.utility)}</b><br />
+                  Efficiency {money(m.expected)} ÷ {e.teamHours.value} h = <b>{money(m.priority)}</b> per team hour. Cash and days are constraints, outside the score.</p>
               </div>
               <div>
                 <div className="lbl">Evidence</div>

@@ -1,0 +1,11 @@
+/* Pipeline status marks (issue 0097). The word keeps the ink colour; only the mark is tinted. */
+.mark { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; vertical-align: middle; }
+.mark svg { flex: none; }
+.word { color: var(--ink); }
+.muted svg { color: var(--muted); }
+.ink svg { color: var(--ink); }
+.amber svg { color: var(--amber); }
+.purple svg { color: var(--purple); }
+.green svg { color: var(--green); }
+.green .word { font-weight: 500; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
