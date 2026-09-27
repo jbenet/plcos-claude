@@ -8,6 +8,10 @@ import { triageExportRows, writeTriageExport, refreshTriageExport, type TriageEx
 import { withDb, type Db } from '../../lib/db';
 import { openPglite } from '../../lib/db/pglite';
 import { migrate } from '../../lib/db/migrate';
+import { readResearchExportStatus } from '../../lib/enrich/export-status';
+import { ExportStatus } from '../../app/dev/enrich/ExportStatus';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 const now = new Date('2026-09-27T00:00:00Z');
 const day = (days: number) => new Date(now.getTime() - days * 86_400_000);
@@ -165,6 +169,48 @@ export async function triageExportProperties(check: Check) {
       && exportQueries <= baselineQueries + 4 && exportMs < 30_000 && exportMs < baselineMs + 5_000,
       `Invented fixture with 500 W1 files and 500 connection records: baseline ${Math.ceil(baselineMs)} ms/${baselineQueries} queries; export ${Math.ceil(exportMs)} ms/${exportQueries} queries. `
       + 'GUESS regression ceilings: 30 s total and 5 s added; these are conservative test limits, not a documented existing deadline.');
+
+    const otherFiles = ['research-set.jsonl', 'candidates.jsonl', 'team.json', 'triage.jsonl'];
+    // Each attempt has its own observation timestamp; all actual exported records must agree.
+    const normalizeExport = (file: string, text: string) => file === 'triage.jsonl'
+      ? JSON.stringify(text.split('\n').filter(Boolean).map(line => ({ ...JSON.parse(line), asOf: null }))) : text;
+    const expectedFiles = await Promise.all(otherFiles.map(async file => normalizeExport(file, await readFile(join(dir, file), 'utf8'))));
+    for (const failure of ['timeout', 'failed'] as const) {
+      await Promise.all(otherFiles.map(file => rm(join(dir, file))));
+      await writeFile(join(dir, 'identity-review.jsonl'), 'stale review must not survive');
+      const logged: unknown[][] = [];
+      const originalError = console.error;
+      const failing: Db = { ...counted, transaction: async () => db!.transaction(async tx => {
+        // Abort a real transaction before presenting either supported failure category.
+        try { await tx.exec('select 1/0'); } catch {
+          throw Object.assign(new Error('Invented private query detail'), failure === 'timeout' ? { code: '57014' } : {});
+        }
+        throw new Error('Expected an aborted transaction');
+      }) };
+      try {
+        console.error = (...args) => { logged.push(args); };
+        const result = await withDb(failing, exportResearchSet);
+        const receipt = await readResearchExportStatus(dir);
+        const html = renderToStaticMarkup(createElement(ExportStatus, { status: receipt }));
+        const actualFiles = await Promise.all(otherFiles.map(async file => normalizeExport(file, await readFile(join(dir, file), 'utf8'))));
+        const reviewRemoved = await readFile(join(dir, 'identity-review.jsonl')).then(() => false, () => true);
+        check(`EXPORT identity ${failure} preserves other files and displays its failure on the page`,
+          result.candidates === 500 && result.identityReviewError === failure && receipt?.identityReviewError === failure
+          && JSON.stringify(expectedFiles) === JSON.stringify(actualFiles) && reviewRemoved
+          && html.includes('role="alert"') && html.includes(failure === 'timeout' ? 'timed out' : 'failed')
+          && html.includes('team and triage files were written') && html.includes('retry Export the research set')
+          && logged.length === 1 && !JSON.stringify(logged).includes('Invented private query detail')
+          && (await db.one<{ n: number }>('select 1 n'))?.n === 1,
+          'An aborted identity transaction leaves all four other files identical, removes stale review output, logs no query detail and persists a visible retry notice.');
+      } finally { console.error = originalError; }
+    }
+    const retried = await withDb(counted, exportResearchSet);
+    const receipt = await readResearchExportStatus(dir);
+    check('EXPORT successful retry replaces stale identity failure receipt',
+      retried.identityReviewError === null && receipt?.identityReviewError === null
+      && (await readFile(join(dir, 'identity-review.jsonl'), 'utf8')) === ''
+      && renderToStaticMarkup(createElement(ExportStatus, { status: receipt })) === '',
+      'A successful empty identity review is a zero-byte file and clears the persistent failure notice.');
   } finally {
     if (previousDir === undefined) delete process.env.ENRICH_DIR; else process.env.ENRICH_DIR = previousDir;
     await db?.close();

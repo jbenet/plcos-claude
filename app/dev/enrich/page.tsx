@@ -24,6 +24,8 @@ import { latestRun } from '@/modules/sources';
 import { readQuality } from '@/lib/enrich/quality';
 import { exportResearchSetAction, importFindingsAction, sourceBulkAction } from './actions';
 import { addedInBulk, BULK_DAY } from '@/lib/enrich/unsourced';
+import { readResearchExportStatus } from '@/lib/enrich/export-status';
+import { ExportStatus } from './ExportStatus';
 
 /** The checks the records point to before anyone writes (iteration 3, docs/19). */
 const FIRSTS: Array<{ id: NonNullable<Triage['first']>; label: string; means: string }> = [
@@ -82,6 +84,7 @@ const enrichmentDbInputs = buildCache(async () => {
 async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?: string; imported?: string; claims?: string; refused?: string; sourced?: string }> }) {
   const sp = await searchParams;
   const dir = enrichDir();
+  const exportStatus = await readResearchExportStatus(dir);
   const {pursuits,suggestions,imported,bulk,mergeRun,duplicateRun} = await enrichmentDbInputs();
   const entities = new Set(pursuits.map((p) => p.entityId)).size;
   const { readFile } = await import('node:fs/promises');
@@ -150,10 +153,11 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
           <div className="fact"><span>Exported</span><span>{set ? `${n(set.lines)} LPs · ${ago(set.at)}` : 'not yet'}{cands && set && cands.lines !== set.lines ? ' · the two files disagree' : ''}</span></div>
           <div className="fact"><span>Findings back</span><span>{n(raw)} LPs researched{pages.pages ? ` (${n(pages.pages)} owed a pass with search: ${n(pages.pages - pages.partial)} from page reads alone${pages.partial ? `, ${n(pages.partial)} with too few searches to follow the protocol` : ''})` : ''} · {n(strategies)} with a strategy</span></div>
           {sp.exported && <p className="stat ready" style={{ marginTop: 10 }}><i />Exported {sp.exported} LPs to {join(config.data.root, 'enrich')}</p>}
+          <ExportStatus status={exportStatus} />
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>
             <button className="btn p" type="submit">Export the research set</button>
             <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>
-              Writes research-set.jsonl (who they are), candidates.jsonl (where they stand), and identity-review.jsonl (ambiguous identities, without contact details) to {join(config.data.root, 'enrich')}.
+              Writes research-set.jsonl (who they are), candidates.jsonl (where they stand), team.json, triage.jsonl, and identity-review.jsonl (ambiguous identities, without contact details) to {join(config.data.root, 'enrich')}.
             </span>
           </form>
         </div>

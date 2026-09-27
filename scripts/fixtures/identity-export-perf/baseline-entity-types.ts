@@ -1,9 +1,9 @@
+// Test-only frozen pre-optimization implementation for semantic parity and profiling.
 import type { Queryable } from '@/lib/db';
-import { identityRawContext } from './identity-context';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
 import { recordEntityTypeCorrection } from '@/modules/identity/entity-type';
-import type { Finding } from './schema';
-import type { Path } from './connect';
+import type { Finding } from '@/lib/enrich/schema';
+import type { Path } from '@/lib/enrich/connect';
 
 export interface EntityTypeReport {
   corrected: Array<{ entityId: string; name: string; correctionId: string }>;
@@ -132,7 +132,13 @@ export async function storedPersonEvidence(tx: Queryable, ids: string[], finding
   for (const f of findings) if (roots.has(f.key)) addEvidence(roots.get(f.key)!, f);
   // Source-owned raw snapshots are read locally, including historical person evidence.
   // A later sparse snapshot must not erase it. List entries contain identity inside entity.
-  const raw = await identityRawContext(tx, members.map(m => m.id));
+  const raw = await tx.query<{ id: string; payload: unknown }>(`select s.entity_id::text id,r.payload from identity.source_record s
+    join lateral (select r.payload from sources.raw_record r
+      where r.source=s.source and (r.source_id=s.source_id or
+        (s.source='affinity' and (r.kind||':'||r.source_id=s.source_id or
+          (r.kind='list_entry' and (r.payload->>'type')||':'||(r.payload->'entity'->>'id')=s.source_id))))
+      ) r on true
+    where s.entity_id=any($1::uuid[])`, [members.map(m => m.id)]);
   for (const r of raw) addEvidence(roots.get(r.id)!, r.payload);
   const notes = await tx.query<{ id: string; data: unknown }>(`select entity_id::text id,data from research.note
     where entity_id=any($1::uuid[]) and (kind='public_profile' or (kind='context' and data->>'source'='prospects'))`, [members.map(m => m.id)]);

@@ -9,8 +9,10 @@ import { exportIdentityReview } from '../lib/enrich/identity-review-export';
 import { undoIdentityMerge } from '../modules/identity/resolution';
 import { correctEntityType, reverseEntityTypeCorrection } from '../modules/identity/entity-type';
 import type { Check, Db } from './properties/harness';
+import { identityContextProperties } from './properties/identity-context';
 
 export async function identityReviewProperties(check: Check, db: Db) {
+  await identityContextProperties(check, db);
   const actor = (await db.one<{ id: string }>('select id::text from platform.app_user where active limit 1'))!.id;
   const vehicle = (await db.one<{ id: string }>("select id::text from platform.vehicle where phase='active' and kind='fund' limit 1"))!.id;
   const ids: string[] = [], tag = randomUUID().slice(0, 8);
@@ -61,6 +63,14 @@ export async function identityReviewProperties(check: Check, db: Db) {
     await db.query("insert into research.claim(entity_id,field,value,source,as_of,confidence) values($1,'title','Partner',$2,'2026-09-27','high')", [privacy[0], document]);
     await db.query("insert into research.note(entity_id,kind,body,data) values($1,'public_profile',$2,$3::jsonb)", [privacy[0], `Private ${secretEmail} ${secretPhone}`, JSON.stringify({ email: secretEmail, phone: secretPhone, title: `Partner ${secretEmail} ${secretPhone}`, identity: { links: [{ kind: 'linkedin', url: linkedin }, { kind: 'bio', url: `https://example.org/bio?email=${encodeURIComponent(secretEmail)}&phone=${encodeURIComponent(secretPhone)}` }, { kind: 'bio', url: `mailto:${secretEmail}` }] } })]);
     await db.query("insert into research.note(entity_id,kind,body,data) values($1,'connection_candidates','Invented path',$2::jsonb)", [privacy[0], JSON.stringify({ paths: [{ lp: privacy[0], other: { key: org, name: label('Privacy Office') } }] })]);
+    const pathAlias = await entity('Path Alias');
+    await db.query('update identity.entity set merged_into=$2 where entity_id=$1', [pathAlias, privacy[0]]);
+    const sharedPathKey = `invented-shared-path-${tag}`;
+    for (const [index, id] of privacy.entries()) await db.query("insert into identity.source_record(source,source_id,entity_id,resolved_by) values($1,$2,$3,'fixture')", [`path-fixture-${index}`, sharedPathKey, id]);
+    await db.query("insert into research.note(entity_id,kind,body,data) values($1,'connection_candidates','Invented alias paths',$2::jsonb)", [pathAlias, JSON.stringify({ paths: [
+      { lp: sharedPathKey, lpPerson: { key: privacy[0] }, other: { key: pathAlias, person: { key: privacy[1] } } },
+      { lp: sharedPathKey, other: { key: pathAlias } },
+    ] })]);
     const privateGroup = (await exported()).find(g => g.group === identityReviewGroupId(privacy));
     const member = privateGroup?.members.find(m => m.entityId === privacy[0]);
     const serialized = JSON.stringify(privateGroup);
@@ -73,6 +83,9 @@ export async function identityReviewProperties(check: Check, db: Db) {
       && !serialized.includes(secretEmail) && !serialized.includes(encodeURIComponent(secretEmail)) && !serialized.includes(secretPhone)
       && !serialized.includes(encodeURIComponent(secretPhone)) && !serialized.includes('mailto:') && !serialized.includes('Private '),
       'Contact values and arbitrary note bodies never leave in the review set.');
+    check('IDENTITY REVIEW counts each path once per root across aliases and colliding source keys',
+      member?.counts.paths === 3 && privateGroup?.members.find(m => m.entityId === privacy[1])?.counts.paths === 2,
+      'Repeated endpoint references and note ownership do not double-count; a source key shared by two roots counts for both.');
 
     await writeFile(join(scratch, 'identity-decisions.jsonl'), `${JSON.stringify(decision(plain).value)}\n{broken\n\n${JSON.stringify({ group: 'unknown', decision: 'separate', evidence: [], decided_by: 'fixture' })}\n`);
     const parsed = await readIdentityDecisions(scratch);

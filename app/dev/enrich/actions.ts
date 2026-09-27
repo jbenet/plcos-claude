@@ -48,7 +48,7 @@ export async function addProspectsAction(): Promise<{ result?: ProspectResult; e
 export async function exportResearchSetAction(): Promise<void> {
   const user = await (await auth()).currentUser();
   const r = await exportResearchSet();
-  await appendAudit({ actorId: user.id, action: 'enrich.exported', subjectType: 'enrich', detail: { candidates: r.candidates, people: r.people, orgs: r.orgs } });
+  await appendAudit({ actorId: user.id, action: 'enrich.exported', subjectType: 'enrich', detail: { candidates: r.candidates, people: r.people, orgs: r.orgs, identityReviewError: r.identityReviewError } });
   revalidatePath('/dev/enrich');
   redirect(`/developer/enrich?exported=${r.candidates}`);
 }

@@ -1,7 +1,7 @@
+// Test-only frozen pre-optimization implementation for semantic parity and profiling.
 import type { Queryable } from '@/lib/db';
-import { identityGraphContext, identityRawContext } from './identity-context';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
-import { identityReviewGroupId } from './identity-decisions';
+import { identityReviewGroupId } from '@/lib/enrich/identity-decisions';
 
 export interface IdentityReviewMember {
   entityId: string; displayName: string; entityType: string;
@@ -49,7 +49,7 @@ const unique = <T>(values: T[]): T[] => [...new Map(values.map(value => [JSON.st
 
 /** Caller owns a transaction. Preview rolls back even successful rule repairs. */
 export async function exportIdentityReview(tx: Queryable): Promise<IdentityReviewGroup[]> {
-  const { mergeImportDuplicatesInTransaction } = await import('./import-dupes');
+  const { mergeImportDuplicatesInTransaction } = await import('./baseline-dupes');
   let ambiguous: Awaited<ReturnType<typeof mergeImportDuplicatesInTransaction>>['ambiguous'];
   await tx.exec('savepoint identity_review_export');
   try {
@@ -88,7 +88,11 @@ export async function exportIdentityReview(tx: Queryable): Promise<IdentityRevie
     const m = member(a.id)!; m.affiliations.push({ org: clean(a.org), role: clean(a.role) });
     if (clean(a.role)) m.titles.push(clean(a.role));
   }
-  const graphAffiliations = await identityGraphContext(tx, aliases);
+  const graphAffiliations = await tx.query<{ id: string; org: string }>(`select distinct p.id::text id,o.display_name org
+    from unnest($1::uuid[]) p(id) join network.edge e on e.from_entity=p.id or e.to_entity=p.id
+    join identity.entity o on o.entity_id=identity.canonical_entity_id(case when e.from_entity=p.id then e.to_entity else e.from_entity end)
+    where o.entity_type='org' and (e.kind::text in ('same_firm','employment') or exists(
+      select 1 from jsonb_array_elements(e.evidence) v where v->>'note' ~* 'affiliation|employment|employed by|works at'))`, [aliases]);
   for (const a of graphAffiliations) member(a.id)!.affiliations.push({ org: clean(a.org), role: '' });
   function readIdentity(id: string, data: unknown, depth = 0) {
     if (!data || typeof data !== 'object' || Array.isArray(data) || depth > 5) return;
@@ -112,7 +116,11 @@ export async function exportIdentityReview(tx: Queryable): Promise<IdentityRevie
       if (fact && typeof fact === 'object' && ['role', 'prior_role', 'affiliation'].includes(String(fact.field))) readIdentity(id, fact.detail, depth + 1);
     }
   }
-  const raw = await identityRawContext(tx, aliases);
+  const raw = await tx.query<{ id: string; payload: unknown }>(`select s.entity_id::text id,r.payload
+    from identity.source_record s join sources.raw_record r on r.source=s.source and
+    (r.source_id=s.source_id or (s.source='affinity' and (r.kind||':'||r.source_id=s.source_id or
+      (r.kind='list_entry' and (r.payload->>'type')||':'||(r.payload->'entity'->>'id')=s.source_id))))
+    where s.entity_id=any($1::uuid[])`, [aliases]);
   for (const row of raw) readIdentity(row.id, row.payload);
   const profiles = await tx.query<{ id: string; data: unknown }>(`select entity_id::text id,data from research.note
     where entity_id=any($1::uuid[]) and (kind='public_profile' or (kind='context' and data->>'source'='prospects'))`, [aliases]);
@@ -134,33 +142,16 @@ export async function exportIdentityReview(tx: Queryable): Promise<IdentityRevie
   const notes = await tx.query<{ id: string; n: number }>(`select entity_id::text id,count(*)::int n from research.note
     where entity_id=any($1::uuid[]) group by entity_id`, [aliases]);
   for (const row of notes) member(row.id)!.counts.notes += row.n;
-  // Expand each stored path once, then resolve its keys through the already-loaded
-  // aliases and sources. The old OR/EXISTS join compared every path with every
-  // member and repeatedly scanned source_record. A key may identify several roots;
-  // retain them all, counting each (note, path ordinal, root) exactly once.
-  const keyRoots = new Map<string, Set<string>>();
-  const addKey = (key: string, root: string) => {
-    const owners = keyRoots.get(key) ?? new Set<string>();
-    owners.add(root); keyRoots.set(key, owners);
-  };
-  for (const e of entities) addKey(e.id, e.root);
-  for (const s of sources) addKey(s.key, roots.get(s.id)!);
-  const paths = await tx.query<{ owner: string | null; keys: Array<string | null> }>(`select n.entity_id::text owner,
-    array[p.data->>'lp',p.data->'other'->>'key',p.data->'lpPerson'->>'key',
-      p.data->'other'->'person'->>'key'] keys
+  const paths = await tx.query<{ root: string; n: number }>(`select r.canonical_id::text root,count(distinct (n.note_id,p.ordinality))::int n
     from research.note n cross join lateral jsonb_array_elements(case when jsonb_typeof(n.data->'paths')='array'
-      then n.data->'paths' else '[]'::jsonb end) p(data)
-    where n.kind='connection_candidates'`);
-  for (const path of paths) {
-    const referenced = new Set<string>();
-    // Note ownership is an entity reference, never an external source key.
-    const owner = path.owner && roots.get(path.owner);
-    if (owner) referenced.add(owner);
-    for (const key of path.keys) if (key !== null) {
-      for (const root of keyRoots.get(key) ?? []) referenced.add(root);
-    }
-    for (const root of referenced) members.get(root)!.counts.paths++;
-  }
+      then n.data->'paths' else '[]'::jsonb end) with ordinality p(data,ordinality)
+    join identity.entity_resolution r on r.entity_id=any($1::uuid[]) and
+      (r.entity_id=n.entity_id or r.entity_id::text=any(array[p.data->>'lp',p.data->'other'->>'key',
+        p.data->'lpPerson'->>'key',p.data->'other'->'person'->>'key']) or exists(
+          select 1 from identity.source_record s where s.entity_id=r.entity_id and s.source_id=any(array[
+            p.data->>'lp',p.data->'other'->>'key',p.data->'lpPerson'->>'key',p.data->'other'->'person'->>'key'])))
+    where n.kind='connection_candidates' group by r.canonical_id`, [aliases]);
+  for (const row of paths) members.get(row.root)!.counts.paths = row.n;
   const pursuits = await tx.query<{ id: string; vehicle: string; status: string }>(`select p.entity_id::text id,v.name vehicle,p.status::text status
     from strategy.active_pursuit p join platform.vehicle v on v.id=p.vehicle_id where p.entity_id=any($1::uuid[])
     order by v.name,p.status`, [aliases]);
