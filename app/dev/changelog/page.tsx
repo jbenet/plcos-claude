@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { readChangelog } from '@/lib/changelog';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
@@ -134,7 +135,7 @@ function Rendered({ block }: { block: Block }) {
   }
 }
 
-export default async function Changelog() {
+async function Changelog() {
   const src = await readChangelog();
   const doc = groupChangelog(parseMarkdown(src));
 
@@ -213,3 +214,5 @@ export default async function Changelog() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/changelog', Changelog);

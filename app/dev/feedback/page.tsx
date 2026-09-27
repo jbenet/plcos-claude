@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -7,7 +8,7 @@ import { issues as issueSink } from '@/lib/issues';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DevFeedback() {
+async function DevFeedback() {
   const [rows, sink] = await Promise.all([listFeedback(), issueSink()]);
   const files = await sink.list();
   const orphaned = files.filter((f) => !rows.some((r) => r.issueRef === f.id));
@@ -125,3 +126,5 @@ export default async function DevFeedback() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/feedback', DevFeedback);

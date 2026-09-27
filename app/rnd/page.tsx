@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { config } from '@/config/deployment';
 import { Page } from '@/components/shell/Page';
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
  * not in the data model, and nothing here pretends otherwise: an empty room is easier to
  * reason about than a furnished one where none of the furniture takes weight.
  */
-export default async function RnD() {
+async function RnD() {
   return (
     <Page
       crumbs={[{ label: SECTION.rnd }, { label: 'Operations' }]}
@@ -95,3 +96,5 @@ export default async function RnD() {
     </Page>
   );
 }
+
+export default coalescePage('/rnd', RnD);

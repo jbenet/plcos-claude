@@ -1,7 +1,8 @@
+import { coalescePage } from '@/lib/page-render';
 import { redirect } from 'next/navigation';
 
 /** The section is now called "Network"; its routes stay under /orgs. */
-export default async function MovedRelationships({
+async function MovedRelationships({
   params,
 }: {
   params: Promise<{ group: string }>;
@@ -9,3 +10,5 @@ export default async function MovedRelationships({
   const { group } = await params;
   redirect(`/orgs/g/${group === 'all' ? 'all' : group}`);
 }
+
+export default coalescePage('/relationships/[group]', MovedRelationships);

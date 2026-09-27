@@ -1,3 +1,5 @@
+import { coalescePage } from '@/lib/page-render';
+import { relationshipCounts, RELATIONSHIP_PAGE_SIZE, type RelationshipGroup } from '@/modules/identity/roles';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -6,7 +8,7 @@ import { EntityLink } from '@/components/entity/EntityLink';
 import { EntitySummary } from '@/components/entity/EntitySummary';
 import { usdM } from '@/lib/money';
 import {
-  AFFIL_LABEL, listAffiliations, relationshipRoles, ROLE_LABEL, type RelationshipRole,
+  AFFIL_LABEL, affiliationsFor, relationshipRoles, ROLE_LABEL, type RelationshipRole,
 } from '@/modules/identity';
 import { RUNG_LABEL, STATUS_LABEL, type LadderRung, type PursuitStatus } from '@/modules/strategy';
 import { listAssessments, BLOCKER_SHORT, type Blocker } from '@/modules/fit';
@@ -68,24 +70,26 @@ const BLOCKER_FLAG: Record<Blocker, string> = {
   fit: 'f-ev', timing: 'f-mute', awareness: 'f-mute', none: 'f-ok',
 };
 
-export default async function Orgs({
+async function Orgs({
   params, searchParams,
 }: {
   params: Promise<{ group: string }>;
-  searchParams: Promise<{ e?: string }>;
+  searchParams: Promise<{ e?: string; page?: string }>;
 }) {
   const { group } = await params;
-  const { e } = await searchParams;
+  const { e, page } = await searchParams;
+  const pageNumber = Math.max(0, Math.min(100000, Number.parseInt(page ?? '0', 10) || 0));
   const spec = GROUPS[group];
   if (!spec) notFound();
 
-  const [all, fit, affiliations] = await Promise.all([
-    relationshipRoles(), listAssessments(null), listAffiliations(),
+  const [rows, fit, counts] = await Promise.all([
+    relationshipRoles(undefined, group as RelationshipGroup, pageNumber * RELATIONSHIP_PAGE_SIZE),
+    listAssessments(null), relationshipCounts(),
   ]);
-  const rows = all.filter((r) => !r.roles.includes('team') && spec.keep(r));
-  const tally = (role: RelationshipRole) => all.filter((r) => r.roles.includes(role)).length;
-  const peopleCount = all.filter((r) => !r.roles.includes('team') && r.entityType === 'person').length;
-  const firmCount = all.filter((r) => !r.roles.includes('team') && r.entityType !== 'person').length;
+  const affiliations = await affiliationsFor(rows.map(r => r.entityId));
+  const tally = (role: RelationshipRole) => counts[role];
+  const peopleCount = counts.people, firmCount = counts.firms;
+  const total = counts[group as RelationshipGroup];
 
   return (
     <Page
@@ -132,9 +136,14 @@ export default async function Orgs({
         ))}
       </div>
 
+      <p className="cover">{pageNumber === 0 ? `Showing the first ${RELATIONSHIP_PAGE_SIZE}` : `Showing ${pageNumber * RELATIONSHIP_PAGE_SIZE + 1}–${pageNumber * RELATIONSHIP_PAGE_SIZE + rows.length}`} of {total} records, ordered by hard money then name.
+        {pageNumber > 0 && <> · <Link href={`/orgs/g/${group}?page=${pageNumber - 1}`}>Previous</Link></>}
+        {(pageNumber + 1) * RELATIONSHIP_PAGE_SIZE < total && <> · <Link href={`/orgs/g/${group}?page=${pageNumber + 1}`}>Next {RELATIONSHIP_PAGE_SIZE}</Link></>}
+        {affiliations.length === 2000 && <> · Showing the first 2,000 affiliations for these records.</>}
+      </p>
       <div className="card">
         <div className="chead">
-          <h2>{rows.length} {rows.length === 1 ? 'record' : 'records'}</h2>
+          <h2>{total} records · {rows.length} shown</h2>
           <span className="lbl">hard money shown per actor, never summed across vehicles</span>
         </div>
         {rows.length === 0 ? (
@@ -255,3 +264,5 @@ export default async function Orgs({
     </Page>
   );
 }
+
+export default coalescePage('/orgs/g/[group]', Orgs);

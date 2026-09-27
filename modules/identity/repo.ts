@@ -27,6 +27,22 @@ export async function listEntities(ids?: string[]): Promise<Entity[]> {
   return rows.map(toEntity);
 }
 
+/** A bounded discovery preview. Pipeline identities are retained first; remaining slots
+ * contain the first names in the address book. Callers must disclose this scope. */
+export async function listEntityPreview(preferredIds: string[], limit = 1000): Promise<Entity[]> {
+  // GUESS: 1,000 names is the maximum useful foreground map preview.
+  const take = Number.isFinite(limit) ? Math.max(1, Math.min(1000, Math.trunc(limit))) : 1000;
+  const preferred = await listEntities([...new Set(preferredIds)].slice(0, take));
+  if (preferred.length >= take) return preferred;
+  const db = await getDb();
+  const rows = await db.query<Row>(
+    `select ${COLS} from identity.entity where merged_into is null and retired_at is null
+      order by lower(display_name), entity_id limit $1`, [take],
+  );
+  const seen = new Set(preferred.map((e) => e.entityId));
+  return [...preferred, ...rows.filter((r) => !seen.has(r.entity_id)).map(toEntity)].slice(0, take);
+}
+
 /** Follows the merge redirect, which is the whole reason merged ids are never reused. */
 export async function getEntity(id: string): Promise<Entity | null> {
   const db = await getDb();

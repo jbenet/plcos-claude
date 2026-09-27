@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { syncSummary } from '@/lib/sync';
 import { ago } from '@/lib/time';
 import { config } from '@/config/deployment';
+import { shareRequestWork } from '@/lib/page-render';
 import { PageFrame } from './PageFrame';
 
 export interface Crumb {
@@ -23,7 +24,7 @@ export async function Page({
   inspector?: ReactNode;
   children: ReactNode;
 }) {
-  const sync = await syncSummary();
+  const sync = await shareRequestWork('shell:syncSummary', {}, syncSummary);
   const profile = config.data.profile;
   // Until a connector has delivered, a real page computes its figures from an empty
   // database, and an empty database says $0 with complete confidence.

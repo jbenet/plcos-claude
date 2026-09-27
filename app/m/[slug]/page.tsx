@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -6,7 +7,7 @@ import { findModule, findPlaybook, PLAYBOOK_ONLY } from '@/lib/nav';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ModulePage({ params }: { params: Promise<{ slug: string }> }) {
+async function ModulePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const mod = findModule(slug);
   const playbook = findPlaybook(slug);
@@ -124,3 +125,5 @@ export default async function ModulePage({ params }: { params: Promise<{ slug: s
     </Page>
   );
 }
+
+export default coalescePage('/m/[slug]', ModulePage);

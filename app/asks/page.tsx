@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -19,7 +20,7 @@ const OUTCOME_LABEL: Record<string, string> = {
   opted_in: 'Opted in', declined: 'Declined', no_reply: 'No reply', deferred: 'Deferred',
 };
 
-export default async function Asks() {
+async function Asks() {
   const selection = await vehicleSelection();
   const [asks, conflicts, load, restrictions] = await Promise.all([
     listAsks(selection.current?.id ?? null),
@@ -260,3 +261,5 @@ export default async function Asks() {
     </Page>
   );
 }
+
+export default coalescePage('/asks', Asks);

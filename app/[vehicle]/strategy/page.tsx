@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -147,7 +148,7 @@ function ChooseVehicle({ vehicles }: { vehicles: Array<{ slug: string; name: str
   );
 }
 
-export default async function VehicleStrategy({
+async function VehicleStrategy({
   params,
 }: {
   params: Promise<{ vehicle: string }>;
@@ -400,3 +401,5 @@ export default async function VehicleStrategy({
     </Page>
   );
 }
+
+export default coalescePage('/[vehicle]/strategy', VehicleStrategy);

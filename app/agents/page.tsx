@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
@@ -12,7 +13,7 @@ const RUN_FLAG: Record<string, string> = {
   accepted: 'f-ok', rejected: 'f-mute',
 };
 
-export default async function Agents() {
+async function Agents() {
   const [breaker, envelopes, runs, cases, ag] = await Promise.all([
     circuitBreaker(), listEnvelopes(), listRuns(), listEvalCases(), agent(),
   ]);
@@ -267,3 +268,5 @@ export default async function Agents() {
     </Page>
   );
 }
+
+export default coalescePage('/agents', Agents);

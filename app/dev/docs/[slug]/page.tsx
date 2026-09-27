@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { notFound } from 'next/navigation';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
@@ -7,7 +8,7 @@ import { SECTION } from '@/lib/nav';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Doc({ params }: { params: Promise<{ slug: string }> }) {
+async function Doc({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const source = await readSystemDoc(slug);
   if (source === null) notFound();
@@ -29,3 +30,5 @@ export default async function Doc({ params }: { params: Promise<{ slug: string }
     <SystemDocBody source={source} file={doc.file} docs={docs} />
   </Page>;
 }
+
+export default coalescePage('/dev/docs/[slug]', Doc);

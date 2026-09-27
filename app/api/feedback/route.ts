@@ -5,6 +5,8 @@ import { auth } from '@/lib/auth';
 import { fileFeedback } from '@/modules/platform';
 import type { IssueAttachment, IssueKind, IssuePriority } from '@/lib/issues';
 import { titleFrom } from '@/lib/issues/title';
+import { cookies } from 'next/headers';
+import { USER_COOKIE } from '@/lib/auth/local';
 
 export async function POST(req: Request) {
   // Only the live app files (docs/COLLAB.md): a branch filing would take numbers the live app
@@ -78,7 +80,11 @@ export async function POST(req: Request) {
       });
     }
 
-    const user = await (await auth()).currentUser();
+    // Reading the local cookie needs no DB. Do not make filing depend on auth's lookup.
+    const user = {
+      handle: (await cookies()).get(USER_COOKIE)?.value || 'unknown reporter',
+      resolveUser: async () => (await auth()).currentUser(),
+    };
     const issue = await fileFeedback(user, {
       title,
       body: body.body ?? '',

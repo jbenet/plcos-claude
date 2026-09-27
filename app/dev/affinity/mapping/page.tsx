@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Fragment } from 'react';
 import { Page } from '@/components/shell/Page';
@@ -30,7 +31,7 @@ function Meaning({ m }: { m: ValueMap | null }) {
   );
 }
 
-export default async function Mapping() {
+async function Mapping() {
   const demo = config.data.profile === 'demo';
   const inv = await inventory();
   const map = await readMapping(inv);
@@ -294,3 +295,5 @@ export default async function Mapping() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/affinity/mapping', Mapping);

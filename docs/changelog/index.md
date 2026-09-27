@@ -108,3 +108,4 @@ to the repository root to preserve existing anchors and rendered output.
 - [N83 — The strategies re-read on the tagged records, capacity by size, and the rungs to check again](entries/n83.md)
 - [N84 — Two agents, one repository: the collab layout, and ChatGPT's first change through the issue queue](entries/n84.md)
 - [N85 — "?" for the keyboard shortcuts, and the system's docs in the app: ChatGPT's second and third](entries/n85.md)
+- [perf3 — Bounded reads and an available feedback box](entries/perf3.md)

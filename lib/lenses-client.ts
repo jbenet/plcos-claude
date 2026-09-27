@@ -86,7 +86,7 @@ export interface Leverage {
   note: string;
 }
 
-export type CellMark = 'recorded' | 'unconfirmed' | 'restricted' | 'missing';
+export type CellMark = 'recorded' | 'unconfirmed' | 'restricted' | 'missing' | 'unknown';
 
 export interface CoverageField {
   key: string;

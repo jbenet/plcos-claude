@@ -4,10 +4,10 @@ import { connectorLoad, listAsks, listConflicts, listRestrictions } from '@/modu
 import { listAssets } from '@/modules/content';
 import { FIRM_CLASS_LABEL, listFirmProfiles } from '@/modules/fit';
 import { listOpenTickets } from '@/modules/governance';
-import { listEntities } from '@/modules/identity';
+import { listEntityPreview } from '@/modules/identity';
 import { coverageGaps } from '@/modules/library';
 import { listMeetings, listObjections } from '@/modules/meetings';
-import { listEdges } from '@/modules/network';
+import { edgeCountsForEntities } from '@/modules/network';
 import { poolChecks } from '@/modules/pipeline';
 import { listVehicles } from '@/modules/platform';
 import { DEFAULT_PARAMS, listMethods, scoreMethods } from '@/modules/research';
@@ -42,10 +42,10 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
   const now = new Date();
   const [
     entities, profiles, vehicles, pursuits, asks, conflicts, restrictions,
-    edges, tickets, meetings, objections, assets, loads, pools, methods, breaker, gaps,
+    tickets, meetings, objections, assets, loads, pools, methods, breaker, gaps,
   ] = await Promise.all([
-    listEntities(), listFirmProfiles(), listVehicles(), listPursuits(null), listAsks(null),
-    listConflicts('open'), listRestrictions(), listEdges(), listOpenTickets(), listMeetings(),
+    listEntityPreview(floor.items.map((i) => i.entityId)), listFirmProfiles(), listVehicles(), listPursuits(null), listAsks(null),
+    listConflicts('open'), listRestrictions(), listOpenTickets(), listMeetings(),
     listObjections(), listAssets(), connectorLoad(), poolChecks(), listMethods(),
     circuitBreaker(), coverageGaps(),
   ]);
@@ -66,11 +66,9 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
   const profileByEntity = new Map(profiles.map((p) => [p.entityId, p]));
   const restrictedIds = new Set(restrictions.map((r) => r.entityId));
   const contestedIds = new Set(conflicts.map((c) => c.entityId));
-  const edgeCount = new Map<string, number>();
-  for (const e of edges) {
-    edgeCount.set(e.fromEntity, (edgeCount.get(e.fromEntity) ?? 0) + 1);
-    edgeCount.set(e.toEntity, (edgeCount.get(e.toEntity) ?? 0) + 1);
-  }
+  const edgeCount = await edgeCountsForEntities([...new Set([
+    ...entities.map((e) => e.entityId), ...floor.items.map((i) => i.entityId),
+  ])]);
 
   const floorByEntity = new Map(floor.items.map((i) => [i.entityId, i]));
   const teamNames = new Set(['Juan', 'Mara Vance', 'Sam Ferreira', 'Inés Duarte', 'Tomás Reyes']);
@@ -82,7 +80,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
   const live = floor.items.filter((i) => i.status !== 'passed');
 
   /**
-   * One territory per name we could conceivably approach. Names with nothing on them are
+   * One territory per name in the bounded preview. Names with nothing on them are
    * the point of the view, not noise to be filtered out — an empty quadrant is the most
    * useful thing a map of this can show.
    */
@@ -170,7 +168,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
     {
       // Not "Sourced": Sourcing is a status now, and these names have no pursuit at all.
       key: 'sourced', label: 'Names nobody is working',
-      requires: 'A name in the system with no pursuit on any vehicle. Nothing more is claimed.',
+      requires: 'Among the first 1,000 names shown, a name with no pursuit on any vehicle. Nothing more is claimed.',
       wip: territories.filter((t) => t.holding === 'open').length,
       in30: 0, out30: 0, dwell: null,
       blocked: territories.filter((t) => t.holding === 'restricted').length,
@@ -221,7 +219,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
   const moves: Move[] = [
     {
       key: 'research', family: 'Discover', label: 'Enrich a name we have not scored',
-      requires: 'Nothing. This is the only move with no prerequisite.',
+      requires: 'Nothing. This is the only move with no prerequisite. Counted among the first 1,000 names shown.',
       available: territories.filter((t) => t.explored !== 'scored').length,
       blocked: 0, blockedWhy: null, gate: null,
       cost: `${scored.filter((m) => m.automatable && m.status === 'available').length} agent-runnable methods on file`,
@@ -230,7 +228,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
     },
     {
       key: 'route', family: 'Discover', label: 'Find a warm route',
-      requires: 'A recorded relationship edge. Co-attendance is a clue, not a route.',
+      requires: 'A recorded relationship edge. Counted among the first 1,000 names shown. Co-attendance is a clue, not a route.',
       available: territories.filter((t) => t.holding === 'open' && t.edges > 0).length,
       blocked: territories.filter((t) => t.holding === 'open' && t.edges === 0).length,
       blockedWhy: 'No edge on file touches them, which is a statement about our records.',
@@ -449,7 +447,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
     scored: territories.filter((t) => t.explored === 'scored').length,
     researched: territories.filter((t) => t.explored === 'researched').length,
     named: territories.filter((t) => t.explored === 'named').length,
-    note: 'A name with no rubric score is not a weak target. It is an unopened one, and the '
+    note: 'Showing the first 1,000 names, with pipeline names first. Map counts describe this preview. A name with no rubric score is not a weak target. It is an unopened one, and the '
       + 'map draws the difference rather than ranking them together.',
   };
 

@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { capacityBandLabel } from '@/lib/capacity-bands';
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -64,7 +65,7 @@ async function pagesOnly(dir: string): Promise<{ pages: number; partial: number 
  * land in files here first, and an import maps them in — so a mapping can change and be run
  * again without anything being searched twice.
  */
-export default async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?: string; imported?: string; claims?: string; refused?: string; sourced?: string }> }) {
+async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?: string; imported?: string; claims?: string; refused?: string; sourced?: string }> }) {
   const sp = await searchParams;
   const dir = enrichDir();
   const pursuits = (await listPursuits(null)).filter(inResearchSet);
@@ -441,3 +442,5 @@ export default async function Enrichment({ searchParams }: { searchParams: Promi
     </Page>
   );
 }
+
+export default coalescePage('/dev/enrich', Enrichment);

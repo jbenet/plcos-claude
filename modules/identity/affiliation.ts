@@ -102,3 +102,26 @@ export async function orgsFor(personId: string): Promise<Affiliation[]> {
       || Number(b.isPrimary) - Number(a.isPrimary)
       || RANK[a.kind] - RANK[b.kind]);
 }
+
+/** Only relationships involving the shown identities. Raw FK filtering retains the
+ * affiliation indexes, including all reversible aliases of a canonical record. */
+export async function affiliationsFor(ids: string[], limit = 2000): Promise<Affiliation[]> {
+  if (!ids.length) return [];
+  const db = await getDb();
+  return (await db.query<Row>(`with recursive wanted(id) as (
+    select identity.canonical_entity_id(id) from unnest($1::uuid[]) id
+    union select e.entity_id from identity.entity e join wanted w on e.merged_into = w.id
+  ), selected_ids as materialized (
+    select affiliation_id from (
+      select a.affiliation_id from wanted w cross join lateral (
+        select affiliation_id from identity.affiliation where person_entity = w.id order by affiliation_id limit $2
+      ) a
+      union select a.affiliation_id from wanted w cross join lateral (
+        select affiliation_id from identity.affiliation where org_entity = w.id order by affiliation_id limit $2
+      ) a
+    ) ids order by affiliation_id limit $2
+  ), selected as materialized (
+    select a.* from identity.affiliation a join selected_ids using(affiliation_id)
+  ) ${SELECT.replace('identity.affiliation a', 'selected a')}
+    order by a.affiliation_id`, [ids, Math.min(2000, Math.max(1, limit))])).map(toAffiliation).sort(order);
+}

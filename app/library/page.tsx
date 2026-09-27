@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -11,7 +12,7 @@ const STATUS_FLAG: Record<string, string> = {
   superseded: 'f-mute', withdrawn: 'f-mute',
 };
 
-export default async function Library() {
+async function Library() {
   const [answers, gaps] = await Promise.all([listAnswers(), coverageGaps()]);
   const approved = answers.filter((a) => a.status === 'approved');
   const stale = answers.filter((a) => a.stale);
@@ -208,3 +209,5 @@ export default async function Library() {
     </Page>
   );
 }
+
+export default coalescePage('/library', Library);

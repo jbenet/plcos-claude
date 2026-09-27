@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -45,7 +46,7 @@ const gateMark = (passed: boolean | null) =>
   : passed === false ? <span className="flag f-block">Fails</span>
   : <span className="flag f-ev">Unanswered</span>;
 
-export default async function FunderVehicleFit({
+async function FunderVehicleFit({
   params,
 }: {
   params: Promise<{ vehicle: string; target: string }>;
@@ -644,3 +645,5 @@ export default async function FunderVehicleFit({
     </Page>
   );
 }
+
+export default coalescePage('/[vehicle]/fit/[target]', FunderVehicleFit);

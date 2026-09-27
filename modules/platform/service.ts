@@ -1,7 +1,8 @@
 import { issues as issueSink } from '@/lib/issues';
-import type { IssueAttachment, IssueKind, IssuePriority } from '@/lib/issues';
+import type { IssueAttachment, IssueKind, IssuePriority, IssueSink } from '@/lib/issues';
 import { appendAudit, attachIssueRef, insertFeedback } from './repo';
 import type { AppUser } from './types';
+import { bestEffortDb, type QueueClock } from '@/lib/db/scheduling';
 
 export interface FeedbackCommand {
   title: string;
@@ -20,34 +21,24 @@ export interface FeedbackCommand {
 }
 
 /**
- * File a piece of feedback: one row in platform.feedback, one markdown file through the
- * IssueSink, one audit entry. The row is written first — if the sink fails, the complaint
- * still exists and can be re-filed, rather than being lost with the request.
+ * The markdown file is the receipt. Database metadata is best-effort and never holds
+ * the complaint behind a busy connection, including reporter lookup.
  */
-export async function fileFeedback(user: AppUser, cmd: FeedbackCommand) {
+export async function fileFeedback(user: AppUser | { handle: string; resolveUser: () => Promise<AppUser> }, cmd: FeedbackCommand, options: { clock?: QueueClock; sink?: IssueSink } = {}) {
+  const verified = !('resolveUser' in user);
   const context = {
     ...cmd.context,
     user: user.handle,
+    reporterVerification: verified ? 'verified' : 'unverified local cookie; database lookup pending',
   };
 
-  const row = await insertFeedback({
-    title: cmd.title.trim(),
-    body: cmd.body.trim(),
-    kind: cmd.kind,
-    priority: cmd.priority,
-    reporterId: user.id,
-    page: cmd.page,
-    labels: [],
-    context,
-  });
-
-  const sink = await issueSink();
+  const sink = options.sink ?? await issueSink();
   const issue = await sink.create({
-    title: row.title,
-    body: row.body || '(no description given)',
+    title: cmd.title.trim(),
+    body: cmd.body.trim() || '(no description given)',
     kind: cmd.kind,
     priority: cmd.priority,
-    reporter: user.handle,
+    reporter: verified ? user.handle : `${user.handle} (unverified)`,
     page: cmd.page,
     labels: [],
     context,
@@ -55,17 +46,25 @@ export async function fileFeedback(user: AppUser, cmd: FeedbackCommand) {
     tokenOffset: cmd.imageOffset ?? 0,
   });
 
-  await attachIssueRef(row.id, issue.id, issue.location);
-  await appendAudit({
-    actorId: user.id,
-    action: 'feedback.filed',
-    subjectType: 'issue',
-    subjectId: issue.id,
-    detail: {
-      page: cmd.page, priority: cmd.priority, kind: cmd.kind, location: issue.location,
-      attachments: issue.attachments,
-    },
-  });
+  void bestEffortDb(async () => {
+    const actor = 'resolveUser' in user ? await user.resolveUser() : user;
+    const row = await insertFeedback({
+      title: cmd.title.trim(), body: cmd.body.trim(), kind: cmd.kind, priority: cmd.priority,
+      reporterId: actor.id, page: cmd.page, labels: [],
+      context: { ...context, user: actor.handle, reporterVerification: 'verified' },
+    });
+    await attachIssueRef(row.id, issue.id, issue.location);
+    await appendAudit({
+      actorId: actor.id,
+      action: 'feedback.filed',
+      subjectType: 'issue',
+      subjectId: issue.id,
+      detail: {
+        page: cmd.page, priority: cmd.priority, kind: cmd.kind, location: issue.location,
+        attachments: issue.attachments,
+      },
+    });
+  }, 250, options.clock);
 
   return issue;
 }

@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -22,7 +23,7 @@ const MONDAY = (d: Date) => {
   return x;
 };
 
-export default async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
+async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
   const { vehicle: slug } = await params;
   const { all } = await vehicleSelection();
   const vehicle = slug === 'all' ? null : all.find((v) => v.slug === slug);
@@ -252,3 +253,5 @@ export default async function Calendar({ params }: { params: Promise<{ vehicle: 
     </Page>
   );
 }
+
+export default coalescePage('/[vehicle]/calendar', Calendar);

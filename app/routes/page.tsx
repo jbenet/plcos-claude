@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
@@ -11,7 +12,7 @@ import { Coverage } from '@/components/ui/Coverage';
 import { Glyph } from '@/components/ui/Glyph';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
-import { listEntities } from '@/modules/identity';
+import { listEntities, affiliationsFor } from '@/modules/identity';
 import { TargetPicker } from '@/components/routes/TargetPicker';
 import { listSourceDocs, notesFor } from '@/modules/research';
 import { directContact, type DirectContact } from '@/modules/meetings';
@@ -38,7 +39,7 @@ const OTHER_LABEL: Record<CandidatePath['other']['type'], string> = {
   team: 'on the team', ours: 'one of ours', backer: 'a backer of ours', lp: 'another LP',
 };
 
-export default async function Routes({
+async function Routes({
   searchParams,
 }: {
   searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string; expanded?: string; page?: string; family?: string; exclude?: string; prefer?: string; warmth?: string; show?: string }>;
@@ -47,11 +48,15 @@ export default async function Routes({
   const params = await searchParams;
   const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam, expanded, page, family } = params;
   const user = await (await auth()).currentUser();
-  const { tiers, vehicles, affiliations, fit, asks, team, entities: pipelineEntities, targets, contact, rows } =
+  const { tiers, vehicles, affiliations: pickerAffiliations, fit, asks, team, entities: pipelineEntities, targets, contact, rows } =
     await routeInputs(selection.current?.id ?? '');
   const entities = target && !pipelineEntities.some((e) => e.entityId === target)
     ? [...pipelineEntities, ...await listEntities([target])] : pipelineEntities;
   const targetId = target ?? targets.find((t) => t.displayName === 'Delia Roos')?.entityId ?? targets[0]?.entityId;
+  const ownAffiliations = targetId ? await affiliationsFor([targetId]) : [];
+  const firmIds = ownAffiliations.filter(a => a.current && a.personId === targetId).map(a => a.orgId);
+  const firmAffiliations = firmIds.length ? await affiliationsFor(firmIds) : [];
+  const affiliations = [...new Map([...pickerAffiliations, ...ownAffiliations, ...firmAffiliations].map(a => [a.affiliationId, a])).values()];
   const minimumWarmth = [1, 2, 3, 4].includes(Number(params.warmth)) ? Number(params.warmth) : 0;
   const preferred = (route: Route) => route.hops.some((h) => {
     if (params.prefer === 'coinvestor') return h.edge.kind === 'coinvestor';
@@ -121,7 +126,7 @@ export default async function Routes({
     ).map((a) => [a.personId, a.orgName]),
   );
   const [pathsNote, nearbyContact] = await Promise.all([
-    targetId ? notesFor(targetId, 'connection_candidates').then((n) => n[0] ?? null) : Promise.resolve(null),
+    targetId ? notesFor(targetId, 'connection_candidates', 1).then((n) => n[0] ?? null) : Promise.resolve(null),
     directContact([...nearbyPeople.keys()]),
   ]);
   const promotedBases = promotedRouteBases(search?.routes ?? [], search?.promotedBasisHashes);
@@ -219,6 +224,7 @@ export default async function Routes({
       <div className="lbl">Module 05 · Warm intro routes</div>
       <h1>Routes to {targetName ?? '—'}</h1>
       <p className="routes-lede">Team and PL routes · estimates carry uncertainty · asks and sends need separate approval.</p>
+      {(pickerAffiliations.length === 2000 || ownAffiliations.length === 2000 || firmAffiliations.length === 2000) && <p className="cover">Showing the first 2,000 affiliations per selected group. Other colleagues may not have been inspected.</p>}
       {routeSummary && <section className="route-stats" aria-label="Route strength summary">
         <div><strong>{routeSummary.strong}</strong><span>Strong</span></div>
         <div><strong>{routeSummary.promising}</strong><span>Promising</span></div>
@@ -508,3 +514,5 @@ export default async function Routes({
     </Page>
   );
 }
+
+export default coalescePage('/routes', Routes);

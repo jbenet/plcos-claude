@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { AutoRefresh } from '@/components/ui/AutoRefresh';
@@ -25,7 +26,7 @@ const KIND: Record<string, string> = {
 
 const n = (x: number) => x.toLocaleString('en-US');
 
-export default async function Slice() {
+async function Slice() {
   const demo = config.data.profile === 'demo';
   const ready = affinityReady();
   const [targets, run, counts] = await Promise.all([
@@ -226,3 +227,5 @@ export default async function Slice() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/affinity/slice', Slice);

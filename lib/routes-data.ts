@@ -3,7 +3,7 @@ import { routeComparison, type ComparisonOptions } from '@/components/routes/rou
 import { buildCache } from '@/lib/build-cache';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
-import { listAffiliations, listEntities } from '@/modules/identity';
+import { affiliationsFor, listEntities } from '@/modules/identity';
 import { listAsks } from '@/modules/coordination';
 import { listAssessments, listFirmProfiles, FIRM_CLASS_LABEL, BLOCKER_SHORT } from '@/modules/fit';
 import { directContact, type DirectContact } from '@/modules/meetings';
@@ -19,15 +19,16 @@ const touchWords = (c: DirectContact) => c.via
 /** Whole picker inputs shared across route clicks. Database writes and midnight
  * invalidate the snapshot; user-specific ownership stays in the page. */
 const pickerInputs = buildCache(async (vehicleId: string) => {
-  const [tiers, vehicles, affiliations, fit, team, pursuits, profiles] = await Promise.all([
+  const [tiers, vehicles, fit, team, pursuits, profiles] = await Promise.all([
     tierCounts(), listVehicles(),
-    listAffiliations(), listAssessments(vehicleId || null),
+    listAssessments(vehicleId || null),
     (await auth()).listUsers(), listPursuits(vehicleId || null), listFirmProfiles(),
   ]);
 
   // Targets worth showing (issues 0022–0023, real): the LPs in this pipeline and the organisations
   // they act for — not every person and firm in the replica, which made this page 1.7 MB — and
   // never a member of the team, by the team's own list.
+  const affiliations = await affiliationsFor([...new Set(pursuits.filter(p => !p.historical).map(p => p.entityId))]);
   const teamNames = new Set(team.map((u) => u.name));
   const inPipeline = new Set(pursuits.filter((p) => !p.historical).map((p) => p.entityId));
   for (const a of affiliations) if (a.current && inPipeline.has(a.personId)) inPipeline.add(a.orgId);

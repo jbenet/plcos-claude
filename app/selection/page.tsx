@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
@@ -18,7 +19,7 @@ const BAND_FLAG: Record<string, string> = {
   strong: 'f-ok', worth_a_look: 'f-ev', weak: 'f-mute', unscored: 'f-mute',
 };
 
-export default async function Selection({
+async function Selection({
   searchParams,
 }: {
   searchParams: Promise<{ e?: string }>;
@@ -213,3 +214,5 @@ export default async function Selection({
     </Page>
   );
 }
+
+export default coalescePage('/selection', Selection);

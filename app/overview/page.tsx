@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -15,7 +16,7 @@ import { Lately } from '@/components/strategy/Lately';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Overview() {
+async function Overview() {
   const selection = await vehicleSelection();
   const v = selection.current;
 
@@ -264,3 +265,5 @@ export default async function Overview() {
     </Page>
   );
 }
+
+export default coalescePage('/overview', Overview);

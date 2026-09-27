@@ -1,10 +1,11 @@
 import Link from '@/components/ui/AppLink';
 import { usdM } from '@/lib/money';
 import { shortDate } from '@/lib/time';
+import { shareRequestWork } from '@/lib/page-render';
 import { getEntity } from '@/modules/identity';
 import { AFFIL_LABEL, ROLE_LABEL, orgsFor, peopleAt, relationshipRoles, type RelationshipRole } from '@/modules/identity';
 import { listExposures } from '@/modules/pipeline';
-import { listEdges, TIER_MEANING } from '@/modules/network';
+import { listEdgesForEntities, TIER_MEANING } from '@/modules/network';
 import { restrictionsFor } from '@/modules/coordination';
 import { assessmentsForEntity, BLOCKER_LABEL } from '@/modules/fit';
 import { claimsFor, listSourceDocs } from '@/modules/research';
@@ -29,6 +30,10 @@ const ROLE_FLAG: Record<RelationshipRole, string> = {
  * blends soft into hard.
  */
 export async function EntitySummary({ entityId }: { entityId: string }) {
+  return shareRequestWork('component:EntitySummary', { entityId }, () => loadEntitySummary(entityId));
+}
+
+async function loadEntitySummary(entityId: string) {
   const entity = await getEntity(entityId);
   if (!entity) {
     return (
@@ -43,14 +48,13 @@ export async function EntitySummary({ entityId }: { entityId: string }) {
     );
   }
 
-  const [roles, exposures, edges, restrictions, fit, claims, docs, pursuits] = await Promise.all([
-    relationshipRoles(),
+  const [roles, exposures, edges, restrictions, fit, claims, pursuits] = await Promise.all([
+    relationshipRoles([entity.entityId]),
     listExposures(null),
-    listEdges(),
+    listEdgesForEntities([entity.entityId], 6),
     restrictionsFor(entityId),
     assessmentsForEntity(entityId),
     claimsFor(entityId),
-    listSourceDocs(),
     listPursuits(null),
   ]);
   const [sits, staff] = await Promise.all([
@@ -64,6 +68,7 @@ export async function EntitySummary({ entityId }: { entityId: string }) {
     .filter((e) => e.fromEntity === entityId || e.toEntity === entityId)
     .slice(0, 6);
   const theirs = pursuits.filter((p) => p.entityId === entityId);
+  const docs = await listSourceDocs([...new Set(claims.map(c => c.provenance.source))]);
   const sources = [...new Set(claims.map((c) => c.provenance.source))]
     .map((id) => docs.find((d) => d.docId === id))
     .filter((d): d is NonNullable<typeof d> => Boolean(d));
@@ -177,7 +182,7 @@ export async function EntitySummary({ entityId }: { entityId: string }) {
 
       {ties.length > 0 && (
         <>
-          <div className="lbl" style={{ marginTop: 16 }}>Ties on file</div>
+          <div className="lbl" style={{ marginTop: 16 }}>First 6 ties on file</div>
           {ties.map((e) => (
             <div className="kv" key={e.edgeId}>
               <span>

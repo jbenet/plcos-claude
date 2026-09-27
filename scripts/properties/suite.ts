@@ -5,6 +5,7 @@ import { freshDb, SCRATCH } from './harness';
 import type { Check } from './harness';
 
 export async function runProperties(check: Check) {
+  await (await import('./availability')).availabilityProperties(check);
   (await import('../connection-target-properties')).connectionTargetProperties(check);
   (await import('../warehouse-investor-properties')).warehouseInvestorProperties(check);
   (await import('../route-presentation-properties')).routePresentationProperties(check);
@@ -56,6 +57,7 @@ export async function runProperties(check: Check) {
 
   await (await import('./deployment')).profileProperties(check);
   await (await import('./issues')).issueProperties(check);
+  await (await import('./render')).renderProperties(check);
   await (await import('./deployment')).checkoutProperties(check);
   await (await import('./navigation')).proxyProperties(check);
   await (await import('./identity')).headingProperties(check);

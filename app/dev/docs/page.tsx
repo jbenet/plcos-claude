@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { docHref, listSystemDocs } from '@/lib/docs';
@@ -5,7 +6,7 @@ import { SECTION } from '@/lib/nav';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Docs() {
+async function Docs() {
   const docs = await listSystemDocs();
   return <Page crumbs={[{ label: SECTION.developer }, { label: 'Docs' }]}>
     <div className="lbl">Developer</div>
@@ -20,3 +21,5 @@ export default async function Docs() {
     </ol>
   </Page>;
 }
+
+export default coalescePage('/dev/docs', Docs);

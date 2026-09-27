@@ -5,7 +5,7 @@ import { listAssets, listSends } from '@/modules/content';
 import { coverageGaps, listAnswers } from '@/modules/library';
 import { listPursuits, rungIndex, RUNGS } from '@/modules/strategy';
 import { vehicleTotals } from '@/modules/pipeline';
-import { listEdges } from '@/modules/network';
+import { tierCounts } from '@/modules/network';
 import type { Assessment, Lever, Reading, Verdict } from './types';
 
 /**
@@ -28,11 +28,11 @@ function verdictFrom(value: number, ok: number, strong: number): Verdict {
 export async function assessVehicle(
   vehicleId: string, now = new Date(),
 ): Promise<Assessment | null> {
-  const [totals, fit, cycles, pursuits, asks, assets, sends, answers, gaps, edges, load] =
+  const [totals, fit, cycles, pursuits, asks, assets, sends, answers, gaps, edgeTiers, load] =
     await Promise.all([
       vehicleTotals(), listAssessments(vehicleId), listCycles(), listPursuits(vehicleId),
       listAsks(vehicleId), listAssets(), listSends(), listAnswers(), coverageGaps(),
-      listEdges(), connectorLoad(),
+      tierCounts(), connectorLoad(),
     ]);
 
   const t = totals.find((x) => x.vehicleId === vehicleId);
@@ -179,11 +179,12 @@ export async function assessVehicle(
       + 'shared board are discovery clues, and they are not counted here.',
     levers: ['route', 'convene'],
   });
-  const tierAB = edges.filter((e) => e.tier === 'A' || e.tier === 'B').length;
+  const edgeTotal = edgeTiers.reduce((sum, e) => sum + e.n, 0);
+  const tierAB = edgeTiers.filter((e) => e.tier === 'A' || e.tier === 'B').reduce((sum, e) => sum + e.n, 0);
   add({
     key: 'graph', group: 'Access', label: 'Edges that can carry a route',
-    value: `${tierAB} of ${edges.length}`,
-    verdict: edges.length === 0 ? 'unknown' : verdictFrom(pct(tierAB, edges.length), 0.4, 0.6),
+    value: `${tierAB} of ${edgeTotal}`,
+    verdict: edgeTotal === 0 ? 'unknown' : verdictFrom(pct(tierAB, edgeTotal), 0.4, 0.6),
     detail: 'Tiers A and B. C and D need a human before either can carry anything.',
     levers: ['enrich', 'route'],
   });

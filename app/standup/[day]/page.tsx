@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -52,7 +53,7 @@ function ItemRow({ i }: { i: Item }) {
   );
 }
 
-export default async function Standup({ params }: { params: Promise<{ day: string }> }) {
+async function Standup({ params }: { params: Promise<{ day: string }> }) {
   const { day } = await params;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) notFound();
 
@@ -412,3 +413,5 @@ export default async function Standup({ params }: { params: Promise<{ day: strin
     </Page>
   );
 }
+
+export default coalescePage('/standup/[day]', Standup);

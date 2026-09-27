@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
@@ -11,7 +12,7 @@ export const dynamic = 'force-dynamic';
 
 const KIND_LABEL: Record<string, string> = { fund: 'Fund', spv: 'SPV', grant_rail: 'Grants rail' };
 
-export default async function Vehicles() {
+async function Vehicles() {
   const selection = await vehicleSelection();
   const [totals, exposures, pursuits] = await Promise.all([
     vehicleTotals(), listExposures(), listPursuits(),
@@ -185,3 +186,5 @@ export default async function Vehicles() {
     </Page>
   );
 }
+
+export default coalescePage('/vehicles', Vehicles);

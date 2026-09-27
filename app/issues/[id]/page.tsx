@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -10,7 +11,7 @@ import { shortDate } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
-export default async function IssueDetail({ params }: { params: Promise<{ id: string }> }) {
+async function IssueDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const sink = await issueSink();
   const issue = await sink.get(id);
@@ -150,3 +151,5 @@ export default async function IssueDetail({ params }: { params: Promise<{ id: st
     </Page>
   );
 }
+
+export default coalescePage('/issues/[id]', IssueDetail);

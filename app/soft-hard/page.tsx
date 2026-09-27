@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -10,7 +11,7 @@ import { INSTRUMENT_LABEL, listExposures, vehicleTotals } from '@/modules/pipeli
 
 export const dynamic = 'force-dynamic';
 
-export default async function SoftHard() {
+async function SoftHard() {
   const selection = await vehicleSelection();
   const [totals, exposures] = await Promise.all([
     vehicleTotals(),
@@ -249,3 +250,5 @@ export default async function SoftHard() {
     </Page>
   );
 }
+
+export default coalescePage('/soft-hard', SoftHard);

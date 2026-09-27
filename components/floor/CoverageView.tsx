@@ -19,13 +19,14 @@ import { compactUsd } from './shared';
  */
 
 const MARK_GLYPH: Record<CellMark, string> = {
-  recorded: '●', unconfirmed: '◐', restricted: '!', missing: '–',
+  recorded: '●', unconfirmed: '◐', restricted: '!', missing: '–', unknown: '?',
 };
 const MARK_LABEL: Record<CellMark, string> = {
   recorded: 'Recorded',
   unconfirmed: 'Recorded but unconfirmed',
   restricted: 'A restriction is on file',
   missing: 'Not recorded',
+  unknown: 'Not inspected',
 };
 
 export function CoverageView({ coverage }: { coverage: Coverage }) {
@@ -45,7 +46,7 @@ export function CoverageView({ coverage }: { coverage: Coverage }) {
                 <b>{t.recorded}</b><span>/{t.of}</span>
               </div>
               <div className="covbar"><i style={{ width: `${pct}%` }} /></div>
-              <div className="covmiss">{t.of - t.recorded} not recorded</div>
+              <div className="covmiss">{t.of - t.recorded} not established</div>
             </div>
           );
         })}
@@ -115,6 +116,7 @@ export function CoverageView({ coverage }: { coverage: Coverage }) {
         <span><i className="cg m-unconfirmed">◐</i> unconfirmed</span>
         <span><i className="cg m-restricted">!</i> restriction on file</span>
         <span><i className="cg m-missing">–</i> not recorded</span>
+        <span><i className="cg m-unknown">?</i> not inspected</span>
         <span>Least recorded first · presence, never quality</span>
       </div>
       <p className="cover">{coverage.note}</p>

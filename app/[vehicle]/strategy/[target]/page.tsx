@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -83,7 +84,7 @@ function Board({
   );
 }
 
-export default async function TargetStrategy({
+async function TargetStrategy({
   params,
 }: {
   params: Promise<{ vehicle: string; target: string }>;
@@ -573,3 +574,5 @@ const LEVERS_FOR_NEED: Record<string, string[]> = {
   timing: ['convene', 'reach'],
   permission: ['enrich', 'convince', 'process'],
 };
+
+export default coalescePage('/[vehicle]/strategy/[target]', TargetStrategy);

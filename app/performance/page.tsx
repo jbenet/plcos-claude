@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { listSyncSources } from '@/modules/platform';
@@ -6,7 +7,7 @@ import { listPursuits, RUNG_LABEL } from '@/modules/strategy';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Performance() {
+async function Performance() {
   const [assets, sends, sources, pursuits] = await Promise.all([
     listAssets(), listSends(), listSyncSources(), listPursuits(),
   ]);
@@ -148,3 +149,5 @@ export default async function Performance() {
     </Page>
   );
 }
+
+export default coalescePage('/performance', Performance);

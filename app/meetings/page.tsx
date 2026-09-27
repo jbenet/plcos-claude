@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
@@ -10,7 +11,7 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-export default async function Meetings({
+async function Meetings({
   searchParams,
 }: {
   searchParams: Promise<{ e?: string }>;
@@ -274,3 +275,5 @@ export default async function Meetings({
     </Page>
   );
 }
+
+export default coalescePage('/meetings', Meetings);

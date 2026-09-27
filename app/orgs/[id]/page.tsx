@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -11,9 +12,9 @@ import { assessmentsForEntity, listAssessments, BLOCKER_LABEL } from '@/modules/
 import { listSyncSources } from '@/modules/platform';
 import { listExposures } from '@/modules/pipeline';
 import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/modules/strategy';
-import { listEdges, TIER_MEANING } from '@/modules/network';
+import { listEdgesForEntities, TIER_MEANING } from '@/modules/network';
 import { restrictionsFor, listAsks } from '@/modules/coordination';
-import { ROLE_LABEL, relationshipRoles, listAffiliations, orgsFor, peopleAt, type RelationshipRole } from '@/modules/identity';
+import { ROLE_LABEL, relationshipRoles, affiliationsFor, orgsFor, peopleAt, type RelationshipRole } from '@/modules/identity';
 import { OrgsFor, PeopleAt } from '@/components/entity/People';
 import { EntityLink } from '@/components/entity/EntityLink';
 import { ConnectionFeedback } from '@/components/routes/ConnectionFeedback';
@@ -38,31 +39,30 @@ const BLOCKER_FLAG: Record<string, string> = {
   fit: 'f-ev', timing: 'f-mute', awareness: 'f-mute', none: 'f-ok',
 };
 
-export default async function OrgPage({ params }: { params: Promise<{ id: string }> }) {
+async function OrgPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const entity = await getEntity(id);
   if (!entity) notFound();
 
-  const [claims, docs, notes, coverage, sources, fit, exposures, pursuits, edges,
+  const [claims, notes, coverage, sources, fit, exposures, pursuits, edges,
          restrictions, roles, asks] = await Promise.all([
     claimsFor(entity.entityId),
-    listSourceDocs(),
     notesFor(entity.entityId),
     corpusCoverage(),
     listSyncSources(),
     assessmentsForEntity(entity.entityId),
     listExposures(null),
     listPursuits(null),
-    listEdges(),
+    listEdgesForEntities([entity.entityId]),
     restrictionsFor(entity.entityId),
-    relationshipRoles(),
+    relationshipRoles([entity.entityId]),
     listAsks(null),
   ]);
   const [allFit, people, sits, everyAffiliation] = await Promise.all([
     listAssessments(null),
     peopleAt(entity.entityId),
     orgsFor(entity.entityId),
-    listAffiliations(),
+    affiliationsFor([entity.entityId]),
   ]);
   const isPerson = entity.entityType === 'person';
 
@@ -97,6 +97,7 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
     assessment: fit.find((f) => f.vehicleId === vid) ?? null,
   }));
 
+  const docs = await listSourceDocs([...new Set([...claims.map(c => c.provenance.source), ...ties.flatMap(e => e.evidence.flatMap(v => v.doc ? [v.doc] : []))])]);
   const docMap = new Map<string, EvidenceDoc>(
     docs.map((d) => [
       d.docId,
@@ -422,7 +423,7 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
           <div className="chead">
             <h2>How we reach them, and what has been spent</h2>
             <span className="lbl">
-              {ties.length} tie{ties.length === 1 ? '' : 's'} · {askedOf.length} ask
+              {ties.length} ties shown · first 100 on file · {askedOf.length} ask
               {askedOf.length === 1 ? '' : 's'} made to them · {carried.length} carried by them
             </span>
           </div>
@@ -599,3 +600,5 @@ export default async function OrgPage({ params }: { params: Promise<{ id: string
     </Page>
   );
 }
+
+export default coalescePage('/orgs/[id]', OrgPage);

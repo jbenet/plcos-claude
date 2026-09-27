@@ -4,7 +4,7 @@ import { listAssets } from '@/modules/content';
 import { listOpenTickets } from '@/modules/governance';
 import { coverageGaps } from '@/modules/library';
 import { listMeetings, listObjections, listQuestions } from '@/modules/meetings';
-import { listEdges } from '@/modules/network';
+import { entityForUser, listEdgeSummariesForEntities } from '@/modules/network';
 import { poolChecks } from '@/modules/pipeline';
 import { listUsers, listVehicles } from '@/modules/platform';
 import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/modules/strategy';
@@ -31,10 +31,10 @@ const days = (from: Date, to: Date) => Math.round((to.getTime() - from.getTime()
 export async function lenses(scopeSlug: string | null, floor: FloorState): Promise<Lenses> {
   const now = new Date();
   const [
-    users, vehicles, edges, asks, restrictions, conflicts, tickets, meetings,
+    users, vehicles, asks, restrictions, conflicts, tickets, meetings,
     objections, questions, assets, gaps, pools, loads, runs, pursuits,
   ] = await Promise.all([
-    listUsers(), listVehicles(), listEdges(), listAsks(null), listRestrictions(),
+    listUsers(), listVehicles(), listAsks(null), listRestrictions(),
     listConflicts('open'), listOpenTickets(), listMeetings(), listObjections(), listQuestions(),
     listAssets(), coverageGaps(), poolChecks(), connectorLoad(), listRuns(60), listPursuits(null),
   ]);
@@ -42,7 +42,15 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
   const inScope = (name: string | null) => scopeSlug === null
     || vehicles.find((v) => v.slug === scopeSlug)?.name === name;
   const items = floor.items;
-  const byEntity = new Map(items.map((i) => [i.entityId, i]));
+  // GUESS: 1,000 edges keep the foreground canvas readable and its work bounded.
+  const edgeLimit = 1000;
+  const owners = await Promise.all(users.map((u) => entityForUser(u.handle)));
+  const edgePreview = await listEdgeSummariesForEntities([...new Set([
+    ...items.map((i) => i.entityId), ...owners.flatMap((o) => o ? [o.entityId] : []),
+  ])], edgeLimit);
+  const edges = edgePreview.edges;
+  const previewNote = `Showing the first ${edgeLimit.toLocaleString('en-US')} recorded edges touching these LPs or the team. `
+    + (edgePreview.truncated ? 'More edges exist; absence here does not mean no recorded connection. ' : '');
   const restrictedIds = new Set(restrictions.map((r) => r.entityId));
   const teamNames = new Set(users.map((u) => u.name));
 
@@ -54,7 +62,7 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
    * touches one of us, or a connector on an ask. Being in the address book is not being an
    * advocate, and the drawing would be unreadable and dishonest if it were.
    */
-  const ourEntities = new Map<string, string>(); // entityId → our name
+  const ourEntities = new Map(owners.flatMap((o) => o ? [[o.entityId, o.name] as const] : []));
   for (const e of edges) {
     if (teamNames.has(e.fromName)) ourEntities.set(e.fromEntity, e.fromName);
     if (teamNames.has(e.toName)) ourEntities.set(e.toEntity, e.toName);
@@ -168,23 +176,36 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
   }
 
   const paths: NetPath[] = [];
-  for (const ol of links.filter((l) => l.from.startsWith('u:'))) {
-    for (const al of links.filter((l) => l.from === ol.to)) {
-      const owner = nodes.find((n) => n.id === ol.from)?.name ?? '';
-      const advocate = nodes.find((n) => n.id === ol.to)?.name ?? '';
-      const target = nodes.find((n) => n.id === al.to);
+  const nodesById = new Map(nodes.map((n) => [n.id, n]));
+  const outgoing = new Map<string, NetLink[]>();
+  for (const link of links) {
+    const bucket = outgoing.get(link.from);
+    if (bucket) bucket.push(link);
+    else outgoing.set(link.from, [link]);
+  }
+  const pathLabels = new Set<string>();
+  // GUESS: a canvas and its equal path list show at most 1,000 path labels.
+  const pathLimit = 1000;
+  let pathsTruncated = false;
+  pathScan: for (const ol of links.filter((l) => l.from.startsWith('u:'))) {
+    for (const al of outgoing.get(ol.to) ?? []) {
+      const owner = nodesById.get(ol.from)?.name ?? '';
+      const advocate = nodesById.get(ol.to)?.name ?? '';
+      const target = nodesById.get(al.to);
       if (!target) continue;
       const state = al.state === 'restricted' || ol.state === 'restricted' ? 'restricted'
         : al.state === 'unconfirmed' || ol.state === 'unconfirmed' ? 'unconfirmed' : 'confirmed';
       const label = `${owner} → ${advocate} → ${target.name}`;
-      if (paths.some((p) => p.label === label)) continue;
+      if (pathLabels.has(label)) continue;
+      if (paths.length === pathLimit) { pathsTruncated = true; break pathScan; }
+      pathLabels.add(label);
       paths.push({ label, owner, advocate, target: target.name, state, why: al.why });
     }
   }
 
   const network: Network = {
     nodes, links, paths,
-    note: 'A line is a recorded edge or a carried ask, never an assumption that two people who '
+    note: previewNote + (pathsTruncated ? `Showing the first ${pathLimit.toLocaleString('en-US')} paths. ` : '') + 'A line is a recorded edge or a carried ask, never an assumption that two people who '
       + 'were in the same room can introduce each other. Tier A and B count as confirmed; C and '
       + 'D need a person to sign off before they carry anything.',
   };
@@ -355,10 +376,11 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
 
     const confirmed = confirmedEdgeFor(i.entityId);
     const anyEdge = anyEdgeFor(i.entityId);
-    put('access', i.restricted ? 'restricted' : confirmed ? 'recorded' : anyEdge ? 'unconfirmed' : 'missing',
+    put('access', i.restricted ? 'restricted' : confirmed ? 'recorded' : anyEdge ? 'unconfirmed' : edgePreview.truncated ? 'unknown' : 'missing',
       i.restricted ? 'A do-not-approach instruction is on file.'
         : confirmed ? `Confirmed ${confirmed.kind.replace(/_/g, ' ')}, tier ${confirmed.tier}.`
         : anyEdge ? `Only ${anyEdge.tier}-tier, unconfirmed — a clue, not a route.`
+        : edgePreview.truncated ? 'No edge in the bounded preview; more edges were not inspected.'
         : 'No recorded edge touches them.');
 
     const ex = exchangeFor(i.entityId);
@@ -389,7 +411,7 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
       recorded: rows.filter((r) => r.cells[f.key]!.mark === 'recorded').length,
       of: rows.length,
     })),
-    note: 'Presence, not quality. A recorded field can still be wrong, and a missing one can be '
+    note: previewNote + 'Presence, not quality. A recorded field can still be wrong, and a missing one can be '
       + 'legitimate — what it cannot be is invisible. Rows with the least recorded come first, '
       + 'because that is where a confident-sounding brief would be most dangerous.',
   };

@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -12,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 const TYPE: Record<string, string> = { company: 'Organizations', opportunity: 'Opportunities', person: 'People' };
 
-export default async function AffinityLists() {
+async function AffinityLists() {
   const demo = config.data.profile === 'demo';
   const ready = affinityReady();
   const [found, init] = await Promise.all([discovered(), initForMatching()]);
@@ -255,3 +256,5 @@ export default async function AffinityLists() {
     </Page>
   );
 }
+
+export default coalescePage('/dev/affinity/lists', AffinityLists);

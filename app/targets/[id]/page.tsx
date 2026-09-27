@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -44,7 +45,7 @@ export const dynamic = 'force-dynamic';
 const claimValue = (field: string, value: string) =>
   /_usd$/.test(field) && Number.isFinite(Number(value)) ? usdCompact(Number(value)) : value;
 
-export default async function TargetWorkspace({ params, searchParams }: {
+async function TargetWorkspace({ params, searchParams }: {
   params: Promise<{ id: string }>;
   /** The timeline's filter and page size (N81): a vehicle's slug, 'unclear' or 'none'; how many rows. */
   searchParams: Promise<{ tl?: string; tln?: string }>;
@@ -503,3 +504,5 @@ export default async function TargetWorkspace({ params, searchParams }: {
     </Page>
   );
 }
+
+export default coalescePage('/targets/[id]', TargetWorkspace);

@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { PipelineTable, type PipelineRow } from '@/components/strategy/PipelineTable';
 import { vehicleSelection } from '@/lib/session';
@@ -26,7 +27,7 @@ function aheadOfStatus(p: Pursuit, s: TouchpointSummary): boolean {
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
-export default async function Pipeline({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+async function Pipeline({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [sp, selection] = await Promise.all([searchParams, vehicleSelection()]);
   const one = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : undefined);
   const asked = one('status');
@@ -195,3 +196,5 @@ export default async function Pipeline({ searchParams }: { searchParams: Promise
     </Page>
   );
 }
+
+export default coalescePage('/targets', Pipeline);
