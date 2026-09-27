@@ -3,7 +3,7 @@ import { correctPipelineEntityTypes, type EntityTypeReport } from './entity-type
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { getDb } from '@/lib/db';
+import { getDb, type Queryable } from '@/lib/db';
 import { finishRun, startRun } from '@/modules/sources';
 import { addOrganizationLps, type OrganizationLpCounts } from './organization-lps';
 import { readWarehouseGraph } from './connect';
@@ -65,20 +65,43 @@ const day = (s: string | null | undefined, fallback: string) => {
   return m ? `${m[1]}-${m[2] ?? '01'}-${m[3] ?? '01'}` : fallback;
 };
 
+/** Keep file validation keyed to the original filename; resolve identity only for DB writes. */
+async function importEntityKeys(tx: Queryable, keys: string[]): Promise<Map<string, string>> {
+  const resolved = new Map<string, string>();
+  const uuids = [...new Set(keys.filter(isEntityKey))];
+  const entities = await tx.query<{ key: string; id: string }>(
+    `select entity_id::text key, identity.canonical_entity_id(entity_id)::text id
+       from identity.entity where entity_id = any($1::uuid[])`, [uuids]);
+  const canonical = new Map(entities.map(e => [e.key, e.id]));
+  // Unknown UUIDs retain the existing not-in-system / no-pursuit handling.
+  for (const key of uuids) resolved.set(key, canonical.get(key.toLowerCase()) ?? key.toLowerCase());
+  const aliases = await tx.query<{ key: string; id: string }>(
+    `select distinct source_id key, identity.canonical_entity_id(entity_id)::text id
+       from identity.source_record where source_id = any($1::text[])
+         and (source = 'prospect_key' or (source = 'warehouse' and source_id like 'member:%'))`,
+    [[...new Set(keys.filter(k => !isEntityKey(k)))]]);
+  const candidates = new Map<string, Set<string>>();
+  for (const row of aliases) candidates.set(row.key, (candidates.get(row.key) ?? new Set()).add(row.id));
+  // Never pick between conflicting namespaces by row order.
+  for (const [key, ids] of candidates) if (ids.size === 1) resolved.set(key, [...ids][0]!);
+  return resolved;
+}
+const unmappedKey = (key: string) => `key ${key} is not mapped yet; run Add prospects (or Import portfolio) first`;
+
 export async function importFindings(runBy: string | null, dir = enrichDir()): Promise<ImportCounts> {
   const counts: ImportCounts = { files: 0, mapped: 0, rejected: 0, unresolved: 0, notInSystem: 0, claims: 0, keptVerified: 0, docs: 0, profiles: 0, withPaths: 0, paths: 0, skippedPaths: 0, skippedRecords: [], strategies: 0, proposed: 0, withdrawn: 0, triaged: 0, problems: [] };
   const run = await startRun('enrich', 'import', runBy);
   try {
     const files = (await readdir(join(dir, 'raw')).catch(() => [])).filter((f) => f.endsWith('.json'));
     counts.files = files.length;
-    const findings: Finding[] = [];
+    let findings: Finding[] = [];
     const findingRecords: LocatedRecord[] = [];
     for (const f of files) {
       const key = f.replace(/\.json$/, '');
       let x: unknown;
       try { x = JSON.parse(await readFile(join(dir, 'raw', f), 'utf8')); } catch { counts.rejected++; counts.problems.push({ key, problems: ['not JSON'] }); continue; }
       findingRecords.push({ file: `raw/${f}`, index: 0, value: x });
-      const problems = [...check(x, key), ...(!isEntityKey(key) ? ['key must be an entity UUID'] : [])];
+      const problems = check(x, key);
       if (problems.length) { counts.rejected++; counts.problems.push({ key, problems }); continue; }
       findings.push(x as Finding);
     }
@@ -104,20 +127,36 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       triage.push(value);
     }
     // W5: one strategy per LP, checked like the findings.
-    const strategies: Array<{ s: Strategy; hash: string }> = [];
+    let strategies: Array<{ s: Strategy; hash: string; fileKey: string }> = [];
     for (const f of (await readdir(join(dir, 'strategy')).catch(() => [])).filter((x) => x.endsWith('.json'))) {
       const key = f.replace(/\.json$/, '');
       const text = await readFile(join(dir, 'strategy', f), 'utf8');
       let x: unknown;
       try { x = JSON.parse(text); } catch { counts.problems.push({ key, problems: ['strategy: not JSON'] }); continue; }
-      const problems = [...checkStrategy(x, key), ...(!isEntityKey(key) ? ['key must be an entity UUID'] : [])];
+      const problems = checkStrategy(x, key);
       if (problems.length) { counts.problems.push({ key, problems: problems.map((q) => `strategy: ${q}`) }); continue; }
-      strategies.push({ s: x as Strategy, hash: createHash('sha1').update(text).digest('hex') });
+      strategies.push({ s: x as Strategy, hash: createHash('sha1').update(text).digest('hex'), fileKey: key });
     }
-    counts.strategies = strategies.length;
-
     const db = await getDb();
     await db.transaction(async (tx) => {
+      // The same lock used by prospect/portfolio identity writers keeps resolution and writes
+      // together when another import or merge is running.
+      await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
+      const keysByFile = await importEntityKeys(tx, [...findings.map(f => f.key), ...strategies.map(s => s.s.key)]);
+      findings = findings.flatMap(f => {
+        const id = keysByFile.get(f.key);
+        if (id) return [{ ...f, key: id }];
+        counts.rejected++;
+        counts.problems.push({ key: f.key, problems: [unmappedKey(f.key)] });
+        return [];
+      });
+      strategies = strategies.flatMap(record => {
+        const id = keysByFile.get(record.s.key);
+        if (id) return [{ ...record, s: { ...record.s, key: id } }];
+        counts.problems.push({ key: record.fileKey, problems: [`strategy: ${unmappedKey(record.fileKey)}`] });
+        return [];
+      });
+      counts.strategies = strategies.length;
       counts.entityTypes = await correctPipelineEntityTypes(tx, findings, parsedPaths.records.map(r => r.value as Path), runBy ?? 'system:identity-import');
       counts.pursuitMerges = await consolidatePursuitsInTransaction(tx, runBy);
       const orgs = await tx.query<{ name: string }>("select display_name as name from identity.entity where entity_type = 'org'");
@@ -202,7 +241,7 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
 
       // Strategies become suggestions on the LP's open pursuit: the same file again changes
       // nothing; a new one withdraws the open proposal it replaces; decided ones stay as they are.
-      for (const { s: st, hash } of strategies) {
+      for (const { s: st, hash, fileKey } of strategies) {
         const pursuit = await tx.one<{ id: string }>(
           `select p.pursuit_id::text as id from strategy.active_pursuit p
              join platform.vehicle v on v.id = p.vehicle_id
@@ -211,7 +250,7 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
             order by (p.entity_id = identity.canonical_entity_id(p.entity_id)) desc, p.opened_at, p.pursuit_id limit 1`,
           [st.key, st.ask.vehicle]);
         if (!pursuit) {
-          counts.problems.push({ key: st.key, problems: ['strategy: no open pursuit in the named vehicle; not imported'] });
+          counts.problems.push({ key: fileKey, problems: ['strategy: no open pursuit in the named vehicle; not imported; retried on the next import once the pursuit exists'] });
           continue;
         }
         const seen = await tx.one<{ n: string }>(`select count(*)::text as n from strategy.suggestion where pursuit_id = $1 and file_hash = $2`, [pursuit.id, hash]);
