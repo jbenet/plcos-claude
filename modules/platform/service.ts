@@ -19,6 +19,8 @@ export interface FeedbackCommand {
    * from 1; the screenshot, when included, takes slot 1 — so the tokens shift by one.
    */
   imageOffset?: number;
+  /** The browser journal's id for this report (lib/feedback-journal.ts): a resend files nothing new. */
+  clientId?: string;
 }
 
 /**
@@ -45,7 +47,10 @@ export async function fileFeedback(user: AppUser | { handle: string; resolveUser
     context,
     attachments: cmd.attachments ?? [],
     tokenOffset: cmd.imageOffset ?? 0,
+    ...(cmd.clientId ? { clientId: cmd.clientId } : {}),
   });
+  // A resend of a report already filed: its database row and audit entry were queued the first time.
+  if (issue.repeat) return issue;
 
   void bestEffortDb(async signal => {
     const q = cancellableDb(await getDb(), signal);

@@ -44,6 +44,7 @@ async function main() {
   await (await import('./properties/triage-export')).triageExportProperties(check);
 
   await cleanTestPostgres();
+  await (await import('./properties/feedback-journal')).feedbackJournalProperties(check);
 
   const failed = results.filter((r) => !r.ok);
   for (const r of results) {

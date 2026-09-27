@@ -32,6 +32,12 @@ export interface ParsedIssue {
    * changing a status on the issues page never drops them.
    */
   extra?: string[];
+  /**
+   * The feedback box's idempotency key (`client_id:`), when it sent one: the report's id in the
+   * browser's journal (lib/feedback-journal.ts). Kept in `extra` like any unmanaged line, and read
+   * here so the sink can answer a resend with the issue it already filed.
+   */
+  clientId?: string | null;
 }
 
 const COMMENTED = new Set(['status', 'kind', 'priority']);
@@ -95,6 +101,7 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
     page: str('page', ''),
     created: str('created', ''),
     closedAt: str('closed_at') || null,
+    clientId: str('client_id') || null,
     labels: Array.isArray(fields['labels']) ? (fields['labels'] as string[]) : [],
     screenshots,
     attachments,

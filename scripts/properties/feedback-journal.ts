@@ -1,0 +1,154 @@
+/**
+ * The feedback journal (Juan, 27 Sep: feedback lost while an import pegged the server). The browser
+ * keeps each report and resends it; these hold the three rules that make that safe: the server
+ * files one issue per client id however often it is sent, the resends follow the backoff, and an
+ * entry leaves the journal only on a confirmed issue number. Invented fixtures only.
+ */
+import type { Check } from './harness';
+import {
+  BACKOFF_CAP_MS, BACKOFF_MS, classify, due, isClientId, retryDelay, settle, type JournalEntry,
+} from '../../lib/feedback-journal';
+import { newRequestKey } from '../../lib/request-key';
+
+const entry = (clientId: string, over: Partial<JournalEntry> = {}): JournalEntry => ({
+  clientId,
+  createdAt: '2026-09-27T12:00:00.000Z',
+  request: {
+    title: 'Invented report', body: 'Fixture only.', kind: 'bug', priority: 'P2', page: '/today',
+    context: {}, screenshots: [], images: [], imageOffset: 0,
+  },
+  attempts: 0, nextAt: 0, lastError: null, refused: false,
+  ...over,
+} as JournalEntry);
+
+export async function feedbackJournalProperties(check: Check) {
+  // ---------------------------------------------------------------- backoff
+  {
+    const first = [1, 2, 3, 4, 5, 6, 50, 1000].map(retryDelay);
+    const monotone = Array.from({ length: 200 }, (_, i) => retryDelay(i + 1)).every((d, i, all) => i === 0 || d >= all[i - 1]!);
+    const odd = [0, -3, Number.NaN, Number.POSITIVE_INFINITY].map(retryDelay);
+    check('Feedback journal: resends back off 5 s, 15 s, 60 s, then every 2 minutes, never faster and never slower',
+      first.join(',') === '5000,15000,60000,120000,120000,120000,120000,120000'
+        && BACKOFF_MS.join(',') === '5000,15000,60000' && BACKOFF_CAP_MS === 120_000
+        && monotone && odd.every((d) => d === 5_000),
+      `delays after 1–6, 50 and 1,000 failures: ${first.map((d) => d / 1000).join(', ')} s; nonsense counts wait 5 s`);
+
+    // Through settle: each unconfirmed send reschedules at now + the delay for its new count.
+    let list = [entry('a1b2c3d4-0000-4000-8000-000000000001')];
+    const waits: number[] = [];
+    let now = 1_000_000;
+    for (let i = 0; i < 7; i++) {
+      list = settle(list, list[0]!.clientId, { kind: 'retry', error: 'No answer within 8 s' }, now);
+      waits.push(list[0]!.nextAt - now);
+      now = list[0]!.nextAt;
+    }
+    check('Feedback journal: each unconfirmed send counts once and waits the schedule’s delay for that count',
+      waits.join(',') === '5000,15000,60000,120000,120000,120000,120000' && list[0]!.attempts === 7
+        && !due(list[0]!, now - 1, false) && due(list[0]!, now, false) && due(list[0]!, now - 1, true),
+      `waits ${waits.map((w) => w / 1000).join(', ')} s; due on its clock, or at once on a kick`);
+  }
+
+  // ---------------------------------------------------------------- removal only on a confirmed id
+  {
+    let seed = 20260927;
+    const rand = () => ((seed = (seed * 48271) % 2147483647) / 2147483647);
+    const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)]!;
+    const statuses = [null, 200, 201, 204, 302, 400, 403, 404, 408, 413, 429, 500, 502, 503] as const;
+    let removedWrongly = 0, keptWrongly = 0, touchedOthers = 0, refusedWrongly = 0, runs = 0;
+    for (let trial = 0; trial < 300; trial++) {
+      let list = Array.from({ length: 1 + Math.floor(rand() * 4) }, () => entry(newRequestKey()));
+      for (let step = 0; step < 12 && list.length; step++) {
+        runs += 1;
+        const target = pick(list);
+        const other = newRequestKey();
+        const status = pick(statuses);
+        const json = pick([
+          null, 'not json', {}, { error: 'Invented refusal' },
+          { id: '0042', clientId: target.clientId },
+          { id: '0042', clientId: target.clientId, repeat: true },
+          { id: '0042' },
+          { id: '0042', clientId: other },
+          { id: 'NaN', clientId: target.clientId },
+          { id: '', clientId: target.clientId },
+          { id: 42, clientId: target.clientId },
+          { location: 'issues/0042-x.md', clientId: target.clientId },
+        ] as const);
+        const outcome = classify(target.clientId, status, json, status === null ? 'Could not reach the server' : undefined);
+        const confirmed = status !== null && status >= 200 && status < 300 && !!json && typeof json === 'object'
+          && 'id' in json && typeof json.id === 'string' && /^\d+$/.test(json.id)
+          && 'clientId' in json && json.clientId === target.clientId;
+        const before = list;
+        list = settle(list, target.clientId, outcome, 5_000_000 + step);
+        const gone = !list.some((e) => e.clientId === target.clientId);
+        if (gone && !confirmed) removedWrongly += 1;
+        if (!gone && confirmed) keptWrongly += 1;
+        for (const e of before) if (e.clientId !== target.clientId && !list.includes(e)) touchedOthers += 1;
+        const shouldRefuse = status !== null && status >= 400 && status < 500 && status !== 408 && status !== 429;
+        const after = list.find((e) => e.clientId === target.clientId);
+        if (after && after.refused !== shouldRefuse) refusedWrongly += 1;
+        if (after && due(after, Number.MAX_SAFE_INTEGER, true) === after.refused) refusedWrongly += 1;
+      }
+    }
+    check('Feedback journal: an entry leaves only when a 2xx names an issue number and echoes its client id',
+      removedWrongly === 0 && keptWrongly === 0 && touchedOthers === 0,
+      `${runs} invented sends over 300 journals (timeouts, 5xx, redirects, empty and foreign 200s): ${removedWrongly} removed unconfirmed, ${keptWrongly} kept confirmed, ${touchedOthers} other entries touched`);
+    check('Feedback journal: a 4xx refusal waits for Retry now; timeouts, 408, 429 and 5xx retry on the clock',
+      refusedWrongly === 0,
+      `${refusedWrongly} entries marked wrongly; a refused entry is never due, even on a kick`);
+
+    const id = newRequestKey();
+    const note = { ...entry(id), target: 'connection' as const, request: { lp: newRequestKey(), page: '/routes', text: 'Invented note.' } };
+    const ok = classify(id, 200, { id, at: '2026-09-27T12:00:00Z' }, undefined, 'connection');
+    const noTime = classify(id, 200, { id }, undefined, 'connection');
+    const foreign = classify(id, 200, { id: newRequestKey(), at: '2026-09-27T12:00:00Z' }, undefined, 'connection');
+    check('Feedback journal: a connection note leaves only on a receipt with its own id and a time',
+      ok.kind === 'filed' && noTime.kind === 'retry' && foreign.kind === 'retry'
+        && settle([note], id, noTime, 0).length === 1 && settle([note], id, ok, 0).length === 0,
+      'receipt without a time, or for another note, keeps it');
+  }
+
+  // ---------------------------------------------------------------- dedupe by client id
+  {
+    const { mkdtemp, readdir, readFile, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join, relative } = await import('node:path');
+    const { fileIssueSink } = await import('../../lib/issues/file');
+    const dir = await mkdtemp(join(tmpdir(), 'plcos-fictional-journal-'));
+    try {
+      const sink = fileIssueSink(relative(process.cwd(), dir));
+      const draft = (clientId?: string, title = 'Invented journal report') => ({
+        title, body: 'Fixture only.', kind: 'bug' as const, priority: 'P2' as const, reporter: 'fixture',
+        page: '/today', labels: [], context: null, ...(clientId ? { clientId } : {}),
+      });
+      const a = newRequestKey();
+      const first = await sink.create(draft(a));
+      const resent = await sink.create(draft(a, 'A resend may even carry different words'));
+      // A resend racing the first write, as after a timeout while the server was stalled.
+      const b = newRequestKey();
+      const racing = await Promise.all(Array.from({ length: 6 }, () => sink.create(draft(b))));
+      // Without a client id, concurrent creates still take distinct numbers.
+      const plain = await Promise.all(Array.from({ length: 4 }, () => sink.create(draft())));
+      // A status change keeps the key, and a resend after it still finds the issue.
+      await sink.update(first.id, { status: 'triaged' });
+      const afterEdit = await sink.create(draft(a));
+      const files = (await readdir(dir)).filter((f) => f.endsWith('.md'));
+      const text = await Promise.all(files.map((f) => readFile(join(dir, f), 'utf8')));
+      const withA = text.filter((t) => t.includes(`client_id: ${a}`)).length;
+      const withB = text.filter((t) => t.includes(`client_id: ${b}`)).length;
+      const racingIds = new Set(racing.map((r) => r.id));
+      const plainIds = new Set(plain.map((r) => r.id));
+      check('Feedback journal: the server files one issue per client id, however often and however concurrently it is sent',
+        resent.id === first.id && resent.repeat === true && first.repeat === undefined
+          && racingIds.size === 1 && racing.filter((r) => r.repeat).length === 5
+          && afterEdit.id === first.id && afterEdit.repeat === true
+          && withA === 1 && withB === 1 && files.length === 6 && plainIds.size === 4,
+        `${files.length} files for 2 keyed reports sent 9 times and 4 unkeyed ones; the key survives a status change`);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+    check('Feedback journal: the route accepts only a plain client id, never something that could name a path',
+      isClientId(newRequestKey()) && !isClientId('../../etc/passwd') && !isClientId('short') && !isClientId('x'.repeat(65))
+        && !isClientId(42) && !isClientId(undefined) && !isClientId('a b c d e f g h'),
+      'a v4 UUID passes; traversal, short, long, spaced and non-string ids are refused');
+  }
+}

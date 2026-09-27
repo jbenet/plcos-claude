@@ -14,6 +14,18 @@ const EXT: Record<string, string> = {
 };
 
 /**
+ * One create at a time per folder. Numbers are taken by reading the folder, so two creates at once
+ * could take the same one; and a resend of a report that is still being written must find it
+ * (lib/feedback-journal.ts). Held in-process — only the live server files (docs/COLLAB.md).
+ */
+const creating = new Map<string, Promise<unknown>>();
+function serially<T>(root: string, work: () => Promise<T>): Promise<T> {
+  const result = (creating.get(root) ?? Promise.resolve()).then(work);
+  creating.set(root, result.catch(() => undefined));
+  return result;
+}
+
+/**
  * Issues are files in the repo. The complaint and its fix travel in one pull request,
  * they survive `npm run db:reset`, and `git log issues/` is free triage history.
  */
@@ -42,6 +54,7 @@ export function fileIssueSink(dir: string): IssueSink {
     reporter: p.reporter, page: p.page, labels: p.labels, body: p.body,
     context: p.context, created: p.created, closedAt: p.closedAt ?? null, location: `${dir}/${file}`,
     screenshots: p.screenshots, attachments: p.attachments, fixedIn: p.fixedIn,
+    ...(p.clientId ? { clientId: p.clientId } : {}),
   });
 
   const find = async (id: string) => (await read()).find((r) => r.issue.id === id) ?? null;
@@ -52,8 +65,11 @@ export function fileIssueSink(dir: string): IssueSink {
       ? `${dir}/NNNN-slug.md, with the real data — never committed`
       : `${dir}/NNNN-slug.md in this repository`,
 
-    async create(draft: IssueDraft): Promise<Issue> {
+    create: (draft: IssueDraft) => serially(root, async (): Promise<Issue & { repeat?: boolean }> => {
       const existing = await read();
+      // A resend: the issue this report already made, not a second one.
+      const already = draft.clientId ? existing.find((r) => r.issue.clientId === draft.clientId) : undefined;
+      if (already) return { ...toIssue(already.file, already.issue), repeat: true };
       const next = String(
         existing.reduce((max, r) => Math.max(max, Number(r.issue.id) || 0), 0) + 1,
       ).padStart(4, '0');
@@ -91,9 +107,10 @@ export function fileIssueSink(dir: string): IssueSink {
         },
       );
 
-      const { attachments: _drop, tokenOffset: _offset, ...rest } = draft;
+      const { attachments: _drop, tokenOffset: _offset, clientId, ...rest } = draft;
       const parsed: ParsedIssue = {
         ...rest,
+        ...(clientId ? { clientId, extra: [`client_id: ${clientId}`] } : {}),
         body,
         screenshots,
         attachments: paths,
@@ -104,7 +121,7 @@ export function fileIssueSink(dir: string): IssueSink {
       };
       await writeFile(join(root, file), serializeIssue(parsed), 'utf8');
       return toIssue(file, parsed);
-    },
+    }),
 
     async list(filter?: IssueFilter): Promise<Issue[]> {
       const all = (await read()).map((r) => toIssue(r.file, r.issue));

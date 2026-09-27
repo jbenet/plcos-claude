@@ -6,6 +6,7 @@ import { auth } from '@/lib/auth';
 import { fileFeedback } from '@/modules/platform';
 import type { IssueAttachment, IssueKind, IssuePriority } from '@/lib/issues';
 import { titleFrom } from '@/lib/issues/title';
+import { isClientId } from '@/lib/feedback-journal';
 import { cookies } from 'next/headers';
 import { USER_COOKIE } from '@/lib/auth/local';
 
@@ -24,7 +25,15 @@ export async function POST(req: Request) {
       page?: string; context?: Record<string, unknown>; screenshots?: string[];
       images?: Array<{ name?: string; dataUrl?: string }>;
       imageOffset?: number;
+      /** The browser journal's id for this report (lib/feedback-journal.ts). */
+      clientId?: unknown;
     };
+    // A resend after a timeout that did reach this server must not file twice: the sink answers a
+    // client id it has seen with the issue it already made. Anything else is refused, not ignored.
+    if (body.clientId !== undefined && !isClientId(body.clientId)) {
+      return NextResponse.json({ error: 'The report\'s client id is malformed.' }, { status: 400 });
+    }
+    const clientId = body.clientId as string | undefined;
     /**
      * Intake writes the title when the reporter did not (issue 0012).
      *
@@ -95,9 +104,11 @@ export async function POST(req: Request) {
       context: body.context ?? {},
       attachments,
       imageOffset: body.imageOffset ?? 0,
+      ...(clientId ? { clientId } : {}),
     });
     return NextResponse.json({
       id: issue.id, title: issue.title, location: issue.location, attachments: issue.attachments,
+      ...(clientId ? { clientId, repeat: Boolean(issue.repeat) } : {}),
     });
   } catch (err) {
     return NextResponse.json(

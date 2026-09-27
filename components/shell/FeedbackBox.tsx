@@ -15,6 +15,7 @@ import { MarkdownField, packAttachments, type DroppedImage } from '@/components/
 import {
   discardDraft, listDrafts, readDraft, readPictures, writeDraft, writePictures, type DraftSummary,
 } from '@/lib/feedback-drafts';
+import { enqueue, startOutbox } from '@/lib/feedback-outbox';
 
 type Kind = 'bug' | 'request' | 'question' | 'chore';
 type Priority = 'P0' | 'P1' | 'P2' | 'P3';
@@ -53,6 +54,9 @@ export function FeedbackButton({
 }) {
   const [open, setOpen] = useState(false);
   const { alt } = useShortcutPlatform();
+  // The outbox sends what an earlier page, tab or session kept (lib/feedback-outbox.ts). Every
+  // layout has this button — even the busy-server one without a rail — so it starts here.
+  useEffect(() => { startOutbox(); }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -153,8 +157,6 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   const [editingId, setEditingId] = useState<string | null>(null);
   /** A picture dropped into the description, being drawn on (issue 0018). */
   const [editingImage, setEditingImage] = useState<number | null>(null);
-  /** Everything filed while this box has been open — reports come in batches (issue 0017). */
-  const [filed, setFiled] = useState<Array<{ id: string; title: string }>>([]);
   /** Bumped per report, so the description field starts from nothing rather than from a reset. */
   const [generation, setGeneration] = useState(0);
   const seeded = useRef(false);
@@ -201,8 +203,8 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   const [body, setBody] = useState('');
   const [kind, setKind] = useState<Kind>('bug');
   const [priority, setPriority] = useState<Priority>('P2');
-  const [state, setState] = useState<'idle' | 'sending' | 'done' | 'failed'>('idle');
-  const [result, setResult] = useState<{ id: string; location: string } | null>(null);
+  /** 'saving' is the moment it goes into this browser's outbox; nothing here waits on the server. */
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [imagesPending, setImagesPending] = useState(false);
   const [images, setImages] = useState<DroppedImage[]>([]);
@@ -247,9 +249,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
       }
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        // On the confirmation, the same keys start the next one — reports come in batches.
-        if (doneRef.current) againRef.current?.();
-        else void submitRef.current?.();
+        void submitRef.current?.();
       }
       if (isShortcutsKey(e)) {
         e.preventDefault();
@@ -323,17 +323,16 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   }, []);
 
   useEffect(() => {
-    if (hydrating.current || state === 'done') return;
+    if (hydrating.current || state === 'saved') return;
     writeDraft(draftPage, worthKeeping
       ? { title, body, kind, priority, at: new Date().toISOString(), pictures: shots.length + images.length }
       : null);
   }, [title, body, kind, priority, shots, images, draftPage, state, worthKeeping]);
   // Pictures change rarely — taken, drawn on, removed — so each change is written as it happens.
   useEffect(() => {
-    if (hydrating.current || state === 'done') return;
+    if (hydrating.current || state === 'saved') return;
     void writePictures<Shot, DroppedImage>(draftPage, worthKeeping ? { shots, images } : null);
   }, [shots, images, draftPage, state, worthKeeping]);
-  useEffect(() => { if (state === 'done') void discardDraft(draftPage); }, [state, draftPage]);
   useEffect(() => {
     setOthers(listDrafts().filter((d) => d.page !== draftPage));
   }, [draftPage, showDrafts, state]);
@@ -355,64 +354,43 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
 
   const submitRef = useRef<(() => Promise<void>) | null>(null);
 
+  /**
+   * File it (Juan, 27 Sep: "can't submit feedback" while an import pegged the server). The report
+   * goes into this browser's outbox — IndexedDB, or its words in localStorage — and the box closes at
+   * once; the outbox sends it until the server confirms an issue number, and the rail shows it
+   * waiting and then filed (components/shell/FeedbackOutbox.tsx). Only a report this browser could
+   * not keep at all stays in the box, as a draft, with the reason.
+   */
   const submit = async () => {
     if (!title.trim() && !body.trim()) return;
-    if (state === 'sending' || state === 'done' || imagesPending || hydrating.current) return;
-    setState('sending');
+    if (state !== 'idle' && state !== 'failed') return;
+    if (imagesPending || hydrating.current) return;
+    setState('saving');
     setError(null);
     // A picture deleted from the text is not sent (issue 0020) — it may be the wrong one.
     const packed = packAttachments(body, images);
     try {
-      // Finish saving this exact picture set before a request can stall or fail.
-      await writePictures<Shot, DroppedImage>(draftPage, { shots, images });
-      const res = await fetch('/api/feedback', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        // GUESS: a local file receipt should arrive well within 30 seconds. Keep the
-        // draft on timeout because a lost response does not prove filing failed.
-        signal: AbortSignal.timeout(30_000),
-        body: JSON.stringify({
-          title, body: packed.body, kind, priority, page: path, context,
-          screenshots: shots.map((x) => x.dataUrl),
-          images: packed.images.map((i) => ({ name: i.name, dataUrl: i.dataUrl })),
-          /**
-           * The server numbers attachments with the screenshot first, so a body written
-           * against `attachment:1` needs an offset for the screenshots still attached.
-           */
-          imageOffset: shots.length,
-        }),
+      await enqueue({
+        title, body: packed.body, kind, priority, page: path, context,
+        screenshots: shots.map((x) => x.dataUrl),
+        images: packed.images.map((i) => ({ name: i.name, dataUrl: i.dataUrl })),
+        /**
+         * The server numbers attachments with the screenshot first, so a body written
+         * against `attachment:1` needs an offset for the screenshots still attached.
+         */
+        imageOffset: shots.length,
       });
-      const json = (await res.json()) as { id?: string; location?: string; title?: string; error?: string };
-      if (!res.ok || !json.id || !json.location) throw new Error(json.error ?? 'Unknown error');
-      setResult({ id: json.id, location: json.location });
-      setFiled((prev) => [...prev, { id: json.id!, title: json.title ?? title }]);
-      setState('done');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setState('failed');
+      return;
     }
+    // Kept in the outbox now: the draft goes, and nothing autosaves it back on the way out.
+    setState('saved');
+    void discardDraft(draftPage);
+    onClose();
   };
   submitRef.current = submit;
-
-  /**
-   * Start the next report without closing the box (issue 0017).
-   *
-   * Everything specific to the last one goes — its words, its pictures, its kind and
-   * priority — and a fresh automatic screenshot is taken, because the one that was attached
-   * belongs to the issue it was filed with. The page and filters are captured again anyway.
-   */
-  const again = () => {
-    setFailed(false);
-    setError(null);
-    setResult(null);
-    setState('idle');
-    // This page's own draft, if one was kept while another was being filed.
-    load(path, null);
-  };
-  const againRef = useRef<(() => void) | null>(null);
-  againRef.current = again;
-  const doneRef = useRef(false);
-  doneRef.current = state === 'done';
 
   const ui = (
     <>
@@ -454,7 +432,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
       >
         <div className="drawerhead">
           <div className="lbl">Feedback</div>
-          {others.length > 0 && state !== 'done' && (
+          {others.length > 0 && state !== 'saved' && (
             <button
               type="button"
               className="drawerwide"
@@ -475,7 +453,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             {wide ? '⇥ Narrower' : '⇤ Wider'}
           </button>
         </div>
-        {showDrafts && others.length > 0 && state !== 'done' && (
+        {showDrafts && others.length > 0 && state !== 'saved' && (
           <div className="draftlist">
             <div className="lbl">Unsent, kept in this browser · {others.length}</div>
             {others.map((d) => (
@@ -497,46 +475,12 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
           </div>
         )}
 
-        {state === 'done' && result ? (
-          <>
-            <h2>Filed as issue {result.id}</h2>
-            <p className="sublede">
-              Thanks — it is in the queue with this page, your filters and any screenshots
-              attached.
-            </p>
-            <div className="acts three">
-              <button className="btn p" onClick={again} autoFocus>
-                Give more feedback
-              </button>
-              <a className="btn" href={`/developer/issues/${result.id}`} style={{ textAlign: 'center' }}>
-                Open the issue
-              </a>
-              <button className="btn" onClick={onClose}>
-                Close
-              </button>
-            </div>
-            <div className="keyhint">
-              <span><kbd>⌘</kbd><kbd>↵</kbd> another</span>
-              <span><kbd>esc</kbd> close</span>
-            </div>
-            {filed.length > 0 && (
-              <div className="filedlist">
-                <div className="lbl">Filed while this was open · {filed.length}</div>
-                {filed.map((f) => (
-                  <a key={f.id} href={`/developer/issues/${f.id}`} className="filedrow">
-                    <span className="mono">{f.id}</span>
-                    <span>{f.title || 'Untitled'}</span>
-                  </a>
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          <>
+        <>
             <h2>What went wrong?</h2>
             <p className="sublede" style={{ marginBottom: 14 }}>
               A description is enough. The title, the page you are on and your filters are
-              filled in for you.
+              filled in for you. Filing keeps it in this browser first, so a busy or restarting
+              server never loses it.
             </p>
 
             <div className="fbcols">
@@ -693,9 +637,9 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             {state === 'failed' && (
               <div className="warn" style={{ marginTop: 12 }}>
                 <div className="lbl" style={{ color: 'var(--clay)' }}>
-                  Filing not confirmed
+                  Not kept
                 </div>
-                <p>{error}. Your text and pictures are still in this draft. Check the issues list before retrying; the server may have saved the report.</p>
+                <p>This browser could not keep the report to send it ({error}). Your text and pictures are still in this draft; try File again, or copy the text somewhere safe.</p>
               </div>
             )}
             </div>
@@ -704,10 +648,10 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             <div className="acts">
               <button
                 className="btn p"
-                disabled={(!title.trim() && !body.trim()) || state === 'sending' || imagesPending}
+                disabled={(!title.trim() && !body.trim()) || state === 'saving' || imagesPending}
                 onClick={submit}
               >
-                {state === 'sending' ? 'Filing…' : 'File it'}
+                {state === 'saving' ? 'Saving…' : 'File it'}
               </button>
               <button className="btn" onClick={onClose}>
                 Cancel
@@ -727,8 +671,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
               <summary>Captured with it: the page, its filters and the device</summary>
               <div className="ctx">{JSON.stringify(context, null, 2)}</div>
             </details>
-          </>
-        )}
+        </>
       </div>
     </>
   );
