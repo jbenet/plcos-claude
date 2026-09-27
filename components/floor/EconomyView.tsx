@@ -1,5 +1,7 @@
 'use client';
 
+import { Pager, usePage } from './Paging';
+
 import type { BoardState } from '@/lib/board-client';
 
 /**
@@ -18,6 +20,7 @@ const TONE_WORD: Record<string, string> = {
 };
 
 export function EconomyView({ board }: { board: BoardState }) {
+  const paging = usePage([...board.goodwill].sort((a, b) => b.used - a.used));
   return (
     <div className="econview">
       <div className="ecogrid">
@@ -52,7 +55,7 @@ export function EconomyView({ board }: { board: BoardState }) {
           <h2>Goodwill, per connector</h2>
           <span className="lbl">the resource people forget is finite</span>
         </div>
-        <div className="cbody">
+        <Pager {...paging} label="connectors, most used first" /><div className="cbody">
           {board.goodwill.length === 0 ? (
             <p className="muted">
               No ask has been carried through a connector in the last three months. That is a
@@ -69,7 +72,7 @@ export function EconomyView({ board }: { board: BoardState }) {
                 </tr>
               </thead>
               <tbody>
-                {board.goodwill.map((g) => (
+                {paging.rows.map((g) => (
                   <tr key={g.name}>
                     <td><b>{g.name}</b></td>
                     <td>

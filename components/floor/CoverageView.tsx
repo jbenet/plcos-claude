@@ -1,5 +1,7 @@
 'use client';
 
+import { Pager, usePage } from './Paging';
+
 import type { CellMark, Coverage } from '@/lib/lenses-client';
 import { COVERAGE_FIELDS } from '@/lib/lenses-client';
 import { useFloor } from './FloorContext';
@@ -30,8 +32,9 @@ const MARK_LABEL: Record<CellMark, string> = {
 };
 
 export function CoverageView({ coverage }: { coverage: Coverage }) {
+  const paging = usePage(coverage.rows);
   const { select } = useFloor();
-  const vehicles = [...new Set(coverage.rows.map((r) => r.vehicleName))];
+  const vehicles = [...new Set(paging.rows.map((r) => r.vehicleName))];
 
   return (
     <div className="covview">
@@ -52,9 +55,9 @@ export function CoverageView({ coverage }: { coverage: Coverage }) {
         })}
       </div>
 
-      <div className="covgrid">
+      <Pager {...paging} label="coverage rows, least recorded first" /><div className="covgrid">
         {vehicles.map((v) => {
-          const rows = coverage.rows.filter((r) => r.vehicleName === v);
+          const rows = paging.rows.filter((r) => r.vehicleName === v);
           return (
             <div className="covcard" key={v}>
               <div className="covch">

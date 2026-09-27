@@ -1,5 +1,7 @@
 'use client';
 
+import { PagedRows } from './Paging';
+
 import Link from '@/components/ui/AppLink';
 import { RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_LABEL } from '@/modules/strategy/client';
 import type { BoardState } from '@/lib/board-client';
@@ -53,13 +55,13 @@ export function Console({ state, board }: { state: FloorState; board: BoardState
         </p>
         <div className="lbl">Carrying</div>
         <div className="clist">
-          {open.sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0)).map((i) => (
+          <PagedRows rows={open.sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))} size={10} label="open pursuits">{page => page.map((i) => (
             <button key={i.key} className="crow" onClick={() => select({ kind: 'item', key: i.key })}>
               <b>{i.entityName}</b>
               <span className="mono">{compactUsd(i.amount)}</span>
               <span className="csmall">{i.vehicleName} · {standingWords(i)}</span>
             </button>
-          ))}
+          ))}</PagedRows>
           {open.length === 0 && <p className="csmall">Nothing open.</p>}
         </div>
         {runs.length > 0 && (

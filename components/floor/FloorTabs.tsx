@@ -5,10 +5,11 @@ import { useUrlParam } from '@/lib/url-state';
 import type { BoardState } from '@/lib/board-client';
 import type { FloorState } from '@/lib/floor-client';
 import type { Lenses } from '@/lib/lenses-client';
+import { filterProjection } from './projection';
 import { Console } from './Console';
 import { CoverageView } from './CoverageView';
 import { FilterBar } from './FilterBar';
-import { EMPTY_FILTER, FloorProvider, matches, type FloorFilter, type Selected } from './FloorContext';
+import { EMPTY_FILTER, FloorProvider, parseFloorFilter, type FloorFilter, type Selected } from './FloorContext';
 import { LeverageView } from './LeverageView';
 import { NetworkView } from './NetworkView';
 import { RadarView } from './RadarView';
@@ -42,12 +43,12 @@ const TABS = [
   {
     id: 'line', title: 'The line',
     asks: 'Where is every LP, by status, and what is stuck where?',
-    learn: 'Reads like a factory: one station per status, left to right, work sitting in them. ◇ marks a status the ladder does not back yet. Best for "what is the shape of the raise right now".',
+    learn: 'Counts by status and lane, largest lanes first. Each cell counts the statuses that still need ladder evidence. Best for "what is the shape of the raise right now".',
   },
   {
     id: 'load', title: 'The load',
     asks: 'Who is carrying what, and is anyone holding more than they can finish?',
-    learn: 'Ignores status entirely and sorts by person. Wired and passed LPs are not load. Best before assigning anything new.',
+    learn: 'Ranks open workload by person and vehicle. Wired and passed LPs are not load. Best before assigning anything new.',
   },
   {
     id: 'flow', title: 'The flow',
@@ -92,7 +93,7 @@ const TABS = [
   {
     id: 'network', title: 'The network',
     asks: 'Who can carry an ask to whom, and which paths are actually confirmed?',
-    learn: 'Us, the people who could carry it, the money — and only recorded lines between them. Best before promising an introduction.',
+    learn: 'Groups by role and vehicle, with recorded neighborhoods expanded on demand. Best before promising an introduction.',
   },
   {
     id: 'leverage', title: 'The leverage',
@@ -107,7 +108,7 @@ const TABS = [
   {
     id: 'radar', title: 'The radar',
     asks: 'When did anybody last actually speak to them?',
-    learn: 'Distance is time since a dated exchange, and the list beside it is everyone nobody has spoken to. Best on a Friday.',
+    learn: 'Recency bands count dated exchanges; unknown dates have their own band. Best on a Friday.',
   },
   {
     id: 'strip', title: 'The strip',
@@ -127,8 +128,13 @@ type TabId = typeof TABS[number]['id'];
 export function FloorTabs({ state, board, lenses }: { state: FloorState; board: BoardState; lenses: Lenses }) {
   // The tab is in the address (N65, issue 0009): a link opens it, and back steps through them.
   const [tab, setTab] = useUrlParam<TabId>('view', 'line', TABS.map((t) => t.id));
-  const [filter, setFilter] = useState<FloorFilter>(EMPTY_FILTER);
+  const [filterParam, setFilterParam] = useUrlParam<string>('filter', '');
+  const savedFilter = useMemo(() => parseFloorFilter(filterParam), [filterParam]);
   const [selected, setSelected] = useState<Selected>(null);
+  // These projections contain shared resources or dated evidence, not per-LP metrics.
+  const scopeOnly = ['plant', 'moves', 'economy', 'strip', 'clock', 'room'].includes(tab);
+  const filter = scopeOnly ? EMPTY_FILTER : savedFilter;
+  const setFilter = (next: FloorFilter) => { setFilterParam(JSON.stringify(next), next.find !== savedFilter.find ? 'replace' : 'push'); setSelected(null); };
   const active = TABS.find((t) => t.id === tab)!;
 
   /**
@@ -137,48 +143,11 @@ export function FloorTabs({ state, board, lenses }: { state: FloorState; board: 
    * — and the count in the bar says how many were hidden.
    */
   const view = useMemo(() => {
-    const items = state.items.filter((i) => matches(i, filter));
-    const keep = new Set(items.map((i) => i.key));
-    const entities = new Set(items.map((i) => i.entityId));
-    const money = state.money.map((m) => ({
-      ...m,
-      hard: items.filter((i) => i.vehicleSlug === m.slug && i.track === 'hard').reduce((n, i) => n + (i.amount ?? 0), 0),
-      soft: items.filter((i) => i.vehicleSlug === m.slug && i.track === 'soft').reduce((n, i) => n + (i.amount ?? 0), 0),
-      items: items.filter((i) => i.vehicleSlug === m.slug).length,
-    })).filter((m) => m.items > 0);
-    const filteredState: FloorState = { ...state, items, money };
-    const filteredBoard: BoardState = {
-      ...board,
-      rows: board.rows.filter((r) => keep.has(r.key)),
-      territories: filter.find.trim() || filter.owner !== 'everyone' || filter.signal !== 'all' || filter.status !== 'all'
-        ? board.territories.filter((t) => entities.has(t.entityId))
-        : board.territories,
-    };
-    const filteredLenses: Lenses = {
-      ...lenses,
-      network: {
-        ...lenses.network,
-        nodes: lenses.network.nodes.filter((n) => n.role !== 'target' || keep.has(n.id.slice(2))),
-        links: lenses.network.links.filter((l) => !l.to.startsWith('t:') || keep.has(l.to.slice(2))),
-      },
-      leverage: {
-        ...lenses.leverage,
-        prerequisites: lenses.leverage.prerequisites
-          .map((p) => ({ ...p, dependents: p.dependents.filter((d) => keep.has(d.key)) }))
-          .filter((p) => p.dependents.length > 0),
-      },
-      coverage: { ...lenses.coverage, rows: lenses.coverage.rows.filter((r) => keep.has(r.key)) },
-      radar: {
-        ...lenses.radar,
-        dots: lenses.radar.dots.filter((d) => keep.has(d.key)),
-        offRadar: lenses.radar.offRadar.filter((d) => keep.has(d.key)),
-      },
-    };
-    return { state: filteredState, board: filteredBoard, lenses: filteredLenses };
+    return filterProjection(state, board, lenses, filter);
   }, [state, board, lenses, filter]);
 
   return (
-    <FloorProvider value={{ selected, select: setSelected, filter }}>
+    <FloorProvider value={{ selected, select: setSelected, filter, setFilter }}>
       {GROUPS.map((g) => (
         <div key={g.title}>
           <div className="floorgroup">
@@ -205,7 +174,7 @@ export function FloorTabs({ state, board, lenses }: { state: FloorState; board: 
         </div>
       ))}
 
-      <FilterBar state={state} filter={filter} onChange={setFilter} shown={view.state.items.length} />
+      {scopeOnly ? <p className="cover"><b>Full page scope: {state.scopeName}.</b> This view includes shared resources or dated records. LP filters are paused here; choose a vehicle in the navigation to change scope.</p> : <FilterBar state={state} filter={filter} onChange={setFilter} shown={view.state.items.length} bands={[...new Set([...board.territories.map(t => t.band), 'Not inspected'])].sort()} />}
 
       <div className={`floorsplit${selected ? ' open' : ''}`}>
         <div className="card floorcard">
@@ -213,7 +182,7 @@ export function FloorTabs({ state, board, lenses }: { state: FloorState; board: 
             <h2>{active.title}</h2>
             <span className="lbl">{view.state.items.length} items · {state.scopeName}</span>
           </div>
-          <div className="floorbody">
+          <div className="floorbody" key={JSON.stringify(filter)}>
             {tab === 'line' && <LineView state={view.state} />}
             {tab === 'load' && <LoadView state={view.state} />}
             {tab === 'flow' && <FlowView state={view.state} />}
@@ -235,7 +204,7 @@ export function FloorTabs({ state, board, lenses }: { state: FloorState; board: 
         {selected && <Console state={state} board={board} />}
       </div>
 
-      <FloorList state={view.state} />
+      <FloorList key={JSON.stringify(filter)} state={view.state} />
     </FloorProvider>
   );
 }

@@ -1,5 +1,7 @@
 'use client';
 
+import { PagedRows } from './Paging';
+
 import type { FloorState } from '@/lib/floor-client';
 import { RUNG_LABEL, RUNG_REQUIRES, RUNGS, STATUS_LABEL, type LadderRung } from '@/modules/strategy/client';
 import { useFloor } from './FloorContext';
@@ -102,6 +104,7 @@ export function FlowView({ state }: { state: FloorState }) {
         <text x={2} y={H - 42} className="fpl">rung now</text>
       </svg>
 
+      <div className="vizsummary scroller"><table className="list"><caption>The same flow, as counts</caption><thead><tr><th>Evidence rung</th><th>Ever recorded</th><th>Also recorded next rung</th><th>At rung now, excluding passed</th><th>Stalled</th></tr></thead><tbody>{RUNGS.map((r, i) => <tr key={r}><th>{RUNG_LABEL[r]}</th><td>{counts[i]}</td><td>{i + 1 < RUNGS.length ? advanced(i).length : 'Final rung'}</td><td>{restingAt(r).length}</td><td>{stuckAt(r).length}</td></tr>)}</tbody></table></div>
       <div className="fstalls">
         {RUNGS.map((r) => {
           const stuck = stuckAt(r);
@@ -109,7 +112,7 @@ export function FlowView({ state }: { state: FloorState }) {
           return (
             <div className="fstall" key={r}>
               <div className="lbl">Stalled with {RUNG_LABEL[r]} on the ladder</div>
-              {stuck.map((i) => (
+              <PagedRows rows={stuck} size={5} label="stalled pursuits">{page => page.map((i) => (
                 <button className="fsrow" key={i.key} onClick={() => select({ kind: 'item', key: i.key })}>
                   <b>{shortName(i.entityName, 26)}</b>
                   <span className="mono">{compactUsd(i.amount)}</span>
@@ -123,7 +126,7 @@ export function FlowView({ state }: { state: FloorState }) {
                     {i.blocked ?? i.tempBasis}
                   </span>
                 </button>
-              ))}
+              ))}</PagedRows>
             </div>
           );
         })}

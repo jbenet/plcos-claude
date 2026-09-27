@@ -1,13 +1,11 @@
+import { listAsks, listConflicts, listRestrictions, connectorLoad, listAssets, listOpenTickets, coverageGaps, listMeetings, listObjections, poolChecks, listVehicles, listPursuits } from './visualization-inputs';
 import { listRuns } from '@/modules/agents';
-import { listAsks, listConflicts, listRestrictions, connectorLoad } from '@/modules/coordination';
-import { listAssets } from '@/modules/content';
-import { listOpenTickets } from '@/modules/governance';
-import { coverageGaps } from '@/modules/library';
-import { listMeetings, listObjections, listQuestions } from '@/modules/meetings';
+
+
+import { listQuestions } from '@/modules/meetings';
 import { entityForUser, listEdgeSummariesForEntities } from '@/modules/network';
-import { poolChecks } from '@/modules/pipeline';
-import { listUsers, listVehicles } from '@/modules/platform';
-import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/modules/strategy';
+import { listUsers } from '@/modules/platform';
+import { RUNG_LABEL, STATUS_LABEL } from '@/modules/strategy';
 import type {
   CellMark, Coverage, CoverageRow, Dependent, Lenses, Leverage, NetLink, NetNode, NetPath,
   Network, Prerequisite, Radar, RadarDot, Strip, StripCell, StripLane, Track,
@@ -199,7 +197,7 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
       if (pathLabels.has(label)) continue;
       if (paths.length === pathLimit) { pathsTruncated = true; break pathScan; }
       pathLabels.add(label);
-      paths.push({ label, owner, advocate, target: target.name, state, why: al.why });
+      paths.push({ fromId: ol.from, viaId: ol.to, targetKey: target.id.slice(2), label, owner, advocate, target: target.name, state, why: al.why });
     }
   }
 
@@ -207,7 +205,7 @@ export async function lenses(scopeSlug: string | null, floor: FloorState): Promi
     nodes, links, paths,
     note: previewNote + (pathsTruncated ? `Showing the first ${pathLimit.toLocaleString('en-US')} paths. ` : '') + 'A line is a recorded edge or a carried ask, never an assumption that two people who '
       + 'were in the same room can introduce each other. Tier A and B count as confirmed; C and '
-      + 'D need a person to sign off before they carry anything.',
+      + 'D remain weaker evidence; approval is required for an action, not for viewing a connection.',
   };
 
   // ── 2 · what would release several moves ─────────────────────────────────────

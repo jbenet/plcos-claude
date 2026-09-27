@@ -1,14 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Route } from '@/modules/network/client';
 import { VERDICT_LABEL } from '@/modules/network/client';
+import { Pager, usePage } from '@/components/floor/Paging';
 import { routeGraphLayout, routeNodeIds, routeReading } from './route-display';
 
 /** Shared entity nodes; every drawn route has an adjacent keyboard-accessible disclosure. */
-export function RouteGraph({ routes, fromName, targetName, selected, routeIds }: {
+export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: allSelected, routeIds: allRouteIds }: {
   routes: Route[]; fromName: string; targetName: string; selected: number; routeIds?: number[];
 }) {
+  const paging = usePage(allRoutes.map((route, index) => ({ route, index })), 8, Math.floor(allSelected / 8));
+  useEffect(() => { paging.setPage(Math.floor(allSelected / 8)); }, [allSelected, paging.setPage]);
+  const routes = paging.rows.map(x => x.route);
+  const routeIds = paging.rows.map(x => allRouteIds?.[x.index] ?? x.index);
+  const selected = paging.rows.findIndex(x => x.index === allSelected);
   const [hovered, setHovered] = useState<number | null>(null);
   // Where the pointer is, inside the map. Keyboard focus has none, so the card keeps its corner (issue 0059).
   const [at, setAt] = useState<{ x: number; y: number; w: number } | null>(null);
@@ -18,6 +24,7 @@ export function RouteGraph({ routes, fromName, targetName, selected, routeIds }:
   const activeReading = active ? routeReading(active) : null;
   return <div className="route-map" onMouseLeave={() => { setHovered(null); setAt(null); }}
     onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt({ x: e.clientX - r.left, y: e.clientY - r.top, w: r.width }); }} onKeyDown={(e) => { if (e.key === 'Escape') setHovered(null); }}>
+    <Pager {...paging} setPage={page => { paging.setPage(page); setHovered(null); }} label="routes in map; full comparison below" />
     <div className="route-map-scroll">
       <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} aria-label={`Routes to ${targetName}. One node per person. Full details in the comparison list.`}>
         {routes.map((route, ri) => {

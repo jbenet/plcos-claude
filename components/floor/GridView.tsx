@@ -1,5 +1,7 @@
 'use client';
 
+import { Pager, usePage } from './Paging';
+
 import type { BoardState, CellState } from '@/lib/board-client';
 import { CELL_GLYPH, CELL_LABEL, LEVERS } from '@/lib/board-client';
 import { STATUS_LABEL } from '@/modules/strategy/client';
@@ -24,12 +26,13 @@ import { claimWords, compactUsd, EVIDENCE_GLYPH, rungShort, standingWords } from
 const ORDER: CellState[] = ['open', 'spent', 'done', 'blocked', 'locked'];
 
 export function GridView({ board }: { board: BoardState }) {
+  const paging = usePage(board.rows);
   const { select } = useFloor();
   const count = (key: string, state: CellState) =>
     board.rows.filter((r) => r.cells[key]?.state === state).length;
 
   return (
-    <div className="gridview">
+    <div className="gridview"><Pager {...paging} label="LP lever rows" />
       <div className="scroller">
         <table className="list gridtable">
           <thead>
@@ -44,7 +47,7 @@ export function GridView({ board }: { board: BoardState }) {
             </tr>
           </thead>
           <tbody>
-            {board.rows.map((r) => {
+            {paging.rows.map((r) => {
               const open = LEVERS.filter((l) => r.cells[l.key]?.state === 'open').length;
               return (
                 <tr key={r.key} className={open === 0 ? 'stuck' : undefined}>
@@ -65,7 +68,7 @@ export function GridView({ board }: { board: BoardState }) {
                     return (
                       <td key={l.key} className={`gcell s-${cell.state}`}
                           title={`${l.label} — ${CELL_LABEL[cell.state]}\n${cell.note}`}>
-                        <span aria-label={CELL_LABEL[cell.state]}>{CELL_GLYPH[cell.state]}</span>
+                        <details><summary aria-label={`${l.label}: ${CELL_LABEL[cell.state]}`}>{CELL_GLYPH[cell.state]}</summary><span>{CELL_LABEL[cell.state]} · {cell.note}</span></details>
                       </td>
                     );
                   })}

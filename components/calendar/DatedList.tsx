@@ -1,5 +1,6 @@
 'use client';
 
+import { Pager, usePage } from '@/components/floor/Paging';
 import Link from '@/components/ui/AppLink';
 import { useMemo, useState } from 'react';
 import { Glyph } from '@/components/ui/Glyph';
@@ -36,36 +37,38 @@ export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: stri
     return words.every((w) => hay.includes(w));
   }), [rows, lanes, standing, vehicle, words.join(' ')]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const paging = usePage(shown);
   const counts = useMemo(() => {
     const c = new Map<string, number>();
     for (const r of rows) c.set(r.lane, (c.get(r.lane) ?? 0) + 1);
     return c;
   }, [rows]);
-  const toggle = (lane: string) => setLanes((prev) => {
+  const toggle = (lane: string) => { paging.setPage(0); setLanes((prev) => {
     const next = new Set(prev);
     if (next.has(lane)) next.delete(lane); else next.add(lane);
     return next;
-  });
+  }); };
   const present = (Object.entries(LANE_LOOK) as Array<[string, LaneLook]>).filter(([lane]) => counts.get(lane));
 
   return (
     <>
+      <Pager {...paging} label="dated records" />
       <div className="dfilters">
         <input
           type="search"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => { setQ(e.target.value); paging.setPage(0); }}
           placeholder="Search what, who, vehicle…"
           aria-label="Search the dated things"
         />
-        <select value={standing} onChange={(e) => setStanding(e.target.value as typeof standing)} aria-label="Standing">
+        <select value={standing} onChange={(e) => { setStanding(e.target.value as typeof standing); paging.setPage(0); }} aria-label="Standing">
           <option value="all">Any standing</option>
           <option value="ahead">Ahead</option>
           <option value="pressing">Pressing</option>
           <option value="done">Done</option>
         </select>
         {vehicles.length > 1 && (
-          <select value={vehicle} onChange={(e) => setVehicle(e.target.value)} aria-label="Vehicle">
+          <select value={vehicle} onChange={(e) => { setVehicle(e.target.value); paging.setPage(0); }} aria-label="Vehicle">
             <option value="all">Every vehicle</option>
             {vehicles.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
@@ -99,7 +102,7 @@ export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: stri
             </tr>
           </thead>
           <tbody>
-            {shown.map((r) => {
+            {paging.rows.map((r) => {
               const look = LANE_LOOK[r.lane];
               return (
                 <tr key={r.id} className={`lane-${r.lane}`}>

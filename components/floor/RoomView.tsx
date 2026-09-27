@@ -1,5 +1,7 @@
 'use client';
 
+import { Pager, usePage } from './Paging';
+
 import type { FloorState } from '@/lib/floor-client';
 import { RUNG_LABEL, STATUS_BACKED_BY, STATUSES } from '@/modules/strategy/client';
 import { compactUsd, EVIDENCE_GLYPH, stateOf } from './shared';
@@ -22,6 +24,7 @@ import { compactUsd, EVIDENCE_GLYPH, stateOf } from './shared';
  */
 
 export function RoomView({ state }: { state: FloorState }) {
+  const paging = usePage(state.alarms);
   const a = state.agents;
   return (
     <div className="roomview">
@@ -132,7 +135,7 @@ export function RoomView({ state }: { state: FloorState }) {
         </div>
       </div>
 
-      <div className="ralarmboard">
+      <div className="ralarmboard"><Pager {...paging} label="alarms" />
         <div className="lbl">Everything asking for a person, newest first</div>
         {state.alarms.length === 0 ? (
           <p className="muted">Nothing is asking for a person right now.</p>
@@ -147,7 +150,7 @@ export function RoomView({ state }: { state: FloorState }) {
               </tr>
             </thead>
             <tbody>
-              {state.alarms.map((x) => (
+              {paging.rows.map((x) => (
                 <tr key={x.key}>
                   <td>
                     <span className={`flag ${x.severity === 'stop' ? 'f-block' : x.severity === 'soon' ? 'f-ev' : 'f-mute'}`}>
