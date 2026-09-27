@@ -81,6 +81,9 @@ export function takeCopy(source: string, root: string): { takenAt: string; how: 
     // A lock names the process that has a database open (lib/db/lock.ts): in the source, the live
     // server. Carried into the copy it would make the copy refuse to open, so it stays behind.
     for (const f of readdirSync(tmp)) if (f.endsWith('.lock')) rmSync(join(tmp, f), { force: true });
+    // Dakota's raw replica stays in plcos-data/real only (docs/20-dakota.md: its data never leaves our
+    // system); a dev copy gets the database, never the replica files.
+    rmSync(join(tmp, 'dakota'), { recursive: true, force: true });
     writeFileSync(join(tmp, MARKER), `${takenAt}\n`);
   } catch (err) {
     rmSync(tmp, { recursive: true, force: true });
