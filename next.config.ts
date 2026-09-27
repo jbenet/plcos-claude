@@ -5,7 +5,7 @@ const real = process.env.DATA_PROFILE === 'real';
 
 const config: NextConfig = {
   // PGlite ships a wasm bundle; it must stay outside the bundler and run in Node.
-  serverExternalPackages: ['@electric-sql/pglite', 'pg'],
+  serverExternalPackages: ['@electric-sql/pglite', 'pg', 'tsx', 'esbuild'],
   typedRoutes: false,
   // Next appends its own block to CLAUDE.md otherwise. That file is the handoff for this
   // repo and is not Next's to edit.
