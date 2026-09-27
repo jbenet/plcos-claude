@@ -14,6 +14,7 @@ import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { noteTags } from '@/lib/connectors/affinity/event-tags';
 import { makeTriageExport, writeTriageExport } from './triage-export';
 import { exportIdentityReview } from './identity-review-export';
+import { exportLpUnitReview } from './lp-unit-review-export';
 import type { ResearchExportStatus } from './export-status';
 
 /**
@@ -318,7 +319,7 @@ export const enrichDir = () => {
 };
 
 /** Write the research, strategy and triage files. Returns counts, never names. */
-export async function exportResearchSet(): Promise<{ candidates: number; people: number; orgs: number; withDomain: number; withOrg: number; byStatus: Record<string, number>; dir: string; identityReviewError: ResearchExportStatus['identityReviewError'] }> {
+export async function exportResearchSet(): Promise<{ candidates: number; people: number; orgs: number; withDomain: number; withOrg: number; byStatus: Record<string, number>; dir: string; identityReviewError: ResearchExportStatus['identityReviewError']; lpUnitReviewError: ResearchExportStatus['lpUnitReviewError'] }> {
   // A record with no searchable name ("-" from a source's blank) can't be researched; W1 wrote
   // empty placeholders for them (27 Sep). It stays in the pipeline, just not in the export.
   const dir = enrichDir();
@@ -362,11 +363,25 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   } finally {
     await rm(temp, { force: true }).catch(() => {});
   }
+  const lpTemp = join(dir, `.lp-unit-review-${randomUUID()}.tmp`);
+  status.lpUnitReviewError = null;
+  try {
+    const review = await db.transaction(tx => exportLpUnitReview(tx));
+    await writeFile(lpTemp, review.map(row => JSON.stringify(row)).join('\n') + (review.length ? '\n' : ''), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    await rename(lpTemp, join(dir, 'lp-unit-review.jsonl'));
+  } catch (error) {
+    status.lpUnitReviewError = (error instanceof Error && /statement timeout|timed out/i.test(error.message))
+      || (typeof error === 'object' && error !== null && 'code' in error && error.code === '57014') ? 'timeout' : 'failed';
+    console.error(`[enrich.export] lp-unit-review.jsonl ${status.lpUnitReviewError}; other research files written.`);
+    await rm(join(dir, 'lp-unit-review.jsonl'), { force: true }).catch(() => {
+      console.error('[enrich.export] stale lp-unit-review.jsonl could not be removed.');
+    });
+  } finally { await rm(lpTemp, { force: true }).catch(() => {}); }
   await writeFile(join(dir, 'export-status.json'), JSON.stringify(status) + '\n', { encoding: 'utf8', mode: 0o600 });
   const byStatus: Record<string, number> = {};
   for (const c of set) for (const p of c.pursuits) byStatus[p.status] = (byStatus[p.status] ?? 0) + 1;
   return {
     candidates: set.length, people: set.filter((c) => c.type === 'person').length, orgs: set.filter((c) => c.type !== 'person').length,
-    withDomain: set.filter((c) => c.domains.length).length, withOrg: set.filter((c) => c.org).length, byStatus, dir: join(config.data.root, 'enrich'), identityReviewError: status.identityReviewError,
+    withDomain: set.filter((c) => c.domains.length).length, withOrg: set.filter((c) => c.org).length, byStatus, dir: join(config.data.root, 'enrich'), identityReviewError: status.identityReviewError, lpUnitReviewError: status.lpUnitReviewError,
   };
 }

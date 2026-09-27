@@ -67,6 +67,7 @@ export async function runProperties(check: Check) {
   await (await import('./lp-stats')).lpStatsProperties(check, db);
   // Last on this database: it re-points every pursuit, then reverses every decision it made.
   await (await import('./lp-units')).lpUnitProperties(check, db);
+  await (await import('./lp-unit-decisions')).lpUnitDecisionProperties(check, db);
   await db.close();
 
   await (await import('./pipeline')).hardeningVariations(check);

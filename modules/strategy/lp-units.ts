@@ -2,6 +2,7 @@ import type { Db, Queryable } from '@/lib/db';
 import { absorbPursuits, inserted, lockMergeTables, pursuitReferences, restoreChanges, write, type Change, type Reference, type Row } from './merge';
 import { combineStatus, decideLpUnit, isPseudoOrg, INVESTING_NAME, LP_RULE, type Evidence, type Firm, type LpDecision } from './lp-unit-rules';
 import { STATUS_LABEL, type PursuitStatus } from './types';
+import type { LpUnitFileDecision } from '@/lib/enrich/lp-unit-decisions';
 
 /**
  * Re-point pursuits to their LP (issues 0111, 0112; docs/23-lp-units.md). Every active person's
@@ -17,7 +18,7 @@ import { STATUS_LABEL, type PursuitStatus } from './types';
  */
 
 export interface LpUnitDecisionRow {
-  id: string; decision: 'moved' | 'personal' | 'review'; decidedBy: 'rule' | 'person';
+  id: string; decision: 'moved' | 'personal' | 'review'; decidedBy: 'rule' | 'person' | 'file';
   pursuitId: string; person: string; personId: string; vehicleId: string; vehicle: string;
   org: string | null; orgPursuitId: string | null; created: boolean; reason: string;
 }
@@ -30,6 +31,7 @@ export interface LpUnitReport {
 /** Investor types whose money is the organisation's (docs/19, W1's investorType; lib/lp-heading.ts). */
 const ORG_MONEY = new Set(['fund_lp_program', 'fo_staff', 'institutional', 'corporate', 'foundation']);
 const HIGH_RUNGS = ['indication_given', 'commitment_accepted', 'cash_received'];
+const MONEY_REFUSAL = 'Money or a number/signature on the ladder is on file in the person’s name; a firm decision is refused. Money is never moved between names.';
 const ANGEL = /\b(angel|personal(?:ly)?|own (?:account|money|capital|behalf)|individual(?:ly)?|in (?:his|her|their) own name)\b/i;
 const REPORTED = 300;
 
@@ -39,11 +41,11 @@ type Candidate = {
 };
 type Facts = {
   firms: Map<string, Firm[]>; personal: Map<string, Evidence[]>; foPrincipal: Set<string>; orgMoney: Set<string>;
-  softHere: Set<string>; highRung: Set<string>; units: Map<string, string>;
+  softHere: Set<string>; amountsHere: Set<string>; pools: Set<string>; highRung: Set<string>; units: Map<string, string>;
 };
 
 const lockAll = async (tx: Queryable, refs: Reference[]) =>
-  lockMergeTables(tx, refs, ['strategy.lp_repoint', 'identity.affiliation', 'pipeline.exposure']);
+  lockMergeTables(tx, refs, ['strategy.lp_repoint', 'identity.affiliation', 'pipeline.exposure', 'pipeline.capital_pool']);
 
 async function candidates(tx: Queryable, only?: string): Promise<Candidate[]> {
   return tx.query<Candidate>(`select p.pursuit_id::text id, e.entity_id::text person, e.display_name person_name,
@@ -62,7 +64,7 @@ async function gather(tx: Queryable, list: Candidate[]): Promise<Facts> {
   const aliases = `with recursive alias as (
       select entity_id, entity_id person from identity.entity where entity_id=any($1::uuid[])
       union all select e.entity_id, a.person from identity.entity e join alias a on e.merged_into=a.entity_id)`;
-  const [affiliations, claims, profiles, prospects, money, rungs, units] = await Promise.all([
+  const [affiliations, claims, profiles, prospects, money, rungs, units, pools] = await Promise.all([
     tx.query<{ person: string; org: string; name: string; type: string; role: string | null; primary: boolean; source: string | null }>(
       `${aliases} select a.person::text, o.entity_id::text org, o.display_name name, o.entity_type::text type, f.role, f.is_primary "primary", f.source
         from identity.affiliation f join alias a on a.entity_id=f.person_entity
@@ -85,6 +87,7 @@ async function gather(tx: Queryable, list: Candidate[]): Promise<Facts> {
     tx.query<{ id: string; unit: string | null }>(
       `select distinct on (s.pursuit_id) s.pursuit_id::text id, s.data->'ask'->>'unit' unit from strategy.suggestion s
         where s.pursuit_id=any($1::uuid[]) and s.status in ('proposed','accepted') order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [pursuits]),
+    tx.query<{ person: string }>(`${aliases} select distinct a.person::text from pipeline.capital_pool p join alias a on a.entity_id=p.entity_id`, [people]),
   ]);
   const orgIds = [...new Set(affiliations.map(a => a.org))];
   const [lps, monies, dakota, derived] = await Promise.all([
@@ -98,7 +101,9 @@ async function gather(tx: Queryable, list: Candidate[]): Promise<Facts> {
   ]);
   const isLp = new Set(lps.map(r => r.id)), hasMoney = new Set(monies.map(r => r.id)), inDakota = new Set(dakota.map(r => r.id));
   const researched = new Set(derived.map(r => `${r.person}:${r.org}`));
-  const facts: Facts = { firms: new Map(), personal: new Map(), foPrincipal: new Set(), orgMoney: new Set(), softHere: new Set(), highRung: new Set(rungs.map(r => r.id)), units: new Map() };
+  const facts: Facts = { firms: new Map(), personal: new Map(), foPrincipal: new Set(), orgMoney: new Set(), softHere: new Set(),
+    amountsHere: new Set(money.map(m => `${m.person}:${m.vehicle}`)), pools: new Set(pools.map(p => p.person)),
+    highRung: new Set(rungs.map(r => r.id)), units: new Map() };
   const add = (person: string, e: Evidence) => {
     const list = facts.personal.get(person) ?? [];
     if (!list.some(x => x.kind === e.kind)) list.push(e);
@@ -145,7 +150,7 @@ async function gather(tx: Queryable, list: Candidate[]): Promise<Facts> {
   return facts;
 }
 
-const decide = (c: Candidate, f: Facts): LpDecision => {
+const ruleFacts = (c: Candidate, f: Facts) => {
   const unit = f.units.get(c.id) ?? null;
   const firms = (f.firms.get(c.person) ?? []).map(x => ({ ...x }));
   // A strategy naming a firm as the unit that commits makes that firm investing.
@@ -153,14 +158,15 @@ const decide = (c: Candidate, f: Facts): LpDecision => {
     const n = x.name.toLowerCase();
     if (!x.investing && n.length > 1 && unit.toLowerCase().includes(n)) x.investing = 'the strategy names it as the unit that commits';
   }
-  return decideLpUnit({
+  return {
     personal: f.personal.get(c.person) ?? [], firms, unit, foPrincipal: f.foPrincipal.has(c.person),
     moneyHere: f.softHere.has(`${c.person}:${c.vehicle}`), highRung: f.highRung.has(c.id),
-  });
+  };
 };
+const decide = (c: Candidate, f: Facts): LpDecision => decideLpUnit(ruleFacts(c, f));
 
 async function journal(tx: Queryable, c: Candidate, d: { decision: 'moved' | 'personal' | 'review'; reason: string; evidence: Evidence[] },
-  by: 'rule' | 'person', actorId: string | null, changes: Change[], org: { id: string; name: string; pursuitId: string; created: boolean } | null): Promise<LpUnitDecisionRow> {
+  by: LpUnitDecisionRow['decidedBy'], actorId: string | null, changes: Change[], org: { id: string; name: string; pursuitId: string; created: boolean } | null): Promise<LpUnitDecisionRow> {
   const row = (await tx.one<{ id: string }>(`insert into strategy.lp_repoint(pursuit_id,person_entity,vehicle_id,decision,decided_by,org_entity,org_pursuit_id,
       created_org_pursuit,reason,evidence,rule,actor_id,changes) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13::jsonb) returning id::text`,
     [c.id, c.person, c.vehicle, d.decision, by, org?.id ?? null, org?.pursuitId ?? null, org?.created ?? false, d.reason,
@@ -175,9 +181,70 @@ async function journal(tx: Queryable, c: Candidate, d: { decision: 'moved' | 'pe
 const pursuitRow = async (tx: Queryable, id: string) =>
   (await tx.one<{ row: Row }>('select to_jsonb(p) row from strategy.pursuit p where pursuit_id=$1', [id]))!.row;
 
+async function moneyInName(tx: Queryable, c: Candidate): Promise<boolean> {
+  return !!await tx.one(`select 1 where exists (
+      select 1 from pipeline.exposure where identity.canonical_entity_id(entity_id)=$1::uuid and vehicle_id=$2::uuid
+    ) or exists (select 1 from pipeline.capital_pool where identity.canonical_entity_id(entity_id)=$1::uuid)
+    or exists (select 1 from strategy.ladder_event where pursuit_id=$3::uuid and rung::text=any($4::text[]))`,
+    [c.person, c.vehicle, c.id, HIGH_RUNGS]);
+}
+
+/** Read-only review inputs, without the report's display limit or research-status filter.
+ * The export layer projects/scrubs free text; no amount or contact column is read here. */
+export async function lpUnitReviewInputs(tx: Queryable) {
+  const list = await candidates(tx);
+  const facts = await gather(tx, list);
+  const protectedIds = new Set((await tx.query<{ id: string }>(`select pursuit_id::text id from strategy.lp_repoint
+    where decided_by in ('person','file') or reversed_at is not null`)).map(r => r.id));
+  return list.flatMap(c => {
+    if (protectedIds.has(c.id)) return [];
+    const f = ruleFacts(c, facts), d = decideLpUnit(f);
+    if (!c.lp_review && d.decision !== 'review') return [];
+    return [{ pursuitId: c.id, vehicle: { id: c.vehicle, name: c.vehicle_name },
+      person: { entityId: c.person, name: c.person_name }, firms: f.firms.filter(x => !isPseudoOrg(x.name)),
+      evidence: d.evidence, foPrincipal: f.foPrincipal,
+      strategyPersonal: !!f.unit && /^\s*personal\b/i.test(f.unit),
+      amountsOnFile: facts.amountsHere.has(`${c.person}:${c.vehicle}`) || facts.pools.has(c.person) ? 'present' as const : 'absent' as const,
+      numberOrSignatureOnLadder: f.highRung,
+      reason: c.lp_review ?? d.reason }];
+  });
+}
+
+/** Called inside the file import's savepoint. It shares mark/move and their exact reversal
+ * journal with the LP page. Metadata pins the normalized decision and its retry key. */
+export async function decideLpUnitFromFile(tx: Queryable, d: LpUnitFileDecision, key: string, actorId: string | null): Promise<LpUnitDecisionRow | null> {
+  const refs = await pursuitReferences(tx);
+  await lockAll(tx, refs);
+  const history = await tx.query<{ decided_by: string; reversed: boolean; key: string | null }>(
+    `select decided_by, reversed_at is not null reversed, file_decision->>'key' key
+      from strategy.lp_repoint where pursuit_id=$1`, [d.pursuitId]);
+  if (history.some(r => r.decided_by === 'person')) throw new Error('A person’s LP-page decision takes precedence over file decisions.');
+  if (history.some(r => r.reversed)) throw new Error('A prior re-point was reversed; resolve this on the LP page.');
+  if (history.some(r => r.key === key)) return null;
+  if (history.some(r => r.decided_by === 'file')) throw new Error('A file decision already settled this pursuit; reverse it before changing the answer on the LP page.');
+  const [c] = await candidates(tx, d.pursuitId);
+  if (!c) throw new Error('Pursuit is stale or is not an active person’s pursuit on a vehicle being raised; export again.');
+  if (d.decision === 'firm' && await moneyInName(tx, c)) throw new Error(MONEY_REFUSAL);
+  const facts = await gather(tx, [c]);
+  if (!c.lp_review && decide(c, facts).decision !== 'review') throw new Error('Pursuit is no longer awaiting LP-unit review; export again.');
+  const reason = `Research decision by ${d.decided_by}: ${d.decision === 'personal' ? 'invests in their own capacity' : 'the affiliated firm is the LP'}.`;
+  let result: LpUnitDecisionRow;
+  if (d.decision === 'personal') result = await mark(tx, c, { decision: 'personal', reason, evidence: [] }, 'file', actorId);
+  else {
+    const firm = (facts.firms.get(c.person) ?? []).find(f => f.orgId === d.firmEntityId);
+    if (!firm || isPseudoOrg(firm.name)) throw new Error('firmEntityId must be a current, canonical, non-pseudo firm affiliation.');
+    const moved = await move(tx, refs, c, firm, { reason, evidence: [] }, 'file', actorId);
+    if ('conflict' in moved) throw new Error(moved.conflict);
+    result = moved;
+  }
+  await tx.query(`update strategy.lp_repoint set file_decision=$2::jsonb,evidence=$3::jsonb where id=$1`,
+    [result.id, JSON.stringify({ key, ...d }), JSON.stringify(d.evidence.map(e => ({ ...e, confidence: 'unassessed', last_verified_by: d.decided_by })))]);
+  return result;
+}
+
 /** Mark a person's pursuit: capacity personal, or a question for a person. */
 async function mark(tx: Queryable, c: Candidate, d: { decision: 'personal' | 'review'; reason: string; evidence: Evidence[] },
-  by: 'rule' | 'person', actorId: string | null): Promise<LpUnitDecisionRow> {
+  by: LpUnitDecisionRow['decidedBy'], actorId: string | null): Promise<LpUnitDecisionRow> {
   const changes: Change[] = [];
   await write(tx, changes, 'strategy.pursuit', await pursuitRow(tx, c.id),
     d.decision === 'personal' ? { lp_capacity: 'personal', lp_review: null } : { lp_capacity: null, lp_review: d.reason });
@@ -191,7 +258,10 @@ const STATUS_FIELDS = ['status', 'status_source', 'status_reason', 'passed_by', 
  * from the person's when there is none. Returns null with a reason when statuses conflict.
  */
 async function move(tx: Queryable, refs: Reference[], c: Candidate, firm: Firm, d: { reason: string; evidence: Evidence[] },
-  by: 'rule' | 'person', actorId: string | null): Promise<LpUnitDecisionRow | { conflict: string }> {
+  by: LpUnitDecisionRow['decidedBy'], actorId: string | null): Promise<LpUnitDecisionRow | { conflict: string }> {
+  // Shared by rule, LP-page and file choices. Include canonical aliases, both money tracks,
+  // capital pools and high rungs; no path may move a pursuit away from money in that name.
+  if (await moneyInName(tx, c)) return { conflict: MONEY_REFUSAL };
   const person = await pursuitRow(tx, c.id);
   const existing = await tx.one<{ id: string; human: boolean }>(`select p.pursuit_id::text id,
       (p.status_source='us' or strategy.pursuit_has_human_status(p.pursuit_id)) human
@@ -257,6 +327,7 @@ export async function repointPursuitsInTransaction(tx: Queryable, actorId: strin
     // A reversal, or a person's decision, is theirs: the rule never re-applies over it.
     if (prior?.reversed) { report.reversedBefore++; continue; }
     if (prior?.by === 'person') { report.decidedByPerson++; continue; }
+    if (prior?.by === 'file') { report.unchanged++; continue; }
     const d = decide(c, facts);
     if (d.decision === 'unaffiliated') { report.unaffiliated++; continue; }
     if (d.decision === 'personal') {

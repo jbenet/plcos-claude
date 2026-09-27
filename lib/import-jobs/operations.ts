@@ -10,11 +10,13 @@ import type { ImportJob, ImportProgress } from './types';
 async function repointJob(db: Db, actor: string): Promise<Record<string, unknown>> {
   const run = await startRun('enrich','lp-units',actor);
   try {
-    const r = await (await import('@/modules/strategy')).repointPursuits(db,actor);
+    const { readLpUnitDecisions, repointWithLpUnitDecisions } = await import('@/lib/enrich/lp-unit-decisions');
+    const { enrichDir } = await import('@/lib/enrich/candidates');
+    const r = await repointWithLpUnitDecisions(db,actor,await readLpUnitDecisions(enrichDir()));
     await finishRun(run,{status:'ok',requests:0,records:r.moved+r.personal+r.review,newRecords:r.created,
-      note:`${r.moved} moved to their organisation (${r.created} organisation pursuits created), ${r.personal} individual LPs, ${r.review} to review, ${r.unchanged} unchanged`,
+      note:`${r.fileDecisions.applied} file decisions applied, ${r.fileDecisions.refused.length} refused · ${r.moved} moved to their organisation (${r.created} organisation pursuits created), ${r.personal} individual LPs, ${r.review} to review, ${r.unchanged} unchanged`,
       detail:{...r}});
-    return {examined:r.examined,moved:r.moved,created:r.created,personal:r.personal,review:r.review,unchanged:r.unchanged,unaffiliated:r.unaffiliated};
+    return {examined:r.examined,moved:r.moved,created:r.created,personal:r.personal,review:r.review,unchanged:r.unchanged,unaffiliated:r.unaffiliated,fileDecisions:r.fileDecisions};
   } catch (err) {
     await finishRun(run,{status:'failed',requests:0,records:0,newRecords:0,note:'Re-point stopped; nothing from this pass was kept.'});
     throw err;

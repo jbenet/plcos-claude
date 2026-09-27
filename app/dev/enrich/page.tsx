@@ -122,7 +122,7 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>
             <button className="btn p" type="submit">Export the research set</button>
             <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>
-              Writes research-set.jsonl (who they are), candidates.jsonl (where they stand), team.json, triage.jsonl, and identity-review.jsonl (ambiguous identities, without contact details) to {join(config.data.root, 'enrich')}.
+              Writes research-set.jsonl (who they are), candidates.jsonl (where they stand), team.json, triage.jsonl, identity-review.jsonl (ambiguous identities), and lp-unit-review.jsonl (firm or personal, without amounts or contact details) to {join(config.data.root, 'enrich')}.
             </span>
           </form>
         </div>
@@ -164,7 +164,8 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
               && (duplicateRun?.status !== 'ok' || mergeRun.startedAt > duplicateRun.startedAt)
             ? mergeRun.detail as unknown as import('@/modules/strategy').PursuitMergeReport : duplicateRun?.status === 'ok' && (!imported || duplicateRun.startedAt > imported.startedAt)
               ? (duplicateRun.detail as unknown as import('@/lib/enrich/import-dupes').ImportDuplicateReport).pursuitMerges : last.pursuitMerges} />
-          <LpUnits last={lpRun ? `${lpRun.status === 'ok' ? '' : 'stopped · '}${lpRun.note ?? ''}` : null} decisions={lpDecisions} />
+          <LpUnits last={lpRun ? `${lpRun.status === 'ok' ? '' : 'stopped · '}${lpRun.note ?? ''}` : null} decisions={lpDecisions}
+            fileDecisions={lpRun?.detail?.fileDecisions as import('@/lib/enrich/lp-unit-decisions').LpUnitFileReport | undefined} />
           <SpvStance last={spvRun ? `${spvRun.status === 'ok' ? '' : 'stopped · '}${spvRun.note ?? ''}` : null} />
           {(last.skippedRecords ?? []).length > 0 && (
             <details className="more" style={{ marginTop: 10 }}>

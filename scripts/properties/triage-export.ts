@@ -178,6 +178,7 @@ export async function triageExportProperties(check: Check) {
     for (const failure of ['timeout', 'failed'] as const) {
       await Promise.all(otherFiles.map(file => rm(join(dir, file))));
       await writeFile(join(dir, 'identity-review.jsonl'), 'stale review must not survive');
+      await writeFile(join(dir, 'lp-unit-review.jsonl'), 'stale LP review must not survive');
       const logged: unknown[][] = [];
       const originalError = console.error;
       const failing: Db = { ...counted, transaction: async () => db!.transaction(async tx => {
@@ -194,12 +195,14 @@ export async function triageExportProperties(check: Check) {
         const html = renderToStaticMarkup(createElement(ExportStatus, { status: receipt }));
         const actualFiles = await Promise.all(otherFiles.map(async file => normalizeExport(file, await readFile(join(dir, file), 'utf8'))));
         const reviewRemoved = await readFile(join(dir, 'identity-review.jsonl')).then(() => false, () => true);
+        const lpReviewRemoved = await readFile(join(dir, 'lp-unit-review.jsonl')).then(() => false, () => true);
         check(`EXPORT identity ${failure} preserves other files and displays its failure on the page`,
           result.candidates === 500 && result.identityReviewError === failure && receipt?.identityReviewError === failure
+          && result.lpUnitReviewError === failure && receipt?.lpUnitReviewError === failure && lpReviewRemoved
           && JSON.stringify(expectedFiles) === JSON.stringify(actualFiles) && reviewRemoved
           && html.includes('role="alert"') && html.includes(failure === 'timeout' ? 'timed out' : 'failed')
           && html.includes('team and triage files were written') && html.includes('retry Export the research set')
-          && logged.length === 1 && !JSON.stringify(logged).includes('Invented private query detail')
+          && html.includes('lp-unit-review.jsonl') && logged.length === 2 && !JSON.stringify(logged).includes('Invented private query detail')
           && (await db.one<{ n: number }>('select 1 n'))?.n === 1,
           'An aborted identity transaction leaves all four other files identical, removes stale review output, logs no query detail and persists a visible retry notice.');
       } finally { console.error = originalError; }
@@ -208,6 +211,8 @@ export async function triageExportProperties(check: Check) {
     const receipt = await readResearchExportStatus(dir);
     check('EXPORT successful retry replaces stale identity failure receipt',
       retried.identityReviewError === null && receipt?.identityReviewError === null
+      && retried.lpUnitReviewError === null && receipt?.lpUnitReviewError === null
+      && (await readFile(join(dir, 'lp-unit-review.jsonl'), 'utf8')) === ''
       && (await readFile(join(dir, 'identity-review.jsonl'), 'utf8')) === ''
       && renderToStaticMarkup(createElement(ExportStatus, { status: receipt })) === '',
       'A successful empty identity review is a zero-byte file and clears the persistent failure notice.');
