@@ -60,17 +60,21 @@ export async function enrichmentProperties(ctx: AffinityContext & { n: (sql: str
   await wf2(join(scratch, 'strategy', `${pick.key}.json`), JSON.stringify(strategy('Offer a portfolio briefing')));
   await imp.importFindings(juan);
   const rows = await adb.query<{ status: string; body: string; id: string; pursuit_id: string }>(
-    `select s.status, s.body, s.suggestion_id::text as id, s.pursuit_id::text from strategy.suggestion s join strategy.pursuit p on p.pursuit_id = s.pursuit_id where p.entity_id = $1 order by s.created_at`, [pick.key]);
-  const before = await adb.one<{ status: string; rungs: string }>(`select p.status::text, (select count(*)::text from strategy.ladder_event l where l.pursuit_id = p.pursuit_id) as rungs from strategy.pursuit p where p.pursuit_id = $1`, [rows[rows.length - 1]!.pursuit_id]);
-  await st.decideSuggestion(juan, rows[rows.length - 1]!.id, 'accept', null);
-  const after = await adb.one<{ status: string; next_step: string | null; rungs: string }>(`select p.status::text, p.next_step, (select count(*)::text from strategy.ladder_event l where l.pursuit_id = p.pursuit_id) as rungs from strategy.pursuit p where p.pursuit_id = $1`, [rows[rows.length - 1]!.pursuit_id]);
-  const twice = await attempt(() => st.decideSuggestion(juan, rows[rows.length - 1]!.id, 'accept', null));
+    `select s.status, s.body, s.suggestion_id::text as id, s.pursuit_id::text from strategy.suggestion s join strategy.pursuit p on p.pursuit_id = s.pursuit_id where p.entity_id = $1 order by s.suggestion_id`, [pick.key]);
+  // Select the proposal by its lifecycle state; timestamps can tie within a transaction.
+  const proposed = rows.find(row => row.status === 'proposed');
+  const withdrawn = rows.find(row => row.status === 'withdrawn');
+  if (!proposed) throw new Error('Invented replacement strategy proposal is missing');
+  const before = await adb.one<{ status: string; rungs: string }>(`select p.status::text, (select count(*)::text from strategy.ladder_event l where l.pursuit_id = p.pursuit_id) as rungs from strategy.pursuit p where p.pursuit_id = $1`, [proposed.pursuit_id]);
+  await st.decideSuggestion(juan, proposed.id, 'accept', null);
+  const after = await adb.one<{ status: string; next_step: string | null; rungs: string }>(`select p.status::text, p.next_step, (select count(*)::text from strategy.ladder_event l where l.pursuit_id = p.pursuit_id) as rungs from strategy.pursuit p where p.pursuit_id = $1`, [proposed.pursuit_id]);
+  const twice = await attempt(() => st.decideSuggestion(juan, proposed.id, 'accept', null));
   delete process.env.ENRICH_DIR;
   await rmr(scratch, { recursive: true, force: true });
   check(
     'Enrichment: the research file carries identity only; findings map in unverified, once; a verified claim survives; bad files are refused; a strategy is decided by a person and moves only the next step',
     exported.candidates > 0 && leaks.length === 0 && first.mapped === 1 && first.rejected === 1 && c1 === 2 && unverified === 2 && again.mapped === 1 && c2 === 2 && triageNotes === 1 &&
-      keptVerified === 1 && phone.length > 0 && proseEmail.length > 0 && street.length > 0 && firmName.length === 0 && proposedOnce === 1 && rows.length === 2 && rows[0]!.status === 'withdrawn' && rows[1]!.status === 'proposed' &&
+      keptVerified === 1 && phone.length > 0 && proseEmail.length > 0 && street.length > 0 && firmName.length === 0 && proposedOnce === 1 && rows.length === 2 && withdrawn?.body === 'Ask for twenty minutes — Juan, this week' && proposed.body === 'Offer a portfolio briefing — Juan, this week' &&
       after?.next_step === 'Offer a portfolio briefing — Juan, this week' && after.status === before?.status && after.rungs === before?.rungs && twice instanceof st.SuggestionRefused,
     `${exported.candidates} in the research set, ${leaks.length} lines carrying more than identity; first import mapped ${first.mapped}, refused ${first.rejected}; claims ${c1} (unverified with a date: ${unverified}); imported again, still ${c2}; triage notes after two imports: ${triageNotes}; ` +
       `a verified claim kept after its fact left the file: ${keptVerified}; a phone number refused: ${phone.length > 0}; an address in a caution refused: ${proseEmail.length > 0}; a street address refused: ${street.length > 0}; a firm called Sixth Street accepted: ${firmName.length === 0}; one proposal after importing twice: ${proposedOnce}; after a new file: ${rows.map((r) => r.status).join(' → ')}; ` +

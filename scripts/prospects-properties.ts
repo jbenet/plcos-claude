@@ -81,12 +81,12 @@ export async function prospectsProperties(check: Check, db: Db) {
       '2026-09-20','Keep this close reason','Keep this next step','us') returning pursuit_id::text id`, [oldId, vehicle.id, actor]))!.id;
   await db.query("insert into research.note (entity_id, author_id, kind, body) values ($1,$2,'context','Keep existing note')", [oldId, actor]);
   const beforeRow = JSON.stringify(await db.query('select * from strategy.pursuit where pursuit_id = $1', [existing]));
-  const beforeNotes = JSON.stringify(await db.query('select * from research.note where entity_id = $1', [oldId]));
+  const beforeNotes = JSON.stringify(await db.query('select * from research.note where entity_id = $1 order by note_id', [oldId]));
   const oldResult = await addProspects(db, actor, files(prospect(oldId, 'Invented Prospect Existing', { status: 'sourcing' })));
   check('PROSPECTS existing closed/passed pursuits and their notes remain byte-for-byte unchanged',
     oldResult.kept === 1 && oldResult.added === 0
     && beforeRow === JSON.stringify(await db.query('select * from strategy.pursuit where pursuit_id = $1', [existing]))
-    && beforeNotes === JSON.stringify(await db.query('select * from research.note where entity_id = $1', [oldId])),
+    && beforeNotes === JSON.stringify(await db.query('select * from research.note where entity_id = $1 order by note_id', [oldId])),
     `Person-set kept ${oldResult.kept}; whole pursuit row and all notes compared.`);
 
   const conflictA = await makePerson('Invented Prospect Namesake');
@@ -182,14 +182,14 @@ export async function prospectsProperties(check: Check, db: Db) {
     `Added ${newResult.added}; sourced person mappings and optional organization checked.`);
 
   const stableBefore = await snapshot();
-  const bornPursuitBefore = JSON.stringify(await db.query('select * from strategy.pursuit where entity_id = $1', [born?.id]));
-  const bornNotesBefore = JSON.stringify(await db.query('select * from research.note where entity_id = $1', [born?.id]));
+  const bornPursuitBefore = JSON.stringify(await db.query('select * from strategy.pursuit where entity_id = $1 order by pursuit_id', [born?.id]));
+  const bornNotesBefore = JSON.stringify(await db.query('select * from research.note where entity_id = $1 order by note_id', [born?.id]));
   const reordered = await addProspects(db, actor, [{ file: 'renamed-invented-file.jsonl', text: [noOrg,
     { ...unseen, reason: 'Same status with edited evidence needs no disposition change.' }].map(r => JSON.stringify(r)).join('\n') }]);
   check('PROSPECTS2 row identity survives renamed files, row order and edited planning fields on rerun',
     reordered.added === 0 && reordered.existing === 2 && stableBefore === await snapshot()
-    && bornPursuitBefore === JSON.stringify(await db.query('select * from strategy.pursuit where entity_id = $1', [born?.id]))
-    && bornNotesBefore === JSON.stringify(await db.query('select * from research.note where entity_id = $1', [born?.id])),
+    && bornPursuitBefore === JSON.stringify(await db.query('select * from strategy.pursuit where entity_id = $1 order by pursuit_id', [born?.id]))
+    && bornNotesBefore === JSON.stringify(await db.query('select * from research.note where entity_id = $1 order by note_id', [born?.id])),
     `Rerun skipped ${reordered.existing}; identities, affiliations, pursuits and notes unchanged.`);
 
   const otherVehicle = (await db.one<{ slug: string }>('select slug from platform.vehicle where id <> $1 order by slug limit 1', [vehicle.id]))!;

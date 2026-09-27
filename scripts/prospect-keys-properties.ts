@@ -42,10 +42,10 @@ export async function prospectKeysProperties(check: Check, db: Db) {
   const alias = (source: string, key: string, id: string) => db.query(
     `insert into identity.source_record (source,source_id,entity_id,resolved_by) values ($1,$2,$3,'invented:key-fixture')`, [source, key, id]);
   const snapshot = async () => JSON.stringify({
-    claims: await db.query(`select entity_id,field,value,source,as_of,confidence,last_verified_by from research.claim where entity_id=any($1::uuid[]) order by field`, [ids]),
-    profiles: await db.query(`select entity_id,kind,body,tags,data from research.note where kind='public_profile' and entity_id=any($1::uuid[])`, [ids]),
+    claims: await db.query(`select entity_id,field,value,source,as_of,confidence,last_verified_by from research.claim where entity_id=any($1::uuid[]) order by entity_id,field,source,value,claim_id`, [ids]),
+    profiles: await db.query(`select entity_id,kind,body,tags,data from research.note where kind='public_profile' and entity_id=any($1::uuid[]) order by entity_id,kind,body,tags,data,note_id`, [ids]),
     suggestions: await db.query(`select pursuit_id,body,data,made_by,made_at,status from strategy.suggestion where pursuit_id in
-      (select pursuit_id from strategy.pursuit where entity_id=any($1::uuid[]))`, [ids]),
+      (select pursuit_id from strategy.pursuit where entity_id=any($1::uuid[])) order by pursuit_id,body,data,made_by,made_at,status,suggestion_id`, [ids]),
   });
   const clearSuggestions = () => db.query(`delete from strategy.suggestion where pursuit_id in
     (select pursuit_id from strategy.pursuit where entity_id=any($1::uuid[]))`, [ids]);

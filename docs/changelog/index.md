@@ -170,3 +170,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [LP-unit research decisions — public evidence, reversible answers](entries/lp-unit-decisions.md)
 - [LP stats 2 — public reference figures, an SPV panel, and better places](entries/lp-stats-2.md)
 - [Linear, read-only — a connector, a replica, and a plan to approve](entries/linear-readonly.md)
+- [Identity review — deterministic fixture labels and row comparisons](entries/flaky-identity-review.md)
