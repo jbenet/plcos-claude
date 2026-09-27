@@ -40,6 +40,7 @@ async function main() {
   await (await import('./properties/perf4')).perf4Properties(check);
   await (await import('./properties/activity')).activityProperties(check);
   await (await import('./properties/activity-data')).activityDataProperties(check);
+  await (await import('./properties/activity-perf')).activityPerfProperties(check);
   await (await import('./properties/activity-connectors')).activityConnectorProperties(check);
   await (await import('./properties/triage-export')).triageExportProperties(check);
 

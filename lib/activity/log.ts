@@ -1,3 +1,4 @@
+import { notifyActivityChange } from './notifications';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -14,6 +15,7 @@ export const runKey = (id: string): string => createHash('sha256').update(id).di
 export async function touchActivity(root: string = config.data.root): Promise<void> {
   await mkdir(join(root, 'activity'), { recursive: true });
   await writeFile(join(root, 'activity', 'generation'), randomUUID(), { mode: 0o600 });
+  notifyActivityChange(root);
 }
 /** Best effort telemetry: never make a successful source read fail. No arbitrary text survives. */
 export async function recordActivity(event: ActivityEvent, root?: string): Promise<void> {

@@ -90,7 +90,7 @@ export async function activityDataProperties(check: Check) {
     let databaseReads = 0;
     const reader = createActivityReader({ root, generation: async () => generation,
       database: async () => { databaseReads++; return { points: [], origins: [] }; } });
-    const actual = await reader();
+    const actual = await reader.refresh();
     check('0103 recorded actuals round-trip with exact counts and host totals',
       actual.points.filter(p => p.source === 'fetch' && p.segment !== 'edgar').reduce((n, p) => n + (p.requests ?? 0), 0) === 7
         && actual.points.filter(p => p.source === 'fetch' && p.segment !== 'edgar').every(p => !p.estimated)
@@ -132,7 +132,7 @@ export async function activityDataProperties(check: Check) {
       databaseReads === 1 && elapsed < 300 && JSON.stringify(warm) === JSON.stringify(actual),
       `One generation uses one database read; warm read took ${elapsed.toFixed(1)} ms with 2000 invented raw files.`);
     generation = 'fixture-v2';
-    const refreshed = await reader();
+    const refreshed = await reader.refresh();
     check('0103 a new data generation invalidates the activity cache',
       databaseReads === 2 && refreshed.points.some(p => p.source === 'search' && p.estimated),
       'A changed generation triggers one new snapshot and picks up historical research files.');
@@ -147,16 +147,18 @@ export async function activityDataProperties(check: Check) {
         && !/SECRET_RESEARCH|Invented Research Person|invented-key/.test(JSON.stringify(refreshed)),
       'Only counts and canonical hosts leave the invented research documents; reconstruction has a basis.');
     const fileReader = createActivityReader({ root });
-    const fileSnapshot = await fileReader();
+    const fileSnapshot = await fileReader.refresh();
     const fileWarmBegan = performance.now();
     const fileWarm = await fileReader();
     const fileWarmElapsed = performance.now() - fileWarmBegan;
     await recordActivity({ ...event, at: '2026-09-25T15:00:00Z', requests: 5 }, root);
-    const fileChanged = await fileReader();
+    const fileChanged = await fileReader.refresh();
     const actualFetchRequests = (data: typeof fileSnapshot) => data.points.filter(p => p.source === 'fetch' && !p.estimated).reduce((n, p) => n + (p.requests ?? 0), 0);
     check('0103 default file generation caches the corpus and observes appended actuals',
       fileWarm === fileSnapshot && fileWarmElapsed < 300 && actualFetchRequests(fileChanged) === actualFetchRequests(fileSnapshot) + 5,
       `The production file marker gives a ${fileWarmElapsed.toFixed(1)} ms warm read across 2000 files; a log append invalidates and adds five measured requests.`);
+    await reader.close();
+    await fileReader.close();
   } finally {
     await rm(root, { recursive: true, force: true });
   }
