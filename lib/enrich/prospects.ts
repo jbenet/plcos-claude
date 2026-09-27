@@ -4,10 +4,11 @@ import { join } from 'node:path';
 import type { Db, Queryable } from '@/lib/db';
 import { enrichDir } from './candidates';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
+import { STATUS_LABEL, type PursuitStatus } from '@/modules/strategy';
 
 export interface Prospect {
   personKey?: string | null; name: string; org: string | null; vehicle: string;
-  status: 'new' | 'sourcing';
+  status: 'new' | 'sourcing' | 'passed';
   capacity: { band: string; basis: string; guess: boolean };
   reason: string; strategic: boolean;
   route: { best: string; score: number } | null;
@@ -17,11 +18,13 @@ export interface ProspectFile { file: string; text: string; inProgress?: boolean
 export interface ProspectProblem { file: string; line: number; name?: string; vehicle?: string; reason: string }
 export interface ProspectResult {
   files: number; added: number; existing: number; ambiguous: number;
+  moved: number; toSourcing: number; toPassed: number; kept: number;
   invalid: ProspectProblem[]; skipped: ProspectProblem[]; inProgress: string[];
 }
 const object = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const words = (x: unknown): x is string => typeof x === 'string' && !!x.trim();
 const normalized = normalizeIdentityName;
+const RULE = 'juan-prospects-2026-09-26';
 
 /** Notes retain supplied evidence; this import does not turn estimates into verified claims. */
 export function prospectProblems(x: unknown): string[] {
@@ -30,7 +33,7 @@ export function prospectProblems(x: unknown): string[] {
   if (x.personKey != null && !words(x.personKey)) errors.push('personKey must be nonempty text, null or absent');
   for (const k of ['name', 'vehicle', 'reason']) if (!words(x[k])) errors.push(`${k} must be nonempty text`);
   if (x.org !== null && !words(x.org)) errors.push('org must be nonempty text or null');
-  if (x.status !== 'new' && x.status !== 'sourcing') errors.push('status must be new or sourcing');
+  if (x.status !== 'new' && x.status !== 'sourcing' && x.status !== 'passed') errors.push('status must be new, sourcing or passed');
   if (!object(x.capacity) || !words(x.capacity.band) || !words(x.capacity.basis) || typeof x.capacity.guess !== 'boolean') errors.push('capacity needs band, basis and a boolean guess');
   if (typeof x.strategic !== 'boolean') errors.push('strategic must be boolean');
   if (x.route !== null && (!object(x.route) || !words(x.route.best) || typeof x.route.score !== 'number' || !Number.isFinite(x.route.score))) errors.push('route must be null or have best text and a finite score');
@@ -136,7 +139,8 @@ async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[])
 
 /** Caller supplies the live server's existing handle; there is deliberately no DB-opening CLI. */
 export async function addProspects(db: Db, actorId: string, files: ProspectFile[]): Promise<ProspectResult> {
-  const result: ProspectResult = { files: files.length, added: 0, existing: 0, ambiguous: 0, invalid: [], skipped: [], inProgress: [] };
+  const result: ProspectResult = { files: files.length, added: 0, existing: 0, ambiguous: 0,
+    moved: 0, toSourcing: 0, toPassed: 0, kept: 0, invalid: [], skipped: [], inProgress: [] };
   const records: Array<{ p: Prospect; file: string; line: number; hash: string }> = [];
   for (const file of files) {
     if (file.inProgress) { result.inProgress.push(file.file); continue; }
@@ -162,6 +166,7 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
       const key = prospectPersonKey(p);
       names.set(key, (names.get(key) ?? new Set()).add(normalized(p.name)));
     }
+    const resolved = [];
     for (const r of valid) {
       const p = r.p;
       const entityId = names.get(prospectPersonKey(p))!.size === 1 ? await resolvePerson(tx, p, identities) : null;
@@ -170,16 +175,78 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
         result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle, reason: 'Conflicting identity: supply the correct existing person ID or resolve the conflicting source mapping.' });
         continue;
       }
+      resolved.push({ ...r, entityId });
+    }
+    // Conflicting dispositions must not oscillate on each rerun or depend on file order.
+    const dispositions = new Map<string, Set<string>>();
+    for (const { p, entityId } of resolved) {
+      const key = `${entityId}:${p.vehicle}`;
+      dispositions.set(key, (dispositions.get(key) ?? new Set()).add(p.status));
+    }
+    const seen = new Set<string>();
+    for (const r of resolved) {
+      const { p, entityId } = r;
+      const key = `${entityId}:${p.vehicle}`;
+      if (dispositions.get(key)!.size > 1) {
+        result.ambiguous++;
+        result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle,
+          reason: 'Conflicting dispositions for this person and vehicle; supply one status before retrying.' });
+        continue;
+      }
+      if (seen.has(key)) continue;
+      seen.add(key);
       const body = `Added by rule on Juan's instruction (26 Sep): ${p.reason}; capacity ${p.capacity.band} (${p.capacity.guess ? 'guess' : 'not marked as a guess'})`;
-      if (await tx.one('select pursuit_id from strategy.pursuit where identity.canonical_entity_id(entity_id)=$1 and vehicle_id=$2 limit 1', [entityId, vehicles.get(p.vehicle)])) { result.existing++; continue; }
+      const reason = `${RULE}: ${p.reason.trim()}`;
+      const existing = await tx.query<{ id: string; status: PursuitStatus; source: string; status_source: string; entity: string; vehicle: string; historical: boolean }>(
+        `select p.pursuit_id::text id, p.status::text, p.source, p.status_source,
+           e.display_name entity, v.name vehicle, v.phase = 'historical' historical
+         from strategy.pursuit p join identity.entity e on e.entity_id = p.entity_id
+         join platform.vehicle v on v.id = p.vehicle_id
+         where identity.canonical_entity_id(p.entity_id)=$1 and p.vehicle_id=$2
+         order by p.pursuit_id for update of p`, [entityId, vehicles.get(p.vehicle)]);
+      if (existing.length > 1) {
+        result.ambiguous++;
+        result.skipped.push({ file: r.file, line: r.line, name: p.name, vehicle: p.vehicle,
+          reason: 'Multiple pursuits for this canonical person and vehicle; resolve them before retrying.' });
+        continue;
+      }
+      const prior = existing[0];
+      if (prior) {
+        // Legacy UI audits have no statusSource. Treat every unmarked change as human.
+        // Read after locking the pursuit so a concurrent UI change cannot slip past this guard.
+        const human = await tx.one(`select 1 from platform.audit_log where subject_type = 'pursuit'
+          and subject_id = $1 and action = 'pursuit.status_set'
+          and detail->>'statusSource' is distinct from 'rule' limit 1`, [prior.id]);
+        if (prior.source !== 'prospects' || prior.status_source !== 'rule' || human) { result.kept++; continue; }
+        if (prior.status === p.status) { result.existing++; continue; }
+        await tx.query(`update strategy.pursuit set status = $2::strategy.pursuit_status,
+          status_source = 'rule', status_reason = $3, status_set_at = now(), status_set_by = $4,
+          passed_by = case when $2 = 'passed' then 'us' else null end,
+          closed_at = case when $2 = 'passed' then coalesce(closed_at, now()) when $5 then closed_at else null end,
+          close_reason = case when $2 = 'passed' then $3 when $5 then close_reason else null end
+          where pursuit_id = $1`, [prior.id, p.status, reason, actorId, prior.historical]);
+        await tx.query(`insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
+          values ($1, 'pursuit.status_set', 'pursuit', $2, $3::jsonb)`, [actorId, prior.id, JSON.stringify({
+          entity: prior.entity, vehicle: prior.vehicle, from: STATUS_LABEL[prior.status], to: STATUS_LABEL[p.status],
+          fromId: prior.status, toId: p.status, ...(p.status === 'passed' ? { passedBy: 'us' } : {}),
+          reason, statusSource: 'rule', rule: RULE, file: r.file, line: r.line, inputHash: r.hash,
+        })]);
+        result.moved++;
+        if (p.status === 'sourcing') result.toSourcing++;
+        if (p.status === 'passed') result.toPassed++;
+        continue;
+      }
       const pursuit = await tx.one<{ id: string }>(
-        `insert into strategy.pursuit (entity_id, vehicle_id, owner_id, status, status_source, status_reason, status_set_at, status_set_by, source)
-         values ($1, $2, $3, $4::strategy.pursuit_status, 'rule', $5, now(), $3, 'prospects')
+        `insert into strategy.pursuit (entity_id, vehicle_id, owner_id, status, status_source, status_reason, status_set_at, status_set_by, source,
+           passed_by, closed_at, close_reason)
+         values ($1, $2, $3, $4::strategy.pursuit_status, 'rule', $5, now(), $3, 'prospects',
+           case when $4 = 'passed' then 'us' else null end, case when $4 = 'passed' then now() else null end,
+           case when $4 = 'passed' then $5 else null end)
          on conflict (entity_id, vehicle_id) do nothing returning pursuit_id::text id`,
-        [entityId, vehicles.get(p.vehicle), actorId, p.status, body]);
+        [entityId, vehicles.get(p.vehicle), actorId, p.status, reason]);
       if (!pursuit) { result.existing++; continue; }
       await tx.query(`insert into research.note (entity_id, author_id, kind, body, data) values ($1, $2, 'context', $3, $4::jsonb)`,
-        [entityId, actorId, body, JSON.stringify({ ...p, pursuitId: pursuit.id, vehicleId: vehicles.get(p.vehicle), source: 'prospects', file: r.file, line: r.line, inputHash: r.hash, rule: 'juan-prospects-2026-09-26' })]);
+        [entityId, actorId, body, JSON.stringify({ ...p, pursuitId: pursuit.id, vehicleId: vehicles.get(p.vehicle), source: 'prospects', file: r.file, line: r.line, inputHash: r.hash, rule: RULE })]);
       result.added++;
     }
     return result;

@@ -23,9 +23,10 @@ export async function addProspectsAction(): Promise<{ result?: ProspectResult; e
     result = await addProspects(await getDb(), user.id, files);
     await appendAudit({ actorId: user.id, action: 'enrich.prospects', subjectType: 'enrich', detail: {
       files: result.files, added: result.added, existing: result.existing, ambiguous: result.ambiguous, invalid: result.invalid.length, inProgress: result.inProgress.length,
+      moved: result.moved, toSourcing: result.toSourcing, toPassed: result.toPassed, kept: result.kept,
     } });
   } catch {
-    return { error: 'The import could not finish. Check the local prospect files and retry; existing pursuits are preserved on retry.' };
+    return { error: 'The import could not finish. Check the local prospect files and retry; person-set statuses are preserved on retry.' };
   }
   revalidatePath('/dev/enrich');
   revalidatePath('/targets', 'layout');
