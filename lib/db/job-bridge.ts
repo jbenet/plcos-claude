@@ -18,7 +18,12 @@ export function hostJobDb(db:Db,port:MessagePort):()=>void {
         let entered!:(tx:Queryable)=>void,failed!:(error:unknown)=>void,finish!:(commit:boolean)=>void;
         const ready=new Promise<Queryable>((resolve,reject)=>{entered=resolve;failed=reject;});
         const done=new Promise<boolean>(resolve=>{finish=resolve;});
-        const complete=withBackgroundDb(()=>db.transaction(async tx=>{entered(tx);if(!await done)throw new Error('Job transaction rolled back.');}));
+        const complete=withBackgroundDb(()=>db.transaction(async tx=>{
+          // A job computes between statements inside one transaction (merges, re-points). On Postgres the
+          // pool's foreground limits (20 s per statement, 60 s idle in a transaction) killed it (27 Sep);
+          // a job transaction gets no statement limit and 30 minutes idle (GUESS). Pages keep theirs.
+          if(db.kind==='postgres')await tx.exec("set local statement_timeout = 0; set local idle_in_transaction_session_timeout = '30min'");
+          entered(tx);if(!await done)throw new Error('Job transaction rolled back.');}));
         complete.catch(failed);
         const tx=await ready;
         if(closed){finish(false);return;}
