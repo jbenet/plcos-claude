@@ -29,9 +29,9 @@ import { noteTags } from '@/lib/connectors/affinity/event-tags';
 
 export const RESEARCH_STATUSES: PursuitStatus[] = ['selected', 'connecting', 'discussing', 'committed'];
 
-/** Juan, 26 Sep: newly added prospects join W0 at New/Sourcing too. Passed stays excluded. */
+/** Juan, 26 Sep: newly added prospects join W0 at New/Sourcing too; 27 Sep, so do the Dakota-sourced ones (searching by name is fine). Passed stays excluded. */
 export const inResearchSet = (p: Pursuit): boolean => !p.historical &&
-  (RESEARCH_STATUSES.includes(p.status) || (p.source === 'prospects' && (p.status === 'new' || p.status === 'sourcing')));
+  (RESEARCH_STATUSES.includes(p.status) || ((p.source === 'prospects' || p.source === 'dakota') && (p.status === 'new' || p.status === 'sourcing')));
 
 /** A domain that says nothing about where someone works. */
 const FREE_MAIL = /^(gmail|googlemail|yahoo|ymail|hotmail|outlook|live|msn|icloud|me|mac|aol|protonmail|proton|gmx|yandex|qq|163|126|comcast|verizon|att|sbcglobal|mail|fastmail|hey|pm)\./i;
