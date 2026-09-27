@@ -72,15 +72,16 @@ export const VEHICLE_MODULES: NavModule[] = [
   m('V', 'Visualizations', 'visualizations', 'L9',
     'Everything trying to happen at once, drawn ten ways: stations, people, drop-off, the fortnight ahead, instruments, the map, the plant, the moves, the grid, the economy.',
     true, undefined, true),
-  // Order: Juan, issue 0102 (27 Sep): fit before strategy; selection and calendar before routes.
-  m('03b', 'Funder–vehicle fit', 'fit', 'L9',
-    'Hard gates, graded dimensions, what they value, what they think of us, and who we know in common.',
-    true, undefined, true),
+  // Order: Juan, issues 0102 and 0110 (27 Sep): strategy, pipeline, selection, then fit under selection;
+  // calendar before routes.
   m('S', 'Strategy', 'strategy', 'L9',
     'Where the raise stands, the option space against it, and a place to commit.',
     true, undefined, true),
   m('04', 'Pipeline', 'targets', 'L5', 'Every LP by status; the per-LP workspace; consent ladder; coverage disclosure.'),
   m('03', 'Selection', 'selection', 'L9', 'The capacity/affinity/propensity rubric, with weights visible and editable.'),
+  m('03b', 'Funder–vehicle fit', 'fit', 'L9',
+    'Hard gates, graded dimensions, what they value, what they think of us, and who we know in common.',
+    true, undefined, true),
   m('22', 'Calendar', 'calendar', 'L7',
     'Everything dated for this vehicle on one compressed timeline, projected from the records that own it.',
     true, undefined, true),
