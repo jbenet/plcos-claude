@@ -6,10 +6,12 @@ import { EntitySummary } from '@/components/entity/EntitySummary';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
 import { capacityBandLabel } from '@/lib/capacity-bands';
+import { lpHeadings } from '@/lib/lp-heading';
+import { listEntities } from '@/modules/identity';
 import { vehicleReadings } from '@/lib/vehicle-readings';
 import { listAssessments, type Assessment } from '@/modules/fit';
 import { FitBoard, FitInspector } from './FitBoard';
-import { GROUP_LABEL, ORDER, type FitRow, type FitSection, type Group } from './fit-model';
+import { GROUP_LABEL, ORDER, groupFitRows, fitGroupCategory, type FitRow, type FitSection, type Group } from './fit-model';
 import s from './fit.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -87,15 +89,33 @@ async function FitRollup({ params, searchParams }: {
     });
   }
 
-  // Ranked by group, then score: a failing gate goes last however well it scores.
-  const ranked = [...rows].sort((a, b) => ORDER.indexOf(a.group) - ORDER.indexOf(b.group) || (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name));
-  ranked.filter((r) => r.kind !== 'missing').forEach((r, i) => { r.rank = i + 1; });
+  const [headings, entities] = await Promise.all([
+    lpHeadings(rows.map(r => ({ pursuitId: r.pursuitId ?? r.entityId, entityId: r.entityId }))),
+    listEntities([...new Set(rows.map(r => r.entityId))]),
+  ]);
+  const organisations = new Set(entities.filter(e => e.entityType !== 'person').map(e => e.entityId));
+  for (const r of rows) {
+    const h = headings.get(r.pursuitId ?? r.entityId);
+    r.isOrg = organisations.has(r.entityId);
+    r.orgId = r.isOrg ? r.entityId : h?.orgId ?? null;
+    r.org = r.isOrg ? r.name : h?.org ?? null;
+    r.orgFirst = r.isOrg || h?.orgFirst || false;
+  }
+  // Keep the organisation and its readings together through sorting, filtering and paging.
+  // Each child retains its own fit, gates and actions, including a different fit category.
+  const byFit = (a: FitRow, b: FitRow) => ORDER.indexOf(a.group) - ORDER.indexOf(b.group)
+    || (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name);
+  const ranked = [...rows].sort(byFit);
+  ranked.filter(r => r.kind !== 'missing').forEach((r, i) => { r.rank = i + 1; });
   const words = (sp.q ?? '').toLowerCase().split(/\s+/).filter(Boolean);
   const group = ORDER.includes(sp.g as Group) ? (sp.g as Group) : null;
-  const filtered = ranked.filter((r) => (!group || r.group === group)
-    && words.every((w) => `${r.name} ${r.owner} ${r.vehicleName} ${r.why ?? ''}`.toLowerCase().includes(w)));
-  if (sp.sort === 'name') filtered.sort((a, b) => a.name.localeCompare(b.name));
-  if (sp.sort === 'recent') filtered.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+  const compare = sp.sort === 'name' ? (a: FitRow, b: FitRow) => (a.org ?? a.name).localeCompare(b.org ?? b.name)
+    : sp.sort === 'recent' ? (a: FitRow, b: FitRow) => (b.date ?? '').localeCompare(a.date ?? '') : byFit;
+  const lpGroups = groupFitRows(rows, compare);
+  if (!sp.sort || sp.sort === 'fit') lpGroups.sort((a, b) =>
+    ORDER.indexOf(fitGroupCategory(a, group)) - ORDER.indexOf(fitGroupCategory(b, group)));
+  const filtered = lpGroups.filter(g => g.people.some(r => (!group || r.group === group)
+    && words.every(w => `${r.name} ${r.org ?? ''} ${r.owner} ${r.vehicleName} ${r.why ?? ''}`.toLowerCase().includes(w))));
   const pages = Math.max(1, Math.ceil(filtered.length / SIZE));
   const page = Math.min(Math.max(0, (Number.parseInt(sp.page ?? '1', 10) || 1) - 1), pages - 1);
   const shown = filtered.slice(page * SIZE, (page + 1) * SIZE);
@@ -115,8 +135,12 @@ async function FitRollup({ params, searchParams }: {
   const median = scores.length ? (scores.length % 2 ? scores[(scores.length - 1) / 2]! : Math.round((scores[scores.length / 2 - 1]! + scores[scores.length / 2]!) / 2)) : null;
   const dates = rows.flatMap((r) => (r.date ? [new Date(r.date)] : [])).sort((a, b) => a.getTime() - b.getTime());
   const sections: FitSection[] = grouped
-    ? ORDER.filter((g) => shown.some((r) => r.group === g)).map((g) => ({ group: g, count: count(g), rows: shown.filter((r) => r.group === g) }))
-    : [{ group: null, count: shown.length, rows: shown }];
+    ? ORDER.filter(g => shown.some(lp => fitGroupCategory(lp, group) === g)).map(g => {
+      const groups = shown.filter(lp => fitGroupCategory(lp, group) === g);
+      return { group: g, count: filtered.filter(lp => fitGroupCategory(lp, group) === g).length,
+        rows: groups.flatMap(lp => lp.people), lpGroups: groups };
+    })
+    : [{ group: null, count: shown.length, rows: shown.flatMap(lp => lp.people), lpGroups: shown }];
 
   return (
     <Page
@@ -125,7 +149,7 @@ async function FitRollup({ params, searchParams }: {
         sp.e ? <EntitySummary entityId={sp.e} /> : (
           <FitInspector>
             <div className="lbl">The shape of it</div>
-            <div className="ihead">{rows.length.toLocaleString('en-US')} LP{rows.length === 1 ? '' : 's'} · {read.length.toLocaleString('en-US')} read</div>
+            <div className="ihead">{lpGroups.length.toLocaleString('en-US')} LP groups · {rows.length.toLocaleString('en-US')} pursuits/readings</div>
             <div className="imeta">{vehicle ? vehicle.name : 'every vehicle, listed separately'}</div>
             {ORDER.filter((g) => count(g)).map((g) => (
               <Link key={g} className={`kv ${s.kvlink}${group === g ? ` ${s.on}` : ''}`} href={href({ g: group === g ? null : g })} aria-pressed={group === g}>
@@ -157,9 +181,9 @@ async function FitRollup({ params, searchParams }: {
       </p>
 
       <div className="kpis five">
-        <div className="kpi"><div className="n">{rows.length.toLocaleString('en-US')}</div><div className="f">LPs in this vehicle’s pipeline</div></div>
-        <div className="kpi"><div className="n">{read.length.toLocaleString('en-US')}</div><div className="f">with a reading · {rows.filter((r) => r.kind === 'assessed').length} assessed, {rows.filter((r) => r.kind === 'provisional').length} provisional</div></div>
-        <div className="kpi"><div className={`n${count('strong') + count('good') ? ' g' : ''}`}>{(count('strong') + count('good')).toLocaleString('en-US')}</div><div className="f">strong or good fit</div></div>
+        <div className="kpi"><div className="n">{lpGroups.length.toLocaleString('en-US')}</div><div className="f">LP groups in this view</div></div>
+        <div className="kpi"><div className="n">{read.length.toLocaleString('en-US')}</div><div className="f">individual readings · {rows.filter((r) => r.kind === 'assessed').length} assessed, {rows.filter((r) => r.kind === 'provisional').length} provisional</div></div>
+        <div className="kpi"><div className={`n${count('strong') + count('good') ? ' g' : ''}`}>{(count('strong') + count('good')).toLocaleString('en-US')}</div><div className="f">readings with strong or good fit</div></div>
         <div className="kpi"><div className="n">{median ?? '—'}</div><div className="f">median score{scores.length > 1 ? `, range ${scores[0]}–${scores.at(-1)}` : ''}</div></div>
         <div className="kpi soft"><div className="n q">{count('missing').toLocaleString('en-US')}</div><div className="f">awaiting a reading: our gap, not theirs</div></div>
       </div>
@@ -174,7 +198,7 @@ async function FitRollup({ params, searchParams }: {
         </select>
         <button className="btn" type="submit">Apply</button>
         {(sp.q || group || (sp.sort && sp.sort !== 'fit')) && <Link className={s.clear} href={`/${slug}/fit`}>Clear</Link>}
-        <span className={s.count}>{filtered.length === rows.length ? `${rows.length.toLocaleString('en-US')} LPs` : `${filtered.length.toLocaleString('en-US')} of ${rows.length.toLocaleString('en-US')}`}{group ? ` · ${GROUP_LABEL[group]}` : ''}</span>
+        <span className={s.count}>{filtered.length === lpGroups.length ? `${lpGroups.length.toLocaleString('en-US')} LP groups` : `${filtered.length.toLocaleString('en-US')} of ${lpGroups.length.toLocaleString('en-US')} LP groups`}{group ? ` · ${GROUP_LABEL[group]}` : ''}</span>
       </form>
 
       {rows.length === 0 ? (
@@ -202,7 +226,7 @@ async function FitRollup({ params, searchParams }: {
       )}
 
       <p className="cover">
-        <b>What the rank is:</b> position among the {read.length.toLocaleString('en-US')} LPs with a reading, by fit group and then
+        <b>What the rank is:</b> position among the {read.length.toLocaleString('en-US')} individual readings, by fit group and then
         score, with anything failing a gate placed last however well it scores. A provisional score weighs the strategy’s four
         readings; with fewer than two known there is none. <b>What this covers:</b> the pursuits on
         {vehicle ? ` ${vehicle.name}` : ' every vehicle'}, formal assessments, and each pursuit’s latest proposed or accepted

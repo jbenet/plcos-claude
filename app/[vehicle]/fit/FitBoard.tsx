@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from '@/components/ui/AppLink';
 import { GROUP_FLAG, GROUP_LABEL, WORK, type FitRow, type FitSection } from './fit-model';
@@ -55,18 +55,21 @@ export function FitBoard({ sections, showVehicle, showGroup }: { sections: FitSe
 
   return (
     <div role="list" aria-label="LPs by fit">
-      {sections.map(({ group, count, rows }) => (
+      {sections.map(({ group, count, rows, lpGroups }) => (
         <div className="card" key={group ?? 'all'} role="presentation">
           {group && (
             <>
               <div className="chead">
                 <h2><span className={`flag ${GROUP_FLAG[group]}`} style={{ marginRight: 8 }}>{count}</span>{GROUP_LABEL[group]}</h2>
-                {rows.length < count && <span className="lbl">{rows.length} on this page</span>}
+                {(lpGroups?.length ?? rows.length) < count && <span className="lbl">{lpGroups?.length ?? rows.length} on this page</span>}
               </div>
               <div className="worknote">{WORK[group]}</div>
             </>
           )}
-          {rows.map((r) => {
+          {(lpGroups ?? rows.map(r => ({ id: r.key, org: null, people: [r] }))).map(lp => <Fragment key={lp.id}>
+            {lp.org && !lp.people[0]!.isOrg && <div className="chead"><h3>{lp.org}</h3><span className="lbl">{lp.people.length} people pursued, below</span></div>}
+            {lp.people.map((r) => {
+            const member = Boolean(lp.org) && !r.isOrg;
             const on = sel === r.key;
             const first = !sel && r.key === flat[0]?.key;
             return (
@@ -89,9 +92,9 @@ export function FitBoard({ sections, showVehicle, showGroup }: { sections: FitSe
                 </div>
                 <div className="t">
                   <div className={s.head}>
-                    <Link className={s.name} href={lpHref(r)}>{r.name}</Link>
+                    <Link className={s.name} href={lpHref(r)}>{member && <span aria-hidden>↳ </span>}{r.name}</Link>
                     {showVehicle && <span className="flag f-mute">{r.vehicleName}</span>}
-                    {showGroup && <span className={`flag ${GROUP_FLAG[r.group]}`}>{GROUP_LABEL[r.group]}</span>}
+                    {(showGroup || r.group !== group) && <span className={`flag ${GROUP_FLAG[r.group]}`}>{GROUP_LABEL[r.group]}</span>}
                     <span className={s.actions}>
                       {r.pursuitId && r.status ? (
                         <StatusPicker name={r.name} pursuitId={r.pursuitId} vehicleId={r.vehicleId} status={r.status} />
@@ -116,7 +119,7 @@ export function FitBoard({ sections, showVehicle, showGroup }: { sections: FitSe
                 </div>
               </div>
             );
-          })}
+          })}</Fragment>)}
         </div>
       ))}
     </div>

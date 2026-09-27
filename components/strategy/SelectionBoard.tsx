@@ -6,7 +6,7 @@ import { scoreDetailAction } from '@/app/selection/actions';
 import type { ScoreDetail } from '@/lib/pipeline-data';
 import { BulkLpActions } from './BulkLpActions';
 import { MoveButton, UndoToast, useMove } from './MoveToSelected';
-import { compareRows, EMPTY, lead, second, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { groupRows, EMPTY, lead, second, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { cx, Disclose, fmt, fmtShort, FilterLine, Icon, Ladder, n, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
 import m from './selection.module.css';
@@ -39,10 +39,13 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   const [limit, setLimit] = useState(PAGE);
   const shownIds = useMemo(() => new Set(shown.map((r) => r.id)), [shown]);
   useEffect(() => setLimit(PAGE), [enabled, view.f, sort]);
-  const ranked = useMemo(() => [...shown].sort((a, b) => compareRows(a, b, sort.key, sort.dir)), [shown, sort]);
+  const groups = useMemo(() => groupRows(shown, sort.key, sort.dir, rows), [shown, sort, rows]);
+  const ranked = useMemo(() => groups.flatMap(g => g.people), [groups]);
+  const visible = groups.slice(0, limit);
+  const groupPosition = (id: string) => groups.findIndex(g => g.people.some(r => r.id === id)) + 1;
   const [focusId, setFocusId] = useState<string | null>(() => initialFilters?.lp ?? null);
   const focus = ranked.find((r) => r.id === focusId) ?? ranked[0] ?? null;
-  const position = focus ? ranked.indexOf(focus) + 1 : 0;
+  const position = focus ? groupPosition(focus.id) : 0;
   const all = enabled.length === statuses.length;
   const byVehicle = showVehicle && new Set(rows.map((r) => r.vehicle)).size > 1;
   const scored = useMemo(() => shown.filter((r) => r.score !== null).length, [shown]);
@@ -65,7 +68,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
     return () => watch.disconnect();
   }, []);
 
-  const visibleIds = ranked.slice(0, limit).map((r) => r.id);
+  const visibleIds = visible.flatMap(g => g.people.map(r => r.id));
   const allTicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
 
   // Move to Selected (issue 0104): the ticked LPs when some are ticked, otherwise the one in focus.
@@ -92,14 +95,14 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
 
   // The keyboard (issues 0091, 0104): up and down move the focus through the table, x ticks the LP
   // in focus, s moves to Selected, u undoes that, Enter opens it. Not while typing in a field or a dialog.
-  const keys = useRef({ ranked, focus, limit, picked, moveNow, undoNow });
-  keys.current = { ranked, focus, limit, picked, moveNow, undoNow };
+  const keys = useRef({ ranked, focus, limit, picked, groups, moveNow, undoNow });
+  keys.current = { ranked, focus, limit, picked, groups, moveNow, undoNow };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target instanceof HTMLElement ? e.target : null;
       if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && !(el as HTMLInputElement).type?.match(/checkbox/) || el.closest('dialog, [role="dialog"]'))) return;
-      const { ranked, focus, limit, picked, moveNow, undoNow } = keys.current;
+      const { ranked, focus, limit, picked, groups, moveNow, undoNow } = keys.current;
       if (e.key === 'u' && !e.shiftKey) { e.preventDefault(); void undoNow(); return; }
       if (!focus) return;
       const i = ranked.indexOf(focus);
@@ -107,7 +110,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
         const next = ranked[Math.max(0, Math.min(ranked.length - 1, i + (e.key === 'ArrowDown' || e.key === 'j' ? 1 : -1)))];
         if (!next) return;
         e.preventDefault();
-        if (ranked.indexOf(next) >= limit) setLimit((x) => x + PAGE);
+        if (groups.findIndex(g => g.people.some(r => r.id === next.id)) >= limit) setLimit((x) => x + PAGE);
         setFocusId(next.id);
         requestAnimationFrame(() => document.querySelector(`[data-lp="${next.id}"]`)?.scrollIntoView({ block: 'nearest' }));
       } else if (e.key === 's' && !e.shiftKey) {
@@ -172,7 +175,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
           <div className={s.head}>
             <h2>Ranked</h2>
             <div className={s.headMeta}>
-              {n(shown.length)} LPs · {n(scored)} scored
+              {n(groups.length)} LP groups · {n(shown.length)} pursuits · {n(scored)} scored
               {enabled.length > 0 && !all && <span> · {enabled.map((id) => statuses.find((x) => x.id === id)?.label).join(', ')}</span>}
             </div>
             <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>s</kbd> to Selected · <kbd>↵</kbd> open</div>
@@ -205,23 +208,31 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
                   </tr>
                 </thead>
                 <tbody>
-                  {ranked.slice(0, limit).map((r, i) => (
-                    <Fragment key={r.id}>
-                      <RankRow r={r} position={i + 1} focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now}
-                        onFocus={setFocusId} onPick={pick} />
-                      {narrow && r.id === focus?.id && detail && (
-                        <tr className={s.inlineRow}><td colSpan={9}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>
-                      )}
-                    </Fragment>
-                  ))}
+                  {visible.map((g, i) => {
+                    const own = g.people[0]!.isOrg ? g.people[0]! : null;
+                    const grouped = Boolean(g.org) && (g.people.length > 1 || !own);
+                    const ids = g.people.map(r => r.id);
+                    return <Fragment key={g.id}>
+                      {grouped && !own && <tr className={s.lead}>
+                        <td className={s.cCheck}><input type="checkbox" aria-label={`Select people at ${g.org}`} checked={ids.every(id => picked.has(id))} onChange={e => pick(ids, e.target.checked)} /></td>
+                        <td className={s.cPos}>{i + 1}</td>
+                        <td className={s.cLp} colSpan={7}><div className={s.lpName}>{g.org}</div><div className={s.second}>{n(g.people.length)} people pursued, below</div></td>
+                      </tr>}
+                      {g.people.map((r, j) => <Fragment key={r.id}>
+                        <RankRow r={r} position={grouped && !r.isOrg ? null : i + 1} member={grouped && !r.isOrg} last={j === g.people.length - 1}
+                          focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now} onFocus={setFocusId} onPick={pick} />
+                        {narrow && r.id === focus?.id && detail && <tr className={s.inlineRow}><td colSpan={9}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>}
+                      </Fragment>)}
+                    </Fragment>;
+                  })}
                 </tbody>
               </table>
             </div>
           )}
-          {ranked.length > limit && (
+          {groups.length > limit && (
             <div className={s.more}>
-              <button type="button" className="btn" onClick={() => setLimit((x) => x + PAGE)}>Show {n(Math.min(PAGE, ranked.length - limit))} more</button>
-              <span>{n(limit)} of {n(ranked.length)} shown. Search covers all of them.</span>
+              <button type="button" className="btn" onClick={() => setLimit((x) => x + PAGE)}>Show {n(Math.min(PAGE, groups.length - limit))} more</button>
+              <span>{n(limit)} of {n(groups.length)} groups shown. Search covers all of them.</span>
             </div>
           )}
           <p className="cover">
@@ -245,21 +256,21 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   );
 }
 
-const RankRow = memo(function RankRow({ r, position, focused, picked, byVehicle, now, onFocus, onPick }: {
-  r: PipelineRow; position: number; focused: boolean; picked: boolean; byVehicle: boolean; now: number;
+const RankRow = memo(function RankRow({ r, position, member = false, last = false, focused, picked, byVehicle, now, onFocus, onPick }: {
+  r: PipelineRow; position: number | null; member?: boolean; last?: boolean; focused: boolean; picked: boolean; byVehicle: boolean; now: number;
   onFocus: (id: string) => void; onPick: (ids: string[], on: boolean) => void;
 }) {
-  const other = second(r);
+  const other = member ? null : second(r);
   const touch = fmtShort(r.lastTouch, now);
   const stale = /stale/i.test(r.scoreKind);
   const cap = r.capacity && !/unknown/i.test(r.capacity) ? r.capacity : null;
   return (
-    <tr data-lp={r.id} className={cx(s.row, focused && s.focus, picked && s.picked)} aria-selected={focused}
+    <tr data-lp={r.id} className={cx(s.row, member && s.member, member && last && s.last, focused && s.focus, picked && s.picked)} aria-selected={focused}
       onClick={(e) => { if ((e.target as HTMLElement).closest('a,button,input,label')) return; onFocus(r.id); }}>
-      <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
+      <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${member ? r.name : lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
       <td className={s.cPos}>{position}</td>
       <td className={s.cLp}>
-        <div className={s.lpName}><span className={s.lpText}>{lead(r)}</span></div>
+        <div className={s.lpName}><span className={s.lpText}>{member ? r.name : lead(r)}</span></div>
         {(other || byVehicle || r.money || r.doNotContact || r.riskCount > 0) && (
           <div className={s.whoLine}>
             {other && <span>{other}</span>}
