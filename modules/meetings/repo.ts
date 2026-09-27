@@ -1,3 +1,4 @@
+import { teamLabels } from '@/modules/identity/team';
 import { getDb } from '@/lib/db';
 import type { LadderRung } from '@/modules/strategy/client';
 import type {
@@ -35,17 +36,18 @@ const MEETINGS_ONLY = `m.channel in ('meeting', 'call') and (m.vehicle_id is not
       and (w.raise_closes_on is null or coalesce(m.held_on,m.scheduled_for::date)<=w.raise_closes_on))))))`;
 
 
-const toMeeting = (r: MeetingRow): Meeting => ({
+const toMeeting = (r: MeetingRow, project: (labels: readonly string[]) => string[]): Meeting => ({
   meetingId: r.meeting_id, pursuitId: r.pursuit_id, entityId: r.entity_id,
   entityName: r.entity_name, vehicleName: r.vehicle_name, kind: r.kind,
   scheduledFor: r.scheduled_for ? new Date(r.scheduled_for) : null,
   heldOn: r.held_on ? new Date(r.held_on) : null,
-  attendees: r.attendees ?? [], ownerName: r.owner_name, source: r.source, summary: r.summary,
+  attendees: project(r.attendees ?? []), ownerName: r.owner_name, source: r.source, summary: r.summary,
   justifiesRung: r.justifies_rung, justification: r.justification,
 });
 
 export async function listMeetings(vehicleId: string | null = null): Promise<Meeting[]> {
   const db = await getDb();
+  const project = await teamLabels(db);
   return (
     await db.query<MeetingRow>(
       `${MEETING_SELECT} where ${MEETINGS_ONLY}
@@ -58,11 +60,12 @@ export async function listMeetings(vehicleId: string | null = null): Promise<Mee
               and (w.raise_closes_on is null or coalesce(m.held_on,m.scheduled_for::date)<=w.raise_closes_on))))))
         order by coalesce(m.held_on::timestamptz,m.scheduled_for) desc nulls last,m.meeting_id`, [vehicleId],
     )
-  ).map(toMeeting);
+  ).map(r => toMeeting(r, project));
 }
 
 export async function upcomingMeetings(): Promise<Meeting[]> {
   const db = await getDb();
+  const project = await teamLabels(db);
   return (
     await db.query<MeetingRow>(
       // Still ahead: a scheduled meeting whose time has passed is not upcoming, whether or not
@@ -71,7 +74,7 @@ export async function upcomingMeetings(): Promise<Meeting[]> {
           and m.scheduled_for >= now() - interval '2 hours'
         order by m.scheduled_for`,
     )
-  ).map(toMeeting);
+  ).map(r => toMeeting(r, project));
 }
 
 type ObjectionRow = {
@@ -203,11 +206,11 @@ const COLLEAGUE_SELECT = `
 
 const day = (d: Date | string | null) => (d ? new Date(d) : null);
 
-const toTouch = (r: TouchRow): Touchpoint => ({
+const toTouch = (r: TouchRow, project: (labels: readonly string[]) => string[]): Touchpoint => ({
   touchpointId: r.meeting_id, entityId: r.entity_id, entityName: r.entity_name,
   vehicleId: r.vehicle_id, vehicleName: r.vehicle_name, channel: r.channel, kind: r.kind,
   on: day(r.held_on), scheduledFor: day(r.scheduled_for), direction: r.direction,
-  ownerName: r.owner_name, attendees: r.attendees ?? [], summary: r.summary,
+  ownerName: r.owner_name, attendees: project(r.attendees ?? []), summary: r.summary,
   read: r.read, readByName: r.read_by_name, source: r.source, sourceRef: r.source_ref,
   viaOrganization: r.entity_id === r.for_entity ? null : r.entity_name,
   about: r.about, aboutVehicles: r.about_vehicles ?? [], aboutBasis: r.about_basis, aboutBy: r.about_by,
@@ -233,11 +236,12 @@ const when = (t: Touchpoint) => (t.on ?? t.scheduledFor)?.getTime() ?? 0;
  */
 export async function touchpointsFor(entityId: string, vehicleId: string | null): Promise<Touchpoint[]> {
   const db = await getDb();
+  const project = await teamLabels(db);
   const rows = await db.query<TouchRow>(
     `${TOUCH_SELECT} where ($2::uuid is null or m.vehicle_id is null or m.vehicle_id = $2)`,
     [[entityId], vehicleId],
   );
-  const all = rows.map(toTouch).sort((a, b) => when(b) - when(a));
+  const all = rows.map(r => toTouch(r, project)).sort((a, b) => when(b) - when(a));
   if (!vehicleId) return all;
   const w = (await raiseWindows()).get(vehicleId);
   return w ? all.filter((t) => aboutThisRaise(t, w)) : all;
@@ -252,6 +256,7 @@ export async function touchpointsFor(entityId: string, vehicleId: string | null)
  */
 export async function colleagueTouchpointsFor(entityId: string, vehicleId: string | null): Promise<Touchpoint[]> {
   const db = await getDb();
+  const project = await teamLabels(db);
   const rows = await db.query<TouchRow>(
     `${COLLEAGUE_SELECT} where ($2::uuid is null or m.vehicle_id is null or m.vehicle_id = $2)`,
     [entityId, vehicleId],
@@ -259,7 +264,7 @@ export async function colleagueTouchpointsFor(entityId: string, vehicleId: strin
   const org = (await db.one<{ name: string }>(
     `select o.display_name as name from identity.affiliation a join identity.entity o on o.entity_id = identity.canonical_entity_id(a.org_entity)
       where identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id($1::uuid) and a.ended_on is null order by a.is_primary desc, a.as_of desc limit 1`, [entityId]))?.name ?? null;
-  const all = rows.map(toTouch).map((t) => ({ ...t, viaOrganization: org ? `${t.entityName}, ${org}` : t.entityName })).sort((a, b) => when(b) - when(a));
+  const all = rows.map(r => toTouch(r, project)).map((t) => ({ ...t, viaOrganization: org ? `${t.entityName}, ${org}` : t.entityName })).sort((a, b) => when(b) - when(a));
   if (!vehicleId) return all;
   const w = (await raiseWindows()).get(vehicleId);
   return w ? all.filter((t) => aboutThisRaise(t, w)) : all;
@@ -320,7 +325,8 @@ export async function touchpointsByPair(
   const out = new Map<string, Touchpoint[]>();
   if (!pairs.length) return out;
   const db = await getDb();
-  const rows = (await db.query<TouchRow>(TOUCH_SELECT, [[...new Set(pairs.map((p) => p.entityId))]])).map((r) => ({ r, t: toTouch(r) }));
+  const project = await teamLabels(db);
+  const rows = (await db.query<TouchRow>(TOUCH_SELECT, [[...new Set(pairs.map((p) => p.entityId))]])).map((r) => ({ r, t: toTouch(r, project) }));
   const byEntity = new Map<string, Touchpoint[]>();
   for (const { r, t } of rows) byEntity.set(r.for_entity, [...(byEntity.get(r.for_entity) ?? []), t]);
   const windows = await raiseWindows();
@@ -340,8 +346,9 @@ export async function touchpointsByEntity(entityIds: string[]): Promise<Map<stri
   const out = new Map<string, Touchpoint[]>();
   if (!entityIds.length) return out;
   const db = await getDb();
+  const project = await teamLabels(db);
   for (const r of await db.query<TouchRow>(TOUCH_SELECT, [[...new Set(entityIds)]])) {
-    out.set(r.for_entity, [...(out.get(r.for_entity) ?? []), toTouch(r)]);
+    out.set(r.for_entity, [...(out.get(r.for_entity) ?? []), toTouch(r, project)]);
   }
   for (const list of out.values()) list.sort((a, b) => when(b) - when(a));
   return out;

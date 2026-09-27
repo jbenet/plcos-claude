@@ -1,3 +1,4 @@
+import { syncTeamRoster } from '@/modules/identity/team';
 import { startRouteWarmup } from './cache';
 import { resolveIdentities, type ResolutionCounts } from '@/modules/identity/resolution';
 import { identityEvidence } from '@/modules/identity/resolution-input';
@@ -104,6 +105,7 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   const counts: BuildCounts = { teamCreated: 0, fromRecords: 0, fromResearch: 0, toConfirm: 0, keptReviewed: 0, notPeople: 0 };
   const today = new Date().toISOString().slice(0, 10);
   const nodeInput = await readNetworkNodeInput(enrichDir());
+  await syncTeamRoster(tx, nodeInput?.team ?? []);
 
   // 1. The team, as people in the graph.
   const users = await tx.query<{ id: string; handle: string; name: string; entity_id: string | null }>(

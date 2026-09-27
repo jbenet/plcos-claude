@@ -3,6 +3,8 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getDb } from '@/lib/db';
 import { finishRun, startRun } from '@/modules/sources';
+import { addOrganizationLps, type OrganizationLpCounts } from './organization-lps';
+import { readWarehouseGraph } from './connect';
 import { resolveConnectionPeople } from './connection-people';
 import { enrichDir } from './candidates';
 import { check, type Finding, type SourceKind } from './schema';
@@ -27,6 +29,7 @@ import type { Triage } from './triage';
  */
 
 export interface ImportCounts {
+  organizationLps?: OrganizationLpCounts;
   files: number;
   mapped: number;
   rejected: number;
@@ -237,6 +240,8 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
         counts.paths += ps.length;
       }
     });
+
+    counts.organizationLps = await addOrganizationLps(db, findings, runBy, await readWarehouseGraph(dir));
 
     await finishRun(run, {
       status: 'ok', requests: 0, records: counts.files, newRecords: counts.claims,

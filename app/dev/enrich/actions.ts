@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { exportResearchSet } from '@/lib/enrich/candidates';
+import { enrichDir, exportResearchSet } from '@/lib/enrich/candidates';
 import { importFindings } from '@/lib/enrich/import';
 import { appendAudit } from '@/modules/platform';
 import { getDb } from '@/lib/db';
@@ -50,8 +50,13 @@ export async function exportResearchSetAction(): Promise<void> {
 export async function importFindingsAction(): Promise<void> {
   const user = await (await auth()).currentUser();
   const r = await importFindings(user.id);
-  await appendAudit({ actorId: user.id, action: 'enrich.imported', subjectType: 'enrich', detail: { mapped: r.mapped, claims: r.claims, rejected: r.rejected, paths: r.paths } });
-  // The research's paths become ties, C and D waiting for a person (N82).
+  await appendAudit({ actorId: user.id, action: 'enrich.imported', subjectType: 'enrich', detail: { mapped: r.mapped, claims: r.claims, rejected: r.rejected, paths: r.paths, organizationLps: r.organizationLps } });
+  // Reconcile the roster's stable handles before calendar/meeting readers return the imported data.
+  const { readNetworkNodeInput } = await import('@/modules/network/nodes');
+  const { repairTeamIdentities } = await import('@/modules/identity/team');
+  const inputs = await readNetworkNodeInput(enrichDir());
+  if (inputs) await repairTeamIdentities(await getDb(), inputs);
+  // Research paths become ties with their evidence tiers.
   const { buildNetwork } = await import('@/modules/network');
   await buildNetwork();
   revalidatePath('/dev/enrich');

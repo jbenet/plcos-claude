@@ -61,3 +61,17 @@ export async function lpHeadings(rows: Array<{ pursuitId: string; entityId: stri
   }
   return out;
 }
+
+/** Separate LPs connected by a current affiliation, in this same vehicle. */
+export async function relatedLpHeadings(entityId: string, vehicleId: string): Promise<Array<{ name: string; pursuitId: string }>> {
+  const db = await getDb();
+  return db.query<{name:string;pursuitId:string}>(`with related as (
+    select identity.canonical_entity_id(a.org_entity) id from identity.affiliation a
+      where identity.canonical_entity_id(a.person_entity)=identity.canonical_entity_id($1::uuid) and a.ended_on is null
+    union select identity.canonical_entity_id(a.person_entity) id from identity.affiliation a
+      where identity.canonical_entity_id(a.org_entity)=identity.canonical_entity_id($1::uuid) and a.ended_on is null
+  ) select distinct e.display_name name,p.pursuit_id::text "pursuitId" from related r
+    join identity.entity e on e.entity_id=r.id
+    join strategy.pursuit p on identity.canonical_entity_id(p.entity_id)=r.id
+    where p.vehicle_id=$2 order by name,"pursuitId"`,[entityId,vehicleId]);
+}

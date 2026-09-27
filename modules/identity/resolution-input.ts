@@ -16,7 +16,10 @@ export function identityEvidence(input: NetworkNodeInput | null, prospects: Pros
     }
     for(const m of input.warehouse.matches)if(m.status==='confident')out.push({entityId:m.lpKey,warehouseIds:[m.personKey]});
     for(const c of input.candidates)out.push({entityId:c.key,organizations:c.org?[c.org]:[],domains:c.domains});
-    for(const p of input.warehouse.people)out.push({source:'warehouse',sourceId:p.key,organizations:p.org?[p.org]:[],domains:p.emailDomain?[p.emailDomain]:[],warehouseIds:[p.key,...Object.values(p.warehouseIds)]});
+    for(const p of input.warehouse.people) {
+      out.push({source:'warehouse',sourceId:p.key,organizations:p.org?[p.org]:[],domains:p.emailDomain?[p.emailDomain]:[],warehouseIds:[p.key,...Object.values(p.warehouseIds)],
+        teamReferences: p.teamKey && input.team.some(t => t.handle === p.teamKey) ? [`app_user:${p.teamKey}`] : []});
+    }
     for(const r of input.graph)for(const e of [r.from,r.to])if(e.type==='person'){
       const source=r.sources?.find(s=>s.url)?.url??r.provenance.source;
       const ids=(e.identity?.sourceIds??[]).map(id=>id.replace(/^warehouse:/,''));

@@ -13,10 +13,12 @@ export interface IdentityEvidence {
   organizations?: string[]; domains?: string[]; warehouseIds?: string[];
   /** Explicit source references in an identity finding, never arbitrary prose about a relationship. */
   references?: string[];
+  /** Explicit roster handle mapping; unlike relationship prose, valid across name variants. */
+  teamReferences?: string[];
 }
-interface Person { id: string; name: string; source: string; sourceId: string; root: string; orgs: Set<string>; domains: Set<string>; warehouse: Set<string>; references: Set<string> }
+interface Person { id: string; name: string; source: string; sourceId: string; root: string; orgs: Set<string>; domains: Set<string>; warehouse: Set<string>; references: Set<string>; teamReferences: Set<string> }
 export interface ResolutionCounts { peopleWithMultipleEntitiesBefore: number; merges: number; mergesByRule: Record<string, number>; possibleMatchesLeft: number }
-const priority: Record<string, number> = { affinity: 0, warehouse: 1, w3_person: 2, prospect: 3 };
+const priority: Record<string, number> = { affinity: 0, warehouse: 1, w3_person: 2, prospect: 3, app_user: 4 };
 const batchSize = config.identityResolution.batchSize;
 const pause = () => new Promise<void>(resolve => setTimeout(resolve, config.identityResolution.pauseMs));
 const intersect = (a: Set<string>, b: Set<string>) => [...a].filter(x => b.has(x));
@@ -30,22 +32,54 @@ function serialized<T>(db: Db, work: () => Promise<T>): Promise<T> {
   mutations.set(db, next);
   return next.finally(() => { if (mutations.get(db) === next) mutations.delete(db); });
 }
-export async function resolveIdentities(db: Db, evidence: IdentityEvidence[] = [], progress?: (stage: string, count: number) => void): Promise<ResolutionCounts> {
+export interface IdentityResolutionScope { teamHandles: string[]; names: string[] }
+
+/** Indexed source/name seeds plus complete redirect components, never a universe scan. */
+async function teamScope(db: Db, scope: IdentityResolutionScope, evidence: IdentityEvidence[]) {
+  const team = await db.query<{ id: string; name: string }>(`select s.entity_id::text id,u.name
+    from platform.app_user u join identity.source_record s on s.source='app_user' and s.source_id=u.handle
+    where u.active and u.handle=any($1::text[])`, [scope.teamHandles]);
+  const ids = new Set(team.map(t => t.id));
+  const names = [...new Set([...scope.names,...team.map(t => t.name)].map(s => s.trim().toLowerCase()).filter(Boolean))];
+  const matches = await db.query<{ id: string }>(`select entity_id::text id from identity.entity
+    where lower(display_name)=any($1::text[]) and entity_type='person' and retired_at is null`, [names]);
+  for (const row of matches) ids.add(row.id);
+  const handles = new Set(scope.teamHandles.map(h => `app_user:${h}`));
+  for (const item of evidence) if (item.teamReferences?.some(r => handles.has(r))) {
+    if (item.entityId) ids.add(item.entityId);
+    else if (item.source && item.sourceId) {
+      const row = await db.one<{ id: string }>('select entity_id::text id from identity.source_record where source=$1 and source_id=$2', [item.source,item.sourceId]);
+      if (row) ids.add(row.id);
+    }
+  }
+  const components = await db.query<{ id: string }>(`with recursive members as (
+    select distinct e.entity_id,e.merged_into,array[e.entity_id] seen from identity.entity e
+      where e.entity_id in (select identity.canonical_entity_id(id) from unnest($1::uuid[]) id)
+    union all select e.entity_id,e.merged_into,m.seen || e.entity_id from members m
+      join identity.entity e on e.merged_into=m.entity_id where not e.entity_id=any(m.seen)
+  ) select distinct entity_id::text id from members`, [[...ids]]);
+  return { ids: components.map(r => r.id), team: team.map(t => t.id) };
+}
+
+export async function resolveIdentities(db: Db, evidence: IdentityEvidence[] = [], progress?: (stage: string, count: number) => void, scope?: IdentityResolutionScope): Promise<ResolutionCounts> {
   db = prioritizeDb(db);
   // Passes serialize so a rebuild queued during an earlier pass reads its own evidence.
-  return serialized(db, () => withBackgroundDb(() => resolvePass(db, evidence, progress)));
+  return serialized(db, () => withBackgroundDb(() => resolvePass(db, evidence, progress, scope)));
 }
-async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (stage: string, count: number) => void): Promise<ResolutionCounts> {
+async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (stage: string, count: number) => void, scope?: IdentityResolutionScope): Promise<ResolutionCounts> {
+  const scoped = scope ? await teamScope(db, scope, evidence) : null;
+  if (scoped) progress?.('scope', scoped.ids.length);
   const people: Person[] = [];
   let sourceCursor = ['00000000-0000-0000-0000-000000000000', '', ''];
   for (;;) {
     const rows = await db.query<{ id:string; name:string; source:string; source_id:string; root:string }>(
       `select e.entity_id::text id,e.display_name name,s.source,s.source_id,identity.canonical_entity_id(e.entity_id)::text root
        from identity.entity e join identity.source_record s using(entity_id)
-       where e.entity_type='person' and e.retired_at is null and s.source=any($1::text[])
+       where e.entity_type='person' and e.retired_at is null and ${scoped ? '(e.entity_id=any($6::uuid[]) and $1::text[] is not null)' : 's.source=any($1::text[])'}
+       ${scoped ? '' : `and (s.source<>'app_user' or exists(select 1 from platform.app_user u where u.handle=s.source_id and u.active))`}
        and (e.entity_id,s.source,s.source_id)>($2::uuid,$3::text,$4::text)
-       order by e.entity_id,s.source,s.source_id limit $5`, [Object.keys(priority),...sourceCursor,batchSize]);
-    people.push(...rows.map(r=>({id:r.id,name:r.name,source:r.source,sourceId:r.source_id,root:r.root,orgs:new Set<string>(),domains:new Set<string>(),warehouse:new Set(r.source==='warehouse'?[r.source_id]:[]),references:new Set<string>()})));
+       order by e.entity_id,s.source,s.source_id limit $5`, [Object.keys(priority),...sourceCursor,batchSize,...(scoped ? [scoped.ids] : [])]);
+    people.push(...rows.map(r=>({id:r.id,name:r.name,source:r.source,sourceId:r.source_id,root:r.root,orgs:new Set<string>(),domains:new Set<string>(),warehouse:new Set(r.source==='warehouse'?[r.source_id]:[]),references:new Set<string>(),teamReferences:new Set<string>()})));
     await pause(); if(rows.length<batchSize)break;
     const last=rows.at(-1)!;sourceCursor=[last.id,last.source,last.source_id];
   }
@@ -57,17 +91,18 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
     for(const p of targets??[]){for(const s of ev.organizations??[])for(const n of organizationNames(s))p.orgs.add(n);
       for(const s of ev.domains??[])if(domain(s))p.domains.add(domain(s));
       for(const s of ev.warehouseIds??[])p.warehouse.add(s);
-      for(const s of ev.references??[])p.references.add(s);}
+      for(const s of ev.references??[])p.references.add(s);
+      for(const s of ev.teamReferences??[])p.teamReferences.add(s);}
   };
-  for(const [i,e] of evidence.entries()){apply(e);if((i+1)%batchSize===0)await pause();}
+  for(const [i,e] of (scoped ? evidence.filter(e => e.entityId ? byId.has(e.entityId) : bySource.has(`${e.source}:${e.sourceId}`)) : evidence).entries()){apply(e);if((i+1)%batchSize===0)await pause();}
   // Source-owned affiliations and person/org graph edges preserve evidence for aliases.
   // Keyset pages avoid repeatedly sorting/scanning the complete evidence corpus.
   let cursor = '';
   for (;;) {
     const rows = await db.query<{key:string;id:string;name:string}>(`select a.affiliation_id::text key,a.person_entity::text id,o.display_name name
       from identity.affiliation a join identity.entity o on o.entity_id=a.org_entity
-      where a.affiliation_id > coalesce(nullif($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
-      order by a.affiliation_id limit $2`,[cursor,batchSize]);
+      where ${scoped ? 'a.person_entity=any($3::uuid[]) and' : ''} a.affiliation_id > coalesce(nullif($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
+      order by a.affiliation_id limit $2`,[cursor,batchSize,...(scoped ? [scoped.ids] : [])]);
     for(const r of rows)apply({entityId:r.id,organizations:[r.name]});
     await pause();if(rows.length<batchSize)break;cursor=rows.at(-1)!.key;
   }
@@ -78,8 +113,11 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
       f.display_name aname,t.display_name bname,f.entity_type::text atype,t.entity_type::text btype,
       e.valid_to is null and exists(select 1 from jsonb_array_elements(e.evidence) v where v->>'note' ilike '%affiliation%') affiliation
       from network.edge e join identity.entity f on f.entity_id=e.from_entity join identity.entity t on t.entity_id=e.to_entity
-      where e.edge_id > coalesce(nullif($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
-      order by e.edge_id limit $2`,[cursor,batchSize]);
+      where ${scoped ? `(e.from_entity=any($3::uuid[]) or e.to_entity=any($3::uuid[]))
+        and ((f.entity_type='person' and t.entity_type='org') or (f.entity_type='org' and t.entity_type='person'))
+        and e.valid_to is null
+        and exists(select 1 from jsonb_array_elements(e.evidence) v where v->>'note' ilike '%affiliation%') and` : ''} e.edge_id > coalesce(nullif($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
+      order by e.edge_id limit $2`,[cursor,batchSize,...(scoped ? [scoped.ids] : [])]);
     for(const r of rows)if(r.affiliation){
       if(r.atype==='person'&&r.btype==='org')apply({entityId:r.a,organizations:[r.bname]});
       if(r.btype==='person'&&r.atype==='org')apply({entityId:r.b,organizations:[r.aname]});
@@ -91,7 +129,11 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
   cursor = '0';
   for (;;) {
     const assertions=await db.query<{key:string;kind:string;left_source:string;left_source_id:string;right_source:string;right_source_id:string;merged_entity:string|null;canonical_entity:string|null;undone_at:string|null}>(`select assertion_id::text key,kind::text,left_source,left_source_id,right_source,right_source_id,merged_entity::text,canonical_entity::text,undone_at::text
-      from identity.match_assertion where assertion_id > $1::bigint order by assertion_id limit $2`,[cursor,batchSize]);
+      from identity.match_assertion a where assertion_id > $1::bigint
+      ${scoped ? `and (merged_entity=any($3::uuid[]) or canonical_entity=any($3::uuid[]) or exists(
+        select 1 from identity.source_record s where s.entity_id=any($3::uuid[]) and
+          ((s.source=a.left_source and s.source_id=a.left_source_id) or (s.source=a.right_source and s.source_id=a.right_source_id))))` : ''}
+      order by assertion_id limit $2`,[cursor,batchSize,...(scoped ? [scoped.ids] : [])]);
     for(const a of assertions)if(a.kind==='not_same_as'||a.undone_at){
       const ls=bySource.get(`${a.left_source}:${a.left_source_id}`)??[],rs=bySource.get(`${a.right_source}:${a.right_source_id}`)??[];
       for(const l of ls)for(const r of rs)forbidden.add(pair(l.id,r.id));
@@ -105,8 +147,9 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
   const roots=new Map(people.map(p=>[p.id,p.root]));
   const root=(id:string):string=>{const seen=new Set<string>();while(roots.has(id)&&roots.get(id)!==id){if(seen.has(id))throw new Error('Identity redirect cycle');seen.add(id);id=roots.get(id)!;}return id;};
   const ranks=new Map<string,number>();
-  for(const p of people)ranks.set(root(p.id),Math.min(ranks.get(root(p.id))??Infinity,priority[p.source]!));
+  for(const p of people)ranks.set(root(p.id),Math.min(ranks.get(root(p.id))??Infinity,(priority[p.source] ?? Infinity)));
   const rank=(id:string)=>ranks.get(id)??Infinity;
+  const touchesTeam = (a: string, b: string) => !scoped || scoped.team.some(id => root(id) === root(a) || root(id) === root(b));
   const proposals:Array<{a:Person;b:Person;signals:Record<string,string[]>}>=[];
   const possible=new Set<string>();
   let comparisons=0;
@@ -118,6 +161,8 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
     for(let i=0;i<group.length;i++)for(let j=i+1;j<group.length;j++){
       if(++comparisons%batchSize===0)await pause();
       const a=group[i]!,b=group[j]!;if(a.id===b.id||a.source===b.source||root(a.id)===root(b.id))continue;
+      // Accounts require an explicit roster mapping below; an employer or namesake cannot identify a login.
+      if(a.source==='app_user'||b.source==='app_user'||!(a.source in priority)||!(b.source in priority))continue;
       const signals:Record<string,string[]>={};
       const org=intersect(a.orgs,b.orgs),email=intersect(a.domains,b.domains),warehouse=intersect(a.warehouse,b.warehouse);
       if(org.length)signals.affiliation=org;if(email.length)signals.email_domain=email;if(warehouse.length)signals.warehouse_id=warehouse;
@@ -125,10 +170,19 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
       if(Object.keys(signals).length)proposals.push({a,b,signals});else possible.add(pair(a.id,b.id));
     }
   }
+  // Explicit warehouse→roster handle links do not depend on the spelling of a person's name.
+  // They use the same audited merge and whole-component correction gates below.
+  for (const a of people) for (const reference of a.teamReferences) {
+    if (!reference.startsWith('app_user:')) continue;
+    const matches = bySource.get(reference) ?? [];
+    if (new Set(matches.map(p => root(p.id))).size !== 1) continue;
+    const b = matches[0]!;
+    if (root(a.id) !== root(b.id)) proposals.push({ a, b, signals: { team_handle: [reference] } });
+  }
   progress?.('proposals', proposals.length);
   proposals.sort((x,y)=>pair(x.a.id,x.b.id).localeCompare(pair(y.a.id,y.b.id)));
   for(const {a,b,signals} of proposals){
-    const ar=root(a.id),br=root(b.id);if(ar===br)continue;
+    const ar=root(a.id),br=root(b.id);if(ar===br || !touchesTeam(ar,br))continue;
     // A correction constrains the whole prospective component, including transitive merges.
     if([...forbidden].some(k=>{const [l,r]=k.split('|');return pair(root(l!),root(r!))===pair(ar,br);})){continue;}
     const ordered=[ar,br].sort((x,y)=>rank(x)-rank(y)||x.localeCompare(y)),canonical=ordered[0]!,merged=ordered[1]!;
@@ -146,16 +200,16 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
   progress?.('merges', counts.merges);
   const active=new Set<string>();
   const projectedForbidden=new Set([...forbidden].map(k=>{const [l,r]=k.split('|');return pair(root(l!),root(r!));}));
-  for(const k of possible){const [a,b]=k.split('|'),l=root(a!),r=root(b!);if(l!==r&&!projectedForbidden.has(pair(l,r)))active.add(pair(l,r));}
+  for(const k of possible){const [a,b]=k.split('|'),l=root(a!),r=root(b!);if(l!==r&&touchesTeam(l,r)&&!projectedForbidden.has(pair(l,r)))active.add(pair(l,r));}
   // GUESS: name-only identity confidence is 0.25, always D-tier; it is never merge evidence.
   for(const k of active){const [a,b]=k.split('|');await db.query(`insert into identity.possible_match(left_entity,right_entity,confidence,signals) values($1,$2,0.25,'{"rule":"name_only","label":"Possible identity: matching full name only; uncorroborated"}')
     on conflict(left_entity,right_entity) do update set active=true where not possible_match.active`,[a,b]);await pause();}
   cursor = '';
   for (;;) {
     const old=await db.query<{edge_id:string;left_entity:string;right_entity:string;active:boolean}>(`select edge_id::text,left_entity::text,right_entity::text,active from identity.possible_match
-      where signals->>'source' is distinct from 'dakota' and edge_id > coalesce(nullif($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
-      order by edge_id limit $2`,[cursor,batchSize]);
-    for(const p of old)if(p.active&&!active.has(pair(p.left_entity,p.right_entity))){await db.query('update identity.possible_match set active=false where edge_id=$1',[p.edge_id]);await pause();}
+      where ${scoped ? '(left_entity=any($3::uuid[]) or right_entity=any($3::uuid[])) and' : ''} signals->>'source' is distinct from 'dakota' and edge_id > coalesce(nullif($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
+      order by edge_id limit $2`,[cursor,batchSize,...(scoped ? [scoped.ids] : [])]);
+    for(const p of old)if(p.active&&touchesTeam(p.left_entity,p.right_entity)&&!active.has(pair(p.left_entity,p.right_entity))){await db.query('update identity.possible_match set active=false where edge_id=$1',[p.edge_id]);await pause();}
     await pause();if(old.length<batchSize)break;cursor=old.at(-1)!.edge_id;
   }
   counts.possibleMatchesLeft=active.size;return counts;
