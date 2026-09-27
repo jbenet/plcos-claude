@@ -169,6 +169,14 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
             <>
               <div className="fact"><span>Mapped</span><span>{n(last.mapped ?? 0)} LPs · {n(last.claims ?? 0)} claims from {n(last.docs ?? 0)} public pages</span></div>
               <div className="fact"><span>Connection candidates</span><span>{n(last.paths ?? 0)} paths for {n(last.withPaths ?? 0)} LPs</span></div>
+              {last.entityTypes && <details className="more" style={{ marginTop: 10 }}>
+                <summary>{last.entityTypes.corrected.length} entity types corrected, {last.entityTypes.ambiguous.length} ambiguous</summary>
+                <ul style={{ fontSize: 12 }}>
+                  {last.entityTypes.corrected.map(c => <li key={c.correctionId}><Link href={`/orgs/${c.entityId}`}>{c.name}</Link> · organization · <code>{c.correctionId}</code></li>)}
+                  {last.entityTypes.ambiguous.map(c => <li key={c.entityId}><Link href={`/orgs/${c.entityId}`}>{c.name}</Link> · {c.reason}</li>)}
+                </ul>
+                <p className="muted">Local type decisions; source identities retained. Export the research set again before the next enrichment check.</p>
+              </details>}
               {(last.skippedRecords?.length ?? 0) > 0 && <div className="fact"><span>Skipped</span><span>{n(last.skippedPaths ?? 0)} paths · {n(last.skippedRecords!.length)} records total — see below</span></div>}
               {(last.rejected ?? 0) > 0 && <div className="fact"><span>Refused</span><span>{n(last.rejected ?? 0)} files that fail the schema — see below</span></div>}
             </>

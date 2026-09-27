@@ -1,3 +1,4 @@
+import { correctPipelineEntityTypes, type EntityTypeReport } from './entity-types';
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -29,6 +30,7 @@ import type { Triage } from './triage';
  */
 
 export interface ImportCounts {
+  entityTypes?: EntityTypeReport;
   organizationLps?: OrganizationLpCounts;
   files: number;
   mapped: number;
@@ -114,6 +116,7 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
 
     const db = await getDb();
     await db.transaction(async (tx) => {
+      counts.entityTypes = await correctPipelineEntityTypes(tx, findings, parsedPaths.records.map(r => r.value as Path), runBy ?? 'system:identity-import');
       const orgs = await tx.query<{ name: string }>("select display_name as name from identity.entity where entity_type = 'org'");
       const records = parsedPaths.records;
       const origin = new Map<Path, LocatedRecord>();

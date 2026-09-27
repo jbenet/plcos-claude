@@ -214,12 +214,16 @@ export async function importNetworkNodes(tx:Queryable,plan:NodePlan,at=new Date(
   const mapped=new Map(existing.map(r=>[sourceKey(r.source,r.source_id),r.entity_id]));
   const entities=await tx.query<{id:string;type:string;name:string}>(`select entity_id::text id,entity_type::text type,display_name name from identity.entity where merged_into is null`);
   const byId=new Map(entities.map(e=>[e.id,e]));
+  const localTypeDecisions=new Set((await tx.query<{id:string}>(`select entity_id::text id from identity.entity_type_correction`)).map(r=>r.id));
   const redirects=new Map((await tx.query<{entity_id:string;canonical_id:string}>(`select entity_id::text,canonical_id::text from identity.entity_resolution`)).map(r=>[r.entity_id,r.canonical_id]));
   const ids=new Map<string,string>(), newEntities=new Map<string,{id:string;type:string;name:string}>(), aliases:Array<{source:string;source_id:string;id:string}>=[];
   for(const n of plan.nodes) {
     const team=n.teamHandle?(ids.get(sourceKey('app_user',n.teamHandle))??mapped.get(sourceKey('app_user',n.teamHandle))):undefined;
     const explicitId=n.entityId ? redirects.get(n.entityId)??n.entityId : undefined;
-    const explicit=explicitId && (!byId.has(explicitId)||byId.get(explicitId)!.type===n.type) ? explicitId : undefined;
+    // An export made before this import may still say person. Keep its stable LP ID when
+    // a local decision explains the type difference; do not mint a stale person duplicate.
+    const localType = n.source==='network_candidate' && explicitId && localTypeDecisions.has(explicitId);
+    const explicit=explicitId && (!byId.has(explicitId)||byId.get(explicitId)!.type===n.type||localType) ? explicitId : undefined;
     const plAlias = n.source==='network_org' && n.sourceId==='pl' ? (await tx.one<{id:string}>(`select identity.canonical_entity_id(entity_id)::text id from identity.source_record where source='w3_person' and source_id=$1`, [connectionPersonKey('PL','https://protocol.ai')]))?.id : undefined;
     const institutionalAlias = n.source==='warehouse' && n.sourceId==='organization:protocol-labs' ? ids.get(sourceKey('network_org','pl')) ?? mapped.get(sourceKey('network_org','pl')) : undefined;
     const id=mapped.get(n.key)??institutionalAlias??plAlias??team??explicit??randomUUID(); ids.set(n.key,id);

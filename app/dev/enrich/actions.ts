@@ -50,7 +50,7 @@ export async function exportResearchSetAction(): Promise<void> {
 export async function importFindingsAction(): Promise<void> {
   const user = await (await auth()).currentUser();
   const r = await importFindings(user.id);
-  await appendAudit({ actorId: user.id, action: 'enrich.imported', subjectType: 'enrich', detail: { mapped: r.mapped, claims: r.claims, rejected: r.rejected, paths: r.paths, organizationLps: r.organizationLps } });
+  await appendAudit({ actorId: user.id, action: 'enrich.imported', subjectType: 'enrich', detail: { mapped: r.mapped, claims: r.claims, rejected: r.rejected, paths: r.paths, organizationLps: r.organizationLps, entityTypes: { corrected: r.entityTypes?.corrected.length ?? 0, ambiguous: r.entityTypes?.ambiguous.length ?? 0 } } });
   // Reconcile the roster's stable handles before calendar/meeting readers return the imported data.
   const { readNetworkNodeInput } = await import('@/modules/network/nodes');
   const { repairTeamIdentities } = await import('@/modules/identity/team');

@@ -41,11 +41,11 @@ export async function resolveConnectionPeople(tx: Queryable, paths: Path[],
       else { ids.set(person.key, mapped.id); mappedKeys.add(person.key); }
       continue;
     }
-    const existing = await tx.one<{ name: string; type: string }>(`select display_name as name, entity_type::text as type from identity.entity where entity_id = $1`, [person.key]);
+    const existing = await tx.one<{ name: string; type: string }>(`select display_name as name, entity_type::text as type from identity.entity where entity_id = identity.canonical_entity_id($1::uuid)`, [person.key]);
     if (existing && (existing.type !== type || norm(existing.name) !== norm(person.name))) {
       badKeys.set(person.key, 'Connector identity conflicts with an existing entity'); continue;
     }
-    const opposite = await tx.one<{ n: number }>(`select count(*)::int as n from identity.entity where lower(trim(display_name)) = lower(trim($1)) and entity_type::text <> $2`, [person.name, type]);
+    const opposite = await tx.one<{ n: number }>(`select count(*)::int as n from identity.entity where merged_into is null and retired_at is null and lower(trim(display_name)) = lower(trim($1)) and entity_type::text <> $2`, [person.name, type]);
     if (opposite && opposite.n > 0) { badKeys.set(person.key, 'Connector name conflicts with an existing entity type'); continue; }
     // Namesakes are separate sourced identities until deterministic corroboration merges them.
     if (existing) {

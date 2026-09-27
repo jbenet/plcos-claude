@@ -95,6 +95,7 @@ async function entityFor(tx: Queryable, kind: 'person' | 'org', sourceId: string
     `select entity_id from identity.source_record where source = $1 and source_id = $2`, [SOURCE, sourceId],
   );
   if (found) {
+    // Keep the locally corrected entity_type. Affinity source identity/type remains unchanged.
     await tx.query(`update identity.entity set display_name = $2 where entity_id = $1 and display_name <> $2`, [found.entity_id, name]);
     return found.entity_id;
   }

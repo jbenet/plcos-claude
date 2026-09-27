@@ -1,3 +1,4 @@
+// entity.entity_type is the effective local type, protected by the correction migration.
 import { getDb } from '@/lib/db';
 import type { Entity, EntityType } from './types';
 

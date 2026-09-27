@@ -154,6 +154,7 @@ export async function researchSet(): Promise<Candidate[]> {
   const ids = [...byEntity.keys()];
   if (!ids.length) return [];
 
+  // entity_type includes audited local corrections; both export files must use this DB value.
   const [entities, affiliations, links, entries, contact] = await Promise.all([
     db.query<{ entity_id: string; entity_type: string; display_name: string }>(
       `select entity_id::text, entity_type::text, display_name from identity.entity where entity_id = any($1::uuid[])`, [ids]),
