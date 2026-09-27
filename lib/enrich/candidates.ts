@@ -11,6 +11,7 @@ import { listRestrictions } from '@/modules/coordination';
 import { listPursuits, type Pursuit, type PursuitStatus } from '@/modules/strategy';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { noteTags } from '@/lib/connectors/affinity/event-tags';
+import { makeTriageExport, writeTriageExport } from './triage-export';
 
 /**
  * The research set (N64, docs/19): who the enrichment workflows read about, written to files
@@ -144,6 +145,11 @@ const OUTSIDE = (f: F) => !/phone|telegram|whatsapp/i.test(f.name) &&
 const IDENTITY_FIELDS = ['Current Organization', 'Current Job Title', 'Organizations', 'Job Titles', 'Industry', 'Location', 'LinkedIn URL'];
 
 export async function researchSet(): Promise<Candidate[]> {
+  return (await researchSnapshot()).candidates;
+}
+
+/** Keep the bulk interaction read for the sibling triage export; never reload it per LP. */
+async function researchSnapshot() {
   const db = await getDb();
   // Juan, 27 Sep: names and entities may be searched, Dakota-sourced ones included. What stays out of
   // research files is Dakota's private or aggregated fields: none are read here (the affiliation read
@@ -152,7 +158,7 @@ export async function researchSet(): Promise<Candidate[]> {
   const byEntity = new Map<string, Pursuit[]>();
   for (const p of all) byEntity.set(p.entityId, [...(byEntity.get(p.entityId) ?? []), p]);
   const ids = [...byEntity.keys()];
-  if (!ids.length) return [];
+  if (!ids.length) return { candidates: [] as Candidate[], touches: new Map<string, import('@/modules/meetings').Touchpoint[]>(), entries: [] as Entry[] };
 
   // entity_type includes audited local corrections; both export files must use this DB value.
   const [entities, affiliations, links, entries, contact] = await Promise.all([
@@ -285,7 +291,7 @@ export async function researchSet(): Promise<Candidate[]> {
   const sentOn = new Map<string, number>();
   for (const c of out) if (c.contact.awaitingSince) sentOn.set(c.contact.awaitingSince, (sentOn.get(c.contact.awaitingSince) ?? 0) + 1);
   for (const c of out) c.contact.outreachShared = c.contact.awaitingSince ? sentOn.get(c.contact.awaitingSince)! : 0;
-  return out;
+  return { candidates: out, touches: everything, entries: entries.map((r) => r.payload) };
 }
 
 /** A row's tag as the strategy step reads it (N81). */
@@ -301,14 +307,20 @@ function noteWords(t: { about: 'raise' | 'other'; vehicles: string[]; by: 'rule'
 }
 
 /** Where the files live; the property harness points it at a scratch directory of its own. */
-export const enrichDir = () => resolve(process.cwd(), process.env.ENRICH_DIR ?? join(config.data.root, 'enrich'));
+export const enrichDir = () => {
+  const expected = resolve(process.cwd(), config.data.root, 'enrich');
+  const dir = resolve(process.cwd(), process.env.ENRICH_DIR ?? expected);
+  if (config.data.profile === 'real' && dir !== expected) throw new Error('Real enrichment exports must stay in data/real/enrich.');
+  return dir;
+};
 
-/** Write both files. Returns counts, never names: a caller may show them anywhere. */
+/** Write the research, strategy and triage files. Returns counts, never names. */
 export async function exportResearchSet(): Promise<{ candidates: number; people: number; orgs: number; withDomain: number; withOrg: number; byStatus: Record<string, number>; dir: string }> {
   // A record with no searchable name ("-" from a source's blank) can't be researched; W1 wrote
   // empty placeholders for them (27 Sep). It stays in the pipeline, just not in the export.
-  const set = (await researchSet()).filter((c) => /[\p{L}\p{N}].*[\p{L}\p{N}]/u.test(c.name ?? ''));
   const dir = enrichDir();
+  const snapshot = await researchSnapshot();
+  const set = snapshot.candidates.filter((c) => /[\p{L}\p{N}].*[\p{L}\p{N}]/u.test(c.name ?? ''));
   await mkdir(dir, { recursive: true });
   const identity = (c: Candidate): ResearchIdentity => ({
     key: c.key, name: c.name, type: c.type, org: c.org, role: c.role, location: c.location, domains: c.domains,
@@ -325,6 +337,7 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   await writeFile(join(dir, 'team.json'), JSON.stringify(team.map((u) => ({
     handle: u.handle, name: u.name, role: u.role,
   })), null, 1) + '\n', 'utf8');
+  await writeTriageExport(dir, await makeTriageExport(dir, snapshot.candidates, snapshot.touches, snapshot.entries, team));
   const byStatus: Record<string, number> = {};
   for (const c of set) for (const p of c.pursuits) byStatus[p.status] = (byStatus[p.status] ?? 0) + 1;
   return {

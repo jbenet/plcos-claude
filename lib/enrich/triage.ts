@@ -31,6 +31,10 @@ export interface Triage {
   first: 'name an owner' | 'check sent mail' | 'first personal note' | 'reply we owe' | null;
 }
 
+/** Shared with the export: a later personal touch supersedes the mailing. */
+export const massMailing = (c: Candidate): boolean => c.contact.outreachShared >= 10 &&
+  !(c.contact.lastTouch && c.contact.awaitingSince && c.contact.lastTouch > c.contact.awaitingSince);
+
 const SENIOR = /\b(founder|co-?founder|managing|partner|principal|chief|cio|ceo|cfo|president|chair|head|director|owner|general partner|gp|trustee|board|angel)\b/i;
 const JUNIOR = /\b(analyst|associate|specialist|research|intern|coordinator|assistant|junior)\b/i;
 const SLOW = /\b(investment authority|sovereign|pension|retirement|endowment|university|college|bank|insurance|holdings? (?:plc|group)|asset management)\b/i;
@@ -42,16 +46,18 @@ const INVESTS = /venture|capital|partners|fund|family office|investments?|ventur
  */
 export const NO_FUNDS = /\b(does not|doesn['’]t|do not|don['’]t|will not|won['’]t|never)\s+(do\s+venture|(invest|allocate)\w*\s+(?!directly)(in|to)\s+[^.;]{0,60}?\b(venture capital|venture funds?|funds?|fund managers))\b|\bno\s+(third[- ]party\s+)?fund\s+investments?\b/i;
 
-export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
-  const candidates = (await readFile(join(dir, 'candidates.jsonl'), 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Candidate);
+export async function triage(dir: string, now = new Date(), input?: Candidate[]): Promise<Array<Triage & { vehicle: string }>> {
+  const candidates = input ?? (await readFile(join(dir, 'candidates.jsonl'), 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Candidate);
   const paths = (await readFile(join(dir, 'connections.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Path);
+  const pathsByKey = new Map<string, Path[]>();
+  for (const p of paths) { const list = pathsByKey.get(p.lp) ?? []; list.push(p); pathsByKey.set(p.lp, list); }
   // Researched means the protocol as written ran; a pages-only finding (v1.6) is still owed its search pass.
   const researched = new Set<string>();
   const pagesFoundNothing = new Set<string>();
   const findingByKey = new Map<string, Finding>();
   /** What each finding says about domains that don't work, kept to test against the domains on file. */
   const domainTalk = new Map<string, string>();
-  for (const f of (await readdir(join(dir, 'raw')).catch(() => [])).filter((x) => x.endsWith('.json'))) {
+  for (const f of (await readdir(join(dir, 'raw')).catch(() => [])).filter((x) => x.endsWith('.json')).sort()) {
     try {
       const x = JSON.parse(await readFile(join(dir, 'raw', f), 'utf8')) as Finding;
       if (x.identity.match === 'confirmed' || x.identity.match === 'probable') findingByKey.set(x.key, x);
@@ -62,11 +68,11 @@ export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
       else if (x.identity.match === 'not_found' || x.identity.match === 'ambiguous') pagesFoundNothing.add(x.key);
     } catch { /* the checker reports it */ }
   }
-  const out: Triage[] = [];
+  const out: Array<Triage & { vehicle: string }> = [];
   for (const c of candidates) {
     const status = c.pursuits[0]?.status;
     if (status !== 'connecting' && status !== 'selected') continue;
-    const mine = paths.filter((p) => p.lp === c.key);
+    const mine = pathsByKey.get(c.key) ?? [];
     const reasons: string[] = [];
     // The finding's confirmed role wins over ours (s08): a council membership on file hid a founding partner.
     const title = findingByKey.get(c.key)?.identity.canonical?.role ?? c.role ?? c.enriched['Current Job Title'] ?? '';
@@ -118,7 +124,7 @@ export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
     else if (title) reasons.push(`Not the decision-maker by title (${title}): likely the first contact and a gatekeeper`);
     // A mailing, unless we wrote again after it (s16): then that later note is what they last had.
     const laterNote = Boolean(c.contact.lastTouch && c.contact.awaitingSince && c.contact.lastTouch > c.contact.awaitingSince);
-    const mailing = c.contact.outreachShared >= 10 && !laterNote;
+    const mailing = massMailing(c);
     if (laterNote && c.contact.outreachShared >= 10) reasons.push(`We wrote again after the mailing, on ${c.contact.lastTouch}: read that note before anything else`);
     if (waitedDays !== null) {
       reasons.push(mailing
@@ -147,7 +153,7 @@ export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
       : 'cold';
     if (theyWroteLast) reasons.unshift(`They wrote last, on ${c.contact.lastFromThem}, and nothing from us is on record since: check sent mail, then answer`);
     const first: Triage['first'] = theyWroteLast ? 'reply we owe' : unowned && warm ? 'name an owner' : (claimsContact && noTouch) || dead ? 'check sent mail' : mailing ? 'first personal note' : null;
-    out.push({ key: c.key, name: c.name, lane, reasons, senior, researched: researched.has(c.key), waitedDays, first });
+    out.push({ key: c.key, name: c.name, vehicle: c.pursuits[0]!.vehicle, lane, reasons, senior, researched: researched.has(c.key), waitedDays, first });
   }
   // The warm side (s13): Discussing or Committed, and the last word on record is theirs — a message,
   // not a meeting — with nothing from us since. One line each, with that one first step.
@@ -157,7 +163,7 @@ export async function triage(dir: string, now = new Date()): Promise<Triage[]> {
     const theirs = c.contact.lastFromThem && !c.contact.awaitingSince && Boolean(c.contact.lastTouchChannel) && c.contact.lastTouchChannel !== 'meeting' && c.contact.lastTouchChannel !== 'call';
     if (!theirs) continue;
     const days = Math.round((now.getTime() - new Date(c.contact.lastFromThem!).getTime()) / 86_400_000);
-    out.push({ key: c.key, name: c.name, lane: 'warm now', senior: false, researched: researched.has(c.key), waitedDays: null, first: 'reply we owe',
+    out.push({ key: c.key, name: c.name, vehicle: c.pursuits[0]!.vehicle, lane: 'warm now', senior: false, researched: researched.has(c.key), waitedDays: null, first: 'reply we owe',
       reasons: [`They wrote last, ${days === 0 ? 'today' : `${days} ${days === 1 ? 'day' : 'days'} ago`} (${c.contact.lastFromThem}), and nothing from us is on record since: check sent mail, then answer`] });
   }
   const order: Record<Lane, number> = { 'warm now': 0, 'research first': 1, 'long process': 2, cold: 3 };
