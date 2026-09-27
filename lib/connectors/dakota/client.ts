@@ -77,6 +77,16 @@ export class DakotaClient {
     return Number(r.record_count ?? NaN);
   }
 
+  /** A small read that reports its status instead of throwing: for finding a query shape Dakota accepts. */
+  async probe(q: ListQuery): Promise<{ status: number; records: number; keys: number }> {
+    await this.pace(); this.requests++;
+    const res = await this.fetcher(`${BASE}/dakota`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'Oauth-Token': await this.auth() }, body: readBody({ ...q, maxNum: Math.min(q.maxNum ?? 2, 2) }) });
+    if (res.status === 429) throw new Error('Dakota answered 429: stop and come back later');
+    if (!res.ok) return { status: res.status, records: 0, keys: 0 };
+    const r = await res.json() as { records?: Record<string, unknown>[] };
+    return { status: res.status, records: r.records?.length ?? 0, keys: Object.keys(r.records?.[0] ?? {}).length };
+  }
+
   async page<T = Record<string, unknown>>(q: ListQuery): Promise<Page<T>> {
     const r = await this.post('dakota', readBody(q), { 'Oauth-Token': await this.auth() }) as { records?: T[]; next_offset?: number };
     return { records: r.records ?? [], nextOffset: Number(r.next_offset ?? -1) };

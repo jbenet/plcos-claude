@@ -65,12 +65,15 @@ async function pull() {
     const dir = join(root, 'dakota', 'raw', m); await mkdir(dir, { recursive: true });
     const file = join(dir, `${stamp}.jsonl`);
     const expected = await client.count(m);
-    let fields: string[] | undefined = (FIELDS as unknown as Record<string, string[]>)[m];
-    let offset = 0, written = 0, mode = 'documented';
+    const { fields: found, orderBy, mode: shape, log } = await findShape(client, m, (FIELDS as unknown as Record<string, string[]>)[m]);
+    await writeFile(join(root, 'dakota', 'raw', `${stamp}.${m}.probe.json`), JSON.stringify(log, null, 1) + '\n');
+    if (!orderBy) { out[m] = { expected, written: 0, fields: 'none accepted', error: 'no query shape accepted' }; continue; }
+    let fields: string[] | undefined = found;
+    let offset = 0, written = 0, mode = shape;
     try {
       for (;;) {
         let page;
-        try { page = await client.page({ module: m, fields, offset }); }
+        try { page = await client.page({ module: m, fields, offset, orderBy }); }
         catch (err) {
           // A field the docs list but our plan cannot read fails the whole request: fall back to Dakota's default set, once.
           if (offset === 0 && fields && /answered 400/.test(String(err))) { fields = undefined; mode = 'default'; continue; }
@@ -91,6 +94,29 @@ async function pull() {
     checks: [{ name: 'every record read', status: failed ? 'fail' : 'pass' }], outcome: failed ? 'partial' : 'succeeded', reason: failed ? JSON.stringify(out).slice(0, 300) : null,
     usage: { input: null, output: null, cacheRead: null, cacheWrite: null, cost: null, source: 'measured', method: `script: ${client.requests} Dakota requests, no model tokens` } });
   console.log(`requests ${client.requests}`); for (const [m, x] of Object.entries(out)) console.log(`${m}: ${x.written}/${x.expected} (${x.fields} fields)${x.error ? ' · ' + x.error : ''}`);
+}
+
+/** Probe, 2 records a request, for a field set and order Dakota accepts; bisect the documented fields when the full set fails. */
+async function findShape(client: DakotaClient, m: string, all: string[]) {
+  const log: Array<{ what: string; status: number; records: number; keys: number }> = [];
+  const probe = async (what: string, fields: string[] | undefined, orderBy: string) => {
+    const r = await client.probe({ module: m, fields, orderBy, offset: 0 }); log.push({ what, ...r }); return r.status === 200 && r.records > 0;
+  };
+  let orderBy: string | null = null;
+  for (const o of ['sfid:ASC', 'id:ASC', 'name:ASC', 'lastmodifieddate:DESC']) if (await probe(`default fields, order ${o}`, undefined, o)) { orderBy = o; break; }
+  if (!orderBy) return { fields: undefined, orderBy: null, mode: 'none', log };
+  if (await probe('all documented fields', all, orderBy)) return { fields: all, orderBy, mode: 'documented', log };
+  // Bisect: keep every chunk that is accepted, split the ones that are not, down to single fields.
+  const ok: string[] = []; const queue: string[][] = [];
+  for (let i = 0; i < all.length; i += 32) queue.push(all.slice(i, i + 32));
+  let budget = 60;
+  while (queue.length && budget-- > 0) {
+    const c = queue.shift()!;
+    if (await probe(`${c.length} fields from ${c[0]}`, c, orderBy)) ok.push(...c);
+    else if (c.length > 1) queue.push(c.slice(0, c.length >> 1), c.slice(c.length >> 1));
+  }
+  if (ok.length && await probe(`${ok.length} accepted fields together`, ok, orderBy)) return { fields: ok, orderBy, mode: `documented minus ${all.length - ok.length}`, log };
+  return { fields: undefined, orderBy, mode: 'default', log };
 }
 
 main().catch((err) => { console.error(err instanceof Error ? err.message : err); process.exit(1); });
