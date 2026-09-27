@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { estimateUsage, usageFields, type Window } from '../lib/workflows/usage';
@@ -56,5 +56,74 @@ export async function workflowUsageProperties(check: (name: string, ok: boolean,
     assert.equal(projected['message.usage.output_tokens'], 1);
     assert.throws(() => usageFields('{"message":'));
     check('Counter resets and repeated Claude messages do not inflate usage', true, 'cache semantics normalized; message bodies absent from allowlisted projection');
+
+    // An exec child may inherit the parent's payload.id/session_id and timestamp.
+    // Its filename and outer metadata timestamp identify its own counter stream.
+    await rm(roots.codex, { recursive: true }); await mkdir(roots.codex);
+    await rm(roots.claude, { recursive: true }); await mkdir(roots.claude);
+    const parent = { ...meta, payload: { ...meta.payload, session_id: 'invented-session',
+      originator: 'codex_exec', source: 'exec' } };
+    const childId = '00000000-0000-4000-8000-000000000001';
+    const childFile = join(roots.codex, `rollout-2020-01-01T00-00-10-${childId}.jsonl`);
+    const child = { ...parent, timestamp: stamp(10), payload: { ...parent.payload,
+      source: { subagent: { thread_spawn: { parent_thread_id: 'invented-session' } } } } };
+    await write(file, [parent, event(10, 100), event(20, 200)]);
+    await write(childFile, [child, { ...parent, timestamp: stamp(10) }, event(20, 100)]);
+    estimates = await estimateUsage([window('headless', 0, 20)], roots);
+    assert.equal(estimates[0].input, 300);
+    assert.equal(estimates[0].sessions.length, 2);
+    assert.ok(estimates[0].sessions.includes(`chatgpt:${childId}`));
+    estimates = await estimateUsage([window('before-child', 0, 10)], roots);
+    assert.equal(estimates[0].input, 100); // child creation is t=10, not inherited t=0
+    check('Headless child counters use rollout identity and their own creation time', true,
+      'inherited parent IDs do not merge independent child streams');
+
+    await rm(childFile);
+    // A resumed partial copy must merge observations before computing deltas.
+    const copy = join(roots.codex, 'resumed.jsonl');
+    await write(copy, [parent, event(20, 200)]);
+    estimates = await estimateUsage([window('resumed', 0, 20)], roots);
+    assert.equal(estimates[0].input, 200);
+    assert.equal(estimates[0].source, 'measured');
+    await rm(copy);
+    const unrelated = join(roots.codex, 'unrelated.jsonl');
+    await writeFile(unrelated, '{broken record\n');
+    estimates = await estimateUsage([window('healthy', 0, 20)], roots);
+    assert.equal(estimates[0].input, 200);
+    assert.equal(estimates[0].source, 'measured');
+    check('Resumed copies and unrelated malformed logs neither inflate nor erase usage', true,
+      '200 measured tokens survive a partial copy and a corrupt unrelated file');
+
+    await appendFile(file, '{"timestamp":"2020-01-01T00:00:21Z","payload":');
+    estimates = await estimateUsage([window('open', 0, 25)], roots);
+    assert.equal(estimates[0].input, 200);
+    assert.equal(estimates[0].source, 'estimated');
+    assert.ok(estimates[0].diagnostics.includes('incomplete final record ignored'));
+    assert.ok(estimates[0].diagnostics.some(d => d.includes('in-flight')));
+    // Once the write completes, the same file can supply the next cumulative report.
+    await write(file, [parent, event(10, 100), event(20, 200), event(25, 300)]);
+    estimates = await estimateUsage([window('closed', 0, 25)], roots);
+    assert.equal(estimates[0].input, 300);
+    assert.equal(estimates[0].source, 'measured');
+    await writeFile(file, [JSON.stringify(parent), JSON.stringify(event(10, 100)), '{broken',
+      JSON.stringify(event(20, 200))].join('\n') + '\n');
+    estimates = await estimateUsage([window('damaged', 0, 20)], roots);
+    assert.equal(estimates[0].input, 200);
+    assert.equal(estimates[0].source, 'estimated');
+    assert.ok(estimates[0].diagnostics.includes('malformed records skipped'));
+    check('Still-open and internally damaged logs preserve observed counters with explicit uncertainty', true,
+      'partial tail is distinguished from internal damage; a completed next report restores full coverage');
+
+    await write(file, [parent, event(20, 0)]);
+    estimates = await estimateUsage([window('zero', 0, 20)], roots);
+    assert.equal(estimates[0].input, 0);
+    assert.equal(estimates[0].source, 'measured');
+    await write(file, [parent]);
+    estimates = await estimateUsage([window('missing', 0, 20)], roots);
+    assert.equal(estimates[0].input, null);
+    assert.equal(estimates[0].source, 'estimated');
+    assert.match(estimates[0].method, /^unavailable:/);
+    check('Observed zero usage is distinct from a session with no usage reports', true,
+      'missing metadata never manufactures zero tokens');
   } finally { await rm(temp, { recursive: true, force: true }); }
 }

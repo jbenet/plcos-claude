@@ -129,5 +129,29 @@ export async function workflowProperties(check: (name: string, ok: boolean, deta
     assert.ok(all.runs.every((r) => r.finish));
     assert.deepEqual(all.issues, []);
     check('Workflow CLI and live-script wrapper record success/failure in a temporary layout', true, 'dev wrapper refused; process exit is not an item-validation claim');
+    const observed = await beginRun({ ...metadata, workerFolder: join(dev, 'worker') }, context);
+    const observedStart = (await readRuns(context)).runs.find(r => r.runId === observed)!.start!.startedAt!;
+    const sessions = { codex: join(temp, 'sessions'), claude: join(temp, 'no-claude') };
+    await mkdir(sessions.codex);
+    const session = (id: string, cwd: string, input: number) => [
+      { timestamp: observedStart, type: 'session_meta', payload: { id, cwd, source: 'exec', originator: 'codex_exec' } },
+      { timestamp: observedStart, type: 'event_msg', payload: { type: 'token_count', info: {
+        total_token_usage: { input_tokens: input, output_tokens: 2, cached_input_tokens: 3 } } } },
+    ].map(row => JSON.stringify(row)).join('\n') + '\n';
+    await writeFile(join(sessions.codex, 'worker.jsonl'), session('worker-session', join(dev, 'worker'), 10) + '{"partial":');
+    await writeFile(join(sessions.codex, 'launcher.jsonl'), session('launcher-session', dev, 9999));
+    await finishWithUsage(observed, { ...result, usage: null }, context, sessions);
+    const recorded = (await readRuns(context)).runs.find(r => r.runId === observed)!.finish!.usage!;
+    assert.equal(recorded.input, 10);
+    assert.equal(recorded.source, 'estimated');
+    assert.deepEqual(recorded.sessions, ['chatgpt:worker-session']);
+    assert.match(recorded.method!, /incomplete final record/);
+    const frozen = await readFile(file, 'utf8');
+    await writeFile(join(sessions.codex, 'worker.jsonl'), session('worker-session', join(dev, 'worker'), 20));
+    await finishWithUsage(observed, { ...result, usage: null }, context, sessions);
+    assert.equal(await readFile(file, 'utf8'), frozen);
+    check('Finish persists usable headless counters, match provenance and stable retries', true,
+      'open worker log is read; unrelated launcher tokens excluded; later reports cannot alter a retry');
+
   } finally { await rm(temp, { recursive: true, force: true }); }
 }

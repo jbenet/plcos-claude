@@ -3,26 +3,29 @@ import { createReadStream } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { createInterface } from 'node:readline';
 import { finishRun, readRuns, type Context, type Finish, type FoldedRun, type Usage } from './ledger';
 
 const keys = ['input', 'cachedInput', 'output', 'reasoning', 'cacheWrite'] as const;
 type Tokens = Record<typeof keys[number], number>;
 export type Estimate = Record<typeof keys[number], number | null> & {
-  runId: string; source: 'estimated'; method: string; sessions: string[];
+  runId: string; source: 'measured' | 'estimated'; method: string; sessions: string[];
+  diagnostics: string[];
 };
 export type Window = { runId: string; source: string; folders: string[]; start: number; end: number };
 type Sample = { start: number; end: number; tokens: Tokens };
-type Session = { id: string; source: string; folders: Set<string>; samples: Sample[] };
+type Observation = { at: number; tokens: Tokens; message: string };
+type Session = { id: string; source: string; folders: Set<string>; samples: Sample[];
+  started: number; raw: Observation[]; diagnostics: Set<string> };
 export type SessionRoots = { codex: string; claude: string };
 const zero = (): Tokens => ({ input: 0, cachedInput: 0, output: 0, reasoning: 0, cacheWrite: 0 });
-const METHOD = 'session-window-v1: cumulative deltas prorated by time; equal shares during concurrency; cwd+provider match';
+const METHOD = 'session-window-v2: cumulative deltas prorated by time; equal shares during concurrency; worker cwd+provider match';
 
 // Allowlist paths, rather than JSON.parse(line): no prompt, instruction, message body,
 // tool arguments or tool output is decoded, retained or printed.
 const paths = [
   'type', 'timestamp', 'cwd', 'sessionId', 'requestId',
   'payload.type', 'payload.id', 'payload.session_id', 'payload.cwd', 'payload.timestamp',
+  'payload.originator', 'payload.source', 'payload.source.subagent.thread_spawn.parent_thread_id',
   'payload.info.total_token_usage.input_tokens', 'payload.info.total_token_usage.cached_input_tokens',
   'payload.info.total_token_usage.cache_write_input_tokens', 'payload.info.total_token_usage.output_tokens',
   'payload.info.total_token_usage.reasoning_output_tokens',
@@ -71,7 +74,7 @@ export function usageFields(text: string): Record<string, unknown> {
       else {
         const start = i;
         skip();
-        if (selected.has(path)) out[path] = JSON.parse(text.slice(start, i));
+        if (selected.has(path) && !['{', '['].includes(text[start])) out[path] = JSON.parse(text.slice(start, i));
       }
       space();
       if (text[i] === '}') { i++; return; }
@@ -100,26 +103,58 @@ async function files(root: string, since: number): Promise<string[]> {
   return result.sort();
 }
 
-async function readSessions(roots: SessionRoots, since: number, until: number): Promise<Session[]> {
-  const sessions = new Map<string, Session>();
-  for (const source of ['chatgpt', 'claude-code']) {
+/** Read a bounded snapshot: an active writer need not close its log before finish. */
+async function* snapshotLines(file: string): AsyncGenerator<{ text: string; tail: boolean }> {
+  const size = (await stat(file)).size;
+  if (!size) return;
+  const stream = createReadStream(file, { encoding: 'utf8', start: 0, end: size - 1 });
+  let pending = '';
+  try {
+    for await (const chunk of stream) {
+      pending += chunk;
+      let end;
+      while ((end = pending.indexOf('\n')) !== -1) {
+        yield { text: pending.slice(0, end), tail: false };
+        pending = pending.slice(end + 1);
+      }
+    }
+    if (pending.trim()) yield { text: pending, tail: true };
+  } finally { stream.destroy(); }
+}
+
+async function readSessions(roots: SessionRoots, windows: Window[]): Promise<{ sessions: Session[]; diagnostics: string[] }> {
+  const sessions = new Map<string, Session>(), diagnostics = new Set<string>();
+  const since = Math.min(...windows.map(w => w.start)), until = Math.max(...windows.map(w => w.end));
+  for (const source of ['chatgpt', 'claude-code'].filter(source => windows.some(w => w.source === source))) {
     const root = source === 'chatgpt' ? roots.codex : roots.claude;
-    for (const file of await files(root, since)) {
-      // Codex date folders describe the session start, so retain earlier (resumed) files.
-      const raw: Array<{ at: number; tokens: Tokens; message: string }> = [];
+    let paths: string[];
+    try { paths = await files(root, since); }
+    catch { diagnostics.add('session directory unreadable'); continue; }
+    for (const file of paths) {
+      const raw: Observation[] = [], warnings = new Set<string>();
       let id = '', cwd = '', started = NaN;
-      const stream = createReadStream(file, { encoding: 'utf8' });
-      const lines = createInterface({ input: stream, crlfDelay: Infinity });
       try {
-        for await (const line of lines) {
-          if (!line.trim()) continue;
+        for await (const line of snapshotLines(file)) {
+          if (!line.text.trim()) continue;
           let f: Record<string, unknown>;
-          try { f = usageFields(line); }
-          catch { throw new Error('Malformed session JSON; usage estimate refused (no content displayed).'); }
-          if (source === 'chatgpt' && f.type === 'session_meta') {
+          try { f = usageFields(line.text); }
+          catch {
+            warnings.add(line.tail ? 'incomplete final record ignored' : 'malformed records skipped');
+            continue; // Never let an unrelated corrupt file discard healthy counters.
+          }
+          // Forked exec logs replay parent metadata after their own header. The
+          // first header owns this file; later inherited headers cannot replace it.
+          if (source === 'chatgpt' && f.type === 'session_meta' && !id) {
             id = String(f['payload.id'] ?? f['payload.session_id'] ?? '');
             cwd = String(f['payload.cwd'] ?? '');
             started = time(f['payload.timestamp'] ?? f.timestamp);
+            // Headless children can inherit the parent's id AND creation timestamp.
+            // Their rollout filename identifies the independent counter stream.
+            if (f['payload.source.subagent.thread_spawn.parent_thread_id']) {
+              const child = basename(file).match(/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.jsonl$/i)?.[1];
+              id = child ?? basename(file, '.jsonl');
+              started = time(f.timestamp);
+            }
           }
           if (source === 'claude-code') {
             id = String(f.sessionId ?? id);
@@ -135,55 +170,55 @@ async function readSessions(roots: SessionRoots, since: number, until: number): 
             const p = 'message.usage.';
             const cachedInput = num(f[p + 'cache_read_input_tokens']), cacheWrite = num(f[p + 'cache_creation_input_tokens']);
             raw.push({ at, message: String(f['message.id'] ?? f.requestId ?? at), tokens: {
-              // Normalize to Codex semantics: input includes cache reads and writes.
               input: num(f[p + 'input_tokens']) + cachedInput + cacheWrite, cachedInput, cacheWrite,
               output: num(f[p + 'output_tokens']), reasoning: num(f[p + 'output_tokens_details.reasoning_tokens']),
             } });
           }
         }
-      } finally { lines.close(); stream.destroy(); }
-      if (!id || !cwd || !raw.length) continue;
-      // Claude subagents share the parent's sessionId, but have independent usage streams.
+      } catch { warnings.add('session file unreadable; observed counters only'); }
+      for (const warning of warnings) diagnostics.add(warning);
+      if (!id || !cwd) continue;
       const key = `${source}:${id}${source === 'claude-code' ? ':' + basename(file, '.jsonl') : ''}`;
-      const session = sessions.get(key) ?? { id: key, source, folders: new Set<string>(), samples: [] };
+      const session = sessions.get(key) ?? { id: key, source, folders: new Set<string>(), samples: [],
+        started, raw: [], diagnostics: new Set<string>() };
       session.folders.add(resolve(cwd));
-      raw.sort((a, b) => a.at - b.at);
-      if (source === 'chatgpt') {
-        let prior = zero(), previousAt = Number.isFinite(started) ? started : raw[0].at;
-        for (const r of raw) {
-          const delta = zero();
-          // A counter reset begins a new accounting segment, never negative usage.
-          const reset = r.tokens.input < prior.input || r.tokens.output < prior.output;
-          for (const k of keys) delta[k] = Math.max(0, r.tokens[k] - (reset ? 0 : prior[k]));
-          if (keys.some(k => delta[k] > 0)) {
-            session.samples.push({ start: Math.min(previousAt, r.at), end: r.at, tokens: delta });
-          }
-          // Even an unchanged report confirms no new usage through this timestamp.
-          previousAt = r.at;
-          prior = r.tokens;
-        }
-      } else {
-        // Streaming/repeated assistant records can repeat a message's usage. Take the
-        // maximum reported counters once, at the last update for that message.
-        const messages = new Map<string, typeof raw[number]>();
-        for (const r of raw) {
-          const prev = messages.get(r.message);
-          if (prev) for (const k of keys) r.tokens[k] = Math.max(r.tokens[k], prev.tokens[k]);
-          messages.set(r.message, r);
-        }
-        for (const r of messages.values()) session.samples.push({ start: r.at, end: r.at, tokens: r.tokens });
-      }
+      session.raw.push(...raw);
+      for (const warning of warnings) session.diagnostics.add(warning);
       sessions.set(key, session);
     }
   }
-  return [...sessions.values()];
+  for (const session of sessions.values()) {
+    // Merge resumed copies BEFORE differencing: partial copies otherwise double count.
+    const raw = [...new Map(session.raw.map(r => [JSON.stringify(r), r])).values()].sort((a, b) => a.at - b.at);
+    if (session.source === 'chatgpt') {
+      let prior = zero(), previousAt = Number.isFinite(session.started) ? session.started : raw[0]?.at;
+      for (const r of raw) {
+        const delta = zero();
+        const reset = r.tokens.input < prior.input || r.tokens.output < prior.output;
+        for (const k of keys) delta[k] = Math.max(0, r.tokens[k] - (reset ? 0 : prior[k]));
+        // Zero is observed usage, distinct from missing token reports.
+        session.samples.push({ start: Math.min(previousAt, r.at), end: r.at, tokens: delta });
+        previousAt = r.at;
+        prior = r.tokens;
+      }
+    } else {
+      const messages = new Map<string, Observation>();
+      for (const r of raw) {
+        const prev = messages.get(r.message);
+        if (prev) for (const k of keys) r.tokens[k] = Math.max(r.tokens[k], prev.tokens[k]);
+        messages.set(r.message, r);
+      }
+      for (const r of messages.values()) session.samples.push({ start: r.at, end: r.at, tokens: r.tokens });
+    }
+  }
+  return { sessions: [...sessions.values()], diagnostics: [...diagnostics].sort() };
 }
 
 export function runWindows(runs: FoldedRun[], now?: string): Window[] {
   return runs.flatMap(r => {
     const end = r.finish?.endedAt ?? now;
     if (r.conflict || !r.start?.startedAt || !end) return [];
-    return [{ runId: r.runId, source: r.start.source, folders: [r.start.workerFolder, r.start.launchFolder].map(f => resolve(f)),
+    return [{ runId: r.runId, source: r.start.source, folders: [resolve(r.start.workerFolder)],
       start: Date.parse(r.start.startedAt), end: Date.parse(end) }];
   });
 }
@@ -191,9 +226,12 @@ export function runWindows(runs: FoldedRun[], now?: string): Window[] {
 export async function estimateUsage(windows: Window[], roots: SessionRoots = {
   codex: join(homedir(), '.codex/sessions'), claude: join(homedir(), '.claude/projects'),
 }): Promise<Estimate[]> {
-  const totals = new Map(windows.map(w => [w.runId, { ...zero(), sessions: new Set<string>() }]));
-  if (windows.length) for (const s of await readSessions(roots, Math.min(...windows.map(w => w.start)), Math.max(...windows.map(w => w.end)))) {
+  const totals = new Map(windows.map(w => [w.runId, { ...zero(), sessions: new Set<string>(), exact: true,
+    diagnostics: new Set<string>() }]));
+  const scan = windows.length ? await readSessions(roots, windows) : { sessions: [], diagnostics: [] };
+  for (const s of scan.sessions) {
     const candidates = windows.filter(w => w.source === s.source && w.folders.some(f => s.folders.has(f)));
+    const lastReportedAt = s.raw.reduce((last, r) => Math.max(last, r.at), -Infinity);
     const seen = new Set<string>();
     for (const sample of s.samples) {
       const signature = JSON.stringify(sample);
@@ -211,13 +249,22 @@ export async function estimateUsage(windows: Window[], roots: SessionRoots = {
           const t = totals.get(w.runId)!;
           for (const k of keys) t[k] += sample.tokens[k] * share;
           t.sessions.add(s.id);
+          if ((share !== 1 && keys.some(k => sample.tokens[k] > 0)) || s.diagnostics.size || s.source !== 'chatgpt') t.exact = false;
+          for (const warning of s.diagnostics) t.diagnostics.add(warning);
+          if (s.source === 'chatgpt' && lastReportedAt < w.end) {
+            t.exact = false; t.diagnostics.add('snapshot ends before run finish; in-flight usage may not yet be reported');
+          }
         }
       }
     }
   }
   return windows.map(w => {
     const t = totals.get(w.runId)!;
-    return { runId: w.runId, source: 'estimated', method: t.sessions.size ? METHOD : 'unavailable: no matching session usage in window',
+    const measured = t.sessions.size === 1 && t.exact;
+    return { runId: w.runId, source: measured ? 'measured' : 'estimated',
+      method: t.sessions.size ? (measured ? 'session-counters-v2: complete unshared counter intervals; worker cwd+provider match' : METHOD)
+        : 'unavailable: no readable matching session usage in window',
+      diagnostics: t.sessions.size ? [...t.diagnostics].sort() : scan.diagnostics,
       sessions: [...t.sessions].sort(), ...Object.fromEntries(keys.map(k => [k, t.sessions.size ? t[k] : null])) } as Estimate;
   });
 }
@@ -235,7 +282,8 @@ export async function finishWithUsage(runId: string, result: Omit<Finish, 'usage
       const estimate = (await estimateUsage(runWindows(ledger.runs, endedAt), roots)).find(e => e.runId === runId);
       if (!estimate) throw new Error('Cannot estimate usage without a run window.');
       usage = { input: estimate.input, output: estimate.output, cacheRead: estimate.cachedInput, cacheWrite: estimate.cacheWrite,
-        reasoning: estimate.reasoning, cost: null, source: 'estimated', method: estimate.method, sessionCount: estimate.sessions.length };
+        reasoning: estimate.reasoning, cost: null, source: estimate.source,
+        method: [estimate.method, ...estimate.diagnostics].join('; '), sessionCount: estimate.sessions.length, sessions: estimate.sessions };
     }
   } else usage = { ...usage, source: usage.source ?? 'measured' };
   await finishRun(runId, { ...result, usage: { ...usage, source: usage.source ?? 'measured' } }, { ...context, endedAt });
