@@ -2276,3 +2276,19 @@ table.list.dated .ddetail{color:var(--muted);font-size:11.5px;margin:1px 0 0 23p
 .status-empty { padding: 22px; }
 @media (max-width: 1000px) { .status-work { grid-template-columns: 1fr; gap: 16px; } .status-money { grid-template-columns: repeat(2, minmax(0, 1fr)); } .status-counts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .status-progress { grid-template-columns: 1fr; } .status-progress li { border-top: 0; border-left: 3px solid var(--line); } .status-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .status-lp { padding: 16px; } }
+
+/* Issue 0082 — vehicle strategy compact actions and move decisions. */
+.strategy-compact { font-size:12px; line-height:1.4; }
+.strategy-compact td, .strategy-compact th { padding:8px 10px; vertical-align:top; }
+.strategy-next-text { margin-top:2px; color:var(--muted); max-width:780px; }
+.strategy-moves summary { cursor:pointer; }
+.move-detail { max-width:780px; min-width:280px; padding:10px 0; white-space:normal; }
+.move-detail dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.move-detail dt { font-weight:600; }
+.move-detail dd { margin:3px 0; color:var(--muted); }
+.move-decision { display:flex; flex-wrap:wrap; align-items:end; gap:8px; border-top:1px solid var(--line); padding-top:12px; }
+.move-decision label { display:grid; gap:4px; }
+.move-decision input,.move-decision select { max-width:240px; padding:6px; border:1px solid var(--line); background:var(--surface); color:var(--ink); }
+@media(max-width:760px) { .move-detail dl { grid-template-columns:1fr; } }
+
+.strategy-action-preview { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }

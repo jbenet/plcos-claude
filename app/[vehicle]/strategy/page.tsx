@@ -1,3 +1,7 @@
+import { StrategyTable } from '@/components/strategy/StrategyTable';
+import { MoveMenu } from '@/components/strategy/MoveMenu';
+import { getDb } from '@/lib/db';
+import { listMoves, moveScore, lpEffortScore, moveHistory } from '@/modules/strategy/moves';
 import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
@@ -17,21 +21,6 @@ const date = (d: Date | null | undefined) => d ? shortDate(d) : 'date unknown';
 function Ref({ label, href, at, basis, strong = false }: { label: string; href: string; at: Date; basis: string; strong?: boolean }) {
   const doc: EvidenceDoc = { docId: label, title: label, origin: 'Local records', asOf: at.toISOString().slice(0, 10), strength: strong ? 'strong' : 'weak', supports: basis, href };
   return <EvidenceRef doc={doc} />;
-}
-function Basis({ row, slug, now }: { row: StrategyAction; slug: string; now: Date }) {
-  const lp = `/${slug}/pipeline/${row.pursuit.pursuitId}`;
-  return <details className="strategy-basis"><summary>Score basis · {row.score ? 'estimated' : 'not scored'}</summary>
-    <dl>
-      <dt>Capacity</dt><dd>{row.capacity === null ? 'Unknown' : money(row.capacity)} · {row.capacityBand ?? 'recorded soft amount'}<br />{row.capacityBasis} <Ref label="Capacity evidence" href={lp} at={row.profileAt ?? now} basis="A soft indication or a midpoint of a closed capacity range. Range midpoints are guesses; no amount is added to hard." /></dd>
-      <dt>Likelihood</dt><dd>{row.likelihood === null ? 'Unknown' : `${Math.round(row.likelihood * 100)}% · GUESS from ${row.propensity?.level} propensity`}<br />{row.propensity?.basis ?? 'No propensity assessment.'}</dd>
-      <dt>Route strength</dt><dd>{row.routeWeight === null ? 'Unknown' : `${row.routeWeight} · GUESS for tier ${row.route?.tier}`} · {row.route?.basis ?? 'No stored search.'} <Ref label="Route evidence" href={`/${slug}/routes?target=${row.pursuit.entityId}`} at={row.route?.at ?? now} basis="Dated search result; review current routes and guards before proposing an approach. Tiers model uncertainty, not consent." /></dd>
-      <dt>Time to decision</dt><dd>{row.days === null ? 'Unknown' : `${row.days} days · GUESS for ${row.decision?.band}`}<br />{row.decision?.basis ?? 'No timing assessment. A next-action due date is not a decision date.'}</dd>
-      <dt>Conversion adjustment</dt><dd>{row.conversion.forward} of {row.conversion.observed} LPs with recorded exits from {STATUS_LABEL[row.pursuit.status]} moved forward at least once. Factor {row.conversion.factor.toFixed(2)}; neutral prior weight {config.strategyRanking.conversionPriorWeight} is a GUESS. <Ref label="Recorded transitions" href="#movement" at={now} basis="Distinct LPs with recorded status exits in this vehicle; forward means a later status other than Passed. Incomplete history, not a cohort probability of committing." /></dd>
-    </dl>
-    <p>Estimated value = capacity × likelihood × route strength. Priority = estimated value × conversion adjustment ÷ decision days. {row.score ? `${money(row.score.expected)} estimated value; ${money(row.score.priority)}/day priority.` : row.held ? 'Held out of the funding ranking: review restrictions, strategy freshness, horizon or close state.' : 'One or more inputs are unknown; no numeric score is assigned.'}</p>
-    {!row.score && <p><b>Evidence priority: {row.workPriority} points · GUESS.</b> {row.workFactors.length ? row.workFactors.map(f => `${f.points} ${f.label.toLowerCase()}`).join(' + ') : 'No measured urgency signal.'} These points order evidence work separately from monetary scores; they do not estimate capital. <Ref label="Evidence-work basis" href={lp} at={now} basis="Recorded restrictions, due dates, soft indications, freshness and missing records. All point weights are guessed and shown here." /></p>}
-    <p>Estimates are for ordering work, not a forecast. No shared capital is allocated by this ranking. <Ref label="Strategy inputs" href={lp} at={row.suggestion ? new Date(row.suggestion.made_at) : now} basis={`Strategy by ${row.suggestion?.made_by ?? 'not recorded'}; ${row.suggestion?.status ?? 'missing'}. External claims retain their provenance on the LP page; a proposal is not verified or accepted.`} /></p>
-  </details>;
 }
 
 function Board({
@@ -132,7 +121,7 @@ async function VehicleStrategyPage({ params, searchParams }: {
   </Page>;
   const vehicle = all.find(v => v.slug === slug);
   if (!vehicle) notFound();
-  const [data, plays, users, query] = await Promise.all([vehicleStrategy(vehicle.id), boardFor(vehicle.id), listUsers(), searchParams]);
+  const [data, plays, users, query, moves, history] = await Promise.all([vehicleStrategy(vehicle.id), boardFor(vehicle.id), listUsers(), searchParams, getDb().then(db => listMoves(db, vehicle.id)), getDb().then(db => moveHistory(db, vehicle.id))]);
   if (!data) notFound();
   const { total, rows, now, since, counts, weekly } = data;
   const path = `/${slug}/strategy`;
@@ -149,17 +138,39 @@ async function VehicleStrategyPage({ params, searchParams }: {
     { id: 'owner', label: 'Owner unavailable', rows: active.filter(r => !r.ownerActive) },
   ];
   const selected = views.find(v => v.id === query.view) ?? views[0]!;
-  const groups = [...new Set(rows.map(r => r.group))];
-  const filtered = selected.rows.filter(r => (!query.action || r.group === query.action) && (!query.status || r.pursuit.status === query.status)
-    && (!query.q || `${r.pursuit.entityName} ${r.action} ${r.pursuit.ownerSaid ?? r.pursuit.ownerName}`.toLowerCase().includes(query.q.toLowerCase())));
-  const size = 30; const pages = Math.max(1, Math.ceil(filtered.length / size));
-  const page = Math.min(pages, Math.max(1, Number.parseInt(query.page ?? '1') || 1));
-  const shown = filtered.slice((page - 1) * size, page * size);
   const link = (patch: Record<string, string>) => {
     const p = new URLSearchParams({ view: selected.id, ...(query.status ? { status: query.status } : {}), ...(query.q ? { q: query.q } : {}), ...(query.action ? { action: query.action } : {}), ...patch });
     return `${path}?${p}#actions`;
   };
-  const top = active.slice(0, 3);
+  const ranked = [
+    ...active.map(r => ({ id: r.pursuit.pursuitId, title: r.pursuit.entityName, action: r.action, kind: 'LP action', href: lpPath(r), priority: lpEffortScore(r).priority, work: r.workPriority, position: null as number|null })),
+    ...moves.filter(m => m.state !== 'dismissed').map(m => ({ id: m.id, title: m.title, action: m.detail, kind: `Move · ${m.state}`, href: `#move-${m.id}`, priority: moveScore(m.estimates).priority, work: 0, position: m.position })),
+  ].sort((a,b) => (b.priority ?? -1) - (a.priority ?? -1) || b.work-a.work || a.id.localeCompare(b.id));
+  const manual = ranked.filter(r => r.position !== null).sort((a,b) => a.position!-b.position! || a.id.localeCompare(b.id));
+  const queue = ranked.filter(r => r.position === null);
+  // Apply from the end so ties retain a stable ID order; manual positions include LP rows.
+  for (const row of manual.reverse()) queue.splice(Math.min(row.position! - 1, queue.length), 0, row);
+  const top = queue.slice(0, 10);
+  const viewIds = new Map(rows.map(r => [r.pursuit.pursuitId, views.filter(v => v.rows.includes(r)).map(v => v.id)]));
+  const tableRows = rows.map(r => {
+    const effort = lpEffortScore(r);
+    return { id:r.pursuit.pursuitId, name:r.pursuit.entityName, href:lpPath(r), action:r.action, group:r.group,
+      status:r.pursuit.status, owner:r.pursuit.ownerSaid ?? r.pursuit.ownerName, priority:effort.priority,
+      evidencePriority:r.workPriority, capacity:r.capacity, likelihood:r.likelihood, route:r.routeWeight, days:r.days,
+      teamHours:effort.teamHours, views:viewIds.get(r.pursuit.pursuitId)!, detail:[
+        r.suggestion?.data.angle ?? r.pursuit.headline ?? 'No vehicle strategy recorded.',
+        `Capacity: ${r.capacityBasis} ${r.capacityBand ?? ''}`,
+        `Likelihood GUESS: ${r.propensity?.basis ?? 'Unknown; no propensity assessment.'}`,
+        `Route: ${r.route?.path ?? 'No stored route'}; ${r.route?.basis ?? 'unknown'}. As of ${date(r.route?.at)}.`,
+        `Decision timing GUESS: ${r.decision?.basis ?? 'Unknown'}. Decision days are elapsed time, not team effort.`,
+        `GUESS incremental capital = capacity × likelihood × route × conversion adjustment (${r.conversion.factor.toFixed(2)}) × action share (${effort.lift}). Divide by ${effort.teamHours} team hours (GUESS: preparation and review for one action). ${effort.expected === null ? 'Held or missing inputs; unscored.' : money(effort.expected)+' GUESS incremental capital.'}`,
+        `Conversion basis: ${r.conversion.forward}/${r.conversion.observed} distinct LPs with recorded exits moved forward; neutral prior ${config.strategyRanking.conversionPriorWeight} (GUESS). Incomplete history, not cohort commitment probability.`,
+        `Evidence priority GUESS: ${r.workFactors.map(f=>`${f.points} ${f.label}`).join(' + ') || 'No signals'}.`,
+        `Recorded due date: ${date(r.pursuit.nextStepOn)}. Proposed: ${r.suggestion?.data.next?.who ?? 'unknown'} · ${r.suggestion?.data.next?.when ?? 'unknown'}.`,
+        `Strategy: ${r.suggestion?.status ?? 'missing'}; ${r.suggestion?.made_by ?? 'unknown author'}; ${r.suggestion ? date(new Date(r.suggestion.made_at)) : 'unknown date'}; confidence ${r.suggestion?.data.confidence ?? 'unknown'}.`,
+        ...r.risks, ...r.pursuit.plan.map(p=>`${p.move} — ${p.because}`),
+      ] };
+  });
   const sourceRange = rows.map(r => r.pursuit.sourceAsOf).filter((d): d is Date => Boolean(d));
   const earliest = sourceRange.length ? new Date(Math.min(...sourceRange.map(d => d.getTime()))) : null;
   const latest = sourceRange.length ? new Date(Math.max(...sourceRange.map(d => d.getTime()))) : null;
@@ -184,10 +195,10 @@ async function VehicleStrategyPage({ params, searchParams }: {
       <p className="worknote"><b>Pipeline:</b> {counts.map(s => `${s.count} ${s.label.toLowerCase()}`).join(' · ')}. <Ref label="Status counts" href={`/${slug}/pipeline`} at={now} strong basis="Current pursuit statuses in this vehicle; not consent or capital." /><br /><b>This week:</b> {data.added} pursuits added, {weekly.length} recorded status changes, {money(data.hardened)} hardened and still on the hard track. <Ref label="This week’s evidence" href="#movement" at={now} basis="Since Monday UTC; detailed records and limitations appear in Movement this week." /></p>
       {!total.hardCount && <p className="worknote">No hard commitments are recorded here. This describes the available records, not proof that none exist. The raise owner should reconcile signed commitments with the close records.</p>}
       {total.historical && <p className="worknote">Historical vehicle: these records describe a past raise.</p>}
-      <div className="cbody"><h3>Do next</h3>
-        {top.length ? <ol className="strategy-next">{top.map(r => <li key={r.pursuit.pursuitId}><Link href={lpPath(r)}><b>{r.pursuit.entityName}</b></Link> — {r.action}<div className="muted">{r.score ? `${money(r.score.priority)}/day estimated priority` : `${r.workPriority} points · evidence priority (GUESS)`} · {r.pursuit.ownerSaid ?? r.pursuit.ownerName}</div><Basis row={r} slug={slug} now={now} /></li>)}</ol>
-          : <p>No active pursuits are recorded. The raise owner can add LPs in the pipeline and record their next actions.</p>}
-        <p className="muted">{active.filter(r => !r.score).length} active pursuits are unscored or held. They are ordered separately by evidence priority: restrictions, overdue work, soft indications and evidence gaps, with all point weights shown. These scores are guesses, not a forecast or an allocation of shared LP capital.</p>
+      <div className="cbody"><h3>So next · {top.length}</h3>
+        <div className="strategy-table-wrap"><table className="list strategy-compact"><thead><tr><th>#</th><th>Action</th><th>Kind</th><th>GUESS $/team hour</th></tr></thead><tbody>{top.map((r,i)=><tr key={r.id}><td>{i+1}</td><td><Link href={r.href}><b>{r.title}</b></Link><div className="strategy-next-text">{r.action}</div></td><td>{r.kind}{r.position!==null&&' · manual order'}</td><td>{r.priority===null?`Unscored · ${r.work} evidence pts`:money(r.priority)}</td></tr>)}</tbody></table></div>
+        {!top.length&&<p>No active actions or moves recorded. Add pursuits or import a move menu.</p>}
+        <p className="muted">One scale: GUESS incremental capital per team hour. Open a move or LP row for factors. Manual positions override model order; unscored evidence work follows scored options. These overlapping alternatives are never summed into a forecast, hard capital, or a shared LP allocation.</p>
       </div>
     </section>
     <section className="card"><div className="chead"><h2>Pipeline by status</h2><Ref label="Pipeline evidence" href={`/${slug}/pipeline`} at={now} strong basis="Pursuit statuses for this vehicle. These counts do not infer consent, signatures or cash receipt." /></div>
@@ -203,28 +214,10 @@ async function VehicleStrategyPage({ params, searchParams }: {
       <div className="strategy-coverage">{views.slice(1).map(v => <Link key={v.id} href={link({ view: v.id, status: '', page: '1' })}><b>{v.rows.length}</b><span>{v.label}</span></Link>)}</div>
       <p className="cover">Route counts describe dated stored searches, not all possible routes. A missing search is unknown; an empty search means no route supported in that search. Stalled means at least {config.strategyRanking.stalledDays} days without recorded activity (GUESS). Silence is not a decline.</p>
     </section>
-    <section className="card" id="actions"><div className="chead"><h2>LPs by next action</h2><span className="lbl">{filtered.length} LPs · {selected.label}</span></div>
-      <form method="get" action={`${path}#actions`} className="strategy-filters">
-        <label>Show<select name="view" defaultValue={selected.id}>{views.map(v => <option value={v.id} key={v.id}>{v.label} ({v.rows.length})</option>)}</select></label>
-        <label>Status<select name="status" defaultValue={query.status ?? ''}><option value="">Every status</option>{counts.map(s => <option value={s.id} key={s.id}>{s.label}</option>)}</select></label>
-        <label>Next action<select name="action" defaultValue={query.action ?? ''}><option value="">Every action group</option>{groups.map(group => <option key={group}>{group}</option>)}</select></label>
-        <label>Find LP, owner or action<input name="q" defaultValue={query.q ?? ''} /></label><button className="btn" type="submit">Apply</button>
-      </form>
-      <p className="worknote">Ranked by estimated priority within the full queue; unscored work follows by evidence priority, then LP name. Each row states whether the action is recorded or proposed. Open a score’s basis to inspect all inputs.</p>
-      {!shown.length && <div className="cbody"><h3>No LPs in this view</h3><p>Try another status or coverage filter. The raise owner can add pursuits from the pipeline.</p></div>}
-      {shown.map(r => <article className="strategy-action" key={r.pursuit.pursuitId}>
-        <div className="strategy-action-head"><div><span className="lbl">{r.group}</span><h3><Link href={lpPath(r)}>{r.pursuit.entityName}</Link></h3><span className="flag f-mute">{STATUS_LABEL[r.pursuit.status]}</span> <Ref label="LP record" href={lpPath(r)} at={r.pursuit.sourceAsOf ?? now} basis={`Pipeline source: ${r.pursuit.source}; status source: ${r.pursuit.statusSource}. Owner and recorded next step come from this pursuit.`} /></div><div className="right"><b>{r.score ? `${money(r.score.priority)}/day` : 'Not scored'}</b><div className="muted">{r.score ? 'estimated priority' : `${r.workPriority} points · evidence priority`}</div></div></div>
-        <p><b>Next:</b> {r.action}</p>
-        <div className="strategy-action-grid">
-          <div><span className="lbl">Owner & timing</span><p>{r.pursuit.ownerSaid ?? r.pursuit.ownerName}{!r.ownerActive && ' · local owner unavailable'}<br />{r.pursuit.nextStepOn ? `Due ${date(r.pursuit.nextStepOn)}` : 'No recorded due date'}</p>{r.suggestion?.data.next && <p className="muted">Proposed: {r.suggestion.data.next.who} · {r.suggestion.data.next.when}</p>}</div>
-          <div><span className="lbl">Strategy</span><p>{r.suggestion?.data.angle ?? r.pursuit.headline ?? 'No strategy recorded for this vehicle.'}</p>{r.pursuit.plan.length > 0 && <details><summary>Recorded plan · {r.pursuit.plan.length} steps</summary><ol>{r.pursuit.plan.map((step, i) => <li key={i}>{step.move} — {step.because}{step.blockedBy && ` · Blocked by: ${step.blockedBy}`}</li>)}</ol></details>}{r.suggestion && <p className="muted">{r.suggestion.status === 'accepted' ? 'Accepted' : 'Proposed; awaiting a decision'} · {date(new Date(r.suggestion.made_at))} <Ref label="Strategy evidence" href={lpPath(r)} at={new Date(r.suggestion.made_at)} basis={`Written by ${r.suggestion.made_by}; confidence ${r.suggestion.data.confidence ?? 'unknown'}; ${r.suggestion.status}. Review linked source claims on the LP page.`} /></p>}</div>
-          <div><span className="lbl">Route</span><p>{r.route?.count ? r.route.path : r.route ? 'No supported route in the stored search.' : 'No stored route search; coverage unknown.'}</p>{r.suggestion?.data.route && <p className="muted">Strategy proposes: {r.suggestion.data.route.via} · tier {r.suggestion.data.route.tier}. {r.suggestion.data.route.why}</p>}{r.route && <p className="muted">{r.route.count} candidates · {r.route.tier ? `tier ${r.route.tier} · ` : ''}{date(r.route.at)} · {r.route.current ? 'recorded search' : 'snapshot; refresh on route page'} <Ref label="Route search" href={`/${slug}/routes?target=${r.pursuit.entityId}`} at={r.route.at} basis={r.route.basis} /></p>}</div>
-        </div>
-        {!!r.limits.length && <p className="worknote">{r.limits.map(l => l.instruction).join(' · ')} <Ref label="Restriction evidence" href={lpPath(r)} at={new Date(r.limits[0]!.at)} basis="Active target restrictions. Do not substitute another connector to bypass them." /></p>}
-        {!!r.risks.length && <details><summary>Stalled or at risk · {r.risks.length} reasons</summary><ul>{r.risks.map((risk, i) => <li key={i}>{risk}</li>)}</ul><p>Last recorded activity {date(r.touch?.lastTouch ?? r.pursuit.statusSetAt ?? r.pursuit.openedAt)}. Research {date(r.profileAt)} · {r.claimCount} active claims. <Ref label="Risk evidence" href={lpPath(r)} at={now} basis="Vehicle-aware touchpoints, owner availability, due dates, target restrictions and risks named in the strategy; missing evidence does not establish a decline." /></p></details>}
-        <Basis row={r} slug={slug} now={now} />
-      </article>)}
-      <nav className="strategy-pagination" aria-label="LP action pages"><span>Page {page} of {pages} · {filtered.length} LPs</span>{page > 1 && <Link className="btn" href={link({ page: String(page - 1) })}>Previous</Link>}{page < pages && <Link className="btn" href={link({ page: String(page + 1) })}>Next</Link>}</nav>
+    <MoveMenu moves={moves} vehicleId={vehicle.id} ranks={Object.fromEntries(queue.map((r,i)=>[r.id,i+1]))} />
+    <details className="card"><summary className="chead">Recent move decisions · {history.length}</summary><div className="cbody">{history.length ? <ul>{history.map((h,i)=><li key={i}>{date(new Date(h.at))} · {h.actor} · {h.title}: {h.detail.before.state} → {h.detail.after.state}; position {h.detail.before.position ?? 'model'} → {h.detail.after.position ?? 'model'}. {h.detail.note}</li>)}</ul> : <p>No human move decisions recorded for this raise.</p>}</div></details>
+    <section className="card" id="actions"><div className="chead"><h2>LPs by next action</h2><span className="lbl">{rows.length} LPs</span></div>
+      <StrategyTable rows={tableRows} asOf={now.toISOString()} initialFilters={query} views={views.map(v=>({id:v.id,label:v.label}))} />
     </section>
     <details className="card"><summary className="chead">Saved plays and whole-raise proposals · {plays.length} plays</summary>
       <div className="strategy-table-wrap"><Board plays={plays} users={users} path={path} empty="No saved plays yet." /></div>

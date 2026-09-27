@@ -273,6 +273,7 @@ async function seedResearch(db: Db) {
 export async function seedIfEmpty(db: Db): Promise<void> {
   // People, not the system's own actor (platform migration 003), which every database has.
   const row = await db.one<{ n: string }>('select count(*)::text as n from platform.app_user where active');
-  if (row && Number(row.n) > 0) return;
-  await seed(db);
+  if (!row || Number(row.n) === 0) await seed(db);
+  const { importMoves } = await import('@/modules/strategy/moves');
+  await importMoves(db, JSON.parse(await readFile(join(process.cwd(), 'fixtures/strategy-moves.json'), 'utf8')), null);
 }

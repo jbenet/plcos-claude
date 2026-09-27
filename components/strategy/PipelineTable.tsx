@@ -3,6 +3,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Glyph } from '@/components/ui/Glyph';
 import { BulkLpActions } from './BulkLpActions';
 import { groupRows, SORT_KEYS, numeric, type SortKey } from './pipeline-model';
+import { SortHeader, TableFilters } from './TableControls';
 export type Status = 'new' | 'sourcing' | 'selected' | 'connecting' | 'discussing' | 'committed' | 'passed';
 
 export interface PipelineRow {
@@ -212,11 +213,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
     window.addEventListener('popstate', pop); window.addEventListener('keydown', key);
     return () => { window.removeEventListener('popstate', pop); window.removeEventListener('keydown', key); };
   }, []);
-  const Th = ({ k, children }: { k: SortKey; children: string }) => <th aria-sort={sort.key === k ? sort.dir === 1 ? 'ascending' : 'descending' : 'none'}>
-    <button className="thsort" onClick={() => setSort({ key: k, dir: sort.key === k ? sort.dir === 1 ? -1 : 1 : numeric.has(k) ? -1 : 1 })}>
-      {children}{sort.key === k ? sort.dir === -1 ? ' ↓' : ' ↑' : ''}
-    </button>
-  </th>;
+  const Th = ({ k, children }: { k: SortKey; children: string }) => <SortHeader column={k} sort={sort} numeric={numeric.has(k)} onSort={setSort}>{children}</SortHeader>;
   const all = enabled.length === statuses.length;
   return <section className="lp-tables" aria-label={mode === 'selection' ? 'LP selection' : 'LP pipeline'}>
     <div className="statusboard" aria-label="Statuses">
@@ -226,13 +223,12 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
       </button>)}
       <button className={`sb${all ? ' on' : ''}`} aria-pressed={all} onClick={() => setEnabled(statuses.map(s => s.id))}><span>All</span><b>{filtered.length.toLocaleString('en-US')}</b></button>
     </div>
-    <div className="lp-filters">
-      <label className="lp-search"><span><Glyph name="search" title="Search" />Search</span><input ref={search} type="search" aria-label="Search LPs" placeholder="Names, organisations, next steps… /" value={f.q} onChange={e => set('q', e.target.value)} /></label>
+    <TableFilters query={f.q} onQuery={value => set('q', value)} searchRef={search}>
       <label><span>Owner</span><select aria-label="Owner" value={f.owner} onChange={e => set('owner',e.target.value)}><option value="">Any</option>{owners.map(o => <option key={o}>{o}</option>)}</select></label>
       {byVehicle && <label><span>Vehicle</span><select aria-label="Vehicle" value={f.vehicle} onChange={e => set('vehicle',e.target.value)}><option value="">Any</option>{vehicles.map(v => <option key={v}>{v}</option>)}</select></label>}
       {(Object.entries(choices) as [keyof typeof choices, string[][]][]).map(([key, options]) => <label key={key}><span>{{ meetings: 'Meetings', touch: 'Last touch', read: 'Their read', money: 'Money', flag: 'Flags' }[key]}</span><select aria-label={key} value={f[key]} onChange={e => set(key,e.target.value)}>{options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>)}
       {active && <button className="btn" onClick={() => setF(EMPTY)}>Clear</button>}
-    </div>
+    </TableFilters>
     <div className="lp-selection-bar"><span>{inColumn.length.toLocaleString('en-US')} pursuits · {groups.length.toLocaleString('en-US')} LP groups</span>
       <button className="btn" disabled={!inColumn.length} onClick={() => toggle(inColumn.map(r => r.id),true)}>Select all matching</button>
       {selected.size > 0 && <><b>{selectedRows.length} selected{selectedRows.some(r => !inColumn.includes(r)) ? ' (includes hidden rows)' : ''}</b><button className="btn" onClick={() => setSelected(new Set())}>Clear selection</button></>}

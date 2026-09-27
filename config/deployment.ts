@@ -141,6 +141,8 @@ export const config = {
     weights: { capacity: 0.25, affinity: 0.3, propensity: 0.25, timeToDecision: 0.2 },
   },
   strategyRanking: {
+    actionTeamHours: 2, // GUESS — preparation and review for one LP action; not elapsed decision time.
+    actionValueFraction: 0.1, // GUESS — marginal share of modeled LP value unlocked by one action.
     // GUESS — planning estimates, never calibrated commitment probabilities.
     likelihood: { high: 0.6, medium: 0.3, low: 0.1 },
     decisionDays: { weeks: 21, '1–2 months': 45, 'a quarter or more': 120 },
