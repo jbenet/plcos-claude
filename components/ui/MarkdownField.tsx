@@ -6,6 +6,7 @@ import {
   type Editor, type ReactNodeViewProps,
 } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { NodeSelection } from '@tiptap/pm/state';
 import Image from '@tiptap/extension-image';
 import { Markdown } from 'tiptap-markdown';
 
@@ -171,7 +172,7 @@ const serialise = (e: Editor): string =>
  * serialises.
  */
 export function MarkdownField({
-  value, onChange, images, onImages, onAnnotate, placeholder, rows = 7,
+  value, onChange, images, onImages, onAnnotate, onPendingChange, placeholder, rows = 7,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -179,6 +180,7 @@ export function MarkdownField({
   onImages: (next: DroppedImage[]) => void;
   /** Open the annotation editor on attachment N. The embed's button calls this. */
   onAnnotate?: (index: number) => void;
+  onPendingChange?: (pending: boolean) => void;
   placeholder?: string;
   rows?: number;
 }) {
@@ -196,6 +198,12 @@ export function MarkdownField({
   const [over, setOver] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   const area = useRef<HTMLTextAreaElement | null>(null);
+  const picker = useRef<HTMLInputElement | null>(null);
+  const pending = useRef(0);
+  const [reading, setReading] = useState(false);
+  const ingest = useRef(Promise.resolve());
+  const latest = useRef({ mode, value, source });
+  latest.current = { mode, value, source };
   /** Guards the loop: our own serialisation must not be fed back in as a new value. */
   const ours = useRef(false);
   const imagesRef = useRef(images);
@@ -275,7 +283,13 @@ export function MarkdownField({
       return before !== undefined && before !== img.dataUrl;
     });
     seen.current = new Map(images.map((img) => [img.index, img.dataUrl]));
-    if (changed && editor && mode === 'rich') {
+    // Draft words can arrive before IndexedDB pictures. Resolve those tokens too.
+    let unresolved = false;
+    editor?.state.doc.descendants((node) => {
+      if (node.type.name === 'image' && typeof node.attrs.src === 'string'
+          && TOKEN.test(node.attrs.src) && images.some((img) => `attachment:${img.index}` === node.attrs.src)) unresolved = true;
+    });
+    if ((changed || unresolved) && editor && mode === 'rich') {
       editor.commands.setContent(toDisplay(source ?? value), { emitUpdate: false });
     }
   }, [images, editor, mode]);
@@ -291,7 +305,7 @@ export function MarkdownField({
     setMode('rich');
   };
 
-  const accept = async (files: File[]) => {
+  const insertFiles = async (files: File[]) => {
     setRefused(null);
     const usable = files.filter((f) => ACCEPT.has(f.type));
     const tooBig = usable.filter((f) => f.size > MAX_BYTES);
@@ -318,18 +332,24 @@ export function MarkdownField({
 
     const added = read.filter((x): x is DroppedImage => x !== null);
     if (added.length === 0) return;
-    const base = imagesRef.current.length;
+    if (editor?.isDestroyed) return;
+    const base = Math.max(0, ...imagesRef.current.map((img) => img.index));
     const numbered = added.map((x, i) => ({ ...x, index: base + i + 1 }));
     imagesRef.current = [...imagesRef.current, ...numbered];
     onImages(imagesRef.current);
 
-    if (mode === 'rich' && editor) {
+    const currentMode = latest.current.mode;
+    if (currentMode === 'rich' && editor) {
       /**
        * Each picture goes in followed by an empty paragraph, and the cursor ends up in it.
        * `setImage` left the new image *selected*, so the next picture dropped — or the second
        * file of a two-file drop — replaced it, and the first was gone from the report.
        */
-      editor.chain().focus().insertContent(numbered.flatMap((img) => [
+      // Adding a file must not replace an image the reporter clicked to inspect.
+      const selection = editor.state.selection;
+      const at = selection instanceof NodeSelection && selection.node.type.name === 'image'
+        ? selection.to : { from: selection.from, to: selection.to };
+      editor.chain().focus().insertContentAt(at, numbered.flatMap((img) => [
         { type: 'image', attrs: { src: img.dataUrl, alt: img.name, title: `attachment:${img.index}` } },
         { type: 'paragraph' },
       ])).run();
@@ -338,18 +358,34 @@ export function MarkdownField({
       // go into it — writing only the parent's copy left it invisible, and switching back to
       // Rich then overwrote the parent with the text that did not have it.
       const el = area.current;
-      const current = source ?? value;
+      const current = latest.current.source ?? latest.current.value;
       const snippet = numbered.map((x) => `\n![${x.name}](attachment:${x.index})\n`).join('');
       const next = el
         ? current.slice(0, el.selectionStart) + snippet + current.slice(el.selectionEnd)
         : current + snippet;
+      latest.current = { ...latest.current, source: next, value: next };
       setSource(next);
       onChange(next);
     }
   };
 
+  // Read and insert batches in arrival order, including overlapping paste/drop events.
+  const accept = (files: File[]) => {
+    pending.current += 1;
+    setReading(true);
+    onPendingChange?.(true);
+    ingest.current = ingest.current.then(() => insertFiles(files)).catch(() => {
+      setRefused('An image could not be read. Try attaching it again.');
+    }).finally(() => {
+      pending.current -= 1;
+      if (!pending.current) { setReading(false); onPendingChange?.(false); }
+    });
+  };
+
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.files.length) return;
     e.preventDefault();
+    e.stopPropagation();
     setOver(false);
     void accept([...e.dataTransfer.files]);
   };
@@ -358,7 +394,8 @@ export function MarkdownField({
     const files = [...e.clipboardData.files];
     if (files.length === 0) return;
     e.preventDefault();
-    void accept(files);
+    e.stopPropagation();
+    accept(files);
   };
 
   return (
@@ -373,13 +410,21 @@ export function MarkdownField({
           </button>
         </div>
         {mode === 'rich' && editor && <RichTools editor={editor} />}
+        <button type="button" className="btn" onClick={() => picker.current?.click()}>Add images</button>
+        <input ref={picker} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden
+          aria-label="Add images" onChange={(event) => {
+            const files = [...(event.currentTarget.files ?? [])];
+            event.currentTarget.value = '';
+            if (files.length) accept(files);
+          }} />
       </div>
 
       <div
         onDragOver={(e) => { e.preventDefault(); setOver(true); }}
         onDragLeave={() => setOver(false)}
-        onDrop={onDrop}
-        onPaste={onPaste}
+        // Intercept files before ProseMirror handles accompanying HTML or its own drop.
+        onDropCapture={onDrop}
+        onPasteCapture={onPaste}
       >
         {mode === 'rich' ? (
           <EditorContent editor={editor} />
@@ -405,6 +450,7 @@ export function MarkdownField({
         {' '}<b>Drop or paste images</b> anywhere in this box.
         {inText > 0 && ` ${inText} in the text — only those are sent.`}
       </p>
+      {reading && <p className="mdhint" role="status">Reading images…</p>}
       {refused && <p className="mdhint refused">Not attached: {refused}. Everything else went in.</p>}
     </div>
   );
