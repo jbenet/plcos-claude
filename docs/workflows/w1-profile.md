@@ -31,7 +31,7 @@ Do not load the changelog, docs/19 history, other workflow protocols, or unrelat
 types, source kinds and capacity bands):
 
     key, name
-    researched   { at, by: "claude (sub-agent)", workflow: "W1", version: "1.49",
+    researched   { at, by: "claude (sub-agent)", workflow: "W1", version: "1.50",
                    method: "search" | "pages", corrected?: [{ at, by, what }] }
     identity     { match: confirmed | probable | ambiguous | not_found, basis,
                    canonical?: { name, role, org, location }, links?: [{ kind, url }] }
@@ -364,6 +364,21 @@ dated words on its mandate.
 - **A small fund's "welcome our new LP" post** is evidence of a commitment; a misspelled name needs a
   second identifying detail, or it stays out.
 
+### Fact discipline (1.50, 27 Sep 2026)
+
+The W1c-27b re-check graded 169 of 195 facts supported and 21 partly supported. These rules come from the partial grades:
+1. **Keep analysis out of a fact.** A roster gives names, not a thesis label. Ownership is not an LP mandate. Put the inference in `profile`, not in a sourced fact.
+2. **No internal labels in sourced fields.** "Personal" and other account classifications from our records never go into `detail.company`. Source it from the cited page.
+3. **One fact, one page.** Every detail field comes from the cited page. Corroboration from another page is a second fact.
+4. **Say what each date is:** publication, observation, event or deadline. A URL path is not a publication date.
+5. **Keep modality and the exact relationship.** "Should enable" is not a product. "Funding" is not "seed funding" unless the page says so.
+6. **Keep qualifiers, scope and currency.** "Majority of $100M" is not "$100M". EUR is not USD without a dated, cited conversion.
+7. **Quotes are exact and at most 25 words.** Read the surrounding section to confirm who and what it is about.
+8. **Snippets, navigation and uncited prose are cautions,** never facts or conclusions.
+9. **A page shows what was; strategy needs what is.** Historical investing is not current deployment, and a public affiliation is not a usable introduction.
+10. **Size the committing unit.** Company valuations, round totals, gifts and client assets are not personal capacity (see Capacity).
+11. **LinkedIn is never fetched,** even for a company page. Search results that show a LinkedIn URL may be cited as a lead only.
+
 ## Capacity
 
 `profile.capacity` is the likely commitment to one fund, as a band, labelled an estimate, with its
@@ -506,7 +521,7 @@ launch names only the batch and the three example file paths, never their conten
 1. Read, in full: this file; `lib/enrich/schema.ts`; `docs/agent-rules/real-data.md`; and the three
    exact example paths named in the read set, for shape and tone.
 2. For each line of the batch, research with WebSearch and WebFetch and write `raw/<key>.json`, with
-   `researched: { at: <now>, by: "claude (sub-agent)", workflow: "W1", version: "1.49", method }` and
+   `researched: { at: <now>, by: "claude (sub-agent)", workflow: "W1", version: "1.50", method }` and
    `scope: "firm"` on what is the firm's. Write only inside `data/real/enrich/raw/`; no git.
 3. Run the check and fix what it reports in your files. Reply with counts (researched; identity
    outcomes; facts; neuro signals by scope; Protocol Labs and crypto ties), the checker's summary line,
