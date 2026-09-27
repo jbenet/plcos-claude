@@ -2,10 +2,11 @@ import { PGlite } from '@electric-sql/pglite';
 import { TooManyRows, type Db, type Queryable } from './index';
 import { lock } from './lock';
 import { prioritizeDb } from './scheduling';
+import { timeQuery } from './timing';
 
 function wrap(run: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>): Queryable {
   const query = async <T>(sql: string, params: unknown[] = []): Promise<T[]> => {
-    const res = await run(sql, params);
+    const res = await timeQuery(sql, () => run(sql, params));
     return res.rows as T[];
   };
   return {

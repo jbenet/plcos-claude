@@ -8,7 +8,8 @@ import { config } from '../config/deployment';
 import { translateDakota } from '../lib/connectors/dakota/translate';
 import { needed, neededRecord, readReplicas, type Module, type Replica } from '../lib/connectors/dakota/replica';
 import { accountFit, ticketEstimate, usd } from '../lib/connectors/dakota/rules';
-import { dakotaFor } from '../lib/connectors/dakota/view';
+import { dakotaCapacities, dakotaFor } from '../lib/connectors/dakota/view';
+import type { RecordFields } from '../lib/connectors/dakota/replica';
 import { readBody, type ListQuery } from '../lib/connectors/dakota/client';
 import { normalizeIdentifier } from '../modules/identity/external';
 import { undoIdentityMerge } from '../modules/identity/resolution';
@@ -185,6 +186,39 @@ export async function dakotaProperties(check: Check, db: Db) {
       await translateDakota(local, actor, [replica('contact', 'contact/invented-constrained.jsonl', [{ id: 'fixture-contact-name', lastmodifieddate: nextAt, linkedin_url__c: 'https://linkedin.com/in/dakota-constrained-person' }])]);
       check('DAKOTA explicit not-same-as constraints override corroborating identifiers', (await lookup('contact', 'fixture-contact-name')).root !== namesake,
         'A correction attached to source identities takes precedence over a repeated LinkedIn URL.');
+
+      // Compare the bounded capacity read to the original whole-resolution query,
+      // including multi-hop aliases and a newer account without a usable ticket.
+      const root = await entity('Invented Capacity Root'), middle = await entity('Invented Capacity Alias'), leaf = await entity('Invented Capacity Leaf');
+      const person = await entity('Invented Capacity Contact', 'person');
+      await tx.query('update identity.entity set merged_into=$1 where entity_id=$2', [root, middle]);
+      await tx.query('update identity.entity set merged_into=$1 where entity_id=$2', [middle, leaf]);
+      await tx.query(`insert into dakota.account(id,entity_id,lastmodifieddate,replica_file,last_verified_by,average_ticket_size__c,check_size_from__c,private_equity_average_ticket_size__c)
+        values('invented-capacity-old',$1,'2026-09-01','invented',$4,'500000',null,null),
+          ('invented-capacity-a',$2,'2026-09-02','invented',$4,'unknown','750000',null),
+          ('invented-capacity-b',$2,'2026-09-02','invented',$4,null,null,'900000'),
+          ('invented-capacity-new',$3,'2026-09-03','invented',$4,'unknown',null,null)`, [root,middle,leaf,actor]);
+      await tx.query(`insert into dakota.contact(id,entity_id,accountid,lastmodifieddate,replica_file,last_verified_by)
+        values('invented-capacity-contact',$1,'invented-capacity-a','2026-09-02','invented',$2)`, [person,actor]);
+      const capacityIds = [existing, linked, root, root, middle, leaf, person, randomUUID()];
+      const legacyRows = await tx.query<RecordFields & {target:string;last_verified_by:string}>(`select a.*,r.canonical_id::text target from dakota.account a
+        join identity.entity_resolution r on r.entity_id=a.entity_id where r.canonical_id=any($1::uuid[])
+        union all select a.*,r.canonical_id::text target from dakota.contact c join dakota.account a on a.id=c.accountid
+        join identity.entity_resolution r on r.entity_id=c.entity_id where r.canonical_id=any($1::uuid[])
+        order by lastmodifieddate desc,id`, [capacityIds]);
+      const legacy = new Map<string,{amount:number;basis:string;asOf:string;verifiedBy:string}>();
+      for (const r of legacyRows) {
+        const estimate = ticketEstimate(r);
+        if (estimate && !legacy.has(r.target)) legacy.set(r.target, {...estimate,
+          basis:`${estimate.basis} The basis belongs to the matched account; for a contact it describes their employer, not personal wealth.`,
+          asOf:new Date(r.lastmodifieddate).toISOString(),verifiedBy:r.last_verified_by});
+      }
+      const bounded = await dakotaCapacities(tx,capacityIds);
+      check('DAKOTA bounded capacities preserve the original projection across aliases, employer records and fallback ordering',
+        JSON.stringify([...bounded]) === JSON.stringify([...legacy]) && bounded.get(root)?.amount === 750000
+          && bounded.get(person)?.amount === 750000 && !bounded.has(middle) && !bounded.has(leaf)
+          && (await dakotaCapacities(tx,[])).size === 0,
+        'Newest usable ticket wins; equal dates retain account-ID order, merged aliases retain canonical targets, provenance is identical.');
       throw rollback;
     });
   } catch (e) { if (e !== rollback) throw e; }
