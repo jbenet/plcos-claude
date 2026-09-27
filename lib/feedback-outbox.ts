@@ -1,12 +1,13 @@
 /**
- * The feedback outbox: reports kept in this browser until the server confirms an issue number
- * (Juan, 27 Sep: "can't submit feedback" while an import pegged the server or it restarted).
+ * The feedback outbox (Juan, 27 Sep: "can't submit feedback" while an import pegged the server; then
+ * "it should journal to the server. the page may die or close forever").
  *
- * File puts the report here and returns; nothing waits on the server. A sender posts each entry
- * with a short timeout and backs off (lib/feedback-journal.ts), and tries again at once when the
- * page loads, the network comes back, the tab is shown again, or any request to this app succeeds.
- * An entry leaves only when the server names the issue it filed; a resend of one that did reach the
- * server is answered with that same issue (the route dedupes on the client id).
+ * File keeps the report here, then posts it at once with a 3 s timeout. The server journals it and
+ * answers 202 (app/api/feedback); from then on it is safe on the server, and this browser only
+ * watches for its issue number. Only when the request cannot reach the server — a restart, the
+ * network — does the report stay here, "only on this device", and a sender keeps resending with a
+ * backoff (lib/feedback-journal.ts), and at once when the page loads, the network comes back, the
+ * tab is shown again, or any request to this app succeeds. The server dedupes on the client id.
  *
  * Storage: IndexedDB, one record per report, pictures and all. When IndexedDB is unavailable or
  * hangs (older Safari can leave `open` pending forever), the words go to localStorage without the
@@ -16,7 +17,7 @@
  * Client only.
  */
 import {
-  SEND_TIMEOUT_MS, classify, due, entryTitle, settle,
+  classify, due, entryTitle, sendTimeout, settle,
   type ConnectionNoteRequest, type FeedbackRequest, type JournalEntry, type SendOutcome,
 } from './feedback-journal';
 import { newRequestKey } from './request-key';
@@ -30,21 +31,29 @@ const OPEN_TIMEOUT_MS = 2_000;
 const KICK_GAP_MS = 3_000;
 /** How long a filed report's number stays on show. */
 const FILED_SHOWN_MS = 8_000;
+/** How often a report saved on the server is asked about, and for how long. GUESS. */
+const POLL_EVERY_MS = 3_000;
+const POLL_FOR_MS = 10 * 60_000;
 
-/** Filed a moment ago: an issue number, or (id null) a connection note saved. */
-export interface FiledNote { clientId: string; id: string | null; title: string; at: number }
+/** Filed a moment ago: an issue number, or (id null) a connection note saved; `error` if the server refused it after all. */
+export interface FiledNote { clientId: string; id: string | null; title: string; at: number; error?: string }
+
+/** Journaled on the server, waiting to be filed there. Not stored: it is safe on the server. */
+export interface ServerNote { clientId: string; target: 'issue' | 'connection'; title: string; at: number }
 
 export interface OutboxState {
   entries: JournalEntry[];
   /** Client ids being sent right now. */
   sending: string[];
+  /** Saved on the server, not yet filed. */
+  onServer: ServerNote[];
   /** Filed in the last few seconds, newest last. */
   filed: FiledNote[];
   /** The report just saved from the box, until its first send ends. */
   justSaved: string | null;
 }
 
-const EMPTY: OutboxState = { entries: [], sending: [], filed: [], justSaved: null };
+const EMPTY: OutboxState = { entries: [], sending: [], onServer: [], filed: [], justSaved: null };
 let state: OutboxState = EMPTY;
 const listeners = new Set<() => void>();
 const set = (patch: Partial<OutboxState>) => {
@@ -188,41 +197,80 @@ let again: boolean | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
 async function sendOne(entry: JournalEntry): Promise<SendOutcome> {
+  // Each route takes the client id under its own name; both answer a resend with what they kept.
+  const [url, payload] = entry.target === 'connection'
+    ? ['/api/connection-feedback', { ...entry.request, id: entry.clientId }]
+    : ['/api/feedback', { ...entry.request, clientId: entry.clientId }];
+  const body = JSON.stringify(payload);
+  const patience = sendTimeout(body.length);
   const ctrl = new AbortController();
-  const stop = setTimeout(() => ctrl.abort(), SEND_TIMEOUT_MS);
+  const stop = setTimeout(() => ctrl.abort(), patience);
   try {
-    // Each route takes the client id under its own name; both answer a resend with what they kept.
-    const [url, payload] = entry.target === 'connection'
-      ? ['/api/connection-feedback', { ...entry.request, id: entry.clientId }]
-      : ['/api/feedback', { ...entry.request, clientId: entry.clientId }];
     const res = await (plainFetch ?? fetch)(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
+      body,
       signal: ctrl.signal,
       cache: 'no-store',
+      // A small note outlives the tab being closed mid-send. Browsers cap keepalive bodies at 64 KB.
+      keepalive: body.length < 60_000,
     });
     let json: unknown = null;
     try { json = await res.json(); } catch { /* an HTML error page, or cut off */ }
     return classify(entry.clientId, res.status, json, undefined, entry.target ?? 'issue');
   } catch {
     return classify(entry.clientId, null, null, ctrl.signal.aborted
-      ? `No answer within ${SEND_TIMEOUT_MS / 1000} s`
+      ? `No answer within ${patience / 1000} s`
       : 'Could not reach the server', entry.target ?? 'issue');
   } finally {
     clearTimeout(stop);
   }
 }
 
-async function attempt(entry: JournalEntry) {
+function showFiled(note: FiledNote) {
+  set({ filed: [...state.filed.filter((f) => f.clientId !== note.clientId), note], onServer: state.onServer.filter((n) => n.clientId !== note.clientId) });
+  setTimeout(() => set({ filed: state.filed.filter((f) => f !== note) }), FILED_SHOWN_MS);
+}
+
+/**
+ * Reports saved on the server, asked about until they are filed: the issue number is shown for a
+ * few seconds. Reads the journal only (GET /api/feedback?clientId=), which answers without the
+ * database. Given up quietly after ten minutes — the report is safe on the server either way.
+ */
+let polling: ReturnType<typeof setTimeout> | null = null;
+function poll() {
+  if (polling || !state.onServer.length) return;
+  polling = setTimeout(async () => {
+    polling = null;
+    const now = Date.now();
+    for (const n of state.onServer) {
+      if (now - n.at > POLL_FOR_MS) { set({ onServer: state.onServer.filter((x) => x !== n) }); continue; }
+      const ctrl = new AbortController();
+      const stop = setTimeout(() => ctrl.abort(), 3_000);
+      try {
+        const res = await (plainFetch ?? fetch)(`/api/${n.target === 'connection' ? 'connection-feedback' : 'feedback'}?clientId=${encodeURIComponent(n.clientId)}`, { cache: 'no-store', signal: ctrl.signal });
+        const json = await res.json() as { state?: string; id?: string | null; error?: string };
+        if (json.state === 'filed') showFiled({ clientId: n.clientId, id: json.id ?? null, title: n.title, at: Date.now() });
+        else if (json.state === 'refused') showFiled({ clientId: n.clientId, id: null, title: n.title, at: Date.now(), error: json.error ?? 'refused' });
+      } catch { /* asked again next time */ } finally { clearTimeout(stop); }
+    }
+    poll();
+  }, POLL_EVERY_MS);
+}
+
+async function attempt(entry: JournalEntry): Promise<SendOutcome> {
   lastTried.set(entry.clientId, Date.now());
   set({ sending: [...state.sending, entry.clientId] });
   const outcome = await sendOne(entry);
-  if (outcome.kind === 'filed') {
+  if (outcome.kind === 'filed' || outcome.kind === 'journaled') {
+    // Safe on the server: this browser no longer needs to keep it.
     await storage.remove(entry.clientId);
-    const note: FiledNote = { clientId: entry.clientId, id: outcome.id, title: entryTitle(entry), at: Date.now() };
-    set({ filed: [...state.filed, note] });
-    setTimeout(() => set({ filed: state.filed.filter((f) => f !== note) }), FILED_SHOWN_MS);
+    const title = entryTitle(entry);
+    if (outcome.kind === 'filed' || outcome.id) showFiled({ clientId: entry.clientId, id: outcome.id, title, at: Date.now() });
+    else {
+      set({ onServer: [...state.onServer.filter((n) => n.clientId !== entry.clientId), { clientId: entry.clientId, target: entry.target ?? 'issue', title, at: Date.now() }] });
+      poll();
+    }
   } else {
     const now = Date.now();
     await storage.update(entry.clientId, (e) => settle([e], e.clientId, outcome, now)[0]!);
@@ -233,6 +281,7 @@ async function attempt(entry: JournalEntry) {
   });
   tellOtherTabs();
   await refresh();
+  return outcome;
 }
 
 /** Send what is due; `kicked` sends every entry that is not refused and not tried a moment ago. */
@@ -317,19 +366,29 @@ const fresh = () => ({
   refused: false,
 });
 
-/** Keep one report and start sending it. Throws only when this browser can keep nothing. */
+/**
+ * File one report: keep it in this browser, then send it at once and wait for that one answer (3 s,
+ * longer for big pictures). `onServer` says whether the server accepted it; if not, it stays here
+ * and is resent. Throws only when this browser could keep nothing and the server was not reached.
+ */
 export const enqueue = (req: FeedbackRequest) => keep({ ...fresh(), request: req });
 
-/** Keep one connection note and start sending it (components/routes/ConnectionFeedback.tsx). */
+/** The same for a connection note (components/routes/ConnectionFeedback.tsx). */
 export const enqueueConnectionNote = (req: ConnectionNoteRequest) => keep({ ...fresh(), target: 'connection', request: req });
 
-async function keep(entry: JournalEntry): Promise<JournalEntry> {
+async function keep(entry: JournalEntry): Promise<{ entry: JournalEntry; onServer: boolean }> {
   startOutbox();
-  const kept = await storage.add(entry);
-  set({ entries: [...state.entries.filter((e) => e.clientId !== kept.clientId), kept], justSaved: kept.clientId });
-  tellOtherTabs();
-  void pump(true);
-  return kept;
+  let kept: JournalEntry | null = null;
+  try { kept = await storage.add(entry); } catch { /* nowhere in this browser: the server is the only place */ }
+  if (kept) {
+    set({ entries: [...state.entries.filter((e) => e.clientId !== kept!.clientId), kept], justSaved: kept.clientId });
+    tellOtherTabs();
+  }
+  const outcome = await attempt(kept ?? entry);
+  const onServer = outcome.kind === 'journaled' || outcome.kind === 'filed';
+  if (!onServer && !kept) throw new Error(`the server was not reached (${outcome.kind === 'refused' || outcome.kind === 'retry' ? outcome.error : ''}) and this browser has no storage`);
+  if (!onServer) schedule();
+  return { entry: kept ?? entry, onServer };
 }
 
 /** Send this one now, even one the server refused. */

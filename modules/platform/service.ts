@@ -27,7 +27,7 @@ export interface FeedbackCommand {
  * The markdown file is the receipt. Database metadata is best-effort and never holds
  * the complaint behind a busy connection, including reporter lookup.
  */
-export async function fileFeedback(user: AppUser | { handle: string; resolveUser: (q: Queryable) => Promise<AppUser> }, cmd: FeedbackCommand, options: { clock?: QueueClock; sink?: IssueSink } = {}) {
+export async function fileFeedback(user: AppUser | { handle: string; resolveUser: (q: Queryable) => Promise<AppUser> }, cmd: FeedbackCommand, options: { clock?: QueueClock; sink?: IssueSink; metadataBudgetMs?: number } = {}) {
   const verified = !('resolveUser' in user);
   const context = {
     ...cmd.context,
@@ -71,7 +71,7 @@ export async function fileFeedback(user: AppUser | { handle: string; resolveUser
         attachments: issue.attachments,
       },
     }, q);
-  }, 250, options.clock);
+  }, options.metadataBudgetMs ?? 250, options.clock);
 
   return issue;
 }

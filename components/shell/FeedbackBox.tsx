@@ -355,11 +355,12 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   const submitRef = useRef<(() => Promise<void>) | null>(null);
 
   /**
-   * File it (Juan, 27 Sep: "can't submit feedback" while an import pegged the server). The report
-   * goes into this browser's outbox — IndexedDB, or its words in localStorage — and the box closes at
-   * once; the outbox sends it until the server confirms an issue number, and the rail shows it
-   * waiting and then filed (components/shell/FeedbackOutbox.tsx). Only a report this browser could
-   * not keep at all stays in the box, as a draft, with the reason.
+   * File it (Juan, 27 Sep: "it should journal to the server. the page may die or close forever").
+   * The report is kept in this browser first (lib/feedback-outbox.ts), then posted with a 3 s
+   * timeout; the server journals it and answers at once, and files it afterwards. The box closes
+   * either way, and the rail says which it is: "Saved on the server" (safe to close the tab) or
+   * "only on this device" (the server was not reached; it resends on its own). Only a report that
+   * neither this browser nor the server could keep stays in the box, as a draft, with the reason.
    */
   const submit = async () => {
     if (!title.trim() && !body.trim()) return;
@@ -479,8 +480,8 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             <h2>What went wrong?</h2>
             <p className="sublede" style={{ marginBottom: 14 }}>
               A description is enough. The title, the page you are on and your filters are
-              filled in for you. Filing keeps it in this browser first, so a busy or restarting
-              server never loses it.
+              filled in for you. Filing saves it on the server at once; if the server cannot be
+              reached, it is kept in this browser and sent when it answers.
             </p>
 
             <div className="fbcols">
@@ -637,9 +638,9 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             {state === 'failed' && (
               <div className="warn" style={{ marginTop: 12 }}>
                 <div className="lbl" style={{ color: 'var(--clay)' }}>
-                  Not kept
+                  Not saved
                 </div>
-                <p>This browser could not keep the report to send it ({error}). Your text and pictures are still in this draft; try File again, or copy the text somewhere safe.</p>
+                <p>Neither the server nor this browser could keep it ({error}). Your text and pictures are still in this draft; try File again, or copy the text somewhere safe.</p>
               </div>
             )}
             </div>
