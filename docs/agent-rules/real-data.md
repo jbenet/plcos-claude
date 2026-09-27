@@ -51,7 +51,15 @@ a copy of it with `npm run preview`, and a sub-agent's worktree, which has no ro
   else leaves the client. Read in bulk to keep the query count down, one request a second, within any
   limit Dakota documents, and stop on a 429. Ask only for the fields in `fields.json` "needed", and after
   the first pull only records changed since the last. Use it to enrich existing LPs and to source new
-  candidate LPs. Code that maps it is built and tested on invented fixtures from the public schema, never
+  candidate LPs. **Searching by name is fine (Juan, 27 Sep):** "Names, entities, etc are fine. a ton of
+  this is public knowledge anyway — we can use all the info to search and think about things ourselves."
+  So a web search may carry a Dakota-sourced person's or organisation's name with the usual public words
+  (organisation, title, location, topic), under the enrichment rules below, and agents may read and reason
+  over Dakota-derived records locally. What never goes out: the private or aggregated information only
+  Dakota would hold (AUM and asset figures, ticket and check sizes, allocations, contact emails and phones,
+  notes and commentary, consultant relationships, search activity) in any query, request or outside
+  service, and never a batch or export of Dakota records to anyone. Code that maps it is built and tested
+  on invented fixtures from the public schema, never
   by an agent reading the raw files; the mapping runs on the live server. The sign-in is two Keychain
   items (`npm run dakota:store`), read by `scripts/with-dakota-key.sh`.
   The feedback box stays open on the real server: an issue and its screenshots live in
