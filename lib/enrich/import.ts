@@ -20,7 +20,7 @@ import type { Triage } from './triage';
  *                         last verified by — nobody, until a person does
  *                       → research.note 'public_profile': the researcher's summary, resting on the facts
  *   connections.jsonl   → research.note 'connection_candidates': the paths W3 found, with their tiers.
- *                         Candidates to look at; a C or D path never routes without a person (rule 6)
+ *                         Candidates with uncertainty; weaker evidence lowers rank, never gates information.
  *
  * What it replaces on a re-run is only what an earlier import wrote and nobody has touched since:
  * a claim a person verified stays, whatever the file now says.
@@ -195,8 +195,16 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       // nothing; a new one withdraws the open proposal it replaces; decided ones stay as they are.
       for (const { s: st, hash } of strategies) {
         const pursuit = await tx.one<{ id: string }>(
-          `select pursuit_id::text as id from strategy.pursuit where entity_id = $1 and closed_at is null order by opened_at limit 1`, [st.key]);
-        if (!pursuit) continue;
+          `select p.pursuit_id::text as id from strategy.pursuit p
+             join platform.vehicle v on v.id = p.vehicle_id
+            where identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id($1::uuid)
+              and p.closed_at is null and lower(trim($2)) in (lower(v.name), lower(v.slug))
+            order by (p.entity_id = identity.canonical_entity_id(p.entity_id)) desc, p.opened_at, p.pursuit_id limit 1`,
+          [st.key, st.ask.vehicle]);
+        if (!pursuit) {
+          counts.problems.push({ key: st.key, problems: ['strategy: no open pursuit in the named vehicle; not imported'] });
+          continue;
+        }
         const seen = await tx.one<{ n: string }>(`select count(*)::text as n from strategy.suggestion where pursuit_id = $1 and file_hash = $2`, [pursuit.id, hash]);
         if (Number(seen?.n ?? 0) > 0) continue;
         const w = await tx.query<{ id: string }>(

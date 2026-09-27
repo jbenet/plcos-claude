@@ -20,10 +20,13 @@ export async function proxyProperties(check: Check) {
     const { config: { data: { cookiePrefix: jar } } } = await import('../../config/deployment');
     const old = call('/targets/abc', { cookie: `${jar}user=juan; ${jar}vehicle=` + encodeURIComponent(JSON.stringify({ juan: 'rails' })) });
     const scoped = call('/neurotech/strategy');
+    const grants = call('/grants/strategy');
+    const grantsPipeline = call('/grants/pipeline');
     const again = call('/dev/enrich', { routed: true });
     const ok =
       dev.rewrite?.endsWith('/dev/enrich') === true && oldDev.status === 307 && oldDev.location?.endsWith('/developer/enrich?imported=3') === true &&
       post.status !== 307 && lp.rewrite?.endsWith('/targets/abc') === true && lp.vehicle === 'neurotech' && lp.asked === '/neurotech/pipeline/abc' &&
+      grants.status !== 307 && !grants.rewrite && grantsPipeline.vehicle === 'grants' &&
       old.status === 307 && old.location?.endsWith('/rails/pipeline/abc') === true && !scoped.rewrite && scoped.status !== 307 && again.status !== 307 && !again.rewrite;
     check(
       'The address follows the sidebar: /<vehicle>/<module> and /developer/<page> reach their pages and carry the address asked for (issue 0011, real), old addresses redirect to their place, a POST is never redirected, and a rewritten request passes through',
@@ -48,6 +51,8 @@ export async function pathProperties(check: Check) {
       ['/issues/0001', 'all', '/developer/issues/0001'],
       ['/all/routes?target=t1', 'neurotech', '/all/routes?target=t1'],
       ['/today', 'all', '/today'],
+      ['/grants/strategy', 'all', '/grants/strategy'],
+      ['/grants/pipeline', 'neurotech', '/grants/pipeline'],
       ['/constructor', 'all', '/constructor'],
       ['https://example.com/targets', 'all', 'https://example.com/targets'],
     ];
@@ -56,6 +61,7 @@ export async function pathProperties(check: Check) {
     const unstable = pages.filter((h) => { const once = canonicalPath(h, 'all'); return canonicalPath(once, 'all') !== once || once === h; });
     const vehicles: Array<[string, string | null]> = [
       ['/neurotech/pipeline/abc', 'neurotech'], ['/all/calendar', 'all'], ['/today', null],
+      ['/grants/strategy', 'grants'], ['/grants/pipeline', 'grants'],
       ['/everything/visualizations', null], ['/developer/issues', null], ['/x/constructor', null],
     ];
     const misread = vehicles.filter(([p, v]) => vehicleOfPath(p) !== v);

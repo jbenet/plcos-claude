@@ -14,3 +14,4 @@ export { routePage, ROUTES_PER_PAGE } from './presentation';
 
 export { precomputeRoutes, startRouteWarmup, routeWarmupProgress } from './cache';
 export { planRoutesLive } from './service';
+export { strategyRouteSummaries, type RecordedRoute } from './strategy-summary';
