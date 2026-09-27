@@ -41,7 +41,10 @@
     "pg:copy": "tsx scripts/pg-copy.ts",
     "linear:store": "bash scripts/linear-key.sh store",
     "linear:status": "bash scripts/linear-key.sh status",
-    "linear:forget": "bash scripts/linear-key.sh forget"
+    "linear:forget": "bash scripts/linear-key.sh forget",
+    "dev:start": "bash scripts/dev.sh start",
+    "dev:stop": "bash scripts/dev.sh stop",
+    "dev:status": "bash scripts/dev.sh status"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

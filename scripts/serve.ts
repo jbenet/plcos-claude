@@ -34,7 +34,6 @@ const message = (err: unknown) => (err instanceof Error ? err.message : String(e
 
 /** The local Postgres cluster the live server uses (docs/21-postgres.md): Homebrew's postgresql@17. */
 const PG_BIN = process.env.PG_BIN ?? '/opt/homebrew/opt/postgresql@17/bin';
-let pgCluster: string | null = null;
 const pgEnv = { ...process.env, LC_ALL: 'en_US.UTF-8', LANG: 'en_US.UTF-8' };
 
 function startPostgres(dir: string, port: number): string {
@@ -47,9 +46,6 @@ function startPostgres(dir: string, port: number): string {
   return dir;
 }
 
-function stopPostgres(dir: string) {
-  spawnSync(join(PG_BIN, 'pg_ctl'), ['-D', dir, '-m', 'fast', '-w', '-t', '30', 'stop'], { env: pgEnv, stdio: 'ignore' });
-}
 
 async function busy(port: number): Promise<boolean> {
   const answers = await new Promise<boolean>((done) => {
@@ -130,10 +126,10 @@ async function main() {
       if (/^postgres(ql)?:\/\/[^@\s]+@(127\.0\.0\.1|localhost|\[::1\]):\d+\/[a-z0-9_]+$/.test(url)) {
         env.DATABASE_URL = url;
         say('database: local Postgres (data/real/postgres.url)');
-        // Juan, 27 Sep: Postgres comes up and goes down with our dev server, never as a login item.
-        // The cluster lives beside the real data (data/real/postgres); start it if it isn't running,
-        // and stop it when this launcher exits. A SIGKILLed launcher leaves it up; the next start reuses it.
-        pgCluster = startPostgres(join(layout.root, 'data', 'real', 'postgres'), Number(new URL(url).port));
+        // Juan, 27 Sep: Postgres is part of our dev setup, never a login item, and a server restart must
+        // not take it down. So this only starts the cluster (data/real/postgres) if it isn't running;
+        // stopping is explicit: npm run dev:stop (scripts/dev.sh).
+        startPostgres(join(layout.root, 'data', 'real', 'postgres'), Number(new URL(url).port));
       } else if (url) refuse('data/real/postgres.url must be a loopback postgres:// URL with a database name.');
     } catch { /* No file: PGlite. */ }
   }
@@ -153,10 +149,7 @@ async function main() {
   // The terminal sends Ctrl-C to both; a signal sent to this process alone is passed on, so the
   // server never outlives its launcher with a database open.
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(sig, () => child.kill(sig));
-  child.on('exit', (code, signal) => {
-    if (pgCluster) stopPostgres(pgCluster);
-    process.exit(code ?? 128 + (signal ? constants.signals[signal] : 0));
-  });
+  child.on('exit', (code, signal) => process.exit(code ?? 128 + (signal ? constants.signals[signal] : 0)));
 }
 
 main().catch((err: unknown) => refuse(message(err)));
