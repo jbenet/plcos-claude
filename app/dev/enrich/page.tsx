@@ -23,6 +23,7 @@ import { addedInBulk, BULK_DAY } from '@/lib/enrich/unsourced';
 import { readResearchExportStatus } from '@/lib/enrich/export-status';
 import { ExportStatus } from './ExportStatus';
 import { LpUnits } from './LpUnits';
+import { SpvStance } from './SpvStance';
 import { recentLpRepoints } from '@/modules/strategy';
 
 /** The checks the records point to before anyone writes (iteration 3, docs/19). */
@@ -58,7 +59,7 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
   const exportStatus = await readResearchExportStatus(dir);
   const {pursuits,suggestions,imported,bulk,mergeRun,duplicateRun,lpDecisions} = await enrichmentDbInputs();
   // Read live: a pass that changes nothing leaves the cached page inputs' revision where it was.
-  const lpRun = await latestRun('enrich','lp-units');
+  const [lpRun, spvRun] = await Promise.all([latestRun('enrich','lp-units'), latestRun('enrich','spv-stance')]);
   const entities = new Set(pursuits.map((p) => p.entityId)).size;
   const {readEnrichmentSummary}=await import('@/lib/enrich/file-worker');
   const {triage,plans,quality,set,cands,raw,pages,strategies}=await readEnrichmentSummary(dir);
@@ -164,6 +165,7 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
             ? mergeRun.detail as unknown as import('@/modules/strategy').PursuitMergeReport : duplicateRun?.status === 'ok' && (!imported || duplicateRun.startedAt > imported.startedAt)
               ? (duplicateRun.detail as unknown as import('@/lib/enrich/import-dupes').ImportDuplicateReport).pursuitMerges : last.pursuitMerges} />
           <LpUnits last={lpRun ? `${lpRun.status === 'ok' ? '' : 'stopped · '}${lpRun.note ?? ''}` : null} decisions={lpDecisions} />
+          <SpvStance last={spvRun ? `${spvRun.status === 'ok' ? '' : 'stopped · '}${spvRun.note ?? ''}` : null} />
           {(last.skippedRecords ?? []).length > 0 && (
             <details className="more" style={{ marginTop: 10 }}>
               <summary>{last.skippedRecords!.length} skipped records — correct these files and import again</summary>

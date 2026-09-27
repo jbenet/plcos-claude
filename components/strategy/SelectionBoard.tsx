@@ -6,12 +6,14 @@ import { scoreDetailAction } from '@/app/selection/actions';
 import type { ScoreDetail } from '@/lib/pipeline-data';
 import { BulkLpActions } from './BulkLpActions';
 import { MoveButton, statusMix, statusWord, UndoToast, useMove } from './MoveToSelected';
-import { sectionRows, EMPTY, lead, second, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { sectionRows, EMPTY, lead, second, spvFlagged, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { CapacityTag, LpWho, units } from './LpWho';
 import { cx, Disclose, fmt, fmtShort, FilterLine, Icon, Ladder, n, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
 import m from './selection.module.css';
 import u from './lp-units.module.css';
+import { SpvMark, SpvReason, spvStyles as sp } from './SpvMark';
+import { spvWords } from '@/modules/strategy/client';
 
 /**
  * Selection (module 03; issues 0071 and 0089): who to work next. A ranked list beside the reasons
@@ -25,7 +27,7 @@ import u from './lp-units.module.css';
 
 const PAGE = 60;
 const SORT_LABEL: Partial<Record<SortKey, string>> = {
-  score: 'score', capacity: 'check size', route: 'routes', status: 'stage', meetings: 'meetings', touch: 'last touch', name: 'name',
+  score: 'score', capacity: 'check size', route: 'routes', status: 'stage', meetings: 'meetings', touch: 'last touch', name: 'name', spv: 'SPV stance',
 };
 const DEFAULT: Status[] = ['new', 'sourcing'];
 
@@ -157,6 +159,8 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   // ways in and the other actions, secondary. For the ticked LPs when some are ticked, else the one in focus.
   const single = !ticked && focus ? focus : null;
   const todo = targets.filter((r) => r.status !== 'selected');
+  // On an SPV vehicle, an LP on record as not doing SPVs is flagged before it is moved (Juan, 27 Sep 2026).
+  const noSpv = todo.filter(spvFlagged);
   const moveBar = targets.length > 0 && (
     <BulkLpActions key={ticked ? 'ticked' : focus?.id} rows={targets} statuses={statuses} initialStatus={null} place="selection"
       onClear={ticked ? view.clearPicked : undefined} onStatusSaved={mv.remember} hidden={ticked ? pickedRows.filter((r) => !shownIds.has(r.id)).length : 0}
@@ -164,6 +168,12 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
       sub={single ? <>{second(single) && <>{second(single)} · </>}now <b>{statusWord(single.status)}</b><span className={m.owner}> · owner {single.owner}</span></>
         : undefined}
       primary={<>
+        {noSpv.length > 0 && <div className={sp.warn} role="note">
+          <b>{noSpv.length === 1 ? `${lead(noSpv[0]!)} doesn’t do SPVs` : `${n(noSpv.length)} of these don’t do SPVs`}</b>, and this is an SPV.
+          {noSpv.length === 1 ? noSpv[0]!.spv.why && <> <small>{noSpv[0]!.spv.why}</small></>
+            : <ul>{noSpv.slice(0, 4).map((r) => <li key={r.id}>{lead(r)}{r.spv.why && <small> · {r.spv.why}</small>}</li>)}{noSpv.length > 4 && <li><small>and {n(noSpv.length - 4)} more</small></li>}</ul>}
+          {' '}Moving {noSpv.length === 1 ? 'it' : 'them'} to Selected is still yours to decide; the LP page can correct the stance.
+        </div>}
         <MoveButton state={mv} rows={targets} ticked={ticked} onMove={() => void moveNow()} />
         {ticked && <p className={m.mix}>{todo.length ? statusMix(todo) : 'all Selected already'}{todo.length < targets.length && todo.length > 0 ? ` · ${n(targets.length - todo.length)} already Selected` : ''}</p>}
       </>}
@@ -198,7 +208,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
         </button>
       </div>
 
-      <FilterLine view={view} rows={rows} showVehicle={showVehicle} keys={['flag', 'touch', 'read']} placeholder="Search names, organisations, next steps…  /" />
+      <FilterLine view={view} rows={rows} showVehicle={showVehicle} keys={['flag', 'spv', 'touch', 'read']} placeholder="Search names, organisations, next steps…  /" />
 
       <div className={cx(s.selGrid, !focus && !pickedRows.length && s.alone)}>
         <div className={cx('card', s.rankCard)}>
@@ -231,6 +241,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
                     <Th k="name" className={s.cLp}>LP</Th>
                     <Th k="score" className={s.cScore}>Score</Th>
                     <Th k="capacity" className={s.cCap} title="The estimated check size: the capacity band on file">Check size</Th>
+                    <Th k="spv" className={sp.cSpv} title="Whether they do SPVs: a person’s setting, research, or what our records show. Unknown is likely open.">SPVs</Th>
                     <Th k="route" className={s.cRoutes}>Routes</Th>
                     <Th k="status" className={s.cStatus}>Stage</Th>
                     <Th k="meetings" className={s.cMeet}>Met</Th>
@@ -242,16 +253,16 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
                   ['ind', 'Individuals', indsShown, sections.individuals,
                   'People who invest in their own capacity. Their firms are context; a firm with its own row here is marked.']] as const).map(([key, title, list, whole, note]) => (
                   <tbody key={key} aria-label={title}>
-                    <tr className={u.sectionRow}><td colSpan={9}><div className={u.sectionHead}>
+                    <tr className={u.sectionRow}><td colSpan={10}><div className={u.sectionHead}>
                       <span className={u.sectionName}>{title}</span><span className={u.sectionCount}>{n(whole.length)}</span><span className={u.sectionNote}>{note}</span>
                     </div></td></tr>
-                    {whole.length === 0 && <tr className={u.sectionEmpty}><td colSpan={9}>{key === 'org' ? 'No organisation' : 'No individual'} at {active ? 'these statuses and filters' : 'these statuses'}.</td></tr>}
+                    {whole.length === 0 && <tr className={u.sectionEmpty}><td colSpan={10}>{key === 'org' ? 'No organisation' : 'No individual'} at {active ? 'these statuses and filters' : 'these statuses'}.</td></tr>}
                     {list.map((r, i) => <Fragment key={r.id}>
                       <RankRow r={r} position={i + 1} focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now}
                         onFocus={setFocusId} onPick={pick} onJump={jump} />
-                      {narrow && r.id === focus?.id && detail && <tr className={s.inlineRow}><td colSpan={9}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>}
+                      {narrow && r.id === focus?.id && detail && <tr className={s.inlineRow}><td colSpan={10}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>}
                     </Fragment>)}
-                    {whole.length > list.length && <tr className={u.moreRow}><td colSpan={9}>
+                    {whole.length > list.length && <tr className={u.moreRow}><td colSpan={10}>
                       <button type="button" className="btn" onClick={() => setLimits((x) => ({ ...x, [key]: x[key] + PAGE }))}>Show {n(Math.min(PAGE, whole.length - list.length))} more {key === 'org' ? 'organisations' : 'individuals'}</button>
                       {n(list.length)} of {n(whole.length)} shown. Search covers all of them.
                     </td></tr>}
@@ -284,14 +295,16 @@ const RankRow = memo(function RankRow({ r, position, focused, picked, byVehicle,
   const touch = fmtShort(r.lastTouch, now);
   const stale = /stale/i.test(r.scoreKind);
   const cap = r.capacity && !/unknown/i.test(r.capacity) ? r.capacity : null;
+  const dim = spvFlagged(r);
   return (
-    <tr data-lp={r.id} className={cx(s.row, focused && s.focus, picked && s.picked)} aria-selected={focused}
+    <tr data-lp={r.id} className={cx(s.row, focused && s.focus, picked && s.picked, dim && sp.dim)} aria-selected={focused}
       onClick={(e) => { if ((e.target as HTMLElement).closest('a,button,input,label')) return; onFocus(r.id); }}>
       <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
       <td className={s.cPos}>{position}</td>
       <td className={s.cLp}>
         <div className={s.lpName}><span className={s.lpText}>{lead(r)}<CapacityTag r={r} /></span></div>
         <LpWho r={r} onJump={onJump} />
+        {dim && <SpvReason mark={r.spv} />}
         {(byVehicle || r.money || r.doNotContact || r.riskCount > 0) && (
           <div className={s.whoLine}>
             {byVehicle && <span>{r.vehicle}</span>}
@@ -307,6 +320,7 @@ const RankRow = memo(function RankRow({ r, position, focused, picked, byVehicle,
             <span className={cx(s.scoreKind, stale && s.stale)}>{r.scoreKind.startsWith('Fit') ? 'fit' : stale ? 'stale' : 'provisional'}</span></div>}
       </td>
       <td className={s.cCap}>{cap ?? <span className={s.none}>—</span>}</td>
+      <td className={sp.cSpv}><SpvMark mark={r.spv} /></td>
       <td className={s.cRoutes}><span className={cx(s.fig, !r.route && s.zero)}><Icon name="link" title="Routes" />{r.route ?? '—'}</span></td>
       <td className={s.cStatus}>{STATUS_WORD[r.status]}</td>
       <td className={s.cMeet}><span className={cx(s.fig, !r.meetings && s.zero)}>{r.meetings ? <><Icon name="calendar" title="Meetings" />{r.meetings}</> : '—'}</span></td>
@@ -386,6 +400,10 @@ function Why({ r, position, sortLabel, rungNames, now, onJump }: {
           {r.firms.map((f) => <li key={f.id}>{f.name}{f.role && <small> · {f.role}</small>}
             {f.lpRow && <button type="button" className={u.jump} onClick={() => onJump(f.lpRow!)}>firm’s row ↑</button>}</li>)}
         </ul></span></div>}
+        <div className={s.fact}><span>SPVs</span><span className={r.spv.stance === 'does-not' && r.spvVehicle ? sp.not : undefined}>
+          {spvWords(r.spv)}
+          <span className={s.small}>{r.spv.why ?? 'Nothing on file either way: unknown is likely open.'}{r.spv.conflict ? ' Other evidence disagrees; the LP page lists both.' : ''}</span>
+        </span></div>
         {d?.angle && <div className={s.fact}><span>Angle</span><span>{d.angle}</span></div>}
         {d?.route && <div className={s.fact}><span>Best path</span><span>{d.route.via} <span className={s.none}>· tier {d.route.tier}</span>{d.route.why && <span className={s.small}>{d.route.why}</span>}</span></div>}
         {d?.ask && <div className={s.fact}><span>Ask</span><span>{d.ask}{d.list && <span className={s.small}>List: {d.list}{d.confidence ? ` · ${d.confidence} confidence` : ''}</span>}</span></div>}

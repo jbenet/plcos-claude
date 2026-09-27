@@ -45,6 +45,11 @@ types, source kinds and capacity bands):
 `version` is the latest amendment, as a string. `detail` keys: `company`, `fund`, `legal_name`,
 `former_name`, `acquirer`, `as_of`, and a year, round or amount as written.
 
+SPV stance (27 Sep 2026): `spv_appetite` is `does`, `does-not` or `unknown`, with a quote for either of the
+first two; `spv_deals` is the least number of SPV or co-investment deals the source shows, a whole number,
+with a quote naming the deals where it can. The import maps both onto the LP's SPV stance, below a person's
+setting.
+
 ## Firm rules
 
 Verbatim, from `docs/agent-rules/real-data.md` (linked from AGENTS.md, which CLAUDE.md imports), amendment 1.48 and W1's protocol. They do

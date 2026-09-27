@@ -56,6 +56,7 @@ const PUBLIC_LABEL: Record<string, string> = {
   fund_lp: 'Backs funds', fund_gp: 'Runs a fund', exit: 'Exit', philanthropy: 'Philanthropy',
   capacity: 'Capacity', aum: 'Assets under management', check_size: 'Check size', interest: 'Interest',
   statement: 'Said', news: 'In the news', location: 'Location', investor_type: 'Investor type', affiliation: 'Affiliation',
+  spv_appetite: 'SPVs', spv_deals: 'Known SPV deals, at least',
 };
 export const claimLabel = (field: string): string =>
   CLAIM_LABEL[field] ?? (field.startsWith('public.') ? `${PUBLIC_LABEL[field.slice(7)] ?? field.slice(7)} (public source)` : field);

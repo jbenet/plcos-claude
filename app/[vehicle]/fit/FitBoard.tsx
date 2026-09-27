@@ -6,6 +6,8 @@ import Link from '@/components/ui/AppLink';
 import { GROUP_FLAG, GROUP_LABEL, WORK, type FitRow, type FitSection } from './fit-model';
 import { StatusPicker } from './StatusPicker';
 import s from './fit.module.css';
+import { SpvMark } from '@/components/strategy/SpvMark';
+import { spvWords } from '@/modules/strategy/client';
 
 /**
  * The fit list and its side pane (issue 0096). Select a row, or move with ↑ ↓ (Home, End), and
@@ -96,6 +98,8 @@ export function FitBoard({ sections, showVehicle, showGroup }: { sections: FitSe
                     {showVehicle && <span className="flag f-mute">{r.vehicleName}</span>}
                     {(showGroup || r.group !== group) && <span className={`flag ${GROUP_FLAG[r.group]}`}>{GROUP_LABEL[r.group]}</span>}
                     <span className={s.actions}>
+                      {/* SPV stance (Juan, 27 Sep 2026): the same place on every row, a column read down the list. */}
+                      {r.spv && <span className={s.spvCell}><SpvMark mark={r.spv} tag /></span>}
                       {r.pursuitId && r.status ? (
                         <StatusPicker name={r.name} pursuitId={r.pursuitId} vehicleId={r.vehicleId} status={r.status} />
                       ) : <span className={s.noPursuit}>no pursuit</span>}
@@ -159,6 +163,17 @@ export function FitInspector({ children }: { children: ReactNode }) {
       ) : <p className="muted" style={{ fontSize: 12 }}>A formal assessment with no pursuit on this vehicle, so there is no status to set.</p>}
 
       {r.why && <p className={s.paneWhy}>{r.why}</p>}
+
+      {r.spv && (
+        <div className={s.paneBlock}>
+          <div className="lbl">SPVs</div>
+          <div className={s.paneReading}>
+            <span>Stance</span><b>{spvWords(r.spv)}</b>
+            <p>{r.spv.why ?? 'Nothing on file either way: unknown is likely open.'}{r.spv.conflict ? ' Other evidence disagrees; the LP page lists both.' : ''}
+              {r.spvVehicle && r.spv.stance === 'does-not' ? ' This is an SPV: check before any approach.' : ''}</p>
+          </div>
+        </div>
+      )}
 
       {d.bases.length > 0 && (
         <div className={s.paneBlock}>

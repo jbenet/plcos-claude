@@ -4,6 +4,9 @@ import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState, type 
 import Link from '@/components/ui/AppLink';
 import { StatusMark } from '@/components/ui/StatusMark';
 import { unpackRows, type PackedTable } from './pack';
+import { SpvMark } from './SpvMark';
+import { spvWords, type SpvRowMark } from '@/modules/strategy/client';
+import sp from './spv.module.css';
 import s from './strategy.module.css';
 
 /** Per-LP inputs behind a row's score. Values only; the explanation is written once, here. */
@@ -22,10 +25,14 @@ export interface StrategyTableRow {
   priority: number | null; expected: number | null; evidencePriority: number;
   capacity: number | null; likelihood: number | null; route: number | null; days: number | null;
   views: string[]; risks: string[]; held: boolean; basis: StrategyRowBasis;
+  /** Whether the LP does SPVs (Juan, 27 Sep 2026). */
+  spv: SpvRowMark;
 }
-type SortKey = 'name' | 'action' | 'status' | 'owner' | 'evidencePriority' | 'priority' | 'capacity' | 'likelihood' | 'route' | 'days';
-const numeric = new Set<SortKey>(['evidencePriority', 'priority', 'capacity', 'likelihood', 'route', 'days']);
-const keys: SortKey[] = ['name', 'action', 'status', 'owner', 'evidencePriority', 'priority', 'capacity', 'likelihood', 'route', 'days'];
+type SortKey = 'name' | 'action' | 'status' | 'owner' | 'evidencePriority' | 'priority' | 'capacity' | 'likelihood' | 'route' | 'days' | 'spv';
+const numeric = new Set<SortKey>(['evidencePriority', 'priority', 'capacity', 'likelihood', 'route', 'days', 'spv']);
+const keys: SortKey[] = ['name', 'action', 'status', 'owner', 'evidencePriority', 'priority', 'capacity', 'likelihood', 'route', 'days', 'spv'];
+/** Does, with the larger known count first; then unknown; doesn't last. */
+const spvOrder = (m: SpvRowMark) => (m.stance === 'does' ? 2 + (m.minDeals ?? 0) / 1e4 : m.stance === 'unknown' ? 1 : 0);
 const EMPTY = { q: '', view: 'all', status: '', action: '', owner: '' };
 type Filters = typeof EMPTY;
 type Sort = { key: SortKey; dir: 1 | -1 };
@@ -39,9 +46,11 @@ const money = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency',
 const label = (v: string) => v.charAt(0).toUpperCase() + v.slice(1).replaceAll('-', ' ');
 const PAGE = 50;
 
-export function StrategyTable({ table, asOf, initialFilters = {}, views = [{ id: 'all', label: 'All LPs' }], rules }: {
+export function StrategyTable({ table, asOf, initialFilters = {}, views = [{ id: 'all', label: 'All LPs' }], rules, spvVehicle = false }: {
   table: PackedTable; asOf: string; initialFilters?: Record<string, string>; views?: Array<{ id: string; label: string }>;
   rules: { hours: number; share: number; prior: number };
+  /** The vehicle is an SPV: an LP that doesn't do SPVs is flagged in its row and its detail. */
+  spvVehicle?: boolean;
 }) {
   const rows = useMemo(() => unpackRows(table), [table]);
   const [filters, setFilters] = useState(() => filtersFrom(initialFilters));
@@ -98,7 +107,7 @@ export function StrategyTable({ table, asOf, initialFilters = {}, views = [{ id:
       && (!filters.owner || row.owner === filters.owner)
       && words.every(word => haystack.get(row.id)!.includes(word)))
       .sort((a, b) => {
-        const av = a[sort.key] ?? null, bv = b[sort.key] ?? null;
+        const av = sort.key === 'spv' ? spvOrder(a.spv) : a[sort.key] ?? null, bv = sort.key === 'spv' ? spvOrder(b.spv) : b[sort.key] ?? null;
         if (av === null || bv === null) {
           if (av !== bv) return av === null ? 1 : -1;
           return b.evidencePriority - a.evidencePriority || a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
@@ -144,18 +153,19 @@ export function StrategyTable({ table, asOf, initialFilters = {}, views = [{ id:
     {filtered.length > 0 && <div className="tscroll"><table className={`list ${s.lp}`}>
       <thead><tr>
         <th className={s.tog} aria-label="Detail" />
-        <Th k="name">LP</Th><Th k="action" className={s.actionCol}>Next action</Th><Th k="status">Status</Th><Th k="owner" className={s.midOnly}>Owner</Th>
+        <Th k="name">LP</Th><Th k="action" className={s.actionCol}>Next action</Th><Th k="status">Status</Th><Th k="spv" className={sp.cSpvStrategy}>SPVs</Th><Th k="owner" className={s.midOnly}>Owner</Th>
         <Th k="priority" className={s.r}>Utility</Th><Th k="evidencePriority" className={`${s.r} ${s.midOnly}`}>Evidence pts</Th>
         <Th k="capacity" className={`${s.r} ${s.opt} ${s.midOnly}`}>Capacity</Th><Th k="likelihood" className={`${s.r} ${s.opt} ${s.wideOnly}`}>Likelihood</Th><Th k="route" className={`${s.r} ${s.opt} ${s.wideOnly}`}>Route</Th>
       </tr></thead>
       <tbody>{shown.map(row => {
         const open = expanded.has(row.id);
         return <Fragment key={row.id}>
-          <tr className={`${s.lpRow}${open ? ` ${s.open}` : ''}`} onClick={rowClick(row.id)}>
+          <tr className={`${s.lpRow}${open ? ` ${s.open}` : ''}${spvVehicle && row.spv.stance === 'does-not' ? ` ${sp.dim}` : ''}`} onClick={rowClick(row.id)}>
             <td className={s.tog}><button type="button" className={s.chev} aria-label={`${open ? 'Hide' : 'Show'} the basis for ${row.name}`} aria-expanded={open} aria-controls={`lp-basis-${row.id}`} onClick={() => toggle(row.id)}><i aria-hidden /></button></td>
-            <td className={s.name}><Link href={row.href}>{row.name}</Link></td>
+            <td className={s.name}><Link href={row.href}>{row.name}</Link>{spvVehicle && row.spv.stance === 'does-not' && <span className={sp.reason}>Doesn’t do SPVs</span>}</td>
             <td className={s.actionCol}><span className={s.clip} title={row.action}>{row.risks.length > 0 && <span className={s.risk} title={row.risks.join('; ')}>{row.risks.length} risk{row.risks.length === 1 ? '' : 's'}</span>}{row.action}</span></td>
             <td className={s.nowrap}><StatusMark status={row.status} /></td>
+            <td className={sp.cSpvStrategy}><SpvMark mark={row.spv} showBasis={false} /></td>
             <td className={`${s.owner} ${s.midOnly}`}>{row.owner}</td>
             <td className={`${s.r} ${s.scoreCell}`}>{row.priority === null
               ? <span className="muted">{row.held ? 'Held' : 'Unscored'}<span className={s.narrowOnly}> · {row.evidencePriority} pts</span></span>
@@ -165,7 +175,7 @@ export function StrategyTable({ table, asOf, initialFilters = {}, views = [{ id:
             <td className={`${s.r} ${s.opt} ${s.wideOnly}`}>{row.likelihood === null ? <span className="muted">—</span> : `${Math.round(row.likelihood * 100)}%`}</td>
             <td className={`${s.r} ${s.opt} ${s.wideOnly}`}>{row.route === null ? <span className="muted">—</span> : row.route}</td>
           </tr>
-          {open && <tr className={s.basisRow} id={`lp-basis-${row.id}`}><td colSpan={10}><Basis row={row} rules={rules} /></td></tr>}
+          {open && <tr className={s.basisRow} id={`lp-basis-${row.id}`}><td colSpan={11}><Basis row={row} rules={rules} spvVehicle={spvVehicle} /></td></tr>}
         </Fragment>;
       })}</tbody>
     </table></div>}
@@ -179,7 +189,7 @@ function Field({ label: name, set, children }: { label: string; set: boolean; ch
   return <label className={`${s.field}${set ? ` ${s.fieldSet}` : ''}`}><span className={s.fieldLabel}>{name}</span>{children}</label>;
 }
 
-function Basis({ row, rules }: { row: StrategyTableRow; rules: { hours: number; share: number; prior: number } }) {
+function Basis({ row, rules, spvVehicle }: { row: StrategyTableRow; rules: { hours: number; share: number; prior: number }; spvVehicle: boolean }) {
   const b = row.basis;
   const [forward, observed, factor] = b.conversion;
   const unknown = <span className="muted">Unknown</span>;
@@ -190,6 +200,9 @@ function Basis({ row, rules }: { row: StrategyTableRow; rules: { hours: number; 
       {b.angle && <p><b>Angle.</b> {b.angle}</p>}
       {b.plan.length > 0 && <ol className={s.plan}>{b.plan.map(([move, because], i) => <li key={i}>{move}<small>{because}</small></li>)}</ol>}
       {row.risks.length > 0 && <ul className={s.risks}>{row.risks.map((r, i) => <li key={i}>{r}</li>)}</ul>}
+      <p><b>SPVs.</b> {spvWords(row.spv)}.{' '}
+        <span className="muted">{row.spv.why ?? 'Nothing on file either way: unknown is likely open.'}{row.spv.conflict ? ' Other evidence disagrees; the LP page lists both.' : ''}</span>
+        {spvVehicle && row.spv.stance === 'does-not' && <span className={sp.reason}>This is an SPV: settle whether they would take part before any approach.</span>}</p>
       <p className="muted">{b.due ? `Recorded due ${b.due}.` : 'No recorded due date.'} {b.proposed ? `Proposed: ${b.proposed}.` : ''} {b.strategy ? `Strategy ${b.strategy}.` : 'No vehicle strategy recorded.'}</p>
       <Link className={s.open} href={row.href}>Open the LP, its strategy and sources →</Link>
     </div>

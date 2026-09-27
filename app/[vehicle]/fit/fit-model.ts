@@ -1,5 +1,5 @@
 import { unitGroups, type LpGroup } from '@/lib/lp-groups';
-import type { PursuitStatus } from '@/modules/strategy/client';
+import type { PursuitStatus, SpvRowMark } from '@/modules/strategy/client';
 
 /** The fit page's groups and rows, shared by the server page and its client list (issues 0073, 0096). */
 export type Group = 'strong' | 'good' | 'possible' | 'weak' | 'unknown' | 'gate' | 'missing';
@@ -37,6 +37,8 @@ export interface FitRow {
   /** ISO date of the reading or assessment. */
   date: string | null;
   known: number | null; dims: string | null;
+  /** Whether the LP unit does SPVs (Juan, 27 Sep 2026), and whether this reading is for an SPV vehicle. */
+  spv?: SpvRowMark; spvVehicle?: boolean;
   /** What the side pane shows for the selected row: the reading's bases, gates and proposal. */
   detail: {
     bases: Array<{ label: string; value: string | null; basis: string | null }>;

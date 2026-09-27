@@ -39,7 +39,12 @@
 /* The optional columns follow the card's width, not the window's: the inspector takes a third
    of a laptop screen, and a phone has none of it. What they hold is also in the opened row. */
 .lpTable, .moveWrap { container-type: inline-size; }
-@container (max-width: 1060px) { .lpTable .wideOnly { display: none; } }
+@container (max-width: 1060px) {
+  .lpTable .wideOnly { display: none; }
+  /* Room for the SPV column (27 Sep 2026): the action is clipped anyway, and whole in the opened row. */
+  .lpTable .actionCol { min-width: 130px; }
+  .lpTable .name { max-width: 190px; }
+}
 @container (max-width: 900px) { .moveWrap .wideOnly { display: none; } }
 /* Narrower still, a row keeps what decides: the name, the action or decision, and the score. */
 @container (max-width: 640px) {

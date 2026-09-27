@@ -1,5 +1,5 @@
 import { mergeImportDuplicatesInTransaction, type ImportDuplicateReport } from './import-dupes';
-import { consolidatePursuitsInTransaction, type PursuitMergeReport } from '@/modules/strategy';
+import { consolidatePursuitsInTransaction, recordResearchSpv, type PursuitMergeReport } from '@/modules/strategy';
 import { correctPipelineEntityTypes, type EntityTypeReport } from './entity-types';
 import { createHash } from 'node:crypto';
 import { recordActivity } from '@/lib/activity/log';
@@ -53,6 +53,8 @@ export interface ImportCounts {
   strategies: number;
   proposed: number;
   withdrawn: number;
+  /** Research facts on SPVs (spv_appetite, spv_deals) mapped onto the SPV stance's evidence. */
+  spvFacts?: number;
   /** LPs given their triage line: the lane and the first step before any outreach (W9). */
   triaged: number;
   problems: Array<{ key: string; problems: string[] }>;
@@ -107,6 +109,8 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       findingRecords.push({ file: `raw/${f}`, index: 0, value: x });
       const problems = check(x, key);
       if (problems.length) { counts.rejected++; counts.problems.push({ key, problems }); continue; }
+      // spv_deals may arrive as a JSON number; everything downstream reads a fact's value as text.
+      for (const fact of (x as Finding).facts) if (typeof fact.value !== 'string') fact.value = String(fact.value);
       findings.push(x as Finding);
     }
     const parsedPaths = readPathRecords(await readFile(join(dir, 'connections.jsonl'), 'utf8').catch(() => ''));
@@ -260,17 +264,21 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
             );
             docs.add(id);
           }
+          // spv_deals may be written as a number (a count); every other value is text.
+          const value = String(fact.value).trim().slice(0, 600);
           const same = await tx.one<{ n: string }>(
             `select count(*)::text as n from research.claim where entity_id = $1 and field = $2 and value = $3 and source = $4`,
-            [f.key, `${PUBLIC_PREFIX}${fact.field}`, fact.value.slice(0, 600), id],
+            [f.key, `${PUBLIC_PREFIX}${fact.field}`, value, id],
           );
           if (Number(same?.n ?? 0) > 0) continue; // verified and kept
-          await tx.query(
+          const claim = await tx.one<{ id: string }>(
             `insert into research.claim (entity_id, field, value, source, as_of, confidence)
-             values ($1,$2,$3,$4,$5,$6::research.confidence)`,
-            [f.key, `${PUBLIC_PREFIX}${fact.field}`, fact.value.slice(0, 600), id, asOf, fact.confidence],
+             values ($1,$2,$3,$4,$5,$6::research.confidence) returning claim_id::text id`,
+            [f.key, `${PUBLIC_PREFIX}${fact.field}`, value, id, asOf, fact.confidence],
           );
           counts.claims++;
+          // SPV stance (Juan, 27 Sep 2026): the two SPV fields are research evidence, below a person's setting.
+          if (await recordResearchSpv(tx, claim!.id, f.key, fact, id, asOf)) counts.spvFacts = (counts.spvFacts ?? 0) + 1;
         }
         if (f.profile || f.identity) {
           await tx.query(

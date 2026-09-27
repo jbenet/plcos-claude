@@ -6,6 +6,7 @@
  * Packing and unpacking are exact inverses; no text is shortened or dropped.
  */
 import type { StrategyTableRow } from './StrategyTable';
+import type { SpvRowMark } from '@/modules/strategy/client';
 
 type S = number;
 export interface PackedRow {
@@ -13,6 +14,8 @@ export interface PackedRow {
   priority: number | null; expected: number | null; evidencePriority: number;
   capacity: number | null; likelihood: number | null; route: number | null; days: number | null;
   views: number; risks: S[]; held: boolean;
+  /** SPV stance: stance, known count, why, basis, conflict (1) or not (0), the short why. */
+  spv: [S, number | null, S | null, S, 0 | 1, S | null];
   basis: {
     angle: S | null; capacity: S; likelihood: S | null; route: S | null; decision: S | null;
     conversion: [number, number, number]; work: Array<[S, number]>; due: S | null; proposed: S | null; strategy: S | null;
@@ -37,6 +40,7 @@ export function packRows(rows: StrategyTableRow[], views: string[], hrefBase: st
         capacity: r.capacity, likelihood: r.likelihood, route: r.route, days: r.days,
         views: r.views.reduce((m, v) => views.includes(v) ? m | (1 << views.indexOf(v)) : m, 0),
         risks: r.risks.map(s), held: r.held,
+        spv: [s(r.spv.stance), r.spv.minDeals, n(r.spv.why), s(r.spv.basis), r.spv.conflict ? 1 : 0, n(r.spv.short)],
         basis: {
           angle: n(b.angle), capacity: s(b.capacity), likelihood: n(b.likelihood), route: n(b.route), decision: n(b.decision),
           conversion: b.conversion, work: b.work.map(([w, p]) => [s(w), p]), due: n(b.due), proposed: n(b.proposed),
@@ -55,6 +59,7 @@ export function unpackRows({ rows, strings, views, hrefBase }: PackedTable): Str
     priority: r.priority, expected: r.expected, evidencePriority: r.evidencePriority,
     capacity: r.capacity, likelihood: r.likelihood, route: r.route, days: r.days,
     views: views.filter((_, i) => r.views & (1 << i)), risks: r.risks.map(s), held: r.held,
+    spv: { stance: s(r.spv[0]) as SpvRowMark['stance'], minDeals: r.spv[1], why: n(r.spv[2]), basis: s(r.spv[3]) as SpvRowMark['basis'], conflict: r.spv[4] === 1, short: n(r.spv[5]) },
     basis: {
       angle: n(r.basis.angle), capacity: s(r.basis.capacity), likelihood: n(r.basis.likelihood), route: n(r.basis.route),
       decision: n(r.basis.decision), conversion: r.basis.conversion, work: r.basis.work.map(([w, p]) => [s(w), p]),

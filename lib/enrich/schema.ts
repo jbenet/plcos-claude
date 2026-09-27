@@ -6,6 +6,7 @@
  */
 
 import { tieDetailsProblems } from '@/modules/network';
+import { spvAppetite, spvDeals } from '@/modules/strategy/client';
 
 export type Match = 'confirmed' | 'probable' | 'ambiguous' | 'not_found';
 export type Confidence = 'high' | 'medium' | 'low';
@@ -14,6 +15,10 @@ export type SourceKind = 'primary' | 'filing' | 'press' | 'podcast' | 'database'
 export const FACT_FIELDS = [
   'role', 'prior_role', 'education', 'board', 'investment', 'fund_lp', 'fund_gp', 'exit', 'philanthropy',
   'capacity', 'aum', 'check_size', 'interest', 'statement', 'news', 'location', 'investor_type', 'affiliation',
+  // SPV stance (Juan, 27 Sep 2026). spv_appetite: 'does' | 'does-not' | 'unknown', with a quote. spv_deals: the least
+  // number of SPV or co-investment deals the source shows, a whole number (digits, or a JSON number), with a quote
+  // naming the deals where it can. Mapped onto the LP's SPV stance by the import, below a person's setting.
+  'spv_appetite', 'spv_deals',
 ] as const;
 export type FactField = (typeof FACT_FIELDS)[number];
 
@@ -30,6 +35,7 @@ export interface Source { url: string; title?: string; published?: string | null
 
 export interface Fact {
   field: FactField;
+  /** Text; spv_deals alone may be a JSON number, made text by the import. */
   value: string;
   /** Structured parts when there are some: a company, a year, a round, an amount as written. */
   detail?: Record<string, string | number | null>;
@@ -226,7 +232,11 @@ export function check(f: unknown, expectKey?: string): string[] {
   if (unsure && (x.facts?.length ?? 0) > 0) p.push('facts recorded for an identity that is not resolved');
   for (const [i, fact] of (x.facts ?? []).entries()) {
     if (!FACT_FIELDS.includes(fact.field)) p.push(`fact ${i}: unknown field "${fact.field}"`);
-    if (!isStr(fact.value)) p.push(`fact ${i}: no value`);
+    if (!isStr(fact.value) && !(fact.field === 'spv_deals' && typeof fact.value === 'number')) p.push(`fact ${i}: no value`);
+    else if (fact.field === 'spv_appetite' && !spvAppetite(fact.value)) p.push(`fact ${i}: spv_appetite must be does, does-not or unknown`);
+    else if (fact.field === 'spv_deals' && spvDeals(fact.value) === null) p.push(`fact ${i}: spv_deals must be a whole number of deals`);
+    else if ((fact.field === 'spv_appetite' && spvAppetite(fact.value) !== 'unknown' || fact.field === 'spv_deals' && (spvDeals(fact.value) ?? 0) > 0)
+      && !isStr(fact.quote)) p.push(`fact ${i}: ${fact.field} needs a quote from its source`);
     if (!fact.source || !isStr(fact.source.url) || !/^https?:\/\//.test(fact.source.url)) p.push(`fact ${i}: no source URL`);
     if (fact.source && !['primary', 'filing', 'press', 'podcast', 'database', 'social', 'other'].includes(fact.source.kind)) p.push(`fact ${i}: unknown source kind`);
     if (fact.source?.published && !Number.isFinite(Date.parse(fact.source.published))) p.push(`fact ${i}: invalid source publication date`);
