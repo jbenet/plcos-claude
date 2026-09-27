@@ -6,8 +6,11 @@ import { getEntity } from '@/modules/identity';
 import { feedbackInput, saveConnectionFeedback } from '@/lib/enrich/feedback';
 
 export async function POST(req: Request) {
+  // Same-origin only. Compared with the Host the browser asked for: the URL Next hands the route names
+  // the address it bound (0.0.0.0, localhost), which never equals the page's own origin, so the old
+  // comparison refused every note sent from a browser.
   const origin = req.headers.get('origin');
-  if (origin && origin !== new URL(req.url).origin) return NextResponse.json({ error: 'Use the feedback box on this server.' }, { status: 403 });
+  if (origin && !sameHost(origin, req.headers.get('host'))) return NextResponse.json({ error: 'Use the feedback box on this server.' }, { status: 403 });
   let input;
   try { input = feedbackInput(await req.json()); }
   catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : 'Invalid feedback.' }, { status: 400 }); }
@@ -23,4 +26,8 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: 'No save receipt was received. Keep this note and retry; retries do not duplicate it.' }, { status: 500 });
   }
+}
+
+function sameHost(origin: string, host: string | null): boolean {
+  try { return Boolean(host) && new URL(origin).host === host; } catch { return false; }
 }

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import Link from '@/components/ui/AppLink';
 import { PHONE_QUERY } from '@/lib/viewport';
 import { useMedia, useModalSheet } from './useSheet';
+import { OutboxIndicator } from './FeedbackOutbox';
 import s from './Shell.module.css';
 
 /**
@@ -56,6 +57,7 @@ export function AppShell({ rail, mark, name, children }: {
           <span className="mark">{mark}</span>
           <b>{name}</b>
         </Link>
+        <OutboxIndicator variant="bar" />
       </header>
 
       <div

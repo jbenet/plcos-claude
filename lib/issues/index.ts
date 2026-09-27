@@ -43,6 +43,12 @@ export interface IssueDraft {
    * takes slot 1 when there is one, and the body counts its own images from 1.
    */
   tokenOffset?: number;
+  /**
+   * The feedback box's idempotency key. A draft whose key an issue already carries files nothing
+   * new: the sink returns that issue, marked `repeat` (Juan, 27 Sep: a resend after a timeout that
+   * did reach the server must not make a second issue).
+   */
+  clientId?: string;
 }
 
 export interface Issue extends Omit<IssueDraft, 'attachments'> {
@@ -77,7 +83,7 @@ export interface IssueSink {
   readonly kind: 'file' | 'github' | 'linear';
   /** Human-readable statement of where issues go, shown in the UI so it is never a guess. */
   readonly destination: string;
-  create(draft: IssueDraft): Promise<Issue>;
+  create(draft: IssueDraft): Promise<Issue & { repeat?: boolean }>;
   list(filter?: IssueFilter): Promise<Issue[]>;
   get(id: string): Promise<Issue | null>;
   update(id: string, patch: Partial<Pick<Issue, 'status' | 'priority' | 'labels'>>): Promise<Issue>;

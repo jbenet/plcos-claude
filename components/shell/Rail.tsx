@@ -11,6 +11,7 @@ import { ticketCounts } from '@/modules/governance';
 import { NavList } from './NavList';
 import { UserSwitcher } from './UserSwitcher';
 import { FeedbackButton } from './FeedbackBox';
+import { OutboxIndicator } from './FeedbackOutbox';
 
 export async function Rail() {
   try { return await shareRequestWork('shell:Rail', {}, LoadedRail); }
@@ -22,7 +23,7 @@ export async function Rail() {
         <p>Navigation could not load. You can still file feedback.</p>
         <a className="btn" href="">Try again</a>
       </div>
-      <div className="railfoot"><FeedbackButton variant="rail" profile={config.data.profile} home={feedbackHome(config.data.profile)} /></div>
+      <div className="railfoot"><OutboxIndicator /><FeedbackButton variant="rail" profile={config.data.profile} home={feedbackHome(config.data.profile)} /></div>
     </nav>;
   }
 }
@@ -57,6 +58,7 @@ async function LoadedRail() {
       />
 
       <div className="railfoot">
+        <OutboxIndicator />
         <div className="railrow">
           <FeedbackButton variant="rail" profile={config.data.profile} home={feedbackHome(config.data.profile)} />
           <Link className="railgear" href="/settings" aria-label="Your settings" title="Your settings">
