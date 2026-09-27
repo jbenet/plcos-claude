@@ -6,8 +6,9 @@ import { scoreDetailAction } from '@/app/selection/actions';
 import type { ScoreDetail } from '@/lib/pipeline-data';
 import { BulkLpActions } from './BulkLpActions';
 import { MoveButton, statusMix, statusWord, UndoToast, useMove } from './MoveToSelected';
-import { sectionRows, EMPTY, lead, second, spvFlagged, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { rankRows, unitShown, unitsFrom, unitsOn, EMPTY, lead, second, spvFlagged, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { CapacityTag, LpWho, units } from './LpWho';
+import { UnitIcon } from './UnitIcon';
 import { cx, Disclose, fmt, fmtShort, FilterLine, Icon, Ladder, n, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
 import m from './selection.module.css';
@@ -44,27 +45,45 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   const router = useRouter();
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'selection' });
   const { enabled, setEnabled, counts, active, shown, sort, picked, pick, pickedRows, now } = view;
-  const [limits, setLimits] = useState({ org: PAGE, ind: PAGE });
+  const [limit, setLimit] = useState(PAGE);
   const shownIds = useMemo(() => new Set(shown.map((r) => r.id)), [shown]);
-  useEffect(() => setLimits({ org: PAGE, ind: PAGE }), [enabled, view.f, sort]);
-  const sections = useMemo(() => sectionRows(shown, sort.key, sort.dir), [shown, sort]);
-  const ranked = useMemo(() => [...sections.organisations, ...sections.individuals], [sections]);
-  const orgsShown = sections.organisations.slice(0, limits.org), indsShown = sections.individuals.slice(0, limits.ind);
-  const place = (r: PipelineRow) => (r.isOrg ? sections.organisations : sections.individuals).indexOf(r) + 1;
+  useEffect(() => setLimit(PAGE), [enabled, view.f, sort]);
+  // One list, organisations and individuals ranked together (issue 0113).
+  const ranked = useMemo(() => rankRows(shown, sort.key, sort.dir), [shown, sort]);
+  const visible = ranked.slice(0, limit);
+  const orgCount = useMemo(() => ranked.filter((r) => r.isOrg).length, [ranked]);
+  const place = (r: PipelineRow) => ranked.indexOf(r) + 1;
   const [focusId, setFocusId] = useState<string | null>(() => initialFilters?.lp ?? null);
   const focus = ranked.find((r) => r.id === focusId) ?? ranked[0] ?? null;
   const position = focus ? place(focus) : 0;
   const all = enabled.length === statuses.length;
   const byVehicle = showVehicle && new Set(rows.map((r) => r.vehicle)).size > 1;
   const scored = useMemo(() => shown.filter((r) => r.score !== null).length, [shown]);
-  /** Bring a row into view and focus: its section grows to include it. */
+  /** Bring a row into view and focus: the list grows to include it. */
   const reveal = (r: PipelineRow) => {
-    const i = place(r) - 1, key = r.isOrg ? 'org' : 'ind';
-    if (i >= limits[key]) setLimits((x) => ({ ...x, [key]: Math.ceil((i + 1) / PAGE) * PAGE }));
+    const i = ranked.indexOf(r);
+    if (i >= limit) setLimit(Math.ceil((i + 1) / PAGE) * PAGE);
     setFocusId(r.id);
     requestAnimationFrame(() => document.querySelector(`[data-lp="${r.id}"]`)?.scrollIntoView({ block: 'nearest' }));
   };
-  const jump = (id: string) => { const r = ranked.find((x) => x.id === id); if (r) reveal(r); };
+  // A link to the same person's or firm's other row: if the toggles hide its type, show it first.
+  const [pending, setPending] = useState<string | null>(null);
+  const jump = (id: string) => {
+    const r = ranked.find((x) => x.id === id);
+    if (r) { reveal(r); return; }
+    const target = rows.find((x) => x.id === id);
+    if (!target) return;
+    setPending(id);
+    if (!unitShown(target, view.f.units)) view.set('units', target.isOrg ? unitsFrom(true, unitsOn(view.f.units).individuals) : unitsFrom(unitsOn(view.f.units).firms, true));
+    if (!enabled.includes(target.status)) setEnabled([...enabled, target.status]);
+  };
+  useEffect(() => {
+    if (!pending) return;
+    const r = ranked.find((x) => x.id === pending);
+    if (r) { setPending(null); reveal(r); }
+    // reveal reads the current list; it runs once the list includes the row.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, ranked]);
 
   // Keep the focused LP in the address, so back and a shared link return to it.
   useEffect(() => {
@@ -84,7 +103,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
     return () => watch.disconnect();
   }, []);
 
-  const visibleIds = [...orgsShown, ...indsShown].map((r) => r.id);
+  const visibleIds = visible.map((r) => r.id);
   const allTicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
 
   // Move to Selected (issue 0104): the ticked LPs when some are ticked, otherwise the one in focus.
@@ -215,7 +234,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
           <div className={s.head}>
             <h2>Ranked</h2>
             <div className={s.headMeta}>
-              {units(sections.organisations.length, sections.individuals.length)} · {n(scored)} scored
+              {units(orgCount, ranked.length - orgCount)} · {n(scored)} scored
               {enabled.length > 0 && !all && <span> · {enabled.map((id) => statuses.find((x) => x.id === id)?.label).join(', ')}</span>}
             </div>
             <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>s</kbd> to Selected · <kbd>↵</kbd> open</div>
@@ -248,26 +267,17 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
                     <Th k="touch" className={s.cTouch}>Last touch</Th>
                   </tr>
                 </thead>
-                {([['org', 'Organisations', orgsShown, sections.organisations,
-                  'Funds, family offices, foundations, companies and vehicles that commit as one. Their people are named in the row.'],
-                  ['ind', 'Individuals', indsShown, sections.individuals,
-                  'People who invest in their own capacity. Their firms are context; a firm with its own row here is marked.']] as const).map(([key, title, list, whole, note]) => (
-                  <tbody key={key} aria-label={title}>
-                    <tr className={u.sectionRow}><td colSpan={10}><div className={u.sectionHead}>
-                      <span className={u.sectionName}>{title}</span><span className={u.sectionCount}>{n(whole.length)}</span><span className={u.sectionNote}>{note}</span>
-                    </div></td></tr>
-                    {whole.length === 0 && <tr className={u.sectionEmpty}><td colSpan={10}>{key === 'org' ? 'No organisation' : 'No individual'} at {active ? 'these statuses and filters' : 'these statuses'}.</td></tr>}
-                    {list.map((r, i) => <Fragment key={r.id}>
-                      <RankRow r={r} position={i + 1} focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now}
-                        onFocus={setFocusId} onPick={pick} onJump={jump} />
-                      {narrow && r.id === focus?.id && detail && <tr className={s.inlineRow}><td colSpan={10}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>}
-                    </Fragment>)}
-                    {whole.length > list.length && <tr className={u.moreRow}><td colSpan={10}>
-                      <button type="button" className="btn" onClick={() => setLimits((x) => ({ ...x, [key]: x[key] + PAGE }))}>Show {n(Math.min(PAGE, whole.length - list.length))} more {key === 'org' ? 'organisations' : 'individuals'}</button>
-                      {n(list.length)} of {n(whole.length)} shown. Search covers all of them.
-                    </td></tr>}
-                  </tbody>
-                ))}
+                <tbody>
+                  {visible.map((r, i) => <Fragment key={r.id}>
+                    <RankRow r={r} position={i + 1} focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now}
+                      onFocus={setFocusId} onPick={pick} onJump={jump} />
+                    {narrow && r.id === focus?.id && detail && <tr className={s.inlineRow}><td colSpan={10}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>}
+                  </Fragment>)}
+                  {ranked.length > visible.length && <tr className={u.moreRow}><td colSpan={10}>
+                    <button type="button" className="btn" onClick={() => setLimit((x) => x + PAGE)}>Show {n(Math.min(PAGE, ranked.length - visible.length))} more</button>
+                    {n(visible.length)} of {n(ranked.length)} shown. Search covers all of them.
+                  </td></tr>}
+                </tbody>
               </table>
             </div>
           )}
@@ -302,8 +312,9 @@ const RankRow = memo(function RankRow({ r, position, focused, picked, byVehicle,
       <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
       <td className={s.cPos}>{position}</td>
       <td className={s.cLp}>
-        <div className={s.lpName}><span className={s.lpText}>{lead(r)}<CapacityTag r={r} /></span></div>
-        <LpWho r={r} onJump={onJump} />
+        <div className={u.nameLine}><UnitIcon org={r.isOrg} /><div>
+          <div className={s.lpName}><span className={s.lpText}>{lead(r)}<CapacityTag r={r} /></span></div>
+          <LpWho r={r} onJump={onJump} />
         {dim && <SpvReason mark={r.spv} />}
         {(byVehicle || r.money || r.doNotContact || r.riskCount > 0) && (
           <div className={s.whoLine}>
@@ -313,6 +324,7 @@ const RankRow = memo(function RankRow({ r, position, focused, picked, byVehicle,
             {r.riskCount > 0 && <span>{r.riskCount} {r.riskCount === 1 ? 'flag' : 'flags'}</span>}
           </div>
         )}
+        </div></div>
       </td>
       <td className={s.cScore}>
         {r.score === null ? <><div className={cx(s.scoreNum, s.none)}>—</div><span className={s.scoreKind}>unscored</span></>
@@ -350,8 +362,8 @@ function Why({ r, position, sortLabel, rungNames, now, onJump }: {
     <div className={s.why}>
       <div className={s.whyHead}>
         <div style={{ minWidth: 0 }}>
-          <div className="lbl">#{n(position)} of {r.isOrg ? 'organisations' : 'individuals'} by {sortLabel}</div>
-          <h3>{lead(r)}<CapacityTag r={r} /></h3>
+          <div className="lbl">#{n(position)} by {sortLabel} · {r.isOrg ? 'firm' : 'individual'}</div>
+          <h3 className={u.nameLine}><UnitIcon org={r.isOrg} size={15} /><span>{lead(r)}<CapacityTag r={r} /></span></h3>
           {other && <div className={s.second}>{other}</div>}
         </div>
         <div className={s.whyScore}>
@@ -388,7 +400,7 @@ function Why({ r, position, sortLabel, rungNames, now, onJump }: {
         {r.isOrg && r.people.length > 0 && <div className={s.fact}><span>People</span><span><ul className={u.detailPeople}>
           {r.people.slice(0, 8).map((p) => <li key={p.id}><span className={p.contact ? u.contact : undefined}>{p.name}</span>{p.role && <small> · {p.role}</small>}
             {p.contact && <small> · contact on this LP</small>}
-            {p.individual && <button type="button" className={u.jump} onClick={() => onJump(p.individual!)}>also individual ↓</button>}</li>)}
+            {p.individual && <button type="button" className={u.jump} onClick={() => onJump(p.individual!)}>also individual</button>}</li>)}
           {r.people.length > 8 && <li><small>and {n(r.people.length - 8)} more on the LP page</small></li>}
         </ul></span></div>}
         {!r.isOrg && <div className={s.fact}><span>Capacity</span><span>
@@ -398,7 +410,7 @@ function Why({ r, position, sortLabel, rungNames, now, onJump }: {
         </span></div>}
         {!r.isOrg && r.firms.length > 0 && <div className={s.fact}><span>Firms</span><span><ul className={u.detailPeople}>
           {r.firms.map((f) => <li key={f.id}>{f.name}{f.role && <small> · {f.role}</small>}
-            {f.lpRow && <button type="button" className={u.jump} onClick={() => onJump(f.lpRow!)}>firm’s row ↑</button>}</li>)}
+            {f.lpRow && <button type="button" className={u.jump} onClick={() => onJump(f.lpRow!)}>firm’s row</button>}</li>)}
         </ul></span></div>}
         <div className={s.fact}><span>SPVs</span><span className={r.spv.stance === 'does-not' && r.spvVehicle ? sp.not : undefined}>
           {spvWords(r.spv)}

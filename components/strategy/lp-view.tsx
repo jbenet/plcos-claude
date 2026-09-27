@@ -4,10 +4,12 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode 
 import { createPortal } from 'react-dom';
 import { Glyph } from '@/components/ui/Glyph';
 import {
-  CHOICES, EMPTY, FILTER_LABEL, filtersFrom, haystack, matches, numeric, sortFrom,
+  CHOICES, EMPTY, FILTER_LABEL, filtersFrom, haystack, matches, numeric, sortFrom, unitShown, unitsFrom, unitsOn,
   type Filters, type PipelineRow, type SortKey, type Status,
 } from './pipeline-model';
+import { UnitIcon } from './UnitIcon';
 import s from './lp-tables.module.css';
+import u from './lp-units.module.css';
 
 /**
  * What the pipeline and selection pages share (issues 0067, 0071, 0083, 0089): the view's state
@@ -64,8 +66,15 @@ export function useLpView({ rows, statuses, asOf, initialFilters = {}, mode, ini
   const hay = useMemo(() => new Map(rows.map((r) => [r.id, haystack(r)])), [rows]);
   const words = useMemo(() => q.toLowerCase().split(/\s+/).filter(Boolean), [q]);
   const deferred = useMemo(() => ({ ...f, q }), [f, q]);
-  const filtered = useMemo(() => rows.filter((r) => matches(r, deferred, words, now, hay.get(r.id))), [rows, deferred, words, now, hay]);
+  // Every filter but the Firms/Individuals toggles, so each toggle can say how many it holds (0113).
+  const anyUnit = useMemo(() => rows.filter((r) => matches(r, { ...deferred, units: 'both' }, words, now, hay.get(r.id))), [rows, deferred, words, now, hay]);
+  const filtered = useMemo(() => anyUnit.filter((r) => unitShown(r, deferred.units)), [anyUnit, deferred.units]);
   const shown = useMemo(() => filtered.filter((r) => enabled.includes(r.status)), [filtered, enabled]);
+  const unitCounts = useMemo(() => {
+    let firms = 0, individuals = 0;
+    for (const r of anyUnit) if (enabled.includes(r.status)) { if (r.isOrg) firms++; else individuals++; }
+    return { firms, individuals };
+  }, [anyUnit, enabled]);
   const active = JSON.stringify(f) !== JSON.stringify(EMPTY);
   const counts = useMemo(() => {
     const all = new Map<Status, number>(), matching = new Map<Status, number>();
@@ -114,7 +123,7 @@ export function useLpView({ rows, statuses, asOf, initialFilters = {}, mode, ini
   const pickedRows = useMemo(() => rows.filter((r) => picked.has(r.id)), [rows, picked]);
 
   return {
-    ids, now, enabled, setEnabled, f, setF, set, active, sort, setSort, sortBy, filtered, shown, counts,
+    ids, now, enabled, setEnabled, f, setF, set, active, sort, setSort, sortBy, filtered, shown, counts, unitCounts,
     picked, pick, pickedRows, clearPicked: () => setPicked(new Set()),
   };
 }
@@ -168,6 +177,23 @@ export function FilterLine({ view, rows, showVehicle, keys, placeholder }: {
           </select>
         </label>
       )}
+      {/* Firms and Individuals (issue 0113): both on to start; each says how many it holds. */}
+      <div className={u.units} role="group" aria-label="Show firms and individuals">
+        <span className={u.unitLabel} aria-hidden>Show</span>
+        <div className={u.unitButtons}>
+          {([['firms', 'Firms', true], ['individuals', 'Individuals', false]] as const).map(([key, label, org]) => {
+            const on = unitsOn(f.units)[key];
+            const next = { ...unitsOn(f.units), [key]: !on };
+            return (
+              <button key={key} type="button" className={u.unitBtn} aria-pressed={on}
+                title={on ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+                onClick={() => set('units', unitsFrom(next.firms, next.individuals))}>
+                <UnitIcon org={org} size={12} />{label} <b>{n(view.unitCounts[key])}</b>
+              </button>
+            );
+          })}
+        </div>
+      </div>
       {keys.map((key) => (
         <label key={key} className={cx(s.field, f[key] !== EMPTY[key] && s.set)}>
           <span className={s.fieldLabel}>{FILTER_LABEL[key]}</span>

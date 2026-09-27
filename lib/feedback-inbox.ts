@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import type { ConnectionNoteRequest, FeedbackRequest } from './feedback-journal';
 import { isClientId } from './feedback-journal';
 import type { IssueAttachment } from './issues';
-import { titleFrom } from './issues/title';
+import { continuations, titleFrom } from './issues/title';
 
 export interface InboxBase {
   clientId: string;
@@ -156,7 +156,10 @@ export type Checked<T> = { ok: true; value: T } | { ok: false; status: number; e
 export function checkReport(raw: unknown): Checked<FeedbackRequest> {
   const b = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === 'string' ? v : '');
-  const title = str(b.title).trim() || titleFrom(str(b.body));
+  // A title is one line, and a line-end backslash is a typed newline, not text (issue 0113).
+  const given = continuations(str(b.title)).replace(/\s*[\r\n]+\s*/g, ' ').trim();
+  const text = continuations(str(b.body));
+  const title = given || titleFrom(text);
   if (!title) return { ok: false, status: 400, error: 'Say what happened. A title or a description — either is enough, neither is not.' };
   const screenshots = Array.isArray(b.screenshots) ? b.screenshots.map(str) : [];
   const images = Array.isArray(b.images)
@@ -180,8 +183,8 @@ export function checkReport(raw: unknown): Checked<FeedbackRequest> {
   return {
     ok: true,
     value: {
-      title: str(b.title).trim() ? str(b.title) : title,
-      body: str(b.body),
+      title,
+      body: text,
       kind: KINDS.has(str(b.kind)) ? str(b.kind) : 'bug',
       priority: PRIORITIES.has(str(b.priority)) ? str(b.priority) : 'P2',
       page: str(b.page) || '/',

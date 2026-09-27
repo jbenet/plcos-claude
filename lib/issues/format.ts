@@ -141,7 +141,12 @@ function unquote(s: string): string {
   return s;
 }
 
-const NEEDS_QUOTES = /^[\d\s]|[:#]/;
+/**
+ * Quoted whenever the plain value would not read back as itself (issue 0113): a leading digit or
+ * space, a colon or hash, any quote mark or backslash, a leading bracket (read as a list), a
+ * trailing space, a line break, or nothing at all. The reader undoes it with JSON.parse.
+ */
+const NEEDS_QUOTES = /^$|^[\d\s[{'"]|[:#"\\\r\n]|\s$/;
 const quote = (s: string): string => (NEEDS_QUOTES.test(s) ? JSON.stringify(s) : s);
 
 export function serializeIssue(issue: ParsedIssue): string {

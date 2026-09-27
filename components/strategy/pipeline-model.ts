@@ -1,4 +1,3 @@
-import { lpSections, type LpSections } from '@/lib/lp-groups';
 import type { SpvRowMark } from '@/modules/strategy/client';
 
 /**
@@ -123,16 +122,20 @@ export function compareRows(a: PipelineRow, b: PipelineRow, key: SortKey, dir: 1
 }
 
 /**
- * Both LP tables' grouping (issues 0111, 0112; docs/23): the LP is the committing unit, so every row
- * is one LP unit. Organisations are listed once each, their people named inside the row; people
- * investing in their own capacity are listed apart, as Individuals, each with their firms as
- * context. Someone who does both appears in both places: named in the firm's row, and as an
- * individual row of their own.
+ * Both LP tables' order (issues 0111–0113; docs/23): every row is one LP unit, organisations and
+ * individuals ranked together in one list (Juan, 0113: "intersperse them"), each row marked with
+ * its type. An organisation names its people inside its row; someone who also invests personally
+ * has an individual row of their own too, and the two link to each other.
  */
-export function sectionRows(rows: PipelineRow[], key: SortKey, dir: 1 | -1): LpSections<PipelineRow> {
-  return lpSections(rows, r => r.isOrg, (a, b) => compareRows(a, b, key, dir));
+export function rankRows(rows: PipelineRow[], key: SortKey, dir: 1 | -1): PipelineRow[] {
+  return [...rows].sort((a, b) => compareRows(a, b, key, dir));
 }
-export type { LpSections };
+/** Which LP units the list shows (issue 0113): the Firms and Individuals toggles, both on to start. */
+export type Units = 'both' | 'firms' | 'individuals' | 'none';
+export const UNITS: Units[] = ['both', 'firms', 'individuals', 'none'];
+export const unitsOn = (u: Units) => ({ firms: u === 'both' || u === 'firms', individuals: u === 'both' || u === 'individuals' });
+export const unitsFrom = (firms: boolean, individuals: boolean): Units => (firms && individuals ? 'both' : firms ? 'firms' : individuals ? 'individuals' : 'none');
+export const unitShown = (r: Pick<PipelineRow, 'isOrg'>, u: Units) => (r.isOrg ? unitsOn(u).firms : unitsOn(u).individuals);
 
 // ── filters ─────────────────────────────────────────────────────────────────────────────────────
 export interface Filters {
@@ -145,8 +148,10 @@ export interface Filters {
   money: 'any' | 'soft' | 'signed' | 'hard' | 'none';
   flag: 'any' | 'ahead' | 'dnc' | 'flagged' | 'scored' | 'unscored';
   spv: 'any' | 'open' | 'does' | 'unknown' | 'not';
+  /** The Firms and Individuals toggles (issue 0113). */
+  units: Units;
 }
-export const EMPTY: Filters = { q: '', owner: '', vehicle: '', meetings: 'any', touch: 'any', read: 'any', money: 'any', flag: 'any', spv: 'any' };
+export const EMPTY: Filters = { q: '', owner: '', vehicle: '', meetings: 'any', touch: 'any', read: 'any', money: 'any', flag: 'any', spv: 'any', units: 'both' };
 export const CHOICES = {
   meetings: [['any', 'Any'], ['some', 'Has met'], ['none', 'Never met']],
   touch: [['any', 'Any'], ['recent', 'Last 30 days'], ['stale', 'Over 90 days'], ['waiting', 'Waiting on them'], ['none', 'Never']],
@@ -165,6 +170,7 @@ export function filtersFrom(given: Record<string, string | undefined> = {}): Fil
     if (value === undefined) continue;
     const allowed = (CHOICES as Record<string, ReadonlyArray<readonly [string, string]>>)[key];
     if (allowed && !allowed.some((c) => c[0] === value)) continue;
+    if (key === 'units' && !UNITS.includes(value as Units)) continue;
     (f as unknown as Record<string, string>)[key] = value;
   }
   return f;
@@ -181,6 +187,7 @@ export function haystack(r: PipelineRow): string {
   return `${r.name} ${r.org ?? ''} ${r.headline ?? ''} ${r.owner} ${r.vehicle} ${r.said ?? ''} ${r.next ?? ''} ${r.ended ?? ''} ${r.capacity ?? ''} ${r.people.map((p) => p.name).join(' ')} ${r.firms.map((f) => f.name).join(' ')}`.toLowerCase();
 }
 export function matches(r: PipelineRow, f: Filters, words: string[], now: number, hay?: string): boolean {
+  if (!unitShown(r, f.units)) return false;
   if (words.length) {
     const h = hay ?? haystack(r);
     if (!words.every((w) => h.includes(w))) return false;

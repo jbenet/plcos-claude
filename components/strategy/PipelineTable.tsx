@@ -3,8 +3,9 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BulkLpActions } from './BulkLpActions';
-import { EMPTY, sectionRows, lead, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { EMPTY, rankRows, unitShown, unitsFrom, unitsOn, lead, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { CapacityTag, LpWho, units } from './LpWho';
+import { UnitIcon } from './UnitIcon';
 import { MoveButton, UndoToast, useMove } from './MoveToSelected';
 import { cx, Flags, fmtShort, FilterLine, Icon, InPane, Ladder, n, ScoreMark, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
@@ -39,35 +40,52 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
   const router = useRouter();
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'pipeline', initialStatus });
   const { enabled, setEnabled, counts, active, shown, sort, sortBy, picked, pick, pickedRows, now } = view;
-  const [limits, setLimits] = useState({ org: PAGE, ind: PAGE });
+  const [limit, setLimit] = useState(PAGE);
   const shownIds = useMemo(() => new Set(shown.map((r) => r.id)), [shown]);
-  useEffect(() => setLimits({ org: PAGE, ind: PAGE }), [enabled, view.f, sort]);
+  useEffect(() => setLimit(PAGE), [enabled, view.f, sort]);
 
   const all = enabled.length === statuses.length;
   const one = enabled.length === 1 ? statuses.find((x) => x.id === enabled[0]) ?? null : null;
   const vehicles = useMemo(() => new Set(rows.map((r) => r.vehicle)).size, [rows]);
   const byVehicle = showVehicle && vehicles > 1;
-  const sections = useMemo(() => sectionRows(shown, sort.key, sort.dir), [shown, sort]);
-  const ranked = useMemo(() => [...sections.organisations, ...sections.individuals], [sections]);
-  const orgsShown = sections.organisations.slice(0, limits.org), indsShown = sections.individuals.slice(0, limits.ind);
-  const visibleIds = [...orgsShown, ...indsShown].map((r) => r.id);
+  // One list, organisations and individuals ranked together (issue 0113), each row marked with its type.
+  const ranked = useMemo(() => rankRows(shown, sort.key, sort.dir), [shown, sort]);
+  const visible = ranked.slice(0, limit);
+  const orgCount = useMemo(() => ranked.filter((r) => r.isOrg).length, [ranked]);
+  const visibleIds = visible.map((r) => r.id);
   const allTicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
   const open = (r: PipelineRow, e?: { metaKey?: boolean; ctrlKey?: boolean }) => {
     const href = lpHref(r);
     if (e?.metaKey || e?.ctrlKey) window.open(href, '_blank'); else router.push(href);
   };
 
-  // The keyboard (issue 0111), as on Selection: a focus that moves through both sections.
+  // The keyboard (issue 0111), as on Selection: a focus that moves through the list.
   const [focusId, setFocusId] = useState<string | null>(null);
   const focus = focusId ? ranked.find((r) => r.id === focusId) ?? null : null;
   const reveal = (r: PipelineRow) => {
-    const list = r.isOrg ? sections.organisations : sections.individuals, key = r.isOrg ? 'org' : 'ind';
-    const i = list.indexOf(r);
-    if (i >= limits[key]) setLimits((x) => ({ ...x, [key]: Math.ceil((i + 1) / PAGE) * PAGE }));
+    const i = ranked.indexOf(r);
+    if (i >= limit) setLimit(Math.ceil((i + 1) / PAGE) * PAGE);
     setFocusId(r.id);
     requestAnimationFrame(() => document.querySelector(`[data-lp="${r.id}"]`)?.scrollIntoView({ block: 'nearest' }));
   };
-  const jump = (id: string) => { const r = ranked.find((x) => x.id === id); if (r) reveal(r); };
+  // A link to the same person's or firm's other row: if the toggles or the status hide it, show it first.
+  const [pending, setPending] = useState<string | null>(null);
+  const jump = (id: string) => {
+    const r = ranked.find((x) => x.id === id);
+    if (r) { reveal(r); return; }
+    const target = rows.find((x) => x.id === id);
+    if (!target) return;
+    setPending(id);
+    if (!unitShown(target, view.f.units)) view.set('units', target.isOrg ? unitsFrom(true, unitsOn(view.f.units).individuals) : unitsFrom(unitsOn(view.f.units).firms, true));
+    if (!enabled.includes(target.status)) setEnabled(statuses.map((x) => x.id));
+  };
+  useEffect(() => {
+    if (!pending) return;
+    const r = ranked.find((x) => x.id === pending);
+    if (r) { setPending(null); reveal(r); }
+    // reveal reads the current list; it runs once the list includes the row.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, ranked]);
   // Move to Selected applies to New and Sourcing: the ticked ones, else the one in focus.
   const mv = useMove('pipeline');
   const movable = (r: PipelineRow) => r.status === 'new' || r.status === 'sourcing';
@@ -160,7 +178,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
           <h2>{all ? 'All statuses' : one?.label ?? 'Pipeline'}</h2>
           <div className={s.headMeta}>
             {n(shown.length)}{active ? ` of ${n(all ? rows.length : counts.all.get(one?.id as Status) ?? 0)}` : ''} LPs
-            {` · ${units(sections.organisations.length, sections.individuals.length)}`}
+            {` · ${units(orgCount, ranked.length - orgCount)}`}
             {one && <span> · {one.means}</span>}
           </div>
           <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>s</kbd> to Selected · <kbd>↵</kbd> open</div>
@@ -202,23 +220,14 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
                   <Th k="ladder" className={s.cEv}>Evidence</Th>
                 </tr>
               </thead>
-              {([['org', 'Organisations', orgsShown, sections.organisations,
-                'Funds, family offices, foundations, companies and vehicles that commit as one. Their people are named in the row.'],
-                ['ind', 'Individuals', indsShown, sections.individuals,
-                'People who invest in their own capacity. Their firms are context; a firm with its own row here is marked.']] as const).map(([key, title, list, whole, note]) => (
-                <tbody key={key} aria-label={title}>
-                  <tr className={u.sectionRow}><td colSpan={span}><div className={u.sectionHead}>
-                    <span className={u.sectionName}>{title}</span><span className={u.sectionCount}>{n(whole.length)}</span><span className={u.sectionNote}>{note}</span>
-                  </div></td></tr>
-                  {whole.length === 0 && <tr className={u.sectionEmpty}><td colSpan={span}>{key === 'org' ? 'No organisation' : 'No individual'} {one ? `at ${one.label}` : 'here'}{active ? ' matches the search and filters' : ''}.</td></tr>}
-                  {list.map((r) => <Row key={r.id} r={r} picked={picked.has(r.id)} focused={r.id === focus?.id} statusLabel={statusLabel(r.status)}
-                    all={all} byVehicle={byVehicle} rungNames={rungNames} now={now} onPick={pick} onOpen={open} onFocus={setFocusId} onJump={jump} />)}
-                  {whole.length > list.length && <tr className={u.moreRow}><td colSpan={span}>
-                    <button type="button" className="btn" onClick={() => setLimits((x) => ({ ...x, [key]: x[key] + PAGE }))}>Show {n(Math.min(PAGE, whole.length - list.length))} more {key === 'org' ? 'organisations' : 'individuals'}</button>
-                    {n(list.length)} of {n(whole.length)} shown. Search and filters cover all of them.
-                  </td></tr>}
-                </tbody>
-              ))}
+              <tbody>
+                {visible.map((r) => <Row key={r.id} r={r} picked={picked.has(r.id)} focused={r.id === focus?.id} statusLabel={statusLabel(r.status)}
+                  all={all} byVehicle={byVehicle} rungNames={rungNames} now={now} onPick={pick} onOpen={open} onFocus={setFocusId} onJump={jump} />)}
+                {ranked.length > visible.length && <tr className={u.moreRow}><td colSpan={span}>
+                  <button type="button" className="btn" onClick={() => setLimit((x) => x + PAGE)}>Show {n(Math.min(PAGE, ranked.length - visible.length))} more</button>
+                  {n(visible.length)} of {n(ranked.length)} shown. Search and filters cover all of them.
+                </td></tr>}
+              </tbody>
             </table>
           </div>
         )}
@@ -263,10 +272,12 @@ const Row = memo(function Row({ r, picked, focused, statusLabel, all, byVehicle,
       onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) { e.stopPropagation(); onOpen(r, e); } }}>
       <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
       <td className={s.cLp}>
+        <div className={u.nameLine}><UnitIcon org={r.isOrg} /><div>
         <div className={s.lpName}><a href={lpHref(r)}>{lead(r)}</a><CapacityTag r={r} /></div>
         <LpWho r={r} onJump={onJump} />
         {r.headline && <div className={s.headline} title={r.headline}>{r.headline}</div>}
         {r.doNotContact && <span className={s.dnc}>Do not contact</span>}
+        </div></div>
         <div className={s.meta}>
           {all && <span className={s.mStatus}>{statusLabel}</span>}
           {byVehicle && <span className={s.mVehicle}>{r.vehicle}</span>}

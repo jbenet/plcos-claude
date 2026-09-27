@@ -18,10 +18,13 @@ individual?)". Decided by Claude, the integrator, the same day.
    "Personal investing", "Individual", "Self") is read as evidence of personal investing, never as a
    firm or a group (`isPseudoOrg`, modules/strategy/lp-unit-rules.ts).
 
-Every LP list follows one grouping (`lib/lp-groups.ts`): organisations, each once, with their
-people named in the row; then individuals, each with their firms as context. Someone who invests
-both ways is in both places, and each row links to the other. Selection, Pipeline and the fit list
-use it; strategies, fit readings and the LP page are per LP unit × vehicle.
+Every row of an LP list is one LP unit: an organisation, listed once with its people named in the
+row, or an individual, with their firms as context. Someone who invests both ways is in both places,
+and each row links to the other. Since issue 0113, Selection and Pipeline rank organisations and
+individuals together in one list, mark each row with a type icon, and have Firms and Individuals
+toggles (`rankRows`, `units` in components/strategy/pipeline-model.ts); the fit list still lists
+organisations first (`lib/lp-groups.ts`). Strategies, fit readings and the LP page are per LP unit ×
+vehicle.
 
 A contact's touchpoints count as the LP's own: a meeting with the person who speaks for a firm is a
 meeting with the firm, as it counted before the pursuit moved (modules/meetings, `via_contact`).
