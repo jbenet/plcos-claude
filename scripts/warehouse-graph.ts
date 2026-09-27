@@ -2,6 +2,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { config } from '../config/deployment';
+import { recordActivity } from '../lib/activity/log';
 import { promisify } from 'node:util';
 import { mkdir, readFile, writeFile, rename, stat } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
@@ -46,16 +47,25 @@ async function query(sql: string): Promise<Row[]> {
 async function fetchPage(sql: string): Promise<Row[]> {
   // Existing application-default login; token is passed in the environment, never argv or a file.
   const token=await exec('gcloud',['auth','application-default','print-access-token']);
+  const at = new Date().toISOString();
+  let bytesIn: number | null = null, records: number | null = null;
   try {
     const r=await exec('bq',['--project_id=plrs-data-platform','query','--use_legacy_sql=false','--format=json',
       '--maximum_bytes_billed=10737418240',`--max_rows=${PAGE}`,sql],
     {env:{...process.env,CLOUDSDK_AUTH_ACCESS_TOKEN:token.stdout.trim()},maxBuffer:128*1024*1024});
-    return JSON.parse(r.stdout) as Row[];
+    bytesIn = Buffer.byteLength(r.stdout, 'utf8');
+    const rows = JSON.parse(r.stdout) as Row[];
+    records = rows.length;
+    return rows;
   } catch (error) {
     // bq can echo SQL and private values. Keep diagnostics under the private output root.
     const e=error as {stdout?:string;stderr?:string};
     await writeFile(join(OUT,'query-error.txt'),(e.stdout??'')+'\n'+(e.stderr??''),{mode:0o600});
     throw new Error('Warehouse SELECT failed; private query-error.txt contains diagnostics.');
+  } finally {
+    await recordActivity({ source: 'warehouse', at, segment: 'queries', runId: process.env.WORKFLOW_RUN_ID,
+      requests: 1, bytesIn, bytesOut: Buffer.byteLength(sql, 'utf8'), records, estimated: true,
+      basis: 'Warehouse CLI attempts, JSON response and SQL UTF-8 bytes; excludes protocol overhead.' }, ROOT);
   }
 }
 async function main() {

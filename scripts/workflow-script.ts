@@ -19,7 +19,7 @@ async function main() {
   const id = await beginRun({ ...metadata, source: 'script', model: null, workerFolder: cwd });
   console.error(`Workflow run: ${id}`);
   const status = await new Promise<{ code: number | null; signal: string | null }>((done) => {
-    const child = spawn(process.execPath, ['--import', 'tsx', target, ...args], { cwd, env: process.env, stdio: 'inherit' });
+    const child = spawn(process.execPath, ['--import', 'tsx', target, ...args], { cwd, env: { ...process.env, WORKFLOW_RUN_ID: id }, stdio: 'inherit' });
     child.once('error', () => done({ code: null, signal: 'spawn-error' }));
     child.once('exit', (code, signal) => done({ code, signal }));
   });

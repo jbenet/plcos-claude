@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { recordActivity } from '@/lib/activity/log';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Db, Queryable } from '@/lib/db';
@@ -164,6 +165,7 @@ function compareSource(a: { file: string; line: number }, b: { file: string; lin
 
 /** Caller supplies the live server's existing handle; there is deliberately no DB-opening CLI. */
 export async function addProspects(db: Db, actorId: string, files: ProspectFile[]): Promise<ProspectResult> {
+  const activityAt = new Date().toISOString();
   const result: ProspectResult = { files: files.length, added: 0, existing: 0, ambiguous: 0,
     moved: 0, toSourcing: 0, toPassed: 0, kept: 0, invalid: [], skipped: [], inProgress: [] };
   const records: Array<{ p: Prospect; file: string; line: number; hash: string }> = [];
@@ -175,7 +177,7 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
     records.push(...parsed.records.map(r => ({ ...r, file: file.file, hash })));
   }
   if (!records.length) return result;
-  return db.transaction(async tx => {
+  await db.transaction(async tx => {
     const vehicles = new Map((await tx.query<{ id: string; slug: string }>('select id::text, slug from platform.vehicle')).map(v => [v.slug, v.id]));
     for (const r of records) if (!vehicles.has(r.p.vehicle)) result.invalid.push({ file: r.file, line: r.line, reason: 'Unknown vehicle slug' });
     const valid = records.filter(r => vehicles.has(r.p.vehicle));
@@ -296,4 +298,8 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
     }
     return result;
   });
+  await recordActivity({ source: 'intake', at: activityAt, segment: 'prospects', requests: 0,
+    bytesIn: files.filter(file => !file.inProgress).reduce((sum, file) => sum + Buffer.byteLength(file.text, 'utf8'), 0),
+    bytesOut: 0, records: result.added + result.moved });
+  return result;
 }

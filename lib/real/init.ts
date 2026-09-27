@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { config } from '@/config/deployment';
 import { parseJsonc } from '@/lib/jsonc';
 import type { Db } from '@/lib/db';
+import { recordActivity } from '@/lib/activity/log';
 
 /**
  * The real profile's first rows (N38, docs/15).
@@ -282,6 +283,8 @@ export async function loadInit(db: Db): Promise<InitReport> {
   }
   const { team, vehicles } = report.init;
 
+  const activityAt = new Date().toISOString();
+  let imported = false;
   await db.transaction(async (tx) => {
     const last = await tx.one<{ hash: string | null }>(
       `select detail->>'hash' as hash from platform.audit_log
@@ -332,6 +335,9 @@ export async function loadInit(db: Db): Promise<InitReport> {
       `insert into platform.audit_log (action, subject_type, detail) values ('init.loaded', 'init', $1)`,
       [JSON.stringify({ hash: report.hash, people: team.length, vehicles: vehicles.length, open: report.open.length })],
     );
+    imported = true;
   });
+  if (imported) await recordActivity({ source: 'intake', at: activityAt, segment: 'init', requests: 0,
+    bytesIn: await stat(abs).then(s => s.size, () => null), bytesOut: 0, records: team.length + vehicles.length });
   return report;
 }

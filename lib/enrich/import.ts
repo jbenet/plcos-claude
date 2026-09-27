@@ -2,6 +2,7 @@ import { mergeImportDuplicatesInTransaction, type ImportDuplicateReport } from '
 import { consolidatePursuitsInTransaction, type PursuitMergeReport } from '@/modules/strategy';
 import { correctPipelineEntityTypes, type EntityTypeReport } from './entity-types';
 import { createHash } from 'node:crypto';
+import { recordActivity } from '@/lib/activity/log';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getDb, type Queryable } from '@/lib/db';
@@ -91,6 +92,7 @@ async function importEntityKeys(tx: Queryable, keys: string[]): Promise<Map<stri
 const unmappedKey = (key: string) => `key ${key} is not mapped yet; run Add prospects (or Import portfolio) first`;
 
 export async function importFindings(runBy: string | null, dir = enrichDir()): Promise<ImportCounts> {
+  const activityAt = new Date().toISOString();
   const counts: ImportCounts = { files: 0, mapped: 0, rejected: 0, unresolved: 0, notInSystem: 0, claims: 0, keptVerified: 0, docs: 0, profiles: 0, withPaths: 0, paths: 0, skippedPaths: 0, skippedRecords: [], strategies: 0, proposed: 0, withdrawn: 0, triaged: 0, problems: [] };
   const run = await startRun('enrich', 'import', runBy);
   try {
@@ -330,6 +332,8 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
 
     counts.organizationLps = await addOrganizationLps(db, findings, runBy, await readWarehouseGraph(dir));
 
+    await recordActivity({ source: 'intake', at: activityAt, segment: 'findings', runId: String(run),
+      requests: 0, bytesIn: null, bytesOut: 0, records: counts.mapped });
     await finishRun(run, {
       status: 'ok', requests: 0, records: counts.files, newRecords: counts.claims,
       note: `${counts.mapped} findings mapped (${counts.claims} claims, ${counts.docs} pages) · ${counts.withPaths} LPs with paths · ${counts.proposed} strategies proposed${counts.rejected ? ` · ${counts.rejected} files refused` : ''}${counts.skippedRecords.length ? ` · ${counts.skippedPaths} paths skipped · ${counts.skippedRecords.length} records skipped` : ''}`,

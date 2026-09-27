@@ -124,7 +124,7 @@ export async function readNotes(runBy: string | null, opts: NotesOptions = {}): 
     });
 
   try {
-    const client = affinity(opts.overrides);
+    const client = affinity({ ...opts.overrides, runId: String(run) });
     // A new note has createdAt and no updatedAt; an edited one has both. Two passes, then.
     const filters: Array<string | null> = since ? [`createdAt>=${iso(since)}`, `updatedAt>=${iso(since)}`] : [null];
     const counted: number[] = [];

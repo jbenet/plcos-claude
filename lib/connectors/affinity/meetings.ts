@@ -91,7 +91,7 @@ export async function readMeetings(runBy: string | null, opts: { cap?: number; f
     finishRun(run, { status, requests, records, newRecords: fresh, note, detail: { ...detail, ...extra, withAttendees, ahead, truncatedAttendees } });
 
   try {
-    const client = affinity(opts.overrides);
+    const client = affinity({ ...opts.overrides, runId: String(run) });
     const filters = since ? [`createdAt>=${iso(since)}`, `updatedAt>=${iso(since)}`] : [`startTime>=${WINDOW}`];
     for (const filter of filters) {
       let next: string | null = '/v2/meetings';
@@ -181,4 +181,3 @@ export async function meetingTitles(ids: string[]): Promise<Map<string, string>>
   );
   return new Map(rows.filter((r) => r.title).map((r) => [r.source_id, r.title!]));
 }
-

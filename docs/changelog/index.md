@@ -144,3 +144,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Import duplicate identities](entries/import-dupes.md)
 
 - [Strategy per vehicle — import companion strategies](entries/strategy-per-vehicle.md)
+- [Issue 0103 — Connector activity data and recording](entries/activity-0103.md)

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { appendFile, lstat, mkdir, readFile, realpath } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { mainCheckout, readLayout } from '../../config/ports';
+import { config } from '../../config/deployment';
+import { recordActivity, touchActivity } from '../activity/log';
 
 export const MAX_LINE_BYTES = 4096;
 type Counts = Record<'selected' | 'written' | 'valid' | 'failed' | 'skipped', number | null>;
@@ -166,6 +168,9 @@ async function append(line: RunLine, context: Context) {
   if (existing.issues.length) throw new Error('Ledger needs operator review; no append attempted.');
   await mkdir(dirname(file), { recursive: true });
   await appendFile(file, text, { encoding: 'utf8', flag: 'a' });
+  await touchActivity(dirname(dirname(file))).catch(() => {
+    console.warn('[activity] Could not invalidate activity after a workflow write.');
+  });
 }
 export async function beginRun(metadata: Begin, context: Context = {}): Promise<string> {
   const line: RunLine = { ...metadata, event: 'started', runId: randomUUID(), startedAt: new Date().toISOString(), endedAt: null,
@@ -187,4 +192,12 @@ export async function finishRun(runId: string, result: Finish, context: Context 
     return;
   }
   await append(line, context);
+  if (line.source === 'claude-code' || line.source === 'chatgpt') {
+    const tokens = line.usage!;
+    await recordActivity({ source: 'agents', at: line.endedAt!, segment: line.workflow,
+      runId, requests: null, records: line.counts.written,
+      bytesIn: tokens.output === null ? null : Math.round(tokens.output * config.activity.bytesPerToken),
+      bytesOut: tokens.input === null ? null : Math.round(tokens.input * config.activity.bytesPerToken),
+      estimated: true, basis: 'Token counts multiplied by 4 bytes per token (GUESS); requests unknown.' }, await realRoot(context));
+  }
 }

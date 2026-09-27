@@ -93,7 +93,7 @@ export async function runSlice(runBy: string | null, opts: SliceOptions = {}): P
     finishRun(run, { status, requests: pages, records, newRecords: fresh, note, detail: { ...detail, gapCount: gaps.length, gaps: gaps.slice(0, 50) } });
 
   try {
-    const client = affinity(opts.overrides);
+    const client = affinity({ ...opts.overrides, runId: String(run) });
     const targets = await sliceTargets();
     detail.lists = targets.map((t) => ({ id: t.list.id, why: t.why, vehicle: t.vehicleSlug, relationships: t.relationships }));
     if (targets.length === 0) {
@@ -182,7 +182,7 @@ export const sliceRunning = () => Boolean(g.__affinitySlice);
 export async function countNotes(runBy: string | null): Promise<SyncRun | null> {
   const run = await startRun(SOURCE, 'count-notes', runBy);
   try {
-    const page = await affinity().get<{ pagination?: { totalCount?: number } }>('/v2/notes', { limit: 0, totalCount: 'true' });
+    const page = await affinity({ runId: String(run) }).get<{ pagination?: { totalCount?: number } }>('/v2/notes', { limit: 0, totalCount: 'true' });
     const total = page.pagination?.totalCount ?? null;
     await finishRun(run, {
       status: total === null ? 'failed' : 'ok', requests: 1, records: 0, newRecords: 0,
