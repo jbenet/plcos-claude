@@ -1,0 +1,16 @@
+'use server';
+import { revalidatePath } from 'next/cache';
+import { auth } from '@/lib/auth';
+import { vehicleSelection } from '@/lib/session';
+import { applyBulk, type BulkInput } from '@/lib/pipeline-bulk';
+export async function bulkLpAction(input: BulkInput) {
+  try {
+    const [user, selection] = await Promise.all([(await auth()).currentUser(), vehicleSelection()]);
+    const result = await applyBulk(user.id, input, selection.current?.id ?? null);
+    revalidatePath('/targets'); revalidatePath('/selection'); revalidatePath('/approvals');
+    for (const row of input.rows) revalidatePath(`/targets/${row.id}`);
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : 'The action could not be recorded.' };
+  }
+}

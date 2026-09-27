@@ -2169,3 +2169,35 @@ table.list.dated .ddetail{color:var(--muted);font-size:11.5px;margin:1px 0 0 23p
   .viznetwork { min-width: 740px; }
 }
 .floorlist-wrap .scroller, .floorcard .scroller { max-height: 640px; overflow: auto; }
+
+/* Issues 0067 / 0071 — shared pipeline and selection tables. */
+.lp-tables .statusboard { display: grid; grid-template-columns: repeat(8,minmax(0,1fr)); gap: 5px; }
+.lp-tables .sb { min-width: 0; padding: 9px 7px; display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.lp-tables .sb > span { font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.lp-tables .sb b { font-size: 17px; font-weight: 500; }
+.lp-tables .sb small { font-size: 10px; color: var(--muted); }
+.lp-filters { display: flex; align-items: end; gap: 6px; margin: 14px 0; }
+.lp-filters label { flex: 1 1 76px; min-width: 0; display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
+.lp-filters label.lp-search { flex: 3 1 210px; }
+.lp-filters input,.lp-filters select { width: 100%; min-width: 0; height: 31px; font-size: 12px; padding: 4px 7px; }
+.lp-selection-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 10px 0; font-size: 12px; }
+.lp-table { min-width: 1320px; table-layout: auto; }
+.lp-table th,.lp-table td { padding: 10px 9px; vertical-align: top; height: auto; font-size: 12px; }
+.lp-table small { display: block; font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+.lp-table td:first-child,.lp-table th:first-child { width: 30px; }
+.lp-table td:nth-child(2) { min-width: 175px; }
+.lp-table .where { min-width: 180px; max-width: 260px; }
+.lp-table .lp-org th { text-align: left; font-size: 13px; font-weight: 600; }
+.lp-table .lp-org { background: var(--ground); }
+.lp-table .lp-person { padding-left: 24px; }
+.lp-table .lp-picked { background: color-mix(in srgb,var(--green) 7%,var(--surface)); }
+.lp-table input[type=checkbox],.lp-table .glyph { vertical-align: middle; }
+.lp-table .thsort { white-space: nowrap; }
+.lp-bulk { margin: 12px 0; }
+.lp-bulk fieldset { border: 0; padding: 0; margin: 0; }
+.lp-bulk summary { cursor: pointer; font-weight: 600; }
+.lp-action-fields { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.lp-action-fields label { display: grid; gap: 4px; font-size: 12px; }
+.lp-bulk textarea { width: 100%; }
+.lp-bulk .btn { margin-right: 8px; }
+@media (max-width: 1000px) { .lp-filters { overflow-x: auto; padding-bottom: 5px; } .lp-filters label { flex: 0 0 90px; } .lp-filters label.lp-search { flex: 0 0 220px; } .lp-tables .sb { padding: 8px 4px; } .lp-tables .sb > span { font-size: 10px; } }

@@ -1,31 +1,11 @@
 import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
-import { PipelineTable, type PipelineRow } from '@/components/strategy/PipelineTable';
+import { PipelineTable } from '@/components/strategy/PipelineTable';
 import { vehicleSelection } from '@/lib/session';
-import { shortDate } from '@/lib/time';
-import {
-  IMPLIED_LABEL, PASSED_BY_LABEL, RUNGS, RUNG_LABEL, STATUSES,
-  impliedRung, listPursuits, rungIndex, type Pursuit, type PursuitStatus,
-} from '@/modules/strategy';
-import { READ_LABEL, touchpointSummaries, touchpointsByPair, type TouchpointSummary } from '@/modules/meetings';
-import { CLOSE_STATE_LABEL, closeStates } from '@/modules/pipeline';
-import { blanketRestricted } from '@/modules/coordination';
-import { readingsFor, type NoteReading } from '@/lib/connectors/affinity/readings';
-import { laterFacts, shownRead } from '@/lib/reads';
-import { onFile } from '@/lib/reconcile';
-import { lpHeadings } from '@/lib/lp-heading';
+import { pipelineData } from '@/lib/pipeline-data';
+import { RUNGS, RUNG_LABEL, STATUSES, type PursuitStatus } from '@/modules/strategy';
 
 export const dynamic = 'force-dynamic';
-
-/**
- * The log has got ahead of the status: a meeting on record for an LP still at Selected or
- * earlier. Shown as a question — the status is a person's call, and it is never moved for them.
- */
-function aheadOfStatus(p: Pursuit, s: TouchpointSummary): boolean {
-  return (p.status === 'new' || p.status === 'sourcing' || p.status === 'selected' || p.status === 'connecting') && s.meetingDates.length > 0;
-}
-
-const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
 async function Pipeline({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [sp, selection] = await Promise.all([searchParams, vehicleSelection()]);
@@ -36,98 +16,9 @@ async function Pipeline({ searchParams }: { searchParams: Promise<Record<string,
   const current = selection.current;
   // All vehicles means the ones being raised: a vehicle kept for its history is shown when it
   // is the one selected, and counted, not mixed in.
-  const history = new Set(selection.all.filter((v) => v.phase === 'historical').map((v) => v.id));
-  const all = await listPursuits(current?.id ?? null);
-  const pursuits = all.filter((p) => (current ? true : !history.has(p.vehicleId)));
-  const onHistory = all.length - pursuits.length;
-
-  const pairs = pursuits.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
-  const entityIds = [...new Set(pursuits.map((p) => p.entityId))];
-  const touchesBy = await touchpointsByPair(pairs);
-  const [sums, closes, restricted, readings] = await Promise.all([
-    touchpointSummaries(pairs, new Date(), touchesBy), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
-  ]);
-  // Whose name leads each row: the organisation's when it is the LP we're targeting (issue 0013).
-  const headings = await lpHeadings(pursuits.map((p) => ({ pursuitId: p.pursuitId, entityId: p.entityId })));
-  const readsOf = new Map<string, NoteReading[]>();
-  for (const r of readings) readsOf.set(r.entityId, [...(readsOf.get(r.entityId) ?? []), r]);
-  const sum = (p: Pursuit) => sums.get(`${p.entityId}:${p.vehicleId}`)!;
-
-  // Furthest along first: by evidence, then meetings held, then what the source's word says
-  // happened; then the most recently in touch, then the name. The table can re-sort by column.
-  pursuits.sort(
-    (a, b) =>
-      rungIndex(b.rung) - rungIndex(a.rung) ||
-      sum(b).meetingDates.length - sum(a).meetingDates.length ||
-      rungIndex(impliedRung(b.implied)) - rungIndex(impliedRung(a.implied)) ||
-      (sum(b).lastTouch?.getTime() ?? 0) - (sum(a).lastTouch?.getTime() ?? 0) ||
-      a.entityName.localeCompare(b.entityName),
-  );
-
-  const rows: PipelineRow[] = pursuits.map((p) => {
-    const s = sum(p);
-    const c = closes.get(`${p.entityId}:${p.vehicleId}`);
-    const read = shownRead(s.read, readsOf.get(p.entityId) ?? [], laterFacts(p, c ? [c] : []));
-    // What the records support beside what the ladder has accepted (N57, docs/18).
-    const file = onFile(p, touchesBy.get(`${p.entityId}:${p.vehicleId}`) ?? [], c ? [c] : []);
-    const onFileRungs = new Set(file.climb.map((x) => x.rung));
-    return {
-      id: p.pursuitId,
-      name: p.entityName,
-      org: headings.get(p.pursuitId)?.org ?? null,
-      orgFirst: headings.get(p.pursuitId)?.orgFirst ?? false,
-      headline: p.headline,
-      vehicle: p.vehicleName,
-      owner: p.ownerSaid ?? p.ownerName,
-      status: p.status,
-      ended: p.status === 'passed'
-        ? [p.passedBy ? PASSED_BY_LABEL[p.passedBy] : 'Passed', p.statusReason?.replace(/_/g, ' ')].filter(Boolean).join(' · ')
-        : null,
-      next: p.nextStep,
-      nextOn: iso(p.nextStepOn),
-      said: p.source !== 'us' ? p.stageSaid : null,
-      implied: p.implied.map((i) => IMPLIED_LABEL[i]),
-      setHere: p.statusSource === 'us' && p.statusSetAt ? `set here ${shortDate(p.statusSetAt)}${p.statusSetByName ? ` by ${p.statusSetByName}` : ''}` : null,
-      ahead: aheadOfStatus(p, s),
-      doNotContact: restricted.has(p.entityId),
-      money: c
-        ? {
-            state: CLOSE_STATE_LABEL[c.state], amount: c.exposure.amount, wired: c.wired, hard: c.exposure.track === 'hard',
-            signedPer: c.state === 'signed' && c.signature
-              ? c.signature.on ? shortDate(c.signature.on) : `per ${c.signature.bySource === 'affinity' ? 'Affinity' : c.signature.bySource}`
-              : null,
-          }
-        : null,
-      meetings: s.meetingDates.length,
-      lastMeeting: iso(s.meetingDates[s.meetingDates.length - 1]),
-      lastTouch: iso(s.lastTouch),
-      waitingSince: iso(s.awaitingSince),
-      read: read ? READ_LABEL[read.read] : null,
-      readOn: iso(read?.on),
-      readSuggested: Boolean(read?.suggested),
-      readSuperseded: read?.superseded?.what ?? null,
-      readOld: Boolean(read?.old),
-      rung: rungIndex(p.rung),
-      needs: rungIndex(p.rung) + 1 + file.climb.length,
-      rungs: RUNGS.map((r) => {
-        const ev = p.events.find((e) => e.rung === r);
-        return ev ? (ev.evidenceKind === 'not_applicable' ? 'na' : 'on') : onFileRungs.has(r) ? 'file' : 'off';
-      }),
-      rungLabel: file.to
-        ? `${p.rung ? `${RUNG_LABEL[p.rung]} · ` : ''}${RUNG_LABEL[file.to]} on file, not accepted`
-        : p.rung ? RUNG_LABEL[p.rung] : 'Nothing on file',
-    };
-  });
-
-  const initial = STATUSES.some((s) => s.id === asked) ? (asked as PursuitStatus) : null;
-  // The bulky columns (issue 0023, real): Sourcing holds thousands of LPs, and sending every row
-  // made this page 1.5 MB. Their rows go to the browser only when their column is the one open;
-  // their tiles carry the server's count, and opening one asks the server for it.
-  const BULKY: PursuitStatus[] = ['sourcing', 'new'];
-  const held = BULKY.filter((s) => s !== initial);
-  const heldBack = Object.fromEntries(held.map((s) => [s, rows.filter((r) => r.status === s).length] as const).filter(([, n]) => n > 0));
-  const sent = held.length ? rows.filter((r) => !held.includes(r.status as PursuitStatus)) : rows;
-  const count = (s: PursuitStatus) => pursuits.filter((p) => p.status === s).length;
+  const { rows, onHistory, asOf } = await pipelineData(current?.id ?? '');
+  const initial = asked === 'all' ? 'all' : STATUSES.some(s => s.id === asked) ? asked as PursuitStatus : null;
+  const count = (status: PursuitStatus) => rows.filter(r => r.status === status).length;
 
   return (
     <Page
@@ -137,7 +28,7 @@ async function Pipeline({ searchParams }: { searchParams: Promise<Record<string,
       ]}
       inspector={
         <>
-          <div className="lbl">Six statuses</div>
+          <div className="lbl">Seven statuses</div>
           <div className="ihead">Where our effort is</div>
           <div className="imeta">Our plan, set by a person, any direction</div>
           {STATUSES.map((s) => (
@@ -159,7 +50,7 @@ async function Pipeline({ searchParams }: { searchParams: Promise<Record<string,
             <div className="lbl">Searching</div>
             <p>
               Press <kbd>/</kbd> to search. Filters narrow every column at once, and each count then
-              reads &ldquo;N of M&rdquo;. Click a column heading to sort by it; click a row to open
+              reads &ldquo;N of M&rdquo;. Click a column heading to sort by it; click an LP name to open
               the LP.
             </p>
           </div>
@@ -178,8 +69,9 @@ async function Pipeline({ searchParams }: { searchParams: Promise<Record<string,
       </p>
 
       <PipelineTable
-        rows={sent}
-        heldBack={heldBack}
+        key={current?.id ?? 'all'}
+        rows={rows}
+        asOf={asOf}
         statuses={STATUSES.map((s) => ({ id: s.id, label: s.label, means: s.means }))}
         rungNames={RUNGS.map((r) => RUNG_LABEL[r])}
         initialStatus={initial}

@@ -44,6 +44,7 @@ export async function runProperties(check: Check) {
   await (await import('./agents')).agentsProperties(seed);
   await (await import('./coordination')).restrictionProperties(seed);
   await (await import('./fit')).fitProperties(seed);
+  await (await import('./tables')).tableProperties(check, db);
   await db.close();
 
   await (await import('./pipeline')).hardeningVariations(check);
