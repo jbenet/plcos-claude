@@ -56,7 +56,7 @@ async function pull() {
   const root = await realRoot();
   const mods = (process.argv[3] ?? 'account,contact').split(',') as Array<'account' | 'contact'>;
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const runId = await beginRun({ parentRunId: null, workflow: 'dakota', operation: 'pull', protocol: { version: 'v1', hash: createHash('sha256').update('dakota-pull-v1: all documented fields, max_num 50, order sfid:ASC, 1 req/s').digest('hex') },
+  const runId = await beginRun({ parentRunId: null, workflow: 'dakota', operation: 'pull', protocol: { version: 'v1', hash: createHash('sha256').update('dakota-pull-v2: needed fields only, changed since last complete pull, max_num 50, 1 req/s').digest('hex') },
     source: 'script', agent: 'Claude', model: null, launchFolder: resolve('.'), workerFolder: resolve('.'),
     batch: { id: `dakota-pull-${stamp}`, manifest: 'modules:' + mods.join(','), hash: createHash('sha256').update(mods.join(',')).digest('hex'), planned: mods.length } });
   const client = new DakotaClient(user, pass);
@@ -64,8 +64,12 @@ async function pull() {
   for (const m of mods) {
     const dir = join(root, 'dakota', 'raw', m); await mkdir(dir, { recursive: true });
     const file = join(dir, `${stamp}.jsonl`);
-    const expected = await client.count(m);
-    const { fields: found, orderBy, mode: shape, log } = await findShape(client, m, (FIELDS as unknown as Record<string, string[]>)[m]);
+    // Only the fields we use (fields.json "needed"), and after the first pull only records changed since the last one.
+    const needed = (FIELDS as unknown as { needed: Record<string, string[]> }).needed[m];
+    const since = await lastPull(join(root, 'dakota', 'raw'), m);
+    const changed = since ? [{ lastmodifieddate: { $gte: since.slice(0, 10) } }] : undefined;
+    const expected = await client.count(m, changed);
+    const { fields: found, orderBy, mode: shape, log } = await findShape(client, m, needed, changed);
     await writeFile(join(root, 'dakota', 'raw', `${stamp}.${m}.probe.json`), JSON.stringify(log, null, 1) + '\n');
     if (!orderBy) { out[m] = { expected, written: 0, fields: 'none accepted', error: 'no query shape accepted' }; continue; }
     let fields: string[] | undefined = found;
@@ -73,7 +77,7 @@ async function pull() {
     try {
       for (;;) {
         let page;
-        try { page = await client.page({ module: m, fields, offset, orderBy }); }
+        try { page = await client.page({ module: m, fields, offset, orderBy, filter: changed }); }
         catch (err) {
           // A field the docs list but our plan cannot read fails the whole request: fall back to Dakota's default set, once.
           if (offset === 0 && fields && /answered 400/.test(String(err))) { fields = undefined; mode = 'default'; continue; }
@@ -96,11 +100,23 @@ async function pull() {
   console.log(`requests ${client.requests}`); for (const [m, x] of Object.entries(out)) console.log(`${m}: ${x.written}/${x.expected} (${x.fields} fields)${x.error ? ' · ' + x.error : ''}`);
 }
 
+/** When this module was last pulled completely, from the manifests; null means pull everything. */
+async function lastPull(dir: string, m: string): Promise<string | null> {
+  const { readdir, readFile } = await import('node:fs/promises');
+  let best: string | null = null;
+  for (const f of (await readdir(dir).catch(() => [] as string[])).filter((x) => x.endsWith('.manifest.json'))) {
+    const man = JSON.parse(await readFile(join(dir, f), 'utf8')) as { at: string; modules: Record<string, { expected: number; written: number; error?: string }> };
+    const x = man.modules[m];
+    if (x && !x.error && x.written >= x.expected && (!best || man.at > best)) best = man.at;
+  }
+  return best;
+}
+
 /** Probe, 2 records a request, for a field set and order Dakota accepts; bisect the documented fields when the full set fails. */
-async function findShape(client: DakotaClient, m: string, all: string[]) {
+async function findShape(client: DakotaClient, m: string, all: string[], filter?: Array<Record<string, unknown>>) {
   const log: Array<{ what: string; status: number; records: number; keys: number }> = [];
   const probe = async (what: string, fields: string[] | undefined, orderBy: string) => {
-    const r = await client.probe({ module: m, fields, orderBy, offset: 0 }); log.push({ what, ...r }); return r.status === 200 && r.records > 0;
+    const r = await client.probe({ module: m, fields, orderBy, offset: 0, filter }); log.push({ what, ...r }); return r.status === 200 && (r.records > 0 || Boolean(filter));
   };
   let orderBy: string | null = null;
   for (const o of ['sfid:ASC', 'id:ASC', 'name:ASC', 'lastmodifieddate:DESC']) if (await probe(`default fields, order ${o}`, undefined, o)) { orderBy = o; break; }

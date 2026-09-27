@@ -20,6 +20,8 @@ import { SHOT } from './shot-image';
 const ROOTS = ['app', 'components', 'lib', 'modules', 'config', 'scripts'];
 const DRIVERS = ['@electric-sql/pglite', "from 'pg'", 'from "pg"'];
 const AFFINITY = ['api.affinity.co', 'AFFINITY_API_KEY'];
+// Dakota (docs/20-dakota.md): only its connector names the host; its data stays in data/real and the database.
+const DAKOTA = ['marketplace-as-a-service.herokuapp.com'];
 // The original harness exception follows only the three files that hold those checks.
 const AFFINITY_PROPERTIES = new Set([
   'scripts/properties/affinity.ts', 'scripts/properties/affinity-notes.ts',
@@ -61,6 +63,12 @@ async function main() {
     if (!rel.startsWith(join('lib', 'connectors', 'affinity')) && rel !== 'scripts/boundaries.ts' && !AFFINITY_PROPERTIES.has(rel)) {
       for (const needle of AFFINITY) {
         if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/affinity/ talks to Affinity`);
+      }
+    }
+
+    if (!rel.startsWith(join('lib', 'connectors', 'dakota')) && rel !== 'scripts/boundaries.ts') {
+      for (const needle of DAKOTA) {
+        if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/dakota/ talks to Dakota`);
       }
     }
 

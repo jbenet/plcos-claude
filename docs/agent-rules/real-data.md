@@ -40,6 +40,20 @@ a copy of it with `npm run preview`, and a sub-agent's worktree, which has no ro
 - **Affinity is read-only.** The key can write and cannot be scoped, so read-only is
   enforced in the client: GET only, allowlisted paths, a property test that a write throws.
   Writing back is a later decision, and would go through approval tickets.
+- **Dakota Marketplace is read-only, and its data never leaves our system (27 Sep 2026, docs/20-dakota.md).**
+  Juan: "they are very touchy about their data, so make sure dakota data does not leave our system and
+  get accidentally placed anywhere else. should just go into our db." So Dakota records live only in
+  `plcos-data/real/dakota/` (the raw replica) and our database (the PL warehouse also holds some, read-only
+  for us). Never in git, a changelog, an issue, a screenshot, an artifact, a published page, a web search,
+  a prompt to any agent, or any file outside those two places; a report about Dakota work gives counts.
+  Only `lib/connectors/dakota/` talks to Dakota (`npm run boundaries`), only a workflow runs it
+  (`scripts/dakota-sync.ts`, recorded in the ledger), and only reads: sign-in, list and count, nothing
+  else leaves the client. Read in bulk to keep the query count down, one request a second, within any
+  limit Dakota documents, and stop on a 429. Ask only for the fields in `fields.json` "needed", and after
+  the first pull only records changed since the last. Use it to enrich existing LPs and to source new
+  candidate LPs. Code that maps it is built and tested on invented fixtures from the public schema, never
+  by an agent reading the raw files; the mapping runs on the live server. The sign-in is two Keychain
+  items (`npm run dakota:store`), read by `scripts/with-dakota-key.sh`.
 - **PL Polaris, the PL Data Warehouse, is read-only too (26 Sep 2026).** Juan gave Claude and ChatGPT
   access to BigQuery project `plrs-data-platform` through Google's MCP Toolbox, run locally and
   registered as `pl-polaris` by `npm run polaris:connect`. It signs in with Juan's gcloud
