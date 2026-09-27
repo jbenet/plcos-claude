@@ -10,7 +10,7 @@ import type { EdgeKind, EvidenceTier } from './types';
 import { warehousePathKind, type Path } from '@/lib/enrich/connect';
 import { config } from '@/config/deployment';
 import { tieWarmth } from './warmth';
-import { researchEndpoint, researchTie } from './research-path';
+import { researchEndpointResolver, researchTie } from './research-path';
 import { enrichDir } from '@/lib/enrich/candidates';
 import { importNetworkNodes, planNetworkNodes, readNetworkNodeInput } from './nodes';
 
@@ -65,11 +65,9 @@ interface NewEdge { reviewedBy?: string; reviewedAt?: string; reviewNote?: strin
 export async function buildNetwork(options: { awaitBackground?: boolean } = {}): Promise<BuildCounts> {
   const db = await getDb();
   const counts = await db.transaction(async (tx) => {
-    // One global topology generation for a rebuild, without logging every inserted edge.
-    await tx.query("select set_config('network.building', 'on', true)");
-    const result = await build(tx);
-    await tx.query('update network.route_revision set revision = txid_current(), epoch = txid_current() where singleton');
-    return result;
+    // Reconcile changed ties only. Existing triggers record their endpoints for the
+    // incremental route cache; unchanged builds do not discard every LP's routes.
+    return build(tx);
   });
   if (options.awaitBackground) {
     // A job thread/process closes its DB proxy at completion; finish its dependent work first.
@@ -147,10 +145,7 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   const kept = new Set(reviewed.filter((r) => r.ended).map((r) => pairKey(r.a, r.b, r.kind)));
   const priorReview = new Map(reviewed.filter((r) => !r.ended).map((r) => [pairKey(r.a, r.b, r.kind), r]));
   counts.keptReviewed = reviewed.length;
-  await tx.query(
-    `delete from network.edge where (reviewed_at is null or valid_to is null)
-        and (evidence @> '[{"derived": "records"}]'::jsonb or evidence @> '[{"derived": "research"}]'::jsonb)`,
-  );
+
 
   const edges = new Map<string, NewEdge>();
   const add = (e: NewEdge) => {
@@ -230,10 +225,18 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   const notes = await tx.query<{ entity_id: string; at: string; data: { paths?: Path[] } }>(
     `select identity.canonical_entity_id(entity_id)::text entity_id, created_at::text as at, data from research.note where kind = 'connection_candidates'`,
   );
-  for (const note of notes) note.data = { ...note.data, paths: await canonicalPaths(tx, note.data.paths ?? []) };
+  // The recursive identity projection is shared by the entire pass, not recomputed per LP.
+  const projected = await canonicalPaths(tx, notes.flatMap(note => note.data.paths ?? []));
+  let pathOffset = 0;
+  for (const note of notes) {
+    const length = note.data.paths?.length ?? 0;
+    note.data = { ...note.data, paths: projected.slice(pathOffset, pathOffset + length) };
+    pathOffset += length;
+  }
   const people = await tx.query<{ id: string; name: string }>(`select entity_id::text as id, display_name as name from identity.entity`);
   const known = new Set(people.map((r) => r.id));
   const roster = people.map((p) => ({ ...p, handle: users.find((u) => entityOfUser.get(u.id) === p.id)?.handle }));
+  const endpoint = researchEndpointResolver(roster);
   // Warehouse identities are created only during this existing server-side import/build transaction.
   // Their stable source keys never merge ambiguous LP matches or people sharing a name.
   const warehouseEntities = new Map<string, string>();
@@ -294,7 +297,7 @@ async function build(tx: Queryable): Promise<BuildCounts> {
         }
         continue;
       }
-      const other = researchEndpoint(p.other, roster);
+      const other = endpoint(p.other);
       if (!other) { counts.notPeople++; continue; }
       const kind = KIND[p.kind] ?? 'other';
       const tie = researchTie(p);
@@ -313,13 +316,43 @@ async function build(tx: Queryable): Promise<BuildCounts> {
     }
   }
 
-  for (const e of edges.values()) {
+  // Bound each bind payload while paying one round trip per batch rather than per tie.
+  await tx.exec(`create temporary table findings_network_edges (like network.edge including defaults) on commit drop`);
+  const pending = [...edges.values()];
+  for (let offset = 0; offset < pending.length; offset += 1000) {
     await tx.query(
-      `insert into network.edge (from_entity, to_entity, kind, tier, strength, tie_band, evidence, valid_from, reviewed_by, reviewed_at, review_note)
-       values ($1, $2, $3::network.edge_kind, $4::network.evidence_tier, null, $5, $6, $7::date, $8::uuid, $9::timestamptz, $10)`,
-      [e.from, e.to, e.kind, e.tier, e.band, JSON.stringify(e.evidence), e.since, e.reviewedBy ?? null, e.reviewedBy ? e.reviewedAt : null, e.reviewNote ?? null],
+      `insert into findings_network_edges (from_entity, to_entity, kind, tier, strength, tie_band, evidence, valid_from, reviewed_by, reviewed_at, review_note)
+       select x."from"::uuid, x."to"::uuid, x.kind::network.edge_kind, x.tier::network.evidence_tier,
+         null, x.band, x.evidence, x.since::date, x."reviewedBy"::uuid,
+         case when x."reviewedBy" is not null then x."reviewedAt"::timestamptz end, x."reviewNote"
+       from jsonb_to_recordset($1::jsonb) as x("from" text, "to" text, kind text, tier text,
+         band text, evidence jsonb, since text, "reviewedBy" text, "reviewedAt" text, "reviewNote" text)`,
+      [JSON.stringify(pending.slice(offset, offset + 1000))],
     );
   }
+  await tx.exec(`create index on findings_network_edges (from_entity, to_entity, kind); create index on findings_network_edges (edge_id); analyze findings_network_edges`);
+  // Keep exactly one existing row for each identical generated tie. Row identity is
+  // significant to cached routes and corrections; rebuilding must not churn it.
+  await tx.exec(`update findings_network_edges incoming set edge_id = matched.edge_id
+    from (
+      select incoming.edge_id new_id, min(old.edge_id::text)::uuid edge_id
+      from findings_network_edges incoming join network.edge old
+        on old.from_entity = incoming.from_entity and old.to_entity = incoming.to_entity and old.kind = incoming.kind
+        and old.tier = incoming.tier and old.strength is null
+        and old.tie_band is not distinct from incoming.tie_band and old.evidence = incoming.evidence
+        and old.valid_from = incoming.valid_from and old.valid_to is null
+        and old.reviewed_by is not distinct from incoming.reviewed_by
+        and old.reviewed_at is not distinct from incoming.reviewed_at
+        and old.review_note is not distinct from incoming.review_note
+      where old.evidence @> '[{"derived":"records"}]'::jsonb or old.evidence @> '[{"derived":"research"}]'::jsonb
+      group by incoming.edge_id
+    ) matched where incoming.edge_id = matched.new_id`);
+  await tx.exec(`delete from network.edge old where (old.reviewed_at is null or old.valid_to is null)
+    and (old.evidence @> '[{"derived":"records"}]'::jsonb or old.evidence @> '[{"derived":"research"}]'::jsonb)
+    and not exists (select 1 from findings_network_edges incoming where incoming.edge_id = old.edge_id)`);
+  await tx.exec(`insert into network.edge (edge_id, from_entity, to_entity, kind, tier, strength, tie_band, evidence, valid_from, valid_to, reviewed_by, reviewed_at, review_note)
+    select edge_id, from_entity, to_entity, kind, tier, strength, tie_band, evidence, valid_from, valid_to, reviewed_by, reviewed_at, review_note
+    from findings_network_edges incoming where not exists (select 1 from network.edge old where old.edge_id = incoming.edge_id)`);
   if (nodeInput) {
     const imported = await importNetworkNodes(tx, planNetworkNodes(nodeInput));
     counts.allNodes = { created: imported.nodesCreated, sourceRecords: imported.sourceRecords, edges: imported.edgesWritten };

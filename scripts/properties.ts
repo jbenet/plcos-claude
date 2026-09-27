@@ -47,6 +47,8 @@ async function main() {
   await (await import('./properties/triage-export')).triageExportProperties(check);
 
   await (await import('./properties/feedback-journal')).feedbackJournalProperties(check);
+  await (await import('./properties/findings-network')).findingsNetworkProperties(check);
+  await (await import('./properties/findings-perf')).findingsPerfProperties(check);
 
   await cleanTestPostgres();
 

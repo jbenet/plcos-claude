@@ -1,4 +1,4 @@
-import type { Queryable } from '@/lib/db';
+import { TooManyRows, type Queryable } from '@/lib/db';
 import { norm, type Path, type ConnectionPerson } from './connect';
 import { connectionIdentityProblems, pathProblems, type LocatedRecord } from './connection-check';
 
@@ -31,27 +31,48 @@ export async function resolveConnectionPeople(tx: Queryable, paths: Path[],
   }
   const ids = new Map<string, string>();
   const mappedKeys = new Set<string>();
+  // Preflight with bounded set reads instead of three round trips per descriptor.
+  const descriptorKeys = [...descriptors.keys()].filter(key => !badKeys.has(key));
+  const mappedRows = await tx.query<{ key: string; id: string; type: string }>(
+    `select s.source_id key,e.entity_id::text id,e.entity_type::text type from identity.source_record s
+     join identity.entity e on e.entity_id=identity.canonical_entity_id(s.entity_id)
+     where s.source='w3_person' and s.source_id=any($1::text[])`, [descriptorKeys]);
+  const mappedByKey = new Map<string, typeof mappedRows[number]>();
+  for (const row of mappedRows) {
+    // The previous one() refused corrupt duplicate mappings; keep that refusal.
+    if (mappedByKey.has(row.key)) throw new TooManyRows(mappedRows.filter(candidate => candidate.key === row.key).length);
+    mappedByKey.set(row.key, row);
+  }
+  const existingByKey = new Map((await tx.query<{ key: string; id: string; name: string; type: string }>(
+    `select requested.key::text key,e.entity_id::text id,e.display_name name,e.entity_type::text type
+     from unnest($1::uuid[]) requested(key)
+     join identity.entity e on e.entity_id=identity.canonical_entity_id(requested.key)`, [descriptorKeys],
+  )).map(row => [row.key, row]));
+  const oppositeTypes = new Map<string, Set<string>>();
+  for (const row of await tx.query<{ name: string; type: string }>(
+    `select distinct names.name,e.entity_type::text type from unnest($1::text[]) names(name)
+     join identity.entity e on lower(trim(e.display_name))=lower(trim(names.name))
+     where e.merged_into is null and e.retired_at is null`,
+    [[...descriptors.values()].map(person => person.name)],
+  )) oppositeTypes.set(row.name, (oppositeTypes.get(row.name) ?? new Set()).add(row.type));
   // Resolve existing identities first. No node is created for a skipped-only path.
   for (const person of descriptors.values()) {
     if (badKeys.has(person.key)) continue;
     const type = person.entityType ?? 'person';
-    const mapped = await tx.one<{ id: string; type: string }>(`select e.entity_id::text as id, e.entity_type::text as type from identity.source_record s join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id) where s.source = 'w3_person' and s.source_id = $1`, [person.key]);
+    const mapped = mappedByKey.get(person.key);
     if (mapped) {
       if (mapped.type !== type) badKeys.set(person.key, 'Connector type conflicts with its existing source mapping');
       else { ids.set(person.key, mapped.id); mappedKeys.add(person.key); }
       continue;
     }
-    const existing = await tx.one<{ name: string; type: string }>(`select display_name as name, entity_type::text as type from identity.entity where entity_id = identity.canonical_entity_id($1::uuid)`, [person.key]);
+    const existing = existingByKey.get(person.key.toLowerCase());
     if (existing && (existing.type !== type || norm(existing.name) !== norm(person.name))) {
       badKeys.set(person.key, 'Connector identity conflicts with an existing entity'); continue;
     }
-    const opposite = await tx.one<{ n: number }>(`select count(*)::int as n from identity.entity where merged_into is null and retired_at is null and lower(trim(display_name)) = lower(trim($1)) and entity_type::text <> $2`, [person.name, type]);
-    if (opposite && opposite.n > 0) { badKeys.set(person.key, 'Connector name conflicts with an existing entity type'); continue; }
-    // Namesakes are separate sourced identities until deterministic corroboration merges them.
-    if (existing) {
-      const canonical = await tx.one<{id:string}>('select identity.canonical_entity_id($1::uuid)::text id', [person.key]);
-      ids.set(person.key, canonical!.id);
+    if ([...(oppositeTypes.get(person.name) ?? [])].some(other => other !== type)) {
+      badKeys.set(person.key, 'Connector name conflicts with an existing entity type'); continue;
     }
+    if (existing) ids.set(person.key, existing.id);
   }
   const usable = paths.filter((p, index) => {
     for (const key of [p?.lp, p?.other?.key]) if (key && badKeys.has(key)) reject(index, badKeys.get(key)!);
@@ -60,16 +81,26 @@ export async function resolveConnectionPeople(tx: Queryable, paths: Path[],
     return false;
   });
   const needed = new Set(usable.flatMap((p) => [p.lp, p.other.key]));
+  const entities: Array<{ id: string; type: string; name: string }> = [];
+  const mappings: Array<{ key: string; id: string }> = [];
   for (const person of descriptors.values()) {
     if (!needed.has(person.key)) continue;
     let id = ids.get(person.key);
     if (!id) {
-      id = (await tx.one<{ id: string }>(`insert into identity.entity (entity_id, entity_type, display_name) values ($1, $3::identity.entity_type, $2) returning entity_id::text as id`, [person.key, person.name, person.entityType ?? 'person']))!.id;
+      id = person.key.toLowerCase();
+      entities.push({ id, type: person.entityType ?? 'person', name: person.name });
     }
     ids.set(person.key, id);
-    if (mappedKeys.has(person.key)) continue;
-    await tx.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by) values ('w3_person', $1, $2, 'rule:sourced-person')`, [person.key, id]);
+    if (!mappedKeys.has(person.key)) mappings.push({ key: person.key, id });
   }
+  for (let i = 0; i < entities.length; i += 500) await tx.query(
+    `insert into identity.entity (entity_id,entity_type,display_name)
+     select id,type::identity.entity_type,name from jsonb_to_recordset($1::jsonb) as r(id uuid,type text,name text)`,
+    [JSON.stringify(entities.slice(i, i + 500))]);
+  for (let i = 0; i < mappings.length; i += 500) await tx.query(
+    `insert into identity.source_record (source,source_id,entity_id,resolved_by)
+     select 'w3_person',key,id,'rule:sourced-person' from jsonb_to_recordset($1::jsonb) as r(key text,id uuid)`,
+    [JSON.stringify(mappings.slice(i, i + 500))]);
   const indices = new Map(paths.map((p, index) => [p, index]));
   return usable.map((p) => {
     const resolved = { ...p, lp: ids.get(p.lp) ?? p.lp,

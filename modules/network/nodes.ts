@@ -4,6 +4,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { config } from '@/config/deployment';
 import type { Queryable } from '@/lib/db';
 import { readWarehouseGraph, connectionPersonKey, type TeamMember, type Network, type WarehouseGraph } from '@/lib/enrich/connect';
@@ -94,9 +95,12 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
     byPerson.set(m.personKey,[...(byPerson.get(m.personKey)??[]),m.lpKey]);
   }
   const warehouseKeys=new Map<string,string>();
+  // Preserve first-match behavior without scanning every candidate per warehouse person.
+  const candidateByKey=new Map<string,NetworkNodeInput['candidates'][number]>();
+  for(const candidate of input.candidates) if(!candidateByKey.has(candidate.key)) candidateByKey.set(candidate.key,candidate);
   for(const p of input.warehouse.people) {
     const lp=byPerson.get(p.key);
-    const matched=lp?.length===1 && byLP.get(lp[0]!)?.length===1 ? input.candidates.find(c=>c.key===lp[0]) : undefined;
+    const matched=lp?.length===1 && byLP.get(lp[0]!)?.length===1 ? candidateByKey.get(lp[0]!) : undefined;
     const institution = p.key === 'organization:protocol-labs';
     const key=addNode('warehouse',p.key,p.name,institution ? 'org' : 'person',{
       ...(matched && isUuid(matched.key)?{entityId:matched.key}:{}),...(p.teamKey?{teamHandle:p.teamKey}:{})});
@@ -196,10 +200,15 @@ export async function readNetworkNodeInput(dir:string):Promise<NetworkNodeInput|
     read('us/graph-2026-09-26.jsonl'),read('us/own-records-direct-ties-2026-09-26.jsonl'),read('us/network.json')]);
   const files=(await readdir(join(dir,'raw')).catch((e:NodeJS.ErrnoException)=>{if(e.code==='ENOENT')return [];throw e;})).filter(f=>f.endsWith('.json')).sort();
   const findings:Finding[]=[];
-  for(const file of files) {
-    const f=parse<Finding>(await read(`raw/${file}`));
-    if(checkFinding(f,file.slice(0,-5)).length) continue; // Same accepted schema as the findings importer.
-    findings.push(f);
+  // Bound file descriptors while preserving sorted input order (and therefore evidence order).
+  for(let offset=0;offset<files.length;offset+=32) {
+    const batch=files.slice(offset,offset+32);
+    const contents=await Promise.all(batch.map(file=>read(`raw/${file}`)));
+    for(let i=0;i<batch.length;i++) {
+      const f=parse<Finding>(contents[i]!);
+      if(checkFinding(f,batch[i]!.slice(0,-5)).length) continue; // Same accepted schema as the findings importer.
+      findings.push(f);
+    }
   }
   if(!warehouse.people.length&&!candidates&&!team&&!graph&&!direct&&!findings.length&&!network)return null;
   return {warehouse,candidates:lines(candidates),team:team?parse<{team:TeamMember[]}>(team).team:[],graph:lines(graph),direct:lines(direct),findings,
@@ -210,12 +219,13 @@ export async function readNetworkNodeInput(dir:string):Promise<NetworkNodeInput|
 export async function importNetworkNodes(tx:Queryable,plan:NodePlan,at=new Date()):Promise<NodeImportCounts> {
   const today=at.toISOString().slice(0,10), counts:NodeImportCounts={nodesCreated:0,sourceRecords:0,edgesWritten:0,edgePairs:new Set(),warehouseLoaded:plan.warehouseLoaded};
   const existing=await tx.query<{source:string;source_id:string;entity_id:string}>(
-    `select source,source_id,identity.canonical_entity_id(entity_id)::text entity_id from identity.source_record where source=any($1::text[])`,[[...new Set(plan.nodes.map(n=>n.source))]]);
-  const mapped=new Map(existing.map(r=>[sourceKey(r.source,r.source_id),r.entity_id]));
+    `select source,source_id,entity_id::text from identity.source_record where source=any($1::text[])`,[[...new Set(plan.nodes.map(n=>n.source))]]);
   const entities=await tx.query<{id:string;type:string;name:string}>(`select entity_id::text id,entity_type::text type,display_name name from identity.entity where merged_into is null`);
   const byId=new Map(entities.map(e=>[e.id,e]));
   const localTypeDecisions=new Set((await tx.query<{id:string}>(`select entity_id::text id from identity.entity_type_correction`)).map(r=>r.id));
   const redirects=new Map((await tx.query<{entity_id:string;canonical_id:string}>(`select entity_id::text,canonical_id::text from identity.entity_resolution`)).map(r=>[r.entity_id,r.canonical_id]));
+  // Resolve the source rows through the same set-based projection already needed below.
+  const mapped=new Map(existing.map(r=>[sourceKey(r.source,r.source_id),redirects.get(r.entity_id)]));
   const ids=new Map<string,string>(), newEntities=new Map<string,{id:string;type:string;name:string}>(), aliases:Array<{source:string;source_id:string;id:string}>=[];
   for(const n of plan.nodes) {
     const team=n.teamHandle?(ids.get(sourceKey('app_user',n.teamHandle))??mapped.get(sourceKey('app_user',n.teamHandle))):undefined;
@@ -238,9 +248,9 @@ export async function importNetworkNodes(tx:Queryable,plan:NodePlan,at=new Date(
     on conflict(source,source_id) do nothing`,[JSON.stringify(chunk)]));
   counts.nodesCreated=newEntities.size;counts.sourceRecords=aliases.length;
   // Protect explicit decisions and reuse pre-existing edges, including earlier W3 imports.
-  type ExistingEdge={id:string;a:string;b:string;kind:EdgeKind;tier:EvidenceTier;reviewed:boolean;evidence:Record<string,unknown>[]};
+  type ExistingEdge={id:string;a:string;b:string;kind:EdgeKind;tier:EvidenceTier;band:string;on:string;reviewed:boolean;evidence:Record<string,unknown>[]};
   const current=await tx.query<ExistingEdge>(
-    `select edge_id::text id,from_entity::text a,to_entity::text b,kind::text,tier::text,reviewed_at is not null reviewed,evidence from network.edge`);
+    `select edge_id::text id,from_entity::text a,to_entity::text b,kind::text,tier::text,tie_band band,valid_from::text "on",reviewed_at is not null reviewed,evidence from network.edge`);
   const byPair=new Map<string,ExistingEdge>(), external=new Map<string,Record<string,unknown>[]>(), externalTier=new Map<string,EvidenceTier>();
   const redundant:string[]=[];
   for(const e of current) {
@@ -267,7 +277,15 @@ export async function importNetworkNodes(tx:Queryable,plan:NodePlan,at=new Date(
       on:day(e.tie.lastInteraction,e.asOf||today),evidence:[...(external.get(pair)??[]),evidence]});
   }
   for(const row of rows.values())row.evidence=[...new Map(row.evidence.map(e=>[JSON.stringify(e),e])).values()];
-  await chunks([...rows.values()],2000,async chunk=>tx.query(`insert into network.edge(edge_id,from_entity,to_entity,kind,tier,tie_band,evidence,valid_from)
+  const currentById=new Map(current.map(e=>[e.id,e]));
+  const changedRows=[...rows.values()].filter(row=>{
+    const prior=currentById.get(row.id);
+    return !prior||prior.tier!==row.tier||prior.band!==row.band||prior.on!==row.on
+      ||!isDeepStrictEqual(prior.evidence,JSON.parse(JSON.stringify(row.evidence)));
+  });
+  // Avoid firing topology invalidation for an identical rebuilt edge. Counts still
+  // describe the complete imported graph, independent of the physical write count.
+  await chunks(changedRows,2000,async chunk=>tx.query(`insert into network.edge(edge_id,from_entity,to_entity,kind,tier,tie_band,evidence,valid_from)
     select id::uuid,a::uuid,b::uuid,kind::network.edge_kind,tier::network.evidence_tier,band,evidence,on_date::date
     from jsonb_to_recordset($1::jsonb) x(id text,a text,b text,kind text,tier text,band text,evidence jsonb,on_date text)
     on conflict(edge_id) do update set tier=excluded.tier,tie_band=excluded.tie_band,evidence=excluded.evidence,valid_from=excluded.valid_from
@@ -276,11 +294,14 @@ export async function importNetworkNodes(tx:Queryable,plan:NodePlan,at=new Date(
   const touchedIds=new Set(current.filter(e=>counts.edgePairs.has(nodePairKey(e.a,e.b,e.kind))).map(e=>e.id));
   const duplicateIds=redundant.filter(id=>touchedIds.has(id));
   if(duplicateIds.length)await tx.query(`delete from network.edge where edge_id=any($1::uuid[]) and reviewed_at is null`,[duplicateIds]);
-  await tx.query(`delete from network.edge where reviewed_at is null
-    and evidence @> '[{"derived":"network_nodes"}]'::jsonb and not(edge_id=any($1::uuid[]))
-    and not exists(select 1 from jsonb_array_elements(evidence) v where v->>'derived' is distinct from 'network_nodes')
-    and exists(select 1 from jsonb_array_elements(evidence) v where v->>'fromSource'=any($2::text[]) and v->>'toSource'=any($2::text[]))`,
-    [[...rows.values()].map(r=>r.id),plan.nodes.map(n=>n.key)]);
+  // `current` already contains the evidence. Sets avoid repeated array membership scans
+  // over every node for every stale edge; reviewed and mixed-provenance edges still survive.
+  const writtenIds=new Set([...rows.values()].map(r=>r.id)), nodeKeys=new Set(plan.nodes.map(n=>n.key));
+  const staleIds=current.filter(e=>!e.reviewed&&!writtenIds.has(e.id)&&e.evidence.length>0
+    &&e.evidence.every(v=>v.derived==='network_nodes')
+    &&e.evidence.some(v=>typeof v.fromSource==='string'&&typeof v.toSource==='string'
+      &&nodeKeys.has(v.fromSource)&&nodeKeys.has(v.toSource))).map(e=>e.id);
+  await chunks(staleIds,2000,chunk=>tx.query(`delete from network.edge where edge_id=any($1::uuid[]) and reviewed_at is null`,[chunk]));
   counts.edgesWritten=rows.size;
   return counts;
 }

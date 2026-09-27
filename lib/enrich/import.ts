@@ -1,7 +1,7 @@
 import { mergeImportDuplicatesInTransaction, type ImportDuplicateReport } from './import-dupes';
-import { consolidatePursuitsInTransaction, recordResearchSpv, type PursuitMergeReport } from '@/modules/strategy';
+import { consolidatePursuitsInTransaction, researchSpvEvidence, type PursuitMergeReport } from '@/modules/strategy';
 import { correctPipelineEntityTypes, type EntityTypeReport } from './entity-types';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { recordActivity } from '@/lib/activity/log';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -92,6 +92,11 @@ async function importEntityKeys(tx: Queryable, keys: string[]): Promise<Map<stri
   return resolved;
 }
 const unmappedKey = (key: string) => `key ${key} is not mapped yet; run Add prospects (or Import portfolio) first`;
+
+/** Bound payload size while using the same set-based SQL on both DB adapters. */
+async function writeRows(tx: Queryable, sql: string, rows: object[]): Promise<void> {
+  for (let i = 0; i < rows.length; i += 500) await tx.query(sql, [JSON.stringify(rows.slice(i, i + 500))]);
+}
 
 export async function importFindings(runBy: string | null, dir = enrichDir()): Promise<ImportCounts> {
   const activityAt = new Date().toISOString();
@@ -234,19 +239,26 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       const importedLps = new Set(paths.map((p) => p.lp));
       await tx.query(`delete from research.note where kind = 'connection_candidates' and author_id is null and entity_id = any($1::uuid[])`,
         [[...known].filter((key) => !skippedLps.has(key) || importedLps.has(key))]);
+      const notes: Array<{ entity_id: string; kind: string; body: string; tags: string[]; data: unknown }> = [];
       for (const t of triage) {
         if (!known.has(t.key)) continue;
-        await tx.query(`insert into research.note (entity_id, kind, body, data) values ($1, 'triage', $2, $3)`,
-          [t.key, t.first ? `Before any outreach: ${t.first}` : `Triage: ${t.lane}`, JSON.stringify(t)]);
+        notes.push({ entity_id: t.key, kind: 'triage', body: t.first ? `Before any outreach: ${t.first}` : `Triage: ${t.lane}`, tags: [], data: t });
         counts.triaged++;
       }
 
-      const docs = new Set<string>();
+      // The old loop checked each fact against claims already written in this pass.
+      // Seed the same membership set from retained claims, and add each first occurrence
+      // before preparing its insert (including duplicates in another file for an alias).
+      const claimKey = (entity: string, field: string, value: string, source: string) => JSON.stringify([entity, field, value, source]);
+      const seenClaims = new Set((await tx.query<{ entity_id: string; field: string; value: string; source: string }>(
+        `select entity_id::text, field, value, source from research.claim where entity_id = any($1::uuid[]) and source like 'pub:%'`, [keys],
+      )).map(c => claimKey(c.entity_id, c.field, c.value, c.source)));
+      const docs = new Map<string, object>();
+      const claims: object[] = [];
+      const spvEvidence: object[] = [];
       for (const f of findings) {
         if (!known.has(f.key)) continue;
-        if (f.identity.match === 'ambiguous' || f.identity.match === 'not_found') {
-          counts.unresolved++;
-        }
+        if (f.identity.match === 'ambiguous' || f.identity.match === 'not_found') counts.unresolved++;
         const researched = f.researched.at.slice(0, 10);
         for (const fact of f.facts) {
           const id = docId(fact.source.url);
@@ -254,43 +266,47 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
           if (!docs.has(id)) {
             let host = fact.source.url;
             try { host = new URL(fact.source.url).hostname.replace(/^www\./, ''); } catch { /* keep the URL */ }
-            await tx.query(
-              `insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body)
-               values ($1,$2,$3,$4,$5,$6::research.doc_strength,$7,$8)
-               on conflict (doc_id) do update set title = excluded.title, as_of = excluded.as_of, strength = excluded.strength`,
-              [id, (fact.source.title || host).slice(0, 200), `public:${fact.source.kind}`, fact.source.url, asOf, STRENGTH[fact.source.kind],
-               `A public page (${host}), read by ${f.researched.by} on ${researched}. It supports what it says, and nothing it doesn't; nobody on the team has verified it.`,
-               fact.quote ?? ''],
-            );
-            docs.add(id);
+            docs.set(id, { doc_id: id, title: (fact.source.title || host).slice(0, 200), kind: `public:${fact.source.kind}`,
+              origin: fact.source.url, as_of: asOf, strength: STRENGTH[fact.source.kind],
+              supports: `A public page (${host}), read by ${f.researched.by} on ${researched}. It supports what it says, and nothing it doesn't; nobody on the team has verified it.`,
+              body: fact.quote ?? '' });
           }
-          // spv_deals may be written as a number (a count); every other value is text.
           const value = String(fact.value).trim().slice(0, 600);
-          const same = await tx.one<{ n: string }>(
-            `select count(*)::text as n from research.claim where entity_id = $1 and field = $2 and value = $3 and source = $4`,
-            [f.key, `${PUBLIC_PREFIX}${fact.field}`, value, id],
-          );
-          if (Number(same?.n ?? 0) > 0) continue; // verified and kept
-          const claim = await tx.one<{ id: string }>(
-            `insert into research.claim (entity_id, field, value, source, as_of, confidence)
-             values ($1,$2,$3,$4,$5,$6::research.confidence) returning claim_id::text id`,
-            [f.key, `${PUBLIC_PREFIX}${fact.field}`, value, id, asOf, fact.confidence],
-          );
+          const field = `${PUBLIC_PREFIX}${fact.field}`;
+          const key = claimKey(f.key, field, value, id);
+          if (seenClaims.has(key)) continue;
+          seenClaims.add(key);
+          const claimId = randomUUID();
+          claims.push({ claim_id: claimId, entity_id: f.key, field, value, source: id, as_of: asOf, confidence: fact.confidence });
           counts.claims++;
-          // SPV stance (Juan, 27 Sep 2026): the two SPV fields are research evidence, below a person's setting.
-          if (await recordResearchSpv(tx, claim!.id, f.key, fact, id, asOf)) counts.spvFacts = (counts.spvFacts ?? 0) + 1;
+          const evidence = researchSpvEvidence(fact);
+          if (evidence) {
+            spvEvidence.push({ entity_id: f.key, stance: evidence.stance, min_deals: evidence.minDeals, label: evidence.label,
+              quote: fact.quote?.trim() ? fact.quote.trim().slice(0, 400) : null, source: id, url: fact.source.url,
+              as_of: asOf, confidence: fact.confidence, claim_id: claimId });
+            counts.spvFacts = (counts.spvFacts ?? 0) + 1;
+          }
         }
         if (f.profile || f.identity) {
-          await tx.query(
-            `insert into research.note (entity_id, kind, body, tags, data) values ($1, 'public_profile', $2, $3, $4)`,
-            [f.key, f.profile?.summary ?? f.identity.basis, f.profile?.interests ?? [],
-             JSON.stringify({ identity: f.identity, profile: f.profile ?? null, researched: f.researched, coverage: f.coverage ?? null, connections: f.connections ?? [], connectionFeedback: f.connectionFeedback ?? [] })],
-          );
+          notes.push({ entity_id: f.key, kind: 'public_profile', body: f.profile?.summary ?? f.identity.basis,
+            tags: f.profile?.interests ?? [], data: { identity: f.identity, profile: f.profile ?? null, researched: f.researched,
+              coverage: f.coverage ?? null, connections: f.connections ?? [], connectionFeedback: f.connectionFeedback ?? [] } });
           counts.profiles++;
         }
         counts.mapped++;
       }
       counts.docs = docs.size;
+      await writeRows(tx, `insert into research.source_doc (doc_id,title,kind,origin,as_of,strength,supports,body)
+        select doc_id,title,kind,origin,as_of,strength::research.doc_strength,supports,body
+        from jsonb_to_recordset($1::jsonb) as r(doc_id text,title text,kind text,origin text,as_of date,strength text,supports text,body text)
+        on conflict (doc_id) do update set title=excluded.title,as_of=excluded.as_of,strength=excluded.strength`, [...docs.values()]);
+      await writeRows(tx, `insert into research.claim (claim_id,entity_id,field,value,source,as_of,confidence)
+        select claim_id,entity_id,field,value,source,as_of,confidence::research.confidence
+        from jsonb_to_recordset($1::jsonb) as r(claim_id uuid,entity_id uuid,field text,value text,source text,as_of date,confidence text)`, claims);
+      await writeRows(tx, `insert into strategy.spv_evidence (entity_id,kind,stance,min_deals,label,quote,source,url,as_of,confidence,claim_id)
+        select entity_id,'research',stance,min_deals,label,quote,source,url,as_of,confidence::research.confidence,claim_id
+        from jsonb_to_recordset($1::jsonb) as r(entity_id uuid,stance text,min_deals integer,label text,quote text,source text,url text,as_of date,confidence text,claim_id uuid)
+        on conflict (claim_id) where claim_id is not null do nothing`, spvEvidence);
 
       // Strategies become suggestions on the LP's open pursuit: the same file again changes
       // nothing; a new one withdraws the open proposal it replaces; decided ones stay as they are.
@@ -329,13 +345,15 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       const rank = { A: 0, B: 1, C: 2, D: 3 } as const;
       for (const [lp, ps] of byLp) {
         ps.sort((a, b) => rank[a.tier] - rank[b.tier]);
-        await tx.query(
-          `insert into research.note (entity_id, kind, body, data) values ($1, 'connection_candidates', $2, $3)`,
-          [lp, `${ps.length} ${ps.length === 1 ? 'path' : 'paths'} found; the best is tier ${ps[0]!.tier}`, JSON.stringify({ paths: ps })],
-        );
+        notes.push({ entity_id: lp, kind: 'connection_candidates',
+          body: `${ps.length} ${ps.length === 1 ? 'path' : 'paths'} found; the best is tier ${ps[0]!.tier}`,
+          tags: [], data: { paths: ps } });
         counts.withPaths++;
         counts.paths += ps.length;
       }
+      await writeRows(tx, `insert into research.note (entity_id,kind,body,tags,data)
+        select entity_id,kind,body,tags,data from jsonb_to_recordset($1::jsonb)
+        as r(entity_id uuid,kind text,body text,tags text[],data jsonb)`, notes);
     });
 
     counts.organizationLps = await addOrganizationLps(db, findings, runBy, await readWarehouseGraph(dir));

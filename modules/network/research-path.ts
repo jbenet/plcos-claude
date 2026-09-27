@@ -16,6 +16,24 @@ export function researchEndpoint(other: Path['other'], people: RoutePerson[]): s
   return matches.length === 1 ? matches[0]!.id : null;
 }
 
+/** Build once per import: preserve exact-ID precedence and ambiguous-name refusal. */
+export function researchEndpointResolver(people: RoutePerson[]): (other: Path['other']) => string | null {
+  const ids = new Set(people.map(p => p.id));
+  const handles = new Map<string, string>();
+  const names = new Map<string, string | null>();
+  for (const person of people) {
+    if (person.handle && !handles.has(person.handle)) handles.set(person.handle, person.id);
+    const key = nameKey(person.name);
+    names.set(key, names.has(key) ? null : person.id);
+  }
+  return other => {
+    if (other.key) return ids.has(other.key) ? other.key : null;
+    if (other.handle) return handles.get(other.handle) ?? null;
+    const key = nameKey(other.name);
+    return key.includes(' ') ? names.get(key) ?? null : null;
+  };
+}
+
 /** Retain the recorded tier; warmth metadata may describe an explicitly documented co-founding. */
 export function researchTie(p: Path) {
   return p.tie ?? ((p.tier === 'C' || p.tier === 'D' || p.kind === 'same_firm')

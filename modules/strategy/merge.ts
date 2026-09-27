@@ -20,6 +20,15 @@ const ident = (s: string) => {
 };
 const tableSql = (s: string) => s.split('.').map(ident).join('.');
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+/** Journal keys are catalog-discovered primary keys, including composite keys.
+ * Compare typed columns so their indexes apply; converting every row to JSON first
+ * made one pursuit update scan and serialize the complete table.
+ */
+const keyPredicate = (key: Row) => {
+  const keys=Object.keys(key);
+  if(!keys.length)throw new Error('Cannot locate a journalled row without its primary key');
+  return keys.map(k=>`t.${ident(k)}=k.${ident(k)}`).join(' and ');
+};
 
 /** Inventory from the catalog, so a new FK cannot silently retain a loser. Historical
  * origin_pursuit_id columns are provenance, deliberately not foreign keys to active state. */
@@ -42,8 +51,9 @@ export async function write(tx: Queryable, changes: Change[], table: string, bef
   const key = await keyFor(tx, table, before), name = tableSql(table);
   const after = (await tx.one<{ row: Row }>(`update ${name} t set
     ${Object.keys(patch).map(k => `${ident(k)}=v.${ident(k)}`).join(',')}
-    from jsonb_populate_record(null::${name},$1::jsonb) v
-    where to_jsonb(t) @> $2::jsonb returning to_jsonb(t) as row`, [JSON.stringify({ ...before, ...patch }), JSON.stringify(key)]))!.row;
+    from jsonb_populate_record(null::${name},$1::jsonb) v,
+      jsonb_populate_record(null::${name},$2::jsonb) k
+    where ${keyPredicate(key)} returning to_jsonb(t) as row`, [JSON.stringify({ ...before, ...patch }), JSON.stringify(key)]))!.row;
   changes.push({ table, key, before, after });
 }
 export async function inserted(tx: Queryable, changes: Change[], table: string, row: Row) {
@@ -119,9 +129,11 @@ export async function absorbPursuits(tx: Queryable, changes: Change[], refs: Ref
 export async function restoreChanges(tx: Queryable, changes: Change[], label: string): Promise<void> {
   for (const change of [...changes].reverse()) {
     const table = tableSql(change.table);
-    const current = await tx.one<{ row: Row }>(`select to_jsonb(t) row from ${table} t where to_jsonb(t) @> $1::jsonb`,[JSON.stringify(change.key)]);
+    const current = await tx.one<{ row: Row }>(`select to_jsonb(t) row from ${table} t,
+      jsonb_populate_record(null::${table},$1::jsonb) k where ${keyPredicate(change.key)}`,[JSON.stringify(change.key)]);
     if (!current || !same(current.row,change.after)) throw new Error(`Reversal conflicts with later edits in ${change.table}; ${label}`);
-    if (!change.before) await tx.query(`delete from ${table} t where to_jsonb(t) @> $1::jsonb`,[JSON.stringify(change.key)]);
+    if (!change.before) await tx.query(`delete from ${table} t using jsonb_populate_record(null::${table},$1::jsonb) k
+      where ${keyPredicate(change.key)}`,[JSON.stringify(change.key)]);
     else await write(tx,[],change.table,current.row,change.before);
   }
 }

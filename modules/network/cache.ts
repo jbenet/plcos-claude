@@ -162,13 +162,21 @@ export async function precomputeRoutes(at?: Date): Promise<PrecomputeCounts> {
   if (existing) return existing;
   const work = withDb(db, async () => {
     const start = performance.now(), version = await revisionFor(db);
-    const targets = await db.query<{ target_id: string; kind: string }>(`with targets as (
-      select identity.canonical_entity_id(p.entity_id) as entity_id, v.kind::text as kind, 0 as priority from strategy.active_pursuit p
+    const targets = await db.query<{ target_id: string; kind: string }>(`with roots as materialized (select * from identity.entity_resolution),
+    pursuits as materialized (
+      select r.canonical_id entity_id, p.vehicle_id, p.closed_at from strategy.active_pursuit p
+      left join roots r on r.entity_id = p.entity_id
+    ), affiliations as materialized (
+      select person.canonical_id person_entity, org.canonical_id org_entity from identity.affiliation a
+      left join roots person on person.entity_id = a.person_entity
+      left join roots org on org.entity_id = a.org_entity where a.ended_on is null
+    ), targets as (
+      select p.entity_id as entity_id, v.kind::text as kind, 0 as priority from pursuits p
         join platform.vehicle v on v.id = p.vehicle_id where p.closed_at is null and v.phase = 'active'
       union all
-      select identity.canonical_entity_id(a.org_entity), v.kind::text, 1 from strategy.active_pursuit p
+      select a.org_entity, v.kind::text, 1 from pursuits p
         join platform.vehicle v on v.id = p.vehicle_id
-        join identity.affiliation a on identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id(p.entity_id) and a.ended_on is null
+        join affiliations a on a.person_entity = p.entity_id
         where p.closed_at is null and v.phase = 'active')
       select entity_id::text as target_id, kind from targets group by entity_id, kind order by min(priority), entity_id, kind`);
     let searches = 0;
