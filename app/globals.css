@@ -2169,3 +2169,33 @@ table.list.dated .ddetail{color:var(--muted);font-size:11.5px;margin:1px 0 0 23p
   .viznetwork { min-width: 740px; }
 }
 .floorlist-wrap .scroller, .floorcard .scroller { max-height: 640px; overflow: auto; }
+
+/* Issues 0072, 0073, 0074 — calendar controls, fit readings and meeting preparation. */
+.dfilters select { max-width: 240px; }
+.table-scroll { overflow-x: auto; }
+.fit0073 td { vertical-align: top; }
+.fit0073 td:last-child { min-width: 260px; max-width: 450px; }
+.fit0073 td p { margin: 0 0 8px; }
+.fit0073 details { margin-top: 8px; }
+.meetings0074 { display: grid; grid-template-columns: minmax(240px, 310px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.meeting-list .dfilters { gap: 6px; padding: 12px; }
+.meeting-list .vizpager { flex-wrap: wrap; }
+.meeting-item { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-top: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+.meeting-item.selected { border-left: 3px solid var(--accent); background: var(--ground); }
+.meeting-item:hover { background: var(--ground); }
+.meeting-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.meeting-heading h2 { font-size: 27px; margin: 5px 0; }
+.meeting-heading p { margin: 0; }
+.meeting-facts { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; }
+.meeting-facts > div, .meeting-scores > div { display: flex; flex-direction: column; gap: 5px; }
+.meeting-highlights { margin: 12px 0; padding-left: 18px; }
+.meeting-highlights li { margin: 8px 0; }
+.meeting-highlights li > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.meeting-highlights small, .meeting-evidence small, .meeting-touch small { display: block; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.meeting-evidence, .meeting-touch { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.meeting-evidence p, .meeting-touch p { margin: 4px 0; }
+.meeting-scores { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; }
+.meeting-context details > summary { cursor: pointer; }
+.meeting-context .warn { margin-bottom: 14px; }
+@media (max-width: 1100px) { .meetings0074 { grid-template-columns: 1fr; } .meeting-list { max-height: 420px; overflow: auto; } }
+@media (max-width: 650px) { .meeting-facts, .meeting-scores { grid-template-columns: 1fr 1fr; } }

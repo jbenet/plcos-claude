@@ -4,7 +4,7 @@ import { Pager, usePage } from '@/components/floor/Paging';
 import Link from '@/components/ui/AppLink';
 import { useMemo, useState } from 'react';
 import { Glyph } from '@/components/ui/Glyph';
-import { LANE_LOOK, type DatedRow, type LaneLook } from '@/lib/lanes';
+import { LANE_LOOK, orderDatedRows, type DatedRow, type LaneLook } from '@/lib/lanes';
 
 /**
  * Every dated thing, filtered as you type (issue 0020, real): a search over what, who and vehicle,
@@ -27,15 +27,24 @@ export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: stri
   const [standing, setStanding] = useState<'all' | DatedRow['standing']>('all');
   const [vehicle, setVehicle] = useState('all');
 
+  const [team, setTeam] = useState('all');
+  const [lp, setLp] = useState('all');
+  const [sort, setSort] = useState('date');
+  const [ascending, setAscending] = useState(false);
+  const teams = [...new Set(rows.flatMap(r => r.team ?? []))].sort();
+  const lps = [...new Set(rows.flatMap(r => r.lp ? [r.lp] : []))].sort();
+
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = useMemo(() => rows.filter((r) => {
+  const shown = useMemo(() => orderDatedRows(rows.filter((r) => {
     if (lanes.size && !lanes.has(r.lane)) return false;
     if (standing !== 'all' && r.standing !== standing) return false;
     if (vehicle !== 'all' && r.vehicle !== vehicle) return false;
+    if (team !== 'all' && !(r.team ?? []).includes(team)) return false;
+    if (lp !== 'all' && r.lp !== lp) return false;
     if (!words.length) return true;
-    const hay = `${r.label} ${r.detail ?? ''} ${r.vehicle ?? ''} ${LANE_LOOK[r.lane].label}`.toLowerCase();
+    const hay = `${r.label} ${(r.team ?? []).join(' ')} ${r.lp ?? ''} ${r.detail ?? ''} ${r.vehicle ?? ''} ${LANE_LOOK[r.lane].label}`.toLowerCase();
     return words.every((w) => hay.includes(w));
-  }), [rows, lanes, standing, vehicle, words.join(' ')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), sort, ascending), [rows, lanes, standing, vehicle, team, lp, sort, ascending, words.join(' ')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const paging = usePage(shown);
   const counts = useMemo(() => {
@@ -73,6 +82,18 @@ export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: stri
             {vehicles.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         )}
+        <select aria-label="Our team" value={team} onChange={e => { setTeam(e.target.value); paging.setPage(0); }}>
+          <option value="all">All team members</option>{teams.map(t => <option key={t}>{t}</option>)}
+        </select>
+        <select aria-label="LP" value={lp} onChange={e => { setLp(e.target.value); paging.setPage(0); }}>
+          <option value="all">All LPs</option>{lps.map(t => <option key={t}>{t}</option>)}
+        </select>
+        <select aria-label="Sort calendar" value={sort} onChange={e => { setSort(e.target.value); setAscending(e.target.value !== 'date'); paging.setPage(0); }}>
+          <option value="date">Date</option><option value="team">Our team</option><option value="lp">LP</option>
+        </select>
+        <button className="btn" onClick={() => { setAscending(!ascending); paging.setPage(0); }} aria-label="Toggle sort direction">
+          {sort === 'date' ? ascending ? 'Oldest first ↑' : 'Newest first ↓' : ascending ? 'A–Z ↑' : 'Z–A ↓'}
+        </button>
         <span className="dcount">{shown.length === rows.length ? `${rows.length} rows` : `${shown.length} of ${rows.length}`}</span>
         <div className="dchips" role="group" aria-label="Lanes">
           {present.map(([lane, look]) => (
@@ -96,7 +117,7 @@ export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: stri
           <thead>
             <tr>
               <th style={{ width: 118 }}>When</th>
-              <th>What</th>
+              <th>What</th><th>LP</th><th>Our team / owner</th>
               {vehicles.length > 1 && <th style={{ width: 150 }}>Vehicle</th>}
               <th style={{ width: 92 }}>Standing</th>
             </tr>
@@ -117,6 +138,7 @@ export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: stri
                     </span>
                     {r.detail && <div className="ddetail">{r.detail}</div>}
                   </td>
+                  <td>{r.lp ?? 'Not recorded'}</td><td>{r.team?.join(', ') || 'Not recorded'}</td>
                   {vehicles.length > 1 && <td className="muted">{r.vehicle ?? '—'}</td>}
                   <td><span className={`flag ${STANDING[r.standing].flag}`}>{STANDING[r.standing].label}</span></td>
                 </tr>

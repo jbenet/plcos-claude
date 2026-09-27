@@ -4,6 +4,7 @@ import { listAsks } from '@/modules/coordination';
 import { listOpenTickets } from '@/modules/governance';
 import { listFunders } from '@/modules/grants';
 import { listMeetings, listQuestions, raiseWindows, touchpointsByPair } from '@/modules/meetings';
+import { listUsers } from '@/modules/platform';
 import { listPursuits } from '@/modules/strategy';
 import { listAccreditation } from '@/modules/compliance';
 
@@ -30,6 +31,8 @@ export interface Mark {
   lane: Lane;
   kind: MarkKind;
   label: string;
+  team?: string[];
+  lp?: string | null;
   detail: string;
   from: Date;
   /** Same as `from` for a point. */
@@ -51,15 +54,15 @@ const day = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 
  * the pipeline and every LP page use, so the calendar and the pages cannot disagree. A meeting on
  * a firm's record, shared by colleagues, is one meeting.
  */
-async function raiseMeetings(vehicleName: string): Promise<Array<{ id: string; who: string; kind: string | null; heldOn: Date | null; scheduledFor: Date | null }>> {
+async function raiseMeetings(vehicleName: string): Promise<Array<{ id: string; who: string; owner: string; source: string; attendees: string[]; entityId: string; kind: string | null; heldOn: Date | null; scheduledFor: Date | null }>> {
   const w = [...(await raiseWindows()).values()].find((x) => x.name === vehicleName);
   if (!w) return [];
   const pairs = (await listPursuits(w.vehicleId)).map((p) => ({ entityId: p.entityId, vehicleId: w.vehicleId }));
-  const seen = new Map<string, { id: string; who: string; kind: string | null; heldOn: Date | null; scheduledFor: Date | null }>();
+  const seen = new Map<string, { id: string; who: string; owner: string; source: string; attendees: string[]; entityId: string; kind: string | null; heldOn: Date | null; scheduledFor: Date | null }>();
   for (const touches of (await touchpointsByPair(pairs)).values()) {
     for (const t of touches) {
       if (t.channel !== 'meeting' && t.channel !== 'call') continue;
-      if (!seen.has(t.touchpointId)) seen.set(t.touchpointId, { id: t.touchpointId, who: t.entityName, kind: t.kind, heldOn: t.on, scheduledFor: t.scheduledFor });
+      if (!seen.has(t.touchpointId)) seen.set(t.touchpointId, { id: t.touchpointId, who: t.entityName, owner: t.ownerName, source: t.source, attendees: t.attendees, entityId: t.entityId, kind: t.kind, heldOn: t.on, scheduledFor: t.scheduledFor });
     }
   }
   return [...seen.values()];
@@ -72,6 +75,8 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
       listMeetings(), listQuestions(), listAccreditation(), listFunders(),
     ]);
 
+  const users = await listUsers();
+  const team = (owner: string, attendees: string[], source: string) => [...new Set([owner, ...attendees.filter(a => source === 'affinity' || users.some(u => u.name === a))])];
   const marks: Mark[] = [];
   const push = (m: Mark) => {
     if (vehicleName && m.vehicleName && m.vehicleName !== vehicleName) return;
@@ -102,7 +107,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
       if (!cond.dueOn) continue;
       push({
         id: `cond:${cond.conditionId}`, lane: 'close', kind: 'deadline',
-        label: cond.label,
+        label: cond.label, team: cond.ownerName ? [cond.ownerName] : [],
         detail: `${cond.status}${cond.ownerName ? ` · ${cond.ownerName}` : ''}${cond.compliance ? ' · compliance condition' : ''}`,
         from: day(cond.dueOn), to: day(cond.dueOn), vehicleName: c.vehicleName,
         alert: cond.overdue, past: cond.status === 'satisfied', href: '/close',
@@ -115,7 +120,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
       const end = seat.wiredAt ?? now;
       push({
         id: `seat:${seat.seatId}`, lane: 'spv', kind: 'span',
-        label: seat.entityName,
+        label: seat.entityName, lp: seat.entityName,
         detail: seat.wired
           ? `Invite to wire in ${seat.days} days.`
           : `${seat.stage.replace(/_/g, ' ')} · ${seat.days} days open, and still running.`,
@@ -130,6 +135,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
     const when = a.madeAt ?? a.scheduledFor!;
     push({
       id: `ask:${a.askId}`, lane: 'outreach', kind: 'point',
+      team: [a.ownerName], lp: a.entityName,
       label: `${a.entityName}${a.connectorName ? ` via ${a.connectorName}` : ''}`,
       detail: `${a.status}${a.outcome ? ` · ${a.outcome}` : ''} · ${a.ownerName}`,
       from: day(when), to: day(when), vehicleName: a.vehicleName,
@@ -142,10 +148,11 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
     if (!when) continue;
     push({
       id: `meet:${m.meetingId}`, lane: 'meetings', kind: 'point',
+      team: team(m.ownerName, m.attendees, m.source), lp: m.entityName,
       label: `${m.entityName} — ${(m.kind ?? 'meeting').replace(/_/g, ' ')}`,
       detail: m.heldOn ? (m.justification ?? 'Held.') : 'Scheduled. An intention, not a fact.',
       from: day(when), to: day(when), vehicleName: m.vehicleName,
-      alert: false, past: Boolean(m.heldOn), href: '/meetings',
+      alert: false, past: Boolean(m.heldOn), href: `/meetings?e=${m.entityId}&m=${m.meetingId}`,
     });
   }
   // One vehicle: the meetings its LPs' pages count for its raise, beside the ones tied to it above.
@@ -156,10 +163,11 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
       if (!when || tied.has(`meet:${m.id}`)) continue;
       push({
         id: `meet:${m.id}`, lane: 'meetings', kind: 'point',
+        team: team(m.owner, m.attendees, m.source), lp: m.who,
         label: `${m.who} — ${(m.kind ?? 'meeting').replace(/_/g, ' ')}`,
         detail: m.heldOn ? 'Held; counted for this raise by its window and what it is about (N59).' : 'Scheduled. An intention, not a fact.',
         from: day(when), to: day(when), vehicleName,
-        alert: false, past: Boolean(m.heldOn), href: '/meetings',
+        alert: false, past: Boolean(m.heldOn), href: `/meetings?e=${m.entityId}&m=${m.id}`,
       });
     }
   }
@@ -180,6 +188,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
     if (!q.dueOn || q.status === 'answered') continue;
     push({
       id: `dq:${q.questionId}`, lane: 'deadlines', kind: 'deadline',
+      team: q.ownerName ? [q.ownerName] : [], lp: q.entityName,
       label: `Diligence — ${q.question.slice(0, 54)}${q.question.length > 54 ? '…' : ''}`,
       detail: `${q.ownerName ?? 'unowned'} · ${q.entityName}`,
       from: day(q.dueOn), to: day(q.dueOn), vehicleName: q.vehicleName,
@@ -191,6 +200,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
     if (!a.expiresOn) continue;
     push({
       id: `acc:${a.recordId}`, lane: 'deadlines', kind: 'deadline',
+      lp: a.entityName,
       label: `Accreditation expires — ${a.entityName}`,
       detail: `${a.method.replace(/_/g, ' ')} · ${a.vehicleName}`,
       from: day(a.expiresOn), to: day(a.expiresOn), vehicleName: a.vehicleName,
@@ -203,6 +213,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
     if (!f.invitedOn) continue;
     push({
       id: `grant:${f.funderId}`, lane: 'grants', kind: 'point',
+      lp: f.entityName,
       label: `${f.entityName} — invitation on file`,
       detail: 'Outreach is unblocked from this date and not before it.',
       from: day(f.invitedOn), to: day(f.invitedOn), vehicleName: 'Grants rail',

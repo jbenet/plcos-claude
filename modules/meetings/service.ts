@@ -42,11 +42,11 @@ export async function prepBrief(entityId: string, vehicleId: string): Promise<Pr
       continue;
     }
     supported.push({
-      field: c.field, value: c.value, source: p.source, asOf: p.asOf, verifiedBy: p.lastVerifiedBy,
+      field: c.field, value: c.value, source: p.source, asOf: p.asOf, confidence: p.confidence, verifiedBy: p.lastVerifiedBy,
     });
   }
 
-  const meeting = upcoming.find((m) => m.entityId === entityId) ?? null;
+  const meeting = upcoming.find((m) => m.entityId === entityId && m.vehicleName === pursuit?.vehicleName) ?? null;
 
   return {
     entityId,
@@ -56,7 +56,7 @@ export async function prepBrief(entityId: string, vehicleId: string): Promise<Pr
     supported,
     refused,
     openObjections: objections.filter((o) => o.status === 'open' || o.status === 'fatal'),
-    openQuestions: questions.filter((q) => q.status === 'open' || q.status === 'blocked'),
+    openQuestions: questions.filter((q) => q.vehicleName === pursuit?.vehicleName && (q.status === 'open' || q.status === 'blocked')),
     currentRung: pursuit?.rung ?? null,
     restriction: restrictions[0]?.instruction ?? null,
   };

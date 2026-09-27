@@ -9,14 +9,14 @@ import { aboutThisRaise, isAutoReply, isEvent } from './types';
 type MeetingRow = {
   meeting_id: string; pursuit_id: string | null; entity_id: string; entity_name: string;
   vehicle_name: string | null; kind: MeetingKind | null; scheduled_for: Date | string | null;
-  held_on: Date | string | null; attendees: string[]; owner_name: string;
+  held_on: Date | string | null; attendees: string[]; owner_name: string; source: string;
   summary: string | null; justifies_rung: LadderRung | null; justification: string | null;
 };
 
 const MEETING_SELECT = `
   select m.meeting_id, m.pursuit_id, e.entity_id, e.display_name as entity_name,
          v.name as vehicle_name, m.kind, m.scheduled_for, m.held_on, m.attendees,
-         u.name as owner_name, m.summary, m.justifies_rung, m.justification
+         u.name as owner_name, m.source, m.summary, m.justifies_rung, m.justification
     from meetings.meeting m
     join identity.entity e on e.entity_id = identity.canonical_entity_id(m.entity_id)
     left join platform.vehicle v on v.id = m.vehicle_id
@@ -25,30 +25,38 @@ const MEETING_SELECT = `
 /**
  * The meeting pages read meetings and calls; an email is a touchpoint, not a meeting (N51). And
  * only those about a raise (N59): tied to a vehicle, logged here, or read as about a raise and
- * dated inside the window of a vehicle it names (or of any, if it names none). The same rule as
+ * dated inside the window of a vehicle it names (human tags override dates). The same rule as
  * aboutThisRaise in ./types; change both.
  */
 const MEETINGS_ONLY = `m.channel in ('meeting', 'call') and (m.vehicle_id is not null or m.source = 'us' or (m.about = 'raise'
   and exists (select 1 from platform.vehicle w
-               where (w.slug = any(m.about_vehicles)
-                      or (cardinality(m.about_vehicles) = 0 and (w.raise_opens_on is not null or w.raise_closes_on is not null)))
-                 and (w.raise_opens_on is null or coalesce(m.held_on, m.scheduled_for::date) >= w.raise_opens_on)
-                 and (w.raise_closes_on is null or coalesce(m.held_on, m.scheduled_for::date) <= w.raise_closes_on))))`;
+    where w.slug=any(m.about_vehicles) and (m.about_by='person' or (
+      (w.raise_opens_on is null or coalesce(m.held_on,m.scheduled_for::date)>=w.raise_opens_on)
+      and (w.raise_closes_on is null or coalesce(m.held_on,m.scheduled_for::date)<=w.raise_closes_on))))))`;
+
 
 const toMeeting = (r: MeetingRow): Meeting => ({
   meetingId: r.meeting_id, pursuitId: r.pursuit_id, entityId: r.entity_id,
   entityName: r.entity_name, vehicleName: r.vehicle_name, kind: r.kind,
   scheduledFor: r.scheduled_for ? new Date(r.scheduled_for) : null,
   heldOn: r.held_on ? new Date(r.held_on) : null,
-  attendees: r.attendees ?? [], ownerName: r.owner_name, summary: r.summary,
+  attendees: r.attendees ?? [], ownerName: r.owner_name, source: r.source, summary: r.summary,
   justifiesRung: r.justifies_rung, justification: r.justification,
 });
 
-export async function listMeetings(): Promise<Meeting[]> {
+export async function listMeetings(vehicleId: string | null = null): Promise<Meeting[]> {
   const db = await getDb();
   return (
     await db.query<MeetingRow>(
-      `${MEETING_SELECT} where ${MEETINGS_ONLY} order by coalesce(m.scheduled_for, m.held_on::timestamptz) desc nulls last`,
+      `${MEETING_SELECT} where ${MEETINGS_ONLY}
+        and ($1::uuid is null or m.vehicle_id=$1 or (m.vehicle_id is null and m.source='us' and exists (
+          select 1 from strategy.pursuit p where p.vehicle_id=$1 and identity.canonical_entity_id(p.entity_id)=e.entity_id))
+          or (m.vehicle_id is null and exists (
+          select 1 from platform.vehicle w where w.id=$1 and w.slug=any(m.about_vehicles)
+            and m.about='raise' and (m.about_by='person' or (
+              (w.raise_opens_on is null or coalesce(m.held_on,m.scheduled_for::date)>=w.raise_opens_on)
+              and (w.raise_closes_on is null or coalesce(m.held_on,m.scheduled_for::date)<=w.raise_closes_on))))))
+        order by coalesce(m.held_on::timestamptz,m.scheduled_for) desc nulls last,m.meeting_id`, [vehicleId],
     )
   ).map(toMeeting);
 }

@@ -29,13 +29,13 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
   const vehicle = slug === 'all' ? null : all.find((v) => v.slug === slug);
   if (slug !== 'all' && !vehicle) notFound();
 
-  const now = new Date('2026-09-20T00:00:00Z');
+  const now = new Date();
   const marks = await timeline(vehicle?.name ?? null, now);
   // The list and the numbers read the same rows (issue 0020). A detail that only repeats the
   // standing ("Held.", "Scheduled…") isn't printed: the standing column says it.
   const REPEATS_STANDING = /^(Held\.$|Held; counted for this raise|Scheduled\. An intention, not a fact\.$)/;
   const rows: DatedRow[] = marks.map((m) => ({
-    id: m.id, lane: m.lane, label: m.label,
+    id: m.id, lane: m.lane, label: m.label, team: m.team, lp: m.lp,
     detail: m.detail && !REPEATS_STANDING.test(m.detail) ? m.detail : null,
     from: m.from.toISOString(),
     to: m.kind === 'span' && m.to.getTime() !== m.from.getTime() ? m.to.toISOString() : null,

@@ -2,217 +2,81 @@ import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
-import { SECTION } from '@/lib/nav';
-import { Meter } from '@/components/fit/marks';
-import { EntityLink } from '@/components/entity/EntityLink';
-import { EntitySummary } from '@/components/entity/EntitySummary';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
-import { listAssessments, BLOCKER_LABEL, type Assessment, type Blocker } from '@/modules/fit';
+import { vehicleReadings } from '@/lib/vehicle-readings';
+import { listAssessments } from '@/modules/fit';
+import { STATUS_LABEL } from '@/modules/strategy';
 
 export const dynamic = 'force-dynamic';
-
-const BLOCKER_FLAG: Record<Blocker, string> = {
-  gated: 'f-block', conviction: 'f-ev', access: 'f-ev', evidence: 'f-ev',
-  fit: 'f-ev', timing: 'f-mute', awareness: 'f-mute', none: 'f-ok',
-};
-
-const BAND_FLAG: Record<Assessment['band'], string> = {
-  strong: 'f-ok', workable: 'f-ev', weak: 'f-mute', blocked: 'f-block',
-};
-
-/**
- * What each blocker means for the week, in the language of work rather than of state.
- * This is the part that turns a list into a plan: five awareness gaps and five conviction
- * gaps are the same pipeline shape and completely different jobs.
- */
-const WORK: Record<Blocker, string> = {
-  gated: 'Correct the record or drop them. No amount of relationship work moves a gate.',
-  conviction: 'Answer a specific objection with evidence. More reach makes this worse, not better.',
-  access: 'Find a connector with credibility on this topic. Nothing else can start.',
-  evidence: 'Go and get one fact. These are cheap and nobody has done them.',
-  fit: 'Stop. Time here is time not spent on a firm that could say yes.',
-  timing: 'Diarise a return. Keep it warm; do not spend an ask now.',
-  awareness: 'Prime before asking. Material through the connector ahead of the introduction.',
-  none: 'Ask. The constraint is calendar, not qualification.',
-};
-
-const ORDER: Blocker[] = ['none', 'awareness', 'conviction', 'evidence', 'access', 'timing', 'fit', 'gated'];
-
-async function FitRollup({
-  params, searchParams,
-}: {
+const SIZE = 25; // Presentation limit: every result remains reachable.
+async function FitRollup({ params, searchParams }: {
   params: Promise<{ vehicle: string }>;
-  searchParams: Promise<{ e?: string }>;
+  searchParams: Promise<{ q?: string; coverage?: string; sort?: string; page?: string }>;
 }) {
   const { vehicle: slug } = await params;
-  const { e } = await searchParams;
   const { all } = await vehicleSelection();
-  const vehicle = slug === 'all' ? null : all.find((v) => v.slug === slug);
+  const vehicle = all.find(v => v.slug === slug);
   if (slug !== 'all' && !vehicle) notFound();
-
-  const rows = await listAssessments(vehicle?.id ?? null);
-
-  const byBlocker = ORDER
-    .map((b) => ({ blocker: b, rows: rows.filter((r) => r.diagnosis.blocker === b) }))
-    .filter((g) => g.rows.length > 0);
-
-  /** Rank inside the pool, in the order listAssessments already put them in. */
-  const rankOf = new Map(rows.map((r, i) => [r.assessmentId, i + 1]));
-
-  const clear = rows.filter((r) => r.gateStatus === 'clear').length;
-  const cover = rows.length ? rows.reduce((s, r) => s + r.evidenceCover, 0) / rows.length : 0;
-  const reachable = rows.filter((r) => r.diagnosis.blocker !== 'gated' && r.diagnosis.blocker !== 'fit').length;
-  const scores = rows.map((r) => Math.round(r.weightedFit * 100)).sort((a, b) => a - b);
-  const median = scores.length === 0 ? 0
-    : scores.length % 2
-      ? scores[Math.floor(scores.length / 2)]!
-      : Math.round((scores[scores.length / 2 - 1]! + scores[scores.length / 2]!) / 2);
-
-  return (
-    <Page
-      crumbs={[
-        { label: vehicle ? vehicle.name : 'All vehicles', href: '/overview' },
-        { label: 'Funder–vehicle fit' },
-      ]}
-      inspector={
-        e ? <EntitySummary entityId={e} /> : (
-        <>
-          <div className="lbl">The shape of it</div>
-          <div className="ihead">
-            {rows.length} assessment{rows.length === 1 ? '' : 's'}
-          </div>
-          <div className="imeta">
-            {vehicle ? vehicle.name : 'every vehicle, listed separately'}
-          </div>
-          {byBlocker.map((g) => (
-            <div className="kv" key={g.blocker}>
-              <span>{BLOCKER_LABEL[g.blocker]}</span>
-              <span>{g.rows.length}</span>
-            </div>
-          ))}
-          <div className="scope">
-            <div className="lbl">Read this as a work queue</div>
-            <p>
-              The counts above are not a funnel. Each one is a different job: an awareness gap
-              needs reach, a conviction gap needs one objection answered, an unanswered gate needs
-              somebody to pick up the phone. Counting them together produces the number that makes
-              a fundraise feel busy and go nowhere.
-            </p>
-          </div>
-          <div className="note">
-            Assessments are per firm <i>and</i> per vehicle. The same firm appears more than once
-            with different readings, and nothing here is summed across vehicles.
-          </div>
-        </>
-        )
-      }
-    >
-      <div className="lbl">
-        Funder–vehicle fit · {vehicle ? vehicle.name : 'all vehicles'}
-      </div>
-      <h1>Where we stand with each funder</h1>
-      <p className="sublede">
-        One firm against one vehicle: the gates that decide whether they can participate at all,
-        the dimensions that decide whether they should want to, what they think of us, and who we
-        know in common. Every reading carries whether it is known, inferred or guessed — the
-        difference is the point, not a footnote.
-      </p>
-
-      <div className="kpis five">
-        <div className="kpi">
-          <div className="n">{rows.length}</div>
-          <div className="f">assessed, firm × vehicle</div>
-        </div>
-        <div className="kpi">
-          <div className={`n${clear === rows.length && rows.length > 0 ? ' g' : ''}`}>{clear}</div>
-          <div className="f">with every gate answered and passing</div>
-        </div>
-        <div className="kpi">
-          <div className="n">{reachable}</div>
-          <div className="f">where the work is ours to do</div>
-        </div>
-        <div className="kpi">
-          <div className="n">{median}</div>
-          <div className="f">
-            median fit score{scores.length > 1 ? `, range ${scores[0]}–${scores.at(-1)}` : ''}
-          </div>
-        </div>
-        <div className="kpi soft">
-          <div className="n q">{Math.round(cover * 100)}%</div>
-          <div className="f">of the weight rests on things we know</div>
-        </div>
-      </div>
-
-      {rows.length === 0 ? (
-        <div className="card">
-          <div className="cbody">
-            <div className="empty">
-              <span className="stat unavailable"><i />Nothing assessed</span>
-              <h3>No funder has been assessed against this vehicle.</h3>
-              <p>
-                An empty list here means nobody has done the work. It is not a finding about the
-                LP universe, and it should not be read as one.
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : (
-        byBlocker.map((g) => (
-          <div className="card" key={g.blocker}>
-            <div className="chead">
-              <h2>
-                <span className={`flag ${BLOCKER_FLAG[g.blocker]}`} style={{ marginRight: 8 }}>
-                  {g.rows.length}
-                </span>
-                {BLOCKER_LABEL[g.blocker]}
-              </h2>
-            </div>
-            <div className="worknote">{WORK[g.blocker]}</div>
-            {g.rows.map((r) => (
-              <div className={`row${e === r.entityId ? ' sel' : ''}`} key={r.assessmentId} style={{ alignItems: 'flex-start' }}>
-                <div className="scorecell">
-                  <div className="rk mono">#{rankOf.get(r.assessmentId)}</div>
-                  <div className={`sc mono b-${r.band}`}>{Math.round(r.weightedFit * 100)}</div>
-                  <span className={`flag ${BAND_FLAG[r.band]}`}>{r.band}</span>
-                </div>
-                <div className="t">
-                  <EntityLink id={r.entityId} name={r.entityName} />
-                  <Link className="xref" href={`/${slug}/fit/${r.entityId}`}>full assessment →</Link>
-                  <Link className="xref" href={`/${slug}/strategy/${r.entityId}`}>what to do →</Link>
-                  {!vehicle && (
-                    <span className="flag f-mute" style={{ marginLeft: 8 }}>{r.vehicleName}</span>
-                  )}
-                  <span style={{ display: 'block', marginTop: 2 }}>{r.diagnosis.statement}</span>
-                  <div className="rowmeta">
-                    <span className="mline">
-                      known <Meter value={r.evidenceCover} /> {Math.round(r.evidenceCover * 100)}%
-                    </span>
-                    <span>{r.strongCount}/{r.gradedCount} dimensions in our favour</span>
-                    <span>
-                      gates {r.gates.filter((x) => x.passed === true).length}/{r.gates.length}
-                      {r.unknownGates.length > 0 ? ` · ${r.unknownGates.length} open` : ''}
-                      {r.failedGates.length > 0 ? ` · ${r.failedGates.length} failing` : ''}
-                    </span>
-                    <span>{r.ownerName ?? 'unassigned'} · {shortDate(r.updatedAt)}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ))
-      )}
-
-      <p className="cover">
-        <b>What the rank is:</b> position in this pool of {rows.length}, ordered by fit score with
-        anything failing a hard gate placed last however well it scores. <b>What this covers:</b>{' '}
-        assessments recorded in this system
-        {vehicle ? ` against ${vehicle.name}` : ' across every vehicle'}. Firms nobody has assessed
-        do not appear — that is a gap in our work, not a judgement about them, and the two should
-        never be read as the same thing.
-      </p>
-    </Page>
-  );
+  const sp = await searchParams;
+  const [readings, assessments] = await Promise.all([vehicleReadings(vehicle?.id ?? null), listAssessments(vehicle?.id ?? null)]);
+  const formal = new Map(assessments.map(a => [`${a.entityId}:${a.vehicleId}`, a]));
+  const rows = readings.map(r => {
+    const a = formal.get(`${r.entity_id}:${r.vehicle_id}`);
+    return { ...r, assessment: a, score: a ? Math.round(a.weightedFit * 100) : r.score,
+      coverage: a ? 'assessed' : r.suggestion_id ? 'provisional' : 'missing' };
+  });
+  // Legacy formal assessments can precede a pursuit; keep them visible too.
+  for (const a of assessments) if (!rows.some(r => r.entity_id === a.entityId && r.vehicle_id === a.vehicleId)) rows.push({
+    pursuit_id: a.assessmentId, entity_id: a.entityId, entity_name: a.entityName, vehicle_id: a.vehicleId,
+    vehicle_name: a.vehicleName, vehicle_slug: a.vehicleSlug, status: 'new', owner_name: a.ownerName ?? 'Unassigned',
+    suggestion_id: null, made_at: null, made_by: null, data: null, fit: undefined,
+    score: Math.round(a.weightedFit * 100), assessment: a, coverage: 'assessed',
+  });
+  const words = (sp.q ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+  const filtered = rows.filter(r => (!sp.coverage || r.coverage === sp.coverage) && words.every(w =>
+    `${r.entity_name} ${r.vehicle_name} ${r.owner_name} ${r.fit?.why ?? ''} ${r.data?.angle ?? ''}`.toLowerCase().includes(w)));
+  filtered.sort((a,b) => sp.sort === 'name' ? a.entity_name.localeCompare(b.entity_name)
+    : sp.sort === 'recent' ? (b.made_at?.getTime() ?? b.assessment?.updatedAt.getTime() ?? 0) - (a.made_at?.getTime() ?? a.assessment?.updatedAt.getTime() ?? 0)
+    : Number(Boolean(a.assessment?.band === 'blocked' || a.fit?.gates?.some(g => g.answer === 'no'))) - Number(Boolean(b.assessment?.band === 'blocked' || b.fit?.gates?.some(g => g.answer === 'no')))
+      || (b.score ?? -1) - (a.score ?? -1) || a.entity_name.localeCompare(b.entity_name));
+  const page = Math.min(Math.max(0, Number.parseInt(sp.page ?? '0',10) || 0), Math.max(0,Math.ceil(filtered.length/SIZE)-1));
+  const pageHref = (n: number) => `/${slug}/fit?${new URLSearchParams({ q:sp.q ?? '',coverage:sp.coverage ?? '',sort:sp.sort ?? 'score',page:String(n) })}`;
+  const dates = rows.flatMap(r => r.made_at ? [r.made_at] : r.assessment ? [r.assessment.updatedAt] : []).sort((a,b) => a.getTime()-b.getTime());
+  return <Page crumbs={[{ label: vehicle?.name ?? 'All vehicles', href:'/overview' },{label:'Funder–vehicle fit'}]}>
+    <div className="lbl">Funder–vehicle fit · {vehicle?.name ?? 'all vehicles'}</div>
+    <h1>Where we stand with each funder</h1>
+    <p className="sublede">Compare fit, capacity and readiness for this raise. Strategy readings are provisional; formal assessments carry their own gates and evidence.</p>
+    <div className="kpis">
+      {[[rows.length,'LP × vehicle records'],[assessments.length,'formal assessments'],[rows.filter(r=>r.coverage==='provisional').length,'provisional strategies'],[rows.filter(r=>r.coverage==='missing').length,'awaiting a reading']].map(([n,label]) =>
+        <div className="kpi" key={label}><div className="n">{n}</div><div className="f">{label}</div></div>)}
+    </div>
+    <div className="card fit0073">
+      <form className="dfilters" action={`/${slug}/fit`}>
+        <input type="search" name="q" defaultValue={sp.q} placeholder="Search LP, owner or fit rationale" aria-label="Search fit" />
+        <select name="coverage" defaultValue={sp.coverage ?? ''} aria-label="Reading coverage"><option value="">Every reading</option><option value="assessed">Formal assessment</option><option value="provisional">Provisional strategy</option><option value="missing">Missing reading</option></select>
+        <select name="sort" defaultValue={sp.sort ?? 'score'} aria-label="Sort fit"><option value="score">Highest score</option><option value="name">LP name</option><option value="recent">Recently updated</option></select>
+        <button className="btn p">Apply</button>
+      </form>
+      <nav className="vizpager" aria-label="Fit result pages"><span>{filtered.length ? page*SIZE+1 : 0}–{Math.min((page+1)*SIZE,filtered.length)} of {filtered.length} records</span>{page>0 && <Link className="btn" href={pageHref(page-1)}>Previous</Link>}{(page+1)*SIZE<filtered.length && <Link className="btn" href={pageHref(page+1)}>Next</Link>}</nav>
+      {filtered.length === 0 ? <div className="cbody"><h2>No matching readings</h2><p>Coverage is limited to the recorded pursuits and assessments for this vehicle. Clear the filters or review the LP list for records awaiting research.</p><Link href={`/${slug}/fit`}>Clear filters</Link></div> :
+        <div className="table-scroll"><table className="list"><thead><tr><th>LP / status</th><th>Fit / score</th><th>Capacity</th><th>Affinity / propensity</th><th>Decision time</th><th>Basis and next step</th></tr></thead><tbody>
+          {filtered.slice(page*SIZE,(page+1)*SIZE).map(r => <tr key={`${r.entity_id}:${r.vehicle_id}`}>
+            <td><Link href={r.pursuit_id === r.assessment?.assessmentId ? `/orgs/${r.entity_id}` : `/${r.vehicle_slug}/pipeline/${r.pursuit_id}`}><b>{r.entity_name}</b></Link><div className="muted">{r.assessment && !readings.some(x=>x.pursuit_id===r.pursuit_id) ? 'No pursuit recorded' : STATUS_LABEL[r.status]}</div><div className="muted">{r.owner_name}{!vehicle ? ` · ${r.vehicle_name}` : ''}</div></td>
+            <td><b>{r.score ?? 'Unknown'}</b>{r.score !== null && ' / 100'}<div>{r.assessment?.band ?? r.fit?.verdict ?? 'Fit not recorded'}</div><span className="flag f-mute">{r.coverage === 'assessed' ? 'Assessed' : r.coverage === 'provisional' ? 'Provisional' : 'Missing reading'}</span>
+              <div className="muted">{r.assessment ? `Gates: ${r.assessment.gateStatus}` : r.fit?.gates?.length ? `${r.fit.gates.filter(g=>g.answer==='no').length} failing · ${r.fit.gates.filter(g=>g.answer==='unknown').length} unanswered gates` : 'Gates not assessed'}</div></td>
+            <td>{r.data?.scores?.capacity?.band ?? 'Unknown'}</td><td>{r.data?.scores?.affinity?.level ?? 'Unknown'} / {r.data?.scores?.propensity?.level ?? 'Unknown'}</td><td>{r.data?.scores?.timeToDecision?.band ?? 'Unknown'}</td>
+            <td><p>{r.assessment?.diagnosis.statement ?? r.fit?.why ?? r.data?.angle ?? 'No vehicle-specific reading on file. Review research before planning an ask.'}</p>
+              <details><summary>Evidence and next step</summary>
+                {Object.entries(r.data?.scores ?? {}).map(([key,value]) => <p key={key}><b>{key === 'timeToDecision' ? 'Decision time' : key}:</b> {value.basis}</p>)}
+                <p>{r.data?.next?.what ?? 'No proposed next step.'}</p>
+                {r.made_at && <p className="muted">Strategy by {r.made_by} · {shortDate(r.made_at)} · {r.data?.confidence ?? 'unknown'} confidence · proposal, not verified evidence</p>}
+                {r.assessment && <Link href={`/${r.vehicle_slug}/fit/${r.entity_id}`}>Full assessment →</Link>}{' '}<Link href={`/${r.vehicle_slug}/strategy/${r.entity_id}`}>Strategy and sources →</Link>
+              </details></td>
+          </tr>)}
+        </tbody></table></div>}
+      <p className="cover">Coverage: recorded pursuits, formal fit assessments and the latest applicable proposed or accepted strategy per LP and vehicle{dates.length ? `, dated ${shortDate(dates[0]!)}–${shortDate(dates.at(-1)!)}` : '; no dated readings'}. Provisional scores use the existing capacity, affinity, propensity and decision-time weights; fewer than two known readings means no score. A missing reading is a coverage gap. Neither a score nor a strategy clears participation gates or authorizes outreach.</p>
+    </div>
+  </Page>;
 }
-
-export default coalescePage('/[vehicle]/fit', FitRollup);
+export default coalescePage('/[vehicle]/fit',FitRollup);
