@@ -17,8 +17,16 @@ upload to Google Drive for PL if needed as a stopgap.)"
    `plcos-backup / passphrase`, and never printed or passed on a command line.
 4. **Write** `~/plcos-backups/plcos-real-<UTC stamp>.tar.gz.gpg` (mode 600, folder mode 700,
    outside every repository) with a `.sha256` beside it.
-5. **Rotate.** Keep the newest 24 backups, plus the first backup of each of the last 14 days. Both
-   numbers are guesses (`KEEP_HOURLY`, `KEEP_DAILY`).
+5. **Thin old backups** (`scripts/backup-prune.py`, Juan, 27 Sep): the older a backup is, the sparser the
+   ones kept.
+   - Event backups, taken around a very large update, are kept for 2 days.
+   - Dailies are all kept for 14 days, then one per week to 8 weeks, one per month to 12 months, then
+     one per year.
+   - The newest backup is always kept.
+   - A 300 GB ceiling (`MAX_GB`) removes the oldest first.
+
+   The day, week and month limits are guesses. Simulated over 400 days at 2 GB a backup, the policy
+   keeps 39 backups and 78 GB.
 
 `npm run backup:restore -- <file> <empty dir>` decrypts and unpacks. `npm run backup:key` says whether
 the passphrase is stored.
@@ -44,9 +52,9 @@ Mac's keychain.
 
 ## Schedule
 
-A backup every hour while the Mac is on, via a launchd agent (to add with Juan's OK, since it is a
-standing job on his machine). Until then Claude runs `npm run backup` before risky operations: bulk
-merges, migrations, and the Postgres switch.
+- **Daily:** `npm run backup` once a day. Juan, 27 Sep: "dont need to run every hour, maybe once every day, and after very large updates".
+- **Events:** `npm run backup -- event "<reason>"` before a very large update, such as bulk merges, migrations, big imports or the Postgres switch.
+- **Running it:** Claude runs both from its session for now. A launchd agent would keep the daily run going without a session, but it's a standing job on Juan's machine, so it's his call.
 
 ## After the move to Postgres (docs/21)
 

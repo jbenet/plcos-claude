@@ -2,7 +2,8 @@
 # Encrypted backups of the real data (Juan, 27 Sep 2026: "snapshot and targz and encrypt it,
 # store in another directory"). docs/22-backups.md has the plan and the restore steps.
 #
-#   npm run backup           snapshot, check the snapshot opens, tar+gzip, encrypt, rotate
+#   npm run backup                       the daily backup
+#   npm run backup -- event "<reason>"   before or after a very large update (kept 2 days)
 #   npm run backup:key       says whether the passphrase is stored (never prints it)
 #   npm run backup:restore -- <file.tar.gz.gpg> <empty dir>   decrypts and unpacks for a restore
 #
@@ -16,8 +17,8 @@ set -euo pipefail
 
 REAL="${PLCOS_REAL:-$HOME/git/plc-os/plcos-data/real}"
 OUT="${PLCOS_BACKUPS:-$HOME/plcos-backups}"
-KEEP_HOURLY="${KEEP_HOURLY:-24}"   # GUESS: a day of hourly snapshots
-KEEP_DAILY="${KEEP_DAILY:-14}"     # GUESS: two weeks of dailies (the first backup of each UTC day)
+MAX_GB="${MAX_GB:-300}"            # Juan, 27 Sep: a 300 GB ceiling for now
+KIND="daily"; REASON=""            # run [daily | event <reason>]
 SERVICE="plcos-backup"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -36,7 +37,8 @@ case "${1:-run}" in
     passphrase | gpg --batch --quiet --pinentry-mode loopback --passphrase-fd 0 --decrypt "$file" | tar -xz -C "$dest"
     echo "Unpacked into $dest. Check it (docs/22-backups.md) before pointing anything at it."
     exit 0 ;;
-  run) ;;
+  run)
+    case "${2:-daily}" in daily) ;; event) KIND="event"; REASON="${3:-}";; *) echo "run takes daily or event <reason>" >&2; exit 2;; esac ;;
   *) echo "usage: backup-real.sh [run|key|restore <file> <dir>]" >&2; exit 2 ;;
 esac
 
@@ -75,28 +77,14 @@ tables="$(cd "$HERE" && BACKUP_DB="$stage/real/database" npx tsx -e '
 ')" || { echo "Backup refused: the snapshot does not open. Nothing was written." >&2; exit 1; }
 
 # 3. Pack and encrypt in one stream; nothing unencrypted is written.
-file="$OUT/plcos-real-$stamp.tar.gz.gpg"
+file="$OUT/plcos-real-$stamp-$KIND.tar.gz.gpg"
 tar -C "$stage" -cz real | passphrase_in=1 gpg --batch --quiet --pinentry-mode loopback \
   --passphrase-fd 3 --symmetric --cipher-algo AES256 --compress-algo none -o "$file" 3< <(passphrase)
 chmod 600 "$file"
 shasum -a 256 "$file" | awk '{print $1}' > "$file.sha256"
 
-# 4. Rotate: keep the newest KEEP_HOURLY, plus the first backup of each of the last KEEP_DAILY days.
-cd "$OUT"
-all=($(ls -1 plcos-real-*.tar.gz.gpg 2>/dev/null | sort -r))
-keep=("${all[@]:0:$KEEP_HOURLY}")
-days=()
-for f in $(ls -1 plcos-real-*.tar.gz.gpg | sort); do
-  d="${f:11:8}"
-  [[ " ${days[*]:-} " == *" $d "* ]] && continue
-  days+=("$d"); keep+=("$f")
-done
-days_keep=(${days[@]+"${days[@]: -$KEEP_DAILY}"})
-for f in "${all[@]}"; do
-  d="${f:11:8}"
-  if [[ " ${keep[*]:-} " == *" $f "* ]] && { [[ " ${all[*]:0:$KEEP_HOURLY} " == *" $f "* ]] || [[ " ${days_keep[*]:-} " == *" $d "* ]]; }; then continue; fi
-  rm -f "$f" "$f.sha256"
-done
-
+# 4. Thin old backups (scripts/backup-prune.py): events kept 2 days; dailies thinned with age; 300 GB cap.
+python3 "$HERE/scripts/backup-prune.py" "$OUT" "$MAX_GB"
 size="$(du -h "$file" | awk '{print $1}')"
-echo "Backup $file ($size), snapshot opened: $tables. Kept $(ls -1 plcos-real-*.tar.gz.gpg | wc -l | tr -d ' ') backups in $OUT."
+[ -n "$REASON" ] && printf '%s\n' "$REASON" > "$file.reason"
+echo "Backup $file ($size, $KIND${REASON:+: $REASON}), snapshot opened: $tables. Kept $(ls -1 "$OUT"/plcos-real-*.tar.gz.gpg | wc -l | tr -d ' ') backups in $OUT."
