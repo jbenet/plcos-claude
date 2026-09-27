@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { Check } from './harness';
 import type { ActivityPoint } from '../../lib/activity/types';
-import { aggregate, host, segment, sources } from '../../lib/activity/model';
+import { aggregate, host, segment, shown, sources } from '../../lib/activity/model';
 import { demoActivity } from '../../lib/activity/demo';
 import { createActivityReader } from '../../lib/activity';
 import { recordActivity, runKey } from '../../lib/activity/log';
@@ -17,11 +17,11 @@ import type { Logged } from '../../lib/activity/backfill';
 /** All records below are invented. Never reads the deployed data root or database. */
 export async function activityDataProperties(check: Check) {
   const demo = demoActivity('2026-09-27T12:00:00.000Z');
-  check('0103 demo covers thirty UTC days for all eight sources',
-    sources.every(source => new Set(demo.points.filter(p => p.source === source).map(p => p.day)).size === 30),
+  check('0103 demo covers thirty UTC days for every shown source',
+    shown.every(source => new Set(demo.points.filter(p => p.source === source).map(p => p.day)).size === 30),
     'Every source has a daily series, including planned connector activity in this fictional fixture.');
   check('0103 each demo source distinguishes actuals and estimates',
-    sources.every(source => [true, false].every(estimated => demo.points.some(p => p.source === source && p.estimated === estimated)))
+    shown.every(source => [true, false].every(estimated => demo.points.some(p => p.source === source && p.estimated === estimated)))
       && demo.points.every(p => !p.estimated || Boolean(p.basis?.trim())),
     'Estimated points always explain their basis; known activity is separately represented.');
   check('0103 origins contain only normalized hosts',
@@ -92,17 +92,18 @@ export async function activityDataProperties(check: Check) {
       database: async () => { databaseReads++; return { points: [], origins: [] }; } });
     const actual = await reader();
     check('0103 recorded actuals round-trip with exact counts and host totals',
-      actual.points.filter(p => p.source === 'fetch').reduce((n, p) => n + (p.requests ?? 0), 0) === 7
-        && actual.points.filter(p => p.source === 'fetch').every(p => !p.estimated)
+      actual.points.filter(p => p.source === 'fetch' && p.segment !== 'edgar').reduce((n, p) => n + (p.requests ?? 0), 0) === 7
+        && actual.points.filter(p => p.source === 'fetch' && p.segment !== 'edgar').every(p => !p.estimated)
         && actual.origins.find(o => o.origin === 'example.org')?.requests === 7,
       'Repeated calls in one run count as seven requests, including an append after a torn tail, without leaking the supplied URL.');
     check('0103 duplicate event IDs and a torn tail preserve the next appended event',
-      actual.points.filter(p => p.source === 'fetch').reduce((n, p) => n + (p.records ?? 0), 0) === 4,
+      actual.points.filter(p => p.source === 'fetch' && p.segment !== 'edgar').reduce((n, p) => n + (p.records ?? 0), 0) === 4,
       'A copied log line is counted once; a truncated fragment is skipped and the next same-day append survives.');
-    check('0103 SEC hosts are counted once under the SEC source',
-      actual.points.filter(p => p.source === 'sec').reduce((n, p) => n + (p.requests ?? 0), 0) === 1
+    check('0106 SEC hosts are counted once, as page fetches under EDGAR, not as a source',
+      actual.points.filter(p => p.source === 'fetch' && p.segment === 'edgar').reduce((n, p) => n + (p.requests ?? 0), 0) === 1
+        && !actual.points.some(p => p.source === 'sec') && !actual.sources.some(s => s.id === 'sec')
         && actual.origins.find(o => o.origin === 'www.sec.gov')?.requests === 1,
-      'A fetch to a SEC subdomain moves into the SEC series without duplicating the fetch total.');
+      'A fetch to a SEC subdomain is one page fetch in the EDGAR segment, its host listed; no SEC source is returned.');
     check('0103 Dakota manifest and warehouse graph reconstruct history',
       actual.points.filter(p => p.source === 'dakota').reduce((n, p) => n + (p.records ?? 0), 0) === 2
         && actual.points.filter(p => p.source === 'warehouse').reduce((n, p) => n + (p.records ?? 0), 0) === 3

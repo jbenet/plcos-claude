@@ -1,6 +1,31 @@
 import type { ActivityData, ActivityPoint, ActivitySource, OriginCount } from './types';
+/** Every source a row may be recorded under. 'sec' stays recordable so old log lines still read. */
 export const sources: ActivitySource[] = ['affinity', 'warehouse', 'dakota', 'intake', 'search', 'fetch', 'sec', 'agents'];
-export const labels = ['Affinity', 'PL data warehouse', 'Dakota', 'Intake files', 'Internet search', 'Page fetches', 'SEC', 'Agents'];
+/** The sources shown (issue 0106): EDGAR is internet reading, not a database of its own, so its
+ *  rows fold into page fetches as the 'edgar' segment and sec.gov shows among the hosts. */
+export const shown: ActivitySource[] = ['affinity', 'warehouse', 'dakota', 'intake', 'search', 'fetch', 'agents'];
+export const labels = ['Affinity', 'PL data warehouse', 'Dakota', 'Intake files', 'Internet search', 'Page fetches', 'Agents'];
+/** One short phrase per source (issues 0107–0108); the page explains estimates once, not per row. */
+export const notes: Partial<Record<ActivitySource, string>> = {
+  affinity: 'Read-only API sync', warehouse: 'Read-only BigQuery queries', dakota: 'Read-only bulk pull',
+  intake: 'Files dropped for import', search: 'Web searches for research', fetch: 'Public pages read for research, EDGAR included',
+  agents: 'Workflow runs: model calls and items written',
+};
+/** SEC rows read as page fetches, segment 'edgar' (a segment of its own, so an unknown SEC figure
+ *  never nulls a known fetch figure on the same day). */
+export function foldSec(p: ActivityPoint): ActivityPoint {
+  return p.source === 'sec' ? { ...p, source: 'fetch', segment: 'edgar' } : p;
+}
+/** A basis made of '; '-separated clauses, each kept once, in first-seen order. Merging the same
+ *  basis twice leaves it unchanged, so repeated merges can no longer grow it (issue 0107). */
+export function tidyBasis(...bases: Array<string | undefined>): string | undefined {
+  const seen = new Set<string>();
+  for (const b of bases) for (const part of (b ?? '').split(/;\s+|\n+/)) {
+    const clause = part.trim().replace(/[;.]+$/, '').trim();
+    if (clause) seen.add(clause);
+  }
+  return seen.size ? `${[...seen].join('; ')}.` : undefined;
+}
 export const quantity = (v: unknown): number | null => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
 export function utcDay(v: unknown): string | null {
   if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}(T|$)/.test(v) || !Number.isFinite(Date.parse(v))) return null;
@@ -24,12 +49,13 @@ export function segment(source: ActivitySource, value: unknown): string | null {
 /** A point is a leaf, never an additional total. Null contaminates a sum: missing is not zero. */
 export function aggregate(points: ActivityPoint[], origins: OriginCount[], asOf: string): ActivityData {
   const groups = new Map<string, ActivityPoint>();
-  for (const p of points) {
+  for (const raw of points) {
+    const p = foldSec(raw);
     const key = JSON.stringify([p.day, p.source, p.segment, p.estimated]);
     const previous = groups.get(key);
-    if (!previous) { groups.set(key, { ...p }); continue; }
+    if (!previous) { groups.set(key, { ...p, ...(p.basis ? { basis: tidyBasis(p.basis) } : {}) }); continue; }
     for (const k of ['requests', 'bytesIn', 'bytesOut', 'records'] as const) previous[k] = previous[k] === null || p[k] === null ? null : previous[k]! + p[k]!;
-    if (p.basis && !previous.basis?.split('; ').includes(p.basis)) previous.basis = [previous.basis, p.basis].filter(Boolean).join('; ');
+    if (p.basis) previous.basis = tidyBasis(previous.basis, p.basis);
   }
   const os = new Map<string, OriginCount>();
   for (const o of origins) {
@@ -39,7 +65,7 @@ export function aggregate(points: ActivityPoint[], origins: OriginCount[], asOf:
   }
   const result = [...groups.values()].sort((a, b) => a.day.localeCompare(b.day) || a.source.localeCompare(b.source) || (a.segment ?? '').localeCompare(b.segment ?? ''));
   return { points: result, origins: [...os.values()].sort((a,b) => a.day.localeCompare(b.day) || a.origin.localeCompare(b.origin)), asOf,
-    sources: sources.map((id, i) => ({ id, label: labels[i], state: result.some(p => p.source === id) ? (id === 'intake' ? 'files' : ['affinity','warehouse','dakota','sec'].includes(id) ? 'read-only' : 'connected') : 'planned',
+    sources: shown.map((id, i) => ({ id, label: labels[i], state: result.some(p => p.source === id) ? (id === 'intake' ? 'files' : ['affinity','warehouse','dakota'].includes(id) ? 'read-only' : 'connected') : 'planned',
       lastAt: result.filter(p => p.source === id).at(-1)?.day ? `${result.filter(p => p.source === id).at(-1)!.day}T00:00:00.000Z` : null,
-      note: 'UTC daily activity. Null means unrecorded; estimates carry a basis. Last activity is day precision; history does not prove current connectivity.' })) };
+      note: notes[id] ?? '' })) };
 }

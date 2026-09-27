@@ -163,7 +163,7 @@ function Axis({ view }: { view: ActivityView }) {
     <div className={s.axis} aria-hidden>
       {view.buckets.map((b, i) => ((n - 1 - i) % every === 0 ? (
         <span key={b.start} style={{ left: `${((i + 0.5) / n) * 100}%` }}
-          className={(i + 0.5) / n < 0.07 ? s.first : (i + 0.5) / n > 0.93 ? s.last : undefined}>{dayLabel(b.start, false)}</span>
+          className={[(i + 0.5) / n < 0.07 ? s.first : (i + 0.5) / n > 0.93 ? s.last : '', ((n - 1 - i) / every) % 2 === 1 ? s.alt : ''].join(' ')}>{dayLabel(b.start, false)}</span>
       ) : null))}
     </div>
   );
@@ -185,10 +185,7 @@ export function ActivityCharts({ view }: { view: ActivityView }) {
         {view.series.map((ser) => (
           <span key={ser.key}><i style={{ background: ser.tone }} aria-hidden />{ser.label}</span>
         ))}
-        <span className={s.legEst}>
-          <i aria-hidden />
-          <span><b>Lighter, dashed: estimate.</b> Backfilled from logs and files for days before counting began — not a count taken at the time.</span>
-        </span>
+        {anyEstimate && <span className={s.legEst}><i aria-hidden />Estimate</span>}
       </div>
 
       <div className={s.split}>
@@ -197,6 +194,9 @@ export function ActivityCharts({ view }: { view: ActivityView }) {
           <Plot view={view} title="Data in and out" metrics={['bytesIn', 'bytesOut']} sel={sel} onPick={setSel} height={124} />
           <Plot view={view} title="Records pulled" metrics={['records']} sel={sel} onPick={setSel} height={104} />
           <Axis view={view} />
+          {anyEstimate && (
+            <p className={s.estline}>Lighter, dashed bars and figures marked ~ are estimates, backfilled where nothing was counted at the time.</p>
+          )}
         </div>
 
         <aside className={s.detail} aria-live="polite" aria-label="The chosen bar">
@@ -235,15 +235,14 @@ export function ActivityCharts({ view }: { view: ActivityView }) {
             )}
           </table>
           <p className={s.dnote}>
-            ~ includes an estimate.{unknownHere > 0 && <> {unknownHere} {unknownHere === 1 ? 'figure was' : 'figures were'} not counted (unknown, not zero).</>}
-            <span className={s.hint}> Tap a bar, or focus a chart and use the arrow keys.</span>
+            {unknownHere > 0 ? <>{unknownHere} {unknownHere === 1 ? 'figure' : 'figures'} not counted. </> : null}Tap a bar, or use the arrow keys.
           </p>
         </aside>
       </div>
 
       {anyEstimate && view.bases.length > 0 && (
         <details className={s.more}>
-          <summary>How the estimates were made · {view.bases.length}</summary>
+          <summary>How each source was estimated · {view.bases.length}</summary>
           <ul className={s.bases}>
             {view.bases.map((x) => <li key={`${x.label}${x.basis}`}><b>{x.label}</b> {x.basis}</li>)}
           </ul>

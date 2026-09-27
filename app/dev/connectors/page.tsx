@@ -12,7 +12,7 @@ import { allSignals } from '@/modules/signals';
 import { getActivity } from '@/lib/activity';
 import type { ActivityData, SourceSummary } from '@/lib/activity/types';
 import {
-  BURST_RATIO, GROUPS, GROUP_TONE, RANGES, buildView, dayLabel, fmtCount, groupOf, isBurst, parseView, sourceTotals,
+  BURST_RATIO, GROUPS, GROUP_TONE, RANGES, buildView, dayLabel, fmtCount, groupOf, isBurst, parseView, sourceNotes, sourceTotals,
   type ActivityView, type BucketSize, type Group, type Part, type RangeKey,
 } from '@/lib/activity/view';
 import { ActivityCharts } from './ActivityCharts';
@@ -90,9 +90,7 @@ function Origins({ view }: { view: ActivityView }) {
         <span className="lbl">{rows.length} hosts · {view.days} days</span>
       </div>
       <p className={s.olede}>
-        Searches and page fetches, by the host they went to, so one site hit too often stands out. <b>Peak</b> is its
-        busiest single day, marked when it is {BURST_RATIO}× or more its median day; the small bars are its{' '}
-        {view.size === 'week' ? 'weeks' : 'days'}, each on its own scale.
+        Requests per host, to spot a site hit too often. The peak is marked when it is {BURST_RATIO}× the host’s usual day.
       </p>
       {rows.length === 0 ? (
         <p className={s.olede}>No requests by host were recorded in these days.</p>
@@ -128,7 +126,9 @@ function Origins({ view }: { view: ActivityView }) {
       )}
       {rest.length > 0 && (
         <div className={s.orest}>
-          {rest.length} more {rest.length === 1 ? 'host' : 'hosts'}: {fmtCount(rest.reduce((n, r) => n + r.actual + r.estimated, 0))} requests together.
+          {rest.length <= 5
+            ? <>Also: {rest.map((r) => `${r.origin} ${r.estimated ? '~' : ''}${fmtCount(r.actual + r.estimated)}`).join(' · ')}</>
+            : <>{rest.length} more hosts: {fmtCount(rest.reduce((n, r) => n + r.actual + r.estimated, 0))} requests together.</>}
         </div>
       )}
     </section>
@@ -137,12 +137,15 @@ function Origins({ view }: { view: ActivityView }) {
 
 function Sources({ data, view, now }: { data: ActivityData; view: ActivityView; now: Date }) {
   const totals = sourceTotals(data, view.from, view.to);
-  const live = data.sources.filter((x) => x.state !== 'planned').length;
+  // EDGAR is part of internet search (issue 0106); its counts sit under page fetches.
+  const list = data.sources.filter((x) => x.id !== 'sec');
+  const notes = sourceNotes(list);
+  const live = list.filter((x) => x.state !== 'planned').length;
   return (
     <div className="card">
       <div className="chead">
         <h2>Sources</h2>
-        <span className="lbl">{live} of {data.sources.length} in use · {view.range === 'all' ? 'all days' : `last ${view.days} days`}</span>
+        <span className="lbl">{live} of {list.length} in use · {view.range === 'all' ? 'all days' : `last ${view.days} days`}</span>
       </div>
       <div className={s.sscroll}>
         <table className={`list ${s.stable}`}>
@@ -156,7 +159,7 @@ function Sources({ data, view, now }: { data: ActivityData; view: ActivityView; 
             </tr>
           </thead>
           <tbody>
-            {data.sources.map((src) => {
+            {list.map((src) => {
               const t = totals.get(src.id);
               const g = groupOf(src.id);
               const last = src.lastAt ? new Date(src.lastAt) : null;
@@ -166,7 +169,7 @@ function Sources({ data, view, now }: { data: ActivityData; view: ActivityView; 
                   <td>
                     <Link href={href(view, { group: g })} scroll={false} className={s.sname}>{src.label}</Link>
                     {src.id === 'affinity' && <Link href="/dev/affinity" className={s.slink}>connection</Link>}
-                    <span className={s.snote}>{src.note}</span>
+                    {notes.get(src.id) && <span className={s.snote}>{notes.get(src.id)}</span>}
                   </td>
                   <td><span className={`flag ${STATE[src.state].flag}`}>{STATE[src.state].word}</span></td>
                   <td className={`${s.num} ${s.hideS}`}>{t ? <Count p={t.requests} /> : '—'}</td>
@@ -242,18 +245,14 @@ async function Connectors({ searchParams }: { searchParams: Promise<SP> }) {
             ['Request', 'One call out: an API page, a query, a search, a fetched page, a model call.'],
             ['Data in · out', 'Bytes received from the source · bytes sent to it.'],
             ['Record', 'An entry pulled, or an item an agent wrote.'],
-            ['Estimate', 'Backfilled for days before counting began; drawn lighter and dashed, marked ~ in figures.'],
-            ['Unknown', 'Not counted. Never shown as zero.'],
+            ['Estimate', 'Backfilled where nothing was counted; lighter, dashed, marked ~.'],
+            ['Unknown', 'Not counted; never shown as zero.'],
           ].map(([k, v]) => (
             <div className="prov" key={k}>
               <div className="p1">{k}</div>
               <div className="p2" style={{ fontFamily: 'var(--sans)', fontSize: 11.5, lineHeight: 1.5 }}>{v}</div>
             </div>
           ))}
-          <div className="note">
-            Estimates cover days before a source was measured; each says how it was made, under the charts.
-            A file drop makes no requests, so intake shows data and records only.
-          </div>
 
           <div className="lbl" style={{ marginTop: 22 }}>Open questions</div>
           <div className="ihead">Still unanswered</div>
@@ -290,8 +289,7 @@ async function Connectors({ searchParams }: { searchParams: Promise<SP> }) {
       <div className="lbl">Developer</div>
       <h1>Connectors</h1>
       <p className="sublede">
-        Every source we read — Affinity, the PL data warehouse, Dakota, intake files, the web, SEC and our own
-        agents — what state each is in, and how much we ask of it: requests, data in and out, and records pulled, day by day.
+        Every source we read, its state, and how much we ask of it: requests, data in and out, and records, day by day.
       </p>
 
       {!activity.ok || !view ? (
@@ -343,8 +341,7 @@ async function Connectors({ searchParams }: { searchParams: Promise<SP> }) {
             </div>
             {view.firstDay && view.firstDay > view.from && (
               <p className="cover" style={{ borderTop: 0, borderBottom: '1px solid var(--hair)' }}>
-                Nothing was recorded {opts.group === 'all' ? '' : `for ${GROUPS.find((g) => g.id === opts.group)!.long} `}before{' '}
-                <b>{dayLabel(view.firstDay)}</b>; earlier bars are empty because there is no record, not because there was no work.
+                No record {opts.group === 'all' ? '' : `for ${GROUPS.find((g) => g.id === opts.group)!.long} `}before <b>{dayLabel(view.firstDay)}</b>.
               </p>
             )}
             <ActivityCharts key={`${opts.group}-${opts.range}-${opts.size}`} view={view} />
