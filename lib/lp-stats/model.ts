@@ -193,6 +193,24 @@ export function recencyOf(iso: string | null, now: Date): Recency {
   return days <= 30 ? 'd30' : days <= 90 ? 'd90' : days <= 182 ? 'd180' : days <= 365 ? 'd365' : 'older';
 }
 
+/**
+ * SPV stance (modules/strategy/spv-rules.ts): does SPVs, with the least number of SPV or
+ * co-investment deals we know of in bands; doesn't; or unknown, which reads as likely open (rule 7).
+ * A count is a lower bound, so "5–9 known" may be more.
+ */
+export const SPV_BANDS = ['d10', 'd5', 'd2', 'd1', 'd0', 'no', 'unknown'] as const;
+export type SpvBand = (typeof SPV_BANDS)[number];
+export const SPV_LABEL: Record<SpvBand, string> = {
+  d10: 'Does · ≥10 known deals', d5: 'Does · 5–9 known', d2: 'Does · 2–4 known', d1: 'Does · 1 known', d0: 'Does · count not known',
+  no: 'Doesn’t do SPVs', unknown: 'Unknown, likely open',
+};
+export function spvBandOf(stance: 'does' | 'does-not' | 'unknown', minDeals: number | null): SpvBand {
+  if (stance === 'does-not') return 'no';
+  if (stance !== 'does') return 'unknown';
+  const n = minDeals ?? 0;
+  return n >= 10 ? 'd10' : n >= 5 ? 'd5' : n >= 2 ? 'd2' : n >= 1 ? 'd1' : 'd0';
+}
+
 export const STATUS_ORDER: PursuitStatus[] = ['new', 'sourcing', 'selected', 'connecting', 'discussing', 'committed', 'passed'];
 export const STATUS_WORD: Record<PursuitStatus, string> = {
   new: 'New', sourcing: 'Sourcing', selected: 'Selected', connecting: 'Connecting', discussing: 'Discussing', committed: 'Committed', passed: 'Passed',
@@ -215,7 +233,9 @@ export interface LpFact {
   check: CheckBand; checkBasis: CheckBasis; checkText: string | null;
   score: number | null; scoreKind: string | null;
   fit: FitGroup;
-  country: string | null; countryBasis: 'dakota' | 'research' | null;
+  /** Where the country was read: the LP's own Dakota record or research, else its firm's (a person) or its people's (a firm). */
+  country: string | null; countryBasis: 'dakota' | 'research' | 'firm' | 'people' | null;
+  spv: SpvBand;
   status: PursuitStatus;
   tier: Tier;
   source: Source;
@@ -256,7 +276,7 @@ export function mergeUnit(parts: LpFact[]): LpFact {
 
 // ── Dimensions ──────────────────────────────────────────────────────────────────────────────────
 export type DimKey =
-  | 'type' | 'check' | 'region' | 'country' | 'score' | 'fit' | 'status' | 'tier' | 'source' | 'owner'
+  | 'type' | 'check' | 'region' | 'country' | 'score' | 'fit' | 'status' | 'tier' | 'spv' | 'source' | 'owner'
   | 'touch' | 'strategy' | 'research' | 'unit' | 'vehicle';
 
 export interface Dimension {
@@ -281,7 +301,7 @@ export const DIMENSIONS: Dimension[] = [
   { key: 'region', title: 'Region', order: REGIONS, label: (v) => REGION_LABEL[v as Region] ?? v, of: (f) => regionOf(f.country),
     note: 'From the country below.' },
   { key: 'country', title: 'Country', order: [], label: (v) => (v === 'unknown' ? 'Not known' : v), of: (f) => f.country ?? 'unknown',
-    note: 'Dakota’s billing or mailing country, else the location in the research profile. Affinity’s location is not imported.' },
+    note: 'Dakota’s billing or mailing country, else the research location; failing both, a person’s firm’s country or a firm’s people’s. Affinity’s location is not imported.' },
   { key: 'score', title: 'Selection score', order: SCORE_BANDS, label: (v) => SCORE_LABEL[v as ScoreBand] ?? v, of: (f) => scoreBandOf(f.score),
     note: 'The score Selection ranks by: a fit assessment where one exists, otherwise the strategy’s provisional score.' },
   { key: 'fit', title: 'Fit reading', order: FIT_GROUPS, label: (v) => FIT_LABEL[v as FitGroup] ?? v, of: (f) => f.fit,
@@ -290,6 +310,8 @@ export const DIMENSIONS: Dimension[] = [
     note: 'Our plan, set by a person or a rule; not evidence of the LP’s interest.' },
   { key: 'tier', title: 'Best path', order: TIERS, label: (v) => TIER_LABEL[v as Tier] ?? v, of: (f) => f.tier,
     note: 'The best evidence tier among the routes the last search recorded. “None found” means none in the material searched, not that none exists.' },
+  { key: 'spv', title: 'SPVs', order: SPV_BANDS, label: (v) => SPV_LABEL[v as SpvBand] ?? v, of: (f) => f.spv,
+    note: 'Whether they do SPVs: a person’s setting on the LP page, then research, then our own SPVs, Dakota’s co-investment flag and research text. Counts are lower bounds.' },
   { key: 'source', title: 'Source', order: SOURCES, label: (v) => SOURCE_LABEL[v as Source] ?? v, of: (f) => f.source,
     note: 'Where the pursuit came from. No record names an intake spreadsheet, so none is counted.' },
   { key: 'owner', title: 'Owner', order: [], label: (v) => v, of: (f) => f.owner, note: 'Who holds the pursuit.' },
@@ -309,7 +331,11 @@ export const DIMENSIONS: Dimension[] = [
 export const DIM = Object.fromEntries(DIMENSIONS.map((d) => [d.key, d])) as Record<DimKey, Dimension>;
 
 // ── Filters ─────────────────────────────────────────────────────────────────────────────────────
-export interface Filters { q: string; sel: Partial<Record<DimKey, string[]>>; sort: 'score' | 'name' | 'touch'; page: number }
+export interface Filters {
+  q: string; sel: Partial<Record<DimKey, string[]>>; sort: 'score' | 'name' | 'touch'; page: number;
+  /** The Coverage panel's chosen bases, by id (cr, ct in the address); unset is the file's default. */
+  cov?: { region?: string; type?: string };
+}
 
 /** Filters from the address: ?q=…&type=family_office,foundation&status=discussing (repeated keys read too). */
 export function parseFilters(sp: Record<string, string | string[] | undefined>): Filters {
@@ -322,7 +348,9 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
   const q = typeof sp.q === 'string' ? sp.q.trim().slice(0, 120) : '';
   const sort = sp.sort === 'name' || sp.sort === 'touch' ? sp.sort : 'score';
   const page = Math.max(1, Number.parseInt(typeof sp.page === 'string' ? sp.page : '1', 10) || 1);
-  return { q, sel, sort, page };
+  const id = (x: unknown) => (typeof x === 'string' && /^[\w-]{1,60}$/.test(x) ? x : undefined);
+  const cov = { region: id(sp.cr), type: id(sp.ct) };
+  return { q, sel, sort, page, ...(cov.region || cov.type ? { cov } : {}) };
 }
 
 /** The address for a set of filters; the order of keys is fixed so one view has one address. */
@@ -332,6 +360,8 @@ export function filterQuery(f: Filters): string {
   for (const d of DIMENSIONS) { const v = f.sel[d.key]; if (v?.length) p.set(d.key, v.join(',')); }
   if (f.sort !== 'score') p.set('sort', f.sort);
   if (f.page > 1) p.set('page', String(f.page));
+  if (f.cov?.region) p.set('cr', f.cov.region);
+  if (f.cov?.type) p.set('ct', f.cov.type);
   const s = p.toString();
   return s ? `?${s.replace(/%2C/g, ',')}` : '';
 }
@@ -452,31 +482,78 @@ function basisLine(labels: string[]): string | null {
 }
 
 // ── Coverage against a reference ────────────────────────────────────────────────────────────────
+/**
+ * One published figure to compare with (config/lp-market-reference.json). A basis with shares is a
+ * distribution over our keys (lib/lp-stats) or over groups of them (`groups`); one without shares is
+ * a figure that is not a distribution (a count in one country), shown for context and never compared.
+ */
+export interface Basis {
+  id: string;
+  dimension: 'region' | 'type';
+  label: string;
+  /** What it counts, in the source's terms: what is counted, where, weighted how. */
+  what: string;
+  source: string;
+  asOf: string;
+  confidence: string;
+  shares: Record<string, number> | null;
+  /** For a figure that is not a distribution: the figure in words, and which of our counts to show beside it. */
+  figure?: string;
+  compare?: Array<{ label: string; members: string[] }>;
+}
 export interface Reference {
   source: string; asOf: string; placeholder: boolean; note: string;
-  region: Partial<Record<Region, number>>;
-  type: Partial<Record<LpType, number>>;
+  /** The default bases' shares, kept for a simple reader; the bases are the full record. */
+  region: Record<string, number>;
+  type: Record<string, number>;
+  /** A key a basis uses that is several of ours: Asia-Pacific, or family offices of both kinds. */
+  groups: Record<string, { label: string; members: string[] }>;
+  bases: Basis[];
 }
-export interface CoverageRow { value: string; label: string; ours: number; reference: number; gap: number; count: number }
+export interface CoverageRow {
+  value: string; label: string; ours: number; reference: number | null; gap: number | null; count: number;
+}
+/** The values a basis can match for one LP: its region and its country (as `country:<name>`), or its type. */
+const coverageValues = (r: LpFact, dimension: Basis['dimension'], now: Date): string[] =>
+  dimension === 'region' ? [DIM.region.of(r, now), ...(r.country ? [`country:${r.country}`] : [])] : [r.type];
+
 /**
- * Our share of each segment beside the reference's, among the LPs whose segment is known (the
- * reference has no "unknown"). The gap is in percentage points: positive means over-represented.
+ * Our share of each of a basis's segments beside the basis's own, among the LPs whose segment is
+ * known (a basis has no "unknown"). LPs in none of its segments get a row of their own with no
+ * reference and no gap. The gap is in percentage points: positive means over-represented.
  */
-export function coverage(rows: LpFact[], key: 'region' | 'type', reference: Reference, now: Date): { rows: CoverageRow[]; known: number; unknown: number } {
-  const dim = DIM[key];
-  const ref = reference[key] as Record<string, number>;
-  const refTotal = Object.values(ref).reduce((n, x) => n + x, 0) || 1;
-  const unknownValue = key === 'region' ? 'unknown' : 'unknown';
-  const known = rows.filter((r) => dim.of(r, now) !== unknownValue);
+export function coverage(rows: LpFact[], basis: Basis, groups: Reference['groups'], now: Date): { rows: CoverageRow[]; known: number; unknown: number } {
+  const shares = basis.shares ?? {};
+  const keys = Object.keys(shares);
+  const total = keys.reduce((n, k) => n + shares[k]!, 0) || 1;
+  const members = new Map(keys.map((k) => [k, new Set(groups[k]?.members ?? [k])]));
+  const known = rows.filter((r) => coverageValues(r, basis.dimension, now)[0] !== 'unknown');
   const counts = new Map<string, number>();
-  for (const r of known) { const v = dim.of(r, now); counts.set(v, (counts.get(v) ?? 0) + 1); }
-  const values = [...dim.order].filter((v) => v !== unknownValue && (ref[v] !== undefined || counts.has(v)));
-  return {
-    known: known.length, unknown: rows.length - known.length,
-    rows: values.map((v) => {
-      const ours = known.length ? (counts.get(v) ?? 0) / known.length : 0;
-      const reference = (ref[v] ?? 0) / refTotal;
-      return { value: v, label: dim.label(v), ours, reference, gap: (ours - reference) * 100, count: counts.get(v) ?? 0 };
-    }),
-  };
+  for (const r of known) {
+    const values = coverageValues(r, basis.dimension, now);
+    const key = keys.find((k) => values.some((v) => members.get(k)!.has(v))) ?? '';
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const dim = DIM[basis.dimension];
+  const out: CoverageRow[] = keys.map((k) => {
+    const ours = known.length ? (counts.get(k) ?? 0) / known.length : 0;
+    const reference = shares[k]! / total;
+    return { value: k, label: groups[k]?.label ?? dim.label(k), ours, reference, gap: (ours - reference) * 100, count: counts.get(k) ?? 0 };
+  });
+  const outside = counts.get('') ?? 0;
+  if (outside) out.push({ value: '', label: 'Not in this basis’s segments', ours: outside / known.length, reference: null, gap: null, count: outside });
+  return { known: known.length, unknown: rows.length - known.length, rows: out };
+}
+
+/** The basis to show for a dimension: the one asked for, else the first distribution. */
+export function chosenBasis(ref: Reference, dimension: Basis['dimension'], id: string | undefined): Basis | null {
+  const all = ref.bases.filter((b) => b.dimension === dimension);
+  return all.find((b) => b.id === id) ?? all.find((b) => b.shares) ?? null;
+}
+
+/** How many of our known LPs fall in some segments (our keys, `country:` names or groups), for a figure's context. */
+export function ourCount(rows: LpFact[], members: string[], groups: Reference['groups'], dimension: Basis['dimension'], now: Date): { count: number; known: number } {
+  const want = new Set(members.flatMap((m) => groups[m]?.members ?? [m]));
+  const known = rows.filter((r) => coverageValues(r, dimension, now)[0] !== 'unknown');
+  return { count: known.filter((r) => coverageValues(r, dimension, now).some((v) => want.has(v))).length, known: known.length };
 }

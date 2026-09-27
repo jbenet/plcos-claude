@@ -2,11 +2,13 @@
 import { randomUUID } from 'node:crypto';
 import { withDb, type Db } from '../../lib/db';
 import {
-  CHECK_BANDS, DIMENSIONS, FIT_GROUPS, LP_TYPES, SOURCES, STATUS_ORDER, TIERS,
-  bandOfText, computeStats, filterQuery, lpTypeOf, parseFilters, toggle,
+  CHECK_BANDS, DIMENSIONS, FIT_GROUPS, LP_TYPES, SOURCES, SPV_BANDS, STATUS_ORDER, TIERS,
+  bandOfText, chosenBasis, computeStats, coverage, filterQuery, lpTypeOf, parseFilters, spvBandOf, toggle,
   type DimKey, type Filters, type LpFact, type Stats,
 } from '../../lib/lp-stats/model';
 import { countryOf, regionOf } from '../../lib/lp-stats/geo';
+import { readReference } from '../../lib/lp-stats/reference';
+import { readFileSync } from 'node:fs';
 import type { Check } from './harness';
 
 /** A small deterministic generator, so a failure repeats. */
@@ -34,7 +36,7 @@ export function inventedFacts(units: number, seed = 7): LpFact[] {
         type: unit === 'individual' ? 'individual' : pick(LP_TYPES.filter((t) => t !== 'individual')), typeBasis: 'record',
         check: pick(CHECK_BANDS), checkBasis: 'strategy', checkText: null,
         score, scoreKind: score === null ? null : 'Provisional', fit: pick(FIT_GROUPS),
-        country: pick(COUNTRIES), countryBasis: 'research', status: 'new', tier: pick(TIERS), source: pick(SOURCES),
+        country: pick(COUNTRIES), countryBasis: 'research', spv: pick(SPV_BANDS), status: 'new', tier: pick(TIERS), source: pick(SOURCES),
         owner: pick(['Invented Owner One', 'Invented Owner Two', 'Invented Owner Three']), strategy: r() < 0.5,
         research: pick(['profile', 'claims', 'none'] as const), lastTouch: r() < 0.4 ? null : new Date(Date.UTC(2026, 0, 1) + r() * 260 * 864e5).toISOString(),
         openedAt: new Date(Date.UTC(2026, 0, 1) + r() * 200 * 864e5).toISOString(),
@@ -143,6 +145,33 @@ export async function lpStatsProperties(check: Check, db: Db) {
       && countryOf('Zug') === 'Switzerland' && countryOf('Princeton, New Jersey') === 'United States' && countryOf('based in Latin America') === null
       && regionOf('Hong Kong') === 'asia_hk' && regionOf(null) === 'unknown' && regionOf(countryOf('Dubai, UAE')) === 'middle_east',
     'Cambridge MA and UK, Mumbai IN, Zug, Princeton NJ, Latin America (no country), Hong Kong, Dubai.');
+
+  check('LP stats (2): places in Asia and the Gulf, and a European city is not read as a US state from its code',
+    countryOf('Frankfurt, DE') === 'Germany' && countryOf('Jeddah') === 'Saudi Arabia' && countryOf('Riyadh, KSA') === 'Saudi Arabia'
+      && countryOf('東京都港区') === 'Japan' && countryOf('Seongnam, Gyeonggi') === 'South Korea' && countryOf('Kowloon') === 'Hong Kong'
+      && countryOf('Raffles Place') === 'Singapore' && countryOf('Sharjah, AE') === 'United Arab Emirates' && countryOf('Austin, TX') === 'United States'
+      && countryOf('Zurich, CH') === 'Switzerland',
+    'Frankfurt DE, Jeddah, Riyadh KSA, 東京都港区, Seongnam, Kowloon, Raffles Place, Sharjah AE, Austin TX, Zurich CH.');
+  check('LP stats (2): SPV stance in bands — the count is a lower bound; doesn’t and unknown stay apart',
+    spvBandOf('does', 12) === 'd10' && spvBandOf('does', 5) === 'd5' && spvBandOf('does', 3) === 'd2' && spvBandOf('does', 1) === 'd1'
+      && spvBandOf('does', null) === 'd0' && spvBandOf('does-not', 4) === 'no' && spvBandOf('unknown', null) === 'unknown'
+      && plain.panels.find((p) => p.dim.key === 'spv')!.segments.reduce((t2, x) => t2 + x.count, 0) === plain.total,
+    '12→≥10, 5→5–9, 3→2–4, 1→1, none→count not known, does-not→doesn’t, unknown; the panel adds up to N.');
+
+  // The reference file as written, and coverage over grouped segments.
+  const ref = readReference(JSON.parse(readFileSync('config/lp-market-reference.json', 'utf8')) as Record<string, unknown>)!;
+  const regionBasis = chosenBasis(ref, 'region', undefined)!, typeBasis = chosenBasis(ref, 'type', 'no-such-basis')!;
+  const regionCov = coverage(plain.rows, regionBasis, ref.groups, NOW);
+  const typeCov = coverage(plain.rows, typeBasis, ref.groups, NOW);
+  const refSum = (c: typeof regionCov) => c.rows.reduce((t2, r) => t2 + (r.reference ?? 0), 0);
+  const oursSum = (c: typeof regionCov) => c.rows.reduce((t2, r) => t2 + r.count, 0);
+  check('LP stats (2): the reference file reads, each comparable basis sums to 100%, every known LP lands in one row, figures are not compared',
+    ref.placeholder === false && ref.bases.every((b) => b.source && b.what && b.asOf)
+      && ref.bases.filter((b) => b.shares).every((b) => Object.keys(b.shares!).every((k) => ref.groups[k] || DIMENSIONS.find((d) => d.key === b.dimension)!.order.includes(k)))
+      && Math.abs(refSum(regionCov) - 1) < 1e-9 && Math.abs(refSum(typeCov) - 1) < 1e-9
+      && oursSum(regionCov) === regionCov.known && oursSum(typeCov) === typeCov.known
+      && ref.bases.some((b) => !b.shares) && chosenBasis(ref, 'type', 'no-such-basis') !== null,
+    `${ref.bases.length} bases (${ref.bases.filter((b) => b.shares).length} distributions); region basis ${regionBasis.id}, type basis ${typeBasis.id}; ${regionCov.known} and ${typeCov.known} invented LPs placed.`);
 
   // Speed: counting 2,000 LPs on warm facts.
   const t0 = performance.now();

@@ -168,3 +168,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [SPV stance — whether an LP does SPVs, and how many we know of](entries/spv-stance.md)
 - [LP stats — who the LPs are, counted, with every count a filter](entries/lp-stats.md)
 - [LP-unit research decisions — public evidence, reversible answers](entries/lp-unit-decisions.md)
+- [LP stats 2 — public reference figures, an SPV panel, and better places](entries/lp-stats-2.md)

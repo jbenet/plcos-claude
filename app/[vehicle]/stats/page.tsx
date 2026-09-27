@@ -131,7 +131,7 @@ async function LpStats({ params, searchParams }: {
             ))}
           </div>
 
-          <CoverageCard rows={stats.rows} reference={reference} now={now} filtered={active > 0} />
+          <CoverageCard rows={stats.rows} reference={reference} now={now} filters={filters} at={at} />
 
           <LpTable rows={stats.rows} filters={{ ...filters, page }} at={at} pages={pages} showVehicle={!vehicle} money={showMoney ? mv : null}
             vehicleName={vehicleName} now={now} />
