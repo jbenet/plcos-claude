@@ -38,7 +38,10 @@
     "backup:key": "bash scripts/backup-real.sh key",
     "backup:restore": "bash scripts/backup-real.sh restore",
     "serve:pg": "tsx scripts/serve-pg.ts",
-    "pg:copy": "tsx scripts/pg-copy.ts"
+    "pg:copy": "tsx scripts/pg-copy.ts",
+    "linear:store": "bash scripts/linear-key.sh store",
+    "linear:status": "bash scripts/linear-key.sh status",
+    "linear:forget": "bash scripts/linear-key.sh forget"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
