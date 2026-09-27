@@ -1,0 +1,126 @@
+/* Vehicle strategy tables: the LP table and the menu of moves (issues 0065, 0082).
+   Compact rows that open in place; the same density as the Pipeline table. */
+
+/* ---------- shared table look ---------- */
+.lp:global(.list), .moves:global(.list) { font-size: 12px; }
+.lp:global(.list) th, .moves:global(.list) th { padding: 8px 10px; white-space: nowrap; }
+.lp:global(.list) td, .moves:global(.list) td { padding: 6px 10px; vertical-align: middle; }
+.lp:global(.list) .r, .moves:global(.list) .r { text-align: right; }
+.lp:global(.list) .num, .moves:global(.list) .num { width: 34px; text-align: right; color: var(--muted); }
+.tog { width: 30px; padding-right: 0 !important; }
+.chev { all: unset; cursor: pointer; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 5px; color: var(--muted); }
+.chev i { display: block; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: translateX(-1px) rotate(-45deg); transition: transform .12s; }
+.chev[aria-expanded="true"] i { transform: translateY(-2px) rotate(45deg); color: var(--ink); }
+.chev:hover, .chev:focus-visible { background: var(--accent-soft); color: var(--ink); }
+.chev:focus-visible { outline: 2px solid var(--accent-line); }
+.lpRow { cursor: pointer; scroll-margin-top: 64px; }
+.lpRow:hover td { background: var(--accent-wash); }
+.lpRow.open td { background: var(--accent-wash); border-bottom-color: transparent; }
+.nowrap { white-space: nowrap; }
+.name { white-space: nowrap; font-weight: 500; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.name a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.owner { white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+/* The action takes whatever width is left and holds to one line. */
+.actionCol { width: 100%; max-width: 0; min-width: 200px; }
+.clip { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.risk { display: inline-block; font-family: var(--mono); font-size: 9px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--clay); border: 1px solid #E4D3C6; background: #FCF6F2; border-radius: 4px; padding: 0 5px; margin-right: 7px; vertical-align: 1px; }
+
+/* Score: a number with a small bar that shows its size against the largest on the list. */
+.scoreCell { white-space: nowrap; }
+.scoreCell b { font-family: var(--mono); font-weight: 500; }
+.bar { display: inline-block; width: 46px; height: 5px; border-radius: 3px; background: var(--hair); overflow: hidden; margin-right: 8px; vertical-align: 2px; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+
+.lpTable .narrowOnly, .moveWrap .narrowOnly { display: none; }
+
+/* ---------- LP table ---------- */
+/* The optional columns follow the card's width, not the window's: the inspector takes a third
+   of a laptop screen, and a phone has none of it. What they hold is also in the opened row. */
+.lpTable, .moveWrap { container-type: inline-size; }
+@container (max-width: 1060px) { .lpTable .wideOnly { display: none; } }
+@container (max-width: 900px) { .moveWrap .wideOnly { display: none; } }
+/* Narrower still, a row keeps what decides: the name, the action or decision, and the score. */
+@container (max-width: 640px) {
+  .lpTable .midOnly, .moveWrap .midOnly { display: none; }
+  .lpTable .narrowOnly, .moveWrap .narrowOnly { display: inline; }
+  .moveWrap small.narrowOnly { display: block; }
+  .actionCol, .what { min-width: 150px; }
+}
+.filters { padding: 0 15px; }
+.filters :global(.lp-filters) { margin: 12px 0 8px; }
+.bar2 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 0 15px 8px; font-size: 12px; color: var(--muted); }
+.bar2 b { color: var(--ink); font-weight: 500; }
+.bar2 :global(.btn) { padding: 3px 9px; font-size: 11.5px; }
+.legend { margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.pager { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 10px 15px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--hair); }
+
+/* ---------- opened row ---------- */
+.basisRow td { background: var(--accent-wash); padding: 4px 16px 16px 40px !important; border-bottom: 1px solid var(--line); }
+.basis { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.35fr) minmax(0, .8fr); gap: 24px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.basis > div { min-width: 0; }
+.basis p { margin: 6px 0 0; }
+.basis :global(.lbl) { margin-bottom: 6px; }
+.lead { font-size: 13px; color: var(--ink); margin-top: 0 !important; }
+.plan { margin: 8px 0 0; padding-left: 18px; }
+.plan li { margin-bottom: 4px; }
+.plan small, .evidence small { display: block; color: var(--muted); font-size: 11px; }
+.risks { margin: 8px 0 0; padding-left: 16px; color: var(--clay); }
+.open:is(a) { display: inline-block; margin-top: 10px; color: var(--accent); font-weight: 500; }
+.factors { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 5px 12px; margin: 0; }
+.factors dt { color: var(--muted); padding-top: 1px; }
+.factors dd { margin: 0; }
+.factors dd b { font-family: var(--mono); font-weight: 500; }
+.factors dd small { display: block; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.formula { margin-top: 10px !important; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+  font-family: var(--mono); font-size: 11px; line-height: 1.6; }
+.formula b { font-weight: 600; }
+.work { list-style: none; margin: 0; padding: 0; }
+.work li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid var(--hair); }
+.work b { font-family: var(--mono); font-weight: 500; }
+.evidence { list-style: none; margin: 0; padding: 0; }
+.evidence li { margin-bottom: 8px; }
+
+/* ---------- moves ---------- */
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 11px 15px; border-bottom: 1px solid var(--line); }
+.chips button { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  border-radius: 14px; padding: 4px 11px; cursor: pointer; min-height: 28px; }
+.chips button b { font-family: var(--mono); font-weight: 400; font-size: 11px; margin-left: 6px; color: var(--muted); }
+.chips button:hover { background: var(--accent-wash); }
+.chips button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.chips button[aria-pressed="true"] b { color: inherit; opacity: .75; }
+.chips button.none { border-style: dashed; color: var(--muted); }
+.check { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; font-size: 12px; color: var(--muted); }
+.what { width: 100%; max-width: 0; min-width: 220px; }
+.what b { font-weight: 500; }
+.cat { margin-left: 8px; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.manual { display: block; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.dim td { color: var(--muted); }
+.dim td b { font-weight: 400; }
+.import { display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--muted); }
+.decide { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.decide label { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+.decide input, .decide select { width: 100%; min-width: 0; height: 30px; font: inherit; font-size: 12px; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; background: var(--surface); }
+.decide .wide { grid-column: 1 / -1; }
+.decide div.wide { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ok { font-size: 11.5px; color: var(--green); }
+.err { font-size: 11.5px; color: var(--clay); }
+
+/* The opened row follows the card's width too. */
+@container (max-width: 900px) {
+  .basis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .basis > div:last-child { grid-column: 1 / -1; }
+}
+@container (max-width: 560px) {
+  .basis { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .basisRow td { padding: 4px 12px 14px !important; }
+  .factors { grid-template-columns: 96px minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .opt { display: none; }
+  .legend { display: none; }
+  .actionCol { min-width: 180px; }
+  .check { margin-left: 0; }
+}

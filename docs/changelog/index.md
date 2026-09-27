@@ -120,3 +120,4 @@ to the repository root to preserve existing anchors and rendered output.
 - [0075–0076 — Vehicle status and WIP navigation](entries/status-0075.md)
 - [0072–0075, redesigned — Meetings, calendar, fit and vehicle status on the earlier look](entries/redesign-0072-0075.md)
 - [0079 — The portfolio page, redesigned: company, founders looked up, investments with their multiple](entries/portfolio-design-0079.md)
+- [0065 / 0082 — The vehicle strategy page, redesigned](entries/strategy-0082-design.md)
