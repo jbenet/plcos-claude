@@ -76,10 +76,10 @@ export async function prospectsProperties(check: Check, db: Db) {
   const beforeNotes = JSON.stringify(await db.query('select * from research.note where entity_id = $1', [oldId]));
   const oldResult = await addProspects(db, actor, files(prospect(oldId, 'Invented Prospect Existing', { status: 'sourcing' })));
   check('PROSPECTS existing closed/passed pursuits and their notes remain byte-for-byte unchanged',
-    oldResult.existing === 1 && oldResult.added === 0
+    oldResult.kept === 1 && oldResult.added === 0
     && beforeRow === JSON.stringify(await db.query('select * from strategy.pursuit where pursuit_id = $1', [existing]))
     && beforeNotes === JSON.stringify(await db.query('select * from research.note where entity_id = $1', [oldId])),
-    `Existing skipped ${oldResult.existing}; whole pursuit row and all notes compared.`);
+    `Person-set kept ${oldResult.kept}; whole pursuit row and all notes compared.`);
 
   const conflictA = await makePerson('Invented Prospect Namesake');
   const conflictB = await makePerson('Invented Prospect Namesake');
@@ -123,7 +123,7 @@ export async function prospectsProperties(check: Check, db: Db) {
   const bornPursuitBefore = JSON.stringify(await db.query('select * from strategy.pursuit where entity_id = $1', [born?.id]));
   const bornNotesBefore = JSON.stringify(await db.query('select * from research.note where entity_id = $1', [born?.id]));
   const reordered = await addProspects(db, actor, [{ file: 'renamed-invented-file.jsonl', text: [noOrg,
-    { ...unseen, status: 'new', reason: 'Edited invented reason must not overwrite the existing pursuit.' }].map(r => JSON.stringify(r)).join('\n') }]);
+    { ...unseen, reason: 'Same status with edited evidence needs no disposition change.' }].map(r => JSON.stringify(r)).join('\n') }]);
   check('PROSPECTS2 row identity survives renamed files, row order and edited planning fields on rerun',
     reordered.added === 0 && reordered.existing === 2 && stableBefore === await snapshot()
     && bornPursuitBefore === JSON.stringify(await db.query('select * from strategy.pursuit where entity_id = $1', [born?.id]))
