@@ -12,7 +12,8 @@ export function neededRecord(module: Module, raw: unknown): RecordFields {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid Dakota record.');
   const r = raw as Record<string,unknown>, result: Record<string,string|null> = {};
   for (const key of needed(module)) {
-    const value = key === 'id' ? r[`${module}_id`] ?? r.id : r[key];
+    const alias = (FIELDS.responseNames[module] as Record<string, string>)[key];
+    const value = key === 'id' ? r[`${module}_id`] ?? r.id : r[key] ?? (alias ? r[alias] : undefined);
     if (value === undefined) continue; // Missing fields from partial pulls do not erase prior fields.
     if (value === null) result[key] = null;
     else if (['string','number','boolean'].includes(typeof value)) result[key] = String(value);

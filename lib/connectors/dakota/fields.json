@@ -291,5 +291,35 @@
    "marketplace_verified_contact__c",
    "lastmodifieddate"
   ]
+ },
+ "responseNames": {
+  "why": "Dakota returns some fields under a different name than the one requested (docs.dakota.com/fields, \"Field(Response)\"; confirmed on the 27 Sep replica). Payload name -> response name.",
+  "account": {
+   "id": "account_id",
+   "type": "account_type",
+   "aum__c": "dft_aum_c",
+   "crd__c": "crd_number_c",
+   "billingcity": "billing_address_city",
+   "billingstate": "billing_address_state",
+   "billingcountry": "billing_address_country",
+   "metro_area_name__c": "rt_metroareas_accounts_name",
+   "lastmodifieddate": "date_modified"
+  },
+  "contact": {
+   "id": "contact_id",
+   "accountid": "contact_account_id",
+   "account_name__c": "account_name",
+   "account_type__c": "account_type",
+   "firstname": "first_name",
+   "lastname": "last_name",
+   "contact_type__c": "contact_type_c",
+   "email": "email1",
+   "mailingcity": "primary_address_city",
+   "mailingstate": "primary_address_state",
+   "mailingcountry": "primary_address_country",
+   "asset_class_coverage__c": "coverage_area_c",
+   "metro_area_name__c": "rt_metroareas_contacts_name",
+   "lastmodifieddate": "date_modified"
+  }
  }
 }

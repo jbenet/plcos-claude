@@ -115,5 +115,9 @@ export async function importDakotaAction(): Promise<{ result?: import('@/lib/con
     if(result.replicas||result.sourced||result.claims) await appendAudit({actorId:user.id,action:'dakota.translated',subjectType:'enrich',detail:{...result}});
     revalidatePath('/dev/enrich');revalidatePath('/targets','layout');revalidatePath('/routes');revalidatePath('/vehicles','layout');
     return {result};
-  } catch {return {error:'Dakota import failed. No record details were exported. Check the complete replica manifests on the live server, then retry.'};}
+  } catch (e) {
+    // The replica reader's own messages are fixed strings with no record data in them; show those.
+    const why = e instanceof Error && /^(Invalid )?Dakota /.test(e.message) ? ` (${e.message})` : '';
+    return {error:`Dakota import failed${why}. No record details were exported. Check the complete replica manifests on the live server, then retry.`};
+  }
 }
