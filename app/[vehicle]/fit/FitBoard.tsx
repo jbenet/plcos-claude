@@ -66,10 +66,8 @@ export function FitBoard({ sections, showVehicle, showGroup }: { sections: FitSe
               <div className="worknote">{WORK[group]}</div>
             </>
           )}
-          {(lpGroups ?? rows.map(r => ({ id: r.key, org: null, people: [r] }))).map(lp => <Fragment key={lp.id}>
-            {lp.org && !lp.people[0]!.isOrg && <div className="chead"><h3>{lp.org}</h3><span className="lbl">{lp.people.length} people pursued, below</span></div>}
+          {(lpGroups ?? rows.map(r => ({ id: r.key, people: [r] }))).map(lp => <Fragment key={lp.id}>
             {lp.people.map((r) => {
-            const member = Boolean(lp.org) && !r.isOrg;
             const on = sel === r.key;
             const first = !sel && r.key === flat[0]?.key;
             return (
@@ -92,7 +90,9 @@ export function FitBoard({ sections, showVehicle, showGroup }: { sections: FitSe
                 </div>
                 <div className="t">
                   <div className={s.head}>
-                    <Link className={s.name} href={lpHref(r)}>{member && <span aria-hidden>↳ </span>}{r.name}</Link>
+                    <Link className={s.name} href={lpHref(r)}>{r.name}</Link>
+                    {/* The LP is the committing unit (docs/23): a person here is one in their own capacity. */}
+                    {!r.isOrg && <span className="flag f-mute" title="An individual LP: a person in their own capacity">individual{r.org ? ` · ${r.org}` : ''}</span>}
                     {showVehicle && <span className="flag f-mute">{r.vehicleName}</span>}
                     {(showGroup || r.group !== group) && <span className={`flag ${GROUP_FLAG[r.group]}`}>{GROUP_LABEL[r.group]}</span>}
                     <span className={s.actions}>

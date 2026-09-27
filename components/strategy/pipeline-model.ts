@@ -1,4 +1,4 @@
-import { groupLps } from '@/lib/lp-groups';
+import { lpSections, type LpSections } from '@/lib/lp-groups';
 
 /**
  * The rows both LP tables show — the pipeline (module 04) and selection (module 03) — and the
@@ -11,7 +11,15 @@ export interface PipelineRow {
   id: string;
   entityId: string;
   isOrg: boolean;
-  people: Array<{ id: string; name: string; role: string }>;
+  /** An organisation's people (docs/23): its contacts on this pursuit first, then everyone acting for it now.
+   * `individual` is their own LP row in this vehicle, when they also invest personally. */
+  people: Array<{ id: string; name: string; role: string; contact?: boolean; individual?: string | null }>;
+  /** A person's firms, as context: `lpRow` is the firm's own LP row in this vehicle, when it has one. */
+  firms: Array<{ id: string; name: string; role: string | null; lpRow: string | null }>;
+  /** 'organisation' for an organisation; 'personal' for a person with evidence of investing on their own account. */
+  lpCapacity: 'organisation' | 'personal' | null;
+  /** Why the re-point rule could not tell firm from personal. */
+  lpReview: string | null;
   capacitySort: number | null;
   vehicleId: string;
   vehicleSlug: string;
@@ -74,10 +82,11 @@ export const STATUS_ORDER: Status[] = ['new', 'sourcing', 'selected', 'connectin
 const READ_ORDER: Record<string, number> = { 'Very interested': 3, Interested: 2, 'Not very interested': 1 };
 const MONEY_ORDER: Record<string, number> = { Closed: 5, Hard: 4, Signed: 3, Soft: 2, Withdrawn: 0 };
 
-/** The name that leads an LP's row (issue 0013): the organisation's when it is the LP we're targeting. */
+/** The name that leads an LP's row: the LP unit's own (docs/23). */
 export const lead = (r: PipelineRow) => (r.orgFirst && r.org ? r.org : r.name);
-/** The other name, when there is one: the person under an organisation, or the organisation under a person. */
-export const second = (r: PipelineRow) => (r.org && r.org !== r.name ? (r.orgFirst ? r.name : r.org) : null);
+/** The context under an individual's name: their firms, the first two. An organisation's people are shown apart. */
+export const second = (r: PipelineRow) => (r.isOrg || !r.firms.length ? null
+  : r.firms.slice(0, 2).map((f) => f.name).join(' · ') + (r.firms.length > 2 ? ` +${r.firms.length - 2}` : ''));
 export const theirRead = (r: PipelineRow) => (r.readSuperseded ? null : r.read);
 
 export function compareRows(a: PipelineRow, b: PipelineRow, key: SortKey, dir: 1 | -1): number {
@@ -103,72 +112,17 @@ export function compareRows(a: PipelineRow, b: PipelineRow, key: SortKey, dir: 1
   return order * dir || lead(a).localeCompare(lead(b)) || a.id.localeCompare(b.id);
 }
 
-export interface Group { id: string; org: string | null; people: PipelineRow[] }
-
 /**
- * Identity, not a matching display name, determines an organisation group. Never merge vehicles.
- * A group sorts by its best member in the chosen order; every person keeps their own row.
+ * Both LP tables' grouping (issues 0111, 0112; docs/23): the LP is the committing unit, so every row
+ * is one LP unit. Organisations are listed once each, their people named inside the row; people
+ * investing in their own capacity are listed apart, as Individuals, each with their firms as
+ * context. Someone who does both appears in both places: named in the firm's row, and as an
+ * individual row of their own.
  */
-export function groupRows(rows: PipelineRow[], key: SortKey, dir: 1 | -1, universe: PipelineRow[] = rows): Group[] {
-  return groupLps(rows, r => r, (a, b) => compareRows(a, b, key, dir), universe);
+export function sectionRows(rows: PipelineRow[], key: SortKey, dir: 1 | -1): LpSections<PipelineRow> {
+  return lpSections(rows, r => r.isOrg, (a, b) => compareRows(a, b, key, dir));
 }
-
-/**
- * An organisation's own row, when several of its people are pursued and it has no pursuit of its
- * own (issue 0092): ranked like any LP, from its people. The score is its best person's, and says
- * so; routes and meetings add up; the last touch and their read are the latest and warmest; the
- * evidence is the furthest any of them has got, named. Nothing here is recorded anywhere: it is a
- * reading of the rows beneath it, and each person keeps their own status, evidence and actions.
- */
-export interface OrgSummary {
-  lead: PipelineRow;
-  org: string;
-  count: number;
-  score: number | null;
-  scoreFrom: string | null;
-  status: Status;
-  owners: string[];
-  capacity: string | null;
-  route: number | null;
-  meetings: number;
-  lastMeeting: string | null;
-  lastTouch: string | null;
-  read: string | null;
-  furthest: PipelineRow;
-  money: { state: string; amount: number; from: number } | null;
-  doNotContact: boolean;
-}
-const later = (a: string | null, b: string | null) => (!a ? b : !b ? a : a > b ? a : b);
-export function orgSummary(people: PipelineRow[]): OrgSummary {
-  const byScore = [...people].sort((a, b) => compareRows(a, b, 'score', -1));
-  const lead = byScore[0]!;
-  const withCap = people.filter((p) => p.capacitySort !== null).sort((a, b) => b.capacitySort! - a.capacitySort!);
-  const routes = people.filter((p) => p.route !== null);
-  const reads = people.map(theirRead).filter((x): x is string => Boolean(x)).sort((a, b) => (READ_ORDER[b] ?? 0) - (READ_ORDER[a] ?? 0));
-  const monies = people.flatMap((p) => (p.money ? [p.money] : []));
-  return {
-    lead,
-    org: lead.org ?? lead.name,
-    count: people.length,
-    score: lead.score,
-    scoreFrom: lead.score === null ? null : lead.name,
-    status: people.reduce((s, p) => (STATUS_ORDER.indexOf(p.status) > STATUS_ORDER.indexOf(s) && p.status !== 'passed' ? p.status : s), people[0]!.status),
-    owners: [...new Set(people.map((p) => p.owner))],
-    capacity: withCap[0]?.capacity ?? null,
-    route: routes.length ? routes.reduce((n, p) => n + p.route!, 0) : null,
-    meetings: people.reduce((n, p) => n + p.meetings, 0),
-    lastMeeting: people.reduce<string | null>((d, p) => later(d, p.lastMeeting), null),
-    lastTouch: people.reduce<string | null>((d, p) => later(d, p.lastTouch), null),
-    read: reads[0] ?? null,
-    furthest: people.reduce((f, p) => (p.rung > f.rung ? p : f), people[0]!),
-    // A group must never label mixed soft/hard amounts with its furthest close state.
-    // The children still show each amount; summarize only one consistent track and state.
-    money: monies.length && new Set(monies.map(m => `${m.state}:${m.hard}`)).size === 1
-      ? { state: monies.reduce((s, m) => ((MONEY_ORDER[m.state] ?? 0) > (MONEY_ORDER[s] ?? 0) ? m.state : s), monies[0]!.state), amount: monies.reduce((n, m) => n + m.amount, 0), from: monies.length }
-      : null,
-    doNotContact: people.some((p) => p.doNotContact),
-  };
-}
+export type { LpSections };
 
 // ── filters ─────────────────────────────────────────────────────────────────────────────────────
 export interface Filters {
@@ -212,7 +166,7 @@ const DAY = 86_400_000;
 const t = (iso: string | null) => (iso ? Date.parse(iso) : 0);
 /** Every word must appear somewhere in what the row says. */
 export function haystack(r: PipelineRow): string {
-  return `${r.name} ${r.org ?? ''} ${r.headline ?? ''} ${r.owner} ${r.vehicle} ${r.said ?? ''} ${r.next ?? ''} ${r.ended ?? ''} ${r.capacity ?? ''} ${r.people.map((p) => p.name).join(' ')}`.toLowerCase();
+  return `${r.name} ${r.org ?? ''} ${r.headline ?? ''} ${r.owner} ${r.vehicle} ${r.said ?? ''} ${r.next ?? ''} ${r.ended ?? ''} ${r.capacity ?? ''} ${r.people.map((p) => p.name).join(' ')} ${r.firms.map((f) => f.name).join(' ')}`.toLowerCase();
 }
 export function matches(r: PipelineRow, f: Filters, words: string[], now: number, hay?: string): boolean {
   if (words.length) {

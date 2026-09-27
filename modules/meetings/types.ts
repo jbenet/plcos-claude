@@ -125,6 +125,8 @@ export interface Touchpoint {
   sourceRef: string | null;
   /** Set when the touchpoint is with the LP's firm rather than with them: the firm's name. */
   viaOrganization: string | null;
+  /** A contact on the LP's pursuit it was with (docs/23): counted as the LP's own, and named. */
+  viaContact?: string | null;
   /**
    * What it is about (N59), decided when it was translated: 'raise', 'other', or null for one
    * logged here. With the vehicles it names, and the words the decision rests on.

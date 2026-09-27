@@ -1,39 +1,26 @@
-/** Read-only LP grouping. Identity and vehicle scope, never matching display names, join rows.
- * Children remain real pursuits/readings: a heading neither invents a pursuit nor transfers
- * a person's status, evidence or money to their organisation. */
-export interface LpGroupIdentity {
-  id: string; entityId: string; vehicleId: string;
-  isOrg: boolean; orgId: string | null; org: string | null; orgFirst?: boolean;
-}
-export interface LpGroup<T> { id: string; org: string | null; people: T[] }
+/**
+ * How every LP list groups its rows (issues 0111, 0112; docs/23-lp-units.md). The LP is the
+ * committing unit, and each row is one: an organisation, or a person in their own capacity. So
+ * nothing is nested: an organisation is listed once, with its people named inside its row, and
+ * individuals are listed apart, never under a pseudo-organisation such as "Personal". A person who
+ * invests both ways is named in their firm's row and has an individual row of their own.
+ *
+ * Read-only: sections neither invent a pursuit nor move a status, evidence or money.
+ */
+export interface LpSections<T> { organisations: T[]; individuals: T[] }
 
-export function groupLps<T>(rows: T[], identity: (row: T) => LpGroupIdentity,
-  compare: (a: T, b: T) => number, universe: T[] = rows): LpGroup<T>[] {
-  const orgs = new Set<string>();
-  const members = new Map<string, Set<string>>();
-  for (const row of universe) {
-    const r = identity(row), org = r.isOrg ? r.entityId : r.orgId;
-    if (!org) continue;
-    const key = `${r.vehicleId}:${org}`;
-    if (r.isOrg || r.orgFirst) orgs.add(key);
-    if (!r.isOrg) {
-      const ids = members.get(key) ?? new Set<string>();
-      ids.add(r.entityId); members.set(key, ids);
-      if (ids.size > 1) orgs.add(key);
-    }
-  }
-  const groups = new Map<string, LpGroup<T>>();
-  for (const row of rows) {
-    const r = identity(row), org = r.isOrg ? r.entityId : r.orgId;
-    const key = org && orgs.has(`${r.vehicleId}:${org}`) ? `${r.vehicleId}:${org}` : `row:${r.id}`;
-    const group = groups.get(key) ?? { id: key, org: org && orgs.has(key) ? r.org : null, people: [] };
-    group.people.push(row); groups.set(key, group);
-  }
-  const best = (g: LpGroup<T>) => g.people.reduce((a, b) => compare(a, b) <= 0 ? a : b);
-  return [...groups.values()].sort((a, b) => compare(best(a), best(b)) || a.id.localeCompare(b.id)).map(g => {
-    g.people.sort(compare);
-    const own = g.people.findIndex(r => identity(r).isOrg);
-    if (own > 0) g.people.unshift(...g.people.splice(own, 1));
-    return g;
-  });
+export function lpSections<T>(rows: T[], isOrg: (row: T) => boolean, compare: (a: T, b: T) => number): LpSections<T> {
+  const organisations: T[] = [], individuals: T[] = [];
+  for (const row of rows) (isOrg(row) ? organisations : individuals).push(row);
+  return { organisations: organisations.sort(compare), individuals: individuals.sort(compare) };
+}
+
+/** A list's row as a one-unit group, for lists that page by group (the fit list). */
+export interface LpGroup<T> { id: string; section: 'organisation' | 'individual'; people: T[] }
+export function unitGroups<T>(rows: T[], id: (row: T) => string, isOrg: (row: T) => boolean, compare: (a: T, b: T) => number): LpGroup<T>[] {
+  const { organisations, individuals } = lpSections(rows, isOrg, compare);
+  return [
+    ...organisations.map(r => ({ id: id(r), section: 'organisation' as const, people: [r] })),
+    ...individuals.map(r => ({ id: id(r), section: 'individual' as const, people: [r] })),
+  ];
 }

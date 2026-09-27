@@ -13,6 +13,7 @@ type PursuitRow = {
   status_set_at: Date | string | null; status_set_by_name: string | null; implied: string[] | null;
   next_step: string | null; next_step_on: Date | string | null; source: string;
   source_as_of: Date | string | null; stage_said: string | null; owner_said: string | null; vehicle_phase: string;
+  lp_capacity: 'organisation' | 'personal' | null; lp_review: string | null;
 };
 
 type EventRow = {
@@ -27,7 +28,7 @@ const PURSUIT_SELECT = `
          p.opened_at, p.closed_at, p.status::text as status, p.status_reason, p.passed_by, p.status_source,
          p.status_said::text as status_said,
          p.status_set_at, su.name as status_set_by_name, p.implied, p.next_step, p.next_step_on,
-         p.source, p.source_as_of, p.stage_said, p.owner_said, v.phase as vehicle_phase
+         p.source, p.source_as_of, p.stage_said, p.owner_said, v.phase as vehicle_phase, p.lp_capacity, p.lp_review
     from strategy.active_pursuit p
     join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
     join platform.vehicle v on v.id = p.vehicle_id
@@ -58,6 +59,7 @@ function assemble(row: PursuitRow, events: LadderEvent[]): Pursuit {
     nextStepOn: row.next_step_on ? new Date(row.next_step_on) : null, source: row.source,
     sourceAsOf: row.source_as_of ? new Date(row.source_as_of) : null, stageSaid: row.stage_said,
     ownerSaid: row.owner_said, historical: row.vehicle_phase === 'historical',
+    lpCapacity: row.lp_capacity ?? null, lpReview: row.lp_review ?? null,
   };
 }
 

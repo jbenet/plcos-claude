@@ -1,19 +1,26 @@
 'use client';
 
-import { Fragment, memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BulkLpActions } from './BulkLpActions';
-import { EMPTY, groupRows, lead, orgSummary, second, type OrgSummary, type PipelineRow, type SortKey, type Status } from './pipeline-model';
-import { cx, Flags, fmtShort, FilterLine, Icon, InPane, Ladder, n, ScoreMark, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
+import { EMPTY, sectionRows, lead, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { CapacityTag, LpWho, units } from './LpWho';
+import { MoveButton, UndoToast, useMove } from './MoveToSelected';
+import { cx, Flags, fmtShort, FilterLine, Icon, InPane, Ladder, n, ScoreMark, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
+import u from './lp-units.module.css';
 
 export type { PipelineRow, Status } from './pipeline-model';
 
 /**
  * The pipeline, as one interactive table (N54; issues 0067 and 0083). The look is the one before
  * 27 Sep — status cards, one filter line, a quiet table — with the asks on top: a score, sorting
- * by any column (score first), All after Passed, an organisation leading its people, and actions
- * on the LPs ticked. Every pursuit in scope arrives once; search, filters and order run here.
+ * by any column (score first), All after Passed, and actions on the LPs ticked. Every pursuit in
+ * scope arrives once; search, filters and order run here.
+ *
+ * The same LP units and keyboard as Selection (issue 0111; docs/23): organisations, each once with
+ * its people named in the row, then individuals; ↑↓ or j/k move, x ticks, Enter opens, s moves a
+ * New or Sourcing LP to Selected and u undoes it.
  */
 
 const PAGE = 100;
@@ -32,22 +39,76 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
   const router = useRouter();
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'pipeline', initialStatus });
   const { enabled, setEnabled, counts, active, shown, sort, sortBy, picked, pick, pickedRows, now } = view;
-  const [limit, setLimit] = useState(PAGE);
+  const [limits, setLimits] = useState({ org: PAGE, ind: PAGE });
   const shownIds = useMemo(() => new Set(shown.map((r) => r.id)), [shown]);
-  useEffect(() => setLimit(PAGE), [enabled, view.f, sort]);
+  useEffect(() => setLimits({ org: PAGE, ind: PAGE }), [enabled, view.f, sort]);
 
   const all = enabled.length === statuses.length;
   const one = enabled.length === 1 ? statuses.find((x) => x.id === enabled[0]) ?? null : null;
   const vehicles = useMemo(() => new Set(rows.map((r) => r.vehicle)).size, [rows]);
   const byVehicle = showVehicle && vehicles > 1;
-  const groups = useMemo(() => groupRows(shown, sort.key, sort.dir, rows), [shown, sort, rows]);
-  const visible = groups.slice(0, limit);
-  const visibleIds = visible.flatMap((g) => g.people.map((r) => r.id));
+  const sections = useMemo(() => sectionRows(shown, sort.key, sort.dir), [shown, sort]);
+  const ranked = useMemo(() => [...sections.organisations, ...sections.individuals], [sections]);
+  const orgsShown = sections.organisations.slice(0, limits.org), indsShown = sections.individuals.slice(0, limits.ind);
+  const visibleIds = [...orgsShown, ...indsShown].map((r) => r.id);
   const allTicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
   const open = (r: PipelineRow, e?: { metaKey?: boolean; ctrlKey?: boolean }) => {
     const href = lpHref(r);
     if (e?.metaKey || e?.ctrlKey) window.open(href, '_blank'); else router.push(href);
   };
+
+  // The keyboard (issue 0111), as on Selection: a focus that moves through both sections.
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const focus = focusId ? ranked.find((r) => r.id === focusId) ?? null : null;
+  const reveal = (r: PipelineRow) => {
+    const list = r.isOrg ? sections.organisations : sections.individuals, key = r.isOrg ? 'org' : 'ind';
+    const i = list.indexOf(r);
+    if (i >= limits[key]) setLimits((x) => ({ ...x, [key]: Math.ceil((i + 1) / PAGE) * PAGE }));
+    setFocusId(r.id);
+    requestAnimationFrame(() => document.querySelector(`[data-lp="${r.id}"]`)?.scrollIntoView({ block: 'nearest' }));
+  };
+  const jump = (id: string) => { const r = ranked.find((x) => x.id === id); if (r) reveal(r); };
+  // Move to Selected applies to New and Sourcing: the ticked ones, else the one in focus.
+  const mv = useMove('pipeline');
+  const movable = (r: PipelineRow) => r.status === 'new' || r.status === 'sourcing';
+  const moveNow = async () => {
+    const targets = (pickedRows.length ? pickedRows : focus ? [focus] : []).filter(movable);
+    if (!targets.length) return;
+    const i = focus ? ranked.indexOf(focus) : -1, going = new Set(targets.map((r) => r.id));
+    const next = pickedRows.length ? null : ranked.slice(i + 1).find((r) => !going.has(r.id)) ?? null;
+    const done = await mv.move(targets);
+    if (!done) return;
+    if (pickedRows.length) view.clearPicked(); else if (next && one) reveal(next);
+  };
+  const keys = useRef({ ranked, focus, picked, moveNow, reveal, undo: mv.undo });
+  keys.current = { ranked, focus, picked, moveNow, reveal, undo: mv.undo };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target instanceof HTMLElement ? e.target : null;
+      if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && !(el as HTMLInputElement).type?.match(/checkbox/) || el.closest('dialog, [role="dialog"]'))) return;
+      const { ranked, focus, picked, moveNow, reveal, undo } = keys.current;
+      if (e.key === 'u' && !e.shiftKey) { e.preventDefault(); void undo(); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'j' || e.key === 'k') {
+        const i = focus ? ranked.indexOf(focus) : -1;
+        const down = e.key === 'ArrowDown' || e.key === 'j';
+        const next = ranked[focus ? Math.max(0, Math.min(ranked.length - 1, i + (down ? 1 : -1))) : 0];
+        if (!next) return;
+        e.preventDefault();
+        reveal(next);
+        return;
+      }
+      if (!focus) return;
+      if (e.key === 'x') { e.preventDefault(); pick([focus.id], !picked.has(focus.id)); }
+      else if (e.key === 's' && !e.shiftKey) { e.preventDefault(); void moveNow(); }
+      else if (e.key === 'Enter' && (!el || el === document.body || el.closest('[data-lp]')) && !el?.closest('a,button,input')) { e.preventDefault(); open(focus); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // pick and open are stable in effect; the rest is read through the ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const span = 2 + (all ? 1 : 0) + (byVehicle ? 1 : 0) + 9;
   const statusLabel = (id: Status) => statuses.find((x) => x.id === id)?.label ?? id;
 
   const Th = ({ k, className, children }: { k: SortKey; className: string; children: string }) => {
@@ -88,7 +149,9 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
       {pickedRows.length > 0 && (
         <InPane slot="lp-pane-actions">
           <BulkLpActions key={pickedRows.length ? 'on' : 'off'} rows={pickedRows} statuses={statuses}
-            initialStatus={nextStatus(one?.id)} onClear={view.clearPicked} hidden={pickedRows.filter((r) => !shownIds.has(r.id)).length} />
+            initialStatus={nextStatus(one?.id)} onClear={view.clearPicked} hidden={pickedRows.filter((r) => !shownIds.has(r.id)).length}
+            onStatusSaved={mv.remember}
+            primary={pickedRows.some(movable) ? <MoveButton state={mv} rows={pickedRows.filter(movable)} ticked onMove={() => void moveNow()} /> : undefined} />
         </InPane>
       )}
 
@@ -97,9 +160,10 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
           <h2>{all ? 'All statuses' : one?.label ?? 'Pipeline'}</h2>
           <div className={s.headMeta}>
             {n(shown.length)}{active ? ` of ${n(all ? rows.length : counts.all.get(one?.id as Status) ?? 0)}` : ''} LPs
-            {groups.length !== shown.length && ` in ${n(groups.length)} rows`}
+            {` · ${units(sections.organisations.length, sections.individuals.length)}`}
             {one && <span> · {one.means}</span>}
           </div>
+          <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>s</kbd> to Selected · <kbd>↵</kbd> open</div>
           <div className={s.headTools}>
             {picked.size > 0 && <span className={s.small} style={{ margin: 0 }}>{n(picked.size)} selected</span>}
             <button type="button" className={s.linkBtn} disabled={!shown.length}
@@ -109,7 +173,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
           </div>
         </div>
 
-        {groups.length === 0 ? (
+        {shown.length === 0 ? (
           <div className={s.emptyWrap}>
             <div className="empty">
               <span className="stat unavailable"><i />Nobody here</span>
@@ -138,41 +202,28 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
                   <Th k="ladder" className={s.cEv}>Evidence</Th>
                 </tr>
               </thead>
-              <tbody>
-                {visible.map((g) => {
-                  const cols = { all, byVehicle, rungNames, now, onPick: pick, onOpen: open };
-                  if (g.people.length === 1 && (!g.org || g.people[0]!.isOrg)) {
-                    const r = g.people[0]!;
-                    return <Row key={g.id} r={r} picked={picked.has(r.id)} statusLabel={statusLabel(r.status)} {...cols} />;
-                  }
-                  // An organisation with several people pursued leads as a row of its own (issue
-                  // 0092): its own pursuit when it has one, otherwise a reading of its people's.
-                  const own = g.people[0]!.isOrg ? g.people[0]! : null;
-                  const members = own ? g.people.slice(1) : g.people;
-                  const ids = g.people.map((r) => r.id);
-                  const sum = own ? null : orgSummary(members);
-                  return (
-                    <Fragment key={g.id}>
-                      {own
-                        ? <Row r={own} picked={picked.has(own.id)} statusLabel={statusLabel(own.status)} people={members.length} listed={members.map((m) => m.entityId).join(',')} {...cols} />
-                        : <OrgRow sum={sum!} picked={ids.every((id) => picked.has(id))} statusLabel={statusLabel(sum!.status)} ids={ids} {...cols} />}
-                      {members.map((r, i) => (
-                        <MemberRow key={r.id} r={r} last={i === members.length - 1} picked={picked.has(r.id)} statusLabel={statusLabel(r.status)} {...cols} />
-                      ))}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
+              {([['org', 'Organisations', orgsShown, sections.organisations,
+                'Funds, family offices, foundations, companies and vehicles that commit as one. Their people are named in the row.'],
+                ['ind', 'Individuals', indsShown, sections.individuals,
+                'People who invest in their own capacity. Their firms are context; a firm with its own row here is marked.']] as const).map(([key, title, list, whole, note]) => (
+                <tbody key={key} aria-label={title}>
+                  <tr className={u.sectionRow}><td colSpan={span}><div className={u.sectionHead}>
+                    <span className={u.sectionName}>{title}</span><span className={u.sectionCount}>{n(whole.length)}</span><span className={u.sectionNote}>{note}</span>
+                  </div></td></tr>
+                  {whole.length === 0 && <tr className={u.sectionEmpty}><td colSpan={span}>{key === 'org' ? 'No organisation' : 'No individual'} {one ? `at ${one.label}` : 'here'}{active ? ' matches the search and filters' : ''}.</td></tr>}
+                  {list.map((r) => <Row key={r.id} r={r} picked={picked.has(r.id)} focused={r.id === focus?.id} statusLabel={statusLabel(r.status)}
+                    all={all} byVehicle={byVehicle} rungNames={rungNames} now={now} onPick={pick} onOpen={open} onFocus={setFocusId} onJump={jump} />)}
+                  {whole.length > list.length && <tr className={u.moreRow}><td colSpan={span}>
+                    <button type="button" className="btn" onClick={() => setLimits((x) => ({ ...x, [key]: x[key] + PAGE }))}>Show {n(Math.min(PAGE, whole.length - list.length))} more {key === 'org' ? 'organisations' : 'individuals'}</button>
+                    {n(list.length)} of {n(whole.length)} shown. Search and filters cover all of them.
+                  </td></tr>}
+                </tbody>
+              ))}
             </table>
           </div>
         )}
-        {groups.length > limit && (
-          <div className={s.more}>
-            <button type="button" className="btn" onClick={() => setLimit((x) => x + PAGE)}>Show {n(Math.min(PAGE, groups.length - limit))} more</button>
-            <span>{n(limit)} of {n(groups.length)} shown. Search and filters cover all of them.</span>
-          </div>
-        )}
       </div>
+      <UndoToast state={mv} onUndo={() => void mv.undo()} />
     </section>
   );
 }
@@ -190,6 +241,8 @@ interface Cols {
   all: boolean; byVehicle: boolean; rungNames: string[]; now: number;
   onPick: (ids: string[], on: boolean) => void;
   onOpen: (r: PipelineRow, e?: { metaKey?: boolean; ctrlKey?: boolean }) => void;
+  onFocus: (id: string) => void;
+  onJump: (id: string) => void;
 }
 /** A row opens its LP; the controls inside it keep their own clicks. */
 const rowClick = (open: () => void) => (e: React.MouseEvent) => {
@@ -198,34 +251,21 @@ const rowClick = (open: () => void) => (e: React.MouseEvent) => {
 };
 const known = (c: string | null) => (c && !/unknown/i.test(c) ? c : null);
 
-/** One LP: a person, an organisation, or an organisation's person where it leads (issue 0013). */
-const Row = memo(function Row({ r, picked, statusLabel, people = 0, listed, all, byVehicle, rungNames, now, onPick, onOpen }: Cols & {
-  r: PipelineRow; picked: boolean; statusLabel: string;
-  /** Its people pursued in this vehicle, listed under it (issue 0092), and so not named again here. */
-  people?: number; listed?: string;
+/** One LP unit (docs/23): an organisation with its people named, or an individual with their firms. */
+const Row = memo(function Row({ r, picked, focused, statusLabel, all, byVehicle, rungNames, now, onPick, onOpen, onFocus, onJump }: Cols & {
+  r: PipelineRow; picked: boolean; focused: boolean; statusLabel: string;
 }) {
-  const affiliated = listed ? r.people.filter((p) => !listed.split(',').includes(p.id)) : r.people;
-  const other = second(r);
   const read = r.readSuperseded ? null : r.read;
   const touch = fmtShort(r.lastTouch, now);
   return (
-    <tr className={cx(s.row, picked && s.picked, people > 0 && s.lead)} tabIndex={0}
-      onClick={rowClick(() => onOpen(r))}
-      onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) onOpen(r, e); }}>
+    <tr data-lp={r.id} className={cx(s.row, picked && s.picked, focused && u.focus)} tabIndex={0} aria-selected={focused}
+      onClick={rowClick(() => onOpen(r))} onFocus={(e) => { if (e.target === e.currentTarget) onFocus(r.id); }}
+      onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) { e.stopPropagation(); onOpen(r, e); } }}>
       <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
       <td className={s.cLp}>
-        <div className={s.lpName}><a href={lpHref(r)}>{lead(r)}</a></div>
-        {other && <div className={s.second}>{other}</div>}
-        {people > 0 && <div className={s.second}>{n(people)} of its people pursued, below</div>}
+        <div className={s.lpName}><a href={lpHref(r)}>{lead(r)}</a><CapacityTag r={r} /></div>
+        <LpWho r={r} onJump={onJump} />
         {r.headline && <div className={s.headline} title={r.headline}>{r.headline}</div>}
-        {affiliated.length > 0 && (
-          <div className={s.people}>
-            <span><Icon name="person" title="People at this organisation" /></span><span>
-            {affiliated.slice(0, 3).map((p, i) => <span key={`${p.id}:${p.role}`}>{i > 0 && ', '}<a href={`/orgs/${p.id}`}>{p.name}</a></span>)}
-            {affiliated.length > 3 && <> and {n(affiliated.length - 3)} more</>}
-            </span>
-          </div>
-        )}
         {r.doNotContact && <span className={s.dnc}>Do not contact</span>}
         <div className={s.meta}>
           {all && <span className={s.mStatus}>{statusLabel}</span>}
@@ -290,113 +330,3 @@ function Met({ meetings, last, now, compact }: { meetings: number; last: string 
     </>
   );
 }
-
-/**
- * An organisation none of whose own pursuit is recorded, ranked from its people (issue 0092). It
- * opens its best-scored person's page, which leads with the organisation and lists its people.
- */
-const OrgRow = memo(function OrgRow({ sum, ids, picked, statusLabel, all, byVehicle, now, onPick, onOpen }: Cols & {
-  sum: OrgSummary; ids: string[]; picked: boolean; statusLabel: string;
-}) {
-  const r = sum.lead;
-  const touch = fmtShort(sum.lastTouch, now);
-  return (
-    <tr className={cx(s.row, s.lead, picked && s.picked)} tabIndex={0}
-      onClick={rowClick(() => onOpen(r))}
-      onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) onOpen(r, e); }}>
-      <td className={s.cCheck}><input type="checkbox" aria-label={`Select everyone at ${sum.org}`} checked={picked} onChange={(e) => onPick(ids, e.target.checked)} /></td>
-      <td className={s.cLp}>
-        <div className={s.lpName}><a href={lpHref(r)}>{sum.org}</a></div>
-        <div className={s.second}>{n(sum.count)} people pursued, below</div>
-        {sum.doNotContact && <span className={s.dnc}>Do not contact</span>}
-        <div className={s.meta}>
-          {all && <span className={s.mStatus}>{statusLabel}</span>}
-          {byVehicle && <span className={s.mVehicle}>{r.vehicle}</span>}
-          <span className={s.mOwner}>Owner: {sum.owners.length === 1 ? sum.owners[0] : `${sum.owners.length} owners`}</span>
-          {known(sum.capacity) && <span className={s.mCap}>{sum.capacity}</span>}
-          {sum.route ? <span className={s.mRoutes}>{n(sum.route)} routes</span> : null}
-          {sum.meetings > 0 && <span className={s.mMeet}>met {sum.meetings}×</span>}
-          {touch && <span className={s.mTouch}>touched {touch}</span>}
-          {sum.read && <span className={s.mRead}>{sum.read}</span>}
-        </div>
-      </td>
-      <td className={s.cScore}>
-        {sum.score === null ? <div className={s.score}><span className={cx(s.scoreNum, s.none)}>—</span><span className={s.scoreKind}>Unscored</span></div> : (
-          <div className={s.score} title={`The best score among its ${sum.count} people: ${sum.scoreFrom}'s.`}>
-            <span className={s.scoreNum}>{sum.score}</span>
-            <span className={s.bar} aria-hidden><i className={scoreTone(sum.score)} style={{ width: `${sum.score}%` }} /></span>
-            <span className={s.scoreKind}>Best of {sum.count}</span>
-          </div>
-        )}
-      </td>
-      {all && <td className={s.cStatus}>{statusLabel}</td>}
-      {byVehicle && <td className={cx(s.cVehicle, s.none)}>{r.vehicle}</td>}
-      <td className={cx(s.cOwner, s.none)}>{sum.owners.length === 1 ? sum.owners[0] : sum.owners.join(', ')}</td>
-      <td className={s.cCap}>{known(sum.capacity) ?? <span className={s.none}>—</span>}</td>
-      <td className={s.cWhere}>
-        {sum.money && <div className={s.money}><Icon name="coin" title="Money" />{sum.money.state} {usdM(sum.money.amount)}</div>}
-        {sum.money && <span className={s.small}>from {sum.money.from === 1 ? 'one of them' : `${sum.money.from} of them`}</span>}
-        {r.next && <div className={s.next} title={r.next}>{r.next}</div>}
-        {r.next && <span className={s.small}>for {r.name}</span>}
-      </td>
-      <td className={s.cRoutes}><span className={cx(s.fig, !sum.route && s.zero)} title="Recorded routes to any of its people"><Icon name="link" title="Routes" />{sum.route ?? '—'}</span></td>
-      <td className={s.cMeet}><Met meetings={sum.meetings} last={sum.lastMeeting} now={now} /></td>
-      <td className={s.cTouch}>{touch ? <span className={s.date}>{touch}</span> : <span className={s.none}>—</span>}</td>
-      <td className={s.cRead}>{sum.read ? <span className={s.read}>{sum.read}</span> : <span className={s.none}>—</span>}</td>
-      <td className={s.cEv}>
-        <div className={s.ladder} role="img" aria-label={`Furthest evidence: ${sum.furthest.rungLabel}, ${sum.furthest.name}`}>
-          {sum.furthest.rungs.map((x, i) => <span key={i} className={cx(x !== 'off' && s[x], i === sum.furthest.needs && s.needs)} />)}
-        </div>
-        <div className={s.ladderLabel}>{sum.furthest.rungLabel}{sum.furthest.rung > 0 ? `, ${sum.furthest.name}` : ''}</div>
-      </td>
-    </tr>
-  );
-});
-
-/**
- * A person under their organisation (issue 0092): indented, smaller, and without what the row above
- * already says — the organisation, its capacity, Affinity's word. The row opens their LP page.
- */
-const MemberRow = memo(function MemberRow({ r, last, picked, statusLabel, all, byVehicle, now, onPick, onOpen }: Cols & {
-  r: PipelineRow; last: boolean; picked: boolean; statusLabel: string;
-}) {
-  const read = r.readSuperseded ? null : r.read;
-  const touch = fmtShort(r.lastTouch, now);
-  return (
-    <tr className={cx(s.row, s.member, last && s.last, picked && s.picked)} tabIndex={0}
-      onClick={rowClick(() => onOpen(r))}
-      onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) onOpen(r, e); }}>
-      <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${r.name}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
-      <td className={s.cLp}>
-        <a href={lpHref(r)}>{r.name}</a>
-        {r.doNotContact && <span className={s.dnc} style={{ marginLeft: 6 }}>Do not contact</span>}
-        <div className={s.meta}>
-          {all && <span className={s.mStatus}>{statusLabel}</span>}
-          <span className={s.mOwner}>Owner: {r.owner}</span>
-          {r.meetings > 0 && <span className={s.mMeet}>met {r.meetings}×</span>}
-          {touch && <span className={s.mTouch}>touched {touch}</span>}
-        </div>
-      </td>
-      <td className={s.cScore}>{r.score === null ? <span className={s.none}>—</span> : <span className={s.scoreNum} title={r.scoreKind}>{r.score}</span>}</td>
-      {all && <td className={s.cStatus}>{statusLabel}</td>}
-      {byVehicle && <td className={s.cVehicle} />}
-      <td className={cx(s.cOwner, s.none)}>{r.owner}</td>
-      <td className={s.cCap} />
-      <td className={s.cWhere}>
-        {r.money && <div className={s.money}>{r.money.state} {usdM(r.money.amount)}</div>}
-        {r.ended && <div className={s.one}>{r.ended}</div>}
-        {r.next && <div className={s.one} title={r.next}>{r.next}</div>}
-        {r.ahead && <span className={s.ahead}>A meeting is on record: Discussing?</span>}
-      </td>
-      <td className={s.cRoutes}><Routes r={r} /></td>
-      <td className={s.cMeet}><Met meetings={r.meetings} last={r.lastMeeting} now={now} compact /></td>
-      <td className={s.cTouch}>{touch ? <span className={s.date}>{touch}</span> : <span className={s.none}>—</span>}</td>
-      <td className={s.cRead}>{read ? <span className={cx(s.read, r.readSuggested && s.suggested)}>{read}</span> : <span className={s.none}>—</span>}</td>
-      <td className={s.cEv}>
-        <div className={s.ladder} role="img" aria-label={`Evidence: ${r.rungLabel}`} title={r.rungLabel}>
-          {r.rungs.map((x, i) => <span key={i} className={cx(x !== 'off' && s[x], i === r.needs && s.needs)} />)}
-        </div>
-      </td>
-    </tr>
-  );
-});

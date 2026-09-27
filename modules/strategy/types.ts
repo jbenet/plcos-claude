@@ -179,6 +179,10 @@ export interface Pursuit {
   ownerSaid: string | null;
   /** On a vehicle kept for its history. */
   historical: boolean;
+  /** 'personal' for a person with evidence of investing on their own account (docs/23). */
+  lpCapacity: 'organisation' | 'personal' | null;
+  /** Why the re-point rule could not tell firm from personal: a question for a person. */
+  lpReview: string | null;
 }
 
 export function rungIndex(rung: LadderRung | null): number {

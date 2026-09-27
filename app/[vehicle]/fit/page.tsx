@@ -11,6 +11,7 @@ import { listEntities } from '@/modules/identity';
 import { vehicleReadings } from '@/lib/vehicle-readings';
 import { listAssessments, type Assessment } from '@/modules/fit';
 import { FitBoard, FitInspector } from './FitBoard';
+import { isPseudoOrg } from '@/modules/strategy/client';
 import { GROUP_LABEL, ORDER, groupFitRows, fitGroupCategory, type FitRow, type FitSection, type Group } from './fit-model';
 import s from './fit.module.css';
 
@@ -98,18 +99,18 @@ async function FitRollup({ params, searchParams }: {
     const h = headings.get(r.pursuitId ?? r.entityId);
     r.isOrg = organisations.has(r.entityId);
     r.orgId = r.isOrg ? r.entityId : h?.orgId ?? null;
-    r.org = r.isOrg ? r.name : h?.org ?? null;
-    r.orgFirst = r.isOrg || h?.orgFirst || false;
+    r.org = r.isOrg ? r.name : h?.org && !isPseudoOrg(h.org) ? h.org : null;
+    // The row is the LP unit's own (docs/23): a person's firm is context, never the heading.
+    r.orgFirst = r.isOrg;
   }
-  // Keep the organisation and its readings together through sorting, filtering and paging.
-  // Each child retains its own fit, gates and actions, including a different fit category.
+  // One row per LP unit (docs/23): each keeps its own fit, gates and actions.
   const byFit = (a: FitRow, b: FitRow) => ORDER.indexOf(a.group) - ORDER.indexOf(b.group)
     || (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name);
   const ranked = [...rows].sort(byFit);
   ranked.filter(r => r.kind !== 'missing').forEach((r, i) => { r.rank = i + 1; });
   const words = (sp.q ?? '').toLowerCase().split(/\s+/).filter(Boolean);
   const group = ORDER.includes(sp.g as Group) ? (sp.g as Group) : null;
-  const compare = sp.sort === 'name' ? (a: FitRow, b: FitRow) => (a.org ?? a.name).localeCompare(b.org ?? b.name)
+  const compare = sp.sort === 'name' ? (a: FitRow, b: FitRow) => a.name.localeCompare(b.name)
     : sp.sort === 'recent' ? (a: FitRow, b: FitRow) => (b.date ?? '').localeCompare(a.date ?? '') : byFit;
   const lpGroups = groupFitRows(rows, compare);
   if (!sp.sort || sp.sort === 'fit') lpGroups.sort((a, b) =>
@@ -149,7 +150,7 @@ async function FitRollup({ params, searchParams }: {
         sp.e ? <EntitySummary entityId={sp.e} /> : (
           <FitInspector>
             <div className="lbl">The shape of it</div>
-            <div className="ihead">{lpGroups.length.toLocaleString('en-US')} LP groups · {rows.length.toLocaleString('en-US')} pursuits/readings</div>
+            <div className="ihead">{lpGroups.length.toLocaleString('en-US')} LPs · {rows.length.toLocaleString('en-US')} pursuits/readings</div>
             <div className="imeta">{vehicle ? vehicle.name : 'every vehicle, listed separately'}</div>
             {ORDER.filter((g) => count(g)).map((g) => (
               <Link key={g} className={`kv ${s.kvlink}${group === g ? ` ${s.on}` : ''}`} href={href({ g: group === g ? null : g })} aria-pressed={group === g}>
@@ -181,7 +182,7 @@ async function FitRollup({ params, searchParams }: {
       </p>
 
       <div className="kpis five">
-        <div className="kpi"><div className="n">{lpGroups.length.toLocaleString('en-US')}</div><div className="f">LP groups in this view</div></div>
+        <div className="kpi"><div className="n">{lpGroups.length.toLocaleString('en-US')}</div><div className="f">LPs in this view</div></div>
         <div className="kpi"><div className="n">{read.length.toLocaleString('en-US')}</div><div className="f">individual readings · {rows.filter((r) => r.kind === 'assessed').length} assessed, {rows.filter((r) => r.kind === 'provisional').length} provisional</div></div>
         <div className="kpi"><div className={`n${count('strong') + count('good') ? ' g' : ''}`}>{(count('strong') + count('good')).toLocaleString('en-US')}</div><div className="f">readings with strong or good fit</div></div>
         <div className="kpi"><div className="n">{median ?? '—'}</div><div className="f">median score{scores.length > 1 ? `, range ${scores[0]}–${scores.at(-1)}` : ''}</div></div>
@@ -198,7 +199,7 @@ async function FitRollup({ params, searchParams }: {
         </select>
         <button className="btn" type="submit">Apply</button>
         {(sp.q || group || (sp.sort && sp.sort !== 'fit')) && <Link className={s.clear} href={`/${slug}/fit`}>Clear</Link>}
-        <span className={s.count}>{filtered.length === lpGroups.length ? `${lpGroups.length.toLocaleString('en-US')} LP groups` : `${filtered.length.toLocaleString('en-US')} of ${lpGroups.length.toLocaleString('en-US')} LP groups`}{group ? ` · ${GROUP_LABEL[group]}` : ''}</span>
+        <span className={s.count}>{filtered.length === lpGroups.length ? `${lpGroups.length.toLocaleString('en-US')} LPs` : `${filtered.length.toLocaleString('en-US')} of ${lpGroups.length.toLocaleString('en-US')} LPs`}{group ? ` · ${GROUP_LABEL[group]}` : ''}</span>
       </form>
 
       {rows.length === 0 ? (
