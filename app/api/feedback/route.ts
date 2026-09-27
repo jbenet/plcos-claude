@@ -1,3 +1,4 @@
+import type { Queryable } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { config } from '@/config/deployment';
 import { feedbackHome } from '@/config/ports';
@@ -83,7 +84,7 @@ export async function POST(req: Request) {
     // Reading the local cookie needs no DB. Do not make filing depend on auth's lookup.
     const user = {
       handle: (await cookies()).get(USER_COOKIE)?.value || 'unknown reporter',
-      resolveUser: async () => (await auth()).currentUser(),
+      resolveUser: async (q: Queryable) => (await auth()).currentUser(q),
     };
     const issue = await fileFeedback(user, {
       title,

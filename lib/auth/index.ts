@@ -5,6 +5,7 @@
  * learn which provider answered. `switchUser` exists only on the local provider and the
  * LabOS provider refuses it loudly rather than pretending.
  */
+import type { Queryable } from '@/lib/db';
 import type { AppUser } from '@/modules/platform';
 import { config } from '@/config/deployment';
 
@@ -14,7 +15,7 @@ export interface AuthProvider {
   readonly kind: 'local' | 'labos';
   /** True when a person can pick who they are from a dropdown. False in any real deployment. */
   readonly switchable: boolean;
-  currentUser(): Promise<AppUser>;
+  currentUser(q?: Queryable): Promise<AppUser>;
   listUsers(): Promise<AppUser[]>;
   switchUser(handle: string): Promise<AppUser>;
 }

@@ -1,3 +1,4 @@
+import type { Queryable } from '@/lib/db';
 import { cookies } from 'next/headers';
 import { getUserByHandle, listUsers } from '@/modules/platform';
 import { config } from '@/config/deployment';
@@ -15,14 +16,14 @@ export function localAuth(): AuthProvider {
     kind: 'local',
     switchable: true,
 
-    async currentUser(): Promise<AppUser> {
+    async currentUser(q?: Queryable): Promise<AppUser> {
       const jar = await cookies();
       const handle = jar.get(USER_COOKIE)?.value;
       if (handle) {
-        const found = await getUserByHandle(handle);
+        const found = await getUserByHandle(handle, q);
         if (found) return found;
       }
-      const all = await listUsers();
+      const all = await listUsers(q);
       if (all.length === 0) {
         throw new Error(
           config.data.profile === 'real'

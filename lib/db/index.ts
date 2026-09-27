@@ -69,7 +69,7 @@ const scopedDb = new AsyncLocalStorage<Db>();
 export const withDb = <T>(db: Db, work: () => Promise<T>): Promise<T> => scopedDb.run(db, work);
 import { join as pathJoin } from 'node:path';
 import { config } from '@/config/deployment';
-import { prioritizeDb } from './scheduling';
+import { isDbBusy, prioritizeDb } from './scheduling';
 
 type Global = typeof globalThis & { __capitalOsDb?: Promise<Db>; __capitalOsMigrationCheck?: { at: number; files: string; running: Promise<void> | null } };
 const g = globalThis as Global;
@@ -116,6 +116,11 @@ async function catchUp(db: Db): Promise<Db> {
       if (applied.length) console.log(`[db] applied while running: ${applied.join(', ')}`);
       state.files = files;
     } catch (err) {
+      if (isDbBusy(err)) {
+        // Busy is transient, not an applied inventory. Retry on the next check.
+        state.at = 0;
+        return;
+      }
       console.error('[db] a new migration could not be applied while running; restart to apply it:', err instanceof Error ? err.message : err);
       state.files = files;
     } finally {

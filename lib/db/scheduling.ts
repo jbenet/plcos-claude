@@ -1,15 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { Db } from './index';
+import type { Db, Queryable } from './index';
 
-interface ScheduledDb { db: Db; hold: <T>(work: () => Promise<T>) => Promise<T> }
+interface ScheduledDb { db: Db; cancellable: (signal: AbortSignal) => Queryable; hold: <T>(work: () => Promise<T>) => Promise<T> }
 // The live handle outlives Next's module reloads. Retain both its queue and async
 // priority context, so hot-loaded callers do not wrap it twice or lose priority.
 const global = globalThis as typeof globalThis & {
-  __capitalOsDbScheduling?: { background: AsyncLocalStorage<boolean>; handles: WeakMap<Db, ScheduledDb>; cancellation?: AsyncLocalStorage<AbortSignal> };
+  __capitalOsDbScheduling?: { background: AsyncLocalStorage<boolean>; handles: WeakMap<Db, ScheduledDb>; idleBusyLogged?: boolean };
 };
 const state = global.__capitalOsDbScheduling ??= { background: new AsyncLocalStorage<boolean>(), handles: new WeakMap() };
 const { background } = state;
-const cancellation = state.cancellation ??= new AsyncLocalStorage<AbortSignal>();
 
 export class DbBusyError extends Error {
   readonly digest = 'CAPITAL_OS_DB_BUSY';
@@ -32,16 +31,32 @@ const clock: QueueClock = {
 };
 
 /** Best-effort metadata must stop queueing work when its short budget expires.
- * A query already executing cannot be interrupted; later queries remain cancelled. */
-export async function bestEffortDb<T>(work: () => Promise<T>, milliseconds = 250, timer = clock): Promise<T | undefined> {
+ * A query already executing cannot be interrupted; later queries on the explicitly bound handle remain cancelled. */
+export async function bestEffortDb<T>(work: (signal: AbortSignal) => Promise<T>, milliseconds = 250, timer = clock): Promise<T | undefined> {
   const controller = new AbortController();
   let cancel = () => {};
   const expired = new Promise<undefined>(resolve => {
     cancel = timer.after(milliseconds, () => { controller.abort(); resolve(undefined); });
   });
   try {
-    return await Promise.race([cancellation.run(controller.signal, work).catch(() => undefined), expired]);
+    return await Promise.race([(async () => work(controller.signal))().catch(() => undefined), expired]);
   } finally { cancel(); }
+}
+
+/** Cancellation is an explicit capability, never inherited by shared async work.
+ * This is intentionally only Queryable: a transaction already admitted must finish. */
+export function cancellableDb(db: Db, signal: AbortSignal): Queryable {
+  const scheduled = state.handles.get(prioritizeDb(db));
+  if (scheduled) return scheduled.cancellable(signal);
+  const run = <T>(work: () => Promise<T>): Promise<T> => {
+    if (signal.aborted) return Promise.reject(new DOMException('DB work cancelled', 'AbortError'));
+    return work();
+  };
+  return {
+    query: (sql, params) => run(() => db.query(sql, params)),
+    one: (sql, params) => run(() => db.one(sql, params)),
+    exec: sql => run(() => db.exec(sql)),
+  };
 }
 
 /** Only explicitly scoped maintenance work yields its place to interactive queries. */
@@ -65,9 +80,9 @@ export function prioritizeDb(db: Db, timing: QueueClock = clock): Db {
   if (prior) return prior.db;
   type Job = { run: () => Promise<void> };
   const foreground: Job[] = [], maintenance: Job[] = [];
-  let scheduled = false, readers = 0;
+  let scheduled = false, executing = false, readers = 0;
   const dispatch = () => {
-    if (scheduled || (!foreground.length && (readers > 0 || !maintenance.length))) return;
+    if (scheduled || executing || (!foreground.length && (readers > 0 || !maintenance.length))) return;
     scheduled = true;
     setImmediate(async () => {
       const job = foreground.shift() ?? (readers === 0 ? maintenance.shift() : undefined);
@@ -76,26 +91,40 @@ export function prioritizeDb(db: Db, timing: QueueClock = clock): Db {
       if (foreground.length || maintenance.length) dispatch();
     });
   };
-  const enqueue = <T>(work: () => Promise<T>): Promise<T> => new Promise((resolve, reject) => {
+  const enqueue = <T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> => new Promise((resolve, reject) => {
     const low = background.getStore() === true;
-    const signal = cancellation.getStore();
     const queuedAt = timing.now(), queue = low ? maintenance : foreground;
-    let waiting = true, cancelTimer = () => {};
+    let waiting = true, deadlineWaived = false, cancelTimer = () => {};
     const cleanup = () => { cancelTimer(); signal?.removeEventListener('abort', abandon); };
+    const origin = new Error('DB request queued here');
     const abandon = () => {
-      if (!waiting) return;
+      if (!waiting) return true;
+      // Explicit cancellation is not load shedding: never resurrect expired writes.
+      if (!signal?.aborted && !executing && !foreground.some(other => other !== job)) {
+        if (!state.idleBusyLogged) {
+          state.idleBusyLogged = true;
+          console.error('[db] invariant: busy refusal with an idle foreground queue; running query instead', origin.stack);
+        }
+        deadlineWaived = true;
+        cancelTimer();
+        dispatch();
+        return false;
+      }
       waiting = false;
       const index = queue.indexOf(job);
       if (index >= 0) queue.splice(index, 1);
-      cleanup(); reject(new DbBusyError());
+      cleanup(); reject(signal?.aborted ? new DOMException('DB work cancelled', 'AbortError') : new DbBusyError());
       dispatch();
+      return true;
     };
     const job: Job = { run: async () => {
       if (!waiting) return;
       // Check again before starting: a CPU-heavy query can delay the timeout callback.
-      if (signal?.aborted || (!low && timing.now() - queuedAt >= 20_000)) { abandon(); return; }
+      if (signal?.aborted || (!deadlineWaived && !low && timing.now() - queuedAt >= 20_000)) { if (abandon()) return; }
       waiting = false; cleanup();
+      executing = true;
       try { resolve(await background.run(low, work)); } catch (err) { reject(err); }
+      finally { executing = false; dispatch(); }
     } };
     if (signal?.aborted) { abandon(); return; }
     queue.push(job);
@@ -112,7 +141,11 @@ export function prioritizeDb(db: Db, timing: QueueClock = clock): Db {
     // Wait for both queues before closing the underlying connection.
     close: () => withBackgroundDb(() => enqueue(() => db.close())),
   };
-  const entry: ScheduledDb = { db: wrapped, hold: async work => {
+  const entry: ScheduledDb = { db: wrapped, cancellable: signal => ({
+    query: (sql, params) => enqueue(() => db.query(sql, params), signal),
+    one: (sql, params) => enqueue(() => db.one(sql, params), signal),
+    exec: sql => enqueue(() => db.exec(sql), signal),
+  }), hold: async work => {
     readers++;
     try { return await background.run(false, work); }
     finally { readers--; dispatch(); }
