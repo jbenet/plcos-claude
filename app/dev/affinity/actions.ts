@@ -1,5 +1,7 @@
 'use server';
 
+import { getDb } from '@/lib/db';
+import { queueImportJob } from '@/lib/import-jobs/server';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/lib/auth';
 import { testConnection } from '@/lib/connectors/affinity';
@@ -28,7 +30,10 @@ export async function runSliceAction(formData: FormData): Promise<void> {
   // A go-ahead on a held run carries the estimate it was shown, and the run proceeds only
   // within that estimate plus a quarter — an approval of a number, not of whatever it costs.
   const approved = Number(formData.get('approvedEstimate') ?? 0);
-  startSlice(user.id, approved > 0 ? { approvedUpTo: Math.ceil(approved * 1.25) } : {});
+  const options = approved > 0 ? { approvedUpTo: Math.ceil(approved * 1.25) } : {};
+  const db=await getDb();
+  if(db.kind==='postgres') await queueImportJob(db,'affinity',user.id,{operation:'slice',options});
+  else startSlice(user.id,options);
   revalidatePath('/dev/affinity/slice');
 }
 
@@ -67,6 +72,8 @@ export async function writeComparisonAction(): Promise<void> {
 export async function translateAction(): Promise<void> {
   const { translate } = await import('@/lib/connectors/affinity/translate');
   const user = await (await auth()).currentUser();
+  const db=await getDb();
+  if(db.kind==='postgres') {await queueImportJob(db,'affinity',user.id,{operation:'translate'});revalidatePath('/', 'layout');return;}
   const run = await translate(user.id);
   // With the records translated, propose the ladder climbs they support (N57). Proposals only:
   // nothing is recorded until someone approves them.
@@ -98,10 +105,10 @@ export async function readNotesAction(formData: FormData): Promise<void> {
   const { startNotes } = await import('@/lib/connectors/affinity/notes');
   const user = await (await auth()).currentUser();
   const approved = Number(formData.get('approvedEstimate') ?? 0);
-  startNotes(user.id, {
-    ...(approved > 0 ? { approvedUpTo: Math.ceil(approved * 1.25) } : {}),
-    full: formData.get('mode') === 'full',
-  });
+  const options={...(approved > 0 ? { approvedUpTo: Math.ceil(approved * 1.25) } : {}),full:formData.get('mode')==='full'};
+  const db=await getDb();
+  if(db.kind==='postgres') await queueImportJob(db,'affinity',user.id,{operation:'notes',options});
+  else startNotes(user.id,options);
   revalidatePath('/dev/affinity/notes');
 }
 
@@ -114,6 +121,9 @@ export async function readMeetingsAction(formData: FormData): Promise<void> {
   const user = await (await auth()).currentUser();
   const mode = formData.get('mode');
   // 'rest': the whole window again, past the usual cap, when someone has said to (N59).
-  startMeetings(user.id, { full: mode === 'full' || mode === 'rest', rest: mode === 'rest' });
+  const options={full:mode==='full'||mode==='rest',rest:mode==='rest'};
+  const db=await getDb();
+  if(db.kind==='postgres') await queueImportJob(db,'affinity',user.id,{operation:'meetings',options});
+  else startMeetings(user.id,options);
   revalidatePath('/dev/affinity/meetings');
 }

@@ -55,9 +55,13 @@ function copyTakenAt(): string | null {
  * pointing somewhere else is refused rather than quietly obeyed.
  */
 function databaseUrl(): string | null {
-  const url = process.env.DATABASE_URL ?? null;
+  const url = process.env.DATABASE_URL?.trim() || null;
+  if (process.env.POSTGRES_REHEARSAL === '1' && !url) throw new Error('Postgres rehearsal requires DATABASE_URL.');
   if (url && PROFILE === 'real') {
-    throw new Error('DATABASE_URL is set in the real profile. Real data stays in data/real/ until deployment is decided (docs/15).');
+    const parsed = new URL(url);
+    if (!['postgres:', 'postgresql:'].includes(parsed.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname) || parsed.search || parsed.hash) {
+      throw new Error('DATABASE_URL is set in the real profile: only local Postgres is approved (docs/21-postgres.md).');
+    }
   }
   return url;
 }
@@ -308,6 +312,7 @@ export const config = {
     localDir: PROFILE === 'real' ? './data/real/database' : (process.env.PGLITE_DIR ?? './data/demo/database'),
     /** Set DATABASE_URL and the Db seam resolves to node-postgres instead. */
     url: databaseUrl(),
+    rehearsal: process.env.POSTGRES_REHEARSAL === '1',
   },
   agentRuntime: {
     /** No key present → the Agent seam is a no-op that refuses rather than guesses. */

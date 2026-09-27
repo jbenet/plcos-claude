@@ -1,5 +1,6 @@
 'use server';
 
+import { queueImportJob } from '@/lib/import-jobs/server';
 import { mergeImportDuplicates, type ImportDuplicateReport } from '@/lib/enrich/import-dupes';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -14,14 +15,16 @@ import { config } from '@/config/deployment';
 import { readLayout } from '@/config/ports';
 import { addProspects, readProspectFiles, type ProspectResult } from '@/lib/enrich/prospects';
 
-export async function addProspectsAction(): Promise<{ result?: ProspectResult; error?: string }> {
+export async function addProspectsAction(): Promise<{ result?: ProspectResult; error?: string; message?: string }> {
   // A dev checkout must never open the real DB for an import; demo uses fictional files.
-  if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
     return { error: 'Add prospects from Developer → Enrich on the live server.' };
   }
   let result: ProspectResult;
   try {
     const user = await (await auth()).currentUser();
+    const db = await getDb();
+    if (db.kind === 'postgres') { await queueImportJob(db,'prospects',user.id); return {message:'Prospect import queued. Progress appears above.'}; }
     const files = await readProspectFiles();
     result = await addProspects(await getDb(), user.id, files);
     await appendAudit({ actorId: user.id, action: 'enrich.prospects', subjectType: 'enrich', detail: {
@@ -52,6 +55,12 @@ export async function exportResearchSetAction(): Promise<void> {
 /** Map the findings in (N64): claims with provenance, profiles, connection candidates. Counts only. */
 export async function importFindingsAction(): Promise<void> {
   const user = await (await auth()).currentUser();
+  const db = await getDb();
+  if (db.kind === 'postgres') {
+    await queueImportJob(db,'findings',user.id);
+    revalidatePath('/dev/enrich');
+    redirect('/developer/enrich');
+  }
   // Repair team aliases before the identity pass consolidates their pursuits.
   const { readNetworkNodeInput } = await import('@/modules/network/nodes');
   const { repairTeamIdentities } = await import('@/modules/identity/team');
@@ -117,17 +126,23 @@ export async function importDakotaAction(): Promise<{job?:import('@/lib/connecto
     const user=await (await auth()).currentUser(),db=await getDb();
     await queueDakota(db,user.id);
     const job=await dakotaStatus(db);
-    resumeDakotaJob(db);
+    if (db.kind === 'postgres') await queueImportJob(db,'dakota',user.id);
+    else resumeDakotaJob(db);
     return {job};
   } catch {return {error:'Dakota could not be queued. Try again; committed batches are preserved.'};}
 }
 
 /** The existing server handle is the only live writer. No DB-opening CLI. */
-export async function consolidatePursuitsAction(): Promise<{ result?: PursuitMergeReport; error?: string }> {
-  if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+export async function consolidatePursuitsAction(): Promise<{ result?: PursuitMergeReport; error?: string; message?: string }> {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
     return { error: 'Consolidate pursuits on the live server.' };
   }
   const user = await (await auth()).currentUser();
+  const db = await getDb();
+  if (db.kind === 'postgres') {
+    try { await queueImportJob(db,'pursuits',user.id); return {message:'Pursuit consolidation queued. Progress appears above.'}; }
+    catch { return {error:'Pursuit consolidation could not be queued. Retry after the active import finishes.'}; }
+  }
   const run = await startRun('enrich', 'pursuit-merge', user.id);
   try {
     const result = await consolidatePursuits(await getDb(), user.id);
@@ -144,7 +159,7 @@ export async function consolidatePursuitsAction(): Promise<{ result?: PursuitMer
 }
 
 export async function reversePursuitMergeAction(id: string, reason: string): Promise<{ error?: string }> {
-  if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
     return { error: 'Reverse pursuit merges on the live server.' };
   }
   try {
@@ -157,11 +172,16 @@ export async function reversePursuitMergeAction(id: string, reason: string): Pro
 }
 
 /** Uses the live server handle; no file reads or external connector traffic. */
-export async function mergeImportDuplicatesAction(): Promise<{ result?: ImportDuplicateReport; error?: string }> {
-  if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+export async function mergeImportDuplicatesAction(): Promise<{ result?: ImportDuplicateReport; error?: string; message?: string }> {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
     return { error: 'Merge duplicate identities on the live server.' };
   }
   const user = await (await auth()).currentUser();
+  const db = await getDb();
+  if (db.kind === 'postgres') {
+    try { await queueImportJob(db,'duplicates',user.id); return {message:'Duplicate identity import queued. Progress appears above.'}; }
+    catch { return {error:'Duplicate import could not be queued. Retry after the active import finishes.'}; }
+  }
   const run = await startRun('enrich', 'import-duplicates', user.id);
   try {
     const result = await mergeImportDuplicates(await getDb(), user.id);
@@ -177,7 +197,7 @@ export async function mergeImportDuplicatesAction(): Promise<{ result?: ImportDu
 }
 
 export async function reverseImportDuplicateAction(assertionId: string, reason: string): Promise<{ error?: string }> {
-  if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
     return { error: 'Reverse duplicate identities on the live server.' };
   }
   try {

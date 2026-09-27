@@ -6,12 +6,14 @@ import type { Check } from './harness';
 /** Compare the reduced readers against the established full projections on demo records. */
 export async function perfVizProperties(check: Check) {
   const { config } = await import('../../config/deployment');
-  if (config.data.profile !== 'demo' || config.db.url) throw new Error('Visualization properties require local demo data.');
+  if (config.data.profile !== 'demo') throw new Error('Visualization properties require local demo data.');
   const scratch = join(process.cwd(), 'data', 'demo', 'perf-viz-props');
   const global = globalThis as typeof globalThis & { __capitalOsDb?: Promise<import('../../lib/db').Db> };
   const previous = global.__capitalOsDb;
+  if (config.db.url && previous) await (await previous).close();
   delete global.__capitalOsDb;
   await rm(scratch, { recursive: true, force: true });
+  await (await import('./database')).resetTestPostgres();
   const db = await (await import('../../lib/db')).openFresh(scratch);
   try {
     const { listPursuits, visualizationPursuits, pursuitCount } = await import('../../modules/strategy');

@@ -20,13 +20,20 @@ registerHooks({
 // The harness deletes its scratch database: always use fictional demo data.
 process.env.DATA_PROFILE = 'demo';
 process.env.PGLITE_DIR = './data/demo/props';
-delete process.env.DATABASE_URL;
+// DATABASE_URL selects the same complete suite on disposable local Postgres.
 
 async function main() {
+  const { resetTestPostgres, cleanTestPostgres } = await import('./properties/database');
+  await resetTestPostgres();
   const results: Array<{ name: string; ok: boolean; detail: string }> = [];
   const check = (name: string, ok: boolean, detail: string) => {
     results.push({ name, ok, detail });
   };
+  await (await import('./properties/postgres')).databaseProperties(check);
+  await (await import('./properties/postgres-preview')).postgresPreviewProperties(check);
+  await (await import('./properties/pg-copy')).pgCopyProperties(check);
+  await (await import('./properties/import-jobs')).importJobProperties(check);
+  await (await import('./properties/cache-retries')).cacheRetryProperties(check);
   const { runProperties } = await import('./properties/suite');
   await runProperties(check);
   await (await import('./properties/perf-viz')).perfVizProperties(check);
@@ -35,6 +42,8 @@ async function main() {
   await (await import('./properties/activity-data')).activityDataProperties(check);
   await (await import('./properties/activity-connectors')).activityConnectorProperties(check);
   await (await import('./properties/triage-export')).triageExportProperties(check);
+
+  await cleanTestPostgres();
 
   const failed = results.filter((r) => !r.ok);
   for (const r of results) {

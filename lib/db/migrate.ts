@@ -22,6 +22,17 @@ type Row = { id: string; checksum: string };
  * Idempotent: safe to call on every boot, which is how the local loop works.
  */
 export async function migrate(db: Db): Promise<{ applied: string[] }> {
+  if (db.kind === 'postgres') {
+    // Concurrent server boots must see the ledger only after the prior migrator commits.
+    return db.transaction(async tx => {
+      await tx.query("select pg_advisory_xact_lock(192837, 1)");
+      return applyMigrations({ ...db, ...tx, transaction: work => work(tx) });
+    });
+  }
+  return applyMigrations(db);
+}
+
+async function applyMigrations(db: Db): Promise<{ applied: string[] }> {
   await db.exec(BOOTSTRAP);
   const done = new Map(
     (await db.query<Row>('select id, checksum from platform.migration')).map((r) => [r.id, r.checksum]),

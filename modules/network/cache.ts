@@ -2,10 +2,14 @@ import { createHash } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
 import { config } from '@/config/deployment';
 import { getDb, withDb, type Db } from '@/lib/db';
-import { withForegroundDb, withBackgroundDb } from '@/lib/db/scheduling';
+import { withForegroundDb, withBackgroundDb, DbBusyError } from '@/lib/db/scheduling';
 import { computeStructuralRoutes, routeGraph } from './service';
 import { canonicalRouteEntity, routeTouchesChanges, routeSources } from './repo';
 import type { Edge, RouteSearch } from './types';
+
+class RevisionChanged extends Error {}
+// GUESS — two retries bound cross-process import churn; never return a mixed graph.
+const REVISION_RETRIES = 2;
 
 const settings = () => createHash('sha256').update(JSON.stringify([
   'compact-structural-v9-routes-0084', config.routeScoring, config.routeWarmth, config.routePolicy,
@@ -71,7 +75,17 @@ export async function cachedRoutes(targetId: string, kind: string, live: () => P
   // A resolver mutation changes the generation. Holding maintenance across this
   // search's yielded reads prevents repeated generation retries from starving a page.
   // Warm-up calls this once per target; no lease spans the whole warm-up.
-  return withForegroundDb(await getDb(), () => readCachedRoutes(targetId, kind, live));
+  return withForegroundDb(await getDb(), async () => {
+    // Shared jobs validate one attempt only. Each caller retains its own retry budget
+    // even when a new page request has started another attempt at a newer revision.
+    for (let attempt = 0; ; attempt++) {
+      try { return await readCachedRoutes(targetId, kind, live); }
+      catch (error) {
+        if (!(error instanceof RevisionChanged)) throw error;
+        if (attempt >= REVISION_RETRIES) throw new DbBusyError();
+      }
+    }
+  });
 }
 async function readCachedRoutes(targetId: string, kind: string, live: () => Promise<RouteSearch | null>): Promise<RouteSearch | null> {
   targetId = await canonicalRouteEntity(targetId);
@@ -95,7 +109,7 @@ async function readCachedRoutes(targetId: string, kind: string, live: () => Prom
     if (entry && entry.revision !== version.revision && await touched(db, targetId, entry.revision, entry.search)) entry = undefined;
     const search = entry ? entry.search : await live();
     const now = await revisionFor(db);
-    if (now.generation !== version.generation || now.revision !== version.revision) return cachedRoutes(targetId, kind, live);
+    if (now.generation !== version.generation || now.revision !== version.revision) throw new RevisionChanged();
     const bytes = entry?.bytes ?? (search ? await store(db, search, kind, version) : 8);
     if (entry && entry.revision !== version.revision) await db.query(`update network.route_cache set input_revision = $3::bigint
       where target_id = $1 and vehicle_kind = $2`, [targetId, kind, version.revision]);

@@ -18,7 +18,8 @@ export function Prospects({ directory }: { directory: string }) {
         An optional entityId pins an existing match; use entityType: "org" for an organization. Invalid rows are skipped and listed. Files modified in the last two minutes are in progress; retry after writing finishes. New prospects appear in the next W0 export; consent evidence does not change.</p>
       <form action={action}><button className="btn p" type="submit" disabled={pending}>{pending ? 'Adding prospects…' : 'Add prospects to the pipeline'}</button></form>
       <div aria-live="polite" aria-busy={pending}>
-        {state.error && <p role="alert">{state.error}</p>}
+        {state.message && <p role="status">{state.message}</p>}
+      {state.error && <p role="alert">{state.error}</p>}
         {r && <>
           <p><b>{r.added} added</b> · {r.moved} moved (to sourcing {r.toSourcing}, to passed {r.toPassed}) · {r.kept} kept because a person set them
             {' '}· {r.existing} unchanged · {r.ambiguous} skipped as ambiguous or conflicting.</p>
