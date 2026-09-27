@@ -1,4 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { setImmediate as yieldTurn } from 'node:timers/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import FIELDS from './fields.json';
@@ -39,15 +41,36 @@ export async function readReplicas(rawDir: string): Promise<Replica[]> {
       const m = manifest.modules[module];
       if (!m || m.error || !Number.isSafeInteger(m.expected) || !Number.isSafeInteger(m.written) || m.expected<0 || m.written<m.expected) continue;
       const file = `${module}/${name.replace('.manifest.json','.jsonl')}`;
-      let text: string;
-      try { text = await readFile(join(rawDir,file),'utf8'); }
-      catch (e) { if (m.written===0 && (e as NodeJS.ErrnoException).code==='ENOENT') text=''; else throw new Error('Dakota replica unavailable.'); }
-      const lines = text.split('\n').filter(l=>l.trim());
-      if (lines.length!==m.written) throw new Error('Dakota replica count does not match its manifest.');
-      let records: RecordFields[];
-      try { records=lines.map(l=>neededRecord(module,JSON.parse(l))); }
-      catch { throw new Error('Invalid Dakota replica records.'); }
-      replicas.push({module,file,hash:createHash('sha256').update(text).digest('hex'),records,at:manifest.at});
+      const hash=createHash('sha256'),records:RecordFields[]=[];
+      let lines=0;
+      const stream=createReadStream(join(rawDir,file),{encoding:'utf8'});
+      let pending='';
+      const accept=(line:string)=>{
+        if(!line.trim())return;
+        lines++;
+        try {records.push(neededRecord(module,JSON.parse(line)));}
+        catch {throw new Error('Invalid Dakota replica records.');}
+      };
+      try {
+        for await(const chunk of stream) {
+          hash.update(chunk);
+          pending+=chunk;
+          let start=0,end:number;
+          while((end=pending.indexOf('\n',start))!==-1) {
+            accept(pending.slice(start,end));start=end+1;
+            if(lines%200===0)await yieldTurn();
+          }
+          pending=pending.slice(start);
+        }
+        if(pending)accept(pending);
+      } catch(e) {
+        if(!(m.written===0&&(e as NodeJS.ErrnoException).code==='ENOENT')) {
+          if(e instanceof Error&&e.message==='Invalid Dakota replica records.')throw e;
+          throw new Error('Dakota replica unavailable.');
+        }
+      } finally {stream.destroy();}
+      if(lines!==m.written)throw new Error('Dakota replica count does not match its manifest.');
+      replicas.push({module,file,hash:hash.digest('hex'),records,at:manifest.at});
     }
   }
   return replicas.sort((a,b)=>a.at.localeCompare(b.at)||a.file.localeCompare(b.file));

@@ -163,7 +163,12 @@ async function boot(dir?: string): Promise<Db> {
     const { seedIfEmpty } = await import('../seed');
     await seedIfEmpty(db);
   }
-  return db;
+  // Schedule only after migrations/init. The worker uses this existing scheduled
+  // handle and its checkpoint; boot never awaits the import or opens another DB.
+  const scheduled=prioritizeDb(db);
+  const {resumeDakotaJob}=await import('../connectors/dakota/job');
+  resumeDakotaJob(scheduled);
+  return scheduled;
 }
 
 /** Script entry point. Same handle, same lifecycle, explicit about the directory. */

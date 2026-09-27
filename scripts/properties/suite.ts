@@ -14,6 +14,7 @@ export async function runProperties(check: Check) {
   await (await import('../path-search-properties')).pathSearchProperties(check);
   const db = await freshDb();
   await (await import('../dakota-properties')).dakotaProperties(check, db);
+  await (await import('../dakota-batched-properties')).dakotaBatchedProperties(check);
   await (await import('../prospects-properties')).prospectsProperties(check, db);
   await (await import('../organization-lps-properties')).organizationLpsProperties(check, db);
   await prospectDispositionProperties(check, db);

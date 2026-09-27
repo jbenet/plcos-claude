@@ -105,24 +105,16 @@ export async function importPortfolioAction(): Promise<{ result?: import('@/lib/
   } catch { return {error:'Portfolio import failed. Check the file’s required sources, vehicle slugs and stable row IDs, then retry.'}; }
 }
 
-/** Dakota records never leave the database; errors and receipts carry counts only. */
-export async function importDakotaAction(): Promise<{ result?: import('@/lib/connectors/dakota/translate').DakotaCounts; error?: string }> {
-  if (config.data.profile !== 'real' || config.data.copyTakenAt || readLayout().role !== 'live') {
-    return {error:'Import Dakota from Developer → Enrichment on the live server.'};
-  }
+/** Return a queued receipt; the local worker commits progress independently. */
+export async function importDakotaAction(): Promise<{job?:import('@/lib/connectors/dakota/translate').DakotaStatus|null;error?:string}> {
+  const {dakotaLiveServer,resumeDakotaJob}=await import('@/lib/connectors/dakota/job');
+  if(!dakotaLiveServer())return {error:'Import Dakota from Developer → Enrichment on the live server.'};
   try {
-    const { readReplicas } = await import('@/lib/connectors/dakota/replica');
-    const { translateDakota } = await import('@/lib/connectors/dakota/translate');
-    const replicas = await readReplicas('data/real/dakota/raw');
-    if(!replicas.length) return {error:'No complete Dakota replicas found. Complete the read-only pull, then retry.'};
-    const user=await (await auth()).currentUser();
-    const result=await translateDakota(await getDb(),user.id,replicas);
-    if(result.replicas||result.sourced||result.claims) await appendAudit({actorId:user.id,action:'dakota.translated',subjectType:'enrich',detail:{...result}});
-    revalidatePath('/dev/enrich');revalidatePath('/targets','layout');revalidatePath('/routes');revalidatePath('/vehicles','layout');
-    return {result};
-  } catch (e) {
-    // The replica reader's own messages are fixed strings with no record data in them; show those.
-    const why = e instanceof Error && /^(Invalid )?Dakota /.test(e.message) ? ` (${e.message})` : '';
-    return {error:`Dakota import failed${why}. No record details were exported. Check the complete replica manifests on the live server, then retry.`};
-  }
+    const {queueDakota,dakotaStatus}=await import('@/lib/connectors/dakota/translate');
+    const user=await (await auth()).currentUser(),db=await getDb();
+    await queueDakota(db,user.id);
+    const job=await dakotaStatus(db);
+    resumeDakotaJob(db);
+    return {job};
+  } catch {return {error:'Dakota could not be queued. Try again; committed batches are preserved.'};}
 }
