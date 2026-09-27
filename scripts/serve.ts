@@ -125,6 +125,11 @@ async function main() {
       const url = readFileSync(join(layout.root, 'data', 'real', 'postgres.url'), 'utf8').trim();
       if (/^postgres(ql)?:\/\/[^@\s]+@(127\.0\.0\.1|localhost|\[::1\]):\d+\/[a-z0-9_]+$/.test(url)) {
         env.DATABASE_URL = url;
+        // The role's password lives in the Keychain (plcos-postgres / app), never in the URL file (Juan,
+        // 27 Sep: lock it down so spurious writes don't get through). pg reads PGPASSWORD.
+        const pw = spawnSync('security', ['find-generic-password', '-s', 'plcos-postgres', '-a', 'app', '-w'], { encoding: 'utf8' });
+        if (pw.status === 0 && pw.stdout.trim()) env.PGPASSWORD = pw.stdout.trim();
+        else refuse('No Postgres app password in the Keychain (plcos-postgres / app); see docs/21-postgres.md.');
         say('database: local Postgres (data/real/postgres.url)');
         // Juan, 27 Sep: Postgres is part of our dev setup, never a login item, and a server restart must
         // not take it down. So this only starts the cluster (data/real/postgres) if it isn't running;
