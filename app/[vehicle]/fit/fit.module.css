@@ -34,3 +34,59 @@
   .row :global(.scorecell) { width: 52px; }
 }
 .row :global(.t) :global(.rowmeta) { row-gap: 3px; column-gap: 14px; }
+
+/* Issue 0096: act from the list, move with the keys, read the selection in the side pane. */
+.row { cursor: default; outline: none; }
+.row:focus-visible { box-shadow: inset 3px 0 0 var(--accent), 0 0 0 2px var(--accent-halo) inset; }
+.on { background: var(--accent-wash); }
+.head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.name { font-size: 13.5px; font-weight: 500; color: var(--ink); }
+.name:hover { color: var(--accent); }
+.actions { margin-left: auto; display: inline-flex; align-items: center; }
+.noPursuit { font-size: 11px; color: var(--muted); }
+.status { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.status select, .status input {
+  font: inherit; font-size: 12px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--ink); width: auto;
+}
+.status :global(.btn) { padding: 4px 10px; font-size: 12px; }
+.confirm {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-basis: 100%; justify-content: flex-end;
+  padding: 7px 8px; margin-top: 2px; border: 1px solid var(--accent-line); border-radius: 7px; background: var(--accent-soft);
+}
+.confirm input { flex: 1 1 180px; min-width: 0; }
+.confirmHead { font-size: 12px; margin-right: auto; }
+.saved { font-size: 11.5px; color: var(--green); flex-basis: 100%; text-align: right; }
+.status .bad { font-size: 11.5px; flex-basis: 100%; text-align: right; }
+.keys { margin: 12px 0 0; font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+.pane .ihead { margin-bottom: 2px; }
+.paneScore { display: flex; align-items: baseline; gap: 10px; margin: 12px 0 10px; }
+.paneScore b { font-size: 30px; font-weight: 500; line-height: 1; }
+.paneScore span { font-size: 11.5px; color: var(--muted); }
+.paneActions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.paneStatus { padding: 10px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 12px; }
+.paneStatus > .lbl { display: block; margin-bottom: 6px; }
+.paneStatus .status { justify-content: flex-start; }
+.paneStatus .confirm { justify-content: flex-start; }
+.paneStatus .confirmHead { flex-basis: 100%; }
+.paneStatus .saved, .paneStatus .status .bad { text-align: left; }
+.paneStatus p { margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
+.paneWhy { font-size: 12.5px; line-height: 1.55; margin: 0 0 12px; }
+.paneBlock { margin: 0 0 14px; }
+.paneBlock > .lbl { margin-bottom: 4px; }
+.paneBlock p { margin: 4px 0 0; font-size: 12px; line-height: 1.5; }
+.paneBlock ul { margin: 6px 0 0; padding-left: 16px; font-size: 12px; line-height: 1.5; }
+.paneReading, .paneGate { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 6px 0; border-bottom: 1px solid var(--hair); font-size: 12.5px; }
+.paneReading span, .paneGate > span:first-child { color: var(--muted); }
+.paneReading b { font-weight: 500; text-align: right; }
+.paneReading p, .paneGate p { grid-column: 1 / -1; margin: 0; font-size: 11px; color: var(--muted); }
+
+@media (pointer: coarse) {
+  .status select, .status input { padding: 7px 9px; }
+  .status :global(.btn) { padding: 7px 12px; }
+}
+/* While a change is being confirmed, it takes the row's full width under the name. */
+.head .actions:has(.confirm, .saved, .bad), .head .actions:has(.confirm, .saved, .bad) > .status { display: contents; }
+.head .status > select { margin-left: auto; }
+.confirmHead { white-space: nowrap; }

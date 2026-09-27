@@ -9,7 +9,7 @@ export async function vehicleReadings(vehicleId: string | null, entityId: string
   const db = await getDb();
   const rows = await db.query<{
     pursuit_id: string; entity_id: string; entity_name: string; vehicle_id: string;
-    vehicle_name: string; vehicle_slug: string; status: PursuitStatus; owner_name: string;
+    vehicle_name: string; vehicle_slug: string; status: PursuitStatus; owner_name: string; next_step: string | null;
     suggestion_id: string | null; made_at: Date | null; made_by: string | null; data: Partial<Strategy> | null;
   }>(`with latest as (
     select distinct on (s.pursuit_id) s.pursuit_id,s.suggestion_id,s.made_at,s.made_by,
@@ -22,7 +22,7 @@ export async function vehicleReadings(vehicleId: string | null, entityId: string
         or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))
     order by s.pursuit_id,s.created_at desc,s.suggestion_id
   ) select p.pursuit_id,e.entity_id,e.display_name entity_name,v.id vehicle_id,v.name vehicle_name,v.slug vehicle_slug,
-      p.status,u.name owner_name,s.suggestion_id,s.made_at,s.made_by,s.data
+      p.status,u.name owner_name,p.next_step,s.suggestion_id,s.made_at,s.made_by,s.data
     from strategy.pursuit p join identity.entity e on e.entity_id=identity.canonical_entity_id(p.entity_id)
     join platform.vehicle v on v.id=p.vehicle_id join platform.app_user u on u.id=p.owner_id
     left join latest s using(pursuit_id)
