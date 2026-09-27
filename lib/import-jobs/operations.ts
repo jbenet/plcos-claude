@@ -19,7 +19,7 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
     case 'export': {
       await progress('Building research export',0,1);
       const result=await (await import('@/lib/enrich/candidates')).exportResearchSet();
-      await appendAudit({actorId:actor,action:'enrich.exported',subjectType:'enrich',detail:{candidates:result.candidates,people:result.people,orgs:result.orgs}});
+      await appendAudit({actorId:actor,action:'enrich.exported',subjectType:'enrich',detail:{candidates:result.candidates,people:result.people,orgs:result.orgs,identityReviewError:result.identityReviewError ?? null}});
       return {...result};
     }
     case 'findings': {

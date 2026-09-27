@@ -163,3 +163,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Prospect precedence — researched decisions survive intake conflicts](entries/prospect-precedence.md)
 
 - [Responsive server — PGlite and imports leave the request thread](entries/responsive-server.md)
+- [Identity review export performance](entries/identity-export-perf.md)

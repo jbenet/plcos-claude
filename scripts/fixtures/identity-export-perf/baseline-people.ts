@@ -1,9 +1,9 @@
+// Test-only frozen pre-optimization implementation for semantic parity and profiling.
 import type { Queryable } from '@/lib/db';
-import { identityGraphContext, identityRawContext } from './identity-context';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
-import type { Finding } from './schema';
-import type { Path } from './connect';
-import type { ImportDuplicateReport } from './import-dupes';
+import type { Finding } from '@/lib/enrich/schema';
+import type { Path } from '@/lib/enrich/connect';
+import type { ImportDuplicateReport } from '@/lib/enrich/import-dupes';
 
 type Person = { id: string; root: string; name: string; created: string; retired: boolean };
 type Source = { id: string; source: string; key: string; resolver: string };
@@ -88,13 +88,21 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
   const apply = (id: string, data: unknown) => { const s = signals.get(roots.get(id) ?? id); if (s) readSignals(data, s); };
   const affiliations = await tx.query<{ id: string; name: string }>(`select a.person_entity::text id,o.display_name name
     from identity.affiliation a join identity.entity o on o.entity_id=identity.canonical_entity_id(a.org_entity)
-    where a.person_entity=any($1::uuid[])`, [ids]);
+    where a.person_entity=any($1::uuid[])
+    union select p.id::text,o.display_name from unnest($1::uuid[]) p(id)
+    join network.edge e on e.from_entity=p.id or e.to_entity=p.id
+    join identity.entity o on o.entity_id=identity.canonical_entity_id(case when e.from_entity=p.id then e.to_entity else e.from_entity end)
+    where o.entity_type='org' and (e.kind::text in ('same_firm','employment') or exists(
+      select 1 from jsonb_array_elements(e.evidence) v where v->>'note' ~* 'affiliation|employment|employed by|works at'))`, [ids]);
   for (const a of affiliations) apply(a.id, { org: a.name });
-  for (const a of await identityGraphContext(tx, ids)) apply(a.id, { org: a.org });
   const notes = await tx.query<{ id: string; data: unknown }>(`select entity_id::text id,data from research.note
     where entity_id=any($1::uuid[]) and (kind='public_profile' or (kind='context' and data->>'source'='prospects'))`, [ids]);
   for (const n of notes) apply(n.id, n.data);
-  const raw = await identityRawContext(tx, ids);
+  const raw = await tx.query<{ id: string; payload: unknown }>(`select s.entity_id::text id,r.payload
+    from identity.source_record s join sources.raw_record r on r.source=s.source and
+      (r.source_id=s.source_id or (s.source='affinity' and (r.kind||':'||r.source_id=s.source_id or
+        (r.kind='list_entry' and (r.payload->>'type')||':'||(r.payload->'entity'->>'id')=s.source_id))))
+    where s.entity_id=any($1::uuid[])`, [ids]);
   for (const r of raw) apply(r.id, r.payload);
   const links = await tx.query<{ id: string; value: string }>(`select entity_id::text id,value from identity.external_identifier
     where kind='linkedin' and entity_id=any($1::uuid[])`, [ids]);

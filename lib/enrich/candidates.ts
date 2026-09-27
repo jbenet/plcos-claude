@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
@@ -13,6 +14,7 @@ import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { noteTags } from '@/lib/connectors/affinity/event-tags';
 import { makeTriageExport, writeTriageExport } from './triage-export';
 import { exportIdentityReview } from './identity-review-export';
+import type { ResearchExportStatus } from './export-status';
 
 /**
  * The research set (N64, docs/19): who the enrichment workflows read about, written to files
@@ -316,7 +318,7 @@ export const enrichDir = () => {
 };
 
 /** Write the research, strategy and triage files. Returns counts, never names. */
-export async function exportResearchSet(): Promise<{ candidates: number; people: number; orgs: number; withDomain: number; withOrg: number; byStatus: Record<string, number>; dir: string }> {
+export async function exportResearchSet(): Promise<{ candidates: number; people: number; orgs: number; withDomain: number; withOrg: number; byStatus: Record<string, number>; dir: string; identityReviewError: ResearchExportStatus['identityReviewError'] }> {
   // A record with no searchable name ("-" from a source's blank) can't be researched; W1 wrote
   // empty placeholders for them (27 Sep). It stays in the pipeline, just not in the export.
   const dir = enrichDir();
@@ -333,18 +335,38 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   // address and no domain, since agents read this file and a personal domain is one step from a
   // personal address (Juan, 24 Sep: nothing that identifies us goes into a request).
   const db = await getDb();
-  const identityReview = await db.transaction(tx => exportIdentityReview(tx));
-  await writeFile(join(dir, 'identity-review.jsonl'), identityReview.map(row => JSON.stringify(row)).join('\n') + (identityReview.length ? '\n' : ''), 'utf8');
   const team = await db.query<{ handle: string; name: string; role: string }>(
     `select handle, name, role from platform.app_user where active order by name`);
   await writeFile(join(dir, 'team.json'), JSON.stringify(team.map((u) => ({
     handle: u.handle, name: u.name, role: u.role,
   })), null, 1) + '\n', 'utf8');
   await writeTriageExport(dir, await makeTriageExport(dir, snapshot.candidates, snapshot.touches, snapshot.entries, team));
+  // Identity review is independent. A cancelled statement rolls back its own transaction,
+  // after the other research files have been written, and never suppresses their receipt.
+  const status: ResearchExportStatus = { at: new Date().toISOString(), identityReviewError: null };
+  const temp = join(dir, `.identity-review-${randomUUID()}.tmp`);
+  try {
+    const identityReview = await db.transaction(tx => exportIdentityReview(tx));
+    await writeFile(temp, identityReview.map(row => JSON.stringify(row)).join('\n') + (identityReview.length ? '\n' : ''), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    await rename(temp, join(dir, 'identity-review.jsonl'));
+  } catch (error) {
+    status.identityReviewError = (error instanceof Error && /statement timeout|timed out/i.test(error.message))
+      || (typeof error === 'object' && error !== null && 'code' in error && error.code === '57014') ? 'timeout' : 'failed';
+    // Driver errors can contain private query parameters. Log only the failure category.
+    console.error(`[enrich.export] identity-review.jsonl ${status.identityReviewError}; other research files written.`);
+    // Never leave an old review set looking current. Even if removal fails, the persisted
+    // receipt below explicitly tells the operator not to use it.
+    await rm(join(dir, 'identity-review.jsonl'), { force: true }).catch(() => {
+      console.error('[enrich.export] stale identity-review.jsonl could not be removed.');
+    });
+  } finally {
+    await rm(temp, { force: true }).catch(() => {});
+  }
+  await writeFile(join(dir, 'export-status.json'), JSON.stringify(status) + '\n', { encoding: 'utf8', mode: 0o600 });
   const byStatus: Record<string, number> = {};
   for (const c of set) for (const p of c.pursuits) byStatus[p.status] = (byStatus[p.status] ?? 0) + 1;
   return {
     candidates: set.length, people: set.filter((c) => c.type === 'person').length, orgs: set.filter((c) => c.type !== 'person').length,
-    withDomain: set.filter((c) => c.domains.length).length, withOrg: set.filter((c) => c.org).length, byStatus, dir: join(config.data.root, 'enrich'),
+    withDomain: set.filter((c) => c.domains.length).length, withOrg: set.filter((c) => c.org).length, byStatus, dir: join(config.data.root, 'enrich'), identityReviewError: status.identityReviewError,
   };
 }
