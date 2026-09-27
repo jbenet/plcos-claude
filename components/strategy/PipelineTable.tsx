@@ -3,8 +3,8 @@
 import { Fragment, memo, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BulkLpActions } from './BulkLpActions';
-import { EMPTY, groupRows, lead, second, type PipelineRow, type SortKey, type Status } from './pipeline-model';
-import { cx, fmtShort, FilterLine, Icon, InPane, Ladder, n, ScoreMark, useLpView, usdM, type StatusInfo } from './lp-view';
+import { EMPTY, groupRows, lead, orgSummary, second, type OrgSummary, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { cx, Flags, fmtShort, FilterLine, Icon, InPane, Ladder, n, ScoreMark, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
 
 export type { PipelineRow, Status } from './pipeline-model';
@@ -120,7 +120,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
           </div>
         ) : (
           <div className={s.scroll}>
-            <table className={s.table}>
+            <table className={cx(s.table, s.pipe)}>
               <thead>
                 <tr>
                   <th className={s.cCheck}><input type="checkbox" aria-label="Select the LPs on screen" checked={allTicked} onChange={(e) => pick(visibleIds, e.target.checked)} /></th>
@@ -139,25 +139,29 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
                 </tr>
               </thead>
               <tbody>
-                {visible.map((g) => (
-                  <Fragment key={g.id}>
-                    {g.org && (
-                      <tr className={s.orgRow}>
-                        <td className={s.cCheck}>
-                          <input type="checkbox" aria-label={`Select everyone at ${g.org}`} checked={g.people.every((r) => picked.has(r.id))}
-                            onChange={(e) => pick(g.people.map((r) => r.id), e.target.checked)} />
-                        </td>
-                        <td colSpan={11 + (all ? 1 : 0) + (byVehicle ? 1 : 0)}>
-                          <span className={s.orgName}><Icon name="folder" title="Organisation" />{g.org}<small>{n(g.people.length)} {g.people[0]!.isOrg ? 'pursuits' : 'people'} here, each with their own status and evidence</small></span>
-                        </td>
-                      </tr>
-                    )}
-                    {g.people.map((r, i) => (
-                      <Row key={r.id} r={r} member={Boolean(g.org)} last={i === g.people.length - 1} picked={picked.has(r.id)} onPick={pick} onOpen={open}
-                        all={all} byVehicle={byVehicle} statusLabel={statusLabel(r.status)} rungNames={rungNames} now={now} />
-                    ))}
-                  </Fragment>
-                ))}
+                {visible.map((g) => {
+                  const cols = { all, byVehicle, rungNames, now, onPick: pick, onOpen: open };
+                  if (g.people.length === 1) {
+                    const r = g.people[0]!;
+                    return <Row key={g.id} r={r} picked={picked.has(r.id)} statusLabel={statusLabel(r.status)} {...cols} />;
+                  }
+                  // An organisation with several people pursued leads as a row of its own (issue
+                  // 0092): its own pursuit when it has one, otherwise a reading of its people's.
+                  const own = g.people[0]!.isOrg ? g.people[0]! : null;
+                  const members = own ? g.people.slice(1) : g.people;
+                  const ids = g.people.map((r) => r.id);
+                  const sum = own ? null : orgSummary(members);
+                  return (
+                    <Fragment key={g.id}>
+                      {own
+                        ? <Row r={own} picked={picked.has(own.id)} statusLabel={statusLabel(own.status)} people={members.length} listed={members.map((m) => m.entityId).join(',')} {...cols} />
+                        : <OrgRow sum={sum!} picked={ids.every((id) => picked.has(id))} statusLabel={statusLabel(sum!.status)} ids={ids} {...cols} />}
+                      {members.map((r, i) => (
+                        <MemberRow key={r.id} r={r} last={i === members.length - 1} picked={picked.has(r.id)} statusLabel={statusLabel(r.status)} {...cols} />
+                      ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -182,31 +186,43 @@ function nextStatus(from: Status | undefined): Status {
 
 const lpHref = (r: PipelineRow) => `/${r.vehicleSlug}/pipeline/${r.id}`;
 
-const Row = memo(function Row({ r, member, last, picked, onPick, onOpen, all, byVehicle, statusLabel, rungNames, now }: {
-  r: PipelineRow; member: boolean; last: boolean; picked: boolean; onPick: (ids: string[], on: boolean) => void;
+interface Cols {
+  all: boolean; byVehicle: boolean; rungNames: string[]; now: number;
+  onPick: (ids: string[], on: boolean) => void;
   onOpen: (r: PipelineRow, e?: { metaKey?: boolean; ctrlKey?: boolean }) => void;
-  all: boolean; byVehicle: boolean; statusLabel: string; rungNames: string[]; now: number;
+}
+/** A row opens its LP; the controls inside it keep their own clicks. */
+const rowClick = (open: () => void) => (e: React.MouseEvent) => {
+  if ((e.target as HTMLElement).closest('a,button,input,label')) return;
+  open();
+};
+const known = (c: string | null) => (c && !/unknown/i.test(c) ? c : null);
+
+/** One LP: a person, an organisation, or an organisation's person where it leads (issue 0013). */
+const Row = memo(function Row({ r, picked, statusLabel, people = 0, listed, all, byVehicle, rungNames, now, onPick, onOpen }: Cols & {
+  r: PipelineRow; picked: boolean; statusLabel: string;
+  /** Its people pursued in this vehicle, listed under it (issue 0092), and so not named again here. */
+  people?: number; listed?: string;
 }) {
-  const other = member ? (r.orgFirst ? r.name : null) : second(r);
+  const affiliated = listed ? r.people.filter((p) => !listed.split(',').includes(p.id)) : r.people;
+  const other = second(r);
   const read = r.readSuperseded ? null : r.read;
   const touch = fmtShort(r.lastTouch, now);
   return (
-    <tr className={cx(s.row, member && s.member, last && s.last, picked && s.picked)} tabIndex={0}
-      onClick={(e) => { if ((e.target as HTMLElement).closest('a,button,input,label,summary,details')) return; onOpen(r, e); }}
+    <tr className={cx(s.row, picked && s.picked, people > 0 && s.lead)} tabIndex={0}
+      onClick={rowClick(() => onOpen(r))}
       onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) onOpen(r, e); }}>
       <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
       <td className={s.cLp}>
-        <div className={s.lpName}>
-          <span className={s.kind}><Icon name={r.isOrg || (r.orgFirst && !member) ? 'folder' : 'person'} title={r.isOrg || (r.orgFirst && !member) ? 'Organisation' : 'Person'} /></span>
-          <a href={lpHref(r)}>{member ? r.name : lead(r)}</a>
-        </div>
-        {other && other !== (member ? r.name : lead(r)) && <div className={s.second}>{other}</div>}
+        <div className={s.lpName}><a href={lpHref(r)}>{lead(r)}</a></div>
+        {other && <div className={s.second}>{other}</div>}
+        {people > 0 && <div className={s.second}>{n(people)} of its people pursued, below</div>}
         {r.headline && <div className={s.headline} title={r.headline}>{r.headline}</div>}
-        {r.people.length > 0 && (
+        {affiliated.length > 0 && (
           <div className={s.people}>
             <span><Icon name="person" title="People at this organisation" /></span><span>
-            {r.people.slice(0, 3).map((p, i) => <span key={`${p.id}:${p.role}`}>{i > 0 && ', '}<a href={`/orgs/${p.id}`}>{p.name}</a></span>)}
-            {r.people.length > 3 && <> and {n(r.people.length - 3)} more</>}
+            {affiliated.slice(0, 3).map((p, i) => <span key={`${p.id}:${p.role}`}>{i > 0 && ', '}<a href={`/orgs/${p.id}`}>{p.name}</a></span>)}
+            {affiliated.length > 3 && <> and {n(affiliated.length - 3)} more</>}
             </span>
           </div>
         )}
@@ -215,7 +231,7 @@ const Row = memo(function Row({ r, member, last, picked, onPick, onOpen, all, by
           {all && <span className={s.mStatus}>{statusLabel}</span>}
           {byVehicle && <span className={s.mVehicle}>{r.vehicle}</span>}
           <span className={s.mOwner}>Owner: {r.owner}</span>
-          {r.capacity && !/unknown/i.test(r.capacity) && <span className={s.mCap}>{r.capacity}</span>}
+          {known(r.capacity) && <span className={s.mCap}>{r.capacity}</span>}
           {r.route !== null && r.route > 0 && <span className={s.mRoutes}>{n(r.route)} {r.route === 1 ? 'route' : 'routes'}</span>}
           {r.meetings > 0 && <span className={s.mMeet}>met {r.meetings}×</span>}
           {touch && <span className={s.mTouch}>touched {touch}</span>}
@@ -226,7 +242,7 @@ const Row = memo(function Row({ r, member, last, picked, onPick, onOpen, all, by
       {all && <td className={s.cStatus}>{statusLabel}</td>}
       {byVehicle && <td className={cx(s.cVehicle, s.none)}>{r.vehicle}</td>}
       <td className={cx(s.cOwner, s.none)}>{r.owner}</td>
-      <td className={s.cCap}>{r.capacity && !/unknown/i.test(r.capacity) ? r.capacity : <span className={s.none}>—</span>}</td>
+      <td className={s.cCap}>{known(r.capacity) ?? <span className={s.none}>—</span>}</td>
       <td className={s.cWhere}>
         {r.money && (
           <div className={s.money}><Icon name="coin" title="Money" />{r.money.state} {usdM(r.money.amount)}
@@ -239,27 +255,10 @@ const Row = memo(function Row({ r, member, last, picked, onPick, onOpen, all, by
         {r.nextOn && <span className={s.small}>Due {fmtShort(r.nextOn, now)}</span>}
         {r.ahead && <span className={s.ahead}>A meeting is on record: Discussing?</span>}
         {r.said && <span className={s.small}>Affinity: &ldquo;{r.said}&rdquo;{r.implied.length ? ` — ${r.implied.join(', ')}` : ''}</span>}
-        {r.riskCount > 0 && (
-          <details className={s.flags}>
-            <summary>{n(r.riskCount)} {r.riskCount === 1 ? 'flag' : 'flags'}</summary>
-            <ul>
-              {r.risks.map((x, i) => <li key={i}>{x}</li>)}
-              {r.riskCount > r.risks.length && <li>and {n(r.riskCount - r.risks.length)} more on the <a href={lpHref(r)}>LP&rsquo;s page</a></li>}
-            </ul>
-          </details>
-        )}
+        <Flags r={r} href={lpHref(r)} />
       </td>
-      <td className={s.cRoutes}>
-        <a className={cx(s.fig, !r.route && s.zero)} href={`/${r.vehicleSlug}/routes?target=${r.entityId}`} title="Recorded warm intro routes">
-          <Icon name="link" title="Routes" />{r.route ?? '—'}
-        </a>
-      </td>
-      <td className={s.cMeet}>
-        <span className={cx(s.fig, !r.meetings && s.zero)} title={r.lastMeeting ? `Last met ${fmtShort(r.lastMeeting, now)}` : 'No meeting on record'}>
-          {r.meetings ? <><Icon name="calendar" title="Meetings" />{r.meetings}</> : '—'}
-        </span>
-        {r.lastMeeting && <span className={s.small}>{fmtShort(r.lastMeeting, now)}</span>}
-      </td>
+      <td className={s.cRoutes}><Routes r={r} /></td>
+      <td className={s.cMeet}><Met meetings={r.meetings} last={r.lastMeeting} now={now} /></td>
       <td className={s.cTouch}>
         {touch ? <span className={s.date}>{touch}</span> : <span className={s.none}>—</span>}
         {r.waitingSince && <span className={s.small}>waiting on them</span>}
@@ -270,6 +269,134 @@ const Row = memo(function Row({ r, member, last, picked, onPick, onOpen, all, by
         {r.readOn && <span className={s.small}>{fmtShort(r.readOn, now)}{r.readSuperseded ? ' · superseded' : r.readSuggested ? ' · suggested' : ''}{r.readOld && !r.readSuperseded ? ' · old' : ''}</span>}
       </td>
       <td className={s.cEv}><Ladder r={r} names={rungNames} /></td>
+    </tr>
+  );
+});
+
+function Routes({ r }: { r: PipelineRow }) {
+  return (
+    <a className={cx(s.fig, !r.route && s.zero)} href={`/${r.vehicleSlug}/routes?target=${r.entityId}`} title="Recorded warm intro routes">
+      <Icon name="link" title="Routes" />{r.route ?? '—'}
+    </a>
+  );
+}
+function Met({ meetings, last, now, compact }: { meetings: number; last: string | null; now: number; compact?: boolean }) {
+  return (
+    <>
+      <span className={cx(s.fig, !meetings && s.zero)} title={last ? `Last met ${fmtShort(last, now)}` : 'No meeting on record'}>
+        {meetings ? <><Icon name="calendar" title="Meetings" />{meetings}</> : '—'}
+      </span>
+      {last && !compact && <span className={s.small}>{fmtShort(last, now)}</span>}
+    </>
+  );
+}
+
+/**
+ * An organisation none of whose own pursuit is recorded, ranked from its people (issue 0092). It
+ * opens its best-scored person's page, which leads with the organisation and lists its people.
+ */
+const OrgRow = memo(function OrgRow({ sum, ids, picked, statusLabel, all, byVehicle, now, onPick, onOpen }: Cols & {
+  sum: OrgSummary; ids: string[]; picked: boolean; statusLabel: string;
+}) {
+  const r = sum.lead;
+  const touch = fmtShort(sum.lastTouch, now);
+  return (
+    <tr className={cx(s.row, s.lead, picked && s.picked)} tabIndex={0}
+      onClick={rowClick(() => onOpen(r))}
+      onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) onOpen(r, e); }}>
+      <td className={s.cCheck}><input type="checkbox" aria-label={`Select everyone at ${sum.org}`} checked={picked} onChange={(e) => onPick(ids, e.target.checked)} /></td>
+      <td className={s.cLp}>
+        <div className={s.lpName}><a href={lpHref(r)}>{sum.org}</a></div>
+        <div className={s.second}>{n(sum.count)} people pursued, below</div>
+        {sum.doNotContact && <span className={s.dnc}>Do not contact</span>}
+        <div className={s.meta}>
+          {all && <span className={s.mStatus}>{statusLabel}</span>}
+          {byVehicle && <span className={s.mVehicle}>{r.vehicle}</span>}
+          <span className={s.mOwner}>Owner: {sum.owners.length === 1 ? sum.owners[0] : `${sum.owners.length} owners`}</span>
+          {known(sum.capacity) && <span className={s.mCap}>{sum.capacity}</span>}
+          {sum.route ? <span className={s.mRoutes}>{n(sum.route)} routes</span> : null}
+          {sum.meetings > 0 && <span className={s.mMeet}>met {sum.meetings}×</span>}
+          {touch && <span className={s.mTouch}>touched {touch}</span>}
+          {sum.read && <span className={s.mRead}>{sum.read}</span>}
+        </div>
+      </td>
+      <td className={s.cScore}>
+        {sum.score === null ? <div className={s.score}><span className={cx(s.scoreNum, s.none)}>—</span><span className={s.scoreKind}>Unscored</span></div> : (
+          <div className={s.score} title={`The best score among its ${sum.count} people: ${sum.scoreFrom}'s.`}>
+            <span className={s.scoreNum}>{sum.score}</span>
+            <span className={s.bar} aria-hidden><i className={scoreTone(sum.score)} style={{ width: `${sum.score}%` }} /></span>
+            <span className={s.scoreKind}>Best of {sum.count}</span>
+          </div>
+        )}
+      </td>
+      {all && <td className={s.cStatus}>{statusLabel}</td>}
+      {byVehicle && <td className={cx(s.cVehicle, s.none)}>{r.vehicle}</td>}
+      <td className={cx(s.cOwner, s.none)}>{sum.owners.length === 1 ? sum.owners[0] : sum.owners.join(', ')}</td>
+      <td className={s.cCap}>{known(sum.capacity) ?? <span className={s.none}>—</span>}</td>
+      <td className={s.cWhere}>
+        {sum.money && <div className={s.money}><Icon name="coin" title="Money" />{sum.money.state} {usdM(sum.money.amount)}</div>}
+        {sum.money && <span className={s.small}>from {sum.money.from === 1 ? 'one of them' : `${sum.money.from} of them`}</span>}
+        {r.next && <div className={s.next} title={r.next}>{r.next}</div>}
+        {r.next && <span className={s.small}>for {r.name}</span>}
+      </td>
+      <td className={s.cRoutes}><span className={cx(s.fig, !sum.route && s.zero)} title="Recorded routes to any of its people"><Icon name="link" title="Routes" />{sum.route ?? '—'}</span></td>
+      <td className={s.cMeet}><Met meetings={sum.meetings} last={sum.lastMeeting} now={now} /></td>
+      <td className={s.cTouch}>{touch ? <span className={s.date}>{touch}</span> : <span className={s.none}>—</span>}</td>
+      <td className={s.cRead}>{sum.read ? <span className={s.read}>{sum.read}</span> : <span className={s.none}>—</span>}</td>
+      <td className={s.cEv}>
+        <div className={s.ladder} role="img" aria-label={`Furthest evidence: ${sum.furthest.rungLabel}, ${sum.furthest.name}`}>
+          {sum.furthest.rungs.map((x, i) => <span key={i} className={cx(x !== 'off' && s[x], i === sum.furthest.needs && s.needs)} />)}
+        </div>
+        <div className={s.ladderLabel}>{sum.furthest.rungLabel}{sum.furthest.rung > 0 ? `, ${sum.furthest.name}` : ''}</div>
+      </td>
+    </tr>
+  );
+});
+
+/**
+ * A person under their organisation (issue 0092): indented, smaller, and without what the row above
+ * already says — the organisation, its capacity, Affinity's word. The row opens their LP page.
+ */
+const MemberRow = memo(function MemberRow({ r, last, picked, statusLabel, all, byVehicle, now, onPick, onOpen }: Cols & {
+  r: PipelineRow; last: boolean; picked: boolean; statusLabel: string;
+}) {
+  const read = r.readSuperseded ? null : r.read;
+  const touch = fmtShort(r.lastTouch, now);
+  return (
+    <tr className={cx(s.row, s.member, last && s.last, picked && s.picked)} tabIndex={0}
+      onClick={rowClick(() => onOpen(r))}
+      onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) onOpen(r, e); }}>
+      <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${r.name}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
+      <td className={s.cLp}>
+        <a href={lpHref(r)}>{r.name}</a>
+        {r.doNotContact && <span className={s.dnc} style={{ marginLeft: 6 }}>Do not contact</span>}
+        <div className={s.meta}>
+          {all && <span className={s.mStatus}>{statusLabel}</span>}
+          <span className={s.mOwner}>Owner: {r.owner}</span>
+          {r.meetings > 0 && <span className={s.mMeet}>met {r.meetings}×</span>}
+          {touch && <span className={s.mTouch}>touched {touch}</span>}
+        </div>
+      </td>
+      <td className={s.cScore}>{r.score === null ? <span className={s.none}>—</span> : <span className={s.scoreNum} title={r.scoreKind}>{r.score}</span>}</td>
+      {all && <td className={s.cStatus}>{statusLabel}</td>}
+      {byVehicle && <td className={s.cVehicle} />}
+      <td className={cx(s.cOwner, s.none)}>{r.owner}</td>
+      <td className={s.cCap} />
+      <td className={s.cWhere}>
+        {r.money && <div className={s.money}>{r.money.state} {usdM(r.money.amount)}</div>}
+        {r.ended && <div className={s.one}>{r.ended}</div>}
+        {r.next && <div className={s.one} title={r.next}>{r.next}</div>}
+        {r.ahead && <span className={s.ahead}>A meeting is on record: Discussing?</span>}
+      </td>
+      <td className={s.cRoutes}><Routes r={r} /></td>
+      <td className={s.cMeet}><Met meetings={r.meetings} last={r.lastMeeting} now={now} compact /></td>
+      <td className={s.cTouch}>{touch ? <span className={s.date}>{touch}</span> : <span className={s.none}>—</span>}</td>
+      <td className={s.cRead}>{read ? <span className={cx(s.read, r.readSuggested && s.suggested)}>{read}</span> : <span className={s.none}>—</span>}</td>
+      <td className={s.cEv}>
+        <div className={s.ladder} role="img" aria-label={`Evidence: ${r.rungLabel}`} title={r.rungLabel}>
+          {r.rungs.map((x, i) => <span key={i} className={cx(x !== 'off' && s[x], i === r.needs && s.needs)} />)}
+        </div>
+      </td>
     </tr>
   );
 });

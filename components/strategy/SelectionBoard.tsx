@@ -1,12 +1,12 @@
 'use client';
 
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { scoreDetailAction } from '@/app/selection/actions';
 import type { ScoreDetail } from '@/lib/pipeline-data';
 import { BulkLpActions } from './BulkLpActions';
 import { compareRows, EMPTY, lead, second, type PipelineRow, type SortKey, type Status } from './pipeline-model';
-import { cx, fmt, fmtShort, FilterLine, Icon, Ladder, n, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
+import { cx, Disclose, fmt, fmtShort, FilterLine, Icon, Ladder, n, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
 
 /**
@@ -16,13 +16,9 @@ import s from './lp-tables.module.css';
  */
 
 const PAGE = 60;
-const SORTS: Array<{ key: SortKey; label: string }> = [
-  { key: 'score', label: 'Score' },
-  { key: 'capacity', label: 'Capacity' },
-  { key: 'route', label: 'Routes' },
-  { key: 'touch', label: 'Last touch' },
-  { key: 'name', label: 'Name' },
-];
+const SORT_LABEL: Partial<Record<SortKey, string>> = {
+  score: 'score', capacity: 'check size', route: 'routes', status: 'stage', meetings: 'meetings', touch: 'last touch', name: 'name',
+};
 const DEFAULT: Status[] = ['new', 'sourcing'];
 
 interface Props {
@@ -37,7 +33,7 @@ interface Props {
 export function SelectionBoard({ rows, statuses, rungNames, initialFilters, showVehicle, asOf }: Props) {
   const router = useRouter();
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'selection' });
-  const { enabled, setEnabled, counts, active, shown, sort, setSort, picked, pick, pickedRows, now } = view;
+  const { enabled, setEnabled, counts, active, shown, sort, picked, pick, pickedRows, now } = view;
   const [limit, setLimit] = useState(PAGE);
   const shownIds = useMemo(() => new Set(shown.map((r) => r.id)), [shown]);
   useEffect(() => setLimit(PAGE), [enabled, view.f, sort]);
@@ -67,10 +63,57 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
     return () => watch.disconnect();
   }, []);
 
+  const visibleIds = ranked.slice(0, limit).map((r) => r.id);
+  const allTicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
+
+  // The keyboard (issue 0091): up and down move the focus through the table, x ticks the LP in
+  // focus, Enter opens it. Not while typing in a field or a dialog.
+  const keys = useRef({ ranked, focus, limit, picked });
+  keys.current = { ranked, focus, limit, picked };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target instanceof HTMLElement ? e.target : null;
+      if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && !(el as HTMLInputElement).type?.match(/checkbox/) || el.closest('dialog, [role="dialog"]'))) return;
+      const { ranked, focus, limit, picked } = keys.current;
+      if (!focus) return;
+      const i = ranked.indexOf(focus);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'j' || e.key === 'k') {
+        const next = ranked[Math.max(0, Math.min(ranked.length - 1, i + (e.key === 'ArrowDown' || e.key === 'j' ? 1 : -1)))];
+        if (!next) return;
+        e.preventDefault();
+        if (ranked.indexOf(next) >= limit) setLimit((x) => x + PAGE);
+        setFocusId(next.id);
+        requestAnimationFrame(() => document.querySelector(`[data-lp="${next.id}"]`)?.scrollIntoView({ block: 'nearest' }));
+      } else if (e.key === 'x') {
+        e.preventDefault();
+        pick([focus.id], !picked.has(focus.id));
+      } else if (e.key === 'Enter' && (!el || el === document.body || el.closest('[data-lp]'))) {
+        e.preventDefault();
+        open(focus);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // open and pick are stable in effect; the rest is read through the ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const Th = ({ k, className, title, children }: { k: SortKey; className: string; title?: string; children: string }) => {
+    const on = sort.key === k;
+    return (
+      <th className={className} aria-sort={on ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'} title={title}>
+        <button type="button" className={cx(s.sortBtn, on && s.sorted)} onClick={() => view.sortBy(k)}>
+          {children}{on ? (sort.dir === -1 ? ' ↓' : ' ↑') : ''}
+        </button>
+      </th>
+    );
+  };
+
   const toggle = (id: Status) => setEnabled(enabled.includes(id) ? enabled.filter((x) => x !== id) : statuses.map((x) => x.id).filter((x) => x === id || enabled.includes(x)));
   const open = (r: PipelineRow) => router.push(`/${r.vehicleSlug}/pipeline/${r.id}`);
 
-  const detail = focus && <Why key={focus.id} r={focus} position={position} sortLabel={SORTS.find((x) => x.key === sort.key)?.label ?? 'Score'} rungNames={rungNames} now={now}
+  const detail = focus && <Why key={focus.id} r={focus} position={position} sortLabel={SORT_LABEL[sort.key] ?? 'score'} rungNames={rungNames} now={now}
     picked={picked.has(focus.id)} onPick={(on) => pick([focus.id], on)} />;
 
   return (
@@ -96,25 +139,14 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
       <FilterLine view={view} rows={rows} showVehicle={showVehicle} keys={['flag', 'touch', 'read']} placeholder="Search names, organisations, next steps…  /" />
 
       <div className={cx(s.selGrid, !focus && !pickedRows.length && s.alone)}>
-        <div className="card" style={{ marginBottom: 0 }}>
+        <div className={cx('card', s.rankCard)}>
           <div className={s.head}>
             <h2>Ranked</h2>
             <div className={s.headMeta}>
               {n(shown.length)} LPs · {n(scored)} scored
               {enabled.length > 0 && !all && <span> · {enabled.map((id) => statuses.find((x) => x.id === id)?.label).join(', ')}</span>}
             </div>
-            <div className={s.sortBar} role="group" aria-label="Order">
-              <span>Order</span>
-              {SORTS.map((x) => {
-                const on = sort.key === x.key;
-                return (
-                  <button key={x.key} type="button" className={cx(s.seg, on && s.on)} aria-pressed={on}
-                    title={on ? 'Reverse the order' : undefined} onClick={() => view.sortBy(x.key)}>
-                    {x.label}{on ? (sort.dir === -1 ? ' ↓' : ' ↑') : ''}
-                  </button>
-                );
-              })}
-            </div>
+            <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>↵</kbd> open</div>
           </div>
 
           {ranked.length === 0 ? (
@@ -128,12 +160,34 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
               </div>
             </div>
           ) : (
-            <ol className={s.rank}>
-              {ranked.slice(0, limit).map((r, i) => (
-                <Item key={r.id} r={r} position={i + 1} focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now}
-                  showStatus={enabled.length > 1} onFocus={setFocusId} onPick={pick} onOpen={open} inline={narrow && r.id === focus?.id ? detail : null} />
-              ))}
-            </ol>
+            <div className={s.scroll}>
+              <table className={cx(s.table, s.ranked)} aria-label="Ranked LPs. Up and down move the focus; x ticks the LP in focus.">
+                <thead>
+                  <tr>
+                    <th className={s.cCheck}><input type="checkbox" aria-label="Select the LPs on screen" checked={allTicked} onChange={(e) => pick(visibleIds, e.target.checked)} /></th>
+                    <th className={s.cPos}>#</th>
+                    <Th k="name" className={s.cLp}>LP</Th>
+                    <Th k="score" className={s.cScore}>Score</Th>
+                    <Th k="capacity" className={s.cCap} title="The estimated check size: the capacity band on file">Check size</Th>
+                    <Th k="route" className={s.cRoutes}>Routes</Th>
+                    <Th k="status" className={s.cStatus}>Stage</Th>
+                    <Th k="meetings" className={s.cMeet}>Met</Th>
+                    <Th k="touch" className={s.cTouch}>Last touch</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranked.slice(0, limit).map((r, i) => (
+                    <Fragment key={r.id}>
+                      <RankRow r={r} position={i + 1} focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now}
+                        onFocus={setFocusId} onPick={pick} />
+                      {narrow && r.id === focus?.id && detail && (
+                        <tr className={s.inlineRow}><td colSpan={9}><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>
+                      )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           {ranked.length > limit && (
             <div className={s.more}>
@@ -159,56 +213,42 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   );
 }
 
-const Item = memo(function Item({ r, position, focused, picked, byVehicle, now, showStatus, onFocus, onPick, onOpen, inline }: {
-  r: PipelineRow; position: number; focused: boolean; picked: boolean; byVehicle: boolean; now: number; showStatus: boolean;
-  onFocus: (id: string) => void; onPick: (ids: string[], on: boolean) => void; onOpen: (r: PipelineRow) => void; inline: React.ReactNode;
+const RankRow = memo(function RankRow({ r, position, focused, picked, byVehicle, now, onFocus, onPick }: {
+  r: PipelineRow; position: number; focused: boolean; picked: boolean; byVehicle: boolean; now: number;
+  onFocus: (id: string) => void; onPick: (ids: string[], on: boolean) => void;
 }) {
   const other = second(r);
   const touch = fmtShort(r.lastTouch, now);
-  const ref = useRef<HTMLLIElement>(null);
   const stale = /stale/i.test(r.scoreKind);
+  const cap = r.capacity && !/unknown/i.test(r.capacity) ? r.capacity : null;
   return (
-    <li ref={ref} className={cx(s.item, focused && s.focus, picked && s.picked)} tabIndex={0} aria-current={focused || undefined}
-      onClick={(e) => { if ((e.target as HTMLElement).closest('a,button,input,label,summary,details')) return; if (focused && (e.target as HTMLElement).closest(`.${s.inline}`)) return; onFocus(r.id); }}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter') { if (focused) onOpen(r); else onFocus(r.id); }
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          e.preventDefault();
-          const next = (e.key === 'ArrowDown' ? ref.current?.nextElementSibling : ref.current?.previousElementSibling) as HTMLElement | null;
-          next?.focus(); next?.click();
-        }
-        if (e.key === ' ') { e.preventDefault(); onPick([r.id], !picked); }
-      }}>
-      <input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} />
-      <span className={s.pos}>{position}</span>
-      <div className={s.who}>
-        <div className={s.whoName}>
-          <span className={s.kind}><Icon name={r.isOrg || r.orgFirst ? 'folder' : 'person'} title={r.isOrg || r.orgFirst ? 'Organisation' : 'Person'} /></span>
-          <span>{lead(r)}</span>
-          {r.list === 'this year' && <span className={cx(s.pill, s.year)} title="The proposed strategy puts them on this year’s close">This year</span>}
-          {r.list === '2027' && <span className={s.pill} title="The proposed strategy puts them on the 2027 list">2027</span>}
-        </div>
-        <div className={s.whoLine}>
-          {other && <span>{other}</span>}
-          {showStatus && <span>{STATUS_WORD[r.status]}</span>}
-          {byVehicle && <span>{r.vehicle}</span>}
-          {r.capacity && !/unknown/i.test(r.capacity) && <span>{r.capacity}</span>}
-          {r.route ? <span>{n(r.route)} {r.route === 1 ? 'route' : 'routes'}</span> : null}
-          {r.meetings > 0 && <span>met {r.meetings}×</span>}
-          {touch && <span>last touch {touch}</span>}
-          {r.money && <span>{r.money.state} {usdM(r.money.amount)}</span>}
-          {r.doNotContact && <span style={{ color: 'var(--clay)' }}>do not contact</span>}
-          {r.riskCount > 0 && <span>{r.riskCount} {r.riskCount === 1 ? 'flag' : 'flags'}</span>}
-        </div>
-      </div>
-      <div className={s.right}>
-        {r.score === null ? <><div className={cx(s.big, s.none)}>—</div><span className={s.scoreKind}>unscored</span></>
-          : <><div className={s.big}>{r.score}</div><span className={s.bar} aria-hidden><i className={scoreTone(r.score)} style={{ width: `${r.score}%` }} /></span>
-            <span className={cx(s.scoreKind, stale && s.stale)}>{r.scoreKind.startsWith('Fit') ? 'fit' : stale ? 'stale' : 'provisional'}</span></>}
-      </div>
-      {focused && inline && <div className={cx('card', s.inline)} style={{ marginBottom: 0 }}>{inline}</div>}
-    </li>
+    <tr data-lp={r.id} className={cx(s.row, focused && s.focus, picked && s.picked)} aria-selected={focused}
+      onClick={(e) => { if ((e.target as HTMLElement).closest('a,button,input,label')) return; onFocus(r.id); }}>
+      <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
+      <td className={s.cPos}>{position}</td>
+      <td className={s.cLp}>
+        <div className={s.lpName}><span className={s.lpText}>{lead(r)}</span></div>
+        {(other || byVehicle || r.money || r.doNotContact || r.riskCount > 0) && (
+          <div className={s.whoLine}>
+            {other && <span>{other}</span>}
+            {byVehicle && <span>{r.vehicle}</span>}
+            {r.money && <span>{r.money.state} {usdM(r.money.amount)}</span>}
+            {r.doNotContact && <span style={{ color: 'var(--clay)' }}>do not contact</span>}
+            {r.riskCount > 0 && <span>{r.riskCount} {r.riskCount === 1 ? 'flag' : 'flags'}</span>}
+          </div>
+        )}
+      </td>
+      <td className={s.cScore}>
+        {r.score === null ? <><div className={cx(s.scoreNum, s.none)}>—</div><span className={s.scoreKind}>unscored</span></>
+          : <div className={s.score}><span className={s.scoreNum}>{r.score}</span><span className={s.bar} aria-hidden><i className={scoreTone(r.score)} style={{ width: `${r.score}%` }} /></span>
+            <span className={cx(s.scoreKind, stale && s.stale)}>{r.scoreKind.startsWith('Fit') ? 'fit' : stale ? 'stale' : 'provisional'}</span></div>}
+      </td>
+      <td className={s.cCap}>{cap ?? <span className={s.none}>—</span>}</td>
+      <td className={s.cRoutes}><span className={cx(s.fig, !r.route && s.zero)}><Icon name="link" title="Routes" />{r.route ?? '—'}</span></td>
+      <td className={s.cStatus}>{STATUS_WORD[r.status]}</td>
+      <td className={s.cMeet}><span className={cx(s.fig, !r.meetings && s.zero)}>{r.meetings ? <><Icon name="calendar" title="Meetings" />{r.meetings}</> : '—'}</span></td>
+      <td className={s.cTouch}>{touch ? <span className={s.date}>{touch}</span> : <span className={s.none}>—</span>}</td>
+    </tr>
   );
 });
 
@@ -233,7 +273,7 @@ function Why({ r, position, sortLabel, rungNames, now, picked, onPick }: {
     <div className={s.why}>
       <div className={s.whyHead}>
         <div style={{ minWidth: 0 }}>
-          <div className="lbl">#{n(position)} by {sortLabel.toLowerCase()}</div>
+          <div className="lbl">#{n(position)} by {sortLabel}</div>
           <h3>{lead(r)}</h3>
           {other && <div className={s.second}>{other}</div>}
         </div>
@@ -241,6 +281,14 @@ function Why({ r, position, sortLabel, rungNames, now, picked, onPick }: {
           <div className={cx(s.big, r.score === null && s.none)}>{r.score ?? '—'}</div>
           <span className={cx(s.scoreKind, stale && s.stale)}>{r.score === null ? 'unscored' : r.scoreKind}</span>
           {r.scoreAt && <span className={s.scoreKind} style={{ display: 'block' }}>{fmt(r.scoreAt)}</span>}
+        </div>
+      </div>
+
+      <div className={s.go}>
+        <a className="btn p" href={`/${r.vehicleSlug}/pipeline/${r.id}`}>Open {lead(r)}&rsquo;s strategy</a>
+        <div className={s.goRow}>
+          <button type="button" className="btn" aria-pressed={picked} onClick={() => onPick(!picked)}>{picked ? 'Unselect' : 'Select for an action'}</button>
+          <a className="btn" href={`/${r.vehicleSlug}/fit/${r.entityId}`}>Fit &amp; standing</a>
         </div>
       </div>
 
@@ -284,13 +332,6 @@ function Why({ r, position, sortLabel, rungNames, now, picked, onPick }: {
         {r.doNotContact && <div className={s.fact}><span>Restricted</span><span style={{ color: 'var(--clay)' }}>Do not contact. Review the target&rsquo;s instructions first.</span></div>}
       </div>
 
-      <div className={s.go}>
-        <a className="btn p" href={`/${r.vehicleSlug}/pipeline/${r.id}`}>Open {lead(r)}&rsquo;s strategy</a>
-        <div className={s.goRow}>
-          <button type="button" className="btn" aria-pressed={picked} onClick={() => onPick(!picked)}>{picked ? 'Unselect' : 'Select for an action'}</button>
-          <a className="btn" href={`/${r.vehicleSlug}/fit/${r.entityId}`}>Fit &amp; standing</a>
-        </div>
-      </div>
     </div>
   );
 }
@@ -302,10 +343,9 @@ function Flags({ list }: { list: string[] }) {
     <>
       <ul className={s.whyFlags}>{list.slice(0, FIRST).map((x, i) => <li key={i}>{x}</li>)}</ul>
       {list.length > FIRST && (
-        <details className={s.flags}>
-          <summary>{n(list.length - FIRST)} more</summary>
+        <Disclose label={`${n(list.length - FIRST)} more`}>
           <ul className={s.whyFlags}>{list.slice(FIRST).map((x, i) => <li key={i}>{x}</li>)}</ul>
-        </details>
+        </Disclose>
       )}
     </>
   );

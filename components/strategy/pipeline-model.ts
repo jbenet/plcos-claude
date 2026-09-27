@@ -109,8 +109,12 @@ export interface Group { id: string; org: string | null; people: PipelineRow[] }
  */
 export function groupRows(rows: PipelineRow[], key: SortKey, dir: 1 | -1): Group[] {
   const groups = new Map<string, PipelineRow[]>();
+  // An organisation pursued in its own right gathers its people pursued in the same vehicle,
+  // whichever name leads their own rows (issue 0092).
+  const orgsPursued = new Set(rows.filter((r) => r.isOrg).map((r) => `${r.vehicleId}:${r.entityId}`));
   for (const r of rows) {
-    const id = r.orgFirst && r.orgId ? `${r.vehicleId}:${r.orgId}` : r.id;
+    const org = r.isOrg ? r.entityId : r.orgId;
+    const id = org && (r.isOrg || r.orgFirst || orgsPursued.has(`${r.vehicleId}:${org}`)) ? `${r.vehicleId}:${org}` : r.id;
     const group = groups.get(id);
     if (group) group.push(r); else groups.set(id, [r]);
   }
@@ -127,6 +131,61 @@ export function groupRows(rows: PipelineRow[], key: SortKey, dir: 1 | -1): Group
 }
 const bestOf = (people: PipelineRow[], compare: (a: PipelineRow, b: PipelineRow) => number) =>
   people.reduce((best, p) => (compare(p, best) < 0 ? p : best), people[0]!);
+
+/**
+ * An organisation's own row, when several of its people are pursued and it has no pursuit of its
+ * own (issue 0092): ranked like any LP, from its people. The score is its best person's, and says
+ * so; routes and meetings add up; the last touch and their read are the latest and warmest; the
+ * evidence is the furthest any of them has got, named. Nothing here is recorded anywhere: it is a
+ * reading of the rows beneath it, and each person keeps their own status, evidence and actions.
+ */
+export interface OrgSummary {
+  lead: PipelineRow;
+  org: string;
+  count: number;
+  score: number | null;
+  scoreFrom: string | null;
+  status: Status;
+  owners: string[];
+  capacity: string | null;
+  route: number | null;
+  meetings: number;
+  lastMeeting: string | null;
+  lastTouch: string | null;
+  read: string | null;
+  furthest: PipelineRow;
+  money: { state: string; amount: number; from: number } | null;
+  doNotContact: boolean;
+}
+const later = (a: string | null, b: string | null) => (!a ? b : !b ? a : a > b ? a : b);
+export function orgSummary(people: PipelineRow[]): OrgSummary {
+  const byScore = [...people].sort((a, b) => compareRows(a, b, 'score', -1));
+  const lead = byScore[0]!;
+  const withCap = people.filter((p) => p.capacitySort !== null).sort((a, b) => b.capacitySort! - a.capacitySort!);
+  const routes = people.filter((p) => p.route !== null);
+  const reads = people.map(theirRead).filter((x): x is string => Boolean(x)).sort((a, b) => (READ_ORDER[b] ?? 0) - (READ_ORDER[a] ?? 0));
+  const monies = people.flatMap((p) => (p.money ? [p.money] : []));
+  return {
+    lead,
+    org: lead.org ?? lead.name,
+    count: people.length,
+    score: lead.score,
+    scoreFrom: lead.score === null ? null : lead.name,
+    status: people.reduce((s, p) => (STATUS_ORDER.indexOf(p.status) > STATUS_ORDER.indexOf(s) && p.status !== 'passed' ? p.status : s), people[0]!.status),
+    owners: [...new Set(people.map((p) => p.owner))],
+    capacity: withCap[0]?.capacity ?? null,
+    route: routes.length ? routes.reduce((n, p) => n + p.route!, 0) : null,
+    meetings: people.reduce((n, p) => n + p.meetings, 0),
+    lastMeeting: people.reduce<string | null>((d, p) => later(d, p.lastMeeting), null),
+    lastTouch: people.reduce<string | null>((d, p) => later(d, p.lastTouch), null),
+    read: reads[0] ?? null,
+    furthest: people.reduce((f, p) => (p.rung > f.rung ? p : f), people[0]!),
+    money: monies.length
+      ? { state: monies.reduce((s, m) => ((MONEY_ORDER[m.state] ?? 0) > (MONEY_ORDER[s] ?? 0) ? m.state : s), monies[0]!.state), amount: monies.reduce((n, m) => n + m.amount, 0), from: monies.length }
+      : null,
+    doNotContact: people.some((p) => p.doNotContact),
+  };
+}
 
 // ── filters ─────────────────────────────────────────────────────────────────────────────────────
 export interface Filters {
