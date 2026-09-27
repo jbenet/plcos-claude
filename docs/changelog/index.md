@@ -112,3 +112,8 @@ to the repository root to preserve existing anchors and rendered output.
 - [0064 — Feedback shortcut and retained pictures](entries/feedback-0064.md)
 - [0065 — Vehicle strategy from the actual raise records](entries/0065-strategy.md)
 - [0066 — Visualizations at working volume](entries/0066-visualization-scale.md)
+- [busy-stuck — Cancellation made explicit, so a timed-out lookup can't poison the database's boot](entries/perf3.md)
+- [0067 / 0071 — Shared pipeline and selection tables](entries/0067-0071-tables.md)
+- [0068–0070 — Routes and portfolio](entries/routes-0070.md)
+- [0072–0074 — Calendar, fit and meeting preparation](entries/meetings-0074.md)
+- [0075–0076 — Vehicle status and WIP navigation](entries/status-0075.md)
