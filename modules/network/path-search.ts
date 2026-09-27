@@ -32,10 +32,10 @@ export async function graphSnapshot(db: Db): Promise<GraphSnapshot> {
     for (;;) {
       const rows: Array<{ entity_id: string; merged_into: string | null }> = await db.query(
         `select entity_id, merged_into from identity.entity
-          ${entityCursor ? 'where entity_id > $1::uuid' : ''} order by entity_id limit 512`, entityCursor ? [entityCursor] : []);
+          ${entityCursor ? 'where entity_id > $1::uuid' : ''} order by entity_id limit 2048`, entityCursor ? [entityCursor] : []);
       for (const row of rows) redirects.set(row.entity_id, row.merged_into);
       await yieldRouteWork();
-      if (rows.length < 512) break;
+      if (rows.length < 2048) break;
       entityCursor = rows.at(-1)!.entity_id;
     }
     // Resolve chains once with path compression. Paging a recursive view repeatedly
@@ -77,7 +77,7 @@ export async function graphSnapshot(db: Db): Promise<GraphSnapshot> {
         reviewed: boolean; valid_from: string; valid_to: string | null }> = await db.query(
         `select edge_id, from_entity, to_entity, tier, reviewed_by is not null as reviewed,
                 valid_from::text, valid_to::text from network.edge
-          ${cursor ? 'where edge_id > $1::uuid' : ''} order by edge_id limit 512`, cursor ? [cursor] : []);
+          ${cursor ? 'where edge_id > $1::uuid' : ''} order by edge_id limit 2048`, cursor ? [cursor] : []);
       for (const edge of rows) {
         edgeCount++;
         from = Math.min(from, new Date(edge.valid_from).getTime());
@@ -88,14 +88,14 @@ export async function graphSnapshot(db: Db): Promise<GraphSnapshot> {
         append(edge.edge_id, edge.from_entity, edge.to_entity);
       }
       await yieldRouteWork();
-      if (rows.length < 512) break;
+      if (rows.length < 2048) break;
       cursor = rows[rows.length - 1].edge_id;
     }
     cursor = null;
     for (;;) {
       const rows: Array<{ edge_id: string; left_entity: string; right_entity: string; created_at: string }> = await db.query(
         `select edge_id, left_entity, right_entity, created_at::text from identity.possible_match
-          where active ${cursor ? 'and edge_id > $1::uuid' : ''} order by edge_id limit 512`, cursor ? [cursor] : []);
+          where active ${cursor ? 'and edge_id > $1::uuid' : ''} order by edge_id limit 2048`, cursor ? [cursor] : []);
       for (const edge of rows) {
         if (canonicalIds.get(edge.left_entity) === canonicalIds.get(edge.right_entity)) continue;
         append(edge.edge_id, edge.left_entity, edge.right_entity);
@@ -106,7 +106,7 @@ export async function graphSnapshot(db: Db): Promise<GraphSnapshot> {
         count.n++; counts.set('D', count);
       }
       await yieldRouteWork();
-      if (rows.length < 512) break;
+      if (rows.length < 2048) break;
       cursor = rows.at(-1)!.edge_id;
     }
     // Merge the two ordered edge sources deterministically before applying the path cap.

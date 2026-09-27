@@ -7,21 +7,15 @@ export interface RouteReading {
   factors: Array<{ label: string; value: string; basis: string }>;
 }
 
-/** Presentation adapter. The scoring module owns the model; legacy influence is explicitly provisional. */
+/** Only the network scorer supplies a route score. Missing scores remain explicitly unscored. */
 export function routeReading(route: Route): RouteReading {
-  // Structural bridge to the parallel scoring branch (RouteScore.value and signed factor points).
-  const scored = route as unknown as { score?: { value: number; band: 'strong' | 'warm' | 'weak'; factors: Array<{ label: string; points: number; basis: string }> } };
-  const supplied = scored.score?.value;
+  const supplied = route.score?.value;
   const valid = typeof supplied === 'number' && Number.isFinite(supplied);
-  // GUESS: tier-only fallback on the existing 0–100 display scale, never a success probability.
-  const fallback = route.influence ? route.influence.score * 100 : { A: 80, B: 65, C: 35, D: 15 }[route.weakestTier];
-  const factors = scored.score?.factors;
   return {
-    score: Math.round(Math.max(0, Math.min(100, valid ? supplied : fallback))),
+    score: valid ? Math.max(0, Math.min(100, supplied)) : 0,
     provisional: !valid,
-    band: valid ? scored.score!.band : fallback >= 75 ? 'strong' : fallback >= 50 ? 'warm' : 'weak',
-    factors: factors?.map((f) => ({ label: f.label, value: `${f.points > 0 ? '+' : ''}${f.points}`, basis: f.basis }))
-      ?? route.influence?.components.map((f) => ({ label: f.label, value: String(Math.round(f.score * 100)), basis: f.basis })) ?? [],
+    band: valid ? route.score!.band : 'weak',
+    factors: valid ? route.score!.factors.map((f) => ({ label: f.label, value: `${f.points > 0 ? '+' : ''}${Math.round(f.points * 100) / 100}`, basis: f.basis })) : [],
   };
 }
 
@@ -46,19 +40,85 @@ export function routeSummaryFor(search: RouteSearch): RouteSummary {
 
 export function provisionalRouteSummary(routes: Route[]): RouteSummary {
   const usable = routes.filter((r) => r.verdict === 'recommend');
-  // GUESS: display bands while the network scorer's summary is unavailable.
-  const strong = usable.filter((r) => routeReading(r).score >= 75).length;
-  const promising = usable.filter((r) => routeReading(r).score >= 50 && routeReading(r).score < 75).length;
-  const supported = usable.some((r) => routeReading(r).score >= 75 && r.weakestTier <= 'B');
+  const strong = usable.filter((r) => !routeReading(r).provisional && routeReading(r).band === 'strong').length;
+  const promising = usable.filter((r) => !routeReading(r).provisional && routeReading(r).band === 'warm').length;
+  const supported = usable.some((r) => !routeReading(r).provisional && routeReading(r).band === 'strong' && r.weakestTier <= 'B');
   return { strong, promising, weak: usable.length - strong - promising, unavailable: routes.length - usable.length,
     confidence: supported ? 'A strong route has supporting evidence' : strong ? 'Strong estimates; evidence is uncertain' : 'A great route is not established',
-    basis: 'Provisional: influence or evidence tier; strong ≥75, promising ≥50. Bands are estimates, not odds of an introduction. Shared ties are not independent evidence.' };
+    basis: 'Provisional summary of available route scores. Unscored routes do not establish strength. Shared ties are not independent evidence.' };
 }
 
 export function routeNodeIds(route: Route): string[] {
   const first = route.hops[0];
   const source = route.fromEntity ?? (first ? (first.edge.toEntity === first.toEntity ? first.edge.fromEntity : first.edge.toEntity) : 'source');
   return [source, ...route.hops.map((h) => h.toEntity)];
+}
+
+export interface RouteGraphArc {
+  key: string;
+  from: string;
+  to: string;
+  edgeIds: string[];
+  routeIndices: number[];
+  score: number | null;
+  grade: Route['weakestTier'];
+}
+
+/** One directed arc per entity pair. Parallel evidence stays linked to its route disclosures.
+ * The best scored relationship supplies the label; a missing score never outranks a known zero.
+ */
+export function routeGraphArcs(routes: Route[]): RouteGraphArc[] {
+  const arcs = new Map<string, RouteGraphArc>();
+  routes.forEach((route, routeIndex) => {
+    const nodes = routeNodeIds(route);
+    route.hops.forEach((hop, i) => {
+      const from = nodes[i]!, to = nodes[i + 1]!;
+      if (from === to) return;
+      const key = JSON.stringify([from, to]);
+      const supplied = hop.edge.warmthScore;
+      const score = typeof supplied === 'number' && Number.isFinite(supplied) ? Math.max(0, Math.min(5, supplied)) : null;
+      const arc = arcs.get(key);
+      if (!arc) {
+        arcs.set(key, { key, from, to, edgeIds: [hop.edge.edgeId], routeIndices: [routeIndex], score, grade: hop.edge.tier });
+        return;
+      }
+      if (!arc.edgeIds.includes(hop.edge.edgeId)) arc.edgeIds.push(hop.edge.edgeId);
+      if (!arc.routeIndices.includes(routeIndex)) arc.routeIndices.push(routeIndex);
+      if ((score !== null && (arc.score === null || score > arc.score))
+        || (score === arc.score && hop.edge.tier < arc.grade)) {
+        arc.score = score;
+        arc.grade = hop.edge.tier;
+      }
+    });
+  });
+  return [...arcs.values()];
+}
+
+/** Keep labels legible when multiple relationships cross at almost the same midpoint.
+ * Pixel clearances are presentation dimensions; displaced labels retain a leader to their arc.
+ */
+export function routeGraphArcLabels(arcs: RouteGraphArc[], nodes: Array<{ id: string; x: number; y: number }>, height: number) {
+  const positions = new Map(nodes.map(node => [node.id, node]));
+  const labels = arcs.map(arc => {
+    const from = positions.get(arc.from)!, to = positions.get(arc.to)!;
+    const bend = from.x === to.x ? (from.y < to.y ? 42 : -42) : 0;
+    const x = (from.x + to.x) / 2 + bend * 0.75, anchorY = (from.y + to.y) / 2;
+    return { key: arc.key, x, y: anchorY - 7, anchorY };
+  }).sort((a, b) => a.x - b.x || a.y - b.y || a.key.localeCompare(b.key));
+  const bands: typeof labels[] = [];
+  for (const label of labels) {
+    const previous = bands.at(-1);
+    if (previous && label.x - previous.at(-1)!.x < 100) previous.push(label);
+    else bands.push([label]);
+  }
+  for (const band of bands) {
+    band.sort((a, b) => a.y - b.y || a.key.localeCompare(b.key));
+    // Center the required spread on the relationships instead of pushing all labels down.
+    const start = Math.max(18, Math.min(height - 18 - (band.length - 1) * 22,
+      band.reduce((sum, label) => sum + label.y, 0) / band.length - (band.length - 1) * 11));
+    band.forEach((label, i) => { label.y = start + i * 22; });
+  }
+  return new Map(labels.map(label => [label.key, label]));
 }
 
 /** One position per entity. Distance from the target permits shorter paths to begin farther right. */
@@ -102,9 +162,10 @@ export function routeComparison(routes: Route[], options: ComparisonOptions) {
   const eligible = filtered.filter(({ route, index }) => familyId !== null
     ? index === familyId || route.foldedUnder === familyId
     : options.expanded === '1' || route.foldedUnder == null || !eligibleIds.has(route.foldedUnder) || String(index) === options.selected)
-    .sort((a, b) => Number(b.route.verdict === 'recommend') - Number(a.route.verdict === 'recommend')
-      || Number(options.preferred(b.route)) - Number(options.preferred(a.route))
-      || (routeReading(a.route).provisional && routeReading(b.route).provisional ? 0 : routeReading(b.route).score - routeReading(a.route).score) || a.index - b.index);
+    .sort((a, b) => Number(routeReading(a.route).provisional) - Number(routeReading(b.route).provisional)
+      || routeReading(b.route).score - routeReading(a.route).score
+      || Number(b.route.verdict === 'recommend') - Number(a.route.verdict === 'recommend')
+      || Number(options.preferred(b.route)) - Number(options.preferred(a.route)) || a.index - b.index);
   const requested = Number(options.show);
   const selectedPosition = eligible.findIndex((entry) => String(entry.index) === options.selected);
   const requestedShow = Number.isSafeInteger(requested) && requested >= 8 ? Math.min(requested, 80) : 8;

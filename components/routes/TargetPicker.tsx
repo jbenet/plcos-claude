@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Glyph, type GlyphName } from '@/components/ui/Glyph';
 
 export interface TargetRow {
+  portfolio?: string[];
   lpType?: string;
   lpIcon?: GlyphName;
   checkBand?: string | null;
@@ -13,7 +14,7 @@ export interface TargetRow {
   entityId: string;
   name: string;
   isPerson: boolean;
-  /** Fit score 0–100 against the selected vehicle, when one exists. */
+  /** Best recorded route score 0–100; null until the current scoring version has evaluated it. */
   score: number | null;
   /** The score is from the proposed strategy's readings, not a fit assessment (issue 0022). */
   provisional: boolean;
@@ -31,22 +32,8 @@ export interface TargetRow {
 
 type Sort = 'score' | 'name';
 
-/**
- * Who to route to.
- *
- * The list used to be names and a type. It is the column you scan before deciding where a
- * week goes, so it carries **the fit score** — there is no point finding a beautiful route
- * to somebody nobody has qualified. Search covers the name and the records around it, so
- * typing "Kaplan" finds the trust and the person who signs for it.
- *
- * The server searches (issue 0023, real): on the real data the list is thousands long, and
- * sending all of it made this page 1.7 MB. The page carries only the rows it draws — the top
- * of the search, by the chosen order — and the search, the order and the minimum score live in
- * the address, so a link opens the same view.
- *
- * People the team is already in touch with are left out unless asked for (issue 0027, real): they
- * need no introduction. The count says how many are left out, and when they are shown each carries
- * a check and the words for it.
+/** The server sends only the first ranked matches. Route strength orders the list;
+ * selection never bypasses search or the In touch filter. Portfolio membership is sourced.
  */
 export function TargetPicker({ targets, current, matched, total, q, sort, min, touchShown, hiddenInTouch, firstShown }: {
   targets: TargetRow[];
@@ -61,7 +48,7 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
   touchShown: boolean;
   /** How many match but are left out for being in touch. */
   hiddenInTouch: number;
-  /** How many of the matches are drawn: `targets` may also carry the one selected, pinned on top. */
+  /** How many ranked matches are drawn. */
   firstShown: number;
 }) {
   const router = useRouter();
@@ -107,7 +94,7 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
         />
         <div className="qctl">
           <button className={sort === 'score' ? 'on' : ''} onClick={() => go({ sort: null })} aria-pressed={sort === 'score'}>
-            Score
+            Route score
           </button>
           <button className={sort === 'name' ? 'on' : ''} onClick={() => go({ sort: 'name' })} aria-pressed={sort === 'name'}>
             Name
@@ -131,8 +118,7 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
         <p className="qcount">
           {pending ? 'Searching…' : <>{matched === total ? `${total}` : `${matched} of ${total}`}{matched > firstShown ? ` · the first ${firstShown} shown` : ''}</>}
           {hiddenInTouch > 0 && <> · {hiddenInTouch} in touch, left out</>}
-          {targets.some((t) => t.borrowedFrom) && <> · * from their org</>}
-          {targets.some((t) => t.provisional) && <> · ~ provisional, from the proposed strategy</>}
+          <span> · recorded route scores /100; unscored last</span>
         </p>
       </div>
 
@@ -149,10 +135,7 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
             <b>{t.name}{t.touch && <Glyph name="check" title={`In touch: ${t.touch}`} tone="good" />}</b>
             <span
               className={`tscore${t.score === null ? ' none' : ''}${t.borrowedFrom ? ' borrowed' : ''}${t.provisional ? ' prov' : ''}`}
-              title={[
-                t.provisional ? 'Provisional: from the proposed strategy’s readings — capacity, affinity, propensity, time to decide — weighted as the scoring settings say. Not a fit assessment.' : null,
-                t.borrowedFrom ? `Read from ${t.borrowedFrom}, whom they act for` : null,
-              ].filter(Boolean).join(' ') || undefined}
+              title={t.score === null ? 'No route score recorded for the current model' : 'Best recorded route score /100; an estimate, not permission'}
             >
               {t.score === null ? '—' : `${t.provisional ? '~' : ''}${t.score}`}{t.borrowedFrom ? '*' : ''}
             </span>
@@ -160,6 +143,7 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
           </span>
           <span className="target-second">
           <span className="target-icons">{t.signals?.map((signal, i) => <Glyph key={i} name={signal.icon} title={signal.label} />)}</span>
+          {Boolean(t.portfolio?.length) && <span className="portfolio-founder">PLC portfolio founder · In touch</span>}
           {t.related.length > 0 && <span className="trel">{t.related.join(' · ')}</span>}
           </span>
           <span className="sr-only">{t.touch ? `In touch: ${t.touch}. ` : ''}{t.blocker ? `Fit: ${t.blocker}.` : ''}</span>

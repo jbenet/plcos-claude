@@ -157,7 +157,7 @@ export function NavList({
         </button>
         {selected && (
           <div className="submods">
-            {modulesForKind(v.kind).map((mod) => {
+            {modulesForKind(v.kind, v.slug).map((mod) => {
               const href = moduleHref(mod, v.slug);
               return (
                 <Link

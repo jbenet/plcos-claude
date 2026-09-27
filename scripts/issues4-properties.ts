@@ -65,7 +65,8 @@ export async function issues4Properties(check: (name: string, ok: boolean, detai
   const candidate: Candidate = { key: lp, name: finding.name, type: 'person', org: null, role: null, location: null, domains: [], enriched: {}, pursuits: [], notes: [], context: [], money: null, restrictions: [],
     contact: { since: null, earlier: { meetings: 0, first: null, last: null }, meetings: 0, lastTouch: null, lastFromThem: null, awaitingSince: null, read: null, lastTouchChannel: null, groupMeetings: 0, meetingDates: [], recent: [], outreachShared: 0 } };
   const ties = connectionPaths([candidate], new Map([[lp, { ...finding, connections: [{ to: endpoint.name, kind: 'colleague', tier: 'B', source: 'https://example.org/cofounders', basis: 'They co-founded an invented company.' }] }]]), network, team).paths;
-  const toLP = ties.find((p) => p.lp === lp && p.tier === 'B');
+  // 0070: explicit co-founding earns grade A; generic acquaintance no longer earns B.
+  const toLP = ties.find((p) => p.lp === lp && p.tier === 'A');
   const toConnector = ties.find((p) => p.lp === toLP?.other.key && p.other.handle === 'alder' && p.tier === 'B');
   check('0037 a sourced connector outside the active LP set completes a two-hop personal route',
     Boolean(toLP?.other.person && toConnector?.lpPerson && researchTie(toLP)?.kind === 'cofounder'),

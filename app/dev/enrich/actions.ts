@@ -85,3 +85,17 @@ export async function sourceBulkAction(formData: FormData): Promise<void> {
 }
 
 // dev rev 19: bumped so the dev server rebuilds this action with the lib code it imports.
+
+export async function importPortfolioAction(): Promise<{ result?: import('@/lib/enrich/portfolio').PortfolioResult; error?: string }> {
+  if (config.data.profile === 'real' && !config.data.copyTakenAt && readLayout().role !== 'live') return { error: 'Import on the live server or a marked preview copy.' };
+  try {
+    const { readPortfolioFile, importPortfolio } = await import('@/lib/enrich/portfolio');
+    const input = await readPortfolioFile();
+    if (!input) return { error: 'No portfolio file found. Add the sourced portfolio.json file, then retry.' };
+    const user = await (await auth()).currentUser();
+    const result = await importPortfolio(await getDb(), input);
+    await appendAudit({actorId:user.id,action:'enrich.portfolio',subjectType:'enrich',detail:{...result}});
+    revalidatePath('/portfolio'); revalidatePath('/routes'); revalidatePath('/dev/enrich');
+    return {result};
+  } catch { return {error:'Portfolio import failed. Check the file’s required sources, vehicle slugs and stable row IDs, then retry.'}; }
+}

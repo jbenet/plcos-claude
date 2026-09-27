@@ -97,9 +97,12 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
   for(const p of input.warehouse.people) {
     const lp=byPerson.get(p.key);
     const matched=lp?.length===1 && byLP.get(lp[0]!)?.length===1 ? input.candidates.find(c=>c.key===lp[0]) : undefined;
-    const key=addNode('warehouse',p.key,p.name,'person',{
+    const institution = p.key === 'organization:protocol-labs';
+    const key=addNode('warehouse',p.key,p.name,institution ? 'org' : 'person',{
       ...(matched && isUuid(matched.key)?{entityId:matched.key}:{}),...(p.teamKey?{teamHandle:p.teamKey}:{})});
-    warehouseKeys.set(p.key,key); members.add(key);
+    warehouseKeys.set(p.key,key);
+    if (institution) continue;
+    members.add(key);
     if(p.roles.includes('PL team') || (p.org && isPL(p.org))) staff.add(key);
     if(p.org) affiliation(key,p.org,p.source,[p.key],p.as_of.slice(0,10));
   }
@@ -175,11 +178,11 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
   // Own network access is explicit policy, not fabricated contact evidence. Unknown dates stay unknown.
   for(const key of members) if(!staff.has(key)) addEdge(pl,key,'other','C',{kind:'proximity'},'AGENTS.md rule 6; warehouse membership',
     'PL network participant; no specific team member or personal interaction identified.',[nodes.get(key)!.sourceId]);
-  for(const key of staff) addEdge(pl,key,'colleague','B',{kind:'worked_together'},'AGENTS.md rule 6; recorded PL affiliation',
+  for(const key of staff) addEdge(pl,key,'colleague','B',{kind:'worked_together',basis:'pl_affiliation'},'AGENTS.md rule 6; recorded PL affiliation',
     'Current or former PL colleague; own-network working tie. Contact date unknown.',[nodes.get(key)!.sourceId]);
   const colleagues=[...staff];
   for(let i=0;i<colleagues.length;i++) for(let j=i+1;j<colleagues.length;j++) addEdge(colleagues[i]!,colleagues[j]!,'colleague','B',
-    {kind:'worked_together'},'AGENTS.md rule 6; recorded PL affiliations','Current or former PL colleagues; contact date unknown.',
+    {kind:'worked_together',basis:'pl_affiliation'},'AGENTS.md rule 6; recorded PL affiliations','Current or former PL colleagues; contact date unknown.',
     [nodes.get(colleagues[i]!)!.sourceId,nodes.get(colleagues[j]!)!.sourceId]);
   return {nodes:[...nodes.values()],edges,warehouseLoaded:input.warehouse.people.length>0};
 }
@@ -217,7 +220,9 @@ export async function importNetworkNodes(tx:Queryable,plan:NodePlan,at=new Date(
     const team=n.teamHandle?(ids.get(sourceKey('app_user',n.teamHandle))??mapped.get(sourceKey('app_user',n.teamHandle))):undefined;
     const explicitId=n.entityId ? redirects.get(n.entityId)??n.entityId : undefined;
     const explicit=explicitId && (!byId.has(explicitId)||byId.get(explicitId)!.type===n.type) ? explicitId : undefined;
-    const id=mapped.get(n.key)??team??explicit??randomUUID(); ids.set(n.key,id);
+    const plAlias = n.source==='network_org' && n.sourceId==='pl' ? (await tx.one<{id:string}>(`select identity.canonical_entity_id(entity_id)::text id from identity.source_record where source='w3_person' and source_id=$1`, [connectionPersonKey('PL','https://protocol.ai')]))?.id : undefined;
+    const institutionalAlias = n.source==='warehouse' && n.sourceId==='organization:protocol-labs' ? ids.get(sourceKey('network_org','pl')) ?? mapped.get(sourceKey('network_org','pl')) : undefined;
+    const id=mapped.get(n.key)??institutionalAlias??plAlias??team??explicit??randomUUID(); ids.set(n.key,id);
     if(!byId.has(id)&&!newEntities.has(id))newEntities.set(id,{id,type:n.type,name:n.name});
     if(!mapped.has(n.key))aliases.push({source:n.source,source_id:n.sourceId,id});
   }

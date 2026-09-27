@@ -12,18 +12,18 @@ export type EvidenceTier = 'A' | 'B' | 'C' | 'D';
  */
 export const TIER_MEANING: Record<EvidenceTier, { label: string; means: string; routable: string }> = {
   A: {
-    label: 'Documented working relationship',
-    means: 'They have demonstrably worked together, with evidence of interaction on file.',
+    label: 'Close, enduring relationship',
+    means: 'Co-founders, family, close friends, or frequent personal co-investment, evidenced on file.',
     routable: 'Routable.',
   },
   B: {
-    label: 'Documented or PL network association',
-    means: 'A sourced relationship or a warm PL affiliation under the network rule; interaction dates may be unknown.',
+    label: 'Warm working or direct relationship',
+    means: 'Worked or invested together, served on a board together, recent direct contact, or PL colleagues under the own-network rule.',
     routable: 'Routable.',
   },
   C: {
-    label: 'Shared affiliation only',
-    means: 'Same board, same firm, same programme — and no evidence they ever spoke.',
+    label: 'Acquaintance or affiliation',
+    means: 'Older or undated contact, generic network membership or a shared affiliation; a warm personal tie is not established.',
     routable: 'Routes with uncertainty; ranked below A and B.',
   },
   D: {
@@ -37,6 +37,8 @@ export const TIER_MEANING: Record<EvidenceTier, { label: string; means: string; 
 export const CLUE_KINDS: EdgeKind[] = ['event_coattendee', 'social_public', 'podcast_guest'];
 
 export interface Edge {
+  /** Compact server-evaluated hop warmth for the graph. */
+  warmthScore?: number;
   edgeId: string;
   fromEntity: string;
   toEntity: string;
@@ -72,7 +74,7 @@ export interface RouteHop {
 
 export type RouteStrength = 'strong' | 'warm' | 'weak';
 export interface RouteScoreFactor {
-  key: 'lastHop' | 'introducer' | 'history' | 'access' | 'recency' | 'confidence';
+  key: 'lastHop' | 'introducer' | 'history' | 'access' | 'recency' | 'confidence' | 'weakestHop';
   label: string;
   /** Signed points; factors sum to the route score before rounding. */
   points: number;

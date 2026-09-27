@@ -229,9 +229,10 @@ export const config = {
 
   /** Investment introductions: ordinal warmth, never confidence or permission to send. */
   routeWarmth: {
-    version: 'warmth-2',
+    version: 'warmth-3',
     priors: {
       proximity: 0, acquaintance: 1, repeated_contact: 2, worked_together: 3,
+      family: 4.5, close_friend: 4, recent_contact: 2.5,
       joint_investment: 3, cofounder: 4, frequent_coinvestment: 5, investor_founder: 4.5,
     }, // GUESS — uncalibrated strength priors; evidence tier is independent.
     currentMonths: 12, // GUESS
@@ -246,7 +247,7 @@ export const config = {
 
   /** SCORE2: relative investment-route strength, never a calibrated probability or consent. */
   routeScoring: {
-    version: 'score-2',
+    version: 'score-3',
     weights: { lastHop: 70, introducer: 10, history: 15, access: 5 }, // GUESS — target relationship dominates.
     tierConfidence: { A: 1, B: 0.85, C: 0.5, D: 0.25 }, // GUESS — uncertainty, not an information gate.
     confidenceFloor: 0.6, // GUESS — confidence discounts strength without lexicographic tier sorting.

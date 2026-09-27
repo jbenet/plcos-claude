@@ -1,3 +1,6 @@
+import { buildCache } from '@/lib/build-cache';
+import { PortfolioImport } from './PortfolioImport';
+import { portfolioFile } from '@/lib/enrich/portfolio';
 import { coalescePage } from '@/lib/page-render';
 import { capacityBandLabel } from '@/lib/capacity-bands';
 import { readdir, stat } from 'node:fs/promises';
@@ -49,15 +52,24 @@ async function count(dir: string): Promise<number> {
 async function pagesOnly(dir: string): Promise<{ pages: number; partial: number }> {
   const { readFile } = await import('node:fs/promises');
   let pages = 0, partial = 0;
-  for (const f of (await readdir(dir).catch(() => [])).filter((x) => x.endsWith('.json'))) {
-    try {
-      const x = JSON.parse(await readFile(join(dir, f), 'utf8')) as Finding;
-      if (isPagesOnly(x)) pages++;
-      if (partialSearch(x)) partial++;
-    } catch { /* the checker reports it */ }
+  const files=(await readdir(dir).catch(()=>[])).filter(x=>x.endsWith('.json'));
+  // Bounded concurrent local reads: a large findings folder must not serialize every file.
+  for(let offset=0;offset<files.length;offset+=32) {
+    const batch=await Promise.allSettled(files.slice(offset,offset+32).map(async f=>JSON.parse(await readFile(join(dir,f),'utf8')) as Finding));
+    for(const result of batch) if(result.status==='fulfilled') {
+      if(isPagesOnly(result.value)) pages++;
+      if(partialSearch(result.value)) partial++;
+    }
   }
   return { pages, partial };
 }
+
+const enrichmentDbInputs = buildCache(async () => {
+  const [pursuits,suggestions,imported,bulk] = await Promise.all([
+    listPursuits(null),openSuggestions(),latestRun('enrich','import'),addedInBulk(),
+  ]);
+  return {pursuits:pursuits.filter(inResearchSet),suggestions,imported,bulk};
+});
 
 /**
  * Enrichment (N64, docs/19): the research set, exported for the research workflows, and what
@@ -68,23 +80,21 @@ async function pagesOnly(dir: string): Promise<{ pages: number; partial: number 
 async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?: string; imported?: string; claims?: string; refused?: string; sourced?: string }> }) {
   const sp = await searchParams;
   const dir = enrichDir();
-  const pursuits = (await listPursuits(null)).filter(inResearchSet);
+  const {pursuits,suggestions,imported,bulk} = await enrichmentDbInputs();
   const entities = new Set(pursuits.map((p) => p.entityId)).size;
   const { readFile } = await import('node:fs/promises');
   const triage = (await readFile(join(dir, 'triage.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Triage);
   const lanes = (['warm now', 'research first', 'long process', 'cold'] as const).map((lane) => ({ lane, rows: triage.filter((t) => t.lane === lane) }));
   const plans = JSON.parse(await readFile(join(dir, 'connectors.json'), 'utf8').catch(() => '[]')) as ConnectorPlan[];
   const quality = await readQuality(dir);
-  const [set, cands, raw, pages, strategies, imported, suggestions] = await Promise.all([
+  const [set, cands, raw, pages, strategies] = await Promise.all([
     fileInfo(join(dir, 'research-set.jsonl')),
     fileInfo(join(dir, 'candidates.jsonl')),
     count(join(dir, 'raw')),
     pagesOnly(join(dir, 'raw')),
     count(join(dir, 'strategy')),
-    latestRun('enrich', 'import'),
-    openSuggestions(),
   ]);
-  const [fixes, bulk] = await Promise.all([latestRecordsToFix(), addedInBulk()]);
+  const fixes = await latestRecordsToFix();
   // W8, the portfolio view: every proposal together, this year's close first, then by how much
   // they could do and how ready they are. A person decides each on its LP's page.
   const LEVEL = { high: 3, medium: 2, low: 1, unknown: 0 } as Record<string, number>;
@@ -121,6 +131,7 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
         Who the research workflows read about, what came back, and the import that maps it in.
       </p>
 
+      <PortfolioImport file={portfolioFile()} />
       <Prospects directory={join(dir, 'prospects')} />
 
       <div className="card">

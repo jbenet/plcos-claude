@@ -82,8 +82,8 @@ export interface RouteSelectionOptions {
 export async function sortRouteCandidates(routes: Route[], preferred?: (route: Route) => boolean): Promise<Route[]> {
   const keys = new Map(routes.map((route) => [route, key(route)]));
   const preferences = preferred ? new Map(routes.map((route) => [route, preferred(route)])) : null;
-  const compare = (a: Route, b: Route) => rank[a.verdict] - rank[b.verdict]
-    || (preferences ? Number(preferences.get(b)) - Number(preferences.get(a)) : 0) || b.score!.value - a.score!.value
+  const compare = (a: Route, b: Route) => (b.score?.value ?? -1) - (a.score?.value ?? -1)
+    || rank[a.verdict] - rank[b.verdict] || (preferences ? Number(preferences.get(b)) - Number(preferences.get(a)) : 0)
     || a.hops.length - b.hops.length || keys.get(a)!.localeCompare(keys.get(b)!);
   const checkpoint = routeCheckpoint();
   let runs: Route[][] = [];
@@ -235,7 +235,7 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
         + 'This path is excluded, and finding a different connector toward the same approach does not satisfy the instruction.');
     }
     for (const h of route.hops.filter((h) => h.edge.tier === 'C' || h.edge.tier === 'D')) {
-      route.reasons.push(`${h.edge.fromName} → ${h.edge.toName}: tier ${h.edge.tier}. `
+      route.reasons.push(`${route.hops.indexOf(h) === 0 ? route.fromName : route.hops[route.hops.indexOf(h) - 1]!.toName} → ${h.toName}: tier ${h.edge.tier}. `
         + (clue[h.edge.kind] ?? 'Weak relationship evidence; interaction is not established.')
         + ' Routes with uncertainty; confidence discounts the investment-route score.');
     }

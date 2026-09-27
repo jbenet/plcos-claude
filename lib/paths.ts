@@ -10,7 +10,7 @@
 
 /** A vehicle's modules served from top-level pages: the address's name → the page's. */
 export const MODULE_PAGES: Record<string, string> = {
-  overview: 'overview', pipeline: 'targets', routes: 'routes', selection: 'selection', asks: 'asks', meetings: 'meetings',
+  portfolio: 'portfolio', overview: 'overview', pipeline: 'targets', routes: 'routes', selection: 'selection', asks: 'asks', meetings: 'meetings',
   decisions: 'decisions', 'soft-hard': 'soft-hard', status: 'vehicles', materials: 'materials', close: 'close', spv: 'spv',
   grants: 'grants', compliance: 'compliance',
 };

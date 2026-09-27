@@ -2,13 +2,13 @@ import { createHash } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
 import { config } from '@/config/deployment';
 import { getDb, withDb, type Db } from '@/lib/db';
-import { withForegroundDb } from '@/lib/db/scheduling';
+import { withForegroundDb, withBackgroundDb } from '@/lib/db/scheduling';
 import { computeStructuralRoutes, routeGraph } from './service';
 import { canonicalRouteEntity, routeTouchesChanges } from './repo';
 import type { Edge, RouteSearch } from './types';
 
 const settings = () => createHash('sha256').update(JSON.stringify([
-  'compact-structural-v5-identity', config.routeScoring, config.routeWarmth,
+  'compact-structural-v7-source-grades', config.routeScoring, config.routeWarmth,
 ])).digest('hex').slice(0, 16);
 export async function revisionFor(db: Db) {
   const row = (await db.one<{ revision: string; epoch: string; day: string }>(
@@ -113,12 +113,12 @@ async function store(db: Db, search: RouteSearch, kind: string, version: Awaited
     }),
   }));
   const serialized = encode({ ...compact, routes, evidence });
-  await db.query(`insert into network.route_cache (target_id, vehicle_kind, revision, input_revision, computed_at, search)
-    select $1::uuid, $2, $3, $4::bigint, now(), $5::jsonb
+  await db.query(`insert into network.route_cache (target_id, vehicle_kind, revision, input_revision, computed_at, search, best_score)
+    select $1::uuid, $2, $3, $4::bigint, now(), $5::jsonb, $6::numeric
       where exists (select 1 from identity.entity where entity_id = $1::uuid)
     on conflict (target_id, vehicle_kind) do update set revision = excluded.revision,
-      input_revision = excluded.input_revision, computed_at = excluded.computed_at, search = excluded.search`,
-  [search.targetId, kind, version.generation, version.revision, serialized]);
+      input_revision = excluded.input_revision, computed_at = excluded.computed_at, search = excluded.search, best_score = excluded.best_score`,
+  [search.targetId, kind, version.generation, version.revision, serialized, search.stats?.bestScore ?? null]);
   return serialized.length * 2;
 }
 
@@ -127,7 +127,8 @@ export interface WarmupProgress { status: string; total: number; completed: numb
 export async function routeWarmupProgress(): Promise<WarmupProgress> {
   return (await (await getDb()).one<WarmupProgress>('select status, total, completed, elapsed_ms, started_at, updated_at, error from network.route_warmup where singleton'))!;
 }
-const warming = new WeakMap<Db, Promise<PrecomputeCounts>>();
+const warmupGlobal = globalThis as typeof globalThis & { __routes0070Warmup?: WeakMap<Db, Promise<PrecomputeCounts>> };
+const warming = warmupGlobal.__routes0070Warmup ??= new WeakMap<Db, Promise<PrecomputeCounts>>();
 /** Awaitable for measurements/tests only. Builds use startRouteWarmup below. No
  * transaction spans targets, and search itself cooperatively chunks graph reads. */
 export async function precomputeRoutes(at?: Date): Promise<PrecomputeCounts> {
@@ -173,12 +174,22 @@ export async function precomputeRoutes(at?: Date): Promise<PrecomputeCounts> {
 /** In-process best-effort warming, not durable orchestration. Restart loses the job,
  * not its completed rows. Build response never waits for the cache workload. */
 export function startRouteWarmup(db: Db): void {
+  if (warming.has(db)) return;
   const timer = setTimeout(() => {
     void withDb(db, async () => {
       const earlier = warming.get(db);
-      if (earlier) await earlier.catch(() => {});
-      return precomputeRoutes();
+      if (earlier) return earlier;
+      return withBackgroundDb(() => precomputeRoutes());
     }).catch(() => { /* cheap progress records failure; foreground misses remain available */ });
   }, 25);
   timer.unref();
+}
+
+/** Compact, versioned picker scores; never scan cached route JSON or plan every target on a page read. */
+export async function recordedRouteScores(kind: string): Promise<Map<string, number>> {
+  const db=await getDb(), version=await revisionFor(db);
+  const rows=await db.query<{id:string;score:string}>(`select target_id::text id,best_score::text score from network.route_cache
+    where vehicle_kind=$1 and revision=$2 and best_score is not null`,[kind,version.generation]);
+  if (!rows.length) startRouteWarmup(db);
+  return new Map(rows.map(r=>[r.id,Number(r.score)]));
 }
