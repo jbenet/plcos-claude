@@ -47,13 +47,12 @@ export async function identityRouteProperties(check: Check, db: Db) {
     [...[alias, canonical].sort()]))!.id;
     const uncertain = await planRoutes('juan', target, 3, 'fund', 'team');
     const live = await planRoutesLive('juan', target, 3, 'fund', 'team');
-    check('IDRES name-only identities route through a labelled D-tier bridge without merging',
-      Boolean(uncertain?.routes.some((r) => r.weakestTier === 'D' && r.verdict === 'recommend'
-        && r.hops.some((h) => h.edge.edgeId === possible && h.edge.kind === 'possible_identity')
-        && r.reasons.some((reason) => reason.includes('Possible identity match by name only'))))
-      && uncertain?.routes[0]?.score?.value === live?.routes[0]?.score?.value
+    check('IDRES a possible identity bridge cannot make the same person an introduction hop twice',
+      uncertain?.routes.length === 0 && live?.routes.length === 0
+      && (uncertain.ruleCounts?.repeatedPeople ?? 0) > 0
+      && (await edgesByIds([possible])).get(possible)?.kind === 'possible_identity'
       && (await db.one<{ merged_into: string | null }>('select merged_into from identity.entity where entity_id = $1', [alias]))?.merged_into === null,
-      'A possible identity supplies weak, explicit uncertainty in cached and live routes, without claiming identity or requiring information approval.');
+      '0085/0088: preserve uncertain identity evidence without drawing it as a personal relationship or merging records.');
     await db.query('update identity.possible_match set active = false where edge_id = $1', [possible]);
     check('IDRES dismissing a possible match removes its cached route',
       (await planRoutes('juan', target, 3, 'fund', 'team'))?.routes.length === 0,

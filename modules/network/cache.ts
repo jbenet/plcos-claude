@@ -4,16 +4,27 @@ import { config } from '@/config/deployment';
 import { getDb, withDb, type Db } from '@/lib/db';
 import { withForegroundDb, withBackgroundDb } from '@/lib/db/scheduling';
 import { computeStructuralRoutes, routeGraph } from './service';
-import { canonicalRouteEntity, routeTouchesChanges } from './repo';
+import { canonicalRouteEntity, routeTouchesChanges, routeSources } from './repo';
 import type { Edge, RouteSearch } from './types';
 
 const settings = () => createHash('sha256').update(JSON.stringify([
-  'compact-structural-v7-source-grades', config.routeScoring, config.routeWarmth,
+  'compact-structural-v9-routes-0084', config.routeScoring, config.routeWarmth, config.routePolicy,
 ])).digest('hex').slice(0, 16);
+const sourceSignatures = new WeakMap<Db, { revision: string; value: Promise<string> }>();
+async function sourceSignature(db: Db, revision: string): Promise<string> {
+  const prior = sourceSignatures.get(db);
+  if (prior?.revision === revision) return prior.value;
+  const value = withDb(db, async () => createHash('sha256').update(JSON.stringify(
+    (await routeSources()).sort((a, b) => a.entityId.localeCompare(b.entityId)),
+  )).digest('hex').slice(0, 16));
+  sourceSignatures.set(db, { revision, value });
+  try { return await value; }
+  catch (error) { if (sourceSignatures.get(db)?.value === value) sourceSignatures.delete(db); throw error; }
+}
 export async function revisionFor(db: Db) {
   const row = (await db.one<{ revision: string; epoch: string; day: string }>(
     `select revision::text, epoch::text, current_date::text as day from network.route_revision where singleton`))!;
-  return { revision: row.revision, generation: `${row.epoch}:${row.day}:${settings()}` };
+  return { revision: row.revision, generation: `${row.epoch}:${row.day}:${settings()}:${await sourceSignature(db, `${row.revision}:${row.day}`)}` };
 }
 function encode(value: unknown): string {
   return JSON.stringify(value, function (key, v) {

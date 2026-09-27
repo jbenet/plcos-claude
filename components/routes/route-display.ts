@@ -51,7 +51,7 @@ export function provisionalRouteSummary(routes: Route[]): RouteSummary {
 export function routeNodeIds(route: Route): string[] {
   const first = route.hops[0];
   const source = route.fromEntity ?? (first ? (first.edge.toEntity === first.toEntity ? first.edge.fromEntity : first.edge.toEntity) : 'source');
-  return [source, ...route.hops.map((h) => h.toEntity)];
+  return [source, ...route.hops.map((h) => h.toEntity)].map(id => route.identityGroups?.[id] ?? id);
 }
 
 export interface RouteGraphArc {
@@ -121,8 +121,12 @@ export function routeGraphArcLabels(arcs: RouteGraphArc[], nodes: Array<{ id: st
   return new Map(labels.map(label => [label.key, label]));
 }
 
-/** One position per entity. Distance from the target permits shorter paths to begin farther right. */
-export function routeGraphLayout(routes: Route[]) {
+/** One position per canonical entity supplied by the route model. Layers satisfy every
+ * relationship in the union, not just each path's original hop number. A union can contain
+ * cycles even when each path is simple: reserve distinct, deterministic columns inside
+ * each strongly connected component and retain the true direction of its reverse arcs.
+ */
+export function routeGraphLayout(routes: Route[], availableWidth = 0) {
   const nodes = new Map<string, { id: string; name: string; depth: number; x: number; y: number }>();
   for (const route of routes) {
     const ids = routeNodeIds(route);
@@ -134,14 +138,60 @@ export function routeGraphLayout(routes: Route[]) {
       else nodes.set(id, { id, name: names[i]!, depth, x: 0, y: 0 });
     });
   }
+  const successors = new Map([...nodes.keys()].map(id => [id, new Set<string>()]));
+  for (const arc of routeGraphArcs(routes)) successors.get(arc.from)!.add(arc.to);
+  const order = new Map<string, number>(), low = new Map<string, number>();
+  const stack: string[] = [], stacked = new Set<string>(), components: string[][] = [];
+  function visit(id: string) {
+    order.set(id, order.size);
+    low.set(id, order.get(id)!);
+    stack.push(id);
+    stacked.add(id);
+    for (const next of [...successors.get(id)!].sort()) {
+      if (!order.has(next)) {
+        visit(next);
+        low.set(id, Math.min(low.get(id)!, low.get(next)!));
+      } else if (stacked.has(next)) low.set(id, Math.min(low.get(id)!, order.get(next)!));
+    }
+    if (low.get(id) !== order.get(id)) return;
+    const component: string[] = [];
+    let member: string;
+    do {
+      member = stack.pop()!;
+      stacked.delete(member);
+      component.push(member);
+    } while (member !== id);
+    // Prefer original hop order inside a cycle; the ID resolves ambiguous ties.
+    component.sort((a, b) => nodes.get(b)!.depth - nodes.get(a)!.depth || a.localeCompare(b));
+    components.push(component);
+  }
+  for (const id of [...nodes.keys()].sort()) if (!order.has(id)) visit(id);
+  const componentOf = new Map(components.flatMap((ids, index) => ids.map(id => [id, index] as const)));
+  const depths = new Map<number, number>();
+  function componentDepth(index: number): number {
+    if (depths.has(index)) return depths.get(index)!;
+    let depth = 0;
+    for (const id of components[index]!) for (const next of successors.get(id)!) {
+      const downstream = componentOf.get(next)!;
+      if (downstream !== index) depth = Math.max(depth, componentDepth(downstream) + components[downstream]!.length);
+    }
+    depths.set(index, depth);
+    return depth;
+  }
+  components.forEach((ids, index) => {
+    const depth = componentDepth(index);
+    ids.forEach((id, offset) => { nodes.get(id)!.depth = depth + ids.length - 1 - offset; });
+  });
   const maxDepth = Math.max(1, ...[...nodes.values()].map((n) => n.depth));
   const columns = Array.from({ length: maxDepth + 1 }, (_, d) => [...nodes.values()].filter((n) => n.depth === d));
-  const height = Math.max(180, ...columns.map((c) => c.length * 58 + 44));
+  const width = Math.max(740, maxDepth * 240 + 220, Number.isFinite(availableWidth) ? availableWidth : 0);
+  const height = Math.max(240, ...columns.map((c) => c.length * 58 + 44));
+  for (const column of columns) column.sort((a, b) => a.id.localeCompare(b.id));
   for (const column of columns) column.forEach((n, i) => {
-    n.x = 100 + (maxDepth - n.depth) * 520 / maxDepth;
+    n.x = 110 + (maxDepth - n.depth) * (width - 220) / maxDepth;
     n.y = height / (column.length + 1) * (i + 1);
   });
-  return { nodes: [...nodes.values()], height, width: 740 };
+  return { nodes: [...nodes.values()], height, width };
 }
 
 export interface ComparisonOptions {

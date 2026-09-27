@@ -1,12 +1,13 @@
+import { routePolicyFacts, routeIdentityGroups } from './route-policy';
+import { emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
 import { cachedRoutes } from './cache';
 import { promotedBasisHashes, compactStructuralRoutes, overlayRoutes, routeCheckpoint, selectDisplayRoutes, sortRouteCandidates, type RouteSelectionOptions } from './route-overlay';
 import { setImmediate } from 'node:timers/promises';
 import { config } from '@/config/deployment';
-import { listEntities } from '@/modules/identity';
 import { connectorLoad, restrictionsFor } from '@/modules/coordination';
 import { listSyncSources } from '@/modules/platform';
 import { listExposures } from '@/modules/pipeline';
-import { canonicalRouteEntity, edgeCoverage, edgesByIds, entityForUser, enumeratePathsFromSources, routeSources, sourceEdges } from './repo';
+import { canonicalRouteEntity, routeNodeNames, edgeCoverage, edgesByIds, entityForUser, enumeratePathsFromSources, routeSources, sourceEdges } from './repo';
 import { influenceFor } from './influence';
 import { investmentTie, scoreRoute, tieDetailsProblems, warmthReader, type RouteScoreContext } from './warmth';
 import { CLUE_KINDS, type Edge, type Route, type RouteHop, type RouteSearch, type RouteVerdict, type RouteStats, type RouteGraph } from './types';
@@ -42,16 +43,16 @@ export async function planRoutes(
     const structural = await cachedRoutes(targetId, vehicleKind, () => computeStructuralRoutes(fromHandle, targetId, maxHops, vehicleKind, scope));
     return structural ? overlayRoutes(structural, vehicleKind, new Date(), selection) : null;
   }
-  const live = await planRoutesLive(fromHandle, targetId, maxHops, vehicleKind, scope, at);
+  const live = await planRoutesLive(fromHandle, targetId, maxHops, vehicleKind, scope, at, selection.vehicleId);
   if (!live || !(selection.exclude || selection.minimumWarmth || selection.preferred)) return live;
   const routes = await selectDisplayRoutes(live.routes, selection, at ?? new Date());
   return { ...live, routes, topRoutes: routes.filter((r) => r.verdict === 'recommend'), graph: routeGraph(routes, targetId, true) };
 }
 
 export async function planRoutesLive(
-  fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'current', at = new Date(),
+  fromHandle: string, targetId: string, maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'current', at = new Date(), vehicleId?: string,
 ): Promise<RouteSearch | null> {
-  return calculateRoutes(fromHandle, targetId, maxHops, vehicleKind, scope, at, false);
+  return calculateRoutes(fromHandle, targetId, maxHops, vehicleKind, scope, at, false, vehicleId);
 }
 
 /** Build-only paths and network scoring. Mutable action guards and money are overlaid on read. */
@@ -62,7 +63,7 @@ export async function computeStructuralRoutes(
 }
 
 async function calculateRoutes(
-  fromHandle: string, targetId: string, maxHops: number, vehicleKind: string, scope: 'current' | 'team', at: Date, structuralOnly: boolean,
+  fromHandle: string, targetId: string, maxHops: number, vehicleKind: string, scope: 'current' | 'team', at: Date, structuralOnly: boolean, vehicleId?: string,
 ): Promise<RouteSearch | null> {
   targetId = await canonicalRouteEntity(targetId);
   const checkpoint = routeCheckpoint();
@@ -83,12 +84,14 @@ async function calculateRoutes(
   const sourceOf = new Map([...team, ...fromSources].map((s) => [s.entityId, s]));
   // In current-user scope a team prefix transfers the source to its last team member.
   // In team scope SQL already prevents these paths before they spend the candidate budget.
+  const ruleCounts = { ...emptyRuleCounts(), inspected: rawPaths.length };
   const paths: Array<typeof rawPaths[number] & { source: typeof team[number] }> = [];
   for (const [index, p] of rawPaths.entries()) {
     if (index % 128 === 0) await checkpoint(index);
-    if (sourceIds.has(targetId)) continue;
+    if (scope === 'team' && sourceIds.has(targetId)) continue;
     let start = 0;
-    if (!onlySources.includes(p.nodes[0]!)) for (let i = 1; i < p.nodes.length - 1; i++) if (sourceIds.has(p.nodes[i]!)) start = i;
+    for (let i = 1; i < p.nodes.length - 1; i++) if (sourceIds.has(p.nodes[i]!)) start = i;
+    if (start) ruleCounts.sourcePrefixes++;
     paths.push({ ...p, nodes: p.nodes.slice(start), edges: p.edges.slice(start),
       hops: p.hops - start, source: sourceOf.get(p.nodes[start]!)! });
   }
@@ -101,9 +104,9 @@ async function calculateRoutes(
   }
   const nodeIds = [...nodeSet], allEdgeIds = [...edgeSet], carrierIds = [...carrierSet];
   const loadEntities = async () => {
-    const out: Awaited<ReturnType<typeof listEntities>> = [];
+    const out: Awaited<ReturnType<typeof routeNodeNames>> = [];
     for (let i = 0; i < nodeIds.length; i += 256) {
-      out.push(...await listEntities(nodeIds.slice(i, i + 256)));
+      out.push(...await routeNodeNames(nodeIds.slice(i, i + 256)));
       await setImmediate();
     }
     return out;
@@ -111,6 +114,9 @@ async function calculateRoutes(
   const [entities, edgeMap, loads] = await Promise.all([
     loadEntities(), edgesByIds(allEdgeIds), structuralOnly ? Promise.resolve([]) : connectorLoad(carrierIds),
   ]);
+  const [identityGroups, policy] = await Promise.all([routeIdentityGroups(nodeIds),
+    routePolicyFacts(nodeIds, vehicleId)]);
+  const removedRoutes: NonNullable<RouteSearch['removedRoutes']> = [];
   const nameOf = new Map(entities.map((e) => [e.entityId, e.displayName]));
   const targetName = nameOf.get(targetId) ?? 'Unknown';
   const loadOf = new Map(loads.map((l) => [l.connectorId, l.used]));
@@ -120,13 +126,25 @@ async function calculateRoutes(
     restrictions.filter((r) => r.connectorId).map((r) => r.connectorId as string),
   );
 
+  // PL is fallback access only when the next person has no recorded team relationship.
+  const plNext = [...new Set(paths.filter(p => onlySources.includes(p.nodes[0]!)).map(p => p.nodes[1]!))];
+  const teamConnections = await sourceEdges([...sourceIds].filter(id => !onlySources.includes(id)), plNext);
+  const knownTeamAccess = new Set(teamConnections.filter(e => e.kind !== 'possible_identity' && (!e.evidence.length || e.evidence.some(ev => ev.tie?.basis !== 'pl_network')))
+    .flatMap(e => [e.fromEntity, e.toEntity]).filter(id => plNext.includes(id)));
   const routes: Route[] = [];
   const seen = new Set<string>();
 
   for (const [index, p] of paths.entries()) {
     if (index % 128 === 0) await checkpoint(index);
+    const names = p.nodes.map(id => identityGroups.get(id) ?? id);
+    if (new Set(p.nodes).size !== p.nodes.length || new Set(names).size !== names.length) {
+      ruleCounts.repeatedPeople++; continue;
+    }
+    if (onlySources.includes(p.nodes[0]!) && knownTeamAccess.has(p.nodes[1]!)) {
+      ruleCounts.plFallbacks++; continue;
+    }
     const key = `${p.nodes[0]}:${p.edges.join('>')}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key)) { ruleCounts.duplicates++; continue; }
     seen.add(key);
 
     const hops: RouteHop[] = [];
@@ -140,6 +158,14 @@ async function calculateRoutes(
     if (broken || hops.length === 0) continue;
 
     const connectorIds = p.nodes.slice(1, -1);
+    const restrictedMiddle = !structuralOnly && p.nodes.slice(0, -1).some(id => policy.blocked.has(id));
+    const largeMiddle = !structuralOnly && connectorIds.some(id => policy.organizations.has(id) && oversizedOrganization(policy.organizations.get(id)!));
+    if (restrictedMiddle || largeMiddle) {
+      if (restrictedMiddle) ruleCounts.restricted++; else ruleCounts.largeOrganizations++;
+      removedRoutes.push({ fromName: p.source.name, names: p.nodes.slice(1).map(id => nameOf.get(id) ?? 'Unknown'),
+        reason: restrictedMiddle ? 'restricted' : 'large_organization' });
+      continue;
+    }
     const connectorNames = connectorIds.map((id) => nameOf.get(id) ?? 'Unknown');
     const weakestTier = hops.reduce<Edge['tier']>(
       (worst, h) => (TIER_ORDER[h.edge.tier] > TIER_ORDER[worst] ? h.edge.tier : worst),
@@ -150,9 +176,9 @@ async function calculateRoutes(
     let verdict: RouteVerdict = 'recommend';
 
     // Rule 8. The restriction attaches to the target and every candidate path is checked.
-    if (blanket) {
+    if (blanket || (!structuralOnly && policy.blocked.has(targetId))) {
       verdict = 'excluded';
-      reasons.push(`${targetName} asked not to be approached at all: ${blanket.instruction}`);
+      reasons.push(`${targetName} asked not to be approached at all: ${blanket?.instruction ?? 'A do-not-contact instruction applies in this vehicle.'}`);
     } else {
       const hit = [p.source.entityId, ...connectorIds].find((id) => restrictedConnectors.has(id));
       if (hit) {
@@ -202,6 +228,7 @@ async function calculateRoutes(
     }
 
     routes.push({
+      identityGroups: Object.fromEntries(p.nodes.map(id => [id, identityGroups.get(id) ?? id])),
       fromEntity: p.source.entityId, fromName: p.source.name,
       hops, connectorNames, connectorIds, verdict, reasons, weakestTier, askLoad,
       influence: null,
@@ -247,18 +274,25 @@ async function calculateRoutes(
   const readWarmth = warmthReader(at);
   for (const [index, route] of routes.entries()) {
     route.score = scoreRoute(route, at, roleOf.get(route.connectorIds.at(-1) ?? ''), readWarmth);
+    if (policy) {
+      const adjusted = organizationPenalty(route.score, route, policy.organizations);
+      if (!structuralOnly && adjusted.value < route.score.value) ruleCounts.organizationPenalties++;
+      route.score = adjusted;
+    }
     if (index % 128 === 0) await checkpoint(index);
   }
   const selected = selectTopRoutes(await sortRouteCandidates(routes));
 
   const search: RouteSearch = {
+    ruleCounts, removedRoutes,
     targetId,
     targetName,
     fromName: scope === 'team' ? 'Team / PL' : me!.name,
     routes: selected,
     topRoutes: selected.filter((r) => r.foldedUnder == null && r.verdict === 'recommend'),
     graph: routeGraph(selected, targetId, true),
-    stats: summarizeRoutes(selected),
+    stats: summarizeRoutes(structuralOnly ? selected.filter(route => !route.connectorIds.some(id =>
+      policy.organizations.has(id) && oversizedOrganization(policy.organizations.get(id)!))) : selected),
     ...(structuralOnly ? {} : { promotedBasisHashes: promotedBasisHashes(selected),
       candidateCounts: { total: selected.length, unavailable: selected.filter((r) => r.verdict !== 'recommend').length } }),
     coverage: {
@@ -284,7 +318,7 @@ async function calculateRoutes(
 export { CLUE_KINDS };
 
 
-const chainKey = (r: Route) => [r.fromEntity ?? '', ...r.hops.map((h) => h.toEntity)].join('|');
+const chainKey = (r: Route) => [r.fromEntity ?? '', ...r.hops.map((h) => h.toEntity)].map(id => r.identityGroups?.[id] ?? id).join('|');
 
 /** Input is ranked. Keep up to three prefixes per last intermediary, with no cap on
  * distinct intermediaries or direct sources. Every evidence alternative stays in the data.
@@ -302,7 +336,7 @@ export function selectTopRoutes(routes: Route[]): Route[] {
     const carrier = route.hops.length > 1 ? route.hops.at(-2)!.toEntity : null;
     if (!carrier) continue;
     // Preserve action classes separately: a held/restricted route cannot hide a usable route.
-    const groupKey = `${route.verdict}:${carrier}`;
+    const groupKey = `${route.verdict}:${route.identityGroups?.[carrier] ?? carrier}`;
     const visible = groups.get(groupKey) ?? [];
     if (visible.length < config.routeScoring.routesPerIntroducer) visible.push(i);
     else route.foldedUnder = visible[0]!;
@@ -317,18 +351,20 @@ export function routeGraph(routes: Route[], targetId: string, visibleOnly = fals
   const links = new Map<string, RouteGraph['links'][number]>();
   for (const [index, route] of routes.entries()) {
     if (visibleOnly && (route.foldedUnder != null || route.verdict !== 'recommend')) continue;
-    let from = route.fromEntity;
+    const identity = (id: string) => route.identityGroups?.[id] ?? id;
+    const graphTarget = identity(targetId);
+    let from = route.fromEntity ? identity(route.fromEntity) : undefined;
     if (!from) continue;
     const existing = nodes.get(from);
-    nodes.set(from, { entityId: from, name: route.fromName ?? existing?.name ?? 'Unknown', source: true, target: from === targetId });
+    nodes.set(from, { entityId: from, name: route.fromName ?? existing?.name ?? 'Unknown', source: true, target: from === graphTarget });
     for (const hop of route.hops) {
-      if (!nodes.has(hop.toEntity)) nodes.set(hop.toEntity, { entityId: hop.toEntity, name: hop.toName, source: false, target: hop.toEntity === targetId });
-      const key = `${from}|${hop.toEntity}`;
-      const link = links.get(key) ?? { fromEntity: from, toEntity: hop.toEntity, edgeIds: [], routeIndices: [] };
+      if (!nodes.has(identity(hop.toEntity))) nodes.set(identity(hop.toEntity), { entityId: identity(hop.toEntity), name: hop.toName, source: false, target: identity(hop.toEntity) === graphTarget });
+      const key = `${from}|${identity(hop.toEntity)}`;
+      const link = links.get(key) ?? { fromEntity: from, toEntity: identity(hop.toEntity), edgeIds: [], routeIndices: [] };
       if (!link.edgeIds.includes(hop.edge.edgeId)) link.edgeIds.push(hop.edge.edgeId);
       if (!link.routeIndices.includes(index)) link.routeIndices.push(index);
       links.set(key, link);
-      from = hop.toEntity;
+      from = identity(hop.toEntity);
     }
   }
   return { nodes: [...nodes.values()], links: [...links.values()] };

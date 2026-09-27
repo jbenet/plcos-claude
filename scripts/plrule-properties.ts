@@ -52,9 +52,10 @@ export async function plRuleProperties(db: Queryable, check: (name: string, ok: 
     await buildNetwork();
     const result = await planRoutes(team[0]!.handle, target.key, 3, 'fund', 'team');
     const routes = result!.routes;
-    check('PLRULE all team members and PL are route sources, including through a C-tier onward tie',
-      [team[0]!.name,team[1]!.name,'PL'].every((name) => routes.some((r) => r.fromName === name && r.hops.length === 2 && r.weakestTier === 'C' && r.verdict === 'recommend')),
-      'PL → colleague → target and each team source retain their own labels and edge evidence.');
+    check('PLRULE a recorded PL colleague starts their own route without redundant team prefixes',
+      routes.some(r => r.fromEntity === colleague.key && r.hops.length === 1 && r.verdict === 'recommend')
+      && routes.every(r => !r.connectorIds.includes(colleague.key)),
+      '0084: PL employment is source evidence, including staff without an app login.');
     const memberRoutes = await planRoutes(team[0]!.handle, member.key, 3, 'fund', 'team');
     check('PLRULE directory membership routes from PL with grade C when no named holder is recorded',
       Boolean(memberRoutes?.routes.some((r) => r.fromName === 'PL' && r.hops.length === 1 && r.weakestTier === 'C' && edgeWarmth(r.hops[0]!.edge).score >= 3)),
@@ -71,7 +72,8 @@ export async function plRuleProperties(db: Queryable, check: (name: string, ok: 
     check('PLRULE a prior human confirmation cannot freeze an obsolete modelled tier',
       refreshed.some((r) => r.hops.length === 1 && r.weakestTier === 'B' && r.hops[0]!.edge.reviewedByName === team[0]!.name),
       'Rebuilding restores the affiliation-derived B tie and retains review provenance.');
-    const direct = routes.find((r) => r.fromName === team[0]!.name && r.hops.length === 2)!;
+    const own = routes.find((r) => r.fromEntity === colleague.key)!;
+    const direct: Route = { ...own, fromEntity: 'invented-fold-source', hops: [{ ...own.hops[0]!, toEntity: colleague.key, edge: { ...own.hops[0]!.edge, edgeId: 'invented-fold-prefix', tier: 'B', evidence: [{ note: 'Invented working tie', tie: { kind: 'worked_together', basis: 'pl_affiliation' } }] } }, ...own.hops] };
     const prefix = direct.hops[0]!;
     const detour: Route = { ...direct, hops: [{ ...prefix, toEntity: 'detour', edge: { ...prefix.edge, edgeId: 'invented-prefix', tier: 'C' } }, { ...prefix, edge: { ...prefix.edge, edgeId: 'invented-return', tier: 'C' } }, direct.hops[1]!] };
     check('PLRULE a warm B prefix folds weaker detours even with a shared C suffix and unknown contact date',
