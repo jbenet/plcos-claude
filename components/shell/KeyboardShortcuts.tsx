@@ -5,13 +5,15 @@ import { isShortcutsKey, SHORTCUT_GROUPS } from '@/lib/keyboard-shortcuts';
 
 type ShortcutGroup = (typeof SHORTCUT_GROUPS)[number];
 
+export function useShortcutPlatform() {
+  const [apple, setApple] = useState(false);
+  useEffect(() => setApple(/Mac|iPad|iPhone|iPod/i.test(navigator.platform)), []);
+  return { modifier: apple ? '⌘' : 'Ctrl', alt: apple ? 'Option' : 'Alt' };
+}
+
 /** Shared with the feedback box so its help and the app-wide list cannot drift. */
 export function ShortcutList({ group }: { group: ShortcutGroup['id'] }) {
-  const [modifier, setModifier] = useState('Ctrl');
-  useEffect(() => {
-    // iPad Safari's desktop identity reports MacIntel; iPhone/iPad identities also count.
-    setModifier(/Mac|iPad|iPhone|iPod/i.test(navigator.platform) ? '⌘' : 'Ctrl');
-  }, []);
+  const { modifier, alt } = useShortcutPlatform();
   const section = SHORTCUT_GROUPS.find((item) => item.id === group)!;
   return (
     <dl className="shortcut-list">
@@ -20,7 +22,7 @@ export function ShortcutList({ group }: { group: ShortcutGroup['id'] }) {
           <dt>{shortcut.keys.map((keys, i) => (
             <span key={keys.join('+')}>
               {i > 0 && <span className="muted"> / </span>}
-              {keys.map((key) => <kbd key={key}>{key === 'Mod' ? modifier : key}</kbd>)}
+              {keys.map((key) => <kbd key={key}>{key === 'Mod' ? modifier : key === 'Alt' ? alt : key}</kbd>)}
             </span>
           ))}</dt>
           <dd>{shortcut.description}</dd>

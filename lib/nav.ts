@@ -68,7 +68,7 @@ export const vehicleHome = (vehicleSlug: string | null) => `/${vehicleSlug ?? 'a
  * whichever vehicle is selected.
  */
 export const VEHICLE_MODULES: NavModule[] = [
-  { ...m('05', 'Portfolio', 'portfolio', 'L4', 'Sourced fund companies and founders', true, ['fund']), vehicleSlugs: ['neurotech', 'rails'] },
+  m('05', 'Portfolio', 'portfolio', 'L4', 'Sourced companies, founders and investments', true, ['fund', 'spv']),
   m('V', 'Visualizations', 'visualizations', 'L9',
     'Everything trying to happen at once, drawn ten ways: stations, people, drop-off, the fortnight ahead, instruments, the map, the plant, the moves, the grid, the economy.',
     true, undefined, true),
