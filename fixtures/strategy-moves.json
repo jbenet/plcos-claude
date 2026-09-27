@@ -1,0 +1,1457 @@
+{
+  "version": 1,
+  "moves": [
+    {
+      "id": "demo-materials",
+      "title": "Reconcile the diligence pack",
+      "category": "materials",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.06,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.06,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-presence",
+      "title": "Build an investor reading page",
+      "category": "presence",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 30,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.02,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 14,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 30,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.02,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 14,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-video",
+      "title": "Edit a short research video",
+      "category": "video",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 40,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.01,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 18,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 40,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.01,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 18,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-writing",
+      "title": "Write a dated thesis post",
+      "category": "writing",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 30,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.015,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 10,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 30,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.015,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 10,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-talk",
+      "title": "Prepare a technical talk",
+      "category": "talk",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 20,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.02,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 20,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.02,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-host",
+      "title": "Host a small research roundtable",
+      "category": "host",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 8,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.08,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 16,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 600,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 8,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.08,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 16,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 600,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-attend",
+      "title": "Attend a focused allocator event",
+      "category": "attend",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.04,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 20,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 600,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.04,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 20,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 600,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-source",
+      "title": "Source a fresh allocator cohort",
+      "category": "source",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 20,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.03,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 16,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 20,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.03,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 16,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-enrich",
+      "title": "Enrich stalled LP records",
+      "category": "enrich",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 15,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.03,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 10,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 15,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.03,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 10,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-introductions",
+      "title": "Prepare committed-LP introduction proposals",
+      "category": "introductions",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 6,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.09,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 6,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.09,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-syndication",
+      "title": "Map a co-investor syndicate",
+      "category": "syndication",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 8,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.07,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 8,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.07,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-close",
+      "title": "Reconcile outstanding close files",
+      "category": "close",
+      "detail": "Invented example for comparing a bounded team project with individual LP actions.",
+      "evidence": [
+        {
+          "source": "Invented strategy workshop",
+          "as_of": "2026-09-01",
+          "confidence": "low; fictional",
+          "last_verified_by": "Demo fixture",
+          "supports": "Illustrates planning assumptions only."
+        }
+      ],
+      "vehicles": [
+        {
+          "slug": "neurotech",
+          "estimates": {
+            "reach": {
+              "value": 5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 6,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        },
+        {
+          "slug": "rails",
+          "estimates": {
+            "reach": {
+              "value": 5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "check": {
+              "value": 240000,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "baseline": {
+              "value": 0.1,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "conversionLift": {
+              "value": 0.12,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "checkLift": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "confidence": {
+              "value": 0.5,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "teamHours": {
+              "value": 6,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "cashCost": {
+              "value": 0,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "effectDays": {
+              "value": 21,
+              "basis": "Invented planning scenario, not measured conversion.",
+              "label": "GUESS"
+            },
+            "audience": "Invented Cedar cohort; overlaps other alternatives.",
+            "dependencies": "Prepare and review only. Any send, intro ask, spend or material circulation needs its own authorization."
+          }
+        }
+      ]
+    }
+  ]
+}
