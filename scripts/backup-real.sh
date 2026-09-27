@@ -56,15 +56,30 @@ stage="$OUT/.stage-$stamp"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/real"
 
-# 1. Snapshot: clone every entry (copy-on-write, near-instant), skipping locks and the Postgres rehearsal cluster.
+# 1. Snapshot. Since 27 Sep 2026 the live database is Postgres (data/real/postgres.url): dump it with
+#    pg_dump as the read-only role, which is consistent by construction. The old PGlite folder
+#    (real/database) is then stale and skipped, as are the cluster's own files and locks.
+PG_BIN="${PG_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
+PG_URL=""; [ -f "$REAL/postgres.url" ] && PG_URL="$(tr -d '[:space:]' < "$REAL/postgres.url")"
 for entry in "$REAL"/* "$REAL"/.[!.]*; do
   [ -e "$entry" ] || continue
   name="$(basename "$entry")"
   case "$name" in *.lock|postgres|.real-copy-*) continue ;; esac
+  [ -n "$PG_URL" ] && [ "$name" = database ] && continue
   cp -cR "$entry" "$stage/real/$name" 2>/dev/null || cp -R "$entry" "$stage/real/$name"
 done
 
-# 2. It only counts if it opens: read it from a separate process.
+# 2. It only counts if it can be restored from: check the dump's table of contents, or open the PGlite copy.
+if [ -n "$PG_URL" ]; then
+  hostport="${PG_URL#*@}"; hostport="${hostport%%/*}"; dbname="${PG_URL##*/}"
+  mkdir -p "$stage/real/postgres-dump"
+  PGPASSWORD="$(security find-generic-password -s plcos-postgres -a ro -w)" "$PG_BIN/pg_dump" -Fc \
+    -h "${hostport%%:*}" -p "${hostport##*:}" -U plcos_ro -d "$dbname" -f "$stage/real/postgres-dump/$dbname.dump" \
+    || { echo "Backup refused: pg_dump failed. Nothing was written." >&2; exit 1; }
+  n="$("$PG_BIN/pg_restore" --list "$stage/real/postgres-dump/$dbname.dump" | grep -c ' TABLE DATA ')" \
+    || { echo "Backup refused: the dump does not list. Nothing was written." >&2; exit 1; }
+  tables="$n tables in the $dbname dump"
+else
 tables="$(cd "$HERE" && BACKUP_DB="$stage/real/database" npx tsx -e '
   import { openPglite } from "./lib/db/pglite";
   (async () => {
@@ -75,6 +90,7 @@ tables="$(cd "$HERE" && BACKUP_DB="$stage/real/database" npx tsx -e '
     await db.close?.();
   })().catch((e) => { console.error(String(e).slice(0, 300)); process.exit(1); });
 ')" || { echo "Backup refused: the snapshot does not open. Nothing was written." >&2; exit 1; }
+fi
 
 # 3. Pack and encrypt in one stream; nothing unencrypted is written.
 file="$OUT/plcos-real-$stamp-$KIND.tar.gz.gpg"
