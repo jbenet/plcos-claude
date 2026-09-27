@@ -34,6 +34,7 @@ export async function compactStructuralRoutes(search: RouteSearch, roles: Map<st
   for (const [routeIndex, route] of search.routes.entries()) {
     if (routeIndex % 128 === 0) await checkpoint(routeIndex);
     candidates.push({
+    ...(route.viaContact ? { viaContact: route.viaContact } : {}),
     nodes: [node(route.fromEntity!, route.fromName ?? search.fromName), ...route.hops.map((h) => node(h.toEntity, h.toName))],
     edges: route.hops.map(({ edge }) => {
       let index = edgeIds.get(edge.edgeId);
@@ -158,9 +159,11 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
   const { carriers, edges: scoreEdges } = memo;
   const [restrictions, loads, exposures, coverage, sources, policy, identityGroups] = await Promise.all([
     restrictionsFor(search.targetId), connectorLoad(carriers), listExposures(null), edgeCoverage(), listSyncSources(),
-    routePolicyFacts(structural.nodes.map(n => n.entityId), selection.vehicleId),
+    routePolicyFacts([search.targetId, ...structural.nodes.map(n => n.entityId)], selection.vehicleId),
     routeIdentityGroups(structural.nodes.map(n => n.entityId)),
   ]);
+  const contactRestrictions = new Map(await Promise.all([...new Set(structural.candidates.flatMap(c => c.viaContact ? [c.viaContact.entityId] : []))]
+    .map(async id => [id, await restrictionsFor(id)] as const)));
   const loadOf = new Map(loads.map((l) => [l.connectorId, l.used]));
   const hard = new Map<string, typeof exposures>();
   for (const x of exposures) if (x.track === 'hard' && x.amount > 0) {
@@ -179,7 +182,7 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
   // Exact derived warmth facts, rather than a time bucket: monthsAgo preserves the
   // time of day, so a dated contact can age immediately after midnight on a boundary.
   const signature = selection.preferred ? null : JSON.stringify([
-    Boolean(blanket), [...restricted].sort(), [...policy.blocked].sort(), [...policy.organizations], selection.vehicleId, config.routePolicy, carriers.map((id) => [id, loadOf.get(id) ?? 0, roles.get(id)]),
+    Boolean(blanket), [...contactRestrictions], [...restricted].sort(), [...policy.blocked].sort(), [...policy.organizations], selection.vehicleId, config.routePolicy, carriers.map((id) => [id, loadOf.get(id) ?? 0, roles.get(id)]),
     cap, config.routeScoring, config.routeWarmth, selection.exclude ?? null, selection.minimumWarmth ?? 0,
     scoreEdges.map((edge) => { const w = readWarmth(edge); return [w.kind, w.prior, w.score, w.recency]; }),
   ]);
@@ -194,7 +197,7 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
       if (candidateIndex % 128 === 0) await checkpoint(candidateIndex);
       const nodes = candidate.nodes.map((i) => structural.nodes[i]!);
       const connectorIds = nodes.slice(1, -1).map((n) => n.entityId), carrier = connectorIds.at(-1);
-      const restrictedMiddle = nodes.slice(0, -1).some(n => policy.blocked.has(n.entityId));
+      const restrictedMiddle = nodes.slice(0, candidate.viaContact ? undefined : -1).some(n => policy.blocked.has(n.entityId));
       const largeMiddle = connectorIds.some(id => policy.organizations.has(id) && oversizedOrganization(policy.organizations.get(id)!));
       if (restrictedMiddle || largeMiddle) {
         if (restrictedMiddle) ruleCounts.restricted++; else ruleCounts.largeOrganizations++;
@@ -204,9 +207,10 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
       }
       const hops = candidate.edges.map((e, i) => ({ edge: scoreEdges[e]!, toEntity: nodes[i + 1]!.entityId, toName: nodes[i + 1]!.name }));
       const askLoad = carrier ? { connector: nodes.at(-2)!.name, used: loadOf.get(carrier) ?? 0, cap } : null;
-      const excluded = blanket || policy.blocked.has(search.targetId) || [nodes[0]!.entityId, ...connectorIds].some((id) => restricted.has(id));
+      const contactBlocked = (contactRestrictions.get(candidate.viaContact?.entityId ?? '') ?? []).some(r => r.scope === 'blanket' || (r.connectorId && [nodes[0]!.entityId, ...connectorIds].includes(r.connectorId)));
+      const excluded = blanket || contactBlocked || policy.blocked.has(search.targetId) || [nodes[0]!.entityId, ...connectorIds, ...(candidate.viaContact ? [candidate.viaContact.entityId] : [])].some((id) => restricted.has(id));
       if (!excluded) for (const edgeIndex of candidate.edges) usableEdges.add(edgeIndex);
-      const route: Route = { identityGroups: Object.fromEntries(nodes.map(n => [n.entityId, identityGroups.get(n.entityId) ?? n.entityId])), fromEntity: nodes[0]!.entityId, fromName: nodes[0]!.name, hops, connectorIds,
+      const route: Route = { ...(candidate.viaContact ? { viaContact: candidate.viaContact } : {}), identityGroups: Object.fromEntries(nodes.map(n => [n.entityId, identityGroups.get(n.entityId) ?? n.entityId])), fromEntity: nodes[0]!.entityId, fromName: nodes[0]!.name, hops, connectorIds,
         connectorNames: nodes.slice(1, -1).map((n) => n.name), verdict: excluded ? 'excluded' : askLoad && askLoad.used >= cap ? 'hold' : 'recommend',
         reasons: [], askLoad, influence: null,
         weakestTier: hops.reduce<Edge['tier']>((tier, h) => tiers[h.edge.tier] > tiers[tier] ? h.edge.tier : tier, 'A') };
@@ -246,9 +250,13 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
     const carrier = route.connectorIds.at(-1);
     route.score = organizationPenalty(scoreRoute(route, at, roles.get(carrier ?? ''), readWarmth), route, policy.organizations);
     route.influence = carrier ? influences.get(carrier) ?? null : null;
-    if (blanket || policy.blocked.has(search.targetId)) route.reasons.push(`${search.targetName} asked not to be approached at all: ${blanket?.instruction ?? 'A do-not-contact instruction applies in this vehicle.'}`);
+    if (route.viaContact) route.reasons.push(`Via ${route.viaContact.role}: ${route.viaContact.name} speaks for ${search.targetName}. The relationship tier is unchanged.`);
+    const contactBlocked = (contactRestrictions.get(route.viaContact?.entityId ?? '') ?? []).some(r => r.scope === 'blanket' || (r.connectorId && [route.fromEntity!, ...route.connectorIds].includes(r.connectorId)));
+    if (blanket || contactBlocked || policy.blocked.has(search.targetId)) route.reasons.push(contactBlocked
+      ? `A restriction on ${route.viaContact?.name ?? 'this contact'} excludes this approach.`
+      : `${search.targetName} asked not to be approached at all: ${blanket?.instruction ?? 'A do-not-contact instruction applies in this vehicle.'}`);
     else {
-      const hit = [route.fromEntity!, ...route.connectorIds].find((id) => restricted.has(id));
+      const hit = [route.fromEntity!, ...route.connectorIds, ...(route.viaContact ? [route.viaContact.entityId] : [])].find((id) => restricted.has(id));
       if (hit) route.reasons.push(`${restrictions.find((r) => r.connectorId === hit)?.instruction ?? 'A restriction applies to this route.'} `
         + 'This path is excluded, and finding a different connector toward the same approach does not satisfy the instruction.');
     }
@@ -271,6 +279,6 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
     graph: routeGraph(selected, search.targetId, true), stats, candidateCounts: { ...snapshot.candidateCounts }, promotedBasisHashes: [...snapshot.promotedBasisHashes],
     coverage: { edges: coverage.edges, from: coverage.from, to: coverage.to, maxHops: search.coverage.maxHops,
       notInspected: [...sources.filter((s) => s.status === 'not_connected').map((s) => ({ source: s.label, why: s.detail ?? 'not connected' })),
-        { source: 'Longer and overflow paths', why: `Search inspects up to ${search.coverage.maxHops} hops and 300 candidate paths per source; best means best among inspected routes.` }] },
+        { source: 'Longer and overflow paths', why: `Search inspects up to ${search.coverage.maxHops} hops and 300 candidate paths per source and LP/contact endpoint; best means best among inspected routes.` }] },
     restrictions: restrictions.map((r) => ({ instruction: r.instruction, connectorName: r.connectorName, source: r.source })) };
 }

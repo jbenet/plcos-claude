@@ -1,3 +1,5 @@
+import { lpContactsFor } from '@/modules/strategy/lp-contacts';
+import { buildCache } from '@/lib/build-cache';
 import { createHash } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
 import { config } from '@/config/deployment';
@@ -12,7 +14,7 @@ class RevisionChanged extends Error {}
 const REVISION_RETRIES = 2;
 
 const settings = () => createHash('sha256').update(JSON.stringify([
-  'compact-structural-v9-routes-0084', config.routeScoring, config.routeWarmth, config.routePolicy,
+  'compact-structural-v10-lp-unit-contacts', config.routeScoring, config.routeWarmth, config.routePolicy,
 ])).digest('hex').slice(0, 16);
 const sourceSignatures = new WeakMap<Db, { revision: string; value: Promise<string> }>();
 async function sourceSignature(db: Db, revision: string): Promise<string> {
@@ -25,10 +27,16 @@ async function sourceSignature(db: Db, revision: string): Promise<string> {
   try { return await value; }
   catch (error) { if (sourceSignatures.get(db)?.value === value) sourceSignatures.delete(db); throw error; }
 }
+// Membership changes are read revisions, not graph edits. Hash the actual resolver output
+// so money/notes invalidations do not discard otherwise valid structural searches.
+const contactSignature = buildCache(async () => {
+  const rows = await (await getDb()).query<{ id: string }>(`select entity_id::text id from identity.entity where entity_type <> 'person' and merged_into is null order by entity_id`);
+  return createHash('sha256').update(JSON.stringify([...(await lpContactsFor(rows.map(r => r.id))).entries()])).digest('hex').slice(0, 16);
+});
 export async function revisionFor(db: Db) {
   const row = (await db.one<{ revision: string; epoch: string; day: string }>(
     `select revision::text, epoch::text, current_date::text as day from network.route_revision where singleton`))!;
-  return { revision: row.revision, generation: `${row.epoch}:${row.day}:${settings()}:${await sourceSignature(db, `${row.revision}:${row.day}`)}` };
+  return { revision: row.revision, generation: `${row.epoch}:${row.day}:${settings()}:${await withDb(db, () => contactSignature())}:${await sourceSignature(db, `${row.revision}:${row.day}`)}` };
 }
 function encode(value: unknown): string {
   return JSON.stringify(value, function (key, v) {
@@ -63,7 +71,9 @@ async function touched(db: Db, targetId: string, since: string, search: RouteSea
       where revision > $1::bigint and entity_id::text > $2 order by entity_id limit 256`, [since, after]);
     if (!rows.length) return false;
     const ids = rows.map((r) => r.canonical_id);
-    if (ids.some((id) => sources.has(id)) || await routeTouchesChanges(targetId, ids)) return true;
+    if (ids.some((id) => sources.has(id))) return true;
+    const contacts = (await lpContactsFor([targetId])).get(targetId) ?? [];
+    for (const endpoint of [targetId, ...contacts.map(c => c.entityId)]) if (await routeTouchesChanges(endpoint, ids)) return true;
     after = rows.at(-1)!.id;
     await pause(1);
   }

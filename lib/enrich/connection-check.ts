@@ -21,6 +21,10 @@ export function pathProblems(value: unknown): string[] {
   if (other?.entityType !== undefined && !['person', 'org'].includes(other.entityType)) problems.push('invalid other.entityType');
   if (other?.person && other.entityType && (other.person.entityType ?? 'person') !== other.entityType) problems.push('other.entityType conflicts with connector descriptor');
   if (other?.key !== undefined && !isEntityKey(other.key)) problems.push('other.key must be an entity UUID');
+  if (p.viaContact !== undefined) {
+    const c = object(p.viaContact);
+    if (!c || !isEntityKey(c.key) || !text(c.name) || !text(c.role) || c.key === p.lp) problems.push('invalid viaContact');
+  }
   if (p.tie !== undefined) problems.push(...tieDetailsProblems(p.tie));
   for (const [label, key, value] of [['lpPerson', p.lp, p.lpPerson], ['other.person', other?.key, other?.person]] as const) {
     if (value === undefined) continue;

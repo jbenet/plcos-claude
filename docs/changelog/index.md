@@ -172,3 +172,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Linear, read-only — a connector, a replica, and a plan to approve](entries/linear-readonly.md)
 - [Findings import performance](entries/findings-perf.md)
 - [Identity review — deterministic fixture labels and row comparisons](entries/flaky-identity-review.md)
+
+- [W3 LP units — paths through firm contacts](entries/w3-lp-units.md)

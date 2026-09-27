@@ -8,6 +8,7 @@ export async function runProperties(check: Check) {
   (await import('../visualization-scale-properties')).visualizationScaleProperties(check);
   await (await import('./availability')).availabilityProperties(check);
   (await import('../connection-target-properties')).connectionTargetProperties(check);
+  (await import('./lp-unit-paths')).lpUnitPathProperties(check);
   (await import('../warehouse-investor-properties')).warehouseInvestorProperties(check);
   (await import('../route-presentation-properties')).routePresentationProperties(check);
   (await import('./routes-layout-0086')).routesLayout0086Properties(check);
@@ -65,6 +66,7 @@ export async function runProperties(check: Check) {
   await (await import('./selection-0104')).selection0104Properties(check, db);
   await (await import('./spv-stance')).spvStanceProperties(check, db);
   await (await import('./lp-stats')).lpStatsProperties(check, db);
+  await (await import('./lp-unit-paths')).lpUnitPathDatabaseProperties(check, db);
   await (await import('./linear')).linearProperties(check, db);
   // Last on this database: it re-points every pursuit, then reverses every decision it made.
   await (await import('./lp-units')).lpUnitProperties(check, db);

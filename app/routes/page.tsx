@@ -360,7 +360,7 @@ async function Routes({
               <details key={i} id={`route-${i}`} className="route-detail" open={r === String(i)}>
                 <summary className="route-comparison-row">
                   <span className="route-score" title={routeReading(route).provisional ? 'Provisional influence / tier estimate; not probability' : 'Route strength'}>{routeReading(route).provisional ? '—' : routeReading(route).score}</span>
-                  <span className="route-chain">{route.fromName ?? search.fromName} → {route.hops.map((h) => h.toName + (founders[h.toEntity] ? ' (PLC portfolio founder)' : '')).join(' → ')}</span>
+                  <span className="route-chain">{route.fromName ?? search.fromName} → {route.hops.map((h) => h.toName + (founders[h.toEntity] ? ' (PLC portfolio founder)' : '')).join(' → ')}{route.viaContact && ` · via ${route.viaContact.role} for ${search.targetName}`}</span>
                   <span className="route-hop-grades" title="Grades in hop order">{route.hops.map(h=>h.edge.tier).join(" ")}</span>
                   <span className="mono">{route.hops.length ? Math.min(...route.hops.map(h=>readWarmth(h.edge).score)) : '—'}/5</span>
                   <span className="route-row-verdict">{VERDICT_LABEL[route.verdict]}</span>

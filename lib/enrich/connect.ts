@@ -25,6 +25,8 @@ export type Tier = 'A' | 'B' | 'C' | 'D';
 
 export interface Path {
   lp: string;
+  /** LP-unit display projection. The relationship endpoint remains this contact, not the firm. */
+  viaContact?: { key: string; name: string; role: string };
   /** Sourced person outside the active LP research set; import resolves before building edges. */
   lpPerson?: ConnectionPerson;
   /** Who or what they are near: a team member, one of our organizations, a backer of ours, another LP. */
@@ -117,6 +119,42 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
 /** W3's pure join, also used by invented property fixtures. No files or database writes. */
 export function connectionPaths(candidates: Candidate[], findings: Map<string, Finding>, net: Network,
   team: TeamMember[], directory: PlDirectoryEntry[] = [], at = new Date(), warehouse?: WarehouseGraph): { paths: Path[]; lps: number; lpKeys: string[]; researched: number } {
+
+  const units = [...new Map(candidates.map(c => [c.key, c])).values()];
+  const endpoints = new Map(units.map(c => [c.key, c]));
+  for (const unit of units) if (unit.type !== 'person') for (const contact of unit.contacts ?? []) {
+    if (contact.type === 'person' && !endpoints.has(contact.key)) endpoints.set(contact.key, contact);
+  }
+  const result = entityConnectionPaths([...endpoints.values()], findings, net, team, directory, at, warehouse);
+  const byEndpoint = new Map<string, Path[]>();
+  for (const path of result.paths) byEndpoint.set(path.lp, [...(byEndpoint.get(path.lp) ?? []), path]);
+  const projected: Path[] = [];
+  const seen = new Set<string>();
+  for (const unit of units) {
+    if (unit.type === 'person' || unit.restrictions?.some(r => r.scope === 'blanket')) continue;
+    for (const contact of unit.contacts ?? []) {
+      if (contact.type !== 'person' || contact.restrictions?.some(r => r.scope === 'blanket')) continue;
+      for (const path of byEndpoint.get(contact.key) ?? []) {
+        if (path.other.key === unit.key || path.other.key === contact.key) continue;
+        const names = new Set([contact.name, path.other.name, ...(path.warehouse?.people.slice(0, -1).map(p => p.name) ?? [])]);
+        if ([...(unit.restrictions ?? []), ...(contact.restrictions ?? [])].some(r =>
+          r.scope === 'connector' && r.connector && [...names].some(n => norm(n) === norm(r.connector!)))) continue;
+        const key = JSON.stringify([unit.key, contact.key, path.other, path.kind, path.tier, path.basis, path.warehouse]);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        projected.push({ ...path, lp: unit.key, lpPerson: undefined,
+          viaContact: { key: contact.key, name: contact.name, role: contact.contactRole },
+          basis: `${path.basis}; via ${contact.contactRole} (${contact.name})` });
+      }
+    }
+  }
+  return { ...result, paths: [...result.paths, ...projected].sort((a, b) => a.tier.localeCompare(b.tier)
+    || (b.warmth?.score ?? 0) - (a.warmth?.score ?? 0) || a.lp.localeCompare(b.lp) || a.other.name.localeCompare(b.other.name)),
+    lps: units.length, lpKeys: units.map(c => c.key) };
+}
+
+function entityConnectionPaths(candidates: Candidate[], findings: Map<string, Finding>, net: Network,
+  team: TeamMember[], directory: PlDirectoryEntry[], at: Date, warehouse?: WarehouseGraph): { paths: Path[]; lps: number; lpKeys: string[]; researched: number } {
 
   // A connector need not be raising. The sourced personal backer roster is a separate
   // universe from active LPs; leaving it out made documented co-founder ties dead ends.

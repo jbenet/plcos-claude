@@ -242,6 +242,7 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   const warehouseEntities = new Map<string, string>();
   const conflictingMatches = new Set<string>();
   for (const n of notes) for (const p of n.data.paths ?? []) {
+    if (p.viaContact) continue; // LP-unit projection, never a new relationship or identity.
     const m = p.warehouse?.match;
     if (!m || m.status !== 'confident' || m.lpKey !== p.lp || !known.has(p.lp)) continue;
     const previous = warehouseEntities.get(m.personKey);
@@ -267,6 +268,7 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   const alreadyMet = new Set([...edges.values()].map((e) => [e.from, e.to].sort().join('|')));
   for (const n of notes) {
     for (const p of n.data.paths ?? []) {
+      if (p.viaContact) continue; // The original contact path supplies the graph edge.
       const lp = known.has(p.lp) ? p.lp : n.entity_id;
       if (!known.has(lp)) { counts.notPeople++; continue; }
       if (p.warehouse) {

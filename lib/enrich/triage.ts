@@ -88,7 +88,7 @@ export async function triage(dir: string, now = new Date(), input?: Candidate[])
     const close = /close/i.test(c.enriched['Relationship Tier'] ?? '');
     const opened = c.notes.find((n) => /viewed|opened|docsend/i.test(n.summary ?? ''));
     const backer = mine.find((p) => p.other.type === 'backer' && p.tier === 'C');
-    const researchPath = mine.find((p) => ['A', 'B'].includes(p.tier) && p.kind !== 'met');
+    const researchPath = mine.find((p) => ['A', 'B'].includes(p.tier) && (p.kind !== 'met' || p.viaContact != null));
 
     if (colleagueMet) reasons.push(`A colleague at their firm has met us: ${colleagueMet.other.name}`);
     if (insider) {

@@ -1,3 +1,4 @@
+import { lpContactsFor } from '@/modules/strategy/lp-contacts';
 import { routePolicyFacts, routeIdentityGroups } from './route-policy';
 import { emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
 import { cachedRoutes } from './cache';
@@ -75,8 +76,12 @@ async function calculateRoutes(
   const sourceIds = new Set(team.map((s) => s.entityId));
   if (!fromSources.length) return null;
 
+  const contacts = (await lpContactsFor([targetId])).get(targetId) ?? [];
+  const contactOf = new Map(contacts.map(c => [c.entityId, c]));
+  const endpoints = [targetId, ...contactOf.keys()];
+  const endpointRestrictions = new Map(await Promise.all(contacts.map(async c => [c.entityId, structuralOnly ? [] : await restrictionsFor(c.entityId)] as const)));
   const [rawPaths, restrictions, coverage, sources] = await Promise.all([
-    enumeratePathsFromSources(fromSources.map((s) => s.entityId).filter((id) => id !== targetId), targetId, maxHops, scope === 'team' ? [...sourceIds] : []),
+    Promise.all(endpoints.map(endpoint => enumeratePathsFromSources(fromSources.map((s) => s.entityId).filter((id) => id !== endpoint), endpoint, maxHops, scope === 'team' ? [...sourceIds] : []))).then(paths => paths.flat()),
     structuralOnly ? Promise.resolve([]) : restrictionsFor(targetId),
     edgeCoverage(),
     listSyncSources(),
@@ -88,7 +93,7 @@ async function calculateRoutes(
   const paths: Array<typeof rawPaths[number] & { source: typeof team[number] }> = [];
   for (const [index, p] of rawPaths.entries()) {
     if (index % 128 === 0) await checkpoint(index);
-    if (scope === 'team' && sourceIds.has(targetId)) continue;
+    if (scope === 'team' && sourceIds.has(p.nodes.at(-1)!)) continue;
     let start = 0;
     for (let i = 1; i < p.nodes.length - 1; i++) if (sourceIds.has(p.nodes[i]!)) start = i;
     if (start) ruleCounts.sourcePrefixes++;
@@ -158,7 +163,7 @@ async function calculateRoutes(
     if (broken || hops.length === 0) continue;
 
     const connectorIds = p.nodes.slice(1, -1);
-    const restrictedMiddle = !structuralOnly && p.nodes.slice(0, -1).some(id => policy.blocked.has(id));
+    const restrictedMiddle = !structuralOnly && p.nodes.slice(0, contactOf.has(p.nodes.at(-1)!) ? undefined : -1).some(id => policy.blocked.has(id));
     const largeMiddle = !structuralOnly && connectorIds.some(id => policy.organizations.has(id) && oversizedOrganization(policy.organizations.get(id)!));
     if (restrictedMiddle || largeMiddle) {
       if (restrictedMiddle) ruleCounts.restricted++; else ruleCounts.largeOrganizations++;
@@ -172,15 +177,18 @@ async function calculateRoutes(
       'A',
     );
 
-    const reasons: string[] = [];
+    const viaContact = contactOf.get(p.nodes.at(-1)!);
+    const contactRestrictions = endpointRestrictions.get(p.nodes.at(-1)!) ?? [];
+    const contactBlocked = contactRestrictions.some(r => r.scope === 'blanket' || (r.connectorId && [p.source.entityId, ...connectorIds].includes(r.connectorId)));
+    const reasons: string[] = viaContact ? [`Via ${viaContact.role}: ${viaContact.name} speaks for ${targetName}. The relationship tier is unchanged.`] : [];
     let verdict: RouteVerdict = 'recommend';
 
     // Rule 8. The restriction attaches to the target and every candidate path is checked.
-    if (blanket || (!structuralOnly && policy.blocked.has(targetId))) {
+    if (blanket || contactBlocked || (!structuralOnly && policy.blocked.has(targetId))) {
       verdict = 'excluded';
-      reasons.push(`${targetName} asked not to be approached at all: ${blanket?.instruction ?? 'A do-not-contact instruction applies in this vehicle.'}`);
+      reasons.push(contactBlocked ? `A restriction on ${viaContact?.name ?? 'this contact'} excludes this approach.` : `${targetName} asked not to be approached at all: ${blanket?.instruction ?? 'A do-not-contact instruction applies in this vehicle.'}`);
     } else {
-      const hit = [p.source.entityId, ...connectorIds].find((id) => restrictedConnectors.has(id));
+      const hit = [p.source.entityId, ...connectorIds, ...(viaContact ? [viaContact.entityId] : [])].find((id) => restrictedConnectors.has(id));
       if (hit) {
         const r = restrictions.find((x) => x.connectorId === hit);
         verdict = 'excluded';
@@ -228,6 +236,7 @@ async function calculateRoutes(
     }
 
     routes.push({
+      ...(viaContact ? { viaContact } : {}),
       identityGroups: Object.fromEntries(p.nodes.map(id => [id, identityGroups.get(id) ?? id])),
       fromEntity: p.source.entityId, fromName: p.source.name,
       hops, connectorNames, connectorIds, verdict, reasons, weakestTier, askLoad,
@@ -303,7 +312,7 @@ async function calculateRoutes(
       notInspected: [
         ...sources.filter((s) => s.status === 'not_connected')
           .map((s) => ({ source: s.label, why: s.detail ?? 'not connected' })),
-        { source: 'Longer and overflow paths', why: `Search inspects up to ${maxHops} hops and 300 candidate paths per source; best means best among inspected routes.` },
+        { source: 'Longer and overflow paths', why: `Search inspects up to ${maxHops} hops and 300 candidate paths per source and LP/contact endpoint; best means best among inspected routes.` },
       ],
     },
     restrictions: restrictions.map((r) => ({
@@ -352,7 +361,7 @@ export function routeGraph(routes: Route[], targetId: string, visibleOnly = fals
   for (const [index, route] of routes.entries()) {
     if (visibleOnly && (route.foldedUnder != null || route.verdict !== 'recommend')) continue;
     const identity = (id: string) => route.identityGroups?.[id] ?? id;
-    const graphTarget = identity(targetId);
+    const graphTarget = identity(route.viaContact?.entityId ?? targetId);
     let from = route.fromEntity ? identity(route.fromEntity) : undefined;
     if (!from) continue;
     const existing = nodes.get(from);
