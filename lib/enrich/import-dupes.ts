@@ -5,6 +5,7 @@ import { consolidatePursuitsInTransaction, type PursuitMergeReport } from '@/mod
 import { storedPersonEvidence } from './entity-types';
 import type { Finding } from './schema';
 import type { Path } from './connect';
+import { mergeImportPeople } from './import-person-dupes';
 
 const RULE = 'identity:v1:import-duplicates';
 const TYPE_RULE = 'rule:import-duplicate-org';
@@ -21,7 +22,7 @@ export interface ImportDuplicateReport {
   pursuitMerges?: PursuitMergeReport;
 }
 
-/** Local imported organizations only. Whole components are checked before any mutation.
+/** Local imported organizations and corroborated imported people. Whole components are checked before any mutation.
  * Like the existing identity resolver, retain original FKs and record a reversible redirect.
  * Caller owns the transaction; there is deliberately no DB-opening command line script.
  */
@@ -41,7 +42,7 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
   }
   const duplicates = [...groups.entries()].filter(([, g]) => g.length > 1 && g.some(e => e.type === 'org'))
     .sort(([a], [b]) => a.localeCompare(b));
-  if (!duplicates.length) return report;
+
   const candidateRoots = new Set(duplicates.flatMap(([, g]) => g.map(e => e.id)));
   const members = entities.filter(e => candidateRoots.has(e.root));
   const ids = members.map(e => e.id);
@@ -121,6 +122,7 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
       report.merges.push({ assertionId: assertion!.id, survivorId: survivor.id, loserId: loser.id, name: survivor.name });
     }
   }
+  await mergeImportPeople(tx, by, report, findings, paths);
   await tx.query(`update identity.possible_match set active=false where active
     and identity.canonical_entity_id(left_entity)=identity.canonical_entity_id(right_entity)`);
   return report;

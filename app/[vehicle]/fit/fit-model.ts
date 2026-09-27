@@ -1,3 +1,4 @@
+import { groupLps, type LpGroup } from '@/lib/lp-groups';
 import type { PursuitStatus } from '@/modules/strategy/client';
 
 /** The fit page's groups and rows, shared by the server page and its client list (issues 0073, 0096). */
@@ -25,6 +26,7 @@ export const WORK: Record<Group, string> = {
 };
 
 export interface FitRow {
+  isOrg?: boolean; orgId?: string | null; org?: string | null; orgFirst?: boolean;
   key: string; entityId: string; name: string;
   vehicleId: string; vehicleName: string; vehicleSlug: string;
   pursuitId: string | null; status: PursuitStatus | null; owner: string;
@@ -44,4 +46,17 @@ export interface FitRow {
   };
 }
 
-export interface FitSection { group: Group | null; count: number; rows: FitRow[] }
+export function groupFitRows(rows: FitRow[], compare: (a: FitRow, b: FitRow) => number, universe: FitRow[] = rows): LpGroup<FitRow>[] {
+  return groupLps(rows, r => ({ id: r.key, entityId: r.entityId, vehicleId: r.vehicleId,
+    isOrg: r.isOrg ?? false, orgId: r.orgId ?? null, org: r.org ?? null, orgFirst: r.orgFirst }), compare, universe);
+}
+
+/** A failing child gate must remain visible in the organisation's work queue. A filtered
+ * queue takes its explicit category; child readings and their badges remain unchanged. */
+export function fitGroupCategory(lp: LpGroup<FitRow>, selected: Group | null = null): Group {
+  if (selected && lp.people.some(r => r.group === selected)) return selected;
+  if (lp.people.some(r => r.group === 'gate')) return 'gate';
+  return lp.people[0]!.group;
+}
+
+export interface FitSection { group: Group | null; count: number; rows: FitRow[]; lpGroups?: LpGroup<FitRow>[] }

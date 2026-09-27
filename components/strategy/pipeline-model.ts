@@ -1,3 +1,5 @@
+import { groupLps } from '@/lib/lp-groups';
+
 /**
  * The rows both LP tables show — the pipeline (module 04) and selection (module 03) — and the
  * pure logic they share: filters, ordering and organisation groups (issues 0067, 0071, 0083,
@@ -107,30 +109,9 @@ export interface Group { id: string; org: string | null; people: PipelineRow[] }
  * Identity, not a matching display name, determines an organisation group. Never merge vehicles.
  * A group sorts by its best member in the chosen order; every person keeps their own row.
  */
-export function groupRows(rows: PipelineRow[], key: SortKey, dir: 1 | -1): Group[] {
-  const groups = new Map<string, PipelineRow[]>();
-  // An organisation pursued in its own right gathers its people pursued in the same vehicle,
-  // whichever name leads their own rows (issue 0092).
-  const orgsPursued = new Set(rows.filter((r) => r.isOrg).map((r) => `${r.vehicleId}:${r.entityId}`));
-  for (const r of rows) {
-    const org = r.isOrg ? r.entityId : r.orgId;
-    const id = org && (r.isOrg || r.orgFirst || orgsPursued.has(`${r.vehicleId}:${org}`)) ? `${r.vehicleId}:${org}` : r.id;
-    const group = groups.get(id);
-    if (group) group.push(r); else groups.set(id, [r]);
-  }
-  const compare = (a: PipelineRow, b: PipelineRow) => compareRows(a, b, key, dir);
-  return [...groups.entries()]
-    .map(([id, people]) => {
-      people.sort(compare);
-      // The organisation's own pursuit leads its group, whatever the order.
-      const own = people.findIndex((p) => p.isOrg);
-      if (own > 0) people.unshift(...people.splice(own, 1));
-      return { id, org: people.length > 1 && people[0]!.orgFirst ? people[0]!.org : null, people };
-    })
-    .sort((a, b) => compare(bestOf(a.people, compare), bestOf(b.people, compare)));
+export function groupRows(rows: PipelineRow[], key: SortKey, dir: 1 | -1, universe: PipelineRow[] = rows): Group[] {
+  return groupLps(rows, r => r, (a, b) => compareRows(a, b, key, dir), universe);
 }
-const bestOf = (people: PipelineRow[], compare: (a: PipelineRow, b: PipelineRow) => number) =>
-  people.reduce((best, p) => (compare(p, best) < 0 ? p : best), people[0]!);
 
 /**
  * An organisation's own row, when several of its people are pursued and it has no pursuit of its
@@ -180,7 +161,9 @@ export function orgSummary(people: PipelineRow[]): OrgSummary {
     lastTouch: people.reduce<string | null>((d, p) => later(d, p.lastTouch), null),
     read: reads[0] ?? null,
     furthest: people.reduce((f, p) => (p.rung > f.rung ? p : f), people[0]!),
-    money: monies.length
+    // A group must never label mixed soft/hard amounts with its furthest close state.
+    // The children still show each amount; summarize only one consistent track and state.
+    money: monies.length && new Set(monies.map(m => `${m.state}:${m.hard}`)).size === 1
       ? { state: monies.reduce((s, m) => ((MONEY_ORDER[m.state] ?? 0) > (MONEY_ORDER[s] ?? 0) ? m.state : s), monies[0]!.state), amount: monies.reduce((n, m) => n + m.amount, 0), from: monies.length }
       : null,
     doNotContact: people.some((p) => p.doNotContact),

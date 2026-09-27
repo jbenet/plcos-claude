@@ -40,7 +40,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
   const one = enabled.length === 1 ? statuses.find((x) => x.id === enabled[0]) ?? null : null;
   const vehicles = useMemo(() => new Set(rows.map((r) => r.vehicle)).size, [rows]);
   const byVehicle = showVehicle && vehicles > 1;
-  const groups = useMemo(() => groupRows(shown, sort.key, sort.dir), [shown, sort]);
+  const groups = useMemo(() => groupRows(shown, sort.key, sort.dir, rows), [shown, sort, rows]);
   const visible = groups.slice(0, limit);
   const visibleIds = visible.flatMap((g) => g.people.map((r) => r.id));
   const allTicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
@@ -141,7 +141,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
               <tbody>
                 {visible.map((g) => {
                   const cols = { all, byVehicle, rungNames, now, onPick: pick, onOpen: open };
-                  if (g.people.length === 1) {
+                  if (g.people.length === 1 && (!g.org || g.people[0]!.isOrg)) {
                     const r = g.people[0]!;
                     return <Row key={g.id} r={r} picked={picked.has(r.id)} statusLabel={statusLabel(r.status)} {...cols} />;
                   }
