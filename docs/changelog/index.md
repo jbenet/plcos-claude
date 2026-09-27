@@ -126,3 +126,4 @@ to the repository root to preserve existing anchors and rendered output.
 - [Pipeline and Selection, redesigned · issues 0083 and 0089 (asks from 0067 and 0071)](entries/tables-0083-0089.md)
 
 - [Dakota translation, enrichment and sourcing — review candidate](entries/dakota-translate.md)
+- [0096 — Act from the funder–vehicle fit list](entries/fit-0096.md)
