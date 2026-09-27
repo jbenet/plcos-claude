@@ -153,7 +153,7 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>
             <button className="btn p" type="submit">Export the research set</button>
             <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>
-              Writes research-set.jsonl (who they are) and candidates.jsonl (with where they stand) to {join(config.data.root, 'enrich')}.
+              Writes research-set.jsonl (who they are), candidates.jsonl (where they stand), and identity-review.jsonl (ambiguous identities, without contact details) to {join(config.data.root, 'enrich')}.
             </span>
           </form>
         </div>

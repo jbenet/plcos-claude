@@ -225,7 +225,8 @@ export async function undoIdentityMerge(db: Db, assertionId: string, reason: str
 export async function undoIdentityMergeInTransaction(tx: Queryable, assertionId: string, reason: string): Promise<boolean> {
   if (!reason.trim()) throw new Error('An undo reason is required');
   await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
-  const a=await tx.one<{merged_entity:string;canonical_entity:string}>(`select merged_entity::text,canonical_entity::text from identity.match_assertion where assertion_id=$1 and rule like 'identity:v1:%' and undone_at is null for update`,[assertionId]);
+  const a=await tx.one<{merged_entity:string;canonical_entity:string}>(`select merged_entity::text,canonical_entity::text from identity.match_assertion where assertion_id=$1 and kind='same_as'
+    and (rule like 'identity:v1:%' or rule='decision:affinity-duplicate') and undone_at is null for update`,[assertionId]);
   if(!a)return false;
   const row=await tx.one(`update identity.entity set merged_into=null where entity_id=$1 and merged_into=$2 returning entity_id`,[a.merged_entity,a.canonical_entity]);
   if(!row)throw new Error('Redirect changed since assertion; undo the newer merge first');

@@ -1,0 +1,204 @@
+/** Identity review uses invented fixtures and a disposable demo database only. */
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { mergeImportDuplicatesInTransaction } from '../lib/enrich/import-dupes';
+import { identityReviewGroupId, readIdentityDecisions, reverseIdentitySeparation, type IdentityDecisionInput } from '../lib/enrich/identity-decisions';
+import { exportIdentityReview } from '../lib/enrich/identity-review-export';
+import { undoIdentityMerge } from '../modules/identity/resolution';
+import { correctEntityType, reverseEntityTypeCorrection } from '../modules/identity/entity-type';
+import type { Check, Db } from './properties/harness';
+
+export async function identityReviewProperties(check: Check, db: Db) {
+  const actor = (await db.one<{ id: string }>('select id::text from platform.app_user where active limit 1'))!.id;
+  const vehicle = (await db.one<{ id: string }>("select id::text from platform.vehicle where phase='active' and kind='fund' limit 1"))!.id;
+  const ids: string[] = [], tag = randomUUID().slice(0, 8);
+  const scratch = await mkdtemp(join(tmpdir(), 'invented-identity-review-'));
+  const document = `identity-review-fixture:${tag}`;
+  const label = (suffix: string) => `Invented Identity Review ${tag} ${suffix}`;
+  const entity = async (suffix: string, type = 'person', source = 'prospect_key', key?: string): Promise<string> => {
+    const id = randomUUID(); ids.push(id);
+    await db.query('insert into identity.entity(entity_id,entity_type,display_name) values($1,$2::identity.entity_type,$3)', [id, type, label(suffix)]);
+    await db.query('insert into identity.source_record(source,source_id,entity_id,resolved_by) values($1,$2,$3,$4)', [source, key ?? id, id, 'rule:sourced-identity-review-fixture']);
+    return id;
+  };
+  const pair = async (suffix: string) => [await entity(suffix), await entity(suffix)];
+  const root = async (id: string) => (await db.one<{ id: string }>('select identity.canonical_entity_id($1)::text id', [id]))!.id;
+  const kind = async (id: string) => (await db.one<{ type: string }>('select entity_type::text type from identity.entity where entity_id=$1', [id]))!.type;
+  const run = (decisions: IdentityDecisionInput[] = []) => db.transaction(tx => mergeImportDuplicatesInTransaction(tx, actor, [], [], { decisions }));
+  const exported = () => db.transaction(tx => exportIdentityReview(tx));
+  const evidence = [{ source: 'https://example.org/invented-identity', as_of: '2026-09-27', quote: 'The two invented profiles identify the same real person.' }];
+  const decision = (members: string[], action = 'merge', extra: Record<string, unknown> = {}): IdentityDecisionInput => ({ line: 1,
+    value: { group: identityReviewGroupId(members), decision: action, members, ...(action === 'merge' ? { survivor: members[0] } : {}), evidence, decided_by: 'invented-fixture-reviewer', ...extra } });
+  const snapshot = async () => JSON.stringify({
+    entities: await db.query('select * from identity.entity where entity_id=any($1::uuid[]) order by entity_id', [ids]),
+    assertions: await db.query('select * from identity.match_assertion order by assertion_id'),
+    corrections: await db.query('select * from identity.entity_type_correction order by correction_id'),
+    notes: await db.query("select * from research.note where entity_id=any($1::uuid[]) or kind='identity_review_decision' order by note_id", [ids]),
+  });
+  try {
+    const plain = await pair('Name Only');
+    check('IDENTITY REVIEW group IDs are stable across ordering and distinguish membership',
+      identityReviewGroupId(plain) === identityReviewGroupId([...plain].reverse()) && identityReviewGroupId(plain) !== identityReviewGroupId([plain[0]!, randomUUID()]),
+      'Group identity depends on sorted entity IDs, not name, ordering or research date.');
+    const beforeExport = await snapshot(), initial = await exported();
+    check('IDENTITY REVIEW export is read-only and includes unresolved namesakes', beforeExport === await snapshot()
+      && initial.some(g => g.group === identityReviewGroupId(plain) && g.members.length === 2 && g.reasons.length > 0),
+      'Export retains all ambiguous members and refusal reasons without applying the automatic pass.');
+    const auto = [await entity('Read Only Organization', 'org'), await entity('Read Only Organization', 'org')];
+    await exported();
+    check('IDENTITY REVIEW export does not merge automatically resolvable groups', await root(auto[0]!) === auto[0] && await root(auto[1]!) === auto[1],
+      'Even a safe organization pair is unchanged by research export.');
+
+    const privacy = [await entity('Privacy', 'person', 'affinity', `person:privacy-${tag}-a`), await entity('Privacy', 'person', 'affinity', `person:privacy-${tag}-b`)];
+    const org = await entity('Privacy Office', 'org');
+    const secretEmail = 'invented.private@example.org', secretPhone = '+1 202 555 0199';
+    const linkedin = `https://www.linkedin.com/in/invented-review-${tag}`;
+    await db.query(`insert into identity.affiliation(person_entity,org_entity,kind,role,source,as_of) values($1,$2,'staff','Partner','fixture','2026-09-27')`, [privacy[0], org]);
+    await db.query("insert into strategy.pursuit(entity_id,vehicle_id,owner_id,status,status_source) values($1,$2,$3,'new','rule')", [privacy[0], vehicle, actor]);
+    await db.query("insert into research.source_doc(doc_id,title,kind,origin,as_of,strength,supports,body) values($1,'Invented identity source','fixture','https://example.org/invented','2026-09-27','moderate','Invented data','Invented data')", [document]);
+    await db.query("insert into research.claim(entity_id,field,value,source,as_of,confidence) values($1,'title','Partner',$2,'2026-09-27','high')", [privacy[0], document]);
+    await db.query("insert into research.note(entity_id,kind,body,data) values($1,'public_profile',$2,$3::jsonb)", [privacy[0], `Private ${secretEmail} ${secretPhone}`, JSON.stringify({ email: secretEmail, phone: secretPhone, title: `Partner ${secretEmail} ${secretPhone}`, identity: { links: [{ kind: 'linkedin', url: linkedin }, { kind: 'bio', url: `https://example.org/bio?email=${encodeURIComponent(secretEmail)}&phone=${encodeURIComponent(secretPhone)}` }, { kind: 'bio', url: `mailto:${secretEmail}` }] } })]);
+    await db.query("insert into research.note(entity_id,kind,body,data) values($1,'connection_candidates','Invented path',$2::jsonb)", [privacy[0], JSON.stringify({ paths: [{ lp: privacy[0], other: { key: org, name: label('Privacy Office') } }] })]);
+    const privateGroup = (await exported()).find(g => g.group === identityReviewGroupId(privacy));
+    const member = privateGroup?.members.find(m => m.entityId === privacy[0]);
+    const serialized = JSON.stringify(privateGroup);
+    check('IDENTITY REVIEW export includes source, affiliation, title, URL, pursuit and reference context', !!member
+      && member.sources.some(s => s.source === 'affinity') && member.affiliations.some(a => a.org === label('Privacy Office') && a.role === 'Partner')
+      && member.titles.some(t => t.includes('Partner')) && member.personalUrls.includes(linkedin) && member.pursuits.some(p => p.status === 'new')
+      && member.counts.claims === 1 && member.counts.notes >= 2 && member.counts.paths >= 1 && member.createdBy.length > 0,
+      'Allowlisted context is useful for an agent without database access.');
+    check('IDENTITY REVIEW excludes contact details even when embedded in URLs or text', !!privateGroup
+      && !serialized.includes(secretEmail) && !serialized.includes(encodeURIComponent(secretEmail)) && !serialized.includes(secretPhone)
+      && !serialized.includes(encodeURIComponent(secretPhone)) && !serialized.includes('mailto:') && !serialized.includes('Private '),
+      'Contact values and arbitrary note bodies never leave in the review set.');
+
+    await writeFile(join(scratch, 'identity-decisions.jsonl'), `${JSON.stringify(decision(plain).value)}\n{broken\n\n${JSON.stringify({ group: 'unknown', decision: 'separate', evidence: [], decided_by: 'fixture' })}\n`);
+    const parsed = await readIdentityDecisions(scratch);
+    check('IDENTITY REVIEW malformed JSON is isolated with physical line numbers', parsed.length === 3 && parsed[0]?.line === 1 && parsed[1]?.line === 2 && !!parsed[1]?.error && parsed[2]?.line === 4,
+      'A malformed line is reported while subsequent decisions remain available.');
+    const noEvidence = await run([decision(plain, 'merge', { evidence: [] }), { line: 2, error: 'Malformed JSON on line 2' }]);
+    check('IDENTITY REVIEW empty evidence and malformed lines are refused without redirects', noEvidence.decisions!.applied === 0 && noEvidence.decisions!.refused.length === 2 && await root(plain[0]!) !== await root(plain[1]!),
+      'Every decision requires evidence and each invalid line remains visible.');
+    const invalidEvidence = await run([decision(plain, 'merge', { evidence: [{ source: '', as_of: 'not-a-date', quote: ' ' }] })]);
+    check('IDENTITY REVIEW evidence needs a source, valid date and substantive quotation', invalidEvidence.decisions!.applied === 0 && invalidEvidence.decisions!.refused.length === 1,
+      'An object with empty evidence fields does not satisfy the evidence guard.');
+    const invalidKinds = await run([decision(plain, 'merge', { decision: ['merge'] }),
+      { ...decision(plain, 'retype', { newType: ['org'] }), line: 2 }]);
+    check('IDENTITY REVIEW enum fields require strings, never coerced arrays', invalidKinds.decisions!.applied === 0
+      && invalidKinds.decisions!.refused.length === 2 && await root(plain[0]!) !== await root(plain[1]!)
+      && await kind(plain[0]!) === 'person', 'Malformed JSON shapes cannot become a separation or type correction.');
+    const valid = decision(plain), merged = await run([valid]);
+    const merge = merged.merges.find(m => m.loserId === plain[1]);
+    check('IDENTITY REVIEW evidenced decision merges through reversible canonical redirects', merged.decisions!.applied === 1 && !!merge && await root(plain[1]!) === plain[0],
+      'Original entity and source records remain intact.');
+    const beforeRetry = await snapshot(), retry = await run([valid]);
+    check('IDENTITY REVIEW exact decision retries are idempotent', retry.decisions!.applied === 0 && retry.decisions!.skipped === 1 && beforeRetry === await snapshot(),
+      'No additional assertions, corrections or changed timestamps on retry.');
+    if (!merge) throw new Error('Expected invented review merge');
+    const undone = await undoIdentityMerge(db, merge.assertionId, 'Invented identity review reversal');
+    const replay = await run([valid]);
+    check('IDENTITY REVIEW undo restores identities and the same decision cannot reapply', undone && await root(plain[1]!) === plain[1] && replay.decisions!.applied === 0,
+      'An unchanged decisions file cannot silently override an operator reversal.');
+
+    const conflict = await run([decision(privacy)]);
+    check('IDENTITY REVIEW generic evidence cannot bypass same-source distinct IDs', conflict.decisions!.applied === 0 && conflict.decisions!.refused.length === 1 && await root(privacy[0]!) !== await root(privacy[1]!),
+      'A name match or vague same-person assertion does not establish that two external records are duplicates.');
+    const markerOnly = await run([decision(privacy, 'merge', { evidence: [{ ...evidence[0], quote: `Same real person: affinity:person:privacy-${tag}-a = affinity:person:privacy-${tag}-b` }] })]);
+    check('IDENTITY REVIEW a bare duplicate marker is not supporting evidence', markerOnly.decisions!.applied === 0 && markerOnly.decisions!.refused.length === 1 && await root(privacy[0]!) !== await root(privacy[1]!),
+      'An explicit pair attestation still needs supporting quoted context from the cited source.');
+    const explicit = decision(privacy, 'merge', { evidence: [{ ...evidence[0], quote: `Both records link to the same named biography and dated role.\nSame real person: affinity:person:privacy-${tag}-a = affinity:person:privacy-${tag}-b` }] });
+    const allowed = await run([explicit]), duplicate = allowed.merges.find(m => m.loserId === privacy[1]);
+    const rule = duplicate && await db.one<{ rule: string }>('select rule from identity.match_assertion where assertion_id=$1', [duplicate.assertionId]);
+    check('IDENTITY REVIEW cited external duplicate evidence records the explicit Affinity rule', allowed.decisions!.applied === 1 && await root(privacy[1]!) === privacy[0] && rule?.rule === 'decision:affinity-duplicate',
+      'Both external identifiers are named in the identity evidence.');
+    if (!duplicate) throw new Error('Expected invented Affinity duplicate merge');
+    check('IDENTITY REVIEW Affinity duplicate override is reversible', await undoIdentityMerge(db, duplicate.assertionId, 'Invented duplicate reversal') && await root(privacy[1]!) === privacy[1],
+      'The exceptional rule uses the existing identity undo path.');
+
+    const aliasA = await entity('Alias Conflict', 'person', 'affinity', `person:alias-${tag}-a`), aliasB = await entity('Alias Conflict');
+    const inherited = await entity('Inherited Source', 'person', 'affinity', `person:alias-${tag}-b`);
+    await db.query('update identity.entity set merged_into=$2 where entity_id=$1', [inherited, aliasB]);
+    const aliasRefusal = await run([decision([aliasA, aliasB])]);
+    check('IDENTITY REVIEW source conflict guard inspects all aliases in a component', aliasRefusal.decisions!.refused.length === 1 && await root(aliasA) !== await root(aliasB),
+      'A source ID attached to an alias cannot be hidden behind a source-free survivor.');
+
+    const separated = await pair('Separate'), separateInput = decision(separated, 'separate');
+    const separate = await run([separateInput]), assertion = separate.decisions!.separations.find(s => s.group === identityReviewGroupId(separated));
+    const remaining = await run(), review = await exported();
+    check('IDENTITY REVIEW separate assertion suppresses the group on later passes and export', separate.decisions!.applied === 1 && !!assertion
+      && !remaining.ambiguous.some(g => g.entityIds.includes(separated[0]!)) && !review.some(g => g.group === identityReviewGroupId(separated))
+      && await root(separated[0]!) !== await root(separated[1]!), 'A resolved namesake does not keep returning as ambiguous.');
+    const separateBefore = await snapshot(), separateRetry = await run([separateInput]);
+    check('IDENTITY REVIEW separation retries do not add assertions', separateRetry.decisions!.applied === 0 && separateRetry.decisions!.skipped === 1 && separateBefore === await snapshot(),
+      'One evidenced separation remains one durable decision.');
+    if (!assertion) throw new Error('Expected invented separation assertion');
+    const reversed = await reverseIdentitySeparation(db, assertion.assertionId, actor, 'Invented separation reversal');
+    const reversedRows = await exported();
+    const separateReplay = await run([separateInput]);
+    check('IDENTITY REVIEW separation undo restores review without replaying the old decision', !!reversed && reversedRows.some(g => g.group === identityReviewGroupId(separated)) && separateReplay.decisions!.applied === 0,
+      'Reopening a namesake decision restores review while preserving its history.');
+
+    const typed = await pair('Retype'), typedInput = decision(typed, 'retype', { members: [typed[0]], newType: 'org' });
+    const retyped = await run([typedInput]);
+    const correction = await db.one<{ id: string }>('select correction_id::text id from identity.entity_type_correction where entity_id=$1 and reversed_at is null', [typed[0]]);
+    check('IDENTITY REVIEW retype uses the existing journal and changes only specified members', retyped.decisions!.applied === 1 && !!correction && await kind(typed[0]!) === 'org' && await kind(typed[1]!) === 'person',
+      'A type decision is independent of merging a namesake.');
+    if (!correction) throw new Error('Expected invented type correction');
+    await reverseEntityTypeCorrection(db, correction.id, actor, 'Invented type review reversal');
+    const typeReplay = await run([typedInput]);
+    check('IDENTITY REVIEW retype reversal restores type and prevents replay', await kind(typed[0]!) === 'person' && typeReplay.decisions!.applied === 0,
+      '0063 correction reversal remains authoritative over an unchanged research decision.');
+
+    const allPairs = [await entity('Three Source Records', 'person', 'affinity', `person:three-${tag}-a`), await entity('Three Source Records', 'person', 'affinity', `person:three-${tag}-b`), await entity('Three Source Records', 'person', 'affinity', `person:three-${tag}-c`)];
+    const insufficient = await run([decision(allPairs, 'merge', { evidence: [{ ...evidence[0], quote: `Both records link to the same named biography and dated role.\nSame real person: affinity:person:three-${tag}-a = affinity:person:three-${tag}-b` }] })]);
+    check('IDENTITY REVIEW each conflicting source pair needs explicit evidence', insufficient.decisions!.applied === 0 && insufficient.decisions!.refused.length === 1
+      && (await Promise.all(allPairs.map(root))).every((id, i) => id === allPairs[i]),
+      'Evidence for two records never licenses silently absorbing a third upstream identity.');
+
+    const mixedBatch = await pair('Valid Neighbor');
+    const neighbors = await run([{ line: 4, error: 'Malformed JSON' }, { ...decision(mixedBatch), line: 5 }]);
+    check('IDENTITY REVIEW refused lines do not prevent independent valid decisions', neighbors.decisions!.applied === 1 && neighbors.decisions!.refused.some(r => r.line === 4)
+      && await root(mixedBatch[1]!) === mixedBatch[0], 'A malformed record is isolated while a valid following record applies.');
+
+    const rollback = await pair('Atomic Type Correction');
+    const ordered = [...rollback].sort();
+    await db.query("update identity.entity set entity_type='org' where entity_id=$1", [ordered[1]]);
+    await correctEntityType(db, { entityId: ordered[1]!, type: 'person', by: actor, reason: 'Invented preexisting correction', rule: 'manual:fixture', requestKey: `identity-review-atomic:${tag}` });
+    const beforeRollback = await snapshot();
+    const rolledBack = await run([decision(rollback, 'retype', { newType: 'org' })]);
+    check('IDENTITY REVIEW a later member failure rolls back earlier type changes in that decision', rolledBack.decisions!.applied === 0 && rolledBack.decisions!.refused.length === 1
+      && rolledBack.corrected.every(c => !rollback.includes(c.entityId)) && beforeRollback === await snapshot(),
+      'The first correction is rolled back when the second member already has an active local correction.');
+
+    const conflicting = await pair('Conflicting Proposals');
+    const beforeConflict = await snapshot();
+    const conflicts = await run([decision(conflicting, 'merge'), { ...decision(conflicting, 'separate'), line: 2 }]);
+    check('IDENTITY REVIEW conflicting proposals for one group are all refused without order dependence', conflicts.decisions!.applied === 0
+      && conflicts.decisions!.refused.length === 2 && conflicts.decisions!.refused.every(r => r.reason.includes('Conflicting')) && beforeConflict === await snapshot(),
+      'A merge and a separation for the same group cannot silently race by file order.');
+
+    const stale = await pair('Stale'), outsider = await entity('Unrelated');
+    const beforeInvalid = await snapshot();
+    const invalidInputs = [decision(stale, 'merge', { survivor: outsider }), decision(stale, 'merge', { members: [...stale, outsider] }), decision(stale, 'merge', { group: identityReviewGroupId([...stale, randomUUID()]) })];
+    const invalid = [];
+    for (const input of invalidInputs) invalid.push(await run([input]));
+    check('IDENTITY REVIEW invalid survivors, out-of-group members and stale hashes are atomic refusals', invalid.every(r => r.decisions!.applied === 0 && r.decisions!.refused.length === 1) && beforeInvalid === await snapshot(),
+      'No partially applied correction, merge or assertion survives invalid membership.');
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+    await db.query("delete from research.note where kind='identity_review_decision' and exists(select 1 from jsonb_array_elements_text(data->'decision'->'members') m(id) where m.id=any($1::text[]))", [ids]);
+    await db.query('delete from research.note where entity_id=any($1::uuid[])', [ids]);
+    await db.query('delete from research.claim where entity_id=any($1::uuid[])', [ids]);
+    await db.query('delete from research.source_doc where doc_id=$1', [document]);
+    await db.query('delete from identity.affiliation where person_entity=any($1::uuid[]) or org_entity=any($1::uuid[])', [ids]);
+    await db.query('delete from identity.entity_type_correction where entity_id=any($1::uuid[])', [ids]);
+    await db.query('delete from identity.match_assertion where merged_entity=any($1::uuid[]) or canonical_entity=any($1::uuid[]) or left_source_id=any($1::text[]) or right_source_id=any($1::text[])', [ids]);
+    await db.query('delete from identity.possible_match where left_entity=any($1::uuid[]) or right_entity=any($1::uuid[])', [ids]);
+    await db.query('delete from strategy.pursuit where entity_id=any($1::uuid[])', [ids]);
+    await db.query('delete from identity.source_record where entity_id=any($1::uuid[])', [ids]);
+    await db.query('update identity.entity set merged_into=null where entity_id=any($1::uuid[])', [ids]);
+    await db.query('delete from identity.entity where entity_id=any($1::uuid[])', [ids]);
+  }
+}

@@ -1,0 +1,195 @@
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { Db, Queryable } from '@/lib/db';
+import { recordEntityTypeCorrection } from '@/modules/identity/entity-type';
+import type { ImportDuplicateReport } from './import-dupes';
+
+export const identityReviewGroupId = (ids: string[]) => createHash('sha256').update(JSON.stringify([...new Set(ids)].sort())).digest('hex');
+export interface IdentityDecisionInput { line: number; value?: unknown; error?: string }
+export interface IdentityDecision {
+  group: string; decision: 'merge' | 'separate' | 'retype'; survivor?: string; members?: string[];
+  newType?: 'person' | 'org'; evidence: Array<{ source: string; as_of: string; quote: string }>; decided_by: string;
+}
+export interface IdentityDecisionReport {
+  applied: number; skipped: number;
+  refused: Array<{ line: number; group?: string; reason: string }>;
+  separations: Array<{ assertionId: string; group: string }>;
+}
+const internalSource = (s: string) => ['prospect', 'prospect_key', 'prospect_org', 'w3_person',
+  'network_candidate', 'network_org', 'network_person', 'investing-organization:v1'].includes(s) || s.startsWith('rule:');
+const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const nonempty = (v: unknown): v is string => typeof v === 'string' && !!v.trim();
+const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
+const fail = (message: string): never => { throw new Error(message); };
+
+/** A missing file means no proposals. Malformed lines remain visible alongside valid ones. */
+export async function readIdentityDecisions(dir: string): Promise<IdentityDecisionInput[]> {
+  let text: string;
+  try { text = await readFile(join(dir, 'identity-decisions.jsonl'), 'utf8'); }
+  catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return []; throw e; }
+  return text.split(/\r?\n/).flatMap<IdentityDecisionInput>((line, i) => {
+    if (!line.trim()) return [];
+    try { return [{ line: i + 1, value: JSON.parse(line) }]; }
+    catch { return [{ line: i + 1, error: 'Invalid JSON' }]; }
+  });
+}
+
+function validate(value: unknown): IdentityDecision {
+  if (!object(value)) fail('Decision must be an object');
+  const v = value as Record<string, unknown>;
+  if (typeof v.group !== 'string' || !/^[0-9a-f]{64}$/.test(v.group)) fail('group must be the exported SHA-256 group ID');
+  if (typeof v.decision !== 'string' || !['merge', 'separate', 'retype'].includes(v.decision)) fail('decision must be merge, separate or retype');
+  if (!nonempty(v.decided_by)) fail('decided_by is required');
+  if (!Array.isArray(v.evidence) || !v.evidence.length || !v.evidence.every(e => object(e)
+    && nonempty(e.source) && nonempty(e.quote) && typeof e.as_of === 'string'
+    && /^\d{4}-\d{2}-\d{2}$/.test(e.as_of) && !isNaN(Date.parse(e.as_of))
+    && new Date(e.as_of).toISOString().slice(0, 10) === e.as_of)) fail('At least one evidence item with source, valid as_of (YYYY-MM-DD) and quote is required');
+  if (v.members !== undefined && (!Array.isArray(v.members) || !v.members.length
+    || !v.members.every(uuid) || new Set(v.members).size !== v.members.length)) fail('members must be unique entity UUIDs');
+  if (v.survivor !== undefined && !uuid(v.survivor)) fail('survivor must be an entity UUID');
+  if (v.decision === 'retype') {
+    if (typeof v.newType !== 'string' || !['person', 'org'].includes(v.newType)) fail('retype requires newType person or org');
+    if (!Array.isArray(v.members)) fail('retype requires explicit members');
+    if (v.survivor !== undefined) fail('retype does not take a survivor');
+  } else if (v.newType !== undefined || (v.decision === 'separate' && v.survivor !== undefined)) fail('Fields do not match the decision kind');
+  return { group: v.group as string, decision: v.decision as IdentityDecision['decision'],
+    ...(v.survivor ? { survivor: v.survivor as string } : {}),
+    ...(v.members ? { members: [...v.members as string[]].sort() } : {}),
+    ...(v.newType ? { newType: v.newType as 'person' | 'org' } : {}),
+    evidence: (v.evidence as IdentityDecision['evidence']).map(e => ({ source: e.source.trim(), as_of: e.as_of, quote: e.quote.trim() })),
+    decided_by: (v.decided_by as string).trim() };
+}
+
+/** Separation is a full-group assertion: changing the member set requires a fresh review. */
+export async function suppressSeparatedIdentityGroups(tx: Queryable, report: ImportDuplicateReport) {
+  const rows = await tx.query<{ group: string }>(`select distinct signals->>'group' "group" from identity.match_assertion
+    where kind='not_same_as' and rule='identity:v1:decision:separate' and undone_at is null`);
+  const separated = new Set(rows.map(r => r.group));
+  report.ambiguous = report.ambiguous.filter(g => !separated.has(identityReviewGroupId(g.entityIds)));
+}
+
+type Member = { id: string; root: string; type: string; retired: boolean; name: string };
+type Source = { id: string; source: string; key: string };
+
+/** Decisions use existing reversible redirects/type corrections. The caller owns the identity lock.
+ * Each line has a savepoint: one refused line cannot partially apply or abort its valid neighbours.
+ */
+export async function applyIdentityDecisions(tx: Queryable, by: string, report: ImportDuplicateReport, inputs: IdentityDecisionInput[]) {
+  const result: IdentityDecisionReport = { applied: 0, skipped: 0, refused: [], separations: [] };
+  report.decisions = result;
+  const parsed = inputs.map(input => {
+    try { if (input.error) fail(input.error); return { input, decision: validate(input.value) }; }
+    catch (e) { result.refused.push({ line: input.line, reason: (e as Error).message }); return { input }; }
+  });
+  const fingerprint = (d: IdentityDecision) => createHash('sha256').update(JSON.stringify(d)).digest('hex');
+  const variants = new Map<string, Set<string>>();
+  for (const { decision: d } of parsed) if (d) variants.set(d.group, (variants.get(d.group) ?? new Set()).add(fingerprint(d)));
+  for (const { input, decision: d } of parsed) {
+    if (!d) continue;
+    const key = fingerprint(d);
+    const delta: Pick<ImportDuplicateReport, 'merged' | 'merges' | 'corrected'> = { merged: 0, merges: [], corrected: [] };
+    const separations: IdentityDecisionReport['separations'] = [];
+    await tx.exec('savepoint identity_decision');
+    try {
+      if (variants.get(d.group)!.size > 1) fail('Conflicting decisions for this group; keep one proposal per group');
+      const receipt = await tx.one(`select note_id from research.note where kind='identity_review_decision' and data->>'key'=$1 limit 1`, [key]);
+      if (receipt) { result.skipped++; await tx.exec('release savepoint identity_decision'); continue; }
+      const group = report.ambiguous.find(g => identityReviewGroupId(g.entityIds) === d.group);
+      if (!group) fail('Group is stale, already settled, or absent from the current ambiguous pass; export again');
+      const groupIds = group!.entityIds;
+      const ids = d.members ?? groupIds;
+      if (ids.some(id => !groupIds.includes(id))) fail('members must belong to the exported group');
+      if (d.decision === 'separate' && identityReviewGroupId(ids) !== d.group) fail('separate must cover every member of the group');
+      if (d.decision === 'merge' && ids.length < 2) fail('merge requires at least two members');
+      const survivor = d.survivor ?? [...ids].sort()[0]!;
+      if (d.decision === 'merge' && !ids.includes(survivor)) fail('survivor must be a selected member');
+      const members = await tx.query<Member>(`select e.entity_id::text id,r.canonical_id::text root,e.entity_type::text type,
+        e.retired_at is not null retired,e.display_name name from identity.entity e join identity.entity_resolution r using(entity_id)
+        where r.canonical_id=any($1::uuid[]) or e.entity_id=any($1::uuid[])`, [ids]);
+      if (ids.some(id => !members.some(m => m.id === id && m.root === id && !m.retired))) fail('Members must still be active canonical identities; export again');
+      if (members.some(m => m.retired)) fail('Retired identity in component');
+      const sources = await tx.query<Source>(`select entity_id::text id,source,source_id key from identity.source_record
+        where entity_id=any($1::uuid[]) order by source,source_id`, [members.map(m => m.id)]);
+      if (sources.some(s => s.source === 'app_user')) fail('User account requires explicit roster resolution');
+      const signals = JSON.stringify({ group: d.group, key, decision: d, by });
+      if (d.decision === 'retype') {
+        if (ids.every(id => members.find(m => m.id === id)!.type === d.newType)) fail('Selected members already have this type');
+        for (const id of ids) {
+          const correctionId = await recordEntityTypeCorrection(tx, { entityId: id, type: d.newType!, by,
+            rule: 'decision:identity-review', requestKey: `identity-review:${key}:${id}`,
+            reason: `Identity review by ${d.decided_by}`, evidence: { ...d, applied_by: by } });
+          if (correctionId) delta.corrected.push({ entityId: id, correctionId });
+        }
+      } else {
+        const sourceFor = (id: string) => sources.find(s => members.find(m => m.id === s.id)?.root === id)
+          ?? { id, source: 'identity', key: id };
+        let rule = 'identity:v1:decision:merge';
+        if (d.decision === 'merge') {
+          if (new Set(ids.map(id => members.find(m => m.id === id)!.type)).size > 1) fail('Retype mixed identities before merging');
+          const constraints = await tx.query<{ a: string | null; b: string | null; ls: string; lk: string; rs: string; rk: string }>(`select
+            merged_entity::text a,canonical_entity::text b,left_source ls,left_source_id lk,right_source rs,right_source_id rk
+            from identity.match_assertion where (kind='not_same_as' and undone_at is null) or (kind='same_as' and undone_at is not null)`);
+          const rootOf = (id: string | null, source: string, key: string) => members.find(m => m.id === id)?.root
+            ?? members.find(m => m.id === sources.find(s => s.source === source && s.key === key)?.id)?.root;
+          if (constraints.some(c => { const a = rootOf(c.a,c.ls,c.lk), b = rootOf(c.b,c.rs,c.rk); return a && b && a !== b && ids.includes(a) && ids.includes(b); }))
+            fail('Prior separation or reversed merge requires a fresh manual identity resolution');
+          const external = new Map<string, Set<string>>();
+          for (const s of sources) if (!internalSource(s.source)) external.set(s.source, (external.get(s.source) ?? new Set()).add(s.key));
+          for (const [source, keys] of external) if (keys.size > 1) {
+            // Explicit, inspectable attestation for EVERY pair; a generic bio cannot waive this guard.
+            if (!d.evidence.some(e => e.quote.split(/\r?\n/).some(line => line.trim() && !/^Same real (person|organization):/.test(line.trim()))))
+              fail(`Different external IDs from ${source}: an attestation also needs a supporting identity excerpt, not only the duplicate declaration`);
+            const refs = [...keys].sort().map(k => `${source}:${k}`);
+            const kind = members.find(m => m.id === survivor)!.type === 'person' ? 'person' : 'organization';
+            for (let i = 0; i < refs.length; i++) for (let j = i + 1; j < refs.length; j++) {
+              const markers = [`Same real ${kind}: ${refs[i]} = ${refs[j]}`, `Same real ${kind}: ${refs[j]} = ${refs[i]}`];
+              if (!d.evidence.some(e => e.quote.split(/\r?\n/).some(line => markers.includes(line.trim()))))
+                fail(`Different external IDs from ${source}: evidence must explicitly attest each pair as the same real ${kind}`);
+            }
+            rule = source === 'affinity' || rule === 'decision:affinity-duplicate' ? 'decision:affinity-duplicate' : 'identity:v1:decision:source-duplicate';
+          }
+        }
+        const pairs = d.decision === 'merge' ? ids.filter(id => id !== survivor).map(id => [id, survivor] as const)
+          : ids.flatMap((id, i) => ids.slice(i + 1).map(other => [id, other] as const));
+        for (const [left, right] of pairs) {
+          const a = sourceFor(left), b = sourceFor(right);
+          if (d.decision === 'merge') await tx.query('update identity.entity set merged_into=$2 where entity_id=$1', [left, right]);
+          const row = await tx.one<{ id: string }>(`insert into identity.match_assertion
+            (kind,left_source,left_source_id,right_source,right_source_id,merged_entity,canonical_entity,rule,signals,note)
+            values($1::identity.assertion_kind,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10) returning assertion_id::text id`,
+          [d.decision === 'merge' ? 'same_as' : 'not_same_as', a.source, a.key, b.source, b.key, left, right,
+            d.decision === 'merge' ? rule : 'identity:v1:decision:separate', signals, `Identity review by ${d.decided_by}; original records retained.`]);
+          if (d.decision === 'merge') {
+            delta.merged++; delta.merges.push({ assertionId: row!.id, loserId: left, survivorId: right, name: members.find(m => m.id === right)!.name });
+          } else separations.push({ assertionId: row!.id, group: d.group });
+        }
+      }
+      await tx.query(`insert into research.note(kind,body,data) values('identity_review_decision','Applied identity review decision',$1::jsonb)`,
+        [JSON.stringify({ key, decision: d, applied_by: by, merges: delta.merges, corrected: delta.corrected, separations })]);
+      await tx.exec('release savepoint identity_decision');
+      report.merged += delta.merged; report.merges.push(...delta.merges); report.corrected.push(...delta.corrected);
+      result.separations.push(...separations); result.applied++;
+      if (d.decision === 'separate' || (d.decision === 'merge' && ids.length === groupIds.length))
+        report.ambiguous = report.ambiguous.filter(g => identityReviewGroupId(g.entityIds) !== d.group);
+    } catch (e) {
+      await tx.exec('rollback to savepoint identity_decision');
+      await tx.exec('release savepoint identity_decision');
+      result.refused.push({ line: input.line, group: d.group, reason: e instanceof Error ? e.message : 'Decision refused' });
+    }
+  }
+}
+
+/** Reopen the entire group, retaining the assertion history. A file retry cannot reapply it. */
+export async function reverseIdentitySeparation(db: Db, assertionId: string, by: string, reason: string): Promise<boolean> {
+  if (!by.trim() || !reason.trim()) throw new Error('Actor and reversal reason are required');
+  return db.transaction(async tx => {
+    await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
+    const row = await tx.one<{ key: string; undone: boolean }>(`select signals->>'key' key,undone_at is not null undone from identity.match_assertion
+      where assertion_id=$1 and kind='not_same_as' and rule='identity:v1:decision:separate'`, [assertionId]);
+    if (!row || row.undone) return false;
+    await tx.query(`update identity.match_assertion set undone_at=now(),undo_reason=$2 where rule='identity:v1:decision:separate'
+      and signals->>'key'=$1 and undone_at is null`, [row.key, `${by}: ${reason}`]);
+    return true;
+  });
+}
