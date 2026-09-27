@@ -4,9 +4,10 @@
  * apart from actuals all the way to the bar. Pure: no database, no clock, no files, so the
  * properties can check that stacking conserves every number it was given.
  */
-import type { ActivityData, ActivityPoint, ActivitySource } from './types';
+import type { ActivityData, ActivityPoint, ActivitySource, SourceSummary } from './types';
+import { foldSec, tidyBasis } from './model';
 
-export type Group = 'all' | 'affinity' | 'warehouse' | 'dakota' | 'intake' | 'search' | 'sec' | 'agents';
+export type Group = 'all' | 'affinity' | 'warehouse' | 'dakota' | 'intake' | 'search' | 'agents';
 export const ALL_SOURCES: ActivitySource[] = ['affinity', 'warehouse', 'dakota', 'intake', 'search', 'fetch', 'sec', 'agents'];
 export const GROUPS: Array<{ id: Group; label: string; long: string; sources: ActivitySource[] }> = [
   { id: 'all', label: 'All', long: 'All sources', sources: ALL_SOURCES },
@@ -14,17 +15,17 @@ export const GROUPS: Array<{ id: Group; label: string; long: string; sources: Ac
   { id: 'warehouse', label: 'Warehouse', long: 'PL data warehouse', sources: ['warehouse'] },
   { id: 'dakota', label: 'Dakota', long: 'Dakota', sources: ['dakota'] },
   { id: 'intake', label: 'Intake', long: 'Intake files', sources: ['intake'] },
-  { id: 'search', label: 'Search', long: 'Search and page fetches', sources: ['search', 'fetch'] },
-  { id: 'sec', label: 'SEC', long: 'SEC EDGAR', sources: ['sec'] },
+  // EDGAR is internet reading, not a database of its own (issue 0106): it is part of Search.
+  { id: 'search', label: 'Search', long: 'Search and page fetches', sources: ['search', 'fetch', 'sec'] },
   { id: 'agents', label: 'Agents', long: 'Agents', sources: ['agents'] },
 ];
-export const groupOf = (s: ActivitySource): Exclude<Group, 'all'> => (s === 'fetch' ? 'search' : s);
+export const groupOf = (s: ActivitySource): Exclude<Group, 'all'> => (s === 'fetch' || s === 'sec' ? 'search' : s);
 
 /** One hue per source group, the same on every chart. Not the meaning colours (clay, green, amber
  *  as states): a source is not a status. Labels always sit beside them; colour is never alone. */
 export const GROUP_TONE: Record<Exclude<Group, 'all'>, string> = {
   affinity: '#2F6F8F', warehouse: '#5F4B9E', dakota: '#9A7420', intake: '#6B8A3A',
-  search: '#2E8A87', sec: '#7A5C48', agents: '#9A4F7E',
+  search: '#2E8A87', agents: '#9A4F7E',
 };
 const SEGMENT_TONES = ['#2F6F8F', '#2E8A87', '#9A7420', '#5F4B9E', '#9A4F7E'];
 const OTHER_TONE = '#A8A294';
@@ -121,7 +122,8 @@ export function buildView(
   const def = GROUPS.find((g) => g.id === group)!;
   const label = new Map(data.sources.map((s) => [s.id, s.label]));
   const sourceLabel = (s: ActivitySource) => label.get(s) ?? s;
-  const inGroup = data.points.filter((p) => def.sources.includes(p.source));
+  // Whatever arrives, SEC rows read as page fetches (the data boundary does this too).
+  const inGroup = data.points.filter((p) => def.sources.includes(p.source)).map(foldSec);
   const points = inGroup.filter((p) => p.day >= from && p.day <= to);
   const firstDay = inGroup.reduce<string | null>((m, p) => (m === null || p.day < m ? p.day : m), null);
 
@@ -141,6 +143,7 @@ export function buildView(
     const name = (key: string) => {
       const [src, seg] = key.split('|') as [ActivitySource, string];
       if (!seg) return multiSource ? sourceLabel(src) : def.long;
+      if (seg === 'edgar') return 'EDGAR';
       return multiSource ? `${sourceLabel(src)} · ${seg}` : seg;
     };
     const kept = ranked.length > MAX_SERIES ? ranked.slice(0, MAX_SERIES - 1) : ranked;
@@ -193,12 +196,20 @@ export function buildView(
     }).sort((a, b) => b.actual + b.estimated - (a.actual + a.estimated) || a.origin.localeCompare(b.origin));
   }
 
-  const bases = new Map<string, { label: string; basis: string }>();
+  // One line per source: its bases' clauses, each once, capped (issues 0107–0108).
+  const bySource = new Map<ActivitySource, string[]>();
   for (const p of points) {
     if (!p.estimated) continue;
-    const basis = p.basis ?? 'No basis recorded.';
-    const key = `${p.source}|${basis}`;
-    if (!bases.has(key)) bases.set(key, { label: sourceLabel(p.source), basis });
+    const list = bySource.get(p.source) ?? [];
+    if (p.basis && !list.includes(p.basis)) list.push(p.basis);
+    bySource.set(p.source, list);
+  }
+  // Sources estimated the same way share one line.
+  const bases = new Map<string, { label: string; basis: string }>();
+  for (const [src, list] of bySource) {
+    const basis = capText(tidyBasis(...list) ?? 'No basis recorded.', MAX_BASIS);
+    const same = bases.get(basis);
+    bases.set(basis, { label: same ? `${same.label}, ${sourceLabel(src)}` : sourceLabel(src), basis });
   }
 
   return {
@@ -222,7 +233,8 @@ function bucketIndexer(shells: Array<{ start: string; end: string }>) {
 export function sourceTotals(data: ActivityData, from: string, to: string) {
   const out = new Map<ActivitySource, { requests: Part & { unknown: number }; records: Part & { unknown: number }; lastDay: string | null }>();
   for (const s of ALL_SOURCES) out.set(s, { requests: { actual: 0, estimated: 0, unknown: 0 }, records: { actual: 0, estimated: 0, unknown: 0 }, lastDay: null });
-  for (const p of data.points) {
+  for (const raw of data.points) {
+    const p = foldSec(raw);
     const t = out.get(p.source);
     if (!t) continue;
     if (!t.lastDay || p.day > t.lastDay) t.lastDay = p.day;
@@ -240,6 +252,31 @@ export function sourceTotals(data: ActivityData, from: string, to: string) {
 /** A host's busiest day at least this many times its usual (median) day reads as a burst. A guess. */
 export const BURST_RATIO = 6;
 export const isBurst = (r: Pick<OriginRow, 'peak' | 'median'>) => r.median > 0 && r.peak >= BURST_RATIO * r.median;
+
+// ── words that fit ────────────────────────────────────────────────────────────────────────
+/** The longest estimate basis shown for one source, and the longest source note. Guesses at one line. */
+export const MAX_BASIS = 180;
+export const MAX_NOTE = 60;
+/** Cut at a word boundary, with an ellipsis, when longer than n. */
+export function capText(s: string, n: number): string {
+  const t = s.replace(/\s+/g, ' ').trim();
+  if (t.length <= n) return t;
+  const cut = t.slice(0, n - 1);
+  const at = cut.lastIndexOf(' ');
+  return `${(at > n * 0.6 ? cut.slice(0, at) : cut).replace(/[\s;,.:–—-]+$/, '')}…`;
+}
+/** A source's note as a short phrase, or nothing: its first sentence, capped, and dropped when
+ *  most sources carry the same text (boilerplate says nothing about the source). */
+export function sourceNotes(list: SourceSummary[]): Map<ActivitySource, string | null> {
+  const count = new Map<string, number>();
+  for (const s of list) { const k = s.note.trim(); if (k) count.set(k, (count.get(k) ?? 0) + 1); }
+  return new Map(list.map((s) => {
+    const k = s.note.trim();
+    if (!k || (list.length > 2 && (count.get(k) ?? 0) > list.length / 2)) return [s.id, null];
+    const first = k.split(/(?<=[.;])\s+/)[0]!.replace(/[.;]$/, '');
+    return [s.id, capText(first, MAX_NOTE)];
+  }));
+}
 
 // ── drawing ────────────────────────────────────────────────────────────────────────────────
 

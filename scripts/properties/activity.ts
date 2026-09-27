@@ -7,8 +7,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Check } from './harness';
 import type { ActivityData, ActivityPoint } from '../../lib/activity/types';
+import { aggregate, tidyBasis } from '../../lib/activity/model';
 import {
-  ALL_SOURCES, BURST_RATIO, GROUPS, METRICS, RANGES, addDays, buildView, daysBetween, estimateStyle, isBurst, makeBuckets,
+  ALL_SOURCES, BURST_RATIO, GROUPS, MAX_BASIS, MAX_NOTE, capText, sourceNotes, METRICS, RANGES, addDays, buildView, daysBetween, estimateStyle, isBurst, makeBuckets,
   niceMax, partSum, rangeDays, stack, type BucketSize,
 } from '../../lib/activity/view';
 
@@ -111,6 +112,45 @@ export async function activityProperties(check: Check) {
   check('Connectors activity: the demo fixture covers 30 days, every source, and both actuals and estimates with a basis',
     days.size === 30 && missing.length === 0 && mixed && based && fixture.origins.length > 0,
     `${days.size} days, missing ${missing.join(', ') || 'none'}, mixed ${mixed}, every estimate has a basis ${based}`);
+
+  // 6. Issues 0107–0108: what arrives long and repeated is shown short and once.
+  const views = GROUPS.map((g) => buildView(fixture, { group: g.id, range: 'all', size: 'day' }));
+  const basisOk = views.every((v) => {
+    const labels = v.bases.flatMap((b) => b.label.split(', '));
+    return new Set(labels).size === labels.length && new Set(v.bases.map((b) => b.basis)).size === v.bases.length && v.bases.every((b) => {
+      const clauses = b.basis.replace(/…$/, '').split('; ').map((c) => c.replace(/\.$/, ''));
+      return b.basis.length <= MAX_BASIS && new Set(clauses).size === clauses.length;
+    });
+  });
+  const longest = Math.max(...fixture.points.map((p) => p.basis?.length ?? 0));
+  const boiler = [...sourceNotes(fixture.sources).values()].every((n) => n === null);
+  const own = sourceNotes([
+    { id: 'affinity', label: 'A', state: 'connected', lastAt: null, note: 'Read-only sync, lists and notes. ' + 'More detail that nobody needs here. '.repeat(10) },
+    { id: 'dakota', label: 'D', state: 'read-only', lastAt: null, note: 'Bulk pull' },
+    { id: 'intake', label: 'I', state: 'files', lastAt: null, note: '' },
+  ]);
+  const tidy = tidyBasis(Array.from({ length: 40 }, () => 'One fetch per cited page; citation may come from search.').join('; '));
+  const merged = aggregate(Array.from({ length: 40 }, () => ({
+    day: '2026-09-01', source: 'fetch' as const, segment: null, requests: 1, bytesIn: null, bytesOut: null, records: 1, estimated: true,
+    basis: 'One fetch per cited page; citation may come from search. Research date used; retries unknown.',
+  })), [], '2026-09-02T00:00:00Z').points;
+  check('Connectors 0107–0108: estimate bases are one capped line per source (sources sharing one basis share the line), each clause once; notes are short or absent',
+    basisOk && longest > 2000 && boiler && own.get('affinity') === 'Read-only sync, lists and notes' && own.get('dakota') === 'Bulk pull' && own.get('intake') === null
+      && capText('x '.repeat(200), MAX_NOTE).length <= MAX_NOTE
+      && tidy === 'One fetch per cited page; citation may come from search.'
+      && merged.length === 1 && merged[0]!.basis === 'One fetch per cited page; citation may come from search. Research date used; retries unknown.',
+    `fixture bases up to ${longest} characters shown as at most ${MAX_BASIS}; boilerplate notes dropped; 40 merges of one basis leave it as written`);
+
+  // 7. Issue 0106: SEC is not a source; its rows are page fetches (EDGAR) and its host stays listed.
+  const all = buildView(fixture, { group: 'all', range: 'all', size: 'day' });
+  const search = buildView(fixture, { group: 'search', range: 'all', size: 'day' });
+  const secReq = fixture.points.filter((p) => p.source === 'sec').reduce((n, p) => n + (p.requests ?? 0), 0);
+  const edgarAt = search.series.findIndex((x) => x.label === 'EDGAR');
+  const edgarReq = edgarAt < 0 ? -1 : search.buckets.reduce((n, b) => n + b.values.requests[edgarAt]!.actual + b.values.requests[edgarAt]!.estimated, 0);
+  check('Connectors 0106: no SEC pill or series; SEC requests are counted once under Search as EDGAR, sec.gov among the hosts',
+    !GROUPS.some((g) => (g.id as string) === 'sec') && !all.series.some((x) => x.key === 'sec') && secReq > 0 && edgarReq === secReq
+      && (search.origins ?? []).some((o) => o.origin === 'sec.gov'),
+    `${secReq} invented SEC requests shown as EDGAR in Search`);
 
   // 5. A burst is a peak well above the host's usual day, and never flagged with no usual day.
   check(`Connectors activity: a host is flagged for a burst only when its peak is ${BURST_RATIO}× its median day`,
