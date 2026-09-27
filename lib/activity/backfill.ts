@@ -45,7 +45,7 @@ export async function readLog(root: string, files?: ActivityFiles): Promise<Logg
       const r = rows[i];
       try {
       const day = utcDay(r.at);
-      if (!day || !['affinity','warehouse','dakota','intake','search','fetch','sec','agents'].includes(r.source) || typeof r.id !== 'string' || ids.has(r.id)) continue;
+      if (!day || !['affinity','warehouse','dakota','linear','intake','search','fetch','sec','agents'].includes(r.source) || typeof r.id !== 'string' || ids.has(r.id)) continue;
       ids.add(r.id);
       const key = r.source;
       if (!out.cutoffs.has(key) || r.at < out.cutoffs.get(key)!) out.cutoffs.set(key, r.at);

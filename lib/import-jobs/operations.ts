@@ -128,6 +128,11 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
         throw new Error('Dakota import stopped.');
       }
     }
+    case 'linear': {
+      // Read-only: queries only (lib/connectors/linear/client.ts), then the local translation.
+      const { syncLinear } = await import('@/lib/connectors/linear/sync');
+      return {...await syncLinear(db,actor,{full:job.input.full===true,progress})};
+    }
     case 'strategy-moves': {
       await progress('Validating strategy moves',0,1);
       const path = config.data.profile==='real' ? join(config.data.root,'strategy-moves/menu.json') : join(process.cwd(),'fixtures/strategy-moves.json');

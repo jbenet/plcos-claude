@@ -129,6 +129,27 @@ export const config = {
      */
     sliceCeiling: PROFILE === 'demo' ? 10 : 3000, // GUESS (the real one)
   },
+  /**
+   * Linear, read-only (Juan, 27 Sep 2026; docs/24-linear.md). The client sends GraphQL queries
+   * from its own allowlist and refuses any mutation. Linear allows 2,500 requests and 3,000,000
+   * complexity points an hour for a personal key (read from its headers, 27 Sep); a full sync of
+   * the workspace took about forty requests.
+   */
+  linear: {
+    readOnly: true,
+    pageSize: 100, // GUESS — Linear allows up to 250 a page; 100 keeps each answer's complexity small.
+    minIntervalMs: 200, // GUESS — polite spacing; the hourly budget is the binding limit.
+    /** Stop and wait for the reset when fewer than this many requests are left in the hour. */
+    minRequestsLeft: 100, // GUESS
+    /** The same for complexity points. */
+    minComplexityLeft: 50_000, // GUESS
+    /** A wait longer than this fails the sync instead of holding a job open. */
+    maxWaitMs: 120_000, // GUESS
+    /** An incremental sync asks for changes since the last complete one, less this overlap. */
+    overlapMs: 10 * 60_000, // GUESS — covers clock skew and edits made while the last pull ran.
+    /** Records written per database transaction during translation. */
+    translateBatch: 200, // GUESS — same bound as Dakota's.
+  },
   warehouse: {
     enabled: false,
     canonMode: 'inProcess' as CanonMode,

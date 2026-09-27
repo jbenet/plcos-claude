@@ -5,8 +5,8 @@ import { getDb } from '@/lib/db';
 import type { RunView } from '@/lib/workflows/view';
 
 /**
- * The two read-only sources Developer → Status lists beside Affinity (issue 0099): Dakota and PL
- * Polaris, the PL Data Warehouse. Neither is read by this server over a network: Dakota lands in a
+ * The read-only sources Developer → Status lists beside Affinity (issue 0099): Dakota, PL Polaris,
+ * the PL Data Warehouse, and Linear (docs/24-linear.md), which this server syncs itself. Neither is read by this server over a network: Dakota lands in a
  * local replica through a workflow (scripts/dakota-sync.ts), Polaris through workflows querying
  * BigQuery with the local MCP Toolbox. So this reads what they left behind — counts and times only.
  * Never a Dakota field value: the manifests carry counts, and the database is asked for counts.
@@ -14,7 +14,7 @@ import type { RunView } from '@/lib/workflows/view';
 
 export type SourceState = 'ok' | 'partial' | 'not_attached' | 'failed';
 export interface ExtraSource {
-  key: 'dakota' | 'polaris';
+  key: 'dakota' | 'polaris' | 'linear';
   label: string;
   access: string;
   state: SourceState;
@@ -114,5 +114,37 @@ export async function polarisStatus(runs: RunView[]): Promise<ExtraSource> {
     facts: facts.length ? facts : [config.data.profile === 'demo' ? 'The demo does not read the warehouse' : 'No warehouse read recorded here'],
     lastAt: when, lastWhat: when ? 'last read' : null,
     note: 'This server never queries it: workflows do, as pl-polaris (npm run polaris:connect), and write what they read under plcos-data/real.',
+  };
+}
+
+/** Linear: this server syncs it (Developer → Linear); the manifests and the replica's counts say how far. */
+export async function linearStatus(): Promise<ExtraSource> {
+  const { rawDir } = await import('@/lib/connectors/linear/sync');
+  const { readManifests } = await import('@/lib/connectors/linear/replica');
+  const { linearKeyPresent } = await import('@/lib/connectors/linear/key');
+  const manifests = await readManifests(rawDir());
+  const [issues, projects, teams] = await Promise.all([
+    count('select count(*) as n from linear.issue where archived_at is null'),
+    count('select count(*) as n from linear.project where archived_at is null'),
+    count('select count(*) as n from linear.team where archived_at is null'),
+  ]);
+  const latest = manifests.at(-1);
+  const complete = [...manifests].reverse().find((m) => m.complete);
+  const facts = [
+    issues || projects ? `In the database: ${n(issues ?? 0)} issues, ${n(projects ?? 0)} projects, ${n(teams ?? 0)} teams` : null,
+    complete ? `Last complete sync: ${n(complete.records)} records in ${n(complete.requests)} requests${complete.since ? ', changes only' : ', everything'}` : null,
+    latest?.budget?.requestsLeft != null && latest.budget.requestsLimit ? `Hourly budget after the last sync: ${n(latest.budget.requestsLeft)} of ${n(latest.budget.requestsLimit)} requests left` : null,
+  ].filter((x): x is string => Boolean(x));
+  const demo = config.data.profile === 'demo';
+  const failedLast = Boolean(latest && latest !== complete);
+  const state: SourceState = !latest ? 'not_attached' : failedLast ? (complete ? 'partial' : 'failed') : 'ok';
+  return {
+    key: 'linear', label: 'Linear',
+    access: demo ? 'Read-only · an invented workspace, read through the real client' : 'Read-only · GraphQL queries only, synced by this server',
+    state,
+    facts: facts.length ? facts : [demo ? 'Not synced yet: Sync Linear on Developer → Linear' : linearKeyPresent() ? 'Key present; not synced yet' : 'Not synced here: no key, or not the live server'],
+    lastAt: complete ? new Date(complete.at) : latest ? new Date(latest.at) : null,
+    lastWhat: failedLast ? 'the latest sync stopped early' : complete ? 'last complete sync' : null,
+    note: 'Counts only. Queries only: the client refuses any mutation (docs/24-linear.md).',
   };
 }

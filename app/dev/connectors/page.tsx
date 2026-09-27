@@ -169,6 +169,7 @@ function Sources({ data, view, now }: { data: ActivityData; view: ActivityView; 
                   <td>
                     <Link href={href(view, { group: g })} scroll={false} className={s.sname}>{src.label}</Link>
                     {src.id === 'affinity' && <Link href="/dev/affinity" className={s.slink}>connection</Link>}
+                    {src.id === 'linear' && <Link href="/developer/linear" className={s.slink}>sync</Link>}
                     {notes.get(src.id) && <span className={s.snote}>{notes.get(src.id)}</span>}
                   </td>
                   <td><span className={`flag ${STATE[src.state].flag}`}>{STATE[src.state].word}</span></td>
@@ -221,8 +222,8 @@ async function Connectors({ searchParams }: { searchParams: Promise<SP> }) {
     },
     {
       name: 'Connector<T>',
-      now: `fixture — ${signals.length} signals ingested through it`,
-      later: 'Affinity, Linear, Drive, DocSend at L13',
+      now: `fixture — ${signals.length} signals ingested through it; Affinity and Linear read-only`,
+      later: 'Drive, DocSend at L13',
       cheap: 'The three invariants below are fixed now, so a real source changes the connector and nothing above it.',
     },
     {
@@ -273,10 +274,10 @@ async function Connectors({ searchParams }: { searchParams: Promise<SP> }) {
             </div>
           </div>
           <div className="prov">
-            <div className="p1">Linear custom fields</div>
+            <div className="p1">Linear custom fields · answered</div>
             <div className="p2" style={{ fontFamily: 'var(--sans)', fontSize: 11.5, lineHeight: 1.5 }}>
-              UNVERIFIED in all three design packages. Check the live GraphQL schema before
-              anything depends on it.
+              Checked against the live schema, 27 Sep 2026: issues have no custom fields. Labels, label groups,
+              projects and milestones carry the structure. <Link href="/developer/linear">Linear</Link> is synced read-only.
             </div>
           </div>
           <div className="note">

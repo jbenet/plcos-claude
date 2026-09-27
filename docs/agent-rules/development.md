@@ -60,8 +60,9 @@ there.
    account has the 100,000-a-month cap, so it is Scale or Advanced — the API can't tell which,
    and only Advanced has Data Share. Poll-first until someone checks the plan.
 2. **Warehouse access.** Own schema with write permission for canon tables?
-3. **Linear custom fields.** UNVERIFIED in all three design packages. Check the live
-   GraphQL schema before anything depends on it. The integration points the product
+3. **Linear custom fields.** Answered 27 Sep 2026 by introspecting the live schema: issues
+   have no custom fields; labels, label groups, projects and milestones carry the structure.
+   Linear is synced read-only (docs/24-linear.md). The integration points the product
    already assumes are written down in `docs/14-linear-integration-points.md`, including
    the outbox (`plays.handoff`) that records what would be sent, and the proposal for a
    dedicated board for observable agent runs.

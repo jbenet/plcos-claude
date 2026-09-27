@@ -7,13 +7,14 @@
 import type { ActivityData, ActivityPoint, ActivitySource, SourceSummary } from './types';
 import { foldSec, tidyBasis } from './model';
 
-export type Group = 'all' | 'affinity' | 'warehouse' | 'dakota' | 'intake' | 'search' | 'agents';
-export const ALL_SOURCES: ActivitySource[] = ['affinity', 'warehouse', 'dakota', 'intake', 'search', 'fetch', 'sec', 'agents'];
+export type Group = 'all' | 'affinity' | 'warehouse' | 'dakota' | 'linear' | 'intake' | 'search' | 'agents';
+export const ALL_SOURCES: ActivitySource[] = ['affinity', 'warehouse', 'dakota', 'linear', 'intake', 'search', 'fetch', 'sec', 'agents'];
 export const GROUPS: Array<{ id: Group; label: string; long: string; sources: ActivitySource[] }> = [
   { id: 'all', label: 'All', long: 'All sources', sources: ALL_SOURCES },
   { id: 'affinity', label: 'Affinity', long: 'Affinity', sources: ['affinity'] },
   { id: 'warehouse', label: 'Warehouse', long: 'PL data warehouse', sources: ['warehouse'] },
   { id: 'dakota', label: 'Dakota', long: 'Dakota', sources: ['dakota'] },
+  { id: 'linear', label: 'Linear', long: 'Linear', sources: ['linear'] },
   { id: 'intake', label: 'Intake', long: 'Intake files', sources: ['intake'] },
   // EDGAR is internet reading, not a database of its own (issue 0106): it is part of Search.
   { id: 'search', label: 'Search', long: 'Search and page fetches', sources: ['search', 'fetch', 'sec'] },
@@ -24,7 +25,7 @@ export const groupOf = (s: ActivitySource): Exclude<Group, 'all'> => (s === 'fet
 /** One hue per source group, the same on every chart. Not the meaning colours (clay, green, amber
  *  as states): a source is not a status. Labels always sit beside them; colour is never alone. */
 export const GROUP_TONE: Record<Exclude<Group, 'all'>, string> = {
-  affinity: '#2F6F8F', warehouse: '#5F4B9E', dakota: '#9A7420', intake: '#6B8A3A',
+  affinity: '#2F6F8F', warehouse: '#5F4B9E', dakota: '#9A7420', linear: '#34466E', intake: '#6B8A3A',
   search: '#2E8A87', agents: '#9A4F7E',
 };
 const SEGMENT_TONES = ['#2F6F8F', '#2E8A87', '#9A7420', '#5F4B9E', '#9A4F7E'];

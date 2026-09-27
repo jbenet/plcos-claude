@@ -65,6 +65,16 @@ a copy of it with `npm run preview`, and a sub-agent's worktree, which has no ro
   The feedback box stays open on the real server: an issue and its screenshots live in
   `plcos-data/real/issues`, inside our system, like every other real record (decided 27 Sep, when a
   branch tried to refuse all feedback once Dakota data was in the database).
+- **Linear is read-only (27 Sep 2026, docs/24-linear.md).** Juan overrode "no connectors before L13"
+  for it, as for Affinity. The personal key can write and cannot be scoped, so read-only is enforced in
+  the client: only allowlisted GraphQL queries, each text checked for a mutation before sending, and
+  properties that prove it. Only `lib/connectors/linear/` names its host or the key's variable
+  (`npm run boundaries`). The key is one Keychain item (`plcos-linear` / `api-key`, `npm run
+  linear:store`), handed to the live server by `scripts/with-linear-key.sh`; never printed, never in a
+  file, never in a preview's or the demo's environment. The replica lives in `plcos-data/real/linear/`
+  and the `linear` schema; only the live server syncs it, from Developer → Linear. Treat its content
+  like Affinity's: counts in reports, nothing in git, screenshots, issues or prompts. Writes wait for
+  Juan's approval of docs/24 §5 and go through approval tickets.
 - **PL Polaris, the PL Data Warehouse, is read-only too (26 Sep 2026).** Juan gave Claude and ChatGPT
   access to BigQuery project `plrs-data-platform` through Google's MCP Toolbox, run locally and
   registered as `pl-polaris` by `npm run polaris:connect`. It signs in with Juan's gcloud

@@ -1,13 +1,13 @@
 import type { ActivityData, ActivityPoint, ActivitySource, OriginCount } from './types';
 /** Every source a row may be recorded under. 'sec' stays recordable so old log lines still read. */
-export const sources: ActivitySource[] = ['affinity', 'warehouse', 'dakota', 'intake', 'search', 'fetch', 'sec', 'agents'];
+export const sources: ActivitySource[] = ['affinity', 'warehouse', 'dakota', 'linear', 'intake', 'search', 'fetch', 'sec', 'agents'];
 /** The sources shown (issue 0106): EDGAR is internet reading, not a database of its own, so its
  *  rows fold into page fetches as the 'edgar' segment and sec.gov shows among the hosts. */
-export const shown: ActivitySource[] = ['affinity', 'warehouse', 'dakota', 'intake', 'search', 'fetch', 'agents'];
-export const labels = ['Affinity', 'PL data warehouse', 'Dakota', 'Intake files', 'Internet search', 'Page fetches', 'Agents'];
+export const shown: ActivitySource[] = ['affinity', 'warehouse', 'dakota', 'linear', 'intake', 'search', 'fetch', 'agents'];
+export const labels = ['Affinity', 'PL data warehouse', 'Dakota', 'Linear', 'Intake files', 'Internet search', 'Page fetches', 'Agents'];
 /** One short phrase per source (issues 0107–0108); the page explains estimates once, not per row. */
 export const notes: Partial<Record<ActivitySource, string>> = {
-  affinity: 'Read-only API sync', warehouse: 'Read-only BigQuery queries', dakota: 'Read-only bulk pull',
+  affinity: 'Read-only API sync', warehouse: 'Read-only BigQuery queries', dakota: 'Read-only bulk pull', linear: 'Read-only GraphQL sync',
   intake: 'Files dropped for import', search: 'Web searches for research', fetch: 'Public pages read for research, EDGAR included',
   agents: 'Workflow runs: model calls and items written',
 };
@@ -43,7 +43,7 @@ export function host(v: unknown): string | null {
 }
 export function segment(source: ActivitySource, value: unknown): string | null {
   if (source === 'agents') return typeof value === 'string' && /^W\d+[a-z]?$/i.test(value) ? value : null;
-  const allowed = ['lists', 'notes', 'meetings', 'persons', 'organizations', 'opportunities', 'relationships', 'fields', 'list-entries', 'field-values', 'interactions', 'account', 'contact', 'fund', 'authentication', 'count', 'graph', 'queries', 'files', 'imports', 'findings', 'prospects', 'portfolio', 'init', 'users', 'rate-limit', 'investment', 'investment_strategy', 'other', 'research', 'review'];
+  const allowed = ['lists', 'notes', 'meetings', 'persons', 'organizations', 'opportunities', 'relationships', 'fields', 'list-entries', 'field-values', 'interactions', 'account', 'contact', 'fund', 'authentication', 'count', 'graph', 'queries', 'files', 'imports', 'findings', 'prospects', 'portfolio', 'init', 'users', 'rate-limit', 'investment', 'investment_strategy', 'other', 'research', 'review', 'teams', 'states', 'labels', 'projects', 'milestones', 'cycles', 'issues', 'comments'];
   return typeof value === 'string' && allowed.includes(value) ? value : null;
 }
 /** A point is a leaf, never an additional total. Null contaminates a sum: missing is not zero. */
@@ -65,7 +65,7 @@ export function aggregate(points: ActivityPoint[], origins: OriginCount[], asOf:
   }
   const result = [...groups.values()].sort((a, b) => a.day.localeCompare(b.day) || a.source.localeCompare(b.source) || (a.segment ?? '').localeCompare(b.segment ?? ''));
   return { points: result, origins: [...os.values()].sort((a,b) => a.day.localeCompare(b.day) || a.origin.localeCompare(b.origin)), asOf,
-    sources: shown.map((id, i) => ({ id, label: labels[i], state: result.some(p => p.source === id) ? (id === 'intake' ? 'files' : ['affinity','warehouse','dakota'].includes(id) ? 'read-only' : 'connected') : 'planned',
+    sources: shown.map((id, i) => ({ id, label: labels[i], state: result.some(p => p.source === id) ? (id === 'intake' ? 'files' : ['affinity','warehouse','dakota','linear'].includes(id) ? 'read-only' : 'connected') : 'planned',
       lastAt: result.filter(p => p.source === id).at(-1)?.day ? `${result.filter(p => p.source === id).at(-1)!.day}T00:00:00.000Z` : null,
       note: notes[id] ?? '' })) };
 }

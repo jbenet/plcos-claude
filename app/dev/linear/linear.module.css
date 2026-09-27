@@ -1,0 +1,35 @@
+/* Developer → Linear (docs/24-linear.md). Builds on .card, table.list, .flag, .fact and .kv. */
+.scroll { overflow-x: auto; container-type: inline-size; }
+.table { table-layout: auto; }
+.table td { vertical-align: top; }
+.num { text-align: right; white-space: nowrap; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+th.num { font-family: inherit; }
+.name { font-weight: 500; font-size: 13px; }
+.key { font-family: var(--mono); font-size: 10.5px; color: var(--muted); letter-spacing: .02em; }
+.sub { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.terms { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.5; }
+.showS { display: none; }
+
+.strip {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  border-bottom: 1px solid var(--hair);
+}
+.stat { padding: 11px 15px; border-right: 1px solid var(--hair); display: flex; flex-direction: column; gap: 2px; }
+.stat:last-child { border-right: 0; }
+.k { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.v { font-family: var(--mono); font-size: 18px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.fill { margin: 0; padding: 10px 15px; font-size: 12.5px; line-height: 1.6; color: var(--muted); border-bottom: 1px solid var(--hair); }
+.fill b { color: var(--ink); font-weight: 500; font-family: var(--mono); font-size: 12px; }
+
+.lede { margin: 0 0 12px; font-size: 13px; line-height: 1.55; }
+.sync { margin-top: 14px; }
+.syncForm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.quiet { background: var(--surface); }
+.hint { font-size: 12px; color: var(--muted); line-height: 1.45; flex: 1 1 260px; }
+.msg, .err { margin: 8px 0 0; font-size: 12.5px; }
+.err { color: var(--clay); }
+
+@container (max-width: 620px) {
+  .hideS { display: none; }
+  .showS { display: block; }
+}

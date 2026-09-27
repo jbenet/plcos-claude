@@ -65,6 +65,7 @@ export async function runProperties(check: Check) {
   await (await import('./selection-0104')).selection0104Properties(check, db);
   await (await import('./spv-stance')).spvStanceProperties(check, db);
   await (await import('./lp-stats')).lpStatsProperties(check, db);
+  await (await import('./linear')).linearProperties(check, db);
   // Last on this database: it re-points every pursuit, then reverses every decision it made.
   await (await import('./lp-units')).lpUnitProperties(check, db);
   await (await import('./lp-unit-decisions')).lpUnitDecisionProperties(check, db);

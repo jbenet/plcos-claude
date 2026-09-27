@@ -17,7 +17,7 @@ import { wrongWrapSends } from '@/modules/content';
 import { poolChecks } from '@/modules/pipeline';
 import { listConflicts } from '@/modules/coordination';
 import { loadLedger } from '@/lib/workflows/view';
-import { dakotaStatus, polarisStatus, type SourceState } from '@/lib/dev/sources';
+import { dakotaStatus, linearStatus, polarisStatus, type SourceState } from '@/lib/dev/sources';
 import { responsivenessSnapshot } from '@/lib/responsiveness';
 import st from './status.module.css';
 
@@ -27,7 +27,7 @@ const STATE_WORD: Record<SourceState | string, string> = { ok: 'ok', partial: 'p
 export const dynamic = 'force-dynamic';
 
 async function Status() {
-  const [db, a, sink, ag, sources, signals, held, breaker, wrongWrap, pools, conflicts] =
+  const [db, a, sink, ag, synced, signals, held, breaker, wrongWrap, pools, conflicts] =
     await Promise.all([
       getDb(), auth(), issueSink(), agent(), listSyncSources(), allSignals(), heldBack(),
       circuitBreaker(), wrongWrapSends(), poolChecks(), listConflicts('open'),
@@ -37,7 +37,9 @@ async function Status() {
     db.query<{ id: string; applied_at: Date | string }>('select id, applied_at from platform.migration order by applied_at'),
     loadLedger(),
   ]);
-  const [dakota, polaris] = await Promise.all([dakotaStatus(), polarisStatus(ledger.runs)]);
+  const [dakota, polaris, linear] = await Promise.all([dakotaStatus(), polarisStatus(ledger.runs), linearStatus()]);
+  // Linear has its own row below, from its replica (docs/24-linear.md), rather than the seed's placeholder.
+  const sources = synced.filter((x) => x.source !== 'linear');
   const lastMigration = migrations.at(-1);
   const over = pools.filter((p) => p.status === 'over');
 
@@ -54,8 +56,8 @@ async function Status() {
     { name: 'Auth', now: `${a.kind} — user switcher`, ok: true, detail: a.switchable ? 'Switchable; no password simulated' : 'Fixed identity' },
     { name: 'Issue sink', now: sink.kind, ok: true, detail: sink.destination },
     config.data.profile === 'real'
-      ? { name: 'Connectors', now: 'Affinity, read-only', ok: true, detail: 'The one connector this server runs (N38); Dakota and the warehouse reach it through workflows, below' }
-      : { name: 'Connectors', now: 'fixture only', ok: true, detail: 'The demo attaches no external source; its Affinity is a fixture' },
+      ? { name: 'Connectors', now: 'Affinity and Linear, read-only', ok: true, detail: 'The two connectors this server runs (N38; Linear from 27 Sep); Dakota and the warehouse reach it through workflows, below' }
+      : { name: 'Connectors', now: 'fixture only', ok: true, detail: 'The demo attaches no external source; its Affinity and Linear are fixtures' },
     { name: 'Agent runtime', now: `${ag.kind} — ${ag.available ? 'available' : 'refuses'}`, ok: true, detail: ag.available ? 'A key is present' : 'No key, or no runtime: it refuses rather than guessing' },
     {
       name: 'Workflow ledger', now: ledger.where === 'demo' ? 'invented runs' : 'runs.jsonl, append-only', ok: !ledger.error,
@@ -63,7 +65,7 @@ async function Status() {
       href: '/dev/workflows',
     },
   ];
-  const extra = [dakota, polaris];
+  const extra = [linear, dakota, polaris];
   const responsiveness = responsivenessSnapshot();
 
   return (
@@ -211,7 +213,7 @@ async function Status() {
           </table>
         </div>
         <p className="cover">
-          <b>Nothing here writes back.</b> Affinity is synced by this server through its read-only client; Dakota and the
+          <b>Nothing here writes back.</b> Affinity and <Link href="/developer/linear">Linear</Link> are synced by this server through read-only clients; Dakota and the
           warehouse are read by workflows, recorded on <Link href="/dev/workflows">Workflows</Link>, and land in files first.
         </p>
       </div>
