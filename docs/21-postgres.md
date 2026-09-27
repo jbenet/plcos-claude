@@ -212,3 +212,21 @@ Live has run on Postgres since 27 Sep 19:57 UTC. `data/real/postgres.url` select
 - **Stopping:** `npm run dev:stop` (live folder only) stops the dev server, then Postgres. Use it when you stop development.
 - **Checking:** `npm run dev:status` says what's running.
 - **No login item:** nothing starts at boot. After a reboot, run `npm run dev:start` or `npm run dev:real`.
+
+## Scope and access (Juan, 27 Sep 2026: "scope it just to this project … lock it down with auth")
+
+**This project's own cluster.** It is not a machine-wide server. Its files are in `plcos-data/real/postgres`, it listens on 127.0.0.1:5433, and its socket lives in that folder, not `/tmp`. Homebrew's default cluster is never started. Another project runs its own cluster from the same binaries: `initdb -D <its folder>`, a different port, and its own `pg_ctl`. Astra's test cluster (`plcos-pg-dev`, port 5434, invented data only) is separate again.
+
+**Roles.** Each role's password is in the login Keychain under service `plcos-postgres`, with accounts `app`, `ro` and `admin`. No password is ever written in a file.
+
+| Role | Can | Used by |
+|---|---|---|
+| `plcos_app` | Owns every schema and table in `plcos_live`; no superuser | The live server. The launcher sets `PGPASSWORD` from the Keychain; `postgres.url` names the role only. |
+| `plcos_ro` | `SELECT` on every table and sequence, including future ones via default privileges | Scripts, agents and backups (`pg_dump`). Writes are refused. |
+| `plcos` | Superuser (the bootstrap role) | Admin by hand only |
+
+**Authentication.** `pg_hba.conf` requires SCRAM passwords for every connection, loopback only. The old trust file is kept as `pg_hba.conf.trust.bak`.
+
+**New schemas.** A migration that creates a new schema must grant `plcos_ro` usage on it; the default privileges cover tables inside existing schemas only.
+
+**Backups.** `npm run backup` dumps `plcos_live` with `pg_dump -Fc` as `plcos_ro` and skips the stale PGlite folder. The first dump backup was 624 MB, against 2 GB for the PGlite clones.
