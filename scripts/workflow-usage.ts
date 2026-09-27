@@ -43,8 +43,8 @@ async function main() {
         total: total('input') + total('output') };
     });
   }
-  console.log('Estimated tokens; input includes cachedInput/cacheWrite; output includes reasoning. No dollar cost inferred.');
-  console.log('Night = UTC start date; unavailable runs are excluded from totals. Session match uses provider and worker/launcher cwd.');
+  console.log('Session-derived tokens (source marks measured or estimated); input includes cachedInput/cacheWrite; output includes reasoning. No dollar cost inferred.');
+  console.log('Night = UTC start date; unavailable runs are excluded from totals. Session match uses provider and worker cwd.');
   console.table(table('workflow'));
   console.table(table('night'));
   console.log(`Wrote ${rows.length} run estimates; ledger unchanged.`);

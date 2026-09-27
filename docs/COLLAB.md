@@ -239,8 +239,10 @@ one entry per run ID, preserving other dates and replacing estimates on rerun. `
 and the database are unchanged. The table groups totals by workflow and night, where night
 means the run's UTC start date; it includes completed runs and shows unavailable counts.
 
-Each entry is marked `estimated` and carries input, cachedInput, output, reasoning, cacheWrite,
-method and session IDs used. Codex cumulative counter deltas are prorated over time between
+Each entry carries input, cachedInput, output, reasoning, cacheWrite, method, session IDs and
+parse/coverage diagnostics. Complete, unshared Codex counter intervals from one matching session
+are marked `measured`; time-prorated, shared or incomplete coverage is marked `estimated`.
+Codex cumulative counter deltas are prorated over time between
 usage updates, including a sample after a window ends when available; the first delta starts
 at session creation (or is a point observation if that timestamp is missing). Repeated totals
 add no tokens but advance the time baseline; counter resets start a new segment. Claude per-message usage is a point observation
@@ -248,11 +250,26 @@ at its last update, deduplicated by message ID using maximum counters. Input inc
 and writes for both providers. Reasoning absent from a usage report contributes zero, meaning
 not separately reported, not proof that no reasoning tokens were used.
 
-Sessions match by provider and worker/launcher cwd. No historical ledger session ID exists,
-so unrelated activity in the same folder can contribute: these are estimates, not measurements.
+Sessions match by provider and worker cwd; launcher activity in another folder is excluded.
+No historical ledger session ID exists,
+so unrelated activity in the same folder can contribute; the match method records this limitation.
 At each overlapping interval/point, usage is split evenly among concurrent matching runs,
 including runs outside the requested date and unfinished runs. Uncovered time is not assigned.
 An unfinished run competes through the estimate's cutoff (the latest selected finish). The CLI's
 live finish captures a single end time before scanning, includes concurrent unfinished runs,
 and reuses a recorded estimate on retry. Future overlapping finishes may gain later usage
 reports; retrospective reruns provide a consistent view once sessions have settled.
+
+### Headless and active session logs
+
+Usage scans read bounded file snapshots and isolate malformed records, including incomplete final
+records in active logs. Healthy counters survive unrelated file damage. Missing counters stay null;
+observed zero counters stay zero. Damaged matching logs and snapshots ending before the run finishes
+carry explicit diagnostics and are estimates: in-flight usage may not yet have been reported.
+
+Headless children can replay their parent's metadata ID and creation time after their own header.
+The first session header owns the file; later inherited headers cannot overwrite it. When subagent source
+metadata is present, the reader uses the rollout filename's child ID and the outer metadata timestamp.
+Independent child counters remain separate; genuine resumed copies merge observations before deltas
+are computed. Finishes retain the session IDs as well as the count and method. Explicit caller-supplied
+usage and finish retry idempotency are unchanged. No prompts or tool content are decoded.

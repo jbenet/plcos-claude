@@ -13,6 +13,7 @@ export interface Usage {
   source?: 'measured' | 'estimated'; // absent only on historical lines
   method?: string;
   sessionCount?: number;
+  sessions?: string[];
 }
 export interface RunLine {
   event: 'started' | 'finished';
@@ -75,6 +76,7 @@ export function validateLine(value: unknown): asserts value is RunLine {
       && (u.reasoning === undefined || token(u.reasoning)), 'usage');
     requireValue(u.source === undefined || u.source === 'measured' || u.source === 'estimated', 'usage source');
     requireValue(u.method === undefined || string(u.method), 'usage method');
+    requireValue(u.sessions === undefined || (Array.isArray(u.sessions) && u.sessions.every(string)), 'usage sessions');
     requireValue(u.sessionCount === undefined || (u.sessionCount !== null && count(u.sessionCount)), 'usage session count');
     if (u.cost !== null) {
       const cost = object(u.cost);
