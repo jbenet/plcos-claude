@@ -305,7 +305,9 @@ export const enrichDir = () => resolve(process.cwd(), process.env.ENRICH_DIR ?? 
 
 /** Write both files. Returns counts, never names: a caller may show them anywhere. */
 export async function exportResearchSet(): Promise<{ candidates: number; people: number; orgs: number; withDomain: number; withOrg: number; byStatus: Record<string, number>; dir: string }> {
-  const set = await researchSet();
+  // A record with no searchable name ("-" from a source's blank) can't be researched; W1 wrote
+  // empty placeholders for them (27 Sep). It stays in the pipeline, just not in the export.
+  const set = (await researchSet()).filter((c) => /[\p{L}\p{N}].*[\p{L}\p{N}]/u.test(c.name ?? ''));
   const dir = enrichDir();
   await mkdir(dir, { recursive: true });
   const identity = (c: Candidate): ResearchIdentity => ({
