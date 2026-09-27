@@ -1,8 +1,9 @@
+import { getDb, type Queryable } from '@/lib/db';
 import { issues as issueSink } from '@/lib/issues';
 import type { IssueAttachment, IssueKind, IssuePriority, IssueSink } from '@/lib/issues';
 import { appendAudit, attachIssueRef, insertFeedback } from './repo';
 import type { AppUser } from './types';
-import { bestEffortDb, type QueueClock } from '@/lib/db/scheduling';
+import { bestEffortDb, cancellableDb, type QueueClock } from '@/lib/db/scheduling';
 
 export interface FeedbackCommand {
   title: string;
@@ -24,7 +25,7 @@ export interface FeedbackCommand {
  * The markdown file is the receipt. Database metadata is best-effort and never holds
  * the complaint behind a busy connection, including reporter lookup.
  */
-export async function fileFeedback(user: AppUser | { handle: string; resolveUser: () => Promise<AppUser> }, cmd: FeedbackCommand, options: { clock?: QueueClock; sink?: IssueSink } = {}) {
+export async function fileFeedback(user: AppUser | { handle: string; resolveUser: (q: Queryable) => Promise<AppUser> }, cmd: FeedbackCommand, options: { clock?: QueueClock; sink?: IssueSink } = {}) {
   const verified = !('resolveUser' in user);
   const context = {
     ...cmd.context,
@@ -46,14 +47,15 @@ export async function fileFeedback(user: AppUser | { handle: string; resolveUser
     tokenOffset: cmd.imageOffset ?? 0,
   });
 
-  void bestEffortDb(async () => {
-    const actor = 'resolveUser' in user ? await user.resolveUser() : user;
+  void bestEffortDb(async signal => {
+    const q = cancellableDb(await getDb(), signal);
+    const actor = 'resolveUser' in user ? await user.resolveUser(q) : user;
     const row = await insertFeedback({
       title: cmd.title.trim(), body: cmd.body.trim(), kind: cmd.kind, priority: cmd.priority,
       reporterId: actor.id, page: cmd.page, labels: [],
       context: { ...context, user: actor.handle, reporterVerification: 'verified' },
-    });
-    await attachIssueRef(row.id, issue.id, issue.location);
+    }, q);
+    await attachIssueRef(row.id, issue.id, issue.location, q);
     await appendAudit({
       actorId: actor.id,
       action: 'feedback.filed',
@@ -63,7 +65,7 @@ export async function fileFeedback(user: AppUser | { handle: string; resolveUser
         page: cmd.page, priority: cmd.priority, kind: cmd.kind, location: issue.location,
         attachments: issue.attachments,
       },
-    });
+    }, q);
   }, 250, options.clock);
 
   return issue;

@@ -1,7 +1,8 @@
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import { fileIssueSink } from '../../lib/issues/file';
-import { withDb, type Db } from '../../lib/db';
-import { bestEffortDb, DbBusyError, prioritizeDb, withBackgroundDb, type QueueClock } from '../../lib/db/scheduling';
+import { getDb, openFresh, withDb, type Db } from '../../lib/db';
+import { bestEffortDb, cancellableDb, DbBusyError, isDbBusy, prioritizeDb, withBackgroundDb, type QueueClock } from '../../lib/db/scheduling';
+import { singleFlight } from '../../lib/in-flight';
 import { fileFeedback } from '../../modules/platform/service';
 import type { Check } from './harness';
 
@@ -35,6 +36,86 @@ function heldDb(clock: QueueClock) {
 }
 
 export async function availabilityProperties(check: Check) {
+  {
+    // A first caller owns its wait, never the process-wide boot promise.
+    const global = globalThis as typeof globalThis & { __capitalOsDb?: Promise<Db>; __capitalOsMigrationCheck?: unknown };
+    const prior = global.__capitalOsDb, priorCheck = global.__capitalOsMigrationCheck;
+    const timer = fakeClock();
+    let shared!: Promise<Db>, opened: Db | undefined;
+    delete global.__capitalOsDb;
+    delete global.__capitalOsMigrationCheck;
+    try {
+      const first = bestEffortDb(() => {
+        shared = openFresh('memory://');
+        return shared;
+      }, 250, timer.clock);
+      timer.advance(250);
+      await first;
+      let healthy = false;
+      try {
+        opened = await shared;
+        await (await getDb()).query('select 1');
+        healthy = true;
+      } catch { /* A poisoned boot promise must fail this property, not the harness. */ }
+      check('busy-stuck expired first caller cannot poison shared DB boot for later pages', healthy,
+        'Expire feedback while boot is pending, then await the shared boot and query through ordinary getDb.');
+      if (opened) {
+        let attempts = 0;
+        const db = opened;
+        global.__capitalOsDb = Promise.resolve({
+          ...db, kind: 'postgres',
+          exec: async sql => { if (++attempts === 1) throw new DbBusyError(); await db.exec(sql); },
+        });
+        delete global.__capitalOsMigrationCheck;
+        await getDb();
+        const afterBusy = global.__capitalOsMigrationCheck as unknown as { files: string; running: unknown };
+        const notApplied = afterBusy.files === '' && afterBusy.running === null;
+        await getDb();
+        check('busy-stuck migration catch-up retries busy refusal without marking files applied',
+          notApplied && attempts > 1 && afterBusy.files !== '',
+          'The first migration bootstrap is refused as busy; ordinary getDb retries and completes the unchanged inventory.');
+      }
+    } finally {
+      await opened?.close();
+      global.__capitalOsDb = prior;
+      global.__capitalOsMigrationCheck = priorCheck;
+    }
+  }
+  {
+    const timer = fakeClock(), held = heldDb(timer.clock), share = singleFlight();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const load = async () => { await gate; return held.db.query('shared-page'); };
+    const first = bestEffortDb(() => share('page', load), 250, timer.clock);
+    const joined = share('page', load).then(() => true, () => false);
+    timer.advance(250); await first;
+    release();
+    check('busy-stuck a normal caller joining shared work survives its first caller expiring',
+      await joined && held.calls.join('|') === 'shared-page',
+      'Shared loaders never receive an implicit abort signal from their creator.');
+  }
+  {
+    const timer = fakeClock(), held = heldDb(timer.clock);
+    const errors: unknown[][] = [], originalError = console.error;
+    console.error = (...args: unknown[]) => { errors.push(args); };
+    try {
+      for (let i = 0; i < 2; i++) {
+        const query = held.db.query(`idle-${i}`);
+        timer.advance(20_001);
+        await query;
+      }
+      check('busy-stuck idle busy guard runs queries and logs one diagnostic stack',
+        held.calls.join('|') === 'idle-0|idle-1' && errors.length === 1
+          && String(errors[0]?.[1]).includes('availability.ts'),
+        'A timer firing before dispatch cannot refuse an idle database, and repeated recovery does not flood logs.');
+    } finally { console.error = originalError; }
+    const controller = new AbortController(); controller.abort();
+    const cancelled = await cancellableDb(held.db, controller.signal).query('cancelled-write')
+      .then(() => false, error => error.name === 'AbortError' && !isDbBusy(error));
+    check('busy-stuck explicit cancellation remains cancelled even with an idle database',
+      cancelled && !held.calls.includes('cancelled-write'),
+      'Cancellation is distinct from capacity refusal; the idle guard must not resurrect expired writes.');
+  }
   for (const fire of [true, false]) {
     const timer = fakeClock(), held = heldDb(timer.clock);
     const active = held.db.query('held'); await held.started;
@@ -47,16 +128,18 @@ export async function availabilityProperties(check: Check) {
     await Promise.all([active, maintenance]);
     const rejected = await abandoned;
     await held.db.query('healthy-page');
-    check(`PERF3 expired queries never run (${fire ? 'timer fired' : 'timer delayed by busy event loop'})`,
-      rejected && held.calls.join('|') === 'held|maintenance|healthy-page',
-      'Dispatch checks age before execution too; maintenance remains eligible and the queue recovers.');
+    check(`PERF3 queue deadline (${fire ? 'refused while blocked' : 'idle recovery after delayed timer'})`,
+      fire ? rejected && held.calls.join('|') === 'held|maintenance|healthy-page'
+        : !rejected && held.calls.join('|') === 'held|expired-page|maintenance|healthy-page',
+      'Busy work is refused; an idle queue recovers instead of manufacturing a busy response.');
   }
 
   {
     const timer = fakeClock(), held = heldDb(timer.clock);
-    const work = bestEffortDb(async () => {
-      await held.db.query('held');
-      await held.db.query('late-followup');
+    const work = bestEffortDb(async signal => {
+      const q = cancellableDb(held.db, signal);
+      await q.query('held');
+      await q.query('late-followup');
     }, 250, timer.clock);
     await held.started;
     timer.advance(250);
@@ -65,7 +148,7 @@ export async function availabilityProperties(check: Check) {
     await held.db.query('healthy-page');
     check('PERF3 best-effort expiry does not enqueue a follow-up after an uninterruptible active query',
       held.calls.join('|') === 'held|healthy-page',
-      'Already-running SQL finishes; its cancelled async context refuses later DB work.');
+      'Already-running SQL finishes; its explicit cancelled handle refuses later DB work.');
   }
 
   const scratch = 'data/demo/perf3-feedback-properties';
@@ -78,9 +161,9 @@ export async function availabilityProperties(check: Check) {
     const lookup = new Promise<void>(resolve => { lookupStarted = resolve; });
     const issue = await withDb(held.db, () => fileFeedback({
       handle: 'invented-reporter',
-      resolveUser: async () => {
+      resolveUser: async q => {
         lookupStarted();
-        await held.db.query('reporter-lookup');
+        await q.query('reporter-lookup');
         throw new Error('Invented missing reporter');
       },
     }, { title: ' Invented blocked database ', body: 'The page did not load.\n\n![First](attachment:1)\n\n![Second](attachment:2)', attachments: [
@@ -109,10 +192,10 @@ export async function availabilityProperties(check: Check) {
     check('0064 attachment bytes survive abandoned metadata work',
       (await Promise.all(issue.attachments.map(path => readFile(`${scratch}/${path}`, 'utf8')))).join('|') === attached.join('|'),
       'Database timeout leaves every attachment unchanged.');
-    const failed = await fileFeedback({ handle: 'invented-reporter', resolveUser: async () => { throw new Error('Invented lookup failure'); } }, {
+    const failed = await withDb(held.db, () => fileFeedback({ handle: 'invented-reporter', resolveUser: async () => { throw new Error('Invented lookup failure'); } }, {
       title: 'Invented failed metadata', body: '![Retained](attachment:1)', kind: 'bug', priority: 'P2', page: '/invented', context: {},
       attachments: [{ kind: 'image', contentType: 'image/png', base64: Buffer.from('invented-retained').toString('base64') }],
-    }, { sink: fileIssueSink(scratch) });
+    }, { sink: fileIssueSink(scratch) }));
     check('0064 failed reporter lookup still returns a complete file receipt with attachments',
       (await readFile(failed.location, 'utf8')).includes('![Retained](attachments/0002-image-1.png)')
         && await readFile(`${scratch}/${failed.attachments[0]}`, 'utf8') === 'invented-retained',

@@ -6,8 +6,8 @@ type UserRow = {
 };
 const toUser = (r: UserRow): AppUser => r;
 
-export async function listUsers(): Promise<AppUser[]> {
-  const db = await getDb();
+export async function listUsers(q?: Queryable): Promise<AppUser[]> {
+  const db = q ?? await getDb();
   const rows = await db.query<UserRow>(
     'select id, handle, name, initials, role, email from platform.app_user where active order by created_at',
   );
@@ -18,8 +18,8 @@ export async function listUsers(): Promise<AppUser[]> {
  * A person who can act here. Inactive rows — the system's own actor for reconciliation's
  * proposals (N57) — are not found, so nobody can switch to one and approve what it asked.
  */
-export async function getUserByHandle(handle: string): Promise<AppUser | null> {
-  const db = await getDb();
+export async function getUserByHandle(handle: string, q?: Queryable): Promise<AppUser | null> {
+  const db = q ?? await getDb();
   const row = await db.one<UserRow>(
     'select id, handle, name, initials, role, email from platform.app_user where handle = $1 and active',
     [handle],
@@ -60,8 +60,8 @@ export async function listSyncSources(): Promise<SourceSync[]> {
   }));
 }
 
-export async function insertFeedback(input: FeedbackInput): Promise<Feedback> {
-  const db = await getDb();
+export async function insertFeedback(input: FeedbackInput, q?: Queryable): Promise<Feedback> {
+  const db = q ?? await getDb();
   const row = await db.one<{ id: string; created_at: Date | string }>(
     `insert into platform.feedback (title, body, kind, priority, reporter_id, page, labels, context)
      values ($1,$2,$3,$4,$5,$6,$7,$8) returning id, created_at`,
@@ -72,8 +72,8 @@ export async function insertFeedback(input: FeedbackInput): Promise<Feedback> {
   return { ...input, id: row.id, issueRef: null, issuePath: null, status: 'open', createdAt: new Date(row.created_at) };
 }
 
-export async function attachIssueRef(id: string, ref: string, path: string): Promise<void> {
-  const db = await getDb();
+export async function attachIssueRef(id: string, ref: string, path: string, q?: Queryable): Promise<void> {
+  const db = q ?? await getDb();
   await db.query('update platform.feedback set issue_ref = $2, issue_path = $3 where id = $1', [id, ref, path]);
 }
 
