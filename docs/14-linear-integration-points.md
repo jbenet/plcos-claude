@@ -1,6 +1,10 @@
 # Linear — the integration points, written down before the connector exists
 
-**Status: nothing is wired.** No Linear client is installed, no API token exists, and none
+**Update, 27 Sep 2026:** a read-only Linear connector exists, and custom fields are answered
+(there are none). See `docs/24-linear.md` for what was built and the plan for writes; this file
+remains the record of the seams below.
+
+**Status (before 27 Sep): nothing is wired.** No Linear client is installed, no API token exists, and none
 will before L13. This file is the list of places the product already assumes a tracker, so
 that when the connector lands nobody has to go looking for them.
 

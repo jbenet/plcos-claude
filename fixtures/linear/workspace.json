@@ -1,0 +1,1095 @@
+{
+ "teams": [
+  {
+   "id": "team-fr",
+   "key": "FR",
+   "name": "Fundraise",
+   "createdAt": "2026-09-01T10:00:00.000Z",
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "team-ops",
+   "key": "OPS",
+   "name": "Operations",
+   "createdAt": "2026-09-01T10:00:00.000Z",
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  }
+ ],
+ "users": [
+  {
+   "id": "user-juan",
+   "name": "Juan",
+   "displayName": "juan",
+   "email": "juan@example.com",
+   "active": true,
+   "createdAt": "2026-09-01T10:00:00.000Z",
+   "updatedAt": "2026-09-03T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "user-mara",
+   "name": "Mara Lind",
+   "displayName": "mara",
+   "email": "mara@example.com",
+   "active": true,
+   "createdAt": "2026-09-01T10:00:00.000Z",
+   "updatedAt": "2026-09-03T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "user-sam",
+   "name": "Sam Okafor",
+   "displayName": "sam",
+   "email": "sam@example.com",
+   "active": true,
+   "createdAt": "2026-09-01T10:00:00.000Z",
+   "updatedAt": "2026-09-03T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "user-ines",
+   "name": "Ines Vidal",
+   "displayName": "ines",
+   "email": "ines@example.com",
+   "active": true,
+   "createdAt": "2026-09-01T10:00:00.000Z",
+   "updatedAt": "2026-09-03T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "user-kit",
+   "name": "Kit Moreno",
+   "displayName": "kit",
+   "email": "kit@contractor.example.org",
+   "active": true,
+   "createdAt": "2026-09-01T10:00:00.000Z",
+   "updatedAt": "2026-09-03T10:00:00.000Z",
+   "archivedAt": null
+  }
+ ],
+ "states": [
+  {
+   "id": "state-fr-backlog",
+   "name": "Backlog",
+   "type": "backlog",
+   "position": 0,
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "state-fr-unstarted",
+   "name": "Todo",
+   "type": "unstarted",
+   "position": 1,
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "state-fr-started",
+   "name": "In Progress",
+   "type": "started",
+   "position": 2,
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "state-fr-completed",
+   "name": "Done",
+   "type": "completed",
+   "position": 3,
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "state-fr-canceled",
+   "name": "Canceled",
+   "type": "canceled",
+   "position": 4,
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "state-ops-backlog",
+   "name": "Backlog",
+   "type": "backlog",
+   "position": 0,
+   "team": {
+    "id": "team-ops"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "state-ops-unstarted",
+   "name": "Todo",
+   "type": "unstarted",
+   "position": 1,
+   "team": {
+    "id": "team-ops"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "state-ops-started",
+   "name": "In Progress",
+   "type": "started",
+   "position": 2,
+   "team": {
+    "id": "team-ops"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "state-ops-completed",
+   "name": "Done",
+   "type": "completed",
+   "position": 3,
+   "team": {
+    "id": "team-ops"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "state-ops-canceled",
+   "name": "Canceled",
+   "type": "canceled",
+   "position": 4,
+   "team": {
+    "id": "team-ops"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  }
+ ],
+ "labels": [
+  {
+   "id": "label-okr",
+   "name": "Quarter goals",
+   "isGroup": true,
+   "parent": null,
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "label-o1kr1",
+   "name": "Goal A",
+   "isGroup": false,
+   "parent": {
+    "id": "label-okr"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "label-o1kr2",
+   "name": "Goal B",
+   "isGroup": false,
+   "parent": {
+    "id": "label-okr"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "label-cadence",
+   "name": "Kind",
+   "isGroup": true,
+   "parent": null,
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "label-weekly",
+   "name": "Follow-up",
+   "isGroup": false,
+   "parent": {
+    "id": "label-cadence"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "label-oneoff",
+   "name": "Document",
+   "isGroup": false,
+   "parent": {
+    "id": "label-cadence"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "label-bug",
+   "name": "Bug",
+   "isGroup": false,
+   "parent": null,
+   "team": null,
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  }
+ ],
+ "projects": [
+  {
+   "id": "project-neuro-checklist",
+   "name": "Neurotech closing checklist",
+   "description": "Invented demo project: neurotech closing checklist.",
+   "slugId": "neuro-checklist",
+   "url": "https://linear.example/demo/project/neuro-checklist",
+   "status": {
+    "name": "In Progress",
+    "type": "started"
+   },
+   "lead": {
+    "id": "user-juan"
+   },
+   "startDate": "2026-09-01",
+   "targetDate": "2026-12-15",
+   "startedAt": "2026-09-08T10:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "createdAt": "2026-09-05T10:00:00.000Z",
+   "updatedAt": "2026-09-24T10:00:00.000Z",
+   "archivedAt": null,
+   "teams": {
+    "nodes": [
+     {
+      "id": "team-fr"
+     }
+    ]
+   },
+   "labelIds": [],
+   "health": "onTrack",
+   "priority": 2
+  },
+  {
+   "id": "project-rails-outreach",
+   "name": "Rails outreach",
+   "description": "Invented demo project: rails outreach.",
+   "slugId": "rails-outreach",
+   "url": "https://linear.example/demo/project/rails-outreach",
+   "status": {
+    "name": "In Progress",
+    "type": "started"
+   },
+   "lead": {
+    "id": "user-mara"
+   },
+   "startDate": "2026-09-10",
+   "targetDate": "2026-12-31",
+   "startedAt": "2026-09-08T10:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "createdAt": "2026-09-05T10:00:00.000Z",
+   "updatedAt": "2026-09-24T10:00:00.000Z",
+   "archivedAt": null,
+   "teams": {
+    "nodes": [
+     {
+      "id": "team-fr"
+     }
+    ]
+   },
+   "labelIds": [],
+   "health": "onTrack",
+   "priority": 2
+  },
+  {
+   "id": "project-cortex-docs",
+   "name": "SPV — Cortex documents",
+   "description": "Invented demo project: spv — cortex documents.",
+   "slugId": "cortex-docs",
+   "url": "https://linear.example/demo/project/cortex-docs",
+   "status": {
+    "name": "Planned",
+    "type": "planned"
+   },
+   "lead": {
+    "id": "user-sam"
+   },
+   "startDate": "2026-10-01",
+   "targetDate": "2026-11-15",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "createdAt": "2026-09-05T10:00:00.000Z",
+   "updatedAt": "2026-09-24T10:00:00.000Z",
+   "archivedAt": null,
+   "teams": {
+    "nodes": [
+     {
+      "id": "team-fr"
+     }
+    ]
+   },
+   "labelIds": [],
+   "health": null,
+   "priority": 2
+  },
+  {
+   "id": "project-investor-events",
+   "name": "Investor events",
+   "description": "Invented demo project: investor events.",
+   "slugId": "investor-events",
+   "url": "https://linear.example/demo/project/investor-events",
+   "status": {
+    "name": "In Progress",
+    "type": "started"
+   },
+   "lead": {
+    "id": "user-ines"
+   },
+   "startDate": "2026-09-15",
+   "targetDate": null,
+   "startedAt": "2026-09-08T10:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "createdAt": "2026-09-05T10:00:00.000Z",
+   "updatedAt": "2026-09-24T10:00:00.000Z",
+   "archivedAt": null,
+   "teams": {
+    "nodes": [
+     {
+      "id": "team-fr"
+     }
+    ]
+   },
+   "labelIds": [],
+   "health": "onTrack",
+   "priority": 2
+  },
+  {
+   "id": "project-tooling",
+   "name": "Office admin",
+   "description": "Invented demo project: office admin.",
+   "slugId": "tooling",
+   "url": "https://linear.example/demo/project/tooling",
+   "status": {
+    "name": "Backlog",
+    "type": "backlog"
+   },
+   "lead": null,
+   "startDate": null,
+   "targetDate": null,
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "createdAt": "2026-09-05T10:00:00.000Z",
+   "updatedAt": "2026-09-24T10:00:00.000Z",
+   "archivedAt": null,
+   "teams": {
+    "nodes": [
+     {
+      "id": "team-ops"
+     }
+    ]
+   },
+   "labelIds": [],
+   "health": null,
+   "priority": 2
+  }
+ ],
+ "milestones": [
+  {
+   "id": "ms-1",
+   "name": "Anchor LPs signed",
+   "targetDate": "2026-11-01",
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "sortOrder": 1,
+   "updatedAt": "2026-09-20T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "ms-2",
+   "name": "First close",
+   "targetDate": "2026-12-15",
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "sortOrder": 2,
+   "updatedAt": "2026-09-20T10:00:00.000Z",
+   "archivedAt": null
+  }
+ ],
+ "cycles": [],
+ "issues": [
+  {
+   "id": "issue-001",
+   "identifier": "FR-1",
+   "title": "Send Roos Foundation the updated deck",
+   "description": "Invented demo task. Send Roos Foundation the updated deck.",
+   "url": "https://linear.example/demo/issue/1",
+   "priority": 0,
+   "estimate": 2,
+   "dueDate": "2026-10-02",
+   "createdAt": "2026-09-19T10:00:00.000Z",
+   "updatedAt": "2026-09-25T09:00:00.000Z",
+   "startedAt": "2026-09-23T10:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-started"
+   },
+   "assignee": {
+    "id": "user-juan"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "projectMilestone": {
+    "id": "ms-1"
+   },
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-o1kr1"
+   ]
+  },
+  {
+   "id": "issue-002",
+   "identifier": "FR-2",
+   "title": "Draft the quarterly letter",
+   "description": "Invented demo task. Draft the quarterly letter.",
+   "url": "https://linear.example/demo/issue/2",
+   "priority": 1,
+   "estimate": null,
+   "dueDate": "2026-10-05",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-24T10:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": {
+    "id": "user-mara"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "projectMilestone": {
+    "id": "ms-1"
+   },
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-o1kr1",
+    "label-weekly"
+   ]
+  },
+  {
+   "id": "issue-003",
+   "identifier": "FR-3",
+   "title": "Book diligence call with Okonjo Family Office",
+   "description": "Invented demo task. Book diligence call with Okonjo Family Office.",
+   "url": "https://linear.example/demo/issue/3",
+   "priority": 2,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-20T10:00:00.000Z",
+   "updatedAt": "2026-09-26T11:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": {
+    "id": "user-juan"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "projectMilestone": {
+    "id": "ms-1"
+   },
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-o1kr2"
+   ]
+  },
+  {
+   "id": "issue-004",
+   "identifier": "FR-4",
+   "title": "Collect side letter requests",
+   "description": "Invented demo task. Collect side letter requests.",
+   "url": "https://linear.example/demo/issue/4",
+   "priority": 3,
+   "estimate": 2,
+   "dueDate": null,
+   "createdAt": "2026-09-12T10:00:00.000Z",
+   "updatedAt": "2026-09-18T12:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-backlog"
+   },
+   "assignee": {
+    "id": "user-sam"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": {
+    "id": "issue-001"
+   },
+   "labelIds": []
+  },
+  {
+   "id": "issue-005",
+   "identifier": "FR-5",
+   "title": "Data room: refresh the track record page",
+   "description": "Invented demo task. Data room: refresh the track record page.",
+   "url": "https://linear.example/demo/issue/5",
+   "priority": 4,
+   "estimate": null,
+   "dueDate": "2026-09-20",
+   "createdAt": "2026-09-15T10:00:00.000Z",
+   "updatedAt": "2026-09-21T13:00:00.000Z",
+   "startedAt": "2026-09-19T10:00:00.000Z",
+   "completedAt": "2026-09-21T10:00:00.000Z",
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-completed"
+   },
+   "assignee": {
+    "id": "user-ines"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-oneoff"
+   ]
+  },
+  {
+   "id": "issue-006",
+   "identifier": "FR-6",
+   "title": "First-close checklist with counsel",
+   "description": "Invented demo task. First-close checklist with counsel.",
+   "url": "https://linear.example/demo/issue/6",
+   "priority": 0,
+   "estimate": null,
+   "dueDate": "2026-11-20",
+   "createdAt": "2026-09-16T10:00:00.000Z",
+   "updatedAt": "2026-09-22T14:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": {
+    "id": "user-sam"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-007",
+   "identifier": "FR-7",
+   "title": "Rails one-pager, second draft",
+   "description": "Invented demo task. Rails one-pager, second draft.",
+   "url": "https://linear.example/demo/issue/7",
+   "priority": 1,
+   "estimate": 2,
+   "dueDate": "2026-10-01",
+   "createdAt": "2026-09-20T10:00:00.000Z",
+   "updatedAt": "2026-09-26T15:00:00.000Z",
+   "startedAt": "2026-09-24T10:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-started"
+   },
+   "assignee": {
+    "id": "user-mara"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-rails-outreach"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-o1kr2"
+   ]
+  },
+  {
+   "id": "issue-008",
+   "identifier": "FR-8",
+   "title": "List allocators to approach",
+   "description": "Invented demo task. List allocators to approach.",
+   "url": "https://linear.example/demo/issue/8",
+   "priority": 2,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-17T10:00:00.000Z",
+   "updatedAt": "2026-09-23T16:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": {
+    "id": "user-mara"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-rails-outreach"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-009",
+   "identifier": "FR-9",
+   "title": "Rails deck: portfolio slide",
+   "description": "Invented demo task. Rails deck: portfolio slide.",
+   "url": "https://linear.example/demo/issue/9",
+   "priority": 3,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-13T10:00:00.000Z",
+   "updatedAt": "2026-09-19T09:00:00.000Z",
+   "startedAt": "2026-09-17T10:00:00.000Z",
+   "completedAt": "2026-09-19T10:00:00.000Z",
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-completed"
+   },
+   "assignee": {
+    "id": "user-ines"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-rails-outreach"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-010",
+   "identifier": "FR-10",
+   "title": "Cortex SPV: term sheet summary",
+   "description": "Invented demo task. Cortex SPV: term sheet summary.",
+   "url": "https://linear.example/demo/issue/10",
+   "priority": 4,
+   "estimate": 2,
+   "dueDate": "2026-10-10",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-24T10:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": {
+    "id": "user-sam"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-cortex-docs"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-011",
+   "identifier": "FR-11",
+   "title": "Cortex SPV: subscription docs review",
+   "description": "Invented demo task. Cortex SPV: subscription docs review.",
+   "url": "https://linear.example/demo/issue/11",
+   "priority": 0,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-24T11:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-backlog"
+   },
+   "assignee": null,
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-cortex-docs"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-012",
+   "identifier": "FR-12",
+   "title": "Breakfast: guest list",
+   "description": "Invented demo task. Breakfast: guest list.",
+   "url": "https://linear.example/demo/issue/12",
+   "priority": 1,
+   "estimate": null,
+   "dueDate": "2026-10-08",
+   "createdAt": "2026-09-20T10:00:00.000Z",
+   "updatedAt": "2026-09-26T12:00:00.000Z",
+   "startedAt": "2026-09-24T10:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-started"
+   },
+   "assignee": {
+    "id": "user-ines"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-investor-events"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-weekly"
+   ]
+  },
+  {
+   "id": "issue-013",
+   "identifier": "FR-13",
+   "title": "Breakfast: venue",
+   "description": "Invented demo task. Breakfast: venue.",
+   "url": "https://linear.example/demo/issue/13",
+   "priority": 2,
+   "estimate": 2,
+   "dueDate": null,
+   "createdAt": "2026-09-11T10:00:00.000Z",
+   "updatedAt": "2026-09-17T13:00:00.000Z",
+   "startedAt": "2026-09-15T10:00:00.000Z",
+   "completedAt": "2026-09-17T10:00:00.000Z",
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-completed"
+   },
+   "assignee": {
+    "id": "user-kit"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-investor-events"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-014",
+   "identifier": "FR-14",
+   "title": "Pipeline review notes",
+   "description": "Invented demo task. Pipeline review notes.",
+   "url": "https://linear.example/demo/issue/14",
+   "priority": 3,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-20T10:00:00.000Z",
+   "updatedAt": "2026-09-26T14:00:00.000Z",
+   "startedAt": "2026-09-24T10:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-started"
+   },
+   "assignee": {
+    "id": "user-juan"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": null,
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-weekly"
+   ]
+  },
+  {
+   "id": "issue-015",
+   "identifier": "OPS-15",
+   "title": "Expense report template",
+   "description": "Invented demo task. Expense report template.",
+   "url": "https://linear.example/demo/issue/15",
+   "priority": 4,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-06T10:00:00.000Z",
+   "updatedAt": "2026-09-12T15:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": "2026-09-12T10:00:00.000Z",
+   "archivedAt": null,
+   "state": {
+    "id": "state-ops-canceled"
+   },
+   "assignee": {
+    "id": "user-kit"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-ops"
+   },
+   "project": {
+    "id": "project-tooling"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-016",
+   "identifier": "OPS-16",
+   "title": "Shared drive clean-up",
+   "description": "Invented demo task. Shared drive clean-up.",
+   "url": "https://linear.example/demo/issue/16",
+   "priority": 0,
+   "estimate": 2,
+   "dueDate": null,
+   "createdAt": "2026-09-08T10:00:00.000Z",
+   "updatedAt": "2026-09-14T16:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-ops-backlog"
+   },
+   "assignee": {
+    "id": "user-kit"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-ops"
+   },
+   "project": {
+    "id": "project-tooling"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-bug"
+   ]
+  }
+ ],
+ "comments": [
+  {
+   "id": "comment-1",
+   "body": "Deck v3 attached in the data room.",
+   "issue": {
+    "id": "issue-001"
+   },
+   "user": {
+    "id": "user-mara"
+   },
+   "parent": null,
+   "createdAt": "2026-09-25T10:00:00.000Z",
+   "updatedAt": "2026-09-25T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "comment-2",
+   "body": "Thanks — sending Monday.",
+   "issue": {
+    "id": "issue-001"
+   },
+   "user": {
+    "id": "user-juan"
+   },
+   "parent": null,
+   "createdAt": "2026-09-26T10:00:00.000Z",
+   "updatedAt": "2026-09-26T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "comment-3",
+   "body": "Portfolio numbers updated.",
+   "issue": {
+    "id": "issue-007"
+   },
+   "user": {
+    "id": "user-ines"
+   },
+   "parent": null,
+   "createdAt": "2026-09-26T10:00:00.000Z",
+   "updatedAt": "2026-09-26T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "comment-4",
+   "body": "Two rooms shortlisted.",
+   "issue": {
+    "id": "issue-012"
+   },
+   "user": {
+    "id": "user-kit"
+   },
+   "parent": null,
+   "createdAt": "2026-09-25T10:00:00.000Z",
+   "updatedAt": "2026-09-25T10:00:00.000Z",
+   "archivedAt": null
+  }
+ ]
+}

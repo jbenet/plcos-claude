@@ -16,6 +16,8 @@ import { SHOT } from './shot-image';
  *   5. In-app links go through components/ui/AppLink (issues 0027–0028): next/link is
  *      imported only there, so an old address is put in its place before a click instead of
  *      being redirected in the middle of a client navigation, which Safari broke on.
+ *   3b. The same for Linear (docs/24-linear.md): only lib/connectors/linear/ names its host or the
+ *      variable that holds its key.
  *   6. Browser code never calls crypto.randomUUID (issue 0104): it is undefined outside a secure
  *      context, and the live server is reached over plain http on the local network. A request
  *      key comes from lib/request-key.ts, which falls back to crypto.getRandomValues.
@@ -25,6 +27,9 @@ const DRIVERS = ['@electric-sql/pglite', "from 'pg'", 'from "pg"'];
 const AFFINITY = ['api.affinity.co', 'AFFINITY_API_KEY'];
 // Dakota (docs/20-dakota.md): only its connector names the host; its data stays in data/real and the database.
 const DAKOTA = ['marketplace-as-a-service.herokuapp.com'];
+// Linear (docs/24-linear.md): only its connector names the host or the key's variable; its client sends queries only.
+const LINEAR = ['api.linear.app', 'LINEAR_API_KEY'];
+const LINEAR_PROPERTIES = new Set(['scripts/properties/linear.ts']);
 // The original harness exception follows only the three files that hold those checks.
 const AFFINITY_PROPERTIES = new Set([
   'scripts/properties/affinity.ts', 'scripts/properties/affinity-notes.ts',
@@ -72,6 +77,12 @@ async function main() {
     if (!rel.startsWith(join('lib', 'connectors', 'dakota')) && rel !== 'scripts/boundaries.ts') {
       for (const needle of DAKOTA) {
         if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/dakota/ talks to Dakota`);
+      }
+    }
+
+    if (!rel.startsWith(join('lib', 'connectors', 'linear')) && rel !== 'scripts/boundaries.ts' && !LINEAR_PROPERTIES.has(rel)) {
+      for (const needle of LINEAR) {
+        if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/linear/ talks to Linear`);
       }
     }
 

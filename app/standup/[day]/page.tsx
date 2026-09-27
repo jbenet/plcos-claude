@@ -364,10 +364,9 @@ async function Standup({ params }: { params: Promise<{ day: string }> }) {
             </tbody>
           </table>
           <p className="cover">
-            <b>Fixture data.</b> No Linear client is installed and none will be before L13 — and
-            the custom-field schema this would map onto is still UNVERIFIED in all three design
-            packages. This pane shows the shape the summary will take, labelled so nobody mistakes
-            it for a sync.
+            <b>Fixture data.</b> Linear is now synced read-only (Developer → Linear), but this pane
+            is not wired to it yet: whether it should be waits on the plan in docs/24-linear.md.
+            It shows the shape the summary would take, labelled so nobody mistakes it for a sync.
           </p>
         </div>
 

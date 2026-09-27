@@ -1,8 +1,8 @@
-export type ActivitySource = 'affinity' | 'warehouse' | 'dakota' | 'intake' | 'search' | 'fetch' | 'sec' | 'agents';
+export type ActivitySource = 'affinity' | 'warehouse' | 'dakota' | 'linear' | 'intake' | 'search' | 'fetch' | 'sec' | 'agents';
 export interface ActivityPoint {
   day: string;                 // YYYY-MM-DD (UTC)
   source: ActivitySource;
-  segment: string | null;      // a sub-series within the source (e.g. affinity: 'lists' | 'notes' | 'meetings'; dakota: 'account' | 'contact'; agents: workflow id), or null
+  segment: string | null;      // a sub-series within the source (e.g. affinity: 'lists' | 'notes' | 'meetings'; dakota: 'account' | 'contact'; linear: 'issues' | 'projects' | …; agents: workflow id), or null
   requests: number | null;     // outbound requests (null = unknown)
   bytesIn: number | null;
   bytesOut: number | null;

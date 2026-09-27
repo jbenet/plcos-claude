@@ -2,7 +2,7 @@
  * The one launcher behind the servers (docs/COLLAB.md).
  *
  *   npm run dev          the demo, on this folder's demo port
- *   npm run dev:real     the real data, on a live row's real port, with the Affinity key
+ *   npm run dev:real     the real data, on a live row's real port, with the Affinity and Linear keys
  *   npm run preview      on a dev row: a fresh copy of the real data, on its preview port, no key
  *   npm run start        the demo, from a production build (npm run build)
  *   npm run start:real   the real data, from its production build (npm run build:real)
@@ -19,6 +19,7 @@ import { constants } from 'node:os';
 import { join, resolve } from 'node:path';
 import { portFor, readLayout, type Layout, type Serve } from '../config/ports';
 import { withoutKey } from '../lib/connectors/affinity/key';
+import { withoutLinearKey } from '../lib/connectors/linear/key';
 import { lockHolder } from '../lib/db/lock';
 import { checkOpens, previewRefusal, takeCopy } from './preview-copy';
 
@@ -114,14 +115,15 @@ async function main() {
   }
 
   if (serve === 'preview') {
-    env = { ...withoutKey(env), PREVIEW_COPY_AT: await prepareCopy(layout) };
-    say(`serving the copy on :${port}, with no Affinity key. Anything changed there stays in the copy and is thrown away.`);
+    env = { ...withoutLinearKey(withoutKey(env)), PREVIEW_COPY_AT: await prepareCopy(layout) };
+    say(`serving the copy on :${port}, with no Affinity or Linear key. Anything changed there stays in the copy and is thrown away.`);
   } else {
     say(`${layout.folder}: ${serve === 'demo' ? 'the demo' : 'the real data'} on :${port}${production ? ', production build' : ''}`);
   }
 
   const next = ['next', production ? 'start' : 'dev', '--hostname', '0.0.0.0', '--port', String(port), ...extra];
-  const command = serve === 'real' ? [join(layout.root, 'scripts', 'with-affinity-key.sh'), ...next] : next;
+  // The live server reads both keys, each from its own Keychain item (docs/15, docs/24-linear.md).
+  const command = serve === 'real' ? [join(layout.root, 'scripts', 'with-affinity-key.sh'), join(layout.root, 'scripts', 'with-linear-key.sh'), ...next] : next;
   const child = spawn(command[0]!, command.slice(1), { stdio: 'inherit', env });
   child.on('error', (err) => refuse(`Could not start ${command[0]}: ${err.message}`));
   // The terminal sends Ctrl-C to both; a signal sent to this process alone is passed on, so the
