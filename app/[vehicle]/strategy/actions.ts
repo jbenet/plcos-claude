@@ -20,5 +20,9 @@ export async function importMoveFile(): Promise<{error?:string;message?:string}>
     const path=config.data.profile === 'real' ? join(process.cwd(),'data/real/strategy-moves/menu.json') : join(process.cwd(),'fixtures/strategy-moves.json');
     const result=await importMoves(await getDb(),JSON.parse(await readFile(path,'utf8')),(await currentUser()).id);
     revalidatePath('/[vehicle]/strategy','page'); return {message:`${result.written} moves imported; ${result.read-result.written} unchanged.`};
-  } catch { return {error:'Import refused. Check menu.json, provenance, GUESS inputs and vehicle scopes; no partial import was applied.'}; }
+  } catch(e) {
+    // The validator's own fixed messages say which check refused; anything else stays generic.
+    const why=e instanceof Error && /^(Invalid|Missing|Duplicate|Unknown|Removing|Estimate)/.test(e.message) ? ` ${e.message}` : '';
+    return {error:`Import refused.${why} Check menu.json, provenance, GUESS inputs and vehicle scopes; no partial import was applied.`};
+  }
 }
