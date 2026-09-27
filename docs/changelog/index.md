@@ -161,3 +161,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Activity performance — persisted file digests and background refresh](entries/activity-perf.md)
 
 - [Prospect precedence — researched decisions survive intake conflicts](entries/prospect-precedence.md)
+
+- [Responsive server — PGlite and imports leave the request thread](entries/responsive-server.md)

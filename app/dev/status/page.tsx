@@ -18,6 +18,7 @@ import { poolChecks } from '@/modules/pipeline';
 import { listConflicts } from '@/modules/coordination';
 import { loadLedger } from '@/lib/workflows/view';
 import { dakotaStatus, polarisStatus, type SourceState } from '@/lib/dev/sources';
+import { responsivenessSnapshot } from '@/lib/responsiveness';
 import st from './status.module.css';
 
 const STATE_FLAG: Record<SourceState | string, string> = { ok: 'f-ok', partial: 'f-ev', failed: 'f-block', not_attached: 'f-mute' };
@@ -63,6 +64,7 @@ async function Status() {
     },
   ];
   const extra = [dakota, polaris];
+  const responsiveness = responsivenessSnapshot();
 
   return (
     <Page
@@ -115,6 +117,25 @@ async function Status() {
         What is running, what is attached, and what a person should look at. The problems list is
         computed from the hard rules rather than maintained by hand.
       </p>
+
+      <div className="card">
+        <div className="chead">
+          <h2>Server responsiveness</h2>
+          <span className="lbl">main event loop · measured locally</span>
+        </div>
+        <div className="cbody">
+          {responsiveness ? <>
+            <div className="fact"><span>Event-loop delay, p99</span><span>{responsiveness.p99Ms.toFixed(1)} ms</span></div>
+            <div className="fact"><span>Longest delay</span><span>{responsiveness.maxMs.toFixed(1)} ms</span></div>
+            <div className="fact"><span>Window</span><span>{(responsiveness.windowMs / 1000).toFixed(0)} s · ended {ago(new Date(responsiveness.at))}</span></div>
+            <p className="muted">{responsiveness.p99Ms >= config.responsiveness.alertP99Ms
+              ? 'The event loop exceeded the 200 ms p99 budget. Check recent imports and the server activity log.'
+              : 'The event loop stayed within the 200 ms p99 budget for this window.'}
+              {' '}This measures event-loop delay, not page or database response time. Refresh to see the next window.</p>
+          </> : <p className="muted">Collecting the first {config.responsiveness.reportIntervalMs / 1000}-second window. Refresh after that interval to see the measured delay.</p>}
+        </div>
+        <p className="cover">P99 and maximum delay are recorded once per window in the local activity log. The monitor needs no database connection.</p>
+      </div>
 
       <div className="card">
         <div className="chead">

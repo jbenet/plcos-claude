@@ -10,6 +10,18 @@ import type { ImportJob, ImportProgress } from './types';
 export async function runImportOperation(db: Db, job: ImportJob, progress: ImportProgress): Promise<Record<string, unknown>> {
   const actor = job.actor;
   switch (job.kind) {
+    case 'network': {
+      await progress('Building relationship ties',0,1);
+      const result=await (await import('@/modules/network')).buildNetwork({awaitBackground:true});
+      await appendAudit({actorId:actor,action:'network.built',subjectType:'network',detail:{...result}});
+      return {...result};
+    }
+    case 'export': {
+      await progress('Building research export',0,1);
+      const result=await (await import('@/lib/enrich/candidates')).exportResearchSet();
+      await appendAudit({actorId:actor,action:'enrich.exported',subjectType:'enrich',detail:{candidates:result.candidates,people:result.people,orgs:result.orgs}});
+      return {...result};
+    }
     case 'findings': {
       await progress('Repairing team identities',0,3);
       const { enrichDir } = await import('@/lib/enrich/candidates');
@@ -25,7 +37,7 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
         entityTypes:{corrected:r.entityTypes?.corrected.length??0,ambiguous:r.entityTypes?.ambiguous.length??0} };
       await appendAudit({actorId:actor,action:'enrich.imported',subjectType:'enrich',detail:counts});
       await progress('Rebuilding research ties',2,3);
-      await (await import('@/modules/network')).buildNetwork();
+      await (await import('@/modules/network')).buildNetwork({awaitBackground:true});
       return counts;
     }
     case 'prospects': {
@@ -90,7 +102,7 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
         await progress('Proposing evidenced ladder changes',1,3);
         await (await import('@/lib/reconcile')).reconcile(actor);
         await progress('Building relationship ties',2,3);
-        await (await import('@/modules/network')).buildNetwork();
+        await (await import('@/modules/network')).buildNetwork({awaitBackground:true});
       }
       return {records:run.records,requests:run.requests};
     }

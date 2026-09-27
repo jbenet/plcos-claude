@@ -1,4 +1,4 @@
-export const IMPORT_KINDS = ['findings','prospects','duplicates','pursuits','dakota','strategy-moves','affinity'] as const;
+export const IMPORT_KINDS = ['findings','prospects','duplicates','pursuits','dakota','strategy-moves','affinity','network','export'] as const;
 export type ImportKind = typeof IMPORT_KINDS[number];
 export interface ImportJob {
   id: string; kind: ImportKind; actor: string; input: Record<string, unknown>;
@@ -8,6 +8,7 @@ export interface ImportJob {
 }
 export type ImportProgress = (phase: string, done?: number, total?: number | null) => Promise<void>;
 export const IMPORT_LABELS: Record<ImportKind, string> = {
+  network: 'Build network', export: 'Export research set',
   findings: 'Import findings', prospects: 'Add prospects', duplicates: 'Merge duplicate identities',
   pursuits: 'Consolidate pursuits', dakota: 'Import Dakota', 'strategy-moves': 'Import strategy moves', affinity: 'Affinity sync',
 };

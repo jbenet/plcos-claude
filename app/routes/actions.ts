@@ -61,11 +61,10 @@ export async function reviewEdgeAction(formData: FormData): Promise<void> {
 
 /** Link the team to the graph and build its ties from our records and the research (N82). */
 export async function buildNetworkAction(formData: FormData): Promise<void> {
-  const { buildNetwork } = await import('@/modules/network');
-  const { appendAudit } = await import('@/modules/platform');
+  const { queueImportJob } = await import('@/lib/import-jobs/server');
+  const { getDb } = await import('@/lib/db');
   const user = await (await auth()).currentUser();
-  const r = await buildNetwork();
-  await appendAudit({ actorId: user.id, action: 'network.built', subjectType: 'network', detail: { ...r } });
+  await queueImportJob(await getDb(),'network',user.id);
   const target = String(formData.get('target') ?? '');
   revalidatePath('/routes');
   redirect(`/routes${target ? `?target=${target}` : ''}`);

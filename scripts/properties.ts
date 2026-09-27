@@ -30,6 +30,7 @@ async function main() {
     results.push({ name, ok, detail });
   };
   await (await import('./properties/postgres')).databaseProperties(check);
+  await (await import('./properties/pglite-worker')).pgliteWorkerProperties(check);
   await (await import('./properties/postgres-preview')).postgresPreviewProperties(check);
   await (await import('./properties/pg-copy')).pgCopyProperties(check);
   await (await import('./properties/import-jobs')).importJobProperties(check);
@@ -41,6 +42,7 @@ async function main() {
   await (await import('./properties/activity')).activityProperties(check);
   await (await import('./properties/activity-data')).activityDataProperties(check);
   await (await import('./properties/activity-perf')).activityPerfProperties(check);
+  await (await import('./properties/responsiveness')).responsivenessProperties(check);
   await (await import('./properties/activity-connectors')).activityConnectorProperties(check);
   await (await import('./properties/triage-export')).triageExportProperties(check);
 

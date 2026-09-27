@@ -62,7 +62,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <HereProvider asked={asked} vehicle={selection.current?.slug ?? 'all'}>
           <KeyboardShortcuts />
           <AppShell rail={<Rail />} mark={config.product.mark} name={config.product.name}>
-            {config.db.url && <ImportJobs />}
+            <ImportJobs />
             {children}
           </AppShell>
         </HereProvider>
