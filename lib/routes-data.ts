@@ -1,3 +1,6 @@
+import { portfolioFounders } from '@/lib/enrich/portfolio';
+import { recordedRouteScores } from '@/modules/network/cache';
+import { warmthReader } from '@/modules/network/warmth';
 import { createHash } from 'node:crypto';
 import { routeComparison, type ComparisonOptions } from '@/components/routes/route-display';
 import { buildCache } from '@/lib/build-cache';
@@ -10,7 +13,6 @@ import { directContact, type DirectContact } from '@/modules/meetings';
 import { listVehicles } from '@/modules/platform';
 import { tierCounts, type Route } from '@/modules/network';
 import { listPursuits } from '@/modules/strategy';
-import { provisionalScores } from '@/lib/strategy-score';
 import type { TargetRow } from '@/components/routes/TargetPicker';
 const touchWords = (c: DirectContact) => c.via
   ? `${c.how === 'met' ? 'Met' : 'Heard from'} ${c.via}, ${shortDate(c.on)}`
@@ -19,41 +21,25 @@ const touchWords = (c: DirectContact) => c.via
 /** Whole picker inputs shared across route clicks. Database writes and midnight
  * invalidate the snapshot; user-specific ownership stays in the page. */
 const pickerInputs = buildCache(async (vehicleId: string) => {
-  const [tiers, vehicles, fit, team, pursuits, profiles] = await Promise.all([
+  const [tiers, vehicles, fit, team, pursuits, profiles, founders] = await Promise.all([
     tierCounts(), listVehicles(),
     listAssessments(vehicleId || null),
-    (await auth()).listUsers(), listPursuits(vehicleId || null), listFirmProfiles(),
+    (await auth()).listUsers(), listPursuits(vehicleId || null), listFirmProfiles(), portfolioFounders(),
   ]);
 
   // Targets worth showing (issues 0022–0023, real): the LPs in this pipeline and the organisations
   // they act for — not every person and firm in the replica, which made this page 1.7 MB — and
   // never a member of the team, by the team's own list.
-  const affiliations = await affiliationsFor([...new Set(pursuits.filter(p => !p.historical).map(p => p.entityId))]);
+  const affiliations = await affiliationsFor([...new Set([...pursuits.filter(p => !p.historical).map(p => p.entityId), ...Object.keys(founders)])]);
   const teamNames = new Set(team.map((u) => u.name));
-  const inPipeline = new Set(pursuits.filter((p) => !p.historical).map((p) => p.entityId));
+  const inPipeline = new Set([...pursuits.filter((p) => !p.historical).map((p) => p.entityId), ...Object.keys(founders)]);
   for (const a of affiliations) if (a.current && inPipeline.has(a.personId)) inPipeline.add(a.orgId);
   const entities = await listEntities([...inPipeline]);
   const targets = entities.filter((e) => inPipeline.has(e.entityId) && !teamNames.has(e.displayName));
-  /**
-   * The picker carries the fit score, because there is no point finding a beautiful route
-   * to somebody nobody has qualified — and the records around each name, so searching
-   * "Kaplan" turns up the trust and the person who signs for it.
-   */
-  const best = new Map<string, { score: number; blocker: string | null; provisional?: boolean }>();
-  // Whom the team already deals with directly (issue 0027, real): a meeting held, or word from them.
-  const [provisional, contact] = await Promise.all([
-    provisionalScores([...inPipeline]), directContact(targets.map((t) => t.entityId)),
-  ]);
-  // Where no fit assessment exists, a provisional score from the proposed strategy (issue 0022).
-  for (const [id, score] of provisional) best.set(id, { score, blocker: null, provisional: true });
-  for (const a of fit) {
-    const hit = best.get(a.entityId);
-    const score = Math.round(a.weightedFit * 100);
-    // An assessment outranks a provisional score, whatever the numbers.
-    if (!hit || hit.provisional || score > hit.score) {
-      best.set(a.entityId, { score, blocker: BLOCKER_SHORT[a.diagnosis.blocker] });
-    }
-  }
+  // Route strength is primary here; qualification evidence remains available in the signals.
+  const contact = await directContact(targets.map(t=>t.entityId));
+  const assessmentById=new Map(fit.map(a=>[a.entityId,a]));
+  const profileById=new Map(profiles.map(p=>[p.entityId,p]));
   // Index once: scanning the whole affiliation array for every target was quadratic.
   const people = new Map<string, typeof affiliations>();
   const orgs = new Map<string, typeof affiliations>();
@@ -66,20 +52,9 @@ const pickerInputs = buildCache(async (vehicleId: string) => {
       ...(people.get(t.entityId) ?? []).map((x) => x.orgName),
       ...(orgs.get(t.entityId) ?? []).map((x) => x.personName),
     ];
-    /**
-     * You route to a person; the fit reading sits on the institution they sign for. So a
-     * person with no reading of their own borrows the best one from an organisation they
-     * currently act for, and the row marks it as borrowed rather than passing it off.
-     */
-    const own = best.get(t.entityId) ?? null;
-    const borrowedFrom = own ? null : (people.get(t.entityId) ?? [])
-      .filter((x) => best.has(x.orgId))
-      .map((x) => ({ org: x.orgName, ...best.get(x.orgId)! }))
-      .sort((a, b) => b.score - a.score)[0] ?? null;
-    const reading = own ?? borrowedFrom;
-    const assessment = fit.find((a) => a.entityId === t.entityId);
-    const profile = profiles.find((p) => p.entityId === t.entityId);
-    const roles = affiliations.filter((a) => a.personId === t.entityId && a.current);
+    const assessment = assessmentById.get(t.entityId);
+    const profile = profileById.get(t.entityId);
+    const roles = people.get(t.entityId) ?? [];
     const founder = roles.find((a) => /\b(co[ -]?)?founder\b/i.test(a.role) && a.source);
     const plRole = roles.find((a) => a.orgName === 'Protocol Labs' && a.source);
     const familiar = assessment?.perceptions.filter((p) => ['familiar', 'deep'].includes(p.familiarity)) ?? [];
@@ -98,21 +73,23 @@ const pickerInputs = buildCache(async (vehicleId: string) => {
       entityId: t.entityId,
       name: t.displayName,
       isPerson: t.entityType === 'person',
-      score: reading?.score ?? null,
-      provisional: Boolean(reading?.provisional),
-      borrowedFrom: borrowedFrom?.org ?? null,
-      blocker: reading?.blocker ?? null,
+      score: null,
+      portfolio: founders[t.entityId] ?? [],
+      provisional: false,
+      borrowedFrom: null,
+      blocker: assessment ? BLOCKER_SHORT[assessment.diagnosis.blocker] : null,
       related: [...new Set(related)].slice(0, 3),
-      touch: contact.has(t.entityId) ? touchWords(contact.get(t.entityId)!) : null,
+      touch: founders[t.entityId] ? `PLC portfolio founder: ${founders[t.entityId]!.join(', ')}` : contact.has(t.entityId) ? touchWords(contact.get(t.entityId)!) : null,
     };
   });
-  return { tiers, vehicles, affiliations, fit, team, entities, targets, contact, rows };
+  return { tiers, vehicles, affiliations, fit, team, entities, targets, contact, rows, founders };
 });
 
 // Ask ownership/status changes on every workflow action, independently of the graph.
 export async function routeInputs(vehicleId: string) {
   const [picker, asks] = await Promise.all([pickerInputs(vehicleId), listAsks(null)]);
-  return { ...picker, asks };
+  const scores = await recordedRouteScores(picker.vehicles.find(v=>v.id===vehicleId)?.kind ?? 'fund');
+  return { ...picker, asks, rows: picker.rows.map(row => ({...row, score: scores.get(row.entityId) ?? null})) };
 }
 
 const basesByRoutes = new WeakMap<Route[], ReadonlySet<string>>();
@@ -136,11 +113,12 @@ export function promotedRouteBases(routes: Route[], hashes?: string[]): { has: (
 /** Client graph consumes identities and score summaries, not full source evidence.
  * The server-rendered comparison below it retains every selected edge's evidence. */
 export function graphRouteInputs(routes: Route[]): Route[] {
+  const readWarmth = warmthReader();
   return routes.map((route) => ({
     ...route, influence: null, askLoad: null,
     score: route.score ? { ...route.score, factors: route.score.factors.slice(0, 3) } : undefined,
     hops: route.hops.map((hop) => ({ ...hop, edge: {
-      ...hop.edge, evidence: [], reviewedByName: null, reviewedAt: null, reviewNote: null,
+      ...hop.edge, warmthScore: readWarmth(hop.edge).score, evidence: [], reviewedByName: null, reviewedAt: null, reviewNote: null,
     } })),
   }));
 }

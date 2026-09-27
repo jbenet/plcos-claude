@@ -1,4 +1,5 @@
 import { getDb, type Db } from '@/lib/db';
+import { edgeGrade } from './warmth';
 import { graphSnapshot, pathsFromSnapshot, yieldRouteWork } from './path-search';
 import type { Edge, EdgeKind, EvidenceTier } from './types';
 
@@ -43,7 +44,7 @@ export async function canonicalRouteEntity(id: string): Promise<string> {
 
 const toEdge = (r: EdgeRow): Edge => ({
   edgeId: r.edge_id, fromEntity: r.from_entity, toEntity: r.to_entity,
-  fromName: r.from_name, toName: r.to_name, kind: r.kind, tier: r.tier,
+  fromName: r.from_name, toName: r.to_name, kind: r.kind, tier: r.tier > 'B' ? r.tier : edgeGrade({ kind: r.kind, evidence: r.evidence ?? [] }),
   strength: r.strength === null ? null : Number(r.strength), tieBand: r.tie_band,
   evidence: r.evidence ?? [], reviewedByName: r.reviewed_by_name,
   reviewedAt: r.reviewed_at ? new Date(r.reviewed_at) : null, reviewNote: r.review_note,
@@ -59,7 +60,7 @@ type EvidenceEntry = { edge: Edge; bytes: number };
 type EvidenceCache = { revision: string; entries: Map<string, EvidenceEntry>; bytes: number };
 const evidenceCaches = new WeakMap<Db, EvidenceCache>();
 const evidenceRevision = async (db: Db) => (await db.one<{ revision: string }>(
-  'select revision::text from network.route_revision where singleton'))!.revision;
+  "select revision::text || ':' || current_date::text as revision from network.route_revision where singleton"))!.revision;
 
 /** Shared team edges recur across many targets. Retain a bounded, disposable evidence
  * LRU; topology, entity-label and reviewer changes all advance this revision. */
@@ -124,11 +125,16 @@ export async function enumeratePathsFromSources(
   const db = await getDb();
   const excluded = await db.query<{ entity_id: string }>(
     `select distinct e.entity_id from identity.source_record s join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id)
-      where s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL'`);
+      where ((s.source = 'w3_person' and e.display_name = 'PL' and e.entity_type = 'org') or (s.source = 'network_org' and s.source_id = 'pl') or (s.source='warehouse' and s.source_id='organization:protocol-labs'))`);
   const graph = await graphSnapshot(db);
   const canonical = (id: string) => graph.canonicalIds?.get(id) ?? id;
-  return pathsFromSnapshot(graph, fromEntities.map(canonical), canonical(targetEntity), maxHops,
-    new Set([...sourceOnlyEntities, ...excluded.map((row) => row.entity_id)].map(canonical)));
+  const pl = new Set(excluded.map(row=>canonical(row.entity_id)));
+  if (pl.has(canonical(targetEntity))) return [];
+  const sources = fromEntities.map(canonical);
+  const regular = await pathsFromSnapshot(graph, sources.filter(id=>!pl.has(id)), canonical(targetEntity), maxHops,
+    new Set([...sourceOnlyEntities.map(canonical), ...pl]));
+  const institutional = await pathsFromSnapshot(graph, sources.filter(id=>pl.has(id)), canonical(targetEntity), maxHops, pl);
+  return [...regular,...institutional];
 }
 
 // Counts do not need a 437K-edge adjacency graph. Cache only four aggregate rows,
@@ -191,16 +197,17 @@ export async function entityForUser(handle: string): Promise<{ entityId: string;
 }
 
 /** People on the active team plus the explicit PL organization source. */
-export async function routeSources(): Promise<Array<{ entityId: string; name: string }>> {
+export async function routeSources(): Promise<Array<{ entityId: string; name: string; sourceOnly: boolean }>> {
   const db = await getDb();
   const rows = await db.query<{ id: string; name: string }>(
     `select distinct e.entity_id::text as id, e.display_name as name
        from identity.source_record s join identity.entity e on e.entity_id = identity.canonical_entity_id(s.entity_id)
        left join platform.app_user u on s.source = 'app_user' and s.source_id = u.handle
       where (s.source = 'app_user' and u.active)
-         or (s.source = 'w3_person' and e.entity_type = 'org' and e.display_name = 'PL')
+         or (((s.source = 'w3_person' and e.display_name = 'PL' and e.entity_type = 'org') or (s.source = 'network_org' and s.source_id = 'pl') or (s.source='warehouse' and s.source_id='organization:protocol-labs')))
       order by name`);
-  return rows.map((r) => ({ entityId: r.id, name: r.name }));
+  const pl = new Set((await db.query<{ id: string }>(`select identity.canonical_entity_id(entity_id)::text id from identity.source_record where (source='network_org' and source_id='pl') or (source='warehouse' and source_id='organization:protocol-labs') or (source='w3_person' and entity_id in(select entity_id from identity.entity where entity_type='org' and display_name='PL'))`)).map(r => r.id));
+  return rows.map((r) => ({ entityId: r.id, name: r.name, sourceOnly: pl.has(r.id) }));
 }
 
 

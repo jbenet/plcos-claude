@@ -25,6 +25,7 @@ export interface NavModule {
   mechanic: string;
   /** Which vehicle kinds this module makes sense for. Empty = all of them. */
   kinds?: Array<'fund' | 'spv' | 'grant_rail'>;
+  vehicleSlugs?: string[];
   /**
    * True when the vehicle is in the URL rather than the cookie. A scoped module lives at
    * `/<vehicle>/<slug>`, so a link to it can be sent to somebody and mean the same thing.
@@ -67,6 +68,7 @@ export const vehicleHome = (vehicleSlug: string | null) => `/${vehicleSlug ?? 'a
  * whichever vehicle is selected.
  */
 export const VEHICLE_MODULES: NavModule[] = [
+  { ...m('05', 'Portfolio', 'portfolio', 'L4', 'Sourced fund companies and founders', true, ['fund']), vehicleSlugs: ['neurotech', 'rails'] },
   m('V', 'Visualizations', 'visualizations', 'L9',
     'Everything trying to happen at once, drawn ten ways: stations, people, drop-off, the fortnight ahead, instruments, the map, the plant, the moves, the grid, the economy.',
     true, undefined, true),
@@ -94,8 +96,8 @@ export const VEHICLE_MODULES: NavModule[] = [
   m('24', 'Compliance', 'compliance', 'L13', 'Accreditation, public claims, the solicitation log and side-letter risk.'),
 ];
 
-export function modulesForKind(kind: string): NavModule[] {
-  return VEHICLE_MODULES.filter((x) => !x.kinds || x.kinds.includes(kind as 'fund'));
+export function modulesForKind(kind: string, vehicleSlug?: string): NavModule[] {
+  return VEHICLE_MODULES.filter((x) => (!x.kinds || x.kinds.includes(kind as 'fund')) && (!vehicleSlug || !x.vehicleSlugs || x.vehicleSlugs.includes(vehicleSlug)));
 }
 
 export interface NavLink {

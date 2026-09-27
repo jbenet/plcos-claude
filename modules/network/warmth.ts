@@ -1,5 +1,5 @@
 import { config } from '@/config/deployment';
-import type { Edge, Route, RouteScore, RouteScoreFactor, RouteStrength } from './types';
+import type { Edge, EvidenceTier, Route, RouteScore, RouteScoreFactor, RouteStrength } from './types';
 
 export type WarmthKind = keyof typeof config.routeWarmth.priors;
 /** Stored in existing evidence JSONB. Dates describe contact, never retrieval or mapping. */
@@ -30,6 +30,7 @@ const LABEL: Record<WarmthKind, string> = {
   proximity: 'Affiliation or proximity only', acquaintance: 'Acquaintance',
   repeated_contact: 'Repeated direct contact', worked_together: 'Worked together',
   joint_investment: 'Joint investment', cofounder: 'Co-founded together',
+  family: 'Family', close_friend: 'Close friends', recent_contact: 'Recent direct contact',
   frequent_coinvestment: 'Frequent personal co-investment', investor_founder: 'Personal investor–founder relationship',
 };
 const monthsAgo = (at: Date, months: number) => {
@@ -65,7 +66,7 @@ export function tieWarmth(kind: string, details?: TieDetails, at = new Date()): 
   if (details && tieDetailsProblems(details).length) details = { kind: 'proximity' };
   const defaults: Record<string, WarmthKind> = {
     colleague: 'worked_together', advisor: 'worked_together', board: 'worked_together',
-    coinvestor: 'joint_investment', cofounder: 'cofounder',
+    coinvestor: 'joint_investment', cofounder: 'cofounder', family: 'family',
     met: 'acquaintance', corresponded: 'acquaintance', connector: 'acquaintance',
   };
   let k = details?.kind ?? defaults[kind] ?? 'proximity';
@@ -81,7 +82,7 @@ export function tieWarmth(kind: string, details?: TieDetails, at = new Date()): 
   const recency: Warmth['recency'] = !Number.isFinite(last) || last > at.getTime() ? 'unknown'
     : last >= monthsAgo(at, c.currentMonths) ? 'current'
       : last >= monthsAgo(at, c.historicalMonths) ? 'ageing' : 'historical';
-  const prior = c.priors[k];
+  const prior = c.priors[k]; // GUESS — ordinal relationship prior, not calibrated probability.
   const penalty = details?.basis ? 0 : c.agePenalty[recency];
   const score = Math.max(0, prior - penalty);
   return { version: c.version, evaluatedAt: at.toISOString(), kind: k, prior, score, recency,
@@ -114,6 +115,21 @@ export function edgeWarmth(edge: Pick<Edge, 'kind' | 'evidence'>, at = new Date(
   });
   return ties.sort((a, b) => b.score - a.score || b.prior - a.prior || a.kind.localeCompare(b.kind))[0]
     ?? tieWarmth(edge.kind, undefined, at);
+}
+
+/** GUESS — qualitative warmth grades, derived from the relationship evidence, never a source's proposed letter alone.
+ * PL staff affiliation is the explicit own-network policy exception. Generic membership stays C.
+ */
+export function edgeGrade(edge: Pick<Edge, 'kind' | 'evidence'>, at = new Date()): EvidenceTier {
+  if (edge.kind === 'possible_identity') return 'D';
+  const warmth = edgeWarmth(edge, at);
+  if (edge.evidence.some(e => e.tie?.basis === 'pl_affiliation')) return 'B';
+  if (['cofounder', 'family', 'close_friend', 'frequent_coinvestment'].includes(warmth.kind)) return 'A';
+  if (['worked_together', 'joint_investment', 'investor_founder'].includes(warmth.kind)
+      && !edge.evidence.some(e => e.tie?.basis === 'pl_network')) return 'B';
+  if (['recent_contact', 'repeated_contact', 'acquaintance'].includes(warmth.kind) && warmth.recency === 'current') return 'B';
+  if (warmth.kind !== 'proximity' || ['colleague', 'advisor', 'board', 'portfolio', 'alumni'].includes(edge.kind)) return 'C';
+  return 'D';
 }
 
 export function routeWarmth(route: Pick<Route, 'hops'>, at = new Date()): number {
@@ -248,6 +264,10 @@ export function scoreRoute(route: Pick<Route, 'hops'>, at = new Date(), context:
   const subtotal = factors.reduce((n, f) => n + f.points, 0);
   add('confidence', 'Evidence confidence', -subtotal * (1 - c.confidenceFloor) * (1 - confidence),
     `Weakest evidence tier confidence ${confidence}; uncalibrated estimate, not investment probability or permission.`, route.hops.map((h) => h.edge.edgeId));
-  const value = Math.round(Math.max(0, Math.min(100, factors.reduce((n, f) => n + f.points, 0))) * 100) / 100;
+  const raw = Math.max(0, factors.reduce((n, f) => n + f.points, 0));
+  const ceiling = route.hops.length ? Math.min(...route.hops.map(h => readWarmth(h.edge).score)) * 20 : 0;
+  add('weakestHop', 'Weakest hop ceiling', Math.min(0, ceiling - raw),
+    `Route strength cannot exceed its weakest hop: ${ceiling / 20}/5 (${ceiling}/100).`, route.hops.map(h => h.edge.edgeId));
+  const value = Math.min(ceiling, Math.round(Math.max(0, Math.min(100, raw)) * 100) / 100);
   return { version: c.version, evaluatedAt: at.toISOString(), value, band: routeStrength(value), confidence, factors };
 }

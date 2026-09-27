@@ -68,7 +68,9 @@ async function calculateRoutes(
   const checkpoint = routeCheckpoint();
   const me = await entityForUser(fromHandle);
   const team = await routeSources();
-  const fromSources = scope === 'team' ? team : me ? [me] : [];
+  const onlySources = team.filter(s => s.sourceOnly).map(s => s.entityId);
+  const currentSource = me ? { ...me, sourceOnly: onlySources.includes(me.entityId) } : null;
+  const fromSources = scope === 'team' ? team : currentSource ? [currentSource] : [];
   const sourceIds = new Set(team.map((s) => s.entityId));
   if (!fromSources.length) return null;
 
@@ -86,7 +88,7 @@ async function calculateRoutes(
     if (index % 128 === 0) await checkpoint(index);
     if (sourceIds.has(targetId)) continue;
     let start = 0;
-    for (let i = 1; i < p.nodes.length - 1; i++) if (sourceIds.has(p.nodes[i]!)) start = i;
+    if (!onlySources.includes(p.nodes[0]!)) for (let i = 1; i < p.nodes.length - 1; i++) if (sourceIds.has(p.nodes[i]!)) start = i;
     paths.push({ ...p, nodes: p.nodes.slice(start), edges: p.edges.slice(start),
       hops: p.hops - start, source: sourceOf.get(p.nodes[start]!)! });
   }
@@ -166,7 +168,7 @@ async function calculateRoutes(
 
     // Tiers describe uncertainty, never a human information gate (rule 6).
     for (const h of hops.filter((h) => h.edge.tier === 'C' || h.edge.tier === 'D')) {
-      reasons.push(`${h.edge.fromName} → ${h.edge.toName}: tier ${h.edge.tier}. ` +
+      reasons.push(`${hops.indexOf(h) === 0 ? p.source.name : hops[hops.indexOf(h) - 1]!.toName} → ${h.toName}: tier ${h.edge.tier}. ` +
         (CLUE_REASON[h.edge.kind] ?? 'Weak relationship evidence; interaction is not established.') +
         ' Routes with uncertainty; confidence discounts the investment-route score.');
     }

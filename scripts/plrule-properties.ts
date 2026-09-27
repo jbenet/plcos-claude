@@ -43,10 +43,10 @@ export async function plRuleProperties(db: Queryable, check: (name: string, ok: 
     const personal = connectionPaths([member], new Map([[member.key, { ...finding(member), connections: [{
       to: team[0]!.name, kind: 'other', tier: 'B', basis: 'First-hand team statement: a personal angel investor in Protocol Labs.', source: null,
     }] }]]), network, team).paths;
-    check('PLRULE a first-hand personal PL backing statement needs no public URL or review gate',
-      personal.some((p) => p.lp === member.key && p.other.handle === team[0]!.handle && p.tier === 'B' && p.warmth!.score >= 3)
-        && personal.some((p) => p.lp === member.key && p.other.name === 'PL' && p.tier === 'B'),
-      'The missing public source remains labelled; the PL policy supplies a warm network tie.');
+    check('PLRULE a first-hand backing statement retains a route without inventing a warm personal relationship',
+      personal.some((p) => p.lp === member.key && p.other.handle === team[0]!.handle && p.tier === 'C' && p.warmth!.score >= 3)
+        && personal.some((p) => p.lp === member.key && p.other.name === 'PL' && p.tier === 'C'),
+      '0070: the policy affiliation remains routable; missing personal relationship evidence is grade C.');
     const resolved = await resolveConnectionPeople(db, paths);
     for (const lp of new Set(resolved.map((p) => p.lp))) await db.query(`insert into research.note (entity_id,kind,body,data) values ($1,'connection_candidates','Invented PL rule fixture',$2)`, [lp,JSON.stringify({ paths: resolved.filter((p) => p.lp === lp) })]);
     await buildNetwork();
@@ -56,8 +56,8 @@ export async function plRuleProperties(db: Queryable, check: (name: string, ok: 
       [team[0]!.name,team[1]!.name,'PL'].every((name) => routes.some((r) => r.fromName === name && r.hops.length === 2 && r.weakestTier === 'C' && r.verdict === 'recommend')),
       'PL → colleague → target and each team source retain their own labels and edge evidence.');
     const memberRoutes = await planRoutes(team[0]!.handle, member.key, 3, 'fund', 'team');
-    check('PLRULE directory membership routes warmly from PL when no named holder is recorded',
-      Boolean(memberRoutes?.routes.some((r) => r.fromName === 'PL' && r.hops.length === 1 && r.weakestTier === 'B' && edgeWarmth(r.hops[0]!.edge).score >= 3)),
+    check('PLRULE directory membership routes from PL with grade C when no named holder is recorded',
+      Boolean(memberRoutes?.routes.some((r) => r.fromName === 'PL' && r.hops.length === 1 && r.weakestTier === 'C' && edgeWarmth(r.hops[0]!.edge).score >= 3)),
       'A sourced network affiliation is enough; no contact record is required.');
     const signature = (r: Route) => `${r.fromEntity}:${r.hops.map((h) => h.edge.edgeId).join('/')}`;
     await db.query(`update network.edge set reviewed_by = $1, reviewed_at = now() where from_entity = $2 or to_entity = $2`, [userIds[0],target.key]);

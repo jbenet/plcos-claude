@@ -48,11 +48,25 @@ async function Routes({
   const params = await searchParams;
   const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam, expanded, page, family } = params;
   const user = await (await auth()).currentUser();
-  const { tiers, vehicles, affiliations: pickerAffiliations, fit, asks, team, entities: pipelineEntities, targets, contact, rows } =
+  const { tiers, vehicles, affiliations: pickerAffiliations, fit, asks, team, entities: pipelineEntities, targets, contact, rows, founders } =
     await routeInputs(selection.current?.id ?? '');
+  // The server searches the targets (issue 0023): the page carries only the rows it draws.
+  const SHOWN = 80;
+  const sort: 'score' | 'name' = sortParam === 'name' ? 'name' : 'score';
+  const minScore = [60, 75].includes(Number(minParam)) ? Number(minParam) : 0;
+  const needle = q.trim().toLowerCase();
+  const touchShown = touchParam === '1';
+  const matching = rows
+    .filter((t) => (minScore ? (t.score ?? -1) >= minScore : true))
+    .filter((t) => !needle || t.name.toLowerCase().includes(needle) || t.related.some((x) => x.toLowerCase().includes(needle)));
+  // In touch already: left out unless asked for, and counted, so none is dropped without a word.
+  const hiddenInTouch = touchShown ? 0 : matching.filter((t) => t.touch).length;
+  const matched = (touchShown ? matching : matching.filter((t) => !t.touch))
+    .sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name) : (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name)));
+  const shown = matched.slice(0, SHOWN);
   const entities = target && !pipelineEntities.some((e) => e.entityId === target)
     ? [...pipelineEntities, ...await listEntities([target])] : pipelineEntities;
-  const targetId = target ?? targets.find((t) => t.displayName === 'Delia Roos')?.entityId ?? targets[0]?.entityId;
+  const targetId = target ?? matched[0]?.entityId;
   const ownAffiliations = targetId ? await affiliationsFor([targetId]) : [];
   const firmIds = ownAffiliations.filter(a => a.current && a.personId === targetId).map(a => a.orgId);
   const firmAffiliations = firmIds.length ? await affiliationsFor(firmIds) : [];
@@ -74,22 +88,6 @@ async function Routes({
     })
     : null;
 
-  // The server searches the targets (issue 0023): the page carries only the rows it draws.
-  const SHOWN = 80;
-  const sort: 'score' | 'name' = sortParam === 'name' ? 'name' : 'score';
-  const minScore = [60, 75].includes(Number(minParam)) ? Number(minParam) : 0;
-  const needle = q.trim().toLowerCase();
-  const touchShown = touchParam === '1';
-  const matching = rows
-    .filter((t) => (minScore ? (t.score ?? -1) >= minScore : true))
-    .filter((t) => !needle || t.name.toLowerCase().includes(needle) || t.related.some((x) => x.toLowerCase().includes(needle)));
-  // In touch already: left out unless asked for, and counted, so none is dropped without a word.
-  const hiddenInTouch = touchShown ? 0 : matching.filter((t) => t.touch).length;
-  const matched = (touchShown ? matching : matching.filter((t) => !t.touch))
-    .sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name) : (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name)));
-  const shown = matched.slice(0, SHOWN);
-  const currentRow = rows.find((t) => t.entityId === targetId);
-  if (currentRow && !shown.includes(currentRow)) shown.unshift(currentRow);
   const readWarmth = warmthReader();
   const allRoutes = search?.routes ?? [];
   const routeSummary = search ? { ...routeSummaryFor(search),
@@ -183,15 +181,13 @@ async function Routes({
           <div className="ihead">What each tier may carry</div>
           <div className="imeta">A–D on every edge · uncertainty stays visible</div>
           {TIERS.map((t) => {
-            const count = tiers.find((x) => x.tier === t);
+
             return (
               <div key={t} style={{ padding: '10px 0', borderBottom: '1px solid var(--hair)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className={`tier t${t}`}>{t}</span>
                   <b style={{ fontSize: 12.5, fontWeight: 500 }}>{TIER_MEANING[t].label}</b>
-                  <span className="mono muted" style={{ marginLeft: 'auto', fontSize: 10.5 }}>
-                    {count ? `${count.n} edge${count.n === 1 ? '' : 's'}` : '—'}
-                  </span>
+
                 </div>
                 <div className="muted" style={{ fontSize: 11.5, lineHeight: 1.5, marginTop: 4 }}>
                   {TIER_MEANING[t].means}
@@ -273,7 +269,7 @@ async function Routes({
                   {inTouchNearby.length === 1 ? 'person' : 'people'} {isPerson ? 'at their firm' : 'there'} the team deals with.
                 </dd>
                 <dt>Who can act</dt>
-                <dd>Anyone: building the network links each of the team to a person record and makes the ties our records show — a meeting held one to one is tier A — and those the research found, C and D labelled as weaker evidence.</dd>
+                <dd>Anyone: building the network links each of the team to a person record and makes the ties our records show — recent direct contact is grade B — and those the research found, C and D labelled as weaker evidence.</dd>
                 <dt>Safe next step</dt>
                 <dd>Build it below. Where the team is in touch already, approach directly and say so.</dd>
               </dl>
@@ -331,23 +327,24 @@ async function Routes({
           <details className="card route-graph-section" open>
             <summary>Route map <span className="muted">· {displayedRoutes.length} paths · one node per person</span></summary>
             <RouteGraph routes={graphRouteInputs(displayedRoutes.map(({ route }) => route))} fromName={search.fromName} targetName={search.targetName}
+              portfolioFounders={founders}
               selected={Math.max(0, displayedRoutes.findIndex(({ index }) => index === selected))} routeIds={displayedRoutes.map((x) => x.index)} />
           </details>
           <div className="card route-comparison">
             <div className="chead"><h2>Compare routes</h2><span className="lbl">{displayedRoutes.length} shown · {eligible.length} match</span></div>
-            <p className="route-comparison-key">Strength /100 · evidence tier · last-hop warmth /5 · open a row for evidence and actions</p>
+            <p className="route-comparison-key">Route score /100 · every hop’s grade · weakest hop /5 · open a row for evidence and actions</p>
             {displayedRoutes.length === 0 && <p className="cbody">No recorded routes match these filters. Clear the excluded intermediate or lower the warmth minimum to inspect the available material.</p>}
             {displayedRoutes.map(({ route, index: i }) => (
               <details key={i} id={`route-${i}`} className="route-detail" open={r === String(i)}>
                 <summary className="route-comparison-row">
-                  <span className="route-score" title={routeReading(route).provisional ? 'Provisional influence / tier estimate; not probability' : 'Route strength'}>{routeReading(route).provisional ? '~' : ''}{routeReading(route).score}</span>
-                  <span className="route-chain">{route.fromName ?? search.fromName} → {route.hops.map((h) => h.toName).join(' → ')}</span>
-                  <span className={`tier t${route.weakestTier}`}>{route.weakestTier}</span>
-                  <span className="mono">{route.hops.length ? readWarmth(route.hops.at(-1)!.edge).score : '—'}/5</span>
+                  <span className="route-score" title={routeReading(route).provisional ? 'Provisional influence / tier estimate; not probability' : 'Route strength'}>{routeReading(route).provisional ? '—' : routeReading(route).score}</span>
+                  <span className="route-chain">{route.fromName ?? search.fromName} → {route.hops.map((h) => h.toName + (founders[h.toEntity] ? ' (PLC portfolio founder)' : '')).join(' → ')}</span>
+                  <span className="route-hop-grades" title="Grades in hop order">{route.hops.map(h=>h.edge.tier).join(" ")}</span>
+                  <span className="mono">{route.hops.length ? Math.min(...route.hops.map(h=>readWarmth(h.edge).score)) : '—'}/5</span>
                   <span className="route-row-verdict">{VERDICT_LABEL[route.verdict]}</span>
                 </summary>
               <div className={`route${i === selected ? ' best' : ''}`}>
-                <span className={`tier t${route.weakestTier}`}>{route.weakestTier}</span>
+                <span className="route-hop-grades" title="Grades in hop order">{route.hops.map(h=>h.edge.tier).join(" ")}</span>
                 <div className="rt">
                   <RouteNames route={route} alternatives={(alternatives.get(i) ?? []).map((x) => x.route)} fromName={route.fromName ?? search.fromName} />
                   <div><Link href={routeHref({ r: String(i) })}>Inspect this route</Link></div>
@@ -355,7 +352,7 @@ async function Routes({
                     <div key={h.edge.edgeId}>
                       <p style={{ marginBottom: 3 }}>
                         <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
-                          {h.edge.tier} · {h.edge.kind.replace('_', ' ')} · edge dated {h.edge.validFrom.getFullYear()}
+                          <b>{readWarmth(h.edge).score}/5</b> · grade {h.edge.tier} · {h.edge.kind.replace('_', ' ')} · edge dated {h.edge.validFrom.getFullYear()}
                         </span>{' '}
                         <span className="muted" style={{ display: 'block' }}>{readWarmth(h.edge).basis}</span>
                         {h.edge.evidence.map((ev, ei) => (

@@ -249,7 +249,7 @@ async function Overview() {
             <h2>Modules for this vehicle</h2>
             <span className="lbl">also in the rail</span>
           </div>
-          {modulesForKind(v?.kind ?? 'fund').map((mod) => (
+          {modulesForKind(v?.kind ?? 'fund', v?.slug).map((mod) => (
             <Link className="row" key={mod.slug} href={mod.href}>
               <span className="kind k-chore" style={{ width: 34 }}>{mod.num}</span>
               <div className="t">

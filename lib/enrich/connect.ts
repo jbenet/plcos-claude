@@ -1,3 +1,5 @@
+import { edgeGrade } from '@/modules/network/warmth';
+import type { EdgeKind } from '@/modules/network';
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -364,7 +366,8 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
   if (warehouse) for (const p of warehousePaths(candidates, team, warehouse, at)) add(p);
 
   return { paths: materializeResearchNodes(plNetworkPaths(paths, candidates, findings, net, team, directory), candidates, net, team).map((p) => {
-    let tie = p.tie ?? ((p.tier === 'C' || p.tier === 'D') ? { kind: 'proximity' as const } : undefined);
+    let tie = p.tie ?? ((p.tier === 'C' || p.tier === 'D') ? { kind: 'proximity' as const }
+      : /\bco[ -]?founded\b|\bco[ -]?founders\b|\bfounded\b.+\bwith\b/i.test(p.basis) ? { kind: 'cofounder' as const } : undefined);
     const sourceTie = p.other.type === 'team' || p.other.person?.name === 'PL';
     if (p.other.type === 'team' && p.tier <= 'B' && investmentTie({ evidence: [{ note: p.basis, source: p.source ?? undefined, tie }] })) {
       tie = { ...tie, kind: 'investor_founder', withUs: 'investor' };
@@ -377,7 +380,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
       if (candidate.money?.track === 'hard' && candidate.money.amount > 0) tie = { ...tie, withUs: 'investor' };
       else if (member && tie.withUs !== 'investor') tie = { ...tie, withUs: 'pl_founder' };
     }
-    return { ...p, tie, warmth: tieWarmth(p.kind, tie, at) };
+    return { ...p, tier: p.tier > 'B' ? p.tier : edgeGrade({ kind: p.kind as EdgeKind, evidence: [{ note: p.basis, source: p.source ?? undefined, tie }] }, at), tie, warmth: tieWarmth(p.kind, tie, at) };
   }).sort((a, b) => a.tier.localeCompare(b.tier) || b.warmth.score - a.warmth.score || a.lp.localeCompare(b.lp) || a.other.name.localeCompare(b.other.name)),
   lps: candidates.length, lpKeys: candidates.map((c) => c.key), researched: findings.size };
 }

@@ -1,67 +1,82 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { Route } from '@/modules/network/client';
 import { VERDICT_LABEL } from '@/modules/network/client';
 import { Pager, usePage } from '@/components/floor/Paging';
-import { routeGraphLayout, routeNodeIds, routeReading } from './route-display';
+import { routeGraphArcLabels, routeGraphArcs, routeGraphLayout, routeReading } from './route-display';
 
 /** Shared entity nodes; every drawn route has an adjacent keyboard-accessible disclosure. */
-export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: allSelected, routeIds: allRouteIds }: {
-  routes: Route[]; fromName: string; targetName: string; selected: number; routeIds?: number[];
+export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: allSelected, routeIds: allRouteIds, portfolioFounders = {} }: {
+  routes: Route[]; fromName: string; targetName: string; selected: number; routeIds?: number[]; portfolioFounders?: Record<string, string[]>;
 }) {
   const paging = usePage(allRoutes.map((route, index) => ({ route, index })), 8, Math.floor(allSelected / 8));
   useEffect(() => { paging.setPage(Math.floor(allSelected / 8)); }, [allSelected, paging.setPage]);
   const routes = paging.rows.map(x => x.route);
   const routeIds = paging.rows.map(x => allRouteIds?.[x.index] ?? x.index);
   const selected = paging.rows.findIndex(x => x.index === allSelected);
-  const [hovered, setHovered] = useState<number | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const arrowId = useId().replaceAll(':', '');
   // Where the pointer is, inside the map. Keyboard focus has none, so the card keeps its corner (issue 0059).
   const [at, setAt] = useState<{ x: number; y: number; w: number } | null>(null);
   const { nodes, height, width } = routeGraphLayout(routes);
+  const arcs = routeGraphArcs(routes);
+  const labels = routeGraphArcLabels(arcs, nodes, height);
   const positions = new Map(nodes.map((n) => [n.id, n]));
-  const active = hovered === null ? null : routes[hovered];
+  const activeArc = arcs.find((arc) => arc.key === hovered);
+  const activeIndex = activeArc?.routeIndices.includes(selected) ? selected : activeArc?.routeIndices[0];
+  const active = activeIndex === undefined ? null : routes[activeIndex];
   const activeReading = active ? routeReading(active) : null;
   return <div className="route-map" onMouseLeave={() => { setHovered(null); setAt(null); }}
     onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt({ x: e.clientX - r.left, y: e.clientY - r.top, w: r.width }); }} onKeyDown={(e) => { if (e.key === 'Escape') setHovered(null); }}>
     <Pager {...paging} setPage={page => { paging.setPage(page); setHovered(null); }} label="routes in map; full comparison below" />
     <div className="route-map-scroll">
-      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} aria-label={`Routes to ${targetName}. One node per person. Full details in the comparison list.`}>
-        {routes.map((route, ri) => {
-          const points = routeNodeIds(route).map((id) => positions.get(id)!);
-          const reading = routeReading(route);
-          const unavailable = route.verdict !== 'recommend';
-          const strong = !unavailable && reading.band === 'strong';
-          const on = ri === (hovered ?? selected);
-          const colour = unavailable ? 'var(--muted)' : strong ? 'var(--green)' : 'var(--accent)';
-          // Separate overlapping paths slightly so each route remains individually hoverable.
-          const d = points.slice(0, -1).map((p, i) => {
-            const q = points[i + 1]!;
-            const bend = (ri - (routes.length - 1) / 2) * 7;
-            return `M ${p.x} ${p.y} C ${(p.x + q.x) / 2} ${p.y + bend}, ${(p.x + q.x) / 2} ${q.y + bend}, ${q.x} ${q.y}`;
-          }).join(' ');
-          return <a key={ri} href={`#route-${routeIds?.[ri] ?? ri}`} aria-label={`Route ${ri + 1}: ${route.fromName ?? fromName} → ${route.hops.map((h) => h.toName).join(' → ')}. Strength ${reading.score}, ${VERDICT_LABEL[route.verdict]}. Inspect in list.`}
-            onMouseEnter={() => setHovered(ri)} onFocus={() => { setHovered(ri); setAt(null); }} onBlur={() => setHovered(null)}
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} aria-label={`Routes to ${targetName}. One node per entity and one scored arc per directed relationship. Full details in the comparison list.`}>
+        <defs><marker id={arrowId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="context-stroke" /></marker></defs>
+        {arcs.map((arc) => {
+          const ri = arc.routeIndices.includes(selected) ? selected : arc.routeIndices[0]!;
+          const unavailable = arc.routeIndices.every((index) => routes[index]!.verdict !== 'recommend');
+          const on = hovered !== null ? hovered === arc.key : arc.routeIndices.includes(selected);
+          const colour = unavailable ? 'var(--muted)' : on ? 'var(--green)' : 'var(--accent)';
+          const p = positions.get(arc.from)!, q = positions.get(arc.to)!;
+          // Same-column links curve around their labels; reverse links take the opposite side.
+          const bend = p.x === q.x ? (p.y < q.y ? 42 : -42) : 0;
+          const midX = (p.x + q.x) / 2;
+          const position = labels.get(arc.key)!;
+          const d = `M ${p.x} ${p.y} C ${midX + bend} ${p.y}, ${midX + bend} ${q.y}, ${q.x} ${q.y}`;
+          const scoreLabel = arc.score === null ? 'Unscored' : `${Number(arc.score.toFixed(2))}/5`;
+          const label = `${p.name} → ${q.name}: ${scoreLabel}, grade ${arc.grade}. ${arc.routeIndices.length} ${arc.routeIndices.length === 1 ? 'route' : 'routes'} use this relationship. Inspect in list.`;
+          return <a key={arc.key} data-from={arc.from} data-to={arc.to} href={`#route-${routeIds[ri]}`} aria-label={label}
+            onMouseEnter={() => setHovered(arc.key)} onFocus={() => { setHovered(arc.key); setAt(null); }} onBlur={() => setHovered(null)}
             onClick={() => { const detail = document.getElementById(`route-${routeIds?.[ri] ?? ri}`); if (detail instanceof HTMLDetailsElement) detail.open = true; }}>
-            <path d={d} fill="none" stroke={colour} strokeWidth={1 + reading.score / 22} opacity={hovered !== null && !on ? 0.18 : on ? 1 : 0.65}
-              strokeDasharray={unavailable ? '5 4' : undefined} />
+            <path d={d} fill="none" stroke={colour} strokeWidth={1.5 + (arc.score ?? 0) / 2} opacity={hovered !== null && !on ? 0.18 : on ? 1 : 0.65}
+              strokeDasharray={unavailable ? '5 4' : undefined} markerEnd={`url(#${arrowId})`} />
             <path d={d} fill="none" stroke="transparent" strokeWidth={14} />
+            <title>{label}</title>
+            {Math.abs(position.y + 7 - position.anchorY) > 3 && <line x1={position.x} y1={position.anchorY} x2={position.x} y2={position.y + 4} stroke="var(--muted)" strokeWidth={0.7} opacity={0.6} pointerEvents="none" />}
+            <text x={position.x} y={position.y} textAnchor="middle" fontFamily="var(--mono)" paintOrder="stroke" stroke="var(--surface)" strokeWidth={5} pointerEvents="none">
+              <tspan fill="var(--ink)" fontSize="12" fontWeight="600">{scoreLabel}</tspan>
+              <tspan fill="var(--muted)" fontSize="10" fontWeight="400"> · {arc.grade}</tspan>
+            </text>
           </a>;
         })}
         {nodes.map((n) => <g key={n.id} data-entity={n.id} pointerEvents="none">
-          <circle cx={n.x} cy={n.y} r={5} fill="var(--surface)" stroke="var(--ink)" strokeWidth={2} />
+          <title>{`${n.name}${portfolioFounders[n.id]?.length ? ` · PLC portfolio founder: ${portfolioFounders[n.id]!.join(', ')}` : ''}`}</title>
+          <circle cx={n.x} cy={n.y} r={portfolioFounders[n.id]?.length ? 7 : 5} fill="var(--surface)" stroke={portfolioFounders[n.id]?.length ? 'var(--green)' : 'var(--ink)'} strokeWidth={2} />
           <text x={n.x} y={n.y - 13} textAnchor="middle" fill="var(--ink)" fontSize="11" fontFamily="var(--sans)" paintOrder="stroke" stroke="var(--surface)" strokeWidth={4}>{n.name}</text>
+          {portfolioFounders[n.id]?.length ? <text x={n.x} y={n.y + 22} textAnchor="middle" fill="var(--green)" fontSize="10" fontFamily="var(--sans)" paintOrder="stroke" stroke="var(--surface)" strokeWidth={4}>PLC portfolio founder</text> : null}
         </g>)}
       </svg>
     </div>
     {active && activeReading && <div className="route-hover" role="status"
       style={at ? { left: Math.max(8, Math.min(at.x - 24, at.w - 448)), top: at.y + 18, bottom: 'auto', pointerEvents: 'none' } : undefined}>
       <b>{active.fromName ?? fromName} → {active.hops.map((h) => h.toName).join(' → ')}</b>
-      <p>{VERDICT_LABEL[active.verdict]} · {activeReading.score}/100 {activeReading.provisional ? 'provisional strength' : 'strength'} · tier {active.weakestTier}</p>
+      <p><b>{activeReading.provisional ? 'Unscored route' : `${Number((activeReading.score / 20).toFixed(2))}/5 route score`}</b> · grades {active.hops.map((hop) => hop.edge.tier).join(' ')} · {VERDICT_LABEL[active.verdict]}</p>
+      {activeArc && <p>{activeArc.routeIndices.length} {activeArc.routeIndices.length === 1 ? 'route shares' : 'routes share'} this relationship · {activeArc.edgeIds.length} {activeArc.edgeIds.length === 1 ? 'evidence edge' : 'evidence edges'}. The arc labels the strongest recorded tie.</p>}
       <p>{active.reasons.join(' ')}</p>
       {activeReading.factors.slice(0, 3).map((f, i) => <p key={i}>{f.label}: {f.value} · {f.basis}</p>)}
-      <small>Activate the path to open its evidence in the list. Escape dismisses this card.</small>
+      <small>Activate the arc to open a route and its evidence in the list. Escape dismisses this card.</small>
     </div>}
-    <p className="route-map-key">Thicker = stronger estimate · strong routes highlighted · dashed = held or unavailable. Hover or focus a path for details.</p>
+    <p className="route-map-key">Hop score /5 first, grade second · one arrow per relationship · thicker = stronger tie · dashed = all routes held or unavailable. Hover or focus an arc for details.</p>
   </div>;
 }
