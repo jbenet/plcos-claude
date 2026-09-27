@@ -65,6 +65,10 @@ export async function availabilityProperties(check: Check) {
         global.__capitalOsDb = Promise.resolve({
           ...db, kind: 'postgres',
           exec: async sql => { if (++attempts === 1) throw new DbBusyError(); await db.exec(sql); },
+          // Postgres serializes the complete migration pass inside a transaction.
+          transaction: fn => db.transaction(tx => fn({ ...tx,
+            exec: async sql => { if (++attempts === 1) throw new DbBusyError(); await tx.exec(sql); },
+          })),
         });
         delete global.__capitalOsMigrationCheck;
         await getDb();

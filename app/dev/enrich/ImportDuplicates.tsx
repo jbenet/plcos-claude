@@ -13,6 +13,7 @@ export function ImportDuplicates({ report, pursuitReport }: { report?: ImportDup
   return <div style={{ marginTop: 12 }}>
     <form action={action}><button className="btn" disabled={pending}>{pending ? 'Merging…' : 'Merge duplicate identities'}</button></form>
     <div aria-live="polite" aria-busy={pending}>
+      {state.message && <p role="status">{state.message}</p>}
       {state.error && <p role="alert">{state.error}</p>}
       {result && <>
         <p>{result.merged} duplicate identities merged, {result.ambiguous.length} ambiguous</p>

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Db } from '../lib/db';
-import { openPglite } from '../lib/db/pglite';
+import { openTestDb } from './properties/database';
 import { migrate } from '../lib/db/migrate';
 import { prioritizeDb, withForegroundDb } from '../lib/db/scheduling';
 import { translateDakota } from '../lib/connectors/dakota/translate';
@@ -41,7 +41,7 @@ export function inventedDakotaReplicas(accountCount: number, contactCount: numbe
 
 export async function inventedDakotaDb(accountCount: number) {
   const dir = await mkdtemp(join(tmpdir(), 'plcos-invented-dakota-batched-'));
-  let db: Db = prioritizeDb(await openPglite(join(dir, 'db')));
+  let db: Db = prioritizeDb(await openTestDb(join(dir, 'db')));
   try {
     await migrate(db);
     await db.query(`insert into platform.app_user(id,handle,name,initials,role,email)
@@ -84,7 +84,7 @@ export async function inventedDakotaDb(accountCount: number) {
     });
     return {
       get db() { return db; },
-      async restart() { await db.close(); db = prioritizeDb(await openPglite(join(dir, 'db'))); },
+      async restart() { await db.close(); db = prioritizeDb(await openTestDb(join(dir, 'db'))); },
       async close() { await db.close(); await rm(dir, { recursive: true, force: true }); },
     };
   } catch (error) { await db.close(); await rm(dir, { recursive: true, force: true }); throw error; }

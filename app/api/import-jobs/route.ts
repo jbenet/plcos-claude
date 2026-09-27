@@ -1,0 +1,10 @@
+import { getDb } from '@/lib/db';
+import { importJobStatus } from '@/lib/import-jobs/server';
+export const dynamic='force-dynamic';
+export async function GET() {
+  try {
+    const jobs=await importJobStatus(await getDb());
+    return Response.json({jobs:jobs.map(({id,kind,status,phase,done,total,result,error})=>({id,kind,status,phase,done,total,result,error}))},
+      {headers:{'Cache-Control':'no-store'}});
+  } catch {return Response.json({error:'Import progress is unavailable. Retrying does not restart an import.'},{status:503});}
+}

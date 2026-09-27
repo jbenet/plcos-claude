@@ -1,9 +1,9 @@
 import type { Check } from './harness';
-import { openPglite } from '../../lib/db/pglite';
+import { openTestDb } from './database';
 import { migrate } from '../../lib/db/migrate';
 
 export async function perf4Properties(check: Check) {
-  const db = await openPglite('memory://');
+  const db = await openTestDb('memory://');
   try {
     await migrate(db);
     // Original recursive definition is the oracle, including corrupt cycles,

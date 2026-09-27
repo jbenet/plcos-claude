@@ -9,7 +9,7 @@ import { demoActivity } from '../../lib/activity/demo';
 import { createActivityReader } from '../../lib/activity';
 import { recordActivity, runKey } from '../../lib/activity/log';
 import { encodeLine, type RunLine } from '../../lib/workflows/ledger';
-import { openPglite } from '../../lib/db/pglite';
+import { openTestDb } from './database';
 import { migrate } from '../../lib/db/migrate';
 import { databaseActivity, databaseGeneration } from '../../lib/activity/database';
 import type { Logged } from '../../lib/activity/backfill';
@@ -160,7 +160,7 @@ export async function activityDataProperties(check: Check) {
     await rm(root, { recursive: true, force: true });
   }
 
-  const db = await openPglite('memory://');
+  const db = await openTestDb('memory://');
   try {
     await migrate(db);
     await db.exec(`insert into sources.request_log(at,source,endpoint,path,outcome,note) values

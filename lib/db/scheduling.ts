@@ -75,9 +75,9 @@ export function withForegroundDb<T>(db: Db, work: () => Promise<T>): Promise<T> 
  * An executing query cannot be preempted: maintenance must also bound its query sizes.
  */
 export function prioritizeDb(db: Db, timing: QueueClock = clock): Db {
-  if (db.kind !== 'pglite') return db;
   const prior = state.handles.get(db);
   if (prior) return prior.db;
+  if (db.kind === 'postgres') return concurrentDb(db);
   type Job = { run: () => Promise<void> };
   const foreground: Job[] = [], maintenance: Job[] = [];
   let scheduled = false, executing = false, readers = 0;
@@ -150,6 +150,43 @@ export function prioritizeDb(db: Db, timing: QueueClock = clock): Db {
     try { return await background.run(false, work); }
     finally { readers--; dispatch(); }
   } };
+  state.handles.set(db, entry);
+  state.handles.set(wrapped, entry);
+  return wrapped;
+}
+
+/** PostgreSQL foreground connections run concurrently. Same-process maintenance still
+ * respects a multi-query reader's yield, without serializing unrelated pages or workers. */
+function concurrentDb(db: Db): Db {
+  let readers = 0;
+  const waiting = new Set<() => void>();
+  const run = async <T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> => {
+    if (signal?.aborted) throw new DOMException('DB work cancelled', 'AbortError');
+    if (background.getStore() && readers > 0) await new Promise<void>(resolve => waiting.add(resolve));
+    if (signal?.aborted) throw new DOMException('DB work cancelled', 'AbortError');
+    return work();
+  };
+  const wrapped: Db = {
+    kind: 'postgres',
+    query: (sql, params) => run(() => db.query(sql, params)),
+    one: (sql, params) => run(() => db.one(sql, params)),
+    exec: sql => run(() => db.exec(sql)),
+    transaction: fn => run(() => db.transaction(fn)),
+    close: () => db.close(),
+  };
+  const entry: ScheduledDb = {
+    db: wrapped,
+    cancellable: signal => ({
+      query: (sql, params) => run(() => db.query(sql, params), signal),
+      one: (sql, params) => run(() => db.one(sql, params), signal),
+      exec: sql => run(() => db.exec(sql), signal),
+    }),
+    hold: async work => {
+      readers++;
+      try { return await background.run(false, work); }
+      finally { if (--readers === 0) { for (const resume of waiting) resume(); waiting.clear(); } }
+    },
+  };
   state.handles.set(db, entry);
   state.handles.set(wrapped, entry);
   return wrapped;

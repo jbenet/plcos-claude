@@ -2,6 +2,7 @@ node_modules/
 .next/
 .next-real/
 .next-real-prod/
+.next-pg-*/
 .env
 .env.local
 *.log

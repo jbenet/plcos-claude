@@ -156,7 +156,9 @@ async function boot(dir?: string): Promise<Db> {
   // getDb(), and without this line that call would await the promise it is running inside.
   g.__capitalOsDb = Promise.resolve(db);
 
-  if (config.data.profile === 'real') {
+  if (config.db.rehearsal) {
+    // A copied database is already initialized. Rehearsal must not read live init files.
+  } else if (config.data.profile === 'real') {
     const { loadInit } = await import('../real/init');
     await loadInit(db);
   } else {
@@ -167,7 +169,7 @@ async function boot(dir?: string): Promise<Db> {
   // handle and its checkpoint; boot never awaits the import or opens another DB.
   const scheduled=prioritizeDb(db);
   const {resumeDakotaJob}=await import('../connectors/dakota/job');
-  resumeDakotaJob(scheduled);
+  if (!config.db.rehearsal) resumeDakotaJob(scheduled);
   return scheduled;
 }
 

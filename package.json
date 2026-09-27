@@ -33,7 +33,9 @@
     "changelog:page": "scripts/changelog-page.sh",
     "perf4:seed": "node --import tsx scripts/perf4-fixture.ts",
     "perf4:profile": "node --import tsx scripts/perf4-profile.ts",
-    "perf4:guards": "node --import tsx scripts/perf4-guards.ts"
+    "perf4:guards": "node --import tsx scripts/perf4-guards.ts",
+    "serve:pg": "tsx scripts/serve-pg.ts",
+    "pg:copy": "tsx scripts/pg-copy.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -45,8 +47,10 @@
     "@tiptap/pm": "^3.31.3",
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
+    "@types/pg": "^8.23.1",
     "modern-screenshot": "^4.7.0",
     "next": "^16.3.5",
+    "pg": "^8.23.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tiptap-markdown": "^0.9.0"

@@ -1,47 +1,46 @@
+import { Pool, types, type QueryResult } from 'pg';
 import { TooManyRows, type Db, type Queryable } from './index';
+import { timeQuery } from './timing';
 
-/**
- * The live-version half of the Db seam. Deliberately unexercised until D0: `pg` is not a
- * dependency yet, so the specifier is computed at runtime — the bundler leaves it alone and
- * a missing driver produces a sentence rather than a build error. The swap at D0 is
- * `npm i pg` plus a DATABASE_URL, and nothing above this file changes.
- */
-
-interface PgResult {
-  rows: unknown[];
-}
-interface PgClient {
-  query(sql: string, params?: unknown[]): Promise<PgResult>;
-  release(): void;
-}
-interface PgPool {
-  query(sql: string, params?: unknown[]): Promise<PgResult>;
-  connect(): Promise<PgClient>;
-  end(): Promise<void>;
-}
-interface PgModule {
-  Pool: new (cfg: { connectionString: string }) => PgPool;
+export interface PostgresOptions {
+  /** GUESS — 20 s foreground budget, matching the PGlite queue deadline. Workers use 0. */
+  statementTimeoutMs?: number;
+  /** GUESS — eight foreground connections; workers use a smaller independent pool. */
+  max?: number;
 }
 
-export async function openPostgres(url: string): Promise<Db> {
-  // Opaque on purpose. `pg` is not a dependency until D0, and a literal here makes the
-  // bundler warn about a module it is never supposed to find.
-  const specifier = ['p', 'g'].join('');
-  let mod: PgModule;
-  try {
-    const loaded = (await import(/* @vite-ignore */ specifier)) as { default?: PgModule; Pool?: PgModule['Pool'] };
-    mod = (loaded.Pool ? (loaded as PgModule) : loaded.default) as PgModule;
-    if (!mod?.Pool) throw new Error('no Pool export');
-  } catch {
-    throw new Error(
-      'DATABASE_URL is set but the `pg` driver is not installed. This is the D0 path: run `npm i pg`. ' +
-        'Unset DATABASE_URL to keep using PGlite locally.',
-    );
-  }
-  const pool = new mod.Pool({ connectionString: url });
+/** The application uses numbers for bigint counts, as PGlite does. Refuse precision loss. */
+const parseInt8 = (text: string) => {
+  const value = Number(text);
+  if (!Number.isSafeInteger(value)) throw new RangeError('Database integer exceeds JavaScript safe precision');
+  return value;
+};
+const parsers = { getTypeParser(oid: number, format?: 'text' | 'binary') {
+  if (oid === 20 && format !== 'binary') return parseInt8;
+  return types.getTypeParser(oid, format);
+} };
 
-  const on = (exec: (sql: string, params: unknown[]) => Promise<PgResult>): Queryable => {
-    const query = async <T>(sql: string, params: unknown[] = []) => (await exec(sql, params)).rows as T[];
+/** Real PostgreSQL connections; query/one/exec have the same shape as the local adapter. */
+export async function openPostgres(url: string, options: PostgresOptions = {}): Promise<Db> {
+  const pool = new Pool({
+    connectionString: url,
+    max: options.max ?? 8,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 5_000,
+    statement_timeout: options.statementTimeoutMs ?? 20_000,
+    idle_in_transaction_session_timeout: 60_000,
+    application_name: 'plcos',
+    types: parsers,
+  });
+  // Idle connection failures must not become unhandled EventEmitter errors. pg removes
+  // the failed client; the next query reconnects. No SQL, parameters or URL in this log.
+  pool.on('error', () => console.error('[db] idle Postgres connection lost'));
+  const on = (run: (sql: string, params: unknown[]) => Promise<QueryResult | QueryResult[]>): Queryable => {
+    const query = async <T>(sql: string, params: unknown[] = []): Promise<T[]> => {
+      const result = await timeQuery(sql, () => run(sql, params));
+      // PGlite's no-parameter multi-statement query returns the last statement.
+      return (Array.isArray(result) ? result.at(-1)?.rows ?? [] : result.rows) as T[];
+    };
     return {
       query,
       async one<T>(sql: string, params: unknown[] = []) {
@@ -49,32 +48,26 @@ export async function openPostgres(url: string): Promise<Db> {
         if (rows.length > 1) throw new TooManyRows(rows.length);
         return rows[0] ?? null;
       },
-      async exec(sql: string) {
-        await exec(sql, []);
-      },
+      async exec(sql: string) { await run(sql, []); },
     };
   };
-
-  const top = on((sql, params) => pool.query(sql, params));
+  let closing: Promise<void> | undefined;
   return {
     kind: 'postgres',
-    ...top,
+    ...on((sql, params) => pool.query(sql, params)),
     async transaction<T>(fn: (tx: Queryable) => Promise<T>): Promise<T> {
       const client = await pool.connect();
+      let discard = false;
       try {
         await client.query('begin');
-        const out = await fn(on((sql, params) => client.query(sql, params)));
+        const result = await fn(on((sql, params) => client.query(sql, params)));
         await client.query('commit');
-        return out;
-      } catch (err) {
-        await client.query('rollback');
-        throw err;
-      } finally {
-        client.release();
-      }
+        return result;
+      } catch (error) {
+        try { await client.query('rollback'); } catch { discard = true; }
+        throw error;
+      } finally { client.release(discard); }
     },
-    async close() {
-      await pool.end();
-    },
+    async close() { await (closing ??= pool.end()); },
   };
 }

@@ -1,4 +1,9 @@
 import { getDb, type Db } from '@/lib/db';
+import { DbBusyError } from '@/lib/db/scheduling';
+
+class RevisionChanged extends Error {}
+// GUESS — two retries tolerate brief imports without an unbounded page rebuild loop.
+const REVISION_RETRIES = 2;
 
 /** One revision read, never a scan of the graph or picker tables. Writes invalidate at
  * transaction commit; midnight refreshes date-sensitive picker inputs. Guards are read live. */
@@ -12,7 +17,7 @@ export async function readRevision(db: Db): Promise<string> {
  * requests share the work. Callers must treat returned values as immutable. */
 export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 16) {
   const databases = new WeakMap<Db, { revision: string; entries: Map<string, Promise<T>> }>();
-  const read = async (...args: string[]): Promise<T> => {
+  const readOnce = async (...args: string[]): Promise<T> => {
     const db = await getDb(), revision = await readRevision(db);
     let state = databases.get(db);
     if (state?.revision !== revision) {
@@ -25,7 +30,8 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
       try {
         const result = await load(...args);
         // Concurrent callers share this validated promise, never the unvalidated load.
-        return await readRevision(db) === revision ? result : read(...args);
+        if (await readRevision(db) !== revision) throw new RevisionChanged();
+        return result;
       } catch (error) {
         if (state.entries.get(key) === value) state.entries.delete(key);
         throw error;
@@ -35,5 +41,14 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
     if (state.entries.size > limit) state.entries.delete(state.entries.keys().next().value!);
     return value;
   };
-  return read;
+  return async (...args: string[]): Promise<T> => {
+    // Retry outside shared attempts: joining another caller must not extend our budget.
+    for (let attempt = 0; ; attempt++) {
+      try { return await readOnce(...args); }
+      catch (error) {
+        if (!(error instanceof RevisionChanged)) throw error;
+        if (attempt >= REVISION_RETRIES) throw new DbBusyError();
+      }
+    }
+  };
 }
