@@ -13,7 +13,7 @@
  * the open-file limit for the real data and the preview, as they always have.
  */
 import { spawn } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { statSync, readFileSync } from 'node:fs';
 import { connect, createServer } from 'node:net';
 import { constants } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -100,6 +100,18 @@ async function main() {
   delete env.PREVIEW_COPY_AT;
   if (!production) env.WATCHPACK_POLLING = 'true';
   if (production && serve === 'real') env.NEXT_DIST_DIR = '.next-real-prod';
+  // The live database (docs/21-postgres.md, switched 27 Sep 2026): the launcher is started from Juan's own
+  // shell loop, so the choice lives in a file beside the real data rather than in his environment.
+  // data/real/postgres.url holds a local loopback URL; deleting the file returns to PGlite (the rollback).
+  if (serve === 'real' && !env.DATABASE_URL) {
+    try {
+      const url = readFileSync(join(layout.root, 'data', 'real', 'postgres.url'), 'utf8').trim();
+      if (/^postgres(ql)?:\/\/[^@\s]+@(127\.0\.0\.1|localhost|\[::1\]):\d+\/[a-z0-9_]+$/.test(url)) {
+        env.DATABASE_URL = url;
+        say('database: local Postgres (data/real/postgres.url)');
+      } else if (url) refuse('data/real/postgres.url must be a loopback postgres:// URL with a database name.');
+    } catch { /* No file: PGlite. */ }
+  }
 
   if (serve === 'preview') {
     env = { ...withoutKey(env), PREVIEW_COPY_AT: await prepareCopy(layout) };
