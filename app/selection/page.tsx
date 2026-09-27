@@ -23,8 +23,8 @@ async function Selection({ searchParams }: { searchParams: Promise<Record<string
       <h1>Selection</h1>
       <p className="sublede">
         Who to work next{current ? ` for ${current.name}` : ' across the vehicles being raised'}. Ranked by the score on file, with
-        what it rests on beside the list. New and Sourcing are shown; turn on any other status to compare, and tick LPs to
-        move them to Selected or act on them together.
+        what it rests on beside the list. New and Sourcing are shown; turn on any other status to compare. Move to Selected (or
+        press s) moves the LP in focus, or every ticked one, and Undo puts them back.
       </p>
       <SelectionBoard
         key={current?.id ?? 'all'}

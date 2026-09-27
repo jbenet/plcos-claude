@@ -16,6 +16,9 @@ import { SHOT } from './shot-image';
  *   5. In-app links go through components/ui/AppLink (issues 0027–0028): next/link is
  *      imported only there, so an old address is put in its place before a click instead of
  *      being redirected in the middle of a client navigation, which Safari broke on.
+ *   6. Browser code never calls crypto.randomUUID (issue 0104): it is undefined outside a secure
+ *      context, and the live server is reached over plain http on the local network. A request
+ *      key comes from lib/request-key.ts, which falls back to crypto.getRandomValues.
  */
 const ROOTS = ['app', 'components', 'lib', 'modules', 'config', 'scripts'];
 const DRIVERS = ['@electric-sql/pglite', "from 'pg'", 'from "pg"'];
@@ -74,6 +77,10 @@ async function main() {
 
     if (rel !== join('components', 'ui', 'AppLink.tsx') && /from ['"]next\/link['"]/.test(text)) {
       violations.push(`${rel}: imports next/link — use @/components/ui/AppLink, which puts an old address in its place`);
+    }
+
+    if (/^['"]use client['"]/m.test(text) && /crypto\.randomUUID\s*\(/.test(text)) {
+      violations.push(`${rel}: calls crypto.randomUUID in browser code — use newRequestKey from @/lib/request-key; plain http has no randomUUID`);
     }
 
     // `client.ts` is a deliberate second entrance: types and constants, no data access.

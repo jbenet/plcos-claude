@@ -8,11 +8,12 @@ import {
   type PassedBy, type PursuitStatus, type TouchChannel, type UpdateSuggestion,
 } from '@/modules/strategy/client';
 import { Glyph } from '@/components/ui/Glyph';
+import { newRequestKey } from '@/lib/request-key';
 
 type Of<K extends UpdateSuggestion['kind']> = Extract<UpdateSuggestion, { kind: K }>;
 
 const CHANNEL_WORD: Record<TouchChannel, string> = { meeting: 'meeting', call: 'call', email: 'email', message: 'message' };
-const newKey = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+const newKey = newRequestKey;
 const a = (w: string) => `${/^[aeiou]/.test(w) ? 'an' : 'a'} ${w}`;
 const day = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 

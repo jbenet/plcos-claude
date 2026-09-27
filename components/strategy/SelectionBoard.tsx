@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { scoreDetailAction } from '@/app/selection/actions';
 import type { ScoreDetail } from '@/lib/pipeline-data';
 import { BulkLpActions } from './BulkLpActions';
+import { MoveButton, UndoToast, useMove } from './MoveToSelected';
 import { compareRows, EMPTY, lead, second, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { cx, Disclose, fmt, fmtShort, FilterLine, Icon, Ladder, n, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
+import m from './selection.module.css';
 
 /**
  * Selection (module 03; issues 0071 and 0089): who to work next. A ranked list beside the reasons
@@ -66,16 +68,39 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   const visibleIds = ranked.slice(0, limit).map((r) => r.id);
   const allTicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
 
-  // The keyboard (issue 0091): up and down move the focus through the table, x ticks the LP in
-  // focus, Enter opens it. Not while typing in a field or a dialog.
-  const keys = useRef({ ranked, focus, limit, picked });
-  keys.current = { ranked, focus, limit, picked };
+  // Move to Selected (issue 0104): the ticked LPs when some are ticked, otherwise the one in focus.
+  // Moving the one in focus hands the focus to the next LP, so s, s, s works down the list.
+  const mv = useMove();
+  const ticked = pickedRows.length > 0;
+  const targets = ticked ? pickedRows : focus ? [focus] : [];
+  const moveNow = async () => {
+    const i = focus ? ranked.indexOf(focus) : -1;
+    const going = new Set(targets.filter((r) => r.status !== 'selected').map((r) => r.id));
+    const next = ticked ? null : ranked.slice(i + 1).find((r) => !going.has(r.id)) ?? ranked.slice(0, Math.max(0, i)).reverse().find((r) => !going.has(r.id));
+    const done = await mv.move(targets);
+    if (!done) return;
+    if (ticked) view.clearPicked();
+    else if (next) {
+      setFocusId(next.id);
+      requestAnimationFrame(() => document.querySelector(`[data-lp="${next.id}"]`)?.scrollIntoView({ block: 'nearest' }));
+    }
+  };
+  const undoNow = async () => {
+    const done = await mv.undo();
+    if (done?.rows.length === 1) setFocusId(done.rows[0]!.id);
+  };
+
+  // The keyboard (issues 0091, 0104): up and down move the focus through the table, x ticks the LP
+  // in focus, s moves to Selected, u undoes that, Enter opens it. Not while typing in a field or a dialog.
+  const keys = useRef({ ranked, focus, limit, picked, moveNow, undoNow });
+  keys.current = { ranked, focus, limit, picked, moveNow, undoNow };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target instanceof HTMLElement ? e.target : null;
       if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && !(el as HTMLInputElement).type?.match(/checkbox/) || el.closest('dialog, [role="dialog"]'))) return;
-      const { ranked, focus, limit, picked } = keys.current;
+      const { ranked, focus, limit, picked, moveNow, undoNow } = keys.current;
+      if (e.key === 'u' && !e.shiftKey) { e.preventDefault(); void undoNow(); return; }
       if (!focus) return;
       const i = ranked.indexOf(focus);
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'j' || e.key === 'k') {
@@ -85,6 +110,9 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
         if (ranked.indexOf(next) >= limit) setLimit((x) => x + PAGE);
         setFocusId(next.id);
         requestAnimationFrame(() => document.querySelector(`[data-lp="${next.id}"]`)?.scrollIntoView({ block: 'nearest' }));
+      } else if (e.key === 's' && !e.shiftKey) {
+        e.preventDefault();
+        void moveNow();
       } else if (e.key === 'x') {
         e.preventDefault();
         pick([focus.id], !picked.has(focus.id));
@@ -113,6 +141,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   const toggle = (id: Status) => setEnabled(enabled.includes(id) ? enabled.filter((x) => x !== id) : statuses.map((x) => x.id).filter((x) => x === id || enabled.includes(x)));
   const open = (r: PipelineRow) => router.push(`/${r.vehicleSlug}/pipeline/${r.id}`);
 
+  const moveBar = targets.length > 0 && <MoveButton state={mv} rows={targets} ticked={ticked} onMove={() => void moveNow()} />;
   const detail = focus && <Why key={focus.id} r={focus} position={position} sortLabel={SORT_LABEL[sort.key] ?? 'score'} rungNames={rungNames} now={now}
     picked={picked.has(focus.id)} onPick={(on) => pick([focus.id], on)} />;
 
@@ -146,7 +175,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
               {n(shown.length)} LPs · {n(scored)} scored
               {enabled.length > 0 && !all && <span> · {enabled.map((id) => statuses.find((x) => x.id === id)?.label).join(', ')}</span>}
             </div>
-            <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>↵</kbd> open</div>
+            <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>s</kbd> to Selected · <kbd>↵</kbd> open</div>
           </div>
 
           {ranked.length === 0 ? (
@@ -181,7 +210,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
                       <RankRow r={r} position={i + 1} focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now}
                         onFocus={setFocusId} onPick={pick} />
                       {narrow && r.id === focus?.id && detail && (
-                        <tr className={s.inlineRow}><td colSpan={9}><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>
+                        <tr className={s.inlineRow}><td colSpan={9}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>
                       )}
                     </Fragment>
                   ))}
@@ -203,12 +232,15 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
         </div>
 
         <aside className={s.side} aria-label="The LP in focus">
+          {!narrow && moveBar}
           {pickedRows.length > 0 && (
-            <BulkLpActions rows={pickedRows} statuses={statuses} initialStatus="selected" onClear={view.clearPicked} hidden={pickedRows.filter((r) => !shownIds.has(r.id)).length} />
+            <BulkLpActions rows={pickedRows} statuses={statuses} initialStatus="selected" onClear={view.clearPicked} place="selection"
+              onStatusSaved={mv.remember} hidden={pickedRows.filter((r) => !shownIds.has(r.id)).length} />
           )}
           {detail && !narrow && <div className={cx('card', s.sideWhy)} style={{ marginBottom: 0 }}>{detail}</div>}
         </aside>
       </div>
+      <UndoToast state={mv} onUndo={() => void undoNow()} />
     </section>
   );
 }
@@ -285,9 +317,9 @@ function Why({ r, position, sortLabel, rungNames, now, picked, onPick }: {
       </div>
 
       <div className={s.go}>
-        <a className="btn p" href={`/${r.vehicleSlug}/pipeline/${r.id}`}>Open {lead(r)}&rsquo;s strategy</a>
+        <a className="btn" href={`/${r.vehicleSlug}/pipeline/${r.id}`}>Open {lead(r)}&rsquo;s strategy</a>
         <div className={s.goRow}>
-          <button type="button" className="btn" aria-pressed={picked} onClick={() => onPick(!picked)}>{picked ? 'Unselect' : 'Select for an action'}</button>
+          <button type="button" className="btn" aria-pressed={picked} onClick={() => onPick(!picked)}>{picked ? 'Untick' : 'Tick for a batch'}</button>
           <a className="btn" href={`/${r.vehicleSlug}/fit/${r.entityId}`}>Fit &amp; standing</a>
         </div>
       </div>
