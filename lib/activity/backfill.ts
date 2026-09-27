@@ -1,3 +1,5 @@
+import { setImmediate as yieldTurn } from 'node:timers/promises';
+import type { ActivityFiles } from './file-cache';
 import { config } from '../../config/deployment';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -18,13 +20,31 @@ export async function contents(path: string): Promise<string> {
 }
 async function json(path: string): Promise<Obj | null> { try { return JSON.parse(await contents(path)); } catch { return null; } }
 async function size(path: string): Promise<number | null> { try { return (await stat(path)).size; } catch { return null; } }
-export async function readLog(root: string): Promise<Logged> {
+export async function readLog(root: string, files?: ActivityFiles): Promise<Logged> {
   const out: Logged = { points: [], origins: [], cutoffs: new Map(), runs: new Set() }, ids = new Set<string>();
   for (const f of await names(join(root, 'activity'))) {
     if (!/^\d{4}-\d\d-\d\d\.jsonl$/.test(f)) continue;
-    const lines = (await contents(join(root, 'activity', f))).split('\n'); lines.pop();
-    for (const line of lines) { try {
-      const r = JSON.parse(line), day = utcDay(r.at);
+    const path = join(root, 'activity', f);
+    const extract = async () => {
+      const lines = (await contents(path)).split('\n'); lines.pop();
+      const rows: Obj[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (i % 100 === 0) await yieldTurn();
+        try {
+          const r = JSON.parse(lines[i]);
+          rows.push({id:r.id, at:r.at, source:r.source, segment:segment(r.source,r.segment), run:r.run,
+            requests:quantity(r.requests), bytesIn:quantity(r.bytesIn), bytesOut:quantity(r.bytesOut),
+            records:quantity(r.records), estimated:r.estimated === true, origin:host(r.origin)});
+        } catch { /* Ignore malformed or torn records. */ }
+      }
+      return rows;
+    };
+    const rows = files ? await files.parsed(path, 'log', extract) : await extract();
+    for (let i = 0; i < rows.length; i++) {
+      if (i % 100 === 0) await yieldTurn();
+      const r = rows[i];
+      try {
+      const day = utcDay(r.at);
       if (!day || !['affinity','warehouse','dakota','intake','search','fetch','sec','agents'].includes(r.source) || typeof r.id !== 'string' || ids.has(r.id)) continue;
       ids.add(r.id);
       const key = r.source;
@@ -43,7 +63,18 @@ export function covered(log: Logged, source: ActivitySource, at: string, id?: st
   // Historical producers without stable execution IDs switch over at instrumentation time.
   return Boolean(log.cutoffs.get(source) && at >= log.cutoffs.get(source)!);
 }
-export async function backfill(root: string, log: Logged): Promise<Evidence> {
+export async function backfill(root: string, log: Logged, files?: ActivityFiles): Promise<Evidence> {
+  const manifest = async (path: string): Promise<Obj | null> => {
+    const extract = async () => {
+      const m = await json(path);
+      if (!m) return null;
+      // Keep only the metadata needed to count and match executions, never payloads.
+      return { at:m.at, asOf:m.asOf, runId:m.runId, requests:m.requests,
+        modules:m.modules && Object.fromEntries(['account','contact'].filter(k => m.modules[k]).map(k => [k,{written:m.modules[k].written}])),
+        inputPages:Array.isArray(m.inputPages) ? m.inputPages.map((p: Obj) => ({queryHash:p.queryHash, retrievedAt:p.retrievedAt, rows:p.rows})) : undefined };
+    };
+    return files ? files.parsed(path, 'manifest', extract) : json(path);
+  };
   const points: ActivityPoint[] = [], origins: OriginCount[] = [];
   const add = (source: ActivitySource, at: unknown, values: Partial<ActivityPoint>, basis: string, id?: string) => {
     const day = utcDay(at); if (!day || (values.segment !== 'files' && covered(log, source, String(at), id))) return;
@@ -56,7 +87,7 @@ export async function backfill(root: string, log: Logged): Promise<Evidence> {
       at: Date.parse(m.at), requests: quantity(m.requests) });
   };
   for (const f of manifests.filter(f => f.endsWith('.manifest.json'))) {
-    const m = await json(join(root, 'dakota/raw', f)); if (!m || !utcDay(m.at)) continue;
+    const m = await manifest(join(root, 'dakota/raw', f)); if (!m || !utcDay(m.at)) continue;
     rememberDakota(m);
     const stamp = f.replace('.manifest.json', '');
     add('dakota', m.at, { requests: quantity(m.requests), bytesIn: 0, bytesOut: null, records: 0, estimated: false }, 'Manifest request total is recorded; outbound bytes were not recorded.', m.runId);
@@ -65,13 +96,13 @@ export async function backfill(root: string, log: Logged): Promise<Evidence> {
       'Manifest written count; saved JSONL bytes approximate response bytes, excluding protocol overhead.', m.runId);
   }
   for (const f of (await names(join(root, 'dakota'))).filter(f => /^test-.*\.json$/.test(f))) {
-    const m = await json(join(root, 'dakota', f)); if (m) {
+    const m = await manifest(join(root, 'dakota', f)); if (m) {
       rememberDakota(m);
       add('dakota', m.at, { requests: quantity(m.requests), records: 0 }, 'Recorded test requests; inventory count is not records pulled.', m.runId);
     }
   }
   let warehousePages = 0;
-  const warehouse = await json(join(root, 'enrich/warehouse/graph-manifest.json'));
+  const warehouse = await manifest(join(root, 'enrich/warehouse/graph-manifest.json'));
   if (warehouse) {
     const seen = new Set<string>();
     for (const p of Array.isArray(warehouse.inputPages) ? warehouse.inputPages : []) {
@@ -83,6 +114,20 @@ export async function backfill(root: string, log: Logged): Promise<Evidence> {
     }
   }
   for (const f of (await names(join(root, 'enrich/raw'))).filter(f => f.endsWith('.json'))) {
+    await yieldTurn();
+    if (files) {
+      const d = await files.raw(join(root, 'enrich/raw', f));
+      if (!d) continue;
+      const day = utcDay(d.at)!;
+      if (d.queries) add('search', d.at, { segment:'queries', requests:d.queries.requests, bytesOut:d.queries.bytes, records:d.queries.requests }, 'One request per saved query; serialized query bytes approximate outbound payload. Retries and result counts unrecorded. Search provider host unknown.');
+      for (const {origin, requests} of d.hosts) {
+        const source = origin === 'sec.gov' || origin.endsWith('.sec.gov') ? 'sec' : 'fetch';
+        if (covered(log, source, d.at)) continue;
+        add(source, d.at, {requests, records:requests}, 'One fetch per distinct cited URL within a finding; citation may come from search. Research date used; W1c refetches and retries unknown.');
+        origins.push({day, origin, requests, estimated:true});
+      }
+      continue;
+    }
     const r = await json(join(root, 'enrich/raw', f)); if (!r || !utcDay(r.researched?.at)) continue;
     const at = r.researched.at, day = utcDay(at)!;
     if (Array.isArray(r.queries)) add('search', at, { segment: 'queries', requests: r.queries.length, bytesOut: Buffer.byteLength(JSON.stringify(r.queries), 'utf8'), records: r.queries.length }, 'One request per saved query; serialized query bytes approximate outbound payload. Retries and result counts unrecorded. Search provider host unknown.');
@@ -103,13 +148,26 @@ export async function backfill(root: string, log: Logged): Promise<Evidence> {
   async function intake(dir: string): Promise<void> {
     let entries; try { entries = await readdir(dir, { withFileTypes: true }); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return; throw e; }
     for (const entry of entries) {
+      await yieldTurn();
       const path = join(dir, entry.name);
       if (entry.isDirectory()) await intake(path);
       else if (entry.isFile()) { const s = await stat(path); add('intake', s.mtime.toISOString(), { segment: 'files', requests: 0, bytesIn: s.size, bytesOut: 0, records: 1 }, 'File size measured; modification date stands in for intake date. One record per file.'); }
     }
   }
   await intake(join(root, 'intake'));
-  const ledger = foldRuns(await contents(join(root, 'workflows/runs.jsonl')));
+  const ledgerPath = join(root, 'workflows/runs.jsonl');
+  const extractLedger = async () => {
+    const ledger = foldRuns(await contents(ledgerPath));
+    // Descriptors are necessary for legacy matching; names, batches and prompts are not.
+    const narrow = (r: NonNullable<(typeof ledger.runs)[number]['start']>) => ({
+      source:r.source, workflow:r.workflow, operation:r.operation, protocol:{version:r.protocol.version},
+      startedAt:r.startedAt, endedAt:r.endedAt, counts:{written:r.counts.written},
+      usage:r.usage && {input:r.usage.input, output:r.usage.output, method:r.usage.method},
+    });
+    return {runs:ledger.runs.map(r => ({runId:r.runId, conflict:r.conflict,
+      start:r.start && narrow(r.start), finish:r.finish && narrow(r.finish)}))};
+  };
+  const ledger = files ? await files.parsed(ledgerPath, 'ledger', extractLedger) : await extractLedger();
   const usableRuns = ledger.runs.filter(run => !run.conflict && run.start);
   const representedDakota = new Set(dakotaManifests.flatMap(m => m.runId ? [m.runId] : []));
   const descriptorOf = (r: NonNullable<(typeof usableRuns)[number]['start']>) => `${r.workflow ?? ''} ${r.operation} ${r.protocol.version ?? ''}`;
@@ -146,8 +204,17 @@ export async function backfill(root: string, log: Logged): Promise<Evidence> {
     }
   }
   const estimates = new Map<string, Obj>();
-  for (const line of (await contents(join(root, 'workflows/usage-estimates.jsonl'))).split('\n')) { try { const r = JSON.parse(line); if (typeof r.runId === 'string') estimates.set(r.runId, r); } catch {} }
+  const estimatePath = join(root, 'workflows/usage-estimates.jsonl');
+  const extractEstimates = async () => {
+    const rows: Obj[] = [];
+    for (const line of (await contents(estimatePath)).split('\n')) { try {
+      const r = JSON.parse(line); if (typeof r.runId === 'string') rows.push({runId:r.runId, input:r.input, output:r.output});
+    } catch {} }
+    return rows;
+  };
+  for (const r of files ? await files.parsed(estimatePath, 'estimates', extractEstimates) : await extractEstimates()) estimates.set(r.runId, r);
   for (const run of ledger.runs) {
+    await yieldTurn();
     if (run.conflict) continue;
     const r = run.finish ?? run.start; if (!r) continue;
     const at = r.endedAt ?? r.startedAt;
