@@ -135,3 +135,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Selection as a table, organisations as rows, a warm intro box · issues 0091–0093](entries/tables-0091-0093.md)
 - [0097 / 0102 — Strategy recommendations, utility created, status marks; rail order](entries/strategy-0097.md)
 - [The Developer pages, redesigned — changelog, status, workflows and logs · issues 0098–0101 (and 0036)](entries/developer-0098-0101.md)
+- [0090 — The shell on a phone and a narrow tablet](entries/shell-phone-0090.md)

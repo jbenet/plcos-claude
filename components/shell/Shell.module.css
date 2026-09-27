@@ -1,0 +1,183 @@
+/*
+ * The shell at narrow widths (issue 0090). Every rule that changes a layout sits in a media query
+ * whose width is lib/viewport.ts's PHONE_MAX (760) or PANE_MAX (1023); a property checks they agree.
+ * Above 1023 px nothing in this file changes what is drawn: the wrappers have `display: contents`,
+ * the phone controls are `display: none`, and the safe-area insets are zero off a phone.
+ */
+
+/* ------------------------------------------------------------ everywhere */
+
+.bar { display: none; }
+.sheet { display: contents; }
+.details { display: none; }
+
+/* The side pane's header and the rail sheet's close button only exist while a sheet is open. */
+.paneHead {
+  position: sticky; top: -16px; z-index: 1;
+  margin: -16px -16px 12px; padding: 10px 12px 10px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.paneHead .paneClose { padding: 6px 12px; min-height: 32px; }
+
+.scrim {
+  position: fixed; inset: 0; z-index: 30;
+  background: rgba(26, 25, 23, .34);
+  animation: fadeIn .18s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* The page's queue column (approvals, decisions, routes): the same as the inline style it replaces. */
+.queued { display: flex; min-height: 0; align-items: stretch; margin: -22px -24px; }
+.queuedWork { flex: 1; min-width: 0; padding: 22px 24px; }
+
+/* ------------------------------------------------------------ narrow tablets and phones */
+
+@media (max-width: 1023px) {
+  /* The pane toggle gives way to a button that opens the pane over the page. */
+  .app :global(.topbar) .deskToggle { display: none; }
+  .details { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; flex: none; }
+
+  /* The breadcrumbs keep a readable width: the sync line wraps under them rather than
+     squeezing them to a word a line. */
+  .app :global(.topbar) { flex-wrap: wrap; row-gap: 4px; padding-top: 6px; padding-bottom: 6px; }
+  .app :global(.topbar .crumb) { flex: 1 1 220px; min-width: 0; }
+
+  /* Closed, the pane is not drawn; open, it slides over the page from the right. */
+  .app :global(.insp).pane { display: none; }
+  .app :global(.insp).pane.paneOpen {
+    display: block;
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 31;
+    width: min(380px, calc(100vw - 48px));
+    height: var(--app-h, 100dvh);
+    overflow-y: auto; overscroll-behavior: contain;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    padding-right: calc(16px + env(safe-area-inset-right));
+    border-left: 1px solid var(--line);
+    box-shadow: -18px 0 40px rgba(26, 25, 23, .14);
+    animation: fromRight .2s ease;
+  }
+}
+@keyframes fromRight { from { transform: translateX(24px); opacity: .4; } to { transform: none; opacity: 1; } }
+
+/* ------------------------------------------------------------ phones */
+
+@media (max-width: 760px) {
+  .app.app { flex-direction: column; background-image: none; }
+
+  /* The top bar: the rail's colours, its brand, and the menu. It stays on screen; the page's own
+     breadcrumb bar scrolls away under it, since two sticky bars would take a tenth of a phone. */
+  .bar {
+    display: flex; align-items: center; gap: 6px; flex: none;
+    position: sticky; top: 0; z-index: 20;
+    min-height: calc(46px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) calc(14px + env(safe-area-inset-right)) 0 calc(4px + env(safe-area-inset-left));
+    background: var(--rail); color: var(--rail-ink);
+    border-bottom: 1px solid var(--rail-line);
+  }
+  .menu {
+    width: 44px; height: 44px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: 0; border-radius: 8px; color: inherit; cursor: pointer;
+  }
+  .menu:hover, .menu:focus-visible { background: var(--rail-hover); }
+  .burger { display: flex; flex-direction: column; gap: 4px; width: 18px; }
+  .burger i { display: block; height: 2px; border-radius: 1px; background: currentColor; }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand b {
+    font-family: var(--display); font-size: 15px; font-weight: 600; letter-spacing: .01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* The rail, as a sheet from the left. Hidden (not only moved) while closed, so nothing in it
+     takes focus or is read out. */
+  .sheet {
+    display: block;
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 31;
+    width: min(320px, calc(100vw - 56px));
+    height: var(--app-h, 100dvh);
+    transform: translateX(-100%); visibility: hidden;
+    transition: transform .22s ease, visibility 0s linear .22s;
+    box-shadow: 18px 0 40px rgba(26, 25, 23, .22);
+    outline: none;
+  }
+  .sheet.open { transform: none; visibility: visible; transition: transform .22s ease; }
+  .sheet :global(.rail) {
+    position: static; width: 100%; height: 100%;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    padding-left: env(safe-area-inset-left);
+  }
+  /* Room for the close button at the end of the brand row. */
+  .sheet :global(.brand) { padding-right: 52px; }
+  .close {
+    position: absolute; z-index: 1; right: 4px; top: calc(1px + env(safe-area-inset-top));
+    width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: 0; border-radius: 8px;
+    color: var(--rail-ink); font-size: 24px; line-height: 1; cursor: pointer;
+  }
+  .close:hover, .close:focus-visible { background: var(--rail-hover); }
+  /* Rows a finger can hit. */
+  .sheet :global(.sub), .sheet :global(.subsub) { min-height: 40px; }
+  .sheet :global(.sub) { font-size: 14px; }
+  .sheet :global(.subsub) { display: flex; align-items: center; font-size: 13.5px; }
+
+  /* The page takes the whole width. */
+  .app :global(.main) {
+    width: 100%;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  .app :global(.topbar) {
+    position: static; flex-wrap: wrap; gap: 6px 10px; padding: 8px 14px;
+  }
+  .app :global(.topbar .crumb) { flex: 1 1 100%; min-width: 0; line-height: 1.4; overflow-wrap: anywhere; }
+  .app :global(.topbar .sync) { margin-left: 0; flex: 1 1 0; min-width: 0; line-height: 1.35; }
+  .app :global(.pnotice) { padding: 8px 14px; }
+  .app :global(.work) { padding: 16px 14px 28px; }
+  /* A table wider than the phone scrolls in its own card, not the page. */
+  .app :global(.work .card) { max-width: 100%; overflow-x: auto; }
+  .app :global(.work .chead) { flex-wrap: wrap; row-gap: 4px; }
+  /* The house row (kind · text · state, as on Today and Approvals) put its text in a column a word
+     wide: the kind and the state share the first line, and the text takes the whole second one.
+     The fixed widths those rows set inline give way here. */
+  .app :global(.work .row:has(> .state)) { flex-wrap: wrap; row-gap: 6px; align-items: flex-start; }
+  .app :global(.work .row:has(> .state) > .t) { order: 2; flex: 1 1 100%; }
+  .app :global(.work .row:has(> .state) > .state) { margin-left: auto; width: auto !important; min-width: 0; }
+
+  /* The pane, as a bottom sheet. */
+  .app :global(.insp).pane.paneOpen {
+    top: auto; left: 0; right: 0; width: auto;
+    height: auto; max-height: calc(var(--app-h, 100dvh) * .86);
+    padding-left: calc(16px + env(safe-area-inset-left));
+    border-left: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0;
+    box-shadow: 0 -18px 40px rgba(26, 25, 23, .16);
+    animation: fromBelow .22s ease;
+  }
+  .paneHead { border-radius: 14px 14px 0 0; }
+
+  /* A queue column goes above the work, in a box of its own that scrolls. */
+  .queued { flex-direction: column; margin: -16px -14px; }
+  .queuedWork { padding: 16px 14px; }
+  .queued > :global(.queue) {
+    position: static; width: auto; height: auto; max-height: 46dvh;
+    overflow-y: auto; overscroll-behavior: contain;
+    border-right: 0; border-bottom: 1px solid var(--line);
+  }
+  .queued > :global(.queue:has(.route-picker)) { height: 46dvh; overflow: hidden; }
+
+  /* The feedback box is portalled to <body>, so it carries this class itself. */
+  .drawer.drawer.drawer {
+    width: 100%; left: 0; border-left: 0;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    padding-left: calc(16px + env(safe-area-inset-left));
+    padding-right: calc(16px + env(safe-area-inset-right));
+  }
+}
+@keyframes fromBelow { from { transform: translateY(32px); opacity: .4; } to { transform: none; opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet, .sheet.open { transition: none; }
+  .scrim, .app :global(.insp).pane.paneOpen { animation: none; }
+}

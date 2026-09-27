@@ -4,6 +4,7 @@ import { ago } from '@/lib/time';
 import { config } from '@/config/deployment';
 import { shareRequestWork } from '@/lib/page-render';
 import { PageFrame } from './PageFrame';
+import s from './Shell.module.css';
 
 export interface Crumb {
   label: string;
@@ -55,9 +56,10 @@ export async function Page({
       inspector={inspector}
     >
       {queue ? (
-        <div style={{ display: 'flex', minHeight: 0, alignItems: 'stretch', margin: '-22px -24px' }}>
+        // On a phone the queue goes above the work (issue 0090), so its layout lives in the stylesheet.
+        <div className={s.queued}>
           <div className="queue">{queue}</div>
-          <div style={{ flex: 1, minWidth: 0, padding: '22px 24px' }}>{children}</div>
+          <div className={s.queuedWork}>{children}</div>
         </div>
       ) : (
         children

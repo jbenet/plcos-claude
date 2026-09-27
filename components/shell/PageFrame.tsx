@@ -1,7 +1,11 @@
 'use client';
 
 import Link from '@/components/ui/AppLink';
-import { useEffect, useState, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { PANE_QUERY } from '@/lib/viewport';
+import { useMedia, useModalSheet } from './useSheet';
+import s from './Shell.module.css';
 
 const STORE_KEY = 'capitalos.rightpane';
 
@@ -12,6 +16,12 @@ const STORE_KEY = 'capitalos.rightpane';
  * The pane is for drilling into one thing — the detail of a selected object, the source
  * material behind it, a conversation about it. It is not scaffolding, so it closes, and
  * the choice is remembered.
+ *
+ * Up to PANE_MAX wide (issue 0090) the pane is not drawn beside the work, which it left a column
+ * about 230 px wide on a tablet held upright. A Details button opens it over the page instead: from
+ * the right on a tablet, from the bottom on a phone, with a close button, Escape, a tap outside, and
+ * focus kept inside it until it closes. That sheet always starts closed and is not remembered; the
+ * desktop choice above is left as it was.
  */
 const PROFILE = {
   demo: {
@@ -68,6 +78,16 @@ export function PageFrame({
     });
   };
 
+  const path = usePathname();
+  const narrow = useMedia(PANE_QUERY);
+  // Open "at" an address, so a link followed from inside the sheet closes it.
+  const [sheetAt, setSheetAt] = useState<string | null>(null);
+  const sheet = narrow && sheetAt === path;
+  const closeSheet = useCallback(() => setSheetAt(null), []);
+  const details = useRef<HTMLButtonElement>(null);
+  const pane = useRef<HTMLElement>(null);
+  useModalSheet(sheet, pane, details, closeSheet);
+
   const last = crumbs[crumbs.length - 1];
 
   return (
@@ -92,7 +112,19 @@ export function PageFrame({
         {actions}
         {inspector && (
           <button
-            className="panetoggle"
+            ref={details}
+            type="button"
+            className={`btn ${s.details}`}
+            onClick={() => setSheetAt(path)}
+            aria-expanded={sheet}
+            aria-controls="page-pane"
+          >
+            Details
+          </button>
+        )}
+        {inspector && (
+          <button
+            className={`panetoggle ${s.deskToggle}`}
             onClick={toggle}
             aria-expanded={open}
             // The glyph is decoration. Without the label a screen reader announces "⟩",
@@ -113,7 +145,26 @@ export function PageFrame({
 
       <div className="body">
         <div className="work">{children}</div>
-        {inspector && open ? <aside className="insp">{inspector}</aside> : null}
+        {inspector && (open || sheet) ? (
+          <aside
+            id="page-pane"
+            ref={pane}
+            className={`insp ${s.pane}${sheet ? ` ${s.paneOpen}` : ''}`}
+            role={sheet ? 'dialog' : undefined}
+            aria-modal={sheet || undefined}
+            aria-label={sheet ? 'Details' : undefined}
+            tabIndex={sheet ? -1 : undefined}
+          >
+            {sheet && (
+              <div className={s.paneHead}>
+                <span className="lbl">Details</span>
+                <button type="button" className={`btn ${s.paneClose}`} onClick={closeSheet} data-sheet-focus>Close</button>
+              </div>
+            )}
+            {inspector}
+          </aside>
+        ) : null}
+        {sheet && <div className={s.scrim} onClick={closeSheet} aria-hidden />}
       </div>
     </>
   );
