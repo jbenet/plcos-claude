@@ -4,7 +4,7 @@ import { withDb, type Db } from '../../lib/db';
 import { applyBulk, type BulkInput } from '../../lib/pipeline-bulk';
 import { pipelineData, scoreDetail } from '../../lib/pipeline-data';
 import { provisionalScore } from '../../lib/strategy-score';
-import { compareRows, groupRows, SORT_KEYS } from '../../components/strategy/pipeline-model';
+import { compareRows, groupRows, orgSummary, SORT_KEYS } from '../../components/strategy/pipeline-model';
 import type { Check } from './harness';
 export async function tableProperties(check: Check, db: Db) {
   await withDb(db, async () => {
@@ -37,6 +37,15 @@ export async function tableProperties(check: Check, db: Db) {
         (await pipelineData(first.id)).rows.find(r => r.id === ids[0])?.score === null, 'The existing vehicle projection rejects a mismatched ask.vehicle.');
       const grouped = groupRows([{...a, orgFirst: true, orgId: 'org', org: 'Invented Org'}, {...b, orgFirst: true, orgId: 'org', org: 'Invented Org'}], 'score', -1);
       check('0067 groups never combine the same organisation across vehicles', grouped.length === 2, 'Grouping uses organisation identity plus vehicle identity.');
+      const orgRow = { ...a, id: 'org-pursuit', entityId: 'org', isOrg: true, orgFirst: true, orgId: 'org', org: 'Invented Org', name: 'Invented Org', score: 10 };
+      const person = { ...a, id: 'person-pursuit', orgFirst: false, orgId: 'org', org: 'Invented Org', score: 90 };
+      const withOrg = groupRows([person, orgRow], 'score', -1);
+      const members = [{ ...person, orgFirst: true, score: 40, route: 2 }, { ...person, id: 'p2', orgFirst: true, score: 70, route: 3 }, { ...person, id: 'p3', orgFirst: true, score: null, route: null }];
+      const sum = orgSummary(members);
+      check('0092 an organisation pursued in its own right leads its people, and an organisation row reads its people without inventing',
+        withOrg.length === 1 && withOrg[0]!.people[0]!.id === 'org-pursuit' && sum.score === 70 && sum.scoreFrom === members[1]!.name
+          && sum.route === 5 && sum.count === 3,
+        'The org pursuit comes first whatever its score; a summary row takes its best person’s score, names them, and adds up routes.');
       check('0067 every column compares deterministically and missing scores sort last both ways',
         SORT_KEYS.every(k => Number.isFinite(compareRows(a,b,k,1))) && compareRows(a,b,'score',1) > 0 && compareRows(a,b,'score',-1) > 0,
         'Unscored is not a zero; all displayed columns have a comparator.');

@@ -37,6 +37,10 @@ import { ConnectionFeedback } from '@/components/routes/ConnectionFeedback';
 import { PublicProfile } from '@/components/entity/PublicProfile';
 import { SuggestedStrategy } from '@/components/strategy/SuggestedStrategy';
 import { AddContext } from '@/components/strategy/AddContext';
+import { OrgPeople, WarmIntroBox } from '@/components/strategy/LpSideCards';
+import lp from '@/components/strategy/lp-tables.module.css';
+import { listEntities } from '@/modules/identity';
+import { listVehicles } from '@/modules/platform';
 import { BeforeOutreach } from '@/components/strategy/BeforeOutreach';
 import { findOpenTicket } from '@/modules/governance';
 
@@ -56,12 +60,15 @@ async function TargetWorkspace({ params, searchParams }: {
   const pursuit = await getPursuit(id);
   if (!pursuit) notFound();
 
-  const user = await (await auth()).currentUser();
+  const [user, vehicles, [entity]] = await Promise.all([(async () => (await auth()).currentUser())(), listVehicles(), listEntities([pursuit.entityId])]);
+  // The routes page's own search — team scope, three hops, this vehicle — so the warm intro box
+  // and the page it opens agree (issue 0093).
+  const vehicleKind = vehicles.find((v) => v.id === pursuit.vehicleId)?.kind ?? 'fund';
   const [claims, notes, restrictions, routes, signals, affinityNotes, tracks, calendar, readings, everything, updates, statusLog] = await Promise.all([
     claimsFor(pursuit.entityId),
     notesFor(pursuit.entityId),
     restrictionsFor(pursuit.entityId),
-    planRoutes(user.handle, pursuit.entityId, 3, 'fund', 'team'),
+    planRoutes(user.handle, pursuit.entityId, 3, vehicleKind, 'team', undefined, { vehicleId: pursuit.vehicleId }),
     signalsFor(pursuit.entityId),
     notesAbout(pursuit.entityId),
     closeTracksFor(pursuit.entityId, pursuit.vehicleId),
@@ -322,7 +329,9 @@ async function TargetWorkspace({ params, searchParams }: {
 
       <StatusStepper pursuit={pursuit} onFile={file} proposalId={proposal?.id ?? null} track={tracks[0] ?? null} />
 
-      <div className="grid2">
+      {/* Two columns while there is room for both. Narrower — an iPad with the pane open — the side
+          column comes first, warm intro on top, instead of spilling under the pane (issue 0093). */}
+      <div className={lp.lpWrap}><div className={lp.lpGrid}>
         <div>
           {tracks.map((t) => <CloseTrack key={t.exposure.exposureId} track={t} pursuitId={pursuit.pursuitId} />)}
 
@@ -455,6 +464,7 @@ async function TargetWorkspace({ params, searchParams }: {
         </div>
 
         <div>
+          <WarmIntroBox search={routes} entityId={pursuit.entityId} />
           {/* Context or a correction from the team (issue 0016): research on this LP, read first by the strategy workflow. */}
           <AddContext
             pursuitId={pursuit.pursuitId}
@@ -462,6 +472,13 @@ async function TargetWorkspace({ params, searchParams }: {
             vehicleId={pursuit.vehicleId}
             notes={notes.filter((n) => n.kind === 'context').map((n) => ({ id: n.noteId, by: n.author, on: shortDate(n.createdAt), body: n.body }))}
           />
+          {/* An organisation that is the LP lists its people (issue 0092). */}
+          {(() => {
+            const isOrg = entity && entity.entityType !== 'person';
+            const orgId = isOrg ? pursuit.entityId : heading?.orgFirst ? heading.orgId : null;
+            const orgName = isOrg ? pursuit.entityName : heading?.org ?? null;
+            return orgId && orgName ? <OrgPeople orgId={orgId} orgName={orgName} vehicleId={pursuit.vehicleId} currentPursuitId={pursuit.pursuitId} /> : null;
+          })()}
           <div className="card">
             <div className="chead">
               <h2>What we know</h2>
@@ -505,7 +522,7 @@ async function TargetWorkspace({ params, searchParams }: {
           </div>
 
         </div>
-      </div>
+      </div></div>
     </Page>
   );
 }

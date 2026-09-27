@@ -208,6 +208,28 @@ export function Ladder({ r, names }: { r: PipelineRow; names: string[] }) {
   );
 }
 
+/** A count that opens to a list; closed, the list isn't in the page, so a long table stays light. */
+export function Disclose({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={s.flags}>
+      <button type="button" className={s.flagsBtn} aria-expanded={open} onClick={() => setOpen(!open)}>{open ? '▾' : '▸'} {label}</button>
+      {open && children}
+    </div>
+  );
+}
+export function Flags({ r, href }: { r: PipelineRow; href: string }) {
+  if (!r.riskCount) return null;
+  return (
+    <Disclose label={`${n(r.riskCount)} ${r.riskCount === 1 ? 'flag' : 'flags'}`}>
+      <ul>
+        {r.risks.map((x, i) => <li key={i}>{x}</li>)}
+        {r.riskCount > r.risks.length && <li>and {n(r.riskCount - r.risks.length)} more on the <a href={href}>LP&rsquo;s page</a></li>}
+      </ul>
+    </Disclose>
+  );
+}
+
 export function Icon({ name, title }: { name: Parameters<typeof Glyph>[0]['name']; title: string }) {
   return <span className={s.ico}><Glyph name={name} title={title} /></span>;
 }

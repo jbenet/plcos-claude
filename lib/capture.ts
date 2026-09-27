@@ -214,6 +214,14 @@ async function renderNow(region?: Region): Promise<string | null> {
           const v = el.style.getPropertyValue(prop);
           if (v === 'auto' || v === 'scroll' || v === 'overlay') el.style.setProperty(prop, 'hidden');
         }
+        // A table keeps the height it has on the page, but the filter below leaves out its rows
+        // under the fold, so the rows that remain were stretched to fill it: every row of the
+        // pipeline hundreds of pixels tall (issues 0067, 0083, 0089, 0092, real). Let a table and
+        // its row groups take the height of what is drawn.
+        if (['TABLE', 'TBODY', 'THEAD', 'TFOOT', 'TR'].includes(el.tagName)) {
+          el.style.removeProperty('height');
+          el.style.removeProperty('block-size');
+        }
         const shift = el.getAttribute(SHIFT);
         if (!shift) return;
         el.style.setProperty('translate', shift);

@@ -160,14 +160,21 @@
 .meta > span { display: none; }
 .meta > span:not(.mCap) { white-space: nowrap; }
 
-/* Organisation groups: the organisation leads; its people sit under it on a thread. */
-.orgRow td { background: var(--ground); padding-top: 8px; padding-bottom: 8px; border-bottom-color: var(--line); }
-.orgName { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; }
-.orgName small { font-weight: 400; font-size: 11.5px; color: var(--muted); }
-.member .cLp { padding-left: 30px; position: relative; }
-.member .cLp::before { content: ''; position: absolute; left: 15px; top: 0; bottom: 0; border-left: 1px solid var(--line); }
-.member .cLp::after { content: ''; position: absolute; left: 15px; top: 17px; width: 9px; border-top: 1px solid var(--line); }
-.member.last .cLp::before { bottom: calc(100% - 17px); }
+/* An organisation with several people pursued is a row like any other (issue 0092); its people
+   follow, indented on a thread, in smaller rows that leave out what the row above says. */
+.lead td { border-bottom-color: transparent; }
+.member td { padding-top: 5px; padding-bottom: 5px; font-size: 12px; border-bottom-color: transparent; }
+.member.last td { border-bottom-color: var(--hair); padding-bottom: 9px; }
+.member .cLp { padding-left: 34px; position: relative; }
+.member .cLp::before { content: ''; position: absolute; left: 20px; top: 0; bottom: 0; border-left: 1px solid var(--line); }
+.member .cLp::after { content: ''; position: absolute; left: 20px; top: 13px; width: 8px; border-top: 1px solid var(--line); }
+.member.last .cLp::before { bottom: calc(100% - 13px); }
+.member .cLp a { font-weight: 400; color: var(--ink); }
+.member .scoreNum { font-size: 12.5px; }
+.member .fig { font-size: 11.5px; }
+.member .fig svg { width: 12px; height: 12px; }
+.member .date, .member .read { font-size: 11.5px; }
+.one { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; contain: inline-size; color: var(--muted); }
 
 /* The score */
 .score { display: flex; flex-direction: column; gap: 3px; }
@@ -188,10 +195,9 @@
 .money { display: flex; align-items: center; gap: 5px; font-weight: 500; }
 .ahead { display: block; font-size: 11.5px; color: var(--amber); margin-top: 3px; }
 .flags { margin-top: 4px; font-size: 11.5px; }
-.flags summary { cursor: pointer; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; list-style: none; }
-.flags summary::-webkit-details-marker { display: none; }
-.flags summary::before { content: '▸'; font-size: 9px; }
-.flags[open] summary::before { content: '▾'; }
+.flagsBtn { all: unset; cursor: pointer; color: var(--muted); font-size: 11.5px; }
+.flagsBtn:focus-visible { outline: 2px solid var(--accent-line); }
+@media (pointer: coarse) { .flagsBtn { padding: 4px 0; } }
 .flags ul { margin: 4px 0 0; padding-left: 14px; color: var(--muted); }
 .flags li { margin: 2px 0; }
 
@@ -222,22 +228,22 @@ a.fig:focus-visible { outline: 2px solid var(--accent-line); }
 
 /* Columns give way as the page narrows; what they said moves under the LP's name. */
 @container lp (max-width: 1180px) {
-  .cCap, .cRoutes { display: none; }
-  .meta .mCap, .meta .mRoutes { display: inline; }
-  .meta { display: flex; }
+  .pipe .cCap, .pipe .cRoutes { display: none; }
+  .pipe .meta .mCap, .pipe .meta .mRoutes { display: inline; }
+  .pipe .meta { display: flex; }
 }
 @container lp (max-width: 980px) {
-  .cOwner, .cRead, .cVehicle { display: none; }
-  .meta .mOwner, .meta .mRead, .meta .mVehicle { display: inline; }
+  .pipe .cOwner, .pipe .cRead, .pipe .cVehicle { display: none; }
+  .pipe .meta .mOwner, .pipe .meta .mRead, .pipe .meta .mVehicle { display: inline; }
 }
 @container lp (max-width: 760px) {
-  .cTouch, .cMeet, .cStatus { display: none; }
-  .meta .mTouch, .meta .mMeet, .meta .mStatus { display: inline; }
-  .cLp, .cWhere { min-width: 150px; }
+  .pipe .cTouch, .pipe .cMeet, .pipe .cStatus { display: none; }
+  .pipe .meta .mTouch, .pipe .meta .mMeet, .pipe .meta .mStatus { display: inline; }
+  .pipe .cLp, .pipe .cWhere { min-width: 150px; }
 }
 @container lp (max-width: 520px) {
-  .cEv { display: none; }
-  .cLp, .cWhere { min-width: 120px; }
+  .pipe .cEv { display: none; }
+  .pipe .cLp, .pipe .cWhere { min-width: 120px; }
 }
 
 /* ── selected LPs: the actions ─────────────────────────────────────────────────────────── */
@@ -343,3 +349,71 @@ a.fig:focus-visible { outline: 2px solid var(--accent-line); }
   .item { grid-template-columns: 22px minmax(0, 1fr) auto; padding: 11px 12px; }
   .pos { display: none; }
 }
+
+/* ── selection as a table (issue 0091): check size, routes and stage in aligned, sortable columns ── */
+.rankCard { container: rank / inline-size; margin-bottom: 0; }
+.ranked .cPos { width: 34px; text-align: right; font-family: var(--mono); font-size: 11.5px; color: var(--muted); padding-right: 4px; }
+.ranked .cLp { min-width: 0; }
+.ranked .cScore { width: 84px; }
+.ranked .cCap { width: 118px; }
+.ranked .cRoutes { width: 72px; }
+.ranked .cStatus { width: 96px; }
+.ranked .cMeet { width: 56px; }
+.ranked .cTouch { width: 84px; }
+.ranked td { vertical-align: top; }
+.lpText { font-weight: 500; font-size: 13px; color: var(--ink); }
+.ranked .whoLine { font-size: 11.5px; margin-top: 1px; }
+.ranked tr.row.focus td { background: var(--accent-soft); }
+.ranked tr.row.focus td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.inlineRow td { padding: 0 10px 12px; background: var(--accent-soft); }
+.keysHint { font-size: 11px; color: var(--muted); white-space: nowrap; margin-left: auto; }
+.keysHint kbd { font-family: var(--mono); font-size: 10px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; margin: 0 1px; background: var(--surface); color: var(--ink); }
+@media (pointer: coarse) { .keysHint { display: none; } }
+@container rank (max-width: 700px) {
+  .ranked .cMeet, .ranked .cTouch { display: none; }
+}
+@container rank (max-width: 560px) {
+  .ranked .cPos { display: none; }
+  .ranked .cScore { width: 64px; }
+  .ranked .cCap { width: 88px; }
+  .ranked .cRoutes { width: 52px; }
+  .ranked .cStatus { width: 82px; }
+  .ranked th, .ranked td { padding-left: 6px; padding-right: 6px; }
+}
+@container rank (max-width: 420px) {
+  .ranked .cRoutes, .ranked .cStatus { display: none; }
+}
+
+/* ── the LP page: warm intro and the organisation's people (issues 0093, 0092) ─────────── */
+.warm { border-color: var(--ink); }
+.warmBody { padding: 14px 15px 15px; display: flex; flex-direction: column; gap: 10px; }
+.warmCount { display: flex; align-items: baseline; gap: 8px; }
+.warmCount b { font-family: var(--display); font-size: 30px; font-weight: 600; line-height: 1; }
+.warmCount span { font-size: 12.5px; color: var(--muted); }
+.warmBands { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: var(--muted); }
+.warmBand { display: inline-flex; align-items: center; gap: 5px; }
+.warmBand i { width: 8px; height: 8px; border-radius: 50%; background: #B8B2A6; }
+.warmBand[data-band="strong"] i { background: var(--green); }
+.warmBand[data-band="warm"] i { background: var(--amber); }
+.warmList { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--hair); }
+.warmList li { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--hair); font-size: 12.5px; }
+.warmVia { min-width: 0; overflow-wrap: anywhere; }
+.warmVia small { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+.warmScore { font-family: var(--mono); font-size: 15px; font-weight: 500; flex: none; }
+.warmLede { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.warmCta { display: block; text-align: center; font-size: 13.5px; font-weight: 500; padding: 10px 12px; border-radius: 8px; }
+.warmNote { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.45; }
+.orgPeople { list-style: none; margin: 0; padding: 0; }
+.orgPeople li { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 8px 15px; border-bottom: 1px solid var(--hair); font-size: 12.5px; }
+.orgPeople li:last-child { border-bottom: 0; }
+.orgPeople li.here { background: var(--accent-soft); }
+.orgPeople li a { font-weight: 500; }
+.orgPeople small { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+.orgPeopleStatus { text-align: right; white-space: nowrap; font-size: 12px; }
+.orgPeopleStatus b { font-family: var(--mono); font-weight: 500; margin-left: 8px; }
+.orgPeopleMore { padding: 9px 15px; border-top: 1px solid var(--hair); font-size: 12px; }
+.lpGrid { display: flex; flex-wrap: wrap; gap: 13px; align-items: flex-start; }
+.lpGrid > :first-child { flex: 999 1 440px; min-width: 0; }
+.lpGrid > :last-child { flex: 1 1 292px; min-width: 0; }
+.lpWrap { container: lpgrid / inline-size; }
+@container lpgrid (max-width: 760px) { .lpGrid > :last-child { order: -1; flex-basis: 100%; } }
