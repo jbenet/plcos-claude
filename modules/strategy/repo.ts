@@ -94,6 +94,53 @@ export async function listPursuits(vehicleId?: string | null, opts: { status?: P
   return rows.map((r) => assemble(r, events.get(r.pursuit_id) ?? []));
 }
 
+/** The visualization uses dates and rungs, never the event's evidence body or source metadata. */
+export type VisualizationPursuit = Pick<Pursuit,
+  'pursuitId' | 'entityId' | 'entityName' | 'vehicleId' | 'vehicleName' | 'ownerName' |
+  'headline' | 'plan' | 'status' | 'statusReason' | 'passedBy' | 'statusSource' |
+  'statusSetAt' | 'statusSetByName' | 'stageSaid' | 'rung' | 'nextRung'> & {
+    events: Array<Pick<LadderEvent, 'rung' | 'occurredAt'>>;
+  };
+
+export async function visualizationPursuits(vehicleId: string | null): Promise<VisualizationPursuit[]> {
+  const db = await getDb();
+  // Preserve the legacy arrival ordering, including equal opened_at timestamps: that order
+  // breaks equal-money ties in the drawings and their top-N labels. Scope the event read
+  // below; narrowing/replanning this ordered base query changes those visible ties.
+  const ordered = await db.query<PursuitRow>(`${PURSUIT_SELECT} order by p.opened_at`);
+  const rows = vehicleId ? ordered.filter(row => row.vehicle_id === vehicleId) : ordered;
+  const events = rows.length ? await db.query<{ pursuit_id: string; rung: LadderRung; occurred_at: Date }>(
+    `select pursuit_id, rung::text as rung, occurred_at from strategy.ladder_event
+      where pursuit_id = any($1::uuid[]) order by rung`, [rows.map(r => r.pursuit_id)],
+  ) : [];
+  const byPursuit = new Map<string, VisualizationPursuit['events']>();
+  for (const event of events) {
+    const list = byPursuit.get(event.pursuit_id) ?? [];
+    list.push({ rung: event.rung, occurredAt: new Date(event.occurred_at) });
+    byPursuit.set(event.pursuit_id, list);
+  }
+  return rows.map(row => {
+    const walk = (byPursuit.get(row.pursuit_id) ?? []).sort((a, b) => rungIndex(a.rung) - rungIndex(b.rung));
+    const rung = walk.at(-1)?.rung ?? null;
+    return {
+      pursuitId: row.pursuit_id, entityId: row.entity_id, entityName: row.entity_name,
+      vehicleId: row.vehicle_id, vehicleName: row.vehicle_name, ownerName: row.owner_name,
+      headline: row.headline, plan: row.plan?.filter(step => step.blockedBy).slice(0, 1) ?? [], status: row.status,
+      statusReason: row.status_reason, passedBy: row.passed_by, statusSource: row.status_source,
+      statusSetAt: row.status_set_at ? new Date(row.status_set_at) : null,
+      statusSetByName: row.status_set_by_name, stageSaid: row.stage_said,
+      events: walk, rung, nextRung: RUNGS[rungIndex(rung) + 1] ?? null,
+    };
+  });
+}
+
+/** Preserve the global corpus disclosure without loading every pursuit's full record. */
+export async function pursuitCount(): Promise<number> {
+  const db = await getDb();
+  const row = await db.one<{ n: number }>(`select count(*)::int as n from (${PURSUIT_SELECT}) p`);
+  return row?.n ?? 0;
+}
+
 /** How many pursuits sit at each status, per vehicle — the board's column heads. */
 export async function statusCounts(): Promise<Array<{ vehicleId: string; status: PursuitStatus; n: number }>> {
   const db = await getDb();

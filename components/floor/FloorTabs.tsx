@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useUrlParam } from '@/lib/url-state';
 import type { BoardState } from '@/lib/board-client';
@@ -129,7 +130,13 @@ type TabId = typeof TABS[number]['id'];
 export function FloorTabs({ state, board, lenses }: { state: FloorState; board: BoardState; lenses: Lenses }) {
   // The tab is in the address (N65, issue 0009): a link opens it, and back steps through them.
   // 'clock' is kept only so an old link lands on the strip, which carries the clock's pile.
-  const [asked, setTab] = useUrlParam<TabId | 'clock'>('view', 'line', [...TABS.map((t) => t.id), 'clock']);
+  const router = useRouter();
+  const [asked] = useUrlParam<TabId | 'clock'>('view', 'line', [...TABS.map((t) => t.id), 'clock']);
+  const setTab = (id: TabId) => {
+    const url = new URL(window.location.href);
+    if (id === 'line') url.searchParams.delete('view'); else url.searchParams.set('view', id);
+    router.push(url.pathname + url.search, { scroll: false });
+  };
   const tab: TabId = asked === 'clock' ? 'strip' : asked;
   const [filterParam, setFilterParam] = useUrlParam<string>('filter', '');
   const savedFilter = useMemo(() => parseFloorFilter(filterParam), [filterParam]);

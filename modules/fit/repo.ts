@@ -40,9 +40,9 @@ const PROFILE_SELECT = `
          p.prior_relationship, p.provenance_note, p.provenance_since, p.updated_at
     from fit.firm_profile p join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)`;
 
-export async function listFirmProfiles(): Promise<FirmProfile[]> {
+export async function listFirmProfiles(entityIds?: string[]): Promise<FirmProfile[]> {
   const db = await getDb();
-  return (await db.query<ProfileRow>(`${PROFILE_SELECT} order by e.display_name`)).map(toProfile);
+  return (await db.query<ProfileRow>(`${PROFILE_SELECT}${entityIds ? ' where e.entity_id = any($1::uuid[])' : ''} order by e.display_name`, entityIds ? [entityIds] : [])).map(toProfile);
 }
 
 export async function firmProfile(entityId: string): Promise<FirmProfile | null> {

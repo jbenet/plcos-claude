@@ -38,9 +38,9 @@ export async function activeWeights(): Promise<Weights | null> {
  * calling the result a score is how a ranking becomes a statement about what we happened
  * to look up.
  */
-export async function ranked(vehicleId: string): Promise<Scored[]> {
+export async function ranked(vehicleId: string, opts: { entityIds?: string[]; weights?: Weights | null } = {}): Promise<Scored[]> {
   const db = await getDb();
-  const weights = await activeWeights();
+  const weights = opts.weights === undefined ? await activeWeights() : opts.weights;
   const rows = await db.query<{
     entity_id: string; entity_name: string; vehicle_id: string; vehicle_name: string;
     dimension: Dimension; value: string; basis: string; source: string | null;
@@ -52,9 +52,9 @@ export async function ranked(vehicleId: string): Promise<Scored[]> {
        join identity.entity e on e.entity_id = identity.canonical_entity_id(f.entity_id)
        join platform.vehicle v on v.id = f.vehicle_id
        left join platform.app_user u on u.id = f.recorded_by
-      where f.vehicle_id = $1
+      where f.vehicle_id = $1 ${opts.entityIds ? 'and e.entity_id = any($2::uuid[])' : ''}
       order by e.display_name`,
-    [vehicleId],
+    opts.entityIds ? [vehicleId, opts.entityIds] : [vehicleId],
   );
 
   const byEntity = new Map<string, Scored>();

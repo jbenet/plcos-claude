@@ -4,7 +4,7 @@ import { FIRM_CLASS_LABEL, listFirmProfiles } from '@/modules/fit';
 import { listEntityPreview } from '@/modules/identity';
 import { edgeCountsForEntities } from '@/modules/network';
 import { DEFAULT_PARAMS, scoreMethods } from '@/modules/research';
-import { BAND_LABEL, ranked } from '@/modules/scoring';
+import { activeWeights, BAND_LABEL, ranked } from '@/modules/scoring';
 import { RUNG_LABEL, RUNG_REQUIRES, RUNGS, type LadderRung, type PursuitStatus } from '@/modules/strategy';
 import type {
   BoardRow, BoardState, CellState, Explored, Holding, Move, Resource, Station, Territory,
@@ -31,16 +31,18 @@ function median(xs: number[]): number | null {
  * readings of it. What it adds is everything that is *not* in flight: names nobody has
  * looked at, moves nobody has made, and the four or five resources that quietly run out.
  */
-export async function boardState(scopeSlug: string | null, floor: FloorState): Promise<BoardState> {
+export async function boardState(scopeSlug: string | null, floor: FloorState, view = 'all'): Promise<BoardState> {
   const now = new Date();
+  const needs = (...views: string[]) => view === 'all' || views.includes(view);
+  const entities = await listEntityPreview(floor.items.map((i) => i.entityId));
   const [
-    entities, profiles, vehicles, pursuits, asks, conflicts, restrictions,
+    profiles, vehicles, pursuits, asks, conflicts, restrictions,
     tickets, meetings, objections, assets, loads, pools, methods, breaker, gaps,
   ] = await Promise.all([
-    listEntityPreview(floor.items.map((i) => i.entityId)), listFirmProfiles(), listVehicles(), listPursuits(null), listAsks(null),
-    listConflicts('open'), listRestrictions(), listOpenTickets(), listMeetings(),
-    listObjections(), listAssets(), connectorLoad(), poolChecks(), listMethods(),
-    circuitBreaker(), coverageGaps(),
+    listFirmProfiles(entities.map(e => e.entityId)), listVehicles(), needs('plant') ? listPursuits(scopeSlug) : [], needs('grid') ? listAsks(null) : [],
+    listConflicts('open'), listRestrictions(), listOpenTickets(), needs('moves', 'grid') ? listMeetings() : [],
+    needs('moves', 'grid') ? listObjections() : [], needs('moves', 'grid', 'economy') ? listAssets() : [], needs('moves', 'economy') ? connectorLoad() : [], needs('economy') ? poolChecks() : [], needs('moves') ? listMethods() : [],
+    circuitBreaker(), needs('moves') ? coverageGaps() : [],
   ]);
 
   const scopeSlugs = new Set(floor.vehicles.map(v => v.slug));
@@ -48,7 +50,8 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
   const scopedVehicles = vehicles.filter((v) => inScope(v.slug));
 
   /** The rubric, per vehicle in scope, merged by taking each entity's best reading. */
-  const rankings = await Promise.all(scopedVehicles.map((v) => ranked(v.id)));
+  const weights = await activeWeights();
+  const rankings = await Promise.all(scopedVehicles.map((v) => ranked(v.id, { entityIds: entities.map(e => e.entityId), weights })));
   const scoreByEntity = new Map<string, (typeof rankings)[number][number]>();
   for (const list of rankings) {
     for (const s of list) {
@@ -447,11 +450,11 @@ export async function boardState(scopeSlug: string | null, floor: FloorState): P
 
   return {
     territories,
-    stations,
-    moves,
-    rows,
-    resources,
-    goodwill: loads.map((l) => ({
+    stations: needs('plant') ? stations : [],
+    moves: needs('moves') ? moves : [],
+    rows: needs('grid') ? rows : [],
+    resources: needs('economy') ? resources : [],
+    goodwill: (needs('economy') ? loads : []).map((l) => ({
       name: l.name, used: l.used, cap: quarterCap,
       basis: 'Asks carried in the last three months, against the quarterly allowance.',
     })),

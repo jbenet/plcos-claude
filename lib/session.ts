@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { cookies, headers } from 'next/headers';
 import { currentUser } from '@/lib/auth';
 import { listVehicles, type Vehicle } from '@/modules/platform';
@@ -35,7 +36,7 @@ export function parseSelections(raw: string | undefined, fallbackHandle: string)
   return { [fallbackHandle]: raw };
 }
 
-export async function vehicleSelection(): Promise<VehicleSelection> {
+export const vehicleSelection = cache(async (): Promise<VehicleSelection> => {
   const all = await listVehicles();
   // The vehicle in the address wins (N65, issue 0009): the proxy passes it for /<vehicle>/<module>,
   // so a link someone sends means the same thing on their screen as on yours.
@@ -50,4 +51,4 @@ export async function vehicleSelection(): Promise<VehicleSelection> {
   const slug = map[user.handle];
   if (!slug || slug === 'all') return { current: null, all };
   return { current: all.find((v) => v.slug === slug) ?? null, all };
-}
+});
