@@ -3,7 +3,7 @@ export const SHORTCUT_GROUPS = [
   { id: 'anywhere', title: 'Anywhere', shortcuts: [
     { keys: [['?']], description: 'Open or close keyboard shortcuts, outside text fields' },
     { keys: [['Esc']], description: 'Close keyboard shortcuts' },
-    { keys: [['F']], description: 'Open feedback, outside text fields and dialogs' },
+    { keys: [['Alt/Option', 'F']], description: 'Open feedback, outside text fields and dialogs' },
   ] },
   { id: 'pipeline', title: 'Pipeline table', shortcuts: [
     { keys: [['/']], description: 'Focus the filter, outside text fields and dialogs' },
@@ -39,9 +39,9 @@ export function isShortcutsKey(event: KeyboardEvent): boolean {
     && !event.isComposing && !isTypingTarget(event.target);
 }
 
-/** Unmodified F is available throughout the app; typing and dialogs keep their keys. */
+/** Physical F also matches Option+F on macOS, where event.key is ƒ. */
 export function isFeedbackKey(event: KeyboardEvent): boolean {
-  return event.key.toLowerCase() === 'f' && !event.metaKey && !event.ctrlKey && !event.altKey
+  return event.code === 'KeyF' && !event.metaKey && !event.ctrlKey && event.altKey
     && !event.shiftKey && !event.isComposing && !event.repeat && !event.defaultPrevented
     && !isTypingTarget(event.target);
 }

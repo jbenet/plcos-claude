@@ -79,7 +79,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-async function run<T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+async function transact<T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const db = await openDb();
   try {
     return await new Promise<T>((resolve, reject) => {
@@ -92,6 +92,15 @@ async function run<T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => 
   } finally {
     db.close();
   }
+}
+
+// One connection/transaction at a time keeps a late autosave from overtaking a
+// newer save or a discard, and makes reopening wait for the preceding write.
+let pictureQueue: Promise<unknown> = Promise.resolve();
+function run<T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  const result = pictureQueue.then(() => transact(mode, act));
+  pictureQueue = result.catch(() => undefined);
+  return result;
 }
 
 export async function readPictures<Shot, Image>(page: string): Promise<DraftPictures<Shot, Image> | null> {

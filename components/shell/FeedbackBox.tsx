@@ -54,7 +54,7 @@ export function FeedbackButton({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!isFeedbackKey(event) || document.querySelector('dialog[open], [role="dialog"]')) return;
+      if (!isFeedbackKey(event) || document.querySelector('dialog[open], [role="dialog"]:not(dialog):not([hidden])')) return;
       event.preventDefault();
       setOpen(true);
     };
@@ -71,10 +71,11 @@ export function FeedbackButton({
       <button
         className={variant === 'rail' ? 'railfeedback' : 'btn'}
         onClick={() => setOpen(true)}
-        aria-keyshortcuts="f"
-        title="Give feedback (F)"
+        aria-keyshortcuts="Alt+F"
+        title="Give feedback (Alt/Option+F)"
       >
         {variant === 'rail' ? <><span aria-hidden>✎</span> Feedback</> : 'Give feedback'}
+        <span className="feedbackkey">Alt/Option+F</span>
       </button>
       {open && (home.filesHere
         ? <FeedbackDrawer profile={profile} onClose={() => setOpen(false)} />
@@ -201,6 +202,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'failed'>('idle');
   const [result, setResult] = useState<{ id: string; location: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [imagesPending, setImagesPending] = useState(false);
   const [images, setImages] = useState<DroppedImage[]>([]);
 
   /**
@@ -353,15 +355,20 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
 
   const submit = async () => {
     if (!title.trim() && !body.trim()) return;
-    if (state === 'sending' || state === 'done') return;
+    if (state === 'sending' || state === 'done' || imagesPending || hydrating.current) return;
     setState('sending');
     setError(null);
     // A picture deleted from the text is not sent (issue 0020) — it may be the wrong one.
     const packed = packAttachments(body, images);
     try {
+      // Finish saving this exact picture set before a request can stall or fail.
+      await writePictures<Shot, DroppedImage>(draftPage, { shots, images });
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        // GUESS: a local file receipt should arrive well within 30 seconds. Keep the
+        // draft on timeout because a lost response does not prove filing failed.
+        signal: AbortSignal.timeout(30_000),
         body: JSON.stringify({
           title, body: packed.body, kind, priority, page: path, context,
           screenshots: shots.map((x) => x.dataUrl),
@@ -546,16 +553,19 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={x.dataUrl} alt={`Screenshot ${i + 1}`} />
-                    <span className="pencil" aria-hidden>✎ Annotate</span>
                   </button>
-                  <button
-                    className="shotx"
-                    onClick={() => drop(x.id)}
-                    aria-label={`Remove screenshot ${i + 1}`}
-                    title={`Delete screenshot ${i + 1}`}
-                  >
-                    ×
-                  </button>
+                  <div className="mdembedbar">
+                    <button type="button" onClick={() => setEditingId(x.id)} title="Draw on this picture">✎ Annotate</button>
+                    <button
+                      type="button"
+                      className="x"
+                      onClick={() => drop(x.id)}
+                      aria-label={`Remove screenshot ${i + 1}`}
+                      title={`Delete screenshot ${i + 1}`}
+                    >
+                      ×
+                    </button>
+                  </div>
                   <div className="shotmeta">
                     <span className={`flag ${x.method === 'screen' ? 'f-ok' : 'f-mute'}`}>
                       {METHOD_LABEL[x.method]}
@@ -644,6 +654,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
                 onChange={setBody}
                 images={images}
                 onImages={setImages}
+                onPendingChange={setImagesPending}
                 onAnnotate={(i) => setEditingImage(i)}
                 placeholder={
                   'What you expected, what happened instead.\n\n'
@@ -680,9 +691,9 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             {state === 'failed' && (
               <div className="warn" style={{ marginTop: 12 }}>
                 <div className="lbl" style={{ color: 'var(--clay)' }}>
-                  Not filed
+                  Filing not confirmed
                 </div>
-                <p>{error} — nothing was written. Your text is still in the box.</p>
+                <p>{error}. Your text and pictures are still in this draft. Check the issues list before retrying; the server may have saved the report.</p>
               </div>
             )}
             </div>
@@ -691,7 +702,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             <div className="acts">
               <button
                 className="btn p"
-                disabled={(!title.trim() && !body.trim()) || state === 'sending'}
+                disabled={(!title.trim() && !body.trim()) || state === 'sending' || imagesPending}
                 onClick={submit}
               >
                 {state === 'sending' ? 'Filing…' : 'File it'}
