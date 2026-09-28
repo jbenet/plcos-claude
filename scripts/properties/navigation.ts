@@ -1,6 +1,7 @@
 import type { Check } from './harness';
 
 export async function proxyProperties(check: Check) {
+  (await import('../../lib/internal-routing')).initializeRoutingSecret();
   // Routes that follow the sidebar (N65, issue 0009): the proxy rewrites /<vehicle>/<module> and
   // /developer/<page> to the pages that serve them, and sends the old addresses to their place.
   {
@@ -27,13 +28,13 @@ export async function proxyProperties(check: Check) {
       dev.rewrite?.endsWith('/dev/enrich') === true && oldDev.status === 307 && oldDev.location?.endsWith('/developer/enrich?imported=3') === true &&
       post.status !== 307 && lp.rewrite?.endsWith('/targets/abc') === true && lp.vehicle === 'neurotech' && lp.asked === '/neurotech/pipeline/abc' &&
       grants.status !== 307 && !grants.rewrite && grantsPipeline.vehicle === 'grants' &&
-      old.status === 307 && old.location?.endsWith('/rails/pipeline/abc') === true && !scoped.rewrite && scoped.status !== 307 && again.status !== 307 && !again.rewrite;
+      old.status === 307 && old.location?.endsWith('/rails/pipeline/abc') === true && !scoped.rewrite && scoped.status !== 307 && again.status === 307 && !again.rewrite;
     check(
-      'The address follows the sidebar: /<vehicle>/<module> and /developer/<page> reach their pages and carry the address asked for (issue 0011, real), old addresses redirect to their place, a POST is never redirected, and a rewritten request passes through',
+      'The address follows the sidebar: /<vehicle>/<module> and /developer/<page> reach their pages and carry the address asked for (issue 0011, real), old addresses redirect to their place, a POST is never redirected, and a forged rewrite marker cannot bypass routing',
       ok,
       `/developer/enrich → ${dev.rewrite?.replace(/^https?:\/\/[^/]+/, '')}; /dev/enrich → ${oldDev.status} ${oldDev.location?.replace(/^https?:\/\/[^/]+/, '')}; POST /dev/enrich → ${post.status}; ` +
         `/neurotech/pipeline/abc → ${lp.rewrite?.replace(/^https?:\/\/[^/]+/, '')} (vehicle ${lp.vehicle}, asked ${lp.asked}); /targets/abc with Rails in view → ${old.status} ${old.location?.replace(/^https?:\/\/[^/]+/, '')}; ` +
-        `/neurotech/strategy passes through: ${!scoped.rewrite}; a rewritten request seen again passes through: ${again.status !== 307 && !again.rewrite}`,
+        `/neurotech/strategy passes through: ${!scoped.rewrite}; a forged marker is refused: ${again.status === 307 && !again.rewrite}`,
     );
   }
 }

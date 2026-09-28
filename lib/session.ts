@@ -1,3 +1,4 @@
+import { trustedVehicle } from '@/lib/internal-routing';
 import { cache } from 'react';
 import { cookies, headers } from 'next/headers';
 import { currentUser } from '@/lib/auth';
@@ -40,7 +41,7 @@ export const vehicleSelection = cache(async (): Promise<VehicleSelection> => {
   const all = await listVehicles();
   // The vehicle in the address wins (N65, issue 0009): the proxy passes it for /<vehicle>/<module>,
   // so a link someone sends means the same thing on their screen as on yours.
-  const fromPath = (await headers()).get('x-vehicle');
+  const fromPath = trustedVehicle(await headers());
   if (fromPath) {
     if (fromPath === 'all') return { current: null, all };
     const v = all.find((x) => x.slug === fromPath);

@@ -69,6 +69,7 @@ const scopedDb = new AsyncLocalStorage<Db>();
 export const withDb = <T>(db: Db, work: () => Promise<T>): Promise<T> => scopedDb.run(db, work);
 import { join as pathJoin } from 'node:path';
 import { config } from '@/config/deployment';
+import { readLayout } from '@/config/ports';
 import { isDbBusy, prioritizeDb } from './scheduling';
 
 type Global = typeof globalThis & { __capitalOsDb?: Promise<Db>; __capitalOsMigrationCheck?: { at: number; files: string; running: Promise<void> | null } };
@@ -169,7 +170,18 @@ async function boot(dir?: string): Promise<Db> {
   // handle and its checkpoint; boot never awaits the import or opens another DB.
   const scheduled=prioritizeDb(db);
   const {resumeDakotaJob}=await import('../connectors/dakota/job');
-  if (!config.db.rehearsal) resumeDakotaJob(scheduled);
+  if (!config.db.rehearsal) {
+    resumeDakotaJob(scheduled);
+    let mayRecover = config.data.profile === 'demo';
+    if (config.data.profile === 'real' && !config.data.copyTakenAt) {
+      try { mayRecover = readLayout().role === 'live'; } catch { /* fail closed */ }
+    }
+    if (mayRecover) {
+      const { importJobStatus } = await import('../import-jobs/server');
+      // Recover queued receipts at server boot; public GET progress polling is read-only.
+      await importJobStatus(scheduled);
+    }
+  }
   return scheduled;
 }
 

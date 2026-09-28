@@ -1,11 +1,12 @@
 'use server';
 
+import { requireServerActionMutation } from '@/lib/mutation-guard';
+
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
 import { recordInvitation } from '@/modules/grants';
 
 export async function saveInvitation(formData: FormData): Promise<{ error?: string } | void> {
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   try {
     await recordInvitation(user.id, {
       funderId: String(formData.get('funderId')),

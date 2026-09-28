@@ -1,4 +1,7 @@
 /** Run the module properties, in their fixture-dependent order. npm run props */
+// Route-handler properties import Next request APIs before the renderer does.
+// Match Next's Node bootstrap so those modules capture real AsyncLocalStorage.
+import 'next/dist/server/node-environment-baseline';
 import { registerHooks } from 'node:module';
 
 // Components keep their styles in CSS modules (issue 0066). Next compiles those; Node cannot,

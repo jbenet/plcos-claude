@@ -71,12 +71,19 @@ export function activeImportProgress():ImportJob[]|null {
   if(!children.size||config.db.url)return null;
   return [...progress.values()].sort((a,b)=>Number(['queued','running'].includes(b.status))-Number(['queued','running'].includes(a.status))||new Date(b.created_at).getTime()-new Date(a.created_at).getTime()).slice(0,30);
 }
-/** Polling recovers queued receipts. Interrupted running work is never silently replayed. */
-export async function importJobStatus(db:Db):Promise<ImportJob[]> {
+/** Read progress without starting work or changing a job; safe for HTTP GET. */
+export async function importJobSnapshot(db:Db):Promise<ImportJob[]> {
   const mirrored=activeImportProgress();if(mirrored)return mirrored;
   const jobs=await db.query<ImportJob>(`select * from platform.import_job
     where status in ('queued','running') or created_at>clock_timestamp()-interval '1 day'
     order by (status in ('queued','running')) desc,created_at desc,id limit 30`);
+  return jobs;
+}
+
+/** Server lifecycle recovery. Interrupted running work is never silently replayed. */
+export async function importJobStatus(db:Db):Promise<ImportJob[]> {
+  const mirrored=activeImportProgress();if(mirrored)return mirrored;
+  const jobs=await importJobSnapshot(db);
   if(process.env.POSTGRES_REHEARSAL==='1')return jobs;
   for(const job of jobs) {
     if(db.kind==='pglite')remember(job);

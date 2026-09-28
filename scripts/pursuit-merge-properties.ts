@@ -145,7 +145,6 @@ export async function pursuitMergeProperties(check: Check, db: Db) {
     await db.query('delete from research.note where entity_id=any($1::uuid[])',[entities]);
     for (const table of ['strategy.ladder_event','strategy.suggestion','strategy.pursuit_update','strategy.pursuit_owner','meetings.meeting']) await db.query(`delete from ${table} where pursuit_id=any($1::uuid[])`,[pursuits]);
     await db.query('delete from strategy.pursuit_merge where survivor_id=any($1::uuid[])',[pursuits]);
-    await db.query('delete from platform.audit_log where subject_type=\'pursuit\' and subject_id=any($1::text[])',[pursuits]);
     await db.query('update strategy.pursuit set merged_into=null where pursuit_id=any($1::uuid[])',[pursuits]);
     await db.query('delete from strategy.pursuit where pursuit_id=any($1::uuid[])',[pursuits]);
     await db.query('update identity.entity set merged_into=null where entity_id=any($1::uuid[])',[entities]);

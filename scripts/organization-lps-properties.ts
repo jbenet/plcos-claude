@@ -62,7 +62,6 @@ export async function organizationLpsProperties(check: Check, db: Db) {
     check('organisation rule never reopens or changes a human pursuit',kept?.status==='passed'&&kept.status_reason==='Human decision','Existing and closed pursuits are insert-only.');
     check('organisation rule never writes consent or capital',before===(await db.one<{n:number}>('select count(*)::int n from strategy.ladder_event'))!.n,'No rung copied from the person.');
   } finally {
-    await db.query(`delete from platform.audit_log where action='pursuit.organization_added' and detail->>'organization'=$1`,[org]);
     await db.query('delete from research.note where entity_id=$1',[org]);
     await db.query('delete from network.edge where from_entity=$1 or to_entity=$1',[org]);
     await db.query('delete from identity.affiliation where org_entity=$1',[org]);

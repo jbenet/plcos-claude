@@ -1,6 +1,7 @@
 'use server';
 
-import { auth } from '@/lib/auth';
+import { requireServerActionMutation } from '@/lib/mutation-guard';
+
 import { getDb } from '@/lib/db';
 import { queueImportJob } from '@/lib/import-jobs/server';
 import { linearSource } from '@/lib/connectors/linear/sync';
@@ -11,11 +12,11 @@ import { linearSource } from '@/lib/connectors/linear/sync';
  * holds the key, may run it; the demo reads an invented workspace.
  */
 export async function syncLinearAction(_prev: { error?: string; message?: string }, form: FormData): Promise<{ error?: string; message?: string }> {
+  const user = await requireServerActionMutation();
   const src = linearSource();
   if ('refused' in src) return { error: src.refused };
   const full = form.get('full') === '1';
   try {
-    const user = await (await auth()).currentUser();
     await queueImportJob(await getDb(), 'linear', user.id, full ? { full: true } : {});
     return { message: full ? 'Full sync queued: every record is read again. Progress appears above.' : 'Sync queued. Progress appears above; reload for the counts.' };
   } catch {

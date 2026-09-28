@@ -1,7 +1,8 @@
 'use server';
 
+import { requireServerActionMutation } from '@/lib/mutation-guard';
+
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { decideLpUnitByPerson } from '@/modules/strategy';
 
@@ -16,7 +17,7 @@ export async function decideLpUnitAction(pursuitId: string, choice: { kind: 'per
     return { error: 'That choice is not one this page offers.' };
   }
   try {
-    const user = await (await auth()).currentUser();
+    const user = await requireServerActionMutation();
     const row = await decideLpUnitByPerson(await getDb(), pursuitId, user.id, choice);
     revalidatePath('/targets', 'layout');
     revalidatePath('/selection');

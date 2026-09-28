@@ -71,6 +71,8 @@ export async function runProperties(check: Check) {
   // Last on this database: it re-points every pursuit, then reverses every decision it made.
   await (await import('./lp-units')).lpUnitProperties(check, db);
   await (await import('./lp-unit-decisions')).lpUnitDecisionProperties(check, db);
+  await (await import('./security-governance')).securityGovernanceProperties(check, db);
+  await (await import('./security-mutations')).securityMutationProperties(check, db);
   await db.close();
 
   await (await import('./pipeline')).hardeningVariations(check);
@@ -90,6 +92,8 @@ export async function runProperties(check: Check) {
   await (await import('./render')).renderProperties(check);
   await (await import('./deployment')).checkoutProperties(check);
   await (await import('./navigation')).proxyProperties(check);
+  await (await import('./security-routing')).securityRoutingProperties(check);
+  await (await import('./security-entrypoints')).securityEntrypointProperties(check);
   await (await import('./identity')).headingProperties(check);
   await (await import('./enrichment-strategy')).strategyContextProperties(check);
   await (await import('./scoring')).provisionalScoreProperties(check);

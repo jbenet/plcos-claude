@@ -182,7 +182,6 @@ export async function importDupesProperties(check: Check, db: Db) {
     const pursuits = (await db.query<{ id: string }>('select pursuit_id::text id from strategy.pursuit where entity_id=any($1::uuid[])',[ids])).map(r=>r.id);
     await db.query('delete from strategy.pursuit_merge where survivor_id=any($1::uuid[]) or loser_ids && $1::uuid[]',[pursuits]);
     for (const table of ['strategy.suggestion','strategy.pursuit_update','strategy.pursuit_owner']) await db.query(`delete from ${table} where pursuit_id=any($1::uuid[])`,[pursuits]);
-    await db.query('delete from platform.audit_log where subject_id=any($1::text[])',[pursuits]);
     await db.query('delete from research.note where entity_id=any($1::uuid[])',[ids]);
     await db.query('delete from research.claim where entity_id=any($1::uuid[])',[ids]);
     await db.query('delete from research.source_doc where doc_id=$1 or origin=$2',[document,`https://example.org/import-dupes-${tag}`]);

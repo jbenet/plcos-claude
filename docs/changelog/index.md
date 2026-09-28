@@ -176,3 +176,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 
 - [W3 LP units — paths through firm contacts](entries/w3-lp-units.md)
 - [System status as one quiet mark beside the user](entries/status-0114.md)
+
+- [Security fixes — mutations, routing, approvals and audit history](entries/security-fixes.md)

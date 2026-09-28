@@ -1,7 +1,8 @@
 'use server';
 
+import { requireServerActionMutation } from '@/lib/mutation-guard';
+
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
 import { setActiveWeights } from '@/modules/scoring';
 import { scoreDetail, type ScoreDetail } from '@/lib/pipeline-data';
 
@@ -12,7 +13,7 @@ export async function scoreDetailAction(vehicleId: string, pursuitId: string): P
 }
 
 export async function saveWeights(formData: FormData): Promise<{ error?: string } | void> {
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const num = (k: string) => Number(formData.get(k) ?? 0) / 100;
   try {
     await setActiveWeights(user.id, {
