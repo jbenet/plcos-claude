@@ -229,3 +229,118 @@ that remains unmeasured. Both are real measurements of different things — do n
 - Sustained (>3 minute) behavior, multi-hour soak, and repeated runs for variance — this is one
   180 s sample per backend, not a distribution.
 - Client-side render/hydration cost: this walk measures server response time only.
+
+## Real-volume rehearsal (28 September 2026, Claude)
+
+What was run: `plcos_live` dumped as `plcos_ro`, restored into a scratch `plcos_rehearsal` on the same
+local cluster (57433), served by a `git archive claude/main` production build (`8e565d0`) with
+`DATA_PROFILE=real`, `NEXT_DIST_DIR=.next`, and a stand-in LabOS `/me` on 127.0.0.1:3299 (two invented tokens).
+Working files were copied into a private rehearsal folder and linked in as `data/real`; the config has no
+env override for the data root (it is `data/<profile>` under the working directory), so the container's
+volume must mount at `/app/data`. No connector was called, `SCHEDULE_DAILY_AT` was unset, the live server
+and `plcos_live` were not written. Everything was deleted afterwards (database dropped, dump, copy and
+build removed). This section contains counts, timings and function names only. Machine: M3 Max, 16 CPUs, 48 GiB.
+The live server kept running throughout, so its imports shared the machine.
+
+### Cutover legs
+
+| Leg | Result |
+|---|---|
+| `pg_dump -Fc` of `plcos_live` (1,449 MB on disk) | **15.3 s**, 199.6 MB file, pg_dump RSS 181 MiB; 119 tables in `--list` |
+| `pg_restore --no-owner --no-acl --exit-on-error --single-transaction` | **39.5 s**, restored database 1,053 MB |
+| Row counts, 119 tables, 1,214,017 rows | all 119 equal the counts taken just before the dump; one cache table (`network.route_cache`) had changed on live by the time the dump ended |
+| `scripts/pg-verify.ts` (live vs. restored, both as `plcos_ro`) | **38 s**, 216 MiB; MISMATCH on 3 tables only (`route_cache`, `route_warmup`, `import_job`), all written by live after the dump (live was not frozen); objects, sequences, indexes, constraints all equal |
+| Working files to copy | **2,119 MiB, 33,132 files** after excluding `postgres/`, `database/` (6.9 GB PGlite), `dakota/`, `logs/`, `postgres.url`, and the hidden `.real-copy-rehearsal` / `.real-copy-switch` snapshots (6.9 + 7.0 GB) |
+| Dakota in the database | `dakota` schema: 7 tables, 19,571 rows; plus 14,353 `identity.source_record` rows with source `dakota` |
+| A copied `import_job` row in `running` | blocks that job kind on the target until failed by hand |
+
+### Build (`git archive` → `npm ci` → `next build` with `DATA_PROFILE=demo`, as the Dockerfile)
+
+npm ci 3 s (warm cache). `next build` **81 s and 73 s** (two clean builds); summed process-tree peak RSS
+**3.53 GiB and 2.13 GiB**. Build-traces guard: 95 manifests, 198,385 entries, 0 violations.
+Starting that build with `DATA_PROFILE=real` fails: Next looks for `.next-real` (next.config.ts
+`distDir`), so the runtime needs `NEXT_DIST_DIR=.next`.
+
+### Pages at real volume (6 vehicles, 27 GET routes: `/today`, `/orgs/g/lps`, `/developer/enrich`, and overview/pipeline/selection/strategy per vehicle)
+
+- `/health` 200 in 1–5 ms, ready in under 1 s. `/` with no cookie or an unknown token: the LabOS sign-in text,
+  HTTP 200, 57 ms.
+- Token 1 (unknown uid): a new `viewer` row was created (`labos-…` handle). Every page returned 200, but in
+  **12.5–13.8 s** each: `scopedReadData` runs its Affinity-note metadata query
+  (`lib/authz/read/scoped-data.ts:23`) on every page for restricted users.
+- Token 2 after `labos_uid` was set on the admin row: admin. Sequential walk 16 ms–2.3 s, but
+  `/developer/enrich` returned **500 every time** (`DbBusyError`).
+- Cause: `resolveLabosUser` (`modules/platform/repo.ts:31`) runs `insert … on conflict do nothing` on every
+  request. The statement-level trigger on `platform.app_user` bumps `network.read_revision` on each one
+  (one enrich request moved it by 53), so `buildCache`'s revision check fails, retries twice and gives up.
+- **10-way, 180 s, as admin, current code:** 1,734 requests, **438 non-200 (25%)**, peak RSS **1.21 GiB**.
+- During the findings import the same insert waited on the row lock the import held on the admin row: pages
+  took 20 s (the statement timeout), then 500.
+- **Same walk with a local, uncommitted patch** (select first, insert only when unknown): **4,811 requests,
+  0 errors**, 26.7 req/s, peak RSS **1.25 GiB** (1,315,904 KiB), idle 75–78 MiB before and 351 MiB 60 s after.
+  p50 by page 65–1,163 ms, p95 240–1,460 ms. The heaviest were the first vehicle's strategy (p50 1.16 s),
+  pipeline (0.91 s) and selection (0.80 s), and `/developer/enrich` (p50 0.77 s, p95 1.24 s).
+  A 2-way walk during the import: 749 requests, 0 errors.
+- Writes: a POST to `/api/identity/entity-type` as admin returned **403 "Change real data on the live
+  server."** Outside the live folder's `.ports.json` row (the container's `/app` has none), every real-data
+  write, the Linear and Dakota jobs, and the recovery of queued jobs are refused.
+
+### Imports (worker launched as `launchImportJob` does, wrapped in `/usr/bin/time -l`)
+
+| Job | Duration | Child peak RSS |
+|---|---|---|
+| Export the research set | **149 s**, completed (live's last run: 117 s) | **603 MiB** |
+| Import the findings | **stopped at 30 min**, still in "Rebuilding research ties" | **2.43 GiB** (process tree) |
+
+The findings phases took: repair and importing findings ~180 s, re-point and SPV stance ~30 s, and
+`buildNetwork` from about 212 s on.
+
+### buildNetwork profile (real volume)
+
+Two CDP CPU profiles (1 ms sampling): the findings import's worker (30 min), and `buildNetwork({awaitBackground:
+true})` alone through a small tsx script on the worker's kind of handle (20 min). Line numbers are the original
+TypeScript lines, mapped through tsx's source maps. Async frames lose their callers after an `await`, so the
+call paths are given from the code where the profile cannot show them.
+
+**Phase 1: identity resolution, about 13 minutes, 98–99% idle.** Busy time per minute was 1–2%, and
+no SQL was active when sampled. The time goes to `resolveIdentities` → `resolvePass`
+(`modules/identity/resolution.ts:69`), whose loops `await pause()` (`resolution.ts:23`, a 50 ms
+`setTimeout`) every 50 groups (`:161`) and every 50 comparisons (`:165`), from `config.identityResolution`
+`{batchSize: 50, pauseMs: 50}` (both GUESS). That pacing was meant to yield to page requests. In the import
+child it only adds sleep. CPU time in this phase: `identityEvidence` (`modules/identity/resolution-input.ts:7`)
+5.9 s, its callback at `:53` 1.3 s, `importNetworkNodes` (`modules/network/nodes.ts:225`) 1.3 s.
+
+**Phase 2: route precompute, 94–100% CPU (the state live was seen in).** Call path:
+`buildNetwork` (`modules/network/build.ts:65`) → `precomputeRoutes` (`modules/network/cache.ts:169`), then for
+each of **5,418 targets** → `calculateRoutes` (`modules/network/service.ts:66`) → `enumeratePathsFromSources`
+(`modules/network/repo.ts:129`, which calls it at `:140` and `:142`) → `pathsFromSnapshot`
+(`modules/network/path-search.ts:131`).
+
+| # | Self time (findings run, warmup window / alone, whole run) | Function |
+|---|---|---|
+| 1 | 670.3 s, 84.1% / 294.9 s, 24.6% | `pathsFromSnapshot` `modules/network/path-search.ts:131`: the 3-hop loop (source → first edge → every neighbour of that node → tails); the 300-path cap only stops it when paths are found |
+| 2 | 64.4 s / 42.0 s | `(program)` (V8 and native) |
+| 3 | 17.4 s / 820.7 s | `(idle)`: in the alone run this is phase 1's pauses |
+| 4 | 18.1 s whole run / 7.0 s | `(garbage collector)` |
+| 5 | 10.6 s / 5.1 s | `runMicrotasks`, resuming after `yieldRouteWork` (`path-search.ts:15`, a `setImmediate` each ≥12 ms slice) |
+| 6 | 6.6 s / 3.7 s | `needsYield`, anonymous at `path-search.ts:137` ← `pathsFromSnapshot` |
+| 7 | 5.9 s (alone) | `identityEvidence` `modules/identity/resolution-input.ts:7` ← `buildNetwork` `build.ts:65` |
+| 8 | 1.3 s | `importNetworkNodes` `modules/network/nodes.ts:225` (callback `:287`, 0.8 s) ← `build` `build.ts:107` |
+| 9 | 1.3 s | anonymous `modules/identity/resolution-input.ts:53` ← `identityEvidence` |
+| 10 | 1.2 s / 1.0 s | `sourceEdges` `modules/network/repo.ts:246` |
+| 11 | 1.1 s / 0.8 s | `calculateRoutes` `modules/network/service.ts:66` |
+| 12 | 0.8 s | `parseRow` `pg/lib/result.js:63` (reading rows) |
+| 13 | 0.8 s | `decode` `modules/network/cache.ts:46` ← `cache.ts:111` |
+| 14 | 0.7 s / 0.6 s | `edgesByIds` `modules/network/repo.ts:67` |
+| 15 | 0.6 s | `enumeratePathsFromSources` `modules/network/repo.ts:129` |
+
+The warmup rate was 367 targets in 802 s in the findings run (2.2 s each) and 330 in 380 s alone (1.15 s each).
+At 5,418 targets, **the precompute alone projects to 1.7–3.3 hours**, after about 13 minutes of paced
+identity resolution. That matches live's 100+ minutes at ~100% CPU in "Rebuilding research ties".
+`pathsFromSnapshot` is where to optimise: bound the hub expansion in the 3-hop loop, or skip targets
+with no tails early.
+
+### What this rehearsal did not cover
+
+A restore over the network into RDS; the container itself (no Docker here) and its memory limit; Kaniko's
+2 GiB/1 CPU build; a finished findings import at real volume.
