@@ -11,4 +11,5 @@ export async function register() {
   void import('./lib/responsiveness').then((m) => m.startResponsivenessMonitor()).catch(() => undefined);
   void import('./lib/activity').then((m) => m.startActivity()).catch(() => undefined);
   void import('./lib/feedback-ingest').then((m) => m.startIngest()).catch(() => undefined);
+  if (process.env.SCHEDULE_DAILY_AT) void import('./lib/daily-timer').then((m) => m.startDailyTimer()).catch(() => console.error('[daily] Could not start timer.'));
 }

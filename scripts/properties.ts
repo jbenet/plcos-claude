@@ -38,6 +38,7 @@ async function main() {
   await (await import('./properties/postgres-preview')).postgresPreviewProperties(check);
   await (await import('./properties/pg-copy')).pgCopyProperties(check);
   await (await import('./properties/import-jobs')).importJobProperties(check);
+  await (await import('./properties/daily-timer')).dailyTimerProperties(check);
   await (await import('./properties/cache-retries')).cacheRetryProperties(check);
   const { runProperties } = await import('./properties/suite');
   await runProperties(check);
