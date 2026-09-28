@@ -145,6 +145,7 @@ export function portFor(serve: Serve, layout: Layout, env: Record<string, string
  * cannot be read files nothing.
  */
 export function feedbackHome(profile: 'demo' | 'real', root: string = process.cwd()): { filesHere: boolean; livePort: number | null } {
+  if (process.env.LABOS_ME_URL) return { filesHere: true, livePort: null };
   try {
     const layout = readLayout(root);
     return { filesHere: layout.role === 'live', livePort: (profile === 'real' ? layout.live?.real : layout.live?.demo) ?? null };
