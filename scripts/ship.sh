@@ -14,6 +14,12 @@ now=$(git rev-parse --short HEAD)
 restart() {
   kill $(pgrep -f "npm run dev:real") $(pgrep -f "next dev --hostname 0.0.0.0 --port 3000") \
     $(pgrep -f "^next-server" | while read p; do lsof -a -p $p -iTCP:3000 -sTCP:LISTEN >/dev/null 2>&1 && echo $p; done) 2>/dev/null
+  # Relaunch it here when nothing else does (28 Sep: a rollback restart left live down). A terminal loop
+  # that relaunches on its own gets 15 s first.
+  sleep 15
+  if ! lsof -nP -iTCP:3000 -sTCP:LISTEN >/dev/null 2>&1; then
+    (cd "$LIVE" && nohup npm run dev:real >> "$LIVE/data/real/logs/live-3000.log" 2>&1 &)
+  fi
 }
 [ "${1:-}" = "--restart" ] && restart
 sleep 20
