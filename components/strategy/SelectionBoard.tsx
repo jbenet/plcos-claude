@@ -3,6 +3,7 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { scoreDetailAction } from '@/app/selection/actions';
+import { actionFailure } from '@/lib/client/action-failure';
 import type { ScoreDetail } from '@/lib/pipeline-data';
 import { BulkLpActions } from './BulkLpActions';
 import { MoveButton, statusMix, statusWord, UndoToast, useMove } from './MoveToSelected';
@@ -352,7 +353,7 @@ function Why({ r, position, sortLabel, rungNames, now, onJump }: {
   const [detail, setDetail] = useState<ScoreDetail | null | 'loading' | 'failed'>('loading');
   useEffect(() => {
     let live = true;
-    scoreDetailAction(r.vehicleId, r.id).then((d) => { if (live) setDetail(d); }, () => { if (live) setDetail('failed'); });
+    scoreDetailAction(r.vehicleId, r.id).then((d) => { if (live) setDetail(d); }, (e) => { if (live) { actionFailure(e, ''); setDetail('failed'); } });
     return () => { live = false; };
   }, [r.vehicleId, r.id]);
   const d = typeof detail === 'object' ? detail : null;

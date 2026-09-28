@@ -6,6 +6,7 @@ import { bulkLpAction, undoBulkLpAction } from '@/app/targets/bulk-actions';
 import { newRequestKey } from '@/lib/request-key';
 import type { BulkPlace } from '@/lib/pipeline-bulk';
 import { lead, type PipelineRow, type Status } from './pipeline-model';
+import { actionFailure } from '@/lib/client/action-failure';
 import { cx, n } from './lp-view';
 import s from './selection.module.css';
 
@@ -50,8 +51,8 @@ export function useMove(place: BulkPlace = 'selection') {
       setLast(moved);
       router.refresh();
       return moved;
-    } catch {
-      setError('The move was not confirmed. Check the list after it reloads before trying again.');
+    } catch (e) {
+      setError(actionFailure(e, 'The move was not confirmed. Check the list after it reloads before trying again.'));
       router.refresh();
       return null;
     } finally { lock.current = false; setBusy(false); }
@@ -77,8 +78,8 @@ export function useMove(place: BulkPlace = 'selection') {
       setLast(next);
       router.refresh();
       return res.ok ? next : null;
-    } catch {
-      setLast({ ...m, state: 'failed', error: 'The undo was not confirmed. Check the list after it reloads.' });
+    } catch (e) {
+      setLast({ ...m, state: 'failed', error: actionFailure(e, 'The undo was not confirmed. Check the list after it reloads.') });
       router.refresh();
       return null;
     } finally { lock.current = false; }

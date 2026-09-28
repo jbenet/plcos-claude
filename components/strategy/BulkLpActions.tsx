@@ -9,6 +9,7 @@ import type { PipelineRow, Status } from './pipeline-model';
 import { Glyph } from '@/components/ui/Glyph';
 import { REASONS, PASSED_BY_CHOICES, PASSED_BY_LABEL } from '@/modules/strategy/client';
 import { lead } from './pipeline-model';
+import { actionFailure } from '@/lib/client/action-failure';
 import { cx, n } from './lp-view';
 import s from './lp-tables.module.css';
 
@@ -111,7 +112,7 @@ export function BulkLpActions({ rows, statuses, initialStatus = 'selected', onCl
             setMessage({ text: `${n(result.written)} saved${result.alreadySaved ? `; ${n(result.alreadySaved)} already saved` : ''}.${workflow ? ' Each request awaits review on the LP’s timeline; no workflow has started.' : ''}${result.proposals ? ` ${result.proposals} draft approval tickets created.` : ''}${result.reconciliationPending ? ` ${result.reconciliationPending} touchpoints saved, but reconciliation needs a retry on the LP page.` : ''}` });
             setDone(true); router.refresh();
           } catch (error) {
-            setMessage({ text: error instanceof Error ? error.message : 'Save not confirmed. Retry the same request.', bad: true });
+            setMessage({ text: actionFailure(error, 'Save not confirmed. Retry the same request.'), bad: true });
           } finally { setBusy(false); }
         }}>
           <p className={s.formHint}>{HINT[action]}</p>
