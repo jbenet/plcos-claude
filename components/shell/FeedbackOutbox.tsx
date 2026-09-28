@@ -7,6 +7,7 @@ import {
 } from '@/lib/feedback-outbox';
 import { entryPictures, entryText, entryTitle, type JournalEntry } from '@/lib/feedback-journal';
 import s from './FeedbackOutbox.module.css';
+import { formatDate } from '@/lib/time';
 
 export const useOutbox = (): OutboxState => useSyncExternalStore(subscribe, snapshot, serverSnapshot);
 
@@ -16,7 +17,7 @@ const plural = (n: number) => (n === 1 ? '1 note' : `${n} notes`);
 const writtenAt = (iso: string) => {
   const d = new Date(iso);
   const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${time}`;
+  return d.toDateString() === new Date().toDateString() ? time : `${formatDate(d, { day: 'numeric', month: 'short' })} ${time}`;
 };
 
 const inSeconds = (ms: number) => {

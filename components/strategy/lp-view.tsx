@@ -3,6 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Glyph } from '@/components/ui/Glyph';
+import { formatDate } from '@/lib/time';
 import {
   CHOICES, EMPTY, FILTER_LABEL, filtersFrom, haystack, matches, numeric, sortFrom, unitShown, unitsFrom, unitsOn,
   type Filters, type PipelineRow, type SortKey, type Status,
@@ -17,12 +18,12 @@ import u from './lp-units.module.css';
  * once; search, filters and order run here, so narrowing is instant.
  */
 
-export const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
+export const fmt = (iso: string | null) => (iso ? formatDate(new Date(iso), { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
 export const fmtShort = (iso: string | null, now: number) => {
   if (!iso) return '';
   const d = new Date(iso);
   const sameYear = d.getUTCFullYear() === new Date(now).getUTCFullYear();
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }), timeZone: 'UTC' });
+  return formatDate(d, { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' as const }), timeZone: 'UTC' });
 };
 export const usdM = (n: number) => (n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : `$${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M`);
 export const n = (x: number) => x.toLocaleString('en-US');

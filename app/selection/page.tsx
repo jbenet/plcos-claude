@@ -5,6 +5,7 @@ import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { pipelineData } from '@/lib/authz/read/pipeline';
 import { RUNGS, RUNG_LABEL, STATUSES } from '@/lib/authz/read/strategy';
+import { formatDate } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,7 @@ async function Selection({ searchParams }: { searchParams: Promise<Record<string
       <p className="cover" style={{ marginTop: 14, background: 'none', borderTop: 0, padding: '4px 0' }}>
         {onHistory > 0 && <>{onHistory.toLocaleString('en-US')} pursuits on vehicles kept for their history are not listed; select one in the rail to see them. </>}
         <b>What this covers:</b> pursuits recorded in this system, including those read from Affinity, loaded{' '}
-        {new Date(asOf).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC.
+        {formatDate(new Date(asOf), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC.
         Someone without a pursuit does not appear, which is a gap in the record rather than a judgement.
       </p>
     </Page>

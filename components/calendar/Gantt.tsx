@@ -1,4 +1,4 @@
-import { shortDate } from '@/lib/time';
+import { shortDate, formatDate } from '@/lib/time';
 import { LANE_LABEL, LANE_MEANS, type Lane, type Mark } from '@/lib/timeline';
 import s from './Gantt.module.css';
 
@@ -62,7 +62,7 @@ export function Gantt({ marks, lanes, weeks, now }: {
   /** Month boundaries, so sixteen weeks of columns still read as a season. */
   const months: Array<{ label: string; left: number }> = [];
   for (const w of weeks) {
-    const label = w.start.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' });
+    const label = formatDate(w.start, { month: 'short', timeZone: 'UTC' });
     if (months.length === 0 || months.at(-1)!.label !== label) months.push({ label, left: pct(w.start.getTime()) });
   }
 

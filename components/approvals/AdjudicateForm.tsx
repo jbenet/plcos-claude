@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { adjudicate } from '@/app/approvals/actions';
 import { REASON_LABEL, type ConflictCase, type ConflictReason } from '@/modules/coordination/client';
+import { formatDate } from '@/lib/time';
 
 const REASONS = Object.keys(REASON_LABEL) as ConflictReason[];
 
@@ -46,7 +47,7 @@ export function AdjudicateForm({ conflict }: { conflict: ConflictCase }) {
             <div className="cl">
               <span>{ask.madeAt ? 'Made' : 'Proposed'}</span>
               <span>
-                {(ask.madeAt ?? ask.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                {formatDate(ask.madeAt ?? ask.createdAt, { day: '2-digit', month: 'short', timeZone: 'UTC' })}
               </span>
             </div>
             <div className="cl">

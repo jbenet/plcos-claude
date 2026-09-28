@@ -5,7 +5,7 @@ import { CloseSteps, closeSteps } from '@/components/status/CloseSteps';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { usdM, multiple } from '@/lib/money';
-import { shortDate } from '@/lib/time';
+import { shortDate, formatDate } from '@/lib/time';
 import { CLOSE_PAGE_SIZE, INSTRUMENT_LABEL, vehicleCloseStatus, vehicleStatusCounts, vehicleTotals } from '@/modules/pipeline';
 import { conditionsFor, listCycles } from '@/modules/close';
 import { listMeetings } from '@/modules/meetings';
@@ -310,7 +310,7 @@ async function Vehicles({ searchParams }: { searchParams: Promise<{ closePage?: 
             <div className={s.gRow}>
               <span />
               <div className={s.axis}>
-                {months.map((m) => <span key={m.toISOString()} style={{ left: x(m.getTime()) }}>{m.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })}</span>)}
+                {months.map((m) => <span key={m.toISOString()} style={{ left: x(m.getTime()) }}>{formatDate(m, { month: 'short', timeZone: 'UTC' })}</span>)}
               </div>
             </div>
             {dated.map(({ r, marks }) => {

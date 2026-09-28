@@ -1,4 +1,4 @@
-import { shortDate } from '@/lib/time';
+import { formatDate, shortDate } from '@/lib/time';
 import { usdM } from '@/lib/money';
 import type { CloseTrack } from '@/modules/pipeline';
 import s from './CloseSteps.module.css';
@@ -49,7 +49,7 @@ export function closeSteps(track: CloseTrack): StepMark[] {
 
 /** Short enough for five columns: the year only when it is not this one. */
 function stepDate(d: Date, now = new Date()): string {
-  return d.toLocaleDateString('en-GB', d.getFullYear() === now.getFullYear()
+  return formatDate(d, d.getFullYear() === now.getFullYear()
     ? { day: '2-digit', month: 'short' } : { day: '2-digit', month: 'short', year: '2-digit' });
 }
 

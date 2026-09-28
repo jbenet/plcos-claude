@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { Glyph } from '@/components/ui/Glyph';
 import { LANE_LOOK, orderDatedRows, type DatedRow, type LaneLook } from '@/lib/lanes';
 import s from './DatedList.module.css';
+import { formatDate } from '@/lib/time';
 
 /**
  * Every dated thing, filtered as you type (issues 0020, 0072): a search over what, who, LP and
@@ -20,7 +21,7 @@ const STANDING: Record<DatedRow['standing'], { label: string; flag: string }> = 
 };
 
 type Sort = 'date' | 'lp' | 'team';
-const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const day = (iso: string) => formatDate(new Date(iso), { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
 /** The label without the LP's name, which has its own column: "Cedar Trust — meeting" reads "Meeting". */
 function what(r: DatedRow): string {

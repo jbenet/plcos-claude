@@ -2,9 +2,10 @@
 import { IMPORT_LABELS } from '@/lib/import-jobs/types';
 import { active, needsLook, useJobs } from '@/lib/import-jobs/client';
 import { ProspectPrecedence, type ProspectPrecedenceReport } from './ProspectPrecedence';
+import { formatDate } from '@/lib/time';
 
 const word = (status: string) => (status === 'queued' ? 'Queued' : status === 'running' ? 'Working' : status === 'completed' ? 'Completed' : 'Stopped');
-const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+const when = (iso?: string | null) => (iso ? formatDate(new Date(iso), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 
 /**
  * The imports in full (issue 0114): on Developer → Status and the developer pages that start them,

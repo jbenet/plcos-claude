@@ -16,6 +16,7 @@ import {
   discardDraft, listDrafts, readDraft, readPictures, writeDraft, writePictures, type DraftSummary,
 } from '@/lib/feedback-drafts';
 import { enqueue, startOutbox } from '@/lib/feedback-outbox';
+import { formatDate } from '@/lib/time';
 
 type Kind = 'bug' | 'request' | 'question' | 'chore';
 type Priority = 'P0' | 'P1' | 'P2' | 'P3';
@@ -40,7 +41,7 @@ const WIDE_KEY = 'capitalos.feedback.wide';
 const savedAt = (iso: string) => {
   const d = new Date(iso);
   const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${time}`;
+  return d.toDateString() === new Date().toDateString() ? time : `${formatDate(d, { day: 'numeric', month: 'short' })} ${time}`;
 };
 
 export function FeedbackButton({

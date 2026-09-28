@@ -3,6 +3,7 @@ import type { Read, TouchpointSummary } from '@/modules/meetings';
 import type { NoteReading } from '@/lib/connectors/affinity/readings';
 import { STEP_LABEL, type CloseTrack } from '@/modules/pipeline';
 import type { Pursuit } from '@/modules/strategy';
+import { formatDate } from '@/lib/time';
 
 /** The read a page shows for an LP: a person's, or — marked — a suggestion from a note. */
 export interface ShownRead {
@@ -24,7 +25,7 @@ export interface ShownRead {
 /** Something that happened, with a date, and which way it points. */
 export interface LaterFact { on: Date; points: 'up' | 'down'; what: string }
 
-const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const fmt = (d: Date) => formatDate(d, { day: 'numeric', month: 'short', year: 'numeric' });
 
 /**
  * What an LP has done since, from the records that point one way or the other (N57): a

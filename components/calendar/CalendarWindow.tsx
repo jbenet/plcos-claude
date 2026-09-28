@@ -6,9 +6,10 @@ import { LANE_LOOK } from '@/lib/lanes';
 import { Glyph } from '@/components/ui/Glyph';
 import { PagedRows } from '@/components/floor/Paging';
 import Link from '@/components/ui/AppLink';
+import { formatDate } from '@/lib/time';
 
 const WEEK = 7 * 86_400_000;
-const short = (stamp: number) => new Date(stamp).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+const short = (stamp: number) => formatDate(new Date(stamp), { day: '2-digit', month: 'short', timeZone: 'UTC' });
 
 /**
  * The window, as weekly counts per lane (issue 0066 kept: fixed bins, so a busy week is one number
@@ -45,7 +46,7 @@ export function CalendarWindow({ rows, first, weeks, now, look = {} }: {
                 const newMonth = i === 0 || new Date(bins[i - 1]!.start).getUTCMonth() !== d.getUTCMonth();
                 return (
                   <th scope="col" key={b.start} className={i === current ? s.now : undefined} title={`Week of ${short(b.start)}`}>
-                    <span className={s.mon}>{newMonth ? d.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' }) : ''}</span>
+                    <span className={s.mon}>{newMonth ? formatDate(d, { month: 'short', timeZone: 'UTC' }) : ''}</span>
                     <span className={s.day}>{d.getUTCDate()}</span>
                   </th>
                 );
