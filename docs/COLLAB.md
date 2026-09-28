@@ -273,3 +273,11 @@ metadata is present, the reader uses the rollout filename's child ID and the out
 Independent child counters remain separate; genuine resumed copies merge observations before deltas
 are computed. Finishes retain the session IDs as well as the count and method. Explicit caller-supplied
 usage and finish retry idempotency are unchanged. No prompts or tool content are decoded.
+
+## Shipping to live (27 Sep 2026)
+
+`bash scripts/ship.sh [--restart]` from the dev checkout does four things in order:
+1. Runs `scripts/gate.sh` on `plcos-claude-dev`: types, boundaries, the properties on PGlite, and on Postgres when the test cluster on 5434 is up. It refuses to ship on any failure.
+2. Fast-forwards the live folder to `claude/main`, restarting it if asked.
+3. Loads real pages and checks for a 200 with no build error.
+4. Rolls live back to the previous commit if the pages fail.
