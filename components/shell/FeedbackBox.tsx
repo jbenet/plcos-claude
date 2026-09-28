@@ -348,7 +348,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   };
 
   const context = useMemo(
-    () => ({ route: path, filters, ...(draftPage !== path ? { startedOn: draftPage } : {}), ...(client ? { client } : {}) }),
+    () => ({ route: path, url: typeof window !== 'undefined' ? window.location.href : undefined, filters, ...(draftPage !== path ? { startedOn: draftPage } : {}), ...(client ? { client } : {}) }),
     [path, filters, client, draftPage],
   );
 
