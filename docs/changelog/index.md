@@ -205,3 +205,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Strip Dakota at cutover](entries/strip-dakota.md)
 
 - [Name collisions — retain usable research](entries/name-collision.md)
+- [Cutover re-point order and viewer refusals](entries/strip-order.md)

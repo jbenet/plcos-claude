@@ -24,15 +24,33 @@ export async function securityEntrypointProperties(check: Check) {
   const entry = nodes(action).find(n => n.type === 'FunctionDeclaration' && n.id?.name === 'requireAction');
   const body: Node[] = entry?.body?.body ?? [];
   const first = body[0]?.declarations?.[0]?.init;
-  const policy = body[1]?.expression;
+  const policyTry = body[1];
+  const policy = policyTry?.block?.body?.[0]?.expression;
+  const refusal = policyTry?.handler?.body?.body?.[0];
+  const rethrow = policyTry?.handler?.body?.body?.[1];
+  const refusalRedirect = refusal?.consequent?.expression;
   const importsGuard = action.body.some((n: Node) => n.type === 'ImportDeclaration'
     && n.source.value === '@/lib/mutation-guard' && n.specifiers.some((s: Node) => s.imported?.name === 'requireServerActionMutation' && s.local.name === 'requireServerActionMutation'));
+  const importsRedirect = action.body.some((n: Node) => n.type === 'ImportDeclaration'
+    && n.source.value === 'next/navigation' && n.specifiers.some((s: Node) => s.imported?.name === 'redirect' && s.local.name === 'redirect'));
   check('SEC combined action resolves the guarded user before policy and returns that same user',
-    importsGuard && first?.type === 'AwaitExpression' && called(first.argument, 'requireServerActionMutation')
-    && body[0].declarations[0].id.name === 'user' && policy?.type === 'AwaitExpression'
+    importsGuard && importsRedirect && body.length === 3 && body[0]?.type === 'VariableDeclaration' && body[0].kind === 'const'
+    && body[0].declarations.length === 1 && first?.type === 'AwaitExpression' && called(first.argument, 'requireServerActionMutation')
+    && first.argument.arguments.length === 0 && body[0].declarations[0].id.name === 'user'
+    && policyTry?.type === 'TryStatement' && policyTry.block.body.length === 1 && !policyTry.finalizer
+    && policy?.type === 'AwaitExpression'
     && called(policy.argument, 'authorizeAction') && policy.argument.arguments[0]?.name === 'user'
+    && policy.argument.arguments.length === 4 && policy.argument.arguments[1]?.name === 'name'
+    && policy.argument.arguments[2]?.name === 'args' && policy.argument.arguments[3]?.type === 'AwaitExpression'
+    && called(policy.argument.arguments[3].argument, 'getDb')
+    && policyTry.handler?.param?.name === 'error' && policyTry.handler.body.body.length === 2
+    && refusal?.type === 'IfStatement' && !refusal.alternate && refusal.test?.type === 'BinaryExpression'
+    && refusal.test.operator === 'instanceof' && refusal.test.left?.name === 'error' && refusal.test.right?.name === 'AuthorizationError'
+    && refusalRedirect?.type === 'CallExpression' && called(refusalRedirect, 'redirect')
+    && refusalRedirect.arguments.length === 1 && refusalRedirect.arguments[0]?.value === '/access-denied'
+    && rethrow?.type === 'ThrowStatement' && rethrow.argument?.name === 'error'
     && body[2]?.type === 'ReturnStatement' && body[2].argument?.name === 'user',
-    'AST verifies first guard, immediate policy using its resolved user, and returned actor.');
+    'AST verifies first guard, sole awaited policy using its resolved user, only AuthorizationError redirected, every other error rethrown, and the same actor returned.');
   const route = await readAst('lib/authz/route.ts');
   const branches = nodes(route).filter(n => n.type === 'IfStatement');
   const guardedBranch = branches.find(n => n.consequent?.body?.some((s: Node) => nodes(s).some(c => called(c, 'mutationRouteGuard'))));
