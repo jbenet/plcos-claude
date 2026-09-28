@@ -46,4 +46,8 @@ Linear before creating, a rollback that archives, and a switch that turns them o
 Checked on the invented workspace in `fixtures/linear/` only: fifteen new properties (no mutation
 leaves the client by any route; the key is never in a log, an error, the activity log, a file or the
 database; pagination and backoff; the translation, nulls clearing fields). The real API was read
-from a worktree to learn its shapes and counts; nothing real is in this change. No screenshots.
+from a worktree to learn its shapes and counts; nothing real is in this change.
+
+| | |
+|---|---|
+| ![Developer → Linear, with the sync state and the invented replica](docs/changelog/shots/linear-readonly/01-dev-linear.webp) | Developer → Linear, on the invented demo workspace (issue 0115: no screenshot of real Linear, as this entry says — this shows only the fixture). |

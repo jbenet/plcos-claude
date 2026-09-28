@@ -1,5 +1,9 @@
 # Person duplicates and organisation LP groups · issue 0105
 
+| | |
+|---|---|
+| ![An organisation row on Pipeline, with its people beneath it](docs/changelog/shots/person-dupes-0105/01-org-grouping.webp) | The shared row projection: an organisation appears once, with the people pursued at it beneath it, on Selection, Fit and Pipeline alike. |
+
 The duplicate-identity pass considered only groups containing an organisation. A newly sourced
 prospect key could therefore create a second person beside an existing upstream identity, and
 **Merge duplicate identities** would leave the two people alone. Separately, Selection and Fit

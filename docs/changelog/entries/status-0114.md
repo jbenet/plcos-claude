@@ -1,5 +1,10 @@
 # System status as one quiet mark beside the user · issue 0114
 
+| | |
+|---|---|
+| ![The status mark, a dim dot beside Juan's name in the rail](docs/changelog/shots/status-0114/01-status-mark.webp) | The mark at rest: a dim dot at the right of the user's name, replacing the old per-page Imports card. |
+| ![The status panel open, showing Feedback and Imports](docs/changelog/shots/status-0114/02-status-panel-open.webp) | A tap opens the words: Feedback ("Nothing waiting to file") and Imports ("Nothing running"), with links to Developer → Status and Logs. |
+
 **The imports panel is off the pages.** Every page used to open with an "Imports" card listing the
 last day's jobs, including four stopped retries of one duplicate merge that a later run had already
 answered. Juan: "not good UX for most users; belongs in developer or logs or status… a small

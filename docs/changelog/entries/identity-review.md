@@ -2,6 +2,10 @@
 
 **27 Sep 2026 · `codex/identity-review` · issue 0105**
 
+| | |
+|---|---|
+| ![Developer → Enrichment, the page where identity review's results and reversal controls appear](docs/changelog/shots/identity-review/01-enrich-identity-review.webp) | Developer → Enrichment, where the applied/refused counts, refusal reasons and separation-reversal control described below appear once an import has run. |
+
 Export the research set now also writes `enrich/identity-review.jsonl`: one stable hashed
 group per ambiguous identity, with names/types, source identifiers, affiliations, titles,
 personal URLs, pursuits, reference counts, source resolution rules and refusal reasons.

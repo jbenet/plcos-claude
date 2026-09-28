@@ -1,5 +1,9 @@
 ## LP stats — who the LPs are, counted, with every count a filter
 
+| | |
+|---|---|
+| ![LP stats for PLC Neurotech I: the summary counts and the panel grid](docs/changelog/shots/lp-stats/01-stats-panels.webp) | `/neurotech/stats`: the header counts, then the fifteen panels — LP type, typical check size, region, country, score, fit, status, owner, last touch, best path, source, strategy, research, LP unit and vehicle — each a list of bars with count and share. |
+
 Juan, 27 Sep: *"we should gather some stats about LPs: counts of what types of them are there (refer to
 prior reports for good segmentation), counts per typical check size, counts for score bands, counts for
 country… We should add a page like 'LP stats' to each vehicle (and all)… That page should also allow

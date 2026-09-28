@@ -3,6 +3,10 @@
 Issue 0104 (Selection, on an SPV): changing a status failed, it asked for a note, and the page had
 no single obvious action.
 
+| | |
+|---|---|
+| ![Selection's side panel, with the Move to Selected action](docs/changelog/shots/selection-0104/01-move-to-selected.webp) | The side panel's Move to Selected action, on the current Selection page (redesigned again in 0109, below). |
+
 **The error.** Every status change from Selection, the pipeline table and the fit list made its
 idempotency key with `crypto.randomUUID()`. Browsers only provide that in a secure context
 (https or localhost). The live server is reached over plain http on the local network, so on the

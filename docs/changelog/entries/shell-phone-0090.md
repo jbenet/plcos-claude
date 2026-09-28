@@ -1,5 +1,10 @@
 # 0090 — The shell on a phone and a narrow tablet
 
+| | |
+|---|---|
+| ![The rail open as a sheet on a phone-width Today page](docs/changelog/shots/shell-phone-0090/01-phone-menu.webp) | At 390 px, the rail becomes a top bar with a menu button; the menu opens the same rail as a sheet, with larger rows for a finger. |
+| ![The funder–vehicle fit page at tablet width, with the side pane over the page](docs/changelog/shots/shell-phone-0090/02-tablet-pane.webp) | At 768 px, a **Details** button replaces the pane toggle; the pane opens over the page instead of splitting it. |
+
 At 390 px wide the rail kept its full 244 px, and pages with a side pane kept that too, which left the
 page about 146 px. On a tablet held upright (768 px) the rail and the pane together left a column
 about 230 px wide, where the LP page's status ladder printed its labels on top of each other. The

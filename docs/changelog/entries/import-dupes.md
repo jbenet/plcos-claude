@@ -1,5 +1,9 @@
 # Import duplicate identities
 
+| | |
+|---|---|
+| ![Developer → Enrichment, with Merge duplicate identities among the import buttons](docs/changelog/shots/import-dupes/01-enrich-merge-duplicates.webp) | **Merge duplicate identities** on Developer → Enrichment, beside **Import the findings**, **Consolidate pursuits** and the other import controls (shown before any import has run on this demo server). |
+
 Imports could leave one organization represented by several organization nodes and an older,
 incorrectly person-typed node. Those source keys then produced conflicting prospect candidates.
 The identity phase of **Import the findings** now runs a deterministic duplicate pass after

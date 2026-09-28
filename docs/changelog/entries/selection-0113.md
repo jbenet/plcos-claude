@@ -1,5 +1,9 @@
 # One list of LPs, with a type on each row · issue 0113
 
+| | |
+|---|---|
+| ![Selection as one ranked list, with a type icon on each row and the Firms/Individuals toggles](docs/changelog/shots/selection-0113/01-type-icons-toggles.webp) | Organisations and individuals as one ranked list, each row with its type icon, and the **Firms**/**Individuals** toggles in the filter line. |
+
 **Selection and Pipeline.** Organisations and individuals are one ranked list again, ranked
 together in the chosen order (Juan: "intersperse them"), instead of two sections. Every row starts
 with a small type icon: a building for a firm, a person for an individual, read out as "Firm" or

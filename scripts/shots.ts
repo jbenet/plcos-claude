@@ -2410,6 +2410,100 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+
+  // Issue 0115 — batches 13 to 19 had no screenshots because the builders on those
+  // branches could not run a server. These backfill the UI-visible ones.
+  'fit-0096': [
+    { name: '01-actions', path: '/neurotech/fit', fullPage: true },
+  ],
+  'tables-0091-0093': [
+    { name: '01-selection-table', path: '/selection', fullPage: true },
+    { name: '02-pipeline-org-row', path: '/neurotech/pipeline?status=discussing', fullPage: true },
+  ],
+  'strategy-0097': [
+    { name: '01-what-to-do', path: '/neurotech/strategy', fullPage: true },
+  ],
+  'developer-0098-0101': [
+    { name: '01-changelog-batches', path: '/dev/changelog' },
+    { name: '02-status-sources', path: '/dev/status', fullPage: true },
+    { name: '03-workflows', path: '/dev/workflows', fullPage: true },
+  ],
+  'shell-phone-0090': [
+    {
+      name: '01-phone-menu',
+      path: '/today',
+      width: 390,
+      fullPage: true,
+      prepare: async (page) => {
+        await page.getByRole('button', { name: 'Open the menu' }).click();
+        await page.waitForTimeout(250);
+      },
+    },
+    { name: '02-tablet-pane', path: '/neurotech/fit', width: 768, fullPage: true },
+  ],
+  'connectors-0103': [
+    { name: '01-activity-charts', path: '/dev/connectors', fullPage: true },
+  ],
+  'selection-0104': [
+    { name: '01-move-to-selected', path: '/neurotech/selection', fullPage: true },
+  ],
+  'person-dupes-0105': [
+    { name: '01-org-grouping', path: '/neurotech/pipeline?status=discussing', fullPage: true },
+  ],
+  'selection-0109': [
+    { name: '01-one-panel', path: '/neurotech/selection', fullPage: true },
+  ],
+  'connectors-0106-0108': [
+    { name: '01-connectors-deduped', path: '/dev/connectors', fullPage: true },
+  ],
+  'responsive-server': [
+    { name: '01-status-event-loop', path: '/dev/status', fullPage: true },
+  ],
+  'spv-stance': [
+    { name: '01-selection-spv-column', path: '/spv-cortex/selection', fullPage: true },
+  ],
+  'lp-stats': [
+    { name: '01-stats-panels', path: '/neurotech/stats', fullPage: true },
+  ],
+  'lp-stats-2': [
+    { name: '01-stats-spv-coverage', path: '/neurotech/stats', fullPage: true },
+  ],
+  'linear-readonly': [
+    { name: '01-dev-linear', path: '/dev/linear', fullPage: true },
+  ],
+  'linear-plc-only': [
+    { name: '01-dev-linear-scoped', path: '/dev/linear', fullPage: true },
+  ],
+  'linear-views': [
+    { name: '01-standup-my-linear', path: '/standup', fullPage: true },
+    { name: '02-overview-workstreams', path: '/neurotech/overview', fullPage: true },
+  ],
+  'workflow-api': [
+    { name: '01-enrich-workflow-buttons', path: '/dev/enrich', fullPage: true },
+  ],
+  'status-0114': [
+    { name: '01-status-mark', path: '/today' },
+    {
+      name: '02-status-panel-open',
+      path: '/today',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: /^Status:/ }).click();
+        await page.waitForTimeout(250);
+      },
+    },
+  ],
+  'selection-0113': [
+    { name: '01-type-icons-toggles', path: '/selection', fullPage: true },
+  ],
+  'interactions-0045': [
+    { name: '01-interaction-history', path: '/dev/affinity/meetings', fullPage: true },
+  ],
+  'import-dupes': [
+    { name: '01-enrich-merge-duplicates', path: '/dev/enrich', fullPage: true },
+  ],
+  'identity-review': [
+    { name: '01-enrich-identity-review', path: '/dev/enrich', fullPage: true },
+  ],
 };
 
 /** The seed mints uuids, so a fixed link is resolved at shot time. */

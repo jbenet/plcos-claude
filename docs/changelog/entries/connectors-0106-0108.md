@@ -1,5 +1,9 @@
 ## Connectors — EDGAR folded into search, and a page that stops repeating itself · issues 0106–0108
 
+| | |
+|---|---|
+| ![Developer → Connectors, with EDGAR folded into Search and notes deduplicated](docs/changelog/shots/connectors-0106-0108/01-connectors-deduped.webp) | The Sources table with SEC gone (folded into page fetches as EDGAR), and each source's own short note instead of a repeated paragraph. |
+
 **SEC is no longer a source (0106).** EDGAR is internet reading, not a database of its own, and it
 held very few records. Its rows now count as page fetches in their own "EDGAR" segment, so an
 unknown SEC figure never blanks a known fetch figure on the same day. sec.gov is listed among the hosts

@@ -1,5 +1,9 @@
 ## Linear — PLC-only sync and replica rebuild
 
+| | |
+|---|---|
+| ![Developer → Linear, with the team allowlist and Purge and re-map](docs/changelog/shots/linear-plc-only/01-dev-linear-scoped.webp) | Developer → Linear showing the allowlist and the scoped counts, with **Purge and re-map** beside **Full resync**. |
+
 Linear now reads only `config.linear.teams` (default `['PLC']`). Every entity query carries a
 server-side scope; users are requested only by referenced IDs. The client keeps its mutation
 guard and prevents caller variables from broadening the team allowlist. Scope changes force a

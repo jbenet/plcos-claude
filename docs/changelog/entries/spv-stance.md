@@ -1,5 +1,9 @@
 # SPV stance: whether an LP does SPVs, and how many we know of
 
+| | |
+|---|---|
+| ![Selection with an SPVs column, on SPV — Cortex](docs/changelog/shots/spv-stance/01-selection-spv-column.webp) | The SPVs column on Selection (does ≥N / doesn't / unknown, whose word it rests on, and "conflict" when evidence disagrees). |
+
 Juan, 27 Sep 2026: "One important thing to check for LPs: whether they do SPVs (and how many, if we
 can find out a min number) … Some explicitly do not do any SPVs and we'll need a way to flag that too.
 By default starts at unknown (likely open to it)."

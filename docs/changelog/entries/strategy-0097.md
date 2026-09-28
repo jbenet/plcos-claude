@@ -3,6 +3,10 @@
 Juan on the redesigned strategy page (0097): "So much better!", with four asks; and a new order for
 the vehicle pages in the rail (0102).
 
+| | |
+|---|---|
+| ![The vehicle strategy page, with the "What to do" band, the menu of moves and status marks](docs/changelog/shots/strategy-0097/01-what-to-do.webp) | The tinted "What to do" band under the counts, the gaps and risks below it, and status marks (`StatusMark`) beside every status word. |
+
 - **Pipeline and conversion: what to do.** A tinted "What to do" band under the counts, computed from
   the records, at most two sentences. It starts nearest money: harden the soft held by Committed LPs,
   follow up with Discussing, naming the three with the largest supported capacity. Then it widens:
