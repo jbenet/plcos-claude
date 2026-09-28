@@ -15,6 +15,14 @@ LabOS container as live. F4: sign-in reads first and never writes for a known ui
 end: a Docker build (no Docker on the Mac; PL's Kaniko is the first real build) and the Dakota strip
 against a real copy — rehearse both once before cutover (§2, §3).
 
+**Status, 28 Sep (rehearsal 2 on a real copy, [06-measurements.md](06-measurements.md) "Rehearsal 2"):
+the Dakota strip FAILS — cutover stops before the flip.** `strip-dakota.ts` hits an FK violation on
+`strategy.pursuit_contact` while undoing LP re-points: the 17 Dakota re-points share 3 `created_at` values, so
+"newest first" is random within a batch and a re-point's created org pursuit is deleted before a same-batch
+re-point's contact on it. Fix the undo order before cutover. With a local retry the rest committed in 479 s
+(one transaction, target frozen throughout), removed every Dakota-sourced row and kept all names. F3, F4 and
+F5 held on real data: 0 errors in two 10-way walks, viewer pages ~0.5 s, peak RSS 1.63 GiB.
+
 
 | # | Problem found | Fix |
 |---|---|---|

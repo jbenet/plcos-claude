@@ -344,3 +344,103 @@ with no tails early.
 
 A restore over the network into RDS; the container itself (no Docker here) and its memory limit; Kaniko's
 2 GiB/1 CPU build; a finished findings import at real volume.
+
+## Rehearsal 2 (strip + fixes) (28 September 2026, Claude)
+
+What was run: `plcos_live` dumped as `plcos_ro` (an import was running on live; live was only read), restored as
+`plcos_app` into a scratch `plcos_rehearsal2` on the same cluster, frozen, stripped of Dakota as
+`scripts/cutover.sh` step 6 does, copied jobs stopped, thawed. Then a `git archive claude/main` build (`5b67946`)
+served it with `next start`, `DATA_PROFILE=real`, `NEXT_DIST_DIR=.next`, a stand-in LabOS `/me` (two invented
+tokens) and the runbook §3c working-file set copied into a private folder and linked as `data/real`. No connector
+was called; no key was in the server's environment. Everything was deleted afterwards (database dropped, dump,
+copy, scripts and build removed). Counts, timings and table names only.
+
+### Cutover legs
+
+| Leg | Result |
+|---|---|
+| `pg_dump -Fc` as `plcos_ro` (1,467 MB database) | **15.7 s**, 213 MB file, RSS 205 MiB; 119 tables of data listed = 119 tables |
+| `pg_restore --no-owner --no-acl --exit-on-error --single-transaction` as `plcos_app` | **37.3 s**, restored database 1,080 MB, 119 tables, 1,214,359 rows |
+| Working files (runbook §3c exclusions) | `rsync` **14 s**, 2,126 MiB, 33,385 files |
+
+### Dakota strip (`scripts/strip-dakota.ts`, exactly as `cutover.sh` runs it on the frozen target)
+
+**It stopped, in 1.3 s, with the target still read-only** — not on ambiguous provenance but on an ordering bug in
+the LP re-point undo. The script's own output is the generic "strip-dakota failed; transaction rolled back"; a
+wrapper printing only the error's code/table/constraint showed `23503` on `strategy.pursuit_contact`
+(`pursuit_contact_pursuit_id_fkey`), raised by `restoreChanges` while deleting an organisation pursuit a re-point
+had created.
+
+Cause: 17 re-points match the strip's selection (all by the Dakota reason text; 0 `identity.affiliation` rows
+have source `dakota`). They share only **3 distinct `created_at` values** (written in batches, one transaction
+timestamp each), so `order by created_at desc, id desc` falls back to random uuid order within a batch. The 4th
+re-point in that order created an org pursuit that two re-points of the **same timestamp**, undone later in that
+order, had added contacts to. Undoing "newest first" is not actually newest first. Fix needed: undo in true
+application order (a sequence or `clock_timestamp()` column, or the journal's own order), or retry FK-blocked
+undos after the others.
+
+To measure the rest, a local copy of the script (rehearsal-only, not committed) retried FK-blocked undos after
+the others (2 passes, 1 deferred) and was otherwise identical. That run **committed in 479 s** (repoints 1 s,
+`strip-dakota.sql` 478 s, one transaction, client RSS 86 MiB); none of the SQL's review stops fired (mixed
+prose, mixed inference/journal provenance, unhandled JSON or scalar provenance). `stop-cutover-jobs.sql` then
+failed 1 copied `running` job.
+
+| Table | Before → after |
+|---|---|
+| `dakota.account` / `contact` / `claim` / `identity_revision` / `replica` (`employment`, `translation_job` 0) | 5,100 / 9,253 / 5,215 / 1 / 2 → 0 |
+| `identity.source_record` | 124,362 → 110,009 (−14,353) |
+| `identity.external_identifier` | 14,644 → 0 (all were Dakota) |
+| `identity.possible_match` | 64,736 → 3,079 (−61,657) |
+| `identity.match_assertion` | 4,672 → 4,254 (−418); 418 merge redirects cleared |
+| `strategy.pursuit` | 6,871 → 6,557 (302 Dakota pursuits, 12 org pursuits created by undone re-points) |
+| `strategy.lp_repoint` / `pursuit_contact` / `pursuit_owner` / `pursuit_update` | −17 each |
+| `strategy.spv_evidence` | 884 → 797 (−87) |
+| `platform.audit_log` | 6,513 → 6,495 (−18) |
+| `network.route_cache` | 7,257 → 0 (recomputable) |
+| All other tables | unchanged; total rows 1,214,359 → 1,095,972 |
+
+Independent check afterwards: every text/enum column named like `source`/`origin` (plus `kind`, `action`,
+`evidence_ref`, `evidence_kind`, `provenance_note`, `aum_basis`) and every JSON column scanned for a
+`source`/`origin`/`file`/`*_source` key valued Dakota: **0 rows** (before: 8 scalar and 2 JSON columns, led by
+61,657 `possible_match.signals` and 14,644 identifiers). Names survived: `identity.entity` 18,599 orgs and
+98,950 people before and after, all named; unmerged rose by 193 orgs and 225 people (the cleared redirects).
+
+### Build (`git archive` → `npm ci` → `npm run build` + `check-build-traces`, Dockerfile env)
+
+npm ci 3 s (warm cache). Build plus traces check **139 s** wall; largest process RSS **2.0 GiB**; traces check
+95 traces, 201,813 entries, 0 violations. 24 warning lines (Turbopack tracing), no errors.
+
+### Pages (`next start`, ready in 0.65 s at 143 MiB)
+
+No cookie: the LabOS sign-in text. Unknown uid: a new `viewer` row (once). Mapped uid: admin.
+Sequential, 1 warm-up + 8 timed per page, 27 pages (`/today`, `/orgs/g/lps`, `/developer/enrich`,
+overview/pipeline/selection/strategy × 6 vehicles), all 200:
+
+| Role | p50 | p95 | Slowest |
+|---|---|---|---|
+| admin | 13–329 ms | 15–347 ms | largest vehicle's strategy (329 / 347 ms); `/developer/enrich` 269 / 279 ms |
+| viewer | 199–745 ms | 203–770 ms | LP stats (745 / 770 ms); every non-strategy page ~0.5 s (was 12.5–13.8 s) |
+
+10-way, 180 s walks over the same 27 pages:
+
+| Walk | Requests | Non-200 | Rate | p50 / p95 by page | Peak RSS (process tree) |
+|---|---|---|---|---|---|
+| all admin | 6,215 | **0** | 34.5/s | 39–1,205 ms / 112–1,284 ms (largest vehicle's pipeline slowest) | **1.63 GiB** (1,668,944 KiB); 1.19 GiB 60 s after |
+| 7 admin + 3 viewer | 1,944 | **0** | 10.8/s | admin 45–1,971 / 1,222–2,137 ms; viewer 312–1,662 / 640–2,462 ms (LP stats slowest) | 1.49 GiB; 645 MiB 60 s after |
+
+Three concurrent viewers cut throughput to a third and pushed admin p95 past 2 s: viewer pages are no longer
+13 s, but under load they still cost several times an admin page.
+
+### F3 and F4
+
+- **F3:** `addUpdateAction` (an LP update, i.e. a note) posted as a form to a vehicle page on a test pursuit
+  created for it: admin **200**, the row written (0.36 s); viewer refused (`AuthorizationError`, shown as HTTP 500
+  on the no-JS form path). The test pursuit, its update and its entity were deleted afterwards.
+- **F4:** `platform.app_user` 12, `network.read_revision` unchanged, and the database's total
+  insert+update+delete counter unchanged across the timing pass and both walks (8,645 requests);
+  they moved only for the deliberate write.
+
+### Still not covered
+
+The re-point ordering fix itself; the strip's 8-minute single transaction on RDS (it holds the target frozen);
+the container, Kaniko and RDS as before.
