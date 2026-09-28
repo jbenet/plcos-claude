@@ -70,6 +70,7 @@ function rewrite(req: NextRequest, path: string, vehicle: string | null = null):
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  if (pathname === '/health') return rewrite(req, '/api/health');
   // A rewrite can reenter the proxy. Only our signed, request-bound context can bypass
   // canonical redirects; arbitrary client markers and modified contexts are discarded.
   const routed = routingContext(req.headers);

@@ -38,8 +38,8 @@ export async function executeImportJob(db: Db, id: string,
     const result = await work(job,progress);
     await db.query(`update platform.import_job set status='completed',phase='Completed',done=coalesce(total,done),result=$2::jsonb,
       heartbeat_at=clock_timestamp(),finished_at=clock_timestamp() where id=$1 and status='running'`,[id,JSON.stringify(result)]);
-  } catch {
+  } catch (error) {
     // Driver and connector exceptions can contain records or credentials. Fixed text only.
-    await failImportJob(db,id);
+    await failImportJob(db,id,job.kind === 'workflow' && error instanceof Error && error.message === 'Workflow refused: ANTHROPIC_API_KEY is not set.' ? error.message : IMPORT_FAILURE);
   } finally { clearInterval(heartbeat); }
 }

@@ -189,3 +189,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [LabOS sign-in](entries/labos-signin.md)
 - [Env keys and feedback export](entries/env-keys-feedback-export.md)
 - [Daily timer](entries/daily-timer.md)
+
+- [Workflow API](entries/workflow-api.md)
