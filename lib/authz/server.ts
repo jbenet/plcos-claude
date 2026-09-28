@@ -1,4 +1,5 @@
 import type { AppUser } from '@/lib/auth';
+import { redirect } from 'next/navigation';
 import { requireServerActionMutation } from '@/lib/mutation-guard';
 import { getDb, type Queryable } from '@/lib/db';
 import { AuthorizationError, requireCan, type Principal } from './index';
@@ -117,6 +118,13 @@ export async function authorizeAction(user: Principal & { id: string }, name: Ac
 /** First statement of every server action: transport/user guard, then policy on that same user. */
 export async function requireAction(name: ActionId, ...args: unknown[]): Promise<AppUser> {
   const user = await requireServerActionMutation();
-  await authorizeAction(user, name, args, await getDb());
+  try {
+    await authorizeAction(user, name, args, await getDb());
+  } catch (error) {
+    // A policy refusal is expected, not a server failure. Next carries this redirect
+    // through both enhanced actions and ordinary form posts (303, then the message).
+    if (error instanceof AuthorizationError) redirect('/access-denied');
+    throw error;
+  }
   return user;
 }

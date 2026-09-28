@@ -83,7 +83,11 @@ before removing the facts that supported them.
 
 For reversible Dakota-only re-points, `restoreChanges` in
 `modules/strategy/merge.ts` compares every current row with the journalled postimage
-before restoring the previous state. Process dependent journals newest first.
+before restoring the previous state. Batch timestamps and UUIDs do not establish
+dependency order: the strip retries FK-blocked journals after other journals have
+been undone, rolling each failed attempt back to a savepoint. A pass with no
+progress stops and rolls back the entire strip; independent children are never
+cascade-deleted to make an undo succeed.
 Later independent edits cause a conflict: fail closed instead of overwriting them.
 Similarly, mixed unstructured prose or an unrecognized provenance shape must block
 cutover until it can be separated without losing independent information. Report

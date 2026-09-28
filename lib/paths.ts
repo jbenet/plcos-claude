@@ -20,7 +20,7 @@ export const PAGE_MODULES: Record<string, string> = Object.fromEntries(Object.en
 const VEHICLE_ROUTES = new Set(['visualizations', 'strategy', 'calendar', 'fit', 'stats']);
 /** First segments that are pages of their own, never a vehicle. */
 export const RESERVED = new Set([
-  '_next', 'api', 'developer', 'dev', 'issues', 'agents', 'm', 'today', 'approvals', 'standup', 'everything', 'orgs', 'rnd',
+  '_next', 'api', 'developer', 'dev', 'issues', 'agents', 'm', 'today', 'approvals', 'standup', 'everything', 'orgs', 'rnd', 'access-denied',
   'research', 'forecast', 'content', 'performance', 'library', 'relationships', 'operations', 'plays', 'settings', 'system',
   'calendar', 'visualizations', 'fit', 'stats', 'favicon.ico', ...Object.values(MODULE_PAGES), ...Object.keys(MODULE_PAGES),
 ]);

@@ -6,6 +6,7 @@ import type { Check } from './harness';
 import { translateDakota } from '../../lib/connectors/dakota/translate';
 import { inventedDakotaReplicas } from '../dakota-batched-properties';
 import { repointPursuits } from '../../modules/strategy/lp-units';
+import { restoreChanges, type Change } from '../../modules/strategy/merge';
 
 export async function stripDakotaProperties(check: Check) {
   const db = await openTestDb();
@@ -131,19 +132,46 @@ async function translatedDakotaProperty(check: Check) {
     await migrate(db);
     await db.query(`insert into platform.app_user(id,handle,name,initials,role,email) values($1,'invented','Invented','IN','fixture','')`, [actor]);
     await db.query(`insert into platform.vehicle(id,slug,name,kind,exemption) values($1,'invented-neurotech','Invented Neurotech','fund','506(c)')`, [vehicle]);
-    await translateDakota(db, actor, inventedDakotaReplicas(2, 2));
-    const person = (await db.one<{ entity_id: string }>('select entity_id::text from dakota.contact order by id limit 1'))!.entity_id;
-    await db.query(`insert into strategy.pursuit(entity_id,vehicle_id,owner_id,source,status,status_source)
-      values($1,$2,$3,'affinity','new','affinity')`, [person, vehicle, actor]);
-    const original = await db.query("select * from strategy.pursuit where source='affinity'");
+    await translateDakota(db, actor, inventedDakotaReplicas(2, 4));
+    // Model people whose firm has no pursuit yet, so the re-point creates it.
+    await db.exec("delete from strategy.pursuit where source='dakota'");
+    const people = await db.query<{ entity_id: string }>('select entity_id::text from dakota.contact order by id limit 3');
+    for (const person of people) await db.query(`insert into strategy.pursuit(entity_id,vehicle_id,owner_id,source,status,status_source)
+      values($1,$2,$3,'affinity','new','affinity')`, [person.entity_id, vehicle, actor]);
+    const original = await db.query("select * from strategy.pursuit where source='affinity' order by pursuit_id");
     const repointed = await repointPursuits(db, actor);
-    check('CUTOVER fixture exercises a real Dakota-derived LP re-point', repointed.moved === 1,
-      'Actual translator affiliation feeds the actual re-point journal.');
+    check('CUTOVER fixture exercises a real Dakota-derived LP re-point', repointed.moved === 3 && repointed.created === 2,
+      'Actual translator affiliations feed three journals, two sharing a created pursuit.');
+    // Force the creator first in descending UUID order, with the actual batch timestamp.
+    const journals = await db.query<{ id: string; created_org_pursuit: boolean }>(
+      'select id::text,created_org_pursuit from strategy.lp_repoint order by created_org_pursuit,id');
+    for (const [i, journal] of journals.entries()) {
+      const id = `90000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`;
+      await db.query('update strategy.lp_repoint set id=$2 where id=$1', [journal.id, id]);
+      // Audit is append-only; preserve the writer's IDs by leaving its detail intact.
+    }
+    const tied = await db.one<{ n: number }>('select count(distinct created_at)::int n from strategy.lp_repoint');
+    check('CUTOVER same-timestamp fixture orders creators before dependent contact journals',
+      tied?.n === 1 && journals.filter(j => j.created_org_pursuit).length === 2,
+      'Three re-points, two org pursuits, one transaction timestamp; creator UUIDs sort first.');
+    let oldOrderFailed = false;
+    try {
+      await db.transaction(async tx => {
+        const rows = await tx.query<{ changes: Change[] }>(
+          'select changes from strategy.lp_repoint order by created_at desc,id desc');
+        for (const row of rows) await restoreChanges(tx, row.changes, 'invented old-order probe');
+        throw new Error('Fixture did not reproduce the dependency');
+      });
+    } catch (error) {
+      oldOrderFailed = !!error && typeof error === 'object' && 'code' in error && error.code === '23503';
+    }
+    check('CUTOVER fixture reproduces FK 23503 under the former timestamp/UUID undo order', oldOrderFailed,
+      'Probe rolls back; the production strip must resolve the same journal dependency.');
     const tableNames = await db.query<{ tablename: string }>("select tablename from pg_tables where schemaname='dakota' order by tablename");
     const populated = await Promise.all(tableNames.map(async ({ tablename }) =>
       Number((await db.one<{ n: string }>(`select count(*)::text n from dakota.${tablename}`))!.n)));
     const names = await db.query('select entity_id,display_name from identity.entity order by entity_id');
-    const contact = (await db.one<{ contact_id: string; role: string }>('select contact_id::text,role from strategy.pursuit_contact'))!;
+    const contact = (await db.one<{ contact_id: string; role: string }>('select contact_id::text,role from strategy.pursuit_contact order by contact_id limit 1'))!;
     await db.query("update strategy.pursuit_contact set role='Invented later independent edit' where contact_id=$1", [contact.contact_id]);
     let conflictRefused = false;
     try { await stripDakota(db); } catch { conflictRefused = true; }
@@ -152,14 +180,35 @@ async function translatedDakotaProperty(check: Check) {
       && Number((await db.one<{ n: string }>('select count(*)::text n from dakota.account'))?.n) === 2,
       'A changed postimage is refused, never overwritten or partially deleted.');
     await db.query('update strategy.pursuit_contact set role=$2 where contact_id=$1', [contact.contact_id, contact.role]);
+    // A contact outside the selected journals is a real blocker, not permission to cascade.
+    const shared = (await db.one<{ pursuit_id: string }>(`select pursuit_id::text from strategy.pursuit_contact
+      group by pursuit_id having count(*)=2`))!.pursuit_id;
+    const independent = (await db.one<{ contact_id: string }>(`insert into strategy.pursuit_contact
+      (pursuit_id,person_entity,role,source,origin_pursuit_id)
+      values($1,$2,'Invented independent contact','public',$1) returning contact_id::text`,
+      [shared, people[1].entity_id]))!.contact_id;
+    const snapshot = async () => JSON.stringify(await Promise.all([
+      db.query('select * from strategy.pursuit order by pursuit_id'),
+      db.query('select * from strategy.pursuit_contact order by contact_id'),
+      db.query('select * from strategy.lp_repoint order by id'),
+    ]));
+    const blockedBefore = await snapshot();
+    let dependenciesRefused = false;
+    try { await stripDakota(db); } catch (error) {
+      dependenciesRefused = error instanceof Error && error.message === 'Cutover stopped: unresolved re-point dependencies';
+    }
+    check('CUTOVER a permanently blocked journal stops after no progress and rolls back earlier undos',
+      dependenciesRefused && blockedBefore === await snapshot(),
+      'Independent contact, all pursuits and all journals survive unchanged.');
+    await db.query('delete from strategy.pursuit_contact where contact_id=$1', [independent]);
     const counts = await stripDakota(db);
     const remaining = await Promise.all(tableNames.map(async ({ tablename }) =>
       Number((await db.one<{ n: string }>(`select count(*)::text n from dakota.${tablename}`))!.n)));
     check('CUTOVER empties all seven populated Dakota tables from the actual translator',
       tableNames.length === 7 && populated.every(n => n > 0) && remaining.every(n => n === 0),
       `Invented table counts ${populated.join('/')} → ${remaining.join('/')}.`);
-    check('CUTOVER restores the independent pursuit before removing Dakota re-point derivatives', counts.repoints === 1
-      && JSON.stringify(original) === JSON.stringify(await db.query("select * from strategy.pursuit where source='affinity'"))
+    check('CUTOVER restores the independent pursuit before removing Dakota re-point derivatives', counts.repoints === 3
+      && JSON.stringify(original) === JSON.stringify(await db.query("select * from strategy.pursuit where source='affinity' order by pursuit_id"))
       && !(await db.query('select 1 from strategy.lp_repoint')).length
       && !(await db.query('select 1 from strategy.pursuit_contact')).length
       && !(await db.query('select 1 from strategy.pursuit_update')).length

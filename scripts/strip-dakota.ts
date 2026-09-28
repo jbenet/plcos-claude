@@ -18,9 +18,27 @@ export async function stripDakota(db: Db): Promise<Record<string, number>> {
             and identity.canonical_entity_id(b.person_entity)=r.person_entity
             and identity.canonical_entity_id(b.org_entity)=r.org_entity and b.role=a.role))
       order by r.created_at desc,r.id desc`);
-    for (const row of repoints) {
-      if (!row.reversed_at) await restoreChanges(tx, row.changes, 'cutover stopped');
-      await tx.query('delete from strategy.lp_repoint where id=$1', [row.id]);
+    // Transaction timestamps tie within a batch; UUID order is not application
+    // order. Retry FK-blocked journals after their dependents have been undone.
+    // A savepoint restores the entire attempted undo, including earlier changes,
+    // and clears Postgres's failed-transaction state before trying the next one.
+    let pending = repoints;
+    while (pending.length) {
+      const blocked: typeof repoints = [];
+      for (const row of pending) {
+        await tx.exec('savepoint strip_repoint');
+        try {
+          if (!row.reversed_at) await restoreChanges(tx, row.changes, 'cutover stopped');
+          await tx.query('delete from strategy.lp_repoint where id=$1', [row.id]);
+        } catch (error) {
+          await tx.exec('rollback to savepoint strip_repoint');
+          if (!error || typeof error !== 'object' || !('code' in error) || error.code !== '23503') throw error;
+          blocked.push(row);
+        }
+        await tx.exec('release savepoint strip_repoint');
+      }
+      if (blocked.length === pending.length) throw new Error('Cutover stopped: unresolved re-point dependencies');
+      pending = blocked;
     }
     // Owner-only maintenance, transactionally restored. Never disable FK checks.
     const hadAuditDelete = (await tx.one<{ allowed: boolean }>("select has_table_privilege(current_user,'platform.audit_log','DELETE') allowed"))!.allowed;
