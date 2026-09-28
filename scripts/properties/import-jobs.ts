@@ -12,6 +12,21 @@ import type { ImportJob } from '../../lib/import-jobs/types';
 import type { Check } from './harness';
 
 export async function importJobProperties(check:Check) {
+  // Issue 0114: progress is a quiet mark in the rail, not a panel over every page.
+  {
+    const { needsLook } = await import('../../lib/import-jobs/client');
+    const { readFile } = await import('node:fs/promises');
+    const job=(id:string,kind:ImportJob['kind'],status:ImportJob['status'])=>({id,kind,status,phase:'',done:0,total:1,result:null,error:null});
+    // Newest first, active first, as /api/import-jobs returns them.
+    const look=needsLook([job('r','findings','running'),job('c','duplicates','completed'),job('f1','duplicates','failed'),job('f2','duplicates','failed'),job('f3','findings','failed'),job('p','prospects','failed')]);
+    const layout=await readFile('app/layout.tsx','utf8'), rail=await readFile('components/shell/Rail.tsx','utf8');
+    check('0114 a stopped import needs a look only while it is the latest of its kind',
+      look.map(j=>j.id).join()==='p',
+      'Four stopped retries answered by a later completed run, and a stopped run with a newer one going, are not raised; the lone stopped one is.');
+    check('0114 no import panel over every page; one status mark beside the user in the rail',
+      !/ImportJobs/.test(layout) && /<SystemStatus \/>/.test(rail) && !/OutboxIndicator/.test(rail),
+      'The full panel lives on Developer → Status and the pages that start imports; the feedback line and import progress share the mark.');
+  }
   const db=await openTestDb();
   try {
     await migrate(db);

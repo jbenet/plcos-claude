@@ -1,4 +1,3 @@
-import { ImportJobs } from '@/components/import-jobs/ImportJobs';
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
@@ -62,7 +61,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <HereProvider asked={asked} vehicle={selection.current?.slug ?? 'all'}>
           <KeyboardShortcuts />
           <AppShell rail={<Rail />} mark={config.product.mark} name={config.product.name}>
-            <ImportJobs />
             {children}
           </AppShell>
         </HereProvider>

@@ -1,46 +1,40 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { IMPORT_LABELS, type ImportJob } from '@/lib/import-jobs/types';
+import { IMPORT_LABELS } from '@/lib/import-jobs/types';
+import { active, needsLook, useJobs } from '@/lib/import-jobs/client';
 import { ProspectPrecedence, type ProspectPrecedenceReport } from './ProspectPrecedence';
-type Status = Pick<ImportJob,'id'|'kind'|'status'|'phase'|'done'|'total'|'result'|'error'>;
 
-/** One status area follows the user across pages. Closing a page does not cancel a child. */
-export function ImportJobs() {
-  const [jobs,setJobs]=useState<Status[]>([]),[error,setError]=useState<string|null>(null);
-  const previous=useRef(new Map<string,string>());
-  const router=useRouter();
-  useEffect(()=>{
-    let cancelled=false,timer:ReturnType<typeof setTimeout>;
-    const poll=async()=>{
-      try {
-        const response=await fetch('/api/import-jobs',{cache:'no-store'});
-        if(!response.ok)throw new Error();
-        const data=await response.json() as {jobs:Status[]};
-        if(cancelled)return;
-        if(data.jobs.some(j=>previous.current.has(j.id)&&previous.current.get(j.id)!==j.status&&['completed','failed'].includes(j.status)))router.refresh();
-        previous.current=new Map(data.jobs.map(j=>[j.id,j.status]));
-        setJobs(data.jobs);setError(null);
-      } catch {if(!cancelled)setError('Import progress is unavailable. Retrying; no import has been restarted.');}
-      if(!cancelled)timer=setTimeout(poll,2000);
-    };
-    void poll();return()=>{cancelled=true;clearTimeout(timer);};
-  },[router]);
-  if(!jobs.length&&!error)return null;
-  const visible=jobs.filter(j=>['queued','running','failed'].includes(j.status));
-  if(!visible.length&&jobs[0])visible.push(jobs[0]);
-  return <section className="card" style={{margin:16}} aria-label="Import progress">
-    <div className="chead"><h2>Imports</h2><span className="muted">You can keep using other pages.</span></div>
+const word = (status: string) => (status === 'queued' ? 'Queued' : status === 'running' ? 'Working' : status === 'completed' ? 'Completed' : 'Stopped');
+const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+
+/**
+ * The imports in full (issue 0114): on Developer → Status and the developer pages that start them,
+ * not over every page. Elsewhere the rail's status mark says the same in a word. Closing a page does
+ * not cancel a job. `compact` shows only what runs and what needs a look, for a page that starts imports.
+ */
+export function ImportJobs({ compact = false }: { compact?: boolean }) {
+  const { jobs, error } = useJobs();
+  const running = jobs.filter(active), look = needsLook(jobs);
+  const rest = compact ? [] : jobs.filter((j) => !active(j) && !look.includes(j));
+  if (compact && !running.length && !look.length && !error) return null;
+  const line = (job: (typeof jobs)[number], stale = false) => (
+    <div key={job.id} style={{ marginBottom: 8, opacity: stale ? 0.7 : 1 }}>
+      <b>{IMPORT_LABELS[job.kind]}</b> · {word(job.status)}
+      {' · '}{job.phase}{job.total !== null ? ` · ${job.done} of ${job.total} ${job.kind === 'dakota' ? 'records' : 'steps'}` : ''}
+      {job.created_at && <span className="muted"> · {when(job.created_at)}</span>}
+      {job.error && <p role={stale ? undefined : 'alert'} className={stale ? 'muted' : undefined} style={{ margin: '2px 0 0' }}>{job.error}</p>}
+      {job.status === 'completed' && job.result && <p className="muted" style={{ margin: '2px 0 0' }}>{Object.entries(job.result).filter(([, value]) => typeof value === 'number').map(([key, value]) => `${key}: ${value}`).join(' · ')}</p>}
+      {job.status === 'completed' && job.kind === 'prospects' && !!job.result?.precedence &&
+        <ProspectPrecedence report={job.result.precedence as ProspectPrecedenceReport} />}
+    </div>
+  );
+  return <section className="card" aria-label="Import progress">
+    <div className="chead"><h2>Imports</h2><span className="muted">Running jobs carry on if you leave this page.</span></div>
     <div className="cbody" aria-live="polite">
-      {error&&<p role="status">{error}</p>}
-      {visible.map(job=><div key={job.id} style={{marginBottom:8}}>
-        <b>{IMPORT_LABELS[job.kind]}</b> · {job.status==='queued'?'Queued':job.status==='running'?'Working':job.status==='completed'?'Completed':'Stopped'}
-        {' · '}{job.phase}{job.total!==null?` · ${job.done} of ${job.total} ${job.kind==='dakota'?'records':'steps'}`:''}
-        {job.error&&<p role="alert">{job.error}</p>}
-        {job.status==='completed'&&job.result&&<p className="muted">{Object.entries(job.result).filter(([,value])=>typeof value==='number').map(([key,value])=>`${key}: ${value}`).join(' · ')}</p>}
-        {job.status==='completed'&&job.kind==='prospects'&&!!job.result?.precedence&&
-          <ProspectPrecedence report={job.result.precedence as ProspectPrecedenceReport} />}
-      </div>)}
+      {error && <p role="status">{error}</p>}
+      {!running.length && !look.length && !rest.length && !error && <p className="muted" style={{ margin: 0 }}>No import has run in the last day.</p>}
+      {running.map((j) => line(j))}
+      {look.map((j) => line(j))}
+      {rest.length > 0 && <details className="more"><summary>Earlier today: {rest.length}</summary>{rest.map((j) => line(j, true))}</details>}
     </div>
   </section>;
 }

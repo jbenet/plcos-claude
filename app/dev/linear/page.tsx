@@ -10,6 +10,7 @@ import { linearKeyPresent } from '@/lib/connectors/linear/key';
 import { linearOverview, linearSyncState, type LinearOverview } from '@/lib/connectors/linear/view';
 import { LinearSync } from './LinearSync';
 import s from './linear.module.css';
+import { ImportJobs } from '@/components/import-jobs/ImportJobs';
 
 export const dynamic = 'force-dynamic';
 
@@ -201,6 +202,9 @@ async function LinearPage() {
         A local copy of the Linear workspace: what the key can see, how fresh the copy is, and how it divides by team,
         project and state. Nothing is written back to Linear.
       </p>
+
+      {/* The imports this page starts, while they run or need a look (issue 0114). */}
+      <ImportJobs compact />
 
       {demo && (
         <div className="scope" style={{ marginBottom: 14 }}>
