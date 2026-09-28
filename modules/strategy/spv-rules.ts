@@ -128,6 +128,7 @@ export function spvDeals(value: unknown): number | null {
 const VEHICLE = String.raw`(?:SPVs?|special[- ]purpose vehicles?|co-?investments?|co-?investing|co-?invest\s+(?:program|programme|opportunit\w*|rights|alongside)|syndicat(?:es?|ions?|ed deals?))`;
 const NOT = new RegExp(String.raw`\b(?:(?:does|do|did|will)\s+not|doesn['’]t|don['’]t|won['’]t|never|no|avoids?|declines?|not\s+(?:open\s+to|interested\s+in))\b[^.;:]{0,40}?\b${VEHICLE}`, 'i');
 const ONLY_FUNDS = /\b(?:only|exclusively|solely)\s+(?:invests?|investing|allocates?|commits?)?\s*(?:in|through|via|to)\s+(?:(?:blind[- ]pool|commingled|primary)\s+)?funds\b|\bfund(?:s|\s+commitments)\s+only\b|\bno\s+direct\s+(?:or\s+co-?invest\w*\s+)?deals\b/i;
+const CAVEAT = /\b(?:unknown|unverified|not\s+verified|verified|no\s+(?:explicit|specific|public|evidence|record)|evidence|inferr?e?d?|establish(?:es|ed)?|prove[ns]?|unclear|not\s+found|was\s+found|were\s+found|opened\s+sources|companion|appetite)\b/i;
 const YES = new RegExp(String.raw`\b${VEHICLE}\b`, 'i');
 const COUNT = new RegExp(String.raw`\b(\d{1,3})\s+(?:\w+\s+)?(?:SPVs|special[- ]purpose vehicles|co-?investments|syndicat(?:es|ed deals))\b`, 'i');
 
@@ -147,12 +148,21 @@ function around(text: string, index: number): string {
  */
 export function readSpvText(text: string): { stance: Exclude<SpvStance, 'unknown'>; minDeals: number | null; quote: string } | null {
   if (!text) return null;
-  const no = NOT.exec(text) ?? ONLY_FUNDS.exec(text);
-  if (no) return { stance: 'does-not', minDeals: null, quote: around(text, no.index) };
-  const yes = YES.exec(text);
+  // Sentence by sentence. A sentence about the evidence itself ("SPV appetite unknown", "no explicit
+  // SPV mandate verified", "not inferred") is a research caveat, not the LP's policy, and says nothing
+  // either way (27 Sep: 257 such caveats had been read as "doesn't do SPVs").
+  const sentences = text.split(/(?<=[.;!?])\s+|\n+/);
+  let yes: { sentence: string; count: number | null } | null = null;
+  for (const sentence of sentences) {
+    if (!YES.test(sentence) && !ONLY_FUNDS.test(sentence)) continue;
+    if (CAVEAT.test(sentence)) continue;
+    const no = NOT.exec(sentence) ?? ONLY_FUNDS.exec(sentence);
+    if (no) return { stance: 'does-not', minDeals: null, quote: around(sentence, no.index) };
+    if (!yes) { const count = COUNT.exec(sentence); yes = { sentence, count: count ? Number(count[1]) || null : null }; }
+  }
   if (!yes) return null;
-  const count = COUNT.exec(text);
-  return { stance: 'does', minDeals: count ? Number(count[1]) || null : null, quote: around(text, yes.index) };
+  const at = YES.exec(yes.sentence)?.index ?? 0;
+  return { stance: 'does', minDeals: yes.count, quote: around(yes.sentence, at) };
 }
 
 /** Dakota's co_investments__c, read as a flag. Only a yes is a signal; its text is never kept. */

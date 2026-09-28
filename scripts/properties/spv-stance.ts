@@ -8,6 +8,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { readSpvText } from '../../modules/strategy/spv-rules';
 import { withDb, type Db } from '../../lib/db';
 import { pipelineData } from '../../lib/pipeline-data';
 import { check as findingProblems, FACT_FIELDS, type Finding } from '../../lib/enrich/schema';
@@ -25,6 +26,17 @@ const ev = (o: Partial<SpvEvidence>): SpvEvidence => ({
 });
 
 export function spvRuleProperties(check: Check) {
+  // 27 Sep: research caveats ("SPV appetite unknown", "no explicit SPV mandate verified") had been
+  // read as "doesn't do SPVs" for 257 LPs. A caveat says nothing either way; a stated policy still counts.
+  const caveats = ['No explicit SPV or co-investment mandate verified; no SPV companion written.',
+    'SPV appetite unknown: no explicit SPV practice in opened sources.', 'No historical SPV allocation or willingness is inferred.',
+    'Co-investment mandate supports SPV appetite classification but no specific SPV participation count was found.'];
+  const policies: Array<[string, string]> = [['The office does not invest in SPVs.', 'does-not'], ['They only invest through funds.', 'does-not'],
+    ['She has led 12 SPVs through her syndicate.', 'does']];
+  check('SPV text: research caveats are neither yes nor no; stated policies and counts still read',
+    caveats.every(t => readSpvText(t) === null) && policies.every(([t, want]) => readSpvText(t)?.stance === want)
+      && readSpvText('She has led 12 SPVs through her syndicate.')?.minDeals === 12,
+    'A sentence about the evidence itself is skipped, sentence by sentence.');
   const none = resolveSpv([]);
   check('SPV unknown by default: nothing on file reads unknown, likely open',
     none.stance === 'unknown' && none.basis === 'none' && none.minDeals === null
