@@ -13,11 +13,12 @@
 # where `ps` would show it. Without it the command still runs, without a key, and
 # Developer → Affinity says why.
 set -euo pipefail
+source "$(dirname "$0")/env-or-command.sh"
 
 SERVICE="plcos-claude"
 ACCOUNT="affinity-api-key"
 
-if ! command -v security >/dev/null 2>&1; then
+if [ -z "${AFFINITY_API_KEY:-}" ] && ! command -v security >/dev/null 2>&1; then
   echo "[affinity] No macOS Keychain on this machine. Starting without an Affinity key." >&2
   exec "$@"
 fi
@@ -25,7 +26,7 @@ fi
 errors="$(mktemp)"
 status=0
 # Only the Keychain's error messages go to the file. The key itself only arrives on stdout.
-key="$(security find-generic-password -s "$SERVICE" -a "$ACCOUNT" -w 2>"$errors")" || status=$?
+key="$(env_or_command AFFINITY_API_KEY security find-generic-password -s "$SERVICE" -a "$ACCOUNT" -w 2>"$errors")" || status=$?
 why="$(head -1 "$errors")"
 rm -f "$errors"
 
@@ -40,5 +41,5 @@ if [ "$status" -ne 0 ] || [ -z "$key" ]; then
   exec "$@"
 fi
 
-echo "[affinity] Key read from the macOS Keychain. Held by the server process only." >&2
+[ -n "${AFFINITY_API_KEY:-}" ] || echo "[affinity] Key read from the macOS Keychain. Held by the server process only." >&2
 AFFINITY_API_KEY="$key" exec "$@"

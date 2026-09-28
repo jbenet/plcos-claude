@@ -187,3 +187,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Authorization layer — roles, vehicle scope and restricted reads](entries/authz-layer.md)
 - [svc-image — One image, and the cutover tooling](entries/svc-image.md)
 - [LabOS sign-in](entries/labos-signin.md)
+- [Env keys and feedback export](entries/env-keys-feedback-export.md)

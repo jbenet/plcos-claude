@@ -2,6 +2,20 @@ import type { Check } from './harness';
 
 export async function issueProperties(check: Check) {
   {
+    const { spawnSync } = await import('node:child_process');
+    const run = (value: string | undefined, fallback: string[]) => spawnSync('bash',
+      ['scripts/env-or-command.sh', 'FIXTURE_SECRET', ...fallback],
+      { env: { NODE_ENV: 'test', PATH: process.env.PATH, FIXTURE_SECRET: value }, encoding: 'utf8' });
+    const values = ['invented', 'spaces $() `literal` "quotes"', 'line\nbreak'];
+    const preferred = values.map(value => run(value, ['false']));
+    const absent = [undefined, ''].map(value => run(value, ['printf', '%s', 'invented-fallback']));
+    check('Credentials: env values bypass the fallback; missing values preserve fallback output and failure',
+      preferred.every((r, i) => r.status === 0 && r.stdout === values[i] && r.stderr === '')
+        && absent.every(r => r.status === 0 && r.stdout === 'invented-fallback' && r.stderr === '')
+        && run(undefined, ['false']).status === 1,
+      'Invented credentials only; no Keychain or network access, no shell evaluation of values.');
+  }
+  {
     const { issueVelocity } = await import('../../lib/issues/velocity');
     const now = new Date('2026-09-26T13:00:00Z');
     const velocity = issueVelocity([
@@ -69,6 +83,35 @@ export async function issueProperties(check: Check) {
         read?.status === 'done' && open.length === 0 && /^status: done\s/m.test(rewritten)
           && !rewritten.includes('| review') && parseIssue(rewritten, created.id).closedAt === null,
         'Compatibility is at the file reader, so list, detail and rail counts agree');
+
+      const { config } = await import('../../config/deployment');
+      const { GET } = await import('../../app/api/feedback/export/route');
+      const savedDir = config.issues.dir, savedToken = process.env.FEEDBACK_EXPORT_TOKEN;
+      try {
+        Object.assign(config.issues, { dir: relative(process.cwd(), dir) });
+        const get = (since: string, authorization = '') => GET(new Request(
+          `http://localhost/api/feedback/export?since=${encodeURIComponent(since)}`, { headers: { authorization } }));
+        delete process.env.FEEDBACK_EXPORT_TOKEN;
+        const disabled = await get('bad');
+        process.env.FEEDBACK_EXPORT_TOKEN = 'invented-export-token';
+        const denied = await Promise.all(['', 'Bearer wrong', 'Bearer invented-export-tokem'].map(auth => get('bad', auth)));
+        const auth = 'Bearer invented-export-token';
+        const invalid = await Promise.all(['', 'bad', '2026-09-28', '123'].map(since => get(since, auth)));
+        const included = await get(new Date(Date.parse(created.created) - 1).toISOString(), auth);
+        const excluded = await get(created.created, auth);
+        const future = await get('9999-01-01T00:00:00Z', auth);
+        check('Feedback export: disabled without token, bearer-only, validates since and reads only newer issues without writes',
+          disabled.status === 404 && denied.every(r => r.status === 401) && invalid.every(r => r.status === 400)
+            && included.status === 200 && included.headers.get('cache-control') === 'no-store'
+            && JSON.stringify((await included.json()).items) === JSON.stringify(await sink.list())
+            && (await excluded.json()).items.length === 0 && (await future.json()).items.length === 0
+            && await readFile(created.location, 'utf8') === rewritten,
+          'One temporary invented issue; strict created > since, including the exact boundary; file unchanged.');
+      } finally {
+        Object.assign(config.issues, { dir: savedDir });
+        if (savedToken === undefined) delete process.env.FEEDBACK_EXPORT_TOKEN;
+        else process.env.FEEDBACK_EXPORT_TOKEN = savedToken;
+      }
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
