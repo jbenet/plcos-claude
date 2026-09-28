@@ -8,7 +8,6 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { readSpvText } from '../../modules/strategy/spv-rules';
 import { withDb, type Db } from '../../lib/db';
 import { pipelineData } from '../../lib/pipeline-data';
 import { check as findingProblems, FACT_FIELDS, type Finding } from '../../lib/enrich/schema';
