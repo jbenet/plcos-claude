@@ -191,3 +191,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Daily timer](entries/daily-timer.md)
 
 - [Workflow API](entries/workflow-api.md)
+
+- [Network speed — invented scale benchmark](entries/network-speed.md)

@@ -131,7 +131,7 @@ export async function graphSnapshot(db: Db): Promise<GraphSnapshot> {
 export async function pathsFromSnapshot(
   graph: GraphSnapshot, sources: string[], target: string, maxHops: number, sourceOnly: Set<string>,
 ): Promise<RawPath[]> {
-  if (!graph.adjacency.has(target)) return [];
+  if (!graph.adjacency.has(target) || !sources.some(source => graph.adjacency.has(source))) return [];
   const paths: RawPath[] = [];
   let iterations = 0, sliceStarted = performance.now();
   const needsYield = () => ++iterations % 1024 === 0 && performance.now() - sliceStarted >= 12;
@@ -144,9 +144,32 @@ export async function pathsFromSnapshot(
     }
     if (needsYield()) await checkpoint();
   }
-  for (const source of new Set(sources)) {
+  // Join the middle hop from the target side once, rather than walking every
+  // source's entire two-hop neighborhood for each LP. Retain UUID ordering/caps.
+  const middles = new Map<string, Link[]>();
+  if (maxHops >= 3) for (const node of tails.keys()) {
+    for (const edge of graph.adjacency.get(node) ?? []) {
+      const links = middles.get(edge.other), link = { edgeId: edge.edgeId, other: node };
+      if (links) links.push(link); else middles.set(edge.other, [link]);
+      if (needsYield()) await checkpoint();
+    }
+  }
+  for (const links of middles.values()) links.sort((a, b) => a.edgeId.localeCompare(b.edgeId));
+  const wanted = new Set(sources), starts = new Map<string, Link[]>();
+  for (const node of new Set([target, ...(maxHops >= 2 ? tails.keys() : []), ...middles.keys()])) {
+    if (node !== target && sourceOnly.has(node)) continue;
+    for (const edge of graph.adjacency.get(node) ?? []) {
+      if (wanted.has(edge.other)) {
+        const links = starts.get(edge.other), link = { edgeId: edge.edgeId, other: node };
+        if (links) links.push(link); else starts.set(edge.other, [link]);
+      }
+      if (needsYield()) await checkpoint();
+    }
+  }
+  for (const links of starts.values()) links.sort((a, b) => a.edgeId.localeCompare(b.edgeId));
+  for (const source of wanted) {
     const start = paths.length;
-    const first = graph.adjacency.get(source) ?? [];
+    const first = starts.get(source) ?? [];
     for (const edge of first) {
       if (edge.other === target) paths.push({ nodes: [source, target], edges: [edge.edgeId], hops: 1 });
       if (paths.length - start >= 300) break;
@@ -168,7 +191,7 @@ export async function pathsFromSnapshot(
     if (tails.size && maxHops >= 3 && paths.length - start < 300) {
       for (const edge of first) {
         if (edge.other === source || edge.other === target || sourceOnly.has(edge.other)) continue;
-        for (const middle of graph.adjacency.get(edge.other) ?? []) {
+        for (const middle of middles.get(edge.other) ?? []) {
           if (middle.other !== source && middle.other !== edge.other) {
             for (const tail of tails.get(middle.other) ?? []) {
               paths.push({ nodes: [source, edge.other, middle.other, target],
