@@ -49,7 +49,7 @@ ol.q li,ul li{margin:6px 0}
   <ul>
     <li><strong>One container.</strong> A Next.js 16 server (<code>next start</code>, Node) built from the LabOS kit Dockerfile. It serves the pages and the server actions. Heavy imports run in <strong>one child process</strong>, so pages keep answering while a job writes. A timer inside the same process runs the daily syncs and the backup.</li>
     <li><strong>One database.</strong> Postgres through the kit's provisioned database, reached over TLS with the certificate verified against the RDS CA bundle. It holds all app data. Size today: about 640 MB.</li>
-    <li><strong>One disk.</strong> A persistent volume for about 1 GB of working files: research outputs, import files, the feedback journal and a run log.</li>
+    <li><strong>One disk.</strong> A persistent volume for about 2 GB of working files: research outputs, import files, the feedback journal and a run log.</li>
     <li><strong>Sign-in.</strong> LabOS only. The server forwards the LabOS token to <code>/me</code>, never stores or logs it, and maps the <code>uid</code> to an app user. Anyone with access to the app can read.</li>
     <li><strong>Outbound calls.</strong> Read-only API syncs from Affinity and Linear. Research runs through the Anthropic API. Its web search and fetch run on Anthropic's side, so the container needs no general internet access. The app sends no email or messages and writes nothing to the outside systems.</li>
     <li><strong>Deploys.</strong> The kit flow, with an owner approval each time. We build the image from a clean <code>git archive</code> of a tested commit, and the build fails if any data file would be included. <code>GET /health</code> returns 200. No <code>X-Frame-Options</code> header, so it embeds in os.pl.xyz.</li>
@@ -60,7 +60,7 @@ flowchart LR
   U[Team browser] --> L[LabOS sign-in<br/>os.pl.xyz]
   L --> A[Capital OS container<br/>next start + 1 import child<br/>+ daily timer]
   A --> DB[(Postgres<br/>kit-provisioned, TLS)]
-  A --> V[[Persistent volume<br/>~1 GB files]]
+  A --> V[[Persistent volume<br/>~2 GB files]]
   A -. read-only .-> X[Affinity API / Linear API]
   A -. research .-> N[Anthropic API]
   A -. nightly encrypted dump .-> S[(S3 bucket)]
@@ -71,14 +71,14 @@ flowchart LR
   <div class="tbl"><table>
     <thead><tr><th>Resource</th><th>Ask</th><th></th><th>Why</th></tr></thead>
     <tbody>
-      <tr><td>Memory</td><td>4 GiB</td><td><span class="tag must">must</span></td><td>Measured: the production server peaks at 0.74 GiB with 10 concurrent users on test data (40k requests, 0 errors). The real data and one import job add about 2 GiB (estimate). The 384 MiB default won't start it.</td></tr>
+      <tr><td>Memory</td><td>6 GiB</td><td><span class="tag must">must</span></td><td>Measured in a full rehearsal on a copy of the real data: the server peaks at 1.25 GiB under a 10-user load, and the largest import job's child process at 2.43 GiB. Together that's about 3.7 GiB, plus headroom. The 384 MiB default won't start it.</td></tr>
       <tr><td>CPU</td><td>2 vCPU</td><td><span class="tag must">must</span></td><td>Page rendering while one import runs.</td></tr>
       <tr><td>Processes</td><td>Allow one child process, a few worker threads and short subprocesses</td><td><span class="tag must">must</span></td><td>Heavy imports run in one child process so pages stay responsive. Background refreshes use worker threads. The nightly backup runs <code>pg_dump</code>, <code>gpg</code> and the AWS CLI as short subprocesses.</td></tr>
-      <tr><td>Persistent volume</td><td>20 GB</td><td><span class="tag must">must</span></td><td>About 1 GB of working files today, which must survive redeploys.</td></tr>
+      <tr><td>Persistent volume</td><td>20 GB</td><td><span class="tag must">must</span></td><td>2.1 GB of working files today (33k files), which must survive redeploys.</td></tr>
       <tr><td>Postgres</td><td>Version 17 (16 is fine), 20 GB, daily snapshots</td><td><span class="tag must">must</span></td><td>640 MB today. We use <code>jsonb</code>, schemas and arrays.</td></tr>
       <tr><td>Outbound HTTPS</td><td><span class="mono">api.affinity.co, api.linear.app, api.anthropic.com</span></td><td><span class="tag must">must</span></td><td>Read-only syncs and research. One more host later, once a data licence allows it.</td></tr>
       <tr><td>S3 bucket</td><td>One private bucket, server-side encryption (KMS)</td><td><span class="tag must">must</span></td><td>Nightly encrypted database backups, kept off the machine.</td></tr>
-      <tr><td>Build memory</td><td>4 GiB</td><td><span class="tag nice">nice</span></td><td>Our build peaks at 2.0 GiB, right at the 2 GiB default.</td></tr>
+      <tr><td>Build memory</td><td>4 GiB, 2 CPU</td><td><span class="tag must">must</span></td><td>Measured: the production build peaks at 2.1–3.5 GiB across its processes (73–81 s), over the 2 GiB Kaniko default.</td></tr>
       <tr><td>Deploy token</td><td>Longer-lived, for this one app</td><td><span class="tag nice">nice</span></td><td>Today each deploy needs a fresh owner approval. That works, but it limits us to one or two deploys a day.</td></tr>
     </tbody>
   </table></div>
@@ -104,5 +104,5 @@ flowchart LR
   </ol>
 
   <h2>Timing</h2>
-  <p>The app, the Dockerfile and the move-over scripts are ready. The move-over has been rehearsed locally: 1M test rows copied and checked, table by table, in about 10 seconds. Once the limits are in place, we deploy a test build first, rehearse the move once against the provisioned database, then move over in one evening. The Mac copy stays untouched for a week as the rollback.</p>
+  <p>The app, the Dockerfile and the move-over scripts are ready. The move-over has been rehearsed on a copy of the real data: dump 15 s (200 MB), restore 40 s, 119 tables and 1.2M rows checked table by table. Once the limits are in place, we deploy a test build first, rehearse the move once against the provisioned database, then move over in one evening. The Mac copy stays untouched for a week as the rollback.</p>
 </main>

@@ -23,7 +23,7 @@ mechanisms are removed; the last table lists each one and what would bring it ba
 
 | Resource | Ask | Why |
 |---|---|---|
-| Memory | 4 GiB | Measured (`06-measurements.md`): the production server peaks at 0.74 GiB with 10 concurrent users on demo data (p95 under 230 ms, 0 errors in 40k requests). The real data and one running import child add perhaps 2 GiB (GUESS: real imports have not been measured on Postgres). The kit default is 384 MiB |
+| Memory | 6 GiB | Measured in the real-volume rehearsal (`06-measurements.md`): server peak 1.25 GiB under 10 users, the findings import child 2.43 GiB; about 3.7 GiB together, plus headroom |
 | CPU | 2 vCPU | Page rendering plus one import job at a time |
 | Disk | A 20 GB persistent volume | 1.0 GB of working files today, plus growth |
 | Database | Postgres 17 (16 works), 20 GB, daily snapshots | 640 MB today |
