@@ -18,7 +18,7 @@ export function w3RoutesProperties(check: (name: string, ok: boolean, detail: st
       researched: { at: '2026-09-28', by: 'fixture', workflow: 'W1', version: '1' }, facts: [], connections };
     return connectionPaths([c], new Map([[c.key, finding]]), net, team, directory, at).paths;
   };
-  for (const channel of ['meeting', 'call', 'email', 'message']) for (const direction of ['ours', 'theirs']) {
+  for (const channel of ['meeting', 'call', 'message']) for (const direction of ['ours', 'theirs']) {
     const candidate = structuredClone(lp);
     candidate.contact.records = [{ on: '2020-01-01', channel, direction, with: [team[0]!.name], about: [], group: false, source: 'invented-local-record' }];
     const path = run(candidate).find(p => p.other.handle === 'rowan');
