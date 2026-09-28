@@ -7,6 +7,11 @@ initializeRoutingSecret();
 const real = process.env.DATA_PROFILE === 'real';
 
 const config: NextConfig = {
+  // Runtime data is supplied separately, never copied by Next's file tracer. Build from
+  // a clean tracked-file tree too: excludes are not a substitute for build isolation.
+  outputFileTracingExcludes: {
+    '*': ['data/**', '**/data/**', 'issues/inbox/**', '**/plcos-data/**'],
+  },
   // PGlite ships a wasm bundle; it must stay outside the bundler and run in Node.
   serverExternalPackages: ['@electric-sql/pglite', 'pg', 'tsx', 'esbuild'],
   typedRoutes: false,
