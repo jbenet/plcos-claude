@@ -13,7 +13,7 @@
  *   w5   a resolved finding with no strategy, or a strategy older than its finding; or W9's warm
  *        lane with no strategy. Within a firm, the colleague with the most contact comes first, so
  *        the lead conversation's strategy is written before the others read it.
- *        With `--keys <file>` (N81): the strategies of the LPs listed, one key a line, firms whole.
+ *        With `--keys <file>` (N81): listed LPs with strategies or eligible for new ones, one key a line, firms whole.
  *        With `--revise` (W5 v1.5): strategies written before version 1.3, or that the critic's
  *        gates flag, or with a next step over 300 characters — and every colleague at their firm,
  *        so a firm is rewritten together.
@@ -45,7 +45,7 @@ async function jsonDir<T extends { key: string }>(dir: string): Promise<Map<stri
 }
 
 async function main() {
-  // `--keys <file>` (N81): exactly these LPs' strategies, and their firms', one key a line.
+  // `--keys <file>`: listed LPs eligible for new/revised strategies, plus their firms' strategies.
   const keysAt = process.argv.indexOf('--keys');
   const keysFile = keysAt >= 0 ? process.argv[keysAt + 1] : null;
   const [mode, prefix, sizeArg] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !(keysAt >= 0 && all[i - 1] === '--keys'));
@@ -61,7 +61,22 @@ async function main() {
   const cands = lines(await readFile(join(dir, 'candidates.jsonl'), 'utf8')).map((l) => JSON.parse(l) as Candidate);
   const identity = new Map(lines(await readFile(join(dir, 'research-set.jsonl'), 'utf8')).map((l) => [JSON.parse(l).key as string, l]));
   const triage = new Map(lines(await readFile(join(dir, 'triage.jsonl'), 'utf8').catch(() => '')).map((l) => JSON.parse(l) as Triage).map((t) => [t.key, t]));
-  const findings = await jsonDir<Finding>(join(dir, 'raw'));
+  const rawFindings = await jsonDir<Finding>(join(dir, 'raw'));
+  const aliases: Record<string, string> = JSON.parse(await readFile(join(dir, 'entity-keys.json'), 'utf8').catch((error) => {
+    if (error.code !== 'ENOENT') throw error;
+    return '{}';
+  }));
+  const candidateKeys = new Set(cands.map(c => c.key));
+  const findings = new Map<string, Finding>();
+  let unmapped = 0;
+  for (const f of rawFindings.values()) {
+    const key = candidateKeys.has(f.key) ? f.key : aliases[f.key];
+    if (!key || !candidateKeys.has(key)) { unmapped++; continue; }
+    // Multiple aliases may describe one candidate. Use its most recent research.
+    const previous = findings.get(key);
+    if (!previous || f.researched.at > previous.researched.at) findings.set(key, { ...f, key });
+  }
+  if (unmapped) console.log(`${unmapped} findings not mapped to candidates; refresh Export the research set to update aliases.`);
   const strategies = await jsonDir<Strategy>(join(dir, 'strategy'));
   // Keys already in a batch file for this mode and not yet done are left to that batch; once done
   // (a finding, a strategy), they are eligible again — for a search pass, or a stale strategy.
@@ -133,17 +148,31 @@ async function main() {
     if (mode === 'w1') return !f || (withSearch && pagesOnly(f));
     const resolved = f && (f.identity.match === 'confirmed' || f.identity.match === 'probable');
     const s = strategies.get(c.key);
-    if (only) return Boolean(s) && only.has(c.key);
+    const engaged = ['discussing', 'committed'].includes(c.pursuits[0]?.status ?? '');
+    const eligible = Boolean(resolved || engaged || triage.get(c.key)?.lane === 'warm now');
+    if (only) return only.has(c.key) && Boolean(s || eligible);
     if (s) return isStale(s, f, c.money, best.get(c.key) ?? null, c.context?.[0]?.at ?? null) || (revise && flagged(c));
     // Discussing or committed: a strategy from our records even without a resolved finding — a
     // firm's lead can be one of them (v03's learning).
-    const engaged = ['discussing', 'committed'].includes(c.pursuits[0]?.status ?? '');
-    return !revise && Boolean(resolved || engaged || triage.get(c.key)?.lane === 'warm now');
+    return !revise && eligible;
   });
   if (revise) {
     // The whole firm comes along: its colleagues' strategies are rewritten with the lead's.
     const roots = new Set(wanted.map((c) => find(c.key)));
-    wanted = cands.filter((c) => strategies.has(c.key) && roots.has(find(c.key)));
+    const selected = new Set(wanted.map(c => c.key));
+    wanted = cands.filter((c) => selected.has(c.key) || (strategies.has(c.key) && roots.has(find(c.key)) && !inOpenBatch(c.key)));
+  }
+  if (mode === 'w5' && only) {
+    const selected = new Set(wanted.map(c => c.key));
+    const omitted: Record<string, number> = { 'no finding': 0, unresolved: 0, 'not a candidate': 0, 'open batch': 0, 'already batched': 0 };
+    for (const key of only) {
+      if (selected.has(key)) continue;
+      const reason = !candidateKeys.has(key) ? 'not a candidate' : inOpenBatch(key) ? 'open batch'
+        : batched.has(key) && !strategies.has(key) ? 'already batched'
+        : !findings.has(key) ? 'no finding' : 'unresolved';
+      omitted[reason]++;
+    }
+    console.log(`--keys: ${[...only].filter(k => !selected.has(k)).length} of ${only.size} listed keys not selected (${Object.entries(omitted).map(([why, n]) => `${why}: ${n}`).join(', ')}).`);
   }
   const firms = new Map<string, Candidate[]>();
   for (const c of wanted) firms.set(find(c.key), [...(firms.get(find(c.key)) ?? []), c]);

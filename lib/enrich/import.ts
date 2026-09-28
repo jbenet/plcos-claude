@@ -1,3 +1,4 @@
+import { importEntityKeys } from './entity-keys';
 import { mergeImportDuplicatesInTransaction, type ImportDuplicateReport } from './import-dupes';
 import { consolidatePursuitsInTransaction, researchSpvEvidence, type PursuitMergeReport } from '@/modules/strategy';
 import { correctPipelineEntityTypes, type EntityTypeReport } from './entity-types';
@@ -70,27 +71,6 @@ const day = (s: string | null | undefined, fallback: string) => {
   return m ? `${m[1]}-${m[2] ?? '01'}-${m[3] ?? '01'}` : fallback;
 };
 
-/** Keep file validation keyed to the original filename; resolve identity only for DB writes. */
-async function importEntityKeys(tx: Queryable, keys: string[]): Promise<Map<string, string>> {
-  const resolved = new Map<string, string>();
-  const uuids = [...new Set(keys.filter(isEntityKey))];
-  const entities = await tx.query<{ key: string; id: string }>(
-    `select entity_id::text key, identity.canonical_entity_id(entity_id)::text id
-       from identity.entity where entity_id = any($1::uuid[])`, [uuids]);
-  const canonical = new Map(entities.map(e => [e.key, e.id]));
-  // Unknown UUIDs retain the existing not-in-system / no-pursuit handling.
-  for (const key of uuids) resolved.set(key, canonical.get(key.toLowerCase()) ?? key.toLowerCase());
-  const aliases = await tx.query<{ key: string; id: string }>(
-    `select distinct source_id key, identity.canonical_entity_id(entity_id)::text id
-       from identity.source_record where source_id = any($1::text[])
-         and (source = 'prospect_key' or (source = 'warehouse' and source_id like 'member:%'))`,
-    [[...new Set(keys.filter(k => !isEntityKey(k)))]]);
-  const candidates = new Map<string, Set<string>>();
-  for (const row of aliases) candidates.set(row.key, (candidates.get(row.key) ?? new Set()).add(row.id));
-  // Never pick between conflicting namespaces by row order.
-  for (const [key, ids] of candidates) if (ids.size === 1) resolved.set(key, [...ids][0]!);
-  return resolved;
-}
 const unmappedKey = (key: string) => `key ${key} is not mapped yet; run Add prospects (or Import portfolio) first`;
 
 /** Bound payload size while using the same set-based SQL on both DB adapters. */
