@@ -1,5 +1,5 @@
 /** Invented rows only. A real child process proves that pages and jobs do not share a JS process. */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { MessageChannel } from 'node:worker_threads';
 import { launchImportJob } from '../../lib/import-jobs/server';
 import { connectJobDb,hostJobDb } from '../../lib/db/job-bridge';
@@ -12,6 +12,31 @@ import type { ImportJob } from '../../lib/import-jobs/types';
 import type { Check } from './harness';
 
 export async function importJobProperties(check:Check) {
+  // A busy child must stop on server disconnect without waiting for its work to finish.
+  {
+    const child=spawn(process.execPath,['--import','tsx','--input-type=module','--eval',`
+      import { requireImportParent } from './lib/import-jobs/parent.ts';
+      requireImportParent();
+      setInterval(() => {}, 1000);
+      process.send('ready');
+    `],{stdio:['ignore','ignore','ignore','ipc']});
+    let ready=false;
+    const code=await new Promise<number|null>((resolve,reject)=>{
+      const timeout=setTimeout(()=>{child.kill('SIGKILL');reject(new Error('Invented orphan worker timeout'));},5000);
+      child.once('message',()=>{ready=true;child.disconnect();});
+      child.once('error',error=>{clearTimeout(timeout);reject(error);});
+      child.once('exit',code=>{clearTimeout(timeout);resolve(code);});
+    });
+    check('IMPORT JOB worker exits when its server IPC channel closes',ready&&code===1,
+      'A real child running unfinished work exits within five seconds after parent disconnect.');
+    const orphan=spawnSync(process.execPath,['--import','tsx','--input-type=module','--eval',`
+      import { requireImportParent } from './lib/import-jobs/parent.ts';
+      requireImportParent();
+      process.exit(0);
+    `],{stdio:'ignore',timeout:5000});
+    check('IMPORT JOB worker refuses to start without its parent channel',orphan.status===1&&!orphan.error,
+      'Missing or already closed IPC fails before work starts.');
+  }
   // Issue 0114: progress is a quiet mark in the rail, not a panel over every page.
   {
     const { needsLook } = await import('../../lib/import-jobs/client');
@@ -100,7 +125,7 @@ export async function importJobProperties(check:Check) {
     const id=queuedTogether[0].id;
     const runChild=()=>new Promise<number|null>((resolve,reject)=>{
       const child=spawn(process.execPath,['--import','tsx','scripts/import-worker.ts',id],{
-        env:{...process.env,DATABASE_URL:url.toString(),DATA_PROFILE:'demo',PLCOS_IMPORT_WORKER:'1'},stdio:'ignore',
+        env:{...process.env,DATABASE_URL:url.toString(),DATA_PROFILE:'demo',PLCOS_IMPORT_WORKER:'1'},stdio:['ignore','ignore','ignore','ipc'],
       });
       const timeout=setTimeout(()=>{child.kill('SIGKILL');reject(new Error('Invented worker timeout'));},30000);
       child.once('error',e=>{clearTimeout(timeout);reject(e);});

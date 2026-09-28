@@ -58,9 +58,9 @@ export function launchImportJob(db:Db,id:string,options?:{demoRoot?:string}):voi
     }
     if(!config.db.url)throw new Error('Missing Postgres configuration.');
     const child=spawn(process.execPath,['--import','tsx',join(process.cwd(),'scripts/import-worker.ts'),id],{
-      cwd:process.cwd(),env:{...process.env,PLCOS_IMPORT_WORKER:'1'},stdio:'ignore',
+      cwd:process.cwd(),env:{...process.env,PLCOS_IMPORT_WORKER:'1'},stdio:['ignore','ignore','ignore','ipc'],
     });
-    child.once('error',()=>stopped(null));child.once('exit',stopped);child.unref();
+    child.once('error',()=>stopped(null));child.once('exit',stopped);child.channel?.unref();child.unref();
   } catch {
     dispose();children.delete(id);
     void recordWorkerExit(db,id,'Worker could not start. Check the local runtime, then retry.').catch(()=>{});

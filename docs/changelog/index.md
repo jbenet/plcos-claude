@@ -199,3 +199,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [W3 routes — Recover interaction and portfolio paths](entries/w3-routes.md)
 - [Batch keys — new strategies and research aliases](entries/batch-keys.md)
 - [LabOS live server — rehearsal blockers F1, F3 and F4](entries/labos-live.md)
+- [Worker lifetime follows the server](entries/worker-orphan.md)
