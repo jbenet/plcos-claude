@@ -193,9 +193,12 @@ async function build(tx: Queryable): Promise<BuildCounts> {
     }
   }
   // "18 Jun to 20 Sep 2026": a span in words, the year once when both ends share it.
+  const dateFormats = [false, true].map(year => new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}), timeZone: 'UTC',
+  }));
   const span = (ds: string[]) => {
     const s = [...ds].sort();
-    const d = (x: string, year: boolean) => new Date(`${x}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}), timeZone: 'UTC' });
+    const d = (x: string, year: boolean) => dateFormats[Number(year)]!.format(new Date(`${x}T12:00:00Z`));
     if (s.length === 1 || s[0] === s[s.length - 1]) return `on ${d(s[0]!, true)}`;
     return `${d(s[0]!, s[0]!.slice(0, 4) !== s[s.length - 1]!.slice(0, 4))} to ${d(s[s.length - 1]!, true)}`;
   };

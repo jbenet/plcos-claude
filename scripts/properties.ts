@@ -56,6 +56,7 @@ async function main() {
   await (await import('./properties/feedback-journal')).feedbackJournalProperties(check);
   await (await import('./properties/findings-network')).findingsNetworkProperties(check);
   await (await import('./properties/findings-perf')).findingsPerfProperties(check);
+  await (await import('./properties/network-speed')).networkSpeedProperties(check);
 
   await cleanTestPostgres();
 
