@@ -217,6 +217,24 @@ export const config = {
       netholabs: ['neurotech', 'neuroscience'],
     } as Record<string, string[]>,
   },
+  /**
+   * Strategic value (issue 0120): the words that tie research text to a vehicle's field. The first
+   * entry whose `match` is in the vehicle's slug or name applies; an SPV also matches its company's
+   * name, read from the vehicle's name. Every list is a GUESS from the vehicles' public descriptions,
+   * not from what has proved useful; `*` lets a word run on (neuro* is neuroscience, neurotech). Words
+   * that also mean something else ("neural" in AI, "health") are left out on purpose.
+   */
+  strategic: {
+    domains: [
+      { match: ['netho'], label: 'neurotech', terms: ['neuro*', 'brain', 'bci', 'brain-computer', 'connectom*', 'whole-brain', 'neuromodulation'] },
+      { match: ['prime intellect'], label: 'AI and compute', terms: ['artificial intelligence', 'ai', 'machine learning', 'llm*', 'gpu*', 'compute', 'deep learning'] },
+      { match: ['persona'], label: 'robotics', terms: ['robot*', 'humanoid*', 'automation', 'manufactur*'] },
+      // Demo: SPV — Cortex is an invented neurotech company.
+      { match: ['cortex'], label: 'neurotech', terms: ['neuro*', 'brain', 'bci', 'brain-computer', 'neuromodulation'] },
+      { match: ['crypto', 'rails'], label: 'crypto', terms: ['crypto*', 'blockchain', 'web3', 'bitcoin', 'ethereum', 'defi', 'stablecoin*', 'digital asset*', 'filecoin'] },
+      { match: ['neuro'], label: 'neurotech', terms: ['neuro*', 'brain', 'bci', 'brain-computer', 'neuromodulation', 'psychiatr*', 'mental health'] },
+    ] as Array<{ match: string[]; label: string; terms: string[] }>,
+  },
   identityResolution: {
     batchSize: 50, // GUESS — bound each maintenance read and CPU slice below interactive latency.
     pauseMs: 50, // GUESS — leave an actual idle interval between slices on the live server.

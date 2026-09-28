@@ -11,3 +11,6 @@ export {
   SPV_BASIS_LABEL, SPV_KIND_LABEL, SPV_STANCES, spvAppetite, spvDeals, spvMark, spvWords,
   type SpvEvidence, type SpvReading, type SpvRowMark, type SpvStance,
 } from './spv-rules';
+export {
+  STRATEGIC_LABEL, STRATEGIC_LEVELS, UNKNOWN_MARK, strategicOrder, type StrategicLevel, type StrategicMark,
+} from './strategic-rules';

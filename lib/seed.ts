@@ -95,9 +95,11 @@ export async function seed(db: Db): Promise<Record<string, number>> {
   // After the statuses: its invented LPs carry statuses a person set, and the derive job reads them.
   const { seedSpv } = await import('./seed-spv');
   const spv = await seedSpv(db);
+  const { seedStrategic } = await import('./seed-strategic');
+  const strategic = await seedStrategic(db);
   return {
     users: users.length, vehicles: vehicles.length, sources: sources.length,
-    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring, signals: signals.inserted, ...meetings, ...content, ...agents, ...compliance, ...library, ...fit, ...standup, ...plays, ...floor, ...statuses, ...spv,
+    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring, signals: signals.inserted, ...meetings, ...content, ...agents, ...compliance, ...library, ...fit, ...standup, ...plays, ...floor, ...statuses, ...spv, ...strategic,
   };
 }
 

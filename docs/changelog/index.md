@@ -209,3 +209,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Cutover re-point order and viewer refusals](entries/strip-order.md)
 - [W3 — Team profile routes](entries/w3-team-edges.md)
 - [Affinity — retry transient reads and preserve paused chunks](entries/affinity-retry.md)
+- [Strategic value — a column and a filter on Selection (0120)](entries/strategic-0120.md)

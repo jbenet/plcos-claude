@@ -4,7 +4,8 @@ import { listEntities } from '@/modules/identity';
 import { buildCache } from '@/lib/build-cache';
 import { listVehicles } from '@/modules/platform';
 import { listAssessments } from '@/modules/fit';
-import { capacityEstimate, spvMarks, vehicleStrategy } from '@/modules/strategy';
+import { capacityEstimate, spvMarks, strategicMark, strategicRecords, strategicScope, vehicleStrategy, type StrategicGrade } from '@/modules/strategy';
+import { config } from '@/config/deployment';
 import { provisionalParts, provisionalScore } from '@/lib/strategy-score';
 import type { Strategy } from '@/lib/enrich/strategy';
 import { GRADE_LABEL, GRADE_SCORE } from '@/modules/fit/client';
@@ -110,6 +111,10 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
     spvMarks(db, entityIds),
   ]);
   const spvKind = new Set(vehicles.filter(v => v.kind === 'spv').map(v => v.id));
+  // Strategic value (issue 0120): each vehicle's field and, for an SPV, its company; then the records.
+  const scopes = new Map(vehicles.map(v => [v.id, strategicScope(v, config.strategic.domains)]));
+  const inView = [...new Set(pursuits.map(p => p.vehicleId))].map(id => scopes.get(id)!);
+  const strategicOn = await strategicRecords(db, entityIds, inView.flatMap(x => [...x.terms, ...(x.company ? [x.company] : [])]));
   const readsOf = new Map<string, NoteReading[]>();
   for (const r of readings) readsOf.set(r.entityId, [...(readsOf.get(r.entityId) ?? []), r]);
   const sum = (p: Pursuit) => sums.get(`${p.entityId}:${p.vehicleId}`)!;
@@ -135,6 +140,17 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
     // What the records support beside what the ladder has accepted (N57, docs/18).
     const file = onFile(p, touchesBy.get(`${p.entityId}:${p.vehicleId}`) ?? [], c ? [c] : []);
     const onFileRungs = new Set(file.climb.map((x) => x.rung));
+    const beyond = assessment?.dimensions.find((d) => d.code === 'strategic_value');
+    const w5 = plan?.suggestion?.data as Partial<Strategy> | undefined;
+    const spvMark = spv.get(p.entityId)!;
+    const strategic = strategicMark(scopes.get(p.vehicleId)!, {
+      assessed: beyond ? { grade: beyond.grade as StrategicGrade, finding: beyond.finding, certainty: beyond.certainty, asOf: iso(beyond.asOf)?.slice(0, 10) ?? null } : null,
+      prospect: strategicOn.prospects.get(`${p.entityId}:${p.vehicleId}`) ?? null,
+      strategy: w5 ? { affinity: w5.scores?.affinity ?? null, askShape: w5.ask?.shape ?? null } : null,
+      // The SPV stance's research quote is research text too: "two neurotech rounds" is a portfolio tie.
+      // Only research: a derived mark's words are our own records ("In 2 of our SPVs: …") or a fixed label.
+      texts: [...(strategicOn.texts.get(p.entityId) ?? []), ...(spvMark.why && spvMark.basis === 'research' ? [{ field: 'spv', value: spvMark.why, asOf: null }] : [])],
+    });
     return {
       licensedCapacity: plan?.usingDakota ?? false,
       licensedStatusReason: p.source === 'dakota' && p.statusSource === 'rule',
@@ -176,8 +192,9 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
       setHere: p.statusSource === 'us' && p.statusSetAt ? `set here ${shortDate(p.statusSetAt)}${p.statusSetByName ? ` by ${p.statusSetByName}` : ''}` : null,
       ahead: aheadOfStatus(p, s),
       doNotContact: restricted.has(p.entityId),
-      spv: spv.get(p.entityId)!,
+      spv: spvMark,
       spvVehicle: spvKind.has(p.vehicleId),
+      strategic,
       money: c
         ? {
             state: CLOSE_STATE_LABEL[c.state], amount: c.exposure.amount, wired: c.wired, hard: c.exposure.track === 'hard',

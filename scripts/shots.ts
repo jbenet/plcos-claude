@@ -4,6 +4,7 @@ import { chromium, type Page } from 'playwright';
 import { config } from '../config/deployment';
 import { portFor, readLayout } from '../config/ports';
 import { encodeShot, SHOT } from './shot-image';
+import { USER_COOKIE } from '../lib/auth/cookie';
 
 /**
  * Changelog screenshots. `npm run shots -- L1` against a running dev server.
@@ -18,6 +19,12 @@ interface Shot {
   fullPage?: boolean;
   /** Narrower than the design boards, for the layouts that have to survive a small window. */
   width?: number;
+}
+
+/** Select the demo's first user by cookie, and reload: server actions refuse a browser with none. */
+async function asUser(page: Page) {
+  await page.context().addCookies([{ name: USER_COOKIE, value: 'juan', url: page.url() }]);
+  await page.reload({ waitUntil: 'networkidle' });
 }
 
 /** An LP's page by name, from whichever status it is at now: a shot that saves moves it (N61). */
@@ -2491,6 +2498,14 @@ const SHOTS: Record<string, Shot[]> = {
         await page.waitForTimeout(250);
       },
     },
+  ],
+  // Issue 0120: the Strategic column and filter, at the issue's viewport. A user is selected first, so
+  // the detail beside the list can read the LP's reasons.
+  'strategic-0120': [
+    { name: '01-selection-strategic-column', path: '/spv-cortex/selection?status=all&sort=strategic&dir=desc', width: 1587, fullPage: true,
+      prepare: async (page) => { await asUser(page); await page.locator('tr[data-lp]', { hasText: 'Halvorsen Family Office' }).click(); await page.getByText('derived, not part of the score').waitFor(); } },
+    { name: '02-fund-high-or-some', path: '/neurotech/selection?status=all&strategic=useful&sort=strategic&dir=desc', width: 1587, fullPage: true,
+      prepare: async (page) => { await asUser(page); await page.getByText('assessed, not part of the score').waitFor(); } },
   ],
   'selection-0113': [
     { name: '01-type-icons-toggles', path: '/selection', fullPage: true },

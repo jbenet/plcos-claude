@@ -369,9 +369,18 @@ a.fig:focus-visible { outline: 2px solid var(--accent-line); }
 .keysHint { font-size: 11px; color: var(--muted); white-space: nowrap; margin-left: auto; }
 .keysHint kbd { font-family: var(--mono); font-size: 10px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; margin: 0 1px; background: var(--surface); color: var(--ink); }
 @media (pointer: coarse) { .keysHint { display: none; } }
-/* 820 (was 700) since the SPV column (27 Sep 2026): met and last touch stay in the detail beside the list. */
-@container rank (max-width: 820px) {
+/* 820 (was 700) since the SPV column (27 Sep 2026), 920 since the Strategic column (issue 0120): met and
+   last touch stay in the detail beside the list. */
+@container rank (max-width: 920px) {
   .ranked .cMeet, .ranked .cTouch { display: none; }
+}
+/* Since the Strategic column (issue 0120): routes, then the stage, give way before the LP's name
+   does. Both stay in the panel for the LP in focus (Routes; "now Sourcing"). */
+@container rank (max-width: 760px) {
+  .ranked .cRoutes { display: none; }
+}
+@container rank (max-width: 600px) {
+  .ranked .cStatus { display: none; }
 }
 @container rank (max-width: 560px) {
   .ranked .cPos { display: none; }
