@@ -193,3 +193,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Workflow API](entries/workflow-api.md)
 
 - [Network speed — invented scale benchmark](entries/network-speed.md)
+- [Service backup — encrypted S3 archives](entries/service-backup.md)

@@ -46,8 +46,7 @@ mechanisms are removed; the last table lists each one and what would bring it ba
   Migrations only add; applied migrations never change, as today.
 - **Feedback:** it works as now, through the journal on disk and then the issues list. The one change is a
   read-only feedback export with a single token, so the Mac dev session can pull new issues.
-- **Backups:** PL's daily database snapshots, plus our existing daily `pg_dump`, encrypted, onto the volume
-  and copied off it (to S3 or Drive, your pick).
+- **Backups:** PL's daily database snapshots, plus daily encrypted dumps and working files to S3 (below).
 
 ## What rev 3 removes (and what would bring each back)
 
@@ -67,13 +66,19 @@ mechanisms are removed; the last table lists each one and what would bring it ba
 
 ## Decisions (Juan, 28 Sep 2026: all four yes)
 
-Answers: (1) yes, with the VM fallback; (2) yes, an Anthropic key may already exist, to be wired later; (3) yes; (4) an S3 bucket, backups encrypted. Keys: backups use an `age` public key on the machine, with the private key offline; ask PL whether a secrets store (for example Infisical) exists. The ask sent to PL Infra: https://claude.ai/artifact/SoKAVeZ94nFxUt6Y9V2kCb
+Answers: (1) yes, with the VM fallback; (2) yes, an Anthropic key may already exist, to be wired later; (3) yes; (4) an S3 bucket, backups encrypted. Keys: backups use a GPG public key on the machine, with the private key offline; ask PL whether a secrets store (for example Infisical) exists. The ask sent to PL Infra: https://claude.ai/artifact/SoKAVeZ94nFxUt6Y9V2kCb
 
 
 1. **Ask PL for one app with the limits above?** *Yes. Fallback, if PL won't raise limits: one VM running the same thing, the way the Mac does.*
 2. **The Anthropic API key** for server-side research, and the monthly cap? *Yes, capped at $1,500 a month (GUESS; last night's runs would have cost more, but steady state is lower).*
 3. **Dakota data on PL's database?** *Only once Dakota's terms allow it. Until then Dakota stays on the Mac and syncs nothing up.*
 4. **Where the off-machine backup copy goes:** S3 or Drive? *S3, if PL gives a bucket.*
+
+## Backups
+
+Set `BACKUP_COMMAND="bash scripts/backup-service.sh"`, `BACKUP_BUCKET` (bucket name), and `BACKUP_GPG_PUBLIC_KEY` (armored public key text); existing `DATABASE_URL` and `DATA_PROFILE` select the sources, and AWS uses the service role.
+Juan: on his own machine, `gpg --quick-gen-key 'PLC service backup' rsa3072 encr 0`; export with `gpg --armor --export 'PLC service backup'` for the public env var. Export the private key with `gpg --armor --export-secret-keys 'PLC service backup'` into his password manager; never put it on the service.
+`BACKUP_DRY_RUN=1` dumps, verifies and encrypts locally, prints the uploads/pruning, and makes no AWS calls. S3 prefixes `plcos-<profile>/database` and `/files` each reuse the existing retention policy and 300 GB cap; working-file archives exclude `postgres`, `database`, and `backups`.
 
 ## Build order
 
