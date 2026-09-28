@@ -27,6 +27,16 @@ export async function getUserByHandle(handle: string, q?: Queryable): Promise<Ap
   return row ? toUser(row) : null;
 }
 
+/** Unknown LabOS members start as viewers; an existing binding is never changed. */
+export async function resolveLabosUser(uid: string, name: string, q?: Queryable): Promise<AppUser | null> {
+  const db = q ?? await getDb();
+  await db.query(`insert into platform.app_user (labos_uid, handle, name, initials, role, email, access)
+    values ($1, 'labos-' || gen_random_uuid()::text, $2, $3, 'Viewer', '', 'viewer')
+    on conflict (labos_uid) do nothing`, [uid, name, name.trim().split(/\s+/).map(n => n[0]).slice(0, 2).join('').toUpperCase()]);
+  return db.one<AppUser>(`select id, handle, name, initials, role, email, access::text, vehicles, approves
+    from platform.app_user where labos_uid = $1 and active`, [uid]);
+}
+
 type VehicleRow = {
   id: string; slug: string; name: string; kind: Vehicle['kind'];
   exemption: string; target_amount: string | null; sort_order: number; phase: Vehicle['phase'];

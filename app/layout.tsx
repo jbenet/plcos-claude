@@ -1,4 +1,6 @@
 import './globals.css';
+import { currentUser } from '@/lib/auth';
+import { MutationGuardError } from '@/lib/mutation-policy';
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import { HereProvider } from '@/components/shell/Here';
@@ -34,8 +36,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // what AppLink needs to put an old address in its place on the server as on the client.
   let context: [string | null, Awaited<ReturnType<typeof vehicleSelection>>];
   try {
+    if (config.auth.provider === 'labos') await currentUser();
     context = await Promise.all([headers().then((h) => h.get('x-asked-path')), vehicleSelection()]);
   } catch (error) {
+    if (config.auth.provider === 'labos' && error instanceof MutationGuardError) return <html lang="en"><body><main>{error.message}</main></body></html>;
     if (!isDbBusy(error)) throw error;
     // Root-layout errors otherwise show Next's development overlay. This needs no DB.
     return <html lang="en" data-theme={themeAttr(DEFAULT_THEME)}><body className={config.data.profile}>

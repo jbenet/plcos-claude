@@ -166,7 +166,7 @@ export const config = {
     dir: PROFILE === 'real' ? 'data/real/issues' : 'issues',
   },
   auth: {
-    provider: 'local' as AuthKind,
+    provider: (process.env.LABOS_ME_URL ? 'labos' : 'local') as AuthKind,
   },
   guard: {
     asksPerRelationshipPerQuarter: 1,

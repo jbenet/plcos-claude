@@ -185,3 +185,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Linear on the standup and each vehicle's Overview](entries/linear-views.md)
 
 - [Authorization layer — roles, vehicle scope and restricted reads](entries/authz-layer.md)
+
+- [LabOS sign-in](entries/labos-signin.md)

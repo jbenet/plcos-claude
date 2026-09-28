@@ -67,7 +67,7 @@ async function LoadedRail() {
         </div>
         {/* The user, and beside them the system's state (issue 0114): one quiet mark, words on a tap. */}
         <div className={st.me}>
-          <UserSwitcher user={user} users={users} />
+          {a.switchable ? <UserSwitcher user={user} users={users} /> : <span>{user.name}</span>}
           <SystemStatus />
         </div>
       </div>
