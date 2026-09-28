@@ -18,7 +18,7 @@ import { listPursuits, openSuggestions, STATUS_LABEL } from '@/lib/authz/read/st
 import type { Strategy } from '@/lib/enrich/strategy';
 import type { Triage } from '@/lib/enrich/triage';
 import { latestRun } from '@/modules/sources';
-import { exportResearchSetAction, importFindingsAction, sourceBulkAction } from './actions';
+import { exportResearchSetAction, importFindingsAction, sourceBulkAction, runWorkflowAction } from './actions';
 import { addedInBulk, BULK_DAY } from '@/lib/enrich/unsourced';
 import { readResearchExportStatus } from '@/lib/enrich/export-status';
 import { ExportStatus } from './ExportStatus';
@@ -123,6 +123,11 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
           <div className="fact"><span>Findings back</span><span>{n(raw)} LPs researched{pages.pages ? ` (${n(pages.pages)} owed a pass with search: ${n(pages.pages - pages.partial)} from page reads alone${pages.partial ? `, ${n(pages.partial)} with too few searches to follow the protocol` : ''})` : ''} · {n(strategies)} with a strategy</span></div>
           {sp.exported && <p className="stat ready" style={{ marginTop: 10 }}><i />Exported {sp.exported} LPs to {join(config.data.root, 'enrich')}</p>}
           <ExportStatus status={exportStatus} />
+          <form action={runWorkflowAction} style={{ marginTop: 12 }}>
+            <label>Batch path <input name="batch" required placeholder={join(dir, 'batches', 'batch.jsonl')} /></label>{' '}
+            {['w1', 'w1c', 'w5'].map(protocol => <button key={protocol} className="btn" name="protocol" value={protocol} disabled={!process.env.ANTHROPIC_API_KEY}>Run {protocol.toUpperCase()}</button>)}
+            {!process.env.ANTHROPIC_API_KEY && <span className="muted"> Set ANTHROPIC_API_KEY to run workflows.</span>}
+          </form>
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>
             <button className="btn p" type="submit">Export the research set</button>
             <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>

@@ -217,3 +217,11 @@ export async function deriveSpvStanceAction(): Promise<{ error?: string; message
   try { await queueImportJob(await getDb(), 'spv-stance', user.id); return { message: 'SPV stance queued. Progress appears above; reload for its counts.' }; }
   catch { return { error: 'SPV stance could not be queued. Retry after the active import finishes.' }; }
 }
+
+export async function runWorkflowAction(formData: FormData): Promise<void> {
+  const authorizedUser = await requireAction('app/dev/enrich/actions.ts#runWorkflowAction', formData);
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('Workflow refused: ANTHROPIC_API_KEY is not set.');
+  await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: formData.get('protocol'), batch: formData.get('batch') });
+  revalidatePath('/dev/enrich');
+  redirect('/developer/enrich');
+}

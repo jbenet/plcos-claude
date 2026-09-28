@@ -40,7 +40,7 @@ export interface RunLine {
 }
 export type Begin = Pick<RunLine, 'parentRunId' | 'workflow' | 'operation' | 'protocol' | 'source' | 'agent' | 'model' | 'launchFolder' | 'workerFolder' | 'batch'>;
 export type Finish = Pick<RunLine, 'counts' | 'checks' | 'outcome' | 'reason'> & { usage: Usage & { source: 'measured' | 'estimated' } };
-export type Context = { cwd?: string; profile?: string };
+export type Context = { cwd?: string; profile?: string; root?: string };
 
 const object = (v: unknown): Record<string, unknown> => {
   if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('Expected an object.');
@@ -148,8 +148,9 @@ export async function realRoot({ cwd = process.cwd(), profile = process.env.DATA
       || await realpath(join(main, 'data/real')) !== root) throw new Error('Shared real root required; preview or redirected root refused.');
   return root;
 }
+// App jobs supply their configured volume root; CLI callers retain the shared-Mac checks.
 async function ledgerPath(context: Context): Promise<string> {
-  const root = await realRoot(context), dir = join(root, 'workflows'), file = join(dir, 'runs.jsonl');
+  const root = context.root ? await realpath(context.root) : await realRoot(context), dir = join(root, 'workflows'), file = join(dir, 'runs.jsonl');
   const ds = await statIfPresent(dir), fs = await statIfPresent(file);
   if ((ds && (!ds.isDirectory() || ds.isSymbolicLink())) || (fs && (!fs.isFile() || fs.isSymbolicLink()))) {
     throw new Error('Workflow ledger must be a regular file in its own directory, not a symlink.');
