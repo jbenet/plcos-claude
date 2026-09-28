@@ -88,7 +88,7 @@ export async function affinitySliceProperties(ctx: AffinityContext) {
   }
 
   {
-    // A dropped connection is tried again; three in a row is an outage, and says why.
+    // A dropped connection is tried again; four in a row is an outage, and says why.
     let failures = 0;
     const flaky = {
       kind: 'scripted' as const,
@@ -106,8 +106,8 @@ export async function affinitySliceProperties(ctx: AffinityContext) {
     const down = await attempt(() => client.get('/v2/lists/9'));
     const tries = await adb.query<{ note: string }>(`select note from sources.request_log where outcome = 'network_error' and path = '/v2/lists/9' order by id`);
     check(
-      'A network failure is tried again, and after three in a row the error names its cause',
-      recovered === null && down instanceof aff.AffinityError && /ENOTFOUND/.test(down.message) && tries.length === 3 && /trying again/.test(tries[0]!.note),
+      'A network failure is tried again, and after four in a row the error names its cause',
+      recovered === null && down instanceof aff.AffinityError && /ENOTFOUND/.test(down.message) && tries.length === 4 && /trying again/.test(tries[0]!.note),
       `first read after a dropped connection: ${recovered ? recovered.message : 'ok'}; outage: ${down?.message}; attempts logged ${tries.length}`,
     );
   }

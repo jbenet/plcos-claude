@@ -1,6 +1,6 @@
 import type { RateWindow, RequestLogEntry } from '@/modules/sources';
 import { allowed } from './allowlist';
-import { AFFINITY_ORIGIN, guardedFetch, type FetchLike } from './fetch';
+import { AFFINITY_ORIGIN, guardedFetch, ReadOnlyViolation, type FetchLike } from './fetch';
 import { recordActivity } from '@/lib/activity/log';
 
 /**
@@ -14,9 +14,7 @@ import { recordActivity } from '@/lib/activity/log';
  *   2. The budget allows it — our own per-minute ceiling, our share of the account's month,
  *      and a floor under the account's remaining month. Otherwise: wait, or refuse.
  *   3. GET, no body, no redirects (fetch.ts).
- *   4. A 429 waits for the reset the headers give and tries again, three times at most. A
- *      network failure is tried twice more, a second and then two apart: a GET is safe to
- *      repeat, and a connection kept from an hour ago fails once and then works.
+ *   4. Network errors, 5xx and 429 retry at most three times, honoring Retry-After.
  *   5. Every attempt is logged — path, status, time, budget. Never a body or a header.
  *   6. The key appears in nothing this client writes or throws.
  */
@@ -33,10 +31,11 @@ export interface Transport {
 }
 
 export function httpsTransport(fetchImpl?: FetchLike): Transport {
+  // GUESS: bulk email pages need a 60 s request timeout.
   const send = guardedFetch(fetchImpl);
   return {
     kind: 'https',
-    get: (url, headers) => send(url, { method: 'GET', headers, signal: AbortSignal.timeout(30_000) }),
+    get: (url, headers) => send(url, { method: 'GET', headers, signal: AbortSignal.timeout(url.pathname === '/v2/emails' ? 60_000 : 30_000) }),
   };
 }
 
@@ -63,6 +62,8 @@ export class AffinityRefused extends Error {
   }
 }
 
+export class AffinityRequestCap extends AffinityRefused {}
+
 export class AffinityError extends Error {
   constructor(readonly status: number, message: string) {
     super(message);
@@ -77,6 +78,8 @@ export interface ClientOptions {
   log: (e: RequestLogEntry) => Promise<void>;
   /** Requests this tool has sent this calendar month, from its own log. */
   usedThisMonth: () => Promise<number>;
+  /** Called once before each actual attempt; a cap refusal is never retried or counted. */
+  beforeAttempt?: () => void;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   /** Counts-only activity context; explicit roots are for invented fixtures. */
@@ -99,7 +102,8 @@ export type Query = Record<string, string | number | readonly string[] | undefin
 
 const SOURCE = 'affinity';
 const MAX_TRIES = 4;
-const MAX_NETWORK_TRIES = 3;
+// GUESS: allow transient bulk-read failures time to recover.
+const BACKOFF_MS = [5_000, 20_000, 60_000];
 const MAX_WAIT_MS = 60_000;
 const MAX_PAGES = 10_000;
 
@@ -188,10 +192,10 @@ export function affinityClient(opts: ClientOptions): AffinityClient {
     const endpoint = allowed(path);
     if (!endpoint) return refuse('(not allowlisted)', path, 'not on the allowlist');
 
-    let networkFailures = 0;
     for (let attempt = 1; ; attempt++) {
       await checkMonth(endpoint.template, path);
       await pace();
+      opts.beforeAttempt?.();
       const started = now();
       sent.push(started);
       if (ours !== null) ours++;
@@ -201,28 +205,30 @@ export function affinityClient(opts: ClientOptions): AffinityClient {
       const segment = endpoint.template.includes('/relationships') ? 'relationships' : endpoint.template.startsWith('/v2/auth/') ? 'authentication' : endpoint.template.split('/')[2]!;
       try {
         let res: TransportResponse;
+        let text: string;
         try {
           res = await opts.transport.get(url, { Authorization: `Bearer ${opts.key}`, Accept: 'application/json' });
+          readHeaders(res.headers, res.status >= 200 && res.status < 300);
+          text = await res.text();
+          bytesIn = Buffer.byteLength(text, 'utf8');
         } catch (err) {
+          if (err instanceof AffinityRefused || err instanceof ReadOnlyViolation) throw err;
           // undici's "fetch failed" says nothing on its own; the cause says which failure it was.
           const cause = (err as { cause?: { code?: string; message?: string } } | null)?.cause;
           const detail = cause?.code ?? cause?.message;
           const why = err instanceof Error ? `${err.name}: ${err.message}${detail ? ` (${detail})` : ''}` : 'unknown';
-          networkFailures++;
-          const again = networkFailures < MAX_NETWORK_TRIES;
+          const again = attempt < MAX_TRIES;
           await log({ endpoint: endpoint.template, path, outcome: 'network_error', status: null, durationMs: now() - started, note: again ? `${why}; trying again` : why });
           if (again) {
-            await sleep(1000 * networkFailures);
+            await sleep(BACKOFF_MS[attempt - 1]!);
             continue;
           }
           throw new AffinityError(0, redact(`Could not reach Affinity (${why})`));
         }
-        readHeaders(res.headers, res.status >= 200 && res.status < 300);
         const durationMs = now() - started;
 
         if (res.status === 429) {
           // A rejected response still consumed a request and response payload.
-          try { bytesIn = Buffer.byteLength(await res.text(), 'utf8'); } catch { /* body unavailable */ }
           records = 0;
           const month = state.perMonth;
           const spent = month && month !== 'none' && month.remaining <= 0;
@@ -232,13 +238,21 @@ export function affinityClient(opts: ClientOptions): AffinityClient {
           }
           if (attempt >= MAX_TRIES) throw new AffinityError(429, `Affinity kept saying too many requests; gave up after ${MAX_TRIES} tries.`);
           const reset = num(res.headers, 'x-ratelimit-limit-user-reset');
-          await sleep(Math.min(MAX_WAIT_MS, reset !== null ? Math.max(1, reset) * 1000 : 2 ** attempt * 1000));
+          const retryAfter = res.headers.get('retry-after');
+          const seconds = retryAfter?.trim() ? Number(retryAfter) : NaN;
+          const date = retryAfter ? Date.parse(retryAfter) : NaN;
+          const delay = Number.isFinite(seconds) ? Math.max(0, seconds * 1000)
+            : Number.isFinite(date) ? Math.max(0, date - now()) : 0;
+          await sleep(Math.max(BACKOFF_MS[attempt - 1]!, delay, reset !== null ? reset * 1000 : 0));
           continue;
         }
 
-        const text = await res.text();
-        bytesIn = Buffer.byteLength(text, 'utf8');
         await log({ endpoint: endpoint.template, path, outcome: 'sent', status: res.status, durationMs, note: null });
+        if (res.status >= 500 && res.status <= 599 && attempt < MAX_TRIES) {
+          records = 0;
+          await sleep(BACKOFF_MS[attempt - 1]!);
+          continue;
+        }
         if (res.status < 200 || res.status >= 300) {
           records = 0;
           let message = text.slice(0, 300);
@@ -288,3 +302,7 @@ export function affinityClient(opts: ClientOptions): AffinityClient {
     budget: () => ({ ...state }),
   };
 }
+
+/** Only transient read failures are resumable pauses; permissions and bad data still fail. */
+export const retryableReadError = (err: unknown): boolean => err instanceof AffinityError
+  && (err.status === 0 || err.status === 429 || (err.status >= 500 && err.status <= 599));

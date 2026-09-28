@@ -1,8 +1,6 @@
-import { config } from '@/config/deployment';
 import { finishRun, landRaw, latestRun, progressRun, startRun, type SyncRun } from '@/modules/sources';
 import { affinity } from './index';
-import { AffinityRefused, httpsTransport, type Query } from './client';
-import { fixtureTransport } from './fixture';
+import { AffinityRequestCap, retryableReadError, type Query } from './client';
 import { AFFINITY_ORIGIN } from './fetch';
 
 /** Bulk history is independent of list membership. API permissions still bound visibility.
@@ -57,7 +55,7 @@ export async function readHistory(runBy: string | null, opts: HistoryOptions = {
   const last = complete?.detail.through;
   const since = !opts.full && typeof last === 'string' ? new Date(new Date(last).getTime() - 86_400_000).toISOString() : null;
   const prior = previous?.detail as HistoryRunDetail | undefined;
-  const resume = !opts.full && (previous?.status === 'failed' || previous?.status === 'running') ? prior?.resume : null;
+  const resume = !opts.full && (previous?.status === 'failed' || previous?.status === 'running' || previous?.status === 'held') ? prior?.resume : null;
   const steps: Step[] = resume?.steps ?? STREAMS.flatMap(s => (since && s.delta
     ? [`createdAt>=${since}`, `updatedAt>=${since}`] : [undefined]).map(filter => ({
       path: s.path, kind: s.kind, query: { limit: 100, ...(s.kind === 'person' ? { fieldTypes: ['global'] } : {}), ...(filter ? { filter } : {}) },
@@ -73,7 +71,7 @@ export async function readHistory(runBy: string | null, opts: HistoryOptions = {
   };
   const run = await startRun(SOURCE, KIND, runBy);
   let requests = 0, records = 0, fresh = 0;
-  const finish = async (status: 'ok' | 'failed', note: string) => {
+  const finish = async (status: 'ok' | 'failed' | 'held', note: string) => {
     detail.resume = status === 'ok' ? null : { steps, phase, next, query, visited: [...visited] };
     await finishRun(run, { status, requests, records, newRecords: fresh, note, detail });
     return latestRun(SOURCE, KIND);
@@ -87,20 +85,14 @@ export async function readHistory(runBy: string | null, opts: HistoryOptions = {
     // A process exit cannot erase the unread page or the original snapshot start. On a
     // crash while landing a page, the preceding checkpoint replays that page idempotently.
     await checkpoint();
-    const transport = opts.overrides?.transport ?? (config.data.profile === 'real' ? httpsTransport() : fixtureTransport());
-    const client = affinity({ ...opts.overrides, runId: String(run), transport: {
-      kind: transport.kind,
-      get: async (url, headers) => {
-        // Count actual attempts, including 429/network retries, against the run cap.
-        if (requests >= cap) throw new AffinityRefused('History request cap reached. Resume this read to continue.');
-        requests++;
-        return transport.get(url, headers);
-      },
+    const client = affinity({ ...opts.overrides, runId: String(run), beforeAttempt: () => {
+      if (requests >= cap) throw new AffinityRequestCap('History request cap reached.');
+      requests++;
     } });
     while (phase < steps.length) {
       if (requests >= cap) {
         detail.stoppedAtCap = true;
-        return finish('failed', `Stopped at ${cap} requests; resume continues the next unread page.`);
+        return finish('held', `Paused at ${cap} requests; resume continues the next unread page.`);
       }
       const pageUrl = nextPage(next, query);
       if (visited.has(pageUrl)) throw new Error('History pagination repeated a cursor; incomplete stream needs a fresh read.');
@@ -132,7 +124,8 @@ export async function readHistory(runBy: string | null, opts: HistoryOptions = {
     detail.through = detail.began;
     return finish('ok', `${records} history records read in ${requests} requests; ${detail.truncated} truncated participant previews remain outside the bulk API's coverage.`);
   } catch (err) {
-    if (requests >= cap) detail.stoppedAtCap = true;
-    return finish('failed', err instanceof Error ? err.message : 'History read failed; resume retries the unread page.');
+    if (err instanceof AffinityRequestCap) detail.stoppedAtCap = true;
+    const paused = detail.stoppedAtCap || retryableReadError(err);
+    return finish(paused ? 'held' : 'failed', `${paused ? 'Paused; resume retries the unread page. ' : ''}${err instanceof Error ? err.message : 'History read failed.'}`);
   }
 }

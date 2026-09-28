@@ -5,6 +5,7 @@ export async function affinityHistoryProperties(ctx: AffinityContext) {
   const { check, adb, KEY, scripted, sleep, ok } = ctx;
   const { readHistory } = await import('../../lib/connectors/affinity/history');
   const { latestRun, startRun, progressRun } = await import('../../modules/sources');
+  await (await import('./affinity-retry')).affinityRetryProperties(ctx);
   try {
   const item = (id: number) => ({ id, createdAt: '2026-09-27T00:00:00Z', updatedAt: null, startTime: '2019-01-01T00:00:00Z' });
   const bulk = scripted(u => {
@@ -17,7 +18,7 @@ export async function affinityHistoryProperties(ctx: AffinityContext) {
   const second = await readHistory(null, options);
   const d2 = second?.detail as HistoryRunDetail;
   check('History resumes a capped bulk read at the unread cursor without advancing its watermark',
-    first?.status === 'failed' && !d1.through && d1.resume?.phase === 0 &&
+    first?.status === 'held' && !d1.through && d1.resume?.phase === 0 &&
     bulk.calls[1]?.searchParams.get('cursor') === 'second' && bulk.calls[1]?.searchParams.get('limit') === '100' &&
     bulk.calls[1]?.searchParams.get('fieldTypes') === 'global' &&
     second?.status === 'ok' && d2.through === d1.began,
@@ -40,8 +41,8 @@ export async function affinityHistoryProperties(ctx: AffinityContext) {
   const stopped = await readHistory(null, { full: true, cap: 2, overrides: { transport: quota.transport, key: KEY, sleep } });
   const stoppedDetail = stopped?.detail as HistoryRunDetail;
   const good = await latestRun('affinity', 'history', 'ok');
-  check('Rate-limit attempts share the cap; failed history never becomes a completed checkpoint',
-    stopped?.status === 'failed' && quota.calls.length === 2 && stopped.requests === 2 && !stoppedDetail.through &&
+  check('Rate-limit attempts share the cap; paused history never becomes a completed checkpoint',
+    stopped?.status === 'held' && quota.calls.length === 2 && stopped.requests === 2 && !stoppedDetail.through &&
     stoppedDetail.resume?.next === '/v2/persons' && good?.id === changed?.id,
     `${quota.calls.length} attempts; prior successful watermark retained`);
   const recovery = scripted(() => ok());

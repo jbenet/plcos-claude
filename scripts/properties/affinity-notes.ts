@@ -61,7 +61,7 @@ export async function affinityNotesProperties(ctx: AffinityContext) {
   check(
     'The calendar is read in bulk from its window, then only what changed, and stops at its cap',
     cal?.status === 'ok' && cal.records === 11 && cal.requests === 1 && cal2?.status === 'ok' && cal2.newRecords === 0 &&
-      (cal2.detail as { mode?: string }).mode === 'since' && capped2?.status === 'failed' && capped2.requests === 3 &&
+      (cal2.detail as { mode?: string }).mode === 'since' && capped2?.status === 'held' && capped2.requests === 3 &&
       (capped2.detail as { stoppedAtCap?: boolean }).stoppedAtCap === true && windowed.startsWith('startTime>='),
     `first read ${cal?.records} meetings in ${cal?.requests} request; second ${cal2?.newRecords} new (${(cal2?.detail as { mode?: string })?.mode}); capped read ${capped2?.status} at ${capped2?.requests} requests; window filter "${windowed}"`,
   );

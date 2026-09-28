@@ -67,8 +67,8 @@ export async function affinityProperties(ctx: AffinityContext) {
     const c2 = aff.affinity({ transport: s5.transport, key: KEY, sleep });
     const gaveUp = await attempt(() => c2.get('/v2/auth/whoami'));
     check(
-      'A 429 waits for the reset Affinity gives, tries again, and gives up after four tries',
-      got === null && slept[0] === 3000 && gaveUp instanceof aff.AffinityError && s5.calls.length === 4,
+      'A 429 waits at least the server reset and backoff, then gives up after four tries',
+      got === null && slept[0] === 5000 && gaveUp instanceof aff.AffinityError && s5.calls.length === 4,
       `first: waited ${slept[0]} ms then succeeded: ${got === null}; always-429: ${s5.calls.length} tries, then ${gaveUp?.name}`,
     );
   }

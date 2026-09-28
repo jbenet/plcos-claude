@@ -1,7 +1,8 @@
 import { getDb } from '@/lib/db';
 import { finishRun, landRaw, latestRaw, latestRun, progressRun, startRun, type SyncRun } from '@/modules/sources';
-import { AffinityRefused, type Query } from './client';
+import { AffinityRequestCap, retryableReadError, type Query } from './client';
 import { affinity } from './index';
+import { AFFINITY_ORIGIN } from './fetch';
 
 /**
  * Every meeting on the team's calendars, from Affinity's calendar sync (N54). Juan, 23 Sep: "if
@@ -56,6 +57,8 @@ const MARGIN_MS = 86_400_000;
 const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 export interface MeetingsRunDetail {
+  began?: string;
+  checkpoint?: { filters: string[]; phase: number; next: string; query?: Query } | null;
   mode?: 'window' | 'since';
   window?: string;
   since?: string | null;
@@ -72,10 +75,18 @@ export interface MeetingsRunDetail {
 export async function readMeetings(runBy: string | null, opts: { cap?: number; full?: boolean; rest?: boolean; overrides?: Parameters<typeof affinity>[0] } = {}): Promise<SyncRun | null> {
   const most = opts.rest ? MEETINGS_CAP_REST : MEETINGS_CAP;
   const cap = Math.min(opts.cap ?? most, most);
+  if (!Number.isSafeInteger(cap) || cap < 1) throw new Error('Meetings cap must be a positive integer.');
+  const previous = await latestRun(SOURCE, KIND);
+  const previousDetail = previous?.detail as MeetingsRunDetail | undefined;
+  const resume = !opts.full && previous?.status !== 'ok' ? previousDetail?.checkpoint : null;
   const prior = await latestRun(SOURCE, KIND, 'ok');
   const priorThrough = (prior?.detail as MeetingsRunDetail | undefined)?.through;
   const since = !opts.full && priorThrough ? new Date(new Date(priorThrough).getTime() - MARGIN_MS) : null;
-  const began = new Date();
+  const began = new Date(resume && previousDetail?.began ? previousDetail.began : Date.now());
+  const filters = resume?.filters ?? (since ? [`createdAt>=${iso(since)}`, `updatedAt>=${iso(since)}`] : [`startTime>=${WINDOW}`]);
+  let phase = resume?.phase ?? 0;
+  let next: string | null = resume?.next ?? '/v2/meetings';
+  let query: Query | undefined = resume ? resume.query : { limit: PAGE, filter: filters[phase] };
   const run = await startRun(SOURCE, KIND, runBy);
   let requests = 0;
   let records = 0;
@@ -85,24 +96,28 @@ export async function readMeetings(runBy: string | null, opts: { cap?: number; f
   let truncatedAttendees = 0;
   const seen = new Set<number>();
   const detail: MeetingsRunDetail & Record<string, unknown> = {
-    mode: since ? 'since' : 'window', window: WINDOW, since: since ? iso(since) : null, cap,
+    mode: resume ? previousDetail?.mode : since ? 'since' : 'window', window: WINDOW,
+    since: resume ? previousDetail?.since : since ? iso(since) : null, cap, began: iso(began),
   };
-  const finish = (status: 'ok' | 'failed', note: string, extra: Partial<MeetingsRunDetail> = {}) =>
-    finishRun(run, { status, requests, records, newRecords: fresh, note, detail: { ...detail, ...extra, withAttendees, ahead, truncatedAttendees } });
+  const saveCursor = () => {
+    detail.resume = next;
+    detail.checkpoint = next ? { filters, phase, next, query } : null;
+  };
+  const finish = (status: 'ok' | 'failed' | 'held', note: string) =>
+    finishRun(run, { status, requests, records, newRecords: fresh, note, detail: { ...detail, withAttendees, ahead, truncatedAttendees } });
 
   try {
-    const client = affinity({ ...opts.overrides, runId: String(run) });
-    const filters = since ? [`createdAt>=${iso(since)}`, `updatedAt>=${iso(since)}`] : [`startTime>=${WINDOW}`];
-    for (const filter of filters) {
-      let next: string | null = '/v2/meetings';
-      let query: Query | undefined = { limit: PAGE, filter };
+    const client = affinity({ ...opts.overrides, runId: String(run), beforeAttempt: () => {
+      if (requests >= cap) throw new AffinityRequestCap('Meetings request cap reached.');
+      requests++;
+    } });
+    while (phase < filters.length) {
       while (next) {
-        if (requests >= cap) {
-          await finish('failed', `Stopped at the cap of ${cap} requests with ${records} meetings read; there are more. Nothing read is lost.`, { stoppedAtCap: true, resume: next });
-          return latestRun(SOURCE, KIND);
-        }
+        saveCursor();
+        await progressRun(run, { requests, records, newRecords: fresh, note: `${records} meetings so far`, detail });
+        if (requests >= cap) throw new AffinityRequestCap('Meetings request cap reached.');
         const page: { data?: AffinityMeeting[]; pagination?: { nextUrl?: string | null } } = await client.get(next, query);
-        requests++;
+        if (!Array.isArray(page.data)) throw new Error('Meetings response is missing its data array; cursor was not advanced.');
         for (const m of page.data ?? []) {
           if (seen.has(m.id)) continue;
           seen.add(m.id);
@@ -112,15 +127,26 @@ export async function readMeetings(runBy: string | null, opts: { cap?: number; f
           if (m.attendeesPreview && m.attendeesPreview.totalCount > m.attendeesPreview.data.length) truncatedAttendees++;
           if (await landRaw({ source: SOURCE, kind: 'meeting', sourceId: String(m.id), sourceUpdatedAt: new Date(m.updatedAt ?? m.createdAt), payload: m })) fresh++;
         }
-        await progressRun(run, { requests, records, newRecords: fresh, note: `${records} meetings so far` });
         next = page.pagination?.nextUrl ?? null;
+        if (next) {
+          const url = new URL(next, AFFINITY_ORIGIN);
+          if (!url.searchParams.has('filter')) url.searchParams.set('filter', filters[phase]!);
+          if (!url.searchParams.has('limit')) url.searchParams.set('limit', String(PAGE));
+          next = url.toString();
+        }
         query = undefined;
       }
+      phase++;
+      if (phase < filters.length) { next = '/v2/meetings'; query = { limit: PAGE, filter: filters[phase] }; }
     }
+    saveCursor();
     detail.through = iso(began);
     await finish('ok', `${records} meetings read in ${requests} requests · ${fresh} new or changed · ${ahead} still ahead`);
   } catch (err) {
-    await finish('failed', err instanceof AffinityRefused ? `Refused: ${err.message}` : err instanceof Error ? err.message : 'unknown error');
+    saveCursor();
+    detail.stoppedAtCap = err instanceof AffinityRequestCap;
+    const paused = detail.stoppedAtCap || retryableReadError(err);
+    await finish(paused ? 'held' : 'failed', `${paused ? 'Paused; resume retries the unread page. ' : ''}${err instanceof Error ? err.message : 'unknown error'}`);
   }
   return latestRun(SOURCE, KIND);
 }

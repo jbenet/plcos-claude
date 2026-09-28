@@ -66,7 +66,7 @@ async function Meetings() {
       </div>
       <h1>The calendar</h1>
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="chead"><h2>Interaction history</h2><span className="lbl">{history?.status === 'failed' && (history.detail as { stoppedAtCap?: boolean } | null)?.stoppedAtCap ? 'paused at cap' : history?.status ?? 'never read'}</span></div>
+        <div className="chead"><h2>Interaction history</h2><span className="lbl">{history?.status === 'held' ? 'paused' : history?.status === 'failed' && (history.detail as { stoppedAtCap?: boolean } | null)?.stoppedAtCap ? 'paused at cap' : history?.status ?? 'never read'}</span></div>
         <div className="cbody">
           <p>Read people, meetings, emails, calls and chat metadata across the account, including years before 2024 and people outside our lists.
             Only records visible to this Affinity key are available. Truncated participant previews are reported as gaps. Notes have their own read.</p>
@@ -95,7 +95,7 @@ async function Meetings() {
         <div className="chead">
           <h2>Read</h2>
           <span className="lbl">
-            {running ? 'reading now' : run ? `${interrupted ? 'interrupted' : run.status} · ${ago(run.startedAt)}${run.runByName ? ` · ${run.runByName}` : ''}` : 'never read'}
+            {running ? 'reading now' : run ? `${interrupted ? 'interrupted' : run.status === 'held' ? 'paused' : run.status} · ${ago(run.startedAt)}${run.runByName ? ` · ${run.runByName}` : ''}` : 'never read'}
           </span>
         </div>
         <div className="cbody">

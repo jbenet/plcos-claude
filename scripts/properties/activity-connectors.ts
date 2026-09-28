@@ -58,11 +58,11 @@ export async function activityConnectorProperties(check: Check) {
 
     check('ACTIVITY connector bytes measure UTF-8 response bodies', pulled?.bytesIn === Buffer.byteLength(body),
       'The invented multibyte character distinguishes byte length from character count.');
-    check('ACTIVITY retries each contribute an outbound request', affinity.length === 6 && affinity.every(row => row.requests === 1)
+    check('ACTIVITY retries each contribute an outbound request', affinity.length === 7 && affinity.every(row => row.requests === 1)
       && affinity.some(row => row.records === 0 && row.bytesIn === Buffer.byteLength('rate-limited')),
-      'One 429, one successful page, one singleton and three failed network attempts.');
+      'One 429, one successful page, one singleton and four failed network attempts.');
     check('ACTIVITY network failures preserve unknown response bytes', disconnected
-      && affinity.filter(row => row.bytesIn === null && row.records === null).length === 3,
+      && affinity.filter(row => row.bytesIn === null && row.records === null).length === 4,
       'A failed connection is a request attempt, not a known zero-byte response.');
     check('ACTIVITY refused paths do not create requests', refused && calls === 3,
       'The unallowlisted path never reaches the scripted transport or activity log.');
@@ -74,7 +74,7 @@ export async function activityConnectorProperties(check: Check) {
     check('ACTIVITY connector records count pages and singleton entities', page.records.length === 1 && account?.records === 1
       && authentication?.records === 0 && affinity.find(row => row.segment === 'lists')?.records === 1,
       'A singleton list is one record; authentication is not a pulled record.');
-    check('ACTIVITY connector observations remain actual', rows.length === 8 && rows.every(row => row.estimated === false),
+    check('ACTIVITY connector observations remain actual', rows.length === 9 && rows.every(row => row.estimated === false),
       'Unobserved quantities stay null rather than invented.');
     check('ACTIVITY connector logs retain no personal data or credentials', !/Invented|invented-|private|password|username|filter|token|query/i.test(raw),
       'Invented secret values, record names, filter contents and raw run IDs do not survive the log boundary.');

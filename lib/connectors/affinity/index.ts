@@ -31,7 +31,7 @@ export class AffinityKeyMissing extends Error {
  * transport: the demo must never reach Affinity, and the real database must never receive
  * the fake's invented records.
  */
-export function affinity(overrides: Partial<Pick<ClientOptions, 'transport' | 'key' | 'sleep' | 'now' | 'runId' | 'activityRoot'>> = {}): AffinityClient {
+export function affinity(overrides: Partial<Pick<ClientOptions, 'transport' | 'key' | 'sleep' | 'now' | 'runId' | 'activityRoot' | 'beforeAttempt'>> = {}): AffinityClient {
   const real = config.data.profile === 'real';
   const transport = overrides.transport ?? (real ? httpsTransport() : fixtureTransport());
   if (real && transport.kind !== 'https') throw new Error('The real profile talks to Affinity itself, never to a fake.');
@@ -48,6 +48,7 @@ export function affinity(overrides: Partial<Pick<ClientOptions, 'transport' | 'k
     },
     log: logRequest,
     usedThisMonth: () => requestsThisMonth('affinity'),
+    beforeAttempt: overrides.beforeAttempt,
     sleep: overrides.sleep,
     now: overrides.now,
     runId: overrides.runId,
