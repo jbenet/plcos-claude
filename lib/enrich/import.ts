@@ -14,7 +14,7 @@ import { resolveConnectionPeople } from './connection-people';
 import { enrichDir } from './candidates';
 import { check, type Finding, type SourceKind } from './schema';
 import type { Path } from './connect';
-import { readPathRecords, isEntityKey, type ConnectionProblem, type LocatedRecord } from './connection-check';
+import { readPathRecords, isEntityKey, connectionIdentityProblems, dropConflictingItems, type ConnectionProblem, type LocatedRecord } from './connection-check';
 import { readStrategyFiles } from './strategy-files';
 import type { Triage } from './triage';
 
@@ -41,6 +41,9 @@ export interface ImportCounts {
   files: number;
   mapped: number;
   rejected: number;
+  keptWithDroppedItems: number;
+  droppedFacts: number;
+  droppedConnections: number;
   unresolved: number;
   notInSystem: number;
   claims: number;
@@ -80,7 +83,7 @@ async function writeRows(tx: Queryable, sql: string, rows: object[]): Promise<vo
 
 export async function importFindings(runBy: string | null, dir = enrichDir()): Promise<ImportCounts> {
   const activityAt = new Date().toISOString();
-  const counts: ImportCounts = { files: 0, mapped: 0, rejected: 0, unresolved: 0, notInSystem: 0, claims: 0, keptVerified: 0, docs: 0, profiles: 0, withPaths: 0, paths: 0, skippedPaths: 0, skippedRecords: [], strategies: 0, proposed: 0, withdrawn: 0, triaged: 0, problems: [] };
+  const counts: ImportCounts = { files: 0, mapped: 0, rejected: 0, keptWithDroppedItems: 0, droppedFacts: 0, droppedConnections: 0, unresolved: 0, notInSystem: 0, claims: 0, keptVerified: 0, docs: 0, profiles: 0, withPaths: 0, paths: 0, skippedPaths: 0, skippedRecords: [], strategies: 0, proposed: 0, withdrawn: 0, triaged: 0, problems: [] };
   const run = await startRun('enrich', 'import', runBy);
   try {
     const files = (await readdir(join(dir, 'raw')).catch(() => [])).filter((f) => f.endsWith('.json'));
@@ -129,10 +132,31 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       // The same lock used by prospect/portfolio identity writers keeps resolution and writes
       // together when another import or merge is running.
       await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
+      const orgs = await tx.query<{ name: string }>("select display_name as name from identity.entity where entity_type = 'org'");
+      const collisionIssues = connectionIdentityProblems(findingRecords, parsedPaths.allRecords, orgs.map(o => o.name));
+      const dropsByFinding = new Map<Finding, NonNullable<ConnectionProblem['dropped']>>();
+      findings = findings.map(f => {
+        const record = findingRecords.find(r => r.value === f)!;
+        const issue = collisionIssues.find(p => p.file === record.file && p.index === record.index);
+        const kept = dropConflictingItems(f, issue);
+        if (issue?.dropped) {
+          counts.problems.push({ key: f.key, problems: issue.problems.map(p => `dropped ${p}`) });
+          dropsByFinding.set(kept, issue.dropped);
+        }
+        return kept;
+      });
       const keysByFile = await importEntityKeys(tx, [...findings.map(f => f.key), ...strategies.map(s => s.s.key)]);
       findings = findings.flatMap(f => {
         const id = keysByFile.get(f.key);
-        if (id) return [{ ...f, key: id }];
+        if (id) {
+          const drops = dropsByFinding.get(f);
+          if (drops) {
+            counts.keptWithDroppedItems++;
+            counts.droppedFacts += drops.facts.length;
+            counts.droppedConnections += drops.connections.length;
+          }
+          return [{ ...f, key: id }];
+        }
         counts.rejected++;
         counts.problems.push({ key: f.key, problems: [unmappedKey(f.key)] });
         return [];
@@ -193,12 +217,12 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       counts.strategies = acceptedStrategies.length;
       for (const t of triage) t.key = canonicalKeys.get(t.key) ?? t.key;
       counts.pursuitMerges = await consolidatePursuitsInTransaction(tx, runBy);
-      const orgs = await tx.query<{ name: string }>("select display_name as name from identity.entity where entity_type = 'org'");
+      const currentOrgs = await tx.query<{ name: string }>("select display_name as name from identity.entity where entity_type = 'org'");
       const records = parsedPaths.records;
       const origin = new Map<Path, LocatedRecord>();
       paths = await resolveConnectionPeople(tx, records.map((r) => r.value as Path),
         (index, problems) => skipPath(records[index]!, problems),
-        { findings: findingRecords, knownOrgs: orgs.map((o) => o.name), records, onResolved: (index, path) => { origin.set(path, records[index]!); } });
+        { findings: findingRecords, knownOrgs: currentOrgs.map((o) => o.name), records, onResolved: (index, path) => { origin.set(path, records[index]!); } });
       const known = new Set((await tx.query<{ id: string }>(
         `select entity_id::text as id from identity.entity where entity_id = any($1::uuid[])`,
         [[...new Set([...findings.map((f) => f.key), ...paths.map((p) => p.lp), ...triage.map((t) => t.key)])]],
@@ -342,7 +366,7 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
       requests: 0, bytesIn: null, bytesOut: 0, records: counts.mapped });
     await finishRun(run, {
       status: 'ok', requests: 0, records: counts.files, newRecords: counts.claims,
-      note: `${counts.mapped} findings mapped (${counts.claims} claims, ${counts.docs} pages) · ${counts.withPaths} LPs with paths · ${counts.proposed} strategies proposed${counts.rejected ? ` · ${counts.rejected} files refused` : ''}${counts.skippedRecords.length ? ` · ${counts.skippedPaths} paths skipped · ${counts.skippedRecords.length} records skipped` : ''}`,
+      note: `${counts.mapped} findings mapped (${counts.claims} claims, ${counts.docs} pages) · ${counts.keptWithDroppedItems} findings kept with dropped items (${counts.droppedFacts} facts, ${counts.droppedConnections} connections) · ${counts.withPaths} LPs with paths · ${counts.proposed} strategies proposed${counts.rejected ? ` · ${counts.rejected} files refused` : ''}${counts.skippedRecords.length ? ` · ${counts.skippedPaths} paths skipped · ${counts.skippedRecords.length} records skipped` : ''}`,
       detail: { ...counts, problems: counts.problems.slice(0, 50) },
     });
     return counts;

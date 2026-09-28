@@ -1,7 +1,7 @@
 /** TOTYPE regressions use invented identities; no real files or database. */
 import { backfillTargetTypes, targetName } from '../lib/enrich/connection-target';
 import { connectionPaths, type Network, type TeamMember } from '../lib/enrich/connect';
-import { connectionIdentityProblems } from '../lib/enrich/connection-check';
+import { connectionIdentityProblems, dropConflictingItems } from '../lib/enrich/connection-check';
 import { check as findingProblems, type Finding, type Connection } from '../lib/enrich/schema';
 import type { Candidate } from '../lib/enrich/candidates';
 
@@ -36,6 +36,42 @@ export function connectionTargetProperties(check: (name: string, ok: boolean, de
     && !connectionIdentityProblems(located(finding([conn('Quiet Acorn')])), [], ['Quiet Acorn']).length, 'Only explicit target types can conflict; scope is never a type assertion.');
   check('TOTYPE checker reports explicit target conflicts', connectionIdentityProblems(located(finding([conn('Quiet Acorn', 'person', 'firm')])), [], ['Quiet Acorn'])
     .some((p) => p.problems.some((s) => s.includes('toType person'))), 'Firm ownership does not hide a wrong person type.');
+  for (const suffix of ['Family Office', 'Foundation', 'Capital', 'Partners', 'Holdings', 'Trust', 'LLC', 'Ltd', 'Inc']) {
+    const f = finding([conn(`${target.name} ${suffix}`, 'org')]);
+    f.identity.canonical = { name: target.name, org: `${target.name} ${suffix}` };
+    f.facts = [{ field: 'board', value: 'Invented board seat', detail: { company: `${target.name} ${suffix}` },
+      confidence: 'high', source: { url: 'https://example.org/board', kind: 'primary' } }];
+    check(`COLLISION ${suffix} distinguishes a person's namesake organization`,
+      !connectionIdentityProblems(located(f), [], [f.identity.canonical.org!]).length,
+      'Organization words remain in collision names; matching normalization is unchanged.');
+  }
+  for (const toType of ['person', 'org'] as const) {
+    const f = finding([conn(target.name, toType)]);
+    check(`COLLISION own identity yields to explicit ${toType} target`,
+      !connectionIdentityProblems(located(f), [], toType === 'person' ? [target.name] : []).length,
+      'An inferred subject type cannot overrule the explicit item type.');
+  }
+  const ownOrg = finding([conn(target.name, 'org')]);
+  ownOrg.identity.canonical = { name: target.name, org: target.name };
+  check('COLLISION canonical org may be the person’s own name', !connectionIdentityProblems(located(ownOrg), []).length,
+    'The identity is retained without treating its default person type as contrary evidence.');
+  const foundation = finding([conn('Invented Meadow Foundation', 'person'), conn('Quiet Acorn', 'org')]);
+  foundation.identity.canonical = { org: 'Invented Meadow Foundation' };
+  foundation.facts = [{ field: 'role', value: 'Invented role', confidence: 'high', source: { url: 'https://example.org/role', kind: 'primary' } }];
+  const foundationIssue = connectionIdentityProblems(located(foundation), [])[0];
+  const kept = dropConflictingItems(foundation, foundationIssue);
+  check('COLLISION a foundation used as a person drops only that connection',
+    foundationIssue?.dropped?.connections.join() === '0' && kept.connections?.length === 1
+      && kept.facts.length === 1 && kept.identity === foundation.identity && foundation.connections?.length === 2,
+    'The source remains unchanged and valid sibling items survive.');
+  const ambiguous = finding([conn('Invented Dual Name', 'person'), conn('Invented Dual Name', 'org'), conn('Quiet Acorn', 'org')]);
+  ambiguous.facts = [{ ...foundation.facts[0]!, detail: { company: 'Invented Dual Name' } }, foundation.facts[0]!];
+  const issue = connectionIdentityProblems(located(ambiguous), [])[0];
+  const partial = dropConflictingItems(ambiguous, issue);
+  check('COLLISION genuinely ambiguous names still drop conflicting connections and facts',
+    issue?.dropped?.connections.length === 2 && issue.dropped.facts.join() === '0'
+      && partial.connections?.length === 1 && partial.facts.length === 1 && partial.identity === ambiguous.identity,
+    'A conflicting mention cannot discard the rest of a finding.');
   const invalid = finding([conn('Quiet Acorn')]);
   (invalid.connections![0] as unknown as { toType: string }).toType = 'company';
   check('TOTYPE schema rejects unsupported target types', findingProblems(invalid).some((p) => p.includes('connection 0: toType')), 'Legacy omission remains valid, unknown values do not.');

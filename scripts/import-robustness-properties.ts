@@ -106,8 +106,16 @@ export async function importRobustnessProperties(check: (name: string, ok: boole
       && cli.stdout.includes(`raw/${lp}.json index 0: connection 0: unknown warmth kind`)
       && cli.stdout.includes('connections.jsonl index 1:') && cli.stdout.includes('toType person conflicts with target identity'),
       'The CLI composes cross-file checks even when the finding already has a vocabulary problem.');
+    await writeFile(join(cliRaw, `${lp}.json`), JSON.stringify(finding));
+    await writeFile(join(cliRaw, '../connections.jsonl'), '');
+    const partialCli = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), join(process.cwd(), 'scripts/enrich-check.ts')], {
+      cwd: cliRoot, env: { ...process.env, DATA_PROFILE: 'demo', TSX_TSCONFIG_PATH: join(process.cwd(), 'tsconfig.json') }, encoding: 'utf8',
+    });
+    check('COLLISION checker separates item drops from rejected findings', partialCli.status === 0
+      && partialCli.stdout.includes('0 rejected · 1 kept with dropped items') && partialCli.stdout.includes('drop items: connection 0:'),
+      'A collision-only finding remains importable; its indexed problem is still reported.');
     await mkdir(join(dir, 'raw'));
-    await writeFile(join(dir, 'raw', `${lp}.json`), JSON.stringify({ ...finding, connections: [], facts: [{ field: 'role', value: 'Invented operator', source: { url: 'https://example.org/robust-fixture', kind: 'primary' }, confidence: 'high' }] }));
+    await writeFile(join(dir, 'raw', `${lp}.json`), JSON.stringify({ ...finding, facts: [{ field: 'role', value: 'Invented operator', source: { url: 'https://example.org/robust-fixture', kind: 'primary' }, confidence: 'high' }, { field: 'board', value: 'Invented conflicting board', detail: { company: good.name }, source: { url: 'https://example.org/robust-fixture', kind: 'primary' }, confidence: 'high' }] }));
     await writeFile(join(dir, 'raw', `${randomUUID()}.json`), '{bad');
     await writeFile(join(dir, 'connections.jsonl'), [JSON.stringify(path(org)), JSON.stringify(path(wrong)), JSON.stringify(path(good)), '{bad', JSON.stringify({ ...path(good), lp: 'invalid' })].join('\n'));
     await writeFile(join(dir, 'triage.jsonl'), '{bad\n' + JSON.stringify({ key: lp, lane: 'cold', first: null }));
@@ -116,11 +124,18 @@ export async function importRobustnessProperties(check: (name: string, ok: boole
       result.mapped === 1 && result.claims === 1 && result.paths === 1 && result.rejected === 1 && result.skippedPaths === 4
         && result.skippedRecords.length === 5 && result.skippedRecords.some((p) => p.file === 'triage.jsonl' && p.index === 0),
       'Malformed records and conflicting descriptors do not block unrelated research.');
+    const profile = await db.one<{ data: { identity: Finding['identity']; connections: unknown[] } }>(
+      "select data from research.note where entity_id = $1 and kind = 'public_profile'", [lp]);
+    check('COLLISION import counts retained findings separately and drops only conflicting items',
+      result.keptWithDroppedItems === 1 && result.droppedFacts === 1 && result.droppedConnections === 1
+        && result.rejected === 1 && result.problems.some(p => p.problems.some(s => s.startsWith('dropped connection 0:')))
+        && profile?.data.identity.canonical?.org === org.name && profile.data.connections.length === 0,
+      'Valid facts, identity and paths remain importable beside one bad connection and fact.');
     const run = await db.one<{ detail: typeof result }>("select detail from sources.sync_run where source = 'enrich' and kind = 'import' order by id desc limit 1");
-    check('ROBUST the persisted Developer Enrich result lists every skipped path', run?.detail.skippedPaths === 4 && run.detail.skippedRecords.length === 5,
+    check('ROBUST the persisted Developer Enrich result lists every skipped path', run?.detail.skippedPaths === 4 && run.detail.skippedRecords.length === 5 && run.detail.keptWithDroppedItems === 1,
       'Counts and file/index/reason diagnostics survive the redirect.');
     const retry = await withDb(db, () => importFindings(null, dir));
-    check('ROBUST retry keeps valid imports and skip counts stable', retry.paths === 1 && retry.skippedPaths === 4 && retry.claims === 1, 'No duplicate connector identity on retry.');
+    check('ROBUST retry keeps valid imports and skip counts stable', retry.paths === 1 && retry.skippedPaths === 4 && retry.claims === 1 && retry.keptWithDroppedItems === 1, 'No duplicate connector identity on retry.');
 
     await writeFile(join(dir, 'connections.jsonl'), JSON.stringify({ ...path(good), tie: { kind: 'unsupported_fixture_kind' } }));
     const skippedOnly = await withDb(db, () => importFindings(null, dir));

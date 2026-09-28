@@ -97,13 +97,13 @@ async function main() {
   for (const org of [...(network.orgs ?? []), ...(network.backers ?? []), ...(network.portfolio ?? [])]) knownOrgs.push(org.name, ...(org.aliases ?? []));
   const identityProblems = connectionIdentityProblems(findingRecords, pathInput.allRecords, knownOrgs);
   for (const issue of [...pathInput.skipped, ...identityProblems]) {
-    console.log(`  ${issue.file} index ${issue.index}: ${issue.problems.join('; ')}`);
-    if (issue.file.startsWith('raw/')) badFiles.add(issue.file.slice(4));
+    console.log(`  ${issue.file} index ${issue.index}: ${issue.dropped ? 'drop items: ' : ''}${issue.problems.join('; ')}`);
   }
+  const keptWithDrops = identityProblems.filter(p => p.dropped && !badFiles.has(p.file.slice(4))).length;
   bad += badFiles.size;
   const pathBad = new Set([...pathInput.skipped, ...identityProblems.filter((p) => p.file === 'connections.jsonl')].map((p) => p.index)).size;
   if (pathBad) console.log(`${pathBad} W3 paths with problems (indices start at zero)`);
-  console.log(`${files.length} findings · ${bad} with problems · identity ${JSON.stringify(tally)} · method ${JSON.stringify(method)}`);
+  console.log(`${files.length} findings · ${bad} rejected · ${keptWithDrops} kept with dropped items · identity ${JSON.stringify(tally)} · method ${JSON.stringify(method)}`);
   // 1.16: nothing in a special category. A word here isn't always one (an organization's name can
   // carry it), so these are for a person to review, not refused.
   if (special.length) console.log(`  review under 1.16 — a religious or political term in ${special.length} findings: ${special.map((k) => k.slice(0, 8)).join(', ')}`);
