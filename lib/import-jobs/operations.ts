@@ -153,7 +153,10 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
         : operation==='history' ? await (await import('@/lib/connectors/affinity/history')).readHistory(actor,options)
         : operation==='translate' ? await (await import('@/lib/connectors/affinity/translate')).translate(actor)
         : null;
-      // A held or failed connector receipt is not a successful import.
+      // A read that stopped at its request cap finished its chunk: the receipt keeps the resume point, and the job
+      // completes. Any other held or failed connector receipt is not a successful import.
+      const capped = run?.status==='failed' && Boolean((run.detail as {stoppedAtCap?:boolean}|null)?.stoppedAtCap);
+      if (capped) return {records:run!.records,requests:run!.requests,stoppedAtCap:true};
       if (!run || run.status!=='ok') throw new Error('Affinity operation stopped; inspect its run receipt.');
       if (operation==='translate') {
         await progress('Proposing evidenced ladder changes',1,3);
