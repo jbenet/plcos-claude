@@ -161,26 +161,20 @@ export async function availabilityProperties(check: Check) {
     await mkdir(scratch, { recursive: true });
     const timer = fakeClock(), held = heldDb(timer.clock);
     const active = held.db.query('held'); await held.started;
-    let lookupStarted!: () => void;
-    const lookup = new Promise<void>(resolve => { lookupStarted = resolve; });
     const issue = await withDb(held.db, () => fileFeedback({
-      handle: 'invented-reporter',
-      resolveUser: async q => {
-        lookupStarted();
-        await q.query('reporter-lookup');
-        throw new Error('Invented missing reporter');
-      },
+      id: '70000000-0000-4000-8000-000000000001', handle: 'invented-reporter',
+      name: 'Invented Reporter', initials: 'IR', role: 'team', email: 'invented@example.invalid',
     }, { title: ' Invented blocked database ', body: 'The page did not load.\n\n![First](attachment:1)\n\n![Second](attachment:2)', attachments: [
       { kind: 'screenshot', contentType: 'image/png', base64: Buffer.from('invented-screen').toString('base64') },
       { kind: 'image', contentType: 'image/png', base64: Buffer.from('invented-first').toString('base64') },
       { kind: 'image', contentType: 'image/png', base64: Buffer.from('invented-second').toString('base64') },
     ], imageOffset: 1, kind: 'bug', priority: 'P1', page: '/invented', context: {} }, { clock: timer.clock, sink: fileIssueSink(scratch) }));
-    await lookup;
+    await new Promise<void>(resolve => setImmediate(resolve));
     const file = await readFile(issue.location, 'utf8');
-    check('PERF3 feedback writes its file and returns while reporter lookup is queued',
-      file.includes('The page did not load.') && file.includes('invented-reporter (unverified)')
-        && file.includes('unverified local cookie') && held.calls.join('|') === 'held',
-      'The actual fileFeedback service files to a scratch directory without waiting for authentication or a database receipt.');
+    check('PERF3 feedback writes a resolved reporter while metadata is queued',
+      file.includes('The page did not load.') && file.includes('reporter: invented-reporter')
+        && file.includes('verified') && !file.includes('unverified') && held.calls.join('|') === 'held',
+      'The actual fileFeedback service files to a scratch directory with its resolved actor without waiting for a database receipt.');
     const attached = await Promise.all(issue.attachments.map(path => readFile(`${scratch}/${path}`, 'utf8')));
     check('0064 all attachments and body references are durable before the blocked database responds',
       attached.join('|') === 'invented-screen|invented-first|invented-second'
@@ -190,20 +184,20 @@ export async function availabilityProperties(check: Check) {
     timer.advance(250);
     held.release(); await active;
     await held.db.query('healthy-page');
-    check('PERF3 feedback metadata times out and its queued lookup never runs later',
+    check('PERF3 feedback metadata times out and its queued write never runs later',
       held.calls.join('|') === 'held|healthy-page' && (await readFile(issue.location, 'utf8')) === file,
-      'The file remains the receipt; no ghost lookup or metadata write starts when the database becomes free.');
+      'The file remains the receipt; no ghost metadata write starts when the database becomes free.');
     check('0064 attachment bytes survive abandoned metadata work',
       (await Promise.all(issue.attachments.map(path => readFile(`${scratch}/${path}`, 'utf8')))).join('|') === attached.join('|'),
       'Database timeout leaves every attachment unchanged.');
-    const failed = await withDb(held.db, () => fileFeedback({ handle: 'invented-reporter', resolveUser: async () => { throw new Error('Invented lookup failure'); } }, {
+    const failed = await withDb(held.db, () => fileFeedback(null, {
       title: 'Invented failed metadata', body: '![Retained](attachment:1)', kind: 'bug', priority: 'P2', page: '/invented', context: {},
       attachments: [{ kind: 'image', contentType: 'image/png', base64: Buffer.from('invented-retained').toString('base64') }],
     }, { sink: fileIssueSink(scratch) }));
-    check('0064 failed reporter lookup still returns a complete file receipt with attachments',
+    check('0064 unresolvable reporter still returns a complete file receipt with attachments',
       (await readFile(failed.location, 'utf8')).includes('![Retained](attachments/0002-image-1.png)')
         && await readFile(`${scratch}/${failed.attachments[0]}`, 'utf8') === 'invented-retained',
-      'Failing best-effort metadata cannot roll back the attachment files.');
+      'No active reporter still retains the issue and attachments without inventing an audit actor.');
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

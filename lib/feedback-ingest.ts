@@ -14,7 +14,6 @@
  */
 import { join } from 'node:path';
 import { config } from '@/config/deployment';
-import type { Queryable } from '@/lib/db';
 import type { QueueClock } from '@/lib/db/scheduling';
 import type { IssueSink } from '@/lib/issues';
 import { attachmentsOf, inboxIds, markFiled, markRefused, readEntry, type InboxEntry } from './feedback-inbox';
@@ -49,37 +48,33 @@ class Refusal extends Error {}
 async function fileOne(entry: InboxEntry, opts: IngestOptions): Promise<{ id: string | null; location: string | null; title: string }> {
   if (entry.kind === 'issue' && opts.fileIssue) return opts.fileIssue(entry);
   if (entry.kind === 'issue') {
-    const [{ fileFeedback }, { withBackgroundDb }] = await Promise.all([import('@/modules/platform'), import('@/lib/db/scheduling')]);
-    const handle = entry.reporter || 'unknown reporter';
+    const [{ fileFeedback }, { withBackgroundDb }, { resolveLocalUser }] = await Promise.all([
+      import('@/modules/platform'), import('@/lib/db/scheduling'), import('@/lib/auth/local-user'),
+    ]);
     const r = entry.request;
-    // Off the request, so the database row and audit entry may wait for the database — as
-    // maintenance, behind any page's reads — up to METADATA_WAIT_MS. The issue file is written first either way.
-    const issue = await withBackgroundDb(() => fileFeedback({
-      handle,
-      // Looked up when the database answers, as the route did: the cookie's handle, else the first user.
-      resolveUser: async (q: Queryable) => {
-        const { getUserByHandle, listUsers } = await import('@/modules/platform');
-        const found = entry.reporter ? await getUserByHandle(entry.reporter, q) : null;
-        const user = found ?? (await listUsers(q))[0];
-        if (!user) throw new Error('No users');
-        return user;
-      },
-    }, {
-      title: r.title.trim() || r.body, body: r.body, kind: r.kind as never, priority: r.priority as never,
-      page: r.page, context: { ...r.context, journaledAt: entry.receivedAt }, attachments: attachmentsOf(r),
-      imageOffset: r.imageOffset, clientId: entry.clientId,
-    }, { metadataBudgetMs: METADATA_WAIT_MS, ...(opts.sink ? { sink: opts.sink } : {}), ...(opts.clock ? { clock: opts.clock } : {}) }));
+    // Resolve identity off the request, at background priority behind page reads. After the
+    // file is durable, metadata may wait up to METADATA_WAIT_MS without delaying that receipt.
+    const issue = await withBackgroundDb(async () => {
+      // Resolve before writing the issue receipt. A busy or failed lookup leaves the durable
+      // journal pending; only a successful lookup with no active users means unknown.
+      const user = await resolveLocalUser(entry.reporter);
+      return fileFeedback(user, {
+        title: r.title.trim() || r.body, body: r.body, kind: r.kind as never, priority: r.priority as never,
+        page: r.page, context: { ...r.context, journaledAt: entry.receivedAt }, attachments: attachmentsOf(r),
+        imageOffset: r.imageOffset, clientId: entry.clientId,
+      }, { metadataBudgetMs: METADATA_WAIT_MS, ...(opts.sink ? { sink: opts.sink } : {}), ...(opts.clock ? { clock: opts.clock } : {}) });
+    });
     return { id: issue.id, location: issue.location, title: issue.title };
   }
 
   // A connection note needs its author and its LP, both from the database. Busy: it waits.
-  const [{ getUserByHandle, listUsers }, { getEntity }, { feedbackInput, saveConnectionFeedback }] = await Promise.all([
-    import('@/modules/platform'), import('@/modules/identity'), import('@/lib/enrich/feedback'),
+  const [{ resolveLocalUser }, { getEntity }, { feedbackInput, saveConnectionFeedback }] = await Promise.all([
+    import('@/lib/auth/local-user'), import('@/modules/identity'), import('@/lib/enrich/feedback'),
   ]);
   let input;
   try { input = feedbackInput({ id: entry.clientId, ...entry.request }); } catch (e) { throw new Refusal(e instanceof Error ? e.message : 'Invalid note.'); }
   // As the route did before the journal: the cookie's user, else the first active one (lib/auth/local.ts).
-  const user = (entry.reporter ? await getUserByHandle(entry.reporter) : null) ?? (await listUsers())[0];
+  const user = await resolveLocalUser(entry.reporter);
   if (!user) throw new Refusal('No active team member for this note. Choose one in the rail and write it again.');
   if (!await getEntity(input.lp)) throw new Refusal('This LP is no longer available.');
   const enrich = opts.enrichRoot ?? join(process.cwd(), config.data.root, 'enrich');

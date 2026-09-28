@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import { config } from '../config/deployment';
 import { fileIssueSink } from '../lib/issues/file';
 import { fileFeedback } from '../modules/platform/service';
+import { withDb, type Db } from '../lib/db';
 import type { IssueAttachment } from '../lib/issues';
 import { packAttachments } from '../components/ui/MarkdownField';
 
@@ -98,10 +99,16 @@ async function persist(payload: Payload, expected: number, stalledMetadata = fal
     ...payload.images.map(image => ({ kind: 'image' as const, contentType: 'image/png' as const, name: image.name, base64: image.dataUrl.split(',')[1]! })),
   ];
   const sink = fileIssueSink(relative(process.cwd(), scratch));
-  const issue = await fileFeedback({ handle: 'fictional-tester', resolveUser: async () => {
-    if (stalledMetadata) return new Promise<never>(() => {});
-    throw new Error('Invented metadata failure');
-  } }, { ...payload, attachments }, { sink });
+  const metadataDb: Db = {
+    kind: 'pglite',
+    query: async () => { if (stalledMetadata) return new Promise<never>(() => {}); throw new Error('Invented metadata failure'); },
+    one: async () => { if (stalledMetadata) return new Promise<never>(() => {}); throw new Error('Invented metadata failure'); },
+    exec: async () => {}, transaction: async fn => fn(metadataDb), close: async () => {},
+  };
+  const issue = await withDb(metadataDb, () => fileFeedback({
+    id: '70000000-0000-4000-8000-000000000001', handle: 'fictional-tester',
+    name: 'Fictional Tester', initials: 'FT', role: 'team', email: 'tester@example.invalid',
+  }, { ...payload, attachments }, { sink }));
   assert.equal(issue.attachments.length, attachments.length);
   const markdown = await readFile(issue.location, 'utf8');
   for (const [index, attachment] of attachments.entries()) {

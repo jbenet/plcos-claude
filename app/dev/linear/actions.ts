@@ -29,7 +29,7 @@ export async function syncLinearAction(_prev: { error?: string; message?: string
 export async function rebuildLinearAction(_prev: { error?: string; message?: string }, _form: FormData): Promise<{ error?: string; message?: string }> {
   if (config.data.profile !== 'demo' && !linearLiveServer()) return { error: 'Purge and re-map Linear from Developer → Linear on the live server.' };
   try {
-    const user = await (await auth()).currentUser();
+    const user = await requireServerActionMutation();
     await queueImportJob(await getDb(), 'linear-rebuild', user.id);
     return { message: 'Purge and re-map queued. Progress appears above; reload for the allowed-team counts.' };
   } catch {

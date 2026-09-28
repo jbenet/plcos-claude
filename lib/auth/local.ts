@@ -5,6 +5,7 @@ import { config } from '@/config/deployment';
 import type { AppUser, AuthProvider } from './index';
 
 import { USER_COOKIE } from './cookie';
+import { resolveLocalUser } from './local-user';
 
 export { USER_COOKIE };
 
@@ -21,19 +22,15 @@ export function localAuth(): AuthProvider {
     async currentUser(q?: Queryable): Promise<AppUser> {
       const jar = await cookies();
       const handle = jar.get(USER_COOKIE)?.value;
-      if (handle) {
-        const found = await getUserByHandle(handle, q);
-        if (found) return found;
-      }
-      const all = await listUsers(q);
-      if (all.length === 0) {
+      const user = await resolveLocalUser(handle, q);
+      if (!user) {
         throw new Error(
           config.data.profile === 'real'
             ? 'No users in platform.app_user. The real profile loads its team from data/real/init.jsonc.'
             : 'No users in platform.app_user. Run `npm run demo` to seed.',
         );
       }
-      return all[0]!;
+      return user;
     },
 
     listUsers,

@@ -247,6 +247,8 @@ export async function feedbackJournalProperties(check: Check) {
     }
   }
 
+  await reporterProperties(check);
+
   // ---------------------------------------------------------------- the route never waits on the database
   {
     const { readFileSync, existsSync } = await import('node:fs');
@@ -280,5 +282,85 @@ export async function feedbackJournalProperties(check: Check) {
     check('Feedback journal (server): the feedback routes load nothing that opens or waits on the database',
       bad.length === 0 && chains.every(([, files]) => files.includes('lib/feedback-inbox.ts')),
       bad.length ? bad.join('; ') : `${chains.map(([r, files]) => `${r}: ${files.length} files`).join('; ')}, none under lib/db, modules or auth`);
+  }
+}
+
+/** The journal selector is untrusted; only resolved app_user rows can name the reporter. */
+async function reporterProperties(check: Check) {
+  const [{ openTestDb }, { migrate }, { withDb }, { mkdtemp, rm }, { tmpdir }, { join, relative }, inbox, { ingestInbox }, { fileIssueSink }] = await Promise.all([
+    import('./database'), import('../../lib/db/migrate'), import('../../lib/db'), import('node:fs/promises'),
+    import('node:os'), import('node:path'), import('../../lib/feedback-inbox'), import('../../lib/feedback-ingest'), import('../../lib/issues/file'),
+  ]);
+  const db = await openTestDb();
+  const root = await mkdtemp(join(tmpdir(), 'plcos-reporter-fixture-'));
+  const sink = fileIssueSink(relative(process.cwd(), root));
+  const opts = { issuesRoot: root, sink };
+  const report = (reporter: string | null): import('../../lib/feedback-inbox').InboxEntry => ({
+    kind: 'issue', clientId: newRequestKey(), receivedAt: '2026-09-28T00:00:00.000Z', reporter,
+    request: {
+      title: 'Invented reporter fixture', body: 'Fixture only.', kind: 'bug', priority: 'P2', page: '/invented',
+      context: { user: 'forged-client', reporterVerification: 'forged-client' }, screenshots: [], images: [], imageOffset: 0,
+    },
+  });
+  try {
+    await migrate(db);
+    await db.exec(`insert into platform.app_user (handle,name,initials,role,email,active,created_at) values
+      ('fixture-first','Invented First','IF','team','first@example.invalid',true,'2026-01-01'),
+      ('fixture-selected','Invented Selected','IS','team','selected@example.invalid',true,'2026-01-02'),
+      ('fixture-inactive','Invented Inactive','II','team','inactive@example.invalid',false,'2026-01-03')`);
+    for (const selector of ['fixture-selected', null, 'forged-selector', 'fixture-inactive']) await inbox.journal(root, report(selector));
+    const filed = await withDb(db, () => ingestInbox(opts));
+    const issues = await sink.list({});
+    check('Feedback reporter: journal selectors resolve to active app_users before the file is written',
+      filed.filed === 4 && issues.filter(i => i.reporter === 'fixture-selected').length === 1
+        && issues.filter(i => i.reporter === 'fixture-first').length === 3
+        && issues.every(i => i.context?.user === i.reporter && i.context?.reporterVerification === 'verified'),
+      'Selected, missing, forged and inactive selectors use the same server resolver as local auth; client context cannot replace the reporter.');
+
+    // A query failure is not evidence that no user exists. Keep the journal intact until retry.
+    const waiting = report('fixture-selected');
+    await inbox.journal(root, waiting);
+    const unavailable: import('../../lib/db').Db = {
+      kind: db.kind, query: db.query.bind(db), exec: db.exec.bind(db), transaction: db.transaction.bind(db), close: async () => {},
+      one: async () => { throw new Error('Invented reporter lookup unavailable'); },
+    };
+    const failed = await withDb(unavailable, () => ingestInbox(opts));
+    const pending = await inbox.inboxStatus(root, waiting.clientId);
+    const retried = await withDb(db, () => ingestInbox(opts));
+    check('Feedback reporter: a failed lookup stays journaled and retries with a resolved actor',
+      failed.failed === 1 && pending?.state === 'journaled' && retried.filed === 1
+        && (await sink.list({})).filter(i => i.reporter === 'fixture-selected').length === 2,
+      'A temporary database failure never files unknown or drops the durable report.');
+
+    // Metadata is asynchronous. Wait for its completion before inspecting identity and closing this fixture database.
+    let audits: Array<{ handle: string; subject_id: string | null }> = [];
+    for (let attempt = 0; attempt < 200; attempt++) {
+      audits = await db.query('select u.handle,a.subject_id from platform.audit_log a join platform.app_user u on u.id=a.actor_id where a.action = $1', ['feedback.filed']);
+      if (audits.length === 5) break;
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    const metadata = await db.query<{ issue_ref: string; handle: string; context: Record<string, unknown> }>(
+      'select f.issue_ref,u.handle,f.context from platform.feedback f join platform.app_user u on u.id=f.reporter_id');
+    const known = await sink.list({});
+    check('Feedback reporter: issue, database receipt and audit share the resolved app_user',
+      audits.length === 5 && metadata.length === 5
+        && metadata.every(m => known.find(i => i.id === m.issue_ref)?.reporter === m.handle && m.context.user === m.handle
+          && audits.some(a => a.subject_id === m.issue_ref && a.handle === m.handle)),
+      'Both database backends persist five invented reports with verified actor metadata.');
+
+    await db.exec('update platform.app_user set active = false');
+    const unresolved = report('fixture-selected');
+    await inbox.journal(root, unresolved);
+    const unknown = await withDb(db, () => ingestInbox(opts));
+    const unknownIssues = (await sink.list({})).filter(i => i.reporter === 'unknown');
+    check('Feedback reporter: unknown is reserved for a successful lookup with no active users',
+      unknown.filed === 1 && unknownIssues.length === 1
+        && unknownIssues[0]!.context?.user === 'unknown'
+        && unknownIssues[0]!.context?.reporterVerification === 'no active app_user resolved'
+        && (await db.query('select id from platform.feedback')).length === 5,
+      'No invented user or audit actor is substituted when the active app_user set is empty.');
+  } finally {
+    await db.close();
+    await rm(root, { recursive: true, force: true });
   }
 }

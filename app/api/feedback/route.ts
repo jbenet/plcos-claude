@@ -14,8 +14,10 @@
  */
 import { join } from 'node:path';
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { config } from '@/config/deployment';
 import { feedbackHome } from '@/config/ports';
+import { USER_COOKIE } from '@/lib/auth/cookie';
 import { isClientId } from '@/lib/feedback-journal';
 import { checkReport, inboxStatus, journal } from '@/lib/feedback-inbox';
 import { newRequestKey } from '@/lib/request-key';
@@ -28,9 +30,11 @@ const fileLater = () => setImmediate(() => {
 });
 
 export async function POST(req: Request) {
-  const { mutationRouteGuard } = await import('@/lib/mutation-guard');
-  const guard = await mutationRouteGuard(req);
-  if ('response' in guard) return guard.response;
+  // Origin and profile only: no database here. The journal must accept a note while the database is busy
+  // (docs/deploy/03); the reporter is resolved server-side at ingest from the selector cookie.
+  const { requireMutationOrigin, requireMutationProfile, MutationGuardError } = await import('@/lib/mutation-guard');
+  try { requireMutationOrigin(req); requireMutationProfile(); }
+  catch (e) { if (e instanceof MutationGuardError) return NextResponse.json({ error: e.message }, { status: e.status }); throw e; }
   // Only the live app files (docs/COLLAB.md): a branch filing would take numbers the live app
   // gives out too. The box on a dev worktree says so; this refuses anything that asks anyway.
   if (!feedbackHome(config.data.profile).filesHere) {
@@ -55,7 +59,9 @@ export async function POST(req: Request) {
   if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: checked.status });
 
   try {
-    const reporter = guard.user.handle;
+    // Capture only the local selector here. Ingest resolves app_user before naming the reporter;
+    // a reporter supplied in the request body is never used.
+    const reporter = (await cookies()).get(USER_COOKIE)?.value || null;
     const done = await journal(issuesRoot(), {
       kind: 'issue', clientId, receivedAt: new Date().toISOString(), reporter, request: checked.value,
     });

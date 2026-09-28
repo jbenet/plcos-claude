@@ -179,3 +179,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Linear — PLC-only sync and replica rebuild](entries/linear-plc-only.md)
 
 - [Security fixes — mutations, routing, approvals and audit history](entries/security-fixes.md)
+- [Feedback reporters and the decision log](entries/feedback-reporter.md)
