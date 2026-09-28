@@ -1,0 +1,108 @@
+<title>Capital OS Hosting Request</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f6f7f8; --paper:#ffffff; --ink:#1b2430; --muted:#5b6674; --rule:#dde2e8;
+  --accent:#2f5f8a; --accent-soft:#e7eef5; --must:#8a3b2f; --nice:#4d6b3a;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#12161b; --paper:#1a2027; --ink:#e3e8ee; --muted:#9aa6b3; --rule:#2c343e;
+    --accent:#86b1d8; --accent-soft:#1f2c3a; --must:#e09a8c; --nice:#a8c894; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12161b; --paper:#1a2027; --ink:#e3e8ee; --muted:#9aa6b3; --rule:#2c343e;
+  --accent:#86b1d8; --accent-soft:#1f2c3a; --must:#e09a8c; --nice:#a8c894; color-scheme:dark;
+}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 var(--sans);padding-inline:16px;padding-block:32px 64px}
+main{max-width:860px;margin:0 auto;background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:clamp(20px,5vw,48px)}
+h1{font-size:28px;line-height:1.2;margin:0 0 6px;font-weight:600;text-wrap:balance}
+h2{font-size:18px;margin:36px 0 10px;font-weight:600;text-wrap:balance}
+p,li{max-width:68ch}
+.meta{color:var(--muted);font-size:13px;margin:0 0 20px}
+.lede{font-size:16px}
+code,.mono{font-family:var(--mono);font-size:13px}
+code{background:var(--accent-soft);padding:1px 5px;border-radius:3px}
+.tbl{overflow-x:auto;margin:8px 0}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--rule)}
+th{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:500}
+td:first-child{white-space:nowrap;font-weight:500}
+.tag{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:3px;border:1px solid currentColor}
+.must{color:var(--must)} .nice{color:var(--nice)}
+.diagram{border:1px solid var(--rule);border-radius:4px;padding:12px;overflow-x:auto;background:var(--bg)}
+ol.q li,ul li{margin:6px 0}
+.note{border-left:3px solid var(--accent);padding:4px 0 4px 14px;color:var(--muted);margin:14px 0}
+</style>
+
+<main>
+  <h1>Capital OS hosting request</h1>
+  <p class="meta">For PL Infra · from PL Capital (Juan Benet) · 28 September 2026</p>
+
+  <p class="lede">Capital OS is PL Capital's fundraising tool. The team of about ten people uses it for the LP pipeline, research on prospective investors, and raise strategy across our vehicles. Today it runs on a single Mac. We'd like to run it as <strong>one LabOS app</strong>, with limits a little above the kit defaults. Below are a short summary of the architecture, the specific ask, and a few questions.</p>
+
+  <h2>Architecture summary</h2>
+  <ul>
+    <li><strong>One container.</strong> A Next.js 16 server (<code>next start</code>, Node) built from the LabOS kit Dockerfile. It serves the pages and the server actions. Heavy imports run in <strong>one child process</strong>, so pages keep answering while a job writes. A timer inside the same process runs the daily syncs and the backup.</li>
+    <li><strong>One database.</strong> Postgres through the kit's provisioned database, reached over TLS with the certificate verified against the RDS CA bundle. It holds all app data. Size today: about 640 MB.</li>
+    <li><strong>One disk.</strong> A persistent volume for about 1 GB of working files: research outputs, import files, the feedback journal and a run log.</li>
+    <li><strong>Sign-in.</strong> LabOS only. The server forwards the LabOS token to <code>/me</code>, never stores or logs it, and maps the <code>uid</code> to an app user. Anyone with access to the app can read.</li>
+    <li><strong>Outbound calls.</strong> Read-only API syncs from Affinity and Linear. Research runs through the Anthropic API. Its web search and fetch run on Anthropic's side, so the container needs no general internet access. The app sends no email or messages and writes nothing to the outside systems.</li>
+    <li><strong>Deploys.</strong> The kit flow, with an owner approval each time. We build the image from a clean <code>git archive</code> of a tested commit, and the build fails if any data file would be included. <code>GET /health</code> returns 200. No <code>X-Frame-Options</code> header, so it embeds in os.pl.xyz.</li>
+  </ul>
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  U[Team browser] --> L[LabOS sign-in<br/>os.pl.xyz]
+  L --> A[Capital OS container<br/>next start + 1 import child<br/>+ daily timer]
+  A --> DB[(Postgres<br/>kit-provisioned, TLS)]
+  A --> V[[Persistent volume<br/>~1 GB files]]
+  A -. read-only .-> X[Affinity API / Linear API]
+  A -. research .-> N[Anthropic API]
+  A -. nightly encrypted dump .-> S[(S3 bucket)]
+</pre>
+  </div>
+
+  <h2>The ask</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Resource</th><th>Ask</th><th></th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Memory</td><td>4 GiB</td><td><span class="tag must">must</span></td><td>Measured: the production server peaks at 0.74 GiB with 10 concurrent users on test data (40k requests, 0 errors). The real data and one import job add about 2 GiB (estimate). The 384 MiB default won't start it.</td></tr>
+      <tr><td>CPU</td><td>2 vCPU</td><td><span class="tag must">must</span></td><td>Page rendering while one import runs.</td></tr>
+      <tr><td>Processes</td><td>Allow one child process, a few worker threads and short subprocesses</td><td><span class="tag must">must</span></td><td>Heavy imports run in one child process so pages stay responsive. Background refreshes use worker threads. The nightly backup runs <code>pg_dump</code>, <code>gpg</code> and the AWS CLI as short subprocesses.</td></tr>
+      <tr><td>Persistent volume</td><td>20 GB</td><td><span class="tag must">must</span></td><td>About 1 GB of working files today, which must survive redeploys.</td></tr>
+      <tr><td>Postgres</td><td>Version 17 (16 is fine), 20 GB, daily snapshots</td><td><span class="tag must">must</span></td><td>640 MB today. We use <code>jsonb</code>, schemas and arrays.</td></tr>
+      <tr><td>Outbound HTTPS</td><td><span class="mono">api.affinity.co, api.linear.app, api.anthropic.com</span></td><td><span class="tag must">must</span></td><td>Read-only syncs and research. One more host later, once a data licence allows it.</td></tr>
+      <tr><td>S3 bucket</td><td>One private bucket, server-side encryption (KMS)</td><td><span class="tag must">must</span></td><td>Nightly encrypted database backups, kept off the machine.</td></tr>
+      <tr><td>Build memory</td><td>4 GiB</td><td><span class="tag nice">nice</span></td><td>Our build peaks at 2.0 GiB, right at the 2 GiB default.</td></tr>
+      <tr><td>Deploy token</td><td>Longer-lived, for this one app</td><td><span class="tag nice">nice</span></td><td>Today each deploy needs a fresh owner approval. That works, but it limits us to one or two deploys a day.</td></tr>
+    </tbody>
+  </table></div>
+
+  <p class="note">Fallback, if one app can't get these limits: one VM (2 vCPU, 8 GiB, 100 GB disk, Ubuntu) running the same server and Postgres, the way the Mac does today, reachable behind LabOS sign-in.</p>
+
+  <h2>Secrets and backup keys</h2>
+  <ul>
+    <li><strong>App secrets</strong> are env vars entered through the LabOS secrets page: the Affinity, Linear and Anthropic API keys, and one token for the developer feedback export. They are never logged.</li>
+    <li><strong>Backups</strong> are encrypted before upload to a GPG public key. The container holds only the public key. The private key that decrypts them stays offline with the owner, plus one sealed copy. The bucket's own KMS encryption sits underneath.</li>
+    <li><strong>Question:</strong> does PL already run a secrets store (Infisical, AWS Secrets Manager or similar) we should use for the keys and the backup key's escrow copy, instead of the LabOS page and our own password manager?</li>
+  </ul>
+
+  <h2>Questions for PL Infra</h2>
+  <ol class="q">
+    <li>Can one LabOS app get the limits above, with a persistent volume? If not, is the VM fallback possible?</li>
+    <li>For the provisioned Postgres: which major version, what backups or point-in-time recovery, and what retention? Is its certificate from the standard RDS CA?</li>
+    <li>Who at PL can access the database, the logs (CloudWatch) and the volume? The data is confidential fundraising data (investor names, pipeline, notes). It's fine for it to be visible to PL Infra staff who need it.</li>
+    <li>Can you provide an S3 bucket with KMS encryption, that the app can write to and prune (we thin old backups by age), but not list anything else?</li>
+    <li>Do you have a secrets store we should use (see above)?</li>
+    <li>Which region, and do outbound calls leave from fixed IPs? Affinity may need them allow-listed.</li>
+    <li>Is a longer-lived deploy token for a single app possible?</li>
+  </ol>
+
+  <h2>Timing</h2>
+  <p>The app, the Dockerfile and the move-over scripts are ready. The move-over has been rehearsed locally: 1M test rows copied and checked, table by table, in about 10 seconds. Once the limits are in place, we deploy a test build first, rehearse the move once against the provisioned database, then move over in one evening. The Mac copy stays untouched for a week as the rollback.</p>
+</main>
