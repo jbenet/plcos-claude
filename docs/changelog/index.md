@@ -197,3 +197,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Kit runtime contract](entries/kit-contract.md)
 - [Triage and checker accuracy](entries/triage-accuracy.md)
 - [W3 routes — Recover interaction and portfolio paths](entries/w3-routes.md)
+- [Batch keys — new strategies and research aliases](entries/batch-keys.md)

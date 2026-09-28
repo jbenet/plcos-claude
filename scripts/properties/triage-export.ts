@@ -137,6 +137,11 @@ export async function triageExportProperties(check: Check) {
     const { exportResearchSet, researchSet } = await import('../../lib/enrich/candidates');
     process.env.ENRICH_DIR = dir;
     const identities = await db.query<{ id: string; name: string }>('select entity_id::text id, display_name name from identity.entity');
+    const other = identities.find(e => e.id !== sample)!.id;
+    await db.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by) values
+      ('prospect_key','invented-research-alias',$1,'rule:invented-batch-property'), ('warehouse','member:invented-unique',$1,'rule:invented-batch-property'),
+      ('prospect_key','member:invented-conflict',$1,'rule:invented-batch-property'), ('warehouse','member:invented-conflict',$2,'rule:invented-batch-property'),
+      ('warehouse','invented-not-member',$1,'rule:invented-batch-property')`, [sample, other]);
     await mkdir(join(dir, 'raw'));
     await Promise.all(identities.map(identity => writeFile(join(dir, 'raw', `${identity.id}.json`), JSON.stringify({
       key: identity.id, name: identity.name, identity: { match: 'confirmed', basis: 'Invented fixture only.' },
@@ -157,6 +162,11 @@ export async function triageExportProperties(check: Check) {
     const exportStart = performance.now();
     const exported = await withDb(counted, exportResearchSet);
     const exportMs = performance.now() - exportStart, exportQueries = queries;
+    const aliases = JSON.parse(await readFile(join(dir, 'entity-keys.json'), 'utf8')) as Record<string, string>;
+    check('EXPORT research aliases follow importer identity rules and refuse conflicting namespaces',
+      aliases['invented-research-alias'] === sample && aliases['member:invented-unique'] === sample
+      && !aliases['member:invented-conflict'] && !aliases['invented-not-member'],
+      'Batch inputs receive canonical candidate keys for allowed aliases only; ambiguity is not resolved by row order.');
     const fullRows = (await readFile(join(dir, 'triage.jsonl'), 'utf8')).split('\n').filter(Boolean).map(s => JSON.parse(s) as TriageExport);
     const recorded = fullRows.find(row => row.key === sample)!.touches;
     check('TRIAGE full export joins stored raw subjects, latest meeting titles and optional snippets',

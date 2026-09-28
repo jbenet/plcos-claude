@@ -1,3 +1,4 @@
+import { importEntityKeys } from './entity-keys';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -371,6 +372,10 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   // address and no domain, since agents read this file and a personal domain is one step from a
   // personal address (Juan, 24 Sep: nothing that identifies us goes into a request).
   const db = await getDb();
+  // Use the importer's ambiguity and canonical-identity rules; batch cutting stays file-only.
+  const candidateKeys = new Set(set.map(c => c.key));
+  const aliases = [...await importEntityKeys(db)].filter(([, key]) => candidateKeys.has(key));
+  await writeFile(join(dir, 'entity-keys.json'), JSON.stringify(Object.fromEntries(aliases)) + '\n', 'utf8');
   const team = await db.query<{ handle: string; name: string; role: string }>(
     `select handle, name, role from platform.app_user where active order by name`);
   await writeFile(join(dir, 'vehicles.json'), JSON.stringify(await db.query('select slug, name from platform.vehicle')) + '\n', 'utf8');
