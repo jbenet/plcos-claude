@@ -182,3 +182,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Feedback reporters and the decision log](entries/feedback-reporter.md)
 
 - [prod-build — Demo production build and tracing boundary](entries/prod-build.md)
+- [Linear on the standup and each vehicle's Overview](entries/linear-views.md)

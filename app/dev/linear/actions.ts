@@ -1,11 +1,12 @@
 'use server';
 
 import { requireServerActionMutation } from '@/lib/mutation-guard';
-
+import { revalidatePath } from 'next/cache';
 import { getDb } from '@/lib/db';
 import { queueImportJob } from '@/lib/import-jobs/server';
 import { config } from '@/config/deployment';
 import { linearLiveServer, linearSource } from '@/lib/connectors/linear/sync';
+import { decideLink } from '@/modules/linear';
 
 /**
  * Sync Linear (docs/24-linear.md): a person's click queues the `linear` import job. Read-only: the
@@ -34,5 +35,32 @@ export async function rebuildLinearAction(_prev: { error?: string; message?: str
     return { message: 'Purge and re-map queued. Progress appears above; reload for the allowed-team counts.' };
   } catch {
     return { error: 'The rebuild could not be queued. Retry after the active Linear job finishes.' };
+  }
+}
+
+/**
+ * Link a vehicle to Linear projects, turn a suggestion down, or remove a link (docs/24-linear.md
+ * §4). A person's click, stored once per pair (a double click changes nothing) and audited. Only
+ * our database is written; Linear never is.
+ */
+export async function linkProjectsAction(_prev: { error?: string; message?: string }, form: FormData): Promise<{ error?: string; message?: string }> {
+  const decision = String(form.get('decision') ?? '');
+  if (decision !== 'accept' && decision !== 'reject' && decision !== 'remove') return { error: 'Unknown choice.' };
+  const vehicleId = String(form.get('vehicle') ?? '');
+  const projectIds = form.getAll('project').map(String).filter(Boolean);
+  if (!vehicleId || projectIds.length === 0) return { error: 'Pick a project first.' };
+  try {
+    const user = await requireServerActionMutation();
+    const changed = await decideLink(user.id, {
+      vehicleId, projectIds, decision,
+      source: form.get('source') === 'name' ? 'name' : 'person',
+      basis: form.get('basis') ? String(form.get('basis')) : null,
+    });
+    revalidatePath('/dev/linear');
+    revalidatePath('/overview');
+    const word = decision === 'accept' ? 'Linked' : decision === 'reject' ? 'Turned down' : 'Removed';
+    return { message: changed ? `${word}: ${changed} project${changed === 1 ? '' : 's'}.` : 'Already recorded; nothing changed.' };
+  } catch {
+    return { error: 'The link was not saved. Reload and try again.' };
   }
 }

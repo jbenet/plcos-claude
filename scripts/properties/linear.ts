@@ -19,6 +19,8 @@ import { normalize, readReplicas, TABLE } from '../../lib/connectors/linear/repl
 import { rebuildLinear, syncLinear } from '../../lib/connectors/linear/sync';
 import { linearOverview } from '../../lib/connectors/linear/view';
 import { translateLinear } from '../../lib/connectors/linear/translate';
+import { withDb } from '../../lib/db';
+import { addDays, decideLink, groupByState, linkReview, localToday, myLinear, STATE_ORDER, vehicleWorkstreams } from '../../modules/linear';
 import type { Check } from './harness';
 
 const KEY = 'lin_api_INVENTEDinventedINVENTED0123456789';
@@ -212,6 +214,8 @@ export async function linearProperties(check: Check, db: Db) {
     filtered && again.incremental === 1 && again.inserted === 0 && again.updated === 0,
     `${second.length} requests, all filtered; ${again.inserted} inserted, ${again.updated} updated.`);
 
+  await linearViewProperties(check, db, actor, ws);
+
   // A later pull, written by hand: an explicit null clears, an absent field stays, an older record loses.
   const raw = join(root, 'linear', 'raw');
   const stamp = '2099-01-01T00-00-00-000Z';
@@ -343,4 +347,81 @@ export async function linearProperties(check: Check, db: Db) {
 
   await rm(root, { recursive: true, force: true });
   await rm(activityRoot, { recursive: true, force: true });
+}
+
+/**
+ * The views on Daily standup and a vehicle's Overview (docs/24-linear.md), on the invented workspace:
+ *   - My Linear finds a person by email or linearEmail, and groups in progress, due within a week, to do;
+ *   - status groups follow Linear's order;
+ *   - a vehicle shows only the projects a person linked; a link is stored once, audited, and a
+ *     turned-down suggestion is not offered again.
+ */
+async function linearViewProperties(check: Check, db: Db, actor: string, ws: ReturnType<typeof loadWorkspace>) {
+  const now = new Date('2026-09-28T12:00:00');
+  const today = localToday(now), soon = addDays(today, 7);
+  const ref = (x: unknown) => (x as { id: string } | null)?.id ?? null;
+  // A Linear member whose address is not anybody's email here: only linearEmail can find them.
+  const member = ws.users!.find((u) => !String(u.email).endsWith('@example.com') && ws.issues!.some((i) => ref(i.assignee) === u.id && ['started', 'unstarted'].includes(String(ws.states!.find((st) => st.id === ref(i.state))?.type))))!;
+  const user = (await db.one<{ id: string; linear_email: string | null }>(`select id::text, linear_email from platform.app_user u
+    where not exists (select 1 from linear.member m where lower(m.email) = lower(u.email)) order by handle limit 1`))!;
+  await db.query('update platform.app_user set linear_email = null where id = $1', [user.id]);
+  const before = await withDb(db, () => myLinear(user.id, { now }));
+  await db.query('update platform.app_user set linear_email = $2 where id = $1', [user.id, String(member.email).toUpperCase()]);
+  const after = await withDb(db, () => myLinear(user.id, { now, cap: 100 }));
+  const all = await withDb(db, () => myLinear(user.id, { now }));
+  await db.query('update platform.app_user set linear_email = $2 where id = $1', [user.id, user.linear_email]);
+  const g = Object.fromEntries(after.mine.map((x) => [x.key, x.issues]));
+  const stateType = new Map(ws.states!.map((st) => [st.id, String(st.type)]));
+  const openMine = ws.issues!.filter((i) => ref(i.assignee) === member.id && !i.archivedAt).filter((i) => {
+    const t = stateType.get(ref(i.state)!);
+    return t === 'started' || t === 'unstarted' || t === 'triage' || (t === 'backlog' && Boolean(i.dueDate) && String(i.dueDate) <= soon);
+  });
+  const listed = after.mine.flatMap((x) => x.issues);
+  check('Linear My issues: a person is found by linearEmail (any case) when their email is not Linear’s, and not before',
+    before.matched.length === 0 && before.mine.length === 0 && after.matched.length === 1 && after.matched[0]!.email === member.email,
+    'unmatched before; matched to one member after linearEmail was set.');
+  check('Linear My issues: in progress, then due within a week or overdue, then to do; every open issue of theirs listed once',
+    (g.started ?? []).every((i) => i.state.type === 'started')
+      && (g.due ?? []).every((i) => i.state.type !== 'started' && i.dueDate! <= soon)
+      && (g.todo ?? []).every((i) => i.state.type === 'unstarted' && !(i.dueDate && i.dueDate <= soon))
+      && after.mine.map((x) => x.key).join() === ['started', 'due', 'todo'].filter((k) => (g[k] ?? []).length).join()
+      && listed.length === openMine.length && listed.length > 0 && new Set(listed.map((i) => i.id)).size === listed.length,
+    `${listed.length} listed of ${openMine.length} open: ${after.mine.map((x) => `${x.title} ${x.issues.length}`).join(', ')}; backlog ${after.backlog}.`);
+
+  const groups = groupByState(all.team.flatMap((x) => x.issues).concat(g.todo ?? []));
+  const order = groups.map((x) => STATE_ORDER.indexOf(x.issues[0]!.state.type));
+  const started = groups.filter((x) => x.issues[0]!.state.type === 'started').map((x) => x.issues[0]!.state.position);
+  check('Linear lists: status groups follow Linear’s order, the later started state first; the team view is work in progress only',
+    groups.length > 1 && order.every((o, i) => i === 0 || order[i - 1]! <= o) && started.every((p, i) => i === 0 || started[i - 1]! >= p)
+      && all.team.length > 0 && all.team.every((x) => x.issues.every((i) => i.state.type === 'started')),
+    `groups: ${groups.map((x) => x.title).join(' → ')}.`);
+
+  // Links: nothing by name alone; a person accepts once.
+  const review = await withDb(db, () => linkReview());
+  const v = review.find((x) => x.suggested.length >= 2)!;
+  const empty = await withDb(db, () => vehicleWorkstreams(v.id));
+  const [a, b] = v.suggested;
+  const audits = async () => Number((await db.one<{ n: string }>(`select count(*) n from platform.audit_log where action like 'linear.link_%'`))!.n);
+  const audit0 = await audits();
+  const first = await withDb(db, () => decideLink(actor, { vehicleId: v.id, projectIds: [a!.projectId], decision: 'accept', source: 'name', basis: a!.basis }));
+  const twice = await withDb(db, () => decideLink(actor, { vehicleId: v.id, projectIds: [a!.projectId, a!.projectId], decision: 'accept', source: 'name', basis: a!.basis }));
+  const rejected = await withDb(db, () => decideLink(actor, { vehicleId: v.id, projectIds: [b!.projectId], decision: 'reject', source: 'name', basis: b!.basis }));
+  const audit1 = await audits();
+  const ws1 = await withDb(db, () => vehicleWorkstreams(v.id));
+  const review1 = (await withDb(db, () => linkReview())).find((x) => x.id === v.id)!;
+  const row = await db.one<{ confidence: string; last_verified_by: string; as_of: string }>(`select confidence, last_verified_by::text, as_of::text from linear.link
+    where target_id = $1 and linear_id = $2`, [v.id, a!.projectId]);
+  check('Linear links: a vehicle shows no project until a person accepts one; a double accept changes nothing; each change is audited once',
+    empty.projects.length === 0 && empty.suggested === v.suggested.length && first === 1 && twice === 0 && rejected === 1 && audit1 - audit0 === 2
+      && ws1.projects.length === 1 && ws1.projects[0]!.id === a!.projectId
+      && ws1.upcoming.every((i) => i.project?.id === a!.projectId && ['started', 'unstarted', 'triage'].includes(i.state.type))
+      && ws1.recentlyDone.every((i) => i.project?.id === a!.projectId && i.state.type === 'completed')
+      && Boolean(row?.as_of) && row?.last_verified_by === actor && row?.confidence === 'confirmed',
+    `${v.name}: ${empty.suggested} suggested, 0 shown; accept ${first}, again ${twice}; ${audit1 - audit0} audit rows; then ${ws1.projects.length} project, ${ws1.upcoming.length} upcoming, ${ws1.recentlyDone.length} done.`);
+  const removed = await withDb(db, () => decideLink(actor, { vehicleId: v.id, projectIds: [a!.projectId, b!.projectId], decision: 'remove', source: 'person' }));
+  const review2 = (await withDb(db, () => linkReview())).find((x) => x.id === v.id)!;
+  check('Linear links: a turned-down suggestion is not offered again until it is undone, and removing a link brings the suggestion back',
+    !review1.suggested.some((x) => x.projectId === b!.projectId) && review1.rejected.some((x) => x.projectId === b!.projectId)
+      && removed === 2 && review2.suggested.length === v.suggested.length && review2.linked.length === 0,
+    `turned down: hidden; removed ${removed}; ${review2.suggested.length} suggestions again.`);
 }

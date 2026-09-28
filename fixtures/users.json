@@ -3,5 +3,5 @@
   { "handle": "mara",  "name": "Mara Vance", "initials": "MV", "role": "Head of LP relations",   "email": "mara@example.com" },
   { "handle": "sam",   "name": "Sam Ferreira","initials": "SF", "role": "Platform & operations",  "email": "sam@example.com" },
   { "handle": "ines",  "name": "Inés Duarte", "initials": "ID", "role": "Research",               "email": "ines@example.com" },
-  { "handle": "tomas", "name": "Tomás Reyes", "initials": "TR", "role": "Counsel (fractional)",   "email": "tomas@example.com" }
+  { "handle": "tomas", "name": "Tomás Reyes", "initials": "TR", "role": "Counsel (fractional)",   "email": "tomas@example.com", "linearEmail": "tomas.reyes@counsel.example.org" }
 ]

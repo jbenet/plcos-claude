@@ -9,6 +9,8 @@ import { linearLiveServer, linearSource, rawDir } from '@/lib/connectors/linear/
 import { linearKeyPresent } from '@/lib/connectors/linear/key';
 import { linearOverview, linearSyncState, type LinearOverview } from '@/lib/connectors/linear/view';
 import { LinearSync } from './LinearSync';
+import { LinkButton, LinkPicker } from './LinkControls';
+import { linkReview, type LinkReviewVehicle } from '@/modules/linear';
 import s from './linear.module.css';
 import { ImportJobs } from '@/components/import-jobs/ImportJobs';
 
@@ -115,12 +117,72 @@ function Projects({ o }: { o: LinearOverview }) {
   );
 }
 
+function Links({ review }: { review: LinkReviewVehicle[] }) {
+  const pending = review.reduce((k, v) => k + v.suggested.length, 0);
+  return (
+    <div className="card" id="links">
+      <div className="chead">
+        <h2>Vehicles and their Linear projects</h2>
+        <span className="lbl">{pending ? `${pending} suggestion${pending === 1 ? '' : 's'} to review` : 'accepted once, by a person'}</span>
+      </div>
+      {review.map((v) => (
+        <section key={v.id} className={s.vehicle} aria-label={v.name}>
+          <div className={s.vhead}>
+            <b className={s.name}>{v.name}</b>
+            <span className={s.key}>{v.linked.length} linked{v.suggested.length ? ` · ${v.suggested.length} suggested` : ''}</span>
+            {v.suggested.length > 1 && (
+              <span className={s.vact}>
+                <LinkButton vehicle={v.id} projects={v.suggested.map((p) => p.projectId)} decision="accept" source="name" basis="name" label={`Accept all ${v.suggested.length}`} />
+              </span>
+            )}
+          </div>
+          {v.linked.map((p) => (
+            <div key={p.projectId} className={s.linkRow}>
+              <span className="flag f-ok">Linked</span>
+              <span className={s.lname}>{p.name}{p.statusName && <span className={s.key}> · {p.statusName}</span>}</span>
+              <span className={s.lwhy}>{p.by ?? 'someone'}, {ago(p.asOf)}{p.source === 'name' ? ' · from a name suggestion' : ' · by hand'}</span>
+              <LinkButton vehicle={v.id} projects={[p.projectId]} decision="remove" source="person" label="Remove" quiet />
+            </div>
+          ))}
+          {v.suggested.map((p) => (
+            <div key={p.projectId} className={s.linkRow}>
+              <span className="flag f-ev">Suggested</span>
+              <span className={s.lname}>{p.name}{p.statusName && <span className={s.key}> · {p.statusName}</span>}</span>
+              <span className={s.lwhy}>the name holds “{p.basis}”</span>
+              <span className={s.lacts}>
+                <LinkButton vehicle={v.id} projects={[p.projectId]} decision="accept" source="name" basis={p.basis} label="Accept" />
+                <LinkButton vehicle={v.id} projects={[p.projectId]} decision="reject" source="name" basis={p.basis} label="Not this vehicle" quiet />
+              </span>
+            </div>
+          ))}
+          {v.linked.length + v.suggested.length === 0 && <p className={s.none}>No project is linked, and none has one of its names ({v.terms.join(', ')}).</p>}
+          <div className={s.vfoot}>
+            <LinkPicker vehicle={v.id} vehicleName={v.name} options={v.others} />
+            {v.rejected.length > 0 && (
+              <span className={s.rejected}>
+                Turned down:{' '}
+                {v.rejected.map((p, i) => (
+                  <span key={p.projectId} className={s.rej}>{i > 0 ? ' · ' : ''}{p.name}<LinkButton vehicle={v.id} projects={[p.projectId]} decision="remove" source="person" label="Undo" quiet /></span>
+                ))}
+              </span>
+            )}
+          </div>
+        </section>
+      ))}
+      <p className="cover">
+        <b>Nothing links by name alone.</b> A project whose name holds one of a vehicle’s names is suggested; a person accepts it once, or turns it down so it isn’t
+        offered again. Linked projects make up the Workstreams card on the vehicle’s Overview. The link is ours: it is never written to Linear.
+      </p>
+    </div>
+  );
+}
+
 function Mapping({ o }: { o: LinearOverview }) {
   return (
     <div className="card">
       <div className="chead">
         <h2>How it maps to our world</h2>
-        <span className="lbl">a reading by name · nothing is linked yet</span>
+        <span className="lbl">a reading by name</span>
       </div>
       <div className={s.scroll}>
         <table className={`list ${s.table}`}>
@@ -139,13 +201,14 @@ function Mapping({ o }: { o: LinearOverview }) {
         </table>
       </div>
       <div className="cbody">
-        <div className="fact"><span>Our team in Linear</span><span>{n(o.ours.matched)} of {n(o.ours.members)} referenced members matched to our team by email</span></div>
+        <div className="fact"><span>Our team in Linear</span><span>{n(o.ours.matched)} of {n(o.ours.members)} referenced members matched to our team by email or linearEmail</span></div>
         <div className="fact"><span>Open issues</span><span>{n(o.ours.openAssigned)} owned by our team · {n(o.ours.openAssignedElsewhere)} by others · {n(o.ours.openUnassigned)} unowned</span></div>
         <div className="fact"><span>LPs named in titles</span><span>{o.lpTitles.issues === 0 ? 'No issue title names an LP we are pursuing' : `${n(o.lpTitles.issues)} issue${o.lpTitles.issues === 1 ? '' : 's'} name${o.lpTitles.issues === 1 ? 's' : ''} ${n(o.lpTitles.lps)} LP${o.lpTitles.lps === 1 ? '' : 's'} we are pursuing`}</span></div>
       </div>
       <p className="cover">
-        <b>Unconfirmed.</b> A vehicle counts a project or issue whose title holds one of its names; an LP counts when its name appears in a title. Names
-        collide and go unmentioned, so none of this links anything. The linking model waits on the plan in docs/24-linear.md.
+        <b>Counts by name, unconfirmed.</b> A vehicle counts a project or issue whose title holds one of its names; an LP counts when its name appears in a title.
+        Names collide and go unmentioned, so these counts link nothing: the links above do. A team member whose Linear address differs from their email is matched
+        by <code>linearEmail</code> in the init file.
       </p>
     </div>
   );
@@ -156,9 +219,10 @@ async function LinearPage() {
   const demo = config.data.profile === 'demo';
   const src = linearSource();
   const refused = 'refused' in src ? src.refused : null;
-  const [state, overview] = await Promise.all([
+  const [state, overview, review] = await Promise.all([
     linearSyncState(db, rawDir()),
     linearOverview(db).then((o) => ({ ok: true as const, o }), () => ({ ok: false as const })),
+    linkReview().catch(() => null),
   ]);
   const last = state.last, complete = state.lastComplete;
   const stopped = Boolean(last && !last.complete);
@@ -252,6 +316,7 @@ async function LinearPage() {
       ) : synced ? (
         <>
           <Replica o={overview.o} />
+          {review && <Links review={review} />}
           <Projects o={overview.o} />
           <Mapping o={overview.o} />
         </>

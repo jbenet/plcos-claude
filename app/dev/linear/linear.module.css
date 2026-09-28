@@ -33,3 +33,31 @@ th.num { font-family: inherit; }
   .hideS { display: none; }
   .showS { display: block; }
 }
+
+/* Vehicles and their Linear projects: the link review. */
+.vehicle { border-bottom: 1px solid var(--line); }
+.vhead { display: flex; align-items: center; gap: 10px; padding: 11px 15px 7px; flex-wrap: wrap; }
+.vact { margin-left: auto; }
+.linkRow {
+  display: grid; grid-template-columns: 78px minmax(0, 1.2fr) minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 6px 15px; border-top: 1px solid var(--hair); font-size: 13px; min-height: 40px;
+}
+.linkRow :global(.flag) { justify-self: start; }
+.lname { min-width: 0; }
+.lwhy { font-size: 11.5px; color: var(--muted); min-width: 0; }
+.lacts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.none { margin: 0; padding: 4px 15px 8px; font-size: 12.5px; color: var(--muted); }
+.vfoot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 7px 15px 11px; }
+.linkForm { display: inline-flex; align-items: center; gap: 6px; }
+.small { font-size: 12px; padding: 4px 10px; }
+.pick { font: inherit; font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 240px; }
+.msgInline { font-size: 11.5px; color: var(--muted); }
+.msgInline:empty, .err:empty { display: none; }
+.rejected { font-size: 11.5px; color: var(--muted); display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.rej { display: inline-flex; align-items: center; gap: 4px; }
+@media (pointer: coarse) { .small, .pick { min-height: 40px; } }
+@media (max-width: 700px) {
+  .linkRow { grid-template-columns: 78px minmax(0, 1fr); }
+  .lwhy { grid-column: 2; }
+  .lacts, .linkRow > form { grid-column: 2; justify-content: flex-start; }
+}

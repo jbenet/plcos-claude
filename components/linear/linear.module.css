@@ -1,0 +1,144 @@
+/*
+ * Linear, redrawn in our tokens (docs/24-linear.md): rows, pills and icons laid out as Linear lays
+ * them out, so a Linear user reads them without learning anything, in our palette and type.
+ */
+
+/* ── Issue list ─────────────────────────────────────────────────────────────── */
+.list { container-type: inline-size; }
+
+.ghead {
+  display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 15px;
+  background: color-mix(in srgb, var(--hair) 65%, var(--surface));
+  border-bottom: 1px solid var(--hair); font-size: 12.5px;
+}
+.ghead b { font-weight: 500; color: var(--ink); }
+.count { font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.row {
+  display: flex; align-items: center; gap: 9px; min-height: 38px; padding: 0 15px;
+  border-bottom: 1px solid var(--hair); color: var(--ink); text-decoration: none; font-size: 13px;
+}
+.row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (hover: hover) { a.row:hover { background: var(--accent-wash); } }
+@media (pointer: coarse) { .row { min-height: 44px; } }
+
+.prio, .status { flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; }
+.ident {
+  flex: none; width: 56px; font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.meta { flex: 0 1 auto; display: flex; align-items: center; justify-content: flex-end; gap: 5px; min-width: 0; max-width: 58%; }
+.labels { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+.av { flex: none; display: inline-grid; place-items: center; width: 18px; }
+
+.pill, .chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; flex: none;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  font-size: 11px; color: var(--label); white-space: nowrap; line-height: 1;
+}
+.pill i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.chip { color: var(--muted); }
+.chip svg { flex: none; }
+.project { max-width: 150px; flex: 0 1 auto; min-width: 0; }
+.project span { overflow: hidden; text-overflow: ellipsis; }
+.overdue { color: var(--clay); border-color: color-mix(in srgb, var(--clay) 38%, var(--surface)); }
+.dueToday { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 38%, var(--surface)); }
+.overdueInk { color: var(--clay); display: inline-grid; }
+.mutedInk { color: var(--muted); display: inline-grid; }
+
+.more {
+  display: block; padding: 8px 15px 8px 96px; font-size: 12px; color: var(--muted);
+  border-bottom: 1px solid var(--hair); text-decoration: none;
+}
+a.more:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (hover: hover) { a.more:hover { color: var(--ink); } }
+.empty { padding: 14px 15px; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.empty b { color: var(--ink); font-weight: 500; }
+
+@container (max-width: 700px) { .labels { display: none; } }
+@container (max-width: 540px) {
+  .project { padding: 0 5px; }
+  .project span { display: none; }
+  .more { padding-left: 15px; }
+}
+@container (max-width: 360px) { .ident { display: none; } }
+
+/* ── Card header controls ───────────────────────────────────────────────────── */
+.headRight { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.fresh { font-family: var(--mono); font-size: 10.5px; color: var(--muted); letter-spacing: .04em; white-space: nowrap; }
+.tabs { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 7px; background: var(--ground); }
+.tab {
+  appearance: none; border: 0; background: none; font: inherit; font-size: 12px; color: var(--muted);
+  padding: 3px 10px; border-radius: 5px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center;
+}
+.tab[aria-selected='true'] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tab .count { font-size: 10.5px; }
+@media (pointer: coarse) { .tab { min-height: 36px; padding: 0 14px; } }
+
+/* ── Workstreams (a vehicle's Linear projects) ─────────────────────────────── */
+.ws { container-type: inline-size; }
+.prow, .axis {
+  display: grid; align-items: center; column-gap: 12px; padding: 0 15px;
+  grid-template-columns: 16px minmax(150px, 1.25fr) minmax(96px, .6fr) minmax(170px, 2fr) 74px 52px;
+  grid-template-areas: 'icon name lead track prog target';
+}
+.prow { min-height: 42px; border-bottom: 1px solid var(--hair); color: var(--ink); text-decoration: none; font-size: 13px; }
+.prow:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (hover: hover) { a.prow:hover { background: var(--accent-wash); } }
+@media (pointer: coarse) { .prow { min-height: 48px; } }
+.axis { height: 26px; border-bottom: 1px solid var(--hair); }
+.pIcon { grid-area: icon; display: inline-grid; place-items: center; }
+.pName { grid-area: name; min-width: 0; display: flex; align-items: center; gap: 7px; }
+.pName b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pLead { grid-area: lead; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.pLead span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pProg { grid-area: prog; display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px; color: var(--label); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pTarget { grid-area: target; text-align: right; font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.pTarget.late { color: var(--clay); }
+.axisLbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+/* The start-to-target strip: one shared scale for every project, a line for today. */
+.track { grid-area: track; position: relative; height: 22px; }
+.axis .track { height: 26px; }
+.tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--hair); }
+.tick span { position: absolute; top: 7px; left: 4px; font-family: var(--mono); font-size: 9.5px; color: var(--muted); letter-spacing: .04em; white-space: nowrap; }
+.today { position: absolute; top: -10px; bottom: -10px; border-left: 1.5px solid var(--clay); opacity: .7; }
+.axis .today { top: 0; bottom: 0; }
+.todayLbl { position: absolute; top: 7px; transform: translateX(-50%); font-family: var(--mono); font-size: 9.5px; color: var(--clay); background: var(--surface); padding: 0 3px; white-space: nowrap; }
+.bar { position: absolute; top: 5px; height: 12px; border-radius: 4px; overflow: hidden; min-width: 4px; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; }
+.bar.open { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.diamond { position: absolute; top: 5px; width: 9px; height: 9px; transform: translateX(-50%) rotate(45deg); border-radius: 2px; }
+.noDates { position: absolute; top: 3px; left: 0; font-size: 11px; color: var(--muted); }
+
+.split { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+.split > div + div { border-left: 1px solid var(--line); }
+.sub {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding: 10px 15px 6px; border-bottom: 1px solid var(--hair);
+}
+.sub h3 { margin: 0; font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--label); }
+.sub span { font-size: 11.5px; color: var(--muted); }
+
+@container (max-width: 820px) {
+  .prow, .axis {
+    grid-template-columns: 16px minmax(120px, 1fr) minmax(150px, 1.6fr) 70px 48px;
+    grid-template-areas: 'icon name track prog target';
+  }
+  .pLead { display: none; }
+}
+@container (max-width: 560px) {
+  .prow, .axis {
+    grid-template-columns: 16px minmax(0, 1fr) auto 48px; row-gap: 2px; padding-top: 8px; padding-bottom: 8px;
+    grid-template-areas: 'icon name prog target' '. track track track';
+  }
+  .axis { height: auto; padding-top: 0; padding-bottom: 0; }
+  .axis .axisLbl { display: none; }
+}
+/* Two lists side by side only where each keeps its identifiers and a readable title. */
+@container (max-width: 780px) {
+  .split { grid-template-columns: 1fr; }
+  .split > div + div { border-left: 0; border-top: 1px solid var(--line); }
+}
