@@ -9,13 +9,13 @@ import { appendAudit } from '@/modules/platform';
 import { getDb } from '@/lib/db';
 import { reversePursuitMerge, type PursuitMergeReport } from '@/modules/strategy';
 import { config } from '@/config/deployment';
-import { readLayout } from '@/config/ports';
+import { isLiveServer } from '@/config/ports';
 import { type ProspectResult } from '@/lib/enrich/prospects';
 
 export async function addProspectsAction(): Promise<{ result?: ProspectResult; error?: string; message?: string }> {
   const authorizedUser = await requireAction('app/dev/enrich/actions.ts#addProspectsAction');
   // A dev checkout must never open the real DB for an import; demo uses fictional files.
-  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || !isLiveServer())) {
     return { error: 'Add prospects from Developer → Enrich on the live server.' };
   }
   try {
@@ -78,7 +78,7 @@ export async function sourceBulkAction(formData: FormData): Promise<void> {
 
 export async function importPortfolioAction(): Promise<{ result?: import('@/lib/enrich/portfolio').PortfolioResult; error?: string }> {
   const authorizedUser = await requireAction('app/dev/enrich/actions.ts#importPortfolioAction');
-  if (config.data.profile === 'real' && !config.data.copyTakenAt && readLayout().role !== 'live') return { error: 'Import on the live server or a marked preview copy.' };
+  if (config.data.profile === 'real' && !config.data.copyTakenAt && !isLiveServer()) return { error: 'Import on the live server or a marked preview copy.' };
   try {
     const user = authorizedUser;
     const { readPortfolioFile, importPortfolio } = await import('@/lib/enrich/portfolio');
@@ -109,7 +109,7 @@ export async function importDakotaAction(): Promise<{job?:import('@/lib/connecto
 /** The existing server handle is the only live writer. No DB-opening CLI. */
 export async function consolidatePursuitsAction(): Promise<{ result?: PursuitMergeReport; error?: string; message?: string }> {
   const authorizedUser = await requireAction('app/dev/enrich/actions.ts#consolidatePursuitsAction');
-  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || !isLiveServer())) {
     return { error: 'Consolidate pursuits on the live server.' };
   }
   const user = authorizedUser;
@@ -120,7 +120,7 @@ export async function consolidatePursuitsAction(): Promise<{ result?: PursuitMer
 
 export async function reversePursuitMergeAction(id: string, reason: string): Promise<{ error?: string }> {
   const authorizedUser = await requireAction('app/dev/enrich/actions.ts#reversePursuitMergeAction', id, reason);
-  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || !isLiveServer())) {
     return { error: 'Reverse pursuit merges on the live server.' };
   }
   try {
@@ -135,7 +135,7 @@ export async function reversePursuitMergeAction(id: string, reason: string): Pro
 /** Uses the server handle and local decision file; no external connector traffic. */
 export async function mergeImportDuplicatesAction(): Promise<{ result?: ImportDuplicateReport; error?: string; message?: string }> {
   const authorizedUser = await requireAction('app/dev/enrich/actions.ts#mergeImportDuplicatesAction');
-  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || !isLiveServer())) {
     return { error: 'Merge duplicate identities on the live server.' };
   }
   const user = authorizedUser;
@@ -146,7 +146,7 @@ export async function mergeImportDuplicatesAction(): Promise<{ result?: ImportDu
 
 export async function reverseImportDuplicateAction(assertionId: string, reason: string): Promise<{ error?: string }> {
   const authorizedUser = await requireAction('app/dev/enrich/actions.ts#reverseImportDuplicateAction', assertionId, reason);
-  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || !isLiveServer())) {
     return { error: 'Reverse duplicate identities on the live server.' };
   }
   try {
@@ -173,7 +173,7 @@ export async function reverseImportDuplicateAction(assertionId: string, reason: 
 
 export async function reverseIdentitySeparationAction(assertionId: string, reason: string): Promise<{ error?: string }> {
   const authorizedUser = await requireAction('app/dev/enrich/actions.ts#reverseIdentitySeparationAction', assertionId, reason);
-  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+  if (config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || !isLiveServer())) {
     return { error: 'Reverse identity separations on the live server.' };
   }
   try {
@@ -185,7 +185,7 @@ export async function reverseIdentitySeparationAction(assertionId: string, reaso
   } catch (error) { return { error: error instanceof Error ? error.message : 'Reversal failed.' }; }
 }
 
-const liveOnly = () => config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || readLayout().role !== 'live');
+const liveOnly = () => config.data.profile === 'real' && !(config.db.url && process.env.POSTGRES_REHEARSAL === '1') && (config.data.copyTakenAt || !isLiveServer());
 
 /** Re-point pursuits to their LP (issues 0111, 0112; docs/23): a queued job on the live server. */
 export async function repointPursuitsAction(): Promise<{ error?: string; message?: string }> {

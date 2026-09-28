@@ -140,6 +140,14 @@ export async function checkoutProperties(check: Check) {
     const live = await checkout('plcos-claude-live', false);
     const dev = await checkout('plcos-claude-dev', true);
     const agent = await checkout('agent-a1b2', true);
+    const missing = join(scratch, 'missing-layout');
+    check('LIVE role preserves local layouts and treats LabOS as live without a layout',
+      [live, dev, agent].every(l => ports.isLiveServer(l.root, {}) === (l.role === 'live'))
+        && !ports.isLiveServer(missing, {})
+        && [live.root, dev.root, agent.root, missing].every(root =>
+          ports.isLiveServer(root, { LABOS_ME_URL: 'https://labos.invalid/me' }))
+        && !ports.isLiveServer(dev.root, { LABOS_ME_URL: '' }),
+      'Invented live/dev/unlisted/missing checkouts; unset and empty LabOS preserve Mac roles.');
     type L = typeof live;
     const port = (s: 'demo' | 'real' | 'preview', l: L, env: Record<string, string> = {}) => {
       try { return ports.portFor(s, l, env); } catch (e) { return e instanceof Error ? e.message : String(e); }

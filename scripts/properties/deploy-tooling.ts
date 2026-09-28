@@ -46,6 +46,12 @@ export async function deployToolingProperties(check: Check): Promise<void> {
 
   // ---- image static guards ------------------------------------------------------------------------
   const [dockerfile, ignore] = await Promise.all(['Dockerfile', '.dockerignore'].map(f => readFile(f, 'utf8')));
+  check('IMAGE build and runtime use the same Next output directory',
+    ['build', 'runtime'].every(stage => {
+      const body = dockerfile.split(`FROM base AS ${stage}\n`)[1]?.split(/^FROM /m)[0] ?? '';
+      return /^ENV [^\n]*NEXT_DIST_DIR=\.next(?:\s|$)/m.test(body);
+    }),
+    'Both stages pin .next regardless of DATA_PROFILE.');
   check('IMAGE runs as a non-root user', /^USER 10001:10001$/m.test(dockerfile) && !/^USER root/m.test(dockerfile), 'Fixed uid.');
   check('IMAGE fails the build on a traced private path', dockerfile.includes('scripts/check-build-traces.ts') && dockerfile.includes("-ipath '*plcos-data*'"), 'Tracing guard and final sweep.');
   check('IMAGE refuses a context that is not a git archive', dockerfile.includes('GIT_COMMIT unset') && dockerfile.includes('[ ! -e .git ]'), 'Source stage.');

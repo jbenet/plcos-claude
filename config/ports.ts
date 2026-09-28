@@ -106,6 +106,12 @@ export function readLayout(root: string = process.cwd()): Layout {
   return { root: resolve(root), folder, row, role: row?.role ?? 'dev', live: live?.role === 'live' ? live : null };
 }
 
+/** LabOS is the deployed live server; without it, retain the local checkout role. */
+export function isLiveServer(root: string = process.cwd(), env: Record<string, string | undefined> = process.env): boolean {
+  if (env.LABOS_ME_URL) return true;
+  try { return readLayout(root).role === 'live'; } catch { return false; }
+}
+
 /** The live row, or null when the file cannot say. Never throws. */
 export function liveRow(root: string = process.cwd()): PortRow | null {
   try {
@@ -148,7 +154,7 @@ export function feedbackHome(profile: 'demo' | 'real', root: string = process.cw
   if (process.env.LABOS_ME_URL) return { filesHere: true, livePort: null };
   try {
     const layout = readLayout(root);
-    return { filesHere: layout.role === 'live', livePort: (profile === 'real' ? layout.live?.real : layout.live?.demo) ?? null };
+    return { filesHere: isLiveServer(root), livePort: (profile === 'real' ? layout.live?.real : layout.live?.demo) ?? null };
   } catch {
     return { filesHere: false, livePort: null };
   }
