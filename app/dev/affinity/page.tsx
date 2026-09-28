@@ -8,6 +8,7 @@ import { ALLOWED, affinityReady, readScopes } from '@/lib/connectors/affinity';
 import { discovered } from '@/lib/connectors/affinity/discover';
 import { latestConnectionTest, recentRequests, requestsThisMonth, type RateWindow } from '@/modules/sources';
 import { runConnectionTest } from './actions';
+import { ImportJobs } from '@/components/import-jobs/ImportJobs';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,6 +83,9 @@ async function AffinityPage() {
         What this server may ask Affinity, what it has asked, and what Affinity said about the
         key and the budget. Nothing is written back.
       </p>
+
+      {/* The imports this page starts, while they run or need a look (issue 0114). */}
+      <ImportJobs compact />
 
       {demo && (
         <div className="scope" style={{ marginBottom: 14 }}>

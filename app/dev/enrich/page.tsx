@@ -25,6 +25,7 @@ import { ExportStatus } from './ExportStatus';
 import { LpUnits } from './LpUnits';
 import { SpvStance } from './SpvStance';
 import { recentLpRepoints } from '@/modules/strategy';
+import { ImportJobs } from '@/components/import-jobs/ImportJobs';
 
 /** The checks the records point to before anyone writes (iteration 3, docs/19). */
 const FIRSTS: Array<{ id: NonNullable<Triage['first']>; label: string; means: string }> = [
@@ -100,6 +101,9 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
       <p className="sublede">
         Who the research workflows read about, what came back, and the import that maps it in.
       </p>
+
+      {/* The imports this page starts, while they run or need a look (issue 0114). */}
+      <ImportJobs compact />
 
       <DakotaImport />
       <PortfolioImport file={portfolioFile()} />

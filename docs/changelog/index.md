@@ -172,3 +172,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Findings import performance](entries/findings-perf.md)
 - [Identity review — deterministic fixture labels and row comparisons](entries/flaky-identity-review.md)
 - [One list of LPs, with a type on each row](entries/selection-0113.md)
+- [System status as one quiet mark beside the user](entries/status-0114.md)

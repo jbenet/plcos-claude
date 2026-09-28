@@ -20,6 +20,7 @@ import { loadLedger } from '@/lib/workflows/view';
 import { dakotaStatus, linearStatus, polarisStatus, type SourceState } from '@/lib/dev/sources';
 import { responsivenessSnapshot } from '@/lib/responsiveness';
 import st from './status.module.css';
+import { ImportJobs } from '@/components/import-jobs/ImportJobs';
 
 const STATE_FLAG: Record<SourceState | string, string> = { ok: 'f-ok', partial: 'f-ev', failed: 'f-block', not_attached: 'f-mute' };
 const STATE_WORD: Record<SourceState | string, string> = { ok: 'ok', partial: 'partial', failed: 'failed', not_attached: 'not attached' };
@@ -119,6 +120,9 @@ async function Status() {
         What is running, what is attached, and what a person should look at. The problems list is
         computed from the hard rules rather than maintained by hand.
       </p>
+
+      {/* Imports in full live here (issue 0114); every other page has the rail's status mark. */}
+      <ImportJobs />
 
       <div className="card">
         <div className="chead">

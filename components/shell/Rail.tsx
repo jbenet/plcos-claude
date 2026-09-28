@@ -11,7 +11,8 @@ import { ticketCounts } from '@/modules/governance';
 import { NavList } from './NavList';
 import { UserSwitcher } from './UserSwitcher';
 import { FeedbackButton } from './FeedbackBox';
-import { OutboxIndicator } from './FeedbackOutbox';
+import { SystemStatus } from './SystemStatus';
+import st from './SystemStatus.module.css';
 
 export async function Rail() {
   try { return await shareRequestWork('shell:Rail', {}, LoadedRail); }
@@ -23,7 +24,7 @@ export async function Rail() {
         <p>Navigation could not load. You can still file feedback.</p>
         <a className="btn" href="">Try again</a>
       </div>
-      <div className="railfoot"><OutboxIndicator /><FeedbackButton variant="rail" profile={config.data.profile} home={feedbackHome(config.data.profile)} /></div>
+      <div className="railfoot"><div className="railrow"><FeedbackButton variant="rail" profile={config.data.profile} home={feedbackHome(config.data.profile)} /><SystemStatus /></div></div>
     </nav>;
   }
 }
@@ -58,14 +59,17 @@ async function LoadedRail() {
       />
 
       <div className="railfoot">
-        <OutboxIndicator />
         <div className="railrow">
           <FeedbackButton variant="rail" profile={config.data.profile} home={feedbackHome(config.data.profile)} />
           <Link className="railgear" href="/settings" aria-label="Your settings" title="Your settings">
             <span aria-hidden>⚙</span>
           </Link>
         </div>
-        <UserSwitcher user={user} users={users} />
+        {/* The user, and beside them the system's state (issue 0114): one quiet mark, words on a tap. */}
+        <div className={st.me}>
+          <UserSwitcher user={user} users={users} />
+          <SystemStatus />
+        </div>
       </div>
     </nav>
   );

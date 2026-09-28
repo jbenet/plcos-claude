@@ -48,35 +48,27 @@ async function copy(text: string): Promise<boolean> {
 }
 
 /**
- * Where filed feedback stands (Juan, 27 Sep), so he knows when it is safe to close the tab. Quiet
- * and absent at zero, in the rail's footer:
- *
- *   "Saving…"                          the first send, up to 3 s
- *   "Saved on server · filing…"        journaled there; safe to close
- *   "1 note only on this device"       the server was not reached; keep this browser, it resends
- *   "Filed as issue 0123"              for a few seconds, once filed
- *
- * "Only on this device" wins over the others, and looks different (solid, with "!"), because it is
- * the one that is not yet safe. It opens the list: each report's state, Retry now and Copy text. At
- * phone widths the rail is a sheet, so the same line also sits in the top bar (`variant="bar"`).
+ * Where filed feedback stands (Juan, 27 Sep), so he knows when it is safe to close the tab. Since
+ * issue 0114 it is said by the one status mark beside the user (components/shell/SystemStatus.tsx),
+ * which also carries the imports; a tap there opens the words, and "Show the notes" opens the list
+ * below: each report's state, Retry now and Copy text. "Only on this device" outranks everything,
+ * because it is the one state that is not yet safe.
  */
-export function OutboxIndicator({ variant = 'rail' }: { variant?: 'rail' | 'bar' }) {
-  const out = useOutbox();
-  const [open, setOpen] = useState(false);
-  /** Where the chip is, so the list opens just above it rather than over it. */
-  const [anchor, setAnchor] = useState<{ left: number; bottom: number } | null>(null);
-  useEffect(() => { startOutbox(); }, []);
-
+export type OutboxTone = 'device' | 'send' | 'server' | 'done' | 'refused';
+/**
+ * Where filed feedback stands, in words: `label` in full, `short` for a narrow line, and a tone.
+ * Null when there is nothing to say. Shared with the rail's status mark (issue 0114).
+ */
+export function outboxSummary(out: OutboxState): { label: string; short: string; tone: OutboxTone } | null {
   const device = out.entries.filter((e) => !(out.justSaved === e.clientId && out.sending.includes(e.clientId)));
   const saving = out.entries.length - device.length;
   const server = out.onServer.length;
   const latest = out.filed.at(-1);
-  if (!out.entries.length && !server && !latest) return open ? <OutboxList anchor={anchor} onClose={() => setOpen(false)} /> : null;
+  if (!out.entries.length && !server && !latest) return null;
 
-  // The top bar on a phone shares its line with the menu and the name, so it says the same in fewer words.
   let label: string;
   let short: string;
-  let tone: 'device' | 'send' | 'server' | 'done' | 'refused';
+  let tone: OutboxTone;
   if (device.length) {
     const refused = device.filter((e) => e.refused).length;
     label = `${plural(device.length)} only on this device${refused ? ` · ${refused} refused` : ''}${server ? ` · ${server} on the server` : ''}`;
@@ -96,32 +88,10 @@ export function OutboxIndicator({ variant = 'rail' }: { variant?: 'rail' | 'bar'
     tone = 'done';
   }
 
-  return (
-    <div className={variant === 'bar' ? s.barWrap : s.railWrap} aria-live="polite">
-      <button
-        type="button"
-        className={`${s.chip} ${variant === 'bar' ? s.bar : s.rail} ${s[tone]}`}
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          setAnchor({ left: Math.max(8, r.left), bottom: Math.max(8, window.innerHeight - r.top + 8) });
-          setOpen((v) => !v);
-        }}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        title={tone === 'device' || tone === 'refused'
-          ? 'Kept only in this browser until the server accepts it: keep this browser, it resends on its own'
-          : 'Saved on the server: safe to close this tab'}
-        aria-label={variant === 'bar' ? label : undefined}
-      >
-        <span className={s.mark} aria-hidden>{tone === 'done' || tone === 'server' ? '✓' : tone === 'refused' || tone === 'device' ? '!' : '↑'}</span>
-        <span className={s.text}>{variant === 'bar' ? short : label}</span>
-      </button>
-      {open && <OutboxList anchor={anchor} onClose={() => setOpen(false)} />}
-    </div>
-  );
+  return { label, short, tone };
 }
 
-function OutboxList({ anchor, onClose }: { anchor: { left: number; bottom: number } | null; onClose: () => void }) {
+export function OutboxList({ anchor, onClose }: { anchor: { left: number; bottom: number } | null; onClose: () => void }) {
   const out = useOutbox();
   const [now, setNow] = useState(() => Date.now());
   const [copied, setCopied] = useState<string | null>(null);
