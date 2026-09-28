@@ -51,13 +51,14 @@ function copyTakenAt(): string | null {
 }
 
 /**
- * The real profile is this machine only until a deployment is chosen, so a connection string
- * pointing somewhere else is refused rather than quietly obeyed.
+ * On the Mac the real profile is this machine only, so a connection string pointing somewhere else
+ * is refused rather than quietly obeyed. The deployed LabOS app (rev 3: LABOS_ME_URL set) uses the
+ * database PL provisions, over TLS verified against the RDS bundle (lib/db/postgres.ts, Dockerfile).
  */
 function databaseUrl(): string | null {
   const url = process.env.DATABASE_URL?.trim() || null;
   if (process.env.POSTGRES_REHEARSAL === '1' && !url) throw new Error('Postgres rehearsal requires DATABASE_URL.');
-  if (url && PROFILE === 'real') {
+  if (url && PROFILE === 'real' && !process.env.LABOS_ME_URL) {
     const parsed = new URL(url);
     if (!['postgres:', 'postgresql:'].includes(parsed.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname) || parsed.search || parsed.hash) {
       throw new Error('DATABASE_URL is set in the real profile: only local Postgres is approved (docs/21-postgres.md).');

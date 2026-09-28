@@ -70,7 +70,11 @@ RUN chmod 644 /usr/share/keyrings/postgresql.asc \
 ARG GIT_COMMIT=""
 LABEL org.opencontainers.image.title="capital-os" \
       org.opencontainers.image.revision="${GIT_COMMIT}"
-ENV NODE_ENV=production PORT=8080 GIT_COMMIT=${GIT_COMMIT}
+# The RDS CA bundle, so connections to PL's database verify its certificate (node and libpq).
+ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
+RUN chmod 644 /etc/ssl/certs/rds-global-bundle.pem
+ENV NODE_ENV=production PORT=8080 GIT_COMMIT=${GIT_COMMIT} \
+    NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem PGSSLROOTCERT=/etc/ssl/certs/rds-global-bundle.pem
 
 # A fixed non-root uid, so the persistent volume's permissions can be set by number.
 RUN groupadd --system --gid 10001 plcos \

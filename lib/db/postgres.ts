@@ -23,8 +23,12 @@ const parsers = { getTypeParser(oid: number, format?: 'text' | 'binary') {
 /** Real PostgreSQL connections; query/one/exec have the same shape as the local adapter. */
 export async function openPostgres(url: string, options: PostgresOptions = {}): Promise<Db> {
   const worker = process.env.PLCOS_IMPORT_WORKER === '1';
+  // A database off this machine (the deployed app's RDS) is always TLS with a verified certificate;
+  // the image adds the RDS CA bundle through NODE_EXTRA_CA_CERTS.
+  const remote = !['127.0.0.1', 'localhost', '[::1]', ''].includes(new URL(url).hostname);
   const pool = new Pool({
     connectionString: url,
+    ...(remote ? { ssl: { rejectUnauthorized: true } } : {}),
     max: options.max ?? 8,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
