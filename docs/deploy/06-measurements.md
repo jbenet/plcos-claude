@@ -91,3 +91,141 @@ Run in a session permitted to connect/listen locally; no live-data operation is 
 - `git diff --check`: pass.
 
 The missing pg suite, HTTP measurements, pool observation, import-child measurement and capped runtime test are required follow-up, not waived acceptance criteria.
+
+## 28 September 2026 (follow-up) — runtime measurements complete
+
+This session was permitted to bind and connect locally, so it completes the "Claude's completion
+steps" above. **Invented/demo data only**, throughout: `data/demo/database` (PGlite) and a
+just-created, just-dropped `plcos_test_measure` database on the shared **dev/test** Postgres
+cluster at `127.0.0.1:5434` (never `data/real`, `plcos-data/real`, port 3000/3001, or the real
+cluster at `57433`). Work envelope: measure demo production RSS and latency, idle and under a
+10-way/3-minute page walk, on both backends, plus one demo import job's child RSS against
+Postgres; change this report and the wishlist's memory rows only; no fetch/pull/push. Budget: one
+bounded session; deadline: this handoff. Escalation owner: Juan/Claude.
+
+Same source baseline as above (`35db4f8` on `claude/main`, no code changes this pass), same
+lockfile SHA-256 (`d534954522761a7db003de3638a1d5404090abb7a6d3f42ff0f1e67e3b1838e8`), same
+dependency versions (Next 16.3.5 Turbopack, React 19.3.0, PGlite 0.5.8, pg 8.23.0). `node_modules`
+came from `npm ci` in the worktree — a symlink to a sibling checkout's `node_modules` was tried
+first, but Turbopack refuses a `node_modules` symlink that resolves outside the project root
+(`Symlink [project]/node_modules is invalid, it points out of the filesystem root`), so this
+worktree got its own install. Machine: Apple M3 Max, 16 logical CPUs, 48 GiB RAM, macOS 15.1.1
+(24B91), Node v26.0.0 (`sysctl hw.model hw.ncpu hw.memsize machdep.cpu.brand_string`, `sw_vers`).
+No container memory limit; other local work can contend for CPU, so timings are not a single-core
+platform prediction.
+
+### Build
+
+A clean `rm -rf .next` followed by `DATA_PROFILE=demo NEXT_TELEMETRY_DISABLED=1 npm run build`
+(which chains `next build && npm run build:traces`), wrapped in `/usr/bin/time -l` for rusage:
+
+| Metric | Value |
+| --- | --- |
+| Elapsed | 84.92 s real (81.97 s user, 52.73 s sys) |
+| Peak child RSS (`ru_maxrss`, largest single process in the tree) | 2,170,191,872 B — **2,069.7 MiB / 2.02 GiB** |
+| `.next` output | 317 MB, 2,736 files |
+| Build-traces guard | 94 manifests, 194,067 entries, 0 forbidden paths, 0 violations — pass |
+
+This exceeds the two builds in the partial run above (1.80 GiB and 1.84 GiB) and took far longer
+than the 9.974 s/6.390 s recorded there; both prior runs may have hit warm OS/module caches this
+clean run did not. Treat 2.02 GiB as the current best measured peak, not a ceiling — build memory
+depends on what changed. `ru_maxrss` is still the largest single process, not the summed tree.
+
+### HTTP walk: page list, method, and per-backend results
+
+Every `app/**/page.tsx` was inventoried (`lib/paths.ts` route table, `fixtures/vehicles.json` for
+vehicle slugs). The walk hits 31 GET routes: `/today`, `/orgs/g/lps`, `/developer/enrich`, and
+`{pipeline,selection,strategy,overview}` for each of the 7 demo vehicles (`neurotech`, `rails`,
+`spv-cortex`, `spv-lattice`, `spv-halo`, `spv-meridian`, `grants` — `fixtures/vehicles.json`).
+Vehicle module addresses are proxy-rewritten server-side (`proxy.ts` + `lib/paths.ts`
+`MODULE_PAGES`) to flat pages (e.g. `/neurotech/pipeline` → `/targets`); `strategy` is served
+directly from `app/[vehicle]/strategy`. No cookie or user-switcher setup was needed: an
+unauthenticated request falls back to the first seeded demo user (`lib/auth/local.ts`).
+
+A small Node script (`fetch`, no dependency added) sent 10 concurrent workers in a tight
+round-robin over the 31 pages for 180 s per backend, recording per-page latency and status;
+`redirect: 'manual'` so a 307 counts as itself, not as a followed 200. In parallel, a Python
+sampler summed `ps -o rss=` over the whole descendant tree of the launcher PID once per second.
+Both backends used the same `.next` build (the demo profile's dist dir does not depend on
+`DATABASE_URL`, only `DATA_PROFILE`, so no separate PGlite/Postgres build was needed). All 31
+pages were curled once first to warm compilation/caches before every measurement window.
+
+**PGlite** (`PORT=3110 DATA_PROFILE=demo npm start`, default `./data/demo/database`, freshly
+reset+seeded — 5 users, 7 vehicles, 5 sources):
+
+| Window | RSS |
+| --- | --- |
+| Idle, 60 s post-warmup | 385.7–421.6 MiB, avg 409.0 MiB |
+| Peak during the 180 s / 10-way walk | 861,600 KiB — **841.4 MiB (0.822 GiB)** |
+| Plateau near the end of the walk | ~816.3 MiB |
+| Post-load, 60 s (recovery) | 800.6 MiB → **366.6 MiB** by second 60 |
+
+Load result: **14,927 requests, 0 errors, 82.93 req/s**, all 200s. Slowest pages: `/developer/enrich`
+(p50 212.5 ms, p95 226.5 ms), the four `strategy` pages (p50 178–192 ms, p95 197–215 ms), then
+`overview` (p50 130–151 ms, p95 152–167 ms); `pipeline`/`selection` were fastest (p50 67–78 ms, p95
+78–90 ms); `/today` and `/orgs/g/lps` were ~107–137 ms p95. Full per-page numbers are in
+`/tmp/measure-logs/load-pglite-results.json` (this machine, not committed — ephemeral).
+
+**Postgres** (`PORT=3111 DATA_PROFILE=demo DATABASE_URL=postgres://plcos@127.0.0.1:5434/plcos_test_measure npm start`
+— an empty database created for this run only, migrated and demo-seeded automatically on first
+boot by the same `getDb()`/`boot()` path the server always uses, dropped again at the end):
+
+| Window | RSS | Postgres connections (`pg_stat_activity`, this DB) |
+| --- | --- | --- |
+| Idle, 60 s post-warmup | 189.6–246.0 MiB, avg 221.9 MiB | 0 (pool's 30 s `idleTimeoutMillis` had already closed them) |
+| Peak during the 180 s / 10-way walk | 758,720 KiB — **741.0 MiB (0.724 GiB)** | 8 (the configured foreground pool max, `lib/db/postgres.ts`) |
+| Post-load, 60 s (recovery) | 582.4 MiB → **240.4 MiB** by second 60 | 0 |
+
+Load result: **25,089 requests, 0 errors, 139.38 req/s** — notably higher throughput and lower
+latency than PGlite at the same concurrency (e.g. `/developer/enrich` p50 151.5 ms/p95 183.1 ms vs.
+212.5/226.5; the `strategy` pages p50 66–102 ms/p95 86–140 ms vs. 178–192/197–215; most other pages
+under 100 ms p95). This one machine, one run: real Postgres served this walk faster than PGlite's
+in-process engine at 10-way concurrency, plausibly because PGlite serializes more under concurrent
+access than a real backend with a real connection pool — not yet confirmed across repeated runs.
+
+Both backends: **zero request errors or non-200s across both 180 s runs** (40,016 requests total).
+
+### Import-child RSS (Postgres only — PGlite has no such child)
+
+`scripts/import-worker.ts` requires `config.db.url` and a queued `platform.import_job` row; it
+does not run against PGlite (that path uses in-process worker threads instead, per the gap table
+above). A `strategy-moves` job (`fixtures/strategy-moves.json`, wholly invented) was queued via
+`createImportJob` against `plcos_test_measure` while the Postgres 10-way walk above was still
+running, then the worker was launched exactly as `launchImportJob` does — same script, same args,
+same `PLCOS_IMPORT_WORKER=1` env — but wrapped directly in `/usr/bin/time -l` so a short-lived
+process's peak is still captured:
+
+| Metric | Value |
+| --- | --- |
+| Elapsed | 0.17 s |
+| Peak RSS (`ru_maxrss`) | 80,855,040 B — **77.1 MiB** |
+| Peak memory footprint | 43,445,440 B — 41.4 MiB |
+| Result | `completed` |
+
+This fixture has 1 move across a few vehicles — a **lower bound only**, smaller and structurally
+different from the 1,100-record PGlite fixture in the section above (1.17–1.25 GiB, which includes
+PGlite's own embedded engine and worker threads, not a Postgres child). Neither figure sizes a
+Postgres-backed worker doing a realistically large import (e.g. a full Affinity or Dakota sync);
+that remains unmeasured. Both are real measurements of different things — do not average them.
+
+### Checks (this pass)
+
+- `npm run props`: **1,107 / 1,107 pass**.
+- `npx tsc --noEmit`: pass.
+- `npm run boundaries`: pass — 63 authorized actions, 13 authorized handlers, 801 files checked,
+  297 screenshot assets.
+- `git diff --check`: pass.
+- Every server started this pass (PIDs and their full descendant trees) was sent `SIGTERM` and
+  confirmed gone; `plcos_test_measure` was dropped; ports 3110/3111 and the scratch database are
+  free again. Ports 3000, 3001 and 57433 were never touched.
+
+### What is still not measured
+
+- A realistically-sized import against Postgres (the fixture above is a lower bound by design).
+- The 384 MiB enforced-runtime-cap / `NODE_OPTIONS=--max-old-space-size` test: still needs a
+  Linux/container memory limit or an explicit RSS watchdog, which this Mac session has neither;
+  cgroup-limited behavior (OOM-kill vs. graceful degradation) is unproven. Note that the observed
+  peaks above (741–841 MiB) already exceed 384 MiB before any cap is even applied.
+- Sustained (>3 minute) behavior, multi-hour soak, and repeated runs for variance — this is one
+  180 s sample per backend, not a distribution.
+- Client-side render/hydration cost: this walk measures server response time only.

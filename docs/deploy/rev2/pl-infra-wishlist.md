@@ -6,22 +6,34 @@ read-only connectors (Affinity, the PL warehouse, Linear and, if licensed, Dakot
 workflows on API models. That is more than the kit's single 384 MiB container covers, so we are asking
 for the following.
 
-**The runtime memory numbers are not measured yet.** A production `next start` measurement was blocked
-in our sandbox. The sizes below are provisional, with headroom, and we will send measured RSS and p95
-figures before go-live. What we have measured:
-- a production build peaks at 1.80–1.84 GiB in one process;
-- an import fixture peaks at 1.17 GiB;
-- the database is 640 MB logical (1.6 GB on disk), and growing.
+**The runtime memory numbers below are now measured**, on one Mac, one 180-second run per backend
+(`docs/deploy/06-measurements.md`, 28 Sep 2026 follow-up) — not a multi-day soak, and not on the
+target Linux/container platform, so keep the headroom. Demo/invented data throughout: PGlite and a
+scratch Postgres database, never `data/real`. What we measured:
+- a production build peaked at **2.02 GiB** in one process (84.9 s), against **1.80–1.84 GiB** in
+  an earlier, shorter-lived run — build memory varies with what changed, both are real;
+- idle demo Next RSS: **~222–409 MiB** average (Postgres-backed lower than PGlite, since PGlite
+  embeds the DB engine in the same process);
+- peak RSS under a 10-way-concurrent, 3-minute walk of all 31 demo pages: **741 MiB (Postgres)** /
+  **841 MiB (PGlite)**, both with **zero errors** across 40,016 total requests (83–139 req/s), p95
+  latency 75–227 ms per page; RSS recovered to near-idle within 60 s after load stopped;
+  the foreground pool used all 8 configured Postgres connections under load, 0 idle;
+- a tiny (1-record) Postgres-backed import fixture peaked at **77 MiB / 0.17 s** — a lower bound,
+  not a sizing number for a real sync;
+- a much larger (1,100-record) PGlite-only import fixture peaked at **1.17–1.25 GiB** — different
+  code path (embedded engine + worker threads), also not directly a Postgres worker-process number;
+- the database is 640 MB logical (1.6 GB on disk), and growing (unchanged, not re-measured here).
 
-Every number marked GUESS is a planning figure.
+A realistically-sized import against real Postgres, and any measurement on the actual Linux
+container/cgroup, remain outstanding. Every number marked GUESS is still a planning figure.
 
 | # | Request | Number | Why | Priority |
 |---|---|---|---|---|
-| 1 | **Web process** | Request 1 GiB / 1 vCPU, limit 2 GiB / 2 vCPU; 1 replica, 2 later (GUESS until measured) | 384 MiB is below one import; route pages are CPU-bound | Must |
-| 2 | **Worker process** (same image, second command) | Request 2 GiB / 2 vCPU, limit 4 GiB / 4 vCPU; 1 replica | Connector syncs and imports (35–96 min of CPU on a Mac) must not share a pod with pages | Must |
+| 1 | **Web process** | Request 1 GiB / 1 vCPU, limit 2 GiB / 2 vCPU; 1 replica, 2 later — **measured, unchanged**: idle 190–422 MiB, peak 741 MiB (Postgres) / 841 MiB (PGlite) under a 10-way/3-min walk, 0 errors | Peak observed is 1.2–1.35x under the 1 GiB request and 2.4–2.7x under the 2 GiB limit; request ≈ round up from peak for steady-state, limit ≈ 2.5x peak for GC/compile spikes and a margin over our synthetic (harder-than-real) 10-way tight loop against ~10 actual people | Must |
+| 2 | **Worker process** (same image, second command) | Request 2 GiB / 2 vCPU, limit 4 GiB / 4 vCPU; 1 replica — **still a GUESS**: bracketed, not measured directly. A tiny Postgres-backed import (1 record) peaked at 77 MiB/0.17 s (a floor); a 1,100-record PGlite-only fixture peaked at 1.17–1.25 GiB (a different code path, ceiling-ish) | Neither measurement is a real sync against Postgres at real volume; keep the existing 2/4 GiB as headroom over the PGlite ceiling (≈1.6–1.7x its 1.25 GiB peak) until a real Affinity/Dakota/Linear sync is measured on this backend | Must |
 | 3 | **Agents process** (same image) | Request 1 GiB / 0.5 vCPU, limit 2 GiB / 1 vCPU; 4 concurrent model runs (GUESS) | API-bound research runs, isolated from connector keys and database writes | Must |
 | 4 | **Scheduled trigger** | A CronJob every minute (under 5 s, 256 MiB), or about 8 schedules | Syncs, nightly dump and reaper, without anyone's laptop | Must |
-| 5 | **Build** | 4 GiB / 2 vCPU builder, **or** we push a prebuilt image; a registry keeping 20 releases | One build process reached 1.84 GiB against a 2 GiB container limit | Must (either) |
+| 5 | **Build** | 4 GiB / 2 vCPU builder, **or** we push a prebuilt image; a registry keeping 20 releases — **measured**: a fresh clean build peaked at 2.02 GiB (84.9 s), up from an earlier 1.84 GiB | 4 GiB is ≈2x the higher measured peak (2.02 GiB), which already exceeds the 2 GiB container limit on its own; doubling is standard headroom for a build/bundler step whose peak varies run to run | Must (either) |
 | 6 | **Postgres 17** (16 minimum) | 2 vCPU / 8 GiB (db.m7g.large class); gp3 20 GB autoscaling to 100 GB; ≥ 100 connections | 640 MB today; 26 schemas; about 34 steady connections, 62 during a rolling deploy | Must |
 | 7 | **Database roles** | `CREATE SCHEMA` for an owner/migrator role, plus 4 login roles we define (app, worker, agent, read-only), or the right to create them | The runtime must not own its append-only audit log; agents and backups need read-only roles | Must |
 | 8 | **Backups and PITR** | PITR 14 days (35 nice); RPO ≤ 5 min; RTO ≤ 60 min; restore-to-new-instance for drills and rehearsal clones | This is the system of record; bad imports must be recoverable | Must |
