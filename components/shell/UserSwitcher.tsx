@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { AppUser } from '@/modules/platform';
 
@@ -8,7 +8,7 @@ import type { AppUser } from '@/modules/platform';
  * The local half of the AuthProvider seam, made visible. It is labelled "local only" on
  * purpose: nothing about this should look like a login.
  */
-export function UserSwitcher({ user, users }: { user: AppUser; users: AppUser[] }) {
+export function UserSwitcher({ user, users, unset = false }: { user: AppUser; users: AppUser[]; unset?: boolean }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -24,6 +24,14 @@ export function UserSwitcher({ user, users }: { user: AppUser; users: AppUser[] 
       router.refresh();
     });
   };
+
+  // Issue 0116: with no user cookie the page shows the default user, but every change requires the
+  // cookie and was refused ("Select an active app user"). Select the shown user once, as a pick would.
+  useEffect(() => {
+    if (!unset) return;
+    fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userHandle: user.handle }) }).then((r) => { if (r.ok) router.refresh(); }, () => {});
+  }, [unset, user.handle, router]);
 
   return (
     <div>

@@ -1,5 +1,6 @@
 import Link from '@/components/ui/AppLink';
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
+import { USER_COOKIE } from '@/lib/auth/cookie';
 import { config } from '@/config/deployment';
 import { feedbackHome } from '@/config/ports';
 import { auth } from '@/lib/auth';
@@ -67,7 +68,7 @@ async function LoadedRail() {
         </div>
         {/* The user, and beside them the system's state (issue 0114): one quiet mark, words on a tap. */}
         <div className={st.me}>
-          {a.switchable ? <UserSwitcher user={user} users={users} /> : <span>{user.name}</span>}
+          {a.switchable ? <UserSwitcher user={user} users={users} unset={(await cookies()).get(USER_COOKIE)?.value !== user.handle} /> : <span>{user.name}</span>}
           <SystemStatus />
         </div>
       </div>
