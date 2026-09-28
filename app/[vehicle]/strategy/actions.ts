@@ -5,7 +5,7 @@ import { queueImportJob } from '@/lib/import-jobs/server';
 import { revalidatePath } from 'next/cache';
 import { getDb } from '@/lib/db';
 import { config } from '@/config/deployment';
-import { readLayout } from '@/config/ports';
+import { isLiveServer } from '@/config/ports';
 import { decideMove, type MoveRow } from '@/modules/strategy/moves';
 
 export async function saveMove(input: {id:string;vehicleId:string;version:number;state:MoveRow['state'];position:number|null;note:string}): Promise<{error?:string}> {
@@ -18,7 +18,7 @@ export async function saveMove(input: {id:string;vehicleId:string;version:number
 }
 export async function importMoveFile(): Promise<{error?:string;message?:string}> {
   const authorizedUser = await requireAction('app/[vehicle]/strategy/actions.ts#importMoveFile');
-  if (config.data.profile === 'real' && !config.data.copyTakenAt && readLayout().role !== 'live') return {error:'Import on the live server or a marked preview copy.'};
+  if (config.data.profile === 'real' && !config.data.copyTakenAt && !isLiveServer()) return {error:'Import on the live server or a marked preview copy.'};
   try {
     const actor=(authorizedUser).id, db=await getDb();
     await queueImportJob(db,'strategy-moves',actor);return {message:'Strategy moves queued. Progress appears above.'};

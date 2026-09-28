@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { Db } from '@/lib/db';
 import { config } from '@/config/deployment';
-import { readLayout } from '@/config/ports';
+import { isLiveServer } from '@/config/ports';
 import { httpsTransport, linearClient, type LinearTransport } from './client';
 import { fixtureTransport } from './fixture';
 import { linearKey } from './key';
@@ -23,7 +23,7 @@ export const rawDir = (root: string = config.data.root): string => join(root, 'l
 /** The live server, or a Postgres rehearsal of it. Never a preview copy or a dev checkout. */
 export function linearLiveServer(): boolean {
   return config.data.profile === 'real'
-    && ((!config.data.copyTakenAt && readLayout().role === 'live') || Boolean(config.db.url && process.env.POSTGRES_REHEARSAL === '1'));
+    && ((!config.data.copyTakenAt && isLiveServer()) || Boolean(config.db.url && process.env.POSTGRES_REHEARSAL === '1'));
 }
 
 export const LINEAR_REFUSAL = {

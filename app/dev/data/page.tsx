@@ -5,7 +5,7 @@ import { headers } from 'next/headers';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
-import { readLayout, type Layout } from '@/config/ports';
+import { isLiveServer, readLayout, type Layout } from '@/config/ports';
 import { getDb } from '@/lib/db';
 import { lockFile } from '@/lib/db/lock';
 import { ago } from '@/lib/time';
@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic';
  */
 function profiles(layout: Layout | null): Array<{ fact: string; demo: string; real: string }> {
   const row = layout?.row;
-  const copy = layout?.role !== 'live';
+  const copy = !isLiveServer();
   const at = (port: number | undefined) => (port ? `port ${port}` : 'the port in PORT (this folder has no row in .ports.json)');
   const files = copy ? 'Not filed here: only the live app files, so issue numbers never collide' : null;
   return [

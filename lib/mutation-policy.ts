@@ -1,5 +1,5 @@
 import { config } from '@/config/deployment';
-import { readLayout } from '@/config/ports';
+import { isLiveServer } from '@/config/ports';
 
 export class MutationGuardError extends Error {
   constructor(message: string, readonly status: 401 | 403) { super(message); }
@@ -24,7 +24,6 @@ export function mutationProfileAllowed(profile: 'demo' | 'real', copyTakenAt: st
 
 export function requireMutationProfile(): void {
   if (config.data.profile !== 'real') return;
-  let live = false;
-  try { live = mutationProfileAllowed(config.data.profile, config.data.copyTakenAt, readLayout().role); } catch { /* fail closed */ }
+  const live = mutationProfileAllowed(config.data.profile, config.data.copyTakenAt, isLiveServer() ? 'live' : 'dev');
   if (!live) throw new MutationGuardError('Change real data on the live server.', 403);
 }

@@ -3,13 +3,13 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { getDb } from '@/lib/db';
 import { config } from '@/config/deployment';
-import { readLayout } from '@/config/ports';
+import { isLiveServer } from '@/config/ports';
 import { correctEntityType, reverseEntityTypeCorrection } from '@/modules/identity/entity-type';
 import { isEntityKey } from '@/lib/enrich/connection-check';
 
 /** Local identity correction only. Real mutations run in the live server's existing DB handle. */
 export const POST = withRoute('app/api/identity/entity-type/route.ts#POST', async function(request: Request, _context, user) {
-  if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
+  if (config.data.profile === 'real' && (config.data.copyTakenAt || !isLiveServer())) {
     return NextResponse.json({ error: 'Correct entity types on the live server.' }, { status: 403 });
   }
   const input = await request.json().catch(() => null);

@@ -30,6 +30,13 @@ export async function getUserByHandle(handle: string, q?: Queryable): Promise<Ap
 /** Unknown LabOS members start as viewers; an existing binding is never changed. */
 export async function resolveLabosUser(uid: string, name: string, q?: Queryable): Promise<AppUser | null> {
   const db = q ?? await getDb();
+  // Include inactive bindings: they must stay refused without touching the row or read revision.
+  const known = await db.one<AppUser & { active: boolean }>(`select id, handle, name, initials, role, email,
+    access::text, vehicles, approves, active from platform.app_user where labos_uid = $1`, [uid]);
+  if (known) {
+    const { active, ...user } = known;
+    return active ? user : null;
+  }
   await db.query(`insert into platform.app_user (labos_uid, handle, name, initials, role, email, access)
     values ($1, 'labos-' || gen_random_uuid()::text, $2, $3, 'Viewer', '', 'viewer')
     on conflict (labos_uid) do nothing`, [uid, name, name.trim().split(/\s+/).map(n => n[0]).slice(0, 2).join('').toUpperCase()]);

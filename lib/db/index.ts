@@ -69,7 +69,7 @@ const scopedDb = new AsyncLocalStorage<Db>();
 export const withDb = <T>(db: Db, work: () => Promise<T>): Promise<T> => scopedDb.run(db, work);
 import { join as pathJoin } from 'node:path';
 import { config } from '@/config/deployment';
-import { readLayout } from '@/config/ports';
+import { isLiveServer } from '@/config/ports';
 import { isDbBusy, prioritizeDb } from './scheduling';
 
 type Global = typeof globalThis & { __capitalOsDb?: Promise<Db>; __capitalOsMigrationCheck?: { at: number; files: string; running: Promise<void> | null } };
@@ -174,7 +174,7 @@ async function boot(dir?: string): Promise<Db> {
     resumeDakotaJob(scheduled);
     let mayRecover = config.data.profile === 'demo';
     if (config.data.profile === 'real' && !config.data.copyTakenAt) {
-      try { mayRecover = readLayout().role === 'live'; } catch { /* fail closed */ }
+      mayRecover = isLiveServer();
     }
     if (mayRecover) {
       const { importJobStatus } = await import('../import-jobs/server');

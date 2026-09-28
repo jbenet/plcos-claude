@@ -1,6 +1,6 @@
 import type { Db } from '@/lib/db';
 import { config } from '@/config/deployment';
-import { readLayout } from '@/config/ports';
+import { isLiveServer } from '@/config/ports';
 import { dakotaJob } from './translate';
 
 // Keep the local worker across Next module reloads. Only the live server's existing
@@ -8,7 +8,7 @@ import { dakotaJob } from './translate';
 const g=globalThis as typeof globalThis & {__dakotaWorkers?:WeakMap<Db,Promise<void>>};
 const workers=g.__dakotaWorkers??=new WeakMap<Db,Promise<void>>();
 export function dakotaLiveServer():boolean {
-  return config.data.profile==='real'&&((!config.data.copyTakenAt&&readLayout().role==='live')||Boolean(config.db.url&&process.env.POSTGRES_REHEARSAL==='1'));
+  return config.data.profile==='real'&&((!config.data.copyTakenAt&&isLiveServer())||Boolean(config.db.url&&process.env.POSTGRES_REHEARSAL==='1'));
 }
 export function resumeDakotaJob(db:Db):void {
   if(!dakotaLiveServer()||workers.has(db))return;
