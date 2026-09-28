@@ -69,6 +69,7 @@ export async function runProperties(check: Check) {
   await (await import('./lp-unit-paths')).lpUnitPathDatabaseProperties(check, db);
   await (await import('./linear')).linearProperties(check, db);
   await (await import('./authz')).authzProperties(check, db);
+  await (await import('./labos')).labosProperties(check, db);
   await (await import('./authz-read')).authzReadProperties(check, db);
   // Last on this database: it re-points every pursuit, then reverses every decision it made.
   await (await import('./lp-units')).lpUnitProperties(check, db);
