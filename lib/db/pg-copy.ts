@@ -9,7 +9,7 @@ const ident = (s: string) => `"${s.replaceAll('"', '""')}"`;
 const literal = (s: string) => `'${s.replaceAll("'", "''")}'`;
 const qualified = (schema: string, name: string) => `${ident(schema)}.${ident(name)}`;
 const userSchema = "n.nspname <> 'information_schema' and n.nspname !~ '^pg_'";
-type Query = { query<T extends Record<string, unknown>>(sql: string, params?: unknown[]): Promise<{ rows: T[] }> };
+export type Query = { query<T extends Record<string, unknown>>(sql: string, params?: unknown[]): Promise<{ rows: T[] }> };
 type Table = { oid: number; schema: string; name: string };
 type Column = { name: string; type: string; nullable: boolean; expression: string | null; generated: string; identity: string; collation: string | null };
 export type CopyReport = { table: string; sourceRows: number; targetRows: number; sourceChecksum: string; targetChecksum: string; ok: boolean };
@@ -31,7 +31,7 @@ async function refuseHeldSource(source: string): Promise<void> {
   throw new PgCopyError('Source is open in a running process. Stop it and take a closed snapshot before copying.');
 }
 
-async function digest(db: Query, table: string, batchSize: number): Promise<{ count: number; checksum: string }> {
+export async function digest(db: Query, table: string, batchSize: number): Promise<{ count: number; checksum: string }> {
   // Hash each row in SQL, preserving full timestamp/numeric precision and canonical jsonb keys.
   // Sorting fixed-width hashes retains duplicate rows, is independent of heap order and uses no JS values.
   const hash = createHash('sha256');
