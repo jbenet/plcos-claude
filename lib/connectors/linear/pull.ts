@@ -22,13 +22,13 @@ export async function pullLinear(client: LinearClient, rawDir: string, opts: Pul
   const now = opts.now ?? (() => new Date());
   const started = now();
   const stamp = started.toISOString().replace(/[:.]/g, '-');
-  const last = opts.full ? null : await lastCompletePull(rawDir);
+  const last = opts.full ? null : await lastCompletePull(rawDir, client.teams());
   const since = last ? new Date(Date.parse(last) - opts.overlapMs).toISOString() : null;
   const filter = since ? { updatedAt: { gt: since } } : null;
   const entities: Manifest['entities'] = {};
   await mkdir(rawDir, { recursive: true });
   let failed = false;
-  for (const [i, entity] of ENTITIES.entries()) {
+  for (const [i, entity] of [...ENTITIES.filter((e) => e !== 'users'), 'users' as const].entries()) {
     await opts.onEntity?.(entity, i);
     const dir = join(rawDir, entity);
     await mkdir(dir, { recursive: true });
@@ -36,7 +36,7 @@ export async function pullLinear(client: LinearClient, rawDir: string, opts: Pul
     await writeFile(file, '', { mode: 0o600 });
     let written = 0;
     try {
-      for await (const nodes of client.pages<unknown>(opName(entity), filter, opts.pageSize)) {
+      for await (const nodes of client.pages<unknown>(opName(entity), entity === 'users' ? null : filter, opts.pageSize)) {
         if (nodes.length) await appendFile(file, nodes.map((n) => JSON.stringify(n)).join('\n') + '\n', { mode: 0o600 });
         written += nodes.length;
       }
@@ -51,6 +51,7 @@ export async function pullLinear(client: LinearClient, rawDir: string, opts: Pul
   }
   const s = client.stats(), b = client.budget();
   const manifest: Manifest = {
+    teams: client.teams(),
     at: started.toISOString(), finishedAt: now().toISOString(), since, full: !since,
     requests: s.requests, bytesIn: s.bytesIn, bytesOut: s.bytesOut, records: s.records,
     budget: { requestsLeft: b.requestsLeft, requestsLimit: b.requestsLimit, complexityLeft: b.complexityLeft, complexityLimit: b.complexityLimit },

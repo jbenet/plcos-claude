@@ -1,3 +1,4 @@
+import { config } from '@/config/deployment';
 import { recordActivity } from '@/lib/activity/log';
 import { QUERIES, type QueryName } from './queries';
 
@@ -67,6 +68,9 @@ export interface LinearStats { requests: number; bytesIn: number; bytesOut: numb
 
 export interface LinearClientOptions {
   transport: LinearTransport;
+  teams?: readonly string[];
+  /** IDs already proved referenced by the filtered local replica. */
+  referencedUserIds?: readonly string[];
   key: string;
   limits: LinearLimits;
   sleep?: (ms: number) => Promise<void>;
@@ -90,6 +94,9 @@ const num = (h: Headers, k: string): number | null => {
 };
 
 export function linearClient(opts: LinearClientOptions) {
+  const teams = [...new Set(opts.teams ?? config.linear.teams)];
+  if (teams.some((key) => !/^[A-Za-z0-9_-]+$/.test(key))) throw new LinearRefused('Linear: invalid team allowlist');
+  const referencedUsers = new Set(opts.referencedUserIds ?? []);
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const now = opts.now ?? (() => Date.now());
   const redact = (s: string) => (opts.key ? s.split(opts.key).join('[key]') : s);
@@ -130,7 +137,10 @@ export function linearClient(opts: LinearClientOptions) {
     const q = Object.hasOwn(QUERIES, name) ? QUERIES[name] : undefined;
     if (!q) throw new LinearRefused(`Linear: "${String(name).slice(0, 40)}" is not on the allowlist; refused`);
     assertReadOnly(q.text);
-    const body = JSON.stringify({ operationName: name, query: q.text, variables });
+    // Caller variables cannot replace or broaden the configured scope.
+    const scopedVariables = { ...variables, filter: variables.filter ?? {}, teamKeys: teams,
+      ...(q.entity === 'users' ? { userIds: [...referencedUsers] } : {}) };
+    const body = JSON.stringify({ operationName: name, query: q.text, variables: scopedVariables });
     const seg = segment ?? q.entity ?? 'authentication';
     for (let attempt = 1; ; attempt++) {
       await pace();
@@ -166,9 +176,14 @@ export function linearClient(opts: LinearClientOptions) {
           const message = (parsed?.errors?.[0]?.message ?? '').slice(0, 200);
           throw new LinearError(res.status, redact(`Linear answered ${res.status} for ${name}${message ? `: ${message}` : ''}`));
         }
-        const conn = q.root ? parsed.data[q.root] as { nodes?: unknown[] } | undefined : undefined;
+        const conn = q.root ? parsed.data[q.root] as { nodes?: Array<Record<string, unknown>> } | undefined : undefined;
         records = Array.isArray(conn?.nodes) ? conn.nodes.length : 0;
         stats.records += records;
+        const refFields = q.entity === 'projects' ? ['lead'] : q.entity === 'issues' ? ['assignee', 'creator'] : q.entity === 'comments' ? ['user'] : [];
+        for (const row of conn?.nodes ?? []) for (const field of refFields) {
+          const id = (row[field] as { id?: unknown } | null)?.id;
+          if (typeof id === 'string') referencedUsers.add(id);
+        }
         return parsed.data as T;
       } finally {
         await recordActivity({ source: 'linear', at, segment: seg, runId: opts.runId, requests: 1, bytesIn,
@@ -194,7 +209,7 @@ export function linearClient(opts: LinearClientOptions) {
     }
   }
 
-  return { transportKind: opts.transport.kind, request, pages, budget: () => ({ ...budget }), stats: () => ({ ...stats }) };
+  return { teams: () => [...teams], transportKind: opts.transport.kind, request, pages, budget: () => ({ ...budget }), stats: () => ({ ...stats }) };
 }
 
 export type LinearClient = ReturnType<typeof linearClient>;

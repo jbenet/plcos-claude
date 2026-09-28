@@ -92,6 +92,8 @@ export function normalize(entity: Entity, raw: unknown): Row {
 
 export interface EntityResult { written: number; error?: string }
 export interface Manifest {
+  /** Pins the requested scope; missing on legacy workspace-wide pulls. */
+  teams?: string[];
   at: string; finishedAt: string; since: string | null; full: boolean;
   requests: number; bytesIn: number; bytesOut: number; records: number;
   budget: { requestsLeft: number | null; requestsLimit: number | null; complexityLeft: number | null; complexityLimit: number | null };
@@ -118,8 +120,13 @@ export async function readManifests(rawDir: string): Promise<Array<Manifest & { 
 }
 
 /** When the newest complete pull started; null means nothing complete yet, so pull everything. */
-export async function lastCompletePull(rawDir: string): Promise<string | null> {
-  return (await readManifests(rawDir)).filter((m) => m.complete).at(-1)?.at ?? null;
+export async function lastCompletePull(rawDir: string, teams?: readonly string[]): Promise<string | null> {
+  const latest = (await readManifests(rawDir)).filter((m) => m.complete).at(-1);
+  if (!latest) return null;
+  const scope = (keys: readonly string[]) => JSON.stringify([...new Set(keys)].sort());
+  // Changing the allowlist needs a full read, including newly allowed unchanged records.
+  if (teams && (!latest.teams || scope(latest.teams) !== scope(teams))) return null;
+  return latest.at;
 }
 
 /**

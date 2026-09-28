@@ -133,6 +133,10 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
       const { syncLinear } = await import('@/lib/connectors/linear/sync');
       return {...await syncLinear(db,actor,{full:job.input.full===true,progress})};
     }
+    case 'linear-rebuild': {
+      const { rebuildLinear } = await import('@/lib/connectors/linear/sync');
+      return {...await rebuildLinear(db,actor,{progress})};
+    }
     case 'strategy-moves': {
       await progress('Validating strategy moves',0,1);
       const path = config.data.profile==='real' ? join(config.data.root,'strategy-moves/menu.json') : join(process.cwd(),'fixtures/strategy-moves.json');

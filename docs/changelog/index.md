@@ -175,3 +175,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Interaction history — bounded backfill and canonical participant links](entries/interactions-0045.md)
 
 - [W3 LP units — paths through firm contacts](entries/w3-lp-units.md)
+- [Linear — PLC-only sync and replica rebuild](entries/linear-plc-only.md)

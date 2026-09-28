@@ -6,7 +6,9 @@ import { httpsTransport, linearClient, type LinearTransport } from './client';
 import { fixtureTransport } from './fixture';
 import { linearKey } from './key';
 import { pullLinear } from './pull';
-import { readReplicas } from './replica';
+import { readReplicas, TABLE } from './replica';
+import { scopeReplicas } from './scope';
+import { recordActivity } from '@/lib/activity/log';
 import { translateLinear } from './translate';
 
 /**
@@ -49,7 +51,9 @@ export async function syncLinear(db: Db, actor: string, opts: { full?: boolean; 
   if ('refused' in src) throw new Error(src.refused);
   const progress = opts.progress ?? (async () => {});
   const dir = rawDir(opts.root);
-  const client = linearClient({ transport: src.transport, key: src.key, limits: config.linear, runId: opts.runId });
+  const scoped = scopeReplicas(await readReplicas(dir),config.linear.teams);
+  const referencedUserIds = scoped.flatMap(r => r.records.flatMap(row => r.entity === 'users' ? [row.id] : ['lead_id','assignee_id','creator_id','user_id'].flatMap(col => typeof row[col] === 'string' ? [row[col] as string] : [])));
+  const client = linearClient({ referencedUserIds, teams:config.linear.teams, activityRoot:opts.root, transport: src.transport, key: src.key, limits: config.linear, runId: opts.runId });
   try {
     await progress('Reading Linear', 0, 3);
     const manifest = await pullLinear(client, dir, { full: opts.full, pageSize: config.linear.pageSize, overlapMs: config.linear.overlapMs,
@@ -73,4 +77,28 @@ export async function syncLinear(db: Db, actor: string, opts: { full?: boolean; 
     // Fixed words only: a lower-level message could carry a record.
     throw new Error(err instanceof Error && Object.values(LINEAR_REFUSAL).includes(err.message as never) ? err.message : 'Linear sync stopped.');
   }
+}
+
+/** Local purge and replay. The import worker serializes this with normal Linear syncs. */
+export async function rebuildLinear(db: Db, actor: string | null, opts: { root?: string; teams?: readonly string[]; progress?: Progress; runId?: string } = {}) {
+  if (config.data.profile !== 'demo' && !linearLiveServer()) throw new Error(LINEAR_REFUSAL.notLive);
+  const teams = opts.teams ?? config.linear.teams;
+  const dir = rawDir(opts.root);
+  await opts.progress?.('Filtering the saved Linear replica',0,3);
+  const {purgeRawReplicas} = await import('./purge');
+  const purged = await purgeRawReplicas(dir,teams);
+  const replicas = await readReplicas(dir);
+  await opts.progress?.('Rebuilding Linear tables',1,3);
+  // Truncate and replay commit together; readers never see a half-rebuilt schema.
+  const counts = await db.transaction(async tx => {
+    await tx.exec(`truncate table ${[...Object.values(TABLE),'replica'].map(t => `linear.${t}`).join(',')}`);
+    const nested: Db = {...tx,kind:db.kind, query:tx.query.bind(tx),one:tx.one.bind(tx),exec:tx.exec.bind(tx),
+      transaction: async fn => fn(tx),close:async () => {}};
+    return translateLinear(nested,actor,replicas,{batch:config.linear.translateBatch,teams});
+  });
+  const result = {requests:0,records:replicas.reduce((n,r) => n+r.records.length,0),...counts,...purged};
+  await db.query(`insert into platform.audit_log (actor_id,action,subject_type,detail) values ($1,'linear.rebuilt','linear',$2::jsonb)`,[actor,JSON.stringify(result)]);
+  await recordActivity({source:'linear',segment:'rebuild',runId:opts.runId,requests:0,bytesIn:0,bytesOut:0,records:result.records},opts.root);
+  await opts.progress?.('Linear rebuilt from the filtered replica',3,3);
+  return result;
 }

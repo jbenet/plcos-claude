@@ -1,3 +1,4 @@
+import { config } from '@/config/deployment';
 import type { Queryable } from '@/lib/db';
 import { readManifests, type Manifest } from './replica';
 
@@ -40,57 +41,74 @@ export function vehicleTerms(v: { slug: string; name: string; aliases: string[] 
 export const termsPattern = (terms: string[]) => terms.length ? `\\m(${terms.map(esc).join('|')})\\M` : null;
 
 export async function linearOverview(db: Queryable): Promise<LinearOverview> {
-  const open = `(select id from linear.state where type = any($1::text[]))`;
-  const [totals] = await db.query<Record<string, string>>(`select
-    (select count(*) from linear.team) teams, (select count(*) from linear.member) members, (select count(*) from linear.state) states,
-    (select count(*) from linear.label) labels, (select count(*) from linear.project where archived_at is null) projects,
-    (select count(*) from linear.milestone) milestones, (select count(*) from linear.cycle) cycles,
-    (select count(*) from linear.issue where archived_at is null) issues, (select count(*) from linear.comment) comments`);
-  const teams = await db.query<Record<string, unknown>>(`select t.id, t.key, t.name,
+  // Scope reads as well as writes so a legacy workspace replica cannot leak into this page
+  // while the live operator is waiting to run its first purge and re-map.
+  const scopedQuery = <T>(sql: string, params: unknown[] = []): Promise<T[]> => {
+    const scope = `with scoped_team as (select * from linear.team where key = any($${params.length + 1}::text[])),
+      scoped_issue as (select * from linear.issue where team_id in (select id from scoped_team)),
+      scoped_project as (select * from linear.project where team_ids && array(select id from scoped_team)),
+      scoped_comment as (select * from linear.comment where issue_id in (select id from scoped_issue)),
+      scoped_state as (select * from linear.state where team_id in (select id from scoped_team)),
+      scoped_label as (select * from linear.label where team_id in (select id from scoped_team)),
+      scoped_cycle as (select * from linear.cycle where team_id in (select id from scoped_team)),
+      scoped_milestone as (select * from linear.milestone where project_id in (select id from scoped_project)),
+      scoped_member as (select * from linear.member where id in (
+        select assignee_id from scoped_issue union select creator_id from scoped_issue
+        union select lead_id from scoped_project union select user_id from scoped_comment))`;
+    return db.query<T>(`${scope}${/^with\s/i.test(sql) ? ', ' + sql.replace(/^with\s+/i, '') : ' ' + sql}`, [...params, config.linear.teams]);
+  };
+
+  const open = `(select id from scoped_state where type = any($1::text[]))`;
+  const [totals] = await scopedQuery<Record<string, string>>(`select
+    (select count(*) from scoped_team) teams, (select count(*) from scoped_member) members, (select count(*) from scoped_state) states,
+    (select count(*) from scoped_label) labels, (select count(*) from scoped_project where archived_at is null) projects,
+    (select count(*) from scoped_milestone) milestones, (select count(*) from scoped_cycle) cycles,
+    (select count(*) from scoped_issue where archived_at is null) issues, (select count(*) from scoped_comment) comments`);
+  const teams = await scopedQuery<Record<string, unknown>>(`select t.id, t.key, t.name,
       count(i.id) issues, count(i.id) filter (where s.type = any($1::text[])) open, count(i.id) filter (where s.type = 'completed') done,
       count(i.id) filter (where s.type in ('canceled','duplicate')) canceled,
-      (select count(*) from linear.project p where t.id = any(p.team_ids) and p.archived_at is null) projects, max(i.updated_at) last
-    from linear.team t left join linear.issue i on i.team_id = t.id and i.archived_at is null left join linear.state s on s.id = i.state_id
-    where t.archived_at is null group by t.id order by count(i.id) desc, t.name`, [OPEN]);
-  const projects = await db.query<Record<string, unknown>>(`select p.id, p.name, p.url, p.status_name, p.status_type, p.start_date::text start, p.target_date::text target,
+      (select count(*) from scoped_project p where t.id = any(p.team_ids) and p.archived_at is null) projects, max(i.updated_at) last
+    from scoped_team t left join scoped_issue i on i.team_id = t.id and i.archived_at is null left join scoped_state s on s.id = i.state_id
+    where t.archived_at is null group by t.id, t.key, t.name order by count(i.id) desc, t.name`, [OPEN]);
+  const projects = await scopedQuery<Record<string, unknown>>(`select p.id, p.name, p.url, p.status_name, p.status_type, p.start_date::text start, p.target_date::text target,
       m.name lead, (u.id is not null) lead_ours,
-      (select string_agg(coalesce(t.key, '?'), ', ' order by t.key) from linear.team t where t.id = any(p.team_ids)) teams,
+      (select string_agg(coalesce(t.key, '?'), ', ' order by t.key) from scoped_team t where t.id = any(p.team_ids)) teams,
       count(i.id) issues, count(i.id) filter (where s.type = any($1::text[])) open, count(i.id) filter (where s.type = 'completed') done,
-      (select count(*) from linear.milestone ms where ms.project_id = p.id and ms.archived_at is null) milestones
-    from linear.project p left join linear.member m on m.id = p.lead_id
+      (select count(*) from scoped_milestone ms where ms.project_id = p.id and ms.archived_at is null) milestones
+    from scoped_project p left join scoped_member m on m.id = p.lead_id
     left join platform.app_user u on m.email is not null and lower(u.email) = lower(m.email)
-    left join linear.issue i on i.project_id = p.id and i.archived_at is null left join linear.state s on s.id = i.state_id
-    where p.archived_at is null group by p.id, m.name, u.id
+    left join scoped_issue i on i.project_id = p.id and i.archived_at is null left join scoped_state s on s.id = i.state_id
+    where p.archived_at is null group by p.id, p.name, p.url, p.status_name, p.status_type, p.start_date, p.target_date, p.team_ids, m.name, u.id
     order by case p.status_type when 'started' then 0 when 'planned' then 1 when 'backlog' then 2 else 3 end, count(i.id) filter (where s.type = any($1::text[])) desc, p.name`, [OPEN]);
-  const states = await db.query<{ type: string; issues: string }>(`select coalesce(s.type, 'unknown') type, count(*) issues
-    from linear.issue i left join linear.state s on s.id = i.state_id where i.archived_at is null group by 1 order by 2 desc`);
-  const [ours] = await db.query<Record<string, string>>(`with ours as (select m.id from linear.member m join platform.app_user u on lower(u.email) = lower(m.email))
-    select (select count(*) from linear.member where archived_at is null) members, (select count(*) from ours) matched,
+  const states = await scopedQuery<{ type: string; issues: string }>(`select coalesce(s.type, 'unknown') type, count(*) issues
+    from scoped_issue i left join scoped_state s on s.id = i.state_id where i.archived_at is null group by 1 order by 2 desc`);
+  const [ours] = await scopedQuery<Record<string, string>>(`with ours as (select m.id from scoped_member m join platform.app_user u on lower(u.email) = lower(m.email))
+    select (select count(*) from scoped_member where archived_at is null) members, (select count(*) from ours) matched,
       count(*) filter (where i.assignee_id in (select id from ours)) open_ours,
       count(*) filter (where i.assignee_id is null) open_none,
       count(*) filter (where i.assignee_id is not null and i.assignee_id not in (select id from ours)) open_else
-    from linear.issue i where i.archived_at is null and i.state_id in ${open}`, [OPEN]);
-  const [fill] = await db.query<Record<string, string>>(`select count(*) filter (where assignee_id is not null) assignee, count(*) filter (where project_id is not null) project,
+    from scoped_issue i where i.archived_at is null and i.state_id in ${open}`, [OPEN]);
+  const [fill] = await scopedQuery<Record<string, string>>(`select count(*) filter (where assignee_id is not null) assignee, count(*) filter (where project_id is not null) project,
       count(*) filter (where due_date is not null) due, count(*) filter (where estimate is not null) estimate,
       count(*) filter (where cardinality(coalesce(label_ids, '{}')) > 0) labels, count(*) filter (where parent_id is not null) parent,
       count(*) filter (where cycle_id is not null) cycle, count(*) filter (where milestone_id is not null) milestone,
       min(created_at) oldest, max(updated_at) newest
-    from linear.issue where archived_at is null`);
+    from scoped_issue where archived_at is null`);
   const vehicles: VehicleReading[] = [];
-  for (const v of await db.query<{ slug: string; name: string; aliases: string[] | null }>(`select slug, name, aliases from platform.vehicle where phase <> 'historical' and kind::text <> 'grant_rail' order by sort_order`)) {
+  for (const v of await scopedQuery<{ slug: string; name: string; aliases: string[] | null }>(`select slug, name, aliases from platform.vehicle where phase <> 'historical' and kind::text <> 'grant_rail' order by sort_order`)) {
     const terms = vehicleTerms(v), re = termsPattern(terms);
     if (!re) continue;
-    const [r] = await db.query<Record<string, string>>(`with ps as (select id from linear.project where archived_at is null and name ~* $1)
+    const [r] = await scopedQuery<Record<string, string>>(`with ps as (select id from scoped_project where archived_at is null and name ~* $1)
       select (select count(*) from ps) projects, count(i.id) issues, count(i.id) filter (where s.type = any($2::text[])) open
-      from linear.issue i left join linear.state s on s.id = i.state_id
+      from scoped_issue i left join scoped_state s on s.id = i.state_id
       where i.archived_at is null and (i.project_id in (select id from ps) or i.title ~* $1)`, [re, OPEN]);
     vehicles.push({ slug: v.slug, name: v.name, projects: n(r?.projects), issues: n(r?.issues), open: n(r?.open), terms });
   }
   // An LP named in an issue title: a name match, counted, never a link (docs/24-linear.md §4).
-  const [lp] = await db.query<Record<string, string>>(`with lps as (
+  const [lp] = await scopedQuery<Record<string, string>>(`with lps as (
       select distinct e.entity_id, lower(e.display_name) name from strategy.active_pursuit p join identity.entity e on e.entity_id = p.entity_id
       where length(e.display_name) >= 5 and p.status::text <> 'passed')
-    select count(distinct i.id) issues, count(distinct l.entity_id) lps from linear.issue i join lps l on position(l.name in lower(i.title)) > 0
+    select count(distinct i.id) issues, count(distinct l.entity_id) lps from scoped_issue i join lps l on position(l.name in lower(i.title)) > 0
     where i.archived_at is null`);
   return {
     totals: Object.fromEntries(Object.entries(totals ?? {}).map(([k, v]) => [k, n(v)])) as LinearOverview['totals'],

@@ -5,7 +5,7 @@ import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { ago } from '@/lib/time';
 import { QUERIES } from '@/lib/connectors/linear/queries';
-import { linearSource, rawDir } from '@/lib/connectors/linear/sync';
+import { linearLiveServer, linearSource, rawDir } from '@/lib/connectors/linear/sync';
 import { linearKeyPresent } from '@/lib/connectors/linear/key';
 import { linearOverview, linearSyncState, type LinearOverview } from '@/lib/connectors/linear/view';
 import { LinearSync } from './LinearSync';
@@ -138,7 +138,7 @@ function Mapping({ o }: { o: LinearOverview }) {
         </table>
       </div>
       <div className="cbody">
-        <div className="fact"><span>Our team in Linear</span><span>{n(o.ours.matched)} of {n(o.ours.members)} members matched to our team by email</span></div>
+        <div className="fact"><span>Our team in Linear</span><span>{n(o.ours.matched)} of {n(o.ours.members)} referenced members matched to our team by email</span></div>
         <div className="fact"><span>Open issues</span><span>{n(o.ours.openAssigned)} owned by our team · {n(o.ours.openAssignedElsewhere)} by others · {n(o.ours.openUnassigned)} unowned</span></div>
         <div className="fact"><span>LPs named in titles</span><span>{o.lpTitles.issues === 0 ? 'No issue title names an LP we are pursuing' : `${n(o.lpTitles.issues)} issue${o.lpTitles.issues === 1 ? '' : 's'} name${o.lpTitles.issues === 1 ? 's' : ''} ${n(o.lpTitles.lps)} LP${o.lpTitles.lps === 1 ? '' : 's'} we are pursuing`}</span></div>
       </div>
@@ -189,6 +189,7 @@ async function LinearPage() {
             </p>
           </div>
           <div className="kv"><span>Key on this server</span><span>{demo ? 'demo: none needed' : linearKeyPresent() ? 'present' : 'absent'}</span></div>
+          <div className="kv"><span>Allowed teams</span><span>{config.linear.teams.join(', ') || 'None'}</span></div>
           <div className="kv"><span>Page size</span><span>{config.linear.pageSize} · GUESS</span></div>
           <div className="kv"><span>Waits below</span><span>{n(config.linear.minRequestsLeft)} requests left · GUESS</span></div>
           <div className="note">The plan, and what would come next: docs/24-linear.md.</div>
@@ -198,8 +199,7 @@ async function LinearPage() {
       <div className="lbl">Developer</div>
       <h1>Linear, read-only</h1>
       <p className="sublede">
-        A local copy of the Linear workspace: what the key can see, how fresh the copy is, and how it divides by team,
-        project and state. Nothing is written back to Linear.
+        A local copy of the allowed Linear teams: {config.linear.teams.join(', ') || 'none'}. Sync status and counts by team, project and state. Nothing is written back to Linear.
       </p>
 
       {demo && (
@@ -220,7 +220,7 @@ async function LinearPage() {
         <div className="cbody">
           {last ? (
             <>
-              <div className="fact"><span>Last sync</span><span>{ago(new Date(last.at))} · {last.since ? 'changes only' : 'everything'} · {n(last.records)} records in {n(last.requests)} requests</span></div>
+              <div className="fact"><span>Last sync</span><span>{ago(new Date(last.at))} · {last.since ? 'changes only' : 'all allowed-team records'} · {n(last.records)} records in {n(last.requests)} requests</span></div>
               {stopped && (
                 <div className="warn" style={{ margin: '8px 0', fontSize: 12.5 }}>
                   <b>It stopped before every kind of record was read.</b> What it read is kept and translated. The next sync asks again
@@ -234,9 +234,9 @@ async function LinearPage() {
               <div className="fact"><span>Replica</span><span>{state.manifests} pull{state.manifests === 1 ? '' : 's'} · {n(state.files)} files translated</span></div>
             </>
           ) : (
-            <p className={s.lede}>Nothing has been read from Linear here yet. The first sync reads every team, project and issue the key can see, and takes about forty requests.</p>
+            <p className={s.lede}>Nothing has been read from Linear here yet. The first sync reads only the allowed teams and their projects, issues and related records.</p>
           )}
-          <LinearSync refused={refused} synced={Boolean(complete)} />
+          <LinearSync refused={refused} rebuildRefused={!demo && !linearLiveServer()} synced={Boolean(complete)} />
         </div>
       </div>
 
