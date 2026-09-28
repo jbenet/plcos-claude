@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { config } from '@/config/deployment';
 import { readLayout } from '@/config/ports';
@@ -9,6 +8,9 @@ import { isEntityKey } from '@/lib/enrich/connection-check';
 
 /** Local identity correction only. Real mutations run in the live server's existing DB handle. */
 export async function POST(request: Request) {
+  const { mutationRouteGuard } = await import('@/lib/mutation-guard');
+  const guard = await mutationRouteGuard(request);
+  if ('response' in guard) return guard.response;
   if (config.data.profile === 'real' && (config.data.copyTakenAt || readLayout().role !== 'live')) {
     return NextResponse.json({ error: 'Correct entity types on the live server.' }, { status: 403 });
   }
@@ -23,7 +25,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Supply a correction ID to reverse, or an entity ID, type and stable request key to correct.' }, { status: 400 });
   }
   try {
-    const user = await (await auth()).currentUser();
+    const user = guard.user;
     const db = await getDb();
     const result = reversal
       ? { reversed: await reverseEntityTypeCorrection(db, input.correctionId, user.id, input.reason) }

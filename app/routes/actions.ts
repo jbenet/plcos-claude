@@ -1,8 +1,9 @@
 'use server';
 
+import { requireServerActionMutation } from '@/lib/mutation-guard';
+
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { auth } from '@/lib/auth';
 import { proposeAsk } from '@/modules/coordination';
 import { listVehicles } from '@/modules/platform';
 import { getEntity } from '@/modules/identity';
@@ -13,7 +14,7 @@ import { getEntity } from '@/modules/identity';
  * another vehicle is already in the way. Then it hands you to the queue.
  */
 export async function proposeFromRoute(formData: FormData): Promise<void> {
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const targetId = String(formData.get('targetId'));
   const connectorId = String(formData.get('connectorId') || '') || null;
   const vehicleSlug = String(formData.get('vehicleSlug'));
@@ -53,7 +54,7 @@ export async function proposeFromRoute(formData: FormData): Promise<void> {
  */
 export async function reviewEdgeAction(formData: FormData): Promise<void> {
   const { reviewEdge } = await import('@/modules/network');
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const decision = String(formData.get('decision')) === 'confirm' ? 'confirm' : 'decline';
   await reviewEdge(user.id, String(formData.get('edgeId')), decision, String(formData.get('note') ?? '').trim() || null);
   revalidatePath('/routes');
@@ -63,7 +64,7 @@ export async function reviewEdgeAction(formData: FormData): Promise<void> {
 export async function buildNetworkAction(formData: FormData): Promise<void> {
   const { queueImportJob } = await import('@/lib/import-jobs/server');
   const { getDb } = await import('@/lib/db');
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   await queueImportJob(await getDb(),'network',user.id);
   const target = String(formData.get('target') ?? '');
   revalidatePath('/routes');

@@ -1,8 +1,9 @@
 'use server';
 
+import { requireServerActionMutation } from '@/lib/mutation-guard';
+
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { auth } from '@/lib/auth';
 import { canonicalPath } from '@/lib/paths';
 import { vehicleSelection } from '@/lib/session';
 import {
@@ -15,7 +16,7 @@ import { CloseRefused, recordClosing, recordSignature, recordWire, reviseSoft, w
 export async function requestLadderAdvance(
   formData: FormData,
 ): Promise<{ error?: string; ticketId?: string }> {
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   try {
     const ticketId = await requestAdvance(user.id, {
       pursuitId: String(formData.get('pursuitId')),
@@ -38,7 +39,7 @@ export async function requestLadderAdvance(
  * and moves neither the ladder nor the money. It waits for the server's answer all the same.
  */
 export async function setPursuitStatus(formData: FormData): Promise<{ error?: string; ok?: boolean }> {
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const pursuitId = String(formData.get('pursuitId'));
   const on = String(formData.get('nextStepOn') ?? '').trim();
   try {
@@ -65,7 +66,7 @@ export async function setPursuitStatus(formData: FormData): Promise<{ error?: st
  */
 export async function addUpdateAction(formData: FormData): Promise<{ error?: string; ok?: boolean; created?: boolean; proposed?: boolean }> {
   const { addUpdate } = await import('@/lib/updates');
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const text = (k: string) => String(formData.get(k) ?? '').trim();
   const day = (k: string, hour: string) => (text(k) ? new Date(`${text(k)}T${hour}:00:00Z`) : null);
   const pursuitId = text('pursuitId');
@@ -100,7 +101,7 @@ export async function addUpdateAction(formData: FormData): Promise<{ error?: str
  */
 export async function addContextAction(formData: FormData): Promise<{ error?: string; ok?: boolean }> {
   const { addTeamContext } = await import('@/modules/research');
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const text = (k: string) => String(formData.get(k) ?? '').trim();
   const pursuitId = text('pursuitId');
   try {
@@ -115,7 +116,7 @@ export async function addContextAction(formData: FormData): Promise<{ error?: st
 /** Accept or dismiss a suggested strategy (N64). Accepting sets the next step; nothing else moves. */
 export async function decideSuggestionAction(formData: FormData): Promise<void> {
   const { decideSuggestion } = await import('@/modules/strategy');
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const decision = String(formData.get('decision')) === 'accept' ? 'accept' : 'dismiss';
   await decideSuggestion(user.id, String(formData.get('suggestionId')), decision, String(formData.get('note') ?? '') || null);
   // Each vehicle's LP page now also shows this LP's companion strategies.
@@ -125,7 +126,7 @@ export async function decideSuggestionAction(formData: FormData): Promise<void> 
 
 /** Log a touchpoint on an LP (N51). A record of what happened; nothing is sent, nothing claimed. */
 export async function logTouchpointAction(formData: FormData): Promise<{ error?: string; ok?: boolean }> {
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const pursuitId = String(formData.get('pursuitId'));
   const on = String(formData.get('on') ?? '').trim();
   const which = String(formData.get('vehicle') ?? 'this');
@@ -154,7 +155,7 @@ export async function logTouchpointAction(formData: FormData): Promise<{ error?:
  * Hardening is not here — it is a MONEY ticket, on Soft → Hard (rule 1).
  */
 export async function closeTrackAction(formData: FormData): Promise<{ error?: string; ok?: boolean }> {
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const exposureId = String(formData.get('exposureId'));
   const pursuitId = String(formData.get('pursuitId'));
   const onRaw = String(formData.get('on') ?? '').trim();
@@ -183,7 +184,7 @@ export async function closeTrackAction(formData: FormData): Promise<{ error?: st
 /** Confirm a read suggested from a note, or say it is wrong (N55). Either way, a person decided. */
 export async function decideReadingAction(formData: FormData): Promise<void> {
   const { decideReading } = await import('@/lib/connectors/affinity/readings');
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const decision = String(formData.get('decision')) === 'confirm' ? 'confirm' : 'dismiss';
   await decideReading(user.id, String(formData.get('noteId')), decision);
   revalidatePath(`/targets/${String(formData.get('pursuitId'))}`);
@@ -198,7 +199,7 @@ export async function decideReadingAction(formData: FormData): Promise<void> {
  */
 export async function tagEventAction(formData: FormData): Promise<void> {
   const { tagEvent } = await import('@/lib/connectors/affinity/event-tags');
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const other = formData.get('other') === 'on';
   const why = String(formData.get('why') ?? '').trim();
   await tagEvent(user.id, String(formData.get('ref') ?? ''), {
@@ -220,7 +221,7 @@ export async function tagEventAction(formData: FormData): Promise<void> {
 export async function moveMetToDiscussing(formData: FormData): Promise<void> {
   const { getPursuit } = await import('@/modules/strategy');
   const { summarize, touchpointsFor } = await import('@/modules/meetings');
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const ids = [...new Set(formData.getAll('pursuitId').map(String))];
   const note = String(formData.get('note') ?? '').trim();
   for (const id of ids) {

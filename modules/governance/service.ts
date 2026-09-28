@@ -112,14 +112,28 @@ export async function decideTicket(
 ): Promise<void> {
   const db = await getDb();
   await db.transaction(async (tx) => {
-    const row = await tx.one<{ decision: ApprovalDecision | null; subject_label: string; kind: ApprovalKind }>(
-      'select decision, subject_label, kind from governance.approval_ticket where id = $1',
+    const actor = await tx.one<{ id: string }>('select id from platform.app_user where id = $1 and active', [actorId]);
+    if (!actor) throw new Error('An active app user must decide a ticket.');
+    const row = await tx.one<{ decision: ApprovalDecision | null; subject_label: string; kind: ApprovalKind;
+      requested_by: string; subject_type: string; subject_id: string; vehicle_id: string | null }>(
+      `select decision, subject_label, kind, requested_by, subject_type, subject_id, vehicle_id
+         from governance.approval_ticket where id = $1 for update`,
       [ticketId],
     );
     if (!row) throw new Error(`No ticket ${ticketId}`);
     if (row.decision !== null) {
       // Idempotent by intent: a double click must not re-decide something already decided.
       return;
+    }
+    if (decision === 'approve' && row.requested_by === actorId) {
+      // The sole exception is STAGE on the requester's own pursuit. Never infer
+      // ownership from ticket scope supplied by the requester.
+      const owned = row.kind === 'STAGE' && row.subject_type === 'pursuit'
+        ? await tx.one<{ pursuit_id: string }>(
+          `select pursuit_id from strategy.pursuit
+            where pursuit_id = $1 and owner_id = $2 and vehicle_id = $3 for update`,
+          [row.subject_id, actorId, row.vehicle_id]) : null;
+      if (!owned) throw new Error('You cannot approve your own ticket; STAGE on a pursuit you own is the only exception.');
     }
     await tx.query(
       `update governance.approval_ticket

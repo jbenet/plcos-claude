@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { internalRoutingHeaders, routingContext, stripRoutingHeaders } from '@/lib/internal-routing';
 import { config as deployment } from '@/config/deployment';
-import { canonicalPath, DEV_PAGES, MODULE_PAGES, RESERVED } from '@/lib/paths';
+import { canonicalPath, DEV_PAGES, MODULE_PAGES, RESERVED, vehicleOfPath } from '@/lib/paths';
 
 /**
  * Routes that follow the sidebar (N65, issue 0009). Juan: "the route should follow the hierarchy
@@ -59,25 +60,23 @@ function at(req: NextRequest, path: string): URL {
   return url;
 }
 
-/**
- * A rewrite marks its request, so the proxy passes it through if it sees it again. On the real
- * server a rewritten request came back through here (seen while it was bound to 127.0.0.1), and
- * without the mark the old-address redirect sent /developer/… round in a loop.
- */
-const ROUTED = 'x-routed';
-/** The address the browser asked for, before the rewrite: what the rail marks as the page you're on (issue 0011, real). */
+/** The original address is carried only in authenticated internal request headers. */
 export const ASKED_PATH = 'x-asked-path';
-function rewrite(req: NextRequest, path: string, extra: Record<string, string> = {}): NextResponse {
-  const headers = new Headers(req.headers);
-  headers.set(ROUTED, '1');
-  headers.set(ASKED_PATH, req.nextUrl.pathname);
-  for (const [k, v] of Object.entries(extra)) headers.set(k, v);
-  return NextResponse.rewrite(at(req, path), { request: { headers } });
+function rewrite(req: NextRequest, path: string, vehicle: string | null = null): NextResponse {
+  const target = at(req, path);
+  const headers = internalRoutingHeaders(req.headers, target.pathname + target.search, req.method, req.nextUrl.pathname, vehicle);
+  return NextResponse.rewrite(target, { request: { headers } });
 }
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (req.headers.get(ROUTED)) return NextResponse.next();
+  // A rewrite can reenter the proxy. Only our signed, request-bound context can bypass
+  // canonical redirects; arbitrary client markers and modified contexts are discarded.
+  const routed = routingContext(req.headers);
+  if (routed && routed.path === pathname + req.nextUrl.search && routed.method === req.method) {
+    return NextResponse.next({ request: { headers: new Headers(req.headers) } });
+  }
+  const clean = stripRoutingHeaders(req.headers);
   const seg = pathname.split('/').filter(Boolean);
   const rest = (from: number) => (seg.length > from ? `/${seg.slice(from).join('/')}` : '');
 
@@ -90,17 +89,20 @@ export function proxy(req: NextRequest) {
 
   // A vehicle's module, with the vehicle in the path.
   if (seg.length >= 2 && (!RESERVED.has(seg[0]!) || seg[0] === 'grants') && Object.hasOwn(MODULE_PAGES, seg[1]!)) {
-    return rememberVehicle(req, rewrite(req, `/${MODULE_PAGES[seg[1]!]}${rest(2)}`, { 'x-vehicle': seg[0]! }), seg[0]!);
+    return rememberVehicle(req, rewrite(req, `/${MODULE_PAGES[seg[1]!]}${rest(2)}`, seg[0]!), seg[0]!);
   }
   // An old address: to its place in the hierarchy, under the vehicle in view.
   if (req.method === 'GET') {
     const to = canonicalPath(pathname, currentVehicle(req));
     if (to !== pathname) return NextResponse.redirect(at(req, to), 307);
   }
-  return NextResponse.next();
+  const vehicle = vehicleOfPath(pathname);
+  const headers = internalRoutingHeaders(clean, pathname + req.nextUrl.search, req.method, pathname, vehicle);
+  return NextResponse.next({ request: { headers } });
 }
 
 export const config = {
-  // Everything but Next's own files and the API.
-  matcher: ['/((?!_next/|api/|favicon\\.ico|.*\\.(?:png|webp|jpg|svg|woff2?|ico|css|js)$).*)'],
+  // APIs and paths containing file extensions can execute handlers/actions too.
+  // Sanitize every incoming request, not just canonical page URLs.
+  matcher: ['/:path*'],
 };

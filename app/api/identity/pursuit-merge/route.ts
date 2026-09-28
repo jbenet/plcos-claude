@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { consolidatePursuitsAction, reversePursuitMergeAction } from '@/app/dev/enrich/actions';
 import { isEntityKey } from '@/lib/enrich/connection-check';
+import { mutationRouteGuard } from '@/lib/mutation-guard';
 
-/** Both actions use the live server's existing handle and enforce the profile boundary. */
+/** Check the caller before parsing input or scheduling either identity mutation. */
 export async function POST(request: Request) {
+  const guard = await mutationRouteGuard(request);
+  if ('response' in guard) return guard.response;
   const input = await request.json().catch(() => null);
   if (input?.operation === 'consolidate') {
     const result = await consolidatePursuitsAction();

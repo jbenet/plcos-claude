@@ -1,11 +1,12 @@
 'use server';
 
+import { requireServerActionMutation } from '@/lib/mutation-guard';
+
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
 import { setDisposition, type Disposition } from '@/modules/signals';
 
 export async function disposeSignal(formData: FormData): Promise<void> {
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   await setDisposition(
     user.id,
     String(formData.get('signalId')),

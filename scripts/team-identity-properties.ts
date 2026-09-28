@@ -111,7 +111,6 @@ export async function teamIdentityProperties(check: Check, db: Db) {
     await db.query('delete from identity.source_record where entity_id=any($1::uuid[])', [[staff, warehouse, namesake, outsideA, outsideB, correctionAlias]]);
     await db.query('update identity.entity set merged_into=null where entity_id=any($1::uuid[])', [[staff, warehouse, namesake, outsideA, outsideB, correctionAlias]]);
     await db.query('delete from identity.entity where entity_id=any($1::uuid[])', [[staff, warehouse, namesake, outsideA, outsideB, correctionAlias]]);
-    await db.query('delete from platform.audit_log where subject_id=$1', [user]);
     await db.query('delete from platform.app_user where id=$1', [user]);
   }
 }

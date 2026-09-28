@@ -127,9 +127,7 @@ export async function affinityTranslationProperties(ctx: AffinityContext & { rep
     if (mergeId) {
       await mergeService.reversePursuitMerge(adb,mergeId,actor,'Restore invented translation fixture');
       await adb.query('delete from strategy.pursuit_merge where id=$1',[mergeId]);
-      await adb.query("delete from platform.audit_log where detail->>'mergeId'=$1",[mergeId]);
     }
-    await adb.query("delete from platform.audit_log where subject_type='pursuit' and subject_id=$1",[duplicate]);
     await adb.query('delete from strategy.pursuit where pursuit_id=$1',[duplicate]);
     await adb.query('delete from identity.entity where entity_id=$1',[alias]);
     const columns = Object.keys(original).filter(k=>k!=='pursuit_id');

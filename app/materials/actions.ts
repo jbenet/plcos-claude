@@ -1,13 +1,14 @@
 'use server';
 
+import { requireServerActionMutation } from '@/lib/mutation-guard';
+
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
 import { requestSend } from '@/modules/content';
 
 export async function proposeSend(
   formData: FormData,
 ): Promise<{ refusals?: string[]; ticketId?: string }> {
-  const user = await (await auth()).currentUser();
+  const user = await requireServerActionMutation();
   const { ticketId, check } = await requestSend(user.id, {
     assetId: String(formData.get('assetId')),
     entityId: String(formData.get('entityId')),

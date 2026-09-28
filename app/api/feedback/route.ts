@@ -2,10 +2,11 @@
  * The feedback box's route: journal first, file after (Juan, 27 Sep: "it should journal to the
  * server. the page may die or close forever").
  *
- * POST validates the report, writes it to the server's journal as one atomic file
- * (lib/feedback-inbox.ts) and answers 202 { journaled, clientId } — it awaits nothing else. No
- * database, no auth lookup, no issue numbering: those happen after the response, in the ingester
- * (lib/feedback-ingest.ts), so a pegged database or a busy import never holds a report.
+ * POST checks origin, live profile and an explicit active actor, then validates the report
+ * and writes it to the server's journal as one atomic file
+ * (lib/feedback-inbox.ts) and answers 202 { journaled, clientId } — issue numbering and ingestion happen after the response.
+ * The active-user lookup is required before accepting a write; an unavailable database can
+ * therefore delay a report, which stays in the browser journal for retry.
  *
  * Keep this file's static imports light. A property walks them and fails if any reaches the
  * database or a module's service code; the ingester is loaded with a dynamic import, after the
@@ -13,10 +14,8 @@
  */
 import { join } from 'node:path';
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { config } from '@/config/deployment';
 import { feedbackHome } from '@/config/ports';
-import { USER_COOKIE } from '@/lib/auth/cookie';
 import { isClientId } from '@/lib/feedback-journal';
 import { checkReport, inboxStatus, journal } from '@/lib/feedback-inbox';
 import { newRequestKey } from '@/lib/request-key';
@@ -29,6 +28,9 @@ const fileLater = () => setImmediate(() => {
 });
 
 export async function POST(req: Request) {
+  const { mutationRouteGuard } = await import('@/lib/mutation-guard');
+  const guard = await mutationRouteGuard(req);
+  if ('response' in guard) return guard.response;
   // Only the live app files (docs/COLLAB.md): a branch filing would take numbers the live app
   // gives out too. The box on a dev worktree says so; this refuses anything that asks anyway.
   if (!feedbackHome(config.data.profile).filesHere) {
@@ -53,7 +55,7 @@ export async function POST(req: Request) {
   if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: checked.status });
 
   try {
-    const reporter = (await cookies()).get(USER_COOKIE)?.value || null;
+    const reporter = guard.user.handle;
     const done = await journal(issuesRoot(), {
       kind: 'issue', clientId, receivedAt: new Date().toISOString(), reporter, request: checked.value,
     });
@@ -76,7 +78,6 @@ export async function GET(req: Request) {
   if (!isClientId(clientId)) return NextResponse.json({ error: 'Give a clientId.' }, { status: 400 });
   const status = await inboxStatus(issuesRoot(), clientId);
   if (!status) return NextResponse.json({ state: 'unknown' }, { status: 404 });
-  if (status.state === 'journaled') fileLater();
   return NextResponse.json(status.state === 'filed'
     ? { state: 'filed', id: status.issueId }
     : status.state === 'refused' ? { state: 'refused', error: status.reason } : { state: 'journaled' });

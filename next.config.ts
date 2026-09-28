@@ -1,4 +1,7 @@
 import type { NextConfig } from 'next';
+import { initializeRoutingSecret } from './lib/internal-routing';
+
+initializeRoutingSecret();
 
 /** docs/15. The real profile builds separately, into its own directory. */
 const real = process.env.DATA_PROFILE === 'real';
