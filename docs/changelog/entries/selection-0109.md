@@ -3,6 +3,10 @@
 Issue 0109, a follow-up to 0104 on an SPV's Selection page. Juan liked the clearer button but found
 it too big, and missed the actions that had disappeared from the panel.
 
+| | |
+|---|---|
+| ![Selection's one panel: heading, Move to Selected, links and the earlier actions](docs/changelog/shots/selection-0109/01-one-panel.webp) | The one card: heading, the smaller Move to Selected button, the four links, and the earlier actions (Set status, Touchpoint, Context, Research, Connections, Strategy, Feedback). |
+
 **One panel for what to do.** At the top of the side panel, one card now holds:
 - **Heading:** the LP in focus, with its other name, status and owner, or "N ticked" with Clear.
 - **Move to Selected:** the app's black primary style, full width and the height of a normal

@@ -2,6 +2,10 @@
 
 27 September 2026 · `codex/responsive-server`
 
+| | |
+|---|---|
+| ![Developer → Status, with the event-loop delay window](docs/changelog/shots/responsive-server/01-status-event-loop.webp) | Developer → Status now shows the latest `monitorEventLoopDelay` window (issue 0115: shot added after the fact — the branch's own sandbox could not start a server). |
+
 PGlite's WASM execution and large file parsing shared the Next.js request thread.
 Scheduling database work with promises did not isolate that synchronous computation.
 The database now lives in a Node worker thread owned by the existing Next process.

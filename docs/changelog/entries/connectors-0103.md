@@ -1,5 +1,9 @@
 ## Connectors — every source we read, and how much we ask of it · issue 0103
 
+| | |
+|---|---|
+| ![Developer → Connectors, with the requests/data/records charts and the sources table](docs/changelog/shots/connectors-0103/01-activity-charts.webp) | The Activity charts (requests, data in and out, records pulled) and the Sources table beneath them, with the five seams and the connector contract below that. |
+
 Developer → Connectors is now the page for every source the system reads — Affinity, the PL data
 warehouse, Dakota, intake files, internet search and page fetches, SEC EDGAR, and our own agents — and
 for the activity we generate against each.

@@ -43,3 +43,8 @@ Checked on the demo with the invented workspace at 1440×900, 1180×820 with tou
 PGlite and Postgres: five new properties (linearEmail matching, the My Linear grouping, Linear's
 group order, links shown only once accepted and stored once, a turned-down suggestion not offered
 again). No screenshots of real Linear.
+
+| | |
+|---|---|
+| ![The daily standup with the My Linear section, before this demo server's own sync](docs/changelog/shots/linear-views/01-standup-my-linear.webp) | My Linear on the standup, with its Mine/Team tabs. This demo server has not run Sync Linear yet, so it reads "hasn't been read on this server yet" rather than showing issues — the section itself is what's new. |
+| ![A vehicle's Overview with the Workstreams card, before this demo server's own sync](docs/changelog/shots/linear-views/02-overview-workstreams.webp) | Workstreams on the vehicle Overview, in the same not-yet-synced state; once linked projects exist it shows their start-to-target strip and next open issues. |

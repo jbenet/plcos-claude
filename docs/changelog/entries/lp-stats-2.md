@@ -2,6 +2,10 @@
 
 Follow-up to [LP stats](lp-stats.md), 27 Sep.
 
+| | |
+|---|---|
+| ![LP stats with the SPV panel and the Coverage against public figures panel](docs/changelog/shots/lp-stats-2/01-stats-spv-coverage.webp) | The SPVs panel (does ≥N bands, doesn't, unknown) and Coverage against public figures, with its basis switch and source/date/confidence. |
+
 **Public figures replace the placeholder.** `config/lp-market-reference.json` now holds the public figures a
 research run compiled (placeholder false), as a list of *bases*. Each basis says what it counts, its source link,
 date and confidence:

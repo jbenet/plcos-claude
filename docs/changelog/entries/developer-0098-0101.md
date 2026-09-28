@@ -1,5 +1,11 @@
 # The Developer pages, redesigned — changelog, status, workflows and logs · issues 0098–0101 (and 0036)
 
+| | |
+|---|---|
+| ![The changelog, batched ten at a time with a row of batch numbers](docs/changelog/shots/developer-0098-0101/01-changelog-batches.webp) | Changelog (0098): the latest batch while it grows, a row of numbered batches, and every entry on its own page. |
+| ![Developer status, with sources including Dakota and the PL Data Warehouse](docs/changelog/shots/developer-0098-0101/02-status-sources.webp) | Status (0099): sources as a table with state, access, what is here and when it was last read. |
+| ![Developer workflows, with the run ledger and its chart](docs/changelog/shots/developer-0098-0101/03-workflows.webp) | Workflows (0100, 0036): the run ledger — outcomes, items written, checks passed and tokens, kept apart as measured or estimated. |
+
 **Changelog (0098).** Entries are read ten at a time. Batches are cut from `docs/changelog/index.md`'s order, oldest
 first, so a full batch never changes: the page holds the latest batch while it grows, and its eleventh entry starts
 the next one. A row of numbered batches sits under the title, each batch scrolls like the old page, and "Older →"

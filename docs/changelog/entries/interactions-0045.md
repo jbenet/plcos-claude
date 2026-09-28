@@ -19,6 +19,10 @@ was developed from code and invented fixtures; no real database or Affinity endp
 
 ## Change
 
+| | |
+|---|---|
+| ![Developer → Affinity → Meetings, with the Interaction history section](docs/changelog/shots/interactions-0045/01-interaction-history.webp) | The new Interaction history section on `/dev/affinity/meetings` (issue 0115: shot added after the fact — the branch's own sandbox refused the demo server). |
+
 A new **Interaction history** section on `/dev/affinity/meetings` queues GET-only account-wide
 person, meeting, email, call and chat metadata. Reads checkpoint every page, resume cap/rate/network
 interruptions or server restarts, reject cursor loops, and advance the watermark only after all
