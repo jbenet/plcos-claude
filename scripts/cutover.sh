@@ -2,7 +2,7 @@
 # Cutover between two Postgres databases, and its reverse (docs/deploy/rev2/00-plan-rev2.md §2;
 # docs/deploy/rev2/image-and-cutover.md). Build item 13. A full-database move, never a sync.
 #
-#   bash scripts/cutover.sh run --from <url> --to <url> [--reverse] [--grants <file.sql>] [--work <dir>]
+#   bash scripts/cutover.sh run --from <url> --to <url> [--reverse] [--keep-dakota] [--grants <file.sql>] [--work <dir>]
 #   bash scripts/cutover.sh unfreeze --db <url>     rollback before any write on the target
 #   bash scripts/cutover.sh status --db <url>       frozen or not, READ_ONLY_MODE, table count
 #   bash scripts/cutover-reverse.sh --from <service url> --to <new database url>
@@ -18,7 +18,8 @@
 #                 optional grants file; the target is set read-only until it verifies.
 #   5. verify     scripts/pg-verify.ts: per-table row counts and ordered-row checksums, sequences, and
 #                 object counts. Any mismatch blocks the cutover.
-#   6. flip       the target made writable and READ_ONLY_MODE cleared there. The source stays frozen
+#   6. sanitize  strip Dakota on target by default (--keep-dakota skips); fail copied active jobs.
+#   7. flip       the target made writable and READ_ONLY_MODE cleared there. The source stays frozen
 #                 (keep it untouched for 14 days). Pointing the processes at the target is a config
 #                 change this script prints but does not make.
 #
@@ -62,13 +63,14 @@ thaw_db() {
 identity() { sql "$1" "select (select system_identifier from pg_control_system())::text || '/' || current_database()"; }
 
 cmd="${1:-}"; shift || true
-FROM=""; TO=""; DB=""; REVERSE=""; GRANTS=""; WORK=""
+FROM=""; TO=""; DB=""; REVERSE=""; GRANTS=""; WORK=""; KEEP_DAKOTA=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --from) FROM="$2"; shift 2 ;;
     --to) TO="$2"; shift 2 ;;
     --db) DB="$2"; shift 2 ;;
     --reverse) REVERSE=1; shift ;;
+    --keep-dakota) KEEP_DAKOTA=1; shift ;;
     --grants) GRANTS="$2"; shift 2 ;;
     --work) WORK="$2"; shift 2 ;;
     *) die "unknown argument $1" ;;
@@ -145,7 +147,17 @@ verify_line="$(cd "$HERE" && node --import tsx scripts/pg-verify.ts "$FROM" "$TO
 say "$verify_line"
 step verify
 
-# ---- 6. flip ----------------------------------------------------------------------------------------
+# Transform only the verified TARGET. Keep it frozen until both steps commit.
+# Verification above proves the restore; intentional removals have separate counts.
+if [ -z "$KEEP_DAKOTA" ]; then
+  (cd "$HERE" && PGOPTIONS="-c default_transaction_read_only=off" node --import tsx scripts/strip-dakota.ts "$TO") \
+    || die "Dakota stripping failed; target remains read-only"
+fi
+PGOPTIONS="-c default_transaction_read_only=off" pg psql "$TO" -XAtq -v ON_ERROR_STOP=1 -1 \
+  -f "$HERE/scripts/stop-cutover-jobs.sql" 2>/dev/null || die "copied jobs could not be stopped; target remains read-only"
+step sanitize
+
+# ---- 7. flip ----------------------------------------------------------------------------------------
 thaw_db "$TO"
 say "flip: $(set_flag "$TO" false)"
 [ "$(sql "$TO" "$FROZEN")" = f ] || die "the target did not become writable"
