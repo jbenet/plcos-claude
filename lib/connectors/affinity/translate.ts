@@ -425,6 +425,18 @@ export async function touchpoints(
   const ours = index.byId;
   const displayByUser = new Map((await tx.query<{ id: string; name: string }>(
     'select id::text,name from platform.app_user where active')).map(u => [u.id, u.name]));
+  // Calendar payloads can identify our participant by person ID with no email at all.
+  // Use settled identity links, never a name match, and refuse conflicting account links.
+  const teamByPerson = new Map<string, Set<string>>();
+  for (const row of await tx.query<{ person: string; user_id: string }>(`
+    select a.source_id person,u.id::text user_id from platform.app_user u
+      join identity.source_record s on s.source='app_user' and s.source_id=u.handle
+      join identity.source_record a on a.source='affinity' and a.source_id like 'person:%'
+        and identity.canonical_entity_id(a.entity_id)=identity.canonical_entity_id(s.entity_id)
+     where u.active`)) {
+    const matches = teamByPerson.get(row.person) ?? new Set<string>();
+    matches.add(row.user_id); teamByPerson.set(row.person, matches);
+  }
   const byEmail = new Map<string, string>();
   const ambiguousEmails = new Set<string>();
   for (const t of team) {
@@ -440,6 +452,7 @@ export async function touchpoints(
     const ids = new Set([p?.primaryEmailAddress, ...(p?.emailAddresses ?? []), email]
       .filter((e): e is string => !!e).map(e => e.trim().toLowerCase())
       .filter(e => !ambiguousEmails.has(e)).map(e => byEmail.get(e)).filter(Boolean));
+    for (const id of teamByPerson.get(`person:${p?.id}`) ?? []) ids.add(id);
     return ids.size === 1 ? [...ids][0] : undefined;
   };
   const attendeeName = (p: InteractionPerson) => {
@@ -496,16 +509,19 @@ export async function touchpoints(
       // Who on the team it was with: the attendees, and for a message whoever on the team it was
       // addressed to (N82) — a reply to one of us is theirs, not nobody's, and says who knows whom.
       const internal = [
-        ...(d.attendees ?? []).map((a) => a.person),
-        ...(d.type === 'email' || d.type === 'chat-message' ? (d.to ?? []).map((x) => (x as { person?: InteractionPerson } | null)?.person) : []),
-      ].filter((p): p is InteractionPerson => p?.type === 'internal');
+        ...(d.attendees ?? []),
+        ...(d.type === 'email' || d.type === 'chat-message' ? [d.from, ...(d.to ?? []) as Participant[]] : []),
+      ].filter((p): p is Participant => !!p && (!!who(p.person, p.emailAddress) || p.person?.type === 'internal'));
       await put({
         entity, ref: `interaction:${d.type}:${d.id}:${key}`, channel: CHANNEL_OF[d.type], at, exact: true,
         direction: d.type === 'email' || d.type === 'chat-message'
           ? d.from?.person?.type === 'internal' ? 'ours' : d.from?.person?.type === 'external' ? 'theirs' : null
           : 'both',
-        owner: who(d.from?.person, d.from?.emailAddress) ?? internal.map((p) => who(p)).find(Boolean) ?? placeholder,
-        attendees: [...new Set(internal.map(attendeeName).filter(Boolean))],
+        owner: who(d.from?.person, d.from?.emailAddress) ?? internal.map((p) => who(p.person, p.emailAddress)).find(Boolean) ?? placeholder,
+        attendees: [...new Set(internal.map(p => {
+          const id = who(p.person, p.emailAddress);
+          return (id && displayByUser.get(id)) || (p.person ? attendeeName(p.person) : '');
+        }).filter(Boolean))],
         // The sender and those it was addressed to: someone on copy doesn't make it about the raise.
         // A message only (N81): who was invited to a meeting says nothing about what it was for.
         about: read(d.subject ?? d.title ?? '', d.type === 'email' || d.type === 'chat-message'

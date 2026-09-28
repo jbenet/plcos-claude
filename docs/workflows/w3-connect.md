@@ -1,10 +1,13 @@
 # W3 — Connect LP units
 
+Version **1.1** (28 September 2026).
+
 Deterministic local file join: `scripts/enrich-connect.ts`, using `lib/enrich/connect.ts`.
 Read `docs/agent-rules/real-data.md`, `docs/23-lp-units.md` and this protocol.
 
 Inputs are a frozen research export (`candidates.jsonl`), public findings in `raw/`,
-`us/network.json`, `us/team.json`, `us/pl-directory.jsonl`, and the optional complete,
+`us/network.json`, `us/team.json`, `us/pl-directory.jsonl`, the optional profile-level
+`portfolio/portfolio.json`, and the optional complete,
 hash-checked `warehouse/` graph. No web requests or database access occur in W3.
 
 An organisation LP exports `contacts`: pursuit contacts and people whose current primary
@@ -22,10 +25,31 @@ The graph importer ignores projected rows when building edges: membership is not
 relationship. Runtime routes resolve current contacts, retaining both firm and contact
 restrictions.
 
+## Route evidence rules
+
+- Export the full held meeting/call/email/message history as `contact.records`, including
+  dates before the current raise and rows beyond the eight-touch strategy preview. Resolve
+  team participants by recorded person identity or email. Match LP people through their
+  canonical records and project their paths onto current LP-unit contacts. An assigned owner
+  alone is not evidence of participation. Legacy exports fall back to `contact.recent`.
+- Each recorded interaction with a named team participant yields a path, including outbound
+  email. Group attendance is C and labelled; a documented direct one-to-one is at least B.
+  A sourced personal podcast conversation or explicit one-to-one finding receives the same
+  rule. Age or an unknown date may lower warmth, but cannot erase the evidence of a direct
+  conversation. Mere mentions, panels, shared attendance and firm-level ties do not qualify.
+- Read the sourced portfolio snapshot, including SPVs. Founders join LP identities only with
+  corroborating company evidence; ambiguous names remain separate. Non-LP founders can be
+  connector nodes when a sourced onward relationship exists. Excluded rows and warehouse-only
+  or research-scope classifications cannot establish portfolio membership.
+- PL directory membership stays C. Its explanation names an independently evidenced team
+  relationship holder when known, otherwise states that no particular holder is recorded.
+  Membership never invents a personal meeting, its date, willingness or consent.
+
 ## Live rerun (Claude, after integration)
 
 1. On the live app, Developer → Enrich → **Export the research set**. An old export lacks
-   contact records, so running only W3 will not recover their paths.
+   full contact history, so running only W3 will not recover missing meetings. Re-translate
+   cached Affinity records first when team participants were stored only as person IDs.
 2. Freeze that export and the named inputs. Record the authorized W3 run in the workflow
    ledger using `docs/COLLAB.md` (protocol hash includes this file and the implementation).
 3. From `plcos-claude-live`, run:

@@ -97,6 +97,11 @@ export async function lpUnitPathDatabaseProperties(check: Check, db: Db) {
     await db.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by) values('app_user',$1,$2,'invented-fixture')`, [handle, origin]);
     await db.query(`insert into network.edge(from_entity,to_entity,kind,tier,evidence,valid_from)
       values($1,$2,'colleague','B',$3::jsonb,'2026-09-01')`, [origin, primary, JSON.stringify([{ note: 'Invented worked-together evidence', tie: { kind: 'worked_together' } }])]);
+    // An old personal meeting must survive both LP-unit projection and the eight-touch preview.
+    await db.query(`insert into meetings.meeting(entity_id,owner_id,kind,channel,held_on,attendees,source)
+      values($1,$2,'intro','meeting','2020-01-02',array['fixture@example.org'],'us')`, [explicit, actor]);
+    for (let i = 0; i < 9; i++) await db.query(`insert into meetings.meeting(entity_id,owner_id,channel,held_on,attendees,source,direction)
+      values($1,$2,'email',current_date - $3::int,array['Invented Other Correspondent'],'affinity','theirs')`, [explicit, actor, i]);
     await withDb(db, async () => {
       const contacts = (await lpContactsFor([firm])).get(firm) ?? [];
       check('LP unit contacts: active primary representatives and pursuit contacts form one deduplicated set',
@@ -104,6 +109,19 @@ export async function lpUnitPathDatabaseProperties(check: Check, db: Db) {
         'Board, adviser, investor, secondary and former roles excluded; duplicate explicit/primary partner retained once.');
       const exported = await researchSet();
       const org = exported.find(c => c.key === firm);
+      const history = org?.contacts?.find(c => c.key === explicit)?.contact;
+      check('W3 export: complete named history survives the preview limit and LP-unit re-pointing',
+        history?.records?.length === 10 && history.recent.length === 8
+          && history.records.some(r => r.on === '2020-01-02' && r.source === 'us'
+            && !r.group && r.with.includes('Invented Unit Source'))
+          && history.records.filter(r => r.source === 'affinity').length === 9,
+        'Both local meetings and imported email remain attributable to the contact after its pursuit moves to the firm.');
+      const historicalPaths = org ? connectionPaths([org], new Map(), { orgs: [], backers: [], backer_people: [] },
+        [{ handle, name: 'Invented Unit Source', roles: [], prior: [], education: [] }], [], new Date()).paths : [];
+      check('W3 export: an old named meeting reaches the firm after eight newer unrelated touches',
+        historicalPaths.some(p => p.lp === firm && p.other.handle === handle && p.viaContact?.key === explicit
+          && p.tie?.lastInteraction === '2020-01-02' && p.tier <= 'B'),
+        'The route uses the complete contact history, not the preview or raise window, without crediting the pursuit owner.');
       check('W3 export: firm contact keys and roles are present without inventing personal LP pursuits',
         org?.contacts?.length === 2 && org.contacts.some(c => c.key === primary && c.contactRole === 'Partner')
           && org.contacts.some(c => c.key === explicit && c.pursuits.length === 0)
@@ -154,6 +172,7 @@ export async function lpUnitPathDatabaseProperties(check: Check, db: Db) {
         !!blocked && blocked.routes.every(r => r.verdict !== 'recommend'), 'Warm cached paths cannot bypass the firm’s current restriction.');
     });
   } finally {
+    await db.query('delete from meetings.meeting where entity_id=any($1::uuid[])', [ids]);
     await db.query('delete from coordination.restriction where entity_id=any($1::uuid[])', [ids]);
     await db.query('delete from network.edge where from_entity=any($1::uuid[]) or to_entity=any($1::uuid[])', [ids]);
     await db.query('delete from strategy.pursuit_contact where person_entity=any($1::uuid[])', [ids]);

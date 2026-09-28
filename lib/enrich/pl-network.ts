@@ -47,14 +47,23 @@ export function plNetworkPaths(paths: Path[], candidates: Candidate[], findings:
   };
   for (const [key, source] of network) {
     const basis = staff.has(key) ? 'pl_affiliation' as const : 'pl_network' as const;
+    const holders = [...new Set(paths.filter(p => p.lp === key && p.other.type === 'team'
+      && p.tier <= 'B' && (p.tie?.directInteraction || (p.tie && ['cofounder', 'worked_together', 'investor_founder'].includes(p.tie.kind))))
+      .map(p => p.other.name))];
+    const holder = holders.length ? ` Recorded PL relationship holder${holders.length === 1 ? '' : 's'}: ${holders.join(', ')}.`
+      : ' No particular team relationship holder is recorded.';
+    if (!staff.has(key)) for (let i = 0; i < out.length; i++) {
+      const p = out[i]!;
+      if (p.lp === key && p.other.name === 'Protocol Labs network') out[i] = { ...p, basis: `${p.basis}.${holder}` };
+    }
     add({ lp: key, lpPerson: paths.find((p) => p.lp === key)?.lpPerson,
       other: { type: 'ours', name: hub.name, key: hub.key, person: hub }, kind: 'colleague', tier: 'B',
       tie: { kind: 'worked_together', basis }, source,
       basis: staff.has(key) ? 'Current or former Protocol Labs affiliation; warm by the PL network rule. Contact dates are not inferred.'
-        : 'In the PL network; PL is the route source where no particular team member is recorded. Not intro consent.' });
+        : `In the PL network; PL is the membership route source.${holder} Not intro consent.` });
     for (const t of plTeam) add({ lp: key, lpPerson: paths.find((p) => p.lp === key)?.lpPerson,
       other: { type: 'team', name: t.name, handle: t.handle }, kind: 'colleague', tier: 'B', tie: { kind: 'worked_together', basis }, source,
-      basis: `${staff.has(key) ? 'Both are or were at Protocol Labs' : 'PL network member and PL team member'}; warm by the PL network rule. No interaction date or willingness is inferred.` });
+      basis: `${staff.has(key) ? 'Both are or were at Protocol Labs' : 'PL network member and PL team member'}; warm by the PL network rule.${staff.has(key) ? '' : holder} No interaction date or willingness is inferred.` });
   }
   // PL colleagues can themselves connect onwards, even when they are not app users.
   const colleagues = candidates.filter((c) => staff.has(c.key));

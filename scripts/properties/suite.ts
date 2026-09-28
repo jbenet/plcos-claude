@@ -5,6 +5,8 @@ import { freshDb, SCRATCH } from './harness';
 import type { Check } from './harness';
 
 export async function runProperties(check: Check) {
+  await (await import('../w3-portfolio-properties')).w3PortfolioProperties(check);
+  (await import('../w3-routes-properties')).w3RoutesProperties(check);
   (await import('../visualization-scale-properties')).visualizationScaleProperties(check);
   await (await import('./availability')).availabilityProperties(check);
   (await import('../connection-target-properties')).connectionTargetProperties(check);
