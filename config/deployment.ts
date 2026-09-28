@@ -163,7 +163,7 @@ export const config = {
      * pull request. Feedback filed while looking at real data can quote it, or carry a
      * screenshot of it, so it stays with the data instead.
      */
-    dir: PROFILE === 'real' ? 'data/real/issues' : 'issues',
+    dir: PROFILE === 'real' || process.env.LABOS_ME_URL ? `data/${PROFILE}/issues` : 'issues',
   },
   auth: {
     provider: (process.env.LABOS_ME_URL ? 'labos' : 'local') as AuthKind,

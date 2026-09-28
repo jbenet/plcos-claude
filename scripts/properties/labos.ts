@@ -2,6 +2,13 @@ import assert from 'node:assert/strict';
 import { labosUser, labosAuth, LABOS_SIGN_IN } from '../../lib/auth/labos';
 import { MutationGuardError } from '../../lib/mutation-policy';
 import type { Check, Db } from './harness';
+import { config } from '../../config/deployment';
+import { feedbackHome } from '../../config/ports';
+import Home from '../../app/page';
+import { healthRoute } from '../../lib/authz/route';
+import { workAsyncStorage, type WorkStore } from 'next/dist/server/app-render/work-async-storage.external';
+import { workUnitAsyncStorage } from 'next/dist/server/app-render/work-unit-async-storage.external';
+import { createRequestStore } from 'next/dist/server/async-storage/request-store';
 
 export async function labosProperties(check: Check, db: Db) {
   const originalFetch = globalThis.fetch, originalNow = Date.now, originalUrl = process.env.LABOS_ME_URL;
@@ -44,6 +51,24 @@ export async function labosProperties(check: Check, db: Db) {
     assert.equal(labosAuth().switchable, false);
     await assert.rejects(labosAuth().switchUser('juan'));
     check('LabOS refuses anonymous, expired and inactive identities and switching', true, 'Missing/malformed cookies and /me 401 fail closed; no local fallback or reactivation.');
+    const provider = config.auth.provider;
+    try {
+      Object.assign(config.auth, { provider: 'labos' });
+      const request = createRequestStore({ phase: 'render', headers: new Headers(), url: { pathname: '/' },
+        rootParams: {}, implicitTags: { tags: [], expirationsByCacheKind: new Map() }, resumeDataCache: null,
+        onUpdateCookies: undefined, previewProps: undefined, isHmrRefresh: false,
+        serverComponentsHmrCache: undefined, hmrRefreshHash: undefined, fallbackParams: null });
+      const root = await workAsyncStorage.run({ route: '/', isStaticGeneration: false } as WorkStore,
+        () => workUnitAsyncStorage.run(request, () => Home()));
+      assert.equal(root, null);
+      assert.equal(healthRoute().status, 200);
+      Object.assign(config.auth, { provider: 'local' });
+      await assert.rejects(Home(), (e: unknown) => e instanceof Error && e.message === 'NEXT_REDIRECT');
+      check('Kit anonymous root leaves sign-in to layout; health stays public', true,
+        'Missing LabOS cookie neither redirects nor throws; local root keeps its redirect.');
+      assert.deepEqual(feedbackHome('demo'), { filesHere: true, livePort: null });
+      check('Kit feedback stays on the deployed origin', true, 'LabOS accepts feedback here without linking to a Mac port.');
+    } finally { Object.assign(config.auth, { provider }); }
   } finally {
     globalThis.fetch = originalFetch; Date.now = originalNow;
     if (originalUrl === undefined) delete process.env.LABOS_ME_URL; else process.env.LABOS_ME_URL = originalUrl;
