@@ -2,6 +2,8 @@
 """Thin ~/plcos-backups so it never grows forever (Juan, 27 Sep 2026; docs/22-backups.md).
 
 Usage: backup-prune.py <backup dir> <max GB> [--dry-run]
+       aws s3 ls s3://bucket/prefix/ | backup-prune.py --list-stdin <prefix> <max GB>
+The stdin mode prints only dropped object keys; it never deletes local files.
 
 Files are plcos-real-<YYYYMMDDTHHMMZ>[-daily|-event].tar.gz.gpg; a name with no kind reads as an event.
 The older a backup is, the sparser the ones kept:
@@ -26,16 +28,25 @@ NAME = re.compile(r'^plcos-real-(\d{8}T\d{4}Z)(?:-(daily|event))?\.tar\.gz\.gpg$
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     dry = '--dry-run' in sys.argv
+    listing = '--list-stdin' in sys.argv
     out, max_gb = args[0], float(args[1])
     now = datetime.now(timezone.utc)
     backups = []
-    for f in os.listdir(out):
-        m = NAME.match(f)
+    entries = (line.split(maxsplit=3) for line in sys.stdin) if listing else os.listdir(out)
+    for entry in entries:
+        if listing:
+            if len(entry) != 4:
+                continue
+            _, _, size, f = entry
+            f = f.rstrip('\n')
+            m = re.fullmatch(r'(\d{8}T\d{6}Z)\.(?:dump|tar\.gz)\.gpg', f)
+        else:
+            f, m = entry, NAME.match(entry)
         if not m:
             continue
-        at = datetime.strptime(m.group(1), '%Y%m%dT%H%MZ').replace(tzinfo=timezone.utc)
+        at = datetime.strptime(m.group(1), '%Y%m%dT%H%M%SZ' if listing else '%Y%m%dT%H%MZ').replace(tzinfo=timezone.utc)
         path = os.path.join(out, f)
-        backups.append({'f': f, 'path': path, 'at': at, 'kind': m.group(2) or 'event', 'size': os.path.getsize(path)})
+        backups.append({'f': f, 'path': path, 'at': at, 'kind': 'daily' if listing else m.group(2) or 'event', 'size': int(size) if listing else os.path.getsize(path)})
     backups.sort(key=lambda b: b['at'])
     if not backups:
         return
@@ -69,6 +80,9 @@ def main():
     for b in backups:
         if b['f'] in keep:
             continue
+        if listing:
+            print(b['path'])
+            continue
         print(('would remove ' if dry else 'removed ') + b['f'])
         if not dry:
             for suffix in ('', '.sha256', '.reason'):
@@ -77,7 +91,8 @@ def main():
                 except FileNotFoundError:
                     pass
     total = sum(b['size'] for b in kept) / 1024 ** 3
-    print(f'{len(kept)} backups kept, {total:.1f} GB of {max_gb:.0f} GB')
+    if not listing:
+        print(f'{len(kept)} backups kept, {total:.1f} GB of {max_gb:.0f} GB')
 
 
 if __name__ == '__main__':

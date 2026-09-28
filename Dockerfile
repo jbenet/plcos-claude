@@ -60,6 +60,13 @@ RUN npm ci --omit=dev \
 
 # ---- runtime -------------------------------------------------------------------------------------
 FROM base AS runtime
+# PGDG supplies the matching major; Debian bookworm's default client is older.
+ADD https://www.postgresql.org/media/keys/ACCC4CF8.asc /usr/share/keyrings/postgresql.asc
+RUN chmod 644 /usr/share/keyrings/postgresql.asc \
+ && apt-get update && apt-get install -y --no-install-recommends ca-certificates gnupg awscli \
+ && echo 'deb [signed-by=/usr/share/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main' > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update && apt-get install -y --no-install-recommends postgresql-client-17 \
+ && rm -rf /var/lib/apt/lists/*
 ARG GIT_COMMIT=""
 LABEL org.opencontainers.image.title="capital-os" \
       org.opencontainers.image.revision="${GIT_COMMIT}"

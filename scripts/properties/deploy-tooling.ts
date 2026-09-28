@@ -1,10 +1,34 @@
 /** The cutover checker's comparison and the image's static guards. Invented inputs only; no database,
  * docker or network. */
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { compare } from '../../lib/db/pg-verify';
 import type { Check } from './harness';
 
 export async function deployToolingProperties(check: Check): Promise<void> {
+  const scratch = await mkdtemp(join(tmpdir(), 'service-backup-'));
+  try {
+    // Compare S3 selection with the existing disk policy, including the cap/newest rule.
+    const names = ['20200101T0000Z', '20200102T0000Z', '20210101T0000Z'];
+    for (const stamp of names) await writeFile(join(scratch, `plcos-real-${stamp}-daily.tar.gz.gpg`), 'x');
+    const disk = execFileSync('python3', ['scripts/backup-prune.py', scratch, '0', '--dry-run'], { encoding: 'utf8' });
+    const listing = names.map(s => `2020-01-01 00:00:00 1 ${s.replace('Z', '00Z')}.dump.gpg`).join('\n');
+    const dropped = execFileSync('python3', ['scripts/backup-prune.py', '--list-stdin', 'database', '0'], { input: listing + '\n', encoding: 'utf8' });
+    check('BACKUP S3 thinning matches disk policy and keeps newest despite cap',
+      names.every(s => disk.includes(`would remove plcos-real-${s}`) === dropped.includes(s.replace('Z', '00Z'))) &&
+      dropped.trim().split('\n').length === 2 && !dropped.includes('20210101'), 'Invented listings; zero cap cannot remove newest.');
+    for (const [name, body] of Object.entries({ node: 'echo unused', pg_dump: 'echo invented', pg_restore: 'echo "SCHEMA only"', gpg: 'echo UNEXPECTED; exit 99', aws: 'echo UNEXPECTED; exit 99' })) {
+      await writeFile(join(scratch, name), `#!/bin/sh\n${body}\n`, { mode: 0o700 });
+    }
+    const run = spawnSync('bash', ['scripts/backup-service.sh'], { encoding: 'utf8', env: {
+      ...process.env, PATH: `${scratch}:${process.env.PATH}`, DATA_PROFILE: 'demo', DATABASE_URL: 'postgres://invented',
+      BACKUP_BUCKET: 'invented', BACKUP_GPG_PUBLIC_KEY: 'invented', BACKUP_DRY_RUN: '1',
+    } });
+    check('BACKUP refuses zero TABLE DATA before encryption or AWS', run.status !== 0 && run.stderr.includes('no TABLE DATA') && !`${run.stdout}${run.stderr}`.includes('UNEXPECTED'), 'Command stubs; no database, keys or network.');
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+
   // ---- cutover verification ---------------------------------------------------------------------
   const snap = (rows: Record<string, [number, string]>, seq = '10') => ({
     tables: new Map(Object.entries(rows).map(([k, [count, checksum]]) => [k, { count, checksum }])),

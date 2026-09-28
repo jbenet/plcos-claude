@@ -191,3 +191,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Daily timer](entries/daily-timer.md)
 
 - [Workflow API](entries/workflow-api.md)
+- [Service backup — encrypted S3 archives](entries/service-backup.md)
