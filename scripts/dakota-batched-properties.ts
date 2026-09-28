@@ -174,20 +174,28 @@ export async function dakotaBatchedProperties(check: Check) {
       && beforeChangedInput === await semanticState(resumed.db)
       && beforeFailedBatch === JSON.stringify(await resumed.db.one('select state from dakota.translation_job')),
     'Both a missing contact replica and a changed contact hash are refused; original inputs remain resumable.');
-    let contactWrites = 0, rolledBack = false;
-    const faulty: Db = { ...resumed.db, transaction: fn => resumed.db.transaction(tx => fn({ ...tx,
-      query: async <T>(sql: string, params?: unknown[]) => {
+    let contactWrites = 0, checkpointWritten = false, rolledBack = false;
+    const faulty: Db = { ...resumed.db, transaction: fn => resumed.db.transaction(tx => {
+      let batchContactWrites = 0;
+      return fn({ ...tx, query: async <T>(sql: string, params?: unknown[]) => {
         const rows = await tx.query<T>(sql, params);
-        if (/insert into dakota\.contact\(/.test(sql) && ++contactWrites === 17) throw interruption;
+        if (/insert into dakota\.contact\(/.test(sql)) batchContactWrites++;
+        // The time budget may end a batch before any fixed record count. Fail the
+        // first contact transaction after BOTH its records and checkpoint are written.
+        if (batchContactWrites > 0 && /update dakota\.translation_job set state=/.test(sql)) {
+          contactWrites = batchContactWrites;
+          checkpointWritten = true;
+          throw interruption;
+        }
         return rows;
-      },
-    })) };
+      } });
+    }) };
     try { await translateDakota(faulty, inventedActor, replicas, { batchSize: 200 }); }
     catch (error) { if (error !== interruption) throw error; rolledBack = true; }
-    check('DAKOTA a failed transaction rolls back its records and checkpoint together', rolledBack
+    check('DAKOTA a failed transaction rolls back its records and checkpoint together', rolledBack && contactWrites > 0 && checkpointWritten
       && (await resumed.db.one<{ n: number }>('select count(*)::int n from dakota.contact'))!.n === 0
       && beforeFailedBatch === JSON.stringify(await resumed.db.one('select state from dakota.translation_job')),
-    'An injected failure after 17 contact writes leaves neither partial records nor an advanced cursor.');
+    `An injected failure after ${contactWrites} contact writes and their checkpoint update leaves neither partial records nor an advanced cursor.`);
     await resumed.restart();
     let claimBatches = 0, claimInterrupted = false;
     try {

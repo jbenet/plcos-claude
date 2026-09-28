@@ -212,3 +212,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Feedback: Pick a part works with a finger](entries/feedback-touch-0117.md)
 - [Safari — dates read the same on the server and in the browser (0118)](entries/safari-dates-0118.md)
 - [Strategic value — a column and a filter on Selection (0120)](entries/strategic-0120.md)
+- [Dakota — deterministic transaction rollback property](entries/deflake-dakota.md)
