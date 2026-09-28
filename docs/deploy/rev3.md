@@ -23,7 +23,7 @@ mechanisms are removed; the last table lists each one and what would bring it ba
 
 | Resource | Ask | Why |
 |---|---|---|
-| Memory | 8 GiB (GUESS; the measured number replaces it tonight) | The kit default is 384 MiB. Our dev server has peaked at ~4 GB; a production build uses less |
+| Memory | 4 GiB | Measured (`06-measurements.md`): the production server peaks at 0.74 GiB with 10 concurrent users on demo data (p95 under 230 ms, 0 errors in 40k requests). The real data and one running import child add perhaps 2 GiB (GUESS: real imports have not been measured on Postgres). The kit default is 384 MiB |
 | CPU | 2 vCPU | Page rendering plus one import job at a time |
 | Disk | A 20 GB persistent volume | 1.0 GB of working files today, plus growth |
 | Database | Postgres 17 (16 works), 20 GB, daily snapshots | 640 MB today |
@@ -75,7 +75,7 @@ mechanisms are removed; the last table lists each one and what would bring it ba
 ## Build order
 
 **Tonight (no decisions needed; demo data only):**
-1. Measure a production `next start` on demo data: memory idle and under a 10-user walk. The number replaces the 8 GiB guess.
+1. ~~Measure a production `next start`~~ Done: 0.74 GiB peak on demo data.
 2. LabOS sign-in: `/me` lookup (cached a few minutes), the `uid` mapping, viewer by default. The local user switcher stays for the Mac.
 3. Env-var keys with Keychain fallback, in each connector.
 4. The in-process daily timer for the syncs and the backup.
