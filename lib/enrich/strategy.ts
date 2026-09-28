@@ -15,6 +15,9 @@ export type Level = 'high' | 'medium' | 'low' | 'unknown';
 
 export interface Strategy {
   key: string;
+  /** Optional canonical identity when the file uses a research alias. */
+  entityId?: string;
+  candidateKey?: string;
   name: string;
   /**
    * `inputs` pins what it was written from (iteration 3; CLAUDE.md, Agent rules: run records pin

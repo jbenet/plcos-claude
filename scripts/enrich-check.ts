@@ -12,6 +12,8 @@ import { CAPACITY_EVIDENCE, gates, isStale, nextOverLimit, nextTooLong, type Str
 import type { Path } from '../lib/enrich/connect';
 import { connectionIdentityProblems, readPathRecords, type LocatedRecord } from '../lib/enrich/connection-check';
 import { checkedStrategyFiles, nameMention, type CheckVehicle } from '../lib/enrich/strategy-check';
+import { candidateKey } from '../lib/enrich/candidate-key';
+import type { Candidate } from '../lib/enrich/candidates';
 import { bandByRule } from '../lib/enrich/capacity';
 
 async function main() {
@@ -156,8 +158,45 @@ async function main() {
   // an organization, or one lead) — or when the text only guards the other's privacy. The rest are
   // counted, and apart from them the ones cited as a W3 row or a connector-plan pairing, which the
   // current files no longer carry (W3's later fixes removed the tie). Full names, two words or more.
-  const allCands = (await readFile(join(process.cwd(), config.data.root, 'enrich', 'candidates.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
-    .map((l) => JSON.parse(l) as { key: string; name: string; org: string | null; domains: string[] });
+  const allCands = candidateLines.map(l => JSON.parse(l) as Candidate);
+  const aliases: Record<string, string> = JSON.parse(await readFile(join(dir, '..', 'entity-keys.json'), 'utf8').catch((error) => {
+    if (error.code !== 'ENOENT') throw error;
+    return '{}';
+  }));
+  const resolveKey = (record: { key: string }, finding = found.get(record.key)) => candidateKey(record, allCands, aliases, finding);
+  const findings = new Map<string, Finding>();
+  for (const f of found.values()) {
+    const key = resolveKey(f, f);
+    if (!key) continue;
+    const previous = findings.get(key);
+    if (!previous || f.researched.at > previous.researched.at) findings.set(key, f);
+  }
+  // Resolve before any candidate-dependent check, keeping file names only for diagnostics.
+  let resolved = sfiles.flatMap(record => {
+    const key = resolveKey(record.s);
+    if (!key) {
+      sbad++;
+      console.log(`  strategy ${record.file}: unresolvable alias; no candidate in the research export`);
+      return [];
+    }
+    const f = found.get(record.fileKey);
+    const previous = findings.get(key);
+    if (f && (!previous || f.researched.at > previous.researched.at)) findings.set(key, f);
+    return [{ ...record, candidateKey: key }];
+  });
+  const pairs = new Map<string, typeof resolved>();
+  for (const record of resolved) {
+    const pair = JSON.stringify([record.vehicle, record.candidateKey]);
+    pairs.set(pair, [...(pairs.get(pair) ?? []), record]);
+  }
+  for (const records of pairs.values()) if (records.length > 1 && new Set(records.map(r => r.fileKey)).size > 1) {
+    for (const record of records) {
+      sbad++;
+      console.log(`  strategy ${record.file}: multiple files for the same LP and vehicle (resolved aliases)`);
+    }
+  }
+  resolved = [...pairs.values()].filter(records => records.length === 1).flat();
+  const keyByFile = new Map(resolved.map(r => [`${r.vehicle}:${r.fileKey}`, r.candidateKey]));
   const allNames = allCands.filter((c) => nameMention(c.name, c.name) >= 0);
   const keyByName = new Map(allCands.map((c) => [c.name, c.key]));
   const nameByKey = new Map(allCands.map((c) => [c.key, c.name]));
@@ -192,8 +231,7 @@ async function main() {
   const unpinned: string[] = [];
   const madeAt = new Map<string, string>();
   const gateCount: Record<string, number> = {};
-  const candsByKey = new Map((await readFile(join(process.cwd(), config.data.root, 'enrich', 'candidates.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
-    .map((l) => JSON.parse(l) as { key: string; domains: string[]; location: string | null; contact: { lastFromThem: string | null; meetings: number; groupMeetings: number }; money: { track: string; state: string; amount: number } | null; context?: Array<{ at: string }> }).map((c) => [c.key, c]));
+  const candsByKey = new Map(allCands.map(c => [c.key, c]));
   const best = new Map<string, 'A' | 'B' | 'C' | 'D'>();
   for (const record of pathInput.records) {
     const p = record.value as Path;
@@ -230,26 +268,27 @@ async function main() {
   };
   const moneyAsk = new Map<string, Set<string>>();
   const lists: Record<string, number> = {}, shapes: Record<string, number> = {};
-  for (const record of sfiles) {
+  for (const record of resolved) {
     const x = record.s;
     const s = x;
-    const key = record.fileKey;
+    const key = record.candidateKey;
     if (x.made?.at) madeAt.set(`${record.vehicle}:${key}`, x.made.at);
     const cand = candsByKey.get(key);
-    if ((x as Strategy).made && isStale(x as Strategy, found.get(key), cand ? cand.money : undefined, best.get(key) ?? null, cand?.context?.[0]?.at ?? null)) stale++;
+    if ((x as Strategy).made && isStale(x as Strategy, findings.get(key), cand ? cand.money : undefined, best.get(key) ?? null, cand?.context?.[0]?.at ?? null)) stale++;
     // A firm-level strategy repeats its lead's ask and dates (s13): stale once the lead is rewritten.
-    const lead = (x as Strategy).made?.inputs?.lead;
+    const pin = (x as Strategy).made?.inputs?.lead;
+    const lead = pin ? { ...pin, key: keyByFile.get(`${record.vehicle}:${pin.key}`) ?? resolveKey({ key: pin.key }) ?? pin.key } : null;
     if (lead) leadPins.push({ key, vehicle: record.vehicle, lead });
     else if ((x as Strategy).ask?.shape === 'firm-level ask') unpinned.push(key);
     if ((x as Strategy).next?.what && nextTooLong(x as Strategy)) long++;
     if ((x as Strategy).next?.what && nextOverLimit(x as Strategy)) over++;
     {
       const st = x as Strategy;
-      leads.set(`${record.vehicle}:${key}`, st.made?.inputs?.lead?.key ?? key);
+      leads.set(`${record.vehicle}:${key}`, lead?.key ?? key);
       outside.push({ key, vehicle: record.vehicle, st, text: [st.angle, st.next?.what, st.route?.why, ...(st.risks ?? []), ...(st.openQuestions ?? [])].filter(Boolean).join(' ') });
     }
     if ((x as Strategy).scores) {
-      const gs = gates(x as Strategy, cand, found.get(key), best.get(key) ?? null);
+      const gs = gates(x as Strategy, cand, findings.get(key), best.get(key) ?? null);
       for (const g of gs) gateCount[g] = (gateCount[g] ?? 0) + 1;
       if (gs.length) gatedKeys.push(key);
     }
@@ -259,10 +298,8 @@ async function main() {
   }
   // Asks drift across batches (W5, iteration 3): a firm whose money is asked for twice. Colleagues by
   // work domain; a `firm-level ask` or anything that isn't money doesn't count.
-  const cands = (await readFile(join(process.cwd(), config.data.root, 'enrich', 'candidates.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
-    .map((l) => JSON.parse(l) as { key: string; domains: string[] });
   const asksAt = new Map<string, number>();
-  for (const c of cands) {
+  for (const c of allCands) {
     const askedVehicles = moneyAsk.get(c.key);
     if (!askedVehicles) continue;
     for (const d of c.domains.filter((x) => !/^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|mac|aol|proton|protonmail|live|msn)\./.test(x))) for (const vehicle of askedVehicles) {
@@ -281,7 +318,7 @@ async function main() {
     if (at > 0 && process.argv[at + 1]) await writeFile(process.argv[at + 1], keys.join('\n') + '\n');
   }
   // A lead carries its firm, so a colleague's newer finding makes the lead stale too (s24).
-  const leadsBehind = new Set(leadPins.filter((x) => { const f = found.get(x.key); const at = madeAt.get(`${x.vehicle}:${x.lead.key}`); return f && at && f.researched.at > at; }).map((x) => x.lead.key)).size;
+  const leadsBehind = new Set(leadPins.filter((x) => { const f = findings.get(x.key); const at = madeAt.get(`${x.vehicle}:${x.lead.key}`); return f && at && f.researched.at > at; }).map((x) => x.lead.key)).size;
   if (sfiles.length) console.log(`${sfiles.length} strategies · ${sbad} with problems · ${stale} older than their LP's finding · ${long} with a next step the import cuts at 400 characters (${over} over v1.5's 300) · ${doubled} firms asked for money twice · ${leadMoved} firm-level strategies whose lead was rewritten since (${unpinned.length} firm-level asks pin no lead) · ${leadsBehind} leads older than a colleague's finding · ${namesOthers} naming an LP the files don't join to them (${staleTies} citing a W3 tie the files no longer carry) · ${tierMismatch} citing a tier W3's file doesn't give the pair · gates ${JSON.stringify(gateCount)} · lists ${JSON.stringify(lists)} · asks ${JSON.stringify(shapes)}`);
   if (bad || sbad || pathBad) process.exitCode = 1;
 }

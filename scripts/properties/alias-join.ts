@@ -1,0 +1,135 @@
+/** Invented file-only regressions: exercise the checker without opening any database. */
+import { execFile } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
+import { candidateKey } from '../../lib/enrich/candidate-key';
+import type { Strategy } from '../../lib/enrich/strategy';
+import type { Check } from './harness';
+
+export async function aliasJoinProperties(check: Check) {
+  const key = '10000000-0000-4000-8000-000000000001';
+  const peer = '10000000-0000-4000-8000-000000000002';
+  const firm = '10000000-0000-4000-8000-000000000003';
+  const stranger = '10000000-0000-4000-8000-000000000004';
+  const candidates = [
+    { key, name: 'Invented River' }, { key: peer, name: 'Invented Willow' },
+    { key: firm, name: 'Invented Arbor' }, { key: stranger, name: 'Invented Stranger' },
+  ].map(c => ({ ...c, type: c.key === firm ? 'org' : 'person',
+    org: c.key === stranger ? null : 'Invented Arbor', domains: c.key === stranger ? [] : ['arbor.example'],
+    location: 'London, UK', money: null, context: [],
+    contact: { lastFromThem: null, meetings: 0, groupMeetings: 0 } }));
+  const alias = 'invented-research-river';
+  const finding = { key: alias, name: 'Invented River', facts: [],
+    researched: { at: '2026-09-26', by: 'fixture', workflow: 'W1', version: '1.0' },
+    identity: { match: 'confirmed', basis: 'Invented fixture identity', canonical: { name: 'Invented River' } } };
+  check('Alias resolution honors explicit IDs, exported aliases and unique finding identities',
+    candidateKey({ key: alias, entityId: key }, candidates, {}) === key
+    && candidateKey({ key: alias, candidateKey: key }, candidates, {}) === key
+    && candidateKey({ key: alias }, candidates, { [alias]: key }) === key
+    && candidateKey({ key: alias }, candidates, {}, finding) === key
+    && candidateKey({ key }, candidates, {}) === key,
+    'One shared resolver covers canonical and research-key files.');
+  check('Alias resolution refuses unknown targets, ambiguous names and unresolved findings',
+    candidateKey({ key: alias }, candidates, { [alias]: 'missing' }) === null
+    && candidateKey({ key: alias }, [...candidates, { key: 'namesake', name: 'Invented River' }], {}, finding) === null
+    && candidateKey({ key: alias }, candidates, {}, { ...finding, identity: { match: 'ambiguous' } }) === null,
+    'No fuzzy identity matches or missing candidate rows.');
+  const scratch = await mkdtemp(join(tmpdir(), 'alias-check-'));
+  const dir = join(scratch, 'data/demo/enrich');
+  const strategy = (k: string): Strategy => ({
+    key: k, name: 'Invented River', made: { at: '2026-09-27', by: 'fixture', workflow: 'W5', version: '1.10',
+      inputs: { finding: finding.researched.at, money: null, bestPath: 'C' } },
+    fit: { invented: { verdict: 'possible', why: 'Invented evidence' } },
+    scores: { capacity: { band: 'unknown', basis: 'No evidence' }, affinity: { level: 'low', basis: 'Invented' },
+      propensity: { level: 'low', basis: 'Invented' }, timeToDecision: { band: 'weeks', basis: 'Invented' } },
+    angle: 'Review Invented River with Invented Willow at Invented Arbor.',
+    route: { via: 'Invented Guide', tier: 'C', why: 'Invented path' },
+    next: { what: 'Review the evidence', who: 'Fixture owner', when: '2026-10-01' },
+    ask: { vehicle: 'invented', shape: 'fund commitment' }, openQuestions: [], risks: [], list: 'this year', confidence: 'low',
+  });
+  const write = (file: string, value: unknown) => writeFile(join(dir, file), JSON.stringify(value));
+  const run = async () => {
+    try {
+      const result = await promisify(execFile)(process.execPath,
+        ['--import', import.meta.resolve('tsx'), resolve('scripts/enrich-check.ts'), '--gated', join(scratch, 'gated.txt'), '--naming', join(scratch, 'naming.txt')],
+        { cwd: scratch, env: { ...process.env, DATA_PROFILE: 'demo', DATABASE_URL: '', TSX_TSCONFIG_PATH: resolve('tsconfig.json') } });
+      return { stdout: result.stdout, code: 0 };
+    } catch (error) {
+      const e = error as { stdout: string; code: number };
+      if (typeof e.stdout !== 'string') throw error;
+      return { stdout: e.stdout, code: e.code };
+    }
+  };
+  try {
+    await mkdir(join(dir, 'raw'), { recursive: true });
+    await mkdir(join(dir, 'strategy/companion'), { recursive: true });
+    await writeFile(join(dir, 'candidates.jsonl'), candidates.map(c => JSON.stringify(c)).join('\n'));
+    await write('vehicles.json', [{ slug: 'invented', name: 'Invented Fund' }, { slug: 'companion', name: 'Invented Companion' }]);
+    await write('entity-keys.json', { [alias]: key });
+    await write(`raw/${alias}.json`, finding);
+    await writeFile(join(dir, 'connections.jsonl'), JSON.stringify({ lp: key, other: { name: 'Invented Guide', type: 'team' }, tier: 'C', kind: 'colleague', basis: 'Invented tie' }));
+    const s = strategy(alias);
+    await write(`strategy/${alias}.json`, s);
+    const first = await run();
+    const gated = (await readFile(join(scratch, 'gated.txt'), 'utf8')).trim();
+    check('Checker joins alias strategies to W3, their firm and evidence gates', first.code === 0
+      && first.stdout.includes('0 older than their LP\'s finding') && first.stdout.includes('0 naming an LP')
+      && first.stdout.includes('"this year, without the evidence gate":1')
+      && first.stdout.includes('"outside the US, no counsel gate":1') && gated === key,
+      'A current C pin stays current, own firm/colleague names are allowed, and gates emit the canonical candidate.');
+    await rm(join(dir, `strategy/${alias}.json`));
+    await write(`strategy/${key}.json`, strategy(key));
+    const canonical = await run();
+    check('Canonical and alias strategies produce identical checker summaries', canonical.stdout === first.stdout,
+      'Same inputs and same candidate checks regardless of filename.');
+    await rm(join(dir, `strategy/${key}.json`));
+    await write('entity-keys.json', {});
+    await write(`strategy/${alias}.json`, { ...s, candidateKey: key,
+      angle: `${s.angle} Review Invented Stranger.`, route: { ...s.route, tier: 'B' } });
+    const negative = await run();
+    check('Alias resolution preserves real stale pins, unrelated naming and route gates',
+      negative.stdout.includes('1 naming an LP') && negative.stdout.includes('"route better than the best path on file":1')
+      && (await readFile(join(scratch, 'naming.txt'), 'utf8')).trim() === key,
+      'Resolving identity does not relax candidate-dependent checks.');
+    await write(`strategy/${alias}.json`, { ...s, entityId: key, made: { ...s.made, inputs: { ...s.made.inputs!, bestPath: 'B' } } });
+    const stale = await run();
+    check('Alias strategies with changed best-tier pins remain stale', stale.stdout.includes('1 older than their LP\'s finding'), 'B pinned against current C.');
+    await write(`strategy/${alias}.json`, { ...s, entityId: key });
+    await write(`raw/${peer}.json`, { ...finding, key: peer, name: 'Invented Willow',
+      researched: { ...finding.researched, at: '2026-09-28' },
+      identity: { match: 'confirmed', basis: 'Invented colleague' } });
+    const colleague = { ...strategy(peer), name: 'Invented Willow', route: null,
+      made: { ...s.made, inputs: { finding: '2026-09-28', money: null, bestPath: null,
+        lead: { key: alias, at: '2026-09-26' } } }, ask: { vehicle: 'invented', shape: 'firm-level ask' } };
+    await write(`strategy/${peer}.json`, colleague);
+    const leads = await run();
+    check('Alias lead pins join rewritten leads and newer colleague findings',
+      leads.stdout.includes('1 firm-level strategies whose lead was rewritten since')
+      && leads.stdout.includes("1 leads older than a colleague's finding"),
+      'A lead filed under its own explicit entity ID resolves even without an exported alias.');
+    await write(`strategy/${peer}.json`, { ...colleague, ask: { vehicle: 'invented', shape: 'fund commitment' } });
+    const money = await run();
+    check('Money asks under aliases count against the canonical firm', money.stdout.includes('1 firms asked for money twice'),
+      'The alias and its colleague cannot hide overlapping asks.');
+    await rm(join(dir, `strategy/${peer}.json`));
+    await write(`strategy/companion/${alias}.json`, { ...s, entityId: key, ask: { vehicle: 'companion', shape: 'advice' } });
+    const companion = await run();
+    check('Companion-vehicle strategies use the same alias join', companion.code === 0
+      && companion.stdout.includes('2 strategies') && companion.stdout.includes('0 older than their LP\'s finding')
+      && companion.stdout.includes('"this year, without the evidence gate":2'),
+      'Both layouts use the candidate evidence without mixing their vehicle keys.');
+    await write(`strategy/${key}.json`, strategy(key));
+    const duplicate = await run();
+    check('Aliases cannot create a second strategy for the same candidate and vehicle', duplicate.code === 1
+      && duplicate.stdout.includes('multiple files for the same LP and vehicle (resolved aliases)'),
+      'Both conflicting files are refused, while a companion vehicle remains separate.');
+    await rm(join(dir, `strategy/${key}.json`));
+    await write('strategy/unmapped.json', { ...strategy('unmapped'), name: 'Invented Unknown' });
+    const unknown = await run();
+    check('Unresolvable aliases are reported on their own failing line', unknown.code === 1
+      && unknown.stdout.includes('strategy unmapped.json: unresolvable alias; no candidate in the research export'),
+      'An unmapped file cannot silently escape the evidence gates.');
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+}

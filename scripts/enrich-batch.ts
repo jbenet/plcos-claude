@@ -24,6 +24,7 @@
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config/deployment';
+import { candidateKey } from '../lib/enrich/candidate-key';
 import type { Candidate } from '../lib/enrich/candidates';
 import { norm } from '../lib/enrich/connect';
 import { pagesOnly, type Finding } from '../lib/enrich/schema';
@@ -70,8 +71,8 @@ async function main() {
   const findings = new Map<string, Finding>();
   let unmapped = 0;
   for (const f of rawFindings.values()) {
-    const key = candidateKeys.has(f.key) ? f.key : aliases[f.key];
-    if (!key || !candidateKeys.has(key)) { unmapped++; continue; }
+    const key = candidateKey(f, cands, aliases, f);
+    if (!key) { unmapped++; continue; }
     // Multiple aliases may describe one candidate. Use its most recent research.
     const previous = findings.get(key);
     if (!previous || f.researched.at > previous.researched.at) findings.set(key, { ...f, key });
