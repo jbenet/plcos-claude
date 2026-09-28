@@ -1,6 +1,6 @@
 # W3 — Connect LP units
 
-Version **1.2** (28 September 2026).
+Version **1.3** (28 September 2026).
 
 Deterministic local file join: `scripts/enrich-connect.ts`, using `lib/enrich/connect.ts`.
 Read `docs/agent-rules/real-data.md`, `docs/23-lp-units.md` and this protocol.
@@ -32,10 +32,24 @@ restrictions.
   team participants by recorded person identity or email. Match LP people through their
   canonical records and project their paths onto current LP-unit contacts. An assigned owner
   alone is not evidence of participation. Legacy exports fall back to `contact.recent`.
-- Each recorded interaction with a named team participant yields a path, including outbound
-  email. Group attendance is C and labelled; a documented direct one-to-one is at least B.
+- Grade email per LP and named team participant, across the complete history. Two-way
+  one-to-one email is B. Inbound-only one-to-one email is B, labelled **waiting on us**.
+  Outbound-only one-to-one email is C, labelled **we wrote, no reply**. Bulk/mass mail alone
+  is D, never evidence of a direct conversation. A rules are unchanged.
+- The private export joins translated touchpoint source refs to cached Affinity email metadata
+  (account-wide email plus list-entry fallback). It preserves `massMailing`, `loggingType`,
+  recipient count, and a derived one-to-one/bulk classification without exporting addresses.
+  `ours`/`sent` and `theirs`/`received` are the two directions. One-to-one requires exactly
+  one sender and one recipient, the LP and an internal participant. More than one recipient
+  (including CC and preview totals), mass-mail flags, bulk/newsletter logging types, and
+  newsletter subjects are conservatively treated as bulk. Investor updates to a list qualify through recipient counts or bulk flags. The strict
+  recipient cutoff and newsletter subject heuristic are guesses. Missing metadata or unknown direction stays C, never inferred as a reply.
+  Bulk emails never supply either side of a two-way exchange or refresh direct-contact warmth;
+  independent personal email or meeting evidence can still establish B.
+- A held direct meeting/call with both present remains B; group attendance stays C and labelled.
   A sourced personal podcast conversation or explicit one-to-one finding receives the same
-  rule. Age or an unknown date may lower warmth, but cannot erase the evidence of a direct
+  rule. Each path's `basis` (the displayed why) states the applicable case. Age or an unknown
+  date may lower warmth, but cannot erase the evidence of a direct
   conversation. Mere mentions, panels, shared attendance and firm-level ties do not qualify.
 - Read the sourced portfolio snapshot, including SPVs. Founders join LP identities only with
   corroborating company evidence; ambiguous names remain separate. Non-LP founders can be
@@ -66,7 +80,7 @@ restrictions.
 ## Live rerun (Claude, after integration)
 
 1. On the live app, Developer → Enrich → **Export the research set**. An old export lacks
-   full contact history, so running only W3 will not recover missing meetings. Re-translate
+   full contact history or email metadata, so running only W3 will not recover missing meetings. Re-translate
    cached Affinity records first when team participants were stored only as person IDs.
 2. Freeze that export and the named inputs. Record the authorized W3 run in the workflow
    ledger using `docs/COLLAB.md` (protocol hash includes this file and the implementation).

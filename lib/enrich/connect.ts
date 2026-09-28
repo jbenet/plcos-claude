@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Candidate } from './candidates';
+import type { EmailEvidence } from './email-evidence';
 import type { Finding } from './schema';
 import type { WarehousePerson, WarehouseTie, WarehouseMatch } from './warehouse-graph';
 import { plNetworkPaths, materializeResearchNodes } from './pl-network';
@@ -631,15 +632,30 @@ function ourSidePaths(c: Candidate, f: Finding | undefined, net: Network, team: 
   const out: Path[] = [];
   const other = (t: TeamMember): Path['other'] => ({ type: 'team', name: t.name, handle: t.handle });
   for (const t of team) {
-    const contacts = (c.contact.records ?? c.contact.recent ?? []).filter((r) => r.with.some((name) => norm(name) === norm(t.name))
+    const contacts: Array<Candidate['contact']['recent'][number] & { group?: boolean; email?: EmailEvidence }> = (c.contact.records ?? c.contact.recent ?? []).filter((r) => r.with.some((name) => norm(name) === norm(t.name))
       && r.on <= at.toISOString().slice(0, 10)
       && ['meeting', 'call', 'email', 'message'].includes(r.channel));
-    const direct = contacts.filter(r => 'group' in r ? !r.group
-      : !(c.contact.meetingDates ?? []).some(d => d.on === r.on && d.group));
-    const dates = [...new Set(contacts.map((r) => r.on))].sort();
-    if (dates.length) out.push({ lp: c.key, other: other(t), kind: contacts.some(r => ['meeting', 'call'].includes(r.channel)) ? 'met' : 'corresponded', tier: direct.length ? 'B' : 'C', source: 'our records',
-      basis: `Named in ${dates.length} dated interaction${dates.length === 1 ? '' : 's'} with ${t.name}${direct.length ? '; direct contact on record' : '; group attendance, personal interaction uncertain'}`,
-      tie: { kind: direct.length ? (direct.length >= config.routeWarmth.repeatedContacts ? 'repeated_contact' : 'acquaintance') : 'proximity', directInteraction: direct.length > 0, lastInteraction: direct.length ? direct.map(r => r.on).sort().at(-1) : dates.at(-1) } });
+    const direct = contacts.filter(r => r.channel !== 'email' && (r.group !== undefined ? !r.group
+      : !(c.contact.meetingDates ?? []).some(d => d.on === r.on && d.group)));
+    const emails = contacts.filter(r => r.channel === 'email');
+    const personal = emails.filter(r => 'email' in r && r.email?.oneToOne && !r.email.bulk);
+    const sent = personal.filter(r => ['ours', 'sent'].includes(r.direction ?? ''));
+    const received = personal.filter(r => ['theirs', 'received'].includes(r.direction ?? ''));
+    const bulkOnly = contacts.length > 0 && contacts.every(r => r.channel === 'email' && 'email' in r && r.email?.bulk);
+    const warm = [...direct, ...received, ...(received.length ? sent : [])];
+    const tier: Tier = warm.length ? 'B' : bulkOnly ? 'D' : 'C';
+    const why = direct.length ? 'direct meeting/call/message with both present'
+      : received.length && sent.length ? 'two-way one-to-one email'
+      : received.length ? 'inbound-only one-to-one email; waiting on us'
+      : bulkOnly ? 'bulk/mass mailing only; no personal tie established'
+      : sent.length ? 'we wrote, no reply (one-to-one email)'
+      : emails.length ? 'email direction or one-to-one participants unverified'
+      : 'group attendance, personal interaction uncertain';
+    const dates = [...new Set(contacts.map(r => r.on))].sort();
+    if (dates.length) out.push({ lp: c.key, other: other(t), kind: contacts.some(r => ['meeting', 'call'].includes(r.channel)) ? 'met' : 'corresponded', tier, source: 'our records',
+      basis: `Named in ${dates.length} dated interaction${dates.length === 1 ? '' : 's'} with ${t.name}; ${why}`,
+      tie: { kind: warm.length ? (warm.length >= config.routeWarmth.repeatedContacts ? 'repeated_contact' : 'acquaintance') : 'proximity',
+        directInteraction: warm.length > 0, lastInteraction: warm.length ? warm.map(r => r.on).sort().at(-1) : dates.at(-1) } });
   }
   if (c.type !== 'person') return out;
   for (const org of net.orgs) {

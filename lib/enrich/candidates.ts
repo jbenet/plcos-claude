@@ -13,6 +13,7 @@ import { listRestrictions } from '@/modules/coordination';
 import { lpContactsFor, listPursuits, type Pursuit, type PursuitStatus } from '@/modules/strategy';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { noteTags } from '@/lib/connectors/affinity/event-tags';
+import { emailEvidenceIndex, type EmailEvidence } from './email-evidence';
 import { emailEntriesByPerson, replyOwedSince } from './reply-owed';
 import { makeTriageExport, writeTriageExport } from './triage-export';
 import { exportIdentityReview } from './identity-review-export';
@@ -100,7 +101,7 @@ export interface Candidate extends ResearchIdentity {
      */
     recent: Array<{ on: string; channel: string; direction: string | null; about: AboutWords; with: string[] }>;
     /** Complete held interaction history for routing, independent of the raise window and W5's eight-row preview. */
-    records?: Array<{ on: string; channel: string; direction: string | null; about: AboutWords; with: string[]; group: boolean; source: string }>;
+    records?: Array<{ on: string; channel: string; direction: string | null; about: AboutWords; with: string[]; group: boolean; source: string; email?: EmailEvidence }>;
     /**
      * How many LPs in the set our last unanswered word went to on the same day (W5, iteration 3):
      * ten or more is a mailing, and the next step is a first personal note, not a follow-up.
@@ -195,6 +196,10 @@ async function researchSnapshot() {
   ]);
   const emailRecords = await latestRaw<unknown>('affinity', 'email');
   const emails = emailEntriesByPerson(emailRecords.map(r => r.payload));
+  const emailEvidence = emailEvidenceIndex([
+    ...entries.flatMap(r => (r.payload.entity.fields ?? []).flatMap(f => f.value?.type === 'interaction' ? [f.value.data] : [])),
+    ...emailRecords.map(r => r.payload),
+  ]);
   const readings = await readingsFor(ids);
   const context = await db.query<{ entity_id: string; at: Date | string; by: string | null; body: string }>(
     `select identity.canonical_entity_id(n.entity_id)::text as entity_id, n.created_at as at, u.name as by, n.body
@@ -291,7 +296,8 @@ async function researchSnapshot() {
           .filter((t) => !t.viaOrganization && ['meeting', 'call', 'email', 'message'].includes(t.channel)
             && t.on && t.on.getTime() <= Date.now() && !isAutoReply(t))
           .map((t) => ({ on: day(t.on)!, channel: t.channel, direction: t.direction,
-            about: aboutWords(eventAbout(t, windows)), with: t.attendees, group: isEvent(t), source: t.source })),
+            about: aboutWords(eventAbout(t, windows)), with: t.attendees, group: isEvent(t), source: t.source,
+            ...(t.channel === 'email' ? { email: emailEvidence(t.sourceRef) } : {}) })),
         recent: (everything.get(ent.entity_id) ?? [])
           .filter((t) => inPeriod(t) && !t.viaOrganization && t.channel !== 'research' && t.on && t.on.getTime() <= Date.now())
           .slice(0, 8)
