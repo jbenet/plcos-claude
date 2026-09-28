@@ -1,5 +1,7 @@
 # Capital OS as a deployed service: the plan, rev 2 (for Juan's review, 28 Sep 2026)
 
+> **Superseded by [rev 3](../rev3.md)** (28 Sep 2026): one machine, far fewer parts. Kept for the record.
+
 This merges four inputs in this folder: A (service and infrastructure), B (cloud workflows) and C (users
 and the dev cycle), written by Claude planners, and Astra's independent plan. It replaces rev 1
 (`../00-plan.md`) wherever the two conflict. Rev 1's premise, that the Mac keeps the connectors and
