@@ -7,6 +7,15 @@ and ran the export and findings imports. It found five problems that stop a depl
 
 ## 0. Before the day: fixes the rehearsal says are required
 
+**Status, 28 Sep 06:40 UTC: F1–F5 are fixed and merged (89dc9f3); gate green on both databases.**
+F1: the Dockerfile sets `NEXT_DIST_DIR=.next`. F2: with `LABOS_ME_URL` set, the real profile accepts
+PL's database over verified TLS (RDS CA bundle in the image). F3: one live-server helper treats the
+LabOS container as live. F4: sign-in reads first and never writes for a known uid. F5: viewer data
+3.4 s → 0.3 s on invented real-scale data (verify on the first real deploy). Still unverified end to
+end: a Docker build (no Docker on the Mac; PL's Kaniko is the first real build) and the Dakota strip
+against a real copy — rehearse both once before cutover (§2, §3).
+
+
 | # | Problem found | Fix |
 |---|---|---|
 | F1 | The image builds with `DATA_PROFILE=demo` into `.next`. With `DATA_PROFILE=real`, `next start` looks in `.next-real` and exits: "Could not find a production build". | Set `NEXT_DIST_DIR=.next` in the app's env (the rehearsal did), or build with `DATA_PROFILE=real`. |
