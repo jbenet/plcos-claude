@@ -25,7 +25,7 @@ import { continuations, titleFrom } from './issues/title';
 export interface InboxBase {
   clientId: string;
   receivedAt: string;
-  /** The reporter's handle from the local user cookie, unverified until filing looks it up. */
+  /** Untrusted local user selector captured by the server; ingest resolves it against app_user before filing. */
   reporter: string | null;
 }
 export type InboxEntry = InboxBase & (

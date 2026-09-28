@@ -1,4 +1,4 @@
-import { getDb, type Queryable } from '@/lib/db';
+import { getDb } from '@/lib/db';
 import { issues as issueSink } from '@/lib/issues';
 import type { IssueAttachment, IssueKind, IssuePriority, IssueSink } from '@/lib/issues';
 import { appendAudit, attachIssueRef, insertFeedback } from './repo';
@@ -25,14 +25,13 @@ export interface FeedbackCommand {
 
 /**
  * The markdown file is the receipt. Database metadata is best-effort and never holds
- * the complaint behind a busy connection, including reporter lookup.
+ * the complaint behind a busy connection. The ingester resolves the reporter before calling this.
  */
-export async function fileFeedback(user: AppUser | { handle: string; resolveUser: (q: Queryable) => Promise<AppUser> }, cmd: FeedbackCommand, options: { clock?: QueueClock; sink?: IssueSink; metadataBudgetMs?: number } = {}) {
-  const verified = !('resolveUser' in user);
+export async function fileFeedback(user: AppUser | null, cmd: FeedbackCommand, options: { clock?: QueueClock; sink?: IssueSink; metadataBudgetMs?: number } = {}) {
   const context = {
     ...cmd.context,
-    user: user.handle,
-    reporterVerification: verified ? 'verified' : 'unverified local cookie; database lookup pending',
+    user: user?.handle ?? 'unknown',
+    reporterVerification: user ? 'verified' : 'no active app_user resolved',
   };
 
   const sink = options.sink ?? await issueSink();
@@ -41,7 +40,7 @@ export async function fileFeedback(user: AppUser | { handle: string; resolveUser
     body: cmd.body.trim() || '(no description given)',
     kind: cmd.kind,
     priority: cmd.priority,
-    reporter: verified ? user.handle : `${user.handle} (unverified)`,
+    reporter: user?.handle ?? 'unknown',
     page: cmd.page,
     labels: [],
     context,
@@ -50,11 +49,11 @@ export async function fileFeedback(user: AppUser | { handle: string; resolveUser
     ...(cmd.clientId ? { clientId: cmd.clientId } : {}),
   });
   // A resend of a report already filed: its database row and audit entry were queued the first time.
-  if (issue.repeat) return issue;
+  if (issue.repeat || !user) return issue;
 
   void bestEffortDb(async signal => {
     const q = cancellableDb(await getDb(), signal);
-    const actor = 'resolveUser' in user ? await user.resolveUser(q) : user;
+    const actor = user;
     const row = await insertFeedback({
       title: cmd.title.trim(), body: cmd.body.trim(), kind: cmd.kind, priority: cmd.priority,
       reporterId: actor.id, page: cmd.page, labels: [],

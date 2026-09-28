@@ -53,6 +53,8 @@ export async function POST(req: Request) {
   if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: checked.status });
 
   try {
+    // Capture only the local selector here. Ingest resolves app_user before naming the reporter;
+    // a reporter supplied in the request body is never used.
     const reporter = (await cookies()).get(USER_COOKIE)?.value || null;
     const done = await journal(issuesRoot(), {
       kind: 'issue', clientId, receivedAt: new Date().toISOString(), reporter, request: checked.value,
