@@ -40,12 +40,27 @@ export function fixtureTransport(opts: FixtureOptions = {}): LinearTransport {
       opts.sent?.push(body);
       n++;
       if (opts.limitFirst && n <= opts.limitFirst) return answer(429, { errors: [{ message: 'Rate limit exceeded', extensions: { code: 'RATELIMITED' } }] });
-      const { operationName, variables } = JSON.parse(body) as { operationName: string; variables: { first?: number; after?: string | null; filter?: { updatedAt?: { gt?: string } } | null } };
+      const { operationName, variables } = JSON.parse(body) as { operationName: string; variables: { first?: number; after?: string | null; filter?: { updatedAt?: { gt?: string } } | null; teamKeys?: string[]; userIds?: string[] } };
       const q = Object.hasOwn(QUERIES, operationName) ? QUERIES[operationName] : undefined;
       if (!q) return answer(400, { errors: [{ message: 'Unknown operation' }] });
-      if (!q.root) return answer(200, { data: { viewer: { id: 'demo-viewer' }, teams: { nodes: (ws.teams ?? []).map((t) => ({ id: t.id })) } } });
+      const allowedTeams = new Set((ws.teams ?? []).filter((t) => variables.teamKeys?.includes(String(t.key))).map((t) => t.id));
+      const ref = (r: Record<string, unknown>, key: string) => (r[key] as { id?: string } | null)?.id;
+      const projectTeams = (r: Record<string, unknown>) => (r.teams as { nodes?: Array<{ id: string }> } | null)?.nodes ?? [];
+      const allowedProjects = new Set((ws.projects ?? []).filter((r) => projectTeams(r).some((t) => allowedTeams.has(t.id))).map((r) => r.id));
+      const allowedIssues = new Set((ws.issues ?? []).filter((r) => allowedTeams.has(ref(r, 'team'))).map((r) => r.id));
+      if (!q.root) return answer(200, { data: { teams: { nodes: (ws.teams ?? []).filter((t) => allowedTeams.has(t.id)).map((t) => ({ id: t.id })) } } });
+      const inScope = (r: Record<string, unknown>) => {
+        switch (q.entity) {
+          case 'teams': return allowedTeams.has(r.id);
+          case 'users': return variables.userIds?.includes(String(r.id)) ?? false;
+          case 'projects': return allowedProjects.has(r.id);
+          case 'milestones': return allowedProjects.has(ref(r, 'project'));
+          case 'comments': return allowedIssues.has(ref(r, 'issue'));
+          default: return allowedTeams.has(ref(r, 'team'));
+        }
+      };
       const since = variables.filter?.updatedAt?.gt;
-      const all = (ws[q.entity!] ?? []).filter((r) => !since || String(r.updatedAt) > since);
+      const all = (ws[q.entity!] ?? []).filter((r) => inScope(r) && (!since || String(r.updatedAt) > since)).map((r) => q.entity === 'projects' ? { ...r, teams: { nodes: projectTeams(r).filter((t) => allowedTeams.has(t.id)) } } : r);
       const start = variables.after ? Number(variables.after) : 0;
       const first = Math.max(1, Math.min(250, variables.first ?? 50));
       const nodes = all.slice(start, start + first);

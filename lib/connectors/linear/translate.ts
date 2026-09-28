@@ -1,7 +1,9 @@
 import { setImmediate as yieldTurn } from 'node:timers/promises';
 import type { Db, Queryable } from '@/lib/db';
 import { COLUMNS, TABLE, type Replica, type Row, type Value } from './replica';
-import type { Entity } from './queries';
+import { ENTITIES, type Entity } from './queries';
+import { config } from '@/config/deployment';
+import { scopeReplicas } from './scope';
 
 /**
  * Raw replica → the `linear` schema (docs/24-linear.md). Replayable and idempotent:
@@ -55,7 +57,7 @@ async function upsert(tx: Queryable, entity: Entity, row: Row, file: string, act
   return !r ? 'unchanged' : r.inserted ? 'inserted' : 'updated';
 }
 
-export interface TranslateOptions { batch: number; onBatch?: (done: number, total: number) => Promise<void> }
+export interface TranslateOptions { batch: number; teams?: readonly string[]; onBatch?: (done: number, total: number) => Promise<void> }
 
 export async function translateLinear(db: Db, actor: string | null, replicas: Replica[], opts: TranslateOptions): Promise<LinearCounts> {
   const counts = emptyCounts();
@@ -65,6 +67,19 @@ export async function translateLinear(db: Db, actor: string | null, replicas: Re
     const was = pinned.get(`${r.entity}:${r.file}`);
     if (was && was !== r.hash) throw new Error('A translated Linear replica file changed; translation refused.');
   }
+  const existing: Replica[] = [];
+  for (const entity of ENTITIES) {
+    const records = await db.query<Row>(`select ${['id',...COLUMNS[entity].map(([c]) => c)].join(',')} from linear.${TABLE[entity]}`);
+    for (const row of records) if ((row.updated_at as unknown) instanceof Date) row.updated_at = (row.updated_at as unknown as Date).toISOString();
+    existing.push({entity,file:'',hash:'',at:'',records});
+  }
+  const scoped = scopeReplicas([...existing,...replicas], opts.teams ?? config.linear.teams);
+  // Also remove legacy rows and records transferred out of an allowed team.
+  for (const entity of ENTITIES) {
+    const ids = [...new Set(scoped.filter(r => r.entity === entity).flatMap(r => r.records.map(row => row.id)))];
+    await db.query(`delete from linear.${TABLE[entity]} where not (id = any($1::text[]))`,[ids]);
+  }
+  replicas = scoped.slice(existing.length);
   const pending = replicas.filter((r) => !pinned.has(`${r.entity}:${r.file}`));
   const total = pending.reduce((n, r) => n + r.records.length, 0);
   let done = 0;

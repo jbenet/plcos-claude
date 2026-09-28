@@ -136,6 +136,8 @@ export const config = {
    * the workspace took about forty requests.
    */
   linear: {
+    /** Only these Linear team keys may be requested or retained. */
+    teams: ['PLC'] as string[],
     readOnly: true,
     pageSize: 100, // GUESS — Linear allows up to 250 a page; 100 keeps each answer's complexity small.
     minIntervalMs: 200, // GUESS — polite spacing; the hourly budget is the binding limit.

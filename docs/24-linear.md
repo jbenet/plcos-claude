@@ -195,3 +195,26 @@ Rules:
 ## Decision, 27 Sep 2026 (Juan)
 
 **Read-only, fewer pages:** only Developer → Linear, Connectors and Status for now. The vehicle Workstreams card and "My Linear" on Today are not built. The read-write phase is not started. Revisit once the fundraising team's Linear use has settled.
+
+## PLC-only scope (Juan, 27 Sep; implemented 28 Sep 2026)
+
+This supersedes the workspace-wide replica and the data-volume decision above. Juan asked to
+read and sync only PLC and purge other teams. `config.linear.teams` defaults to `['PLC']`.
+The reviewed GraphQL texts require team filters; caller filters cannot widen that scope.
+Users are read by IDs referenced by scoped projects, issues and comments. A changed allowlist
+forces a full scoped pull. The mutation guard is unchanged.
+
+Developer → Linear shows the allowlist and scopes its database reads, including before cleanup.
+**Purge and re-map** queues `linear-rebuild` on the live server without needing the connector key.
+It filters every saved entity JSONL file (including orphan/partial files), removes empty files,
+updates manifest counts with a counts-only purge note, then truncates and replays the Linear
+schema in one database transaction. Audit and activity contain counts only. Pull and rebuild
+share the same job exclusion so they cannot modify the replica concurrently.
+
+Claude's live procedure after integration: apply the new migration through the live server,
+open Developer → Linear, verify the visible allowlist, click **Purge and re-map**, wait for the
+job to finish, and reload the counts. Then use **Full resync** for a fresh scoped copy if desired.
+The purge makes no API calls. If interrupted during file rewriting, rerun the rebuild before
+syncing: each rewrite is atomic and replay resets the old file pins. Repeating a completed
+rebuild preserves the same records and retained purge counts. No live purge was run during
+implementation; all development evidence uses invented fixtures.
