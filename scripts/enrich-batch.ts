@@ -68,7 +68,10 @@ async function main() {
   const batched = new Set<string>();
   /** w5: keys in a batch of either mode (new or revise) not yet written since the batch was cut (v09). */
   const openW5 = new Set<string>();
-  for (const f of await readdir(join(dir, 'batches')).catch(() => [])) {
+  for (const entry of await readdir(join(dir, 'batches'), { withFileTypes: true }).catch(() => [])) {
+    // Run folders (e.g. w5gap-20260927/) sit beside the batch files; only files are batches.
+    if (!entry.isFile()) continue;
+    const f = entry.name;
     const text = await readFile(join(dir, 'batches', f), 'utf8');
     if (mode === 'w1' && f.endsWith('.jsonl')) for (const l of lines(text)) batched.add(JSON.parse(l).key);
     if (mode === 'w5' && /^s\d+\.txt$/.test(f)) for (const k of lines(text)) batched.add(k.trim());
