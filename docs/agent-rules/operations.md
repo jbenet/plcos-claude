@@ -102,6 +102,10 @@ Rules:
   `docs/changelog/entries/<version>.md` with the `.webp` name. Never commit a PNG there: `npm run boundaries` fails
   on one, and on any file over 512 KB. `npm run shots:compress` converts a stray capture and
   fixes its links. Git keeps every image forever, so size is paid on every clone.
+- **Builders who can't run a server (ChatGPT/Astra sandboxes) can't take shots.** The integrator
+  takes them at merge: for every merged entry that changes something visible, run a `shot-taker`
+  before shipping. An entry with a visible change and no shot is not done (issue 0115, 28 Sep 2026:
+  batches 13–19 shipped without images).
 
 - Prose in docs and UI copy: plain, specific, no hype. Say the number or say you don't know
   it.
