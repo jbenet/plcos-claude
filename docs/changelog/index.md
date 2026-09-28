@@ -209,3 +209,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Cutover re-point order and viewer refusals](entries/strip-order.md)
 - [W3 — Team profile routes](entries/w3-team-edges.md)
 - [Affinity — retry transient reads and preserve paused chunks](entries/affinity-retry.md)
+- [Feedback: Pick a part works with a finger](entries/feedback-touch-0117.md)
