@@ -1,6 +1,5 @@
 'use server';
-
-import { requireServerActionMutation } from '@/lib/mutation-guard';
+import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
 import { requestSend } from '@/modules/content';
@@ -8,7 +7,8 @@ import { requestSend } from '@/modules/content';
 export async function proposeSend(
   formData: FormData,
 ): Promise<{ refusals?: string[]; ticketId?: string }> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/materials/actions.ts#proposeSend', formData);
+  const user = authorizedUser;
   const { ticketId, check } = await requestSend(user.id, {
     assetId: String(formData.get('assetId')),
     entityId: String(formData.get('entityId')),

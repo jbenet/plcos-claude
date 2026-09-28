@@ -1,3 +1,7 @@
+import { createElement } from 'react';
+import { currentUser } from '@/lib/auth';
+import { needsScopedProjection } from '@/lib/authz/read/projection';
+import { ScopedReadPage } from '@/lib/authz/read/scoped';
 import { cookies, headers } from 'next/headers';
 import { renderKey, singleFlight } from './in-flight';
 
@@ -7,8 +11,8 @@ const share = global.__capitalOsRenders ??= singleFlight();
 /** Reuse pending data work in async descendants too. Inputs identify the work;
  * request context keeps user, vehicle and displayed URL details separate. */
 export async function shareRequestWork<T>(route: string, inputs: unknown, work: () => Promise<T>): Promise<T> {
-  const [jar, h] = await Promise.all([cookies(), headers()]);
-  const key = renderKey(route, inputs, {
+  const [jar, h, principal] = await Promise.all([cookies(), headers(), currentUser()]);
+  const key = renderKey(route, { inputs, access: principal.access, vehicles: principal.vehicles, approves: principal.approves }, {
     cookies: jar.toString(), vehicle: h.get('x-vehicle'),
     host: h.get('host'), askedPath: h.get('x-asked-path'),
   });
@@ -22,7 +26,9 @@ export function coalescePage<P extends { params?: Promise<unknown>; searchParams
   route: string, render: (props: P) => Promise<T>,
 ): (props: P) => Promise<T> {
   return async props => {
+    const user = await currentUser();
     const [params, search] = await Promise.all([props.params, props.searchParams]);
+    if (needsScopedProjection(user) || (user.access !== 'admin' && (route.startsWith('/dev') || route === '/[vehicle]/visualizations'))) return createElement(ScopedReadPage, { user, context: { route, params, search } }) as T;
     return shareRequestWork(route, { params: params ?? {}, search: search ?? {} }, () => render(props));
   };
 }

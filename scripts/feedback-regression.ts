@@ -108,6 +108,7 @@ async function persist(payload: Payload, expected: number, stalledMetadata = fal
   const issue = await withDb(metadataDb, () => fileFeedback({
     id: '70000000-0000-4000-8000-000000000001', handle: 'fictional-tester',
     name: 'Fictional Tester', initials: 'FT', role: 'team', email: 'tester@example.invalid',
+      access: 'viewer', vehicles: [], approves: [],
   }, { ...payload, attachments }, { sink }));
   assert.equal(issue.attachments.length, attachments.length);
   const markdown = await readFile(issue.location, 'utf8');

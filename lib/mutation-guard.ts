@@ -2,38 +2,12 @@ import { cookies, headers } from 'next/headers';
 import { RequestCookies } from 'next/dist/compiled/@edge-runtime/cookies';
 import type { Queryable } from '@/lib/db';
 import { config } from '@/config/deployment';
-import { readLayout } from '@/config/ports';
 import { auth, type AppUser } from '@/lib/auth';
 import { USER_COOKIE } from '@/lib/auth/cookie';
 import { getUserByHandle } from '@/modules/platform';
 
-export class MutationGuardError extends Error {
-  constructor(message: string, readonly status: 401 | 403) { super(message); }
-}
-
-/** Explicit origin, including port and scheme; sibling origins are never trusted. */
-export function requireMutationOrigin(request: Request): void {
-  const origin = request.headers.get('origin');
-  const site = request.headers.get('sec-fetch-site');
-  const url = new URL(request.url);
-  // Next's route URL can name its bind address. Host is the address the browser requested;
-  // forwarded-host is deliberately not trusted.
-  const expected = `${url.protocol}//${request.headers.get('host') || url.host}`;
-  if (!origin || origin !== expected || (site !== null && site !== 'same-origin')) {
-    throw new MutationGuardError('Use this server’s own page to make changes.', 403);
-  }
-}
-
-export function mutationProfileAllowed(profile: 'demo' | 'real', copyTakenAt: string | null, role: 'dev' | 'live'): boolean {
-  return profile === 'demo' || (!copyTakenAt && role === 'live');
-}
-
-export function requireMutationProfile(): void {
-  if (config.data.profile !== 'real') return;
-  let live = false;
-  try { live = mutationProfileAllowed(config.data.profile, config.data.copyTakenAt, readLayout().role); } catch { /* fail closed */ }
-  if (!live) throw new MutationGuardError('Change real data on the live server.', 403);
-}
+import { MutationGuardError, requireMutationOrigin, requireMutationProfile } from './mutation-policy';
+export { MutationGuardError, requireMutationOrigin, requireMutationProfile, mutationProfileAllowed } from './mutation-policy';
 
 /** No local provider fallback: an absent, unknown or inactive cookie is anonymous. */
 export async function requireMutationUser(): Promise<AppUser> {

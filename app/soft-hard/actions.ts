@@ -1,12 +1,12 @@
 'use server';
-
-import { requireServerActionMutation } from '@/lib/mutation-guard';
+import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
 import { recordCash, requestHardening } from '@/modules/pipeline';
 
 export async function requestHarden(formData: FormData): Promise<{ error?: string; ticketId?: string }> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/soft-hard/actions.ts#requestHarden', formData);
+  const user = authorizedUser;
   try {
     const ticketId = await requestHardening(user.id, {
       exposureId: String(formData.get('exposureId')),
@@ -29,7 +29,8 @@ export async function requestHarden(formData: FormData): Promise<{ error?: strin
  * The evidence requirement is the bank reference — the receipt, not the recollection.
  */
 export async function recordWire(formData: FormData): Promise<{ error?: string; ok?: boolean }> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/soft-hard/actions.ts#recordWire', formData);
+  const user = authorizedUser;
   const raw = String(formData.get('receivedAt') ?? '');
   const reference = String(formData.get('reference') ?? '').trim();
   if (!reference) return { error: 'A wire needs its bank reference. Without one this is a recollection.' };

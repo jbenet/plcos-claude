@@ -86,6 +86,7 @@ export async function hardeningVariations(check: Check) {
       "select id from governance.approval_ticket where kind = 'MONEY' and decision is null",
     );
     const juan = await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'");
+    await ticketDecisionProperties(check, d, juan!.id);
     await decideTicket(juan!.id, t!.id, 'approve', 'Countersigned copy on file.');
     const ticket = await getTicket(t!.id);
     await applyApprovedTicket(juan!.id, ticket!);
@@ -161,4 +162,62 @@ export async function hardeningVariations(check: Check) {
       'The candidate is included without manufacturing a soft/hard amount or close date.');
     await d.close();
   }
+}
+
+/** Direct service calls must obey the gate even when no server action is involved. */
+async function ticketDecisionProperties(check: Check, db: Awaited<ReturnType<typeof freshDb>>, adminId: string) {
+  const { openTicket, decideTicket, getTicket } = await import('../../modules/governance');
+  const { AuthorizationError } = await import('../../lib/authz');
+  const vehicles = await db.query<{ id: string }>('select id::text from platform.vehicle order by sort_order limit 2');
+  const [inside, outside] = vehicles.map(v => v.id);
+  const actor = async (handle: string, access: string, active = true) => (await db.one<{ id: string }>(
+    `insert into platform.app_user(handle,name,initials,role,email,access,vehicles,approves,active)
+     values($1,$1,'FX','Invented test actor',$1 || '@example.test',$2::platform.access_role,$3::uuid[],$4::text[],$5) returning id::text`,
+    [handle, access, [inside], ['STAGE', 'INTRO_ASK', 'SEND'], active]))!.id;
+  const gp = await actor('invented-authz-approver', 'gp');
+  const viewer = await actor('invented-authz-viewer', 'viewer');
+  const inactive = await actor('invented-authz-inactive', 'admin', false);
+  const entity = (await db.one<{ id: string }>(`insert into identity.entity(entity_type,display_name)
+    values('org','Invented service authorization LP') returning entity_id::text id`))!.id;
+  const pursuit = (await db.one<{ id: string }>(`insert into strategy.pursuit(entity_id,vehicle_id,owner_id,status)
+    values($1,$2,$3,'new') returning pursuit_id::text id`, [entity, inside, gp]))!.id;
+  const request = (kind: import('../../modules/governance').ApprovalKind, requester: string, vehicle = inside!) => openTicket(requester,
+    { kind, subjectType: 'pursuit', subjectId: pursuit, subjectLabel: 'Invented service authorization request',
+      scope: { authorizes: 'Test approval gate only', excludes: ['Any executed action'] }, vehicleId: vehicle });
+  const denied = async (who: string, ticket: string) => {
+    try { await decideTicket(who, ticket, 'approve', null); return false; }
+    catch (e) { return e instanceof AuthorizationError && (await getTicket(ticket))?.decision === null; }
+  };
+  const stage = await request('STAGE', adminId);
+  const viewerDenied = await denied(viewer, stage), inactiveDenied = await denied(inactive, stage);
+  await decideTicket(gp, stage, 'approve', 'Invented independent approval');
+  const elsewhere = await request('STAGE', adminId, outside!);
+  const outsideDenied = await denied(gp, elsewhere);
+  await decideTicket(adminId, elsewhere, 'reject', 'Invented fixture complete');
+  check('Ticket service enforces active role and vehicle scope without a server action',
+    viewerDenied && inactiveDenied && outsideDenied && (await getTicket(stage))?.decidedByName === 'invented-authz-approver',
+    'Viewer, inactive Admin and out-of-scope GP refused; explicitly permitted in-scope GP approves.');
+  let selfDenied = true;
+  for (const kind of ['SEND', 'INTRO_ASK', 'MONEY', 'ALLOCATION_EXCEPTION'] as const) {
+    const own = await request(kind, adminId);
+    selfDenied = await denied(adminId, own) && selfDenied;
+    await decideTicket(adminId, own, 'reject', 'Invented fixture complete');
+  }
+  const notOwner = await request('STAGE', adminId);
+  selfDenied = await denied(adminId, notOwner) && selfDenied;
+  await decideTicket(adminId, notOwner, 'reject', 'Invented fixture complete');
+  const ownStage = await request('STAGE', gp);
+  await decideTicket(gp, ownStage, 'approve', null);
+  check('Ticket service forbids self-approval except STAGE by the pursuit owner',
+    selfDenied && (await getTicket(ownStage))?.decision === 'approve',
+    'Admin cannot self-approve SEND, INTRO_ASK, MONEY, ALLOCATION_EXCEPTION or another owner’s STAGE; scoped owner can approve STAGE.');
+  let moneyDenied = true;
+  for (const kind of ['MONEY', 'ALLOCATION_EXCEPTION'] as const) {
+    const ticket = await request(kind, viewer);
+    moneyDenied = await denied(gp, ticket) && moneyDenied;
+    await decideTicket(adminId, ticket, 'approve', null);
+    moneyDenied = (await getTicket(ticket))?.decision === 'approve' && moneyDenied;
+  }
+  check('Ticket service reserves MONEY and ALLOCATION_EXCEPTION for independent Admin approval', moneyDenied,
+    'Scoped GP approval grants do not authorize money or allocation exceptions; an independent Admin can decide.');
 }

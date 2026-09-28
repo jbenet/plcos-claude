@@ -2,14 +2,14 @@ import { getDb, type Queryable } from '@/lib/db';
 import type { AppUser, AuditEntry, Feedback, FeedbackInput, SourceSync, Vehicle } from './types';
 
 type UserRow = {
-  id: string; handle: string; name: string; initials: string; role: string; email: string;
+  id: string; handle: string; name: string; initials: string; role: string; email: string; access: AppUser['access']; vehicles: string[] | null; approves: string[];
 };
 const toUser = (r: UserRow): AppUser => r;
 
 export async function listUsers(q?: Queryable): Promise<AppUser[]> {
   const db = q ?? await getDb();
   const rows = await db.query<UserRow>(
-    'select id, handle, name, initials, role, email from platform.app_user where active order by created_at',
+    'select id, handle, name, initials, role, email, access::text, vehicles, approves from platform.app_user where active order by created_at',
   );
   return rows.map(toUser);
 }
@@ -21,7 +21,7 @@ export async function listUsers(q?: Queryable): Promise<AppUser[]> {
 export async function getUserByHandle(handle: string, q?: Queryable): Promise<AppUser | null> {
   const db = q ?? await getDb();
   const row = await db.one<UserRow>(
-    'select id, handle, name, initials, role, email from platform.app_user where handle = $1 and active',
+    'select id, handle, name, initials, role, email, access::text, vehicles, approves from platform.app_user where handle = $1 and active',
     [handle],
   );
   return row ? toUser(row) : null;

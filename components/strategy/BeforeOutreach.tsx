@@ -1,4 +1,4 @@
-import { notesFor } from '@/modules/research';
+import { notesFor } from '@/lib/authz/read/research';
 import type { Triage } from '@/lib/enrich/triage';
 
 /**

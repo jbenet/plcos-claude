@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db';
 import { shortDate } from '@/lib/time';
 import {
   SPV_BASIS_LABEL, SPV_KIND_LABEL, spvHistory, spvReadings, spvWords, type SpvEvidence, type SpvReading,
-} from '@/modules/strategy';
+} from '@/lib/authz/read/strategy';
 import { SpvControl } from './SpvControl';
 import s from './spv.module.css';
 

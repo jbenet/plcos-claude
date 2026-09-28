@@ -3,7 +3,7 @@ import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
 import { vehicleSelection } from '@/lib/session';
-import { lpStatsData } from '@/lib/lp-stats/data';
+import { lpStatsData } from '@/lib/authz/read/stats';
 import { marketReference } from '@/lib/lp-stats/reference';
 import { computeStats, parseFilters, filterQuery, DIM, DIMENSIONS, type Filters } from '@/lib/lp-stats/model';
 import { usdCompact } from '@/lib/money';

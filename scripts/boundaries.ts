@@ -1,3 +1,4 @@
+import { authorizationCoverage } from './authz-coverage';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { SHOT } from './shot-image';
@@ -56,7 +57,8 @@ async function main() {
     }
   }
 
-  const violations: string[] = [];
+  const authorization = await authorizationCoverage(cwd);
+  const violations: string[] = [...authorization.violations];
   for (const file of files) {
     const rel = relative(cwd, file);
     const text = await readFile(file, 'utf8');
@@ -128,7 +130,7 @@ async function main() {
     for (const v of violations) console.error('  ' + v);
     process.exit(1);
   }
-  console.log(`boundaries ok · ${files.length} files checked · ${stored.length} screenshots, all ${SHOT.ext} and under ${SHOT.maxBytes / 1024} KB`);
+  console.log(`boundaries ok · ${authorization.actions} authorized actions · ${authorization.routes} authorized handlers · ${files.length} files checked · ${stored.length} screenshots, all ${SHOT.ext} and under ${SHOT.maxBytes / 1024} KB`);
 }
 
 main().catch((err: unknown) => {

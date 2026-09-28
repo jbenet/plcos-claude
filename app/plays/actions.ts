@@ -1,6 +1,5 @@
 'use server';
-
-import { requireServerActionMutation } from '@/lib/mutation-guard';
+import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
 import { assignPlay, commit } from '@/modules/plays';
@@ -13,7 +12,8 @@ import { assignPlay, commit } from '@/modules/plays';
  * carries the ticket kind it will need and the board shows it on the row.
  */
 export async function assign(playId: string, assigneeId: string, path: string): Promise<void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/plays/actions.ts#assign', playId, assigneeId, path);
+  const user = authorizedUser;
   await assignPlay(playId, assigneeId, user.id);
   revalidatePath(path);
 }
@@ -21,8 +21,9 @@ export async function assign(playId: string, assigneeId: string, path: string): 
 export async function propose(
   vehicleId: string, entityId: string | null, body: string, path: string,
 ): Promise<void> {
+  const authorizedUser = await requireAction('app/plays/actions.ts#propose', vehicleId, entityId, body, path);
   if (!body.trim()) return;
-  const user = await requireServerActionMutation();
+  const user = authorizedUser;
   await commit(vehicleId, entityId, body, user.id);
   revalidatePath(path);
 }

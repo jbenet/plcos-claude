@@ -1,6 +1,5 @@
 'use server';
-
-import { requireServerActionMutation } from '@/lib/mutation-guard';
+import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
 import { liveMetrics, pinDay } from '@/modules/standup';
@@ -13,7 +12,8 @@ import { liveMetrics, pinDay } from '@/modules/standup';
  * a second press cannot quietly rewrite what the team met on.
  */
 export async function pinToday(day: string): Promise<void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/standup/pin.ts#pinToday', day);
+  const user = authorizedUser;
   await pinDay(day, user.id, await liveMetrics());
   revalidatePath(`/standup/${day}`);
 }

@@ -1,5 +1,5 @@
 import Link from '@/components/ui/AppLink';
-import { pipelineData } from '@/lib/pipeline-data';
+import { pipelineData } from '@/lib/authz/read/pipeline';
 import { LpUnitChoice } from './LpUnitChoice';
 import u from './lp-units.module.css';
 

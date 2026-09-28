@@ -1,3 +1,4 @@
+import { AuthorizedControl } from '@/lib/authz/read/Control';
 import { StrategyTable, type StrategyTableRow } from '@/components/strategy/StrategyTable';
 import { MoveTable, type MoveTableRow } from '@/components/strategy/MoveTable';
 import { packRows } from '@/components/strategy/pack';
@@ -14,7 +15,7 @@ import { Propose } from '@/components/plays/Propose';
 import { vehicleSelection } from '@/lib/session';
 import { dateLabel, shortDate } from '@/lib/time';
 import { config } from '@/config/deployment';
-import { spvMarks, vehicleStrategy, STATUS_LABEL, type StrategyAction } from '@/modules/strategy';
+import { spvMarks, vehicleStrategy, STATUS_LABEL, type StrategyAction } from '@/lib/authz/read/strategy';
 import { presenceFor, utilityOf } from '@/modules/strategy/move-utility';
 import { gapAdvice, pipelineAdvice, type GapId, type Sentence } from '@/modules/strategy/advice';
 import { StatusMark } from '@/components/ui/StatusMark';
@@ -290,7 +291,7 @@ async function VehicleStrategyPage({ params, searchParams }: {
     </div>
 
     <section className="card" id="moves" aria-labelledby="moves-h">
-      <div className="chead"><h2 id="moves-h">Menu of moves</h2><div className={s.chead}><span className="lbl">whole-raise options · {liveMoves} live</span><ImportMoves /></div></div>
+      <div className="chead"><h2 id="moves-h">Menu of moves</h2><div className={s.chead}><span className="lbl">whole-raise options · {liveMoves} live</span><AuthorizedControl action="admin"><ImportMoves /></AuthorizedControl></div></div>
       <MoveTable moves={moveRows} vehicleId={vehicle.id} pointValue={rules.presencePointValue} />
       <details className={s.history}><summary>Recorded move decisions · {history.length}</summary>
         {history.length ? <ul>{history.map((h, i) => <li key={i}><span className="mono">{date(new Date(h.at))}</span> {h.actor ?? 'Unknown person'} · <b>{h.title}</b>: {h.detail.before.state} → {h.detail.after.state}; position {h.detail.before.position ?? 'model'} → {h.detail.after.position ?? 'model'}. <span className="muted">{h.detail.note}</span></li>)}</ul>

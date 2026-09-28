@@ -2,14 +2,14 @@ import Link from '@/components/ui/AppLink';
 import { usdM } from '@/lib/money';
 import { shortDate } from '@/lib/time';
 import { shareRequestWork } from '@/lib/page-render';
-import { getEntity } from '@/modules/identity';
-import { AFFIL_LABEL, ROLE_LABEL, orgsFor, peopleAt, relationshipRoles, type RelationshipRole } from '@/modules/identity';
+import { getEntity } from '@/lib/authz/read/identity';
+import { AFFIL_LABEL, ROLE_LABEL, orgsFor, peopleAt, relationshipRoles, type RelationshipRole } from '@/lib/authz/read/identity';
 import { listExposures } from '@/modules/pipeline';
-import { listEdgesForEntities, TIER_MEANING } from '@/modules/network';
+import { listEdgesForEntities, TIER_MEANING } from '@/lib/authz/read/network';
 import { restrictionsFor } from '@/modules/coordination';
 import { assessmentsForEntity, BLOCKER_LABEL } from '@/modules/fit';
-import { claimsFor, listSourceDocs } from '@/modules/research';
-import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/modules/strategy';
+import { claimsFor, listSourceDocs } from '@/lib/authz/read/research';
+import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/lib/authz/read/strategy';
 
 const TYPE_LABEL: Record<string, string> = {
   person: 'Person', org: 'Organisation', family: 'Family office',

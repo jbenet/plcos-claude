@@ -1,6 +1,5 @@
 'use server';
-
-import { requireServerActionMutation } from '@/lib/mutation-guard';
+import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -9,7 +8,8 @@ import { applyApprovedTicket } from './apply';
 import { adjudicateConflict, type ConflictReason } from '@/modules/coordination';
 
 export async function decide(formData: FormData): Promise<{ error?: string } | void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/approvals/actions.ts#decide', formData);
+  const user = authorizedUser;
   const ticketId = String(formData.get('ticketId'));
   const decision = String(formData.get('decision')) as ApprovalDecision;
   const note = String(formData.get('note') ?? '').trim() || null;
@@ -38,7 +38,8 @@ export async function decide(formData: FormData): Promise<{ error?: string } | v
 }
 
 export async function adjudicate(formData: FormData): Promise<{ error: string } | void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/approvals/actions.ts#adjudicate', formData);
+  const user = authorizedUser;
   const followup = String(formData.get('loserFollowupAt') ?? '').trim();
   if (!followup) {
     return { error: 'A dated follow-up for the losing vehicle is required.' };
@@ -60,7 +61,8 @@ export async function adjudicate(formData: FormData): Promise<{ error: string } 
  * ticket that is not a reconciliation proposal is not decided here, whatever the form says.
  */
 export async function decideMany(formData: FormData): Promise<void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/approvals/actions.ts#decideMany', formData);
+  const user = authorizedUser;
   const decision = String(formData.get('decision')) === 'approve' ? 'approve' : 'reject';
   const ids = [...new Set(formData.getAll('ticketId').map(String))];
   const note = String(formData.get('note') ?? '').trim();

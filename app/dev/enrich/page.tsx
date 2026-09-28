@@ -14,7 +14,7 @@ import { RESEARCH_STATUSES, enrichDir, inResearchSet } from '@/lib/enrich/candid
 import { Prospects } from './Prospects';
 import Link from '@/components/ui/AppLink';
 import { latestRecordsToFix } from '@/lib/enrich/fixes';
-import { listPursuits, openSuggestions, STATUS_LABEL } from '@/modules/strategy';
+import { listPursuits, openSuggestions, STATUS_LABEL } from '@/lib/authz/read/strategy';
 import type { Strategy } from '@/lib/enrich/strategy';
 import type { Triage } from '@/lib/enrich/triage';
 import { latestRun } from '@/modules/sources';
@@ -24,7 +24,7 @@ import { readResearchExportStatus } from '@/lib/enrich/export-status';
 import { ExportStatus } from './ExportStatus';
 import { LpUnits } from './LpUnits';
 import { SpvStance } from './SpvStance';
-import { recentLpRepoints } from '@/modules/strategy';
+import { recentLpRepoints } from '@/lib/authz/read/strategy';
 import { ImportJobs } from '@/components/import-jobs/ImportJobs';
 
 /** The checks the records point to before anyone writes (iteration 3, docs/19). */

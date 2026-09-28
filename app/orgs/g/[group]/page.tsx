@@ -9,8 +9,8 @@ import { EntitySummary } from '@/components/entity/EntitySummary';
 import { usdM } from '@/lib/money';
 import {
   AFFIL_LABEL, affiliationsFor, relationshipRoles, ROLE_LABEL, type RelationshipRole,
-} from '@/modules/identity';
-import { RUNG_LABEL, STATUS_LABEL, type LadderRung, type PursuitStatus } from '@/modules/strategy';
+} from '@/lib/authz/read/identity';
+import { RUNG_LABEL, STATUS_LABEL, type LadderRung, type PursuitStatus } from '@/lib/authz/read/strategy';
 import { listAssessments, BLOCKER_SHORT, type Blocker } from '@/modules/fit';
 
 export const dynamic = 'force-dynamic';

@@ -1,5 +1,5 @@
 import Link from '@/components/ui/AppLink';
-import type { Route } from '@/modules/network';
+import type { Route } from '@/lib/authz/read/network';
 
 export function routeNameLinks(route: Route, alternatives: Route[], fromName: string) {
   return route.hops.map((hop, i) => ({ name: hop.toName, href: `/orgs/${hop.toEntity}`,

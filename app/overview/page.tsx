@@ -7,7 +7,7 @@ import { usdM, multiple } from '@/lib/money';
 import { ago, shortDate } from '@/lib/time';
 import { modulesForKind } from '@/lib/nav';
 import { KIND_CLASS, listOpenTickets } from '@/modules/governance';
-import { listPursuits } from '@/modules/strategy';
+import { listPursuits } from '@/lib/authz/read/strategy';
 import { listExposures, vehicleTotals } from '@/modules/pipeline';
 import { listAsks, listConflicts } from '@/modules/coordination';
 import { listCycles, spvRooms } from '@/modules/close';

@@ -9,7 +9,7 @@ import { readMapping, type ValueMap } from '@/lib/connectors/affinity/mapping';
 import { normName } from '@/lib/connectors/affinity/match';
 import {
   IMPLIED, IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUSES, STATUS_LABEL, impliedRung,
-} from '@/modules/strategy';
+} from '@/lib/authz/read/strategy';
 import { latestRun } from '@/modules/sources';
 import { translateAction, writeMappingAction } from '../actions';
 

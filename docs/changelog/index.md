@@ -183,3 +183,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 
 - [prod-build — Demo production build and tracing boundary](entries/prod-build.md)
 - [Linear on the standup and each vehicle's Overview](entries/linear-views.md)
+
+- [Authorization layer — roles, vehicle scope and restricted reads](entries/authz-layer.md)

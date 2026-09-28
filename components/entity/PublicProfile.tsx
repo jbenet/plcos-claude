@@ -1,7 +1,7 @@
 import { capacityBandLabel } from '@/lib/capacity-bands';
 import { shortDate } from '@/lib/time';
 import { partialSearch } from '@/lib/enrich/schema';
-import { claimLabel, claimsFor, getSourceDoc, notesFor, type Claim } from '@/modules/research';
+import { claimLabel, claimsFor, getSourceDoc, notesFor, type Claim } from '@/lib/authz/read/research';
 
 /**
  * What public sources say about an LP (N64, docs/19): the enrichment research, mapped in by the

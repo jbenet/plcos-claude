@@ -1,6 +1,6 @@
 import Link from '@/components/ui/AppLink';
 import { shortDate } from '@/lib/time';
-import { AFFIL_LABEL, AFFIL_MEANS, type Affiliation } from '@/modules/identity';
+import { AFFIL_LABEL, AFFIL_MEANS, type Affiliation } from '@/lib/authz/read/identity';
 import { EntityLink } from './EntityLink';
 
 const KIND_FLAG: Record<string, string> = {

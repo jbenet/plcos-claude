@@ -1,6 +1,4 @@
-/** DB-free liveness: even a busy database must not prevent the server from answering. */
+import { healthRoute } from '@/lib/authz/route';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export function GET() {
-  return Response.json({ ok: true });
-}
+export const GET = healthRoute;

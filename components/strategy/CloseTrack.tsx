@@ -1,3 +1,4 @@
+import { AuthorizedControl } from '@/lib/authz/read/Control';
 import Link from '@/components/ui/AppLink';
 import { shortDate } from '@/lib/time';
 import { usdM } from '@/lib/money';
@@ -62,7 +63,7 @@ export function CloseTrack({ track: t, pursuitId }: { track: Track; pursuitId: s
         {t.state !== 'withdrawn' && (
           <details className="more" style={{ marginTop: 8 }}>
             <summary>Record what happened</summary>
-            <CloseTrackForm exposureId={x.exposureId} pursuitId={pursuitId} state={t.state} signedBefore={t.events.some((e) => (e.step === 'signed' || e.step === 'resigned') && e.source === 'us')} />
+            <AuthorizedControl action="admin"><CloseTrackForm exposureId={x.exposureId} pursuitId={pursuitId} state={t.state} signedBefore={t.events.some((e) => (e.step === 'signed' || e.step === 'resigned') && e.source === 'us')} /></AuthorizedControl>
           </details>
         )}
       </div>

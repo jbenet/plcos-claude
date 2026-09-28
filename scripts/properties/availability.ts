@@ -164,6 +164,7 @@ export async function availabilityProperties(check: Check) {
     const issue = await withDb(held.db, () => fileFeedback({
       id: '70000000-0000-4000-8000-000000000001', handle: 'invented-reporter',
       name: 'Invented Reporter', initials: 'IR', role: 'team', email: 'invented@example.invalid',
+      access: 'viewer', vehicles: [], approves: [],
     }, { title: ' Invented blocked database ', body: 'The page did not load.\n\n![First](attachment:1)\n\n![Second](attachment:2)', attachments: [
       { kind: 'screenshot', contentType: 'image/png', base64: Buffer.from('invented-screen').toString('base64') },
       { kind: 'image', contentType: 'image/png', base64: Buffer.from('invented-first').toString('base64') },

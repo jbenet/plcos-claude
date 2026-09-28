@@ -4,7 +4,7 @@ import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
-import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/modules/strategy';
+import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/lib/authz/read/strategy';
 import {
   listMeetings, listObjections, listQuestions, MEETING_LABEL, objectionTally, OBJECTION_LABEL,
 } from '@/modules/meetings';

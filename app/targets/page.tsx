@@ -2,8 +2,8 @@ import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { PipelineTable } from '@/components/strategy/PipelineTable';
 import { vehicleSelection } from '@/lib/session';
-import { pipelineData } from '@/lib/pipeline-data';
-import { RUNGS, RUNG_LABEL, STATUSES, type PursuitStatus } from '@/modules/strategy';
+import { pipelineData } from '@/lib/authz/read/pipeline';
+import { RUNGS, RUNG_LABEL, STATUSES, type PursuitStatus } from '@/lib/authz/read/strategy';
 
 export const dynamic = 'force-dynamic';
 

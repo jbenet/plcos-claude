@@ -1,3 +1,4 @@
+import { AuthorizedControl } from '@/lib/authz/read/Control';
 import Link from '@/components/ui/AppLink';
 import { ago } from '@/lib/time';
 import type { ApprovalTicket } from '@/modules/governance';
@@ -31,7 +32,7 @@ export function ReconcileBatch({ proposals, receipt }: {
         </p>
       )}
       {proposals.length > 0 && (
-        <form action={decideMany} className="card">
+        <AuthorizedControl action="approve" scope={{ vehicle: proposals.map(p => p.vehicleId).filter((id): id is string => !!id), ticketKind: 'STAGE' }}><form action={decideMany} className="card">
           <div className="chead">
             <h2>Proposed climbs</h2>
             <span className="lbl">one ticket per LP · uncheck any you are unsure of</span>
@@ -67,7 +68,7 @@ export function ReconcileBatch({ proposals, receipt }: {
             the close track, a forecast or the hard total, and sends nothing. If an LP&rsquo;s ladder
             changed since the proposal, that one records nothing and says so.
           </p>
-        </form>
+        </form></AuthorizedControl>
       )}
     </>
   );
