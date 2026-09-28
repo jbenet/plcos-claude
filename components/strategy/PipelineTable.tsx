@@ -161,7 +161,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
         </button>
       </div>
 
-      <FilterLine view={view} rows={rows} showVehicle={showVehicle} keys={['meetings', 'touch', 'read', 'money', 'flag']}
+      <FilterLine view={view} rows={rows} showVehicle={showVehicle} keys={['meetings', 'touch', 'read', 'money', 'flag', 'strategic']}
         placeholder="Name, organisation, next step…  /" />
 
       {pickedRows.length > 0 && (

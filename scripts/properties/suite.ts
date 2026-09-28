@@ -67,6 +67,7 @@ export async function runProperties(check: Check) {
   await (await import('./tables')).tableProperties(check, db);
   await (await import('./selection-0104')).selection0104Properties(check, db);
   await (await import('./spv-stance')).spvStanceProperties(check, db);
+  await (await import('./strategic')).strategicProperties(check, db);
   await (await import('./lp-stats')).lpStatsProperties(check, db);
   await (await import('./lp-unit-paths')).lpUnitPathDatabaseProperties(check, db);
   await (await import('./linear')).linearProperties(check, db);

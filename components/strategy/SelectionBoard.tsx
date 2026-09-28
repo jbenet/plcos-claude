@@ -15,6 +15,7 @@ import s from './lp-tables.module.css';
 import m from './selection.module.css';
 import u from './lp-units.module.css';
 import { SpvMark, SpvReason, spvStyles as sp } from './SpvMark';
+import { STRATEGIC_BASIS, StrategicMark } from './StrategicMark';
 import { spvWords } from '@/modules/strategy/client';
 
 /**
@@ -29,7 +30,7 @@ import { spvWords } from '@/modules/strategy/client';
 
 const PAGE = 60;
 const SORT_LABEL: Partial<Record<SortKey, string>> = {
-  score: 'score', capacity: 'check size', route: 'routes', status: 'stage', meetings: 'meetings', touch: 'last touch', name: 'name', spv: 'SPV stance',
+  score: 'score', capacity: 'check size', route: 'routes', status: 'stage', meetings: 'meetings', touch: 'last touch', name: 'name', spv: 'SPV stance', strategic: 'strategic value',
 };
 const DEFAULT: Status[] = ['new', 'sourcing'];
 
@@ -228,7 +229,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
         </button>
       </div>
 
-      <FilterLine view={view} rows={rows} showVehicle={showVehicle} keys={['flag', 'spv', 'touch', 'read']} placeholder="Search names, organisations, next steps…  /" />
+      <FilterLine view={view} rows={rows} showVehicle={showVehicle} keys={['flag', 'spv', 'strategic', 'touch', 'read']} placeholder="Search names, organisations, next steps…  /" />
 
       <div className={cx(s.selGrid, !focus && !pickedRows.length && s.alone)}>
         <div className={cx('card', s.rankCard)}>
@@ -261,6 +262,7 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
                     <Th k="name" className={s.cLp}>LP</Th>
                     <Th k="score" className={s.cScore}>Score</Th>
                     <Th k="capacity" className={s.cCap} title="The estimated check size: the capacity band on file">Check size</Th>
+                    <Th k="strategic" className={sp.cStrategic} title="Strategic value: how useful they would be to this vehicle beyond the check (for an SPV, its company). Derived from research, sourcing and the strategy, or a person’s grade; not part of the score.">Strategic</Th>
                     <Th k="spv" className={sp.cSpv} title="Whether they do SPVs: a person’s setting, research, or what our records show. Unknown is likely open.">SPVs</Th>
                     <Th k="route" className={s.cRoutes}>Routes</Th>
                     <Th k="status" className={s.cStatus}>Stage</Th>
@@ -272,9 +274,9 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
                   {visible.map((r, i) => <Fragment key={r.id}>
                     <RankRow r={r} position={i + 1} focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now}
                       onFocus={setFocusId} onPick={pick} onJump={jump} />
-                    {narrow && r.id === focus?.id && detail && <tr className={s.inlineRow}><td colSpan={10}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>}
+                    {narrow && r.id === focus?.id && detail && <tr className={s.inlineRow}><td colSpan={11}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>}
                   </Fragment>)}
-                  {ranked.length > visible.length && <tr className={u.moreRow}><td colSpan={10}>
+                  {ranked.length > visible.length && <tr className={u.moreRow}><td colSpan={11}>
                     <button type="button" className="btn" onClick={() => setLimit((x) => x + PAGE)}>Show {n(Math.min(PAGE, ranked.length - visible.length))} more</button>
                     {n(visible.length)} of {n(ranked.length)} shown. Search covers all of them.
                   </td></tr>}
@@ -333,6 +335,7 @@ const RankRow = memo(function RankRow({ r, position, focused, picked, byVehicle,
             <span className={cx(s.scoreKind, stale && s.stale)}>{r.scoreKind.startsWith('Fit') ? 'fit' : stale ? 'stale' : 'provisional'}</span></div>}
       </td>
       <td className={s.cCap}>{cap ?? <span className={s.none}>—</span>}</td>
+      <td className={sp.cStrategic}><StrategicMark mark={r.strategic} /></td>
       <td className={sp.cSpv}><SpvMark mark={r.spv} /></td>
       <td className={s.cRoutes}><span className={cx(s.fig, !r.route && s.zero)}><Icon name="link" title="Routes" />{r.route ?? '—'}</span></td>
       <td className={s.cStatus}>{STATUS_WORD[r.status]}</td>
@@ -413,6 +416,11 @@ function Why({ r, position, sortLabel, rungNames, now, onJump }: {
           {r.firms.map((f) => <li key={f.id}>{f.name}{f.role && <small> · {f.role}</small>}
             {f.lpRow && <button type="button" className={u.jump} onClick={() => onJump(f.lpRow!)}>firm’s row</button>}</li>)}
         </ul></span></div>}
+        <div className={s.fact}><span>Strategic</span><span>
+          <b className={r.strategic.level === 'high' ? sp.does : undefined}>{r.strategic.level}</b> <span className={s.none}>· {STRATEGIC_BASIS[r.strategic.basis]}, not part of the score</span>
+          {r.strategic.reasons.length > 0 ? <ul className={s.whyFlags}>{r.strategic.reasons.map((x, i) => <li key={i}>{x}</li>)}</ul>
+            : <span className={s.small}>Nothing on file ties them to this vehicle’s field or company, and nobody has graded it: unknown, not none.</span>}
+        </span></div>
         <div className={s.fact}><span>SPVs</span><span className={r.spv.stance === 'does-not' && r.spvVehicle ? sp.not : undefined}>
           {spvWords(r.spv)}
           <span className={s.small}>{r.spv.why ?? 'Nothing on file either way: unknown is likely open.'}{r.spv.conflict ? ' Other evidence disagrees; the LP page lists both.' : ''}</span>

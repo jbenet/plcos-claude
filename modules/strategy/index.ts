@@ -16,5 +16,7 @@ export { repointPursuits, repointPursuitsInTransaction, reverseLpRepoint, decide
 export { LP_RULE, isPseudoOrg, decideLpUnit, combineStatus, type LpDecision, type LpFacts, type Firm as LpFirm, type Evidence as LpEvidence } from './lp-unit-rules';
 export { spvReadings, spvMarks, spvHistory, setSpvStance, withdrawSpvStance, deriveSpvStance, recordResearchSpv, researchSpvEvidence, SpvRefused, type SpvDeriveReport, type SpvSettingHistory, type SpvFact } from './spv';
 export * from './spv-rules';
+export { strategicRecords, type StrategicRecords } from './strategic';
+export * from './strategic-rules';
 
 export { lpContactsFor, type LpContact } from './lp-contacts';

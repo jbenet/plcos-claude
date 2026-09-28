@@ -95,3 +95,9 @@
 @container rank (max-width: 560px) { .cSpv { width: 72px; } }
 /* The strategy table's column: the mark alone; whose word it is opens with the row. */
 .cSpvStrategy { white-space: nowrap; }
+
+/* Strategic value (issue 0120): the same cell as the SPV stance, beside it. High is green; some is ink;
+   none and unknown are muted, unknown in a lighter weight. The words carry it. */
+.cStrategic { width: 82px; }
+.some { color: var(--ink); }
+@container rank (max-width: 560px) { .cStrategic { width: 68px; } }
