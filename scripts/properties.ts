@@ -33,6 +33,7 @@ async function main() {
     results.push({ name, ok, detail });
   };
   await (await import('./properties/build-traces')).buildTraceProperties(check);
+  await (await import('./properties/deploy-tooling')).deployToolingProperties(check);
   await (await import('./properties/postgres')).databaseProperties(check);
   await (await import('./properties/pglite-worker')).pgliteWorkerProperties(check);
   await (await import('./properties/postgres-preview')).postgresPreviewProperties(check);

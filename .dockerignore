@@ -1,0 +1,36 @@
+# The supported build context is `git archive <commit>` (scripts/image-build.sh), which already holds
+# only tracked files. This list is the second fence, for a plain `docker build .` from a checkout;
+# the Dockerfile's `source` stage refuses such a context anyway.
+
+# Version control and local tooling
+.git
+.claude
+.github
+**/.DS_Store
+
+# Data of any kind: the demo database, the real replica, the shared data folder
+data/*
+!data/README.md
+**/data/real
+**/plcos-data
+pgdata
+issues/inbox
+
+# Secrets and local environment
+# (Not *.pem: the bundled RDS CA certificate is a tracked, public file the image needs.)
+.env
+.env.*
+**/*.age
+**/*.gpg
+**/*.dump
+
+# Build output and dependencies (rebuilt inside the image)
+node_modules
+.next
+.next-*
+*.tsbuildinfo
+next-env.d.ts
+*.log
+
+# Large or irrelevant to the runtime
+design/_full-export.zip
