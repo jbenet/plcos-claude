@@ -76,13 +76,13 @@ export async function linearOverview(db: Queryable): Promise<LinearOverview> {
       count(i.id) issues, count(i.id) filter (where s.type = any($1::text[])) open, count(i.id) filter (where s.type = 'completed') done,
       (select count(*) from scoped_milestone ms where ms.project_id = p.id and ms.archived_at is null) milestones
     from scoped_project p left join scoped_member m on m.id = p.lead_id
-    left join platform.app_user u on m.email is not null and lower(u.email) = lower(m.email)
+    left join platform.app_user u on m.email is not null and lower(m.email) in (lower(u.email), lower(u.linear_email))
     left join scoped_issue i on i.project_id = p.id and i.archived_at is null left join scoped_state s on s.id = i.state_id
     where p.archived_at is null group by p.id, p.name, p.url, p.status_name, p.status_type, p.start_date, p.target_date, p.team_ids, m.name, u.id
     order by case p.status_type when 'started' then 0 when 'planned' then 1 when 'backlog' then 2 else 3 end, count(i.id) filter (where s.type = any($1::text[])) desc, p.name`, [OPEN]);
   const states = await scopedQuery<{ type: string; issues: string }>(`select coalesce(s.type, 'unknown') type, count(*) issues
     from scoped_issue i left join scoped_state s on s.id = i.state_id where i.archived_at is null group by 1 order by 2 desc`);
-  const [ours] = await scopedQuery<Record<string, string>>(`with ours as (select m.id from scoped_member m join platform.app_user u on lower(u.email) = lower(m.email))
+  const [ours] = await scopedQuery<Record<string, string>>(`with ours as (select distinct m.id from scoped_member m join platform.app_user u on lower(m.email) in (lower(u.email), lower(u.linear_email)))
     select (select count(*) from scoped_member where archived_at is null) members, (select count(*) from ours) matched,
       count(*) filter (where i.assignee_id in (select id from ours)) open_ours,
       count(*) filter (where i.assignee_id is null) open_none,

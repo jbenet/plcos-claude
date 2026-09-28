@@ -13,9 +13,10 @@
 {
   // Who uses the tool. The handle is short and lowercase. It appears in URLs and on anything
   // a person files. affinityEmail is the address they sign in to Affinity with, which is how
-  // an Affinity owner or note author is matched to a person here.
+  // an Affinity owner or note author is matched to a person here. linearEmail is optional: the
+  // address they sign in to Linear with, when it is not their email, so "My Linear" finds them.
   "team": [
-    { "handle": "juan", "name": "Juan", "initials": "J", "role": null, "email": null, "affinityEmail": null }
+    { "handle": "juan", "name": "Juan", "initials": "J", "role": null, "email": null, "affinityEmail": null, "linearEmail": null }
   ],
 
   // One entry per vehicle.

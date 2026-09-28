@@ -29,6 +29,8 @@ export interface TeamMember {
   email: string | null;
   /** The address they sign in to Affinity with — how an owner or a note author finds them. */
   affinityEmail: string | null;
+  /** The address they sign in to Linear with, when it is not `email` — how "My Linear" finds their issues. Optional. */
+  linearEmail: string | null;
 }
 
 export interface VehicleInit {
@@ -140,7 +142,7 @@ export function validate(raw: unknown): { init: RealInit | null; problems: strin
         team.push({
           handle, name,
           initials: str(t.initials) ?? initialsOf(name),
-          role: str(t.role), email: str(t.email), affinityEmail: str(t.affinityEmail),
+          role: str(t.role), email: str(t.email), affinityEmail: str(t.affinityEmail), linearEmail: str(t.linearEmail),
         });
       }
     });
@@ -295,15 +297,15 @@ export async function loadInit(db: Db): Promise<InitReport> {
     if (last?.hash === report.hash) return;
     for (const t of team) {
       await tx.query(
-        `insert into platform.app_user (handle, name, initials, role, email)
-         values ($1,$2,$3,$4,$5)
+        `insert into platform.app_user (handle, name, initials, role, email, linear_email)
+         values ($1,$2,$3,$4,$5,$6)
          on conflict (handle) do update set name = coalesce((
            select a.detail->>'name' from platform.audit_log a
            where a.subject_type='app_user' and a.subject_id=app_user.id::text
              and a.action='identity.team_roster_updated'
            order by a.at desc,a.id desc limit 1), excluded.name), initials = excluded.initials,
-           role = excluded.role, email = excluded.email`,
-        [t.handle, t.name, t.initials, t.role ?? '', t.email ?? ''],
+           role = excluded.role, email = excluded.email, linear_email = excluded.linear_email`,
+        [t.handle, t.name, t.initials, t.role ?? '', t.email ?? '', t.linearEmail],
       );
     }
     for (const [i, v] of vehicles.entries()) {

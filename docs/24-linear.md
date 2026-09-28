@@ -1,7 +1,9 @@
 # 24 — Linear, read-only first
 
-**Status:** read-only connector built 27 Sep 2026. The pages below §3 are a **plan for Juan to
-approve**; nothing in §3–§5 is built except the Developer pages.
+**Status:** read-only connector built 27 Sep 2026. Later that night Juan asked for Linear on the
+daily standup and on each vehicle's Overview: "My Linear" and the Workstreams card (§3 items 1–2)
+and the vehicle ↔ project links (§4, first bullet) are built; see the last decision below. The
+rest of §3–§5 (LP links, strategy links, writes) is still a plan.
 
 Juan, 27 Sep 2026: "let's implement Linear support … start with a read-only version. Create a
 connector, test the API, wire it up to all the relevant pages (connectors, status, etc) … we just
@@ -218,3 +220,39 @@ The purge makes no API calls. If interrupted during file rewriting, rerun the re
 syncing: each rewrite is atomic and replay resets the old file pins. Repeating a completed
 rebuild preserves the same records and retained purge counts. No live purge was run during
 implementation; all development evidence uses invented fixtures.
+## Decision, 27 Sep 2026, late (Juan): the standup and each vehicle's Overview
+
+Juan: "Think about what would be useful to show in Daily Standup and in Overviews for each vehicle.
+Likely we want to show upcoming tasks, related tasks, etc. I do think we should try to show Linear
+tasks as close as we can to the Linear UI, so it's visually familiar to humans and they don't have
+to learn a new way of representing the same stuff."
+
+This supersedes "fewer pages" for two places. Still read-only; still nothing on LP pages or the
+Calendar (§3's "not now" stands); the write phase (§5) is not started. The sync reads only the
+allowed teams (PLC-only scope, above), and these views scope their reads to `config.linear.teams`
+as Developer → Linear does, so a replica not yet purged shows no other team's work.
+
+**Built:**
+
+- **A Linear-shaped issue list** (`components/linear/`): priority, identifier, status circle, title,
+  label pills, project, due date (red when overdue), assignee, grouped by status in Linear's order,
+  each row opening the issue in Linear in a new tab. Linear's shapes, redrawn in our palette; no
+  Linear asset. Why: the people who read these rows live in Linear, and a second way of drawing the
+  same issue is something to learn for no gain.
+- **My Linear, on the daily standup,** replacing the fixture pane: the signed-in person's issues in
+  progress, then due within a week or overdue, then to do (twelve at most; backlog counted), and a
+  Team tab with everyone's work in progress by person. Live, and labelled as not pinned with the day.
+- **Workstreams, on each vehicle's Overview** (funds and SPVs being raised): its linked projects
+  with status, lead, done/total and target on one start-to-target strip with a line for today, then
+  the next six open issues by due date and priority, and the latest four done.
+- **`linear.link`** (`modules/linear/migrations/002_link.sql`), as §4 proposed, for vehicle ↔
+  project only: name-based suggestions on Developer → Linear, accepted or turned down by a person
+  once, audited, never inferred. The same table will carry pursuit and move links when §4's other
+  bullets are built.
+- **`linearEmail`** on the init file's team roster, stored as `platform.app_user.linear_email`;
+  a Linear member is ours when their address is someone's email or linearEmail.
+- Label and project **colours** are now read, for the pills and the strip.
+
+**Not built, on purpose:** a per-issue view (Linear is one), comments, cycles, milestones on the
+strip (the fundraising team has none), and any filter by label group. The link URLs to Linear's own
+"My issues" and team views are derived from an issue's address, a guess at Linear's URL scheme.

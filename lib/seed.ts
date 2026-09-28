@@ -17,16 +17,16 @@ export async function seed(db: Db): Promise<Record<string, number>> {
   if (config.data.profile === 'real') {
     throw new Error('Refusing to seed fictional data into the real profile.');
   }
-  const users = await fixture<{ handle: string; name: string; initials: string; role: string; email: string }>('users.json');
+  const users = await fixture<{ handle: string; name: string; initials: string; role: string; email: string; linearEmail?: string }>('users.json');
   const vehicles = await fixture<{ slug: string; name: string; kind: string; exemption: string; target_amount: number | null; sort_order: number; phase?: string }>('vehicles.json');
   const sources = await fixture<{ source: string; label: string; status: string; detail: string }>('sources.json');
 
   await db.transaction(async (tx) => {
     for (const u of users) {
       await tx.query(
-        `insert into platform.app_user (handle, name, initials, role, email)
-         values ($1,$2,$3,$4,$5) on conflict (handle) do nothing`,
-        [u.handle, u.name, u.initials, u.role, u.email],
+        `insert into platform.app_user (handle, name, initials, role, email, linear_email)
+         values ($1,$2,$3,$4,$5,$6) on conflict (handle) do nothing`,
+        [u.handle, u.name, u.initials, u.role, u.email, u.linearEmail ?? null],
       );
     }
     for (const v of vehicles) {

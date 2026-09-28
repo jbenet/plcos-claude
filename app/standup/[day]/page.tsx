@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { PinButton } from '@/components/standup/PinButton';
+import { MyLinear } from '@/components/linear/MyLinear';
+import { currentUser } from '@/lib/auth';
 import { EntityLink } from '@/components/entity/EntityLink';
 import { usdM } from '@/lib/money';
 import { longDate, shortDate, timeOfDay } from '@/lib/time';
@@ -16,10 +18,6 @@ export const dynamic = 'force-dynamic';
 
 const STATUS_FLAG: Record<ItemStatus, string> = {
   open: 'f-ev', done: 'f-ok', carried: 'f-mute', dropped: 'f-mute',
-};
-
-const LINEAR_FLAG: Record<string, string> = {
-  Done: 'f-ok', 'In Review': 'f-ev', 'In Progress': 'f-ev', Todo: 'f-mute', Triage: 'f-mute',
 };
 
 function value(m: Metric): string {
@@ -60,7 +58,7 @@ async function Standup({ params }: { params: Promise<{ day: string }> }) {
   const s = await standupFor(day);
   if (!s) notFound();
 
-  const days = await listDays();
+  const [days, user] = await Promise.all([listDays(), currentUser()]);
   const metrics = s.live ? await liveMetrics() : s.metrics;
 
   const byVehicle = new Map<string, Metric[]>();
@@ -337,77 +335,47 @@ async function Standup({ params }: { params: Promise<{ day: string }> }) {
         </p>
       </div>
 
-      {/* ---------- external ---------- */}
-      <div className="grid-even">
-        <div className="card">
-          <div className="chead">
-            <h2>Linear</h2>
-            <span className="lbl">mocked — no connector before L13</span>
-          </div>
-          <table className="list">
-            <tbody>
-              {s.linear.map((e) => (
-                <tr key={e.externalId}>
-                  <td style={{ width: 74 }} className="mono muted">{e.ref}</td>
-                  <td>
-                    <b>{e.title}</b>
-                    {e.detail && <div className="muted" style={{ fontSize: 11 }}>{e.detail}</div>}
-                    <div className="muted" style={{ fontSize: 10.5 }}>
-                      {e.who ?? 'unassigned'} · {shortDate(e.occurredAt)}
-                    </div>
-                  </td>
-                  <td style={{ width: 96 }}>
-                    <span className={`flag ${LINEAR_FLAG[e.state] ?? 'f-mute'}`}>{e.state}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="cover">
-            <b>Fixture data.</b> Linear is now synced read-only (Developer → Linear), but this pane
-            is not wired to it yet: whether it should be waits on the plan in docs/24-linear.md.
-            It shows the shape the summary would take, labelled so nobody mistakes it for a sync.
-          </p>
-        </div>
+      {/* ---------- Linear, live ---------- */}
+      <MyLinear user={user} pinnedDay={!s.live} />
 
-        <div className="card">
-          <div className="chead">
-            <h2>Recent outreach</h2>
-            <span className="lbl">mocked — Affinity is not attached</span>
-          </div>
-          <table className="list">
-            <tbody>
-              {s.outreach.map((e) => (
-                <tr key={e.externalId}>
-                  <td>
-                    <b>{e.title}</b>
-                    {e.detail && <div className="muted" style={{ fontSize: 11 }}>{e.detail}</div>}
-                    <div className="muted" style={{ fontSize: 10.5 }}>
-                      {e.who ?? '—'} · {shortDate(e.occurredAt)}
-                    </div>
-                  </td>
-                  <td style={{ width: 150 }}>
-                    <span className="flag f-mute">{e.state}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="cover">
-            <b>Fixture data, and the state on the right is the consent ladder rung</b> — not a
-            CRM status. When Affinity is attached it will fill the same shape through the
-            Connector seam, and the rung will still be the thing a piece of evidence justifies
-            rather than a field somebody set.
-          </p>
+      {/* ---------- external, still mocked ---------- */}
+      <div className="card">
+        <div className="chead">
+          <h2>Recent outreach</h2>
+          <span className="lbl">mocked — Affinity is not attached</span>
         </div>
+        <table className="list">
+          <tbody>
+            {s.outreach.map((e) => (
+              <tr key={e.externalId}>
+                <td>
+                  <b>{e.title}</b>
+                  {e.detail && <div className="muted" style={{ fontSize: 11 }}>{e.detail}</div>}
+                  <div className="muted" style={{ fontSize: 10.5 }}>
+                    {e.who ?? '—'} · {shortDate(e.occurredAt)}
+                  </div>
+                </td>
+                <td style={{ width: 150 }}>
+                  <span className="flag f-mute">{e.state}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="cover">
+          <b>Fixture data, and the state on the right is the consent ladder rung</b> — not a
+          CRM status. When Affinity is attached it will fill the same shape through the
+          Connector seam, and the rung will still be the thing a piece of evidence justifies
+          rather than a field somebody set.
+        </p>
       </div>
 
       <p className="cover">
         <b>What this page covers:</b> the {metrics.length} numbers{' '}
         {s.live ? 'as computed just now' : `as pinned at ${timeOfDay(s.capturedAt!)}`}, {s.week.length}{' '}
         weekly and {s.today.length} daily items, {s.actions.length} actions, and{' '}
-        {s.linear.length + s.outreach.length} rows of fixture data from two systems that are not
-        connected. <b>Nothing here is a forecast</b>, and nothing on it has been sent to anyone.
+        {s.outreach.length} rows of fixture data from Affinity, which this pane is not connected to, and
+        Linear&rsquo;s issues as of its last sync. <b>Nothing here is a forecast</b>, and nothing on it has been sent to anyone.
       </p>
     </Page>
   );

@@ -13,6 +13,7 @@ import { listAsks, listConflicts } from '@/modules/coordination';
 import { listCycles, spvRooms } from '@/modules/close';
 import { StatusCounts } from '@/components/strategy/StatusCounts';
 import { Lately } from '@/components/strategy/Lately';
+import { WorkstreamsCard } from '@/components/linear/Workstreams';
 
 export const dynamic = 'force-dynamic';
 
@@ -209,6 +210,8 @@ async function Overview() {
           </table>
         </div>
       )}
+
+      {v && v.kind !== 'grant_rail' && v.phase !== 'historical' && <WorkstreamsCard vehicle={v} />}
 
       <div className="grid-even">
         <StatusCounts pursuits={counted} vehicleName={v?.name ?? null} />

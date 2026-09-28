@@ -3,7 +3,7 @@
   {
    "id": "team-fr",
    "key": "PLC",
-   "name": "Fundraise",
+   "name": "PLC Fundraising",
    "createdAt": "2026-09-01T10:00:00.000Z",
    "updatedAt": "2026-09-02T10:00:00.000Z",
    "archivedAt": null
@@ -67,6 +67,16 @@
    "createdAt": "2026-09-01T10:00:00.000Z",
    "updatedAt": "2026-09-03T10:00:00.000Z",
    "archivedAt": null
+  },
+  {
+   "id": "user-tomas",
+   "name": "Tomás Reyes",
+   "displayName": "tomas",
+   "email": "tomas.reyes@counsel.example.org",
+   "active": true,
+   "createdAt": "2026-09-01T10:00:00.000Z",
+   "updatedAt": "2026-09-03T10:00:00.000Z",
+   "archivedAt": null
   }
  ],
  "states": [
@@ -104,10 +114,21 @@
    "archivedAt": null
   },
   {
+   "id": "state-fr-review",
+   "name": "In Review",
+   "type": "started",
+   "position": 3,
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
    "id": "state-fr-completed",
    "name": "Done",
    "type": "completed",
-   "position": 3,
+   "position": 4,
    "team": {
     "id": "team-fr"
    },
@@ -118,7 +139,7 @@
    "id": "state-fr-canceled",
    "name": "Canceled",
    "type": "canceled",
-   "position": 4,
+   "position": 5,
    "team": {
     "id": "team-fr"
    },
@@ -184,18 +205,19 @@
  "labels": [
   {
    "id": "label-okr",
-   "name": "Quarter goals",
+   "name": "Key results",
    "isGroup": true,
    "parent": null,
    "team": {
     "id": "team-fr"
    },
    "updatedAt": "2026-09-02T10:00:00.000Z",
-   "archivedAt": null
+   "archivedAt": null,
+   "color": "#8A8F98"
   },
   {
    "id": "label-o1kr1",
-   "name": "Goal A",
+   "name": "KR1 Anchor LPs",
    "isGroup": false,
    "parent": {
     "id": "label-okr"
@@ -204,11 +226,12 @@
     "id": "team-fr"
    },
    "updatedAt": "2026-09-02T10:00:00.000Z",
-   "archivedAt": null
+   "archivedAt": null,
+   "color": "#5F4B9E"
   },
   {
    "id": "label-o1kr2",
-   "name": "Goal B",
+   "name": "KR2 New relationships",
    "isGroup": false,
    "parent": {
     "id": "label-okr"
@@ -217,22 +240,24 @@
     "id": "team-fr"
    },
    "updatedAt": "2026-09-02T10:00:00.000Z",
-   "archivedAt": null
+   "archivedAt": null,
+   "color": "#0E7F55"
   },
   {
    "id": "label-cadence",
-   "name": "Kind",
+   "name": "Cadence",
    "isGroup": true,
    "parent": null,
    "team": {
     "id": "team-fr"
    },
    "updatedAt": "2026-09-02T10:00:00.000Z",
-   "archivedAt": null
+   "archivedAt": null,
+   "color": "#8A8F98"
   },
   {
    "id": "label-weekly",
-   "name": "Follow-up",
+   "name": "Weekly",
    "isGroup": false,
    "parent": {
     "id": "label-cadence"
@@ -241,11 +266,12 @@
     "id": "team-fr"
    },
    "updatedAt": "2026-09-02T10:00:00.000Z",
-   "archivedAt": null
+   "archivedAt": null,
+   "color": "#2F6F9F"
   },
   {
    "id": "label-oneoff",
-   "name": "Document",
+   "name": "One-off",
    "isGroup": false,
    "parent": {
     "id": "label-cadence"
@@ -254,7 +280,8 @@
     "id": "team-fr"
    },
    "updatedAt": "2026-09-02T10:00:00.000Z",
-   "archivedAt": null
+   "archivedAt": null,
+   "color": "#8A8F98"
   },
   {
    "id": "label-bug",
@@ -262,6 +289,75 @@
    "isGroup": false,
    "parent": null,
    "team": null,
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null,
+   "color": "#BF4A16"
+  },
+  {
+   "id": "label-o1kr3",
+   "name": "KR3 Close documents",
+   "color": "#8A6410",
+   "isGroup": false,
+   "parent": {
+    "id": "label-okr"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "label-fn",
+   "name": "Function",
+   "color": "#8A8F98",
+   "isGroup": true,
+   "parent": null,
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "label-materials",
+   "name": "Materials",
+   "color": "#9A4F7C",
+   "isGroup": false,
+   "parent": {
+    "id": "label-fn"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "label-legal",
+   "name": "Legal",
+   "color": "#B5622E",
+   "isGroup": false,
+   "parent": {
+    "id": "label-fn"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "updatedAt": "2026-09-02T10:00:00.000Z",
+   "archivedAt": null
+  },
+  {
+   "id": "label-events",
+   "name": "Events",
+   "color": "#3E8E8A",
+   "isGroup": false,
+   "parent": {
+    "id": "label-fn"
+   },
+   "team": {
+    "id": "team-fr"
+   },
    "updatedAt": "2026-09-02T10:00:00.000Z",
    "archivedAt": null
   }
@@ -297,7 +393,8 @@
    },
    "labelIds": [],
    "health": "onTrack",
-   "priority": 2
+   "priority": 2,
+   "color": "#5F4B9E"
   },
   {
    "id": "project-rails-outreach",
@@ -329,7 +426,8 @@
    },
    "labelIds": [],
    "health": "onTrack",
-   "priority": 2
+   "priority": 2,
+   "color": "#2F6F9F"
   },
   {
    "id": "project-cortex-docs",
@@ -361,7 +459,8 @@
    },
    "labelIds": [],
    "health": null,
-   "priority": 2
+   "priority": 2,
+   "color": "#8A6410"
   },
   {
    "id": "project-investor-events",
@@ -393,7 +492,8 @@
    },
    "labelIds": [],
    "health": "onTrack",
-   "priority": 2
+   "priority": 2,
+   "color": "#3E8E8A"
   },
   {
    "id": "project-tooling",
@@ -418,6 +518,139 @@
     "nodes": [
      {
       "id": "team-ops"
+     }
+    ]
+   },
+   "labelIds": [],
+   "health": null,
+   "priority": 2,
+   "color": "#8A8F98"
+  },
+  {
+   "id": "project-neuro-dataroom",
+   "name": "Neurotech data room",
+   "description": "Invented demo project: neurotech data room.",
+   "slugId": "neuro-dataroom",
+   "url": "https://linear.example/demo/project/neuro-dataroom",
+   "color": "#0E7F55",
+   "status": {
+    "name": "In Progress",
+    "type": "started"
+   },
+   "lead": {
+    "id": "user-ines"
+   },
+   "startDate": "2026-09-10",
+   "targetDate": "2026-10-20",
+   "startedAt": "2026-09-12T10:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "createdAt": "2026-09-05T10:00:00.000Z",
+   "updatedAt": "2026-09-26T10:00:00.000Z",
+   "archivedAt": null,
+   "teams": {
+    "nodes": [
+     {
+      "id": "team-fr"
+     }
+    ]
+   },
+   "labelIds": [],
+   "health": "atRisk",
+   "priority": 2
+  },
+  {
+   "id": "project-neuro-anchors",
+   "name": "Neurotech anchor LPs",
+   "description": "Invented demo project: neurotech anchor lps.",
+   "slugId": "neuro-anchors",
+   "url": "https://linear.example/demo/project/neuro-anchors",
+   "color": "#BF4A16",
+   "status": {
+    "name": "In Progress",
+    "type": "started"
+   },
+   "lead": {
+    "id": "user-mara"
+   },
+   "startDate": "2026-09-14",
+   "targetDate": "2026-11-01",
+   "startedAt": "2026-09-15T10:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "createdAt": "2026-09-05T10:00:00.000Z",
+   "updatedAt": "2026-09-26T10:00:00.000Z",
+   "archivedAt": null,
+   "teams": {
+    "nodes": [
+     {
+      "id": "team-fr"
+     }
+    ]
+   },
+   "labelIds": [],
+   "health": "onTrack",
+   "priority": 2
+  },
+  {
+   "id": "project-rails-legal",
+   "name": "Rails fund documents",
+   "description": "Invented demo project: rails fund documents.",
+   "slugId": "rails-legal",
+   "url": "https://linear.example/demo/project/rails-legal",
+   "color": "#6B7F3A",
+   "status": {
+    "name": "Planned",
+    "type": "planned"
+   },
+   "lead": {
+    "id": "user-tomas"
+   },
+   "startDate": "2026-10-05",
+   "targetDate": "2026-11-30",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "createdAt": "2026-09-05T10:00:00.000Z",
+   "updatedAt": "2026-09-26T10:00:00.000Z",
+   "archivedAt": null,
+   "teams": {
+    "nodes": [
+     {
+      "id": "team-fr"
+     }
+    ]
+   },
+   "labelIds": [],
+   "health": null,
+   "priority": 2
+  },
+  {
+   "id": "project-lattice-close",
+   "name": "Lattice SPV close",
+   "description": "Invented demo project: lattice spv close.",
+   "slugId": "lattice-close",
+   "url": "https://linear.example/demo/project/lattice-close",
+   "color": "#8A6410",
+   "status": {
+    "name": "Completed",
+    "type": "completed"
+   },
+   "lead": {
+    "id": "user-sam"
+   },
+   "startDate": "2026-08-20",
+   "targetDate": "2026-09-22",
+   "startedAt": "2026-08-21T10:00:00.000Z",
+   "completedAt": "2026-09-22T16:00:00.000Z",
+   "canceledAt": null,
+   "createdAt": "2026-09-05T10:00:00.000Z",
+   "updatedAt": "2026-09-26T10:00:00.000Z",
+   "archivedAt": null,
+   "teams": {
+    "nodes": [
+     {
+      "id": "team-fr"
      }
     ]
    },
@@ -457,8 +690,8 @@
    "identifier": "PLC-1",
    "title": "Send Roos Foundation the updated deck",
    "description": "Invented demo task. Send Roos Foundation the updated deck.",
-   "url": "https://linear.example/demo/issue/1",
-   "priority": 0,
+   "url": "https://linear.example/demo/issue/PLC-1",
+   "priority": 2,
    "estimate": 2,
    "dueDate": "2026-10-02",
    "createdAt": "2026-09-19T10:00:00.000Z",
@@ -496,7 +729,7 @@
    "identifier": "PLC-2",
    "title": "Draft the quarterly letter",
    "description": "Invented demo task. Draft the quarterly letter.",
-   "url": "https://linear.example/demo/issue/2",
+   "url": "https://linear.example/demo/issue/PLC-2",
    "priority": 1,
    "estimate": null,
    "dueDate": "2026-10-05",
@@ -536,7 +769,7 @@
    "identifier": "PLC-3",
    "title": "Book diligence call with Okonjo Family Office",
    "description": "Invented demo task. Book diligence call with Okonjo Family Office.",
-   "url": "https://linear.example/demo/issue/3",
+   "url": "https://linear.example/demo/issue/PLC-3",
    "priority": 2,
    "estimate": null,
    "dueDate": null,
@@ -575,7 +808,7 @@
    "identifier": "PLC-4",
    "title": "Collect side letter requests",
    "description": "Invented demo task. Collect side letter requests.",
-   "url": "https://linear.example/demo/issue/4",
+   "url": "https://linear.example/demo/issue/PLC-4",
    "priority": 3,
    "estimate": 2,
    "dueDate": null,
@@ -612,7 +845,7 @@
    "identifier": "PLC-5",
    "title": "Data room: refresh the track record page",
    "description": "Invented demo task. Data room: refresh the track record page.",
-   "url": "https://linear.example/demo/issue/5",
+   "url": "https://linear.example/demo/issue/PLC-5",
    "priority": 4,
    "estimate": null,
    "dueDate": "2026-09-20",
@@ -649,7 +882,7 @@
    "identifier": "PLC-6",
    "title": "First-close checklist with counsel",
    "description": "Invented demo task. First-close checklist with counsel.",
-   "url": "https://linear.example/demo/issue/6",
+   "url": "https://linear.example/demo/issue/PLC-6",
    "priority": 0,
    "estimate": null,
    "dueDate": "2026-11-20",
@@ -677,14 +910,17 @@
    "projectMilestone": null,
    "cycle": null,
    "parent": null,
-   "labelIds": []
+   "labelIds": [
+    "label-legal",
+    "label-o1kr3"
+   ]
   },
   {
    "id": "issue-007",
    "identifier": "PLC-7",
    "title": "Rails one-pager, second draft",
    "description": "Invented demo task. Rails one-pager, second draft.",
-   "url": "https://linear.example/demo/issue/7",
+   "url": "https://linear.example/demo/issue/PLC-7",
    "priority": 1,
    "estimate": 2,
    "dueDate": "2026-10-01",
@@ -713,7 +949,8 @@
    "cycle": null,
    "parent": null,
    "labelIds": [
-    "label-o1kr2"
+    "label-o1kr2",
+    "label-materials"
    ]
   },
   {
@@ -721,7 +958,7 @@
    "identifier": "PLC-8",
    "title": "List allocators to approach",
    "description": "Invented demo task. List allocators to approach.",
-   "url": "https://linear.example/demo/issue/8",
+   "url": "https://linear.example/demo/issue/PLC-8",
    "priority": 2,
    "estimate": null,
    "dueDate": null,
@@ -756,7 +993,7 @@
    "identifier": "PLC-9",
    "title": "Rails deck: portfolio slide",
    "description": "Invented demo task. Rails deck: portfolio slide.",
-   "url": "https://linear.example/demo/issue/9",
+   "url": "https://linear.example/demo/issue/PLC-9",
    "priority": 3,
    "estimate": null,
    "dueDate": null,
@@ -791,7 +1028,7 @@
    "identifier": "PLC-10",
    "title": "Cortex SPV: term sheet summary",
    "description": "Invented demo task. Cortex SPV: term sheet summary.",
-   "url": "https://linear.example/demo/issue/10",
+   "url": "https://linear.example/demo/issue/PLC-10",
    "priority": 4,
    "estimate": 2,
    "dueDate": "2026-10-10",
@@ -819,14 +1056,16 @@
    "projectMilestone": null,
    "cycle": null,
    "parent": null,
-   "labelIds": []
+   "labelIds": [
+    "label-legal"
+   ]
   },
   {
    "id": "issue-011",
    "identifier": "PLC-11",
    "title": "Cortex SPV: subscription docs review",
    "description": "Invented demo task. Cortex SPV: subscription docs review.",
-   "url": "https://linear.example/demo/issue/11",
+   "url": "https://linear.example/demo/issue/PLC-11",
    "priority": 0,
    "estimate": null,
    "dueDate": null,
@@ -859,7 +1098,7 @@
    "identifier": "PLC-12",
    "title": "Breakfast: guest list",
    "description": "Invented demo task. Breakfast: guest list.",
-   "url": "https://linear.example/demo/issue/12",
+   "url": "https://linear.example/demo/issue/PLC-12",
    "priority": 1,
    "estimate": null,
    "dueDate": "2026-10-08",
@@ -888,7 +1127,8 @@
    "cycle": null,
    "parent": null,
    "labelIds": [
-    "label-weekly"
+    "label-weekly",
+    "label-events"
    ]
   },
   {
@@ -896,7 +1136,7 @@
    "identifier": "PLC-13",
    "title": "Breakfast: venue",
    "description": "Invented demo task. Breakfast: venue.",
-   "url": "https://linear.example/demo/issue/13",
+   "url": "https://linear.example/demo/issue/PLC-13",
    "priority": 2,
    "estimate": 2,
    "dueDate": null,
@@ -931,7 +1171,7 @@
    "identifier": "PLC-14",
    "title": "Pipeline review notes",
    "description": "Invented demo task. Pipeline review notes.",
-   "url": "https://linear.example/demo/issue/14",
+   "url": "https://linear.example/demo/issue/PLC-14",
    "priority": 3,
    "estimate": null,
    "dueDate": null,
@@ -1031,6 +1271,847 @@
    "parent": null,
    "labelIds": [
     "label-bug"
+   ]
+  },
+  {
+   "id": "issue-017",
+   "identifier": "PLC-17",
+   "title": "Anchor LP call prep: term questions",
+   "description": "Invented demo task. Anchor LP call prep: term questions.",
+   "url": "https://linear.example/demo/issue/PLC-17",
+   "priority": 2,
+   "estimate": null,
+   "dueDate": "2026-09-29",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-27T17:00:00.000Z",
+   "startedAt": "2026-09-27T09:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-review"
+   },
+   "assignee": {
+    "id": "user-juan"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-anchors"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-o1kr1"
+   ]
+  },
+  {
+   "id": "issue-018",
+   "identifier": "PLC-18",
+   "title": "Confirm the first-close date with counsel",
+   "description": "Invented demo task. Confirm the first-close date with counsel.",
+   "url": "https://linear.example/demo/issue/PLC-18",
+   "priority": 1,
+   "estimate": null,
+   "dueDate": "2026-09-26",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-25T17:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": {
+    "id": "user-juan"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-legal",
+    "label-o1kr3"
+   ]
+  },
+  {
+   "id": "issue-019",
+   "identifier": "PLC-19",
+   "title": "Rails: pick two anchor targets",
+   "description": "Invented demo task. Rails: pick two anchor targets.",
+   "url": "https://linear.example/demo/issue/PLC-19",
+   "priority": 2,
+   "estimate": null,
+   "dueDate": "2026-10-01",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-24T17:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": {
+    "id": "user-juan"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-rails-outreach"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-o1kr2"
+   ]
+  },
+  {
+   "id": "issue-020",
+   "identifier": "PLC-20",
+   "title": "Review the data room access list",
+   "description": "Invented demo task. Review the data room access list.",
+   "url": "https://linear.example/demo/issue/PLC-20",
+   "priority": 3,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-22T17:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-backlog"
+   },
+   "assignee": {
+    "id": "user-juan"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-dataroom"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-021",
+   "identifier": "PLC-21",
+   "title": "Write the October LP update",
+   "description": "Invented demo task. Write the October LP update.",
+   "url": "https://linear.example/demo/issue/PLC-21",
+   "priority": 3,
+   "estimate": null,
+   "dueDate": "2026-10-09",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-24T17:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": {
+    "id": "user-juan"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-weekly",
+    "label-materials"
+   ]
+  },
+  {
+   "id": "issue-022",
+   "identifier": "PLC-22",
+   "title": "Thank-you notes after the breakfast",
+   "description": "Invented demo task. Thank-you notes after the breakfast.",
+   "url": "https://linear.example/demo/issue/PLC-22",
+   "priority": 4,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-20T17:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-backlog"
+   },
+   "assignee": {
+    "id": "user-juan"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-investor-events"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-events"
+   ]
+  },
+  {
+   "id": "issue-023",
+   "identifier": "PLC-23",
+   "title": "Sign the Lattice closing certificate",
+   "description": "Invented demo task. Sign the Lattice closing certificate.",
+   "url": "https://linear.example/demo/issue/PLC-23",
+   "priority": 2,
+   "estimate": null,
+   "dueDate": "2026-09-22",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-22T17:00:00.000Z",
+   "startedAt": "2026-09-22T09:00:00.000Z",
+   "completedAt": "2026-09-22T16:00:00.000Z",
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-completed"
+   },
+   "assignee": {
+    "id": "user-juan"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-lattice-close"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-legal"
+   ]
+  },
+  {
+   "id": "issue-024",
+   "identifier": "PLC-24",
+   "title": "Approve the Neurotech one-pager",
+   "description": "Invented demo task. Approve the Neurotech one-pager.",
+   "url": "https://linear.example/demo/issue/PLC-24",
+   "priority": 3,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-26T17:00:00.000Z",
+   "startedAt": "2026-09-26T09:00:00.000Z",
+   "completedAt": "2026-09-26T16:00:00.000Z",
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-completed"
+   },
+   "assignee": {
+    "id": "user-juan"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-dataroom"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-materials"
+   ]
+  },
+  {
+   "id": "issue-025",
+   "identifier": "PLC-25",
+   "title": "Anchor tracker: add commitment dates",
+   "description": "Invented demo task. Anchor tracker: add commitment dates.",
+   "url": "https://linear.example/demo/issue/PLC-25",
+   "priority": 2,
+   "estimate": null,
+   "dueDate": "2026-10-03",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-26T17:00:00.000Z",
+   "startedAt": "2026-09-26T09:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-started"
+   },
+   "assignee": {
+    "id": "user-mara"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-anchors"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-o1kr1"
+   ]
+  },
+  {
+   "id": "issue-026",
+   "identifier": "PLC-26",
+   "title": "Rails intro emails, second batch",
+   "description": "Invented demo task. Rails intro emails, second batch.",
+   "url": "https://linear.example/demo/issue/PLC-26",
+   "priority": 1,
+   "estimate": null,
+   "dueDate": "2026-09-25",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-25T17:00:00.000Z",
+   "startedAt": "2026-09-25T09:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-started"
+   },
+   "assignee": {
+    "id": "user-mara"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-rails-outreach"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-o1kr2"
+   ]
+  },
+  {
+   "id": "issue-027",
+   "identifier": "PLC-27",
+   "title": "Anchor LP shortlist",
+   "description": "Invented demo task. Anchor LP shortlist.",
+   "url": "https://linear.example/demo/issue/PLC-27",
+   "priority": 2,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-24T17:00:00.000Z",
+   "startedAt": "2026-09-24T09:00:00.000Z",
+   "completedAt": "2026-09-24T16:00:00.000Z",
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-completed"
+   },
+   "assignee": {
+    "id": "user-mara"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-anchors"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-o1kr1"
+   ]
+  },
+  {
+   "id": "issue-028",
+   "identifier": "PLC-28",
+   "title": "Cortex SPV: open the bank account",
+   "description": "Invented demo task. Cortex SPV: open the bank account.",
+   "url": "https://linear.example/demo/issue/PLC-28",
+   "priority": 2,
+   "estimate": null,
+   "dueDate": "2026-10-06",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-26T17:00:00.000Z",
+   "startedAt": "2026-09-26T09:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-started"
+   },
+   "assignee": {
+    "id": "user-sam"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-cortex-docs"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-legal"
+   ]
+  },
+  {
+   "id": "issue-029",
+   "identifier": "PLC-29",
+   "title": "Lattice: file the wire confirmations",
+   "description": "Invented demo task. Lattice: file the wire confirmations.",
+   "url": "https://linear.example/demo/issue/PLC-29",
+   "priority": 3,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-21T17:00:00.000Z",
+   "startedAt": "2026-09-21T09:00:00.000Z",
+   "completedAt": "2026-09-21T16:00:00.000Z",
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-completed"
+   },
+   "assignee": {
+    "id": "user-sam"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-lattice-close"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-030",
+   "identifier": "PLC-30",
+   "title": "Lattice: final investor list to the administrator",
+   "description": "Invented demo task. Lattice: final investor list to the administrator.",
+   "url": "https://linear.example/demo/issue/PLC-30",
+   "priority": 2,
+   "estimate": null,
+   "dueDate": "2026-09-19",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-19T17:00:00.000Z",
+   "startedAt": "2026-09-19T09:00:00.000Z",
+   "completedAt": "2026-09-19T16:00:00.000Z",
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-completed"
+   },
+   "assignee": {
+    "id": "user-sam"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-lattice-close"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-031",
+   "identifier": "PLC-31",
+   "title": "Data room: DDQ answers, section 4",
+   "description": "Invented demo task. Data room: DDQ answers, section 4.",
+   "url": "https://linear.example/demo/issue/PLC-31",
+   "priority": 2,
+   "estimate": null,
+   "dueDate": "2026-10-05",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-27T17:00:00.000Z",
+   "startedAt": "2026-09-27T09:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-started"
+   },
+   "assignee": {
+    "id": "user-ines"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-dataroom"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-materials",
+    "label-o1kr3"
+   ]
+  },
+  {
+   "id": "issue-032",
+   "identifier": "PLC-32",
+   "title": "Data room: index and permissions",
+   "description": "Invented demo task. Data room: index and permissions.",
+   "url": "https://linear.example/demo/issue/PLC-32",
+   "priority": 3,
+   "estimate": null,
+   "dueDate": "2026-10-12",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-23T17:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": {
+    "id": "user-ines"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-dataroom"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-033",
+   "identifier": "PLC-33",
+   "title": "Data room: team bios",
+   "description": "Invented demo task. Data room: team bios.",
+   "url": "https://linear.example/demo/issue/PLC-33",
+   "priority": 4,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-25T17:00:00.000Z",
+   "startedAt": "2026-09-25T09:00:00.000Z",
+   "completedAt": "2026-09-25T16:00:00.000Z",
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-completed"
+   },
+   "assignee": {
+    "id": "user-ines"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-dataroom"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-materials"
+   ]
+  },
+  {
+   "id": "issue-034",
+   "identifier": "PLC-34",
+   "title": "Rails LPA: first markup",
+   "description": "Invented demo task. Rails LPA: first markup.",
+   "url": "https://linear.example/demo/issue/PLC-34",
+   "priority": 2,
+   "estimate": null,
+   "dueDate": "2026-10-14",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-23T17:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": {
+    "id": "user-tomas"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-rails-legal"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-legal"
+   ]
+  },
+  {
+   "id": "issue-035",
+   "identifier": "PLC-35",
+   "title": "Side letter: MFN language",
+   "description": "Invented demo task. Side letter: MFN language.",
+   "url": "https://linear.example/demo/issue/PLC-35",
+   "priority": 1,
+   "estimate": null,
+   "dueDate": "2026-09-30",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-27T17:00:00.000Z",
+   "startedAt": "2026-09-27T09:00:00.000Z",
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-started"
+   },
+   "assignee": {
+    "id": "user-tomas"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-legal",
+    "label-o1kr3"
+   ]
+  },
+  {
+   "id": "issue-036",
+   "identifier": "PLC-36",
+   "title": "Breakfast: print the name cards",
+   "description": "Invented demo task. Breakfast: print the name cards.",
+   "url": "https://linear.example/demo/issue/PLC-36",
+   "priority": 4,
+   "estimate": null,
+   "dueDate": "2026-10-07",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-22T17:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": {
+    "id": "user-kit"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-investor-events"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-events"
+   ]
+  },
+  {
+   "id": "issue-037",
+   "identifier": "PLC-37",
+   "title": "Rails: data room structure",
+   "description": "Invented demo task. Rails: data room structure.",
+   "url": "https://linear.example/demo/issue/PLC-37",
+   "priority": 0,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-20T17:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-backlog"
+   },
+   "assignee": null,
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-rails-legal"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": []
+  },
+  {
+   "id": "issue-038",
+   "identifier": "PLC-38",
+   "title": "Neurotech: capital call notice template",
+   "description": "Invented demo task. Neurotech: capital call notice template.",
+   "url": "https://linear.example/demo/issue/PLC-38",
+   "priority": 3,
+   "estimate": null,
+   "dueDate": "2026-10-20",
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-21T17:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": null,
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-unstarted"
+   },
+   "assignee": null,
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-neuro-checklist"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-legal"
+   ]
+  },
+  {
+   "id": "issue-039",
+   "identifier": "PLC-39",
+   "title": "Neurotech: a second breakfast",
+   "description": "Invented demo task. Neurotech: a second breakfast.",
+   "url": "https://linear.example/demo/issue/PLC-39",
+   "priority": 4,
+   "estimate": null,
+   "dueDate": null,
+   "createdAt": "2026-09-18T10:00:00.000Z",
+   "updatedAt": "2026-09-23T17:00:00.000Z",
+   "startedAt": null,
+   "completedAt": null,
+   "canceledAt": "2026-09-23T16:00:00.000Z",
+   "archivedAt": null,
+   "state": {
+    "id": "state-fr-canceled"
+   },
+   "assignee": {
+    "id": "user-ines"
+   },
+   "creator": {
+    "id": "user-juan"
+   },
+   "team": {
+    "id": "team-fr"
+   },
+   "project": {
+    "id": "project-investor-events"
+   },
+   "projectMilestone": null,
+   "cycle": null,
+   "parent": null,
+   "labelIds": [
+    "label-events"
    ]
   }
  ],
