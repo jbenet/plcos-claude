@@ -5,6 +5,7 @@ export const routeRules = {
   'app/api/dakota/status/route.ts#GET': 'admin',
   'app/api/feedback/route.ts#POST': 'feedback',
   'app/api/feedback/route.ts#GET': 'feedback',
+  'app/api/feedback/export/route.ts#GET': 'feedback',
   'app/api/identity/entity-type/route.ts#POST': 'admin',
   'app/api/identity/pursuit-merge/route.ts#POST': 'admin',
   'app/api/import-jobs/route.ts#GET': 'admin',

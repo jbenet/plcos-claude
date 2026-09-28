@@ -46,7 +46,7 @@ async function query(sql: string): Promise<Row[]> {
 }
 async function fetchPage(sql: string): Promise<Row[]> {
   // Existing application-default login; token is passed in the environment, never argv or a file.
-  const token=await exec('gcloud',['auth','application-default','print-access-token']);
+  const token=await exec('bash',[join(process.cwd(),'scripts/env-or-command.sh'),'CLOUDSDK_AUTH_ACCESS_TOKEN','gcloud','auth','application-default','print-access-token']);
   const at = new Date().toISOString();
   let bytesIn: number | null = null, records: number | null = null;
   try {

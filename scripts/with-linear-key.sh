@@ -9,17 +9,18 @@
 # the command's: never written to a file, never echoed, never on a command line. Without it the
 # command still runs, and Developer → Linear says why nothing syncs. Only lib/connectors/linear/ reads it.
 set -euo pipefail
+source "$(dirname "$0")/env-or-command.sh"
 
 SERVICE="plcos-linear"
 ACCOUNT="api-key"
 
-if ! command -v security >/dev/null 2>&1; then
+if [ -z "${LINEAR_API_KEY:-}" ] && ! command -v security >/dev/null 2>&1; then
   echo "[linear] No macOS Keychain on this machine. Starting without a Linear key." >&2
   exec "$@"
 fi
 
 status=0
-key="$(security find-generic-password -s "$SERVICE" -a "$ACCOUNT" -w 2>/dev/null)" || status=$?
+key="$(env_or_command LINEAR_API_KEY security find-generic-password -s "$SERVICE" -a "$ACCOUNT" -w 2>/dev/null)" || status=$?
 
 if [ "$status" -eq 44 ]; then
   echo "[linear] No Linear key in the Keychain yet. Store it once with: npm run linear:store" >&2
@@ -31,5 +32,5 @@ if [ "$status" -ne 0 ] || [ -z "$key" ]; then
   exec "$@"
 fi
 
-echo "[linear] Key read from the macOS Keychain. Held by the server process only." >&2
+[ -n "${LINEAR_API_KEY:-}" ] || echo "[linear] Key read from the macOS Keychain. Held by the server process only." >&2
 LINEAR_API_KEY="$key" exec "$@"
