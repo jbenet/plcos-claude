@@ -5,6 +5,9 @@ import { withImportLock } from '../lib/db/advisory';
 import { executeImportJob } from '../lib/import-jobs/store';
 import { runImportOperation } from '../lib/import-jobs/operations';
 import type { ImportJob } from '../lib/import-jobs/types';
+import { requireImportParent } from '../lib/import-jobs/parent';
+
+requireImportParent();
 
 async function main() {
   const id=process.argv[2];
