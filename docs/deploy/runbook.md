@@ -15,10 +15,14 @@ and ran the export and findings imports. It found five problems that stop a depl
 | F4 | LabOS sign-in runs an `insert … on conflict do nothing` into `platform.app_user` on every request. Its statement trigger bumps `network.read_revision` each time, so the page caches keep invalidating themselves. Under 10-way load, 25% of requests returned 500 (`DbBusyError`), and `/developer/enrich` failed every time. During an import, the insert waits on the row lock and times out after 20 s. | Read first, and insert only when the uid is unknown. With that patch applied locally: 0 errors, including during an import. |
 | F5 | Viewer pages take about 13 s each: `scopedReadData` (`lib/authz/read/scoped-data.ts`, the Affinity-note metadata query) runs on every page. | Anyone LabOS signs in who isn't mapped is a viewer. Fix the query, or map the whole team to GP/admin before opening the app. |
 
-Also decide one thing. **Dakota (rev 3 decision 3)** says Dakota stays on the Mac, but the database holds it
-in two places: the `dakota` schema (7 tables) and 14,353 `identity.source_record` rows with source `dakota`.
-Either Dakota's terms allow it, or the dump must leave out the schema and the derived rows. That needs a
-script that doesn't exist yet.
+**Dakota (rev 3 decision 3)** stays on the Mac. `cutover.sh` now strips the verified target
+by default, before making it writable; `--keep-dakota` explicitly skips this step. It empties
+the seven Dakota tables and removes source-owned and derived evidence outside that schema,
+retaining names. It also fails copied queued/running import jobs with `stopped at cutover`.
+See [the provenance inventory](strip-dakota-provenance.md). Ambiguous mixed prose, conflicting
+journal reversals or unknown provenance stop cutover with the target still read-only.
+The rehearsal's 19,571 schema rows and 14,353 source records are pre-strip counts, not a
+measurement of this script against real data.
 
 ## 1. Settings in LabOS (secrets page), entered once
 
@@ -45,11 +49,11 @@ from the container. The persistent volume mounts at `/app/data`, and the working
 | Step | What | Rehearsal time |
 |---|---|---|
 | a | Wait until no import job is `queued`/`running` on live, or fail it. A copied `running` row blocks that job kind on the target, and the rehearsal had to fail one by hand. Then stop the live server (`npm run dev:stop` stops Postgres too; stop only the Next server). Take `npm run backup -- event "pre-cutover"`. | backup: minutes |
-| b | `scripts/cutover.sh run --from plcos_live --to <RDS>`: freeze, `pg_dump -Fc`, restore `--no-owner --no-acl --single-transaction`, verify, flip. | dump 15 s (190 MiB file, 1.45 GB database); restore 40 s locally, longer over the network (GUESS 1–3 min); verify 38 s |
+| b | `scripts/cutover.sh run --from plcos_live --to <RDS>`: freeze, `pg_dump -Fc`, restore `--no-owner --no-acl --single-transaction`, verify, strip Dakota, stop copied jobs, flip. | dump 15 s (190 MiB file, 1.45 GB database); restore 40 s locally, longer over the network (GUESS 1–3 min); verify 38 s |
 | c | Copy the working files to the volume: everything under `plcos-data/real` except `postgres/`, `database/` (6.9 GB of old PGlite), `database.lock`, `postgres.url`, `dakota/`, `logs/`, `rehearsal/`, and the hidden `.real-copy-*` snapshots (14 GB). What's left is **2.1 GB, 33,132 files**, not the 1.0 GB rev 3 assumed. | tar + upload: GUESS 2–5 min |
 | d | Point the app at RDS (settings above) and deploy (Approve). | about 1 min |
 
-Verify: `pg-verify` must say MATCH. In the rehearsal the three tables that differed (`route_cache`,
+Verify: `pg-verify` must say MATCH **before** target sanitation. The subsequent counts report intentional removals; do not expect source/target equality after stripping. In the rehearsal the three tables that differed (`route_cache`,
 `route_warmup`, `import_job`) differed only because live kept writing, and the freeze prevents that. Then
 walk `/today`, each vehicle's overview/pipeline/selection/strategy, `/orgs/g/lps` and `/developer/enrich`
 as admin. All should return 200. On the Mac at real volume, with F4 applied, a 10-way walk gave 0 errors,

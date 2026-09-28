@@ -202,3 +202,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Worker lifetime follows the server](entries/worker-orphan.md)
 - [Viewer speed — remove the Affinity note cross product (F5)](entries/viewer-speed.md)
 - [Network speed 2 — reuse hub indexes and remove worker pacing](entries/network-speed-2.md)
+- [Strip Dakota at cutover](entries/strip-dakota.md)
