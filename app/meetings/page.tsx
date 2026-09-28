@@ -8,9 +8,9 @@ import { shortDate } from '@/lib/time';
 import { usdM } from '@/lib/money';
 import { capacityBandLabel } from '@/lib/capacity-bands';
 import { vehicleReadings } from '@/lib/vehicle-readings';
-import { pursuitFor, RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_LABEL } from '@/modules/strategy';
+import { pursuitFor, RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_LABEL } from '@/lib/authz/read/strategy';
 import { closeTracksFor, CLOSE_STATE_LABEL } from '@/modules/pipeline';
-import { claimLabel } from '@/modules/research';
+import { claimLabel } from '@/lib/authz/read/research';
 import {
   CHANNEL_LABEL, listMeetings, MEETING_LABEL, OBJECTION_LABEL, prepBrief, summarize, touchpointsFor, type Meeting,
 } from '@/modules/meetings';

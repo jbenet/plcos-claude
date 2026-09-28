@@ -136,6 +136,8 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
     const file = onFile(p, touchesBy.get(`${p.entityId}:${p.vehicleId}`) ?? [], c ? [c] : []);
     const onFileRungs = new Set(file.climb.map((x) => x.rung));
     return {
+      licensedCapacity: plan?.usingDakota ?? false,
+      licensedStatusReason: p.source === 'dakota' && p.statusSource === 'rule',
       id: p.pursuitId,
       entityId: p.entityId,
       isOrg: organisations.has(p.entityId),

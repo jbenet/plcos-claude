@@ -13,7 +13,7 @@ import { ago, dateLabel, shortDate } from '@/lib/time';
 import { usdM, multiple } from '@/lib/money';
 import { KIND_CLASS, listOpenTickets } from '@/modules/governance';
 import { listAsks, listConflicts } from '@/modules/coordination';
-import { listPursuits } from '@/modules/strategy';
+import { listPursuits } from '@/lib/authz/read/strategy';
 import { listExposures, vehicleTotals } from '@/modules/pipeline';
 import { sprintStrip, urgency } from '@/modules/calendar';
 import { actionableSignals, heldBack } from '@/modules/signals';

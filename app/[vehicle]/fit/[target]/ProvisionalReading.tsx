@@ -3,7 +3,7 @@ import { Page, type Crumb } from '@/components/shell/Page';
 import { shortDate } from '@/lib/time';
 import { capacityBandLabel } from '@/lib/capacity-bands';
 import type { vehicleReadings } from '@/lib/vehicle-readings';
-import { STATUS_LABEL } from '@/modules/strategy';
+import { STATUS_LABEL } from '@/lib/authz/read/strategy';
 import s from './reading.module.css';
 
 type Reading = Awaited<ReturnType<typeof vehicleReadings>>[number];

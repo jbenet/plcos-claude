@@ -1,84 +1,60 @@
-import { readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { loadBindings, parse } from 'next/dist/build/swc';
+import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { authorizationCoverage } from '../authz-coverage';
 import type { Check } from './harness';
 
-type Node = { type?: string; [key: string]: unknown };
+const { parse } = createRequire(import.meta.url)('next/dist/compiled/babel/parser');
+type Node = { type: string; [key: string]: any };
 function nodes(value: unknown): Node[] {
   if (!value || typeof value !== 'object') return [];
   if (Array.isArray(value)) return value.flatMap(nodes);
   return [value as Node, ...Object.values(value).flatMap(nodes)];
 }
-const directive = (node: Node) => nodes(node).some(n => n.type === 'StringLiteral' && n.value === 'use server');
-function awaitedGuard(node: Node, names: string[]): boolean {
-  return nodes(node).some(n => n.type === 'AwaitExpression' && nodes(n.argument).some(c =>
-    c.type === 'CallExpression' && names.includes(String((c.callee as Node)?.value))));
-}
-async function files(root: string): Promise<string[]> {
-  const out: string[] = [];
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) out.push(...await files(path));
-    else if (/\.[cm]?[jt]sx?$/.test(entry.name)) out.push(path);
-  }
-  return out;
-}
+const called = (node: Node, name: string) => node.type === 'CallExpression' && node.callee?.name === name;
+const callAt = (body: Node[], name: string) => body.findIndex(statement => nodes(statement).some(node => called(node, name)));
 
-/** AST inventory fails closed on new exports and inline server actions. No regex body parsing. */
+/** Inventory plus composition: an action cannot substitute policy for the security guard. */
 export async function securityEntrypointProperties(check: Check) {
-  await loadBindings();
-  const failures: string[] = [];
-  let mutations = 0, routes = 0, reads = 0;
-  const methods = ['POST', 'PUT', 'PATCH', 'DELETE'];
-  for (const path of [...await files('app'), ...await files('lib')]) {
-    const text = await readFile(path, 'utf8');
-    const api = path.startsWith('app/api/') && path.endsWith('/route.ts');
-    if (!api && !text.includes('use server')) continue;
-    const ast = await parse(text, { filename: path });
-    const topLevelServer = ast.body.some((n: Node) => n.type === 'ExpressionStatement' && (n.expression as Node)?.value === 'use server');
-    for (const statement of ast.body as Node[]) {
-      if (statement.type !== 'ExportDeclaration') {
-        if (topLevelServer && String(statement.type).startsWith('Export')) failures.push(`${path}: unsupported export form requires review`);
-        if (api && (statement.type === 'ExportAllDeclaration' ||
-          (statement.type === 'ExportNamedDeclaration' && nodes(statement).some(n => methods.includes(String(n.value)))))) {
-          failures.push(`${path}: re-exported mutation requires review`);
-        }
-        continue;
-      }
-      const declaration = statement.declaration as Node;
-      const name = String((declaration.identifier as Node)?.value);
-      if (api && declaration.type === 'VariableDeclaration') {
-        for (const binding of declaration.declarations as Node[]) {
-          if (methods.includes(String((binding.id as Node)?.value))) failures.push(`${path}: variable mutation export requires review`);
-        }
-      }
-      if (api && !methods.includes(name)) continue;
-      if (!api && !topLevelServer) continue;
-      if (path === 'app/selection/actions.ts' && name === 'scoreDetailAction') { reads++; continue; }
-      if (declaration.type !== 'FunctionDeclaration') { failures.push(`${path}: unsupported export ${name}`); continue; }
-      if (api) {
-        routes++;
-        const calls = (names: string[]) => names.every(n => nodes(declaration).some(c => c.type === 'CallExpression' && (c.callee as Node)?.value === n));
-        // The feedback journal routes must accept a note while the database is busy (docs/deploy/03, the
-        // feedback-journal property): origin and profile are checked without the database, and the reporter
-        // is resolved server-side at ingest. Every other route uses the full guard.
-        const journal = path === 'app/api/feedback/route.ts' || path === 'app/api/connection-feedback/route.ts';
-        const guarded = path === 'app/api/session/route.ts'
-          ? calls(['requireMutationOrigin', 'requireMutationProfile', 'requireMutationUser'])
-          : journal ? (calls(['requireMutationOrigin', 'requireMutationProfile']) || awaitedGuard(declaration, ['mutationRouteGuard']))
-          : awaitedGuard(declaration, ['mutationRouteGuard']);
-        if (!guarded) failures.push(`${path}: ${name}`);
-      } else {
-        mutations++;
-        if (!awaitedGuard(declaration, ['requireServerActionMutation'])) failures.push(`${path}: ${name}`);
-      }
-    }
-    if (!topLevelServer) {
-      for (const fn of nodes(ast).filter(n => ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(n.type ?? '') && n.body && directive(n.body as Node))) {
-        if (!awaitedGuard(fn, ['requireServerActionMutation'])) failures.push(`${path}: inline server action`);
-      }
-    }
-  }
-  check('SEC every mutating API route and server action uses the shared guard', failures.length === 0,
-    failures.length ? failures.join('; ') : `${mutations} mutating actions, ${routes} API mutations, ${reads} explicitly read-only action; local session selection is the only bootstrap exception.`);
+  const coverage = await authorizationCoverage();
+  check('SEC every mutating API route and server action uses the shared guard', coverage.violations.length === 0,
+    coverage.violations.length ? coverage.violations.join('; ') : `${coverage.actions} actions and ${coverage.routes} handlers use registered combined boundaries; feedback and session are explicit origin/profile exceptions.`);
+  const readAst = async (file: string): Promise<Node> => parse(await readFile(file, 'utf8'),
+    { sourceType: 'module', plugins: ['typescript'] }).program;
+  const action = await readAst('lib/authz/server.ts');
+  const entry = nodes(action).find(n => n.type === 'FunctionDeclaration' && n.id?.name === 'requireAction');
+  const body: Node[] = entry?.body?.body ?? [];
+  const first = body[0]?.declarations?.[0]?.init;
+  const policy = body[1]?.expression;
+  const importsGuard = action.body.some((n: Node) => n.type === 'ImportDeclaration'
+    && n.source.value === '@/lib/mutation-guard' && n.specifiers.some((s: Node) => s.imported?.name === 'requireServerActionMutation' && s.local.name === 'requireServerActionMutation'));
+  check('SEC combined action resolves the guarded user before policy and returns that same user',
+    importsGuard && first?.type === 'AwaitExpression' && called(first.argument, 'requireServerActionMutation')
+    && body[0].declarations[0].id.name === 'user' && policy?.type === 'AwaitExpression'
+    && called(policy.argument, 'authorizeAction') && policy.argument.arguments[0]?.name === 'user'
+    && body[2]?.type === 'ReturnStatement' && body[2].argument?.name === 'user',
+    'AST verifies first guard, immediate policy using its resolved user, and returned actor.');
+  const route = await readAst('lib/authz/route.ts');
+  const branches = nodes(route).filter(n => n.type === 'IfStatement');
+  const guardedBranch = branches.find(n => n.consequent?.body?.some((s: Node) => nodes(s).some(c => called(c, 'mutationRouteGuard'))));
+  const branchSteps: Node[] = guardedBranch?.consequent?.body ?? [];
+  const steps = branchSteps.slice(callAt(branchSteps, 'mutationRouteGuard'));
+  const guard = steps[0]?.declarations?.[0]?.init;
+  const gate = steps[2]?.expression;
+  const invocation = nodes(steps[3]).find(n => called(n, 'handler'));
+  const special = branches.find(n => nodes(n.test).some(c => c.type === 'StringLiteral' && c.value === 'feedback'));
+  const specials: Node[] = special?.consequent?.body ?? [];
+  const guardImport = nodes(route).some(n => n.type === 'ImportExpression' && n.source?.value === '@/lib/mutation-guard'
+    || n.type === 'CallExpression' && n.callee?.type === 'Import' && n.arguments[0]?.value === '@/lib/mutation-guard');
+  check('SEC combined mutation route preserves guard refusal and authorizes its resolved user before handler',
+    guardImport && guard?.type === 'AwaitExpression' && called(guard.argument, 'mutationRouteGuard')
+    && steps[1]?.type === 'IfStatement' && nodes(steps[1]).some(n => n.type === 'ReturnStatement' && n.argument?.property?.name === 'response')
+    && called(gate ?? {} as Node, 'requireCan') && gate.arguments[0]?.object?.name === 'guard' && gate.arguments[0]?.property?.name === 'user'
+    && invocation?.arguments[2]?.object?.name === 'guard' && invocation.arguments[2]?.property?.name === 'user',
+    'AST verifies guard response is returned and policy precedes handler with the same resolved actor.');
+  check('SEC feedback/session exceptions check origin and profile before their handlers',
+    callAt(specials, 'requireMutationOrigin') >= 0 && callAt(specials, 'requireMutationProfile') >= 0
+    && callAt(specials, 'requireMutationOrigin') < callAt(specials, 'handler')
+    && callAt(specials, 'requireMutationProfile') < callAt(specials, 'handler')
+    && !nodes(special).some(n => called(n, 'mutationRouteGuard') || called(n, 'currentUser')),
+    'The explicit bootstrap/journal branch validates origin/profile and performs no roster lookup.');
 }

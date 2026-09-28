@@ -1,5 +1,5 @@
 import Link from '@/components/ui/AppLink';
-import { RUNG_LABEL, STATUSES, STATUS_BACKED_BY, rungIndex, type Pursuit, type PursuitStatus } from '@/modules/strategy';
+import { RUNG_LABEL, STATUSES, STATUS_BACKED_BY, rungIndex, type Pursuit, type PursuitStatus } from '@/lib/authz/read/strategy';
 
 /**
  * Where the pursuits stand, by status (N62, issue 0008): "Statuses in overview should be the new

@@ -9,7 +9,7 @@ import { shortDate } from '@/lib/time';
 import { CLOSE_PAGE_SIZE, INSTRUMENT_LABEL, vehicleCloseStatus, vehicleStatusCounts, vehicleTotals } from '@/modules/pipeline';
 import { conditionsFor, listCycles } from '@/modules/close';
 import { listMeetings } from '@/modules/meetings';
-import { STATUSES } from '@/modules/strategy';
+import { STATUSES } from '@/lib/authz/read/strategy';
 import s from './status.module.css';
 
 export const dynamic = 'force-dynamic';

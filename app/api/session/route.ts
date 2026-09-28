@@ -1,16 +1,15 @@
+import { withRoute } from '@/lib/authz/route';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { USER_COOKIE } from '@/lib/auth/cookie';
 import { appendAudit, getUserByHandle } from '@/modules/platform';
 import { parseSelections, VEHICLE_COOKIE } from '@/lib/session';
-import { MutationGuardError, requireMutationOrigin, requireMutationProfile, requireMutationUser } from '@/lib/mutation-guard';
+import { MutationGuardError, requireMutationUser } from '@/lib/mutation-guard';
 
 /** Local identity selection is the one bootstrap exception to requiring an existing cookie. */
-export async function POST(req: Request) {
+export const POST = withRoute('app/api/session/route.ts#POST', async function(req: Request) {
   try {
-    requireMutationOrigin(req);
-    requireMutationProfile();
     const body = await req.json() as { userHandle?: string; vehicleSlug?: string };
     const jar = await cookies();
     let who;
@@ -40,4 +39,4 @@ export async function POST(req: Request) {
     if (error instanceof SyntaxError) return NextResponse.json({ error: 'Supply a valid session request.' }, { status: 400 });
     throw error;
   }
-}
+});

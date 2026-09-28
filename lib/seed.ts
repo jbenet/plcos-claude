@@ -24,8 +24,8 @@ export async function seed(db: Db): Promise<Record<string, number>> {
   await db.transaction(async (tx) => {
     for (const u of users) {
       await tx.query(
-        `insert into platform.app_user (handle, name, initials, role, email, linear_email)
-         values ($1,$2,$3,$4,$5,$6) on conflict (handle) do nothing`,
+        `insert into platform.app_user (handle, name, initials, role, email, linear_email, access)
+         values ($1,$2,$3,$4,$5,$6,case when $1 = 'juan' then 'admin'::platform.access_role else 'gp'::platform.access_role end) on conflict (handle) do nothing`,
         [u.handle, u.name, u.initials, u.role, u.email, u.linearEmail ?? null],
       );
     }

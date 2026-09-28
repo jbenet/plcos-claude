@@ -1,3 +1,7 @@
+import { workAsyncStorage, type WorkStore } from 'next/dist/server/app-render/work-async-storage.external';
+import { workUnitAsyncStorage } from 'next/dist/server/app-render/work-unit-async-storage.external';
+import { createRequestStore } from 'next/dist/server/async-storage/request-store';
+import { USER_COOKIE } from '../../lib/auth/cookie';
 import { MutationGuardError, requireMutationOrigin, mutationProfileAllowed, resolveMutationUser } from '../../lib/mutation-guard';
 import { POST as merge } from '../../app/api/identity/pursuit-merge/route';
 import { GET as importProgress } from '../../app/api/import-jobs/route';
@@ -5,18 +9,26 @@ import { withDb } from '../../lib/db';
 import type { Check, Db } from './harness';
 
 export async function securityMutationProperties(check: Check, db: Db) {
-  const actor = await db.one<{ id: string }>('select id from platform.app_user where active limit 1');
+  const actor = await db.one<{ id: string; handle: string }>(`insert into platform.app_user(handle,name,initials,role,email,access)
+    values ('security-progress-fixture','Invented Progress Admin','IP','test','progress@example.invalid','admin') returning id,handle`);
   const jobs = await db.query<{ id: string }>(`insert into platform.import_job(kind,actor,status,started_at,heartbeat_at)
     values ('strategy-moves',$1,'running',clock_timestamp()-interval '10 minutes',clock_timestamp()-interval '10 minutes'),
            ('export',$1,'queued',null,null) returning id`, [actor!.id]);
   try {
     const snapshot = () => db.query('select * from platform.import_job where id=any($1::uuid[]) order by id', [jobs.map(j => j.id)]);
     const before = JSON.stringify(await snapshot());
-    const response = await withDb(db, () => importProgress());
+    const req = new Request('http://localhost:3211/api/import-jobs', { headers: { cookie: `${USER_COOKIE}=${actor!.handle}` } });
+    const requestStore = createRequestStore({ phase: 'render', headers: req.headers,
+      url: { pathname: '/api/import-jobs' }, rootParams: {}, implicitTags: { tags: [], expirationsByCacheKind: new Map() },
+      resumeDataCache: null, onUpdateCookies: undefined, previewProps: undefined, isHmrRefresh: false,
+      serverComponentsHmrCache: undefined, hmrRefreshHash: undefined, fallbackParams: null });
+    const workStore = { route: '/api/import-jobs', isStaticGeneration: false } as WorkStore;
+    const response = await withDb(db, () => workAsyncStorage.run(workStore,
+      () => workUnitAsyncStorage.run(requestStore, () => importProgress(req))));
     const payload = await response.json() as { jobs?: Array<{ id: string }> };
     check('SEC import progress GET neither launches queued work nor changes stale running jobs',
       response.status === 200 && jobs.every(j => payload.jobs?.some(row => row.id === j.id)) && JSON.stringify(await snapshot()) === before,
-      'Actual unauthenticated GET, invented queued and stale-running jobs, complete rows unchanged.');
+      'Actual GET with an explicit fictional Admin cookie, invented queued and stale-running jobs, complete rows unchanged.');
   } finally { await db.query('delete from platform.import_job where id=any($1::uuid[])', [jobs.map(j => j.id)]); }
   const request = (headers: Record<string, string>) => new Request('http://localhost:3211/api/identity/pursuit-merge', { method: 'POST', headers });
   const refuses = async (f: () => unknown, status: number) => {

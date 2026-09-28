@@ -1,3 +1,4 @@
+import { withRoute } from '@/lib/authz/route';
 import { readFile } from 'node:fs/promises';
 import { join, normalize } from 'node:path';
 
@@ -10,7 +11,7 @@ const ROOT = 'docs/changelog/shots';
  * not to the app's asset bundle — copying fifty images into public/ to render one page is
  * the wrong trade. The path is normalised and re-rooted so a traversal cannot walk out.
  */
-export async function GET(
+export const GET = withRoute('app/dev/shot/[...path]/route.ts#GET', async function(
   _req: Request,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
@@ -29,4 +30,4 @@ export async function GET(
   } catch {
     return new Response('Not found', { status: 404 });
   }
-}
+});

@@ -10,10 +10,10 @@ import { ScoreStrip, standingFor } from '@/components/fit/Score';
 import { usdM } from '@/lib/money';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
-import { getEntity } from '@/modules/identity';
+import { getEntity } from '@/lib/authz/read/identity';
 import { vehicleReadings } from '@/lib/vehicle-readings';
 import { ProvisionalReading } from './ProvisionalReading';
-import { listSourceDocs } from '@/modules/research';
+import { listSourceDocs } from '@/lib/authz/read/research';
 import {
   assessmentFor, assessmentsForEntity, contributions, listAssessments,
   BLOCKER_LABEL, CERTAINTY_LABEL, DECISION_LABEL, FAMILIARITY_LABEL, FIRM_CLASS_LABEL,

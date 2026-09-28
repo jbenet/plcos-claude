@@ -1,6 +1,5 @@
 'use server';
-
-import { requireServerActionMutation } from '@/lib/mutation-guard';
+import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
 import { getDb } from '@/lib/db';
@@ -13,11 +12,12 @@ import { decideLpUnitByPerson } from '@/modules/strategy';
  */
 export async function decideLpUnitAction(pursuitId: string, choice: { kind: 'personal' } | { kind: 'firm'; orgId: string }):
   Promise<{ error?: string; to?: string }> {
+  const authorizedUser = await requireAction('app/targets/lp-unit-actions.ts#decideLpUnitAction', pursuitId, choice);
   if (typeof pursuitId !== 'string' || !choice || (choice.kind !== 'personal' && !(choice.kind === 'firm' && typeof choice.orgId === 'string'))) {
     return { error: 'That choice is not one this page offers.' };
   }
   try {
-    const user = await requireServerActionMutation();
+    const user = authorizedUser;
     const row = await decideLpUnitByPerson(await getDb(), pursuitId, user.id, choice);
     revalidatePath('/targets', 'layout');
     revalidatePath('/selection');

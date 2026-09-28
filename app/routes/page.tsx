@@ -1,3 +1,4 @@
+import { AuthorizedControl } from '@/lib/authz/read/Control';
 import { config } from '@/config/deployment';
 import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
@@ -13,14 +14,14 @@ import { Coverage } from '@/components/ui/Coverage';
 import { Glyph } from '@/components/ui/Glyph';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
-import { listEntities, affiliationsFor } from '@/modules/identity';
+import { listEntities, affiliationsFor } from '@/lib/authz/read/identity';
 import { TargetPicker } from '@/components/routes/TargetPicker';
-import { listSourceDocs, notesFor } from '@/modules/research';
+import { listSourceDocs, notesFor } from '@/lib/authz/read/research';
 import { directContact, type DirectContact } from '@/modules/meetings';
-import { planRoutes, warmthReader, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier, type Route } from '@/modules/network';
+import { planRoutes, warmthReader, tieWarmth, TIER_MEANING, VERDICT_LABEL, type EvidenceTier, type Route } from '@/lib/authz/read/network';
 import type { Path } from '@/lib/enrich/connect';
 import { buildNetworkAction } from './actions';
-import { routeInputs, promotedRouteBases, graphRouteInputs, routeComparisonInputs } from '@/lib/routes-data';
+import { routeInputs, promotedRouteBases, graphRouteInputs, routeComparisonInputs } from '@/lib/authz/read/routes';
 import { RouteSections } from '@/components/routes/RouteSections';
 import { RouteFilters } from '@/components/routes/RouteFilters';
 import { routeReading, routeSummaryFor } from '@/components/routes/route-display';
@@ -291,14 +292,14 @@ async function Routes({
                   {inTouchNearby.length === 1 ? 'person' : 'people'} {isPerson ? 'at their firm' : 'there'} the team deals with.
                 </dd>
                 <dt>Who can act</dt>
-                <dd>Anyone: building the network links each of the team to a person record and makes the ties our records show — recent direct contact is grade B — and those the research found, C and D labelled as weaker evidence.</dd>
+                <dd>An administrator: building the network links each of the team to a person record and makes the ties our records show — recent direct contact is grade B — and those the research found, C and D labelled as weaker evidence.</dd>
                 <dt>Safe next step</dt>
                 <dd>Build it below. Where the team is in touch already, approach directly and say so.</dd>
               </dl>
-              <form action={buildNetworkAction} style={{ marginTop: 12 }}>
+              <AuthorizedControl action="admin"><form action={buildNetworkAction} style={{ marginTop: 12 }}>
                 <input type="hidden" name="target" value={targetId ?? ''} />
                 <button className="btn p" type="submit">Build the network from our records and the research</button>
-              </form>
+              </form></AuthorizedControl>
             </div>
           </div>
         </div>

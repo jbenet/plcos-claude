@@ -1,3 +1,4 @@
+import { AuthorizedControl } from '@/lib/authz/read/Control';
 import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
@@ -117,7 +118,7 @@ async function Grants() {
                       <span className="flag f-block" style={{ marginBottom: 6, display: 'inline-block' }}>
                         blocked
                       </span>
-                      <InvitationForm funderId={f.funderId} funderName={f.entityName} />
+                      <AuthorizedControl action="admin"><InvitationForm funderId={f.funderId} funderName={f.entityName} /></AuthorizedControl>
                     </>
                   )}
                 </td>

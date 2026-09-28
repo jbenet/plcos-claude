@@ -51,7 +51,7 @@ const KNOBS: Array<{
  * a queue with a limit — because the failure mode here is not picking the wrong one, it is
  * starting eleven and finishing none.
  */
-export function EnrichmentTable({ methods }: { methods: Method[] }) {
+export function EnrichmentTable({ methods, canEdit = false }: { methods: Method[]; canEdit?: boolean }) {
   const [params, setParams] = useState<ScoreParams>(DEFAULT_PARAMS);
   const [showKnobs, setShowKnobs] = useState(false);
   // The view is in the address (issue 0009): which methods, and in what order, so back steps
@@ -239,7 +239,7 @@ export function EnrichmentTable({ methods }: { methods: Method[] }) {
                     <input
                       type="checkbox"
                       checked={m.selected}
-                      disabled={pending || m.status === 'rejected' || m.status === 'blocked'}
+                      disabled={!canEdit || pending || m.status === 'rejected' || m.status === 'blocked'}
                       aria-label={`Put ${m.name} in the queue`}
                       onChange={(e) => {
                         const on = e.target.checked;

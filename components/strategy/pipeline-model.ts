@@ -8,6 +8,9 @@ import type { SpvRowMark } from '@/modules/strategy/client';
 export type Status = 'new' | 'sourcing' | 'selected' | 'connecting' | 'discussing' | 'committed' | 'passed';
 
 export interface PipelineRow {
+  /** Display provenance retained so restricted capacity cannot escape through derived scores. */
+  licensedCapacity?: boolean;
+  licensedStatusReason?: boolean;
   id: string;
   entityId: string;
   isOrg: boolean;

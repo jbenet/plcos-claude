@@ -1,12 +1,12 @@
 'use server';
-
-import { requireServerActionMutation } from '@/lib/mutation-guard';
+import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
 import { recordInvitation } from '@/modules/grants';
 
 export async function saveInvitation(formData: FormData): Promise<{ error?: string } | void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/grants/actions.ts#saveInvitation', formData);
+  const user = authorizedUser;
   try {
     await recordInvitation(user.id, {
       funderId: String(formData.get('funderId')),

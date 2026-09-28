@@ -3,8 +3,8 @@ import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { Coverage } from '@/components/ui/Coverage';
-import { countEntities, listEntityPreview } from '@/modules/identity';
-import { activeClaimCount, claimCounts, corpusCoverage, unverifiedCount, weaklySupportedCount } from '@/modules/research';
+import { countEntities, listEntityPreview } from '@/lib/authz/read/identity';
+import { activeClaimCount, claimCounts, corpusCoverage, unverifiedCount, weaklySupportedCount } from '@/lib/authz/read/research';
 import { listSyncSources } from '@/modules/platform';
 import { shortDate } from '@/lib/time';
 

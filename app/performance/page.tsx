@@ -3,7 +3,7 @@ import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { listSyncSources } from '@/modules/platform';
 import { listAssets, listSends } from '@/modules/content';
-import { listPursuits, RUNG_LABEL } from '@/modules/strategy';
+import { listPursuits, RUNG_LABEL } from '@/lib/authz/read/strategy';
 
 export const dynamic = 'force-dynamic';
 

@@ -1,16 +1,11 @@
+import { withRoute } from '@/lib/authz/route';
 /**
  * The feedback box's route: journal first, file after (Juan, 27 Sep: "it should journal to the
  * server. the page may die or close forever").
  *
- * POST checks origin, live profile and an explicit active actor, then validates the report
- * and writes it to the server's journal as one atomic file
- * (lib/feedback-inbox.ts) and answers 202 { journaled, clientId } — issue numbering and ingestion happen after the response.
- * The active-user lookup is required before accepting a write; an unavailable database can
- * therefore delay a report, which stays in the browser journal for retry.
- *
- * Keep this file's static imports light. A property walks them and fails if any reaches the
- * database or a module's service code; the ingester is loaded with a dynamic import, after the
- * response.
+ * POST checks origin and profile, then journals the report without database access.
+ * The ingester resolves the reporter from the captured selector after the response.
+ * Static imports stay light; the ingester is loaded only after journaling.
  */
 import { join } from 'node:path';
 import { NextResponse } from 'next/server';
@@ -29,12 +24,9 @@ const fileLater = () => setImmediate(() => {
   void import('@/lib/feedback-ingest').then((m) => m.kickIngest()).catch(() => undefined);
 });
 
-export async function POST(req: Request) {
+export const POST = withRoute('app/api/feedback/route.ts#POST', async function(req: Request) {
   // Origin and profile only: no database here. The journal must accept a note while the database is busy
   // (docs/deploy/03); the reporter is resolved server-side at ingest from the selector cookie.
-  const { requireMutationOrigin, requireMutationProfile, MutationGuardError } = await import('@/lib/mutation-guard');
-  try { requireMutationOrigin(req); requireMutationProfile(); }
-  catch (e) { if (e instanceof MutationGuardError) return NextResponse.json({ error: e.message }, { status: e.status }); throw e; }
   // Only the live app files (docs/COLLAB.md): a branch filing would take numbers the live app
   // gives out too. The box on a dev worktree says so; this refuses anything that asks anyway.
   if (!feedbackHome(config.data.profile).filesHere) {
@@ -76,10 +68,10 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});
 
 /** Where a journaled report stands: { state: 'journaled' | 'filed' | 'refused', id? }. Reads the journal only. */
-export async function GET(req: Request) {
+export const GET = withRoute('app/api/feedback/route.ts#GET', async function(req: Request) {
   const clientId = new URL(req.url).searchParams.get('clientId') ?? '';
   if (!isClientId(clientId)) return NextResponse.json({ error: 'Give a clientId.' }, { status: 400 });
   const status = await inboxStatus(issuesRoot(), clientId);
@@ -87,4 +79,4 @@ export async function GET(req: Request) {
   return NextResponse.json(status.state === 'filed'
     ? { state: 'filed', id: status.issueId }
     : status.state === 'refused' ? { state: 'refused', error: status.reason } : { state: 'journaled' });
-}
+});

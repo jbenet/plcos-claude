@@ -1,6 +1,6 @@
 import { capacityBandLabel } from '@/lib/capacity-bands';
 import { shortDate } from '@/lib/time';
-import { suggestionsFor } from '@/modules/strategy';
+import { suggestionsFor } from '@/lib/authz/read/strategy';
 import type { Strategy } from '@/lib/enrich/strategy';
 import { decideSuggestionAction } from '@/app/targets/actions';
 

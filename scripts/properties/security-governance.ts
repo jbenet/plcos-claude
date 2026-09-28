@@ -10,7 +10,10 @@ const refused = async (work: () => Promise<unknown>) => {
 /** Invented tickets only; exercise the command and the real database triggers. */
 export async function securityGovernanceProperties(check: Check, db: Db) {
   await withDb(db, async () => {
-    const users = await db.query<{ id: string }>('select id from platform.app_user where active order by handle');
+    const users = await db.query<{ id: string }>(`insert into platform.app_user(handle,name,initials,role,email,access)
+      values ('security-requester-fixture','Invented Security Requester','SR','test','requester@example.invalid','admin'),
+             ('security-approver-fixture','Invented Security Approver','SA','test','approver@example.invalid','admin')
+      returning id`);
     const requester = users[0]!.id, approver = users[1]!.id;
     const snapshot = async () => JSON.stringify(await db.query('select * from platform.audit_log order by id'));
     const ticket = (kind: ApprovalKind, subjectId: string = randomUUID(), subjectType = 'security_fixture', vehicleId: string | null = null) =>

@@ -3,8 +3,8 @@ import { Page } from '@/components/shell/Page';
 import { SelectionBoard } from '@/components/strategy/SelectionBoard';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
-import { pipelineData } from '@/lib/pipeline-data';
-import { RUNGS, RUNG_LABEL, STATUSES } from '@/modules/strategy';
+import { pipelineData } from '@/lib/authz/read/pipeline';
+import { RUNGS, RUNG_LABEL, STATUSES } from '@/lib/authz/read/strategy';
 
 export const dynamic = 'force-dynamic';
 

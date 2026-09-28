@@ -1,6 +1,5 @@
 'use server';
-
-import { requireServerActionMutation } from '@/lib/mutation-guard';
+import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
 import { getDb } from '@/lib/db';
@@ -12,9 +11,10 @@ import { setSpvStance, SpvRefused, withdrawSpvStance, type SpvStance } from '@/m
  * reversible: withdrawing it returns the LP to what the evidence says. Waits for the server.
  */
 export async function setSpvStanceAction(entityId: string, input: { stance: SpvStance; minDeals: number | null; note: string }): Promise<{ error?: string }> {
+  const authorizedUser = await requireAction('app/targets/spv-actions.ts#setSpvStanceAction', entityId, input);
   if (typeof entityId !== 'string' || !input || !['does', 'does-not', 'unknown'].includes(input.stance)) return { error: 'That choice is not one this page offers.' };
   try {
-    const user = await requireServerActionMutation();
+    const user = authorizedUser;
     await setSpvStance(await getDb(), entityId, user.id, { stance: input.stance, minDeals: input.minDeals, note: String(input.note ?? '') });
     refresh();
     return {};
@@ -24,9 +24,10 @@ export async function setSpvStanceAction(entityId: string, input: { stance: SpvS
 }
 
 export async function withdrawSpvStanceAction(entityId: string): Promise<{ error?: string; none?: boolean }> {
+  const authorizedUser = await requireAction('app/targets/spv-actions.ts#withdrawSpvStanceAction', entityId);
   if (typeof entityId !== 'string') return { error: 'Not an LP on record.' };
   try {
-    const user = await requireServerActionMutation();
+    const user = authorizedUser;
     const done = await withdrawSpvStance(await getDb(), entityId, user.id);
     refresh();
     return done ? {} : { none: true };

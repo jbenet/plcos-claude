@@ -1,3 +1,4 @@
+import { AuthorizedControl } from '@/lib/authz/read/Control';
 import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
@@ -304,7 +305,7 @@ async function Approvals({
               </span>
             </div>
             <div className="cbody">
-              <DecideForm ticketId={selected.id} blocked={blocked} />
+              <AuthorizedControl action="approve" scope={{ vehicle: selected.vehicleId, ticketKind: selected.kind }}><DecideForm ticketId={selected.id} blocked={blocked} /></AuthorizedControl>
             </div>
           </div>
 

@@ -1,3 +1,4 @@
+import { withRoute } from '@/lib/authz/route';
 import { readFile } from 'node:fs/promises';
 import { join, normalize } from 'node:path';
 import { config } from '@/config/deployment';
@@ -10,7 +11,7 @@ import { config } from '@/config/deployment';
  * normalised and re-rooted, and only a PNG is served — a traversal cannot walk out and
  * nothing here is executed.
  */
-export async function GET(
+export const GET = withRoute('app/issues/shot/[...path]/route.ts#GET', async function(
   _req: Request,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
@@ -27,4 +28,4 @@ export async function GET(
   } catch {
     return new Response('Not found', { status: 404 });
   }
-}
+});

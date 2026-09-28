@@ -107,7 +107,7 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
     const capacityBand = strategy?.scores?.capacity?.band ?? profile?.data.profile?.capacity?.band;
     const capacity = soft.length ? soft.reduce((n, x) => n + x.amount, 0) : capacityEstimate(capacityBand) ?? dakota.get(p.entityId)?.amount ?? null;
     const usingDakota = !soft.length && capacityEstimate(capacityBand) === null && dakota.has(p.entityId);
-    const capacityBasis = soft.length ? 'Recorded soft amount in this vehicle; not hard committed.' : usingDakota ? dakota.get(p.entityId)!.basis : strategy?.scores?.capacity?.basis ?? profile?.data.profile?.capacity?.basis ?? dakota.get(p.entityId)?.basis ?? 'No supported capacity estimate.';
+    const capacityBasis = soft.length ? 'Recorded soft amount in this vehicle; not hard committed.' : usingDakota ? dakota.get(p.entityId)!.basis : strategy?.scores?.capacity?.basis ?? profile?.data.profile?.capacity?.basis ?? 'No supported capacity basis.';
     const propensity = strategy?.scores?.propensity;
     const likelihood = propensity && propensity.level !== 'unknown' ? rules.likelihood[propensity.level] : null;
     const decision = strategy?.scores?.timeToDecision;
@@ -148,7 +148,7 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
     ].filter(f => f.points > 0);
     const workPriority = workFactors.reduce((n, f) => n + f.points, 0);
     return { workFactors, workPriority, pursuit: p, suggestion, profileAt, claimCount: byClaims.get(p.entityId) ?? 0, route, limits, touch,
-      capacity, capacityBand, capacityBasis, likelihood, propensity, days, decision, routeWeight, conversion, score,
+      capacity, capacityBand, capacityBasis, usingDakota, likelihood, propensity, days, decision, routeWeight, conversion, score,
       action, group, risks, idleDays, stale, closed, held, ownerActive: byOwner.get(p.pursuitId) ?? false };
   });
   rows.sort((a, b) => (b.score?.priority ?? -1) - (a.score?.priority ?? -1) || Number(a.closed) - Number(b.closed) || b.workPriority - a.workPriority || a.pursuit.entityName.localeCompare(b.pursuit.entityName));

@@ -1,12 +1,10 @@
+import { withRoute } from '@/lib/authz/route';
 import { NextResponse } from 'next/server';
 import { consolidatePursuitsAction, reversePursuitMergeAction } from '@/app/dev/enrich/actions';
 import { isEntityKey } from '@/lib/enrich/connection-check';
-import { mutationRouteGuard } from '@/lib/mutation-guard';
 
 /** Check the caller before parsing input or scheduling either identity mutation. */
-export async function POST(request: Request) {
-  const guard = await mutationRouteGuard(request);
-  if ('response' in guard) return guard.response;
+export const POST = withRoute('app/api/identity/pursuit-merge/route.ts#POST', async function(request: Request) {
   const input = await request.json().catch(() => null);
   if (input?.operation === 'consolidate') {
     const result = await consolidatePursuitsAction();
@@ -18,4 +16,4 @@ export async function POST(request: Request) {
     return NextResponse.json(result.error ? result : { reversed: true }, { status: result.error ? 409 : 200 });
   }
   return NextResponse.json({ error: 'Supply operation consolidate, or operation reverse with mergeId and reason.' }, { status: 400 });
-}
+});

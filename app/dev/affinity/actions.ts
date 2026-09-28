@@ -1,6 +1,5 @@
 'use server';
-
-import { requireServerActionMutation } from '@/lib/mutation-guard';
+import { requireAction } from '@/lib/authz/server';
 
 import { getDb } from '@/lib/db';
 import { queueImportJob } from '@/lib/import-jobs/server';
@@ -9,7 +8,8 @@ import { testConnection } from '@/lib/connectors/affinity';
 
 /** Two GET requests. The page re-renders with what Affinity said, or why it could not ask. */
 export async function runConnectionTest(): Promise<void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/dev/affinity/actions.ts#runConnectionTest');
+  const user = authorizedUser;
   await testConnection(user.id);
   revalidatePath('/dev/affinity');
   revalidatePath('/dev/connectors');
@@ -17,8 +17,9 @@ export async function runConnectionTest(): Promise<void> {
 
 /** One request per list, plus a few: lists, their fields, the account's users. No entries. */
 export async function runDiscovery(): Promise<void> {
+  const authorizedUser = await requireAction('app/dev/affinity/actions.ts#runDiscovery');
   const { discoverLists } = await import('@/lib/connectors/affinity/discover');
-  const user = await requireServerActionMutation();
+  const user = authorizedUser;
   await discoverLists(user.id);
   revalidatePath('/dev/affinity');
   revalidatePath('/dev/affinity/lists');
@@ -26,7 +27,8 @@ export async function runDiscovery(): Promise<void> {
 
 /** Starts the first slice in this server's process and returns at once; the page watches it. */
 export async function runSliceAction(formData: FormData): Promise<void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/dev/affinity/actions.ts#runSliceAction', formData);
+  const user = authorizedUser;
   // A go-ahead on a held run carries the estimate it was shown, and the run proceeds only
   // within that estimate plus a quarter — an approval of a number, not of whatever it costs.
   const approved = Number(formData.get('approvedEstimate') ?? 0);
@@ -38,7 +40,7 @@ export async function runSliceAction(formData: FormData): Promise<void> {
 
 /** Writes the inventory to data/<profile>/reports/ — aggregates only, like the page. */
 export async function writeInventoryReport(): Promise<void> {
-  await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/dev/affinity/actions.ts#writeInventoryReport');
   const { inventory, writeReport } = await import('@/lib/connectors/affinity/inventory');
   await writeReport(await inventory());
   revalidatePath('/dev/affinity/inventory');
@@ -49,7 +51,7 @@ export async function writeInventoryReport(): Promise<void> {
  * The first list the init file names for a vehicle is its pipeline; any other is history.
  */
 export async function writeMappingAction(): Promise<void> {
-  await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/dev/affinity/actions.ts#writeMappingAction');
   const { inventory } = await import('@/lib/connectors/affinity/inventory');
   const { writeMapping } = await import('@/lib/connectors/affinity/mapping');
   const { sliceTargets } = await import('@/lib/connectors/affinity/slice');
@@ -64,7 +66,7 @@ export async function writeMappingAction(): Promise<void> {
 
 /** Compares each vehicle's older lists with the one in use, and writes the names to a report. */
 export async function writeComparisonAction(): Promise<void> {
-  await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/dev/affinity/actions.ts#writeComparisonAction');
   const { compareLists, writeComparison } = await import('@/lib/connectors/affinity/compare');
   await writeComparison(await compareLists());
   revalidatePath('/dev/affinity/inventory');
@@ -72,7 +74,8 @@ export async function writeComparisonAction(): Promise<void> {
 
 /** Reads the landed copy through the mapping into the tool's own tables. Not one request to Affinity. */
 export async function translateAction(): Promise<void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/dev/affinity/actions.ts#translateAction');
+  const user = authorizedUser;
   const db=await getDb();
   await queueImportJob(db,'affinity',user.id,{operation:'translate'});
   revalidatePath('/', 'layout');
@@ -80,8 +83,9 @@ export async function translateAction(): Promise<void> {
 
 /** One request: how many notes the account holds, to price reading them in bulk. */
 export async function countNotesAction(): Promise<void> {
+  const authorizedUser = await requireAction('app/dev/affinity/actions.ts#countNotesAction');
   const { countNotes } = await import('@/lib/connectors/affinity/slice');
-  const user = await requireServerActionMutation();
+  const user = authorizedUser;
   await countNotes(user.id);
   revalidatePath('/dev/affinity/notes');
 }
@@ -93,7 +97,8 @@ export async function countNotesAction(): Promise<void> {
  * it, a read after the first asks only for what changed.
  */
 export async function readNotesAction(formData: FormData): Promise<void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/dev/affinity/actions.ts#readNotesAction', formData);
+  const user = authorizedUser;
   const approved = Number(formData.get('approvedEstimate') ?? 0);
   const options={...(approved > 0 ? { approvedUpTo: Math.ceil(approved * 1.25) } : {}),full:formData.get('mode')==='full'};
   const db=await getDb();
@@ -106,7 +111,8 @@ export async function readNotesAction(formData: FormData): Promise<void> {
  * server's process while the page watches. After a complete read, only what changed.
  */
 export async function readMeetingsAction(formData: FormData): Promise<void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/dev/affinity/actions.ts#readMeetingsAction', formData);
+  const user = authorizedUser;
   const mode = formData.get('mode');
   // 'rest': the whole window again, past the usual cap, when someone has said to (N59).
   const options={full:mode==='full'||mode==='rest',rest:mode==='rest'};
@@ -117,7 +123,8 @@ export async function readMeetingsAction(formData: FormData): Promise<void> {
 
 /** Account-wide historical metadata; each human-started continuation keeps its request cap. */
 export async function readHistoryAction(formData: FormData): Promise<void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/dev/affinity/actions.ts#readHistoryAction', formData);
+  const user = authorizedUser;
   const db = await getDb();
   await queueImportJob(db, 'affinity', user.id, { operation: 'history', options: {
     full: formData.get('mode') === 'full', rest: formData.get('rest') === 'true',

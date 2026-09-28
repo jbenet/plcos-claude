@@ -12,7 +12,7 @@ import { Glyph, type GlyphName } from '@/components/ui/Glyph';
 import { refOf, type RungRecord } from '@/lib/reconcile';
 import {
   RUNG_LABEL, STATUS_LABEL, rungIndex, type LadderEvent, type LadderRung, type PursuitStatus, type PursuitUpdate,
-} from '@/modules/strategy';
+} from '@/lib/authz/read/strategy';
 import { EntryBox } from './EntryBox';
 import { TIMELINE_PAGE, TimelineRows, type TimelineOption, type TimelineRow } from './TimelineRows';
 import { TagControl, TagVehicles, type TagVehicle } from './TagControl';

@@ -15,6 +15,10 @@
   // a person files. affinityEmail is the address they sign in to Affinity with, which is how
   // an Affinity owner or note author is matched to a person here. linearEmail is optional: the
   // address they sign in to Linear with, when it is not their email, so "My Linear" finds them.
+  // Optional access grants: access = admin | gp | viewer; vehicles = UUID[] or null (all).
+  // Omitted grants preserve existing values. New users default to GP/all; Juan to Admin/all.
+  // approves = ["STAGE", "INTRO_ASK", "SEND"] for named GP approvers within their vehicle scope.
+  // Money/allocation require an independent Admin; requesting your own ticket never grants approval.
   "team": [
     { "handle": "juan", "name": "Juan", "initials": "J", "role": null, "email": null, "affinityEmail": null, "linearEmail": null }
   ],

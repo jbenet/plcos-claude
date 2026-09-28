@@ -4,7 +4,7 @@ import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { SendGate } from '@/components/content/SendGate';
 import { shortDate } from '@/lib/time';
-import { listEntities } from '@/modules/identity';
+import { listEntities } from '@/lib/authz/read/identity';
 import { listVehicles } from '@/modules/platform';
 import {
   AUDIENCE_LABEL, listAssets, listSends, listWrapRules, USE_LABEL, wrongWrapSends,

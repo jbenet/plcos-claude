@@ -1,6 +1,6 @@
 'use server';
+import { requireAction } from '@/lib/authz/server';
 
-import { requireServerActionMutation } from '@/lib/mutation-guard';
 import { revalidatePath } from 'next/cache';
 import { getDb } from '@/lib/db';
 import { queueImportJob } from '@/lib/import-jobs/server';
@@ -14,7 +14,8 @@ import { decideLink } from '@/modules/linear';
  * holds the key, may run it; the demo reads an invented workspace.
  */
 export async function syncLinearAction(_prev: { error?: string; message?: string }, form: FormData): Promise<{ error?: string; message?: string }> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/dev/linear/actions.ts#syncLinearAction', _prev, form);
+  const user = authorizedUser;
   const src = linearSource();
   if ('refused' in src) return { error: src.refused };
   const full = form.get('full') === '1';
@@ -28,9 +29,10 @@ export async function syncLinearAction(_prev: { error?: string; message?: string
 
 /** Rebuild uses the existing local replica. It never needs a connector key or API request. */
 export async function rebuildLinearAction(_prev: { error?: string; message?: string }, _form: FormData): Promise<{ error?: string; message?: string }> {
+  const authorizedUser = await requireAction('app/dev/linear/actions.ts#rebuildLinearAction', _prev, _form);
   if (config.data.profile !== 'demo' && !linearLiveServer()) return { error: 'Purge and re-map Linear from Developer → Linear on the live server.' };
   try {
-    const user = await requireServerActionMutation();
+    const user = authorizedUser;
     await queueImportJob(await getDb(), 'linear-rebuild', user.id);
     return { message: 'Purge and re-map queued. Progress appears above; reload for the allowed-team counts.' };
   } catch {
@@ -44,13 +46,14 @@ export async function rebuildLinearAction(_prev: { error?: string; message?: str
  * our database is written; Linear never is.
  */
 export async function linkProjectsAction(_prev: { error?: string; message?: string }, form: FormData): Promise<{ error?: string; message?: string }> {
+  const authorizedUser = await requireAction('app/dev/linear/actions.ts#linkProjectsAction', _prev, form);
   const decision = String(form.get('decision') ?? '');
   if (decision !== 'accept' && decision !== 'reject' && decision !== 'remove') return { error: 'Unknown choice.' };
   const vehicleId = String(form.get('vehicle') ?? '');
   const projectIds = form.getAll('project').map(String).filter(Boolean);
   if (!vehicleId || projectIds.length === 0) return { error: 'Pick a project first.' };
   try {
-    const user = await requireServerActionMutation();
+    const user = authorizedUser;
     const changed = await decideLink(user.id, {
       vehicleId, projectIds, decision,
       source: form.get('source') === 'name' ? 'name' : 'person',

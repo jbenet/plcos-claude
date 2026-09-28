@@ -1,6 +1,6 @@
 import Link from '@/components/ui/AppLink';
 import { shortDate } from '@/lib/time';
-import { RUNG_LABEL } from '@/modules/strategy';
+import { RUNG_LABEL } from '@/lib/authz/read/strategy';
 import type { RecheckRow } from '@/lib/reconcile';
 
 const NOW_LABEL: Record<RecheckRow['now'], string> = {

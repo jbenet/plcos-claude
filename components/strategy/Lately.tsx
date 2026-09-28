@@ -1,7 +1,7 @@
 import Link from '@/components/ui/AppLink';
 import { summarize, touchpointsByPair } from '@/modules/meetings';
 import { auditSince } from '@/modules/platform';
-import { STATUSES, type Pursuit, type PursuitStatus } from '@/modules/strategy';
+import { STATUSES, type Pursuit, type PursuitStatus } from '@/lib/authz/read/strategy';
 
 /**
  * A vehicle's movement, in numbers (N62, issue 0007). Juan, on the overview's "What happened":

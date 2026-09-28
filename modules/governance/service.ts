@@ -1,4 +1,5 @@
 import { getDb, type Queryable } from '@/lib/db';
+import { requireTicketDecision } from '@/lib/authz/tickets';
 import { appendAudit } from '@/modules/platform';
 import { insertTicket } from './repo';
 import type { ApprovalDecision, ApprovalKind, TicketScope } from './types';
@@ -112,15 +113,7 @@ export async function decideTicket(
 ): Promise<void> {
   const db = await getDb();
   await db.transaction(async (tx) => {
-    const actor = await tx.one<{ id: string }>('select id from platform.app_user where id = $1 and active', [actorId]);
-    if (!actor) throw new Error('An active app user must decide a ticket.');
-    const row = await tx.one<{ decision: ApprovalDecision | null; subject_label: string; kind: ApprovalKind;
-      requested_by: string; subject_type: string; subject_id: string; vehicle_id: string | null }>(
-      `select decision, subject_label, kind, requested_by, subject_type, subject_id, vehicle_id
-         from governance.approval_ticket where id = $1 for update`,
-      [ticketId],
-    );
-    if (!row) throw new Error(`No ticket ${ticketId}`);
+    const row = await requireTicketDecision(tx, actorId, ticketId, decision);
     if (row.decision !== null) {
       // Idempotent by intent: a double click must not re-decide something already decided.
       return;

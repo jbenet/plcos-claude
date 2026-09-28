@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { config } from '@/config/deployment';
 import { parseJsonc } from '@/lib/jsonc';
-import type { Db } from '@/lib/db';
+import type { Db, Queryable } from '@/lib/db';
 import { recordActivity } from '@/lib/activity/log';
 
 /**
@@ -31,6 +31,10 @@ export interface TeamMember {
   affinityEmail: string | null;
   /** The address they sign in to Linear with, when it is not `email` — how "My Linear" finds their issues. Optional. */
   linearEmail: string | null;
+  /** Omitted grants preserve existing rows; new rows default to Juan Admin / team GP. */
+  access?: import('@/lib/authz').Role;
+  vehicles?: string[] | null;
+  approves?: string[];
 }
 
 export interface VehicleInit {
@@ -138,11 +142,17 @@ export function validate(raw: unknown): { init: RealInit | null; problems: strin
       else if (seen.has(handle)) problems.push(`${at}.handle "${handle}" appears twice.`);
       else seen.add(handle);
       if (!name) problems.push(`${at}.name is required.`);
+      if (t?.access !== undefined && !['admin', 'gp', 'viewer'].includes(String(t.access))) problems.push(`${at}.access must be admin, gp or viewer.`);
+      if (t?.vehicles !== undefined && t.vehicles !== null && (!Array.isArray(t.vehicles) || t.vehicles.some(v => typeof v !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)))) problems.push(`${at}.vehicles must be null (all) or a list of vehicle UUIDs.`);
+      if (t?.approves !== undefined && (!Array.isArray(t.approves) || t.approves.some(k => !['STAGE', 'INTRO_ASK', 'SEND'].includes(String(k))))) problems.push(`${at}.approves may contain STAGE, INTRO_ASK and SEND; money/allocation require Admin.`);
       if (handle && name) {
         team.push({
           handle, name,
           initials: str(t.initials) ?? initialsOf(name),
           role: str(t.role), email: str(t.email), affinityEmail: str(t.affinityEmail), linearEmail: str(t.linearEmail),
+          ...(t.access === undefined ? {} : { access: t.access as TeamMember['access'] }),
+          ...(t.vehicles === undefined ? {} : { vehicles: t.vehicles as TeamMember['vehicles'] }),
+          ...(t.approves === undefined ? {} : { approves: t.approves as string[] }),
         });
       }
     });
@@ -261,6 +271,24 @@ export async function readInit(): Promise<InitReport> {
   return { path, exists: true, created: false, problems, open: init ? openQuestions(init) : [], init, hash };
 }
 
+/** Explicit grant fields change permissions; omitted fields cannot widen an existing user's access. */
+export async function upsertTeamMember(db: Queryable, t: TeamMember): Promise<void> {
+  await db.query(
+    `insert into platform.app_user (handle, name, initials, role, email, access, vehicles, approves, linear_email)
+         values ($1,$2,$3,$4,$5,coalesce($6::platform.access_role,case when $1 = 'juan' then 'admin'::platform.access_role else 'gp'::platform.access_role end),$7::uuid[],coalesce($9::text[],'{}'),$10)
+         on conflict (handle) do update set name = coalesce((
+           select a.detail->>'name' from platform.audit_log a
+           where a.subject_type='app_user' and a.subject_id=app_user.id::text
+             and a.action='identity.team_roster_updated'
+           order by a.at desc,a.id desc limit 1), excluded.name), initials = excluded.initials,
+           role = excluded.role, email = excluded.email, linear_email = excluded.linear_email,
+           access = coalesce($6::platform.access_role, app_user.access),
+           vehicles = case when $8::boolean then excluded.vehicles else app_user.vehicles end,
+           approves = coalesce($9::text[], app_user.approves)`,
+    [t.handle, t.name, t.initials, t.role ?? '', t.email ?? '', t.access ?? null, t.vehicles ?? null, t.vehicles !== undefined, t.approves ?? null, t.linearEmail ?? null],
+  );
+}
+
 /**
  * Put the file's people and vehicles into the database. Creates the file from the template
  * the first time. Refuses outside the real profile, and refuses a file with any problem —
@@ -295,19 +323,7 @@ export async function loadInit(db: Db): Promise<InitReport> {
     // A successful load already applied this exact file. Avoid no-op upserts on boot:
     // even unchanged rows fire statement triggers and invalidate persisted route caches.
     if (last?.hash === report.hash) return;
-    for (const t of team) {
-      await tx.query(
-        `insert into platform.app_user (handle, name, initials, role, email, linear_email)
-         values ($1,$2,$3,$4,$5,$6)
-         on conflict (handle) do update set name = coalesce((
-           select a.detail->>'name' from platform.audit_log a
-           where a.subject_type='app_user' and a.subject_id=app_user.id::text
-             and a.action='identity.team_roster_updated'
-           order by a.at desc,a.id desc limit 1), excluded.name), initials = excluded.initials,
-           role = excluded.role, email = excluded.email, linear_email = excluded.linear_email`,
-        [t.handle, t.name, t.initials, t.role ?? '', t.email ?? '', t.linearEmail],
-      );
-    }
+    for (const t of team) await upsertTeamMember(tx, t);
     for (const [i, v] of vehicles.entries()) {
       await tx.query(
         `insert into platform.vehicle (slug, name, kind, exemption, target_amount, sort_order, phase,

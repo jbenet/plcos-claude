@@ -1,3 +1,4 @@
+import { AuthorizedControl } from '@/lib/authz/read/Control';
 import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
@@ -232,7 +233,7 @@ async function SoftHard() {
                     <>
                       <span className="flag f-ev">not yet wired</span>
                       <div style={{ marginTop: 5 }}>
-                        <CashForm exposureId={x.exposureId} entityName={x.entityName} />
+                        <AuthorizedControl action="admin"><CashForm exposureId={x.exposureId} entityName={x.entityName} /></AuthorizedControl>
                       </div>
                     </>
                   )}

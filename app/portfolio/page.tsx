@@ -1,3 +1,4 @@
+import { coalescePage } from '@/lib/page-render';
 import type { ReactNode } from 'react';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
@@ -155,7 +156,7 @@ function GroupTable({ group, rows, ids, sources }: { group: Group; rows: Portfol
   </section>;
 }
 
-export default async function Portfolio() {
+async function Portfolio() {
   const { current } = await vehicleSelection();
   const supported = !!current && ['fund', 'spv'].includes(current.kind);
   let fileProblem = false;
@@ -221,3 +222,5 @@ export default async function Portfolio() {
     </>}
   </Page>;
 }
+
+export default coalescePage('/portfolio', Portfolio);

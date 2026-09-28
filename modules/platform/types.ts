@@ -4,6 +4,9 @@ export interface AppUser {
   name: string;
   initials: string;
   role: string;
+  access: import('@/lib/authz').Role;
+  vehicles: string[] | null;
+  approves: string[];
   email: string;
 }
 

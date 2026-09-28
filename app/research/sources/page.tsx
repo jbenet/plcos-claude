@@ -2,7 +2,7 @@ import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
-import { corpusCoverage, listSourceDocs, snapshotCount } from '@/modules/research';
+import { corpusCoverage, listSourceDocs, snapshotCount } from '@/lib/authz/read/research';
 import { shortDate } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';

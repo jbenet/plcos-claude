@@ -1,8 +1,8 @@
 import Link from '@/components/ui/AppLink';
 import { routeReading, routeSummaryFor } from '@/components/routes/route-display';
-import type { RouteSearch } from '@/modules/network';
-import { pipelineData } from '@/lib/pipeline-data';
-import { STATUS_LABEL } from '@/modules/strategy';
+import type { RouteSearch } from '@/lib/authz/read/network';
+import { pipelineData } from '@/lib/authz/read/pipeline';
+import { STATUS_LABEL } from '@/lib/authz/read/strategy';
 import s from './lp-tables.module.css';
 
 /**

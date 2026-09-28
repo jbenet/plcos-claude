@@ -1,3 +1,5 @@
+import { currentUser } from '@/lib/auth';
+import { can } from '@/lib/authz';
 import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
@@ -5,7 +7,7 @@ import { SECTION } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
 import { EnrichmentTable } from '@/components/research/EnrichmentTable';
-import { gapsFor, listMethods } from '@/modules/research';
+import { gapsFor, listMethods } from '@/lib/authz/read/research';
 
 export const dynamic = 'force-dynamic';
 
@@ -128,7 +130,7 @@ async function Enrichment() {
         </p>
       </div>
 
-      <EnrichmentTable methods={methods} />
+      <EnrichmentTable methods={methods} canEdit={can(await currentUser(), 'admin')} />
 
       <p className="cover">
         <b>Why a rejected method is on the page.</b> Bulk people data from LinkedIn is listed and

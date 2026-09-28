@@ -1,6 +1,9 @@
+import { currentUser } from '@/lib/auth';
+import { licensedAccess } from '@/lib/authz/read/r3';
 import { getDb } from '@/lib/db';
 import { dakotaFor, dakotaLabel } from '@/lib/connectors/dakota/view';
 export async function DakotaClaims({entityId}:{entityId:string}) {
+  if (!licensedAccess(await currentUser())) return null;
   const data=await dakotaFor(await getDb(),entityId);
   if(!data.claims.length&&!data.contacts.length&&!data.capacity)return null;
   return <section className="card"><div className="chead"><h2>Claims from Dakota</h2><span className="muted">Tier C · vendor claims, not evidence</span></div><div className="cbody">

@@ -1,6 +1,5 @@
 'use server';
-
-import { requireServerActionMutation } from '@/lib/mutation-guard';
+import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -14,7 +13,8 @@ import { getEntity } from '@/modules/identity';
  * another vehicle is already in the way. Then it hands you to the queue.
  */
 export async function proposeFromRoute(formData: FormData): Promise<void> {
-  const user = await requireServerActionMutation();
+  const authorizedUser = await requireAction('app/routes/actions.ts#proposeFromRoute', formData);
+  const user = authorizedUser;
   const targetId = String(formData.get('targetId'));
   const connectorId = String(formData.get('connectorId') || '') || null;
   const vehicleSlug = String(formData.get('vehicleSlug'));
@@ -53,8 +53,9 @@ export async function proposeFromRoute(formData: FormData): Promise<void> {
  * New feedback is recorded through the connection feedback box.
  */
 export async function reviewEdgeAction(formData: FormData): Promise<void> {
+  const authorizedUser = await requireAction('app/routes/actions.ts#reviewEdgeAction', formData);
   const { reviewEdge } = await import('@/modules/network');
-  const user = await requireServerActionMutation();
+  const user = authorizedUser;
   const decision = String(formData.get('decision')) === 'confirm' ? 'confirm' : 'decline';
   await reviewEdge(user.id, String(formData.get('edgeId')), decision, String(formData.get('note') ?? '').trim() || null);
   revalidatePath('/routes');
@@ -62,9 +63,10 @@ export async function reviewEdgeAction(formData: FormData): Promise<void> {
 
 /** Link the team to the graph and build its ties from our records and the research (N82). */
 export async function buildNetworkAction(formData: FormData): Promise<void> {
+  const authorizedUser = await requireAction('app/routes/actions.ts#buildNetworkAction', formData);
   const { queueImportJob } = await import('@/lib/import-jobs/server');
   const { getDb } = await import('@/lib/db');
-  const user = await requireServerActionMutation();
+  const user = authorizedUser;
   await queueImportJob(await getDb(),'network',user.id);
   const target = String(formData.get('target') ?? '');
   revalidatePath('/routes');
