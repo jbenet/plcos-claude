@@ -8,7 +8,7 @@ import { ago } from '@/lib/time';
 import { affinityReady } from '@/lib/connectors/affinity';
 import { MEETINGS_CAP, MEETINGS_CAP_REST, WINDOW, meetingsInventory, meetingsRunning, type MeetingsRunDetail } from '@/lib/connectors/affinity/meetings';
 import { latestRun } from '@/modules/sources';
-import { readMeetingsAction, translateAction } from '../actions';
+import { readMeetingsAction, readHistoryAction, translateAction } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +26,7 @@ async function Meetings() {
   const d = (run?.detail ?? {}) as MeetingsRunDetail;
   const good = (lastGood?.detail ?? {}) as MeetingsRunDetail;
   const stale = !!lastGood && (!translated || translated.startedAt < lastGood.startedAt);
+  const history = await latestRun('affinity', 'history');
 
   return (
     <Page
@@ -58,12 +59,26 @@ async function Meetings() {
         </>
       }
     >
-      {running && <AutoRefresh seconds={3} />}
+      {(running || history?.status === 'running') && <AutoRefresh seconds={3} />}
       <div className="lbl">
         <Link href="/dev/affinity">Affinity</Link> · <Link href="/dev/affinity/notes">Notes</Link> ·{' '}
         <Link href="/dev/affinity/mapping">Mapping</Link>
       </div>
       <h1>The calendar</h1>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="chead"><h2>Interaction history</h2><span className="lbl">{history?.status ?? 'never read'}</span></div>
+        <div className="cbody">
+          <p>Read people, meetings, emails, calls and chat metadata across the account, including years before 2024 and people outside our lists.
+            Only records visible to this Affinity key are available. Truncated participant previews are reported as gaps. Notes have their own read.</p>
+          <p className="muted">{history?.note ?? 'Each read stops at its request cap. Continue to resume the next unread page, then translate the local replica.'}</p>
+          <div className="acts">
+            <form action={readHistoryAction}><button className="btn p" disabled={!ready.ready}>Read or continue history · at most 99 requests</button></form>
+            <form action={readHistoryAction}><input type="hidden" name="rest" value="true" /><button className="btn" disabled={!ready.ready}>Continue · at most 1,000 requests</button></form>
+            <form action={readHistoryAction}><input type="hidden" name="mode" value="full" /><button className="btn" disabled={!ready.ready}>Restart full history · at most 99 requests</button></form>
+            <form action={translateAction}><button className="btn c">Translate local replica</button></form>
+          </div>
+        </div>
+      </div>
       <p className="sublede">
         Every meeting on the team&rsquo;s calendars since {WINDOW.slice(0, 4)}, a hundred to a request, each
         with its attendees. Translated, a meeting with someone in the tool becomes their touchpoint.

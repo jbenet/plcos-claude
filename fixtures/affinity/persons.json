@@ -1,0 +1,4 @@
+{
+  "data": [{"id":7001,"type":"external","firstName":"Nadia","lastName":"Brandt","primaryEmailAddress":"nadia@brandt-family.example","emailAddresses":["nadia@brandt-family.example","nadia@old-address.example"],"fields":[]}],
+  "pagination":{"nextUrl":null}
+}

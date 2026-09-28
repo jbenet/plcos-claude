@@ -146,6 +146,7 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
       const run = operation==='slice' ? await (await import('@/lib/connectors/affinity/slice')).runSlice(actor,options)
         : operation==='notes' ? await (await import('@/lib/connectors/affinity/notes')).readNotes(actor,options)
         : operation==='meetings' ? await (await import('@/lib/connectors/affinity/meetings')).readMeetings(actor,options)
+        : operation==='history' ? await (await import('@/lib/connectors/affinity/history')).readHistory(actor,options)
         : operation==='translate' ? await (await import('@/lib/connectors/affinity/translate')).translate(actor)
         : null;
       // A held or failed connector receipt is not a successful import.

@@ -33,7 +33,11 @@ export const ALLOWED: readonly Endpoint[] = [
   // per-entry note endpoints (/v2/persons/{id}/notes and the rest), which are no longer allowed.
   { template: '/v2/notes', purpose: 'Every note in the account but replies, a hundred at a time, each with the people, organizations and opportunities it is attached to. limit=0 counts them and returns none.' },
   // N54: the calendar, in bulk, under a cap Juan set (fewer than a hundred requests).
-  { template: '/v2/meetings', purpose: 'Every meeting on the team’s calendars since 2024, a hundred at a time, with its time and attendees — dated meetings for each LP. No count exists, so a read is capped.' },
+  { template: '/v2/meetings', purpose: 'Calendar metadata, a hundred at a time. History reads all years; the legacy calendar read starts in 2024. Both are capped.' },
+  { template: '/v2/persons', purpose: 'Account-wide identities and alternate email addresses for linking interaction participants, including people off our lists.' },
+  { template: '/v2/emails', purpose: 'Account-wide email metadata, under the history request cap and the key’s visibility permissions.' },
+  { template: '/v2/calls', purpose: 'Account-wide call metadata, under the history request cap.' },
+  { template: '/v2/chat-messages', purpose: 'Account-wide chat metadata, under the history request cap.' },
 ];
 
 /**

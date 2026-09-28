@@ -166,7 +166,7 @@ The lists the init file names, and the lists that say SPV. For each:
 - relationship strengths to the team, the strongest hundred per person, only on a People list
   that a vehicle claims.
 
-Meeting and email metadata is not read separately: the lists' relationship-intelligence fields
+The original slice did not read meeting and email metadata separately: the lists' relationship-intelligence fields
 (*Last email*, *Last meeting*, …) already carry when someone was last in touch, and the
 account-wide email and meeting endpoints can't be filtered by person.
 
@@ -231,3 +231,50 @@ what is missing. Juan files feedback as usual; from the real profile it lands in
   only ever be invalidations.
 - Data Share, until a warehouse exists.
 - Deployment and its secret store.
+
+## 11. Interaction history repair (0045, 27 Sep 2026)
+
+The list fields are summaries, not a complete interaction history. The separate **Interaction
+history** controls on Developer → Affinity → Meetings supersede §7's omission for a history
+backfill. The existing calendar-window controls remain available for their narrower read.
+
+History reads `/v2/persons` (global fields and alternate addresses), `/v2/meetings`,
+`/v2/emails`, `/v2/calls` and `/v2/chat-messages`, across the account, with no list, person or
+historical event-date filter. These GET collections are listed in Affinity's
+[official endpoint index](https://developer.affinity.co/llms.txt). Access remains bounded by
+what the key can see. No write endpoint or request method was added.
+
+A run allows 99 actual HTTP attempts, or 1,000 when the operator chooses that continuation.
+Both inherit the existing monthly share/floor and per-minute guards. A stopped or interrupted
+run saves the next unread URL, original query, stream phase and original start time. Continue
+resumes it; **Restart full history** deliberately discards that cursor. Each landed page gets
+a checkpoint. Repeated cursors fail closed. Only completion of every stream advances the
+watermark. Expired cursors require a fresh full read; they cannot establish complete coverage.
+
+Subsequent meetings reads use createdAt and updatedAt with a day's overlap, never the event's
+start date. The other four collections conservatively sweep again: their change-filter
+contract was not verifiable from the accessible official documentation in this session.
+Do not schedule repeated account-wide email sweeps without pricing them. This is bounded
+manual sync, not durable external orchestration.
+
+Translation replays the landed corpus after creating list identities. Affinity IDs resolve
+through `identity.canonical_entity_id`; an unbound alternate ID can link through an
+unambiguous exact full email address, including an alias chain. A conflicting address, a
+human `not_same_as`, a name-only match, or a shared domain cannot establish identity. Already
+resolved entities are not automatically merged. Email-only participants and team organizers
+are retained, and later identity arrivals can link old raw records without fetching them
+again. Company contacts get their own histories plus an explicit claimed Affinity association;
+today's employer is not asserted to have attended an old meeting. Exact interaction dates
+win over note creation dates. Replays reuse existing event/entity source refs.
+
+The notes reader remains account-wide, with created/updated deltas, an estimate-approved
+request ceiling, the first 100 attachments per preview, and replies counted but not fetched.
+Bulk interaction previews that advertise more participants than returned are counted in the
+history receipt. There are no attendee/recipient continuation endpoints in the inspected
+index. These are coverage gaps, not proof that another participant had no relationship.
+Relationship-strength reads remain the strongest 100 relationships per person on a
+vehicle-claimed People list; they are tier-C claims, not substitutes for dated interactions.
+
+The API cannot recover communications omitted by Affinity or hidden by key permissions.
+Name-only duplicates need human identity review; internal communications absent from Affinity
+need the separately authorized warehouse import. No name/domain guess fills either gap.
