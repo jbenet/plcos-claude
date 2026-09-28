@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
 import { config } from '@/config/deployment';
+import { formatDate } from '@/lib/time';
 import type { Period, PeriodKind, UrgencyState, Week } from './types';
 
 type Row = {
@@ -62,7 +63,7 @@ export async function sprintStrip(count = 8, now = new Date()): Promise<Week[]> 
     const dead = lost >= config.calendarDeadWeekDays;
     return {
       startsOn,
-      label: startsOn.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+      label: formatDate(startsOn, { day: '2-digit', month: 'short' }),
       isCurrent: i === 0,
       periods: hits.sort((a, b) => Number(b.kind === 'milestone') - Number(a.kind === 'milestone')),
       dead,

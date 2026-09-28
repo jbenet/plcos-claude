@@ -1,5 +1,6 @@
 import { Glyph } from '@/components/ui/Glyph';
 import { LANE_LOOK, type DatedRow, type Lane } from '@/lib/lanes';
+import { formatDate } from '@/lib/time';
 
 /**
  * Before the list (issue 0020, real): how many dated things, by standing and by lane, and how
@@ -9,7 +10,7 @@ import { LANE_LOOK, type DatedRow, type Lane } from '@/lib/lanes';
  */
 const MAX_MONTHS = 24;
 const monthKey = (iso: string) => iso.slice(0, 7);
-const monthName = (key: string) => new Date(`${key}-01T00:00:00Z`).toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' });
+const monthName = (key: string) => formatDate(new Date(`${key}-01T00:00:00Z`), { month: 'short', timeZone: 'UTC' });
 
 export function CalendarStats({ rows, now }: { rows: DatedRow[]; now: string }) {
   if (!rows.length) return null;

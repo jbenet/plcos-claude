@@ -210,3 +210,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [W3 — Team profile routes](entries/w3-team-edges.md)
 - [Affinity — retry transient reads and preserve paused chunks](entries/affinity-retry.md)
 - [Feedback: Pick a part works with a finger](entries/feedback-touch-0117.md)
+- [Safari — dates read the same on the server and in the browser (0118)](entries/safari-dates-0118.md)

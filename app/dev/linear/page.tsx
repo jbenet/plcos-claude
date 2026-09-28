@@ -3,7 +3,7 @@ import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
-import { ago } from '@/lib/time';
+import { ago, formatDate } from '@/lib/time';
 import { QUERIES } from '@/lib/connectors/linear/queries';
 import { linearLiveServer, linearSource, rawDir } from '@/lib/connectors/linear/sync';
 import { linearKeyPresent } from '@/lib/connectors/linear/key';
@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 
 const n = (x: number) => x.toLocaleString('en-US');
 const pct = (x: number, of: number) => (of ? `${Math.round((x / of) * 100)}%` : '—');
-const day = (d: string | null) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit', timeZone: 'UTC' }) : '—');
+const day = (d: string | null) => (d ? formatDate(new Date(`${d}T00:00:00Z`), { day: 'numeric', month: 'short', year: '2-digit', timeZone: 'UTC' }) : '—');
 const STATUS_FLAG: Record<string, string> = { started: 'f-ok', planned: 'f-ev', backlog: 'f-mute', completed: 'f-mute', canceled: 'f-mute', paused: 'f-ev' };
 const STATE_WORD: Record<string, string> = { backlog: 'Backlog', unstarted: 'To do', started: 'In progress', completed: 'Done', canceled: 'Canceled', duplicate: 'Duplicate', triage: 'Triage', unknown: 'Unknown state' };
 
@@ -28,7 +28,7 @@ function Replica({ o }: { o: LinearOverview }) {
     <div className="card">
       <div className="chead">
         <h2>In the replica</h2>
-        <span className="lbl">{o.oldest && o.newest ? `issues created from ${o.oldest.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })} · last change ${ago(o.newest)}` : 'counts'}</span>
+        <span className="lbl">{o.oldest && o.newest ? `issues created from ${formatDate(o.oldest, { month: 'short', year: 'numeric' })} · last change ${ago(o.newest)}` : 'counts'}</span>
       </div>
       <div className={s.strip}>
         {([['Teams', o.totals.teams], ['Projects', o.totals.projects], ['Issues', o.totals.issues], ['Comments', o.totals.comments], ['Members', o.totals.members], ['Labels', o.totals.labels]] as const).map(([k, v]) => (

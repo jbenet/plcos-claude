@@ -1,6 +1,7 @@
 import type { FoldedRun } from '@/lib/workflows/ledger';
 import { OUTCOMES, type Bucket } from '@/lib/workflows/view';
 import s from './workflows.module.css';
+import { formatDate } from '@/lib/time';
 
 /** Plain words for a run's outcome (AGENTS.md: status vocabulary is plain language). */
 export const OUTCOME_WORD: Record<FoldedRun['outcome'], string> = {
@@ -43,7 +44,7 @@ export function OutcomeBar({ outcomes, total }: { outcomes: Record<FoldedRun['ou
 }
 
 const fmtHour = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const fmtDay = (d: Date) => formatDate(d, { weekday: 'short', day: 'numeric', month: 'short' });
 
 /**
  * Runs over time as stacked bars. A picture of the runs table below it, which carries the same

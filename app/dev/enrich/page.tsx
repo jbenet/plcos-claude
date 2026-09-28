@@ -9,7 +9,7 @@ import { capacityBandLabel } from '@/lib/capacity-bands';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
-import { ago } from '@/lib/time';
+import { ago, formatDate } from '@/lib/time';
 import { RESEARCH_STATUSES, enrichDir, inResearchSet } from '@/lib/enrich/candidates';
 import { Prospects } from './Prospects';
 import Link from '@/components/ui/AppLink';
@@ -374,7 +374,7 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
               <input type="hidden" name="day" value={d.day} />
               <div className="cbody">
                 <div className="fact">
-                  <span>Import of {new Date(`${d.day}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  <span>Import of {formatDate(new Date(`${d.day}T12:00:00Z`), { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                   <span>{n(d.added)} entries that day · {n(d.inSet)} in the research set · {n(d.rows.length)} with nothing else on record</span>
                 </div>
                 <label className="bulkall">
@@ -419,7 +419,7 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
         <div className="card">
           <div className="chead">
             <h2>Records to fix in Affinity</h2>
-            <span className="lbl">{n(fixes.rows.length)} LPs · listed {new Date(fixes.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+            <span className="lbl">{n(fixes.rows.length)} LPs · listed {formatDate(new Date(fixes.at), { day: 'numeric', month: 'short' })}</span>
           </div>
           <div className="cbody">
             <div className="fact"><span>By kind</span><span>{Object.entries(fixes.kinds).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · ')}</span></div>

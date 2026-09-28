@@ -8,7 +8,7 @@ import { config } from '@/config/deployment';
 import { isLiveServer, readLayout, type Layout } from '@/config/ports';
 import { getDb } from '@/lib/db';
 import { lockFile } from '@/lib/db/lock';
-import { ago } from '@/lib/time';
+import { ago, formatDate } from '@/lib/time';
 import { QUESTIONS, TEMPLATE_PATH, readInit } from '@/lib/real/init';
 import { listSyncSources } from '@/modules/platform';
 import { reloadInit } from './actions';
@@ -111,7 +111,7 @@ async function DataPage() {
           {copied && (
             <div className="fact">
               <span>Copy taken</span>
-              <span>{copied.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {ago(copied)} · changes here are thrown away</span>
+              <span>{formatDate(copied, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {ago(copied)} · changes here are thrown away</span>
             </div>
           )}
           <div className="fact"><span>Opened as</span><span className="mono">{host}</span></div>

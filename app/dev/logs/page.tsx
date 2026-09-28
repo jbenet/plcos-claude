@@ -2,7 +2,7 @@ import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
-import { ago } from '@/lib/time';
+import { ago, formatDate } from '@/lib/time';
 import { KINDS, KIND_LABEL, loadTimeline, type Event, type Kind } from '@/lib/dev/timeline';
 import { Outcome } from '../workflows/parts';
 import s from './logs.module.css';
@@ -99,7 +99,7 @@ async function Logs({ searchParams }: { searchParams: Promise<SP> }) {
           <div className="lbl">Append-only · newest first</div>
           <div className="ihead">What happened, in order</div>
           <div className="imeta">
-            {t.events.length} shown{before ? ` from before ${before.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}
+            {t.events.length} shown{before ? ` from before ${formatDate(before, { day: 'numeric', month: 'short' })}` : ''}
             {t.events.length ? `, back to ${ago(t.events.at(-1)!.at)}` : ''}
           </div>
           {KINDS.map((k) => (
@@ -180,7 +180,7 @@ async function Logs({ searchParams }: { searchParams: Promise<SP> }) {
       {t.more && (
         <p className={s.older}>
           <Link href={href(kind, t.more)} className={s.chip}>Older →</Link>
-          <span className="muted">From before {hm(t.more)}, {t.more.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.</span>
+          <span className="muted">From before {hm(t.more)}, {formatDate(t.more, { day: 'numeric', month: 'short' })}.</span>
         </p>
       )}
     </Page>

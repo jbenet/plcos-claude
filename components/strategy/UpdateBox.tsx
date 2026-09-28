@@ -9,13 +9,14 @@ import {
 } from '@/modules/strategy/client';
 import { Glyph } from '@/components/ui/Glyph';
 import { newRequestKey } from '@/lib/request-key';
+import { formatDate } from '@/lib/time';
 
 type Of<K extends UpdateSuggestion['kind']> = Extract<UpdateSuggestion, { kind: K }>;
 
 const CHANNEL_WORD: Record<TouchChannel, string> = { meeting: 'meeting', call: 'call', email: 'email', message: 'message' };
 const newKey = newRequestKey;
 const a = (w: string) => `${/^[aeiou]/.test(w) ? 'an' : 'a'} ${w}`;
-const day = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const day = (iso: string) => formatDate(new Date(`${iso}T12:00:00Z`), { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
 /**
  * The first row of an LP's timeline (N61, issue 0004): write what happened or what changed, and

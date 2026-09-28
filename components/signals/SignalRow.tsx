@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { disposeSignal } from '@/app/signals-actions';
 import { KIND_LABEL, type Signal } from '@/modules/signals/client';
+import { formatDate } from '@/lib/time';
 
 const CONF_FLAG: Record<string, string> = { high: 'f-ok', medium: 'f-ev', low: 'f-mute' };
 
@@ -27,7 +28,7 @@ export function SignalRow({ signal, compact = false }: { signal: Signal; compact
           <span className="mono" style={{ fontSize: 10.5 }}>
             {signal.source}
             {signal.sourceRef ? ` · ${signal.sourceRef}` : ''} ·{' '}
-            {signal.observedAt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+            {formatDate(signal.observedAt, { day: '2-digit', month: 'short', timeZone: 'UTC' })}
           </span>
         </span>
         {!compact && (

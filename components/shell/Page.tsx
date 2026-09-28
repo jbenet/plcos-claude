@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { syncSummary } from '@/lib/sync';
-import { ago } from '@/lib/time';
+import { ago, formatDate } from '@/lib/time';
 import { config } from '@/config/deployment';
 import { shareRequestWork } from '@/lib/page-render';
 import { PageFrame } from './PageFrame';
@@ -48,7 +48,7 @@ export async function Page({
       syncLine={copied ? `Taken ${ago(copied)} · changes here are thrown away` : sync.line}
       syncTitle={
         copied
-          ? `Copied from the real data at ${copied.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. ` +
+          ? `Copied from the real data at ${formatDate(copied, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. ` +
             `Nothing syncs here. In the copy: ${sync.line}.\n${sources}`
           : sources
       }

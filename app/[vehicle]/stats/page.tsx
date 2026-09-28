@@ -10,6 +10,7 @@ import { usdCompact } from '@/lib/money';
 import { FilterBar, PanelCard, CoverageCard, LpTable, PAGE_SIZE } from './parts';
 import { StatsNav } from './StatsNav';
 import s from './stats.module.css';
+import { formatDate } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
@@ -144,7 +145,7 @@ async function LpStats({ params, searchParams }: {
         {!vehicle && data.onHistory > 0 && <> {data.onHistory.toLocaleString('en-US')} pursuits on vehicles kept for their history are left out; open one in the rail to count them.</>}
         {' '}Types, places and check sizes are readings of what the sources say, labelled with what they rest on; an unknown is a gap in
         the record, not a finding. Each panel counts the LPs matching the search and every other filter, so its bars add up to its own
-        base. <b>Read:</b> {new Date(data.asOf).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC,
+        base. <b>Read:</b> {formatDate(new Date(data.asOf), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC,
         recounted on any change to the records. {DIM.tier.note}
       </p>
       </StatsNav>

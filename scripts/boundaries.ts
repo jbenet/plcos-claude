@@ -22,6 +22,10 @@ import { SHOT } from './shot-image';
  *   6. Browser code never calls crypto.randomUUID (issue 0104): it is undefined outside a secure
  *      context, and the live server is reached over plain http on the local network. A request
  *      key comes from lib/request-key.ts, which falls back to crypto.getRandomValues.
+ *   7. A short month name is never left to the runtime's ICU (issue 0118): Node says "Sept", Safari
+ *      "Sep", so a Client Component that formatted one failed to hydrate in Safari. formatDate in
+ *      lib/time.ts builds the text from numbers and reads the same everywhere. Scripts never render,
+ *      so they are not held to it.
  */
 const ROOTS = ['app', 'components', 'lib', 'modules', 'config', 'scripts'];
 const DRIVERS = ['@electric-sql/pglite', "from 'pg'", 'from "pg"'];
@@ -94,6 +98,10 @@ async function main() {
 
     if (/^['"]use client['"]/m.test(text) && /crypto\.randomUUID\s*\(/.test(text)) {
       violations.push(`${rel}: calls crypto.randomUUID in browser code — use newRequestKey from @/lib/request-key; plain http has no randomUUID`);
+    }
+
+    if (!rel.startsWith('scripts') && rel !== join('lib', 'time.ts') && /toLocale(?:Date|Time)?String\([^)]*month:\s*['"]short['"]/.test(text)) {
+      violations.push(`${rel}: formats a short month with toLocale*String — use formatDate from @/lib/time; Node and Safari disagree on "Sept"`);
     }
 
     // `client.ts` is a deliberate second entrance: types and constants, no data access.

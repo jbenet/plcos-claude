@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import type { RunView } from '@/lib/workflows/view';
+import { formatDate } from '@/lib/time';
 
 /**
  * The read-only sources Developer → Status lists beside Affinity (issue 0099): Dakota, PL Polaris,
@@ -74,7 +75,7 @@ export async function dakotaStatus(): Promise<ExtraSource> {
   const facts = [
     complete ? `Last complete pull: ${Object.entries(pulled).map(([k, v]) => `${n(v.written ?? 0)} ${k}s`).join(', ')}` : null,
     accounts || contacts ? `In the database: ${n(accounts ?? 0)} accounts, ${n(contacts ?? 0)} contacts${entities ? `, ${n(entities)} linked records` : ''}` : null,
-    last ? `Last import ${new Date(last.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}: ${['sourced', 'merged', 'claims'].filter((k) => typeof last.detail?.[k] === 'number').map((k) => `${n(last.detail[k] as number)} ${k}`).join(', ') || 'recorded'}` : null,
+    last ? `Last import ${formatDate(new Date(last.at), { day: 'numeric', month: 'short' })}: ${['sourced', 'merged', 'claims'].filter((k) => typeof last.detail?.[k] === 'number').map((k) => `${n(last.detail[k] as number)} ${k}`).join(', ') || 'recorded'}` : null,
   ].filter((x): x is string => Boolean(x));
   const state: SourceState = !folder && !accounts ? 'not_attached' : failedLast ? 'partial' : complete ? 'ok' : manifests.length ? 'failed' : 'not_attached';
   return {

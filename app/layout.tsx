@@ -23,6 +23,9 @@ export const metadata: Metadata = {
   // The tab says which data it holds, so two windows side by side cannot be confused.
   title: config.data.profile === 'real' ? `Real · ${config.product.name}` : config.product.name,
   description: 'Fundraising strategy and operations for PLC Neurotech I, PLC Crypto/Rails, the SPVs and the grants rail.',
+  // Safari on an iPad turns numbers, dates and addresses into links before React hydrates, which
+  // it then reports as a mismatch (issue 0118). Figures here are data, not things to dial.
+  formatDetection: { telephone: false, date: false, email: false, address: false },
 };
 
 /**

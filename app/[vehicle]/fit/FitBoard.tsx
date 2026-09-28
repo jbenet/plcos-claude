@@ -8,6 +8,7 @@ import { StatusPicker } from './StatusPicker';
 import s from './fit.module.css';
 import { SpvMark } from '@/components/strategy/SpvMark';
 import { spvWords } from '@/modules/strategy/client';
+import { formatDate } from '@/lib/time';
 
 /**
  * The fit list and its side pane (issue 0096). Select a row, or move with ↑ ↓ (Home, End), and
@@ -23,7 +24,7 @@ const store = {
   subscribe: (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; },
 };
 
-const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+const day = (iso: string) => formatDate(iso, { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const lpHref = (r: FitRow) => (r.pursuitId ? `/${r.vehicleSlug}/pipeline/${r.pursuitId}` : `/orgs/${r.entityId}`);
 
 export function FitBoard({ sections, showVehicle, showGroup }: { sections: FitSection[]; showVehicle: boolean; showGroup: boolean }) {
