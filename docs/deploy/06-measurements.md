@@ -444,3 +444,60 @@ Three concurrent viewers cut throughput to a third and pushed admin p95 past 2 s
 
 The re-point ordering fix itself; the strip's 8-minute single transaction on RDS (it holds the target frozen);
 the container, Kaniko and RDS as before.
+
+## Rehearsal 3 (strip) (28 September 2026, Claude)
+
+Confirms the re-point undo fix (`a2c7768`, `claude/main`) on a fresh real copy, while an Affinity import ran on
+`plcos_live` untouched. `pg_dump -Fc` as `plcos_ro` (source never frozen, never touched otherwise) → restored
+`--no-owner --no-acl --exit-on-error --single-transaction` as `plcos_app` into scratch `plcos_rehearsal3` on the
+same cluster → target frozen (`default_transaction_read_only=on`) → `scripts/strip-dakota.ts`, exactly as
+`cutover.sh` step 6 invokes it (`PGOPTIONS=... node --import tsx scripts/strip-dakota.ts "$TO"`) → `stop-cutover-jobs.sql`
+→ target thawed. Everything dropped/deleted afterward (database, dump, working folder). Counts and timings only.
+
+| Leg | Result |
+|---|---|
+| `pg_dump -Fc` as `plcos_ro` | **17 s**, 222 MiB file, 119 tables of data listed |
+| `pg_restore --no-owner --no-acl --exit-on-error --single-transaction` as `plcos_app` | **45 s**, 119 tables |
+| `strip-dakota.ts` (frozen target, exactly as `cutover.sh` runs it) | **succeeded, exit 0, 510 s**, one transaction; no FK-blocked-undo error |
+| `stop-cutover-jobs.sql` | 1 copied `running` job failed |
+
+**Result: PASS.** No `23503` (or any) error. The 17-repoint undo — the same shape that failed in rehearsal 2 (3
+`created_at` batches, random UUID order within a batch) — resolved cleanly through the retry loop this time.
+
+Rows removed (from `strip-dakota.ts`'s own report; cross-checked independently against before/after counts on
+`dakota.*`, `identity.source_record`, `identity.external_identifier`, `identity.possible_match`,
+`identity.match_assertion`, `strategy.pursuit` and `strategy.lp_repoint` — all matched exactly):
+
+| Table / operation | Removed |
+|---|---|
+| `dakota.account` / `contact` / `claim` / `identity_revision` / `replica` (`employment`, `translation_job` 0) | 5,100 / 9,253 / 5,215 / 1 / 2 |
+| `identity.source_record` | 14,353 (124,591 → 110,238) |
+| `identity.external_identifier` | 14,644 (14,644 → 0) |
+| `identity.possible_match` | 61,657 (64,804 → 3,147) |
+| `identity.match_assertion` | 418 (4,770 → 4,352); 418 merge redirects cleared (unmerged rose by 193 orgs, 225 people) |
+| `strategy.pursuit` | 314 (6,872 → 6,558): 302 Dakota pursuits + 12 org pursuits created by undone re-points |
+| `strategy.lp_repoint` / `pursuit_contact` / `pursuit_owner` / `pursuit_update` | 17 each (all 17 re-points undone and removed) |
+| `strategy.spv_evidence` | 87 (before 884, consistent with rehearsal 2) |
+| `network.route_cache` | 7,427 (recomputable) |
+| `platform.audit_log` | 1 |
+
+Independent scan, done two ways since a plain substring search over-matches ordinary prose:
+
+- **Every text/enum column named like `source`/`origin`/`kind`/`action`/`evidence*`/`provenance_note`/`aum_basis`/`reason`/`basis`**
+  (128 columns) for a value **equal to** `dakota` (case-insensitive): **0**. A substring sweep of the same columns
+  had one false-positive hit (`research.source_doc.origin`, 3 rows, 85–129 characters long — URLs from public
+  enrichment research, not the 6-character source tag).
+- **Every JSON/JSONB column** (37 columns), walked recursively for a `source`/`origin`/`file`/`*_source` **key**
+  valued `dakota` (case-insensitive), matching rehearsal 2's method: **0** across all of them. A substring sweep
+  of the same 37 columns flagged 2,455 rows in 9 columns (`research.note.data`, `sources.raw_record.payload`,
+  `strategy.suggestion.data`, `sources.sync_run.detail`, `strategy.lp_repoint.changes` and others) — free-text
+  mentions of the word, not a Dakota-sourced key/value, confirmed 0 by the key-scoped check.
+
+Org/person counts (`identity.entity`, unmerged), before → after: person 96,724 → 96,949, org 16,264 → 16,457 (the
+rise is exactly the 418 cleared merge redirects). **Including merged rows, both totals are unchanged**: person
+99,130 → 99,130, org 18,626 → 18,626 — every name survived.
+
+### Still not covered
+
+RDS network latency on the dump/restore/strip legs (this ran on one local cluster); the container, Kaniko and RDS
+as before.

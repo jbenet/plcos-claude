@@ -15,11 +15,19 @@ LabOS container as live. F4: sign-in reads first and never writes for a known ui
 end: a Docker build (no Docker on the Mac; PL's Kaniko is the first real build) and the Dakota strip
 against a real copy — rehearse both once before cutover (§2, §3).
 
+**Status, 28 Sep 07:47 UTC (rehearsal 3 on a fresh real copy, [06-measurements.md](06-measurements.md)
+"Rehearsal 3"): the Dakota strip PASSES with the fix merged (`a2c7768`, `claude/main`).** `strip-dakota.ts`,
+run exactly as `cutover.sh` step 6 invokes it against a frozen target, committed in 510 s with no FK error —
+the same 17-re-point, 3-batch shape that failed in rehearsal 2 resolved through the retry-after-blocked loop.
+Every Dakota-sourced row removed (dump-verified per table), an independent key-scoped scan of every
+source-type and JSON column found 0 residue, and org/person counts matched exactly before/after (99,130
+people, 18,626 orgs, unchanged). Cutover's sanitize step is confirmed against real data; not yet run on RDS.
+
 **Status, 28 Sep (rehearsal 2 on a real copy, [06-measurements.md](06-measurements.md) "Rehearsal 2"):
-the Dakota strip FAILS — cutover stops before the flip.** `strip-dakota.ts` hits an FK violation on
-`strategy.pursuit_contact` while undoing LP re-points: the 17 Dakota re-points share 3 `created_at` values, so
-"newest first" is random within a batch and a re-point's created org pursuit is deleted before a same-batch
-re-point's contact on it. Fix the undo order before cutover. With a local retry the rest committed in 479 s
+the Dakota strip FAILED before the fix — cutover stopped before the flip.** `strip-dakota.ts` hit an FK
+violation on `strategy.pursuit_contact` while undoing LP re-points: the 17 Dakota re-points share 3
+`created_at` values, so "newest first" is random within a batch and a re-point's created org pursuit is
+deleted before a same-batch re-point's contact on it. With a local retry the rest committed in 479 s
 (one transaction, target frozen throughout), removed every Dakota-sourced row and kept all names. F3, F4 and
 F5 held on real data: 0 errors in two 10-way walks, viewer pages ~0.5 s, peak RSS 1.63 GiB.
 
