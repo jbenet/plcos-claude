@@ -58,8 +58,14 @@ export async function securityEntrypointProperties(check: Check) {
       if (declaration.type !== 'FunctionDeclaration') { failures.push(`${path}: unsupported export ${name}`); continue; }
       if (api) {
         routes++;
+        const calls = (names: string[]) => names.every(n => nodes(declaration).some(c => c.type === 'CallExpression' && (c.callee as Node)?.value === n));
+        // The feedback journal routes must accept a note while the database is busy (docs/deploy/03, the
+        // feedback-journal property): origin and profile are checked without the database, and the reporter
+        // is resolved server-side at ingest. Every other route uses the full guard.
+        const journal = path === 'app/api/feedback/route.ts' || path === 'app/api/connection-feedback/route.ts';
         const guarded = path === 'app/api/session/route.ts'
-          ? ['requireMutationOrigin', 'requireMutationProfile', 'requireMutationUser'].every(n => nodes(declaration).some(c => c.type === 'CallExpression' && (c.callee as Node)?.value === n))
+          ? calls(['requireMutationOrigin', 'requireMutationProfile', 'requireMutationUser'])
+          : journal ? (calls(['requireMutationOrigin', 'requireMutationProfile']) || awaitedGuard(declaration, ['mutationRouteGuard']))
           : awaitedGuard(declaration, ['mutationRouteGuard']);
         if (!guarded) failures.push(`${path}: ${name}`);
       } else {

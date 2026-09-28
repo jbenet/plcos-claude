@@ -94,7 +94,7 @@ export async function copyPgliteToPostgres(options: CopyOptions): Promise<CopyRe
     const read = from as unknown as Query;
     stage = 'checking supported schema features';
     const unsupported = await read.query<{ count: string }>(`select count(*)::text count from (
-      select c.oid from pg_class c join pg_namespace n on n.oid=c.relnamespace where ${userSchema} and (c.relkind in ('p','f','m','c') or c.relispartition or c.relrowsecurity or c.relacl is not null or (c.relkind='v' and c.reloptions is not null))
+      select c.oid from pg_class c join pg_namespace n on n.oid=c.relnamespace where ${userSchema} and (c.relkind in ('p','f','m','c') or c.relispartition or c.relrowsecurity or (c.relacl is not null and not (n.nspname='platform' and c.relname='audit_log')) or (c.relkind='v' and c.reloptions is not null))
       union all select t.oid from pg_type t join pg_namespace n on n.oid=t.typnamespace where ${userSchema} and t.typtype in ('d','r','m')
       union all select i.inhrelid from pg_inherits i join pg_class c on c.oid=i.inhrelid join pg_namespace n on n.oid=c.relnamespace where ${userSchema}
       union all select p.oid from pg_proc p join pg_namespace n on n.oid=p.pronamespace where ${userSchema} and p.prokind not in ('f','p')
@@ -127,6 +127,8 @@ export async function copyPgliteToPostgres(options: CopyOptions): Promise<CopyRe
     const targetSchemas = await to.query<{ name: string }>(`select n.nspname name from pg_namespace n where ${userSchema}`);
     for (const schema of targetSchemas.rows) await to.query(`drop schema ${ident(schema.name)} cascade`);
     for (const schema of schemas) await to.query(`create schema ${ident(schema.name)}`);
+    // platform.audit_log's revoked update/delete (migration platform/010_audit_append_only) is the one
+    // known custom grant: the target's own migration reapplies it, and its append-only trigger holds.
     // Preserve the built-in public schema's PUBLIC usage/create grants. Other custom
     // grants require an explicit role mapping and are refused in the preflight above.
     const publicGrants = await read.query<{ privilege: string }>(`select a.privilege_type privilege from pg_namespace n cross join lateral aclexplode(n.nspacl) a where n.nspname='public' and a.grantee=0`);
