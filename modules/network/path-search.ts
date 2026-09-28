@@ -125,6 +125,31 @@ export async function graphSnapshot(db: Db): Promise<GraphSnapshot> {
   catch (error) { if (snapshots.get(db)?.value === value) snapshots.delete(db); throw error; }
 }
 
+// Snapshot-owned, so a graph revision/date change also discards this index. Parallel
+// edges retain UUID order; grouping never chooses a different representative tie.
+const neighborIndexes = new WeakMap<GraphSnapshot, Promise<Map<string, Map<string, Link[]>>>>();
+async function neighborsFor(graph: GraphSnapshot) {
+  const previous = neighborIndexes.get(graph);
+  if (previous) return previous;
+  const value = (async () => {
+    const index = new Map<string, Map<string, Link[]>>();
+    let count = 0;
+    for (const [node, links] of graph.adjacency) {
+      const neighbors = new Map<string, Link[]>();
+      for (const link of links) {
+        const group = neighbors.get(link.other);
+        if (group) group.push(link); else neighbors.set(link.other, [link]);
+        // GUESS: keep index construction cooperative without a timer per edge.
+        if (++count % 8192 === 0) await yieldRouteWork();
+      }
+      index.set(node, neighbors);
+    }
+    return index;
+  })();
+  neighborIndexes.set(graph, value);
+  return value;
+}
+
 /** Enumerate in (source, hops, edge UUIDs) order, stopping at the same 300/source cap.
  * Short paths always precede longer paths. PL and team sources cannot be intermediaries.
  * Time slicing covers high-degree hubs even when they have no supported route. */
@@ -144,32 +169,33 @@ export async function pathsFromSnapshot(
     }
     if (needsYield()) await checkpoint();
   }
-  // Join the middle hop from the target side once, rather than walking every
-  // source's entire two-hop neighborhood for each LP. Retain UUID ordering/caps.
+  const neighbors = maxHops >= 3 ? await neighborsFor(graph) : null;
   const middles = new Map<string, Link[]>();
-  if (maxHops >= 3) for (const node of tails.keys()) {
-    for (const edge of graph.adjacency.get(node) ?? []) {
-      const links = middles.get(edge.other), link = { edgeId: edge.edgeId, other: node };
-      if (links) links.push(link); else middles.set(edge.other, [link]);
+  const wanted = new Set(sources);
+  // Sparse target neighborhoods are cheaper to probe backwards. Use the same
+  // snapshot index, and fall back to the source walk when a target touches hubs.
+  const sourceDegree = [...wanted].reduce((n, source) => n + (graph.adjacency.get(source)?.length ?? 0), 0);
+  const tailDegree = [...tails.keys()].reduce((n, node) => n + (neighbors?.get(node)?.size ?? 0), 0);
+  let eligible: Set<string> | null = null;
+  if (neighbors && tailDegree < sourceDegree) {
+    eligible = new Set([target, ...tails.keys()]);
+    for (const node of tails.keys()) for (const other of neighbors.get(node)?.keys() ?? []) {
+      if (!sourceOnly.has(other)) eligible.add(other);
       if (needsYield()) await checkpoint();
     }
   }
-  for (const links of middles.values()) links.sort((a, b) => a.edgeId.localeCompare(b.edgeId));
-  const wanted = new Set(sources), starts = new Map<string, Link[]>();
-  for (const node of new Set([target, ...(maxHops >= 2 ? tails.keys() : []), ...middles.keys()])) {
-    if (node !== target && sourceOnly.has(node)) continue;
-    for (const edge of graph.adjacency.get(node) ?? []) {
-      if (wanted.has(edge.other)) {
-        const links = starts.get(edge.other), link = { edgeId: edge.edgeId, other: node };
-        if (links) links.push(link); else starts.set(edge.other, [link]);
-      }
-      if (needsYield()) await checkpoint();
-    }
-  }
-  for (const links of starts.values()) links.sort((a, b) => a.edgeId.localeCompare(b.edgeId));
   for (const source of wanted) {
     const start = paths.length;
-    const first = starts.get(source) ?? [];
+    let first = graph.adjacency.get(source) ?? [];
+    if (eligible && eligible.size < first.length) {
+      first = [];
+      const byNeighbor = neighbors!.get(source);
+      for (const node of eligible) {
+        if (node === target || !sourceOnly.has(node)) first.push(...(byNeighbor?.get(node) ?? []));
+        if (needsYield()) await checkpoint();
+      }
+      first.sort((a, b) => a.edgeId.localeCompare(b.edgeId));
+    }
     for (const edge of first) {
       if (edge.other === target) paths.push({ nodes: [source, target], edges: [edge.edgeId], hops: 1 });
       if (paths.length - start >= 300) break;
@@ -177,7 +203,7 @@ export async function pathsFromSnapshot(
     }
     if (tails.size && maxHops >= 2 && paths.length - start < 300) {
       for (const edge of first) {
-        if (edge.other !== source) {
+        if (edge.other !== source && !sourceOnly.has(edge.other)) {
           for (const tail of tails.get(edge.other) ?? []) {
             paths.push({ nodes: [source, edge.other, target], edges: [edge.edgeId, tail.edgeId], hops: 2 });
             if (paths.length - start >= 300) break;
@@ -191,7 +217,26 @@ export async function pathsFromSnapshot(
     if (tails.size && maxHops >= 3 && paths.length - start < 300) {
       for (const edge of first) {
         if (edge.other === source || edge.other === target || sourceOnly.has(edge.other)) continue;
-        for (const middle of middles.get(edge.other) ?? []) {
+        let middleLinks = middles.get(edge.other);
+        if (!middleLinks) {
+          middleLinks = [];
+          const byNeighbor = neighbors!.get(edge.other);
+          // Intersect unique neighbors with target tails, never expand a hub's
+          // entire two-hop neighborhood. No arbitrary degree cutoff loses routes.
+          if (byNeighbor) {
+            const candidates = byNeighbor.size < tails.size ? byNeighbor.keys() : tails.keys();
+            for (const node of candidates) {
+              if (tails.has(node)) for (const link of byNeighbor.get(node) ?? []) {
+                middleLinks.push(link);
+                if (needsYield()) await checkpoint();
+              }
+              if (needsYield()) await checkpoint();
+            }
+          }
+          middleLinks.sort((a, b) => a.edgeId.localeCompare(b.edgeId));
+          middles.set(edge.other, middleLinks);
+        }
+        for (const middle of middleLinks) {
           if (middle.other !== source && middle.other !== edge.other) {
             for (const tail of tails.get(middle.other) ?? []) {
               paths.push({ nodes: [source, edge.other, middle.other, target],
