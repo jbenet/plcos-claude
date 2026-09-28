@@ -12,9 +12,9 @@ export interface TriageExport extends Triage {
   /** Stable vehicle slug, also the W5 strategy folder and draft filename suffix. */
   vehicle: string;
   vehicleName: string;
-  status: Candidate['pursuits'][number]['status'];
+  status: Candidate['pursuits'][number]['status'] | null;
   owner: string | null;
-  lanes: Array<Triage['lane'] | NonNullable<Triage['first']>>;
+  lanes: Array<Triage['lane'] | NonNullable<Triage['first']> | 'vehicle-tagged contact, no pursuit'>;
   asOf: string;
   touches: Array<{
     date: string;
@@ -87,7 +87,7 @@ export async function triageExportRows(
   for (const c of candidates) {
     const held = ownTouches(touches.get(c.key) ?? [], now);
     const days = (direction: 'theirs' | 'ours') => {
-      const last = held.find((t) => t.direction === direction);
+      const last = held.find((t) => t.channel === 'email' && t.direction === direction);
       return last ? Math.floor((now.getTime() - last.on!.getTime()) / 86_400_000) : null;
     };
     contactByKey.set(c.key, {
@@ -95,7 +95,7 @@ export async function triageExportRows(
         const detail = details.get(refOf(t) ?? '');
         return {
           date: t.on!.toISOString().slice(0, 10),
-          direction: t.direction === 'ours' ? 'out' : t.direction === 'theirs' ? 'in' : null,
+          direction: t.channel !== 'email' ? null : t.direction === 'ours' ? 'out' : t.direction === 'theirs' ? 'in' : null,
           channel: t.sourceRef?.startsWith('note:') ? 'note' : t.channel === 'email' ? 'email'
             : t.channel === 'meeting' || t.channel === 'call' ? 'meeting' : 'other',
           subject: triageText(detail?.subject),
@@ -107,7 +107,7 @@ export async function triageExportRows(
       daysSinceLastInbound: days('theirs'), daysSinceLastOutbound: days('ours'),
     });
   }
-  return rows.map((r): TriageExport => {
+  const result = rows.map((r): TriageExport => {
     const c = candidateByPair.get(JSON.stringify([r.key, r.vehicle]))!;
     const p = c.pursuits[0]!;
     const pair = pairById.get(p.pursuitId);
@@ -122,7 +122,15 @@ export async function triageExportRows(
       lanes: r.first ? [r.lane, r.first] : [r.lane], asOf: now.toISOString(),
       ...contactByKey.get(c.key)!, massMailing: massMailing(c),
     };
-  }).sort((a, b) => compare(a.key, b.key) || compare(a.vehicle, b.vehicle));
+  });
+  for (const c of candidates) for (const v of c.vehicleTaggedWithoutPursuit ?? []) result.push({
+    key: c.key, name: triageText(c.name) ?? '[redacted]', vehicle: v.slug, vehicleName: triageText(v.name) ?? '[redacted]',
+    status: null, owner: null, lane: 'cold', first: null, lanes: ['vehicle-tagged contact, no pursuit'],
+    reasons: ['Contact tagged to this vehicle, with no pursuit for it: review whether to add one'],
+    senior: false, researched: false, waitedDays: null, asOf: now.toISOString(),
+    ...contactByKey.get(c.key)!, massMailing: massMailing(c),
+  });
+  return result.sort((a, b) => compare(a.key, b.key) || compare(a.vehicle, b.vehicle));
 }
 
 /** Bulk local reads only; raw interaction fields already loaded by researchSet are reused. */
@@ -187,13 +195,15 @@ export async function refreshTriageExport(dir: string, now = new Date()): Promis
   const previous = (await readFile(join(dir, 'triage.jsonl'), 'utf8')).split('\n').filter(Boolean).map((s) => JSON.parse(s) as TriageExport);
   const byPair = new Map(previous.map((r) => [JSON.stringify([r.key, r.vehicleName]), r]));
   const classified = await triage(dir, now, [...candidatesByPair(candidates).values()]);
-  const rows = classified.map((r) => {
+  const rows: TriageExport[] = classified.map((r) => {
     const old = byPair.get(JSON.stringify([r.key, r.vehicle]));
     if (!old || !Array.isArray(old.touches)) throw new Error('Run Export the research set before refreshing W9; touch records are missing.');
     return { ...old, lane: r.lane, first: r.first, reasons: r.reasons.map((s) => triageText(s) ?? '[redacted]'),
       senior: r.senior, researched: r.researched, waitedDays: r.waitedDays,
       lanes: r.first ? [r.lane, r.first] : [r.lane] } satisfies TriageExport;
   }).sort((a, b) => compare(a.key, b.key) || compare(a.vehicle, b.vehicle));
+  rows.push(...previous.filter(r => r.lanes.includes('vehicle-tagged contact, no pursuit')));
+  rows.sort((a, b) => compare(a.key, b.key) || compare(a.vehicle, b.vehicle));
   await writeTriageExport(dir, rows);
   return rows;
 }

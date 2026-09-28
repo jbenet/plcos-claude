@@ -12,6 +12,7 @@ import { listRestrictions } from '@/modules/coordination';
 import { lpContactsFor, listPursuits, type Pursuit, type PursuitStatus } from '@/modules/strategy';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { noteTags } from '@/lib/connectors/affinity/event-tags';
+import { emailEntriesByPerson, replyOwedSince } from './reply-owed';
 import { makeTriageExport, writeTriageExport } from './triage-export';
 import { exportIdentityReview } from './identity-review-export';
 import { exportLpUnitReview } from './lp-unit-review-export';
@@ -66,6 +67,7 @@ export interface ResearchIdentity {
 export type AboutWords = string[];
 
 export interface Candidate extends ResearchIdentity {
+  vehicleTaggedWithoutPursuit?: Array<{ slug: string; name: string }>;
   contacts?: Array<Candidate & { contactRole: string }>;
   pursuits: Array<{
     pursuitId: string; vehicle: string; status: PursuitStatus; rung: string | null; owner: string; stageSaid: string | null; nextStep: string | null;
@@ -79,6 +81,8 @@ export interface Candidate extends ResearchIdentity {
    * of their vehicles' raise windows; what came before is summed in `earlier`.
    */
   contact: {
+    /** Strict personal inbound email, with no later outbound; absent on older exports. */
+    replyOwedSince?: string | null;
     since: string | null;
     earlier: { meetings: number; first: string | null; last: string | null };
     meetings: number; lastTouch: string | null; lastFromThem: string | null; awaitingSince: string | null; read: string | null;
@@ -161,12 +165,14 @@ async function researchSnapshot() {
   // Juan, 27 Sep: names and entities may be searched, Dakota-sourced ones included. What stays out of
   // research files is Dakota's private or aggregated fields: none are read here (the affiliation read
   // below skips Dakota's, and nothing from dakota.* is exported).
-  const all = (await listPursuits(null)).filter(inResearchSet);
+  const allPursuits = await listPursuits(null);
+  const all = allPursuits.filter(inResearchSet);
+  const tagged = await db.query<{ id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text as id from meetings.meeting where cardinality(about_vehicles)>0`);
   const byEntity = new Map<string, Pursuit[]>();
   for (const p of all) byEntity.set(p.entityId, [...(byEntity.get(p.entityId) ?? []), p]);
   const lpIds = [...byEntity.keys()];
   const contacts = await lpContactsFor(lpIds, undefined, { excludeDakota: true });
-  const ids = [...new Set([...lpIds, ...[...contacts.values()].flatMap(cs => cs.map(c => c.entityId))])];
+  const ids = [...new Set([...tagged.map(t => t.id), ...lpIds, ...[...contacts.values()].flatMap(cs => cs.map(c => c.entityId))])];
   if (!ids.length) return { candidates: [] as Candidate[], touches: new Map<string, import('@/modules/meetings').Touchpoint[]>(), entries: [] as Entry[] };
 
   // entity_type includes audited local corrections; both export files must use this DB value.
@@ -184,6 +190,8 @@ async function researchSnapshot() {
     latestRaw<Entry>('affinity', 'list_entry'),
     touchpointSummaries(all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }))),
   ]);
+  const emailRecords = await latestRaw<unknown>('affinity', 'email');
+  const emails = emailEntriesByPerson(emailRecords.map(r => r.payload));
   const readings = await readingsFor(ids);
   const context = await db.query<{ entity_id: string; at: Date | string; by: string | null; body: string }>(
     `select identity.canonical_entity_id(n.entity_id)::text as entity_id, n.created_at as at, u.name as by, n.body
@@ -241,6 +249,10 @@ async function researchSnapshot() {
     const before = [...new Set((met.get(ent.entity_id) ?? []).filter((t) => !inPeriod(t)).map((t) => day(t.on)!))].sort();
     const days = [...new Set(mine.map((t) => day(t.on)!))].sort();
     return {
+      vehicleTaggedWithoutPursuit: windows.filter(w =>
+        (everything.get(ent.entity_id) ?? []).some(t => t.aboutVehicles.includes(w.slug))
+        && !allPursuits.some(p => p.entityId === ent.entity_id && p.vehicleId === w.vehicleId))
+        .map(w => ({ slug: w.slug, name: w.name })),
       key: ent.entity_id,
       name: ent.display_name,
       type: ent.entity_type,
@@ -261,6 +273,7 @@ async function researchSnapshot() {
         };
       }),
       contact: {
+        replyOwedSince: replyOwedSince([...es, ...(emails.get(affinityOf.get(ent.entity_id) ?? '') ?? [])], affinityOf.get(ent.entity_id) ?? '', everything.get(ent.entity_id) ?? []),
         since: day(since),
         earlier: { meetings: before.length, first: before[0] ?? null, last: before[before.length - 1] ?? null },
         meetings: rel.meetingDates.length,
@@ -303,7 +316,7 @@ async function researchSnapshot() {
   for (const c of out) if (byEntity.has(c.key) && c.contact.awaitingSince) sentOn.set(c.contact.awaitingSince, (sentOn.get(c.contact.awaitingSince) ?? 0) + 1);
   for (const c of out) c.contact.outreachShared = c.contact.awaitingSince ? (sentOn.get(c.contact.awaitingSince) ?? 0) : 0;
   const byKey = new Map(out.map(c => [c.key, c]));
-  const candidates = out.filter(c => byEntity.has(c.key)).map(c => ({ ...c,
+  const candidates = out.filter(c => byEntity.has(c.key) || c.vehicleTaggedWithoutPursuit?.length).map(c => ({ ...c,
     ...(contacts.has(c.key) ? { contacts: contacts.get(c.key)!.flatMap(person => {
       const contact = byKey.get(person.entityId);
       return contact ? [{ ...contact, contacts: undefined, contactRole: person.role }] : [];
@@ -338,7 +351,7 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   // empty placeholders for them (27 Sep). It stays in the pipeline, just not in the export.
   const dir = enrichDir();
   const snapshot = await researchSnapshot();
-  const set = snapshot.candidates.filter((c) => /[\p{L}\p{N}].*[\p{L}\p{N}]/u.test(c.name ?? ''));
+  const set = snapshot.candidates.filter((c) => c.pursuits.length > 0 && /[\p{L}\p{N}].*[\p{L}\p{N}]/u.test(c.name ?? ''));
   await mkdir(dir, { recursive: true });
   const identity = (c: Candidate): ResearchIdentity => ({
     key: c.key, name: c.name, type: c.type, org: c.org, role: c.role, location: c.location, domains: c.domains,
@@ -353,6 +366,7 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   const db = await getDb();
   const team = await db.query<{ handle: string; name: string; role: string }>(
     `select handle, name, role from platform.app_user where active order by name`);
+  await writeFile(join(dir, 'vehicles.json'), JSON.stringify(await db.query('select slug, name from platform.vehicle')) + '\n', 'utf8');
   await writeFile(join(dir, 'team.json'), JSON.stringify(team.map((u) => ({
     handle: u.handle, name: u.name, role: u.role,
   })), null, 1) + '\n', 'utf8');

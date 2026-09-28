@@ -81,7 +81,7 @@ export async function triage(dir: string, now = new Date(), input?: Candidate[])
     const org = `${findingByKey.get(c.key)?.identity.canonical?.org ?? c.org ?? ''} ${c.enriched['Industry'] ?? ''}`;
     const waitedDays = c.contact.awaitingSince ? Math.round((now.getTime() - new Date(c.contact.awaitingSince).getTime()) / 86_400_000) : null;
     // They wrote to us last, with nothing from us since (s22): a reply we owe, whatever the status.
-    const theyWroteLast = Boolean(c.contact.lastFromThem && !c.contact.awaitingSince && c.contact.lastTouchChannel && c.contact.lastTouchChannel !== 'meeting' && c.contact.lastTouchChannel !== 'call');
+    const theyWroteLast = Boolean(c.contact.replyOwedSince);
 
     const colleagueMet = mine.find((p) => p.kind === 'same_firm' && p.tier === 'B');
     const insider = mine.find((p) => p.kind === 'colleague' && p.tier === 'B' && p.other.type === 'ours');
@@ -151,7 +151,7 @@ export async function triage(dir: string, now = new Date(), input?: Candidate[])
       : slow ? 'long process'
       : senior && INVESTS.test(org) && !researched.has(c.key) ? 'research first'
       : 'cold';
-    if (theyWroteLast) reasons.unshift(`They wrote last, on ${c.contact.lastFromThem}, and nothing from us is on record since: check sent mail, then answer`);
+    if (theyWroteLast) reasons.unshift(`They wrote last, on ${c.contact.replyOwedSince}, and nothing from us is on record since: check sent mail, then answer`);
     const first: Triage['first'] = theyWroteLast ? 'reply we owe' : unowned && warm ? 'name an owner' : (claimsContact && noTouch) || dead ? 'check sent mail' : mailing ? 'first personal note' : null;
     out.push({ key: c.key, name: c.name, vehicle: c.pursuits[0]!.vehicle, lane, reasons, senior, researched: researched.has(c.key), waitedDays, first });
   }
@@ -160,11 +160,11 @@ export async function triage(dir: string, now = new Date(), input?: Candidate[])
   for (const c of candidates) {
     const status = c.pursuits[0]?.status;
     if (status !== 'discussing' && status !== 'committed') continue;
-    const theirs = c.contact.lastFromThem && !c.contact.awaitingSince && Boolean(c.contact.lastTouchChannel) && c.contact.lastTouchChannel !== 'meeting' && c.contact.lastTouchChannel !== 'call';
+    const theirs = Boolean(c.contact.replyOwedSince);
     if (!theirs) continue;
-    const days = Math.round((now.getTime() - new Date(c.contact.lastFromThem!).getTime()) / 86_400_000);
+    const days = Math.round((now.getTime() - new Date(c.contact.replyOwedSince!).getTime()) / 86_400_000);
     out.push({ key: c.key, name: c.name, vehicle: c.pursuits[0]!.vehicle, lane: 'warm now', senior: false, researched: researched.has(c.key), waitedDays: null, first: 'reply we owe',
-      reasons: [`They wrote last, ${days === 0 ? 'today' : `${days} ${days === 1 ? 'day' : 'days'} ago`} (${c.contact.lastFromThem}), and nothing from us is on record since: check sent mail, then answer`] });
+      reasons: [`They wrote last, ${days === 0 ? 'today' : `${days} ${days === 1 ? 'day' : 'days'} ago`} (${c.contact.replyOwedSince}), and nothing from us is on record since: check sent mail, then answer`] });
   }
   const order: Record<Lane, number> = { 'warm now': 0, 'research first': 1, 'long process': 2, cold: 3 };
   return out.sort((a, b) => order[a.lane] - order[b.lane] || Number(b.senior) - Number(a.senior) || (a.waitedDays ?? 9e9) - (b.waitedDays ?? 9e9));

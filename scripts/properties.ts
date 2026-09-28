@@ -51,6 +51,7 @@ async function main() {
   await (await import('./properties/activity-perf')).activityPerfProperties(check);
   await (await import('./properties/responsiveness')).responsivenessProperties(check);
   await (await import('./properties/activity-connectors')).activityConnectorProperties(check);
+  await (await import('./properties/triage-accuracy')).triageAccuracyProperties(check);
   await (await import('./properties/triage-export')).triageExportProperties(check);
 
   await (await import('./properties/feedback-journal')).feedbackJournalProperties(check);

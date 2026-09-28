@@ -47,6 +47,7 @@ export async function triageExportProperties(check: Check) {
     reply.pursuits[0]!.status = 'discussing';
     reply.contact.lastFromThem = reply.contact.lastTouch = day(1).toISOString().slice(0, 10);
     reply.contact.lastTouchChannel = 'email';
+    reply.contact.replyOwedSince = reply.contact.lastFromThem;
     const sent = candidate('sent'); sent.pursuits[0]!.stageSaid = 'Contacted';
     const personal = candidate('personal'); personal.contact.awaitingSince = personal.contact.lastTouch = '2026-09-01'; personal.contact.outreachShared = 12;
     const unowned = candidate('unowned'); unowned.enriched['Relationship Tier'] = 'close'; unowned.pursuits[0]!.owner = 'Not on the team';
@@ -216,6 +217,21 @@ export async function triageExportProperties(check: Check) {
       && (await readFile(join(dir, 'identity-review.jsonl'), 'utf8')) === ''
       && renderToStaticMarkup(createElement(ExportStatus, { status: receipt })) === '',
       'A successful empty identity review is a zero-byte file and clears the persistent failure notice.');
+    await db.exec(`insert into platform.vehicle(slug,name,kind,exemption) values ('gamma','Invented Gamma','fund','506(c)');
+      insert into identity.entity(entity_type,display_name) values ('person','Invented Unpursued');`);
+    const unpursued = (await db.one<{ id: string }>(`select entity_id::text id from identity.entity where display_name='Invented Unpursued'`))!.id;
+    for (const id of [sample, unpursued]) await db.query(`insert into meetings.meeting(entity_id,owner_id,channel,held_on,about,about_vehicles,about_by)
+      values($1,$2,'meeting','2026-09-20','raise',array['alpha','gamma'],'person')`, [id, actor]);
+    await db.query(`update strategy.pursuit set status='passed' where entity_id=$1 and vehicle_id=(select id from platform.vehicle where slug='alpha')`, [sample]);
+    await withDb(counted, exportResearchSet);
+    const taggedRows = (await readFile(join(dir, 'triage.jsonl'), 'utf8')).split('\n').filter(Boolean).map(s => JSON.parse(s) as TriageExport);
+    const missing = taggedRows.filter(r => r.lanes.includes('vehicle-tagged contact, no pursuit'));
+    check('TRIAGE vehicle tags identify missing pursuits, including contacts with no pursuit anywhere',
+      missing.length === 3 && missing.some(r => r.key === sample && r.vehicle === 'gamma')
+      && missing.filter(r => r.key === unpursued).length === 2 && missing.every(r => r.status === null && r.owner === null)
+      && !missing.some(r => r.key === sample && r.vehicle === 'alpha'),
+      'Existing pursuits, even Passed, suppress only their own vehicle; tagged unpursued contacts get review rows without invented pursuits.');
+
   } finally {
     if (previousDir === undefined) delete process.env.ENRICH_DIR; else process.env.ENRICH_DIR = previousDir;
     await db?.close();
