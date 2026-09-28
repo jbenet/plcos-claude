@@ -5,6 +5,8 @@ export type WarmthKind = keyof typeof config.routeWarmth.priors;
 /** Stored in existing evidence JSONB. Dates describe contact, never retrieval or mapping. */
 export interface TieDetails {
   kind: WarmthKind;
+  /** Sourced direct conversation, independent of its age or unknown contact date. */
+  directInteraction?: boolean;
   /** PL affiliation is a policy-based tie, not a claimed dated interaction. */
   basis?: 'pl_affiliation' | 'pl_network';
   lastInteraction?: string | null;
@@ -48,6 +50,7 @@ export function tieDetailsProblems(value: unknown): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return ['tie must be an object'];
   const t = value as TieDetails;
   const problems: string[] = [];
+  if (t.directInteraction !== undefined && typeof t.directInteraction !== 'boolean') problems.push('directInteraction must be boolean');
   if (!Object.hasOwn(config.routeWarmth.priors, t.kind)) problems.push('unknown warmth kind');
   if (t.basis !== undefined && !['pl_affiliation', 'pl_network'].includes(t.basis)) problems.push('unknown tie basis');
   if (t.lastInteraction != null && !Number.isFinite(dateOf(t.lastInteraction))) problems.push('lastInteraction must be an actual YYYY-MM-DD contact date');
@@ -125,6 +128,9 @@ export function edgeGrade(edge: Pick<Edge, 'kind' | 'evidence'>, at = new Date()
   const warmth = edgeWarmth(edge, at);
   if (edge.evidence.some(e => e.tie?.basis === 'pl_affiliation')) return 'B';
   if (['cofounder', 'family', 'close_friend', 'frequent_coinvestment'].includes(warmth.kind)) return 'A';
+  if (edge.evidence.some(e => e.source && e.tie?.directInteraction === true
+    && !tieDetailsProblems(e.tie).length && !e.tie.basis
+    && ['recent_contact', 'repeated_contact', 'acquaintance'].includes(e.tie.kind))) return 'B';
   if (['worked_together', 'joint_investment', 'investor_founder'].includes(warmth.kind)
       && !edge.evidence.some(e => e.tie?.basis === 'pl_network')) return 'B';
   if (['recent_contact', 'repeated_contact', 'acquaintance'].includes(warmth.kind) && warmth.recency === 'current') return 'B';

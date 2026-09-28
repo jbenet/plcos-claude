@@ -60,7 +60,7 @@ export async function teamLabels(q: Queryable) {
 
 async function readTeamLabels(q: Queryable) {
   const rows = await q.query<TeamAlias>(`with recursive team as (
-    select u.id::text, u.name, identity.canonical_entity_id(s.entity_id) root
+    select u.id::text, u.name, u.email, identity.canonical_entity_id(s.entity_id) root
     from platform.app_user u left join identity.source_record s on s.source='app_user' and s.source_id=u.handle
     where u.active
   ), aliases as (
@@ -70,6 +70,7 @@ async function readTeamLabels(q: Queryable) {
       join identity.entity e on e.merged_into=a.entity_id and e.retired_at is null
       where not e.entity_id=any(a.seen)
   ) select id,name,name alias from team
+  union all select id,name,email from team where email is not null
   union all select id,name,display_name from aliases
   union all select t.id,t.name,a.detail->>'previousName' from team t join platform.audit_log a
     on a.subject_id::text=t.id and a.subject_type='app_user' and a.action='identity.team_roster_updated'

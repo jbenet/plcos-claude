@@ -1,3 +1,5 @@
+import { portfolioPaths, readConnectionPortfolio } from './portfolio-paths';
+import type { PortfolioInput } from './portfolio';
 import { edgeGrade } from '@/modules/network/warmth';
 import type { EdgeKind } from '@/modules/network';
 import { createHash } from 'node:crypto';
@@ -113,19 +115,19 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
   const directory = (await readFile(join(dir, 'us', 'pl-directory.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
     .map((l) => JSON.parse(l) as PlDirectoryEntry);
   const warehouse = await readWarehouseGraph(dir);
-  return connectionPaths(candidates, findings, net, team, directory, new Date(), warehouse);
+  return connectionPaths(candidates, findings, net, team, directory, new Date(), warehouse, await readConnectionPortfolio(dir));
 }
 
 /** W3's pure join, also used by invented property fixtures. No files or database writes. */
 export function connectionPaths(candidates: Candidate[], findings: Map<string, Finding>, net: Network,
-  team: TeamMember[], directory: PlDirectoryEntry[] = [], at = new Date(), warehouse?: WarehouseGraph): { paths: Path[]; lps: number; lpKeys: string[]; researched: number } {
+  team: TeamMember[], directory: PlDirectoryEntry[] = [], at = new Date(), warehouse?: WarehouseGraph, portfolio?: PortfolioInput): { paths: Path[]; lps: number; lpKeys: string[]; researched: number } {
 
   const units = [...new Map(candidates.map(c => [c.key, c])).values()];
   const endpoints = new Map(units.map(c => [c.key, c]));
   for (const unit of units) if (unit.type !== 'person') for (const contact of unit.contacts ?? []) {
     if (contact.type === 'person' && !endpoints.has(contact.key)) endpoints.set(contact.key, contact);
   }
-  const result = entityConnectionPaths([...endpoints.values()], findings, net, team, directory, at, warehouse);
+  const result = entityConnectionPaths([...endpoints.values()], findings, net, team, directory, at, warehouse, portfolio);
   const byEndpoint = new Map<string, Path[]>();
   for (const path of result.paths) byEndpoint.set(path.lp, [...(byEndpoint.get(path.lp) ?? []), path]);
   const projected: Path[] = [];
@@ -154,7 +156,7 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
 }
 
 function entityConnectionPaths(candidates: Candidate[], findings: Map<string, Finding>, net: Network,
-  team: TeamMember[], directory: PlDirectoryEntry[], at: Date, warehouse?: WarehouseGraph): { paths: Path[]; lps: number; lpKeys: string[]; researched: number } {
+  team: TeamMember[], directory: PlDirectoryEntry[], at: Date, warehouse?: WarehouseGraph, portfolio?: PortfolioInput): { paths: Path[]; lps: number; lpKeys: string[]; researched: number } {
 
   // A connector need not be raising. The sourced personal backer roster is a separate
   // universe from active LPs; leaving it out made documented co-founder ties dead ends.
@@ -297,12 +299,15 @@ function entityConnectionPaths(candidates: Candidate[], findings: Map<string, Fi
       const resolved = c.toType !== 'org' && c.scope !== 'firm' ? (c.toHandle && team.some((t) => t.handle === c.toHandle)
         ? { type: 'team' as const, name: team.find((t) => t.handle === c.toHandle)!.name, handle: c.toHandle }
         : resolvePerson(c.to, people, team)) : null;
+      const direct = resolved?.type === 'team' && Boolean(c.source)
+        && (c.kind === 'podcast_guest' || /\b(?:one[- ]to[- ]one|1[: -]1|direct conversation|interviewed)\b/i.test(c.basis))
+        && !/\b(?:not|never|no|panel|coattendance|co-attendance)\b/i.test(c.basis);
       add({ lp: f.key, other: { ...(resolved ?? { type: /protocol labs|filecoin|ipfs|pl capital|protocol vc/i.test(c.to) ? 'ours' as const : 'backer' as const, name: c.to }), ...(c.toType ? { entityType: c.toType } : {}) },
         kind: c.kind === 'portfolio' ? 'portfolio' : c.kind === 'board' ? 'board' : c.kind === 'advisor' ? 'advisor' : c.kind === 'coinvestor' ? 'coinvestor' : c.kind === 'colleague' ? 'colleague' : c.kind === 'alumni' ? 'alumni' : 'other',
-        tie: c.scope === 'firm' ? { kind: 'proximity' } : c.tie
+        tie: c.scope === 'firm' ? { kind: 'proximity' } : direct ? { ...c.tie, kind: 'acquaintance', directInteraction: true } : c.tie
           ?? (/\bco[ -]?founded\b|\bco[ -]?founders\b/i.test(c.basis) && resolved ? { kind: 'cofounder' } : undefined),
         reviewedBy: c.reviewedBy, reviewedAt: c.reviewedAt,
-        tier, basis: `${c.basis}${c.scope === 'firm' ? ' (the firm’s tie)' : ''}`, source: c.source ?? 'research:W3 (source not recorded)' });
+        tier: direct && tier > 'B' ? 'B' : tier, basis: `${c.basis}${c.scope === 'firm' ? ' (the firm’s tie)' : ''}`, source: c.source ?? 'research:W3 (source not recorded)' });
     }
   }
 
@@ -403,7 +408,8 @@ function entityConnectionPaths(candidates: Candidate[], findings: Map<string, Fi
 
   if (warehouse) for (const p of warehousePaths(candidates, team, warehouse, at)) add(p);
 
-  return { paths: materializeResearchNodes(plNetworkPaths(paths, candidates, findings, net, team, directory), candidates, net, team).map((p) => {
+  const withPortfolio = portfolio ? portfolioPaths(paths, candidates, findings, portfolio) : paths;
+  return { paths: materializeResearchNodes(plNetworkPaths(withPortfolio, candidates, findings, net, team, directory), candidates, net, team).map((p) => {
     let tie = p.tie ?? ((p.tier === 'C' || p.tier === 'D') ? { kind: 'proximity' as const }
       : /\bco[ -]?founded\b|\bco[ -]?founders\b|\bfounded\b.+\bwith\b/i.test(p.basis) ? { kind: 'cofounder' as const } : undefined);
     const sourceTie = p.other.type === 'team' || p.other.person?.name === 'PL';
@@ -558,19 +564,20 @@ function periodDate(value: unknown, end: boolean): string | null {
 
 /** Our records attach a tie to its actual holder; neither ownership nor PL membership does. */
 function ourSidePaths(c: Candidate, f: Finding | undefined, net: Network, team: TeamMember[], at: Date): Path[] {
-  if (c.type !== 'person') return [];
   const out: Path[] = [];
   const other = (t: TeamMember): Path['other'] => ({ type: 'team', name: t.name, handle: t.handle });
   for (const t of team) {
-    const contacts = (c.contact.recent ?? []).filter((r) => r.with.some((name) => norm(name) === norm(t.name))
+    const contacts = (c.contact.records ?? c.contact.recent ?? []).filter((r) => r.with.some((name) => norm(name) === norm(t.name))
       && r.on <= at.toISOString().slice(0, 10)
-      && (((r.channel === 'meeting' || r.channel === 'call') && !(c.contact.meetingDates ?? []).some((d) => d.on === r.on && d.group))
-        || ((r.channel === 'email' || r.channel === 'message') && r.direction === 'theirs')));
+      && ['meeting', 'call', 'email', 'message'].includes(r.channel));
+    const direct = contacts.filter(r => 'group' in r ? !r.group
+      : !(c.contact.meetingDates ?? []).some(d => d.on === r.on && d.group));
     const dates = [...new Set(contacts.map((r) => r.on))].sort();
-    if (dates.length) out.push({ lp: c.key, other: other(t), kind: 'met', tier: 'B', source: 'our records',
-      basis: `Named in ${dates.length} dated direct interaction${dates.length === 1 ? '' : 's'} with ${t.name}`,
-      tie: { kind: dates.length >= config.routeWarmth.repeatedContacts ? 'repeated_contact' : 'acquaintance', lastInteraction: dates.at(-1) } });
+    if (dates.length) out.push({ lp: c.key, other: other(t), kind: contacts.some(r => ['meeting', 'call'].includes(r.channel)) ? 'met' : 'corresponded', tier: direct.length ? 'B' : 'C', source: 'our records',
+      basis: `Named in ${dates.length} dated interaction${dates.length === 1 ? '' : 's'} with ${t.name}${direct.length ? '; direct contact on record' : '; group attendance, personal interaction uncertain'}`,
+      tie: { kind: direct.length ? (direct.length >= config.routeWarmth.repeatedContacts ? 'repeated_contact' : 'acquaintance') : 'proximity', directInteraction: direct.length > 0, lastInteraction: direct.length ? direct.map(r => r.on).sort().at(-1) : dates.at(-1) } });
   }
+  if (c.type !== 'person') return out;
   for (const org of net.orgs) {
     const aliases = [org.name, ...org.aliases];
     const isOrg = (s: unknown) => typeof s === 'string' && aliases.some((a) => norm(a) === norm(s));

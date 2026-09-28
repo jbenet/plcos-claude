@@ -5,7 +5,7 @@ import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { latestRaw } from '@/modules/sources';
 import {
-  eventAbout, isEvent, raiseWindows, summarize, touchpointSummaries, touchpointsByEntity, type EventAbout, type RaiseWindow,
+  eventAbout, isAutoReply, isEvent, raiseWindows, summarize, touchpointSummaries, touchpointsByEntity, type EventAbout, type RaiseWindow,
 } from '@/modules/meetings';
 import { closeStates } from '@/modules/pipeline';
 import { listRestrictions } from '@/modules/coordination';
@@ -94,6 +94,8 @@ export interface Candidate extends ResearchIdentity {
      * our side was on it.
      */
     recent: Array<{ on: string; channel: string; direction: string | null; about: AboutWords; with: string[] }>;
+    /** Complete held interaction history for routing, independent of the raise window and W5's eight-row preview. */
+    records?: Array<{ on: string; channel: string; direction: string | null; about: AboutWords; with: string[]; group: boolean; source: string }>;
     /**
      * How many LPs in the set our last unanswered word went to on the same day (W5, iteration 3):
      * ten or more is a mailing, and the next step is a first personal note, not a follow-up.
@@ -271,6 +273,11 @@ async function researchSnapshot() {
         read: rel.read?.read ?? null,
         groupMeetings: days.filter((d) => (onDay.get(d) ?? 0) >= 4 || mine.some((t) => day(t.on) === d && isEvent(t))).length,
         outreachShared: 0,
+        records: (everything.get(ent.entity_id) ?? [])
+          .filter((t) => !t.viaOrganization && ['meeting', 'call', 'email', 'message'].includes(t.channel)
+            && t.on && t.on.getTime() <= Date.now() && !isAutoReply(t))
+          .map((t) => ({ on: day(t.on)!, channel: t.channel, direction: t.direction,
+            about: aboutWords(eventAbout(t, windows)), with: t.attendees, group: isEvent(t), source: t.source })),
         recent: (everything.get(ent.entity_id) ?? [])
           .filter((t) => inPeriod(t) && !t.viaOrganization && t.channel !== 'research' && t.on && t.on.getTime() <= Date.now())
           .slice(0, 8)

@@ -195,3 +195,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Network speed — invented scale benchmark](entries/network-speed.md)
 - [Service backup — encrypted S3 archives](entries/service-backup.md)
 - [Kit runtime contract](entries/kit-contract.md)
+
+- [W3 routes — Recover interaction and portfolio paths](entries/w3-routes.md)

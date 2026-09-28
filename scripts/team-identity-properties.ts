@@ -60,6 +60,9 @@ export async function teamIdentityProperties(check: Check, db: Db) {
       await root(staff) === warehouse && await root(namesake) === namesake && (result.mergesByRule.team_handle ?? 0) === 1,
       'Only the explicit source mapping links identities; a matching full name is insufficient.');
     const project = await teamLabels(db);
+    check('TEAMIDENT known team email resolves to its roster name for meeting exports',
+      JSON.stringify(project(['INVENTED.ROSTER@example.org', 'Invented Roster Full'])) === JSON.stringify(['Invented Roster Full']),
+      'An exact account email and canonical name identify one participant without publishing the address.');
     check('TEAMIDENT calendar projects historical owner, roster and canonical attendee labels once',
       JSON.stringify(project(['Invented R.', 'Invented Roster Full', 'Invented alternate spelling'])) === JSON.stringify(['Invented Roster Full']),
       'One team label, backed by handle audit and canonical identity aliases.');
