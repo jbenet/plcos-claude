@@ -9,7 +9,7 @@ import type { PipelineRow, Status } from './pipeline-model';
 import { Glyph } from '@/components/ui/Glyph';
 import { REASONS, PASSED_BY_CHOICES, PASSED_BY_LABEL } from '@/modules/strategy/client';
 import { lead } from './pipeline-model';
-import { actionFailure } from '@/lib/client/action-failure';
+import { actionFailure, withDeadline } from '@/lib/client/action-failure';
 import { cx, n } from './lp-view';
 import s from './lp-tables.module.css';
 
@@ -103,7 +103,7 @@ export function BulkLpActions({ rows, statuses, initialStatus = 'selected', onCl
             frozen.current ??= { key: key.current, rows: rows.map((r) => ({ id: r.id, vehicleId: r.vehicleId, status: r.status })),
               action, body: text('body'), status: status || undefined, passedBy: text('passedBy') as BulkInput['passedBy'], passReason: text('passReason'),
               channel: text('channel') as BulkInput['channel'], direction: (text('direction') || null) as BulkInput['direction'], on: text('on'), place };
-            const result = await bulkLpAction(frozen.current);
+            const result = await withDeadline(bulkLpAction(frozen.current));
             if (!result.ok) { frozen.current = null; throw new Error(result.error); }
             if (action === 'status' && result.written > 0 && onStatusSaved) {
               const changed = rows.filter((r) => r.status !== status);

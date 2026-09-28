@@ -96,6 +96,8 @@ Rules:
     against the cap: the levers are fewer tokens (small contexts, short rule files, no nested agents)
     and moving bulk work to ChatGPT. Haiku's rate is not measured; it failed the tagging pilot (66%).
 
+- **`npm run e2e`** (issue 0116) drives the basics through the real pages on its own demo server (port 3150–3199) and checks each change in the database, in about 40 s.
+  `E2E=1 bash scripts/gate.sh` adds it to the gate; when a basic action breaks, add its check to `scripts/e2e.ts`.
 - **Changelog screenshots** are 2000 px WebP at quality 80 (`scripts/shot-image.ts`).
   `npm run shots -- <version>` captures against the running demo server, writes
   `docs/changelog/shots/<version>/NN-name.webp`, and prints each file's size. Link them from

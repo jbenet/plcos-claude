@@ -27,6 +27,7 @@
     "db:seed": "tsx scripts/seed.ts",
     "demo": "tsx scripts/reset.ts && tsx scripts/seed.ts",
     "shots": "tsx scripts/shots.ts",
+    "e2e": "tsx scripts/e2e.ts",
     "shots:compress": "tsx scripts/shots-compress.ts",
     "boundaries": "node --import tsx scripts/boundaries.ts",
     "props": "node --import tsx scripts/properties.ts",

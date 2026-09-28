@@ -6,7 +6,7 @@ import { bulkLpAction, undoBulkLpAction } from '@/app/targets/bulk-actions';
 import { newRequestKey } from '@/lib/request-key';
 import type { BulkPlace } from '@/lib/pipeline-bulk';
 import { lead, type PipelineRow, type Status } from './pipeline-model';
-import { actionFailure } from '@/lib/client/action-failure';
+import { actionFailure, withDeadline } from '@/lib/client/action-failure';
 import { cx, n } from './lp-view';
 import s from './selection.module.css';
 
@@ -44,8 +44,8 @@ export function useMove(place: BulkPlace = 'selection') {
     lock.current = true; setBusy(true); setError(null);
     const key = newRequestKey();
     try {
-      const res = await bulkLpAction({ key, action: 'status', status: 'selected', body: '', place,
-        rows: todo.map((r) => ({ id: r.id, vehicleId: r.vehicleId, status: r.status })) });
+      const res = await withDeadline(bulkLpAction({ key, action: 'status', status: 'selected', body: '', place,
+        rows: todo.map((r) => ({ id: r.id, vehicleId: r.vehicleId, status: r.status })) }));
       if (!res.ok) { setError(res.error); return null; }
       const moved: Moved = { key, to: 'selected', state: 'done', rows: todo.map((r) => ({ id: r.id, name: lead(r), from: r.status })) };
       setLast(moved);
@@ -73,7 +73,7 @@ export function useMove(place: BulkPlace = 'selection') {
     if (!m || m.state !== 'done' || lock.current) return null;
     lock.current = true; setLast({ ...m, state: 'undoing' });
     try {
-      const res = await undoBulkLpAction({ of: m.key, place });
+      const res = await withDeadline(undoBulkLpAction({ of: m.key, place }));
       const next: Moved = res.ok ? { ...m, state: 'undone' } : { ...m, state: 'failed', error: res.error };
       setLast(next);
       router.refresh();

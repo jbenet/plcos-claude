@@ -4,6 +4,7 @@
 #
 #   bash scripts/gate.sh            in the checkout to test (default: this repo)
 #   GATE_DIR=<checkout> bash scripts/gate.sh
+#   E2E=1 bash scripts/gate.sh      also the basics end to end (npm run e2e): its own demo server, port 3150–3199
 set -u
 cd "${GATE_DIR:-$(cd "$(dirname "$0")/.." && pwd)}" || exit 1
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
@@ -25,4 +26,12 @@ if /opt/homebrew/opt/postgresql@17/bin/pg_isready -h 127.0.0.1 -p 5434 -q 2>/dev
 else
   echo "== props (Postgres): test cluster not running, skipped"
 fi
-exit $(( rc1 || rc2 || rc3 || rc4 ))
+rc5=0
+# The basic actions through the real pages (issue 0116). Off by default: it needs a free port and a browser.
+if [ "${E2E:-0}" = "1" ]; then
+  echo "== e2e (demo server)"; npm run -s e2e > "$tmp/e2e" 2>&1; rc5=$?
+  grep -A1 "^ FAIL" "$tmp/e2e" | head -30; grep -E "checks pass|^e2e: " "$tmp/e2e" | tail -3
+else
+  echo "== e2e: skipped (E2E=1 runs it)"
+fi
+exit $(( rc1 || rc2 || rc3 || rc4 || rc5 ))
