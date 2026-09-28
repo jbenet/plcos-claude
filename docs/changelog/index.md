@@ -173,3 +173,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Identity review — deterministic fixture labels and row comparisons](entries/flaky-identity-review.md)
 - [One list of LPs, with a type on each row](entries/selection-0113.md)
 - [Interaction history — bounded backfill and canonical participant links](entries/interactions-0045.md)
+
+- [W3 LP units — paths through firm contacts](entries/w3-lp-units.md)

@@ -3,7 +3,7 @@ import type { Path } from './connect';
 
 /** Read projection only: stored paths keep their original IDs so identity undo restores them. */
 export async function canonicalPaths(tx: Queryable, paths: Path[]): Promise<Path[]> {
-  const keys = [...new Set(paths.flatMap(p => [p.lp, p.other.key, p.lpPerson?.key, p.other.person?.key, p.warehouse?.match.lpKey])
+  const keys = [...new Set(paths.flatMap(p => [p.lp, p.viaContact?.key, p.other.key, p.lpPerson?.key, p.other.person?.key, p.warehouse?.match.lpKey])
     .filter((key): key is string => typeof key === 'string'))];
   if (!keys.length) return paths;
   const rows = await tx.query<{ key: string; id: string }>(`select entity_id::text key,canonical_id::text id
@@ -11,6 +11,7 @@ export async function canonicalPaths(tx: Queryable, paths: Path[]): Promise<Path
   const roots = new Map(rows.map(r => [r.key, r.id]));
   const root = (key: string) => roots.get(key) ?? key;
   return paths.map(p => ({ ...p, lp: root(p.lp),
+    ...(p.viaContact ? { viaContact: { ...p.viaContact, key: root(p.viaContact.key) } } : {}),
     ...(p.lpPerson ? { lpPerson: { ...p.lpPerson, key: root(p.lpPerson.key) } } : {}),
     other: { ...p.other, ...(p.other.key ? { key: root(p.other.key) } : {}),
       ...(p.other.person ? { person: { ...p.other.person, key: root(p.other.person.key) } } : {}) },

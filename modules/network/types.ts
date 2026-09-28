@@ -109,6 +109,8 @@ export interface RouteGraph {
 }
 
 export interface Route {
+  /** Capacity of the terminal person for an organisation LP; never an additional relationship hop. */
+  viaContact?: { entityId: string; name: string; role: string };
   /** Presentation-only safety groups for unmerged possible identities. Evidence IDs stay intact. */
   identityGroups?: Record<string, string>;
   /** Present on every planned route; optional only for legacy fixture callers. */
@@ -185,6 +187,6 @@ export interface RouteSearch {
 export interface StructuralRoutes {
   nodes: Array<{ entityId: string; name: string }>;
   edges: Array<Pick<Edge, 'edgeId' | 'kind' | 'tier' | 'evidence'> & { basisHashes: string[] }>;
-  candidates: Array<{ nodes: number[]; edges: number[] }>;
+  candidates: Array<{ nodes: number[]; edges: number[]; viaContact?: Route['viaContact'] }>;
   roles: Record<string, import('./warmth').RouteScoreContext>;
 }

@@ -9,7 +9,7 @@ import {
 } from '@/modules/meetings';
 import { closeStates } from '@/modules/pipeline';
 import { listRestrictions } from '@/modules/coordination';
-import { listPursuits, type Pursuit, type PursuitStatus } from '@/modules/strategy';
+import { lpContactsFor, listPursuits, type Pursuit, type PursuitStatus } from '@/modules/strategy';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { noteTags } from '@/lib/connectors/affinity/event-tags';
 import { makeTriageExport, writeTriageExport } from './triage-export';
@@ -49,6 +49,8 @@ export interface ResearchIdentity {
   org: string | null;
   role: string | null;
   location: string | null;
+  /** People who speak for an organisation LP; identities only in the public research file. */
+  contacts?: Array<ResearchIdentity & { contactRole: string }>;
   /** Work domains only; the addresses themselves never leave the database. */
   domains: string[];
   /** What Affinity's own enrichment says (location, title, links), field by field. */
@@ -64,6 +66,7 @@ export interface ResearchIdentity {
 export type AboutWords = string[];
 
 export interface Candidate extends ResearchIdentity {
+  contacts?: Array<Candidate & { contactRole: string }>;
   pursuits: Array<{
     pursuitId: string; vehicle: string; status: PursuitStatus; rung: string | null; owner: string; stageSaid: string | null; nextStep: string | null;
     /** N81: the contact tagged with this pursuit's vehicle, inside its window — all that counts for it. */
@@ -161,7 +164,9 @@ async function researchSnapshot() {
   const all = (await listPursuits(null)).filter(inResearchSet);
   const byEntity = new Map<string, Pursuit[]>();
   for (const p of all) byEntity.set(p.entityId, [...(byEntity.get(p.entityId) ?? []), p]);
-  const ids = [...byEntity.keys()];
+  const lpIds = [...byEntity.keys()];
+  const contacts = await lpContactsFor(lpIds, undefined, { excludeDakota: true });
+  const ids = [...new Set([...lpIds, ...[...contacts.values()].flatMap(cs => cs.map(c => c.entityId))])];
   if (!ids.length) return { candidates: [] as Candidate[], touches: new Map<string, import('@/modules/meetings').Touchpoint[]>(), entries: [] as Entry[] };
 
   // entity_type includes audited local corrections; both export files must use this DB value.
@@ -185,7 +190,7 @@ async function researchSnapshot() {
        from research.note n left join platform.app_user u on u.id = n.author_id
       where n.kind = 'context' and identity.canonical_entity_id(n.entity_id) = any($1::uuid[])
       order by n.created_at desc`, [ids]);
-  const restrictions = (await listRestrictions({ includeListMarks: true })).filter((r) => byEntity.has(r.entityId));
+  const restrictions = (await listRestrictions({ includeListMarks: true })).filter((r) => ids.includes(r.entityId));
   const pairs = all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
   const [everything, tracks, windowMap, tags] = await Promise.all([
     touchpointsByEntity(ids), closeStates(pairs), raiseWindows(), noteTags(readings.map((r) => r.noteId)),
@@ -195,7 +200,9 @@ async function researchSnapshot() {
   const met = new Map([...everything].map(([id, list]) => [id, list.filter((t) => (t.channel === 'meeting' || t.channel === 'call') && t.on && !t.viaOrganization && t.on.getTime() <= Date.now())]));
   // A date many LPs share is an event: count who was "in a meeting" each day.
   const onDay = new Map<string, number>();
-  for (const list of met.values()) {
+  for (const [id, list] of met) {
+    // Contact-only endpoints do not change existing LP meeting-group classification.
+    if (!byEntity.has(id)) continue;
     for (const d of new Set(list.map((t) => t.on!.toISOString().slice(0, 10)))) onDay.set(d, (onDay.get(d) ?? 0) + 1);
   }
 
@@ -210,7 +217,7 @@ async function researchSnapshot() {
   }
 
   const out: Candidate[] = entities.map((ent) => {
-    const ps = byEntity.get(ent.entity_id)!;
+    const ps = byEntity.get(ent.entity_id) ?? [];
     const aff = affiliations.find((a) => a.person_entity === ent.entity_id) ?? null;
     const es = entriesOf.get(affinityOf.get(ent.entity_id) ?? '') ?? [];
     const enriched: Record<string, string> = {};
@@ -293,9 +300,16 @@ async function researchSnapshot() {
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
   const sentOn = new Map<string, number>();
-  for (const c of out) if (c.contact.awaitingSince) sentOn.set(c.contact.awaitingSince, (sentOn.get(c.contact.awaitingSince) ?? 0) + 1);
-  for (const c of out) c.contact.outreachShared = c.contact.awaitingSince ? sentOn.get(c.contact.awaitingSince)! : 0;
-  return { candidates: out, touches: everything, entries: entries.map((r) => r.payload) };
+  for (const c of out) if (byEntity.has(c.key) && c.contact.awaitingSince) sentOn.set(c.contact.awaitingSince, (sentOn.get(c.contact.awaitingSince) ?? 0) + 1);
+  for (const c of out) c.contact.outreachShared = c.contact.awaitingSince ? (sentOn.get(c.contact.awaitingSince) ?? 0) : 0;
+  const byKey = new Map(out.map(c => [c.key, c]));
+  const candidates = out.filter(c => byEntity.has(c.key)).map(c => ({ ...c,
+    ...(contacts.has(c.key) ? { contacts: contacts.get(c.key)!.flatMap(person => {
+      const contact = byKey.get(person.entityId);
+      return contact ? [{ ...contact, contacts: undefined, contactRole: person.role }] : [];
+    }) } : {}),
+  }));
+  return { candidates, touches: everything, entries: entries.map((r) => r.payload) };
 }
 
 /** A row's tag as the strategy step reads it (N81). */
@@ -329,6 +343,7 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   const identity = (c: Candidate): ResearchIdentity => ({
     key: c.key, name: c.name, type: c.type, org: c.org, role: c.role, location: c.location, domains: c.domains,
     enriched: Object.fromEntries(Object.entries(c.enriched).filter(([k]) => IDENTITY_FIELDS.includes(k))),
+    ...(c.contacts ? { contacts: c.contacts.map(contact => ({ ...identity(contact), contactRole: contact.contactRole })) } : {}),
   });
   await writeFile(join(dir, 'research-set.jsonl'), set.map((c) => JSON.stringify(identity(c))).join('\n') + '\n', 'utf8');
   await writeFile(join(dir, 'candidates.jsonl'), set.map((c) => JSON.stringify(c)).join('\n') + '\n', 'utf8');

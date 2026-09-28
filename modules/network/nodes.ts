@@ -8,6 +8,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { config } from '@/config/deployment';
 import type { Queryable } from '@/lib/db';
 import { readWarehouseGraph, connectionPersonKey, type TeamMember, type Network, type WarehouseGraph } from '@/lib/enrich/connect';
+import type { Candidate } from '@/lib/enrich/candidates';
 import { check as checkFinding, type Finding } from '@/lib/enrich/schema';
 import type { EdgeKind, EvidenceTier } from './types';
 import { tieWarmth, type TieDetails } from './warmth';
@@ -211,7 +212,12 @@ export async function readNetworkNodeInput(dir:string):Promise<NetworkNodeInput|
     }
   }
   if(!warehouse.people.length&&!candidates&&!team&&!graph&&!direct&&!findings.length&&!network)return null;
-  return {warehouse,candidates:lines(candidates),team:team?parse<{team:TeamMember[]}>(team).team:[],graph:lines(graph),direct:lines(direct),findings,
+  const units = lines<Candidate>(candidates);
+  const endpoints = new Map(units.map(c => [c.key, c]));
+  for (const unit of units) if (unit.type !== 'person') for (const contact of unit.contacts ?? []) {
+    if (contact.type === 'person' && !endpoints.has(contact.key)) endpoints.set(contact.key, contact);
+  }
+  return {warehouse,candidates:[...endpoints.values()],team:team?parse<{team:TeamMember[]}>(team).team:[],graph:lines(graph),direct:lines(direct),findings,
     network:network?parse<Network>(network):undefined};
 }
 
