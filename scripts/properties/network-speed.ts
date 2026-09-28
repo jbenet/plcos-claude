@@ -9,8 +9,12 @@ import { openTestDb } from './database';
 import { migrate } from '../../lib/db/migrate';
 import { withDb } from '../../lib/db';
 import { config } from '../../config/deployment';
+import { identityPauseMs } from '../../modules/identity/resolution';
+import { cachedRoutes } from '../../modules/network/cache';
+import { computeStructuralRoutes } from '../../modules/network/service';
 import { buildNetwork } from '../../modules/network/build';
 import { tieWarmth } from '../../modules/network/warmth';
+import { networkHubFixture } from '../network-speed-2-fixture';
 import { generateNetworkFixture } from '../network-perf';
 
 // Original source-side walk, kept as an independent reference for ordering and caps.
@@ -38,6 +42,12 @@ function oldPaths(graph: GraphSnapshot, sources: string[], target: string, hops:
 }
 
 export async function networkSpeedProperties(check: Check) {
+  check('NETWORK identity pacing is retained only for the in-process PGlite server',
+    identityPauseMs('pglite', '') === config.identityResolution.pauseMs
+      && identityPauseMs('pglite', '0') === config.identityResolution.pauseMs
+      && identityPauseMs('pglite', '1') === 0
+      && identityPauseMs('postgres', '') === 0 && identityPauseMs('postgres', '1') === 0,
+    'Worker and Postgres batches use setImmediate; the local PGlite server keeps its configured sleep.');
   let seed = 1701, matches = true, capped = false;
   const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed; };
   for (let run = 0; run < 12; run++) {
@@ -63,6 +73,14 @@ export async function networkSpeedProperties(check: Check) {
   check('NETWORK target-side join preserves every old path, edge, order and per-source cap', matches && capped,
     '216 seeded cases include parallel ties, cycles, source-only exclusions, absent targets and the 300-path cap.');
 
+  const hub = networkHubFixture(40, 500);
+  let hubMatches = true;
+  for (const target of hub.targets) hubMatches &&= isDeepStrictEqual(
+    await pathsFromSnapshot(hub.graph, hub.sources, target, 3, hub.sourceOnly),
+    oldPaths(hub.graph, hub.sources, target, 3, hub.sourceOnly));
+  check('NETWORK reused hub index preserves original results across targets', hubMatches,
+    '40 invented targets share high-degree team, PL and intermediary hubs; complete ordered paths match the independent source-walk oracle.');
+
   const dir = await mkdtemp(join(tmpdir(), 'network-speed-props-')), previous = process.env.ENRICH_DIR;
   const db = await openTestDb(join(dir, 'db'));
   process.env.ENRICH_DIR = join(dir, 'enrich');
@@ -87,7 +105,28 @@ export async function networkSpeedProperties(check: Check) {
         [{ derived: 'records', tie, note: met ? `${n} ${n === 1 ? 'meeting' : 'meetings'} held one to one, ${span}` : `${n} ${n === 1 ? 'message' : 'messages'} from them, ${span}`,
           source: met ? 'Affinity calendar and notes, as translated' : 'Affinity mail sync, as translated', as_of: new Date().toISOString().slice(0, 10) }], dates[0], null, null, null, null];
     });
+    // A closed pursuit and an LP with no pursuit must remain on-demand.
+    const closed = (await db.one<{ id: string }>(`select entity_id::text id from strategy.pursuit order by entity_id limit 1`))!.id;
+    await db.query('update strategy.pursuit set closed_at=now() where entity_id=$1', [closed]);
     await withDb(db, () => buildNetwork({ awaitBackground: true }));
+    await withDb(db, async () => {
+      const warmed = await db.query<{ id: string; kind: string }>('select target_id::text id,vehicle_kind kind from network.route_cache');
+      const open = await db.query<{ id: string }>('select entity_id::text id from strategy.active_pursuit where closed_at is null');
+      check('NETWORK only open pursuits are warmed', warmed.length === open.length && warmed.length === 9
+        && warmed.every(t => open.some(p => p.id === t.id)) && !warmed.some(t => t.id === closed),
+        `${warmed.length} warmed of 100 invented people; closed and unpursued targets excluded.`);
+      let misses = 0, identical = true;
+      for (const target of warmed) {
+        const live = await computeStructuralRoutes('', target.id, 3, target.kind, 'team');
+        const cached = await cachedRoutes(target.id, target.kind, async () => { misses++; return live; });
+        identical &&= !!live && !!cached && isDeepStrictEqual(cached.structural, live.structural);
+      }
+      check('NETWORK precomputed targets have identical structural candidates to on-demand calculation', identical && misses === 0,
+        `${warmed.length} targets; compared full structural nodes, edges and candidates; ${misses} unexpected cache misses.`);
+      const cold = await cachedRoutes(closed, 'fund', async () => { misses++; return computeStructuralRoutes('', closed, 3, 'fund', 'team'); });
+      check('NETWORK skipped targets still calculate routes on demand', !!cold && misses === 1,
+        'The closed pursuit was absent from warm-up and successfully computed on the first request.');
+    });
     const actual = (await db.query<{ edge: unknown[] }>(`select jsonb_build_array(from_entity,to_entity,kind,tier,tie_band,evidence,valid_from,valid_to,reviewed_by,reviewed_at,review_note) edge
       from network.edge where evidence @> '[{"derived":"records"}]'::jsonb`)).map(r => r.edge);
     const sort = (rows: unknown[][]) => rows.sort((a, b) => String(a.slice(0, 2)).localeCompare(String(b.slice(0, 2))));

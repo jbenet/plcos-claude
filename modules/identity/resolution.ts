@@ -20,7 +20,10 @@ interface Person { id: string; name: string; source: string; sourceId: string; r
 export interface ResolutionCounts { peopleWithMultipleEntitiesBefore: number; merges: number; mergesByRule: Record<string, number>; possibleMatchesLeft: number }
 const priority: Record<string, number> = { affinity: 0, warehouse: 1, w3_person: 2, prospect: 3, app_user: 4 };
 const batchSize = config.identityResolution.batchSize;
-const pause = () => new Promise<void>(resolve => setTimeout(resolve, config.identityResolution.pauseMs));
+/** Only the in-process PGlite server needs pacing between batches. */
+export function identityPauseMs(kind: Db['kind'], worker = process.env.PLCOS_IMPORT_WORKER): number {
+  return kind === 'postgres' || worker === '1' ? 0 : config.identityResolution.pauseMs;
+}
 const intersect = (a: Set<string>, b: Set<string>) => [...a].filter(x => b.has(x));
 const domain = (s: string) => s.trim().toLowerCase().replace(/^.*@/, '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 const pair = (a: string, b: string) => [a,b].sort().join('|');
@@ -67,6 +70,8 @@ export async function resolveIdentities(db: Db, evidence: IdentityEvidence[] = [
   return serialized(db, () => withBackgroundDb(() => resolvePass(db, evidence, progress, scope)));
 }
 async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (stage: string, count: number) => void, scope?: IdentityResolutionScope): Promise<ResolutionCounts> {
+  const delay = identityPauseMs(db.kind);
+  const pause = () => new Promise<void>(resolve => delay ? setTimeout(resolve, delay) : setImmediate(resolve));
   const scoped = scope ? await teamScope(db, scope, evidence) : null;
   if (scoped) progress?.('scope', scoped.ids.length);
   const people: Person[] = [];
