@@ -19,17 +19,30 @@ export async function scopedReadData(user: Principal, query?: Db) {
     identity.canonical_entity_id(n.entity_id)::text "entityId", u.name author, n.created_at::text at
     from research.note n left join platform.app_user u on u.id=n.author_id
     where identity.canonical_entity_id(n.entity_id)=any($1::uuid[]) order by n.created_at desc`, [ids]) : [];
-  // Metadata only: never select the note payload/body, even for health-flagged notes.
-  const affinityNotes = ids.length ? await db.query<NoteIdentity>(`select distinct 'affinity:' || n.source_id id,
-    identity.canonical_entity_id(r.entity_id)::text "entityId",
-    nullif(trim(concat_ws(' ',n.payload#>>'{creator,firstName}',n.payload#>>'{creator,lastName}')),'') author,
-    coalesce(n.payload->>'createdAt',n.fetched_at::text) at
-    from identity.source_record r join sources.raw_record n on n.source='affinity' and n.kind='note'
-    where r.source='affinity' and identity.canonical_entity_id(r.entity_id)=any($1::uuid[])
-      and ((r.source_id like 'person:%' and exists(select 1 from jsonb_array_elements(coalesce(n.payload#>'{personsPreview,data}','[]'::jsonb)) x where x->>'id'=split_part(r.source_id,':',2)))
-        or (r.source_id like 'company:%' and exists(select 1 from jsonb_array_elements(coalesce(n.payload#>'{companiesPreview,data}','[]'::jsonb)) x where x->>'id'=split_part(r.source_id,':',2))))
-      and not exists(select 1 from sources.raw_record newer where newer.source=n.source and newer.kind=n.kind
-        and newer.source_id=n.source_id and (newer.fetched_at,newer.id)>(n.fetched_at,n.id))`, [ids]) : [];
+  // Expand each latest note's links once, rather than comparing every source record with
+  // every note. Keep payload/body out of the result, including health-flagged notes.
+  const affinityNotes = ids.length ? await db.query<NoteIdentity>(`with latest as materialized (
+    select distinct on (source_id) source_id,
+      nullif(trim(concat_ws(' ',payload#>>'{creator,firstName}',payload#>>'{creator,lastName}')),'') author,
+      coalesce(payload->>'createdAt',fetched_at::text) at,
+      payload#>'{personsPreview,data}' persons, payload#>'{companiesPreview,data}' companies
+    from sources.raw_record where source='affinity' and kind='note'
+    order by source_id,fetched_at desc,id desc
+  ), links as materialized (
+    select n.source_id,n.author,n.at,'person:' || (x->>'id') source_key
+      from latest n cross join lateral jsonb_array_elements(coalesce(n.persons,'[]'::jsonb)) x
+    union all
+    select n.source_id,n.author,n.at,'company:' || (x->>'id') source_key
+      from latest n cross join lateral jsonb_array_elements(coalesce(n.companies,'[]'::jsonb)) x
+  ), entities as materialized (
+    select split_part(source_id,':',1) || ':' || split_part(source_id,':',2) source_key,
+      identity.canonical_entity_id(entity_id) entity_id
+      from identity.source_record where source='affinity'
+        and (source_id like 'person:%' or source_id like 'company:%')
+  )
+    select distinct 'affinity:' || n.source_id id,r.entity_id::text "entityId",n.author,n.at
+    from links n join entities r on r.source_key=n.source_key
+    where r.entity_id=any($1::uuid[])`, [ids]) : [];
   const allowedVehicles = [...new Set(preliminary.rows.filter(row => can(user, 'read', { vehicle: row.vehicleId, fieldClass: 'R1' })).map(row => row.vehicleId))];
   const details = allowedVehicles.length ? await db.query<{ id: string; amount: string | null; track: string | null; restriction: string | null }>(`select p.pursuit_id::text id,
     x.amount::text amount,x.track::text track,

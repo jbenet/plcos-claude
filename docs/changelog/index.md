@@ -200,3 +200,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Batch keys — new strategies and research aliases](entries/batch-keys.md)
 - [LabOS live server — rehearsal blockers F1, F3 and F4](entries/labos-live.md)
 - [Worker lifetime follows the server](entries/worker-orphan.md)
+- [Viewer speed — remove the Affinity note cross product (F5)](entries/viewer-speed.md)
