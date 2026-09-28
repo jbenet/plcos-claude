@@ -65,7 +65,10 @@ mechanisms are removed; the last table lists each one and what would bring it ba
 | CI on GitHub Actions | The local gate | More than one person deploys |
 | Passkeys, step-up checks, roster gates | LabOS sign-in (you're reporting the cookie bug) | PL says the fix won't land |
 
-## Decisions for you
+## Decisions (Juan, 28 Sep 2026: all four yes)
+
+Answers: (1) yes, with the VM fallback; (2) yes, an Anthropic key may already exist, to be wired later; (3) yes; (4) an S3 bucket, backups encrypted. Keys: backups use an `age` public key on the machine, with the private key offline; ask PL whether a secrets store (for example Infisical) exists. The ask sent to PL Infra: https://claude.ai/artifact/SoKAVeZ94nFxUt6Y9V2kCb
+
 
 1. **Ask PL for one app with the limits above?** *Yes. Fallback, if PL won't raise limits: one VM running the same thing, the way the Mac does.*
 2. **The Anthropic API key** for server-side research, and the monthly cap? *Yes, capped at $1,500 a month (GUESS; last night's runs would have cost more, but steady state is lower).*
