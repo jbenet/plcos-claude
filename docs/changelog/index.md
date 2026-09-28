@@ -207,3 +207,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Name collisions — retain usable research](entries/name-collision.md)
 - [Alias join — strategy checker uses the candidate identity](entries/alias-join.md)
 - [Cutover re-point order and viewer refusals](entries/strip-order.md)
+- [W3 — Team profile routes](entries/w3-team-edges.md)

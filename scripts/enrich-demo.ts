@@ -16,7 +16,7 @@ async function main() {
   if (!set.length) { console.error('No research set yet: export it from /dev/enrich on the demo server first.'); process.exit(1); }
   const keyOf = new Map(set.map((c) => [c.name, c.key]));
   const fx = JSON.parse(await readFile(join(process.cwd(), 'fixtures', 'enrich', 'demo.json'), 'utf8')) as {
-    findings: Array<{ name: string }>; strategies: Array<{ name: string }>; network: unknown;
+    findings: Array<{ name: string }>; strategies: Array<{ name: string }>; network: unknown; team?: unknown[];
     reviews?: { strategy?: Record<string, Array<{ name: string }>>; facts?: Record<string, Array<{ name: string }>> };
   };
   for (const d of ['raw', 'strategy', 'us']) await mkdir(join(dir, d), { recursive: true });
@@ -29,7 +29,7 @@ async function main() {
     const out = rows.flatMap(({ name, ...rest }) => { const k = keyOf.get(name); return k ? [JSON.stringify({ key: k, ...rest })] : []; });
     await writeFile(join(dir, file), out.join('\n') + '\n');
   }
-  await writeFile(join(dir, 'us', 'team.json'), JSON.stringify({ team: [] }, null, 1));
+  await writeFile(join(dir, 'us', 'team.json'), JSON.stringify({ team: fx.team ?? [] }, null, 1));
   console.log(`demo fixtures: ${f} findings, ${s} strategies, and our side, under ${join(config.data.root, 'enrich')}`);
 }
 main();

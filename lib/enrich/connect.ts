@@ -59,7 +59,8 @@ export interface PlDirectoryEntry {
 }
 export interface Network { orgs: Org[]; backers: Org[]; backer_people: Array<{ name: string; what: string; source: string }>; portfolio?: Array<Org & { vehicle: string }> }
 export interface TeamRole { org: string; role?: string; since?: string | number; until?: string | number; source?: string }
-export interface TeamMember { handle: string; name: string; roles: TeamRole[]; prior: TeamRole[]; education: Array<{ org: string }>; sources?: string[] }
+export interface TeamMember { handle: string; name: string; roles: TeamRole[]; prior: TeamRole[]; education: Array<{ org: string }>; sources?: string[]; bio?: string;
+  affiliations?: TeamRole[]; boards?: TeamRole[]; employers?: TeamRole[]; cofounded?: TeamRole[]; investments?: TeamRole[] }
 
 const STOP = /\b(llc|l\.l\.c\.|inc|incorporated|co|company|corp|corporation|ltd|limited|lp|l\.p\.|plc|gmbh|ag|sa|the)\b/g;
 /** A firm's name reduced to what identifies it: "Harbor Street Ventures, LLC" → "harbor street ventures". */
@@ -199,6 +200,7 @@ function entityConnectionPaths(candidates: Candidate[], findings: Map<string, Fi
     const orgs = orgsOf(c, unsure ? undefined : f);
 
     for (const p of ourSidePaths(c, unsure ? undefined : f, net, team, at)) add(p);
+    for (const p of teamProfilePaths(c, unsure ? undefined : f, team, at)) add(p);
 
     // Our own record of an interaction: meetings held with them, and who owns the pursuit.
     for (const p of c.pursuits) {
@@ -560,6 +562,68 @@ function periodDate(value: unknown, end: boolean): string | null {
   if (/^\d{4}$/.test(s)) return `${s}-${end ? '01-01' : '12-31'}`;
   if (/^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s))) return s;
   return null;
+}
+
+/** Team profile evidence uses the same resolved findings and structured entity keys as W3. */
+function teamProfilePaths(c: Candidate, f: Finding | undefined, team: TeamMember[], at: Date): Path[] {
+  const out: Path[] = [];
+  if (c.restrictions?.some(r => r.scope === 'blanket')) return out;
+  const today = at.toISOString().slice(0, 10);
+  const fields = new Set([...RECORD_FIELDS, 'philanthropy']);
+  const facts = f?.facts.filter(x => x.confidence !== 'low' && x.source.url && fields.has(x.field)) ?? [];
+  const names = (x: NonNullable<Finding['facts'][number]['detail']>) => RECORD_KEYS.flatMap(k =>
+    typeof x[k] === 'string' ? String(x[k]).split(/\s*;\s*/) : []);
+  // Own-record identities still work without public research. Ambiguous research is never used.
+  const orgs = [...new Set([c.type === 'org' ? c.name : null, c.org, f?.identity.canonical?.org,
+    ...facts.flatMap(x => names(x.detail ?? {}))].filter((s): s is string => Boolean(s)))];
+  const usable = (org: string) => entityKey(org).length >= 3 && !GENERIC.test(norm(org)) && !TOO_COMMON.has(norm(org));
+  for (const t of team) {
+    if (c.restrictions?.some(r => r.scope === 'connector' && r.connector && norm(r.connector) === norm(t.name))) continue;
+    const emit = (org: string, role: TeamRole | undefined, category: string) => {
+      const matched = facts.filter(x => names(x.detail ?? {}).some(n => entityKey(n) === entityKey(org)));
+      let overlap: string | undefined;
+      // A shared organisation alone cannot establish working together. Require sourced work
+      // roles on both sides and a conservatively dated overlap, including past partnerships.
+      if (role?.source && ['work', 'affiliation'].includes(category) && c.type === 'person'
+        && /\b(partner|founder|employee|engineer|director|president|chief|manager|analyst|associate|officer)\b/i.test(role.role ?? '')) {
+        const start = periodDate(role.since, false), end = periodDate(role.until, true)
+          ?? (t.roles.includes(role) ? today : null);
+        for (const x of matched) {
+          if (x.scope === 'firm' || !['role', 'prior_role', 'fund_gp'].includes(x.field)) continue;
+          const xs = periodDate(x.detail?.since ?? x.detail?.from ?? x.detail?.joined, false);
+          const xe = periodDate(x.detail?.until ?? x.detail?.to ?? x.detail?.left, true)
+            ?? (x.field === 'role' ? periodDate(x.detail?.as_of, true) : null);
+          if (!start || !end || !xs || !xe) continue;
+          const from = [start, xs].sort().at(-1)!;
+          const to = [end, xe, today].sort()[0]!;
+          const minimum = new Date(from);
+          minimum.setUTCMonth(minimum.getUTCMonth() + config.routeWarmth.colleagueOverlapMonths);
+          if (Date.parse(to) >= minimum.getTime()) overlap = `${from} to ${to}`;
+        }
+      }
+      const sources = [...new Set([role?.source, ...(t.sources ?? []), ...matched.map(x => x.source.url)].filter(Boolean))];
+      out.push({ lp: c.key, other: { type: 'team', name: t.name, handle: t.handle },
+        kind: category === 'board' ? 'board' : category === 'investment' ? 'coinvestor' : category === 'work' ? 'colleague' : 'other',
+        tier: overlap ? 'B' : 'C', tie: { kind: overlap ? 'worked_together' : 'proximity' },
+        basis: `${t.name}: ${role?.role ?? category} at ${org}${role?.since || role?.until ? ` (${role.since ?? '?'}–${role.until ?? '?'})` : ''}; ${overlap
+          ? `documented working overlap ${overlap}` : category === 'from bio' ? 'from bio; exact organisation-name mention only'
+            : 'shared organisation; direct working overlap is not established'}${matched.some(x => x.scope === 'firm') ? '; includes firm-level evidence' : ''}${matched.length ? `; LP evidence: ${clip(matched.map(x => x.value).join('; '))}` : ''}. No willingness or consent recorded.`,
+        source: sources.join('; ') || 'us/team.json',
+      });
+    };
+    const entries: Array<[TeamRole, string]> = [
+      ...[...t.roles, ...t.prior, ...(t.employers ?? []), ...(t.cofounded ?? [])].map(r => [r, 'work'] as [TeamRole, string]),
+      ...(t.affiliations ?? []).map(r => [r, 'affiliation'] as [TeamRole, string]),
+      ...(t.boards ?? []).map(r => [r, 'board'] as [TeamRole, string]),
+      ...(t.investments ?? []).map(r => [r, 'investment'] as [TeamRole, string]),
+    ];
+    for (const [role, category] of entries) if (usable(role.org)
+      && orgs.some(org => entityKey(org) === entityKey(role.org))) emit(role.org, role, category);
+    // Literal, bounded organisation names only: no fuzzy aliases or person-name joins in prose.
+    if (t.bio) for (const org of orgs) if (usable(org) && affirms(t.bio, org)
+      && !new RegExp(`${escape(org)}\\s+(?:Trust|Institute|Council|Foundation|Labs?|Inc|Corp|LLC|Ltd|Technologies|Systems|Holdings|Capital|Ventures|Partners|Group)\\b`, 'i').test(t.bio)) emit(org, undefined, 'from bio');
+  }
+  return out;
 }
 
 /** Our records attach a tie to its actual holder; neither ownership nor PL membership does. */

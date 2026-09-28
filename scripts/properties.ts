@@ -35,6 +35,7 @@ async function main() {
   await (await import('./properties/build-traces')).buildTraceProperties(check);
   await (await import('./properties/deploy-tooling')).deployToolingProperties(check);
   await (await import('./properties/enrich-batch')).enrichBatchProperties(check);
+  await (await import('./properties/team-edges')).teamEdgesProperties(check);
   await (await import('./properties/alias-join')).aliasJoinProperties(check);
   await (await import('./properties/strip-dakota')).stripDakotaProperties(check);
   await (await import('./properties/cutover-shell')).cutoverShellProperties(check);

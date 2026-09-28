@@ -760,5 +760,60 @@
     }
    ]
   }
- }
+ },
+ "team": [
+  {
+   "handle": "rowan",
+   "name": "Rowan Alder",
+   "roles": [],
+   "prior": [
+    {
+     "org": "Willow Investment Arm",
+     "role": "Partner",
+     "since": "2010",
+     "until": "2018",
+     "source": "https://example.org/rowan-career"
+    }
+   ],
+   "education": [],
+   "affiliations": [
+    {
+     "org": "Aster Institute",
+     "role": "Fellow",
+     "since": "2019",
+     "until": "2021"
+    }
+   ],
+   "boards": [
+    {
+     "org": "Cedar Research Council",
+     "role": "Director",
+     "source": "https://example.org/cedar-board"
+    }
+   ],
+   "employers": [
+    {
+     "org": "Birch Engineering",
+     "role": "Engineer"
+    }
+   ],
+   "cofounded": [
+    {
+     "org": "Juniper Science",
+     "role": "Co-founder",
+     "source": "https://example.org/juniper-founders"
+    }
+   ],
+   "investments": [
+    {
+     "org": "Larch Robotics",
+     "source": "https://example.org/larch-round"
+    }
+   ],
+   "bio": "Rowan advises Pine Research Trust.",
+   "sources": [
+    "https://example.org/rowan-bio"
+   ]
+  }
+ ]
 }
