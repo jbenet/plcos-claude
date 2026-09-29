@@ -185,12 +185,15 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     select signals->>'separationGroup' key,canonical_entity id from identity.match_assertion
       where kind='not_same_as' and undone_at is null and signals->>'separationGroup' is not null
   ), memberships as (
-    select r.canonical_id,array_agg(distinct e.key) groups from endpoints e
-      join identity.entity_resolution r on r.entity_id=e.id group by r.canonical_id
+    -- Canonical ids through the function, for the few endpoints only: joining the
+    -- entity_resolution view against every match row ran for hours on 118k entities.
+    select identity.canonical_entity_id(e.id) canonical_id,array_agg(distinct e.key) groups from endpoints e group by 1
+  ), pairs as (
+    select p.edge_id,identity.canonical_entity_id(p.left_entity) l,identity.canonical_entity_id(p.right_entity) r
+      from identity.possible_match p where p.active and exists(select 1 from memberships)
   ) update identity.possible_match p set active=false
-    from identity.entity_resolution l,identity.entity_resolution r,memberships a,memberships b
-    where p.active and l.entity_id=p.left_entity and r.entity_id=p.right_entity
-      and a.canonical_id=l.canonical_id and b.canonical_id=r.canonical_id and a.groups && b.groups`);
+    from pairs x join memberships a on a.canonical_id=x.l join memberships b on b.canonical_id=x.r
+    where p.edge_id=x.edge_id and a.groups && b.groups`);
   await tx.query(`update identity.possible_match set active=false where active
     and (identity.canonical_entity_id(left_entity)=identity.canonical_entity_id(right_entity)
       or (signals->>'rule'='creation-name-only' and exists(

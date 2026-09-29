@@ -11,8 +11,7 @@ export async function readSeparationGroups(tx: Queryable): Promise<string[][]> {
     union
     select signals->>'separationGroup' key,canonical_entity id from identity.match_assertion
       where kind='not_same_as' and undone_at is null and signals->>'separationGroup' is not null
-  ) select e.key,array_agg(distinct r.canonical_id::text) ids from endpoints e
-    join identity.entity_resolution r on r.entity_id=e.id group by e.key`);
+  ) select e.key,array_agg(distinct identity.canonical_entity_id(e.id)::text) ids from endpoints e group by e.key`);
   return rows.map(r => r.ids);
 }
 
