@@ -10,8 +10,10 @@ status, an amount from our records, a note, a list name, or the fact that someon
 sign-ins, no paid services, no contact-data brokers, nothing posted or submitted. Never fetch LinkedIn.
 Where a service insists on an email, use blue.tunguska@agentmail.to, never anyone's real address. SEC at most
 one request a second; a 403, 429 or 503 ends requests to that host for the run. Dakota: names may be searched,
-but no Dakota-only private fields (AUM, ticket sizes, emails, notes) in any query, and do not read anything
-under plcos-data/real/dakota.
+but no Dakota-only private fields (AUM, ticket sizes, emails, notes) in any query, and no value copied from a
+Dakota record (profile URLs, ids, titles) in a search either — search the name and organisation instead
+(28 Sep 2026: an identity reviewer searched a Dakota-stored profile URL). Do not read anything under
+plcos-data/real/dakota.
 
 **Fact discipline** (W1 1.50): analysis stays out of sourced facts; one fact, one page; say what each date is;
 keep qualifiers and currency; quotes exact and at most 25 words; snippets are cautions; historical is not
