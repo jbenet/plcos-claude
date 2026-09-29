@@ -1,6 +1,6 @@
 # W13 — Review ambiguous identities
 
-Version 1. Identity only: decide whether exported records describe the same person or organization,
+Version 2. Identity only: decide whether exported records describe the same person or organization,
 different namesakes, or a person/organization type error. Do not change pipeline status, consent,
 capital, routes, contact permissions or source systems. A missing match is unresolved, not proof of
 different identities.
@@ -104,7 +104,12 @@ An export previews the deterministic pass and rolls back its writes: it does not
   merges and conflicting proposals for one group are refused. Existing active separations or
   reversed merges cannot be overridden by a merge proposal.
 
-### Same-source different-ID exception
+### Legacy same-source different-ID exception
+
+The deterministic pass now records distinct Affinity, warehouse, Dakota and network_finding
+IDs as `different_external_id` separations before review. Those pairs leave the ambiguous
+queue and **cannot** be overridden by the attestation below. This format remains relevant
+to legacy decisions and other source namespaces; a recorded separation always wins.
 
 For every pair of different external IDs from each source across the complete selected
 components (aliases included), provide supporting identity evidence and an explicit local
@@ -129,7 +134,9 @@ An Affinity exception stores rule `decision:affinity-duplicate`; source records 
 
 ## Application, reversal and acceptance checks
 
-The human's **Merge duplicate identities** action runs deterministic rules first, then the
+The human's **Merge duplicate identities** action runs deterministic rules first (same normalized
+name plus non-free-mail email domain, personal URL/domain, or current affiliation; source-ID
+conflicts become recorded differences; own-named offices remain affiliated separate identities), then the
 local decision file, then existing pursuit consolidation. The Enrichment page reports
 “N decisions applied, M refused” and line-specific reasons. It shows merge, correction and
 separation IDs. Exact retries use persisted decision receipts and do not duplicate mutations,

@@ -220,3 +220,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 
 - [Research export — preserve identity keys and email domains](entries/export-redaction.md)
 - [Identity review — apply later decisions without removing history](entries/decisions-applied.md)
+
+- [Deterministic duplicate rules](entries/dedupe-rules.md)

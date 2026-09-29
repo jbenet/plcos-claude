@@ -1,3 +1,4 @@
+import { businessEmailDomain, normalizeOrg, countDuplicateRule } from './duplicate-rules';
 import type { Queryable } from '@/lib/db';
 import { identityGraphContext, identityRawContext } from './identity-context';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
@@ -8,8 +9,7 @@ import type { ImportDuplicateReport } from './import-dupes';
 type Person = { id: string; root: string; name: string; created: string; retired: boolean };
 type Source = { id: string; source: string; key: string; resolver: string };
 const internal = (s: string) => ['prospect', 'prospect_key', 'w3_person', 'network_person', 'network_candidate'].includes(s) || s.startsWith('rule:');
-const imported = (s: Source) => internal(s.source) || s.resolver.startsWith('rule:sourced-');
-type Signals = { orgs: Set<string>; urls: Set<string> };
+type Signals = { orgs: Set<string>; urls: Set<string>; domains: Set<string> };
 const meaningful = (s: string) => !!s.trim() && !/^(unknown|none|null|n\/a|not recorded)$/i.test(s.trim());
 
 // A shared article, firm homepage or email domain is not a personal identity locator.
@@ -18,7 +18,7 @@ function personalUrl(value: unknown, explicit = false): string | null {
   const text = value.trim();
   try {
     const u = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
-    if (!['http:', 'https:'].includes(u.protocol)) return null;
+    if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) return null;
     const host = u.hostname.toLowerCase().replace(/^www\./, '');
     if (!host.includes('.')) return null;
     const path = u.pathname.replace(/\/+$/, '');
@@ -34,10 +34,17 @@ function personalUrl(value: unknown, explicit = false): string | null {
 function readSignals(value: unknown, into: Signals) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
   const v = value as Record<string, unknown>;
-  const org = (x: unknown) => { if (typeof x === 'string' && meaningful(x) && /[\p{L}\p{N}]/u.test(x)) into.orgs.add(normalizeIdentityName(x)); };
+  const start=v.started_on??v.startedOn??v.start_date;
+  if (typeof start==='string' && (!Number.isFinite(Date.parse(start)) || Date.parse(start)>Date.now())) return;
+  if (v.ended_on || v.endedOn || v.end_date || v.current === false) return;
+  const org = (x: unknown) => { if (typeof x === 'string' && meaningful(x) && /[\p{L}\p{N}]/u.test(x)) into.orgs.add(normalizeOrg(x)); };
   const url = (x: unknown, explicit = false) => { const key = personalUrl(x, explicit); if (key) into.urls.add(key); };
+  for (const key of ['email','email_address','emailDomain','email_domain', 'email__c']) {
+    const d=businessEmailDomain(v[key]); if(d) into.domains.add(d);
+  }
+  for (const email of Array.isArray(v.emails) ? v.emails : []) { const d=businessEmailDomain(email); if(d) into.domains.add(d); }
   for (const key of ['org', 'organization', 'company', 'firm', 'contextOrganization']) org(v[key]);
-  for (const key of ['linkedin', 'linkedin_url', 'linkedinUrl', 'linkedin_url__c', 'personal_url', 'personalUrl', 'personal_website', 'bio_url']) url(v[key], !key.startsWith('linkedin'));
+  for (const key of ['linkedin', 'linkedin_url', 'linkedinUrl', 'linkedin_url__c', 'personal_url', 'personalUrl', 'personal_website', 'personal_domain', 'bio_url']) url(v[key], !key.startsWith('linkedin'));
   if (typeof v.source === 'string') url(v.source);
   if (v.identity && typeof v.identity === 'object') {
     const identity = v.identity as Record<string, unknown>;
@@ -53,7 +60,7 @@ function readSignals(value: unknown, into: Signals) {
   }
   for (const fact of Array.isArray(v.facts) ? v.facts : []) {
     const f = fact as Record<string, unknown>;
-    if (f && ['role', 'prior_role', 'affiliation'].includes(String(f.field))) readSignals(f.detail, into);
+    if (f && ['role', 'affiliation'].includes(String(f.field))) readSignals(f.detail, into);
   }
   for (const source of Array.isArray(v.sources) ? v.sources : []) {
     if (typeof source === 'string') url(source);
@@ -82,24 +89,24 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
   const sources = await tx.query<Source>(`select entity_id::text id,source,source_id key,resolved_by resolver
     from identity.source_record where entity_id=any($1::uuid[]) order by source,source_id`, [ids]);
   const rootSources = (id: string) => sources.filter(s => roots.get(s.id) === id);
-  const isImport = (id: string) => rootSources(id).some(imported);
   const established = (id: string) => rootSources(id).some(s => !internal(s.source));
-  const signals = new Map([...duplicateRoots].map(id => [id, { orgs: new Set<string>(), urls: new Set<string>() }]));
+  const signals = new Map([...duplicateRoots].map(id => [id, { orgs: new Set<string>(), urls: new Set<string>(), domains: new Set<string>() }]));
   const apply = (id: string, data: unknown) => { const s = signals.get(roots.get(id) ?? id); if (s) readSignals(data, s); };
   const affiliations = await tx.query<{ id: string; name: string }>(`select a.person_entity::text id,o.display_name name
     from identity.affiliation a join identity.entity o on o.entity_id=identity.canonical_entity_id(a.org_entity)
-    where a.person_entity=any($1::uuid[])`, [ids]);
+    where a.person_entity=any($1::uuid[]) and a.ended_on is null and a.source is distinct from 'identity:v1:own_named_organization'
+      and (a.started_on is null or a.started_on<=current_date)`, [ids]);
   for (const a of affiliations) apply(a.id, { org: a.name });
-  for (const a of await identityGraphContext(tx, ids)) apply(a.id, { org: a.org });
+  for (const a of await identityGraphContext(tx, ids, true)) apply(a.id, { org: a.org });
   const notes = await tx.query<{ id: string; data: unknown }>(`select entity_id::text id,data from research.note
     where entity_id=any($1::uuid[]) and (kind='public_profile' or (kind='context' and data->>'source'='prospects'))`, [ids]);
   for (const n of notes) apply(n.id, n.data);
-  const raw = await identityRawContext(tx, ids);
+  const raw = await identityRawContext(tx, ids, true);
   for (const r of raw) apply(r.id, r.payload);
   const links = await tx.query<{ id: string; value: string }>(`select entity_id::text id,value from identity.external_identifier
     where kind='linkedin' and entity_id=any($1::uuid[])`, [ids]);
   for (const l of links) apply(l.id, { linkedin: l.value });
-  const contacts = await tx.query<{ id: string; linkedin: string | null }>(`select entity_id::text id,linkedin_url__c linkedin
+  const contacts = await tx.query<{ id: string; linkedin: string | null; email: string | null }>(`select entity_id::text id,linkedin_url__c linkedin,email
     from dakota.contact where entity_id=any($1::uuid[])`, [ids]);
   for (const c of contacts) apply(c.id, c);
   const keyOwner = (key: string) => roots.has(key) ? key : (() => {
@@ -119,24 +126,22 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
     where entity_id=any($1::uuid[])`, [ids])).map(c => roots.get(c.id)!));
   const shared = (a: string, b: string) => {
     const x = signals.get(a)!, y = signals.get(b)!;
-    return { organizations: [...x.orgs].filter(v => y.orgs.has(v)).sort(), personalUrls: [...x.urls].filter(v => y.urls.has(v)).sort() };
+    return { organizations: [...x.orgs].filter(v => y.orgs.has(v)).sort(), personalUrls: [...x.urls].filter(v => y.urls.has(v)).sort(), emailDomains: [...x.domains].filter(v => y.domains.has(v)).sort() };
   };
-  const corroborates = (a: string, b: string) => { const s = shared(a, b); return s.organizations.length + s.personalUrls.length > 0; };
+  const corroborates = (a: string, b: string) => { const s = shared(a, b); return s.organizations.length + s.personalUrls.length + s.emailDomains.length > 0; };
   for (const [name, group] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
-    if (group.length < 2 || !group.some(p => isImport(p.id))) continue;
+    if (group.length < 2) continue;
     // Build proposals before writing, so an ambiguous fork cannot become an arbitrary first match.
     const remaining = new Set(group.map(p => p.id));
     while (remaining.size) {
       const component = new Set([remaining.values().next().value!]);
       for (const a of component) for (const b of group) if (!component.has(b.id)
-        && (isImport(a) || isImport(b.id)) && corroborates(a, b.id)) component.add(b.id);
+        && corroborates(a, b.id)) component.add(b.id);
       for (const id of component) remaining.delete(id);
-      if (component.size === 1 && !isImport([...component][0]!)) continue;
       const members = people.filter(p => component.has(p.root));
       const ownedSources = sources.filter(s => component.has(roots.get(s.id)!));
       const reasons = new Set<string>();
       if (component.size === 1) reasons.add('matching name without corroborating organization or personal URL');
-      if ([...component].filter(established).length > 1) reasons.add('multiple established identities match the imported person');
       if (members.some(p => p.retired)) reasons.add('retired identity in component');
       if ([...component].some(id => corrected.has(id))) reasons.add('prior local type decision');
       if (ownedSources.some(s => s.source === 'app_user')) reasons.add('user account requires explicit roster resolution');
@@ -163,13 +168,16 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
       const survivor = ordered[0]!, canonical = rootSources(survivor.id)[0]!;
       for (const loser of ordered.slice(1)) {
         const source = rootSources(loser.id)[0]!;
+        const proof=shared(loser.id,survivor.id);
+        const rule=proof.personalUrls.length?'same_name_personal_url':proof.emailDomains.length?'same_name_email_domain':'same_name_current_affiliation';
         await tx.query('update identity.entity set merged_into=$2 where entity_id=$1', [loser.id, survivor.id]);
         const assertion = await tx.one<{ id: string }>(`insert into identity.match_assertion
           (kind,left_source,left_source_id,right_source,right_source_id,merged_entity,canonical_entity,rule,signals,note)
-          values('same_as',$1,$2,$3,$4,$5,$6,'identity:v1:import-duplicates',$7::jsonb,
+          values('same_as',$1,$2,$3,$4,$5,$6,$8,$7::jsonb,
             'Corroborated imported person duplicate; original source references retained for undo.') returning assertion_id::text id`,
         [source.source, source.key, canonical.source, canonical.key, loser.id, survivor.id,
-          JSON.stringify({ entityType: 'person', normalizedName: name, by, ...shared(loser.id, survivor.id) })]);
+          JSON.stringify({ rule, entityType: 'person', normalizedName: name, by, ...proof }), `identity:v1:${rule}`]);
+        countDuplicateRule(report,rule);
         report.merged++;
         report.merges.push({ assertionId: assertion!.id, survivorId: survivor.id, loserId: loser.id, name: survivor.name });
       }
