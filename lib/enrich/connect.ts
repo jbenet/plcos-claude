@@ -631,8 +631,18 @@ function teamProfilePaths(c: Candidate, f: Finding | undefined, team: TeamMember
 function ourSidePaths(c: Candidate, f: Finding | undefined, net: Network, team: TeamMember[], at: Date): Path[] {
   const out: Path[] = [];
   const other = (t: TeamMember): Path['other'] => ({ type: 'team', name: t.name, handle: t.handle });
+  const records: Array<Candidate['contact']['recent'][number] & { group?: boolean; email?: EmailEvidence }> = c.contact.records ?? c.contact.recent ?? [];
+  const history = records.map(r => {
+    const email = r.email;
+    return { ...r, with: email?.team?.length ? email.team : r.with, direction: email?.direction ?? r.direction };
+  });
+  const cutoff = new Date(at.getTime() - 180 * 86400000).toISOString().slice(0, 10);
+  const recentPersonal = history.filter(r => r.channel === 'email' && 'email' in r && r.email?.oneToOne && !r.email.bulk
+    && r.on >= cutoff && r.on <= at.toISOString().slice(0, 10) && team.some(t => r.with.some(n => norm(n) === norm(t.name))));
+  const twoWay = recentPersonal.some(r => ['sent', 'ours'].includes(r.direction ?? ''))
+    && recentPersonal.some(r => ['received', 'theirs'].includes(r.direction ?? ''));
   for (const t of team) {
-    const contacts: Array<Candidate['contact']['recent'][number] & { group?: boolean; email?: EmailEvidence }> = (c.contact.records ?? c.contact.recent ?? []).filter((r) => r.with.some((name) => norm(name) === norm(t.name))
+    const contacts: Array<Candidate['contact']['recent'][number] & { group?: boolean; email?: EmailEvidence }> = history.filter((r) => r.with.some((name) => norm(name) === norm(t.name))
       && r.on <= at.toISOString().slice(0, 10)
       && ['meeting', 'call', 'email', 'message'].includes(r.channel));
     const direct = contacts.filter(r => r.channel !== 'email' && (r.group !== undefined ? !r.group
@@ -642,10 +652,11 @@ function ourSidePaths(c: Candidate, f: Finding | undefined, net: Network, team: 
     const sent = personal.filter(r => ['ours', 'sent'].includes(r.direction ?? ''));
     const received = personal.filter(r => ['theirs', 'received'].includes(r.direction ?? ''));
     const bulkOnly = contacts.length > 0 && contacts.every(r => r.channel === 'email' && 'email' in r && r.email?.bulk);
-    const warm = [...direct, ...received, ...(received.length ? sent : [])];
+    const pairedSent = twoWay ? sent.filter(r => r.on >= cutoff) : [];
+    const warm = [...direct, ...received, ...pairedSent];
     const tier: Tier = warm.length ? 'B' : bulkOnly ? 'D' : 'C';
     const why = direct.length ? 'direct meeting/call/message with both present'
-      : received.length && sent.length ? 'two-way one-to-one email'
+      : twoWay && personal.some(r => r.on >= cutoff) ? 'two-way one-to-one email within 180 days (across the named team)'
       : received.length ? 'inbound-only one-to-one email; waiting on us'
       : bulkOnly ? 'bulk/mass mailing only; no personal tie established'
       : sent.length ? 'we wrote, no reply (one-to-one email)'

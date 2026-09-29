@@ -13,6 +13,7 @@ import { listRestrictions } from '@/modules/coordination';
 import { lpContactsFor, listPursuits, type Pursuit, type PursuitStatus } from '@/modules/strategy';
 import { readingsFor } from '@/lib/connectors/affinity/readings';
 import { noteTags } from '@/lib/connectors/affinity/event-tags';
+import { initForMatching, type AffinityUser } from '@/lib/connectors/affinity/discover';
 import { emailEvidenceIndex, type EmailEvidence } from './email-evidence';
 import { emailEntriesByPerson, replyOwedSince } from './reply-owed';
 import { makeTriageExport, writeTriageExport } from './triage-export';
@@ -196,10 +197,13 @@ async function researchSnapshot() {
   ]);
   const emailRecords = await latestRaw<unknown>('affinity', 'email');
   const emails = emailEntriesByPerson(emailRecords.map(r => r.payload));
+  const roster = await db.query<{ name: string; handle: string; email: string }>('select name, handle, email from platform.app_user where active');
+  const init = await initForMatching();
+  const affinityUsers = await latestRaw<AffinityUser>('affinity', 'user');
   const emailEvidence = emailEvidenceIndex([
     ...entries.flatMap(r => (r.payload.entity.fields ?? []).flatMap(f => f.value?.type === 'interaction' ? [f.value.data] : [])),
-    ...emailRecords.map(r => r.payload),
-  ]);
+    ...emailRecords.map(r => ({ ...r.payload as object, type: 'email' })),
+  ], roster.map(t => ({ ...t, affinityEmail: init?.team.find(m => m.handle === t.handle)?.affinityEmail })), affinityUsers.map(r => r.payload));
   const readings = await readingsFor(ids);
   const context = await db.query<{ entity_id: string; at: Date | string; by: string | null; body: string }>(
     `select identity.canonical_entity_id(n.entity_id)::text as entity_id, n.created_at as at, u.name as by, n.body

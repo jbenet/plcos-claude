@@ -215,3 +215,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Dakota — deterministic transaction rollback property](entries/deflake-dakota.md)
 
 - [W3 1.3 — Email evidence tiers](entries/w3-email-tiers.md)
+
+- [W3 — Resolve email direction and team holders](entries/w3-direction.md)

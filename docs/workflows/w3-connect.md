@@ -32,13 +32,19 @@ restrictions.
   team participants by recorded person identity or email. Match LP people through their
   canonical records and project their paths onto current LP-unit contacts. An assigned owner
   alone is not evidence of participation. Legacy exports fall back to `contact.recent`.
-- Grade email per LP and named team participant, across the complete history. Two-way
+- Grade email per LP and named team participant, across the complete history. A two-way
+  exchange requires personal messages in both directions within the last 180 days; the
+  sending and receiving team members may differ. Two-way
   one-to-one email is B. Inbound-only one-to-one email is B, labelled **waiting on us**.
   Outbound-only one-to-one email is C, labelled **we wrote, no reply**. Bulk/mass mail alone
   is D, never evidence of a direct conversation. A rules are unchanged.
 - The private export joins translated touchpoint source refs to cached Affinity email metadata
   (account-wide email plus list-entry fallback). It preserves `massMailing`, `loggingType`,
   recipient count, and a derived one-to-one/bulk classification without exporting addresses.
+  Resolve `from`, `toParticipantsPreview` and `ccParticipantsPreview` (including legacy
+  preview aliases) against active roster emails, Affinity email aliases and cached Affinity
+  user IDs. Preserve resolved team names and direction in private email metadata; never
+  export addresses. Conflicting direction or ambiguous roster matches cannot establish a reply.
   `ours`/`sent` and `theirs`/`received` are the two directions. One-to-one requires exactly
   one sender and one recipient, the LP and an internal participant. More than one recipient
   (including CC and preview totals), mass-mail flags, bulk/newsletter logging types, and

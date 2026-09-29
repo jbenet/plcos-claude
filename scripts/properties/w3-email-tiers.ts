@@ -31,7 +31,7 @@ const counts = (paths: Path[]) => Object.fromEntries(['A', 'B', 'C', 'D'].map(t 
 export function w3EmailTierProperties(check: (name: string, ok: boolean, detail: string) => void) {
   const paths = runEmailFixture();
   const expected = ['B', 'C', 'B', 'B', 'D', 'D', 'D', 'D', 'D'];
-  const why = ['two-way', 'we wrote, no reply', 'waiting on us', 'both present', 'bulk', 'bulk', 'bulk', 'bulk', 'bulk'];
+  const why = ['waiting on us', 'we wrote, no reply', 'waiting on us', 'both present', 'bulk', 'bulk', 'bulk', 'bulk', 'bulk'];
   for (let i = 0; i < expected.length; i++) {
     const p = paths.find(p => p.lp === emailFixture[i]!.key);
     check(`W3 email fixture ${i}: ${expected[i]} ${why[i]}`, p?.tier === expected[i] && p.basis.includes(why[i]!), p?.basis ?? 'Missing path');
@@ -58,5 +58,44 @@ export function w3EmailTierProperties(check: (name: string, ok: boolean, detail:
   check('Organisation projection preserves outbound C and why', projected?.tier === 'C'
     && projected.basis.includes('we wrote, no reply') && !!projected.viaContact, 'Membership cannot turn outbound mail warm.');
   check('Future replies cannot upgrade outbound', run([mail('ours'), { ...mail('theirs'), on: '2027-01-01' }])?.tier === 'C', 'Frozen evaluation date bounds evidence.');
+
+  const roster = [{ name: 'Rowan Alder', email: 'rowan@example.test' }, { name: 'Cedar Brook', email: 'cedar@example.test' }];
+  const users = [{ id: 20, primaryEmailAddress: 'rowan@example.test' }, { id: 21, primaryEmailAddress: 'cedar@example.test' }];
+  const rawRecord = (direction: string, member = 20, extra = {}): Record => {
+    const raw = { id: 8, type: 'email', direction,
+      from: direction === 'sent' ? person(member, 'internal') : person(10, 'external'),
+      toParticipantsPreview: { data: [direction === 'sent' ? person(10, 'external') : person(member, 'internal')], totalCount: 1 },
+      ccParticipantsPreview: { data: [], totalCount: 0 }, ...extra };
+    return { ...mail('unknown'), on: '2026-09-01', direction: null, with: ['Rowan Alder'],
+      email: emailEvidenceIndex([raw], roster, users)('interaction:email:8:person:10') };
+  };
+  const fixed = [
+    [rawRecord('received'), rawRecord('sent')],
+    [rawRecord('received', 21), rawRecord('sent')],
+    [rawRecord('sent')],
+    [rawRecord('received', 20, { massMailing: true })],
+    [rawRecord('received', 99)],
+  ];
+  const runCases = (before: boolean) => fixed.flatMap((records, i) => connectionPaths([{ ...emailFixture[0]!, key: `direction-${i}`,
+    contact: { ...emailFixture[0]!.contact, records: before ? records.map(r => ({ ...r, email: { ...r.email!, team: undefined, direction: undefined, oneToOne: false } })) : records }
+  }], new Map(), net, [...team, otherTeam], [], at).paths);
+  const before = counts(runCases(true)), after = counts(runCases(false));
+  check('Direction fixture before/after counts', JSON.stringify(before) === JSON.stringify({ A: 0, B: 0, C: 4, D: 1 })
+    && JSON.stringify(after) === JSON.stringify({ A: 0, B: 3, C: 2, D: 1 }), JSON.stringify({ before, after }));
+  check('Cross-team two-way names both holders', runCases(false).filter(p => p.lp === 'direction-1').every(p => p.tier === 'B' && /two-way/.test(p.basis))
+    && runCases(false).some(p => p.lp === 'direction-1' && p.other.name === 'Cedar Brook'), 'Received by Cedar, sent by Rowan.');
+  check('Preview CC totals keep mass D', run([rawRecord('received', 20, { ccParticipantsPreview: { data: [], totalCount: 10 } })])?.tier === 'D', 'Truncated previews still count.');
+  check('Roster email resolves sender without internal marker', run([rawRecord('sent', 20, { from: { emailAddress: ' ROWAN@EXAMPLE.TEST ' } })])?.basis.includes('we wrote, no reply') === true, 'Exact normalized address.');
+  check('Contradictory payload direction fails closed', run([rawRecord('sent', 20, { direction: 'received' })])?.tier === 'C', 'No inferred reply from contradictory metadata.');
+  check('Old inbound cannot pair with new outbound across team', connectionPaths([{ ...emailFixture[0]!, contact: { ...emailFixture[0]!.contact,
+    records: [{ ...rawRecord('received', 21), on: '2026-03-01' }, rawRecord('sent')] } }], new Map(), net, [...team, otherTeam], [], at).paths.some(p => p.other.handle === 'rowan' && p.tier === 'C'), '180-day window applies to both sides.');
+
+  const ambiguous = emailEvidenceIndex([{ id: 9, type: 'email', from: person(10, 'external'),
+    toParticipantsPreview: { data: [{ emailAddress: 'shared@example.test' }], totalCount: 1 } }],
+    [{ name: 'Rowan Alder', email: 'shared@example.test' }, { name: 'Cedar Brook', email: 'shared@example.test' }])('interaction:email:9:person:10');
+  check('Ambiguous roster address cannot establish personal inbound', ambiguous?.oneToOne === false && !ambiguous.direction, 'Shared addresses fail closed.');
+  check('Email metadata exports no addresses', !JSON.stringify(rawRecord('received').email).includes('@'), 'Names and direction only.');
+  const cutoffDay = new Date(at.getTime() - 180 * 86400000).toISOString().slice(0, 10);
+  check('180-day cutoff is inclusive', /two-way/.test(run([{ ...rawRecord('received'), on: cutoffDay }, rawRecord('sent')])!.basis), 'Both messages inside the frozen window.');
 
 }

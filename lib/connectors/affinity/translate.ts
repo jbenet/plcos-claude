@@ -390,6 +390,8 @@ interface Interaction {
   cc?: unknown[] | null;
   attendees?: Array<{ emailAddress?: string; person?: InteractionPerson }>;
   attendeesPreview?: { data: Participant[]; totalCount: number };
+  toParticipantsPreview?: { data: Participant[]; totalCount: number };
+  ccParticipantsPreview?: { data: Participant[]; totalCount: number };
   toPreview?: { data: Participant[]; totalCount: number };
   ccPreview?: { data: Participant[]; totalCount: number };
   participantsPreview?: { data: Participant[]; totalCount: number };
@@ -510,7 +512,7 @@ export async function touchpoints(
       // addressed to (N82) — a reply to one of us is theirs, not nobody's, and says who knows whom.
       const internal = [
         ...(d.attendees ?? []),
-        ...(d.type === 'email' || d.type === 'chat-message' ? [d.from, ...(d.to ?? []) as Participant[]] : []),
+        ...(d.type === 'email' || d.type === 'chat-message' ? [d.from, ...(d.to ?? d.toParticipantsPreview?.data ?? d.toPreview?.data ?? []) as Participant[]] : []),
       ].filter((p): p is Participant => !!p && (!!who(p.person, p.emailAddress) || p.person?.type === 'internal'));
       await put({
         entity, ref: `interaction:${d.type}:${d.id}:${key}`, channel: CHANNEL_OF[d.type], at, exact: true,
@@ -558,8 +560,8 @@ export async function touchpoints(
   for (const d of interactions) {
     const at = d.sentAt ?? d.startTime;
     if (!at || !CHANNEL_OF[d.type]) continue;
-    const to = (d.to ?? d.toPreview?.data ?? []) as Participant[];
-    const participants: Participant[] = [d.from, ...to, ...(d.cc ?? d.ccPreview?.data ?? []) as Participant[],
+    const to = (d.to ?? d.toParticipantsPreview?.data ?? d.toPreview?.data ?? []) as Participant[];
+    const participants: Participant[] = [d.from, ...to, ...(d.cc ?? d.ccParticipantsPreview?.data ?? d.ccPreview?.data ?? []) as Participant[],
       ...(d.attendees ?? d.attendeesPreview?.data ?? d.participantsPreview?.data ?? [])].filter((p): p is Participant => !!p);
     const internal = participants.map(a => who(a.person, a.emailAddress)).filter((x): x is string => !!x);
     const linked = new Set<string>();
