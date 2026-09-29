@@ -141,6 +141,8 @@ export async function cacheOverlayProperties(check: Check, db: Db) {
     await db.query('delete from coordination.restriction where entity_id = $1', [target]);
     await db.query('delete from pipeline.exposure where entity_id = $1', [carrier]);
     await db.query('delete from network.edge where from_entity = any($1::uuid[]) or to_entity = any($1::uuid[])', [ids]);
+    await db.query('delete from identity.possible_match where left_entity= any($1::uuid[]) or right_entity= any($1::uuid[])', [ids]);
+    await db.query("delete from research.note where entity_id= any($1::uuid[]) and kind='identity_creation'", [ids]);
     await db.query('delete from identity.entity where entity_id = any($1::uuid[])', [ids]);
   }
 }

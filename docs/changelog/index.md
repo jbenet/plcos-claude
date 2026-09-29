@@ -219,3 +219,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [W3 — Resolve email direction and team holders](entries/w3-direction.md)
 
 - [Research export — preserve identity keys and email domains](entries/export-redaction.md)
+- [Create-match — Resolve identities before creation](entries/create-match.md)

@@ -1,0 +1,9 @@
+# Create-match — Resolve identities before creation
+
+Person and organization creation now uses `modules/identity/create.ts`: attach an existing same-source ID first, then a unique normalized-name match corroborated by a non-free email domain or personal URL, then a unique name-and-affiliation match. A name alone creates a separate entity and an active identity-review pair in the same transaction. Multiple corroborated candidates remain unresolved. Source mappings, canonical redirects, type corrections and explicit separations are retained.
+
+Prospects, findings/W3 endpoints, portfolio, Affinity translation and participant contacts, Dakota, warehouse/network builders, demo seeds and the manual creation API share this entrance. Linear currently creates replica rows only. Portfolio source IDs no longer retarget when later evidence changes; company domains and CRD/CIK alone no longer establish identity. No new UI or schema migration.
+
+Creation evidence is stored in source-labelled research notes for subsequent imports, without presenting it as verified research. Later identity passes preserve unresolved creation pairs. The boundaries check rejects direct entity inserts outside the resolver; named demo/benchmark fixtures and property harnesses may still construct historical duplicates and redirects.
+
+Validation: invented fixtures cover the resolver's precedence, normalization, ambiguous matches, free-mail refusal, canonical/source stability, separation, rollback and immediate queues, plus each creation adapter. `npx tsc --noEmit`, `npm run boundaries` and `npm run props` passed (1,351/1,351 properties on PGlite). The unchanged network scale benchmark passed: 4,705 invented people and 188,000 ties imported in 26.1 seconds, then repeated in 18.3 seconds with zero new entities, both below its one-minute limit. Postgres properties remain the merge gate. No real data was read and no remote operation was run.

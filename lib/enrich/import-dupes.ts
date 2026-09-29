@@ -41,6 +41,8 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     e.display_name name,e.entity_type::text type,e.created_at::text created,e.retired_at is not null retired
     from identity.entity e join identity.entity_resolution r using(entity_id) order by e.entity_id`);
   const roots = new Map(entities.map(e => [e.id, e.root]));
+  const creationPairs = await tx.query<{a:string;b:string}>(`select identity.canonical_entity_id(left_entity)::text a,
+    identity.canonical_entity_id(right_entity)::text b from identity.possible_match where active and signals->>'rule'='creation-name-only'`);
   const groups = new Map<string, Entity[]>();
   for (const e of entities) if (e.id === e.root && !e.retired && ['org', 'person'].includes(e.type)) {
     const name = normalizeIdentityName(e.name);
@@ -80,6 +82,9 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     const component = members.filter(e => groupIds.has(e.root));
     const groupSources = sources.filter(s => groupIds.has(roots.get(s.id)!));
     const reasons = new Set<string>();
+    if(creationPairs.some(p=>p.a!==p.b && groupIds.has(p.a) && groupIds.has(p.b))) {
+      reasons.add('creation name-only match requires identity review');
+    }
     for (const e of component) {
       const own = groupSources.filter(s => s.id === e.id);
       if (!own.length || own.some(s => !internalSource(s.source) && !s.resolver.startsWith('rule:'))) {
@@ -129,6 +134,27 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     }
   }
   await mergeImportPeople(tx, by, report, findings, paths);
+  // W13 also reviews manual/connector namesakes that the imported-person pass does
+  // not own. Fold current queued components into the same stable decision groups.
+  const queued = await tx.query<{a:string;b:string;name:string}>(`select a.entity_id::text a,b.entity_id::text b,a.display_name name
+    from identity.possible_match p
+    join identity.entity a on a.entity_id=identity.canonical_entity_id(p.left_entity)
+    join identity.entity b on b.entity_id=identity.canonical_entity_id(p.right_entity)
+    where p.active and p.signals->>'rule'='creation-name-only' and a.entity_id<>b.entity_id
+      and a.retired_at is null and b.retired_at is null`);
+  for(const pair of queued) {
+    const ids=new Set([pair.a,pair.b]), reasons=new Set(['creation name-only match requires identity review']);
+    let changed=true;
+    while(changed) {
+      changed=false;
+      report.ambiguous=report.ambiguous.filter(g=>{
+        if(!g.entityIds.some(id=>ids.has(id)))return true;
+        for(const id of g.entityIds)ids.add(id);
+        reasons.add(g.reason);changed=true;return false;
+      });
+    }
+    report.ambiguous.push({name:pair.name,entityIds:[...ids].sort(),reason:[...reasons].join('; ')});
+  }
   await suppressSeparatedIdentityGroups(tx, report);
   if (!options.reviewOnly) await applyIdentityDecisions(tx, by, report, options.decisions ?? []);
   if (report.decisions?.applied) {
@@ -143,7 +169,16 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     }
   }
   await tx.query(`update identity.possible_match set active=false where active
-    and identity.canonical_entity_id(left_entity)=identity.canonical_entity_id(right_entity)`);
+    and (identity.canonical_entity_id(left_entity)=identity.canonical_entity_id(right_entity)
+      or (signals->>'rule'='creation-name-only' and exists(
+        select 1 from identity.match_assertion a
+        join identity.source_record l on l.source=a.left_source and l.source_id=a.left_source_id
+        join identity.source_record r on r.source=a.right_source and r.source_id=a.right_source_id
+        where a.kind='not_same_as' and a.undone_at is null
+          and least(identity.canonical_entity_id(l.entity_id),identity.canonical_entity_id(r.entity_id))=
+            least(identity.canonical_entity_id(left_entity),identity.canonical_entity_id(right_entity))
+          and greatest(identity.canonical_entity_id(l.entity_id),identity.canonical_entity_id(r.entity_id))=
+            greatest(identity.canonical_entity_id(left_entity),identity.canonical_entity_id(right_entity)))))`);
   return report;
 }
 

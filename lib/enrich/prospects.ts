@@ -1,3 +1,4 @@
+import { resolveEntity } from '@/modules/identity/create';
 import { createHash } from 'node:crypto';
 import { recordActivity } from '@/lib/activity/log';
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -12,6 +13,7 @@ export interface Prospect {
   personKey?: string | null; name: string; org: string | null; vehicle: string;
   status: 'new' | 'sourcing' | 'passed';
   decidedAt?: string;
+  emailDomain?: string; personalUrls?: string[];
   capacity: { band: string; basis: string; guess: boolean };
   reason: string; strategic: boolean;
   route: { best: string; score: number } | null;
@@ -42,6 +44,8 @@ export function prospectProblems(x: unknown): string[] {
   if (x.personKey != null && !words(x.personKey)) errors.push('personKey must be nonempty text, null or absent');
   if (x.entityId != null && !words(x.entityId)) errors.push('entityId must be nonempty text, null or absent');
   if (x.entityType !== undefined && x.entityType !== 'person' && x.entityType !== 'org') errors.push('entityType must be person or org');
+  if (x.emailDomain !== undefined && !words(x.emailDomain)) errors.push('emailDomain must be nonempty text');
+  if (x.personalUrls !== undefined && (!Array.isArray(x.personalUrls) || !x.personalUrls.every(words))) errors.push('personalUrls must be a text array');
   for (const k of ['name', 'vehicle', 'reason']) if (!words(x[k])) errors.push(`${k} must be nonempty text`);
   if (x.org !== null && !words(x.org)) errors.push('org must be nonempty text or null');
   if (x.status !== 'new' && x.status !== 'sourcing' && x.status !== 'passed') errors.push('status must be new, sourcing or passed');
@@ -109,20 +113,10 @@ type Identity = { id: string; name: string; type: string; merged: string | null;
 const current = (e: Identity) => !e.merged && !e.retired;
 
 /** Record the supplied organization as a claimed affiliation, never a decision-making role. */
-async function affiliateProspect(tx: Queryable, personId: string, p: Prospect, identities: Identity[]) {
+async function affiliateProspect(tx: Queryable, personId: string, p: Prospect) {
   if (!p.org) return;
   const key = normalized(p.org);
-  const mapped = await tx.one<{ id: string }>(`select entity_id::text id from identity.source_record where source = 'prospect_org' and source_id = $1`, [key]);
-  let orgId = mapped?.id;
-  if (!orgId) {
-    const matches = identities.filter(e => e.type === 'org' && current(e) && normalized(e.name) === key);
-    // Never arbitrarily choose among organization namesakes. Retain a separate sourced node.
-    orgId = matches.length === 1 ? matches[0]!.id : (await tx.one<{ id: string }>(
-      `insert into identity.entity (entity_type, display_name) values ('org', $1) returning entity_id::text id`, [p.org]))!.id;
-    if (matches.length !== 1) identities.push({ id: orgId, name: p.org, type: 'org', merged: null, retired: null });
-    await tx.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by)
-      values ('prospect_org', $1, $2, 'rule:sourced-prospect-organization')`, [key, orgId]);
-  }
+  const orgId = (await resolveEntity(tx,{type:'org',name:p.org,source:'prospect_org',sourceId:key})).id;
   await tx.query(`insert into identity.affiliation
     (person_entity, org_entity, kind, role, is_primary, source, as_of, certainty, note)
     values ($1, $2, 'contact', 'not recorded', true, $3, current_date, 'claimed',
@@ -145,6 +139,12 @@ async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[],
     // A reviewed explicit pin intentionally resolves stale names and conflicting source mappings.
     return { id: pinned.id, candidates: [pinned] };
   }
+  const source = await tx.one<{id:string}>(`select identity.canonical_entity_id(entity_id)::text id from identity.source_record where source='prospect' and source_id=$1`,[prospectPersonKey(p)]);
+  if(source) {
+    const resolved=await resolveEntity(tx,{type:expectedType,name:p.name,source:'prospect',sourceId:prospectPersonKey(p),
+      organizations:p.org?[p.org]:[],domains:p.emailDomain?[p.emailDomain]:[],personalUrls:p.personalUrls??[]});
+    return {id:resolved.id,candidates:[]};
+  }
   const rows = await tx.query<Identity>(
     `select distinct e.entity_id::text id, e.display_name name, e.entity_type::text type, e.merged_into::text merged, e.retired_at::text retired
        from identity.entity original join identity.entity e on e.entity_id=identity.canonical_entity_id(original.entity_id)
@@ -158,12 +158,10 @@ async function resolvePerson(tx: Queryable, p: Prospect, identities: Identity[],
     const row = rows[0]!;
     return { id: row.type === expectedType && current(row) && normalized(row.name) === normalized(p.name) ? row.id : undefined, candidates };
   }
-  const id = (await tx.one<{ id: string }>(
-    `insert into identity.entity (entity_type, display_name) values ($2::identity.entity_type, $1) returning entity_id::text id`, [p.name, expectedType]))!.id;
-  await tx.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by)
-    values ('prospect', $1, $2, 'rule:sourced-prospect')`, [prospectPersonKey(p), id]);
+  const { id } = await resolveEntity(tx,{type:expectedType,name:p.name,source:'prospect',sourceId:prospectPersonKey(p),
+    organizations:p.org?[p.org]:[],domains:p.emailDomain?[p.emailDomain]:[],personalUrls:p.personalUrls??[]});
   identities.push({ id, name: p.name, type: expectedType, merged: null, retired: null });
-  if (expectedType === 'person') await affiliateProspect(tx, id, p, identities);
+  if (expectedType === 'person') await affiliateProspect(tx, id, p);
   return { id, candidates: [] };
 }
 

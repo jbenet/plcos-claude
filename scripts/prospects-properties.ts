@@ -59,7 +59,7 @@ export async function prospectsProperties(check: Check, db: Db) {
     && matchedAliases.some(r => r.key === 'invented-prospect:w3' && r.id === w3),
     'Direct, warehouse and W3 matches all have stable prospect_key aliases.');
   const notes = await db.query<{ body: string; kind: string; data: Record<string, unknown> }>(
-    'select body, kind, data from research.note where entity_id = any($1::uuid[])', [[direct, warehouse, w3]]);
+    "select body, kind, data from research.note where entity_id = any($1::uuid[]) and kind <> 'identity_creation'", [[direct, warehouse, w3]]);
   check('PROSPECTS keyed entity, warehouse and W3 imports create once, with traceable capacity notes',
     first.added === 3 && first.existing === 0 && first.ambiguous === 0 && second.added === 0 && second.existing === 3 && notes.length === 3
     && notes.every(note => note.kind === 'context' && note.body.startsWith("Added by rule on Juan's instruction (26 Sep):")
@@ -71,7 +71,7 @@ export async function prospectsProperties(check: Check, db: Db) {
   const raced = await Promise.all([addProspects(db, actor, raceFile), addProspects(db, actor, raceFile)]);
   check('PROSPECTS concurrent imports create exactly one pursuit and one note',
     raced.reduce((sum, r) => sum + r.added, 0) === 1 && raced.reduce((sum, r) => sum + r.existing, 0) === 1
-    && await n('select count(*)::text n from research.note where entity_id = $1', [raceId]) === 1,
+    && await n("select count(*)::text n from research.note where entity_id = $1 and kind <> 'identity_creation'", [raceId]) === 1,
     `Two calls added ${raced.map(r => r.added).join('/')}, skipped existing ${raced.map(r => r.existing).join('/')}.`);
 
   const oldId = await makePerson('Invented Prospect Existing');
@@ -81,12 +81,12 @@ export async function prospectsProperties(check: Check, db: Db) {
       '2026-09-20','Keep this close reason','Keep this next step','us') returning pursuit_id::text id`, [oldId, vehicle.id, actor]))!.id;
   await db.query("insert into research.note (entity_id, author_id, kind, body) values ($1,$2,'context','Keep existing note')", [oldId, actor]);
   const beforeRow = JSON.stringify(await db.query('select * from strategy.pursuit where pursuit_id = $1', [existing]));
-  const beforeNotes = JSON.stringify(await db.query('select * from research.note where entity_id = $1 order by note_id', [oldId]));
+  const beforeNotes = JSON.stringify(await db.query("select * from research.note where entity_id = $1 and kind <> 'identity_creation' order by note_id", [oldId]));
   const oldResult = await addProspects(db, actor, files(prospect(oldId, 'Invented Prospect Existing', { status: 'sourcing' })));
   check('PROSPECTS existing closed/passed pursuits and their notes remain byte-for-byte unchanged',
     oldResult.kept === 1 && oldResult.added === 0
     && beforeRow === JSON.stringify(await db.query('select * from strategy.pursuit where pursuit_id = $1', [existing]))
-    && beforeNotes === JSON.stringify(await db.query('select * from research.note where entity_id = $1 order by note_id', [oldId])),
+    && beforeNotes === JSON.stringify(await db.query("select * from research.note where entity_id = $1 and kind <> 'identity_creation' order by note_id", [oldId])),
     `Person-set kept ${oldResult.kept}; whole pursuit row and all notes compared.`);
 
   const conflictA = await makePerson('Invented Prospect Namesake');
@@ -183,13 +183,13 @@ export async function prospectsProperties(check: Check, db: Db) {
 
   const stableBefore = await snapshot();
   const bornPursuitBefore = JSON.stringify(await db.query('select * from strategy.pursuit where entity_id = $1 order by pursuit_id', [born?.id]));
-  const bornNotesBefore = JSON.stringify(await db.query('select * from research.note where entity_id = $1 order by note_id', [born?.id]));
+  const bornNotesBefore = JSON.stringify(await db.query("select * from research.note where entity_id = $1 and kind <> 'identity_creation' order by note_id", [born?.id]));
   const reordered = await addProspects(db, actor, [{ file: 'renamed-invented-file.jsonl', text: [noOrg,
     { ...unseen, reason: 'Same status with edited evidence needs no disposition change.' }].map(r => JSON.stringify(r)).join('\n') }]);
   check('PROSPECTS2 row identity survives renamed files, row order and edited planning fields on rerun',
     reordered.added === 0 && reordered.existing === 2 && stableBefore === await snapshot()
     && bornPursuitBefore === JSON.stringify(await db.query('select * from strategy.pursuit where entity_id = $1 order by pursuit_id', [born?.id]))
-    && bornNotesBefore === JSON.stringify(await db.query('select * from research.note where entity_id = $1 order by note_id', [born?.id])),
+    && bornNotesBefore === JSON.stringify(await db.query("select * from research.note where entity_id = $1 and kind <> 'identity_creation' order by note_id", [born?.id])),
     `Rerun skipped ${reordered.existing}; identities, affiliations, pursuits and notes unchanged.`);
 
   const otherVehicle = (await db.one<{ slug: string }>('select slug from platform.vehicle where id <> $1 order by slug limit 1', [vehicle.id]))!;
@@ -209,7 +209,7 @@ export async function prospectsProperties(check: Check, db: Db) {
     unseenRaced.reduce((sum, r) => sum + r.added, 0) === 1 && unseenRaced.reduce((sum, r) => sum + r.existing, 0) === 1
     && await n('select count(*)::text n from identity.entity where display_name = $1', [unseenRace.name]) === 1
     && await n('select count(*)::text n from identity.affiliation where person_entity = $1', [racedPerson?.id]) === 1
-    && await n('select count(*)::text n from research.note where entity_id = $1', [racedPerson?.id]) === 1,
+    && await n("select count(*)::text n from research.note where entity_id = $1 and kind <> 'identity_creation'", [racedPerson?.id]) === 1,
     `Two unseen calls added ${unseenRaced.map(r => r.added).join('/')}.`);
 
   const single = await makePerson('Invented Prospects2 Hazel');
@@ -232,13 +232,13 @@ export async function prospectsProperties(check: Check, db: Db) {
   const conflictingAliasKey = 'invented-prospect:alias-conflict';
   await alias('prospect', conflictingAliasKey, conflictA);
   await alias('prospect_key', conflictingAliasKey, conflictB);
-  const conflictBefore = await snapshot();
   const conflictingAlias = await addProspects(db, actor, files(prospect(conflictingAliasKey, 'Invented Prospect Namesake')));
-  check('PROSPECT-KEYS conflicting mappings are listed and never overwritten',
-    conflictingAlias.ambiguous === 1 && conflictingAlias.skipped.length === 1 && conflictBefore === await snapshot()
+  check('PROSPECT-KEYS the same-source prospect mapping wins without overwriting another alias',
+    conflictingAlias.ambiguous === 0 && conflictingAlias.skipped.length === 0 && conflictingAlias.existing === 1
+    && (await sourcePerson(conflictingAliasKey))?.id === conflictA
     && (await db.one<{ id: string }>(`select entity_id::text id from identity.source_record
       where source = 'prospect_key' and source_id = $1`, [conflictingAliasKey]))?.id === conflictB,
-    'Different canonical people under prospect and prospect_key refuse the row without writes.');
+    'The prospect external ID attaches to its existing person; the prospect_key alias remains unchanged.');
   const mergedAlias = await makePerson(unseen.name);
   await db.query('update identity.entity set merged_into=$2 where entity_id=$1', [born?.id, mergedAlias]);
   const aliasBeforeMergeRetry = JSON.stringify(await db.query(
@@ -254,11 +254,13 @@ export async function prospectsProperties(check: Check, db: Db) {
   const knownOrgRow = prospect('invented-prospects2:known-org', 'Invented Prospects2 Iris', { org: 'Invented Prospects2 Known Office' });
   const knownOrgResult = await addProspects(db, actor, files(knownOrgRow));
   const knownOrgPerson = await sourcePerson(knownOrgRow.personKey);
-  check('PROSPECTS2 a newly sourced person reuses a single existing organization without duplicating it',
+  const sourcedOrg = await db.one<{ id: string }>('select org_entity::text id from identity.affiliation where person_entity=$1', [knownOrgPerson?.id]);
+  check('PROSPECTS2 an organization name alone creates a separate identity and immediately queues the pair',
     knownOrgResult.added === 1
-    && await n('select count(*)::text n from identity.affiliation where person_entity = $1 and org_entity = $2', [knownOrgPerson?.id, knownOrg]) === 1
-    && await n('select count(*)::text n from identity.entity where display_name = $1', [knownOrgRow.org]) === 1,
-    'Existing organization retained; a sourced affiliation links the newly created person.');
+    && !!sourcedOrg && sourcedOrg.id !== knownOrg
+    && await n('select count(*)::text n from identity.entity where display_name = $1', [knownOrgRow.org]) === 2
+    && await n('select count(*)::text n from identity.possible_match where active and left_entity=least($1::uuid,$2::uuid) and right_entity=greatest($1::uuid,$2::uuid)', [knownOrg, sourcedOrg?.id]) === 1,
+    'A sourced affiliation links the newly created organization; its namesake is queued before export.');
 
   const unkeyed = prospect(null, 'Invented Prospects3 Juniper', { org: 'Invented Prospects3 Office',
     sources: ['https://example.org/juniper', { url: 'https://example.org/juniper-bio', title: 'Invented biography' }] });
@@ -362,6 +364,7 @@ export async function prospectsProperties(check: Check, db: Db) {
     await tx.query('delete from strategy.pursuit where entity_id = any($1::uuid[])', [inventedIds]);
     await tx.query('delete from identity.source_record where entity_id = any($1::uuid[])', [inventedIds]);
     await tx.query('delete from identity.affiliation where person_entity = any($1::uuid[]) or org_entity = any($1::uuid[])', [inventedIds]);
+    await tx.query('delete from identity.possible_match where left_entity = any($1::uuid[]) or right_entity = any($1::uuid[])', [inventedIds]);
     await tx.query('delete from identity.entity where entity_id = any($1::uuid[])', [inventedIds]);
   });
 }

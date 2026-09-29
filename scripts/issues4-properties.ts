@@ -83,6 +83,8 @@ export async function issues4Properties(check: (name: string, ok: boolean, detai
         'Source identities are mapped once before connection candidate notes are imported.');
     } finally {
       await db.query("delete from identity.source_record where source = 'w3_person' and source_id = any($1::text[])", [keys]);
+      await db.query('delete from identity.possible_match where left_entity= any($1::uuid[]) or right_entity= any($1::uuid[])', [keys]);
+      await db.query("delete from research.note where entity_id= any($1::uuid[]) and kind='identity_creation'", [keys]);
       await db.query('delete from identity.entity where entity_id = any($1::uuid[])', [keys]);
     }
   }

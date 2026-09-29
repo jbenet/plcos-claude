@@ -117,6 +117,7 @@ export async function prospectKeysProperties(check: Check, db: Db) {
     await db.query('delete from research.note where entity_id=any($1::uuid[])', [ids]);
     await db.query("delete from research.source_doc where origin='https://example.org/invented-prospect-keys'");
     await db.query('delete from identity.source_record where entity_id=any($1::uuid[])', [ids]);
+    await db.query('delete from identity.possible_match where left_entity=any($1::uuid[]) or right_entity=any($1::uuid[])', [ids]);
     await db.query('delete from identity.entity where entity_id=any($1::uuid[])', [ids]);
   }
 }

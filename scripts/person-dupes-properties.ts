@@ -108,15 +108,16 @@ export async function personDupesProperties(check: Check, db: Db) {
     check('0105 the current import findings corroborate before they are stored', await root(findingNew) === findingOld && incoming.merges.some(m => m.loserId === findingNew), 'The transactional import can repair identities before it maps facts.');
 
     const endOld = await entity(name('Roundtrip'), 'affinity', 'rule:source-owned');
-    await affiliate(endOld, org);
-    const prospect: Prospect = { personKey: `fixture-${tag}`, name: name('Roundtrip'), org: name('Cedar Office'), vehicle: vehicle.slug,
+    const prospect: Prospect = { personKey: `fixture-${tag}`, name: name('Roundtrip'), org: null, vehicle: vehicle.slug,
       status: 'new', capacity: { band: 'unknown', basis: 'Invented', guess: true }, reason: 'Invented duplicate fixture', strategic: false, route: null, sources: ['https://example.org/fixture'] };
     await db.query("insert into strategy.pursuit(entity_id,vehicle_id,owner_id,status) values($1,$2,$3,'new')", [endOld, vehicle.id, actor]);
     const files = [{ file: 'invented-0105.jsonl', text: JSON.stringify(prospect) }];
     const added = await addProspects(db, actor, files);
     const endNew = (await db.one<{ id: string }>("select entity_id::text id from identity.source_record where source='prospect_key' and source_id=$1", [prospect.personKey]))!.id;
     ids.push(endNew);
-    check('0105 fixture reproduces the prospect importer creating a separate keyed namesake', added.added === 1 && endNew !== endOld, 'A new prospect key can mint a second person despite an existing named person.');
+    check('0105 name-only prospect identity remains separate before corroboration arrives', added.added === 1 && endNew !== endOld, 'A name alone does not attach a newly sourced person.');
+    await affiliate(endOld, org);
+    await affiliate(endNew, org);
     const repaired = await run();
     const personMerge = repaired.merges.find(m => m.loserId === endNew)!;
     const count = async () => (await db.one<{ n: number }>('select count(*)::int n from strategy.active_pursuit where entity_id=any($1::uuid[])', [[endOld, endNew]]))!.n;

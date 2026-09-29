@@ -162,6 +162,8 @@ export async function importRobustnessProperties(check: (name: string, ok: boole
     await db.query('delete from research.claim where entity_id = $1', [lp]);
     await db.query("delete from research.source_doc where origin = 'https://example.org/robust-fixture'");
     await db.query("delete from identity.source_record where source = 'w3_person' and source_id = any($1::text[])", [[good.key, org.key, ...extraKeys]]);
+    await db.query('delete from identity.possible_match where left_entity = any($1::uuid[]) or right_entity = any($1::uuid[])', [[lp, good.key, org.key, ...extraKeys]]);
+    await db.query("delete from research.note where entity_id = any($1::uuid[]) and kind='identity_creation'", [[lp, good.key, org.key, ...extraKeys]]);
     await db.query('delete from identity.entity where entity_id = any($1::uuid[])', [[lp, good.key, org.key, ...extraKeys]]);
   }
 }

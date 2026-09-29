@@ -1,3 +1,5 @@
+import { check as findingProblems, type Finding } from './schema';
+import { resolveEntity } from '@/modules/identity/create';
 import { TooManyRows, type Queryable } from '@/lib/db';
 import { norm, type Path, type ConnectionPerson } from './connect';
 import { connectionIdentityProblems, pathProblems, type LocatedRecord } from './connection-check';
@@ -81,22 +83,22 @@ export async function resolveConnectionPeople(tx: Queryable, paths: Path[],
     return false;
   });
   const needed = new Set(usable.flatMap((p) => [p.lp, p.other.key]));
-  const entities: Array<{ id: string; type: string; name: string }> = [];
   const mappings: Array<{ key: string; id: string }> = [];
   for (const person of descriptors.values()) {
     if (!needed.has(person.key)) continue;
     let id = ids.get(person.key);
     if (!id) {
-      id = person.key.toLowerCase();
-      entities.push({ id, type: person.entityType ?? 'person', name: person.name });
+      const finding=context.findings?.map(r=>r.value as Finding).find(f=>f && f.key===person.key && !findingProblems(f,person.key).length && ['confirmed','probable'].includes(f.identity.match));
+      id = (await resolveEntity(tx, { type: person.entityType ?? 'person', name: person.name,
+        source: 'w3_person', sourceId: person.key, id: person.key.toLowerCase(),
+        organizations: finding?.identity?.canonical?.org ? [finding.identity.canonical.org] : [],
+        personalUrls: finding?.identity?.links?.filter(l=>['bio','linkedin','x'].includes(l.kind)).map(l=>l.url),
+        resolvedBy: 'rule:sourced-person' })).id;
+      mappedKeys.add(person.key);
     }
     ids.set(person.key, id);
     if (!mappedKeys.has(person.key)) mappings.push({ key: person.key, id });
   }
-  for (let i = 0; i < entities.length; i += 500) await tx.query(
-    `insert into identity.entity (entity_id,entity_type,display_name)
-     select id,type::identity.entity_type,name from jsonb_to_recordset($1::jsonb) as r(id uuid,type text,name text)`,
-    [JSON.stringify(entities.slice(i, i + 500))]);
   for (let i = 0; i < mappings.length; i += 500) await tx.query(
     `insert into identity.source_record (source,source_id,entity_id,resolved_by)
      select 'w3_person',key,id,'rule:sourced-person' from jsonb_to_recordset($1::jsonb) as r(key text,id uuid)`,

@@ -190,6 +190,13 @@ export async function reverseIdentitySeparation(db: Db, assertionId: string, by:
     if (!row || row.undone) return false;
     await tx.query(`update identity.match_assertion set undone_at=now(),undo_reason=$2 where rule='identity:v1:decision:separate'
       and signals->>'key'=$1 and undone_at is null`, [row.key, `${by}: ${reason}`]);
+    await tx.query(`update identity.possible_match p set active=true from identity.match_assertion a
+      where p.signals->>'rule'='creation-name-only' and a.rule='identity:v1:decision:separate' and a.signals->>'key'=$1
+        and identity.canonical_entity_id(p.left_entity)<>identity.canonical_entity_id(p.right_entity)
+        and least(identity.canonical_entity_id(p.left_entity),identity.canonical_entity_id(p.right_entity))=
+          least(identity.canonical_entity_id(a.merged_entity),identity.canonical_entity_id(a.canonical_entity))
+        and greatest(identity.canonical_entity_id(p.left_entity),identity.canonical_entity_id(p.right_entity))=
+          greatest(identity.canonical_entity_id(a.merged_entity),identity.canonical_entity_id(a.canonical_entity))`,[row.key]);
     return true;
   });
 }

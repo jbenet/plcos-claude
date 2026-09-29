@@ -3,8 +3,8 @@ import { recordActivity } from '@/lib/activity/log';
 import { readFile } from 'node:fs/promises';
 import { config } from '@/config/deployment';
 import { getDb, type Db } from '@/lib/db';
-import { normalizeIdentityName, organizationNames } from '@/modules/identity/resolution';
-import { readWarehouseGraph } from '@/lib/enrich/connect';
+import { normalizeIdentityName } from '@/modules/identity/resolution';
+import { resolveEntity, type EntityCreation } from '@/modules/identity/create';
 
 export interface PortfolioSource { file: string; page: number; as_of: string; confidence: number; last_verified_by: string }
 export interface PortfolioPerson {
@@ -50,7 +50,6 @@ const sourceValid = (s: PortfolioSource | undefined) => s && typeof s.file === '
 const stringsValid = (v: unknown) => Array.isArray(v) && v.every(x => typeof x === 'string' && !!x.trim());
 const urlKey = (s: string) => { try { const u = new URL(s); return /^https?:$/.test(u.protocol) ? `${u.hostname.toLowerCase()}${u.pathname.replace(/\/$/, '')}${u.search}` : ''; } catch { return ''; } };
 const domainKey = (s: string) => { try { return new URL(s.includes('://') ? s : `https://${s}`).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; } };
-const freeDomain = /^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|aol|protonmail|proton|live|msn|fastmail|hey)\./i;
 const rowsOf = (input: PortfolioInput) => [...input.rows, ...(input.spv_rows ?? [])];
 export function portfolioProblems(input: PortfolioInput): string[] {
   if (!input || input.version !== 1 || !Array.isArray(input.rows) || !Array.isArray(input.coverage)
@@ -83,128 +82,46 @@ export function portfolioProblems(input: PortfolioInput): string[] {
   return errors;
 }
 export interface PortfolioResult { rows: number; founders: number; possible: number; linked: number; removed: number }
-interface IdentitySignals { organizations: Set<string>; domains: Set<string>; profiles: Set<string>; warehouse: Set<string> }
-const signals = (): IdentitySignals => ({ organizations: new Set(), domains: new Set(), profiles: new Set(), warehouse: new Set() });
-const addOrganizations = (to: IdentitySignals, names: string[]) => { for (const name of names) for (const key of organizationNames(name)) to.organizations.add(key); };
-const intersects = (a: Set<string>, b: Set<string>) => [...a].some(x => b.has(x));
 const affiliationNote = 'Portfolio import: sourced founder affiliation.';
 const legacyAffiliationNote = 'Portfolio materials explicitly name this founder.';
 /** The file is an authoritative snapshot, including explicit exclusions. Source-owned facts remain separate
- * from independent graph evidence; a rematch redirects this import's source key, never another entity's facts. */
+ * from independent graph evidence. Existing source keys stay attached until explicit identity review. */
 export async function importPortfolio(db: Db, input: PortfolioInput): Promise<PortfolioResult> {
   const activityAt = new Date().toISOString();
   const errors = portfolioProblems(input); if (errors.length) throw new Error(errors.join(' '));
   const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
   const excluded = new Set(input.excluded?.map(r => r.id));
   const rows = rowsOf(input).filter(r => !excluded.has(r.id));
-  // One verified graph-file read per import, never one disk/graph scan per founder.
-  const warehouse = await readWarehouseGraph(`data/${config.data.profile}/enrich`);
   const imported = await db.transaction(async tx => {
     await tx.exec('lock table identity.entity, identity.source_record, network.portfolio in share row exclusive mode');
     const vehicles = new Map((await tx.query<{ id: string; slug: string; kind: string }>('select id::text,slug,kind::text from platform.vehicle')).map(v => [v.slug, v]));
     if (rows.some(r => !['fund', 'spv'].includes(vehicles.get(r.vehicle)?.kind ?? ''))
       || (input.spv_rows ?? []).some(r => !excluded.has(r.id) && vehicles.get(r.vehicle)?.kind !== 'spv')) throw new Error('Portfolio vehicle is unavailable or has the wrong kind.');
-    const entities = await tx.query<{ id: string; name: string; type: string }>(`select entity_id::text id,display_name name,entity_type::text type from identity.entity where merged_into is null and retired_at is null`);
-    const byName = new Map<string, typeof entities>();
-    for (const e of entities) { const k = `${e.type}:${normalizeIdentityName(e.name)}`; byName.set(k, [...(byName.get(k) ?? []), e]); }
-    const sources = await tx.query<{ source: string; key: string; id: string; rule: string }>(`select source,source_id key,identity.canonical_entity_id(entity_id)::text id,resolved_by rule from identity.source_record`);
+    const sources = await tx.query<{ source: string; key: string; id: string }>(`select source,source_id key,identity.canonical_entity_id(entity_id)::text id from identity.source_record`);
     const sourceIds = new Map(sources.map(s => [`${s.source}:${s.key}`, s.id]));
-    const mappings = new Map(sources.filter(s => s.source === 'portfolio').map(s => [s.key, s]));
-    const evidence = new Map<string, IdentitySignals>();
-    const forId = (id: string) => { let e = evidence.get(id); if (!e) { e = signals(); evidence.set(id, e); } return e; };
-    for (const s of sources) if (s.source === 'warehouse') forId(s.id).warehouse.add(s.key);
-    for (const p of warehouse.people) {
-      const id = sourceIds.get(`warehouse:${p.key}`); if (!id) continue;
-      const e = forId(id); for (const k of [p.key, ...Object.values(p.warehouseIds)]) e.warehouse.add(k);
-      if (p.org) addOrganizations(e, [p.org]);
-      if (p.emailDomain && !freeDomain.test(domainKey(p.emailDomain))) e.domains.add(domainKey(p.emailDomain));
-    }
-    const affiliations = await tx.query<{ id: string; org: string }>(`select identity.canonical_entity_id(a.person_entity)::text id,o.display_name org
-      from identity.affiliation a join identity.entity o on o.entity_id=identity.canonical_entity_id(a.org_entity)
-      where nullif(trim(a.source),'') is not null and a.certainty in ('known','confirmed') and coalesce(a.note,'') <> all($1::text[])`, [[affiliationNote, legacyAffiliationNote]]);
-    for (const a of affiliations) addOrganizations(forId(a.id), [a.org]);
-    const graphAffiliations = await tx.query<{ id: string; org: string }>(`select identity.canonical_entity_id(p.entity_id)::text id,o.display_name org
-      from network.edge e join identity.entity p on p.entity_id=e.from_entity join identity.entity o on o.entity_id=e.to_entity
-      where p.entity_type='person' and o.entity_type='org' and e.valid_to is null and exists
-      (select 1 from jsonb_array_elements(e.evidence) v where v->>'note' ilike 'Recorded organizational affiliation%' and nullif(v->>'source','') is not null)`);
-    for (const a of graphAffiliations) addOrganizations(forId(a.id), [a.org]);
-    const notes = await tx.query<{ id: string; data: { identity?: { match?: string; canonical?: { org?: string }; links?: Array<{ url: string }> }; researched?: { at?: string; by?: string } } }>(`select identity.canonical_entity_id(entity_id)::text id,data from research.note where kind='public_profile' and entity_id is not null`);
-    for (const n of notes) if (n.data.researched?.by && n.data.researched.at && ['confirmed', 'probable'].includes(n.data.identity?.match ?? '')) {
-      const e = forId(n.id); if (n.data.identity?.canonical?.org) addOrganizations(e, [n.data.identity.canonical.org]);
-      for (const p of n.data.identity?.links ?? []) { const url = urlKey(p.url); if (url) e.profiles.add(url); }
-    }
-    const claims = await tx.query<{ id: string; field: string; value: string }>(`select identity.canonical_entity_id(entity_id)::text id,field,value from research.claim
-      where superseded_by is null and last_verified_by is not null and field in ('domain','company_domain','website','linkedin','profile_url')`);
-    for (const c of claims) { const e = forId(c.id); if (['domain', 'company_domain', 'website'].includes(c.field)) { const d = domainKey(c.value); if (d && !freeDomain.test(d)) e.domains.add(d); } else { const u = urlKey(c.value); if (u) e.profiles.add(u); } }
-    const assertions = await tx.query<{ left_source: string; left_source_id: string; right_source: string; right_source_id: string; merged: string | null; canonical: string | null }>(`select left_source,left_source_id,right_source,right_source_id,merged_entity::text merged,canonical_entity::text canonical from identity.match_assertion where kind='not_same_as' or undone_at is not null`);
-    const blockedKeys = new Set<string>();
-    const blockedPairs = new Set<string>();
-    for (const a of assertions) {
-      if (a.left_source === 'portfolio') blockedKeys.add(a.left_source_id);
-      if (a.right_source === 'portfolio') blockedKeys.add(a.right_source_id);
-      const l = sourceIds.get(`${a.left_source}:${a.left_source_id}`) ?? a.merged;
-      const r = sourceIds.get(`${a.right_source}:${a.right_source_id}`) ?? a.canonical;
-      if (l && r) blockedPairs.add([l, r].sort().join('|'));
-    }
-    // Import-created placeholders are not independent namesake evidence. Keep their origin even
-    // after a later source-key rematch; otherwise the orphan would become a new possible match.
-    const independentIds = new Set(sources.filter(s => !['portfolio', 'portfolio_placeholder'].includes(s.source)).map(s => s.id));
-    const placeholderIds = new Set(sources.filter(s => ['portfolio', 'portfolio_placeholder'].includes(s.source)
-      && !independentIds.has(s.id) && !evidence.has(s.id)).map(s => s.id));
-    for (const id of placeholderIds) await tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by)
-      values('portfolio_placeholder',$1::text,($1::text)::uuid,'rule:portfolio:source-created-placeholder') on conflict(source,source_id) do nothing`, [id]);
-    const desiredPossible = new Set<string>();
     const result: PortfolioResult = { rows: 0, founders: 0, possible: 0, linked: 0, removed: 0 };
-    async function resolve(key: string, name: string, type: 'person' | 'org', incoming: IdentitySignals) {
-      const matches = (byName.get(`${type}:${normalizeIdentityName(name)}`) ?? []).filter(m => !placeholderIds.has(m.id));
-      const old = mappings.get(key);
-      const candidates = matches.filter(m => {
-        const ev = evidence.get(m.id); if (!ev) return false;
-        return intersects(ev.organizations, incoming.organizations) || intersects(ev.domains, incoming.domains)
-          || intersects(ev.profiles, incoming.profiles) || intersects(ev.warehouse, incoming.warehouse);
-      });
-      let id = old?.id, resolution = old ? 'Existing source key' : 'Source identity; name-only matches remain possible';
-      if (candidates.length === 1 && !blockedKeys.has(key) && (!old || old.rule.startsWith('rule:portfolio:'))
-        && (!old || !blockedPairs.has([old.id, candidates[0]!.id].sort().join('|')))) {
-        const candidate = candidates[0]!;
-        if (candidate.id !== id) result.linked++;
-        id = candidate.id; resolution = 'Name and independent sourced identity evidence';
-      }
-      if (!id) {
-        id = (await tx.one<{ id: string }>(`insert into identity.entity(entity_type,display_name) values($1::identity.entity_type,$2) returning entity_id::text id`, [type, name]))!.id;
-        await tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by)
-          values('portfolio_placeholder',$1::text,($1::text)::uuid,'rule:portfolio:source-created-placeholder')`, [id]);
-        placeholderIds.add(id);
-      }
-      await tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by) values('portfolio',$1,$2,$3)
-        on conflict(source,source_id) do update set entity_id=excluded.entity_id,resolved_by=excluded.resolved_by,resolved_at=now()
-        where source_record.resolved_by like 'rule:portfolio:%'`, [key, id, `rule:portfolio:${resolution}`]);
-      mappings.set(key, { source: 'portfolio', key, id, rule: old && !old.rule.startsWith('rule:portfolio:') ? old.rule : `rule:portfolio:${resolution}` });
-      const possibleMatches = matches.filter(m => m.id !== id && !blockedKeys.has(key) && !blockedPairs.has([id!, m.id].sort().join('|'))).map(m => m.id);
-      for (const other of possibleMatches) {
-        const [a, b] = [id, other].sort();
-        desiredPossible.add(`${a}:${b}`);
-        await tx.query(`insert into identity.possible_match(left_entity,right_entity,confidence,signals) values($1,$2,0.25,$3::jsonb)
-          on conflict(left_entity,right_entity) do update set active=true where not possible_match.active and possible_match.signals->>'rule'='portfolio-name-only'`, [a, b, JSON.stringify({ rule: 'portfolio-name-only', sourceKey: key })]);
-        result.possible++;
-      }
-      return { entityId: id, possibleMatches, resolution };
+    async function resolve(key: string, name: string, type: 'person' | 'org', incoming: Pick<EntityCreation, 'organizations' | 'domains' | 'personalUrls'>) {
+      const resolved = await resolveEntity(tx, { type, name, source: 'portfolio', sourceId: key, ...incoming });
+      if (!resolved.created && resolved.rule !== 'source_id') result.linked++;
+      if (resolved.created) await tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by)
+        values('portfolio_placeholder',$1::text,($1::text)::uuid,'rule:portfolio:source-created-placeholder') on conflict(source,source_id) do nothing`, [resolved.id]);
+      // Include the live queue on retries; source-id attachment itself does not enqueue again.
+      const possibleMatches = (await tx.query<{ id: string }>(`select case when left_entity=$1 then right_entity else left_entity end::text id
+        from identity.possible_match where active and (left_entity=$1 or right_entity=$1)`, [resolved.id])).map(p => p.id);
+      result.possible += possibleMatches.length;
+      return { entityId: resolved.id, possibleMatches, resolution: resolved.rule };
     }
     const pl = sourceIds.get('network_org:pl') ?? sourceIds.get('w3_person:713c0c5f-8600-59da-abef-c84cc771b81a');
     const desiredEdges = new Map<string, { from: string; to: string; evidence: Record<string, unknown>; asOf: string }>();
     const desiredAffiliations = new Map<string, { person: string; company: string; source: PortfolioSource }>();
     for (const row of rows) {
-      const companySignals = signals();
-      if (row.company.domain) companySignals.domains.add(domainKey(row.company.domain));
-      if (row.company.warehouse_company_id) companySignals.warehouse.add(row.company.warehouse_company_id);
-      const company = await resolve(`${row.id}:company`, row.company.name, 'org', companySignals);
+      const company = await resolve(`${row.id}:company`, row.company.name, 'org', {});
       const founders: PortfolioFounder[] = [];
       for (const f of row.founders) {
-        const ev = signals(); addOrganizations(ev, [row.company.name, ...(row.company.organization_names ?? []), ...(f.organization_names ?? [])]);
-        if (f.company_domain && !freeDomain.test(domainKey(f.company_domain))) ev.domains.add(domainKey(f.company_domain));
-        for (const p of f.profile_urls ?? []) ev.profiles.add(urlKey(p));
-        if (f.warehouse_person_id) ev.warehouse.add(f.warehouse_person_id);
-        const founder = { ...f, ...await resolve(`${row.id}:founder:${normalizeIdentityName(f.name)}`, f.name, 'person', ev) };
+        const founder = { ...f, ...await resolve(`${row.id}:founder:${normalizeIdentityName(f.name)}`, f.name, 'person', {
+          organizations: [row.company.name, ...(row.company.organization_names ?? []), ...(f.organization_names ?? [])],
+          personalUrls: f.profile_urls,
+        }) };
         founders.push(founder); result.founders++;
         desiredAffiliations.set(`${founder.entityId}:${company.entityId}:${f.source.file}`, { person: founder.entityId, company: company.entityId, source: f.source });
         if (pl && pl !== founder.entityId && !row.portfolio_status?.startsWith('warehouse_') && row.portfolio_status !== 'research_scope_only') {
@@ -244,9 +161,6 @@ export async function importPortfolio(db: Db, input: PortfolioInput): Promise<Po
       else if (JSON.stringify(next) !== JSON.stringify(edge.evidence)) await tx.query('update network.edge set evidence=$2::jsonb where edge_id=$1', [edge.id, JSON.stringify(next)]);
     }
     for (const edge of desiredEdges.values()) await tx.query(`insert into network.edge(from_entity,to_entity,kind,tier,evidence,valid_from) values($1,$2,'portfolio','B',$3::jsonb,$4::date)`, [edge.from, edge.to, JSON.stringify([edge.evidence]), edge.asOf]);
-    const previousPossible = await tx.query<{ id: string; a: string; b: string }>(`select edge_id::text id,left_entity::text a,right_entity::text b
-      from identity.possible_match where active and signals->>'rule'='portfolio-name-only'`);
-    for (const p of previousPossible) if (!desiredPossible.has(`${p.a}:${p.b}`)) await tx.query('update identity.possible_match set active=false where edge_id=$1', [p.id]);
     return result;
   });
   await recordActivity({ source: 'intake', at: activityAt, segment: 'portfolio', requests: 0,
@@ -282,7 +196,7 @@ export async function portfolioIdentities(people: Array<{ id: string; possible: 
       from unnest($1::uuid[]) i(id) join identity.entity c on c.entity_id=identity.canonical_entity_id(i.id)
       where c.retired_at is null`, [ids]),
     db.query<{ a: string; b: string }>(`select left_entity::text a,right_entity::text b from identity.possible_match
-      where active and signals->>'rule'='portfolio-name-only' and (left_entity=any($1::uuid[]) or right_entity=any($1::uuid[]))`, [ids]),
+      where active and (left_entity=any($1::uuid[]) or right_entity=any($1::uuid[]))`, [ids]),
   ]);
   const byId = new Map(records.map(r => [r.id, r]));
   const pairs = new Set(open.map(p => [p.a, p.b].sort().join('|')));

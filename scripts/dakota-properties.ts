@@ -107,6 +107,9 @@ export async function dakotaProperties(check: Check, db: Db) {
       await identify(existing, 'domain', 'dakota-existing.example');
       await identify(blocked, 'crd', '987654');
       await identify(linked, 'linkedin', 'linkedin.com/in/dakota-fixture-cio');
+      await tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by) values
+        ('dakota','account:fixture-existing',$1,'invented prior binding'),
+        ('dakota','account:fixture-blocked',$2,'invented prior binding')`, [existing, blocked]);
       await tx.query(`insert into strategy.pursuit(entity_id,vehicle_id,owner_id,status) values($1,$2,$3,'discussing')`, [existing, vehicle, actor]);
       await tx.query(`insert into coordination.restriction(entity_id,scope,instruction,recorded_by) values($1,'blanket','Invented restriction',$2)`, [blocked, actor]);
       const acct = (id: string, extra: Record<string, unknown> = {}) => ({ account_id: id, investment_interest__c: 'healthcare', average_ticket_size__c: '500000', ...extra });
@@ -126,9 +129,9 @@ export async function dakotaProperties(check: Check, db: Db) {
       const lookup = async (module: string, id: string) => (await tx.one<{ entity_id: string; root: string }>(`select entity_id::text,identity.canonical_entity_id(entity_id)::text root from dakota.${module} where id=$1`, [id]))!;
       const account = await lookup('account', 'fixture-existing'), name = await lookup('contact', 'fixture-contact-name'), cio = await lookup('contact', 'fixture-contact-cio');
       const possible = await tx.one(`select 1 from identity.possible_match where left_entity=least($1::uuid,$2::uuid) and right_entity=greatest($1::uuid,$2::uuid) and active`, [name.entity_id, namesake]);
-      check('DAKOTA name-only match remains separate and possible; corroborated identities redirect', name.root !== namesake && !!possible
-        && account.root === existing && account.entity_id !== existing && cio.root === linked && first.merged >= 3,
-        'Website, CRD and LinkedIn corroborate; a person name alone does not. Source entities remain intact.');
+      check('DAKOTA name-only match queues immediately; source IDs and name plus personal URL attach', name.root !== namesake && !!possible
+        && account.entity_id === existing && cio.entity_id === linked && first.merged === 0,
+        'Existing source bindings persist; the matching personal URL attaches without creating a redirect.');
       const selected = await tx.query<{ id: string; status: string; status_source: string; status_reason: string }>(`select a.id,p.status::text,p.status_source,p.status_reason from strategy.pursuit p
         join dakota.account a on identity.canonical_entity_id(a.entity_id)=p.entity_id where p.vehicle_id=$1 and p.source='dakota' order by a.id`, [vehicle]);
       check('DAKOTA sources only the top capped eligible accounts and respects restrictions and pursued entities', selected.length === 2
@@ -174,10 +177,16 @@ export async function dakotaProperties(check: Check, db: Db) {
       let immutable = false;
       try { await translateDakota(local, actor, [{ ...accounts, hash: 'invented-changed-hash' }]); } catch { immutable = true; }
       check('DAKOTA completed replica hash changes fail closed', immutable && prior === await snapshot(), 'A previously imported file cannot silently change its meaning.');
-      const assertion = (await tx.one<{ id: string }>('select assertion_id::text id from identity.match_assertion where merged_entity=$1 and undone_at is null', [account.entity_id]))!;
+      // A historical redirect can still be reversed; new creation attachment adds no redirect.
+      const legacyAlias = await entity('Invented Historical Dakota Alias');
+      await tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by)
+        values('dakota','account:fixture-legacy-alias',$1,'invented historical binding')`, [legacyAlias]);
+      await tx.query('update identity.entity set merged_into=$2 where entity_id=$1', [legacyAlias, existing]);
+      const assertion = (await tx.one<{ id: string }>(`insert into identity.match_assertion(kind,left_source,left_source_id,right_source,right_source_id,merged_entity,canonical_entity,rule,note)
+        values('same_as','dakota','account:fixture-legacy-alias','dakota','account:fixture-existing',$1,$2,'identity:v1:external-identifier','Invented legacy redirect') returning assertion_id::text id`, [legacyAlias, existing]))!;
       const undone = await undoIdentityMerge(local, assertion.id, 'Invented fixture correction');
-      await translateDakota(local, actor, [replica('account', 'account/invented-after-undo.jsonl', [{ id: 'fixture-existing', lastmodifieddate: '2026-09-04T00:00:00Z', aum__c: '130000000' }])]);
-      check('DAKOTA identity corrections survive newer corroborated records', undone && (await lookup('account', 'fixture-existing')).root === account.entity_id,
+      await translateDakota(local, actor, [replica('account', 'account/invented-after-undo.jsonl', [{ id: 'fixture-legacy-alias', lastmodifieddate: '2026-09-04T00:00:00Z', website: 'https://www.dakota-existing.example/' }])]);
+      check('DAKOTA identity corrections survive newer corroborated records', undone && (await lookup('account', 'fixture-legacy-alias')).root === legacyAlias,
         'An undone source-owned redirect is not recreated merely because the vendor repeats its identifier.');
       await tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by) values('invented_fixture','person-name',$1,'invented fixture')`, [namesake]);
       await identify(namesake, 'linkedin', 'linkedin.com/in/dakota-constrained-person');

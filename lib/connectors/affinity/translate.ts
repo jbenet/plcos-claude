@@ -13,7 +13,8 @@ import { aboutRaise, addressOf, type About, type AboutVehicle } from './about';
 import { noteText } from './notes';
 import { translateTags } from './event-tags';
 import type { PursuitStatus } from '@/modules/strategy';
-import { participantIndex, type PersonIdentity, type Participant } from './participants';
+import { participantIndex, affinityIdentityEvidence, type PersonIdentity, type Participant } from './participants';
+import { resolveEntity } from '@/modules/identity/create';
 
 /**
  * Translation (N47, docs/16 §4): the landed copy, read through the mapping, into the tool's
@@ -91,25 +92,13 @@ export interface TranslationCounts {
   readings: number;
 }
 
-async function entityFor(tx: Queryable, kind: 'person' | 'org', sourceId: string, name: string, counts: TranslationCounts): Promise<string> {
-  const found = await tx.one<{ entity_id: string }>(
-    `select entity_id from identity.source_record where source = $1 and source_id = $2`, [SOURCE, sourceId],
-  );
-  if (found) {
-    // Keep the locally corrected entity_type. Affinity source identity/type remains unchanged.
-    await tx.query(`update identity.entity set display_name = $2 where entity_id = $1 and display_name <> $2`, [found.entity_id, name]);
-    return found.entity_id;
+export async function entityFor(tx: Queryable, kind: 'person' | 'org', sourceId: string, name: string, counts: TranslationCounts, evidence: ReturnType<typeof affinityIdentityEvidence> = {}): Promise<string> {
+  const result = await resolveEntity(tx, { type: kind, name, source: SOURCE, sourceId, ...evidence, resolvedBy: 'rule:affinity-id' });
+  if (result.created) {
+    if (kind === 'person') counts.people++;
+    else counts.organizations++;
   }
-  const row = await tx.one<{ entity_id: string }>(
-    `insert into identity.entity (entity_type, display_name) values ($1::identity.entity_type, $2) returning entity_id`, [kind, name],
-  );
-  await tx.query(
-    `insert into identity.source_record (source, source_id, entity_id, confidence, resolved_by) values ($1,$2,$3,1,'rule:affinity-id')`,
-    [SOURCE, sourceId, row!.entity_id],
-  );
-  if (kind === 'person') counts.people++;
-  else counts.organizations++;
-  return row!.entity_id;
+  return result.id;
 }
 
 /** `mappingPath` is for the property harness, which keeps its own copy; the app never passes it. */
@@ -184,7 +173,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
           if (e.type === 'opportunity') { counts.skipped++; continue; }
 
           const kind = e.type === 'person' ? 'person' : 'org';
-          const entity = await entityFor(tx, kind, `${e.type}:${e.entity.id}`, nameOf(e.entity), counts);
+          const entity = await entityFor(tx, kind, `${e.type}:${e.entity.id}`, nameOf(e.entity), counts, affinityIdentityEvidence(e.entity));
 
           // Where they work, from the list's own organization field — a contact, capacity not
           // established (identity.affil_kind), because a CRM row does not say who decides.

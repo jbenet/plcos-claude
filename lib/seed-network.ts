@@ -1,3 +1,4 @@
+import { resolveEntity } from '@/modules/identity/create';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Db } from './db';
@@ -27,9 +28,6 @@ export async function seedNetwork(db: Db): Promise<{ teamEntities: number; edges
   const users = await db.query<{ id: string; handle: string; name: string }>(
     'select id, handle, name from platform.app_user',
   );
-  const entities = await db.query<{ entity_id: string; display_name: string }>(
-    'select entity_id, display_name from identity.entity',
-  );
   const bySource = await db.query<{ source_id: string; entity_id: string }>(
     "select source_id, entity_id from identity.source_record where source = 'seed'",
   );
@@ -40,22 +38,9 @@ export async function seedNetwork(db: Db): Promise<{ teamEntities: number; edges
 
   await db.transaction(async (tx) => {
     for (const u of users) {
-      const existingEntity = entities.find((e) => e.display_name === u.name);
-      let entityId = existingEntity?.entity_id;
-      if (!entityId) {
-        const rows = await tx.query<{ entity_id: string }>(
-          `insert into identity.entity (entity_type, display_name)
-           values ('person', $1) returning entity_id`,
-          [u.name],
-        );
-        entityId = rows[0]!.entity_id;
-        teamEntities += 1;
-      }
-      await tx.query(
-        `insert into identity.source_record (source, source_id, entity_id, resolved_by)
-         values ('app_user', $1, $2, 'rule:handle') on conflict (source, source_id) do nothing`,
-        [u.handle, entityId],
-      );
+      const resolved = await resolveEntity(tx,{type:'person',name:u.name,source:'app_user',sourceId:u.handle,resolvedBy:'rule:handle'});
+      const entityId = resolved.id;
+      if(resolved.created)teamEntities++;
       key.set(u.handle, entityId);
     }
 

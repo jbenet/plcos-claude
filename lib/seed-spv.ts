@@ -1,3 +1,4 @@
+import { resolveEntity } from '@/modules/identity/create';
 import type { Db } from './db';
 import { deriveSpvStance, recordResearchSpv, setSpvStance } from '@/modules/strategy';
 
@@ -16,8 +17,7 @@ export async function seedSpv(db: Db): Promise<{ spvLps: number }> {
   const vehicles = await db.query<{ id: string; slug: string }>('select id::text, slug from platform.vehicle');
   const v = (slug: string) => vehicles.find((x) => x.slug === slug)!.id;
 
-  const org = async (name: string) => (await db.one<{ id: string }>(
-    `insert into identity.entity (entity_type, display_name) values ('org', $1) returning entity_id::text id`, [name]))!.id;
+  const org = async (name:string) => (await resolveEntity(db,{type:'org',name})).id;
   const pursue = (entity: string, vehicle: string, status: string, owner: string, headline: string) => db.query(
     `insert into strategy.pursuit (entity_id, vehicle_id, owner_id, status, status_source, status_set_at, status_set_by, headline)
      values ($1,$2,$3,$4::strategy.pursuit_status,'us',now() - interval '3 days',$3,$5)`, [entity, v(vehicle), user(owner), status, headline]);

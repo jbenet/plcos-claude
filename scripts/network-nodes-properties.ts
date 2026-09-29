@@ -17,13 +17,13 @@ const tie = (key: string, from: string, to: string, tier: 'B' | 'C' | 'D' = 'C')
   firstSeen: '2026-09-01', lastSeen: '2026-09-01',
 });
 function counted(db: Queryable) {
-  let calls = 0;
+  let calls = 0, edgeCalls = 0;
   const tx: Queryable = {
-    query: async <T>(sql: string, params?: unknown[]) => { calls++; return db.query<T>(sql, params); },
-    one: async <T>(sql: string, params?: unknown[]) => { calls++; return db.one<T>(sql, params); },
-    exec: async (sql: string) => { calls++; await db.exec(sql); },
+    query: async <T>(sql: string, params?: unknown[]) => { calls++; if(/network\.edge\b/i.test(sql))edgeCalls++; return db.query<T>(sql, params); },
+    one: async <T>(sql: string, params?: unknown[]) => { calls++; if(/network\.edge\b/i.test(sql))edgeCalls++; return db.one<T>(sql, params); },
+    exec: async (sql: string) => { calls++; if(/network\.edge\b/i.test(sql))edgeCalls++; await db.exec(sql); },
   };
-  return { tx, calls: () => calls };
+  return { tx, calls: () => calls, edgeCalls: () => edgeCalls };
 }
 async function nodeIds(db: Queryable, nodes: NodeSpec[]) {
   const rows = await db.query<{ source: string; source_id: string; entity_id: string }>(
@@ -172,12 +172,14 @@ export async function networkNodesProperties(check: Check, db: Queryable) {
       staleAfter?.n === '0' && retainedDecisions?.n === '2',
       'An outdated source does not leave a live unreviewed route or erase a recorded decision.');
     check('NODES import uses bounded batches rather than one query per edge',
-      countedDb.calls() < 60, `${countedDb.calls()} calls for three complete imports.`);
+      countedDb.edgeCalls() < 60, `${countedDb.edgeCalls()} edge SQL calls; ${countedDb.calls()} total calls including identity resolution for three complete imports.`);
   } finally {
     const added = (await db.query<{ id: string }>('select entity_id::text as id from identity.entity')).map((r) => r.id).filter((id) => !before.has(id));
     const cleanup = [...createdCandidates, ...added];
     await db.query('delete from network.edge where from_entity=any($1::uuid[]) or to_entity=any($1::uuid[])', [cleanup]);
     await db.query('delete from identity.source_record where entity_id=any($1::uuid[])', [cleanup]);
+    await db.query('delete from identity.possible_match where left_entity=any($1::uuid[]) or right_entity=any($1::uuid[])', [cleanup]);
+    await db.query("delete from research.note where entity_id=any($1::uuid[]) and kind='identity_creation'", [cleanup]);
     await db.query('delete from identity.entity where entity_id=any($1::uuid[])', [cleanup]);
   }
 }
@@ -232,7 +234,7 @@ async function runStandaloneProperties() {
   try {
     db = await (await import('../lib/db')).openFresh(scratch);
     const results: Array<{ name: string; ok: boolean; detail: string }> = [];
-    await networkNodesProperties((name, ok, detail) => results.push({ name, ok, detail }), db);
+    await db.transaction(tx => networkNodesProperties((name, ok, detail) => results.push({ name, ok, detail }), tx));
     for (const result of results) console.log(`${result.ok ? 'ok' : 'FAIL'} ${result.name}: ${result.detail}`);
     console.log(`${results.filter((r) => r.ok).length}/${results.length} NODES properties hold`);
     if (results.some((r) => !r.ok)) process.exitCode = 1;

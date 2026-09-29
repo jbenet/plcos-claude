@@ -1,5 +1,6 @@
 import type { AffinityContext } from './affinity-fixtures';
 import { touchpoints } from '../../lib/connectors/affinity/translate';
+import { resolveEntity } from '../../modules/identity/create';
 import type { PersonIdentity } from '../../lib/connectors/affinity/participants';
 
 export async function affinityParticipantProperties({ adb, check }: AffinityContext) {
@@ -23,9 +24,10 @@ export async function affinityParticipantProperties({ adb, check }: AffinityCont
       }
       await tx.query(`insert into identity.match_assertion(kind,left_source,left_source_id,right_source,right_source_id)
         values ('not_same_as','affinity','person:94505','affinity','person:94501')`);
+      await resolveEntity(tx, {type: 'person', name: 'Invented history fixture', source: 'affinity', sourceId: 'person:94501', domains: ['example.invalid']});
       const persons: PersonIdentity[] = [
         { id: 94501, primaryEmailAddress: 'one@example.invalid', emailAddresses: ['alternate@example.invalid', 'shared@example.invalid'] },
-        { id: 94502, primaryEmailAddress: 'alternate@example.invalid', emailAddresses: ['older@example.invalid'] },
+        { id: 94502, firstName: 'Invented', lastName: 'history fixture', primaryEmailAddress: 'alternate@example.invalid', emailAddresses: ['older@example.invalid'] },
         { id: 94503, primaryEmailAddress: 'other@example.invalid', emailAddresses: ['shared@example.invalid'] },
         { id: 94505, primaryEmailAddress: 'one@example.invalid', emailAddresses: ['denied-bridge@example.invalid'] },
         { id: 94508, primaryEmailAddress: 'denied-bridge@example.invalid' },
@@ -66,7 +68,7 @@ export async function affinityParticipantProperties({ adb, check }: AffinityCont
         sent?.attendees.includes(account.name) === true,
         'The sender is a participant even when the entry supplies only an email address and no internal person object.');
       const alias = await tx.one<{ entity_id: string }>(`select entity_id from identity.source_record where source='affinity' and source_id='person:94502'`);
-      check('Off-list participants join by alternate full email; email-only team members retain ownership',
+      check('Off-list participants join by matching name and email domain; email-only team members retain ownership',
         alias?.entity_id === a && first.some(r => r.source_ref.startsWith('interaction:email:94501:') && r.entity_id === a) &&
         first.some(r => r.source_ref.startsWith('interaction:meeting:94501:') && r.owner_id === user && r.held_on === '2018-01-01'),
         'Old calendar and email records linked; note creation did not replace calendar date.');
@@ -79,7 +81,7 @@ export async function affinityParticipantProperties({ adb, check }: AffinityCont
         first.some(r => r.source_ref.startsWith('interaction:meeting:94504:') && r.entity_id !== org) &&
         !!(await tx.one(`select 1 from identity.affiliation where org_entity=$1`, [org])),
         'Canonical person and associated company contact retain histories without inventing historical employment.');
-      persons.push({ id: 94507, primaryEmailAddress: 'alternate@example.invalid' });
+      persons.push({ id: 94507, firstName: 'Invented', lastName: 'history fixture', primaryEmailAddress: 'alternate@example.invalid' });
       await run();
       const replay = await rows();
       await run();

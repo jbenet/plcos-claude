@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { openTestDb } from './database';
 import { migrate } from '../../lib/db/migrate';
@@ -132,7 +133,13 @@ async function translatedDakotaProperty(check: Check) {
     await migrate(db);
     await db.query(`insert into platform.app_user(id,handle,name,initials,role,email) values($1,'invented','Invented','IN','fixture','')`, [actor]);
     await db.query(`insert into platform.vehicle(id,slug,name,kind,exemption) values($1,'invented-neurotech','Invented Neurotech','fund','506(c)')`, [vehicle]);
-    await translateDakota(db, actor, inventedDakotaReplicas(2, 4));
+    const replicas = inventedDakotaReplicas(2, 4);
+    // This reversal fixture needs distinct people, not same-name corroborated contacts.
+    for (const replica of replicas) if (replica.module === 'contact') {
+      replica.records = replica.records.map((record, index) => ({ ...record, lastname: `Cutover Contact ${index}` }));
+      replica.hash = createHash('sha256').update(JSON.stringify(replica.records)).digest('hex');
+    }
+    await translateDakota(db, actor, replicas);
     // Model people whose firm has no pursuit yet, so the re-point creates it.
     await db.exec("delete from strategy.pursuit where source='dakota'");
     const people = await db.query<{ entity_id: string }>('select entity_id::text from dakota.contact order by id limit 3');

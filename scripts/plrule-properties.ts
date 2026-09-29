@@ -89,6 +89,7 @@ export async function plRuleProperties(db: Queryable, check: (name: string, ok: 
     await db.query('delete from network.edge where from_entity = any($1::uuid[]) or to_entity = any($1::uuid[])', [added]);
     await db.query('delete from research.note where entity_id = any($1::uuid[])', [added]);
     await db.query('delete from identity.source_record where entity_id = any($1::uuid[])', [added]);
+    await db.query('delete from identity.possible_match where left_entity= any($1::uuid[]) or right_entity= any($1::uuid[])', [added]);
     await db.query('delete from identity.entity where entity_id = any($1::uuid[])', [added]);
     await db.query('delete from platform.app_user where id = any($1::uuid[])', [userIds]);
   }

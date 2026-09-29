@@ -119,8 +119,13 @@ export async function exportIdentityReview(tx: Queryable): Promise<IdentityRevie
   const raw = await identityRawContext(tx, aliases);
   for (const row of raw) readIdentity(row.id, row.payload);
   const profiles = await tx.query<{ id: string; data: unknown }>(`select entity_id::text id,data from research.note
-    where entity_id=any($1::uuid[]) and (kind='public_profile' or (kind='context' and data->>'source'='prospects'))`, [aliases]);
-  for (const row of profiles) readIdentity(row.id, row.data);
+    where entity_id=any($1::uuid[]) and (kind in ('public_profile','identity_creation') or (kind='context' and data->>'source'='prospects'))`, [aliases]);
+  for (const row of profiles) {
+    readIdentity(row.id, row.data);
+    const data=row.data as {organizations?:unknown;personalUrls?:unknown};
+    for(const org of Array.isArray(data.organizations)?data.organizations:[]) if(clean(org))member(row.id)!.affiliations.push({org:clean(org),role:''});
+    for(const value of Array.isArray(data.personalUrls)?data.personalUrls:[]) {const url=personalUrl(value);if(url)member(row.id)!.personalUrls.push(url);}
+  }
   const contacts = await tx.query<{ id: string; title: string | null; linkedin: string | null }>(`select entity_id::text id,
     title,linkedin_url__c linkedin from dakota.contact where entity_id=any($1::uuid[])`, [aliases]);
   for (const row of contacts) readIdentity(row.id, row);

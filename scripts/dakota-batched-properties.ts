@@ -235,13 +235,13 @@ export async function dakotaBatchedProperties(check: Check) {
     await translateDakota(correction.db, inventedActor, inventedDakotaReplicas(220, 440), { batchSize: 100, afterBatch: async progress => {
       if (changed || progress.done === 0) return;
       changed = true;
-      await withForegroundDb(correction.db, () => correction.db.query(`insert into identity.external_identifier(entity_id,kind,value,source,as_of,confidence,last_verified_by)
-        values($1,'domain','invented-219.example','invented_fixture',$2,'medium',$3)`, [target, at, inventedActor]));
+      await withForegroundDb(correction.db, () => correction.db.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by)
+        values('dakota','account:invented-a-000219',$1,'invented foreground binding')`, [target]));
     } });
     const linked = await correction.db.one<{ root: string }>(`select identity.canonical_entity_id(entity_id)::text root
       from dakota.account where id='invented-a-000219'`);
-    check('DAKOTA refreshes its identity index after a foreground change between batches', changed && linked?.root === target,
-      'A new foreground domain identifier is visible to a later record; the cached index never overrides the correction.');
+    check('DAKOTA sees source bindings added by a foreground change between batches', changed && linked?.root === target,
+      'A new foreground source binding is visible to a later record; the cached index never overrides the correction.');
   } finally { await correction.close(); }
 }
 

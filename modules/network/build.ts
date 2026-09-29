@@ -1,3 +1,4 @@
+import { resolveEntity } from '@/modules/identity/create';
 import { canonicalPaths } from '@/lib/enrich/canonical-paths';
 import { syncTeamRoster } from '@/modules/identity/team';
 import { precomputeRoutes, startRouteWarmup } from './cache';
@@ -121,15 +122,11 @@ async function build(tx: Queryable): Promise<BuildCounts> {
   for (const u of users) {
     let id = u.entity_id;
     if (!id) {
-      id = (await tx.one<{ entity_id: string }>(
-        `insert into identity.entity (entity_type, display_name) values ('person', $1) returning entity_id::text`, [u.name],
-      ))!.entity_id;
-      await tx.query(
-        `insert into identity.source_record (source, source_id, entity_id, resolved_by)
-         values ('app_user', $1, $2, 'rule:handle') on conflict (source, source_id) do nothing`,
-        [u.handle, id],
-      );
-      counts.teamCreated++;
+      const team = nodeInput?.team.find(t => t.handle === u.handle);
+      const resolved = await resolveEntity(tx, { type: 'person', name: u.name, source: 'app_user', sourceId: u.handle,
+        organizations: team ? [...team.roles, ...team.prior].map(r => r.org) : [], resolvedBy: 'rule:handle' });
+      id = resolved.id;
+      if (resolved.created) counts.teamCreated++;
     }
     entityOfUser.set(u.id, id);
   }
@@ -258,12 +255,8 @@ async function build(tx: Queryable): Promise<BuildCounts> {
     if (p.teamKey) return entityOfUser.get(userByHandle.get(p.teamKey) ?? userByName.get(norm(p.name)) ?? '');
     const cached = warehouseEntities.get(p.key);
     if (cached) return cached;
-    const existing = await tx.one<{ id: string }>(
-      `select identity.canonical_entity_id(entity_id)::text as id from identity.source_record where source = 'warehouse' and source_id = $1`, [p.key]);
-    const id = existing?.id ?? (await tx.one<{ id: string }>(
-      `insert into identity.entity (entity_type, display_name) values ('person', $1) returning entity_id::text as id`, [p.name]))!.id;
-    if (!existing) await tx.query(
-      `insert into identity.source_record (source, source_id, entity_id, resolved_by) values ('warehouse', $1, $2, 'rule:warehouse-id')`, [p.key, id]);
+    const { id } = await resolveEntity(tx, { type: 'person', name: p.name, source: 'warehouse', sourceId: p.key,
+      organizations: p.org ? [p.org] : [], domains: p.emailDomain ? [p.emailDomain] : [], resolvedBy: 'rule:warehouse-id' });
     warehouseEntities.set(p.key, id);
     return id;
   };

@@ -61,6 +61,7 @@ export async function identityRouteProperties(check: Check, db: Db) {
     await db.query('delete from identity.possible_match where left_entity = any($1::uuid[]) or right_entity = any($1::uuid[])', [ids]);
     await db.query('delete from coordination.restriction where entity_id = any($1::uuid[])', [ids]);
     await db.query('delete from network.edge where edge_id = any($1::uuid[])', [edgeIds]);
+    await db.query("delete from research.note where entity_id= any($1::uuid[]) and kind='identity_creation'", [ids]);
     await db.query('delete from identity.entity where entity_id = any($1::uuid[])', [ids]);
   }
 }

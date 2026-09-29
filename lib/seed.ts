@@ -1,3 +1,4 @@
+import { resolveEntity } from '@/modules/identity/create';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Db } from './db';
@@ -103,7 +104,7 @@ export async function seed(db: Db): Promise<Record<string, number>> {
   };
 }
 
-interface EntityFixture { key: string; type: string; name: string; note: string }
+interface EntityFixture { key: string; type: import('@/modules/identity').EntityType; name: string; note: string }
 interface DocFixture {
   doc_id: string; title: string; kind: string; origin: string; as_of: string;
   strength: string; supports: string; body: string;
@@ -161,18 +162,8 @@ async function seedResearch(db: Db) {
 
   await db.transaction(async (tx) => {
     for (const e of entities) {
-      const row = await tx.query<{ entity_id: string }>(
-        `insert into identity.entity (entity_type, display_name)
-         values ($1::identity.entity_type, $2) returning entity_id`,
-        [e.type, e.name],
-      );
-      const id = row[0]!.entity_id;
+      const { id } = await resolveEntity(tx,{type:e.type,name:e.name,source:'seed',sourceId:e.key,resolvedBy:'human:seed'});
       ids.set(e.key, id);
-      await tx.query(
-        `insert into identity.source_record (source, source_id, entity_id, confidence, resolved_by)
-         values ('seed', $1, $2, null, 'human:seed')`,
-        [e.key, id],
-      );
       if (e.note) {
         await tx.query(
           `insert into research.note (entity_id, kind, body, tags) values ($1, 'summary', $2, '{}')`,

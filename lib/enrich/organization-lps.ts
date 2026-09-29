@@ -1,3 +1,4 @@
+import { resolveEntity } from '@/modules/identity/create';
 import { createHash } from 'node:crypto';
 import type { Db, Queryable } from '@/lib/db';
 import type { Finding } from './schema';
@@ -149,17 +150,7 @@ export async function addOrganizationLps(db: Db, findings: Finding[], actorId: s
       const key = `${person.id}:${normalize(c.organization)}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const mapped = await tx.one<{id:string}>(`select identity.canonical_entity_id(entity_id)::text id from identity.source_record where source=$1 and source_id=$2`,[RULE,normalize(c.organization)]);
-      const matches = mapped ? [mapped] : await tx.query<{id:string;affinity:boolean}>(`select e.entity_id::text id,
-        exists(select 1 from identity.source_record s where s.entity_id=e.entity_id and s.source='affinity') affinity
-        from identity.entity e where e.entity_type in ('org','foundation','family') and e.merged_into is null and e.retired_at is null
-          and lower(trim(e.display_name))=$1`,[normalize(c.organization)]);
-      // Duplicate derived network nodes may coexist with the single authoritative CRM organisation.
-      const authoritative = matches.filter(m => 'affinity' in m && m.affinity);
-      if (matches.length > 1 && authoritative.length !== 1) {counts.ambiguous++;continue;}
-      let orgId = (authoritative[0] ?? matches[0])?.id;
-      if (!orgId) orgId = (await tx.one<{id:string}>(`insert into identity.entity(entity_type,display_name) values('org',$1) returning entity_id::text id`,[c.organization]))!.id;
-      await tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by) values($1,$2,$3,$1) on conflict(source,source_id) do nothing`,[RULE,normalize(c.organization),orgId]);
+      const orgId = (await resolveEntity(tx,{type:'org',name:c.organization,source:RULE,sourceId:normalize(c.organization)})).id;
       const evidence = {rule:RULE,inputHash:digest(JSON.stringify(c)),person:person.id,organization:orgId,role:c.role,tier:c.tier,evidence:c.evidence};
       const source = ownedAffiliations.get(`${person.id}:${orgId}`) ?? `${RULE}:${digest(`${person.id}:${orgId}`)}`;
       const asOf = c.evidence.map(e=>e.as_of).sort().at(-1)!;
