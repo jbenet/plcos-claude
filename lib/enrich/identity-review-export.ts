@@ -2,6 +2,7 @@ import type { Queryable } from '@/lib/db';
 import { identityGraphContext, identityRawContext } from './identity-context';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
 import { identityReviewGroupId } from './identity-decisions';
+import { resolvedIdentities } from './identity-roots';
 
 export interface IdentityReviewMember {
   entityId: string; displayName: string; entityType: string;
@@ -64,9 +65,8 @@ export async function exportIdentityReview(tx: Queryable): Promise<IdentityRevie
   }
   const ids = [...new Set(ambiguous.flatMap(group => group.entityIds))];
   if (!ids.length) return [];
-  const entities = await tx.query<{ id: string; root: string; name: string; type: string }>(`select e.entity_id::text id,
-    r.canonical_id::text root,e.display_name name,e.entity_type::text type
-    from identity.entity e join identity.entity_resolution r using(entity_id) where r.canonical_id=any($1::uuid[])`, [ids]);
+  const selected = new Set(ids);
+  const entities = (await resolvedIdentities(tx)).filter(e => selected.has(e.root));
   const roots = new Map(entities.map(e => [e.id, e.root]));
   const aliases = entities.map(e => e.id);
   const members = new Map(entities.filter(e => e.id === e.root).map(e => [e.id, {

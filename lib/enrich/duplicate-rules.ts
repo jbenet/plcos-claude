@@ -28,7 +28,9 @@ const pair = (a: string, b: string) => [a, b].sort().join(':');
 export async function recordDuplicateSeparations(tx: Queryable, by: string, report: ImportDuplicateReport) {
   const entities = await tx.query<{ id: string; name: string; type: string }>(`select entity_id::text id,display_name name,entity_type::text type
     from identity.entity where merged_into is null and retired_at is null order by entity_id`);
-  const sources = await tx.query<{ id: string; source: string; key: string }>(`select identity.canonical_entity_id(entity_id)::text id,source,source_id key from identity.source_record order by source,source_id`);
+  const sources = await tx.query<{ id: string; source: string; key: string }>(`select (case when e.merged_into is null then e.entity_id
+    else identity.canonical_entity_id(e.entity_id) end)::text id,s.source,s.source_id key
+    from identity.source_record s join identity.entity e on e.entity_id=s.entity_id order by s.source,s.source_id`);
   const owned = new Map<string, typeof sources>();
   for (const s of sources) owned.set(s.id, [...(owned.get(s.id) ?? []), s]);
   const existing = await tx.query<{ a: string; b: string }>(`select identity.canonical_entity_id(coalesce(m.merged_entity,l.entity_id))::text a,

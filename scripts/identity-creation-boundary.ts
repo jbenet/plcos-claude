@@ -3,7 +3,7 @@
  */
 const fixtureWriters = new Set([
   'scripts/identity-review-repeat.ts','scripts/profile-import-threads.ts','scripts/lp-units-demo.ts',
-  'scripts/identity-export-perf.ts','scripts/network-perf.ts','scripts/responsiveness.ts',
+  'scripts/identity-export-perf.ts','scripts/research-export-perf.ts','scripts/network-perf.ts','scripts/responsiveness.ts',
   'scripts/viewer-speed-bench.ts','scripts/perf4-fixture.ts','scripts/findings-perf.ts',
 ]);
 export function directEntityInsertViolation(path:string,text:string):boolean {

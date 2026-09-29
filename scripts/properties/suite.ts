@@ -17,6 +17,7 @@ export async function runProperties(check: Check) {
   await (await import('../path-search-properties')).pathSearchProperties(check);
   await (await import('./create-match')).creationProperties(check);
   const db = await freshDb();
+  await (await import('./identity-roots')).identityRootProperties(check, db);
   await (await import('./create-match-connectors')).connectorCreationProperties(check, db);
   await (await import('../create-match-network-properties')).createMatchNetworkProperties(check);
   await (await import('../dakota-properties')).dakotaProperties(check, db);

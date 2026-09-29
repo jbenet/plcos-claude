@@ -32,6 +32,7 @@ async function main() {
   const check = (name: string, ok: boolean, detail: string) => {
     results.push({ name, ok, detail });
   };
+  (await import('./properties/identity-review-components')).identityReviewComponentProperties(check);
   await (await import('./properties/build-traces')).buildTraceProperties(check);
   await (await import('./properties/deploy-tooling')).deployToolingProperties(check);
   await (await import('./properties/enrich-batch')).enrichBatchProperties(check);
