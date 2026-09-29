@@ -7,7 +7,9 @@
 export type GlyphName =
   | 'calendar' | 'calendar-next' | 'phone' | 'mail' | 'mail-in' | 'mail-out' | 'chat' | 'link'
   | 'ticket' | 'search' | 'note' | 'mic' | 'eye' | 'question' | 'folder' | 'coin' | 'pen' | 'stop'
-  | 'chart' | 'person' | 'list' | 'update' | 'status' | 'rung' | 'check';
+  | 'chart' | 'person' | 'list' | 'update' | 'status' | 'rung' | 'check'
+  // The screenshot annotation toolbar (components/shell/ShotEditor.tsx).
+  | 'arrow' | 'line' | 'box' | 'text' | 'undo' | 'redo' | 'trash' | 'close' | 'pipette';
 
 const PATHS: Record<GlyphName, React.ReactNode> = {
   calendar: <><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" /></>,
@@ -35,6 +37,16 @@ const PATHS: Record<GlyphName, React.ReactNode> = {
   status: <><path d="M3.5 14V2.5" /><path d="M3.5 3h8.5l-2 2.8 2 2.7H3.5" /></>,
   rung: <path d="M5 2v12M11 2v12M5 5h6M5 8h6M5 11h6" />,
   check: <path d="M3.5 8.5l3 3 6-6.5" />,
+  // Drawing tools and edits, for the annotation toolbar.
+  arrow: <path d="M3.5 12.5l9-9M6.5 3.5h6v6" />,
+  line: <path d="M3.5 12.5l9-9" />,
+  box: <rect x="2.5" y="3.5" width="11" height="9" rx="1" />,
+  text: <path d="M3.5 4V3h9v1M8 3v10M6 13h4" />,
+  undo: <path d="M5.5 3.5l-3 3 3 3M2.5 6.5h7a3.5 3.5 0 0 1 0 7H7" />,
+  redo: <path d="M10.5 3.5l3 3-3 3M13.5 6.5h-7a3.5 3.5 0 0 0 0 7H9" />,
+  trash: <path d="M2.5 4.5h11M6 4.5V2.8h4v1.7M4 4.5l.7 9h6.6l.7-9M6.7 7v4M9.3 7v4" />,
+  close: <path d="M4 4l8 8M12 4l-8 8" />,
+  pipette: <path d="M9.5 4.5l2 2M10.4 3.6l1.2-1.2a1.4 1.4 0 0 1 2 2l-1.2 1.2M8.8 5.2l-5.3 5.3-.5 2.5 2.5-.5 5.3-5.3" />,
   list: <><path d="M5.5 4.5h8M5.5 8h8M5.5 11.5h8" /><circle cx="3" cy="4.5" r=".6" fill="currentColor" /><circle cx="3" cy="8" r=".6" fill="currentColor" /><circle cx="3" cy="11.5" r=".6" fill="currentColor" /></>,
 };
 
@@ -45,5 +57,17 @@ export function Glyph({ name, title, tone }: { name: GlyphName; title: string; t
         {PATHS[name]}
       </svg>
     </span>
+  );
+}
+
+/**
+ * The same drawing without its circle or its own name, for inside a button that carries the name
+ * (aria-label) itself. Hidden from assistive technology so the name is not read twice.
+ */
+export function GlyphIcon({ name, size = 16 }: { name: GlyphName; size?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
+      {PATHS[name]}
+    </svg>
   );
 }

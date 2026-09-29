@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { GlyphIcon, type GlyphName } from '@/components/ui/Glyph';
+import { useShortcutPlatform } from './KeyboardShortcuts';
 
 type Tool = 'pen' | 'arrow' | 'line' | 'box' | 'text';
 
@@ -40,27 +42,20 @@ const COLOURS = [
   { id: '#FFFFFF', name: 'White' },
 ];
 
-const TOOLS: Array<{ id: Tool; glyph: React.ReactNode; name: string }> = [
-  { id: 'pen', glyph: '✎', name: 'Draw freehand' },
-  { id: 'arrow', glyph: '↗', name: 'Point at something' },
-  {
-    id: 'line',
-    glyph: (
-      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-        <path d="M3.5 12.5l9-9" />
-      </svg>
-    ),
-    name: 'Draw a line',
-  },
-  { id: 'box', glyph: '▢', name: 'Box it' },
-  { id: 'text', glyph: 'T', name: 'Add a label' },
+/**
+ * Icons, not words, so the toolbar is one slim row (Juan, 29 Sep 2026). Each button still
+ * carries its name for a screen reader (aria-label) and shows it, with its shortcut if it has
+ * one, in a tooltip on hover or keyboard focus.
+ */
+const TOOLS: Array<{ id: Tool; icon: GlyphName; name: string }> = [
+  { id: 'pen', icon: 'pen', name: 'Draw freehand' },
+  { id: 'arrow', icon: 'arrow', name: 'Point at something' },
+  { id: 'line', icon: 'line', name: 'Draw a line' },
+  { id: 'box', icon: 'box', name: 'Box it' },
+  { id: 'text', icon: 'text', name: 'Add a label' },
 ];
 
-const PIPETTE = (
-  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M9.5 4.5l2 2M10.4 3.6l1.2-1.2a1.4 1.4 0 0 1 2 2l-1.2 1.2M8.8 5.2l-5.3 5.3-.5 2.5 2.5-.5 5.3-5.3" />
-  </svg>
-);
+const PIPETTE = <GlyphIcon name="pipette" size={14} />;
 
 /** Line height of a label, in the field on screen and in the saved image alike. */
 const LEADING = 1.3;
@@ -578,40 +573,119 @@ export function ShotEditor({
       .finally(() => { window.setTimeout(() => { eyeOpenRef.current = false; }, 250); });
   };
 
-  /** The presets, then any colour at all, then one copied off the screenshot. */
-  const colourPicks = (value: string, pick: (c: string) => void) => (
-    <>
-      {COLOURS.map((c) => (
-        <button
-          key={c.id}
-          className={`swatch${sameColour(c.id, value) ? ' on' : ''}`}
-          style={{ background: c.id }}
-          onClick={() => pick(c.id)}
-          aria-pressed={sameColour(c.id, value)}
-          title={c.name}
-          aria-label={c.name}
+  /**
+   * The presets, then any colour at all, then one copied off the screenshot. In the toolbar a
+   * name is its tooltip (data-tip, below); in the label's bar it is still the browser's title.
+   */
+  const colourPicks = (value: string, pick: (c: string) => void, inBar = false) => {
+    const named = (name: string) => (inBar ? { 'data-tip': name } : { title: name });
+    return (
+      <>
+        {COLOURS.map((c) => (
+          <button
+            key={c.id}
+            className={`swatch${sameColour(c.id, value) ? ' on' : ''}`}
+            style={{ '--c': c.id } as React.CSSProperties}
+            onClick={() => pick(c.id)}
+            aria-pressed={sameColour(c.id, value)}
+            aria-label={c.name}
+            {...named(c.name)}
+          />
+        ))}
+        <input
+          type="color"
+          className={`swatch any${COLOURS.some((c) => sameColour(c.id, value)) ? '' : ' on'}`}
+          value={hex6(value)}
+          onChange={(e) => pick(e.target.value)}
+          aria-label="Any colour"
+          {...named('Any colour')}
         />
-      ))}
-      <input
-        type="color"
-        className={`swatch any${COLOURS.some((c) => sameColour(c.id, value)) ? '' : ' on'}`}
-        value={hex6(value)}
-        onChange={(e) => pick(e.target.value)}
-        title="Any colour"
-        aria-label="Any colour"
-      />
-      {canPick && (
-        <button
-          className="setpipette"
-          onClick={() => pickFromScreen(pick)}
-          title="Copy a colour from the screenshot"
-          aria-label="Copy a colour from the screenshot"
-        >
-          {PIPETTE}
-        </button>
-      )}
-    </>
-  );
+        {canPick && (
+          <button
+            className="setpipette"
+            onClick={() => pickFromScreen(pick)}
+            aria-label="Copy a colour from the screenshot"
+            {...named('Copy a colour from the screenshot')}
+          >
+            {PIPETTE}
+          </button>
+        )}
+      </>
+    );
+  };
+
+  /**
+   * The toolbar's tooltip: one element, positioned under whichever button it names.
+   *
+   * Not the browser's title: that never shows on keyboard focus, and it cannot show a shortcut
+   * as a key. Not a CSS ::after either: on a narrow screen the buttons scroll sideways, and a
+   * scrolling box clips anything that hangs out of it. With a mouse it follows the pointer by
+   * position rather than by event target, because a disabled button (Undo with nothing to undo)
+   * takes no pointer events in some browsers and should still say what it is. A finger gets no
+   * tooltip: a tap is a press, and the name is on the button for a screen reader.
+   */
+  const [tip, setTip] = useState<{ text: string; keys?: string; cx: number; top: number } | null>(null);
+  const tipRef = useRef<HTMLDivElement | null>(null);
+  const tipFor = useRef<HTMLElement | null>(null);
+  const tipTimer = useRef<number | null>(null);
+  const tipUp = useRef(false);
+  tipUp.current = tip !== null;
+  const hideTip = () => {
+    if (tipTimer.current) window.clearTimeout(tipTimer.current);
+    tipTimer.current = null;
+    tipFor.current = null;
+    setTip(null);
+  };
+  const placeTip = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    setTip({ text: el.dataset.tip ?? '', keys: el.dataset.keys, cx: r.left + r.width / 2, top: r.bottom + 6 });
+  };
+  const tipAt = (bar: HTMLElement, x: number, y: number): HTMLElement | null => {
+    const inside = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+    };
+    return [...bar.querySelectorAll<HTMLElement>('[data-tip]')].find((el) => {
+      const scroller = el.closest('.setscroll');
+      return inside(el) && (!scroller || inside(scroller));
+    }) ?? null;
+  };
+  const onBarPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'mouse') return;
+    const hit = tipAt(e.currentTarget, e.clientX, e.clientY);
+    if (hit === tipFor.current) return;
+    const wasUp = tipUp.current;
+    hideTip();
+    if (!hit) return;
+    tipFor.current = hit;
+    // Straight away when moving along the bar with a tooltip already up; after a moment
+    // otherwise, so a pointer passing over the bar does not flash one. The delay is a GUESS
+    // near the browsers' own for a title.
+    if (wasUp) placeTip(hit);
+    else tipTimer.current = window.setTimeout(() => placeTip(hit), 450);
+  };
+  const onBarFocus = (e: React.FocusEvent<HTMLDivElement>) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-tip]');
+    let visible = false;
+    try { visible = !!el?.matches(':focus-visible'); } catch { /* an old engine: no tooltip on focus */ }
+    if (!el || !visible) return;
+    hideTip();
+    tipFor.current = el;
+    placeTip(el);
+  };
+  // Kept on screen: a tooltip under the first or last button would hang off the edge.
+  useLayoutEffect(() => {
+    const t = tipRef.current;
+    if (!t || !tip) return;
+    const w = t.offsetWidth;
+    t.style.left = `${Math.max(6, Math.min(tip.cx - w / 2, window.innerWidth - 6 - w))}px`;
+  }, [tip]);
+  useEffect(() => () => { if (tipTimer.current) window.clearTimeout(tipTimer.current); }, []);
+
+  const { modifier } = useShortcutPlatform();
+  const apple = modifier === '⌘';
+  const undoKeys = apple ? '⌘Z' : 'Ctrl+Z';
+  const redoKeys = apple ? '⌘⇧Z' : 'Ctrl+Shift+Z';
 
   const c = canvasRef.current;
   const W = c?.width || 1;
@@ -627,38 +701,87 @@ export function ShotEditor({
         <div className="setwrap">
           {/* Directly above the image: a toolbar at the top of a dark overlay, with the
               picture centred below it, is a toolbar nobody finds. */}
-          <div className="setop">
-            <div className="settools" role="group" aria-label="Tool">
-              {TOOLS.map((t) => (
+          <div
+            className="setop"
+            onPointerMove={onBarPointerMove}
+            onPointerLeave={hideTip}
+            onPointerDown={(e) => {
+              // A press hides the tooltip until the pointer moves to another button.
+              hideTip();
+              if (e.pointerType === 'mouse') tipFor.current = tipAt(e.currentTarget, e.clientX, e.clientY);
+            }}
+            onFocus={onBarFocus}
+            onBlur={hideTip}
+          >
+            {/* Everything but Cancel and Done scrolls sideways when the screen is too narrow for
+                one row, so the way out is always in view. */}
+            <div className="setscroll" onScroll={hideTip}>
+              <div className="settools" role="group" aria-label="Tool">
+                {TOOLS.map((t) => (
+                  <button
+                    key={t.id}
+                    className={t.id === tool ? 'on' : ''}
+                    onClick={() => { stopEditing(); setTool(t.id); }}
+                    aria-pressed={t.id === tool}
+                    aria-label={t.name}
+                    data-tip={t.name}
+                  >
+                    <GlyphIcon name={t.icon} />
+                  </button>
+                ))}
+              </div>
+              <span className="setdiv" aria-hidden />
+              <div className="setcols" role="group" aria-label="Colour">
+                {colourPicks(colour, setColour, true)}
+              </div>
+              <span className="setdiv" aria-hidden />
+              <div className="setacts" role="group" aria-label="Edit">
                 <button
-                  key={t.id}
-                  className={t.id === tool ? 'on' : ''}
-                  onClick={() => { stopEditing(); setTool(t.id); }}
-                  aria-pressed={t.id === tool}
-                  title={t.name}
-                  aria-label={t.name}
+                  onClick={undo}
+                  disabled={marks.length === 0}
+                  aria-label="Undo"
+                  aria-keyshortcuts="Meta+Z Control+Z"
+                  data-tip="Undo"
+                  data-keys={undoKeys}
                 >
-                  <span aria-hidden>{t.glyph}</span>
+                  <GlyphIcon name="undo" />
                 </button>
-              ))}
+                <button
+                  onClick={redo}
+                  disabled={redoDepth === 0}
+                  aria-label="Redo"
+                  aria-keyshortcuts="Meta+Shift+Z Control+Shift+Z Control+Y"
+                  data-tip="Redo"
+                  data-keys={redoKeys}
+                >
+                  <GlyphIcon name="redo" />
+                </button>
+                <button
+                  onClick={clearAll}
+                  disabled={marks.length === 0}
+                  aria-label="Clear all marks"
+                  data-tip="Clear all marks"
+                >
+                  <GlyphIcon name="trash" />
+                </button>
+              </div>
             </div>
-            <div className="setcols" role="group" aria-label="Colour">
-              {colourPicks(colour, setColour)}
-            </div>
-            <div className="setacts">
-              <button className="btn" onClick={undo} disabled={marks.length === 0} title="⌘Z">
-                Undo
+            <span className="setdiv" aria-hidden />
+            <div className="setexit" role="group" aria-label="Finish">
+              <button onClick={onCancel} aria-label="Cancel" aria-keyshortcuts="Escape" data-tip="Cancel" data-keys="Esc">
+                <GlyphIcon name="close" />
               </button>
-              <button className="btn" onClick={redo} disabled={redoDepth === 0} title="⌘⇧Z">
-                Redo
+              <button className="p" onClick={save} aria-label="Done" data-tip="Done">
+                <GlyphIcon name="check" />
               </button>
-              <button className="btn" onClick={clearAll} disabled={marks.length === 0}>
-                Clear
-              </button>
-              <button className="btn" onClick={onCancel} title="Esc">Cancel</button>
-              <button className="btn p" onClick={save}>Done</button>
             </div>
           </div>
+          {tip && (
+            <div ref={tipRef} className="settip" role="tooltip" style={{ top: tip.top, left: tip.cx }}>
+              {tip.text}
+              {tip.keys && <kbd>{tip.keys}</kbd>}
+            </div>
+          )}
 
           {/* The picture's own box, and nothing else, so a label's position is a share of the
               picture. It was a share of the picture and the toolbar together, which drew every

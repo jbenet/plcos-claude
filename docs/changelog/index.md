@@ -225,3 +225,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Create-match — Resolve identities before creation](entries/create-match.md)
 - [Bulk identity separations](entries/separation-bulk.md)
 - [Research export — bounded identity review work](entries/export-speed.md)
+- [Feedback — the annotation toolbar is one row of icons](entries/shot-editor-icons.md)
