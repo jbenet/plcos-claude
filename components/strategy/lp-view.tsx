@@ -1,6 +1,6 @@
 'use client';
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Glyph } from '@/components/ui/Glyph';
 import { formatDate } from '@/lib/time';
@@ -116,16 +116,18 @@ export function useLpView({ rows, statuses, asOf, initialFilters = {}, mode, ini
 
   const set = <K extends keyof Filters>(key: K, value: Filters[K]) => setF((old) => ({ ...old, [key]: value }));
   const sortBy = (key: SortKey) => setSort((old) => (old.key === key ? { key, dir: old.dir === 1 ? -1 : 1 } : { key, dir: numeric.has(key) ? -1 : 1 }));
-  const pick = (ids: string[], on: boolean) => setPicked((old) => {
+  // Stable, so a memoised row does not re-render for every keyboard move (issue 0121).
+  const pick = useCallback((ids: string[], on: boolean) => setPicked((old) => {
     const next = new Set(old);
     for (const id of ids) if (on) next.add(id); else next.delete(id);
     return next;
-  });
+  }), []);
+  const clearPicked = useCallback(() => setPicked(new Set()), []);
   const pickedRows = useMemo(() => rows.filter((r) => picked.has(r.id)), [rows, picked]);
 
   return {
     ids, now, enabled, setEnabled, f, setF, set, active, sort, setSort, sortBy, filtered, shown, counts, unitCounts,
-    picked, pick, pickedRows, clearPicked: () => setPicked(new Set()),
+    picked, pick, pickedRows, clearPicked,
   };
 }
 export type LpView = ReturnType<typeof useLpView>;

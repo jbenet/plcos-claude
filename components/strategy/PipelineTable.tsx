@@ -1,11 +1,12 @@
 'use client';
 
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BulkLpActions } from './BulkLpActions';
 import { EMPTY, rankRows, unitShown, unitsFrom, unitsOn, lead, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { CapacityTag, LpWho, units } from './LpWho';
 import { UnitIcon } from './UnitIcon';
+import { useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
 import { MoveButton, UndoToast, useMove } from './MoveToSelected';
 import { cx, Flags, fmtShort, FilterLine, Icon, InPane, Ladder, n, ScoreMark, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
@@ -50,24 +51,20 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
   const byVehicle = showVehicle && vehicles > 1;
   // One list, organisations and individuals ranked together (issue 0113), each row marked with its type.
   const ranked = useMemo(() => rankRows(shown, sort.key, sort.dir), [shown, sort]);
-  const visible = ranked.slice(0, limit);
+  const visible = useMemo(() => ranked.slice(0, limit), [ranked, limit]);
   const orgCount = useMemo(() => ranked.filter((r) => r.isOrg).length, [ranked]);
   const visibleIds = visible.map((r) => r.id);
   const allTicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
-  const open = (r: PipelineRow, e?: { metaKey?: boolean; ctrlKey?: boolean }) => {
+  const open = useCallback((r: PipelineRow, e?: { metaKey?: boolean; ctrlKey?: boolean }) => {
     const href = lpHref(r);
     if (e?.metaKey || e?.ctrlKey) window.open(href, '_blank'); else router.push(href);
-  };
+  }, [router]);
 
-  // The keyboard (issue 0111), as on Selection: a focus that moves through the list.
-  const [focusId, setFocusId] = useState<string | null>(null);
-  const focus = focusId ? ranked.find((r) => r.id === focusId) ?? null : null;
-  const reveal = (r: PipelineRow) => {
-    const i = ranked.indexOf(r);
-    if (i >= limit) setLimit(Math.ceil((i + 1) / PAGE) * PAGE);
-    setFocusId(r.id);
-    requestAnimationFrame(() => document.querySelector(`[data-lp="${r.id}"]`)?.scrollIntoView({ block: 'nearest' }));
-  };
+  // The keyboard (issues 0111, 0121), as on Selection: a cursor that moves through the list, the
+  // shared one (row-cursor.ts). None until an arrow key or a tick box puts it somewhere.
+  const resetKey = `${enabled.join()}|${JSON.stringify(view.f)}|${sort.key}${sort.dir}`;
+  const cursor = useRowCursor({ ranked, defaultFirst: false, limit, setLimit, page: PAGE, resetKey });
+  const { focus, reveal, setFocus: setFocusId } = cursor;
   // A link to the same person's or firm's other row: if the toggles or the status hide it, show it first.
   const [pending, setPending] = useState<string | null>(null);
   const jump = (id: string) => {
@@ -79,6 +76,10 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
     if (!unitShown(target, view.f.units)) view.set('units', target.isOrg ? unitsFrom(true, unitsOn(view.f.units).individuals) : unitsFrom(unitsOn(view.f.units).firms, true));
     if (!enabled.includes(target.status)) setEnabled(statuses.map((x) => x.id));
   };
+  // Stable for the memoised rows, so a keyboard move re-renders two rows, not the table (issue 0121).
+  const jumpNow = useRef(jump);
+  jumpNow.current = jump;
+  const onJump = useCallback((id: string) => jumpNow.current(id), []);
   useEffect(() => {
     if (!pending) return;
     const r = ranked.find((x) => x.id === pending);
@@ -98,22 +99,17 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
     if (!done) return;
     if (pickedRows.length) view.clearPicked(); else if (next && one) reveal(next);
   };
-  const keys = useRef({ ranked, focus, picked, moveNow, reveal, undo: mv.undo });
-  keys.current = { ranked, focus, picked, moveNow, reveal, undo: mv.undo };
+  const keys = useRef({ focus, picked, moveNow, step: cursor.step, undo: mv.undo });
+  keys.current = { focus, picked, moveNow, step: cursor.step, undo: mv.undo };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target instanceof HTMLElement ? e.target : null;
       if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && !(el as HTMLInputElement).type?.match(/checkbox/) || el.closest('dialog, [role="dialog"]'))) return;
-      const { ranked, focus, picked, moveNow, reveal, undo } = keys.current;
+      const { focus, picked, moveNow, step, undo } = keys.current;
       if (e.key === 'u' && !e.shiftKey) { e.preventDefault(); void undo(); return; }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'j' || e.key === 'k') {
-        const i = focus ? ranked.indexOf(focus) : -1;
-        const down = e.key === 'ArrowDown' || e.key === 'j';
-        const next = ranked[focus ? Math.max(0, Math.min(ranked.length - 1, i + (down ? 1 : -1))) : 0];
-        if (!next) return;
-        e.preventDefault();
-        reveal(next);
+        step(e.key === 'ArrowDown' || e.key === 'j' ? 1 : -1, e);
         return;
       }
       if (!focus) return;
@@ -127,7 +123,11 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const span = 2 + (all ? 1 : 0) + (byVehicle ? 1 : 0) + 9;
-  const statusLabel = (id: Status) => statuses.find((x) => x.id === id)?.label ?? id;
+  // The rendered rows, kept while the cursor moves: each row reads the cursor itself (issue 0121).
+  const rowEls = useMemo(() => visible.map((r) => <Row key={r.id} r={r} picked={picked.has(r.id)} cursor={cursor.store}
+    statusLabel={statuses.find((x) => x.id === r.status)?.label ?? r.status}
+    all={all} byVehicle={byVehicle} rungNames={rungNames} now={now} onPick={pick} onOpen={open} onFocus={setFocusId} onJump={onJump} />),
+  [visible, picked, cursor.store, statuses, all, byVehicle, rungNames, now, pick, open, setFocusId, onJump]);
 
   const Th = ({ k, className, children }: { k: SortKey; className: string; children: string }) => {
     const on = sort.key === k;
@@ -221,8 +221,7 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
                 </tr>
               </thead>
               <tbody>
-                {visible.map((r) => <Row key={r.id} r={r} picked={picked.has(r.id)} focused={r.id === focus?.id} statusLabel={statusLabel(r.status)}
-                  all={all} byVehicle={byVehicle} rungNames={rungNames} now={now} onPick={pick} onOpen={open} onFocus={setFocusId} onJump={jump} />)}
+                {rowEls}
                 {ranked.length > visible.length && <tr className={u.moreRow}><td colSpan={span}>
                   <button type="button" className="btn" onClick={() => setLimit((x) => x + PAGE)}>Show {n(Math.min(PAGE, ranked.length - visible.length))} more</button>
                   {n(visible.length)} of {n(ranked.length)} shown. Search and filters cover all of them.
@@ -261,16 +260,18 @@ const rowClick = (open: () => void) => (e: React.MouseEvent) => {
 const known = (c: string | null) => (c && !/unknown/i.test(c) ? c : null);
 
 /** One LP unit (docs/23): an organisation with its people named, or an individual with their firms. */
-const Row = memo(function Row({ r, picked, focused, statusLabel, all, byVehicle, rungNames, now, onPick, onOpen, onFocus, onJump }: Cols & {
-  r: PipelineRow; picked: boolean; focused: boolean; statusLabel: string;
+const Row = memo(function Row({ r, picked, cursor, statusLabel, all, byVehicle, rungNames, now, onPick, onOpen, onFocus, onJump }: Cols & {
+  r: PipelineRow; picked: boolean; cursor: CursorStore; statusLabel: string;
 }) {
+  const focused = useIsCursor(cursor, r.id);
   const read = r.readSuperseded ? null : r.read;
   const touch = fmtShort(r.lastTouch, now);
   return (
     <tr data-lp={r.id} className={cx(s.row, picked && s.picked, focused && u.focus)} tabIndex={0} aria-selected={focused}
       onClick={rowClick(() => onOpen(r))} onFocus={(e) => { if (e.target === e.currentTarget) onFocus(r.id); }}
       onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) { e.stopPropagation(); onOpen(r, e); } }}>
-      <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
+      {/* Ticking a row puts the cursor on it too, so the arrows go on from there (issue 0121). */}
+      <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => { onPick([r.id], e.target.checked); onFocus(r.id); }} /></td>
       <td className={s.cLp}>
         <div className={u.nameLine}><UnitIcon org={r.isOrg} /><div>
         <div className={s.lpName}><a href={lpHref(r)}>{lead(r)}</a><CapacityTag r={r} /></div>

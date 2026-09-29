@@ -238,7 +238,11 @@ async function main() {
     await db.query(`update strategy.pursuit set status = 'new' where pursuit_id = $1`, [person.id]);
     person.status = 'new';
     since = (await db.one<{ t: string }>(`select coalesce(max(created_at), 'epoch')::text t from strategy.pursuit_update`))!.t;
-    return { org: [orgs[0]!, orgs[1]!, orgs[2]!, orgs[3]!, orgs[4]!] as const, person, pipe: [selected[0]!, selected[1]!, selected[2]!] as const, page };
+    // Two more at New or Sourcing that no other check touches, for the keyboard cursor (issue 0121).
+    const used = new Set([...orgs.slice(0, 5), person, page].map((r) => r.id));
+    const spare = all.filter((r) => (r.status === 'new' || r.status === 'sourcing') && !used.has(r.id)).slice(0, 2);
+    if (spare.length < 2) throw new Error('The demo seed no longer has two spare LPs at New or Sourcing for the keyboard check.');
+    return { org: [orgs[0]!, orgs[1]!, orgs[2]!, orgs[3]!, orgs[4]!] as const, person, pipe: [selected[0]!, selected[1]!, selected[2]!] as const, page, spare: [spare[0]!, spare[1]!] as const };
   });
   const [o1, o2, o3, o4, o5] = lp.org;
   const [p1, p2, p3] = lp.pipe;
@@ -315,6 +319,78 @@ async function main() {
       return { ui: 'the reasons panel loaded, with no failure message', verify: async (db) => {
         same(await movesOf(db, id), [], 'status changes from reading the reasons');
       } };
+    });
+
+    // The keyboard cursor (issue 0121) ──────────────────────────────────────────────────────
+    const cursorAt = () => page.evaluate(() => document.querySelector('tr[data-lp][aria-selected="true"]')?.getAttribute('data-lp') ?? null);
+    const listed = () => page.evaluate(() => [...document.querySelectorAll('tr[data-lp]')].map((r) => r.getAttribute('data-lp')!));
+    await check('Selection: a tick moves the keyboard cursor, and a move keeps its place', async () => {
+      const [a, b] = lp.spare;
+      await openSelection(page);
+      const before = await listed();
+      const ia = before.indexOf(a.id), ib = before.indexOf(b.id);
+      if (ia < 0 || ib < 0) throw new Error('the spare LPs are not listed at New and Sourcing');
+      // A tick puts the cursor on its row, and ↓ goes on from there.
+      await row(page, a.id).locator('input[type="checkbox"]').check();
+      same(await cursorAt(), a.id, 'the cursor after ticking a row');
+      if (ia + 1 < before.length) {
+        await page.keyboard.press('ArrowDown');
+        await page.waitForFunction((id) => document.querySelector('tr[data-lp][aria-selected="true"]')?.getAttribute('data-lp') === id, before[ia + 1]);
+      }
+      await row(page, b.id).locator('input[type="checkbox"]').check();
+      same(await cursorAt(), b.id, 'the cursor after ticking a second row');
+      // After the move the cursor is on the next row still listed, not back at the top.
+      const going = new Set([a.id, b.id]);
+      const expect = before.slice(ib + 1).find((id) => !going.has(id)) ?? before.slice(0, ib).reverse().find((id) => !going.has(id));
+      await selectionTray(page).getByRole('button', { name: /^Move 2 to Selected/ }).click();
+      await toast(page, 'Moved 2 LPs to Selected').waitFor();
+      await row(page, b.id).waitFor({ state: 'detached' });
+      await page.waitForFunction((id) => document.querySelector('tr[data-lp][aria-selected="true"]')?.getAttribute('data-lp') === id, expect, { timeout: 5000 })
+        .catch(async () => { throw new Error(`the cursor is on row ${(await listed()).indexOf((await cursorAt()) ?? '')}, expected the row after the moved one`); });
+      await page.getByRole('button', { name: /^Undo/ }).click();
+      await toast(page, /2 LPs back to/).waitFor();
+      return { ui: 'the tick moved the cursor, ↓ went on from it, and after Move 2 it stayed in place; Undo put them back', verify: async (db) => {
+        for (const x of [a, b]) {
+          same(await statusOf(db, x.id), x.status, `${x.name}'s status`);
+          same(await movesOf(db, x.id), [`${x.status}>selected by juan`, `selected>${x.status} by juan`], `${x.name}'s status changes`);
+        }
+      } };
+    });
+
+    await check('Selection: a held arrow key stops when released (no queued moves)', async () => {
+      await openSelection(page, '?status=all');
+      await row(page, (await listed())[0]!).locator('td').nth(1).click();
+      // A slow machine, where a move takes longer than the key repeat: 4× CPU throttling (GUESS: about
+      // an older iPad). Hold ↓ for 0.5 s at macOS's fastest repeat (30 ms), sent without waiting for
+      // the page, as a keyboard does; then count the moves made after the release.
+      const cdp = await admin.newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+      try {
+        await page.evaluate(() => {
+          const w = window as unknown as { __moves: number[] };
+          w.__moves = [];
+          new MutationObserver(() => w.__moves.push(Date.now()))
+            .observe(document.querySelector('tbody')!, { attributes: true, subtree: true, attributeFilter: ['aria-selected'] });
+        });
+        const key = (type: 'rawKeyDown' | 'keyUp', autoRepeat: boolean) => cdp.send('Input.dispatchKeyEvent',
+          { type, key: 'ArrowDown', code: 'ArrowDown', windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40, autoRepeat });
+        const sent: Array<Promise<unknown>> = [];
+        const t0 = Date.now();
+        for (let k = 0; Date.now() - t0 < 500; k++) { sent.push(key('rawKeyDown', k > 0)); await sleep(30); }
+        const released = Date.now();
+        sent.push(key('keyUp', false));
+        await Promise.all(sent);
+        await sleep(2000);
+        const moves = await page.evaluate(() => (window as unknown as { __moves: number[] }).__moves);
+        // A move already in flight at the release may land a frame later; 150 ms allows for one.
+        const late = moves.filter((t) => t > released + 150);
+        if (moves.length < 2) throw new Error(`holding ↓ moved the cursor ${moves.length} times`);
+        if (late.length) throw new Error(`${late.length} changes of the cursor came after the key was released, the last ${moves.at(-1)! - released} ms after`);
+        return { ui: `holding ↓ changed the cursor ${moves.length} times, none after the release`, verify: async () => undefined };
+      } finally {
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 }).catch(() => undefined);
+        await cdp.detach().catch(() => undefined);
+      }
     });
 
     // Pipeline ─────────────────────────────────────────────────────────────────────────────

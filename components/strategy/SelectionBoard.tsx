@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { scoreDetailAction } from '@/app/selection/actions';
 import { actionFailure } from '@/lib/client/action-failure';
@@ -10,6 +10,7 @@ import { MoveButton, statusMix, statusWord, UndoToast, useMove } from './MoveToS
 import { rankRows, unitShown, unitsFrom, unitsOn, EMPTY, lead, second, spvFlagged, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { CapacityTag, LpWho, units } from './LpWho';
 import { UnitIcon } from './UnitIcon';
+import { useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
 import { cx, Disclose, fmt, fmtShort, FilterLine, Icon, Ladder, n, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
 import s from './lp-tables.module.css';
 import m from './selection.module.css';
@@ -52,22 +53,34 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   useEffect(() => setLimit(PAGE), [enabled, view.f, sort]);
   // One list, organisations and individuals ranked together (issue 0113).
   const ranked = useMemo(() => rankRows(shown, sort.key, sort.dir), [shown, sort]);
-  const visible = ranked.slice(0, limit);
+  const visible = useMemo(() => ranked.slice(0, limit), [ranked, limit]);
   const orgCount = useMemo(() => ranked.filter((r) => r.isOrg).length, [ranked]);
   const place = (r: PipelineRow) => ranked.indexOf(r) + 1;
-  const [focusId, setFocusId] = useState<string | null>(() => initialFilters?.lp ?? null);
-  const focus = ranked.find((r) => r.id === focusId) ?? ranked[0] ?? null;
-  const position = focus ? place(focus) : 0;
+  // The keyboard cursor (issue 0121): a click or tap moves it, it keeps its place when its row
+  // leaves the list, and the page scrolls ahead of it. Shared with Pipeline.
+  const resetKey = `${enabled.join()}|${JSON.stringify(view.f)}|${sort.key}${sort.dir}`;
+  const cursor = useRowCursor({ ranked, initialId: initialFilters?.lp ?? null, defaultFirst: true, limit, setLimit, page: PAGE, resetKey });
+  const { focusId, focus, reveal, setFocus: setFocusId } = cursor;
+  // One copy of the reasons: beside the list when there is room, under the LP in focus when not.
+  const wrap = useRef<HTMLElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const watch = new ResizeObserver(([entry]) => setNarrow((entry?.contentRect.width ?? 1000) <= 860));
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, []);
+
+  // The panel beside the list follows the cursor at a lower priority, so a held arrow key moves the
+  // highlight without waiting for the reasons to render. Not when narrow: there the reasons sit
+  // inside the list, under the row in focus, and the scroll must see them where they end up.
+  const deferredFocus = useDeferredValue(focus);
+  const panelFocus = narrow ? focus : deferredFocus;
+  const position = panelFocus ? place(panelFocus) : 0;
   const all = enabled.length === statuses.length;
   const byVehicle = showVehicle && new Set(rows.map((r) => r.vehicle)).size > 1;
   const scored = useMemo(() => shown.filter((r) => r.score !== null).length, [shown]);
-  /** Bring a row into view and focus: the list grows to include it. */
-  const reveal = (r: PipelineRow) => {
-    const i = ranked.indexOf(r);
-    if (i >= limit) setLimit(Math.ceil((i + 1) / PAGE) * PAGE);
-    setFocusId(r.id);
-    requestAnimationFrame(() => document.querySelector(`[data-lp="${r.id}"]`)?.scrollIntoView({ block: 'nearest' }));
-  };
   // A link to the same person's or firm's other row: if the toggles hide its type, show it first.
   const [pending, setPending] = useState<string | null>(null);
   const jump = (id: string) => {
@@ -79,6 +92,10 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
     if (!unitShown(target, view.f.units)) view.set('units', target.isOrg ? unitsFrom(true, unitsOn(view.f.units).individuals) : unitsFrom(unitsOn(view.f.units).firms, true));
     if (!enabled.includes(target.status)) setEnabled([...enabled, target.status]);
   };
+  // Stable for the memoised rows: one keyboard move re-renders two rows, not the whole list.
+  const jumpNow = useRef(jump);
+  jumpNow.current = jump;
+  const onJump = useCallback((id: string) => jumpNow.current(id), []);
   useEffect(() => {
     if (!pending) return;
     const r = ranked.find((x) => x.id === pending);
@@ -87,23 +104,16 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending, ranked]);
 
-  // Keep the focused LP in the address, so back and a shared link return to it.
+  // Keep the focused LP in the address, so back and a shared link return to it. Once the cursor
+  // rests: Next re-renders the router on each replaceState, too much for every key repeat (issue 0121).
   useEffect(() => {
-    const u = new URL(window.location.href);
-    if (focusId) u.searchParams.set('lp', focusId); else u.searchParams.delete('lp');
-    if (u.toString() !== window.location.href) window.history.replaceState(window.history.state, '', u);
+    const t = setTimeout(() => {
+      const u = new URL(window.location.href);
+      if (focusId) u.searchParams.set('lp', focusId); else u.searchParams.delete('lp');
+      if (u.toString() !== window.location.href) window.history.replaceState(window.history.state, '', u);
+    }, 300);
+    return () => clearTimeout(t);
   }, [focusId]);
-
-  // One copy of the reasons: beside the list when there is room, under the LP in focus when not.
-  const wrap = useRef<HTMLElement>(null);
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const el = wrap.current;
-    if (!el) return;
-    const watch = new ResizeObserver(([entry]) => setNarrow((entry?.contentRect.width ?? 1000) <= 860));
-    watch.observe(el);
-    return () => watch.disconnect();
-  }, []);
 
   const visibleIds = visible.map((r) => r.id);
   const allTicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
@@ -129,22 +139,18 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
 
   // The keyboard (issues 0091, 0104): up and down move the focus through the table, x ticks the LP
   // in focus, s moves to Selected, u undoes that, Enter opens it. Not while typing in a field or a dialog.
-  const keys = useRef({ ranked, focus, picked, moveNow, undoNow, reveal });
-  keys.current = { ranked, focus, picked, moveNow, undoNow, reveal };
+  const keys = useRef({ focus, picked, moveNow, undoNow, step: cursor.step });
+  keys.current = { focus, picked, moveNow, undoNow, step: cursor.step };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target instanceof HTMLElement ? e.target : null;
       if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && !(el as HTMLInputElement).type?.match(/checkbox/) || el.closest('dialog, [role="dialog"]'))) return;
-      const { ranked, focus, picked, moveNow, undoNow, reveal } = keys.current;
+      const { focus, picked, moveNow, undoNow, step } = keys.current;
       if (e.key === 'u' && !e.shiftKey) { e.preventDefault(); void undoNow(); return; }
       if (!focus) return;
-      const i = ranked.indexOf(focus);
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'j' || e.key === 'k') {
-        const next = ranked[Math.max(0, Math.min(ranked.length - 1, i + (e.key === 'ArrowDown' || e.key === 'j' ? 1 : -1)))];
-        if (!next) return;
-        e.preventDefault();
-        reveal(next);
+        step(e.key === 'ArrowDown' || e.key === 'j' ? 1 : -1, e);
       } else if (e.key === 's' && !e.shiftKey) {
         e.preventDefault();
         void moveNow();
@@ -178,12 +184,13 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
 
   // One panel for what to do (issues 0104, 0109): Move to Selected as the black primary, then the
   // ways in and the other actions, secondary. For the ticked LPs when some are ticked, else the one in focus.
-  const single = !ticked && focus ? focus : null;
-  const todo = targets.filter((r) => r.status !== 'selected');
+  const single = !ticked && panelFocus ? panelFocus : null;
+  const shownTargets = ticked ? pickedRows : panelFocus ? [panelFocus] : [];
+  const todo = shownTargets.filter((r) => r.status !== 'selected');
   // On an SPV vehicle, an LP on record as not doing SPVs is flagged before it is moved (Juan, 27 Sep 2026).
   const noSpv = todo.filter(spvFlagged);
-  const moveBar = targets.length > 0 && (
-    <BulkLpActions key={ticked ? 'ticked' : focus?.id} rows={targets} statuses={statuses} initialStatus={null} place="selection"
+  const moveBar = shownTargets.length > 0 && (
+    <BulkLpActions key={ticked ? 'ticked' : panelFocus?.id} rows={shownTargets} statuses={statuses} initialStatus={null} place="selection"
       onClear={ticked ? view.clearPicked : undefined} onStatusSaved={mv.remember} hidden={ticked ? pickedRows.filter((r) => !shownIds.has(r.id)).length : 0}
       heading={single ? lead(single) : `${n(targets.length)} ticked`}
       sub={single ? <>{second(single) && <>{second(single)} · </>}now <b>{statusWord(single.status)}</b><span className={m.owner}> · owner {single.owner}</span></>
@@ -195,8 +202,8 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
             : <ul>{noSpv.slice(0, 4).map((r) => <li key={r.id}>{lead(r)}{r.spv.why && <small> · {r.spv.why}</small>}</li>)}{noSpv.length > 4 && <li><small>and {n(noSpv.length - 4)} more</small></li>}</ul>}
           {' '}Moving {noSpv.length === 1 ? 'it' : 'them'} to Selected is still yours to decide; the LP page can correct the stance.
         </div>}
-        <MoveButton state={mv} rows={targets} ticked={ticked} onMove={() => void moveNow()} />
-        {ticked && <p className={m.mix}>{todo.length ? statusMix(todo) : 'all Selected already'}{todo.length < targets.length && todo.length > 0 ? ` · ${n(targets.length - todo.length)} already Selected` : ''}</p>}
+        <MoveButton state={mv} rows={shownTargets} ticked={ticked} onMove={() => void moveNow()} />
+        {ticked && <p className={m.mix}>{todo.length ? statusMix(todo) : 'all Selected already'}{todo.length < shownTargets.length && todo.length > 0 ? ` · ${n(shownTargets.length - todo.length)} already Selected` : ''}</p>}
       </>}
       links={single && (
         <div className={m.links} role="group" aria-label={`Open ${lead(single)}`}>
@@ -207,7 +214,13 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
         </div>
       )} />
   );
-  const detail = focus && <Why key={focus.id} r={focus} position={position} sortLabel={SORT_LABEL[sort.key] ?? 'score'} rungNames={rungNames} now={now} onJump={jump} />;
+  // The rendered rows, kept while the cursor moves: each row reads the cursor itself (issue 0121).
+  const rowEls = useMemo(() => visible.map((r, i) => <RankRow key={r.id} r={r} position={i + 1} cursor={cursor.store} picked={picked.has(r.id)} byVehicle={byVehicle} now={now}
+    onFocus={setFocusId} onPick={pick} onJump={onJump} />), [visible, cursor.store, picked, byVehicle, now, setFocusId, pick, onJump]);
+  const detail = panelFocus && <Why key={panelFocus.id} r={panelFocus} position={position} sortLabel={SORT_LABEL[sort.key] ?? 'score'} rungNames={rungNames} now={now} onJump={onJump} />;
+
+  // When narrow, the reasons sit under the row in focus.
+  const inlineAt = narrow && detail && panelFocus ? visible.indexOf(panelFocus) : -1;
 
   return (
     <section ref={wrap} className={s.wrap} aria-label="LP selection">
@@ -271,11 +284,9 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map((r, i) => <Fragment key={r.id}>
-                    <RankRow r={r} position={i + 1} focused={r.id === focus?.id} picked={picked.has(r.id)} byVehicle={byVehicle} now={now}
-                      onFocus={setFocusId} onPick={pick} onJump={jump} />
-                    {narrow && r.id === focus?.id && detail && <tr className={s.inlineRow}><td colSpan={11}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>}
-                  </Fragment>)}
+                  {inlineAt < 0 ? rowEls : [...rowEls.slice(0, inlineAt + 1),
+                    <tr key="inline-detail" className={s.inlineRow}><td colSpan={11}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>,
+                    ...rowEls.slice(inlineAt + 1)]}
                   {ranked.length > visible.length && <tr className={u.moreRow}><td colSpan={11}>
                     <button type="button" className="btn" onClick={() => setLimit((x) => x + PAGE)}>Show {n(Math.min(PAGE, ranked.length - visible.length))} more</button>
                     {n(visible.length)} of {n(ranked.length)} shown. Search covers all of them.
@@ -301,17 +312,18 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   );
 }
 
-const RankRow = memo(function RankRow({ r, position, focused, picked, byVehicle, now, onFocus, onPick, onJump }: {
-  r: PipelineRow; position: number; focused: boolean; picked: boolean; byVehicle: boolean; now: number;
+const RankRow = memo(function RankRow({ r, position, cursor, picked, byVehicle, now, onFocus, onPick, onJump }: {
+  r: PipelineRow; position: number; cursor: CursorStore; picked: boolean; byVehicle: boolean; now: number;
   onFocus: (id: string) => void; onPick: (ids: string[], on: boolean) => void; onJump: (id: string) => void;
 }) {
+  const focused = useIsCursor(cursor, r.id);
   const touch = fmtShort(r.lastTouch, now);
   const stale = /stale/i.test(r.scoreKind);
   const cap = r.capacity && !/unknown/i.test(r.capacity) ? r.capacity : null;
   const dim = spvFlagged(r);
   return (
     <tr data-lp={r.id} className={cx(s.row, focused && s.focus, picked && s.picked, dim && sp.dim)} aria-selected={focused}
-      onClick={(e) => { if ((e.target as HTMLElement).closest('a,button,input,label')) return; onFocus(r.id); }}>
+      onClick={(e) => { if ((e.target as HTMLElement).closest('a,button')) return; onFocus(r.id); }}>
       <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => onPick([r.id], e.target.checked)} /></td>
       <td className={s.cPos}>{position}</td>
       <td className={s.cLp}>
@@ -349,15 +361,22 @@ const STATUS_WORD: Record<Status, string> = {
   new: 'New', sourcing: 'Sourcing', selected: 'Selected', connecting: 'Connecting', discussing: 'Discussing', committed: 'Committed', passed: 'Passed',
 };
 
+/** GUESS: how long the cursor rests on an LP before its reasons are read; longer than a key repeat. */
+const READ_AFTER_MS = 150;
+
 /** Why the LP in focus ranks where it does, read from the server when it comes into focus. */
-function Why({ r, position, sortLabel, rungNames, now, onJump }: {
+const Why = memo(function Why({ r, position, sortLabel, rungNames, now, onJump }: {
   r: PipelineRow; position: number; sortLabel: string; rungNames: string[]; now: number; onJump: (id: string) => void;
 }) {
   const [detail, setDetail] = useState<ScoreDetail | null | 'loading' | 'failed'>('loading');
   useEffect(() => {
     let live = true;
-    scoreDetailAction(r.vehicleId, r.id).then((d) => { if (live) setDetail(d); }, (e) => { if (live) { actionFailure(e, ''); setDetail('failed'); } });
-    return () => { live = false; };
+    // Read once the cursor rests: a held arrow key would otherwise queue a server read per row, and
+    // Next runs server actions one at a time, so a Move after it would wait (issue 0121).
+    const t = setTimeout(() => {
+      scoreDetailAction(r.vehicleId, r.id).then((d) => { if (live) setDetail(d); }, (e) => { if (live) { actionFailure(e, ''); setDetail('failed'); } });
+    }, READ_AFTER_MS);
+    return () => { live = false; clearTimeout(t); };
   }, [r.vehicleId, r.id]);
   const d = typeof detail === 'object' ? detail : null;
   const other = second(r);
@@ -444,7 +463,7 @@ function Why({ r, position, sortLabel, rungNames, now, onJump }: {
 
     </div>
   );
-}
+});
 
 /** The first few flags, and the rest a tap away. */
 function Flags({ list }: { list: string[] }) {
