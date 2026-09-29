@@ -1,3 +1,4 @@
+import { readSeparationGroups, violatesSeparationGroup } from '@/modules/identity/separation-groups';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -151,6 +152,8 @@ export async function applyIdentityDecisions(tx: Queryable, by: string, report: 
         let rule = 'identity:v1:decision:merge';
         if (d.decision === 'merge') {
           if (new Set(ids.map(id => members.find(m => m.id === id)!.type)).size > 1) fail('Retype mixed identities before merging');
+          if (violatesSeparationGroup(ids, await readSeparationGroups(tx)))
+            fail('Prior group separation requires a fresh manual identity resolution');
           const constraints = await tx.query<{ a: string | null; b: string | null; ls: string; lk: string; rs: string; rk: string }>(`select
             merged_entity::text a,canonical_entity::text b,left_source ls,left_source_id lk,right_source rs,right_source_id rk
             from identity.match_assertion where (kind='not_same_as' and undone_at is null) or (kind='same_as' and undone_at is not null)`);

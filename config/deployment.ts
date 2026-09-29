@@ -68,6 +68,7 @@ function databaseUrl(): string | null {
 }
 
 export const config = {
+  identity: { compactSeparationThreshold: 25 }, // GUESS: compact proven all-different candidate groups above this size.
   /**
    * What the tool is called on screen (issue 0019). "Capital OS" stays as the codename — in
    * the code, the docs, the design history and the storage keys, which cannot be renamed

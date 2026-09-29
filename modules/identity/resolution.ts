@@ -1,6 +1,7 @@
 import type { Db, Queryable } from '@/lib/db';
 import { prioritizeDb, withBackgroundDb } from '@/lib/db/scheduling';
 import { config } from '@/config/deployment';
+import { readSeparationGroups, violatesSeparationGroup } from './separation-groups';
 
 export const normalizeIdentityName = (s: string) => s.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().trim().replace(/\s+/gu, ' ');
 /** Former affiliations still corroborate identity; no inference about a current role. */
@@ -134,6 +135,8 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
   }
   progress?.('edges', people.length);
   const forbidden=new Set<string>();
+  // Read complete groups even in a scoped pass: its anchor can lie outside the scope.
+  const separationGroups = await readSeparationGroups(db);
   cursor = '0';
   for (;;) {
     const assertions=await db.query<{key:string;kind:string;left_source:string;left_source_id:string;right_source:string;right_source_id:string;merged_entity:string|null;canonical_entity:string|null;undone_at:string|null}>(`select assertion_id::text key,kind::text,left_source,left_source_id,right_source,right_source_id,merged_entity::text,canonical_entity::text,undone_at::text
@@ -193,6 +196,7 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
     const ar=root(a.id),br=root(b.id);if(ar===br || !touchesTeam(ar,br))continue;
     // A correction constrains the whole prospective component, including transitive merges.
     if([...forbidden].some(k=>{const [l,r]=k.split('|');return pair(root(l!),root(r!))===pair(ar,br);})){continue;}
+    if(violatesSeparationGroup([ar,br], separationGroups.map(g=>g.map(root))))continue;
     const ordered=[ar,br].sort((x,y)=>rank(x)-rank(y)||x.localeCompare(y)),canonical=ordered[0]!,merged=ordered[1]!;
     const rule=Object.keys(signals).sort().join('+');
     const changed=await db.transaction(async tx=>{
@@ -208,7 +212,8 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
   progress?.('merges', counts.merges);
   const active=new Set<string>();
   const projectedForbidden=new Set([...forbidden].map(k=>{const [l,r]=k.split('|');return pair(root(l!),root(r!));}));
-  for(const k of possible){const [a,b]=k.split('|'),l=root(a!),r=root(b!);if(l!==r&&touchesTeam(l,r)&&!projectedForbidden.has(pair(l,r)))active.add(pair(l,r));}
+  const projectedGroups = separationGroups.map(g=>g.map(root));
+  for(const k of possible){const [a,b]=k.split('|'),l=root(a!),r=root(b!);if(l!==r&&touchesTeam(l,r)&&!projectedForbidden.has(pair(l,r))&&!violatesSeparationGroup([l,r],projectedGroups))active.add(pair(l,r));}
   // GUESS: name-only identity confidence is 0.25, always D-tier; it is never merge evidence.
   for(const k of active){const [a,b]=k.split('|');await db.query(`insert into identity.possible_match(left_entity,right_entity,confidence,signals) values($1,$2,0.25,'{"rule":"name_only","label":"Possible identity: matching full name only; uncorroborated"}')
     on conflict(left_entity,right_entity) do update set active=true where not possible_match.active`,[a,b]);await pause();}

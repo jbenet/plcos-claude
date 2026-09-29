@@ -1,3 +1,4 @@
+import { readSeparationGroups, violatesSeparationGroup } from '@/modules/identity/separation-groups';
 import { businessEmailDomain, normalizeOrg, countDuplicateRule } from './duplicate-rules';
 import type { Queryable } from '@/lib/db';
 import { identityGraphContext, identityRawContext } from './identity-context';
@@ -118,6 +119,7 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
   for (const p of [...paths, ...pathNotes.flatMap(n => n.data.paths ?? [])]) {
     for (const d of [p.lpPerson, p.other.person]) if (d) apply(keyOwner(d.key), d);
   }
+  const separationGroups = await readSeparationGroups(tx);
   const constraints = await tx.query<{ a: string | null; b: string | null; ls: string; lk: string; rs: string; rk: string }>(
     `select merged_entity::text a,canonical_entity::text b,left_source ls,left_source_id lk,right_source rs,right_source_id rk
      from identity.match_assertion where kind='not_same_as' or undone_at is not null`);
@@ -141,6 +143,7 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
       const members = people.filter(p => component.has(p.root));
       const ownedSources = sources.filter(s => component.has(roots.get(s.id)!));
       const reasons = new Set<string>();
+      if (violatesSeparationGroup(component, separationGroups)) reasons.add('prior identity group separation');
       if (component.size === 1) reasons.add('matching name without corroborating organization or personal URL');
       if (members.some(p => p.retired)) reasons.add('retired identity in component');
       if ([...component].some(id => corrected.has(id))) reasons.add('prior local type decision');

@@ -223,3 +223,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 
 - [Deterministic duplicate rules](entries/dedupe-rules.md)
 - [Create-match — Resolve identities before creation](entries/create-match.md)
+- [Bulk identity separations](entries/separation-bulk.md)

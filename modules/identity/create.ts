@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type { Db, Queryable } from '@/lib/db';
 import type { EntityType } from './types';
 import { normalizeIdentityName, organizationNames } from './resolution';
+import { readSeparationGroups, violatesSeparationGroup } from './separation-groups';
 
 export interface EntityCreation {
   type: EntityType; name: string; source?: string; sourceId?: string; id?: string;
@@ -127,14 +128,24 @@ export async function resolveEntity(tx:Queryable,input:EntityCreation):Promise<E
     join identity.entity e on e.entity_id=identity.canonical_entity_id(original.entity_id)
     where original.entity_id=any($1::uuid[]) and original.retired_at is null and e.retired_at is null order by id`,[names]);
   const allowed:string[]=[], strong:string[]=[], affiliations:string[]=[];
+  const separationGroups = await readSeparationGroups(tx);
+  const incomingRoot = input.id ? await tx.one<{id:string}>(
+    'select canonical_id::text id from identity.entity_resolution where entity_id=$1::uuid',[input.id]) : null;
   for(const {id,type} of candidates) {
+    if(incomingRoot && violatesSeparationGroup([incomingRoot.id,id],separationGroups))continue;
     const members=(await tx.query<{id:string}>(`with recursive members as (
       select entity_id from identity.entity where entity_id=$1 union all
       select e.entity_id from identity.entity e join members m on e.merged_into=m.entity_id
     ) select entity_id::text id from members`,[id])).map(e=>e.id);
     const forbidden=await tx.one(`select 1 from identity.match_assertion a where ((a.kind='not_same_as' and a.undone_at is null) or (a.kind='same_as' and a.undone_at is not null))
       and ((a.left_source=$1 and a.left_source_id=$2 and exists(select 1 from identity.source_record s where s.source=a.right_source and s.source_id=a.right_source_id and s.entity_id=any($3::uuid[])))
-        or (a.right_source=$1 and a.right_source_id=$2 and exists(select 1 from identity.source_record s where s.source=a.left_source and s.source_id=a.left_source_id and s.entity_id=any($3::uuid[])))) limit 1`,[input.source??'local',input.sourceId??input.id??'',members]);
+        or (a.right_source=$1 and a.right_source_id=$2 and exists(select 1 from identity.source_record s where s.source=a.left_source and s.source_id=a.left_source_id and s.entity_id=any($3::uuid[])))
+        or (a.kind='not_same_as' and a.undone_at is null and a.signals->>'separationGroup' is not null
+          and ((a.left_source=$1 and a.left_source_id=$2) or (a.right_source=$1 and a.right_source_id=$2))
+          and exists(select 1 from identity.match_assertion g
+            where g.kind='not_same_as' and g.undone_at is null
+              and g.signals->>'separationGroup'=a.signals->>'separationGroup'
+              and (g.merged_entity=any($3::uuid[]) or g.canonical_entity=any($3::uuid[]))))) limit 1`,[input.source??'local',input.sourceId??input.id??'',members]);
     if(forbidden)continue;
     allowed.push(id);
     if(type!==input.type || !(incoming.domains.size || incoming.personalUrls.size || incoming.organizations.size))continue;

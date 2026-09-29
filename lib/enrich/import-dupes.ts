@@ -1,3 +1,4 @@
+import { readSeparationGroups, violatesSeparationGroup } from '@/modules/identity/separation-groups';
 import type { Db, Queryable } from '@/lib/db';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
 import { recordEntityTypeCorrection } from '@/modules/identity/entity-type';
@@ -61,6 +62,7 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
   const sources = await tx.query<Source>(`select entity_id::text id,source,source_id key,resolved_by resolver
     from identity.source_record where entity_id=any($1::uuid[]) order by source,source_id`, [ids]);
   const bySource = new Map(sources.map(s => [`${s.source}\0${s.key}`, roots.get(s.id)!]));
+  const separationGroups = await readSeparationGroups(tx);
   const constraints = await tx.query<{ a: string | null; b: string | null; ls: string; lk: string; rs: string; rk: string }>(
     `select merged_entity::text a,canonical_entity::text b,left_source ls,left_source_id lk,right_source rs,right_source_id rk
      from identity.match_assertion where kind='not_same_as' or undone_at is not null`);
@@ -86,6 +88,7 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     const component = members.filter(e => groupIds.has(e.root));
     const groupSources = sources.filter(s => groupIds.has(roots.get(s.id)!));
     const reasons = new Set<string>();
+    if (violatesSeparationGroup(groupIds, separationGroups)) reasons.add('prior identity group separation');
     if(creationPairs.some(p=>p.a!==p.b && groupIds.has(p.a) && groupIds.has(p.b))) {
       reasons.add('creation name-only match requires identity review');
     }
@@ -159,6 +162,7 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     }
     report.ambiguous.push({name:pair.name,entityIds:[...ids].sort(),reason:[...reasons].join('; ')});
   }
+  for (const key of await recordDuplicateSeparations(tx, by, report)) separated.add(key);
   await suppressDeterministicSeparations(tx, report, separated);
   await suppressSeparatedIdentityGroups(tx, report);
   if (!options.reviewOnly) await applyIdentityDecisions(tx, by, report, options.decisions ?? []);
@@ -173,6 +177,20 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
       await tx.exec('release savepoint identity_review_remaining');
     }
   }
+  // Compact membership constrains non-anchor pairs too; retire those queued edges in one statement.
+  await tx.query(`with endpoints as (
+    select signals->>'separationGroup' key,merged_entity id from identity.match_assertion
+      where kind='not_same_as' and undone_at is null and signals->>'separationGroup' is not null
+    union
+    select signals->>'separationGroup' key,canonical_entity id from identity.match_assertion
+      where kind='not_same_as' and undone_at is null and signals->>'separationGroup' is not null
+  ), memberships as (
+    select r.canonical_id,array_agg(distinct e.key) groups from endpoints e
+      join identity.entity_resolution r on r.entity_id=e.id group by r.canonical_id
+  ) update identity.possible_match p set active=false
+    from identity.entity_resolution l,identity.entity_resolution r,memberships a,memberships b
+    where p.active and l.entity_id=p.left_entity and r.entity_id=p.right_entity
+      and a.canonical_id=l.canonical_id and b.canonical_id=r.canonical_id and a.groups && b.groups`);
   await tx.query(`update identity.possible_match set active=false where active
     and (identity.canonical_entity_id(left_entity)=identity.canonical_entity_id(right_entity)
       or (signals->>'rule'='creation-name-only' and exists(
