@@ -215,6 +215,8 @@ async function main() {
       } finally {
         const ids = [...new Set(aliases.map(alias => alias.id))];
         await db.query('delete from identity.source_record where entity_id=any($1::uuid[])', [ids]);
+        await db.query('delete from identity.possible_match where left_entity=any($1::uuid[]) or right_entity=any($1::uuid[])', [ids]);
+        await db.query("delete from research.note where entity_id=any($1::uuid[]) and kind='identity_creation'", [ids]);
         await db.query('delete from identity.entity where entity_id=any($1::uuid[])', [ids]);
       }
     });
@@ -229,6 +231,8 @@ async function main() {
         assert.ok(aliases.every(alias => alias.id === canonical && alias.type === 'org'));
       } finally {
         await db.query('delete from identity.source_record where entity_id=$1', [canonical]);
+        await db.query('delete from identity.possible_match where left_entity=$1 or right_entity=$1', [canonical]);
+        await db.query("delete from research.note where entity_id=$1 and kind='identity_creation'", [canonical]);
         await db.query('delete from identity.entity where entity_id=$1', [canonical]);
       }
     });
@@ -249,6 +253,8 @@ async function main() {
       } finally {
         await db.query('delete from network.edge where from_entity=any($1::uuid[]) or to_entity=any($1::uuid[])', [[legacy, origin, target]]);
         await db.query('delete from identity.source_record where entity_id=$1', [legacy]);
+        await db.query('delete from identity.possible_match where left_entity=any($1::uuid[]) or right_entity=any($1::uuid[])', [[legacy, origin, target]]);
+        await db.query("delete from research.note where entity_id=any($1::uuid[]) and kind='identity_creation'", [[legacy, origin, target]]);
         await db.query('delete from identity.entity where entity_id=any($1::uuid[])', [[legacy, origin, target]]);
       }
     });

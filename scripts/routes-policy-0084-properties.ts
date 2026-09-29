@@ -183,6 +183,7 @@ export async function routesPolicy0084Properties(check: Check, db: Db) {
     await db.query('delete from network.edge where from_entity=any($1::uuid[]) or to_entity=any($1::uuid[])', [ids]);
     await db.query('delete from identity.affiliation where person_entity=any($1::uuid[]) or org_entity=any($1::uuid[])', [ids]);
     await db.query('delete from identity.source_record where entity_id=any($1::uuid[])', [ids]);
+    await db.query("delete from research.note where entity_id=any($1::uuid[]) and kind='identity_creation'", [ids]);
     await db.query('delete from identity.entity where entity_id=any($1::uuid[])', [ids]);
     await db.query('delete from platform.vehicle where id=any($1::uuid[])', [[vehicle, otherVehicle]]);
     await db.query('delete from platform.app_user where id=$1', [user]);

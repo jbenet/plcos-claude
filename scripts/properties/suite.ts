@@ -15,7 +15,10 @@ export async function runProperties(check: Check) {
   (await import('../route-presentation-properties')).routePresentationProperties(check);
   (await import('./routes-layout-0086')).routesLayout0086Properties(check);
   await (await import('../path-search-properties')).pathSearchProperties(check);
+  await (await import('./create-match')).creationProperties(check);
   const db = await freshDb();
+  await (await import('./create-match-connectors')).connectorCreationProperties(check, db);
+  await (await import('../create-match-network-properties')).createMatchNetworkProperties(check);
   await (await import('../dakota-properties')).dakotaProperties(check, db);
   await (await import('../dakota-batched-properties')).dakotaBatchedProperties(check);
   await (await import('../prospects-properties')).prospectsProperties(check, db);
@@ -37,7 +40,7 @@ export async function runProperties(check: Check) {
   await (await import('../route-scoring-properties')).routeScoringProperties(check, db);
   await (await import('../issues4-properties')).issues4Properties(check, db);
   await (await import('../plrule-properties')).plRuleProperties(db, check);
-  await (await import('../network-nodes-properties')).networkNodesProperties(check, db);
+  await db.transaction(async tx => (await import('../network-nodes-properties')).networkNodesProperties(check, tx));
   await (await import('../routes-perf-properties')).routesPerfProperties(check, db);
   const { listEntities } = await import('../../modules/identity');
   const entities = await listEntities();

@@ -66,6 +66,8 @@ export async function routesPerfProperties(check: Check, db: Db) {
   } finally {
     await db.query(`delete from network.edge where from_entity = any($1::uuid[])`, [ids]);
     await db.query(`delete from identity.source_record where entity_id = any($1::uuid[])`, [ids]);
+    await db.query('delete from identity.possible_match where left_entity= any($1::uuid[]) or right_entity= any($1::uuid[])', [ids]);
+    await db.query("delete from research.note where entity_id= any($1::uuid[]) and kind='identity_creation'", [ids]);
     await db.query(`delete from identity.entity where entity_id = any($1::uuid[])`, [ids]);
   }
   check('PERF cached coverage invalidates on deletion', (await edgeCoverage()).edges === before.edges, 'Deleted fixture edges disappear immediately.');
@@ -99,6 +101,8 @@ export async function routesPerfProperties(check: Check, db: Db) {
       routes.filter((p) => p.nodes[0] === source).length === 300), 'No source consumes another source’s candidate budget.');
   } finally {
     await db.query(`delete from network.edge where from_entity = any($1::uuid[])`, [[...sources, hub]]);
+    await db.query('delete from identity.possible_match where left_entity= any($1::uuid[]) or right_entity= any($1::uuid[])', [all]);
+    await db.query("delete from research.note where entity_id= any($1::uuid[]) and kind='identity_creation'", [all]);
     await db.query(`delete from identity.entity where entity_id = any($1::uuid[])`, [all]);
     await db.exec('analyze network.edge; analyze identity.entity');
   }

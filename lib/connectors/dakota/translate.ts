@@ -3,7 +3,7 @@ import { setImmediate as yieldTurn } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { withBackgroundDb } from '@/lib/db/scheduling';
 import { config } from '@/config/deployment';
-import { externalIdentityIndex, resolveExternalIdentity } from '@/modules/identity/external';
+import { resolveExternalIdentity } from '@/modules/identity/external';
 import { needed, neededRecord, type Module, type Replica, type RecordFields } from './replica';
 import { accountFit, contactRelevance } from './rules';
 
@@ -16,7 +16,7 @@ const contactFields = ['title','contact_type__c','asset_class_coverage__c','mail
 const asIso = (x: unknown) => new Date(x as string).toISOString();
 
 async function storeRecord(tx: Queryable, module: Module, record: RecordFields, file: string, actor: string,
-  index: Awaited<ReturnType<typeof externalIdentityIndex>>, accountNames: Map<string,string>, counts: DakotaCounts) {
+  accountNames: Map<string,string>, counts: DakotaCounts) {
   const previous = await tx.one<Stored>(`select * from dakota.${module} where id=$1`,[record.id]);
   const merged: RecordFields = {...record};
   for(const key of needed(module)) if(!(key in record)) merged[key]=previous?.[key]??null;
@@ -25,9 +25,11 @@ async function storeRecord(tx: Queryable, module: Module, record: RecordFields, 
     k==='lastmodifieddate'?asIso(previous[k])===record[k]:previous[k]===merged[k]))) { counts.unchanged++;return; }
   const name=module==='account' ? accountNames.get(record.id) || merged.website || `Dakota account ${record.id}`
     : [merged.firstname,merged.lastname].filter(Boolean).join(' ') || `Dakota contact ${record.id}`;
-  const identity=await resolveExternalIdentity(tx,index,{source:'dakota',sourceId:`${module}:${record.id}`,type:module==='account'?'org':'person',name,
+  const identity=await resolveExternalIdentity(tx,{source:'dakota',sourceId:`${module}:${record.id}`,type:module==='account'?'org':'person',name,
     identifiers:module==='account'?{domain:merged.website??'',linkedin:merged.linkedin__c??(merged.lid__linkedin_company_id__c?`https://linkedin.com/company/${merged.lid__linkedin_company_id__c}`:''),crd:merged.crd__c??'',cik:merged.sec_cik__c??''}:{linkedin:merged.linkedin_url__c??''},
-    asOf:record.lastmodifieddate,verifiedBy:actor});
+    asOf:record.lastmodifieddate,verifiedBy:actor,
+    domains: module==='contact' && merged.email ? [merged.email] : [],
+    organizations: module==='contact' && merged.accountid && accountNames.get(merged.accountid) ? [accountNames.get(merged.accountid)!] : []});
   const columns=[...needed(module),'entity_id','replica_file','last_verified_by'];
   await tx.query(`insert into dakota.${module}(${columns.join(',')}) values(${columns.map((_,i)=>`$${i+1}`).join(',')})
     on conflict(id) do update set ${columns.filter(c=>c!=='id').map(c=>`${c}=excluded.${c}`).join(',')}`,
@@ -184,13 +186,13 @@ async function namesFor(tx: Queryable, replicas: Replica[]) {
 }
 
 /** Local background worker; no external orchestration. Each bounded transaction commits
- * source effects and the next cursor together. Restart reconstructs indexes from committed
+ * source effects and the next cursor together. Restart resolves identities from committed
  * state and validates frozen inputs before advancing. Supplied handles only. */
 export async function translateDakota(db: Db,actor: string,replicas: Replica[],options: DakotaOptions={}): Promise<DakotaCounts> {
   const size=options.batchSize??config.dakota.translationBatchRecords;
   if(!Number.isSafeInteger(size)||size<1||size>config.dakota.translationBatchRecords)throw new Error('Invalid Dakota batch size.');
   return withBackgroundDb(async()=>{
-    const policy=createHash('sha256').update(JSON.stringify({version:'dakota-batched-v1',config:config.dakota})).digest('hex');
+    const policy=createHash('sha256').update(JSON.stringify({version:'dakota-batched-v2-create-match',config:config.dakota})).digest('hex');
     let job=await dakotaJob(db);
     const completed=await db.query<{module:Module;file:string;hash:string}>('select module,file,hash from dakota.replica');
     const imported=new Map(completed.map(r=>[`${r.module}:${r.file}`,r.hash]));
@@ -219,26 +221,13 @@ export async function translateDakota(db: Db,actor: string,replicas: Replica[],o
       return r;
     });
     const names=await namesFor(db,inputs);
-    const revision=async(tx:Queryable)=>(await tx.one<{revision:string}>('select revision::text from dakota.identity_revision where singleton'))!.revision;
-    let index:Awaited<ReturnType<typeof externalIdentityIndex>>|undefined,indexRevision:string|undefined;
     while(state.phase!=='completed') {
       await yieldTurn();
-      if(state.phase==='records') {
-        const before=await revision(db);
-        if(!index||indexRevision!==before) {
-          index=await externalIdentityIndex(db);
-          indexRevision=await revision(db);
-          // Foreground edits may have interleaved these bounded reads. Rebuild a
-          // coherent index rather than use a mixed snapshot for identity decisions.
-          if(before!==indexRevision){index=undefined;continue;}
-        }
-      }
       // Copy before mutation: failures leave both the persisted cursor and in-memory
-      // counters at the last commit. No index from a rolled-back batch is reused.
+      // counters at the last commit. Matching reads the current transaction snapshot.
       const next:State=structuredClone(state);
       const committed=await db.transaction(async tx=>{
         await tx.exec('lock table dakota.translation_job,identity.entity,identity.source_record,identity.external_identifier,identity.match_assertion,research.claim,research.note,sources.raw_record,strategy.pursuit in share row exclusive mode');
-        if(next.phase==='records'&&await revision(tx)!==indexRevision){index=undefined;return false;}
         const owns=await tx.one('select 1 from dakota.translation_job where id=$1 and state=$2::jsonb',[job!.id,JSON.stringify(state)]);
         if(!owns)throw new Error('Dakota checkpoint advanced in another worker.');
         if(next.phase==='records') {
@@ -247,7 +236,7 @@ export async function translateDakota(db: Db,actor: string,replicas: Replica[],o
           else {
             const started=performance.now();
             for(const record of replica.records.slice(next.offset,next.offset+size)) {
-              await storeRecord(tx,replica.module,neededRecord(replica.module,record),replica.file,actor,index!,names,next.counts);
+              await storeRecord(tx,replica.module,neededRecord(replica.module,record),replica.file,actor,names,next.counts);
               next.offset++;next.done++;
               if(next.done%20===0)await yieldTurn();
               if(performance.now()-started>=config.dakota.translationBatchWorkMs)break;
@@ -315,7 +304,6 @@ export async function translateDakota(db: Db,actor: string,replicas: Replica[],o
           next.cursor=records.at(-1)?.id??next.cursor;
           if(records.length<size){next.phase=module==='account'?'contact claims':'completed';next.cursor='';}
         }
-        if(next.phase==='records')indexRevision=await revision(tx);
         await checkpoint(tx,next);
         if(next.phase==='completed'&&(next.counts.replicas||next.counts.sourced||next.counts.claims))
           await tx.query(`insert into platform.audit_log(actor_id,action,subject_type,detail) values($1,'dakota.translated','enrich',$2::jsonb)`,[actor,JSON.stringify(next.counts)]);

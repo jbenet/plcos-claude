@@ -33,18 +33,29 @@ try {
     await assert.rejects(importPortfolio(db, input([bad])), /investment/);
     assert.equal((await db.one<{ n: number }>('select count(*)::int n from identity.entity'))!.n, before);
   });
-  await test('name alone stays possible and repeated own affiliations do not corroborate', async () => {
+  await test('name alone queues immediately; source keys are stable and new sourced affiliations attach', async () => {
     const existing = await entity('Invented Namesake');
     const a = row('namesake', 'Invented Namesake');
     await importPortfolio(db, input([a])); const first = await founder(a.id);
     assert.notEqual(first.entityId, existing); assert.ok(first.possibleMatches.includes(existing));
+    assert.ok(await db.one('select 1 from identity.possible_match where active and left_entity=least($1::uuid,$2::uuid) and right_entity=greatest($1::uuid,$2::uuid)', [existing, first.entityId]));
     await importPortfolio(db, input([a])); assert.equal((await founder(a.id)).entityId, first.entityId);
     await db.query(`update identity.possible_match set active=false,signals='{"rule":"independent-fixture"}'::jsonb
       where left_entity=least($1::uuid,$2::uuid) and right_entity=greatest($1::uuid,$2::uuid)`, [existing, first.entityId]);
     await importPortfolio(db, input([a]));
     assert.equal((await db.one<{ active: boolean }>(`select active from identity.possible_match where signals->>'rule'='independent-fixture'`))!.active, false);
     const b = row('second-namesake', 'Invented Namesake');
-    await importPortfolio(db, input([a, b])); assert.notEqual((await founder(b.id)).entityId, first.entityId);
+    await importPortfolio(db, input([a, b])); assert.equal((await founder(b.id)).entityId, first.entityId);
+  });
+  await test('company creation queues normalized namesakes and preserves its source mapping after renaming', async () => {
+    const existing = await entity('Invented Company', 'org');
+    const a = row('company-source', 'Invented Company Founder'); a.company.name = '  INVENTED   Company ';
+    await importPortfolio(db, input([a]));
+    const company = (await db.one<{ id: string }>('select company_entity::text id from network.portfolio where portfolio_id=$1', [a.id]))!.id;
+    assert.notEqual(company, existing);
+    assert.ok(await db.one('select 1 from identity.possible_match where active and left_entity=least($1::uuid,$2::uuid) and right_entity=greatest($1::uuid,$2::uuid)', [company, existing]));
+    a.company.name = 'Invented Renamed Company'; await importPortfolio(db, input([a]));
+    assert.equal((await db.one<{ id: string }>('select company_entity::text id from network.portfolio where portfolio_id=$1', [a.id]))!.id, company);
   });
   await test('overlapping names across a complete snapshot produce no new possible matches on repeat', async () => {
     const existing = await entity('Invented Shared Founder');
@@ -56,26 +67,29 @@ try {
     const ids = [(await founder(a.id)).entityId, (await founder(b.id)).entityId];
     assert.ok(ids.every(id => id !== existing));
     const second = await importPortfolio(db, input([a, b]));
-    assert.deepEqual(await state(), before); assert.equal(second.possible, first.possible); assert.equal(second.linked, 0);
+    assert.deepEqual(await state(), before); assert.ok(first.possible > 0 && second.possible > 0); assert.equal(second.linked, 0);
     assert.deepEqual([(await founder(a.id)).entityId, (await founder(b.id)).entityId], ids);
   });
-  await test('later warehouse evidence retargets only this source and keeps external entities intact', async () => {
+  await test('later corroboration never retargets an existing source key', async () => {
     const external = await entity('Invented Rematch'); await map(external, 'invented-person-42');
     const a = row('rematch', 'Invented Rematch');
     await importPortfolio(db, input([a])); const previous = (await founder(a.id)).entityId;
     assert.notEqual(previous, external);
     a.founders[0]!.warehouse_person_id = 'invented-person-42'; a.founders[0]!.warehouse_person_id_source = source;
-    const result = await importPortfolio(db, input([a])); assert.equal(result.linked, 1);
-    assert.equal((await founder(a.id)).entityId, external);
+    a.founders[0]!.profile_urls = ['https://example.org/people/invented-rematch'];
+    a.founders[0]!.profile_sources = [{ url: a.founders[0]!.profile_urls[0]!, source }];
+    await db.query("insert into research.note(entity_id,kind,body,data) values($1,'identity_creation','Invented', $2::jsonb)", [external, JSON.stringify({ personalUrls: a.founders[0]!.profile_urls })]);
+    const result = await importPortfolio(db, input([a])); assert.equal(result.linked, 0);
+    assert.equal((await founder(a.id)).entityId, previous);
     assert.equal((await db.one<{ merged: string | null }>('select merged_into::text merged from identity.entity where entity_id=$1', [previous]))!.merged, null);
-    assert.equal((await db.one<{ n: number }>("select count(*)::int n from network.edge where to_entity=$1 and evidence @> '[{\"portfolioId\":\"rematch\"}]'::jsonb", [previous]))!.n, 0);
+    assert.equal((await db.one<{ n: number }>("select count(*)::int n from network.edge where to_entity=$1 and evidence @> '[{\"portfolioId\":\"rematch\"}]'::jsonb", [previous]))!.n, 1);
     const edgeIds = async () => (await db.query<{ id: string }>("select edge_id::text id from network.edge where evidence @> '[{\"portfolioId\":\"rematch\"}]'::jsonb order by edge_id")).map(e => e.id);
     const stable = await edgeIds(); await importPortfolio(db, input([a])); assert.deepEqual(await edgeIds(), stable);
-    assert.equal((await founder(a.id)).entityId, external);
+    assert.equal((await founder(a.id)).entityId, previous);
   });
-  await test('profile and company-domain evidence corroborate independently sourced identities', async () => {
+  await test('personal profiles attach; company website domains alone do not identify people', async () => {
     const profileId = await entity('Invented Profile');
-    await db.query("insert into research.note(entity_id,kind,body,data) values($1,'public_profile','Invented research',$2::jsonb)", [profileId, JSON.stringify({ researched: { at: source.as_of, by: 'fixture' }, identity: { match: 'confirmed', links: [{ url: 'https://example.org/people/invented-profile' }] } })]);
+    await db.query("insert into research.note(entity_id,kind,body,data) values($1,'public_profile','Invented research',$2::jsonb)", [profileId, JSON.stringify({ researched: { at: source.as_of, by: 'fixture' }, identity: { match: 'confirmed', links: [{ kind: 'personal', url: 'https://example.org/people/invented-profile' }] } })]);
     const p = row('profile', 'Invented Profile'); p.founders[0]!.profile_urls = ['https://example.org/people/invented-profile/'];
     p.founders[0]!.profile_sources = [{ url: p.founders[0]!.profile_urls[0]!, source }];
     const domainId = await entity('Invented Domain');
@@ -83,10 +97,12 @@ try {
     await db.query("insert into research.source_doc(doc_id,title,kind,origin,as_of,strength,supports,body) values('invented-domain-source','Invented site','website','https://invented.example','2026-09-01','strong','identity','Invented')");
     await db.query("insert into research.claim(entity_id,field,value,source,as_of,confidence,last_verified_by) values($1,'company_domain','invented.example','invented-domain-source','2026-09-01','high',$2)", [domainId, reviewer]);
     const d = row('domain', 'Invented Domain'); d.founders[0]!.company_domain = 'https://invented.example/'; d.founders[0]!.company_domain_source = source;
-    await importPortfolio(db, input([p, d])); assert.equal((await founder(p.id)).entityId, profileId); assert.equal((await founder(d.id)).entityId, domainId);
+    await importPortfolio(db, input([p, d])); assert.equal((await founder(p.id)).entityId, profileId); assert.notEqual((await founder(d.id)).entityId, domainId);
+    assert.ok((await founder(d.id)).possibleMatches.includes(domainId));
   });
   await test('not-same-as and ambiguous corroboration fail closed', async () => {
     const external = await entity('Invented Blocked'); await map(external, 'invented-blocked-person');
+    await db.query("insert into research.note(entity_id,kind,body,data) values($1,'identity_creation','Invented', $2::jsonb)", [external, JSON.stringify({ organizations: ['Invented Blocked Labs'] })]);
     const a = row('blocked', 'Invented Blocked'); a.founders[0]!.warehouse_person_id = 'invented-blocked-person'; a.founders[0]!.warehouse_person_id_source = source;
     await db.query("insert into identity.match_assertion(kind,left_source,left_source_id,right_source,right_source_id) values('not_same_as','portfolio','blocked:founder:invented blocked','warehouse','invented-blocked-person')");
     await importPortfolio(db, input([a])); assert.notEqual((await founder(a.id)).entityId, external);

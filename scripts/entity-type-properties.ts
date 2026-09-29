@@ -203,6 +203,7 @@ export async function entityTypeProperties(check: Check, db: Db) {
     await db.query("delete from sources.raw_record where source='affinity' and source_id=any($1::text[])", [sources]);
     await db.query('delete from strategy.pursuit where entity_id=any($1::uuid[])', [ids]);
     await db.query('update identity.entity set merged_into=null where entity_id=any($1::uuid[])', [ids]);
+    await db.query('delete from identity.possible_match where left_entity=any($1::uuid[]) or right_entity=any($1::uuid[])', [ids]);
     await db.query('delete from identity.entity where entity_id=any($1::uuid[])', [ids]);
   }
 }

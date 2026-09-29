@@ -1,3 +1,4 @@
+import { directEntityInsertViolation } from './identity-creation-boundary';
 import { authorizationCoverage } from './authz-coverage';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
@@ -45,7 +46,7 @@ async function walk(dir: string, out: string[] = []): Promise<string[]> {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const p = join(dir, entry.name);
     if (entry.isDirectory()) await walk(p, out);
-    else if (/\.(?:tsx?|mjs|cjs)$/.test(entry.name)) out.push(p);
+    else if (/\.(?:tsx?|mjs|cjs|sql)$/.test(entry.name)) out.push(p);
   }
   return out;
 }
@@ -66,6 +67,7 @@ async function main() {
   for (const file of files) {
     const rel = relative(cwd, file);
     const text = await readFile(file, 'utf8');
+    if (directEntityInsertViolation(rel,text)) violations.push(`${rel}: direct identity.entity insertion — use modules/identity/create.ts resolveEntity`);
 
     if (!rel.startsWith('lib/db') && rel !== 'scripts/boundaries.ts') {
       for (const d of DRIVERS) {

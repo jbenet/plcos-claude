@@ -222,3 +222,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Identity review — apply later decisions without removing history](entries/decisions-applied.md)
 
 - [Deterministic duplicate rules](entries/dedupe-rules.md)
+- [Create-match — Resolve identities before creation](entries/create-match.md)

@@ -1,4 +1,5 @@
 import type { Queryable } from '@/lib/db';
+import { resolveEntity } from '@/modules/identity/create';
 
 export interface PersonIdentity {
   id?: number;
@@ -7,6 +8,9 @@ export interface PersonIdentity {
   emailAddresses?: string[];
   firstName?: string | null;
   lastName?: string | null;
+  linkedinUrl?: string | null;
+  linkedin_url?: string | null;
+  linkedin?: string | null;
   /** Local replica timestamp, supplied by translation; never an API field. */
   replicaAsOf?: string;
   fields?: Array<{ name: string; value: { type: string; data: unknown } | null }>;
@@ -14,6 +18,22 @@ export interface PersonIdentity {
 export interface Participant { emailAddress?: string | null; person?: PersonIdentity | null }
 const normalized = (s?: string | null) => s?.trim().toLowerCase() || '';
 const emails = (p: PersonIdentity) => [...new Set([p.primaryEmailAddress, ...(p.emailAddresses ?? [])].map(normalized).filter(Boolean))];
+
+/** Explicit replica evidence for the shared creation resolver. */
+export function affinityIdentityEvidence(p: PersonIdentity): { domains?: string[]; organizations?: string[]; personalUrls?: string[] } {
+  const fields = p.fields ?? [];
+  const orgValue = fields.find(f => f.name === 'Current Organization')?.value?.data
+    ?? fields.find(f => f.name === 'Organizations')?.value?.data;
+  const orgs = (Array.isArray(orgValue) ? orgValue : orgValue ? [orgValue] : []) as Array<{ name?: string }>;
+  return {
+    domains: emails(p),
+    organizations: orgs.map(o => o.name).filter((name): name is string => !!name),
+    personalUrls: [p.linkedinUrl, p.linkedin_url, p.linkedin].filter((url): url is string => !!url).concat(
+      fields.filter(f => /linkedin|personal.*(?:url|website)/i.test(f.name))
+        .flatMap(f => typeof f.value?.data === 'string' ? [f.value.data] : [])),
+  };
+}
+const personName = (p: PersonIdentity) => [p.firstName, p.lastName].filter(Boolean).join(' ') || 'Unnamed Affinity contact';
 
 /** Exact IDs and unambiguous full addresses only. Neither a name nor a domain identifies a person. */
 export async function participantIndex(tx: Queryable, persons: PersonIdentity[]) {
@@ -80,9 +100,9 @@ export async function participantIndex(tx: Queryable, persons: PersonIdentity[])
     if (byId.has(key)) continue; // Never silently merge two already-resolved entities.
     const entity = exactEmail(emails(p));
     if (!entity || blocked(key, entity)) continue;
-    await tx.query(`insert into identity.source_record (source,source_id,entity_id,confidence,resolved_by)
-      values ('affinity',$1,$2,1,'rule:affinity-exact-email') on conflict do nothing`, [key, entity]);
-    byId.set(key, entity);
+    const resolved = await resolveEntity(tx, { type: 'person', name: personName(p), source: 'affinity', sourceId: key,
+      ...affinityIdentityEvidence(p), resolvedBy: 'rule:affinity-id' });
+    byId.set(key, resolved.id);
   }
   // Pursued organizations retain contact-person histories through an explicit affiliation.
   // Do not turn today's employer into a claim that the firm attended a historical meeting.
@@ -101,11 +121,13 @@ export async function participantIndex(tx: Queryable, persons: PersonIdentity[])
     const key = `person:${p.id}`;
     let contact = byId.get(key);
     if (!contact) {
-      contact = (await tx.one<{ entity_id: string }>(
-        `insert into identity.entity(entity_type,display_name) values ('person',$1) returning entity_id`,
-        [[p.firstName, p.lastName].filter(Boolean).join(' ') || 'Unnamed Affinity contact']))!.entity_id;
-      await tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by)
-        values ('affinity',$1,$2,'rule:affinity-id')`, [key, contact]);
+      const evidence = affinityIdentityEvidence(p);
+      if (!evidence.organizations?.length) {
+        evidence.organizations = (await tx.query<{ name: string }>(
+          'select display_name name from identity.entity where entity_id=any($1::uuid[])', [known])).map(o => o.name);
+      }
+      contact = (await resolveEntity(tx, { type: 'person', name: personName(p), source: 'affinity', sourceId: key,
+        ...evidence, resolvedBy: 'rule:affinity-id' })).id;
       byId.set(key, contact);
     }
     for (const org of new Set(known)) {
@@ -118,6 +140,14 @@ export async function participantIndex(tx: Queryable, persons: PersonIdentity[])
     }
     for (const email of emails(p)) {
       const ids = addresses.get(email) ?? new Set<string>(); ids.add(contact); addresses.set(email, ids);
+    }
+  }
+  addresses.clear();
+  for (const p of persons) {
+    const id = byId.get(`person:${p.id}`);
+    if (!id) continue;
+    for (const email of emails(p)) {
+      const ids = addresses.get(email) ?? new Set<string>(); ids.add(id); addresses.set(email, ids);
     }
   }
   const person = (a: Participant): string | undefined => {

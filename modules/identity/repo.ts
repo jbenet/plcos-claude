@@ -1,3 +1,4 @@
+import { resolveEntity, type EntityCreation } from './create';
 // entity.entity_type is the effective local type, protected by the correction migration.
 import { getDb } from '@/lib/db';
 import type { Entity, EntityType } from './types';
@@ -51,14 +52,11 @@ export async function getEntity(id: string): Promise<Entity | null> {
   return row ? toEntity(row) : null;
 }
 
-export async function createEntity(entityType: EntityType, displayName: string): Promise<Entity> {
+export async function createEntity(entityType: EntityType, displayName: string, evidence: Pick<EntityCreation, 'domains' | 'organizations' | 'personalUrls'> = {}): Promise<Entity> {
   const db = await getDb();
-  const row = await db.one<Row>(
-    `insert into identity.entity (entity_type, display_name) values ($1::identity.entity_type, $2)
-     returning ${COLS}`,
-    [entityType, displayName],
-  );
-  if (!row) throw new Error('entity insert returned no row');
+  const resolved = await resolveEntity(db, {type:entityType,name:displayName,...evidence});
+  const row = await db.one<Row>(`select ${COLS} from identity.entity where entity_id=$1`,[resolved.id]);
+  if (!row) throw new Error('Resolved entity is missing');
   return toEntity(row);
 }
 

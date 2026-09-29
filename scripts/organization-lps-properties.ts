@@ -37,6 +37,8 @@ export async function organizationLpsProperties(check: Check, db: Db) {
   const before=(await db.one<{n:number}>('select count(*)::int n from strategy.ladder_event'))!.n;
   try {
     await db.query(`insert into identity.entity(entity_id,entity_type,display_name) values($1,'person','Invented Person'),($2,'org','Invented Science Foundation'),($3,'person','Invented Alias')`,[person,org,alias]);
+    // This relationship/replay fixture pins the existing organization by source identity.
+    await db.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by) values('investing-organization:v1','invented science foundation',$1,'invented fixture')`,[org]);
     await db.query('update identity.entity set merged_into=$1 where entity_id=$2',[person,alias]);
     await db.query(`insert into strategy.pursuit(entity_id,vehicle_id,owner_id,status,status_source) values($1,$2,$3,'discussing','us')`,[person,vehicle,actor]);
     const first=await addOrganizationLps(db,[{...finding,key:alias}],actor);
@@ -67,6 +69,7 @@ export async function organizationLpsProperties(check: Check, db: Db) {
     await db.query('delete from identity.affiliation where org_entity=$1',[org]);
     await db.query('delete from strategy.pursuit where entity_id=any($1::uuid[])',[[person,org]]);
     await db.query('delete from identity.source_record where entity_id=$1',[org]);
+    await db.query('delete from identity.possible_match where left_entity=any($1::uuid[]) or right_entity=any($1::uuid[])', [[alias,person,org]]);
     await db.query('delete from identity.entity where entity_id=any($1::uuid[])',[[alias,person,org]]);
   }
 }

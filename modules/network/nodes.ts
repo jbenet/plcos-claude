@@ -1,7 +1,8 @@
+import { resolveEntity } from '@/modules/identity/create';
 /** All discovered people and organizations, independent of the current LP route shortlist.
  * Files are read locally; the caller owns the existing server transaction. No database is opened here.
  */
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -36,7 +37,7 @@ export interface NetworkNodeInput {
 }
 export interface NodeSpec {
   key:string; source:string; sourceId:string; name:string; type:'person'|'org';
-  entityId?:string; teamHandle?:string;
+  entityId?:string; teamHandle?:string; organizations?:string[]; domains?:string[]; personalUrls?:string[];
 }
 export interface NodeEdge {
   from:string; to:string; kind:EdgeKind; tier:EvidenceTier; tie:TieDetails;
@@ -60,7 +61,7 @@ const edgeKind = (kind:string): EdgeKind => ({worked_together:'colleague',cofoun
 
 /** Pure preparation: source identities survive name collisions; every endpoint is materialized. */
 export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan {
-  const today=at.toISOString().slice(0,10), nodes=new Map<string,NodeSpec>(), edges:NodeEdge[]=[];
+  const today=at.toISOString().slice(0,10), nodes=new Map<string,NodeSpec>(), edges:NodeEdge[]=[], uncertainIdentities=new Set<string>();
   const staff=new Set<string>(), members=new Set<string>(), candidateKeys=new Map<string,string>(), teamKeys=new Map<string,string>();
   const addNode=(source:string,id:string,name:string,type:'person'|'org',extra:Partial<NodeSpec>={}) => {
     const key=sourceKey(source,id);
@@ -75,6 +76,8 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
   };
   const affiliation=(person:string,name:string,source:string,rowIds:string[],asOf=today,employment=true) => {
     if (!name.trim()) return;
+    const personNode=nodes.get(person);
+    if (employment && personNode && !uncertainIdentities.has(person)) personNode.organizations=[...new Set([...(personNode.organizations??[]),name])];
     const company=org(name);
     if (employment && isPL(name) && nodes.get(person)?.type==='person') staff.add(person);
     addEdge(person,company,'other',employment?'C':'D',{kind:'proximity'},source,
@@ -85,7 +88,7 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
     for (const r of [...t.roles,...t.prior]) affiliation(key,r.org,r.source??'enrich/us/team.json',[t.handle]);
   }
   for (const c of input.candidates) {
-    const key=addNode('network_candidate',c.key,c.name,c.type==='org'?'org':'person',isUuid(c.key)?{entityId:c.key}:{});
+    const key=addNode('network_candidate',c.key,c.name,c.type==='org'?'org':'person',{domains:c.domains,...(isUuid(c.key)?{entityId:c.key}:{})});
     candidateKeys.set(c.key,key);
     if(c.org && c.type!=='org') affiliation(key,c.org,'enrich/candidates.jsonl',[c.key]);
   }
@@ -104,6 +107,7 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
     const matched=lp?.length===1 && byLP.get(lp[0]!)?.length===1 ? candidateByKey.get(lp[0]!) : undefined;
     const institution = p.key === 'organization:protocol-labs';
     const key=addNode('warehouse',p.key,p.name,institution ? 'org' : 'person',{
+      domains:p.emailDomain?[p.emailDomain]:[], organizations:p.org?[p.org]:[],
       ...(matched && isUuid(matched.key)?{entityId:matched.key}:{}),...(p.teamKey?{teamHandle:p.teamKey}:{})});
     warehouseKeys.set(p.key,key);
     if (institution) continue;
@@ -120,15 +124,11 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
   for(const list of [input.network?.orgs,input.network?.backers,input.network?.portfolio]) for(const x of list??[]) org(x.name);
   const sourcedPerson=(name:string,source:string) => addNode('w3_person',connectionPersonKey(name,source),name,'person');
   for(const p of input.network?.backer_people??[]) sourcedPerson(p.name,p.source);
-  const exactTeam=(name:string) => {
-    const matches=input.team.filter(t=>normalized(t.name)===normalized(name));
-    return matches.length===1 ? teamKeys.get(matches[0]!.handle) : undefined;
-  };
   const researchPerson=(endpoint:ResearchEndpoint,source:string) => {
     if(endpoint.type!=='person') return org(endpoint.name);
     const local=endpoint.localNameMatches;
     if(endpoint.identity?.match==='confirmed' && local?.length===1 && candidateKeys.has(local[0]!.key)) return candidateKeys.get(local[0]!.key)!;
-    const key=exactTeam(endpoint.name)??sourcedPerson(endpoint.name,source);
+    const key=sourcedPerson(endpoint.name,source);
     if(endpoint.contextOrganization) affiliation(key,endpoint.contextOrganization,source,[],today,endpoint.contextIsEmploymentClaim===true);
     return key;
   };
@@ -156,6 +156,9 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
     const resolved=f.identity.match==='confirmed'||f.identity.match==='probable';
     const owner=(resolved?(candidateKeys.get(f.key)??warehouseKeys.get(f.key)):undefined)??
       addNode('network_finding',f.key,f.identity.canonical?.name??f.name,'person',resolved&&isUuid(f.key)?{entityId:f.key}:{});
+    if(!resolved)uncertainIdentities.add(owner);
+    const ownerNode=nodes.get(owner);
+    if(resolved && ownerNode) ownerNode.personalUrls=(f.identity.links??[]).filter(l=>['bio','linkedin','x'].includes(l.kind)).map(l=>l.url);
     if(f.identity.canonical?.org) affiliation(owner,f.identity.canonical.org,`enrich/raw/${f.key}.json`,[f.key],day(f.researched.at,today));
     for(const fact of f.facts) {
       const organizations=new Set(['company','companies','organization','org','firm','fund','school','university','institution'].flatMap(k=>typeof fact.detail?.[k]==='string'?String(fact.detail[k]).split(/\s*;\s*/):[]));
@@ -172,7 +175,7 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
     }
     for(const c of f.connections??[]) {
       const source=c.source??`enrich/raw/${f.key}.json`;
-      const to=(c.toHandle?teamKeys.get(c.toHandle):undefined)??exactTeam(c.to)??
+      const to=(c.toHandle?teamKeys.get(c.toHandle):undefined)??
         (isPL(c.to)||knownOrgs.has(normalized(c.to))||/\b(capital|ventures|partners|foundation|university|labs|inc|llc|fund)\b/i.test(c.to)?org(c.to):sourcedPerson(c.to,source));
       const from=c.scope==='firm' && f.identity.canonical?.org ? org(f.identity.canonical.org) : owner;
       const tier=c.scope==='firm' && c.tier<'C'?'C':c.tier;
@@ -221,7 +224,7 @@ export async function readNetworkNodeInput(dir:string):Promise<NetworkNodeInput|
     network:network?parse<Network>(network):undefined};
 }
 
-/** Bounded JSON recordsets, never one query per person or tie. Caller must hold a transaction. */
+/** Identities use the shared resolver; edge writes use bounded recordsets. Caller holds a transaction. */
 export async function importNetworkNodes(tx:Queryable,plan:NodePlan,at=new Date()):Promise<NodeImportCounts> {
   const today=at.toISOString().slice(0,10), counts:NodeImportCounts={nodesCreated:0,sourceRecords:0,edgesWritten:0,edgePairs:new Set(),warehouseLoaded:plan.warehouseLoaded};
   const existing=await tx.query<{source:string;source_id:string;entity_id:string}>(
@@ -232,7 +235,7 @@ export async function importNetworkNodes(tx:Queryable,plan:NodePlan,at=new Date(
   const redirects=new Map((await tx.query<{entity_id:string;canonical_id:string}>(`select entity_id::text,canonical_id::text from identity.entity_resolution`)).map(r=>[r.entity_id,r.canonical_id]));
   // Resolve the source rows through the same set-based projection already needed below.
   const mapped=new Map(existing.map(r=>[sourceKey(r.source,r.source_id),redirects.get(r.entity_id)]));
-  const ids=new Map<string,string>(), newEntities=new Map<string,{id:string;type:string;name:string}>(), aliases:Array<{source:string;source_id:string;id:string}>=[];
+  const ids=new Map<string,string>();
   for(const n of plan.nodes) {
     const team=n.teamHandle?(ids.get(sourceKey('app_user',n.teamHandle))??mapped.get(sourceKey('app_user',n.teamHandle))):undefined;
     const explicitId=n.entityId ? redirects.get(n.entityId)??n.entityId : undefined;
@@ -242,17 +245,27 @@ export async function importNetworkNodes(tx:Queryable,plan:NodePlan,at=new Date(
     const explicit=explicitId && (!byId.has(explicitId)||byId.get(explicitId)!.type===n.type||localType) ? explicitId : undefined;
     const plAlias = n.source==='network_org' && n.sourceId==='pl' ? (await tx.one<{id:string}>(`select identity.canonical_entity_id(entity_id)::text id from identity.source_record where source='w3_person' and source_id=$1`, [connectionPersonKey('PL','https://protocol.ai')]))?.id : undefined;
     const institutionalAlias = n.source==='warehouse' && n.sourceId==='organization:protocol-labs' ? ids.get(sourceKey('network_org','pl')) ?? mapped.get(sourceKey('network_org','pl')) : undefined;
-    const id=mapped.get(n.key)??institutionalAlias??plAlias??team??explicit??randomUUID(); ids.set(n.key,id);
-    if(!byId.has(id)&&!newEntities.has(id))newEntities.set(id,{id,type:n.type,name:n.name});
-    if(!mapped.has(n.key))aliases.push({source:n.source,source_id:n.sourceId,id});
+    const pinned=mapped.get(n.key)??institutionalAlias??plAlias??team??(explicit && byId.has(explicit)?explicit:undefined);
+    let id=pinned;
+    if (!id) {
+      const resolved=await resolveEntity(tx,{type:n.type,name:n.name,source:n.source,sourceId:n.sourceId,
+        id:explicit,organizations:n.organizations,domains:n.domains,personalUrls:n.personalUrls,resolvedBy:'rule:network-source-key'});
+      id=resolved.id;
+      if(resolved.created)counts.nodesCreated++;
+      counts.sourceRecords++;
+      byId.set(id,{id,type:n.type,name:n.name});
+    } else {
+      if(!mapped.has(n.key)) {
+        await tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by) values($1,$2,$3,'rule:network-source-key') on conflict(source,source_id) do nothing`,[n.source,n.sourceId,id]);
+        counts.sourceRecords++;
+      }
+      // Remember corroborating input even when a confirmed source/ID already pins the node.
+      await resolveEntity(tx,{type:n.type,name:n.name,source:n.source,sourceId:n.sourceId,
+        organizations:n.organizations,domains:n.domains,personalUrls:n.personalUrls,resolvedBy:'rule:network-source-key'});
+    }
+    ids.set(n.key,id);
   }
   const chunks=async<T>(rows:T[],size:number,run:(chunk:T[])=>Promise<unknown>)=>{for(let i=0;i<rows.length;i+=size)await run(rows.slice(i,i+size));};
-  await chunks([...newEntities.values()],1000,async chunk=>tx.query(`insert into identity.entity(entity_id,entity_type,display_name)
-    select id::uuid,type::identity.entity_type,name from jsonb_to_recordset($1::jsonb) x(id text,type text,name text) on conflict(entity_id) do nothing`,[JSON.stringify(chunk)]));
-  await chunks(aliases,1000,async chunk=>tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by)
-    select source,source_id,id::uuid,'rule:network-source-key' from jsonb_to_recordset($1::jsonb) x(source text,source_id text,id text)
-    on conflict(source,source_id) do nothing`,[JSON.stringify(chunk)]));
-  counts.nodesCreated=newEntities.size;counts.sourceRecords=aliases.length;
   // Protect explicit decisions and reuse pre-existing edges, including earlier W3 imports.
   type ExistingEdge={id:string;a:string;b:string;kind:EdgeKind;tier:EvidenceTier;band:string;on:string;reviewed:boolean;evidence:Record<string,unknown>[]};
   const current=await tx.query<ExistingEdge>(

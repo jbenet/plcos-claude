@@ -217,6 +217,8 @@ export async function routeScoringProperties(check: Check, db: Queryable) {
     await db.query('delete from coordination.restriction where entity_id=any($1::uuid[])', [ids]);
     await db.query('delete from network.edge where from_entity=any($1::uuid[]) or to_entity=any($1::uuid[])', [ids]);
     await db.query('delete from identity.source_record where entity_id=any($1::uuid[])', [ids]);
+    await db.query('delete from identity.possible_match where left_entity=any($1::uuid[]) or right_entity=any($1::uuid[])', [ids]);
+    await db.query("delete from research.note where entity_id=any($1::uuid[]) and kind='identity_creation'", [ids]);
     await db.query('delete from identity.entity where entity_id=any($1::uuid[])', [ids]);
     await db.query('delete from platform.app_user where handle=any($1::text[])', [handles]);
   }
