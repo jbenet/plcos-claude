@@ -73,7 +73,7 @@ export async function pipelineProperties({ check, db }: SeedContext) {
 }
 
 export async function hardeningVariations(check: Check) {
-  // The gate-to-action chain, end to end: approving the Cedar MONEY ticket is the only
+  // The gate-to-action chain, end to end: approving the Fernhollow Umberfield MONEY ticket is the only
   // thing in this system that can move the headline.
   {
     const d = await freshDb();
@@ -97,7 +97,7 @@ export async function hardeningVariations(check: Check) {
     const pack = await d.one<{ status: string }>(
       `select p.status::text as status from close.pack_item p
          join identity.entity e on e.entity_id = p.entity_id
-        where e.display_name = 'Cedar Trust'`,
+        where e.display_name = 'Fernhollow Umberfield Trust'`,
     );
     check(
       'Variation — approve the MONEY ticket',
@@ -115,12 +115,12 @@ export async function hardeningVariations(check: Check) {
     const expOf = async (name: string) => (await d.one<{ exposure_id: string; entity_id: string; vehicle_id: string }>(
       `select x.exposure_id, x.entity_id, x.vehicle_id from pipeline.exposure x join identity.entity e on e.entity_id = x.entity_id
         where e.display_name = $1 and x.closed_at is null order by x.amount desc limit 1`, [name]))!;
-    const cedar = await expOf('Cedar Trust');
-    const counter = await d.one<{ n: string }>(`select count(*)::text as n from pipeline.commitment_event where exposure_id = $1 and step = 'countersigned'`, [cedar.exposure_id]);
-    await pl.recordWire(juan!.id, cedar.exposure_id, { on: new Date('2026-09-20T12:00:00Z'), amount: 1_500_000, reference: 'wire-0917' });
-    const over = await attempt(() => pl.recordWire(juan!.id, cedar.exposure_id, { on: new Date('2026-09-21T12:00:00Z'), amount: 3_000_000, reference: 'wire-0918' }));
-    await pl.recordClosing(juan!.id, cedar.exposure_id, { on: new Date('2026-09-22T12:00:00Z'), closing: 'First close' });
-    const [ct] = await pl.closeTracksFor(cedar.entity_id, cedar.vehicle_id);
+    const fernhollowUmberfield = await expOf('Fernhollow Umberfield Trust');
+    const counter = await d.one<{ n: string }>(`select count(*)::text as n from pipeline.commitment_event where exposure_id = $1 and step = 'countersigned'`, [fernhollowUmberfield.exposure_id]);
+    await pl.recordWire(juan!.id, fernhollowUmberfield.exposure_id, { on: new Date('2026-09-20T12:00:00Z'), amount: 1_500_000, reference: 'wire-0917' });
+    const over = await attempt(() => pl.recordWire(juan!.id, fernhollowUmberfield.exposure_id, { on: new Date('2026-09-21T12:00:00Z'), amount: 3_000_000, reference: 'wire-0918' }));
+    await pl.recordClosing(juan!.id, fernhollowUmberfield.exposure_id, { on: new Date('2026-09-22T12:00:00Z'), closing: 'First close' });
+    const [ct] = await pl.closeTracksFor(fernhollowUmberfield.entity_id, fernhollowUmberfield.vehicle_id);
     const cash = (await vt()).find((t2) => t2.vehicleSlug === 'neurotech')!.cash;
     check(
       'A wire is an amount: a call in part counts in part, never past the commitment, and closing needs it hard',
@@ -129,12 +129,12 @@ export async function hardeningVariations(check: Check) {
       `countersigned events ${counter!.n}; state ${ct?.state}; wired ${ct?.wired} of ${ct?.exposure.amount}, outstanding ${ct?.outstanding}; over-wire ${over ? 'refused' : 'ALLOWED'}; cash +$${((cash - after.cash) / 1e6).toFixed(1)}M`,
     );
 
-    const northwood = await expOf('Northwood Capital');
-    const wireSoft = await attempt(() => pl.recordWire(juan!.id, northwood.exposure_id, { on: new Date('2026-09-20T12:00:00Z'), amount: 100, reference: 'x' }));
-    await pl.recordSignature(juan!.id, northwood.exposure_id, { on: new Date('2026-09-18T12:00:00Z'), document: 'Subscription agreement v1' });
-    const noReason = await attempt(() => pl.recordSignature(juan!.id, northwood.exposure_id, { on: new Date('2026-09-21T12:00:00Z'), document: 'Subscription agreement v2' }));
-    await pl.recordSignature(juan!.id, northwood.exposure_id, { on: new Date('2026-09-21T12:00:00Z'), document: 'Subscription agreement v2', reason: 'Their holding entity changed its name' });
-    const [nt] = await pl.closeTracksFor(northwood.entity_id, northwood.vehicle_id);
+    const vetchlingWagtail = await expOf('Vetchling Wagtail Capital');
+    const wireSoft = await attempt(() => pl.recordWire(juan!.id, vetchlingWagtail.exposure_id, { on: new Date('2026-09-20T12:00:00Z'), amount: 100, reference: 'x' }));
+    await pl.recordSignature(juan!.id, vetchlingWagtail.exposure_id, { on: new Date('2026-09-18T12:00:00Z'), document: 'Subscription agreement v1' });
+    const noReason = await attempt(() => pl.recordSignature(juan!.id, vetchlingWagtail.exposure_id, { on: new Date('2026-09-21T12:00:00Z'), document: 'Subscription agreement v2' }));
+    await pl.recordSignature(juan!.id, vetchlingWagtail.exposure_id, { on: new Date('2026-09-21T12:00:00Z'), document: 'Subscription agreement v2', reason: 'Their holding entity changed its name' });
+    const [nt] = await pl.closeTracksFor(vetchlingWagtail.entity_id, vetchlingWagtail.vehicle_id);
     check(
       'Signing moves no money; signing again needs its reason; cash cannot land on a soft commitment',
       nt?.state === 'signed' && nt.exposure.track === 'soft' && nt.resigned === 1 && nt.signature?.document === 'Subscription agreement v2' &&
@@ -143,9 +143,9 @@ export async function hardeningVariations(check: Check) {
     );
     // A second instrument must not disappear behind the LP's largest position.
     await d.query(`insert into pipeline.exposure (entity_id, vehicle_id, instrument, track, amount, owner_id)
-      select entity_id, vehicle_id, 'direct', 'soft', 1234, owner_id from pipeline.exposure where exposure_id = $1`, [northwood.exposure_id]);
-    const statusPage = await pl.vehicleCloseStatus(northwood.vehicle_id, 1);
-    const statusLp = statusPage.rows.find(r => r.entity_id === northwood.entity_id);
+      select entity_id, vehicle_id, 'direct', 'soft', 1234, owner_id from pipeline.exposure where exposure_id = $1`, [vetchlingWagtail.exposure_id]);
+    const statusPage = await pl.vehicleCloseStatus(vetchlingWagtail.vehicle_id, 1);
+    const statusLp = statusPage.rows.find(r => r.entity_id === vetchlingWagtail.entity_id);
     check('Status keeps multiple instruments and does not promote a signature into hard money',
       statusLp?.tracks.length === 2 && statusLp.tracks.every(t => t.exposure.track === 'soft') &&
       statusLp.tracks.some(t => t.signature?.document === 'Subscription agreement v2'),

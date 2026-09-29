@@ -3,7 +3,7 @@ import { RUNG_LABEL, type LadderRung } from '@/modules/strategy';
 
 /**
  * The audit log in words (N62, issue 0007): "Juan set the status to Discussing, from Selected —
- * Omar Haddad · PLC Neurotech I" rather than "pursuit.status_set". What an entry names comes
+ * Eero Sandoval · PLC Neurotech I" rather than "pursuit.status_set". What an entry names comes
  * from its own detail; an action this doesn't know is shown by its name, not guessed at.
  */
 export function describeAudit(a: AuditRow): { what: string; about: string | null } {

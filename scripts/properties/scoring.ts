@@ -32,17 +32,17 @@ export async function scoringVariations(check: Check) {
     const vid = (await d.one<{ id: string }>("select id from platform.vehicle where slug = 'neurotech'"))!.id;
     const juan = (await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'"))!.id;
 
-    const before = (await rk(vid)).find((r) => r.entityName === 'Roos Foundation')!;
+    const before = (await rk(vid)).find((r) => r.entityName === 'Quaresma Foundation')!;
     await setActiveWeights(juan, {
       label: 'Propensity over capacity',
       capacity: 0.1, affinity: 0.3, propensity: 0.4, timeToDecision: 0.2,
     });
-    const after = (await rk(vid)).find((r) => r.entityName === 'Roos Foundation')!;
+    const after = (await rk(vid)).find((r) => r.entityName === 'Quaresma Foundation')!;
 
     check(
       'Variation — reweight toward propensity',
       (after.score ?? 1) < (before.score ?? 0),
-      `Roos Foundation ${before.score?.toFixed(2)} → ${after.score?.toFixed(2)}; its weakest ` +
+      `Quaresma Foundation ${before.score?.toFixed(2)} → ${after.score?.toFixed(2)}; its weakest ` +
       'dimension is propensity (no LP positions in seven years), so raising that weight has to lower it',
     );
     await d.close();

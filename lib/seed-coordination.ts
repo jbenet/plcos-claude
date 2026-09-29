@@ -30,8 +30,8 @@ export async function seedCoordination(db: Db): Promise<{ asks: number; tickets:
       `insert into coordination.restriction (entity_id, scope, connector_id, instruction, source, recorded_by)
        values ($1, 'connector', $2, $3, 'S05', $4)`,
       [
-        e('Delia Roos'), e('Jonah Hale'),
-        'Roos asked not to be introduced to fund managers through Jonah Hale.',
+        e('Solveig Quaresma'), e('Anselm Rautio'),
+        'Quaresma asked not to be introduced to fund managers through Anselm Rautio.',
         u('mara'),
       ],
     );
@@ -42,27 +42,27 @@ export async function seedCoordination(db: Db): Promise<{ asks: number; tickets:
       outcome: 'opted_in' | 'declined' | 'no_reply' | 'deferred' | null; outcomeNote: string | null;
     }> = [
       {
-        entity: 'Delia Roos', connector: 'Michael Okonjo', vehicle: 'rails', owner: 'mara',
+        entity: 'Solveig Quaresma', connector: 'Bram Kowalczyk', vehicle: 'rails', owner: 'mara',
         purpose: 'Opt-in request for a Rails conversation, carrying the Rails one-pager.',
         madeDaysAgo: 6, channel: 'email', outcome: null, outcomeNote: null,
       },
       {
-        entity: 'Priya Raman', connector: null, vehicle: 'neurotech', owner: 'juan',
-        purpose: 'Direct approach — Raman asked to be contacted at the Q3 event.',
+        entity: 'Perpetua Eskildsen', connector: null, vehicle: 'neurotech', owner: 'juan',
+        purpose: 'Direct approach — Eskildsen asked to be contacted at the Q3 event.',
         madeDaysAgo: 20, channel: 'email', outcome: 'opted_in', outcomeNote: 'Asked for the DDQ pack.',
       },
       {
-        entity: 'Ivo Lindqvist', connector: 'Mercer & Bly', vehicle: 'neurotech', owner: 'mara',
-        purpose: 'Opt-in request via the consultant who screens for Cedar.',
+        entity: 'Emeka Holmqvist', connector: 'Gyasi & Ferrante-Obuya', vehicle: 'neurotech', owner: 'mara',
+        purpose: 'Opt-in request via the consultant who screens for Fernhollow Umberfield.',
         madeDaysAgo: 40, channel: 'call', outcome: 'opted_in', outcomeNote: 'Moved to diligence 12 Sep.',
       },
       {
-        entity: 'Michael Okonjo', connector: 'Allison Duettmann', vehicle: 'neurotech', owner: 'juan',
+        entity: 'Bram Kowalczyk', connector: 'Orla Umeadi', vehicle: 'neurotech', owner: 'juan',
         purpose: 'Opt-in request for a Neurotech conversation.',
         madeDaysAgo: 30, channel: 'email', outcome: 'no_reply', outcomeNote: 'No reply after two weeks.',
       },
       {
-        entity: 'Anne Quill', connector: 'Allison Duettmann', vehicle: 'spv-cortex', owner: 'juan',
+        entity: 'Renata Corcoran', connector: 'Orla Umeadi', vehicle: 'spv-cortex', owner: 'juan',
         purpose: 'Opt-in request for the Cortex SPV.',
         madeDaysAgo: 10, channel: 'email', outcome: 'deferred', outcomeNote: 'Asked us to come back in November.',
       },
@@ -89,25 +89,25 @@ export async function seedCoordination(db: Db): Promise<{ asks: number; tickets:
       basis: Array<{ label: string; value: string; source?: string }>;
     }> = [
       {
-        kind: 'SEND', label: 'Neurotech primer v4 → Okonjo Family Office', subjectType: 'material_send',
+        kind: 'SEND', label: 'Neurotech primer v4 → Kowalczyk Family Office', subjectType: 'material_send',
         by: 'mara', vehicle: 'neurotech',
-        authorizes: 'Sending the approved Neurotech primer, version 4, to Michael Okonjo and nobody else.',
+        authorizes: 'Sending the approved Neurotech primer, version 4, to Bram Kowalczyk and nobody else.',
         excludes: ['Sending the track record appendix', 'Any statement about the Rails vehicle', 'Forwarding rights'],
         basis: [
           { label: 'Wrap check', value: 'Passed — 506(c) fund, primer scope' },
           { label: 'Claims changed since last send', value: '2' },
-          { label: 'Last verified', value: 'Mara Vance, 18 Sep' },
+          { label: 'Last verified', value: 'Keziah Grimaldo, 18 Sep' },
         ],
       },
       {
-        kind: 'STAGE', label: 'Advance Northwood Capital to Diligence', subjectType: 'target_stage',
+        kind: 'STAGE', label: 'Advance Vetchling Wagtail Capital to Diligence', subjectType: 'target_stage',
         by: 'sam', vehicle: 'neurotech',
-        authorizes: 'Moving Northwood Capital from Meeting held to Diligence.',
+        authorizes: 'Moving Vetchling Wagtail Capital from Meeting held to Diligence.',
         excludes: ['Any claim of indication or commitment', 'Any change to the forecast'],
         basis: [
           { label: 'Consent ladder', value: 'Meeting held' },
           { label: 'Evidence for the next rung', value: 'None on file' },
-          { label: 'Requested because', value: 'Raman asked for the DDQ pack' },
+          { label: 'Requested because', value: 'Eskildsen asked for the DDQ pack' },
         ],
       },
     ];
@@ -129,15 +129,15 @@ export async function seedCoordination(db: Db): Promise<{ asks: number; tickets:
   // collision with Rails produces a ConflictCase rather than a silent block.
   const { proposeAsk } = await import('@/modules/coordination');
   await proposeAsk(u('juan'), {
-    entityId: e('Delia Roos'),
-    entityName: 'Delia Roos',
-    connectorId: e('Allison Duettmann'),
-    connectorName: 'Allison Duettmann',
+    entityId: e('Solveig Quaresma'),
+    entityName: 'Solveig Quaresma',
+    connectorId: e('Orla Umeadi'),
+    connectorName: 'Orla Umeadi',
     vehicleId: v('neurotech').id,
     vehicleName: v('neurotech').name,
-    purpose: 'Ask Duettmann for an opt-in, leading with the PRI path rather than the LP path.',
+    purpose: 'Ask Umeadi for an opt-in, leading with the PRI path rather than the LP path.',
     carries:
-      'One opt-in request to Allison Duettmann regarding Delia Roos, carrying the approved ' +
+      'One opt-in request to Orla Umeadi regarding Solveig Quaresma, carrying the approved ' +
       'Neurotech primer (v4) and the PRI structure note, and nothing else.',
   });
 

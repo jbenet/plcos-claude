@@ -20,7 +20,7 @@
  "users": [
   {
    "id": "user-juan",
-   "name": "Juan",
+   "name": "Lior",
    "displayName": "juan",
    "email": "juan@example.com",
    "active": true,
@@ -30,7 +30,7 @@
   },
   {
    "id": "user-mara",
-   "name": "Mara Lind",
+   "name": "Keziah Kettleborough",
    "displayName": "mara",
    "email": "mara@example.com",
    "active": true,
@@ -40,7 +40,7 @@
   },
   {
    "id": "user-sam",
-   "name": "Sam Okafor",
+   "name": "Fiachra Dahlquist",
    "displayName": "sam",
    "email": "sam@example.com",
    "active": true,
@@ -50,7 +50,7 @@
   },
   {
    "id": "user-ines",
-   "name": "Ines Vidal",
+   "name": "Zoe Pellegrino",
    "displayName": "ines",
    "email": "ines@example.com",
    "active": true,
@@ -60,7 +60,7 @@
   },
   {
    "id": "user-kit",
-   "name": "Kit Moreno",
+   "name": "Jovana Ekwueme",
    "displayName": "kit",
    "email": "kit@contractor.example.org",
    "active": true,
@@ -70,9 +70,9 @@
   },
   {
    "id": "user-tomas",
-   "name": "Tomás Reyes",
+   "name": "Joaquín Hallorann",
    "displayName": "tomas",
-   "email": "tomas.reyes@counsel.example.org",
+   "email": "tomas.hallorann@counsel.example.org",
    "active": true,
    "createdAt": "2026-09-01T10:00:00.000Z",
    "updatedAt": "2026-09-03T10:00:00.000Z",
@@ -688,8 +688,8 @@
   {
    "id": "issue-001",
    "identifier": "PLC-1",
-   "title": "Send Roos Foundation the updated deck",
-   "description": "Invented demo task. Send Roos Foundation the updated deck.",
+   "title": "Send Quaresma Foundation the updated deck",
+   "description": "Invented demo task. Send Quaresma Foundation the updated deck.",
    "url": "https://linear.example/demo/issue/PLC-1",
    "priority": 2,
    "estimate": 2,
@@ -767,8 +767,8 @@
   {
    "id": "issue-003",
    "identifier": "PLC-3",
-   "title": "Book diligence call with Okonjo Family Office",
-   "description": "Invented demo task. Book diligence call with Okonjo Family Office.",
+   "title": "Book diligence call with Kowalczyk Family Office",
+   "description": "Invented demo task. Book diligence call with Kowalczyk Family Office.",
    "url": "https://linear.example/demo/issue/PLC-3",
    "priority": 2,
    "estimate": null,

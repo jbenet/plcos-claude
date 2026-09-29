@@ -1,6 +1,6 @@
 [
   {
-    "entity": "roos",
+    "entity": "quaresma",
     "kind": "open_question",
     "author": "juan",
     "body": "Does the foundation have authority to take a fund LP position at all? The grants export shows none in seven years, which is evidence of practice, not of the trust deed.",
@@ -12,7 +12,7 @@
     }
   },
   {
-    "entity": "roos",
+    "entity": "quaresma",
     "kind": "open_question",
     "author": "ines",
     "body": "Is the 2027 budget set? Nothing public since the March 2026 page update.",
@@ -24,7 +24,7 @@
     }
   },
   {
-    "entity": "roos",
+    "entity": "quaresma",
     "kind": "open_question",
     "author": "tomas",
     "body": "Where did counsel land on §4944(c)? The only note we have is two years old.",
@@ -38,7 +38,7 @@
     }
   },
   {
-    "entity": "roos",
+    "entity": "quaresma",
     "kind": "note",
     "author": "mara",
     "body": "Programme lead was warm but careful on the phone. Reading between the lines, the foundation has been approached a lot this year.",
@@ -48,10 +48,10 @@
     "data": {}
   },
   {
-    "entity": "northwood",
+    "entity": "vetchling-wagtail",
     "kind": "open_question",
     "author": "mara",
-    "body": "Is Priya Raman's emerging-manager programme open for 2026? She has held the seat three weeks; the only figures we have for Northwood come from a 2021 CSV nobody can vouch for.",
+    "body": "Is Perpetua Eskildsen's emerging-manager programme open for 2026? She has held the seat three weeks; the only figures we have for Vetchling Wagtail come from a 2021 CSV nobody can vouch for.",
     "tags": [
       "staffing"
     ],
@@ -60,17 +60,17 @@
     }
   },
   {
-    "entity": "okonjo-fo",
+    "entity": "kowalczyk-fo",
     "kind": "note",
     "author": "juan",
-    "body": "Michael Okonjo is both a possible connector to Roos and a prospect in his own right. Those two roles should not be resolved by whoever gets there first.",
+    "body": "Bram Kowalczyk is both a possible connector to Quaresma and a prospect in his own right. Those two roles should not be resolved by whoever gets there first.",
     "tags": [
       "conflict"
     ],
     "data": {}
   },
   {
-    "entity": "halvorsen",
+    "entity": "iwasaki",
     "kind": "note",
     "author": "tomas",
     "body": "Sourced, not applied for. Any outreach on the grants rail stays blocked until an invitation exists — that is a state machine guard at L13, not a reminder.",

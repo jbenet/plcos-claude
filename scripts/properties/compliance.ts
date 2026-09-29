@@ -40,16 +40,16 @@ export async function verificationVariations(check: Check) {
     const d = await freshDb();
     const { requestHardening } = await import('../../modules/pipeline');
     const juan = (await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'"))!;
-    const whitcomb = (await d.one<{ exposure_id: string }>(
+    const albescu = (await d.one<{ exposure_id: string }>(
       `select x.exposure_id from pipeline.exposure x
          join identity.entity e on e.entity_id = x.entity_id
          join platform.vehicle v on v.id = x.vehicle_id
-        where e.display_name = 'Whitcomb Capital' and v.slug = 'neurotech'`,
+        where e.display_name = 'Albescu Capital' and v.slug = 'neurotech'`,
     ))!;
     let refusal = '';
     try {
       await requestHardening(juan.id, {
-        exposureId: whitcomb.exposure_id, evidenceRef: 'sub-doc:whitcomb', note: 'Countersigned.',
+        exposureId: albescu.exposure_id, evidenceRef: 'sub-doc:albescu', note: 'Countersigned.',
       });
     } catch (err) {
       refusal = err instanceof Error ? err.message : String(err);

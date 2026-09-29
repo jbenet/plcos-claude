@@ -1,170 +1,170 @@
 [
   {
-    "key": "roos",
+    "key": "quaresma",
     "type": "person",
-    "name": "Delia Roos",
-    "note": "Sole principal of the Roos Foundation."
+    "name": "Solveig Quaresma",
+    "note": "Sole principal of the Quaresma Foundation."
   },
   {
-    "key": "roos-fdn",
+    "key": "quaresma-fdn",
     "type": "foundation",
-    "name": "Roos Foundation",
+    "name": "Quaresma Foundation",
     "note": "Dual mandate: PRI-capable philanthropy and direct fund commitments."
   },
   {
-    "key": "duettmann",
+    "key": "umeadi",
     "type": "person",
-    "name": "Allison Duettmann",
+    "name": "Orla Umeadi",
     "note": "Connector. Has delivered two of two prior introductions for us."
   },
   {
-    "key": "okonjo",
+    "key": "kowalczyk",
     "type": "person",
-    "name": "Michael Okonjo",
-    "note": "Principal, Okonjo Family Office. Connector and prospect at once."
+    "name": "Bram Kowalczyk",
+    "note": "Principal, Kowalczyk Family Office. Connector and prospect at once."
   },
   {
-    "key": "okonjo-fo",
+    "key": "kowalczyk-fo",
     "type": "family",
-    "name": "Okonjo Family Office",
+    "name": "Kowalczyk Family Office",
     "note": "Single family office, generalist with a neuro interest since 2024."
   },
   {
-    "key": "navarro",
+    "key": "barrowcliff",
     "type": "person",
-    "name": "Elena Navarro",
-    "note": "Same 2024 panel as Roos. Nothing more than that is on file."
+    "name": "Mirela Barrowcliff",
+    "note": "Same 2024 panel as Quaresma. Nothing more than that is on file."
   },
   {
-    "key": "hale",
+    "key": "rautio",
     "type": "person",
-    "name": "Jonah Hale",
-    "note": "Placement adviser. Roos asked not to be introduced through him."
+    "name": "Anselm Rautio",
+    "note": "Placement adviser. Quaresma asked not to be introduced through him."
   },
   {
-    "key": "northwood",
+    "key": "vetchling-wagtail",
     "type": "org",
-    "name": "Northwood Capital",
+    "name": "Vetchling Wagtail Capital",
     "note": "Multi-family office, $1.4B, allocates to emerging managers."
   },
   {
-    "key": "raman",
+    "key": "eskildsen",
     "type": "person",
-    "name": "Priya Raman",
-    "note": "Head of investments at Northwood Capital since September 2026. Asked to be contacted directly."
+    "name": "Perpetua Eskildsen",
+    "note": "Head of investments at Vetchling Wagtail Capital since September 2026. Asked to be contacted directly."
   },
   {
-    "key": "cedar",
+    "key": "fernhollow-umberfield",
     "type": "org",
-    "name": "Cedar Trust",
+    "name": "Fernhollow Umberfield Trust",
     "note": "Endowment. Countersigned 18 Sep."
   },
   {
-    "key": "lindqvist",
+    "key": "holmqvist",
     "type": "person",
-    "name": "Ivo Lindqvist",
-    "note": "Chief investment officer, Cedar Trust."
+    "name": "Emeka Holmqvist",
+    "note": "Chief investment officer, Fernhollow Umberfield Trust."
   },
   {
-    "key": "halvorsen",
+    "key": "iwasaki",
     "type": "foundation",
-    "name": "Halvorsen Institute",
+    "name": "Iwasaki Institute",
     "note": "Grants funder. No invitation on file — outreach is gated."
   },
   {
-    "key": "mercer",
+    "key": "gyasi",
     "type": "org",
-    "name": "Mercer & Bly",
+    "name": "Gyasi & Ferrante-Obuya",
     "note": "Consultant. Gatekeeper for two of the endowments above."
   },
   {
-    "key": "quill",
+    "key": "corcoran",
     "type": "person",
-    "name": "Anne Quill",
-    "note": "Former colleague of Duettmann. Unverified link to Northwood."
+    "name": "Renata Corcoran",
+    "note": "Former colleague of Umeadi. Unverified link to Vetchling Wagtail."
   },
   {
-    "key": "brenner",
+    "key": "valdivieso",
     "type": "foundation",
-    "name": "Brenner Endowment",
+    "name": "Valdivieso Endowment",
     "note": "First close anchor. Wired in July."
   },
   {
-    "key": "kaplan",
+    "key": "jaramillo",
     "type": "family",
-    "name": "Kaplan Family Trust",
+    "name": "Jaramillo Family Trust",
     "note": "Two vehicles, one budget. Watch the pool."
   },
   {
-    "key": "vantage",
+    "key": "greylag-gorsebrook",
     "type": "org",
-    "name": "Vantage Partners",
+    "name": "Greylag Gorsebrook Partners",
     "note": "Committed to both funds. The conserved-pool check has something to say about this."
   },
   {
-    "key": "orsini",
+    "key": "mbatha",
     "type": "foundation",
-    "name": "Orsini Foundation",
+    "name": "Mbatha Foundation",
     "note": "Wired in August."
   },
   {
-    "key": "whitcomb",
+    "key": "albescu",
     "type": "org",
-    "name": "Whitcomb Capital",
+    "name": "Albescu Capital",
     "note": "Soft on Neurotech, hard on the Cortex SPV."
   },
   {
-    "key": "sablepoint",
+    "key": "inglenookalderwick",
     "type": "org",
-    "name": "Sable Point Capital",
+    "name": "Inglenook Alderwick Capital",
     "note": "Emerging-manager seeder. The class whose entire business is underwriting managers like us."
   },
   {
-    "key": "mork",
+    "key": "lindgaard",
     "type": "person",
-    "name": "Anneliese Mork",
+    "name": "Adaeze Lindgaard",
     "note": "Founder, sold her company in June. Fresh liquidity, no family-office infrastructure yet."
   },
   {
-    "key": "tessaro",
+    "key": "oyelaran",
     "type": "family",
-    "name": "Tessaro Family Office",
+    "name": "Oyelaran Family Office",
     "note": "Single family office, principal-decided. Neuro interest is publicly stated by the principal."
   },
   {
-    "key": "whitcomb-p",
+    "key": "albescu-p",
     "type": "person",
-    "name": "Gordon Whitcomb",
-    "note": "Principal of Whitcomb Capital. Decides alone and moves in days."
+    "name": "Yaw Albescu",
+    "note": "Principal of Albescu Capital. Decides alone and moves in days."
   },
   {
-    "key": "tessaro-p",
+    "key": "oyelaran-p",
     "type": "person",
-    "name": "Marisa Tessaro",
-    "note": "Principal of the Tessaro Family Office. Has spoken publicly about wanting more exposure to frontier neuroscience."
+    "name": "Folake Oyelaran",
+    "note": "Principal of the Oyelaran Family Office. Has spoken publicly about wanting more exposure to frontier neuroscience."
   },
   {
-    "key": "iglesias",
+    "key": "fontaine",
     "type": "person",
-    "name": "Rosa Iglesias",
-    "note": "CIO at Vantage Partners. Signed both of our vehicles inside one year."
+    "name": "Anaïs Fontaine",
+    "note": "CIO at Greylag Gorsebrook Partners. Signed both of our vehicles inside one year."
   },
   {
-    "key": "adeyemi",
+    "key": "yilmazer",
     "type": "person",
-    "name": "Curtis Adeyemi",
-    "note": "Head of investments at the Brenner Endowment."
+    "name": "Otso Yilmazer",
+    "note": "Head of investments at the Valdivieso Endowment."
   },
   {
-    "key": "kaplan-p",
+    "key": "jaramillo-p",
     "type": "person",
-    "name": "Rachel Kaplan",
-    "note": "Principal of the Kaplan Family Trust."
+    "name": "Paloma Jaramillo",
+    "note": "Principal of the Jaramillo Family Trust."
   },
   {
-    "key": "boyle",
+    "key": "brankovic",
     "type": "person",
-    "name": "Hannah Boyle",
-    "note": "Investment operations at Cedar Trust. Our counterpart for everything after the decision."
+    "name": "Imogen Brankovic",
+    "note": "Investment operations at Fernhollow Umberfield Trust. Our counterpart for everything after the decision."
   }
 ]

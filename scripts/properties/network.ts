@@ -128,16 +128,16 @@ export async function routeCacheProperties({ check, db, id }: SeedContext) {
       'Unknown target URLs retain coverage disclosure; no orphaned cache row is written.');
 
     const original = await db.one<{ computed: string; payload: string }>(
-      "select computed_at::text as computed, search::text as payload from network.route_cache where target_id = $1 and vehicle_kind = 'fund'", [id('Delia Roos')]);
+      "select computed_at::text as computed, search::text as payload from network.route_cache where target_id = $1 and vehicle_kind = 'fund'", [id('Solveig Quaresma')]);
     const stranger = (await db.one<{ id: string }>(`insert into identity.entity (entity_type, display_name)
       values ('person', 'Unrelated cache fixture') returning entity_id::text as id`))!.id;
     await db.query('update identity.entity set display_name = $2 where entity_id = $1', [stranger, 'Renamed unrelated cache fixture']);
     await db.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by)
       values ('w3_person', 'cache2-unrelated-person', $1, 'fixture')`, [stranger]);
     await db.query("update platform.source_sync set detail = 'Fictional sync progress' where source = 'affinity'");
-    await planRoutes('juan', id('Delia Roos'), 3, 'fund', 'team');
+    await planRoutes('juan', id('Solveig Quaresma'), 3, 'fund', 'team');
     const unchanged = await db.one<{ computed: string; payload: string }>(
-      "select computed_at::text as computed, search::text as payload from network.route_cache where target_id = $1 and vehicle_kind = 'fund'", [id('Delia Roos')]);
+      "select computed_at::text as computed, search::text as payload from network.route_cache where target_id = $1 and vehicle_kind = 'fund'", [id('Solveig Quaresma')]);
     check('CACHE2 unrelated entity writes and sync progress reuse the existing target snapshot',
       original?.computed === unchanged?.computed && original?.payload === unchanged?.payload,
       'A changed graph read revision validates dependencies without recomputing unrelated targets.');
@@ -150,7 +150,7 @@ export async function routeCacheProperties({ check, db, id }: SeedContext) {
       'The progress row exposes completion and elapsed time without scanning cache payloads.');
 
     let attempts = 0, refused = false;
-    const retry = () => cachedRoutes(id('Delia Roos'), 'fixture-retry', async () => {
+    const retry = () => cachedRoutes(id('Solveig Quaresma'), 'fixture-retry', async () => {
       attempts++;
       if (attempts === 1) throw new Error('Invented transient route lookup failure');
       return null;
@@ -179,7 +179,7 @@ export async function routeCacheProperties({ check, db, id }: SeedContext) {
 
 export async function networkProperties({ check, id }: SeedContext) {
   const { planRoutes } = await import('../../modules/network');
-  const roos = await planRoutes('juan', id('Delia Roos'));
+  const roos = await planRoutes('juan', id('Solveig Quaresma'));
   const uncertain = roos!.routes.filter((r) => r.weakestTier >= 'C' && r.verdict !== 'excluded');
   check('C/D routes are available without review and carry uncertainty labels',
     uncertain.length > 0 && uncertain.every((r) => r.verdict !== 'not_a_route' && r.reasons.some((s) => s.includes('uncertainty'))),
@@ -190,7 +190,7 @@ export async function networkProperties({ check, id }: SeedContext) {
       && (i === 0 || informational[i - 1]!.verdict !== r.verdict || informational[i - 1]!.score!.value >= r.score!.value)),
     'Tier contributes uncertainty to the score; target relationship strength determines route ranking.');
 
-  const restrictedPaths = roos!.routes.filter((r) => r.connectorNames.includes('Jonah Hale'));
+  const restrictedPaths = roos!.routes.filter((r) => r.connectorNames.includes('Anselm Rautio'));
   check(
     'Every path through a restricted party is excluded',
     restrictedPaths.length > 0 && restrictedPaths.every((r) => r.verdict === 'excluded'),
@@ -212,11 +212,11 @@ export async function networkVariations(check: Check) {
   }> = [
     {
       name: 'remove the tier-A route',
-      describe: 'Delete the Duettmann → Roos edge.',
+      describe: 'Delete the Umeadi → Quaresma edge.',
       expect: 'The best remaining route is available with its original evidence tier and uncertainty.',
       perturb: async (d, ids) => {
         await d.query('delete from network.edge where from_entity = $1 and to_entity = $2', [
-          ids('Allison Duettmann'), ids('Delia Roos'),
+          ids('Orla Umeadi'), ids('Solveig Quaresma'),
         ]);
       },
       assert: (r) => {
@@ -229,13 +229,13 @@ export async function networkVariations(check: Check) {
     },
     {
       name: 'add a blanket do-not-contact',
-      describe: 'Record a blanket restriction on Roos.',
+      describe: 'Record a blanket restriction on Quaresma.',
       expect: 'Every route is excluded. Not one is downgraded to Hold and left clickable.',
       perturb: async (d, ids) => {
         await d.query(
           `insert into coordination.restriction (entity_id, scope, instruction, source)
-           values ($1, 'blanket', 'Roos asked not to be approached about any fund this year.', 'S05')`,
-          [ids('Delia Roos')],
+           values ($1, 'blanket', 'Quaresma asked not to be approached about any fund this year.', 'S05')`,
+          [ids('Solveig Quaresma')],
         );
       },
       assert: (r) => ({
@@ -245,29 +245,29 @@ export async function networkVariations(check: Check) {
     },
     {
       name: 'a human reviews the tier-D edge',
-      describe: 'Mark Navarro → Roos as confirmed by a person.',
+      describe: 'Mark Barrowcliff → Quaresma as confirmed by a person.',
       expect:
         'It remains a route with tier D uncertainty; review does not gate or upgrade the evidence.',
       perturb: async (d, ids) => {
         const u = await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'");
         await d.query(
           `update network.edge set reviewed_by = $3, reviewed_at = now(),
-                  review_note = 'Spoke to Navarro; she knows Roos slightly.'
+                  review_note = 'Spoke to Barrowcliff; she knows Quaresma slightly.'
             where from_entity = $1 and to_entity = $2`,
-          [ids('Elena Navarro'), ids('Delia Roos'), u!.id],
+          [ids('Mirela Barrowcliff'), ids('Solveig Quaresma'), u!.id],
         );
       },
       assert: (r) => {
-        const path = r!.routes.find((x) => x.connectorNames.includes('Elena Navarro'));
+        const path = r!.routes.find((x) => x.connectorNames.includes('Mirela Barrowcliff'));
         return {
           ok: path?.verdict === 'recommend' && path.weakestTier === 'D',
-          detail: `Navarro route is ${path?.verdict ?? 'missing'}`,
+          detail: `Barrowcliff route is ${path?.verdict ?? 'missing'}`,
         };
       },
     },
     {
       name: 'the connector reaches the cap',
-      describe: 'Record one more ask through Duettmann this quarter.',
+      describe: 'Record one more ask through Umeadi this quarter.',
       expect: 'The tier-A route drops from Recommend to Hold on goodwill, not on evidence.',
       perturb: async (d, ids) => {
         const u = await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'");
@@ -276,14 +276,14 @@ export async function networkVariations(check: Check) {
           `insert into coordination.ask
              (entity_id, connector_id, vehicle_id, status, owner_id, purpose, made_at, channel)
            values ($1,$2,$3,'made',$4,'Another ask this quarter', now() - interval '2 days', 'email')`,
-          [ids('Anne Quill'), ids('Allison Duettmann'), v!.id, u!.id],
+          [ids('Renata Corcoran'), ids('Orla Umeadi'), v!.id, u!.id],
         );
       },
       assert: (r) => {
-        const path = r!.routes.find((x) => x.connectorNames.includes('Allison Duettmann'));
+        const path = r!.routes.find((x) => x.connectorNames.includes('Orla Umeadi'));
         return {
           ok: path?.verdict === 'hold',
-          detail: `Duettmann route is ${path?.verdict ?? 'missing'}`,
+          detail: `Umeadi route is ${path?.verdict ?? 'missing'}`,
         };
       },
     },
@@ -295,17 +295,17 @@ export async function networkVariations(check: Check) {
     const ents = await le();
     const ids = (n: string) => ents.find((e) => e.displayName === n)!.entityId;
     // Warm the persisted/memory team search before changing evidence or action guards.
-    await pr('juan', ids('Delia Roos'), 3, 'fund', 'team');
-    const before = await d.one<{ computed_at: string }>('select computed_at::text as computed_at from network.route_cache where target_id = $1 and vehicle_kind = $2', [ids('Delia Roos'), 'fund']);
+    await pr('juan', ids('Solveig Quaresma'), 3, 'fund', 'team');
+    const before = await d.one<{ computed_at: string }>('select computed_at::text as computed_at from network.route_cache where target_id = $1 and vehicle_kind = $2', [ids('Solveig Quaresma'), 'fund']);
     await v.perturb(d, ids);
-    const r = await pr('juan', ids('Delia Roos'));
+    const r = await pr('juan', ids('Solveig Quaresma'));
     const out = v.assert(r);
     check(`Variation — ${v.name}`, out.ok, `${v.expect} (${out.detail})`);
-    const cached = await pr('juan', ids('Delia Roos'), 3, 'fund', 'team');
+    const cached = await pr('juan', ids('Solveig Quaresma'), 3, 'fund', 'team');
     const evaluatedAt = cached?.routes[0]?.score?.evaluatedAt;
     const { planRoutesLive } = await import('../../modules/network');
-    const live = await planRoutesLive('juan', ids('Delia Roos'), 3, 'fund', 'team', evaluatedAt ? new Date(evaluatedAt) : new Date());
-    const after = await d.one<{ computed_at: string }>('select computed_at::text as computed_at from network.route_cache where target_id = $1 and vehicle_kind = $2', [ids('Delia Roos'), 'fund']);
+    const live = await planRoutesLive('juan', ids('Solveig Quaresma'), 3, 'fund', 'team', evaluatedAt ? new Date(evaluatedAt) : new Date());
+    const after = await d.one<{ computed_at: string }>('select computed_at::text as computed_at from network.route_cache where target_id = $1 and vehicle_kind = $2', [ids('Solveig Quaresma'), 'fund']);
     const { routeGraph } = await import('../../modules/network/service');
     const selected = live?.routes.filter((r) => r.foldedUnder == null).map((r) => ({ ...r, foldedUnder: null }));
     const expected = live && selected ? { ...live, routes: selected,

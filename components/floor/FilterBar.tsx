@@ -7,7 +7,7 @@ import { EMPTY_FILTER, SIGNAL_LABEL, type FloorFilter } from './FloorContext';
 /**
  * One filter, every view.
  *
- * It narrows the projection before any drawing sees it, so a search for "Roos" reshapes the
+ * It narrows the projection before any drawing sees it, so a search for "Quaresma" reshapes the
  * line, the load, the map and the list at once rather than being reimplemented five times
  * with five sets of bugs. The count says what is hidden — a filtered picture that looks like
  * an unfiltered one is the most expensive kind of mistake this page could make.

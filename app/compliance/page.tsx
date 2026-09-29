@@ -138,7 +138,7 @@ async function Compliance() {
           </tbody>
         </table>
         <p className="cover">
-          <b>Whitcomb Capital is the case to look at.</b> The record is complete, signed and dated,
+          <b>Albescu Capital is the case to look at.</b> The record is complete, signed and dated,
           and it is still not sufficient: self-certification is not reasonable steps under 506(c),
           no matter who signed it. Asking to harden that commitment is refused before a{' '}
           <code>MONEY</code> ticket is even opened.
@@ -197,7 +197,7 @@ async function Compliance() {
         </table>
         <p className="cover">
           One claim is flagged <b>needs review</b>: &ldquo;backed by a $60M first close&rdquo; was
-          used in an email on 19 September, and hard is $56.0M until the Cedar ticket is approved.
+          used in an email on 19 September, and hard is $56.0M until the Fernhollow Umberfield ticket is approved.
           The registry caught it because substantiation is a required field rather than a habit.
         </p>
       </div>
@@ -259,7 +259,7 @@ async function Compliance() {
             </div>
           ))}
           <p className="cover">
-            The Cedar fee break triggers the Vantage MFN, and Vantage has not been told. That is a
+            The Fernhollow Umberfield fee break triggers the Greylag Gorsebrook MFN, and Greylag Gorsebrook has not been told. That is a
             row here rather than a discovery in January.
           </p>
         </div>

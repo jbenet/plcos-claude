@@ -15,7 +15,7 @@ export class LadderRefused extends Error {
 
 /**
  * Open a STAGE ticket to advance one rung. The scope names the rung and the evidence,
- * because "advance Northwood" is exactly the kind of opaque bundle an approval must not be.
+ * because "advance Vetchling Wagtail" is exactly the kind of opaque bundle an approval must not be.
  */
 export async function requestAdvance(
   actorId: string,

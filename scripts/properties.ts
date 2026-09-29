@@ -66,6 +66,7 @@ async function main() {
   await (await import('./properties/network-speed')).networkSpeedProperties(check);
 
   await (await import('./properties/w3-email-tiers')).w3EmailTierProperties(check);
+  await (await import('./properties/demo-names')).demoNameProperties(check);
 
   await cleanTestPostgres();
 

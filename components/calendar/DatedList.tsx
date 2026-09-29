@@ -23,7 +23,7 @@ const STANDING: Record<DatedRow['standing'], { label: string; flag: string }> = 
 type Sort = 'date' | 'lp' | 'team';
 const day = (iso: string) => formatDate(new Date(iso), { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
-/** The label without the LP's name, which has its own column: "Cedar Trust — meeting" reads "Meeting". */
+/** The label without the LP's name, which has its own column: "Fernhollow Umberfield Trust — meeting" reads "Meeting". */
 function what(r: DatedRow): string {
   if (!r.lp) return r.label;
   const esc = r.lp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

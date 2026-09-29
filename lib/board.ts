@@ -68,7 +68,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState, vi
   ])]);
 
   const floorByEntity = new Map(floor.items.map((i) => [i.entityId, i]));
-  const teamNames = new Set(['Juan', 'Mara Vance', 'Sam Ferreira', 'Inés Duarte', 'Tomás Reyes']);
+  const teamNames = new Set(['Lior', 'Keziah Grimaldo', 'Fiachra Järvinen', 'Zoé Thorsby', 'Joaquín Hallorann']);
   /**
    * What is still being worked. A passed LP is off, for now — they declined or we stopped
    * (docs/17) — so it sits at no station, and no move is "available" on it: an ask toward an

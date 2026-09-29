@@ -6,7 +6,7 @@
   "by": "claude",
   "at": "2026-09-23T12:00:00Z",
   "notes": {
-    "30016": { "summary": "Asked again for the track-record deck; Sam sent the link.", "read": "interested", "basis": "asked for the track-record deck again", "what": "materials" },
+    "30016": { "summary": "Asked again for the track-record deck; Fiachra sent the link.", "read": "interested", "basis": "asked for the track-record deck again", "what": "materials" },
     "30003": { "summary": "Soft circle at $2.5M, pending her partner's sign-off; wants a side letter on reporting.", "read": "very_interested", "basis": "soft circle at 2.5M", "what": "indication" },
     // Mentions health, so the line loads only because it says what was taken out (N56); the same
     // line without the bracketed redaction would be refused (Report 4 §6.2).

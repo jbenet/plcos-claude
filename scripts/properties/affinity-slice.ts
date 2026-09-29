@@ -52,7 +52,7 @@ export async function affinitySliceProperties(ctx: AffinityContext) {
   );
   const report = await inv.inventory();
   const text = JSON.stringify(report);
-  const outsiders = ['Nadia', 'Brandt', 'Vidal', 'Tanaka', 'Obi', 'surgery', 'data-room'].filter((w) => text.includes(w));
+  const outsiders = ['Thandiwe', 'Petrescu', 'Pellegrino', 'Rasmussen-Oda', 'Kasprzak', 'surgery', 'data-room'].filter((w) => text.includes(w));
   const notes = report.notes;
   check(
     'The inventory flags health detail, names nobody outside the team, and sums no amount',

@@ -39,13 +39,13 @@ export async function seedStrategic(db: Db): Promise<{ strategicInputs: number }
   };
 
   // High: a tie to the company itself.
-  await fact('Marrow Lane Capital', 'board', 'Board observer at Cortex since its seed round, for a partner who ran a clinical neurology practice.', '2026-08-12');
+  await fact('Petrel Meadowsweet Capital', 'board', 'Board observer at Cortex since its seed round, for a partner who ran a clinical neurology practice.', '2026-08-12');
   // High: two ties to the field — an operating role and a stated interest.
-  await fact('Halvorsen Family Office', 'role', 'The principal is a former neurosurgeon and chairs the family office’s investment committee.', '2026-06-14');
-  await fact('Halvorsen Family Office', 'interest', 'Writes about brain-computer interfaces and funds a neurorehabilitation lab.', '2026-06-14');
+  await fact('Iwasaki Family Office', 'role', 'The principal is a former neurosurgeon and chairs the family office’s investment committee.', '2026-06-14');
+  await fact('Iwasaki Family Office', 'interest', 'Writes about brain-computer interfaces and funds a neurorehabilitation lab.', '2026-06-14');
   // Some: marked strategic when sourced.
-  await sourced('Aldermoor Trust', true, 'Its science advisers include two neuroscientists who could help Cortex recruit clinical sites.');
+  await sourced('Kittiwake Cindervale Trust', true, 'Its science advisers include two neuroscientists who could help Cortex recruit clinical sites.');
   // None: sourced, researched, and not marked strategic.
-  await sourced('Pell & Vance Holdings', false, 'A holding company that qualifies on check size alone; nothing ties it to neuroscience.');
+  await sourced('Delahunt & Grimaldo Holdings', false, 'A holding company that qualifies on check size alone; nothing ties it to neuroscience.');
   return { strategicInputs: n };
 }

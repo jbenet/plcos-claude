@@ -26,16 +26,16 @@ export async function seedCompliance(db: Db): Promise<{ accreditation: number; c
     entity: string; vehicle: string; method: string; status: string;
     ref?: string; by?: string; on?: string; expires?: string; note?: string;
   }> = [
-    { entity: 'Brenner Endowment', vehicle: 'neurotech', method: 'third_party_letter', status: 'verified', ref: 'doc:brenner-accred-2026', by: 'tomas', on: '2026-06-24', expires: '2027-06-24' },
-    { entity: 'Vantage Partners', vehicle: 'neurotech', method: 'registered_professional', status: 'verified', ref: 'doc:vantage-cpa-letter', by: 'tomas', on: '2026-07-02', expires: '2027-07-02' },
-    { entity: 'Kaplan Family Trust', vehicle: 'neurotech', method: 'net_worth', status: 'verified', ref: 'doc:kaplan-nw-2026', by: 'tomas', on: '2026-07-16', expires: '2027-07-16' },
-    { entity: 'Orsini Foundation', vehicle: 'neurotech', method: 'third_party_letter', status: 'verified', ref: 'doc:orsini-accred', by: 'tomas', on: '2026-08-05', expires: '2027-08-05' },
-    { entity: 'Cedar Trust', vehicle: 'neurotech', method: 'third_party_letter', status: 'verified', ref: 'doc:cedar-counsel-letter', by: 'tomas', on: '2026-09-15', expires: '2027-09-15',
+    { entity: 'Valdivieso Endowment', vehicle: 'neurotech', method: 'third_party_letter', status: 'verified', ref: 'doc:valdivieso-accred-2026', by: 'tomas', on: '2026-06-24', expires: '2027-06-24' },
+    { entity: 'Greylag Gorsebrook Partners', vehicle: 'neurotech', method: 'registered_professional', status: 'verified', ref: 'doc:greylag-gorsebrook-cpa-letter', by: 'tomas', on: '2026-07-02', expires: '2027-07-02' },
+    { entity: 'Jaramillo Family Trust', vehicle: 'neurotech', method: 'net_worth', status: 'verified', ref: 'doc:jaramillo-nw-2026', by: 'tomas', on: '2026-07-16', expires: '2027-07-16' },
+    { entity: 'Mbatha Foundation', vehicle: 'neurotech', method: 'third_party_letter', status: 'verified', ref: 'doc:mbatha-accred', by: 'tomas', on: '2026-08-05', expires: '2027-08-05' },
+    { entity: 'Fernhollow Umberfield Trust', vehicle: 'neurotech', method: 'third_party_letter', status: 'verified', ref: 'doc:fernhollow-umberfield-counsel-letter', by: 'tomas', on: '2026-09-15', expires: '2027-09-15',
       note: 'Completed before the subscription pack went out, which is why the MONEY ticket can be approved at all.' },
-    { entity: 'Whitcomb Capital', vehicle: 'neurotech', method: 'self_certified', status: 'verified', ref: 'form:whitcomb-self-cert', by: 'sam', on: '2026-08-14',
+    { entity: 'Albescu Capital', vehicle: 'neurotech', method: 'self_certified', status: 'verified', ref: 'form:albescu-self-cert', by: 'sam', on: '2026-08-14',
       note: 'Signed by the principal on the day the SPV allocation was confirmed.' },
-    { entity: 'Northwood Capital', vehicle: 'neurotech', method: 'third_party_letter', status: 'requested', note: 'Requested with the DDQ pack. Nothing back yet.' },
-    { entity: 'Orsini Foundation', vehicle: 'spv-halo', method: 'self_certified', status: 'verified', ref: 'form:orsini-halo-cert', by: 'sam', on: '2026-09-01',
+    { entity: 'Vetchling Wagtail Capital', vehicle: 'neurotech', method: 'third_party_letter', status: 'requested', note: 'Requested with the DDQ pack. Nothing back yet.' },
+    { entity: 'Mbatha Foundation', vehicle: 'spv-halo', method: 'self_certified', status: 'verified', ref: 'form:mbatha-halo-cert', by: 'sam', on: '2026-09-01',
       note: 'Halo is 506(b). Self-certification plus a reasonable belief is the standard there, and it is met.' },
   ];
 
@@ -55,7 +55,7 @@ export async function seedCompliance(db: Db): Promise<{ accreditation: number; c
     {
       statement: 'Backed by a $60M first close.',
       channel: 'email', vehicle: 'neurotech', used: '2026-09-19',
-      sub: 'NOT YET TRUE. Hard is $56.0M until the Cedar MONEY ticket is approved.',
+      sub: 'NOT YET TRUE. Hard is $56.0M until the Fernhollow Umberfield MONEY ticket is approved.',
       by: 'tomas', on: '2026-09-19', status: 'needs_review',
     },
     {
@@ -107,14 +107,14 @@ export async function seedCompliance(db: Db): Promise<{ accreditation: number; c
     }
 
     const letters: Array<{ entity: string; vehicle: string; provision: string; mfn: boolean; risk: string; on: string; by: string }> = [
-      { entity: 'Vantage Partners', vehicle: 'neurotech', provision: 'Most-favoured-nation on fees and reporting.', mfn: true,
+      { entity: 'Greylag Gorsebrook Partners', vehicle: 'neurotech', provision: 'Most-favoured-nation on fees and reporting.', mfn: true,
         risk: 'Every later side letter has to be read against this one. A fee break granted to anyone smaller flows through.',
         on: '2026-07-08', by: 'tomas' },
-      { entity: 'Brenner Endowment', vehicle: 'neurotech', provision: 'Quarterly reporting with portfolio-level detail.', mfn: false,
-        risk: 'Operational load rather than economic. Falls under the Vantage MFN for reporting.',
+      { entity: 'Valdivieso Endowment', vehicle: 'neurotech', provision: 'Quarterly reporting with portfolio-level detail.', mfn: false,
+        risk: 'Operational load rather than economic. Falls under the Greylag Gorsebrook MFN for reporting.',
         on: '2026-06-30', by: 'tomas' },
-      { entity: 'Cedar Trust', vehicle: 'neurotech', provision: 'Fee break at $4M and above.', mfn: false,
-        risk: 'Triggers the Vantage MFN. Vantage is entitled to the same break and has not been told.',
+      { entity: 'Fernhollow Umberfield Trust', vehicle: 'neurotech', provision: 'Fee break at $4M and above.', mfn: false,
+        risk: 'Triggers the Greylag Gorsebrook MFN. Greylag Gorsebrook is entitled to the same break and has not been told.',
         on: '2026-09-18', by: 'tomas' },
     ];
     for (const l of letters) {

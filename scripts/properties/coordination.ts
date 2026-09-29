@@ -44,19 +44,19 @@ export async function grantVariations(check: Check) {
   {
     const d = await freshDb();
     const { evaluateGuards } = await import('../../modules/coordination');
-    const halvorsen = (await d.one<{ entity_id: string }>(
-      "select entity_id from identity.entity where display_name = 'Halvorsen Institute'",
+    const iwasaki = (await d.one<{ entity_id: string }>(
+      "select entity_id from identity.entity where display_name = 'Iwasaki Institute'",
     ))!;
-    const orsini = (await d.one<{ entity_id: string }>(
-      "select entity_id from identity.entity where display_name = 'Orsini Foundation'",
+    const mbatha = (await d.one<{ entity_id: string }>(
+      "select entity_id from identity.entity where display_name = 'Mbatha Foundation'",
     ))!;
     const rail = (await d.one<{ id: string }>("select id from platform.vehicle where slug = 'grants'"))!;
 
     const blockedReport = await evaluateGuards({
-      entityId: halvorsen.entity_id, connectorId: null, vehicleId: rail.id,
+      entityId: iwasaki.entity_id, connectorId: null, vehicleId: rail.id,
     });
     const openReport = await evaluateGuards({
-      entityId: orsini.entity_id, connectorId: null, vehicleId: rail.id,
+      entityId: mbatha.entity_id, connectorId: null, vehicleId: rail.id,
     });
     const gateBlock = blockedReport.blocks.find((b) => b.rule === 'no_unsolicited_grant');
 

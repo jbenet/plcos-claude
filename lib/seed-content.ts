@@ -20,7 +20,7 @@ export async function seedContent(db: Db): Promise<{ assets: number; wrapRules: 
   const claims = await db.query<{ claim_id: string; field: string }>(
     `select c.claim_id, c.field from research.claim c
        join identity.entity e on e.entity_id = c.entity_id
-      where e.display_name in ('Roos Foundation', 'Delia Roos')`,
+      where e.display_name in ('Quaresma Foundation', 'Solveig Quaresma')`,
   );
   const u = (h: string) => users.find((x) => x.handle === h)!.id;
   const v = (s: string) => vehicles.find((x) => x.slug === s)!.id;
@@ -123,7 +123,7 @@ export async function seedContent(db: Db): Promise<{ assets: number; wrapRules: 
       },
       {
         title: 'Neurotech primer v5 draft', audience: 'public_primer', use: 'public', status: 'draft', owner: 'mara',
-        summary: 'Rewrite after the Cedar close. Not approved, therefore not sendable.',
+        summary: 'Rewrite after the Fernhollow Umberfield close. Not approved, therefore not sendable.',
         body: 'Adds the first-close anchor language. Needs counsel on the performance wording.',
       },
     ];
@@ -152,7 +152,7 @@ export async function seedContent(db: Db): Promise<{ assets: number; wrapRules: 
       `insert into content.send (asset_id, entity_id, vehicle_id, instrument, status, requested_by, refusal)
        values ($1,$2,$3,'spv','refused',$4,$5)`,
       [
-        primer!.asset_id, e('Orsini Foundation'), v('spv-halo'), u('sam'),
+        primer!.asset_id, e('Mbatha Foundation'), v('spv-halo'), u('sam'),
         'public_primer is not an allowed audience for 506(b) × spv. No general solicitation. ' +
         'A public primer used for a 506(b) vehicle can break the exemption for the whole raise.',
       ],

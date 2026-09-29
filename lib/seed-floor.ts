@@ -41,33 +41,33 @@ export async function seedFloor(db: Db): Promise<{ floorPursuits: number; floorM
 
   const pursuits: P[] = [
     {
-      entity: 'Sable Point Capital', vehicle: 'neurotech', owner: 'sam',
+      entity: 'Inglenook Alderwick Capital', vehicle: 'neurotech', owner: 'sam',
       headline: '[floor] Credit-heavy allocator testing a venture sleeve. No route on file yet.',
-      walk: [['connector_willing', 12, 'Mork said she would raise it with their CIO.']],
-      next: 'A reply from Sable Point, not from Mork.',
+      walk: [['connector_willing', 12, 'Lindgaard said she would raise it with their CIO.']],
+      next: 'A reply from Inglenook Alderwick, not from Lindgaard.',
       soft: { amount: 7_000_000, probability: 0.35 },
     },
     {
-      entity: 'Tessaro Family Office', vehicle: 'neurotech', owner: 'ines',
+      entity: 'Oyelaran Family Office', vehicle: 'neurotech', owner: 'ines',
       headline: '[floor] Single family office, neuro interest stated publicly in 2025.',
-      walk: [['connector_willing', 41, 'Marisa Tessaro agreed to pass the primer to her father.']],
+      walk: [['connector_willing', 41, 'Folake Oyelaran agreed to pass the primer to her father.']],
       next: 'Anything at all from the family. Nothing for six weeks.',
       soft: { amount: 3_000_000, probability: 0.25 },
     },
     {
-      entity: 'Elena Navarro', vehicle: 'neurotech', owner: 'juan',
+      entity: 'Mirela Barrowcliff', vehicle: 'neurotech', owner: 'juan',
       headline: '[floor] Angel turned family-office principal. Writes her own cheques, fast.',
       walk: [
-        ['connector_willing', 17, 'Hale offered the intro at the September dinner.'],
-        ['target_opted_in', 12, 'Navarro replied directly and asked for the deck.'],
+        ['connector_willing', 17, 'Rautio offered the intro at the September dinner.'],
+        ['target_opted_in', 12, 'Barrowcliff replied directly and asked for the deck.'],
         ['meeting_held', 4, '40 minutes, no terms. She asked twice about reserves.'],
       ],
       next: 'A number or a range from her. She has not given one.',
       soft: { amount: 2_500_000, probability: 0.45 },
     },
     {
-      entity: 'Priya Raman', vehicle: 'rails', owner: 'mara',
-      headline: '[floor] Northwood’s principal, acting personally on the Rails side.',
+      entity: 'Perpetua Eskildsen', vehicle: 'rails', owner: 'mara',
+      headline: '[floor] Vetchling Wagtail’s principal, acting personally on the Rails side.',
       walk: [
         ['connector_willing', 30, 'Direct — she asked to be contacted about Rails.'],
         ['target_opted_in', 23, 'Replied within the week.'],
@@ -78,54 +78,54 @@ export async function seedFloor(db: Db): Promise<{ floorPursuits: number; floorM
       soft: { amount: 1_500_000, probability: 0.6 },
     },
     {
-      entity: 'Halvorsen Institute', vehicle: 'rails', owner: 'mara',
+      entity: 'Iwasaki Institute', vehicle: 'rails', owner: 'mara',
       headline: '[floor] Institute treasury exploring a rails allocation. Not the grants rail.',
       walk: [
-        ['connector_willing', 6, 'Adeyemi offered to introduce their treasurer.'],
+        ['connector_willing', 6, 'Yilmazer offered to introduce their treasurer.'],
         ['target_opted_in', 3, 'Treasurer replied asking what the custody model is.'],
       ],
       next: 'A meeting with a date on it.',
     },
     {
-      entity: 'Anneliese Mork', vehicle: 'rails', owner: 'sam',
+      entity: 'Adaeze Lindgaard', vehicle: 'rails', owner: 'sam',
       headline: '[floor] Adviser to two of our targets. Reads as a connector, not a cheque.',
-      walk: [['connector_willing', 27, 'Said yes to asking Sable Point, then went quiet.']],
-      next: 'Anything from Mork. Three and a half weeks of nothing.',
+      walk: [['connector_willing', 27, 'Said yes to asking Inglenook Alderwick, then went quiet.']],
+      next: 'Anything from Lindgaard. Three and a half weeks of nothing.',
     },
     {
-      entity: 'Curtis Adeyemi', vehicle: 'spv-lattice', owner: 'tomas',
+      entity: 'Otso Yilmazer', vehicle: 'spv-lattice', owner: 'tomas',
       headline: '[floor] Operator angel, wrote into two prior SPVs at this size.',
       walk: [
-        ['connector_willing', 3, 'Lindqvist offered to forward the Lattice memo.'],
-        ['target_opted_in', 1, 'Adeyemi asked for the cap table and the timeline.'],
+        ['connector_willing', 3, 'Holmqvist offered to forward the Lattice memo.'],
+        ['target_opted_in', 1, 'Yilmazer asked for the cap table and the timeline.'],
       ],
       next: 'A number from him.',
       soft: { amount: 750_000, probability: 0.55 },
     },
     {
-      entity: 'Rosa Iglesias', vehicle: 'spv-cortex', owner: 'tomas',
-      headline: '[floor] Vantage’s deal lead, exploring a personal allocation.',
-      walk: [['connector_willing', 9, 'Iglesias raised it herself after the Cortex briefing.']],
-      next: 'Confirmation she can invest personally alongside Vantage.',
+      entity: 'Anaïs Fontaine', vehicle: 'spv-cortex', owner: 'tomas',
+      headline: '[floor] Greylag Gorsebrook’s deal lead, exploring a personal allocation.',
+      walk: [['connector_willing', 9, 'Fontaine raised it herself after the Cortex briefing.']],
+      next: 'Confirmation she can invest personally alongside Greylag Gorsebrook.',
     },
     {
-      entity: 'Hannah Boyle', vehicle: 'rails', owner: 'ines',
-      headline: '[floor] Cedar Trust’s analyst. Not a decision-maker; a route to one.',
+      entity: 'Imogen Brankovic', vehicle: 'rails', owner: 'ines',
+      headline: '[floor] Fernhollow Umberfield Trust’s analyst. Not a decision-maker; a route to one.',
       walk: [
-        ['connector_willing', 21, 'Boyle agreed to put Rails in front of Lindqvist.'],
-        ['target_opted_in', 15, 'Lindqvist asked for a one-pager. Cedar, not Boyle, is the target.'],
+        ['connector_willing', 21, 'Brankovic agreed to put Rails in front of Holmqvist.'],
+        ['target_opted_in', 15, 'Holmqvist asked for a one-pager. Fernhollow Umberfield, not Brankovic, is the target.'],
       ],
-      next: 'A meeting with Lindqvist, not with Boyle.',
+      next: 'A meeting with Holmqvist, not with Brankovic.',
     },
     {
-      entity: 'Gordon Whitcomb', vehicle: 'spv-halo', owner: 'sam',
+      entity: 'Yaw Albescu', vehicle: 'spv-halo', owner: 'sam',
       headline: '[floor] Already in Cortex. Halo is a second, smaller ask of the same person.',
       walk: [['connector_willing', 34, 'Agreed in principle at the Cortex close. Nothing since.']],
       blockedBy: 'One ask per relationship per quarter — the Cortex ask used this quarter’s.',
       next: 'The frequency window opens again in October.',
     },
     {
-      entity: 'Marisa Tessaro', vehicle: 'spv-lattice', owner: 'mara',
+      entity: 'Folake Oyelaran', vehicle: 'spv-lattice', owner: 'mara',
       headline: '[floor] The daughter, who actually runs the office’s venture sleeve.',
       walk: [
         ['connector_willing', 7, 'Offered to look at Lattice personally.'],
@@ -135,15 +135,15 @@ export async function seedFloor(db: Db): Promise<{ floorPursuits: number; floorM
       soft: { amount: 1_000_000, probability: 0.4 },
     },
     {
-      entity: 'Michael Okonjo', vehicle: 'neurotech', owner: 'ines',
+      entity: 'Bram Kowalczyk', vehicle: 'neurotech', owner: 'ines',
       headline: '[floor] Principal of the family office. The office already has an open ask.',
       walk: [['connector_willing', 11, 'Said he would rather be asked directly than through the office.']],
-      blockedBy: 'The Okonjo Family Office ask is open in the same window — same money, two doors.',
+      blockedBy: 'The Kowalczyk Family Office ask is open in the same window — same money, two doors.',
       next: 'Decide which door. Both is not an option.',
     },
     {
-      entity: 'Ivo Lindqvist', vehicle: 'spv-cortex', owner: 'juan',
-      headline: '[floor] Cedar’s CIO, asked about a personal allocation to Cortex.',
+      entity: 'Emeka Holmqvist', vehicle: 'spv-cortex', owner: 'juan',
+      headline: '[floor] Fernhollow Umberfield’s CIO, asked about a personal allocation to Cortex.',
       walk: [
         ['connector_willing', 5, 'Raised it himself.'],
         ['target_opted_in', 1, 'Confirmed in writing that he wants the memo.'],
@@ -152,7 +152,7 @@ export async function seedFloor(db: Db): Promise<{ floorPursuits: number; floorM
       soft: { amount: 500_000, probability: 0.5 },
     },
     {
-      entity: 'Rachel Kaplan', vehicle: 'neurotech', owner: 'juan',
+      entity: 'Paloma Jaramillo', vehicle: 'neurotech', owner: 'juan',
       headline: '[floor] Signs for the trust. A second neuro allocation is hers to decide.',
       walk: [
         ['connector_willing', 19, 'Direct — she asked at the annual meeting.'],
@@ -164,14 +164,14 @@ export async function seedFloor(db: Db): Promise<{ floorPursuits: number; floorM
   ];
 
   const meetings: Array<{ entity: string; vehicle: string; kind: string; when: number; owner: string; attendees: string[] }> = [
-    { entity: 'Elena Navarro', vehicle: 'neurotech', kind: 'follow_up', when: 3, owner: 'juan', attendees: ['Elena Navarro', 'Juan'] },
-    { entity: 'Halvorsen Institute', vehicle: 'rails', kind: 'intro', when: 5, owner: 'mara', attendees: ['Their treasurer', 'Mara Vance'] },
-    { entity: 'Priya Raman', vehicle: 'rails', kind: 'diligence', when: 8, owner: 'mara', attendees: ['Priya Raman', 'Mara Vance', 'Tomás Reyes'] },
-    { entity: 'Marisa Tessaro', vehicle: 'spv-lattice', kind: 'pitch', when: 6, owner: 'mara', attendees: ['Marisa Tessaro', 'Mara Vance'] },
-    { entity: 'Curtis Adeyemi', vehicle: 'spv-lattice', kind: 'intro', when: 2, owner: 'tomas', attendees: ['Curtis Adeyemi', 'Tomás Reyes'] },
-    { entity: 'Rachel Kaplan', vehicle: 'neurotech', kind: 'committee', when: 12, owner: 'juan', attendees: ['Rachel Kaplan', 'Two trustees', 'Juan'] },
-    { entity: 'Ivo Lindqvist', vehicle: 'spv-cortex', kind: 'follow_up', when: 4, owner: 'juan', attendees: ['Ivo Lindqvist', 'Juan'] },
-    { entity: 'Sable Point Capital', vehicle: 'neurotech', kind: 'intro', when: 15, owner: 'sam', attendees: ['Their CIO', 'Anneliese Mork', 'Sam Ferreira'] },
+    { entity: 'Mirela Barrowcliff', vehicle: 'neurotech', kind: 'follow_up', when: 3, owner: 'juan', attendees: ['Mirela Barrowcliff', 'Lior'] },
+    { entity: 'Iwasaki Institute', vehicle: 'rails', kind: 'intro', when: 5, owner: 'mara', attendees: ['Their treasurer', 'Keziah Grimaldo'] },
+    { entity: 'Perpetua Eskildsen', vehicle: 'rails', kind: 'diligence', when: 8, owner: 'mara', attendees: ['Perpetua Eskildsen', 'Keziah Grimaldo', 'Joaquín Hallorann'] },
+    { entity: 'Folake Oyelaran', vehicle: 'spv-lattice', kind: 'pitch', when: 6, owner: 'mara', attendees: ['Folake Oyelaran', 'Keziah Grimaldo'] },
+    { entity: 'Otso Yilmazer', vehicle: 'spv-lattice', kind: 'intro', when: 2, owner: 'tomas', attendees: ['Otso Yilmazer', 'Joaquín Hallorann'] },
+    { entity: 'Paloma Jaramillo', vehicle: 'neurotech', kind: 'committee', when: 12, owner: 'juan', attendees: ['Paloma Jaramillo', 'Two trustees', 'Lior'] },
+    { entity: 'Emeka Holmqvist', vehicle: 'spv-cortex', kind: 'follow_up', when: 4, owner: 'juan', attendees: ['Emeka Holmqvist', 'Lior'] },
+    { entity: 'Inglenook Alderwick Capital', vehicle: 'neurotech', kind: 'intro', when: 15, owner: 'sam', attendees: ['Their CIO', 'Adaeze Lindgaard', 'Fiachra Järvinen'] },
   ];
 
   let floorMeetings = 0;
@@ -180,8 +180,8 @@ export async function seedFloor(db: Db): Promise<{ floorPursuits: number; floorM
   await db.transaction(async (tx) => {
     // Two more budgets, so the pool check has something to check on the new names.
     for (const p of [
-      { entity: 'Sable Point Capital', budget: 12_000_000, source: 'Stated by Mork, second-hand', as_of: 30, verified: null },
-      { entity: 'Tessaro Family Office', budget: 6_000_000, source: 'Their published annual letter, 2025', as_of: 120, verified: 'ines' },
+      { entity: 'Inglenook Alderwick Capital', budget: 12_000_000, source: 'Stated by Lindgaard, second-hand', as_of: 30, verified: null },
+      { entity: 'Oyelaran Family Office', budget: 6_000_000, source: 'Their published annual letter, 2025', as_of: 120, verified: 'ines' },
     ]) {
       await tx.query(
         `insert into pipeline.capital_pool (entity_id, budget, source, as_of, verified_by)
@@ -264,9 +264,9 @@ export async function seedFloor(db: Db): Promise<{ floorPursuits: number; floorM
       { status: 'proposed', kind: 'enrichment', minutesAgo: 22, finished: false,
         rationale: 'Running. Four of eight targets read so far.' },
       { status: 'proposed', kind: 'enrichment', minutesAgo: 35, finished: false,
-        rationale: 'Running. Reading the Tessaro annual letter.' },
+        rationale: 'Running. Reading the Oyelaran annual letter.' },
       { status: 'proposed', kind: 'brief', minutesAgo: 90, finished: true,
-        rationale: 'Draft prep brief for the Navarro follow-up. Waiting on a person to accept it.' },
+        rationale: 'Draft prep brief for the Barrowcliff follow-up. Waiting on a person to accept it.' },
       { status: 'proposed', kind: 'enrichment', minutesAgo: 240, finished: true,
         rationale: 'Six notes drafted, two targets reported as not found. Waiting on a person.' },
     ];

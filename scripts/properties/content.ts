@@ -43,7 +43,7 @@ export async function contentVariations(check: Check) {
     ))!;
     const halo = (await d.one<{ id: string }>("select id from platform.vehicle where slug = 'spv-halo'"))!;
     const target = (await d.one<{ entity_id: string }>(
-      "select entity_id from identity.entity where display_name = 'Kaplan Family Trust'",
+      "select entity_id from identity.entity where display_name = 'Jaramillo Family Trust'",
     ))!;
     const juan = (await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'"))!;
 
@@ -74,7 +74,7 @@ export async function contentVariations(check: Check) {
     ))!;
     const neuro = (await d.one<{ id: string }>("select id from platform.vehicle where slug = 'neurotech'"))!;
     const target = (await d.one<{ entity_id: string }>(
-      "select entity_id from identity.entity where display_name = 'Kaplan Family Trust'",
+      "select entity_id from identity.entity where display_name = 'Jaramillo Family Trust'",
     ))!;
     const juan = (await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'"))!;
     const out = await requestSend(juan.id, {

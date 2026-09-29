@@ -3,6 +3,7 @@ import { authorizationCoverage } from './authz-coverage';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { SHOT } from './shot-image';
+import { demoRealNameViolations } from './demo-names-check';
 
 /**
  * The two boundaries worth enforcing from L1, both an afternoon's work and both miserable
@@ -27,6 +28,9 @@ import { SHOT } from './shot-image';
  *      "Sep", so a Client Component that formatted one failed to hydrate in Safari. formatDate in
  *      lib/time.ts builds the text from numbers and reads the same everywhere. Scripts never render,
  *      so they are not held to it.
+ *   8. The demo seed carries no real names (29 Sep 2026): fixtures/ and lib/seed*.ts are checked
+ *      against the hashed names they once carried (scripts/demo-names-check.ts). A new demo person
+ *      or firm takes a name from lib/demo-names.ts.
  */
 const ROOTS = ['app', 'components', 'lib', 'modules', 'config', 'scripts'];
 const DRIVERS = ['@electric-sql/pglite', "from 'pg'", 'from "pg"'];
@@ -115,6 +119,8 @@ async function main() {
       }
     }
   }
+
+  violations.push(...await demoRealNameViolations(cwd));
 
   const shots = join(cwd, 'docs', 'changelog', 'shots');
   const stored: string[] = [];

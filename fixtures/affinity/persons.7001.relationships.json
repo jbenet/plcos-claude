@@ -3,13 +3,13 @@
   {
    "person1": {
     "id": 7001,
-    "firstName": "Nadia",
-    "lastName": "Brandt",
-    "primaryEmailAddress": "nadia@brandt-family.example"
+    "firstName": "Thandiwe",
+    "lastName": "Petrescu",
+    "primaryEmailAddress": "thandiwe@petrescu-family.example"
    },
    "person2": {
     "id": 90001,
-    "firstName": "Juan",
+    "firstName": "Lior",
     "lastName": null,
     "primaryEmailAddress": "juan@example.com"
    },
@@ -19,14 +19,14 @@
   {
    "person1": {
     "id": 7001,
-    "firstName": "Nadia",
-    "lastName": "Brandt",
-    "primaryEmailAddress": "nadia@brandt-family.example"
+    "firstName": "Thandiwe",
+    "lastName": "Petrescu",
+    "primaryEmailAddress": "thandiwe@petrescu-family.example"
    },
    "person2": {
     "id": 90002,
-    "firstName": "Mara",
-    "lastName": "Vance",
+    "firstName": "Keziah",
+    "lastName": "Grimaldo",
     "primaryEmailAddress": "mara@example.com"
    },
    "interactionScore": 0.31,

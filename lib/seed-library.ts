@@ -35,8 +35,8 @@ export async function seedLibrary(db: Db): Promise<{ answers: number }> {
       status: 'approved', owner: 'juan', approvedBy: 'tomas', approvedOn: '2026-06-08',
       expires: '2027-06-08',
       uses: [
-        { context: 'Cedar Trust pitch — track-record objection', entity: 'Cedar Trust', on: '2026-08-20', by: 'mara' },
-        { context: 'Northwood intro call', entity: 'Northwood Capital', on: '2026-09-08', by: 'juan' },
+        { context: 'Fernhollow Umberfield Trust pitch — track-record objection', entity: 'Fernhollow Umberfield Trust', on: '2026-08-20', by: 'mara' },
+        { context: 'Vetchling Wagtail intro call', entity: 'Vetchling Wagtail Capital', on: '2026-09-08', by: 'juan' },
       ],
     },
     {
@@ -46,16 +46,16 @@ export async function seedLibrary(db: Db): Promise<{ answers: number }> {
         'advisory board that reviews conflicts and related-party transactions. The LPA sets out the ' +
         'recusal mechanics.',
       status: 'approved', owner: 'tomas', approvedBy: 'tomas', approvedOn: '2026-07-02',
-      uses: [{ context: 'Northwood intro call — governance objection', entity: 'Northwood Capital', on: '2026-09-08', by: 'juan' }],
+      uses: [{ context: 'Vetchling Wagtail intro call — governance objection', entity: 'Vetchling Wagtail Capital', on: '2026-09-08', by: 'juan' }],
     },
     {
       question: 'What are the fee terms, and is there a break at size?',
       answer:
         'Standard schedule in the LPA, with a documented break at $4M and above. Any break granted ' +
-        'flows through to the Vantage most-favoured-nation provision, which is why the side-letter ' +
+        'flows through to the Greylag Gorsebrook most-favoured-nation provision, which is why the side-letter ' +
         'register is checked before a break is offered.',
       status: 'approved', owner: 'tomas', approvedBy: 'tomas', approvedOn: '2026-09-18',
-      uses: [{ context: 'Cedar Trust — terms objection', entity: 'Cedar Trust', on: '2026-08-20', by: 'tomas' }],
+      uses: [{ context: 'Fernhollow Umberfield Trust — terms objection', entity: 'Fernhollow Umberfield Trust', on: '2026-08-20', by: 'tomas' }],
     },
     {
       question: 'How does a programme-related investment work for a foundation?',
@@ -65,9 +65,9 @@ export async function seedLibrary(db: Db): Promise<{ answers: number }> {
         'and the answer says so rather than glossing it.',
       status: 'needs_review', owner: 'tomas', approvedBy: 'tomas', approvedOn: '2024-03-11',
       expires: '2025-03-11',
-      claims: [['Roos Foundation', 'Instruments used']],
+      claims: [['Quaresma Foundation', 'Instruments used']],
       docs: ['S10'],
-      uses: [{ context: 'Roos Foundation strategy note', entity: 'Roos Foundation', on: '2026-09-14', by: 'tomas' }],
+      uses: [{ context: 'Quaresma Foundation strategy note', entity: 'Quaresma Foundation', on: '2026-09-14', by: 'tomas' }],
     },
     {
       question: 'What cheque size does the fund expect from a new relationship?',
@@ -75,14 +75,14 @@ export async function seedLibrary(db: Db): Promise<{ answers: number }> {
         'Between $2M and $5M for a first commitment. This rests on a forwarded letter excerpt rather ' +
         'than a statement made to us, and the answer carries that qualification wherever it is used.',
       status: 'approved', owner: 'ines', approvedBy: 'juan', approvedOn: '2026-08-31',
-      claims: [['Delia Roos', 'Cheque band']],
+      claims: [['Solveig Quaresma', 'Cheque band']],
       docs: ['S03'],
     },
     {
       question: 'What is the liquidity profile, and how long is the lock?',
       answer: 'Ten years with two one-year extensions, and a recycling provision that shortens the effective lock.',
       status: 'draft', owner: 'juan',
-      uses: [{ context: 'Cedar Trust — liquidity objection', entity: 'Cedar Trust', on: '2026-08-20', by: 'mara' }],
+      uses: [{ context: 'Fernhollow Umberfield Trust — liquidity objection', entity: 'Fernhollow Umberfield Trust', on: '2026-08-20', by: 'mara' }],
     },
   ];
 

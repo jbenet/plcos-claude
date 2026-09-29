@@ -13,7 +13,8 @@ export async function enrichmentProperties(ctx: AffinityContext & { n: (sql: str
   const exported = await cand.exportResearchSet();
   const identity = (await rf(join(scratch, 'research-set.jsonl'), 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
   const leaks = identity.filter((x) => 'pursuits' in x || 'contact' in x || 'notes' in x || Object.keys((x.enriched ?? {}) as object).some((k) => !['Current Organization', 'Current Job Title', 'Organizations', 'Job Titles', 'Industry', 'Location', 'LinkedIn URL'].includes(k)));
-  const pick = identity[0] as { key: string; name: string };
+  // The demo LP these steps were written against (its name is generated: lib/demo-names.ts).
+  const pick = (identity.find((x) => x.name === 'Elif Pellegrino') ?? identity[0]) as { key: string; name: string };
   await mk(join(scratch, 'raw'), { recursive: true });
   await mk(join(scratch, 'strategy'), { recursive: true });
   const finding = (extra: Record<string, unknown> = {}) => ({
@@ -27,7 +28,7 @@ export async function enrichmentProperties(ctx: AffinityContext & { n: (sql: str
   // W9's line for them: mapped in as a note, replaced (never piled up) by the next import.
   await wf2(join(scratch, 'triage.jsonl'), JSON.stringify({ key: pick.key, name: pick.name, lane: 'cold', reasons: ['The stage on file says “Contacted”, but no touch is on record: check sent mail before writing'], senior: true, researched: true, waitedDays: null, first: 'check sent mail' }) + '\n');
   // Refused: facts for an identity that is not resolved, and a phone number in a fact.
-  const other = identity[1] as { key: string; name: string };
+  const other = identity.find((x) => x.key !== pick.key) as { key: string; name: string };
   await wf2(join(scratch, 'raw', `${other.key}.json`), JSON.stringify({ ...finding(), key: other.key, identity: { match: 'ambiguous', basis: 'Two people share the name.' } }));
   const first = await imp.importFindings(juan);
   const claimsNow = () => n(`select count(*)::text as n from research.claim where entity_id = $1 and source like 'pub:%'`, [pick.key]);

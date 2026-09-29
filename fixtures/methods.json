@@ -69,7 +69,7 @@
     "latency": 2,
     "coverage": "segment",
     "status": "in_use",
-    "limits": "This is how we know Roos has made forty-seven grants and no LP commitments. It says nothing about whether the trust deed permits one.",
+    "limits": "This is how we know Quaresma has made forty-seven grants and no LP commitments. It says nothing about whether the trust deed permits one.",
     "certainty": "known",
     "source": "S02",
     "as_of": "2026-09-14",
@@ -189,7 +189,7 @@
     "latency": 0,
     "coverage": "universe",
     "status": "in_use",
-    "limits": "This is exactly the kind of record the route planner refuses without a human. Two people in a room have not necessarily met, and the Okonjo–Roos board overlap is the case that proves it.",
+    "limits": "This is exactly the kind of record the route planner refuses without a human. Two people in a room have not necessarily met, and the Kowalczyk–Quaresma board overlap is the case that proves it.",
     "certainty": "known",
     "source": "S07",
     "as_of": "2026-09-14",
@@ -299,7 +299,7 @@
   {
     "kind": "ask",
     "name": "Ask an adviser to place a target in their own network",
-    "detail": "Mercer & Bly screen for several endowments. Asking them where a name sits is different from asking them for an introduction, and costs nothing.",
+    "detail": "Gyasi & Ferrante-Obuya screen for several endowments. Asking them where a name sits is different from asking them for an introduction, and costs nothing.",
     "yields": [
       "decision_speed",
       "check_band",

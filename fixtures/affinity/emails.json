@@ -1,4 +1,4 @@
 {
-  "data": [{"id":945100,"createdAt":"2026-09-01T12:00:00Z","updatedAt":null,"sentAt":"2020-06-01T12:00:00Z","subject":"Invented historical conversation","from":{"emailAddress":"nadia@old-address.example","person":null},"to":[{"emailAddress":"juan@example.com","person":null}],"cc":[]}],
+  "data": [{"id":945100,"createdAt":"2026-09-01T12:00:00Z","updatedAt":null,"sentAt":"2020-06-01T12:00:00Z","subject":"Invented historical conversation","from":{"emailAddress":"thandiwe@old-address.example","person":null},"to":[{"emailAddress":"juan@example.com","person":null}],"cc":[]}],
   "pagination":{"nextUrl":null}
 }

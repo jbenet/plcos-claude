@@ -44,18 +44,18 @@ export async function seedClose(db: Db): Promise<{ conditions: number; seats: nu
       },
       {
         label: 'Counsel position on §4944(c) for PRI subscriptions',
-        detail: 'The Roos Foundation route is a PRI. The only note on file is from March 2024 and is stale.',
+        detail: 'The Quaresma Foundation route is a PRI. The only note on file is from March 2024 and is stale.',
         owner: 'tomas', due: '2026-11-20', status: 'open', compliance: true,
       },
       {
-        label: 'Side-letter review — Vantage MFN',
+        label: 'Side-letter review — Greylag Gorsebrook MFN',
         detail: 'Most-favoured-nation clause. Every later side letter has to be read against it.',
         owner: 'tomas', due: '2026-11-01', status: 'open',
       },
       {
-        label: 'Administrator onboarding — Cedar Trust',
+        label: 'Administrator onboarding — Fernhollow Umberfield Trust',
         detail: 'Cannot accept the wire until the administrator has them set up.',
-        owner: 'sam', due: '2026-10-15', status: 'open', entity: 'Cedar Trust',
+        owner: 'sam', due: '2026-10-15', status: 'open', entity: 'Fernhollow Umberfield Trust',
       },
       {
         label: 'Audit engagement letter signed',
@@ -83,13 +83,13 @@ export async function seedClose(db: Db): Promise<{ conditions: number; seats: nu
     }
 
     const pack: Array<{ entity: string; status: string; sent?: string; returned?: string; signed?: string; note?: string }> = [
-      { entity: 'Brenner Endowment', status: 'countersigned', sent: '2026-06-12', returned: '2026-06-25', signed: '2026-06-30' },
-      { entity: 'Vantage Partners', status: 'countersigned', sent: '2026-06-20', returned: '2026-07-02', signed: '2026-07-08', note: 'MFN side letter attached.' },
-      { entity: 'Kaplan Family Trust', status: 'countersigned', sent: '2026-07-06', returned: '2026-07-18', signed: '2026-07-22' },
-      { entity: 'Orsini Foundation', status: 'countersigned', sent: '2026-07-24', returned: '2026-08-06', signed: '2026-08-11' },
-      { entity: 'Cedar Trust', status: 'returned', sent: '2026-09-04', returned: '2026-09-16', note: 'Countersignature pending the administrator onboarding condition.' },
-      { entity: 'Whitcomb Capital', status: 'not_sent', note: 'Still on the soft track. Nothing is sent before there is something to sign.' },
-      { entity: 'Northwood Capital', status: 'not_sent', note: 'DDQ pack requested; the subscription pack is a later document.' },
+      { entity: 'Valdivieso Endowment', status: 'countersigned', sent: '2026-06-12', returned: '2026-06-25', signed: '2026-06-30' },
+      { entity: 'Greylag Gorsebrook Partners', status: 'countersigned', sent: '2026-06-20', returned: '2026-07-02', signed: '2026-07-08', note: 'MFN side letter attached.' },
+      { entity: 'Jaramillo Family Trust', status: 'countersigned', sent: '2026-07-06', returned: '2026-07-18', signed: '2026-07-22' },
+      { entity: 'Mbatha Foundation', status: 'countersigned', sent: '2026-07-24', returned: '2026-08-06', signed: '2026-08-11' },
+      { entity: 'Fernhollow Umberfield Trust', status: 'returned', sent: '2026-09-04', returned: '2026-09-16', note: 'Countersignature pending the administrator onboarding condition.' },
+      { entity: 'Albescu Capital', status: 'not_sent', note: 'Still on the soft track. Nothing is sent before there is something to sign.' },
+      { entity: 'Vetchling Wagtail Capital', status: 'not_sent', note: 'DDQ pack requested; the subscription pack is a later document.' },
     ];
 
     for (const p of pack) {
@@ -106,19 +106,19 @@ export async function seedClose(db: Db): Promise<{ conditions: number; seats: nu
       vehicle: string; entity: string; stage: string; amount: number | null; owner: string;
       invited: string; ioi?: string; allocated?: string; wired?: string; note?: string;
     }> = [
-      { vehicle: 'spv-cortex', entity: 'Whitcomb Capital', stage: 'wired', amount: 2_500_000, owner: 'juan',
+      { vehicle: 'spv-cortex', entity: 'Albescu Capital', stage: 'wired', amount: 2_500_000, owner: 'juan',
         invited: '2026-08-10', ioi: '2026-08-14', allocated: '2026-08-20', wired: '2026-09-09' },
-      { vehicle: 'spv-cortex', entity: 'Okonjo Family Office', stage: 'ioi', amount: 3_000_000, owner: 'juan',
+      { vehicle: 'spv-cortex', entity: 'Kowalczyk Family Office', stage: 'ioi', amount: 3_000_000, owner: 'juan',
         invited: '2026-08-28', ioi: '2026-09-05', note: 'Also in the Neurotech pipeline. One budget.' },
-      { vehicle: 'spv-cortex', entity: 'Kaplan Family Trust', stage: 'allocated', amount: 1_500_000, owner: 'mara',
+      { vehicle: 'spv-cortex', entity: 'Jaramillo Family Trust', stage: 'allocated', amount: 1_500_000, owner: 'mara',
         invited: '2026-08-25', ioi: '2026-09-01', allocated: '2026-09-15' },
-      { vehicle: 'spv-cortex', entity: 'Orsini Foundation', stage: 'passed', amount: null, owner: 'mara',
+      { vehicle: 'spv-cortex', entity: 'Mbatha Foundation', stage: 'passed', amount: null, owner: 'mara',
         invited: '2026-08-26', note: 'Passed — outside their neuro remit.' },
-      { vehicle: 'spv-lattice', entity: 'Anne Quill', stage: 'ioi', amount: 2_000_000, owner: 'juan',
+      { vehicle: 'spv-lattice', entity: 'Renata Corcoran', stage: 'ioi', amount: 2_000_000, owner: 'juan',
         invited: '2026-09-10', ioi: '2026-09-12', note: 'Asked us to come back in November.' },
-      { vehicle: 'spv-lattice', entity: 'Northwood Capital', stage: 'invited', amount: null, owner: 'juan',
+      { vehicle: 'spv-lattice', entity: 'Vetchling Wagtail Capital', stage: 'invited', amount: null, owner: 'juan',
         invited: '2026-09-14' },
-      { vehicle: 'spv-halo', entity: 'Orsini Foundation', stage: 'wired', amount: 1_000_000, owner: 'mara',
+      { vehicle: 'spv-halo', entity: 'Mbatha Foundation', stage: 'wired', amount: 1_000_000, owner: 'mara',
         invited: '2026-08-20', ioi: '2026-08-25', allocated: '2026-09-01', wired: '2026-09-12' },
     ];
 

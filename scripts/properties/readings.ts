@@ -41,7 +41,7 @@ export async function readingProperties(ctx: AffinityContext & { n: (sql: string
     loaded === 15 && health === 0 && unmarked.health === 1 && unmarked.loaded === 0 && leaky.health === 1 && leaky.loaded === 0 && stillClean &&
       nadiaShown?.suggested === false && nadiaShown.read === 'very_interested' &&
       anaFirst?.suggested === true && anaFirst.noteId === '30003' && anaAfter?.noteId === '30008' && stillDismissed === 1 &&
-      anaConfirmed?.suggested === false && anaConfirmed.byName === 'Juan',
-    `loaded ${loaded} (the health note's, redacted and marked: ${health === 0}; unmarked refused: ${unmarked.health === 1}; still carrying the detail refused: ${leaky.health === 1}); Nadia shows ${nadiaShown?.read} by ${nadiaShown?.byName}; Ana suggested ${anaFirst?.noteId} → after dismissing, ${anaAfter?.noteId}, still dismissed after translating again: ${stillDismissed === 1}; confirmed → ${anaConfirmed?.read} by ${anaConfirmed?.byName}`,
+      anaConfirmed?.suggested === false && anaConfirmed.byName === 'Lior',
+    `loaded ${loaded} (the health note's, redacted and marked: ${health === 0}; unmarked refused: ${unmarked.health === 1}; still carrying the detail refused: ${leaky.health === 1}); Thandiwe shows ${nadiaShown?.read} by ${nadiaShown?.byName}; Elif suggested ${anaFirst?.noteId} → after dismissing, ${anaAfter?.noteId}, still dismissed after translating again: ${stillDismissed === 1}; confirmed → ${anaConfirmed?.read} by ${anaConfirmed?.byName}`,
   );
 }

@@ -51,8 +51,8 @@ const PLAYS: PlaySeed[] = [
       + 'vehicles, and publish the letter to the answer library so it can be cited rather than '
       + 're-explained.',
     because:
-      'Northwood named it as the blocker in the room, and it is the stated reason their fit '
-      + 'reading is conviction rather than awareness. Cedar asked for the same thing before '
+      'Vetchling Wagtail named it as the blocker in the room, and it is the stated reason their fit '
+      + 'reading is conviction rather than awareness. Fernhollow Umberfield asked for the same thing before '
       + 'signing, and two further endowment-shaped prospects will ask it next.',
     likelihood: 4, effort: 5, reach: 4,
     payoff:
@@ -62,12 +62,12 @@ const PLAYS: PlaySeed[] = [
   },
   {
     vehicle: 'neurotech', horizon: 'now', lever: 'process',
-    title: 'Offer Whitcomb the CPA-letter accreditation route',
+    title: 'Offer Albescu the CPA-letter accreditation route',
     detail:
       'Write the one-page note explaining why the SPV was different, and offer the '
       + 'accountant-letter route, which does not require them to send us any financial document.',
     because:
-      'Whitcomb has indicated $5.0M soft and fails the accreditation gate on a self-certification. '
+      'Albescu has indicated $5.0M soft and fails the accreditation gate on a self-certification. '
       + 'The compliance registry and the fit gate independently agree that they cannot subscribe.',
     likelihood: 4, effort: 1, reach: 1,
     payoff: '$5.0M of soft becomes hardenable, from a firm that already wired an SPV in nineteen days.',
@@ -75,13 +75,13 @@ const PLAYS: PlaySeed[] = [
   },
   {
     vehicle: 'neurotech', horizon: 'now', lever: 'route',
-    title: 'Ask Vantage for a reference call and an introduction',
+    title: 'Ask Greylag Gorsebrook for a reference call and an introduction',
     detail:
-      'Vantage are an LP in both vehicles. Ask their CIO for a reference call, and separately '
-      + 'whether Priya Raman — who was their investment director until August — would take a '
-      + 'warm note about the Northwood emerging-manager programme.',
+      'Greylag Gorsebrook are an LP in both vehicles. Ask their CIO for a reference call, and separately '
+      + 'whether Perpetua Eskildsen — who was their investment director until August — would take a '
+      + 'warm note about the Vetchling Wagtail emerging-manager programme.',
     because:
-      'The affiliation table surfaced that Raman came from Vantage, and Vantage has never been '
+      'The affiliation table surfaced that Eskildsen came from Greylag Gorsebrook, and Greylag Gorsebrook has never been '
       + 'asked for anything. Report 6 is blunt that under-asking existing LPs is the most common '
       + 'mistake a manager makes.',
     likelihood: 4, effort: 0.5, reach: 2,
@@ -94,8 +94,8 @@ const PLAYS: PlaySeed[] = [
     vehicle: 'neurotech', horizon: 'now', lever: 'enrich',
     title: 'Answer the four unanswered hard gates',
     detail:
-      'Four assessments carry a gate nobody has answered: Northwood’s mandate slot, Roos’s '
-      + 'trust-deed permission, Vantage’s new-vehicle conflict, and Sable Point’s. Each is '
+      'Four assessments carry a gate nobody has answered: Vetchling Wagtail’s mandate slot, Quaresma’s '
+      + 'trust-deed permission, Greylag Gorsebrook’s new-vehicle conflict, and Inglenook Alderwick’s. Each is '
       + 'one call or one document.',
     because:
       'An unanswered gate is not a pass, so these four sit in the board as "cannot be qualified '
@@ -115,7 +115,7 @@ const PLAYS: PlaySeed[] = [
       + 'neuroscience, longevity or frontier biology — conference talks, interviews, foundation '
       + 'giving. Record only what they said about their own interests.',
     because:
-      'Tessaro scores 80 and arrived at the thesis independently of us; they are the highest-fit '
+      'Oyelaran scores 80 and arrived at the thesis independently of us; they are the highest-fit '
       + 'unconverted name on the board and they came from exactly this shape of search. One '
       + 'instance is a lead, not a pattern, which is why this is a sourcing play rather than a '
       + 'conclusion.',
@@ -132,7 +132,7 @@ const PLAYS: PlaySeed[] = [
       'A two-page note on how pre-revenue positions are marked, who signs the mark, and what '
       + 'happens when a round does not price. Approve it into the answer library.',
     because:
-      'Northwood raised it as a DDQ question they must defend to nine families, and the coverage '
+      'Vetchling Wagtail raised it as a DDQ question they must defend to nine families, and the coverage '
       + 'query lists it among the questions with no approved answer behind them.',
     likelihood: 4, effort: 1.5, reach: 5,
     payoff:
@@ -147,7 +147,7 @@ const PLAYS: PlaySeed[] = [
       'Get a current written position on programme-related investments into a venture fund, and '
       + 'a PRI structure note that a foundation’s counsel can read.',
     because:
-      'Roos cannot be qualified until it is answered; the only note on file is from March 2024 and '
+      'Quaresma cannot be qualified until it is answered; the only note on file is from March 2024 and '
       + 'expired. No amount of relationship work substitutes for a legal opinion.',
     likelihood: 3, effort: 2, reach: 2,
     payoff:
@@ -156,12 +156,12 @@ const PLAYS: PlaySeed[] = [
   },
   {
     vehicle: 'neurotech', horizon: 'now', lever: 'ask',
-    title: 'Adjudicate the Roos collision and diarise the loser',
+    title: 'Adjudicate the Quaresma collision and diarise the loser',
     detail:
       'Two vehicles have an open ask on the same actor inside the conflict window, through the '
       + 'only tier-A connector either has. Pick one, and write the dated follow-up for the other.',
     because:
-      'Open since 18 September. Duettmann is at two of three asks this quarter, so the window is '
+      'Open since 18 September. Umeadi is at two of three asks this quarter, so the window is '
       + 'closing on its own whether or not anybody decides.',
     likelihood: 5, effort: 0.25, reach: 2,
     payoff:
@@ -173,11 +173,11 @@ const PLAYS: PlaySeed[] = [
     vehicle: 'neurotech', horizon: 'now', lever: 'convene',
     title: 'Invite four prospects to the November convening',
     detail:
-      'Offer seats at the next research convening to Tessaro, Sable Point, Brenner and Okonjo. '
+      'Offer seats at the next research convening to Oyelaran, Inglenook Alderwick, Valdivieso and Kowalczyk. '
       + 'A seat, not a pitch — no subscription document goes near it.',
     because:
-      'Okonjo is speaking at a neurotech conference in November, which is a contact that costs no '
-      + 'connector goodwill; Tessaro holds the thesis and has never heard of us. Both are reachable '
+      'Kowalczyk is speaking at a neurotech conference in November, which is a contact that costs no '
+      + 'connector goodwill; Oyelaran holds the thesis and has never heard of us. Both are reachable '
       + 'at low pressure and neither is reachable by another ask.',
     likelihood: 3, effort: 2, reach: 4,
     payoff:
@@ -194,7 +194,7 @@ const PLAYS: PlaySeed[] = [
       'A permanent public version of the neuro thesis with its evidence, updated quarterly, that '
       + 'somebody can find without knowing us and send to a colleague without asking permission.',
     because:
-      'Tessaro found their way to this thesis independently and named two of our podcast guests '
+      'Oyelaran found their way to this thesis independently and named two of our podcast guests '
       + 'as people they follow — without ever hearing of us. That is reach working, by accident, '
       + 'on somebody else’s content.',
     likelihood: 3, effort: 8, reach: 12,
@@ -225,7 +225,7 @@ const PLAYS: PlaySeed[] = [
       'Every figure that traces back to the 2021 import gets re-sourced or marked as unusable, '
       + 'starting with the firms that carry a live assessment.',
     because:
-      'Northwood’s AUM, cheque band and co-investor list all come from a file nobody can vouch '
+      'Vetchling Wagtail’s AUM, cheque band and co-investor list all come from a file nobody can vouch '
       + 'for, and the fit score is discounted for it. Several other rows share the source.',
     likelihood: 5, effort: 4, reach: 8,
     payoff:
@@ -240,7 +240,7 @@ const PLAYS: PlaySeed[] = [
       'Offer the third-party verification route at first serious contact rather than at '
       + 'subscription, with a standing arrangement so it takes days instead of weeks.',
     because:
-      'Whitcomb is blocked at the last step on something that could have been settled at the first. '
+      'Albescu is blocked at the last step on something that could have been settled at the first. '
       + 'Two further prospects have no accreditation record at all.',
     likelihood: 4, effort: 2.5, reach: 9,
     payoff:
@@ -252,12 +252,12 @@ const PLAYS: PlaySeed[] = [
   // ---------------------------------------------------------------- Rails · now
   {
     vehicle: 'rails', horizon: 'now', lever: 'process',
-    title: 'Disclose the Cedar fee break to Vantage',
+    title: 'Disclose the Fernhollow Umberfield fee break to Greylag Gorsebrook',
     detail:
-      'Their most-favoured-nation clause is triggered by the break documented in the Cedar side '
+      'Their most-favoured-nation clause is triggered by the break documented in the Fernhollow Umberfield side '
       + 'letter. Tell them, in writing, before they find it.',
     because:
-      'The compliance registry flagged the interaction the day after Cedar signed, and it has been '
+      'The compliance registry flagged the interaction the day after Fernhollow Umberfield signed, and it has been '
       + 'open since. Finding out from a quarterly report is a relationship problem, not a '
       + 'paperwork one.',
     likelihood: 5, effort: 0.5, reach: 1,
@@ -267,7 +267,7 @@ const PLAYS: PlaySeed[] = [
   },
   {
     vehicle: 'rails', horizon: 'now', lever: 'enrich',
-    title: 'Establish whether Vantage’s new vehicle competes with ours',
+    title: 'Establish whether Greylag Gorsebrook’s new vehicle competes with ours',
     detail:
       'They filed a Form D for a $400M vehicle in August. Find out whether it draws on the same '
       + 'capital and the same mandate.',
@@ -296,10 +296,10 @@ const PLAYS: PlaySeed[] = [
 
   // ---------------------------------------------------------------- per-target plays
   {
-    vehicle: 'neurotech', entity: 'Northwood Capital', horizon: 'now', lever: 'convince',
+    vehicle: 'neurotech', entity: 'Vetchling Wagtail Capital', horizon: 'now', lever: 'convince',
     title: 'Send the verification letter the moment it exists',
     detail:
-      'Raman named independent verification as the thing standing between a DDQ pack and a real '
+      'Eskildsen named independent verification as the thing standing between a DDQ pack and a real '
       + 'conversation. Send it with a one-paragraph note and nothing else attached.',
     because: 'They stated the objection in the room. It is the whole content of their fit diagnosis.',
     likelihood: 4, effort: 0.25, reach: 1,
@@ -307,22 +307,22 @@ const PLAYS: PlaySeed[] = [
     certainty: 'known', owner: 'mara', gate: 'SEND',
   },
   {
-    vehicle: 'neurotech', entity: 'Northwood Capital', horizon: 'now', lever: 'route',
-    title: 'Reach Raman through Vantage rather than cold',
+    vehicle: 'neurotech', entity: 'Vetchling Wagtail Capital', horizon: 'now', lever: 'route',
+    title: 'Reach Eskildsen through Greylag Gorsebrook rather than cold',
     detail:
-      'Raman was an investment director at Vantage until 31 August. Vantage is an LP in both of '
+      'Eskildsen was an investment director at Greylag Gorsebrook until 31 August. Greylag Gorsebrook is an LP in both of '
       + 'our vehicles. Ask their CIO for a note.',
     because:
       'The affiliation record surfaced the former seat, and the tie is tier-A by employment rather '
-      + 'than by inference. No ask has ever been made of Vantage.',
+      + 'than by inference. No ask has ever been made of Greylag Gorsebrook.',
     likelihood: 4, effort: 0.5, reach: 1,
     payoff: 'A warm route to the decision-maker that does not spend any existing connector.',
     certainty: 'known', owner: 'juan', gate: 'INTRO_ASK',
   },
   {
-    vehicle: 'neurotech', entity: 'Northwood Capital', horizon: 'now', lever: 'enrich',
+    vehicle: 'neurotech', entity: 'Vetchling Wagtail Capital', horizon: 'now', lever: 'enrich',
     title: 'Ask whether a 2026 emerging-manager slot is open',
-    detail: 'One question, to Raman, before any more diligence effort is spent.',
+    detail: 'One question, to Eskildsen, before any more diligence effort is spent.',
     because:
       'She raised the programme, we did not. The mandate gate is unanswered and everything else on '
       + 'this target is downstream of it.',
@@ -331,10 +331,10 @@ const PLAYS: PlaySeed[] = [
     certainty: 'known', owner: 'mara',
   },
   {
-    vehicle: 'neurotech', entity: 'Tessaro Family Office', horizon: 'now', lever: 'route',
-    title: 'Ask Duettmann for an introduction',
+    vehicle: 'neurotech', entity: 'Oyelaran Family Office', horizon: 'now', lever: 'route',
+    title: 'Ask Umeadi for an introduction',
     detail:
-      'The principal publicly named Duettmann as somebody she follows. Ask Duettmann for a note, '
+      'The principal publicly named Umeadi as somebody she follows. Ask Umeadi for a note, '
       + 'not a pitch.',
     because:
       'They hold the thesis independently and have never heard of us — an awareness gap with a '
@@ -345,7 +345,7 @@ const PLAYS: PlaySeed[] = [
     certainty: 'inferred', owner: 'juan', gate: 'INTRO_ASK',
   },
   {
-    vehicle: 'neurotech', entity: 'Tessaro Family Office', horizon: 'now', lever: 'reach',
+    vehicle: 'neurotech', entity: 'Oyelaran Family Office', horizon: 'now', lever: 'reach',
     title: 'Prime with the podcast episode before the introduction',
     detail:
       'Send the episode featuring the adviser she named, through the connector, a week before any '
@@ -359,7 +359,7 @@ const PLAYS: PlaySeed[] = [
     certainty: 'guess', owner: 'mara',
   },
   {
-    vehicle: 'neurotech', entity: 'Tessaro Family Office', horizon: 'now', lever: 'convene',
+    vehicle: 'neurotech', entity: 'Oyelaran Family Office', horizon: 'now', lever: 'convene',
     title: 'Offer a seat at the November convening',
     detail: 'A seat at the research convening. No document, no ask, no follow-up sequence.',
     because:
@@ -370,10 +370,10 @@ const PLAYS: PlaySeed[] = [
     certainty: 'inferred', owner: 'sam',
   },
   {
-    vehicle: 'neurotech', entity: 'Sable Point Capital', horizon: 'now', lever: 'route',
+    vehicle: 'neurotech', entity: 'Inglenook Alderwick Capital', horizon: 'now', lever: 'route',
     title: 'Find one credible route into a seeder',
     detail:
-      'Ask every LP and adviser on the register whether they know anybody at Sable Point. This is '
+      'Ask every LP and adviser on the register whether they know anybody at Inglenook Alderwick. This is '
       + 'a census question, not an ask.',
     because:
       'No tie on file and no prior relationship — the only assessment on this board blocked purely '
@@ -385,7 +385,7 @@ const PLAYS: PlaySeed[] = [
     certainty: 'known', owner: 'juan',
   },
   {
-    vehicle: 'neurotech', entity: 'Sable Point Capital', horizon: 'now', lever: 'materials',
+    vehicle: 'neurotech', entity: 'Inglenook Alderwick Capital', horizon: 'now', lever: 'materials',
     title: 'Package the sourcing edge as an inspectable document',
     detail:
       'What the convening programme and the content operation actually produce, as deal flow an '
@@ -397,8 +397,8 @@ const PLAYS: PlaySeed[] = [
     certainty: 'inferred', owner: 'mara',
   },
   {
-    vehicle: 'neurotech', entity: 'Okonjo Family Office', horizon: 'now', lever: 'convene',
-    title: 'See Okonjo at the November conference',
+    vehicle: 'neurotech', entity: 'Kowalczyk Family Office', horizon: 'now', lever: 'convene',
+    title: 'See Kowalczyk at the November conference',
     detail: 'He is speaking. Be there, and do not ask for anything.',
     because:
       'Three weeks of silence after a warm introduction, and the connector is at two of three asks '
@@ -408,7 +408,7 @@ const PLAYS: PlaySeed[] = [
     certainty: 'known', owner: 'juan',
   },
   {
-    vehicle: 'neurotech', entity: 'Roos Foundation', horizon: 'now', lever: 'materials',
+    vehicle: 'neurotech', entity: 'Quaresma Foundation', horizon: 'now', lever: 'materials',
     title: 'Lead with a PRI structure note, not the primer',
     detail:
       'A note on how a programme-related investment into this vehicle would be structured, written '
@@ -424,81 +424,81 @@ const PLAYS: PlaySeed[] = [
 
 const NEEDS: NeedSeed[] = [
   {
-    vehicle: 'neurotech', entity: 'Northwood Capital', kind: 'validation',
+    vehicle: 'neurotech', entity: 'Vetchling Wagtail Capital', kind: 'validation',
     statement: 'Somebody other than us confirming the operating-company marks.',
-    evidence: 'Raman said it in the room on 8 September and would not discuss the science until it is settled.',
+    evidence: 'Eskildsen said it in the room on 8 September and would not discuss the science until it is settled.',
     met: false, as_of: '2026-09-08',
   },
   {
-    vehicle: 'neurotech', entity: 'Northwood Capital', kind: 'permission',
+    vehicle: 'neurotech', entity: 'Vetchling Wagtail Capital', kind: 'permission',
     statement: 'A 2026 emerging-manager slot that is not already spoken for.',
     evidence: 'She raised the programme unprompted; nobody has asked whether a slot exists.',
     met: null, as_of: '2026-09-08',
   },
   {
-    vehicle: 'neurotech', entity: 'Northwood Capital', kind: 'mechanics',
+    vehicle: 'neurotech', entity: 'Vetchling Wagtail Capital', kind: 'mechanics',
     statement: 'A valuation policy for pre-revenue assets they can defend to nine families.',
     evidence: 'Asked in the DDQ request. We have a policy and it has never been written up for an external reader.',
     met: false, as_of: '2026-09-08',
   },
   {
-    vehicle: 'neurotech', entity: 'Tessaro Family Office', kind: 'know_us',
+    vehicle: 'neurotech', entity: 'Oyelaran Family Office', kind: 'know_us',
     statement: 'To know who we are at all.',
     evidence: 'Public interview names two of our podcast guests as people she follows, and never mentions us.',
     met: false, source: 'S12', as_of: '2026-09-02',
   },
   {
-    vehicle: 'neurotech', entity: 'Tessaro Family Office', kind: 'know_domain',
+    vehicle: 'neurotech', entity: 'Oyelaran Family Office', kind: 'know_domain',
     statement: 'Nothing — she already holds the thesis.',
     evidence: 'Has spoken publicly about wanting more exposure to frontier neuroscience and about why the timelines deter most investors.',
     met: true, as_of: '2026-09-02',
   },
   {
-    vehicle: 'neurotech', entity: 'Tessaro Family Office', kind: 'believe_access',
+    vehicle: 'neurotech', entity: 'Oyelaran Family Office', kind: 'believe_access',
     statement: 'Evidence that we get into the rounds that matter.',
     evidence: 'Not yet raised, because no conversation has happened. Inferred from what a direct investor of this shape asks.',
     met: null, as_of: '2026-09-20',
   },
   {
-    vehicle: 'neurotech', entity: 'Sable Point Capital', kind: 'believe_access',
+    vehicle: 'neurotech', entity: 'Inglenook Alderwick Capital', kind: 'believe_access',
     statement: 'An inspectable sourcing edge, not a claimed one.',
     evidence: 'Standard for a seeder underwriting a first-time manager. Nothing we hold is written for that reader.',
     met: false, as_of: '2026-09-20',
   },
   {
-    vehicle: 'neurotech', entity: 'Sable Point Capital', kind: 'validation',
+    vehicle: 'neurotech', entity: 'Inglenook Alderwick Capital', kind: 'validation',
     statement: 'A manager who has already assembled a real LP base.',
     evidence: '$56.0M hard from four institutions. True, and currently said to nobody there.',
     met: true, as_of: '2026-09-20',
   },
   {
-    vehicle: 'neurotech', entity: 'Roos Foundation', kind: 'permission',
+    vehicle: 'neurotech', entity: 'Quaresma Foundation', kind: 'permission',
     statement: 'A trust deed that permits a fund LP position, or a PRI that avoids the question.',
     evidence: 'Forty-seven grants over seven years include no LP positions. Nobody has read the deed.',
     met: null, source: 'S02', as_of: '2026-09-14',
   },
   {
-    vehicle: 'neurotech', entity: 'Roos Foundation', kind: 'mechanics',
+    vehicle: 'neurotech', entity: 'Quaresma Foundation', kind: 'mechanics',
     statement: 'A current §4944(c) position their counsel can rely on.',
     evidence: 'Our only note is from March 2024 and expired.',
     met: false, source: 'S10', as_of: '2024-03-11',
   },
   {
-    vehicle: 'neurotech', entity: 'Okonjo Family Office', kind: 'timing',
+    vehicle: 'neurotech', entity: 'Kowalczyk Family Office', kind: 'timing',
     statement: 'Their own window, which is not now.',
     evidence: 'Three weeks of silence after a warm introduction that he agreed to receive.',
     met: false, as_of: '2026-09-11',
   },
   {
-    vehicle: 'neurotech', entity: 'Whitcomb Capital', kind: 'mechanics',
+    vehicle: 'neurotech', entity: 'Albescu Capital', kind: 'mechanics',
     statement: 'A way to prove accreditation without handing a manager financial documents.',
     evidence: 'Only a self-certification is on file, and 506(c) does not accept one.',
     met: false, as_of: '2026-08-14',
   },
   {
-    vehicle: 'rails', entity: 'Vantage Partners', kind: 'mechanics',
+    vehicle: 'rails', entity: 'Greylag Gorsebrook Partners', kind: 'mechanics',
     statement: 'To be told about a term change before they find it.',
-    evidence: 'Their MFN is triggered by the Cedar fee break, signed 18 September, and nobody has told them.',
+    evidence: 'Their MFN is triggered by the Fernhollow Umberfield fee break, signed 18 September, and nobody has told them.',
     met: false, as_of: '2026-09-18',
   },
 ];

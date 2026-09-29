@@ -78,18 +78,18 @@ const GATES: Record<string, string> = {
 
 const SPECS: Spec[] = [
   {
-    entity: 'Cedar Trust', vehicle: 'neurotech', owner: 'mara',
+    entity: 'Fernhollow Umberfield Trust', vehicle: 'neurotech', owner: 'mara',
     headline: 'Countersigned. The assessment is kept because a closed LP is the best calibration we have for the next one.',
     profile: { firm_class: 'endowment', iapd: true, aum: 900_000_000, aum_basis: 'Annual report, 2026', aum_certainty: 'known',
-      decision: 'small_ic', weeks: [6, 10], signs: 'Ivo Lindqvist, CIO', kills: 'The investment committee, quarterly',
-      band: [3_000_000, 8_000_000], prior: true, provenance: 'Introduced through Mercer & Bly, who screen managers for them. First contact 5 August 2026.', since: '2026-08-05' },
+      decision: 'small_ic', weeks: [6, 10], signs: 'Emeka Holmqvist, CIO', kills: 'The investment committee, quarterly',
+      band: [3_000_000, 8_000_000], prior: true, provenance: 'Introduced through Gyasi & Ferrante-Obuya, who screen managers for them. First contact 5 August 2026.', since: '2026-08-05' },
     gates: [
       { code: 'check_band', passed: true, detail: '$4.0M sits inside our $2–8M band and well under the concentration cap.', certainty: 'known', as_of: '2026-09-18' },
       { code: 'mandate', passed: true, detail: 'Life-sciences allocation was raised from 8% to 12% in the annual report; emerging managers are explicitly permitted.', certainty: 'known', as_of: '2026-09-15' },
       { code: 'duration', passed: true, detail: 'Ten-year lock accepted after seeing the recycling provision.', certainty: 'known', as_of: '2026-08-20' },
       { code: 'conflict', passed: true, detail: 'No competing neuro fund in the portfolio.', certainty: 'known', as_of: '2026-08-20' },
       { code: 'accredited', passed: true, detail: 'Third-party counsel letter on file, verified 15 September, valid a year.', certainty: 'known', as_of: '2026-09-15' },
-      { code: 'provenance', passed: true, detail: 'Relationship established through Mercer & Bly on 5 August, before any offering conversation.', certainty: 'known', as_of: '2026-08-05' },
+      { code: 'provenance', passed: true, detail: 'Relationship established through Gyasi & Ferrante-Obuya on 5 August, before any offering conversation.', certainty: 'known', as_of: '2026-08-05' },
     ],
     dims: [
       { code: 'invests_in_funds', grade: 'strong', certainty: 'known', finding: 'Almost all private exposure is through managers rather than directs.', as_of: '2026-08-11' },
@@ -107,7 +107,7 @@ const SPECS: Spec[] = [
       { code: 'concession_tolerance', grade: 'weak', certainty: 'inferred', finding: 'Market-rate only. No PRI or catalytic capacity in an endowment of this shape.', as_of: '2026-08-20' },
       { code: 'signal_value', grade: 'good', certainty: 'inferred', finding: 'Known name in the endowment world; carries weight with other endowments, less with family offices.', as_of: '2026-08-20' },
       { code: 'strategic_value', grade: 'neutral', certainty: 'inferred', finding: 'Capital and credibility. No scientific network or deal flow to offer.', as_of: '2026-08-20' },
-      { code: 'referral_willingness', grade: 'good', certainty: 'inferred', finding: 'Has not been asked. Mercer & Bly screen for several endowments, which is the real referral surface.', as_of: '2026-09-18' },
+      { code: 'referral_willingness', grade: 'good', certainty: 'inferred', finding: 'Has not been asked. Gyasi & Ferrante-Obuya screen for several endowments, which is the real referral surface.', as_of: '2026-09-18' },
       { code: 'domain_sympathy', grade: 'good', certainty: 'known', finding: 'Asked about clinical timelines unprompted and did not flinch at the answer.', as_of: '2026-08-20' },
       { code: 'mission_motivation', grade: 'neutral', certainty: 'known', finding: 'None stated. This is an allocation decision, not a personal one.', as_of: '2026-08-20' },
     ],
@@ -120,30 +120,30 @@ const SPECS: Spec[] = [
       { subject: 'Protocol Labs', kind: 'firm', fam: 'familiar', sent: 'positive', evidence: 'Knew the name before the first meeting; associated it with crypto infrastructure rather than science.', certainty: 'known', as_of: '2026-08-20' },
       { subject: 'PLC Neurotech I', kind: 'vehicle', fam: 'deep', sent: 'champion', evidence: 'Countersigned $4.0M after one pitch and one follow-up.', certainty: 'known', as_of: '2026-09-18' },
       { subject: 'The neuro thesis', kind: 'thesis', fam: 'deep', sent: 'positive', evidence: '"The thesis landed in the first meeting" — their questions were all structure and fees, never the science.', certainty: 'known', as_of: '2026-08-20' },
-      { subject: 'Juan', kind: 'person', fam: 'familiar', sent: 'positive', evidence: 'Ran the pitch. Lindqvist asked for him by name on the follow-up.', certainty: 'known', as_of: '2026-08-20' },
+      { subject: 'Lior', kind: 'person', fam: 'familiar', sent: 'positive', evidence: 'Ran the pitch. Holmqvist asked for him by name on the follow-up.', certainty: 'known', as_of: '2026-08-20' },
     ],
     engagement: [
       { channel: 'newsletter', behaviour: 'subscribed', detail: 'Two people from the investment team subscribed after the pitch.', on: '2026-08-22', certainty: 'known' },
     ],
     links: [
-      { via: 'Mercer & Bly', kind: 'advisor', statement: 'Mercer & Bly screen managers for Cedar and put us in front of them.', band: 'moderate', weight: 'strong', certainty: 'known', source: 'S09', as_of: '2026-08-05' },
-      { via: 'Ivo Lindqvist', kind: 'personal', statement: 'Lindqvist is the CIO and signed. He is now the strongest reference we have with any endowment.', band: 'moderate', weight: 'strong', certainty: 'known', as_of: '2026-09-18' },
+      { via: 'Gyasi & Ferrante-Obuya', kind: 'advisor', statement: 'Gyasi & Ferrante-Obuya screen managers for Fernhollow Umberfield and put us in front of them.', band: 'moderate', weight: 'strong', certainty: 'known', source: 'S09', as_of: '2026-08-05' },
+      { via: 'Emeka Holmqvist', kind: 'personal', statement: 'Holmqvist is the CIO and signed. He is now the strongest reference we have with any endowment.', band: 'moderate', weight: 'strong', certainty: 'known', as_of: '2026-09-18' },
     ],
   },
 
   {
-    entity: 'Northwood Capital', vehicle: 'neurotech', owner: 'juan',
+    entity: 'Vetchling Wagtail Capital', vehicle: 'neurotech', owner: 'juan',
     headline: 'Good fit on paper, and almost everything we believe about them comes from a 2021 spreadsheet nobody can vouch for.',
     profile: { firm_class: 'mfo', iapd: true, aum: 1_400_000_000, aum_basis: 'A 2021 CSV import of unknown provenance', aum_certainty: 'guess',
-      decision: 'cio', weeks: [4, 8], signs: 'Priya Raman, head of investments since September', kills: 'The families themselves, on any single allocation',
-      band: [2_000_000, 8_000_000], prior: true, provenance: 'Raman asked to be contacted at the Q3 event on 28 August, before any offering material.', since: '2026-08-28' },
+      decision: 'cio', weeks: [4, 8], signs: 'Perpetua Eskildsen, head of investments since September', kills: 'The families themselves, on any single allocation',
+      band: [2_000_000, 8_000_000], prior: true, provenance: 'Eskildsen asked to be contacted at the Q3 event on 28 August, before any offering material.', since: '2026-08-28' },
     gates: [
       { code: 'check_band', passed: true, detail: 'Their $2–8M band overlaps ours across its whole width.', certainty: 'inferred', source: 'S11', as_of: '2021-06-01' },
       { code: 'mandate', passed: null, detail: 'Emerging-manager programme is active, but nobody has confirmed whether it permits a single-sector first-time fund. This is a question, not an assumption.', certainty: 'guess', as_of: '2026-09-14' },
       { code: 'duration', passed: true, detail: 'Multi-family office with a normal venture allocation. Ten years is standard for them.', certainty: 'inferred', as_of: '2026-09-08' },
       { code: 'conflict', passed: true, detail: 'No competing neuro position surfaced in diligence.', certainty: 'inferred', as_of: '2026-09-08' },
       { code: 'accredited', passed: null, detail: 'Third-party letter requested with the DDQ pack. Nothing back yet.', certainty: 'known', as_of: '2026-09-08' },
-      { code: 'provenance', passed: true, detail: 'Raman asked to be contacted at the Q3 event on 28 August. Recorded the same day.', certainty: 'known', as_of: '2026-08-28' },
+      { code: 'provenance', passed: true, detail: 'Eskildsen asked to be contacted at the Q3 event on 28 August. Recorded the same day.', certainty: 'known', as_of: '2026-08-28' },
     ],
     dims: [
       { code: 'invests_in_funds', grade: 'strong', certainty: 'known', finding: 'Emerging-manager programme takes three to five new managers a year.', source: 'S02', as_of: '2026-09-14' },
@@ -168,31 +168,31 @@ const SPECS: Spec[] = [
     values: [
       { value: 'Independently verified track record before anything else', match: 'Audited marks exist and are held by counsel; independent verification has not been arranged.', grade: 'neutral', clear: false, action: 'Arrange the third-party verification now. It is the stated blocker and it is answerable.', certainty: 'known', as_of: '2026-09-08' },
       { value: 'Knowing who else sits on the investment committee', match: 'No external IC; GPs decide with an advisory board on conflicts.', grade: 'good', clear: true, action: 'Already answered in the room, and the answer is in the library.', certainty: 'known', as_of: '2026-09-08' },
-      { value: 'A 2026 emerging-manager slot that is not already spoken for', match: 'We do not know whether one is open. They raised it, not us.', grade: 'neutral', clear: false, action: 'Ask Raman directly whether a 2026 slot exists before spending more diligence effort.', certainty: 'known', as_of: '2026-09-08' },
+      { value: 'A 2026 emerging-manager slot that is not already spoken for', match: 'We do not know whether one is open. They raised it, not us.', grade: 'neutral', clear: false, action: 'Ask Eskildsen directly whether a 2026 slot exists before spending more diligence effort.', certainty: 'known', as_of: '2026-09-08' },
       { value: 'A valuation policy for pre-revenue assets they can defend to nine families', match: 'We have one; it has never been written up for an external reader.', grade: 'neutral', clear: false, action: 'Write the valuation-policy note. It is a DDQ answer that will be asked again.', certainty: 'known', as_of: '2026-10-07' },
     ],
     perception: [
       { subject: 'Protocol Labs', kind: 'firm', fam: 'heard_of', sent: 'neutral', evidence: 'Recognised the name, associated it with crypto, asked how that connects to neuro.', certainty: 'known', as_of: '2026-09-08' },
       { subject: 'PLC Neurotech I', kind: 'vehicle', fam: 'familiar', sent: 'neutral', evidence: 'Sat through a 45-minute intro call and asked for the DDQ pack. Process interest, not an indication.', certainty: 'known', as_of: '2026-09-08' },
       { subject: 'The neuro thesis', kind: 'thesis', fam: 'heard_of', sent: 'neutral', evidence: 'No terms discussed and no number mentioned by either side. The thesis was not the conversation.', certainty: 'known', as_of: '2026-09-08' },
-      { subject: 'Juan', kind: 'person', fam: 'familiar', sent: 'positive', evidence: 'Raman asked to be contacted directly after meeting him at the Q3 event.', certainty: 'known', as_of: '2026-08-28' },
+      { subject: 'Lior', kind: 'person', fam: 'familiar', sent: 'positive', evidence: 'Eskildsen asked to be contacted directly after meeting him at the Q3 event.', certainty: 'known', as_of: '2026-08-28' },
       { subject: 'The operating-company track record', kind: 'portfolio', fam: 'familiar', sent: 'skeptical', evidence: 'Wants it independently verified. That is the objection, stated plainly.', certainty: 'known', as_of: '2026-09-08' },
     ],
     engagement: [
-      { channel: 'event', behaviour: 'attended', detail: 'Raman attended the Q3 event where the thesis was presented.', on: '2026-08-28', certainty: 'known' },
-      { channel: 'x', behaviour: 'follows', detail: 'The firm account follows Juan. No engagement on any post.', on: '2026-09-12', certainty: 'inferred' },
+      { channel: 'event', behaviour: 'attended', detail: 'Eskildsen attended the Q3 event where the thesis was presented.', on: '2026-08-28', certainty: 'known' },
+      { channel: 'x', behaviour: 'follows', detail: 'The firm account follows Lior. No engagement on any post.', on: '2026-09-12', certainty: 'inferred' },
     ],
     links: [
-      { via: 'Priya Raman', kind: 'personal', statement: 'Met Juan at the Q3 event and asked to be contacted. This is the route, and it is direct.', band: 'moderate', weight: 'strong', certainty: 'known', as_of: '2026-08-28' },
-      { via: 'Anne Quill', kind: 'co_investor', statement: 'Quill appears alongside Northwood in a 2021 co-investor list nobody can vouch for. Treat as a lead, not a link.', band: 'weak', weight: 'weak', certainty: 'guess', source: 'S11', as_of: '2021-06-01' },
+      { via: 'Perpetua Eskildsen', kind: 'personal', statement: 'Met Lior at the Q3 event and asked to be contacted. This is the route, and it is direct.', band: 'moderate', weight: 'strong', certainty: 'known', as_of: '2026-08-28' },
+      { via: 'Renata Corcoran', kind: 'co_investor', statement: 'Corcoran appears alongside Vetchling Wagtail in a 2021 co-investor list nobody can vouch for. Treat as a lead, not a link.', band: 'weak', weight: 'weak', certainty: 'guess', source: 'S11', as_of: '2021-06-01' },
     ],
   },
 
   {
-    entity: 'Whitcomb Capital', vehicle: 'neurotech', owner: 'juan',
+    entity: 'Albescu Capital', vehicle: 'neurotech', owner: 'juan',
     headline: 'They want to come in and they cannot, on a technicality that is not negotiable.',
-    profile: { firm_class: 'sfo', iapd: false, aum: 8_000_000, aum_basis: 'Stated by Whitcomb, unconfirmed since August', aum_certainty: 'guess',
-      decision: 'principal', weeks: [1, 3], signs: 'Whitcomb himself', kills: 'Nobody else',
+    profile: { firm_class: 'sfo', iapd: false, aum: 8_000_000, aum_basis: 'Stated by Albescu, unconfirmed since August', aum_certainty: 'guess',
+      decision: 'principal', weeks: [1, 3], signs: 'Albescu himself', kills: 'Nobody else',
       band: [1_000_000, 5_000_000], prior: true, provenance: 'Wired the Cortex SPV in September. The relationship long predates this vehicle.', since: '2026-08-10' },
     gates: [
       { code: 'check_band', passed: true, detail: '$5.0M soft sits inside our band.', certainty: 'known', as_of: '2026-09-09' },
@@ -237,18 +237,18 @@ const SPECS: Spec[] = [
   },
 
   {
-    entity: 'Roos Foundation', vehicle: 'neurotech', owner: 'juan',
+    entity: 'Quaresma Foundation', vehicle: 'neurotech', owner: 'juan',
     headline: 'The best thesis fit in the universe, and seven years of evidence that they do not do this.',
     profile: { firm_class: 'foundation', iapd: false, aum: 5_000_000, aum_basis: 'Forwarded letter excerpt S03 — an excerpt, not a statement to us', aum_certainty: 'guess',
-      decision: 'principal', weeks: [4, 12], signs: 'Delia Roos, sole trustee', kills: 'Her counsel, on the §4944(c) question',
-      band: [2_000_000, 5_000_000], prior: false, provenance: 'Duettmann has offered to ask. No relationship with the foundation itself.' },
+      decision: 'principal', weeks: [4, 12], signs: 'Solveig Quaresma, sole trustee', kills: 'Her counsel, on the §4944(c) question',
+      band: [2_000_000, 5_000_000], prior: false, provenance: 'Umeadi has offered to ask. No relationship with the foundation itself.' },
     gates: [
       { code: 'check_band', passed: true, detail: '$2–5M band overlaps ours, from a forwarded excerpt rather than a statement to us.', certainty: 'guess', source: 'S03', as_of: '2026-08-30' },
       { code: 'mandate', passed: null, detail: 'Nobody knows whether the trust deed permits a fund LP position at all. Forty-seven grants over seven years include none.', certainty: 'known', source: 'S02', as_of: '2026-09-14' },
       { code: 'duration', passed: true, detail: 'Recoverable grants already run on multi-year horizons.', certainty: 'inferred', source: 'S02', as_of: '2026-09-14' },
       { code: 'conflict', passed: true, detail: 'No competing position. They fund research, not managers.', certainty: 'inferred', as_of: '2026-09-14' },
       { code: 'accredited', passed: true, detail: 'A foundation of this size qualifies comfortably.', certainty: 'inferred', as_of: '2026-09-12' },
-      { code: 'provenance', passed: null, detail: 'No pre-existing substantive relationship. Duettmann has offered to ask, which is the first rung and nothing more.', certainty: 'known', source: 'S04', as_of: '2026-09-14' },
+      { code: 'provenance', passed: null, detail: 'No pre-existing substantive relationship. Umeadi has offered to ask, which is the first rung and nothing more.', certainty: 'known', source: 'S04', as_of: '2026-09-14' },
     ],
     dims: [
       { code: 'invests_in_funds', grade: 'weak', certainty: 'known', finding: 'No LP positions at all in the seven-year grants export. Thirty-nine outright grants, six recoverable, two PRIs.', source: 'S02', as_of: '2026-09-14' },
@@ -280,14 +280,14 @@ const SPECS: Spec[] = [
       { subject: 'PLC Neurotech I', kind: 'vehicle', fam: 'unaware', sent: 'unknown', evidence: 'No contact has been made. The connector has not asked yet.', certainty: 'known', source: 'S04', as_of: '2026-09-14' },
     ],
     links: [
-      { via: 'Allison Duettmann', kind: 'advisor', statement: 'Roos publicly cited a memo Duettmann co-authored. Duettmann has offered to ask — the only tier-A route.', band: 'moderate', weight: 'strong', certainty: 'known', source: 'S06', as_of: '2026-09-14' },
-      { via: 'Michael Okonjo', kind: 'board', statement: 'Both served on a research charity board until December 2023. Affiliation only — no evidence they ever spoke.', band: 'weak', weight: 'weak', certainty: 'known', source: 'S09', as_of: '2023-12-31' },
-      { via: 'Jonah Hale', kind: 'advisor', statement: 'Hale introduced Roos to two managers in 2023. She has since asked not to be introduced through him.', band: 'moderate', weight: 'blocker', certainty: 'known', source: 'S05', as_of: '2026-09-08' },
+      { via: 'Orla Umeadi', kind: 'advisor', statement: 'Quaresma publicly cited a memo Umeadi co-authored. Umeadi has offered to ask — the only tier-A route.', band: 'moderate', weight: 'strong', certainty: 'known', source: 'S06', as_of: '2026-09-14' },
+      { via: 'Bram Kowalczyk', kind: 'board', statement: 'Both served on a research charity board until December 2023. Affiliation only — no evidence they ever spoke.', band: 'weak', weight: 'weak', certainty: 'known', source: 'S09', as_of: '2023-12-31' },
+      { via: 'Anselm Rautio', kind: 'advisor', statement: 'Rautio introduced Quaresma to two managers in 2023. She has since asked not to be introduced through him.', band: 'moderate', weight: 'blocker', certainty: 'known', source: 'S05', as_of: '2026-09-08' },
     ],
   },
 
   {
-    entity: 'Sable Point Capital', vehicle: 'neurotech', owner: 'juan',
+    entity: 'Inglenook Alderwick Capital', vehicle: 'neurotech', owner: 'juan',
     headline: 'The class whose whole business is backing managers like us, and we have no way to reach them.',
     profile: { firm_class: 'fof', iapd: true, aum: 470_000_000, aum_basis: 'Their own announced fund size', aum_certainty: 'known',
       decision: 'small_ic', weeks: [12, 24], signs: 'Investment committee', kills: 'Any committee member',
@@ -332,7 +332,7 @@ const SPECS: Spec[] = [
   },
 
   {
-    entity: 'Tessaro Family Office', vehicle: 'neurotech', owner: 'mara',
+    entity: 'Oyelaran Family Office', vehicle: 'neurotech', owner: 'mara',
     headline: 'Publicly stated interest in exactly this field, and nobody has ever spoken to them.',
     profile: { firm_class: 'sfo', iapd: false, aum: 300_000_000, aum_basis: 'Inferred from a fifteen-person office and industry operating-cost heuristics', aum_certainty: 'guess',
       decision: 'principal', weeks: [2, 6], signs: 'The principal', kills: 'Nobody else',
@@ -378,23 +378,23 @@ const SPECS: Spec[] = [
       { channel: 'podcast', behaviour: 'cited', detail: 'The principal named two of our podcast guests as people they follow, in a public interview.', on: '2026-09-02', certainty: 'known' },
     ],
     links: [
-      { via: 'Allison Duettmann', kind: 'advisor', statement: 'Duettmann is one of the two people the principal named publicly. A podcast-guest route with genuine credibility on this topic.', band: 'moderate', weight: 'strong', certainty: 'inferred', as_of: '2026-09-02' },
+      { via: 'Orla Umeadi', kind: 'advisor', statement: 'Umeadi is one of the two people the principal named publicly. A podcast-guest route with genuine credibility on this topic.', band: 'moderate', weight: 'strong', certainty: 'inferred', as_of: '2026-09-02' },
     ],
   },
 
   {
-    entity: 'Okonjo Family Office', vehicle: 'neurotech', owner: 'juan',
+    entity: 'Kowalczyk Family Office', vehicle: 'neurotech', owner: 'juan',
     headline: 'Three weeks of silence after a warm introduction, which is information rather than an absence of it.',
     profile: { firm_class: 'sfo', iapd: false, aum: 5_000_000, aum_basis: 'Inferred from their last three commitments', aum_certainty: 'guess',
-      decision: 'principal', weeks: [2, 8], signs: 'Michael Okonjo', kills: 'Nobody else',
-      band: [1_000_000, 3_500_000], prior: true, provenance: 'Introduced by Duettmann on 21 August. Relationship exists but is thin.', since: '2026-08-21' },
+      decision: 'principal', weeks: [2, 8], signs: 'Bram Kowalczyk', kills: 'Nobody else',
+      band: [1_000_000, 3_500_000], prior: true, provenance: 'Introduced by Umeadi on 21 August. Relationship exists but is thin.', since: '2026-08-21' },
     gates: [
       { code: 'check_band', passed: true, detail: '$3.5M soft sits inside our band.', certainty: 'inferred', as_of: '2026-08-21' },
       { code: 'mandate', passed: true, detail: 'No mandate. Principal decides.', certainty: 'known', as_of: '2026-08-21' },
       { code: 'duration', passed: true, detail: 'No signal against it.', certainty: 'guess', as_of: '2026-08-21' },
       { code: 'conflict', passed: true, detail: 'None visible.', certainty: 'inferred', as_of: '2026-08-21' },
       { code: 'accredited', passed: null, detail: 'Never requested. Would be required before any subscription on a 506(c) vehicle.', certainty: 'known', as_of: '2026-09-20' },
-      { code: 'provenance', passed: true, detail: 'Duettmann forwarded the opt-in request on 21 August.', certainty: 'known', as_of: '2026-08-21' },
+      { code: 'provenance', passed: true, detail: 'Umeadi forwarded the opt-in request on 21 August.', certainty: 'known', as_of: '2026-08-21' },
     ],
     dims: [
       { code: 'invests_in_funds', grade: 'good', certainty: 'inferred', finding: 'Routes most private exposure through funds rather than directs.', as_of: '2026-08-21' },
@@ -411,7 +411,7 @@ const SPECS: Spec[] = [
       { code: 'duration_tolerance', grade: 'neutral', certainty: 'guess', finding: 'Unknown.', as_of: '2026-08-21' },
       { code: 'concession_tolerance', grade: 'neutral', certainty: 'guess', finding: 'Unknown.', as_of: '2026-08-21' },
       { code: 'signal_value', grade: 'neutral', certainty: 'guess', finding: 'Modest.', as_of: '2026-08-21' },
-      { code: 'strategic_value', grade: 'good', certainty: 'known', finding: 'Okonjo is also a connector to Roos. That makes him worth keeping warm regardless of his own cheque.', source: 'S09', as_of: '2026-09-14' },
+      { code: 'strategic_value', grade: 'good', certainty: 'known', finding: 'Kowalczyk is also a connector to Quaresma. That makes him worth keeping warm regardless of his own cheque.', source: 'S09', as_of: '2026-09-14' },
       { code: 'referral_willingness', grade: 'good', certainty: 'known', finding: 'Already carried an ask for the Rails vehicle, which is willingness demonstrated rather than assumed.', as_of: '2026-09-14' },
       { code: 'domain_sympathy', grade: 'neutral', certainty: 'guess', finding: 'Unknown.', as_of: '2026-08-21' },
       { code: 'mission_motivation', grade: 'neutral', certainty: 'known', finding: 'None stated.', as_of: '2026-08-21' },
@@ -420,19 +420,19 @@ const SPECS: Spec[] = [
       { value: 'Not being asked twice for the same thing', match: 'We have one open ask and a connector at two of three. A second ask now would spend goodwill for nothing.', grade: 'good', clear: false, action: 'Do not re-ask. The November conference appearance is a cheaper contact that costs no connector goodwill.', certainty: 'known', as_of: '2026-09-11' },
     ],
     perception: [
-      { subject: 'Protocol Labs', kind: 'firm', fam: 'heard_of', sent: 'neutral', evidence: 'Introduced by Duettmann, so aware. Nothing beyond that.', certainty: 'inferred', as_of: '2026-08-21' },
+      { subject: 'Protocol Labs', kind: 'firm', fam: 'heard_of', sent: 'neutral', evidence: 'Introduced by Umeadi, so aware. Nothing beyond that.', certainty: 'inferred', as_of: '2026-08-21' },
       { subject: 'PLC Neurotech I', kind: 'vehicle', fam: 'heard_of', sent: 'unknown', evidence: 'Received the opt-in request. No reply in three weeks.', certainty: 'known', as_of: '2026-09-11' },
     ],
     engagement: [
       { channel: 'event', behaviour: 'attended', detail: 'Speaking at a neurotech conference in November. Contact that costs no connector goodwill.', on: '2026-09-11', certainty: 'known' },
     ],
     links: [
-      { via: 'Allison Duettmann', kind: 'advisor', statement: 'Duettmann made the introduction and is at 2 of 3 asks this quarter.', band: 'moderate', weight: 'good', certainty: 'known', as_of: '2026-08-21' },
+      { via: 'Orla Umeadi', kind: 'advisor', statement: 'Umeadi made the introduction and is at 2 of 3 asks this quarter.', band: 'moderate', weight: 'good', certainty: 'known', as_of: '2026-08-21' },
     ],
   },
 
   {
-    entity: 'Vantage Partners', vehicle: 'rails', owner: 'juan',
+    entity: 'Greylag Gorsebrook Partners', vehicle: 'rails', owner: 'juan',
     headline: 'Committed to both funds, and the conserved-pool check says the same dollar may be counted twice.',
     profile: { firm_class: 'mfo', iapd: true, aum: 2_000_000_000, aum_basis: 'Form ADV', aum_certainty: 'known',
       decision: 'cio', weeks: [4, 8], signs: 'Their CIO', kills: 'The MFN clause, indirectly',
@@ -466,7 +466,7 @@ const SPECS: Spec[] = [
       { code: 'mission_motivation', grade: 'neutral', certainty: 'known', finding: 'None stated. A portfolio decision.', as_of: '2026-07-08' },
     ],
     values: [
-      { value: 'Most-favoured-nation treatment on fees and reporting', match: 'Granted. The Cedar fee break now triggers it and they have not been told.', grade: 'weak', clear: false, action: 'Tell them about the Cedar break before they find it. This is a relationship risk, not a paperwork one.', certainty: 'known', as_of: '2026-09-18' },
+      { value: 'Most-favoured-nation treatment on fees and reporting', match: 'Granted. The Fernhollow Umberfield fee break now triggers it and they have not been told.', grade: 'weak', clear: false, action: 'Tell them about the Fernhollow Umberfield break before they find it. This is a relationship risk, not a paperwork one.', certainty: 'known', as_of: '2026-09-18' },
       { value: 'Portfolio-level reporting detail', match: 'Quarterly reporting is in place and falls under their MFN.', grade: 'good', clear: true, action: 'Nothing.', certainty: 'known', as_of: '2026-06-30' },
     ],
     perception: [

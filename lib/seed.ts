@@ -245,12 +245,12 @@ async function seedResearch(db: Db) {
     // One of each, so the distinction is visible in the UI rather than only in a README.
     await tx.query(
       `insert into research.read_cache (source, source_id, payload, expires_at)
-       values ('seed', 'roos-fdn', $1, now() + interval '1 hour')`,
+       values ('seed', 'quaresma-fdn', $1, now() + interval '1 hour')`,
       [JSON.stringify({ note: 'A cache exists for latency and quota. It may vanish at any time.' })],
     );
     await tx.query(
       `insert into research.snapshot (source, source_id, payload, taken_for, note)
-       values ('seed', 'roos-fdn', $1, 'dossier draft, 14 Sep', $2)`,
+       values ('seed', 'quaresma-fdn', $1, 'dossier draft, 14 Sep', $2)`,
       [
         JSON.stringify({ mandate: 'Neurodegeneration and longevity biology', band: '$2\u20135M' }),
         'What we saw on 14 September. Not today\u2019s truth, and labelled as such wherever it appears.',

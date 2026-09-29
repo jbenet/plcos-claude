@@ -227,3 +227,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Research export — bounded identity review work](entries/export-speed.md)
 - [Feedback — the annotation toolbar is one row of icons](entries/shot-editor-icons.md)
 - [Selection and Pipeline — a keyboard cursor that keeps up (0121)](entries/keyboard-cursor-0121.md)
+- [Demo — generated names instead of real ones](entries/demo-random-names.md)

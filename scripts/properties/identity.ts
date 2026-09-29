@@ -7,11 +7,11 @@ export async function headingProperties(check: Check) {
     const { orgLeads } = await import('../../lib/lp-heading');
     const cases: Array<[string | null, string | null, string | null, boolean, string]> = [
       [null, 'the fund-of-funds unit', 'institutional', false, 'no organisation on record'],
-      ['Mercer & Bly', 'personal', 'fo_staff', false, 'a personal check'],
-      ['Mercer & Bly', 'Mercer & Bly', 'angel', true, 'a unit named at the firm'],
-      ['Mercer & Bly', null, 'fo_staff', true, 'family-office staff, no unit'],
-      ['Mercer & Bly', null, 'angel', false, 'an angel, no unit'],
-      ['Mercer & Bly', null, null, false, 'nothing known'],
+      ['Gyasi & Ferrante-Obuya', 'personal', 'fo_staff', false, 'a personal check'],
+      ['Gyasi & Ferrante-Obuya', 'Gyasi & Ferrante-Obuya', 'angel', true, 'a unit named at the firm'],
+      ['Gyasi & Ferrante-Obuya', null, 'fo_staff', true, 'family-office staff, no unit'],
+      ['Gyasi & Ferrante-Obuya', null, 'angel', false, 'an angel, no unit'],
+      ['Gyasi & Ferrante-Obuya', null, null, false, 'nothing known'],
     ];
     const wrong = cases.filter(([org, unit, type, want]) => orgLeads(org, unit, type) !== want).map((c) => c[4]);
     check('The organisation leads an LP’s row when it is the LP we’re targeting — a named unit, else an institution’s money — and the person otherwise',

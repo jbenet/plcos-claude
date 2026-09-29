@@ -4,7 +4,7 @@ import type { Db } from './db';
  * L11 seed: two meetings that happened, one that is scheduled, and the objections and
  * diligence questions they produced.
  *
- * The Northwood meeting is the interesting one: it justifies "meeting held" and nothing
+ * The Vetchling Wagtail meeting is the interesting one: it justifies "meeting held" and nothing
  * above it, and the seeded STAGE ticket asks for a rung the meeting does not support.
  */
 export async function seedMeetings(db: Db): Promise<{ meetings: number; objections: number; questions: number }> {
@@ -36,8 +36,8 @@ export async function seedMeetings(db: Db): Promise<{ meetings: number; objectio
       objections?: Array<{ class: string; statement: string; status: string; answer?: string; source?: string; by?: string }>;
     }> = [
       {
-        entity: 'Cedar Trust', kind: 'pitch', held: '2026-08-20',
-        attendees: ['Ivo Lindqvist', 'two of the investment team', 'Mara Vance', 'Juan'],
+        entity: 'Fernhollow Umberfield Trust', kind: 'pitch', held: '2026-08-20',
+        attendees: ['Emeka Holmqvist', 'two of the investment team', 'Keziah Grimaldo', 'Lior'],
         owner: 'mara',
         summary: 'Full pitch. Thesis landed; the questions were all about structure and fees.',
         rung: 'meeting_held',
@@ -49,8 +49,8 @@ export async function seedMeetings(db: Db): Promise<{ meetings: number; objectio
         ],
       },
       {
-        entity: 'Northwood Capital', kind: 'intro', held: '2026-09-08',
-        attendees: ['Priya Raman', 'one analyst', 'Juan'],
+        entity: 'Vetchling Wagtail Capital', kind: 'intro', held: '2026-09-08',
+        attendees: ['Perpetua Eskildsen', 'one analyst', 'Lior'],
         owner: 'juan',
         summary: '45 minutes. Neuro thesis and team. No terms discussed, no number mentioned by either side.',
         rung: 'meeting_held',
@@ -64,14 +64,14 @@ export async function seedMeetings(db: Db): Promise<{ meetings: number; objectio
         ],
       },
       {
-        entity: 'Northwood Capital', kind: 'diligence', scheduled: '2026-09-24',
-        attendees: ['Priya Raman', 'two analysts', 'Juan', 'Mara Vance'],
+        entity: 'Vetchling Wagtail Capital', kind: 'diligence', scheduled: '2026-09-24',
+        attendees: ['Perpetua Eskildsen', 'two analysts', 'Lior', 'Keziah Grimaldo'],
         owner: 'juan',
         summary: 'DDQ walkthrough. They asked for it on 31 August.',
       },
       {
-        entity: 'Okonjo Family Office', kind: 'follow_up', scheduled: '2026-11-12',
-        attendees: ['Michael Okonjo', 'Juan'],
+        entity: 'Kowalczyk Family Office', kind: 'follow_up', scheduled: '2026-11-12',
+        attendees: ['Bram Kowalczyk', 'Lior'],
         owner: 'juan',
         summary: 'At the neurotech conference. Costs no connector goodwill — see the signal.',
       },
@@ -105,12 +105,12 @@ export async function seedMeetings(db: Db): Promise<{ meetings: number; objectio
     }
 
     const ddq: Array<{ entity: string; question: string; due: string; owner: string; status: string; answer?: string; source?: string }> = [
-      { entity: 'Northwood Capital', question: 'Audited marks for the three prior operating-company vehicles.', due: '2026-09-30', owner: 'juan', status: 'open' },
-      { entity: 'Northwood Capital', question: 'Key-person provisions and what happens on a departure.', due: '2026-09-30', owner: 'tomas', status: 'answered', answer: 'Two named key persons, 24-month suspension trigger.', source: 'doc:lpa-v4' },
-      { entity: 'Northwood Capital', question: 'Valuation policy for pre-revenue neuro assets.', due: '2026-10-07', owner: 'juan', status: 'open' },
-      { entity: 'Northwood Capital', question: 'Reference calls with two prior co-investors.', due: '2026-09-18', owner: 'mara', status: 'open' },
-      { entity: 'Cedar Trust', question: 'Confirmation of the fee break mechanics in the side letter.', due: '2026-09-12', owner: 'tomas', status: 'answered', answer: 'Drafted and countersigned with the subscription pack.', source: 'doc:side-letter-cedar' },
-      { entity: 'Roos Foundation', question: 'Does the trust deed permit a fund LP position at all?', due: '2026-10-31', owner: 'tomas', status: 'blocked' },
+      { entity: 'Vetchling Wagtail Capital', question: 'Audited marks for the three prior operating-company vehicles.', due: '2026-09-30', owner: 'juan', status: 'open' },
+      { entity: 'Vetchling Wagtail Capital', question: 'Key-person provisions and what happens on a departure.', due: '2026-09-30', owner: 'tomas', status: 'answered', answer: 'Two named key persons, 24-month suspension trigger.', source: 'doc:lpa-v4' },
+      { entity: 'Vetchling Wagtail Capital', question: 'Valuation policy for pre-revenue neuro assets.', due: '2026-10-07', owner: 'juan', status: 'open' },
+      { entity: 'Vetchling Wagtail Capital', question: 'Reference calls with two prior co-investors.', due: '2026-09-18', owner: 'mara', status: 'open' },
+      { entity: 'Fernhollow Umberfield Trust', question: 'Confirmation of the fee break mechanics in the side letter.', due: '2026-09-12', owner: 'tomas', status: 'answered', answer: 'Drafted and countersigned with the subscription pack.', source: 'doc:side-letter-fernhollow-umberfield' },
+      { entity: 'Quaresma Foundation', question: 'Does the trust deed permit a fund LP position at all?', due: '2026-10-31', owner: 'tomas', status: 'blocked' },
     ];
 
     for (const q of ddq) {

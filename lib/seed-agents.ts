@@ -116,20 +116,20 @@ export async function seedAgents(db: Db): Promise<{ envelopes: number; evalCases
 
     const funders: Array<{ entity: string; programme: string; cycle: string; status: string; fit: string; invitation?: string; on?: string; by?: string }> = [
       {
-        entity: 'Halvorsen Institute', programme: 'Neurodegeneration translational awards',
+        entity: 'Iwasaki Institute', programme: 'Neurodegeneration translational awards',
         cycle: 'Rolling', status: 'sourced',
         fit: 'Strong thematic fit. No invitation, so no outreach — the rail refuses it.',
       },
       {
-        entity: 'Roos Foundation', programme: 'Recoverable grants — neuro',
+        entity: 'Quaresma Foundation', programme: 'Recoverable grants — neuro',
         cycle: 'Rolling', status: 'sourced',
         fit: 'Their instrument mix fits a PRI. Still sourced only.',
       },
       {
-        entity: 'Orsini Foundation', programme: 'Open science infrastructure',
+        entity: 'Mbatha Foundation', programme: 'Open science infrastructure',
         cycle: 'Annual, closes 31 Jan', status: 'invited',
         fit: 'Programme officer asked us to submit after the September briefing.',
-        invitation: 'email:orsini-2026-09-05', on: '2026-09-05', by: 'A. Feld, programme officer',
+        invitation: 'email:mbatha-2026-09-05', on: '2026-09-05', by: 'A. Tamburini, programme officer',
       },
     ];
     for (const f of funders) {

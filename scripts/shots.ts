@@ -41,7 +41,7 @@ async function openLp(page: Page, name: string) {
 }
 
 const N61_UPDATE =
-  "Met Michael and the family office's CIO on Tuesday. They want the deck and the track record before a second meeting — very keen on the thesis.";
+  "Met Bram and the family office's CIO on Tuesday. They want the deck and the track record before a second meeting — very keen on the thesis.";
 
 const SHOTS: Record<string, Shot[]> = {
   L1: [
@@ -85,7 +85,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-approvals-conflict',
       path: '/approvals',
       prepare: async (page) => {
-        await page.getByRole('link', { name: /Route to Delia Roos/ }).click();
+        await page.getByRole('link', { name: /Route to Solveig Quaresma/ }).click();
         await page.waitForLoadState('networkidle');
       },
     },
@@ -94,7 +94,7 @@ const SHOTS: Record<string, Shot[]> = {
       path: '/approvals',
       fullPage: true,
       prepare: async (page) => {
-        await page.getByRole('link', { name: /Route to Delia Roos/ }).click();
+        await page.getByRole('link', { name: /Route to Solveig Quaresma/ }).click();
         await page.waitForLoadState('networkidle');
       },
     },
@@ -109,7 +109,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '03-no-route',
       path: '/routes',
       prepare: async (page) => {
-        await page.getByRole('link', { name: 'Ivo Lindqvist' }).click();
+        await page.getByRole('link', { name: 'Emeka Holmqvist' }).click();
         await page.waitForLoadState('networkidle');
       },
     },
@@ -117,19 +117,19 @@ const SHOTS: Record<string, Shot[]> = {
   L5: [
     { name: '01-pursuits', path: '/targets' },
     {
-      name: '02-workspace-roos',
+      name: '02-workspace-quaresma',
       path: '/targets',
       fullPage: true,
       prepare: async (page) => {
-        await page.getByRole('link', { name: 'Delia Roos' }).first().click();
+        await page.getByRole('link', { name: 'Solveig Quaresma' }).first().click();
         await page.waitForLoadState('networkidle');
       },
     },
     {
-      name: '03-ladder-cedar',
+      name: '03-ladder-fernhollow-umberfield',
       path: '/targets',
       prepare: async (page) => {
-        await page.getByRole('link', { name: 'Cedar Trust' }).first().click();
+        await page.getByRole('link', { name: 'Fernhollow Umberfield Trust' }).first().click();
         await page.waitForLoadState('networkidle');
       },
     },
@@ -137,12 +137,12 @@ const SHOTS: Record<string, Shot[]> = {
       name: '04-advance-ticket',
       path: '/targets',
       prepare: async (page) => {
-        await page.getByRole('link', { name: 'Northwood Capital' }).first().click();
+        await page.getByRole('link', { name: 'Vetchling Wagtail Capital' }).first().click();
         await page.waitForLoadState('networkidle');
         await page.getByPlaceholder('email:2026-09-22').fill('email:2026-09-19');
         await page
           .getByPlaceholder('Quote or summarise the part that justifies this rung')
-          .fill('Raman said the DDQ pack looks thorough and they are keen.');
+          .fill('Eskildsen said the DDQ pack looks thorough and they are keen.');
         await page.getByRole('button', { name: /Request:/ }).click();
         await page.waitForTimeout(900);
       },
@@ -281,7 +281,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-ties-to-confirm',
       path: '/all/routes',
       prepare: async (page) => {
-        await page.locator('a.tix', { hasText: 'Delia Roos' }).first().click();
+        await page.locator('a.tix', { hasText: 'Solveig Quaresma' }).first().click();
         await page.locator('.edgereview').first().waitFor({ timeout: 15_000 });
         await page.waitForLoadState('networkidle');
         // The target list scrolls its current row into view once it loads; scroll after it.
@@ -297,7 +297,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-timeline-by-vehicle',
       path: '/neurotech/pipeline?status=committed',
       prepare: async (page) => {
-        await page.getByRole('link', { name: 'Nadia Brandt' }).first().click();
+        await page.getByRole('link', { name: 'Thandiwe Petrescu' }).first().click();
         await page.waitForLoadState('networkidle');
         await page.getByRole('heading', { name: 'Timeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
         await page.evaluate(() => window.scrollBy(0, -80));
@@ -308,7 +308,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-tag-a-row',
       path: '/neurotech/pipeline?status=committed',
       prepare: async (page) => {
-        await page.getByRole('link', { name: 'Nadia Brandt' }).first().click();
+        await page.getByRole('link', { name: 'Thandiwe Petrescu' }).first().click();
         await page.waitForLoadState('networkidle');
         await page.locator('.tl-filter a', { hasText: 'Vehicle unclear' }).click();
         await page.waitForURL(/tl=unclear/);
@@ -423,7 +423,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-update-or-touchpoint',
       path: '/all/pipeline',
       prepare: async (page) => {
-        await openLp(page, 'Michael Okonjo');
+        await openLp(page, 'Bram Kowalczyk');
         await page.getByRole('radio', { name: /touchpoint/i }).first().click();
         await page.locator('.entrytouch').first().evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
         await page.evaluate(() => window.scrollBy(0, -160));
@@ -434,7 +434,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-add-context',
       path: '/all/pipeline',
       prepare: async (page) => {
-        await openLp(page, 'Michael Okonjo');
+        await openLp(page, 'Bram Kowalczyk');
         // Fictional, like everything on the demo: one entry, added once.
         if (!(await page.getByText(/moved the office.s venture allocation/).count())) {
           await page.getByLabel('Context or a correction').fill('He moved the office’s venture allocation to a new CIO in August: ask her, not him, about fund commitments.');
@@ -462,7 +462,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-the-org-on-its-page',
       path: '/rails/pipeline?status=discussing',
       prepare: async (page) => {
-        await page.locator('tr', { hasText: 'Hannah Boyle' }).locator('a').first().click();
+        await page.locator('tr', { hasText: 'Imogen Brankovic' }).locator('a').first().click();
         await page.waitForURL(/\/rails\/pipeline\/[0-9a-f-]{36}/, { timeout: 60_000 });
         await page.waitForLoadState('networkidle');
       },
@@ -508,7 +508,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-a-few-searches',
       path: '/all/pipeline',
       prepare: async (page) => {
-        await openLp(page, 'Gordon Whitcomb');
+        await openLp(page, 'Yaw Albescu');
         await page.getByRole('heading', { name: 'From public sources' }).evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
         await page.evaluate(() => window.scrollBy(0, -80));
         await page.waitForTimeout(300);
@@ -527,7 +527,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-a-fact-check',
       path: '/all/pipeline',
       prepare: async (page) => {
-        await openLp(page, 'Nadia Brandt');
+        await openLp(page, 'Thandiwe Petrescu');
         await page.getByText(/Corrected on/).first().evaluate((el) => el.scrollIntoView({ block: 'center' })).catch(() => {});
         await page.waitForTimeout(300);
       },
@@ -538,7 +538,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-a-reply-we-owe',
       path: '/all/pipeline',
       prepare: async (page) => {
-        await openLp(page, 'Rosa Iglesias');
+        await openLp(page, 'Anaïs Fontaine');
         await page.getByRole('heading', { name: 'Before any outreach' }).evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
         await page.evaluate(() => window.scrollBy(0, -120));
         await page.waitForTimeout(300);
@@ -550,7 +550,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-page-reads-only',
       path: '/neurotech/pipeline',
       prepare: async (page) => {
-        await openLp(page, 'Rachel Kaplan');
+        await openLp(page, 'Paloma Jaramillo');
         await page.getByRole('heading', { name: 'From public sources' }).evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
         await page.evaluate(() => window.scrollBy(0, -80));
         await page.waitForTimeout(300);
@@ -562,7 +562,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-a-shared-record',
       path: '/neurotech/pipeline',
       prepare: async (page) => {
-        await openLp(page, 'Michael Okonjo');
+        await openLp(page, 'Bram Kowalczyk');
         await page.getByRole('heading', { name: 'From public sources' }).evaluate((el) => el.scrollIntoView({ block: 'start' })).catch(() => {});
         await page.evaluate(() => window.scrollBy(0, -80));
         await page.waitForTimeout(300);
@@ -624,7 +624,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-a-suggested-strategy',
       path: '/targets?status=discussing',
       prepare: async (page) => {
-        await openLp(page, 'Michael Okonjo');
+        await openLp(page, 'Bram Kowalczyk');
         await page.getByRole('heading', { name: 'Suggested strategy' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
         await page.evaluate(() => window.scrollBy(0, -80));
         await page.waitForTimeout(200);
@@ -634,7 +634,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-from-public-sources',
       path: '/targets?status=discussing',
       prepare: async (page) => {
-        await openLp(page, 'Michael Okonjo');
+        await openLp(page, 'Bram Kowalczyk');
         await page.locator('.pubprof details summary').first().click();
         await page.getByRole('heading', { name: 'From public sources' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
         await page.evaluate(() => window.scrollBy(0, -80));
@@ -719,8 +719,8 @@ const SHOTS: Record<string, Shot[]> = {
       prepare: async (page) => {
         await page.request.post(new URL('/api/session', page.url()).toString(), { data: { vehicleSlug: 'all' } });
         // Someone reaches out, and says so on the LP's page: Connecting, waiting on a reply.
-        await openLp(page, 'Anneliese Mork');
-        await page.locator('.updbox textarea').fill('Emailed Anneliese this morning to ask for twenty minutes before the IC.');
+        await openLp(page, 'Adaeze Lindgaard');
+        await page.locator('.updbox textarea').fill('Emailed Adaeze this morning to ask for twenty minutes before the IC.');
         await page.getByRole('button', { name: 'Save update' }).click();
         await page.locator('.updbox .stat.ready').waitFor({ timeout: 15000 });
         await page.goto(new URL('/today', page.url()).toString(), { waitUntil: 'networkidle' });
@@ -735,7 +735,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-an-update-read-as-you-type',
       path: '/targets?status=selected',
       prepare: async (page) => {
-        await openLp(page, 'Michael Okonjo');
+        await openLp(page, 'Bram Kowalczyk');
         await page.getByRole('heading', { name: 'Timeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
         await page.evaluate(() => window.scrollBy(0, -80));
         await page.locator('.updbox textarea').fill(N61_UPDATE);
@@ -746,7 +746,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-the-state-changing-on-the-timeline',
       path: '/targets?status=selected',
       prepare: async (page) => {
-        await openLp(page, 'Michael Okonjo');
+        await openLp(page, 'Bram Kowalczyk');
         await page.locator('.updbox textarea').fill(N61_UPDATE);
         await page.getByRole('button', { name: 'Save update' }).click();
         await page.locator('.updbox .stat.ready').waitFor({ timeout: 15000 });
@@ -762,7 +762,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-status-with-its-evidence',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Thandiwe Petrescu/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(200);
       },
@@ -771,7 +771,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-passed-and-why',
       path: '/targets?status=passed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Ruth Kessler/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Xiomara Castellane/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(200);
       },
@@ -782,7 +782,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-only-this-raise',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Elif Pellegrino/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.getByRole('heading', { name: 'Timeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
         await page.evaluate(() => window.scrollBy(0, -80));
@@ -793,7 +793,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-contact-history',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Elif Pellegrino/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         const own = await page.locator('.elsewhere a').first().getAttribute('href');
         await page.goto(new URL(own!, page.url()).toString(), { waitUntil: 'networkidle' });
@@ -808,7 +808,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-captured-as-drawn',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Thandiwe Petrescu/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.evaluate(() => document.fonts.ready);
         await page.locator('button', { hasText: /^\s*✎?\s*Feedback\s*$/ }).first().click();
@@ -820,7 +820,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-scrolled-full-size',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Thandiwe Petrescu/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.evaluate(() => document.fonts.ready);
         await page.mouse.wheel(0, 700);
@@ -837,7 +837,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-on-file-not-accepted',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Thandiwe Petrescu/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(200);
       },
@@ -859,7 +859,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '04-accepted',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Thandiwe Petrescu/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(200);
       },
@@ -878,7 +878,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-one-timeline',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Elif Pellegrino/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.getByRole('heading', { name: 'Timeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
         await page.evaluate(() => window.scrollBy(0, -80));
@@ -889,7 +889,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-questions-and-a-redaction',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Thandiwe Petrescu/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.getByRole('heading', { name: 'Timeline' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
         await page.evaluate(() => window.scrollBy(0, -80));
@@ -902,7 +902,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '01-a-thread-opened',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Elif Pellegrino/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.locator('details.thread summary').first().click();
         await page.getByRole('heading', { name: 'Touchpoints' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
@@ -914,7 +914,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-notes-read',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Elif Pellegrino/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(200);
       },
@@ -924,7 +924,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '04-confirmed',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Elif Pellegrino/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         const confirm = page.getByRole('button', { name: 'Confirm' });
         if (await confirm.count()) {
@@ -959,7 +959,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-dated-meetings',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Thandiwe Petrescu/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.getByRole('heading', { name: 'Touchpoints' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
         await page.evaluate(() => window.scrollBy(0, -80));
@@ -993,7 +993,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-signed-per-affinity',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Yuki Tanaka/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Hana Rasmussen-Oda/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.getByText('Record what happened').click();
         await page.getByRole('heading', { name: 'Close track' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
@@ -1005,7 +1005,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '03-signed-again',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Ana Vidal/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Elif Pellegrino/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         // Recorded here, once: a signature, then a second one with its reason.
         if (!(await page.getByText('Subscription agreement, v2').count())) {
@@ -1032,7 +1032,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-the-log',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Thandiwe Petrescu/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         // Logged here, once: the third meeting, with their read.
         if (!(await page.getByText('the data room walkthrough').count())) {
@@ -1053,7 +1053,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '03-form',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Thandiwe Petrescu/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.getByText('Log a touchpoint').click();
         await page.getByRole('radio', { name: 'Research pass' }).click();
@@ -1071,7 +1071,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-read-from-affinity',
       path: '/targets?status=committed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Thandiwe Petrescu/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.getByText('Change the status').click();
         await page.waitForTimeout(300);
@@ -1081,7 +1081,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '03-set-here',
       path: '/targets?status=passed',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Ruth Kessler/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Xiomara Castellane/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         // Set by a person, through the form: who ended it, why, and when to try again.
         await page.getByText('Change the status').click();
@@ -1131,7 +1131,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-on-the-lp',
       path: '/targets',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Nadia Brandt/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Thandiwe Petrescu/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.getByRole('heading', { name: 'Notes in Affinity' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
         await page.evaluate(() => window.scrollBy(0, -70));
@@ -1191,7 +1191,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '03-a-translated-pursuit',
       path: '/vehicles',
       prepare: async (page) => {
-        const href = await page.getByRole('link', { name: /Yuki Tanaka/ }).first().getAttribute('href');
+        const href = await page.getByRole('link', { name: /Hana Rasmussen-Oda/ }).first().getAttribute('href');
         await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(200);
       },
@@ -1330,7 +1330,7 @@ const SHOTS: Record<string, Shot[]> = {
           g.fillStyle = '#1A1917'; g.font = '600 22px sans-serif'; g.fillText('Ask log · owner', 24, 44);
           g.fillStyle = '#E4E0D6'; for (let i = 0; i < 4; i++) g.fillRect(24, 72 + i * 44, 472, 1);
           g.fillStyle = '#5E5A52'; g.font = '16px sans-serif';
-          ['Delia Roos · Mara Vance', 'Northwood · Juan', 'Cedar Trust · Juan'].forEach((t, i) => g.fillText(t, 24, 100 + i * 44));
+          ['Solveig Quaresma · Keziah Grimaldo', 'Vetchling Wagtail · Lior', 'Fernhollow Umberfield Trust · Lior'].forEach((t, i) => g.fillText(t, 24, 100 + i * 44));
           const blob: Blob = await new Promise((r) => c.toBlob((x) => r(x!), 'image/png'));
           const dt = new DataTransfer(); dt.items.add(new File([blob], 'ask-log.png', { type: 'image/png' }));
           document.querySelector('.mdfield > div:nth-of-type(2)')!
@@ -1401,7 +1401,7 @@ const SHOTS: Record<string, Shot[]> = {
           g.fillStyle = '#1A1917'; g.font = '600 22px sans-serif'; g.fillText('Ask log · owner', 24, 48);
           g.fillStyle = '#E4E0D6'; for (let i = 0; i < 5; i++) g.fillRect(24, 80 + i * 40, 472, 1);
           g.fillStyle = '#5E5A52'; g.font = '16px sans-serif';
-          ['Delia Roos · Mara Vance', 'Northwood · Juan', 'Cedar Trust · Juan', 'Okonjo · Sam'].forEach((t, i) => g.fillText(t, 24, 108 + i * 40));
+          ['Solveig Quaresma · Keziah Grimaldo', 'Vetchling Wagtail · Lior', 'Fernhollow Umberfield Trust · Lior', 'Kowalczyk · Fiachra'].forEach((t, i) => g.fillText(t, 24, 108 + i * 40));
           const blob: Blob = await new Promise((r) => c.toBlob((x) => r(x!), 'image/png'));
           const dt = new DataTransfer(); dt.items.add(new File([blob], 'ask-log.png', { type: 'image/png' }));
           document.querySelector('.mdfield > div:nth-of-type(2)')!
@@ -1561,7 +1561,7 @@ const SHOTS: Record<string, Shot[]> = {
         await page.waitForTimeout(350);
       } },
     { name: '03-one-collision', path: '/approvals', prepare: async (page) => {
-        await page.getByRole('link', { name: /Route to Delia Roos/ }).click();
+        await page.getByRole('link', { name: /Route to Solveig Quaresma/ }).click();
         await page.waitForLoadState('networkidle');
         await page.getByText(/guard.*refusing/i).first().scrollIntoViewIfNeeded();
         await page.waitForTimeout(350);
@@ -1693,7 +1693,7 @@ const SHOTS: Record<string, Shot[]> = {
   N22: [
     { name: '01-picker-and-bars', path: '/routes' },
     { name: '02-search', path: '/routes', prepare: async (page) => {
-        await page.getByLabel('Search targets').fill('Kaplan');
+        await page.getByLabel('Search targets').fill('Jaramillo');
         await page.waitForTimeout(400);
       } },
     { name: '03-score-filter', path: '/routes', prepare: async (page) => {
@@ -1918,7 +1918,7 @@ const SHOTS: Record<string, Shot[]> = {
         await page.getByRole('heading', { name: 'What we could do' }).scrollIntoViewIfNeeded();
         await page.waitForTimeout(350);
       } },
-    { name: '04-tessaro', path: '/neurotech/fit', prepare: async (page) => {
+    { name: '04-oyelaran', path: '/neurotech/fit', prepare: async (page) => {
         await page.getByRole('link', { name: 'what to do →' }).nth(1).click();
         await page.waitForLoadState('networkidle');
         await page.getByRole('heading', { name: 'What they need before they can say yes' })
@@ -1940,8 +1940,8 @@ const SHOTS: Record<string, Shot[]> = {
         await page.getByRole('heading', { name: 'Propose and commit' }).scrollIntoViewIfNeeded();
         await page.locator('.mdfield textarea').fill(
           '- @mara books the third-party verification this week, letter by 2026-10-02\n'
-          + '- @juan asks Vantage for a reference call and a note to Raman\n'
-          + '- @ines writes the CPA-letter note for Whitcomb by 2026-09-24\n',
+          + '- @juan asks Greylag Gorsebrook for a reference call and a note to Eskildsen\n'
+          + '- @ines writes the CPA-letter note for Albescu by 2026-09-24\n',
         );
         await page.waitForTimeout(400);
       } },
@@ -2098,7 +2098,7 @@ const SHOTS: Record<string, Shot[]> = {
           'The fit score needs a "why this moved" line',
         );
         await page.locator('textarea').fill(
-          'Northwood went from 0.62 to 0.60 and nothing on the page says which reading changed. A one-line diff against the last assessment would answer it.',
+          'Vetchling Wagtail went from 0.62 to 0.60 and nothing on the page says which reading changed. A one-line diff against the last assessment would answer it.',
         );
         await page.waitForTimeout(400);
       },
@@ -2159,7 +2159,7 @@ const SHOTS: Record<string, Shot[]> = {
       path: '/orgs/g/firms',
       fullPage: true,
       prepare: async (page) => {
-        await page.getByRole('link', { name: /Open the page for Northwood Capital/ }).click();
+        await page.getByRole('link', { name: /Open the page for Vetchling Wagtail Capital/ }).click();
         await page.waitForLoadState('networkidle');
       },
     },
@@ -2167,7 +2167,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '03-person-two-firms',
       path: '/orgs/g/people',
       prepare: async (page) => {
-        await page.getByRole('link', { name: /Open the page for Priya Raman/ }).click();
+        await page.getByRole('link', { name: /Open the page for Perpetua Eskildsen/ }).click();
         await page.waitForLoadState('networkidle');
         await page.getByRole('heading', { name: 'Where they sit' }).scrollIntoViewIfNeeded();
         await page.waitForTimeout(300);
@@ -2177,7 +2177,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '04-summary-acts-for',
       path: '/orgs/g/people',
       prepare: async (page) => {
-        await page.getByRole('link', { name: /Summarise Jonah Hale/ }).click();
+        await page.getByRole('link', { name: /Summarise Anselm Rautio/ }).click();
         await page.waitForLoadState('networkidle');
         await page.waitForTimeout(400);
       },
@@ -2248,7 +2248,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-summary-pane',
       path: '/orgs/g/all',
       prepare: async (page) => {
-        await page.getByRole('link', { name: /Summarise Whitcomb Capital/ }).click();
+        await page.getByRole('link', { name: /Summarise Albescu Capital/ }).click();
         await page.waitForLoadState('networkidle');
         await page.waitForTimeout(400);
       },
@@ -2258,7 +2258,7 @@ const SHOTS: Record<string, Shot[]> = {
       path: '/orgs/g/all',
       fullPage: true,
       prepare: async (page) => {
-        await page.getByRole('link', { name: /Open the page for Delia Roos/ }).click();
+        await page.getByRole('link', { name: /Open the page for Solveig Quaresma/ }).click();
         await page.waitForLoadState('networkidle');
       },
     },
@@ -2266,7 +2266,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '04-summary-from-fit',
       path: '/fit',
       prepare: async (page) => {
-        await page.getByRole('link', { name: /Summarise Okonjo Family Office/ }).click();
+        await page.getByRole('link', { name: /Summarise Kowalczyk Family Office/ }).click();
         await page.waitForLoadState('networkidle');
         await page.waitForTimeout(400);
       },
@@ -2503,7 +2503,7 @@ const SHOTS: Record<string, Shot[]> = {
   // the detail beside the list can read the LP's reasons.
   'strategic-0120': [
     { name: '01-selection-strategic-column', path: '/spv-cortex/selection?status=all&sort=strategic&dir=desc', width: 1587, fullPage: true,
-      prepare: async (page) => { await asUser(page); await page.locator('tr[data-lp]', { hasText: 'Halvorsen Family Office' }).click(); await page.getByText('derived, not part of the score').waitFor(); } },
+      prepare: async (page) => { await asUser(page); await page.locator('tr[data-lp]', { hasText: 'Iwasaki Family Office' }).click(); await page.getByText('derived, not part of the score').waitFor(); } },
     { name: '02-fund-high-or-some', path: '/neurotech/selection?status=all&strategic=useful&sort=strategic&dir=desc', width: 1587, fullPage: true,
       prepare: async (page) => { await asUser(page); await page.getByText('assessed, not part of the score').waitFor(); } },
   ],
@@ -2531,8 +2531,8 @@ async function resolveTokens(page: Page, base: string, path: string): Promise<st
   }
   if (!path.includes('__ROOS__')) return path;
   await page.goto(base + '/research', { waitUntil: 'networkidle' });
-  const href = await page.getByRole('link', { name: 'Delia Roos' }).first().getAttribute('href');
-  if (!href) throw new Error('could not resolve the Delia Roos dossier link');
+  const href = await page.getByRole('link', { name: 'Solveig Quaresma' }).first().getAttribute('href');
+  if (!href) throw new Error('could not resolve the Solveig Quaresma dossier link');
   return path.replace('/research/__ROOS__', href);
 }
 

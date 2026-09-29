@@ -1,9 +1,9 @@
 [
   {
-    "source_key": "fixture:2026-09-18:northwood-personnel",
-    "entity": "Northwood Capital",
+    "source_key": "fixture:2026-09-18:vetchling-wagtail-personnel",
+    "entity": "Vetchling Wagtail Capital",
     "kind": "personnel_change",
-    "headline": "Priya Raman promoted to head of investments",
+    "headline": "Perpetua Eskildsen promoted to head of investments",
     "detail": "Trade press notice. She now signs rather than recommends, which changes who our counterpart is.",
     "source": "trade_press",
     "source_ref": "press:2026-09-18",
@@ -13,8 +13,8 @@
     "threshold_detail": "Personnel news is noise unless it touches the person who decides. This one does."
   },
   {
-    "source_key": "fixture:2026-09-16:roos-allocation",
-    "entity": "Roos Foundation",
+    "source_key": "fixture:2026-09-16:quaresma-allocation",
+    "entity": "Quaresma Foundation",
     "kind": "allocation_announced",
     "headline": "$6M recoverable grant announced to a competing neuro programme",
     "detail": "Second deployment this year in our field. Their budget is finite and we do not know its size.",
@@ -26,23 +26,23 @@
     "threshold_detail": "A grant inside our thesis, from a target whose budget we have not verified. Both halves matter."
   },
   {
-    "source_key": "fixture:2026-09-15:cedar-mandate",
-    "entity": "Cedar Trust",
+    "source_key": "fixture:2026-09-15:fernhollow-umberfield-mandate",
+    "entity": "Fernhollow Umberfield Trust",
     "kind": "mandate_change",
     "headline": "Life-sciences allocation raised from 8% to 12%",
     "detail": "Published in their annual report. Raises the ceiling on what they can do with us later.",
     "source": "annual_report",
-    "source_ref": "doc:cedar-ar-2026",
+    "source_ref": "doc:fernhollow-umberfield-ar-2026",
     "observed_at": "2026-09-15",
     "confidence": "high",
     "threshold_label": "Mandate ceiling moved",
     "threshold_detail": "A stated allocation change from a primary document, not a comment in an interview."
   },
   {
-    "source_key": "fixture:2026-09-11:okonjo-event",
-    "entity": "Okonjo Family Office",
+    "source_key": "fixture:2026-09-11:kowalczyk-event",
+    "entity": "Kowalczyk Family Office",
     "kind": "event_attendance",
-    "headline": "Michael Okonjo speaking at a neurotech conference in November",
+    "headline": "Bram Kowalczyk speaking at a neurotech conference in November",
     "detail": "Public agenda. A place to be in the room without spending an ask.",
     "source": "event_agenda",
     "source_ref": "agenda:nov-2026",
@@ -52,8 +52,8 @@
     "threshold_detail": "Attendance only counts as a signal when it creates contact that does not cost connector goodwill."
   },
   {
-    "source_key": "fixture:2026-08-02:vantage-filing",
-    "entity": "Vantage Partners",
+    "source_key": "fixture:2026-08-02:greylag-gorsebrook-filing",
+    "entity": "Greylag Gorsebrook Partners",
     "kind": "filing",
     "headline": "Form D filed for a new $400M vehicle",
     "detail": "They are raising as well as allocating. Relevant to the conserved-pool question on their budget.",
@@ -65,8 +65,8 @@
     "threshold_detail": "A filing that changes what an actor can commit, from a primary source."
   },
   {
-    "source_key": "fixture:2026-09-19:quill-statement",
-    "entity": "Anne Quill",
+    "source_key": "fixture:2026-09-19:corcoran-statement",
+    "entity": "Renata Corcoran",
     "kind": "public_statement",
     "headline": "Quoted as \"looking hard at neuro in 2027\"",
     "detail": "One sentence in a podcast transcript. Consistent with her asking us to come back in November.",

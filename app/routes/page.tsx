@@ -30,7 +30,7 @@ export const dynamic = 'force-dynamic';
 
 const TIERS: EvidenceTier[] = ['A', 'B', 'C', 'D'];
 
-/** "Met 12 Mar 2026", "Heard from Ana Ruiz, 3 Jun 2026": the latest direct contact, in words. */
+/** "Met 12 Mar 2026", "Heard from Elif Ruiz, 3 Jun 2026": the latest direct contact, in words. */
 const touchWords = (c: DirectContact) => c.via
   ? `${c.how === 'met' ? 'Met' : 'Heard from'} ${c.via}, ${shortDate(c.on)}`
   : `${c.how === 'met' ? 'Met' : 'Heard from them'} ${shortDate(c.on)}`;

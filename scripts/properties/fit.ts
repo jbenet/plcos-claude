@@ -38,13 +38,13 @@ export async function fitProperties({ check }: SeedContext) {
     check(
       'Awareness is measured against us, never against a thesis they hold independently',
       (() => {
-        const t = fit.find((a) => a.entityName === 'Tessaro Family Office');
+        const t = fit.find((a) => a.entityName === 'Oyelaran Family Office');
         if (!t) return false;
         const holdsThesis = t.perceptions.some(
           (x) => x.subjectKind === 'thesis' && x.familiarity === 'deep');
         return holdsThesis && t.diagnosis.blocker === 'awareness';
       })(),
-      'Tessaro knows the thesis deeply and has never heard of us; the blocker is awareness',
+      'Oyelaran knows the thesis deeply and has never heard of us; the blocker is awareness',
     );
 
     check(
@@ -59,7 +59,7 @@ export async function fitProperties({ check }: SeedContext) {
       (() => {
         const bySlug = new Map<string, number>();
         for (const a of fit) bySlug.set(a.entityName, (bySlug.get(a.entityName) ?? 0) + 1);
-        // Vantage is assessed on Rails only here; the property is that the repo returns one
+        // Greylag Gorsebrook is assessed on Rails only here; the property is that the repo returns one
         // row per firm × vehicle and never a merged one.
         return fit.length === new Set(fit.map((a) => `${a.entityId}:${a.vehicleId}`)).size;
       })(),
@@ -69,11 +69,11 @@ export async function fitProperties({ check }: SeedContext) {
     check(
       'The compliance registry and the accreditation gate agree',
       (() => {
-        const w = fit.find((a) => a.entityName === 'Whitcomb Capital');
+        const w = fit.find((a) => a.entityName === 'Albescu Capital');
         const gate = w?.gates.find((g) => g.code === 'accredited');
         return Boolean(w && gate && gate.passed === false && w.exemption === '506(c)');
       })(),
-      'Whitcomb self-certified on a 506(c) vehicle: the gate fails and the registry says the same',
+      'Albescu self-certified on a 506(c) vehicle: the gate fails and the registry says the same',
     );
   }
 }

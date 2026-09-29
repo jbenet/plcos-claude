@@ -29,11 +29,11 @@ export async function seedStrategy(db: Db): Promise<{ pursuits: number; ladderEv
 
   const seeded: Seeded[] = [
     {
-      entity: 'Delia Roos', vehicle: 'neurotech', owner: 'juan',
+      entity: 'Solveig Quaresma', vehicle: 'neurotech', owner: 'juan',
       headline: 'Dual mandate: PRI-capable philanthropy and direct fund commitments. $2–5M band.',
       plan: [
         {
-          move: 'Ask Duettmann for an opt-in, carrying the primer and the PRI structure note.',
+          move: 'Ask Umeadi for an opt-in, carrying the primer and the PRI structure note.',
           because: 'She is the only tier-A route, and she has already offered.',
           blockedBy: 'Conflict with PLC Crypto/Rails, who opened an ask on the same actor six days ago.',
         },
@@ -49,17 +49,17 @@ export async function seedStrategy(db: Db): Promise<{ pursuits: number; ladderEv
       events: [
         {
           rung: 'connector_willing', kind: 'relationship_note', ref: 'S04',
-          note: 'Duettmann: "Happy to ask Delia whether she wants an intro." Explicitly not a commitment to advocate.',
+          note: 'Umeadi: "Happy to ask Solveig whether she wants an intro." Explicitly not a commitment to advocate.',
           at: '2026-09-14', by: 'juan',
         },
       ],
     },
     {
-      entity: 'Northwood Capital', vehicle: 'neurotech', owner: 'juan',
+      entity: 'Vetchling Wagtail Capital', vehicle: 'neurotech', owner: 'juan',
       headline: 'Multi-family office, $1.4B. Emerging-manager programme, 3–5 new managers a year.',
       plan: [
         {
-          move: 'Send the DDQ pack Raman asked for.',
+          move: 'Send the DDQ pack Eskildsen asked for.',
           because: 'She asked for it directly on 31 August.',
           blockedBy: 'No SEND ticket has been opened for it yet.',
         },
@@ -71,24 +71,24 @@ export async function seedStrategy(db: Db): Promise<{ pursuits: number; ladderEv
       events: [
         {
           rung: 'connector_willing', kind: 'not_applicable', ref: 'direct',
-          note: 'Direct approach — Raman asked at the Q3 event to be contacted. No connector was involved.',
+          note: 'Direct approach — Eskildsen asked at the Q3 event to be contacted. No connector was involved.',
           at: '2026-08-28', by: 'juan',
         },
         {
-          rung: 'target_opted_in', kind: 'ask_outcome', ref: 'ask:raman',
-          note: 'Raman replied the same week and asked for the DDQ pack.',
+          rung: 'target_opted_in', kind: 'ask_outcome', ref: 'ask:eskildsen',
+          note: 'Eskildsen replied the same week and asked for the DDQ pack.',
           at: '2026-08-31', by: 'juan',
         },
         {
           rung: 'meeting_held', kind: 'meeting', ref: 'meeting:2026-09-08',
-          note: '45 minutes with Raman and one analyst. Neuro thesis and team; no terms discussed.',
+          note: '45 minutes with Eskildsen and one analyst. Neuro thesis and team; no terms discussed.',
           at: '2026-09-08', by: 'juan',
         },
       ],
     },
     {
-      entity: 'Cedar Trust', vehicle: 'neurotech', owner: 'mara',
-      headline: 'Endowment. Screened by Mercer & Bly. Countersigned 18 September; the wire has not landed.',
+      entity: 'Fernhollow Umberfield Trust', vehicle: 'neurotech', owner: 'mara',
+      headline: 'Endowment. Screened by Gyasi & Ferrante-Obuya. Countersigned 18 September; the wire has not landed.',
       plan: [
         {
           move: 'Confirm the wire and record cash separately from the commitment.',
@@ -97,18 +97,18 @@ export async function seedStrategy(db: Db): Promise<{ pursuits: number; ladderEv
       ],
       events: [
         {
-          rung: 'connector_willing', kind: 'relationship_note', ref: 'note:mercer-2026-08-05',
-          note: 'Mercer & Bly agreed to put us in front of Cedar as part of their screen.',
+          rung: 'connector_willing', kind: 'relationship_note', ref: 'note:gyasi-2026-08-05',
+          note: 'Gyasi & Ferrante-Obuya agreed to put us in front of Fernhollow Umberfield as part of their screen.',
           at: '2026-08-05', by: 'mara',
         },
         {
-          rung: 'target_opted_in', kind: 'ask_outcome', ref: 'ask:lindqvist',
-          note: 'Lindqvist agreed to a first call.',
+          rung: 'target_opted_in', kind: 'ask_outcome', ref: 'ask:holmqvist',
+          note: 'Holmqvist agreed to a first call.',
           at: '2026-08-11', by: 'mara',
         },
         {
           rung: 'meeting_held', kind: 'meeting', ref: 'meeting:2026-08-20',
-          note: 'Lindqvist plus two of the investment team. Full pitch.',
+          note: 'Holmqvist plus two of the investment team. Full pitch.',
           at: '2026-08-20', by: 'mara',
         },
         {
@@ -117,31 +117,31 @@ export async function seedStrategy(db: Db): Promise<{ pursuits: number; ladderEv
           at: '2026-09-02', by: 'mara',
         },
         {
-          rung: 'commitment_accepted', kind: 'document', ref: 'sub-doc:cedar-v3',
+          rung: 'commitment_accepted', kind: 'document', ref: 'sub-doc:fernhollow-umberfield-v3',
           note: 'Subscription document signed and countersigned. $4.0M.',
           at: '2026-09-18', by: 'tomas',
         },
       ],
     },
     {
-      entity: 'Okonjo Family Office', vehicle: 'neurotech', owner: 'juan',
+      entity: 'Kowalczyk Family Office', vehicle: 'neurotech', owner: 'juan',
       headline: 'Generalist single family office with a neuro interest since 2024. No reply in three weeks.',
       plan: [
         {
-          move: 'Leave it. Do not ask Duettmann again this quarter.',
+          move: 'Leave it. Do not ask Umeadi again this quarter.',
           because: 'She is at 2 of 3 asks, and a second ask on a silent target spends goodwill for nothing.',
         },
       ],
       events: [
         {
-          rung: 'connector_willing', kind: 'relationship_note', ref: 'note:duettmann-2026-08-21',
-          note: 'Duettmann forwarded the opt-in request to Okonjo.',
+          rung: 'connector_willing', kind: 'relationship_note', ref: 'note:umeadi-2026-08-21',
+          note: 'Umeadi forwarded the opt-in request to Kowalczyk.',
           at: '2026-08-21', by: 'juan',
         },
       ],
     },
     {
-      entity: 'Anne Quill', vehicle: 'spv-cortex', owner: 'juan',
+      entity: 'Renata Corcoran', vehicle: 'spv-cortex', owner: 'juan',
       headline: 'Asked us to come back in November. Not a decline.',
       plan: [
         {
@@ -151,14 +151,14 @@ export async function seedStrategy(db: Db): Promise<{ pursuits: number; ladderEv
       ],
       events: [
         {
-          rung: 'connector_willing', kind: 'relationship_note', ref: 'note:duettmann-2026-09-10',
-          note: 'Duettmann agreed to make the introduction for the Cortex SPV.',
+          rung: 'connector_willing', kind: 'relationship_note', ref: 'note:umeadi-2026-09-10',
+          note: 'Umeadi agreed to make the introduction for the Cortex SPV.',
           at: '2026-09-10', by: 'juan',
         },
       ],
     },
     {
-      entity: 'Delia Roos', vehicle: 'rails', owner: 'mara',
+      entity: 'Solveig Quaresma', vehicle: 'rails', owner: 'mara',
       headline: 'Same actor as the Neurotech pursuit. This is the collision.',
       plan: [
         {
@@ -168,8 +168,8 @@ export async function seedStrategy(db: Db): Promise<{ pursuits: number; ladderEv
       ],
       events: [
         {
-          rung: 'connector_willing', kind: 'relationship_note', ref: 'note:okonjo-2026-09-14',
-          note: 'Okonjo agreed to ask Roos about a Rails conversation.',
+          rung: 'connector_willing', kind: 'relationship_note', ref: 'note:kowalczyk-2026-09-14',
+          note: 'Kowalczyk agreed to ask Quaresma about a Rails conversation.',
           at: '2026-09-14', by: 'mara',
         },
       ],

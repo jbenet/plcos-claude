@@ -2,7 +2,7 @@
  "note": "Fictional findings and strategies for the demo profile (N64). Keyed by name; scripts/enrich-demo.ts writes them under data/demo/enrich/ with the demo’s own keys.",
  "findings": [
   {
-   "name": "Michael Okonjo",
+   "name": "Bram Kowalczyk",
    "researched": {
     "at": "2026-09-20T10:00:00Z",
     "by": "claude (sub-agent)",
@@ -13,28 +13,28 @@
     "match": "confirmed",
     "basis": "Name, family office and title match the record; the office’s own page names him as principal.",
     "canonical": {
-     "name": "Michael Okonjo",
+     "name": "Bram Kowalczyk",
      "role": "Principal",
-     "org": "Okonjo Family Office",
+     "org": "Kowalczyk Family Office",
      "location": "Lagos and London"
     },
     "links": [
      {
       "kind": "website",
-      "url": "https://okonjo-family-office.example.org/"
+      "url": "https://kowalczyk-family-office.example.org/"
      },
      {
       "kind": "podcast",
-      "url": "https://allocators-hour.example.org/episodes/okonjo"
+      "url": "https://allocators-hour.example.org/episodes/kowalczyk"
      }
     ]
    },
    "facts": [
     {
      "field": "role",
-     "value": "Principal of the Okonjo Family Office, a single-family office investing across venture, credit and real estate.",
+     "value": "Principal of the Kowalczyk Family Office, a single-family office investing across venture, credit and real estate.",
      "source": {
-      "url": "https://okonjo-family-office.example.org/about",
+      "url": "https://kowalczyk-family-office.example.org/about",
       "kind": "primary",
       "title": null,
       "published": null
@@ -46,7 +46,7 @@
      "field": "fund_lp",
      "value": "Commits to three to five venture funds a year, usually as an early LP in a manager’s first or second fund.",
      "source": {
-      "url": "https://allocators-hour.example.org/episodes/okonjo",
+      "url": "https://allocators-hour.example.org/episodes/kowalczyk",
       "kind": "podcast",
       "title": null,
       "published": "2026-05-12"
@@ -58,7 +58,7 @@
      "field": "interest",
      "value": "Says brain–computer interfaces are \"the next platform\" and wants exposure before the category is priced.",
      "source": {
-      "url": "https://allocators-hour.example.org/episodes/okonjo",
+      "url": "https://allocators-hour.example.org/episodes/kowalczyk",
       "kind": "podcast",
       "title": null,
       "published": "2026-05-12"
@@ -68,9 +68,9 @@
     },
     {
      "field": "investment",
-     "value": "Angel investor in two neuromodulation startups, Halcyon Neuro among them.",
+     "value": "Angel investor in two neuromodulation startups, Nightjar Saltmarsh Neuro among them.",
      "source": {
-      "url": "https://okonjo-family-office.example.org/portfolio",
+      "url": "https://kowalczyk-family-office.example.org/portfolio",
       "kind": "primary",
       "title": null,
       "published": null
@@ -78,7 +78,7 @@
      "confidence": "medium",
      "scope": "person",
      "detail": {
-      "company": "Halcyon Neuro"
+      "company": "Nightjar Saltmarsh Neuro"
      }
     },
     {
@@ -119,7 +119,7 @@
    },
    "connections": [
     {
-     "to": "Mara Vance",
+     "to": "Keziah Grimaldo",
      "kind": "other",
      "basis": "Both on the same allocator panel in 2025.",
      "source": "https://allocators-hour.example.org/panel-2025",
@@ -138,7 +138,7 @@
    }
   },
   {
-   "name": "Nadia Brandt",
+   "name": "Thandiwe Petrescu",
    "researched": {
     "at": "2026-09-20T10:00:00Z",
     "by": "claude (sub-agent)",
@@ -156,24 +156,24 @@
     "match": "confirmed",
     "basis": "Name and firm match; her firm’s team page and two interviews agree.",
     "canonical": {
-     "name": "Nadia Brandt",
+     "name": "Thandiwe Petrescu",
      "role": "Managing Partner",
-     "org": "Brandt & Co.",
+     "org": "Petrescu & Co.",
      "location": "Zurich"
     },
     "links": [
      {
       "kind": "bio",
-      "url": "https://brandt-co.example.org/team"
+      "url": "https://petrescu-co.example.org/team"
      }
     ]
    },
    "facts": [
     {
      "field": "role",
-     "value": "Managing Partner of Brandt & Co., a multi-family office.",
+     "value": "Managing Partner of Petrescu & Co., a multi-family office.",
      "source": {
-      "url": "https://brandt-co.example.org/team",
+      "url": "https://petrescu-co.example.org/team",
       "kind": "primary",
       "title": null,
       "published": null
@@ -184,7 +184,7 @@
      "field": "exit",
      "value": "Sold her medical-imaging company in 2019.",
      "source": {
-      "url": "https://swiss-tech-news.example.org/2019/brandt-exit",
+      "url": "https://swiss-tech-news.example.org/2019/petrescu-exit",
       "kind": "press",
       "title": null,
       "published": "2019-06-01"
@@ -195,7 +195,7 @@
      "field": "philanthropy",
      "value": "Chairs a foundation funding neurodegeneration research.",
      "source": {
-      "url": "https://brandt-foundation.example.org/",
+      "url": "https://petrescu-foundation.example.org/",
       "kind": "primary",
       "title": null,
       "published": null
@@ -204,27 +204,27 @@
     },
     {
      "field": "investment",
-     "value": "Seed investor in Halcyon Neuro, a neuromodulation startup.",
+     "value": "Seed investor in Nightjar Saltmarsh Neuro, a neuromodulation startup.",
      "detail": {
-      "company": "Halcyon Neuro"
+      "company": "Nightjar Saltmarsh Neuro"
      },
      "source": {
-      "url": "https://brandt-co.example.org/portfolio",
+      "url": "https://petrescu-co.example.org/portfolio",
       "kind": "primary",
       "title": null,
       "published": null
      },
-     "quote": "Seed: Halcyon Neuro",
+     "quote": "Seed: Nightjar Saltmarsh Neuro",
      "confidence": "high"
     },
     {
      "field": "board",
-     "value": "Sits on the board of the Lumen Brain Institute.",
+     "value": "Sits on the board of the Zephyrine Rookwood Institute.",
      "detail": {
-      "company": "Lumen Brain Institute"
+      "company": "Zephyrine Rookwood Institute"
      },
      "source": {
-      "url": "https://lumen-brain.example.org/board",
+      "url": "https://zephyrine-rookwood.example.org/board",
       "kind": "primary",
       "title": null,
       "published": null
@@ -262,7 +262,7 @@
    }
   },
   {
-   "name": "Rachel Kaplan",
+   "name": "Paloma Jaramillo",
    "researched": {
     "at": "2026-09-20T10:00:00Z",
     "by": "claude (sub-agent)",
@@ -274,17 +274,17 @@
     "match": "probable",
     "basis": "Name and trust match; only one public page names her.",
     "canonical": {
-     "name": "Rachel Kaplan",
+     "name": "Paloma Jaramillo",
      "role": "Principal",
-     "org": "Kaplan Family Trust"
+     "org": "Jaramillo Family Trust"
     }
    },
    "facts": [
     {
      "field": "role",
-     "value": "Principal of the Kaplan Family Trust.",
+     "value": "Principal of the Jaramillo Family Trust.",
      "source": {
-      "url": "https://kaplan-trust.example.org/",
+      "url": "https://jaramillo-trust.example.org/",
       "kind": "primary",
       "title": null,
       "published": null
@@ -293,12 +293,12 @@
     },
     {
      "field": "board",
-     "value": "Board member of the Lumen Brain Institute.",
+     "value": "Board member of the Zephyrine Rookwood Institute.",
      "detail": {
-      "company": "Lumen Brain Institute"
+      "company": "Zephyrine Rookwood Institute"
      },
      "source": {
-      "url": "https://lumen-brain.example.org/board",
+      "url": "https://zephyrine-rookwood.example.org/board",
       "kind": "primary",
       "title": null,
       "published": null
@@ -331,7 +331,7 @@
    }
   },
   {
-   "name": "Gordon Whitcomb",
+   "name": "Yaw Albescu",
    "researched": {
     "at": "2026-09-20T09:30:00Z",
     "by": "claude (sub-agent)",
@@ -343,17 +343,17 @@
     "match": "probable",
     "basis": "Name, firm and city agree on the firm's own page; two searches ran before the session's budget ran out.",
     "canonical": {
-     "name": "Gordon Whitcomb",
+     "name": "Yaw Albescu",
      "role": "Managing Partner",
-     "org": "Whitcomb Capital"
+     "org": "Albescu Capital"
     }
    },
    "facts": [
     {
      "field": "role",
-     "value": "Managing Partner of Whitcomb Capital.",
+     "value": "Managing Partner of Albescu Capital.",
      "source": {
-      "url": "https://whitcomb-capital.example.com/team",
+      "url": "https://albescu-capital.example.com/team",
       "kind": "primary",
       "title": null,
       "published": null
@@ -377,7 +377,7 @@
    "coverage": {
     "searched": [
      "web search (2 queries)",
-     "Whitcomb Capital's team page (read)"
+     "Albescu Capital's team page (read)"
     ],
     "notFound": [
      "whether the firm backs other managers' funds",
@@ -386,7 +386,7 @@
    }
   },
   {
-   "name": "Hannah Boyle",
+   "name": "Imogen Brankovic",
    "researched": {
     "at": "2026-09-21T09:00:00Z",
     "by": "claude (sub-agent)",
@@ -398,17 +398,17 @@
     "match": "confirmed",
     "basis": "The trust's own team page names her with the title, beside its CIO.",
     "canonical": {
-     "name": "Hannah Boyle",
+     "name": "Imogen Brankovic",
      "role": "Director of Investments",
-     "org": "Cedar Trust"
+     "org": "Fernhollow Umberfield Trust"
     }
    },
    "facts": [
     {
      "field": "role",
-     "value": "Director of Investments at Cedar Trust.",
+     "value": "Director of Investments at Fernhollow Umberfield Trust.",
      "source": {
-      "url": "https://cedar-trust.example.org/team",
+      "url": "https://fernhollow-umberfield-trust.example.org/team",
       "kind": "primary",
       "title": null,
       "published": null
@@ -440,7 +440,7 @@
  ],
  "strategies": [
   {
-   "name": "Michael Okonjo",
+   "name": "Bram Kowalczyk",
    "made": {
     "at": "2026-09-20T11:00:00Z",
     "by": "claude (sub-agent)",
@@ -480,13 +480,13 @@
    },
    "angle": "He said on a podcast that BCI is the next platform and that he likes being early in a manager’s first fund: the portfolio (a clinical-stage BCI company among ten) is exactly the exposure he described.",
    "route": {
-    "via": "Our own meeting; Mara Vance was on an allocator panel with him",
+    "via": "Our own meeting; Keziah Grimaldo was on an allocator panel with him",
     "tier": "B",
     "why": "Met once; the panel is a D clue on its own."
    },
    "next": {
     "what": "Offer 20 minutes at the November conference, where he is speaking, with one portfolio company’s founder",
-    "who": "Juan",
+    "who": "Lior",
     "when": "before the conference",
     "material": "the portfolio one-pager"
    },
@@ -505,7 +505,7 @@
    "confidence": "medium"
   },
   {
-   "name": "Nadia Brandt",
+   "name": "Thandiwe Petrescu",
    "made": {
     "at": "2026-09-20T11:00:00Z",
     "by": "claude (sub-agent)",
@@ -544,7 +544,7 @@
    },
    "next": {
     "what": "Ask which two or three families in the office should see the fund, and offer a portfolio briefing for them",
-    "who": "Mara Vance",
+    "who": "Keziah Grimaldo",
     "when": "this month",
     "material": null
    },
@@ -583,15 +583,15 @@
   ],
   "backers": [
    {
-    "name": "Harbor Street Ventures",
+    "name": "Copperbeck Amberlith Ventures",
     "aliases": [
-     "Harbor Street Ventures"
+     "Copperbeck Amberlith Ventures"
     ],
     "domains": [
-     "harborstreet.example.org"
+     "copperbeckamberlith.example.org"
     ],
     "what": "An early backer of ours",
-    "source": "https://example.org/harbor"
+    "source": "https://example.org/copperbeck"
    }
   ],
   "backer_people": [],
@@ -611,7 +611,7 @@
   "strategy": {
    "strategy-review.jsonl": [
     {
-     "name": "Michael Okonjo",
+     "name": "Bram Kowalczyk",
      "grade": "B",
      "version": 1,
      "issues": [
@@ -623,7 +623,7 @@
      "fix": "Set capacity to unknown."
     },
     {
-     "name": "Nadia Brandt",
+     "name": "Thandiwe Petrescu",
      "grade": "C",
      "version": 1,
      "issues": [
@@ -641,14 +641,14 @@
    ],
    "strategy-review-2.jsonl": [
     {
-     "name": "Michael Okonjo",
+     "name": "Bram Kowalczyk",
      "grade": "A",
      "version": 1.5,
      "issues": [],
      "fix": "No rewrite needed."
     },
     {
-     "name": "Nadia Brandt",
+     "name": "Thandiwe Petrescu",
      "grade": "B",
      "version": 1.5,
      "issues": [
@@ -664,7 +664,7 @@
   "facts": {
    "fact-review-01.jsonl": [
     {
-     "name": "Michael Okonjo",
+     "name": "Bram Kowalczyk",
      "identity": "holds",
      "identityNote": "The office's page and the podcast agree.",
      "facts": [
@@ -696,7 +696,7 @@
      ]
     },
     {
-     "name": "Nadia Brandt",
+     "name": "Thandiwe Petrescu",
      "identity": "holds",
      "identityNote": "The firm's page names her.",
      "facts": [
@@ -728,7 +728,7 @@
      ]
     },
     {
-     "name": "Rachel Kaplan",
+     "name": "Paloma Jaramillo",
      "identity": "doubt",
      "identityNote": "One page only.",
      "facts": [
@@ -747,7 +747,7 @@
    ],
    "fact-review-02.jsonl": [
     {
-     "name": "Gordon Whitcomb",
+     "name": "Yaw Albescu",
      "identity": "holds",
      "identityNote": "The firm's team page names him with the title.",
      "facts": [
@@ -763,22 +763,22 @@
  },
  "team": [
   {
-   "handle": "rowan",
-   "name": "Rowan Alder",
+   "handle": "radek",
+   "name": "Radek Wennerholm",
    "roles": [],
    "prior": [
     {
-     "org": "Willow Investment Arm",
+     "org": "Yellowhammer Teasel Investment Arm",
      "role": "Partner",
      "since": "2010",
      "until": "2018",
-     "source": "https://example.org/rowan-career"
+     "source": "https://example.org/radek-career"
     }
    ],
    "education": [],
    "affiliations": [
     {
-     "org": "Aster Institute",
+     "org": "Sedgewater Foxglove Institute",
      "role": "Fellow",
      "since": "2019",
      "until": "2021"
@@ -786,33 +786,33 @@
    ],
    "boards": [
     {
-     "org": "Cedar Research Council",
+     "org": "Fernhollow Umberfield Research Council",
      "role": "Director",
-     "source": "https://example.org/cedar-board"
+     "source": "https://example.org/fernhollow-umberfield-board"
     }
    ],
    "employers": [
     {
-     "org": "Birch Engineering",
+     "org": "Larkspur Quartzmere Engineering",
      "role": "Engineer"
     }
    ],
    "cofounded": [
     {
-     "org": "Juniper Science",
+     "org": "Emberly Quillmere Science",
      "role": "Co-founder",
-     "source": "https://example.org/juniper-founders"
+     "source": "https://example.org/emberly-quillmere-founders"
     }
    ],
    "investments": [
     {
-     "org": "Larch Robotics",
-     "source": "https://example.org/larch-round"
+     "org": "Loamrise Samphire Robotics",
+     "source": "https://example.org/loamrise-samphire-round"
     }
    ],
-   "bio": "Rowan advises Pine Research Trust.",
+   "bio": "Radek advises Wrenfield Dunlin Research Trust.",
    "sources": [
-    "https://example.org/rowan-bio"
+    "https://example.org/radek-bio"
    ]
   }
  ]
