@@ -18,7 +18,10 @@ export function ImportDuplicates({ report, pursuitReport }: { report?: ImportDup
       {result && <>
         <p>{result.merged} duplicate identities merged, {result.ambiguous.length} ambiguous</p>
         {result.decisions && <>
-          <p>{result.decisions.applied} decisions applied, {result.decisions.refused.length} refused{result.decisions.skipped > 0 ? `, ${result.decisions.skipped} already applied` : ''}</p>
+          <p>{result.decisions.applied} decisions applied, {result.decisions.refused.length} refused{result.decisions.skipped > 0 ? `, ${result.decisions.skipped} already applied` : ''}{!!result.decisions.superseded?.length && `, ${result.decisions.superseded.length} superseded`}</p>
+          {!!result.decisions.superseded?.length && <ul>{result.decisions.superseded.map(r => <li key={r.line}>
+            Line {r.line} · group {r.group.slice(0, 12)}: superseded by line {r.byLine}, which reviews the expanded group.
+          </li>)}</ul>}
           {result.decisions.refused.length > 0 && <ul>{result.decisions.refused.map(r => <li key={r.line}>
             Line {r.line}{r.group ? ` · group ${r.group.slice(0, 12)}` : ''}: {r.reason}
           </li>)}</ul>}

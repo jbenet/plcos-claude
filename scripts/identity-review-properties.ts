@@ -218,10 +218,41 @@ export async function identityReviewProperties(check: Check, db: Db) {
       && rolledBack.corrected.every(c => !rollback.includes(c.entityId)) && beforeRollback === await snapshot(),
       'The first correction is rolled back when the second member already has an active local correction.');
 
+    const sequential = await pair('Retype Then Merge');
+    const retype = decision(sequential, 'retype', { newType: 'org' });
+    const firstRetype = await run([retype]);
+    await exported();
+    const appendOnly = [retype, { ...decision(sequential), line: 2 }];
+    const afterRetype = await run(appendOnly);
+    check('IDENTITY REVIEW applied retype does not conflict with a later merge', firstRetype.decisions!.applied === 1
+      && afterRetype.decisions!.applied === 1 && afterRetype.decisions!.skipped === 1
+      && afterRetype.decisions!.refused.length === 0 && await root(sequential[1]!) === sequential[0],
+      'The append-only history keeps the applied retype while the fresh export permits the merge.');
+    const sequentialRetry = await run(appendOnly);
+    check('IDENTITY REVIEW applied history remains idempotent after retype then merge', sequentialRetry.decisions!.skipped === 2
+      && sequentialRetry.decisions!.applied === 0 && sequentialRetry.decisions!.refused.length === 0,
+      'Both receipts remain consumed after the group disappears from the export.');
+
+    const growing = await pair('Growing Group');
+    const olderMerge = decision(growing);
+    const expanded = [...growing, await entity('Growing Group')];
+    const growingHistory = [olderMerge, { ...decision(expanded), line: 2 }];
+    const grown = await run(growingHistory);
+    check('IDENTITY REVIEW older unapplied merge is superseded by an expanded group', grown.decisions!.applied === 1
+      && grown.decisions!.refused.length === 0 && grown.decisions!.superseded.length === 1
+      && grown.decisions!.superseded[0]!.line === 1 && grown.decisions!.superseded[0]!.byLine === 2
+      && await root(expanded[2]!) === growing[0],
+      'The old full member set is contained in the later proposal; it is superseded, not refused.');
+    const grownRetry = await run(growingHistory);
+    check('IDENTITY REVIEW superseded history remains superseded on retry', grownRetry.decisions!.skipped === 1
+      && grownRetry.decisions!.superseded.length === 1 && grownRetry.decisions!.refused.length === 0,
+      'Explicit full-group hashes preserve supersession after the newer merge has applied.');
+
     const conflicting = await pair('Conflicting Proposals');
     const beforeConflict = await snapshot();
     const conflicts = await run([decision(conflicting, 'merge'), { ...decision(conflicting, 'separate'), line: 2 }]);
     check('IDENTITY REVIEW conflicting proposals for one group are all refused without order dependence', conflicts.decisions!.applied === 0
+      && conflicts.decisions!.superseded.length === 0 && conflicts.decisions!.skipped === 0
       && conflicts.decisions!.refused.length === 2 && conflicts.decisions!.refused.every(r => r.reason.includes('Conflicting')) && beforeConflict === await snapshot(),
       'A merge and a separation for the same group cannot silently race by file order.');
 

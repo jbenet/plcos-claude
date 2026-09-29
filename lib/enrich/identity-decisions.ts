@@ -14,6 +14,7 @@ export interface IdentityDecision {
 export interface IdentityDecisionReport {
   applied: number; skipped: number;
   refused: Array<{ line: number; group?: string; reason: string }>;
+  superseded: Array<{ line: number; group: string; byLine: number }>;
   separations: Array<{ assertionId: string; group: string }>;
 }
 const internalSource = (s: string) => ['prospect', 'prospect_key', 'prospect_org', 'w3_person',
@@ -76,25 +77,48 @@ type Source = { id: string; source: string; key: string };
  * Each line has a savepoint: one refused line cannot partially apply or abort its valid neighbours.
  */
 export async function applyIdentityDecisions(tx: Queryable, by: string, report: ImportDuplicateReport, inputs: IdentityDecisionInput[]) {
-  const result: IdentityDecisionReport = { applied: 0, skipped: 0, refused: [], separations: [] };
+  const result: IdentityDecisionReport = { applied: 0, skipped: 0, refused: [], superseded: [], separations: [] };
   report.decisions = result;
   const parsed = inputs.map(input => {
     try { if (input.error) fail(input.error); return { input, decision: validate(input.value) }; }
     catch (e) { result.refused.push({ line: input.line, reason: (e as Error).message }); return { input }; }
   });
   const fingerprint = (d: IdentityDecision) => createHash('sha256').update(JSON.stringify(d)).digest('hex');
+  const receipts = await tx.query<{ key: string }>(`select data->>'key' key from research.note
+    where kind='identity_review_decision' and data->>'key'=any($1::text[])`,
+  [parsed.flatMap(p => p.decision ? [fingerprint(p.decision)] : [])]);
+  const applied = new Set(receipts.map(r => r.key));
+  // A hash alone cannot recover an old export's members. Only use a current group or
+  // explicit members that reproduce its full-group hash; never guess from a name.
+  const groupMembers = (d: IdentityDecision) => report.ambiguous.find(g => identityReviewGroupId(g.entityIds) === d.group)?.entityIds
+    ?? (d.members && identityReviewGroupId(d.members) === d.group ? d.members : undefined);
+  const superseded = new Map<IdentityDecisionInput, number>();
+  for (const { input, decision: d } of parsed) {
+    if (!d || applied.has(fingerprint(d))) continue;
+    const members = groupMembers(d);
+    if (!members) continue;
+    const later = parsed.find(p => {
+      if (!p.decision || p.input.line <= input.line) return false;
+      const next = groupMembers(p.decision);
+      return next && next.length > members.length && members.every(id => next.includes(id))
+        && (d.members ?? members).every(id => (p.decision!.members ?? next).includes(id));
+    });
+    if (later) superseded.set(input, later.input.line);
+  }
   const variants = new Map<string, Set<string>>();
-  for (const { decision: d } of parsed) if (d) variants.set(d.group, (variants.get(d.group) ?? new Set()).add(fingerprint(d)));
+  for (const { input, decision: d } of parsed) if (d && !applied.has(fingerprint(d)) && !superseded.has(input))
+    variants.set(d.group, (variants.get(d.group) ?? new Set()).add(fingerprint(d)));
   for (const { input, decision: d } of parsed) {
     if (!d) continue;
     const key = fingerprint(d);
+    if (applied.has(key)) { result.skipped++; continue; }
+    const byLine = superseded.get(input);
+    if (byLine !== undefined) { result.superseded.push({ line: input.line, group: d.group, byLine }); continue; }
     const delta: Pick<ImportDuplicateReport, 'merged' | 'merges' | 'corrected'> = { merged: 0, merges: [], corrected: [] };
     const separations: IdentityDecisionReport['separations'] = [];
     await tx.exec('savepoint identity_decision');
     try {
       if (variants.get(d.group)!.size > 1) fail('Conflicting decisions for this group; keep one proposal per group');
-      const receipt = await tx.one(`select note_id from research.note where kind='identity_review_decision' and data->>'key'=$1 limit 1`, [key]);
-      if (receipt) { result.skipped++; await tx.exec('release savepoint identity_decision'); continue; }
       const group = report.ambiguous.find(g => identityReviewGroupId(g.entityIds) === d.group);
       if (!group) fail('Group is stale, already settled, or absent from the current ambiguous pass; export again');
       const groupIds = group!.entityIds;
@@ -168,6 +192,7 @@ export async function applyIdentityDecisions(tx: Queryable, by: string, report: 
       await tx.query(`insert into research.note(kind,body,data) values('identity_review_decision','Applied identity review decision',$1::jsonb)`,
         [JSON.stringify({ key, decision: d, applied_by: by, merges: delta.merges, corrected: delta.corrected, separations })]);
       await tx.exec('release savepoint identity_decision');
+      applied.add(key);
       report.merged += delta.merged; report.merges.push(...delta.merges); report.corrected.push(...delta.corrected);
       result.separations.push(...separations); result.applied++;
       if (d.decision === 'separate' || (d.decision === 'merge' && ids.length === groupIds.length))

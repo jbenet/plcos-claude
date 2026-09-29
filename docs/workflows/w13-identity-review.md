@@ -71,8 +71,8 @@ An export previews the deterministic pass and rolls back its writes: it does not
    gap in the private run report. Do not use `separate` as a synonym for uncertain.
 6. Write one proposal per group to the assigned decision file. A subset merge is allowed when
    only that subset is proved identical. Retype explicit members first; export again before
-   proposing their merge. Keep inputs fixed during a batch; remove settled proposals before
-   writing a different decision for the same group.
+   proposing their merge. Keep inputs fixed during a batch. The decisions file is append-only;
+   retain settled proposals when appending a later decision.
 
 ## Decision format
 
@@ -134,6 +134,11 @@ local decision file, then existing pursuit consolidation. The Enrichment page re
 “N decisions applied, M refused” and line-specific reasons. It shows merge, correction and
 separation IDs. Exact retries use persisted decision receipts and do not duplicate mutations,
 even after an operator reverses a decision. Do not erase receipts to force reapplication.
+Applied decisions do not conflict with later proposals; only unapplied proposals conflict.
+A later proposal for a strictly expanded group supersedes an older unapplied proposal covering
+the same members. The report names both lines instead of refusing the older one. Membership
+must be recoverable from the current group or explicit members matching the full group hash;
+names and partial overlaps do not establish supersession.
 
 Reverse related pursuit consolidations before reversing a merge with the existing identity
 undo. Reverse subsequent merges before using the existing type-correction reversal. **Reverse
