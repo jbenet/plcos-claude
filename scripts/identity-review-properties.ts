@@ -60,7 +60,7 @@ export async function identityReviewProperties(check: Check, db: Db) {
     check('IDENTITY REVIEW export does not merge automatically resolvable groups', await root(auto[0]!) === auto[0] && await root(auto[1]!) === auto[1],
       'Even a safe organization pair is unchanged by research export.');
 
-    const privacy = [await entity('Privacy', 'person', 'affinity', `person:privacy-${tag}-a`), await entity('Privacy', 'person', 'affinity', `person:privacy-${tag}-b`)];
+    const privacy = [await entity('Privacy', 'person', 'affinity', `person:privacy-${tag}-a`), await entity('Privacy', 'person', 'warehouse', `person:privacy-${tag}-b`)];
     const org = await entity('Privacy Office', 'org');
     const secretEmail = 'invented.private@example.org', secretPhone = '+1 202 555 0199';
     const linkedin = `https://www.linkedin.com/in/invented-review-${tag}`;
@@ -148,6 +148,8 @@ export async function identityReviewProperties(check: Check, db: Db) {
     check('IDENTITY REVIEW undo restores identities and the same decision cannot reapply', undone && await root(plain[1]!) === plain[1] && replay.decisions!.applied === 0,
       'An unchanged decisions file cannot silently override an operator reversal.');
 
+    // Add the conflicting upstream key after exercising unresolved-group export privacy.
+    await db.query("insert into identity.source_record(source,source_id,entity_id,resolved_by) values('affinity',$1,$2,'rule:fixture')", [`person:privacy-${tag}-b`, privacy[1]]);
     const conflict = await run([decision(privacy)]);
     check('IDENTITY REVIEW generic evidence cannot bypass same-source distinct IDs', conflict.decisions!.applied === 0 && conflict.decisions!.refused.length === 1 && await root(privacy[0]!) !== await root(privacy[1]!),
       'A name match or vague same-person assertion does not establish that two external records are duplicates.');
@@ -155,13 +157,10 @@ export async function identityReviewProperties(check: Check, db: Db) {
     check('IDENTITY REVIEW a bare duplicate marker is not supporting evidence', markerOnly.decisions!.applied === 0 && markerOnly.decisions!.refused.length === 1 && await root(privacy[0]!) !== await root(privacy[1]!),
       'An explicit pair attestation still needs supporting quoted context from the cited source.');
     const explicit = decision(privacy, 'merge', { evidence: [{ ...evidence[0], quote: `Both records link to the same named biography and dated role.\nSame real person: affinity:person:privacy-${tag}-a = affinity:person:privacy-${tag}-b` }] });
-    const allowed = await run([explicit]), duplicate = allowed.merges.find(m => m.loserId === privacy[1]);
-    const rule = duplicate && await db.one<{ rule: string }>('select rule from identity.match_assertion where assertion_id=$1', [duplicate.assertionId]);
-    check('IDENTITY REVIEW cited external duplicate evidence records the explicit Affinity rule', allowed.decisions!.applied === 1 && await root(privacy[1]!) === privacy[0] && rule?.rule === 'decision:affinity-duplicate',
-      'Both external identifiers are named in the identity evidence.');
-    if (!duplicate) throw new Error('Expected invented Affinity duplicate merge');
-    check('IDENTITY REVIEW Affinity duplicate override is reversible', await undoIdentityMerge(db, duplicate.assertionId, 'Invented duplicate reversal') && await root(privacy[1]!) === privacy[1],
-      'The exceptional rule uses the existing identity undo path.');
+    const refused = await run([explicit]);
+    check('IDENTITY REVIEW cited duplicate assertions cannot override a recorded different decision', refused.decisions!.applied === 0
+      && refused.decisions!.refused.length === 1 && await root(privacy[1]!) !== await root(privacy[0]!),
+      'Requested deterministic different-ID rule is a hard constraint, including against the legacy attestation exception.');
 
     const aliasA = await entity('Alias Conflict', 'person', 'affinity', `person:alias-${tag}-a`), aliasB = await entity('Alias Conflict');
     const inherited = await entity('Inherited Source', 'person', 'affinity', `person:alias-${tag}-b`);

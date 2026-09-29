@@ -65,7 +65,8 @@ export async function personDupesProperties(check: Check, db: Db) {
       await affiliate(a, org); await affiliate(alias, org);
       const result = await run();
       check(`0105 conflicting ${source} person IDs across aliases veto merging`, await root(a) !== await root(b)
-        && result.ambiguous.some(x => x.entityIds.includes(alias) && x.reason.includes(`different external IDs from ${source}`)), 'A sourced resolver label and a shared employer never erase distinct upstream IDs.');
+        && !result.ambiguous.some(x => x.entityIds.includes(alias))
+        && result.rules?.different_external_id === 1, 'A sourced resolver label and a shared employer never erase distinct upstream IDs.');
     }
     for (const [label, urls] of [['Placeholder URL', ['unknown', 'unknown']], ['Distinct query URLs', ['https://example.org/profile?id=one', 'https://example.org/profile?id=two']]] as const) {
       const a = await entity(name(label), 'warehouse', 'rule:source-owned'), b = await entity(name(label));
@@ -92,8 +93,8 @@ export async function personDupesProperties(check: Check, db: Db) {
     const one = await entity(name('Fork'), 'affinity', 'rule:source-owned'), two = await entity(name('Fork'), 'warehouse', 'rule:source-owned'), fork = await entity(name('Fork'));
     for (const id of [one, two, fork]) await affiliate(id, org);
     const forks = await run();
-    check('0105 multiple established matches remain ambiguous without choosing the first', await root(fork) === fork && await root(one) !== await root(two)
-      && forks.ambiguous.some(a => a.entityIds.includes(fork) && a.entityIds.length === 3), 'All candidate components are checked before mutation.');
+    check('duplicate rule: current affiliation identifies multiple established sources', await root(fork) === await root(one) && await root(one) === await root(two)
+      && forks.rules?.same_name_current_affiliation === 2, 'Requested rule: distinct sources with a shared current employer corroborate the normalized name.');
     const otherOrg = await entity(name('Other Office'), 'prospect_org', 'rule:sourced-prospect-organization', 'org');
     const correct = await entity(name('Namesake'), 'affinity', 'rule:source-owned'), namesake = await entity(name('Namesake'), 'warehouse', 'rule:source-owned'), candidate = await entity(name('Namesake'));
     await affiliate(correct, org); await affiliate(candidate, org); await affiliate(namesake, otherOrg);

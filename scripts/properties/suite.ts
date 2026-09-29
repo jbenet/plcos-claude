@@ -30,6 +30,7 @@ export async function runProperties(check: Check) {
   await (await import('../entity-type-properties')).entityTypeProperties(check, db);
   await (await import('../pursuit-merge-properties')).pursuitMergeProperties(check, db);
   await (await import('../import-dupes-properties')).importDupesProperties(check, db);
+  await (await import('../dedupe-rules-properties')).dedupeRulesProperties(check, db);
   await (await import('../person-dupes-properties')).personDupesProperties(check, db);
   await (await import('../identity-review-properties')).identityReviewProperties(check, db);
   await (await import('../path-search-properties')).edgeEvidenceCacheProperties(check, db);

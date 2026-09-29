@@ -120,7 +120,7 @@ export async function importDupesProperties(check: Check, db: Db) {
       await db.query('update identity.entity set merged_into=$2 where entity_id=$1',[a,alias]);
       await db.query('update identity.entity set display_name=$2 where entity_id=$1',[alias,name(source)]);
       const result = await run();
-      check(`DUPES distinct ${source} external IDs remain ambiguous across aliases`, await root(b)!==await root(alias) && result.ambiguous.some(x=>x.entityIds.includes(b)),
+      check(`DUPES distinct ${source} external IDs are recorded different across aliases`, await root(b)!==await root(alias) && !result.ambiguous.some(x=>x.entityIds.includes(b)) && result.rules?.different_external_id===1,
         'External source conflicts include every member of each redirect component.');
     }
     const unknown = await entity(name('Unknown'),'org','unrecognized_fixture_source',undefined,'manual:fixture'), known = await entity(name('Unknown'));
@@ -137,7 +137,7 @@ export async function importDupesProperties(check: Check, db: Db) {
     const external1 = await entity(name('Resolver label'),'org','dakota',`account:label-${tag}-a`,'rule:sourced-prospect');
     const external2 = await entity(name('Resolver label'),'org','dakota',`account:label-${tag}-b`,'rule:sourced-prospect');
     const labels = await run();
-    check('DUPES an internal-looking resolver cannot erase external source conflicts', await root(external1)!==await root(external2) && labels.ambiguous.some(a=>a.entityIds.includes(external1)),
+    check('DUPES an internal-looking resolver cannot erase external source conflicts', await root(external1)!==await root(external2) && !labels.ambiguous.some(a=>a.entityIds.includes(external1)) && labels.rules?.different_external_id===1,
       'Distinct Dakota account IDs remain distinct regardless of the resolution label.');
     const separated1 = await entity(name('Source veto')), separated2 = await entity(name('Source veto'));
     await db.query("insert into identity.match_assertion(kind,left_source,left_source_id,right_source,right_source_id,rule,undone_at,undo_reason) values('same_as','prospect',$1,'prospect',$2,'identity:v1:fixture',now(),'Invented source-only undo')",[separated1,separated2]);

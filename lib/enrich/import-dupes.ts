@@ -11,6 +11,8 @@ import { applyIdentityDecisions, readIdentityDecisions, suppressSeparatedIdentit
 import { config } from '@/config/deployment';
 import { join } from 'node:path';
 
+import { recordDuplicateSeparations, suppressDeterministicSeparations } from './duplicate-rules';
+
 const RULE = 'identity:v1:import-duplicates';
 const TYPE_RULE = 'rule:import-duplicate-org';
 // These keys identify our rows/descriptors, not distinct upstream organizations.
@@ -20,6 +22,7 @@ type Entity = { id: string; root: string; name: string; type: string; created: s
 type Source = { id: string; source: string; key: string; resolver: string };
 export interface ImportDuplicateReport {
   merged: number;
+  rules?: Record<string, number>;
   merges: Array<{ assertionId: string; survivorId: string; loserId: string; name: string }>;
   corrected: Array<{ entityId: string; correctionId: string }>;
   ambiguous: Array<{ name: string; entityIds: string[]; reason: string }>;
@@ -37,6 +40,7 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
   if (!by.trim()) throw new Error('An actor is required');
   await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
   const report: ImportDuplicateReport = { merged: 0, merges: [], corrected: [], ambiguous: [] };
+  const separated = await recordDuplicateSeparations(tx, by, report);
   const entities = await tx.query<Entity>(`select e.entity_id::text id,r.canonical_id::text root,
     e.display_name name,e.entity_type::text type,e.created_at::text created,e.retired_at is not null retired
     from identity.entity e join identity.entity_resolution r using(entity_id) order by e.entity_id`);
@@ -129,6 +133,7 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     }
   }
   await mergeImportPeople(tx, by, report, findings, paths);
+  await suppressDeterministicSeparations(tx, report, separated);
   await suppressSeparatedIdentityGroups(tx, report);
   if (!options.reviewOnly) await applyIdentityDecisions(tx, by, report, options.decisions ?? []);
   if (report.decisions?.applied) {
