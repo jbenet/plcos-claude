@@ -646,9 +646,11 @@ table.list tr.past td:first-child{box-shadow:inset 2px 0 0 var(--line)}
 .shotthumb img{display:block;width:100%;height:auto;max-height:190px;object-fit:cover;object-position:top}
 .feedbackkey{font-family:var(--mono);font-size:9px;opacity:.75;margin-left:auto;white-space:nowrap}
 .shotmeta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:5px}
-.misaligned{font-size:10.5px;color:var(--amber);border-bottom:1px dotted var(--amber);
-            cursor:help;outline:none}
-.misaligned:focus{color:var(--clay);border-color:var(--clay)}
+/* "Misaligned? Tell us": a small toggle under an automatic screenshot. */
+button.misaligned{background:none;border:0;border-bottom:1px dotted var(--amber);padding:0;
+  font:inherit;font-size:10.5px;color:var(--amber);cursor:pointer}
+button.misaligned:hover,button.misaligned:focus-visible{color:var(--clay);border-color:var(--clay)}
+button.misaligned.on{color:var(--clay);border-bottom-style:solid}
 
 /* the annotation editor */
 /* Dark native controls too: the size field's arrows and list, and the colour picker. */
@@ -856,8 +858,15 @@ button.sec .pip{margin-left:auto;margin-right:7px;font-family:var(--mono);font-s
            border:1px dashed var(--accent-line);border-radius:4px;padding:2px 6px}
 
 /* the markdown field */
-.mdfield{border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.mdfield{border:1px solid var(--line);border-radius:8px;background:var(--surface);
+         transition:border-color .12s ease, box-shadow .12s ease}
 .mdfield.over{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+/* A focus ring in the theme's accent, the instant the cursor is inside the field (Juan, 29 Sep 2026):
+   the eye should go straight to where you type. */
+.mdfield:focus-within{border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 6px 18px color-mix(in srgb, var(--ink) 8%, transparent)}
+.mdfield:focus-within .mdbar{border-bottom-color:color-mix(in srgb, var(--accent) 35%, var(--line))}
+@media (prefers-reduced-motion: reduce){.mdfield{transition:none}}
 .mdbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;border-bottom:1px solid var(--line);padding:6px 8px}
 .mdtabs{display:flex;gap:3px}
 .mdtabs button,.mdtools button{font:inherit;font-size:11.5px;padding:3px 9px;border:1px solid transparent;
@@ -1707,9 +1716,30 @@ th.stripoff{font-size:6.5px;letter-spacing:.03em;text-transform:uppercase;border
 .drawer{transition:width .18s ease}
 .drawerhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .drawerhead .lbl{margin-right:auto}
+/* The sheet's own heading (Juan, 29 Sep 2026): bigger than the other labels, so the panel
+   speaks for itself instead of repeating "What went wrong?" below it. */
+.drawerhead .fbhead{margin:0 auto 0 0;font-size:20px;line-height:1.2;letter-spacing:0;text-transform:none}
 .drawerwide{background:none;border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer;
   font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--label)}
 .drawerwide:hover{border-color:var(--accent);color:var(--accent)}
+/* The screenshot help, in a (?) badge beside Whole page / Pick a part rather than a paragraph below them. */
+.fbhelp{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;
+  border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:600;cursor:help;
+  align-self:center;background:var(--surface)}
+.fbhelp:hover,.fbhelp:focus-visible{color:var(--ink);border-color:var(--accent);outline:none}
+
+/* Immediate tooltips inside the feedback sheet (Juan, 29 Sep 2026: the browser's title tooltips
+   are slow). Any element in the sheet with data-tip shows it at once on hover and on keyboard
+   focus; long text wraps. data-tip-end aligns the bubble to the element's right edge, for
+   controls near the panel's edge. */
+.drawer [data-tip]{position:relative}
+.drawer [data-tip]:hover::after,.drawer [data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;z-index:40;
+  top:calc(100% + 6px);left:50%;transform:translateX(-50%);width:max-content;max-width:280px;white-space:pre-line;
+  text-align:left;padding:7px 9px;border-radius:6px;background:var(--ink);color:var(--surface);
+  font:500 11.5px/1.45 var(--sans);letter-spacing:0;text-transform:none;box-shadow:0 6px 18px rgba(0,0,0,.18);
+  pointer-events:none}
+.drawer [data-tip][data-tip-end]:hover::after,.drawer [data-tip][data-tip-end]:focus-visible::after{left:auto;right:0;transform:none}
+@media (hover:none){.drawer [data-tip]:hover::after{content:none}}
 /* Drafts started on other pages (issue 0026, real): pick one to carry on with it here. */
 .draftlist{margin:10px 0 4px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--ground)}
 .draftlist p{margin:8px 0 0;font-size:11.5px;line-height:1.5;color:var(--muted)}

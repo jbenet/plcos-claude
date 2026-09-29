@@ -140,6 +140,8 @@ interface Shot {
   dataUrl: string;
   method: CaptureMethod;
   annotated: boolean;
+  /** The reporter said the automatic capture does not match the screen. */
+  misaligned?: boolean;
 }
 
 function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClose: () => void }) {
@@ -197,6 +199,8 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   const drop = (id: string) => setShots((prev) => prev.filter((x) => x.id !== id));
   const replace = (id: string, dataUrl: string) =>
     setShots((prev) => prev.map((x) => (x.id === id ? { ...x, dataUrl, annotated: true } : x)));
+  const flagMisaligned = (id: string) =>
+    setShots((prev) => prev.map((x) => (x.id === id ? { ...x, misaligned: !x.misaligned } : x)));
 
   const path = usePathname();
   const params = useSearchParams();
@@ -348,9 +352,16 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
     void discardDraft(page).then(() => setOthers(listDrafts().filter((d) => d.page !== draftPage)));
   };
 
+  const misaligned = shots.flatMap((x, i) => (x.misaligned ? [i + 1] : []));
   const context = useMemo(
-    () => ({ route: path, url: typeof window !== 'undefined' ? window.location.href : undefined, filters, ...(draftPage !== path ? { startedOn: draftPage } : {}), ...(client ? { client } : {}) }),
-    [path, filters, client, draftPage],
+    () => ({
+      route: path, url: typeof window !== 'undefined' ? window.location.href : undefined, filters,
+      ...(draftPage !== path ? { startedOn: draftPage } : {}),
+      ...(client ? { client } : {}),
+      ...(misaligned.length ? { capture: { misaligned } } : {}),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [path, filters, client, draftPage, misaligned.join(',')],
   );
 
   const submitRef = useRef<(() => Promise<void>) | null>(null);
@@ -433,14 +444,14 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
         aria-label="Give feedback"
       >
         <div className="drawerhead">
-          <div className="lbl">Feedback</div>
+          <h2 className="fbhead">Feedback</h2>
           {others.length > 0 && state !== 'saved' && (
             <button
               type="button"
               className="drawerwide"
               onClick={() => setShowDrafts((v) => !v)}
               aria-expanded={showDrafts}
-              title="Unsent reports kept in this browser, started on other pages"
+              data-tip="Unsent reports kept in this browser, started on other pages"
             >
               Drafts · {others.length}
             </button>
@@ -450,7 +461,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             className="drawerwide"
             onClick={toggleWide}
             aria-pressed={wide}
-            title={wide ? 'Back to the narrow panel' : 'Use more of the page for a long report'}
+            data-tip={wide ? 'Back to the narrow panel' : 'Use more of the page for a long report'}
           >
             {wide ? '⇥ Narrower' : '⇤ Wider'}
           </button>
@@ -478,13 +489,6 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
         )}
 
         <>
-            <h2>What went wrong?</h2>
-            <p className="sublede" style={{ marginBottom: 14 }}>
-              A description is enough. The title, the page you are on and your filters are
-              filled in for you. Filing saves it on the server at once; if the server cannot be
-              reached, it is kept in this browser and sent when it answers.
-            </p>
-
             <div className="fbcols">
             <div className="fbshots">
             <div className="lbl">
@@ -503,13 +507,13 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
                     <img src={x.dataUrl} alt={`Screenshot ${i + 1}`} />
                   </button>
                   <div className="mdembedbar">
-                    <button type="button" onClick={() => setEditingId(x.id)} title="Draw on this picture">✎ Annotate</button>
+                    <button type="button" onClick={() => setEditingId(x.id)} data-tip="Draw on this picture">✎ Annotate</button>
                     <button
                       type="button"
                       className="x"
                       onClick={() => drop(x.id)}
                       aria-label={`Remove screenshot ${i + 1}`}
-                      title={`Delete screenshot ${i + 1}`}
+                      data-tip={`Delete screenshot ${i + 1}`}
                     >
                       ×
                     </button>
@@ -520,21 +524,22 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
                     </span>
                     {x.annotated && <span className="flag f-ok">annotated</span>}
                     {x.method === 'render' && (
-                      <span
-                        className="misaligned"
-                        tabIndex={0}
-                        title={
+                      <button
+                        type="button"
+                        className={`misaligned${x.misaligned ? ' on' : ''}`}
+                        aria-pressed={Boolean(x.misaligned)}
+                        onClick={() => flagMisaligned(x.id)}
+                        data-tip={
                           'The automatic capture is your browser redrawing the page from its own '
                           + 'markup. It needs no permission and it leaves this panel out — but it '
                           + 'can get spacing, wrapping or a form control subtly wrong.\n\n'
-                          + 'If it looks wrong, press Whole page or Pick a part below. Those use '
-                          + "your browser's own screen capture, so they are exactly what you see. "
-                          + 'Your browser will ask permission first, and that capture cannot leave '
-                          + 'this panel out.'
+                          + 'Press to tell us it does not match your screen: the report says so, '
+                          + 'which helps fix the capture. For exact pixels, press Whole page or '
+                          + "Pick a part below; they take a screenshot in your browser."
                         }
                       >
-                        Mis-aligned?
-                      </span>
+                        {x.misaligned ? 'Misaligned · noted' : 'Misaligned? Tell us'}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -550,28 +555,33 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
                 <span className="gl" aria-hidden>⌖</span>
                 Pick a part
               </button>
+              <span
+                className="fbhelp" data-tip-end=""
+                tabIndex={0}
+                role="note"
+                aria-label="About screenshots"
+                data-tip={
+                  (shots.length === 0
+                    ? 'Optional — the report files without one.'
+                    : 'Adds another; it does not replace what is already here.')
+                  + " Both buttons use your browser's screen capture for exact pixels, and it will ask permission. "
+                  + 'Click a screenshot to annotate it; use its × to delete it. '
+                  + (profile === 'real'
+                      ? 'Filed beside the issue with the real data — never committed.'
+                      : 'Filed beside the issue in this repository.')
+                }
+              >
+                ?
+              </span>
             </div>
-            <p className="mdhint" style={{ border: 0, padding: '7px 0 0' }}>
-              {shots.length === 0
-                ? 'Optional — the complaint files without one.'
-                : 'Adds another; it does not replace what is already here.'}
-              {' '}Both buttons use your browser&rsquo;s screen capture for exact pixels, and it
-              will ask permission.
-            </p>
             {failed && (
               <p className="mdhint refused">
                 No capture came back — declined, unsupported, or it took too long. Everything else
                 still files.
               </p>
             )}
-
-            {shots.length > 0 && (
-              <p className="mdhint">
-                {profile === 'real'
-                  ? 'Filed beside the issue with the real data — never committed.'
-                  : 'Filed beside the issue in this repository.'}{' '}
-                Click an image to annotate it; use its × to delete it.
-              </p>
+            {shots.some((x) => x.misaligned) && (
+              <p className="mdhint">Thanks — the report says the automatic capture was off. Click the <b>Whole Page</b> or <b>Pick a Part</b> to take a screenshot in your browser.</p>
             )}
 
             </div>
@@ -595,7 +605,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
             </label>
 
             <div className="field">
-              <span className="lbl">What happened</span>
+              <span className="lbl">Enter any feedback:</span>
               <MarkdownField
                 key={generation}
                 value={body}
@@ -604,9 +614,10 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
                 onImages={setImages}
                 onPendingChange={setImagesPending}
                 onAnnotate={(i) => setEditingImage(i)}
+                label="Enter any feedback"
                 placeholder={
-                  'What you expected, what happened instead.\n\n'
-                  + 'Markdown works. Drop a screenshot from somewhere else in here if you have one.'
+                  'What you expected, what happened instead.\n'
+                  + 'Markdown works. Drop or paste a screenshot from somewhere else in here.'
                 }
               />
             </div>
@@ -630,11 +641,6 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
                 </select>
               </label>
             </div>
-            <p className="note" style={{ marginTop: 0 }}>
-              {PRIORITY_MEANS[priority]}. <b>No date is promised against a priority</b> — how
-              fast anything is fixed depends on how full the queue is, which the issues page
-              shows.
-            </p>
 
             {state === 'failed' && (
               <div className="warn" style={{ marginTop: 12 }}>
