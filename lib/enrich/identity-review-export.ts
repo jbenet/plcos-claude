@@ -19,18 +19,22 @@ export interface IdentityReviewGroup {
 
 // Identity fields can themselves contain contact details. Project only allowed fields,
 // then scrub their strings too; never serialize a source payload or a note body.
-const email = /[\w.!#$%&'*+/=?^`{|}~-]+@[\w.-]+/giu;
-const phone = /(?:\+?\d[\d\s().-]{5,}\d)/gu;
-const redact = (value: string): string => value.replace(email, '[contact omitted]').replace(phone, match =>
-  (match.match(/\d/g)?.length ?? 0) >= 7 ? '[contact omitted]' : match);
-const clean = (value: unknown): string => {
+const email = /([\w.!#$%&'*+/=?^`{|}~-]+@[\w.-]+)/giu;
+const phone = /(?<![\p{L}\p{N}_])(?:\+?\(?\d[\d\s().-]{5,}\d)(?![\p{L}\p{N}_])/gu;
+const redact = (value: string, identifier: boolean): string => value.split(email).map((part, index) => {
+  // Handle addresses separately so numeric domains survive phone detection too.
+  if (index % 2) return `…${part.slice(part.lastIndexOf('@'))}`;
+  return identifier ? part : part.replace(phone, match =>
+    (match.match(/\d/g)?.length ?? 0) >= 7 ? '[contact omitted]' : match);
+}).join('');
+const clean = (value: unknown, identifier = false): string => {
   if (typeof value !== 'string') return '';
   let decoded = value;
   try {
     for (let i = 0; i < 3; i++) { const next = decodeURIComponent(decoded); if (next === decoded) break; decoded = next; }
   } catch { /* Malformed escapes are still checked as ordinary text. */ }
-  if (decoded !== value && redact(decoded) !== decoded) return '[contact omitted]';
-  return redact(value).trim();
+  const redacted = redact(decoded, identifier);
+  return (redacted !== decoded ? redacted : value).trim();
 };
 function personalUrl(value: unknown): string | null {
   if (typeof value !== 'string' || /\s/.test(value.trim())) return null;
@@ -74,11 +78,11 @@ export async function exportIdentityReview(tx: Queryable): Promise<IdentityRevie
     source,source_id key,resolved_by rule from identity.source_record where entity_id=any($1::uuid[]) order by source,source_id`, [aliases]);
   for (const s of sources) {
     const m = member(s.id)!;
-    // Numeric connector IDs are identifiers, not telephone fields. Explicit contact
-    // schemes, formatted phone numbers and email-shaped identifiers are redacted.
-    const externalId = /^\d+$/.test(s.key) || /^[\da-f]{8}-[\da-f-]{27}$/i.test(s.key) || /^(person|organization|org):\d+$/.test(s.key)
-      ? s.key : clean(s.key);
-    m.sources.push({ source: clean(s.source), externalId: /^(mailto|tel|sms):/i.test(s.key) ? '[contact omitted]' : externalId });
+    // source_id is an opaque key by schema, regardless of connector or digit count.
+    // Email-shaped keys retain only their domain; explicit phone schemes stay private.
+    m.sources.push({ source: clean(s.source), externalId: /^(mailto|tel|sms):/i.test(s.key)
+      ? (/^mailto:/i.test(s.key) ? clean(s.key.slice(7), true) : '[contact omitted]')
+      : clean(s.key, true) });
     if (clean(s.rule)) m.createdBy.push(clean(s.rule));
   }
   const affiliations = await tx.query<{ id: string; org: string; role: string }>(`select a.person_entity::text id,
@@ -176,7 +180,7 @@ export async function exportIdentityReview(tx: Queryable): Promise<IdentityRevie
     const id = identityReviewGroupId(group.entityIds);
     groups.set(id, { group: id, name: clean(normalizeIdentityName(group.name)),
       type: types.size === 1 && types.has('person') ? 'person' as const : types.size === 1 && types.has('org') ? 'org' as const : 'mixed' as const,
-      members: rows, reasons: unique([...(groups.get(id)?.reasons ?? []), ...group.reason.split('; ').map(clean)]).sort() });
+      members: rows, reasons: unique([...(groups.get(id)?.reasons ?? []), ...group.reason.split('; ').map(reason => clean(reason))]).sort() });
   }
   return [...groups.values()].sort((a, b) => a.group.localeCompare(b.group));
 }

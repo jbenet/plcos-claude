@@ -79,6 +79,18 @@ export async function identityReviewProperties(check: Check, db: Db) {
       { lp: sharedPathKey, lpPerson: { key: privacy[0] }, other: { key: pathAlias, person: { key: privacy[1] } } },
       { lp: sharedPathKey, other: { key: pathAlias } },
     ] })]);
+    const opaqueKeys = ['company:123456789012', 'person:123456789012', 'warehouse:123456789012:person',
+      'finding-123456789012-key', '123456789012', '12345678-1234-1234-1234-123456789012'];
+    for (const [index, key] of opaqueKeys.entries()) await db.query(
+      "insert into identity.source_record(source,source_id,entity_id,resolved_by) values($1,$2,$3,'fixture')",
+      [`invented-key-${index}`, key, privacy[0]]);
+    await db.query("insert into research.note(entity_id,kind,body,data) values($1,'public_profile','Invented contact redaction fixture',$2::jsonb)", [privacy[0], JSON.stringify({
+      title: 'Contact 2025550199 or (202) 555-0199; invented.local@123456789.example.org',
+      role: 'Encoded invented%2Elocal%40example.com',
+    })]);
+    const emailNames = [await entity('Email Name', 'person', 'w3_person'), await entity('Email Name', 'person', 'warehouse')];
+    await db.query('update identity.entity set display_name=$2 where entity_id=any($1::uuid[])',
+      [emailNames, 'invented.name@example.com']);
     const privateGroup = (await exported()).find(g => g.group === identityReviewGroupId(privacy));
     const member = privateGroup?.members.find(m => m.entityId === privacy[0]);
     const serialized = JSON.stringify(privateGroup);
@@ -91,6 +103,19 @@ export async function identityReviewProperties(check: Check, db: Db) {
       && !serialized.includes(secretEmail) && !serialized.includes(encodeURIComponent(secretEmail)) && !serialized.includes(secretPhone)
       && !serialized.includes(encodeURIComponent(secretPhone)) && !serialized.includes(numericUrl) && !serialized.includes('mailto:') && !serialized.includes('Private '),
       'Contact values and arbitrary note bodies never leave in the review set.');
+    check('IDENTITY REVIEW preserves long numeric source identifiers in every key format',
+      opaqueKeys.every(key => member?.sources.some(source => source.externalId === key)),
+      'Affinity company/person IDs, warehouse keys, finding keys, numeric IDs and UUIDs remain exact.');
+    check('IDENTITY REVIEW redacts free-text phones and only email local-parts',
+      member?.titles.includes('Contact [contact omitted] or [contact omitted]; …@123456789.example.org') === true
+      && member.titles.includes('Encoded …@example.com')
+      && !serialized.includes('invented.local') && !serialized.includes('2025550199'),
+      'Numeric email domains survive, encoded local-parts are removed, and plain/formatted phones stay private.');
+    const emailNameGroup = (await exported()).find(g => g.group === identityReviewGroupId(emailNames));
+    check('IDENTITY REVIEW retains domains for name-only W3 and warehouse members',
+      emailNameGroup?.members.length === 2 && emailNameGroup.members.every(m => m.displayName === '…@example.com'),
+      'The domain remains identity context even without affiliations or a profile.');
+
     check('IDENTITY REVIEW counts each path once per root across aliases and colliding source keys',
       member?.counts.paths === 3 && privateGroup?.members.find(m => m.entityId === privacy[1])?.counts.paths === 2,
       'Repeated endpoint references and note ownership do not double-count; a source key shared by two roots counts for both.');

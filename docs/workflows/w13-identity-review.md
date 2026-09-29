@@ -42,7 +42,9 @@ The source records, affiliations and counts include existing aliases of each can
 `createdBy` contains the source resolution rules on file, not an inferred author. Counts describe
 available records, not evidence strength. Empty fields mean unavailable in this export.
 The export contains URL locators, never email/phone fields or note bodies; embedded contact
-strings are redacted and URL query/fragment tokens removed. Connector IDs remain identifiers.
+strings have phone numbers omitted and email local-parts replaced with `…` (the domain remains,
+for example `…@example.com`). URL query/fragment tokens are removed. Source keys remain
+identifiers regardless of their digit runs; email-shaped keys retain only the domain.
 An export previews the deterministic pass and rolls back its writes: it does not merge identities.
 
 ## Research steps and query rules
