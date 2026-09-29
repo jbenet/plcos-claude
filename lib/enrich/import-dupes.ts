@@ -10,6 +10,8 @@ import { mergeImportPeople } from './import-person-dupes';
 import { applyIdentityDecisions, readIdentityDecisions, suppressSeparatedIdentityGroups,
   type IdentityDecisionInput, type IdentityDecisionReport } from './identity-decisions';
 import { config } from '@/config/deployment';
+import { foldIdentityReviewComponents } from './identity-review-components';
+import { resolvedIdentities } from './identity-roots';
 import { join } from 'node:path';
 
 import { recordDuplicateSeparations, suppressDeterministicSeparations } from './duplicate-rules';
@@ -42,12 +44,11 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
   await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
   const report: ImportDuplicateReport = { merged: 0, merges: [], corrected: [], ambiguous: [] };
   const separated = await recordDuplicateSeparations(tx, by, report);
-  const entities = await tx.query<Entity>(`select e.entity_id::text id,r.canonical_id::text root,
-    e.display_name name,e.entity_type::text type,e.created_at::text created,e.retired_at is not null retired
-    from identity.entity e join identity.entity_resolution r using(entity_id) order by e.entity_id`);
+  const entities: Entity[] = await resolvedIdentities(tx);
   const roots = new Map(entities.map(e => [e.id, e.root]));
-  const creationPairs = await tx.query<{a:string;b:string}>(`select identity.canonical_entity_id(left_entity)::text a,
-    identity.canonical_entity_id(right_entity)::text b from identity.possible_match where active and signals->>'rule'='creation-name-only'`);
+  const creationPairs = (await tx.query<{a:string;b:string}>(`select left_entity::text a,right_entity::text b
+    from identity.possible_match where active and signals->>'rule'='creation-name-only'`))
+    .map(p => ({ a: roots.get(p.a), b: roots.get(p.b) }));
   const groups = new Map<string, Entity[]>();
   for (const e of entities) if (e.id === e.root && !e.retired && ['org', 'person'].includes(e.type)) {
     const name = normalizeIdentityName(e.name);
@@ -77,8 +78,8 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     union all select entity_id from research.claim where entity_id=any($1::uuid[])
     union all select e.entity_id from research.note n cross join lateral
       jsonb_array_elements(case when jsonb_typeof(n.data->'paths')='array' then n.data->'paths' else '[]'::jsonb end) p
-      join identity.entity e on e.entity_id=any($1::uuid[]) and
-        (e.entity_id=n.entity_id or e.entity_id::text=p->>'lp' or e.entity_id::text=p->'other'->>'key')
+      cross join lateral (select distinct key from unnest(array[n.entity_id::text,p->>'lp',p->'other'->>'key']) key) k
+      join identity.entity e on e.entity_id=any($1::uuid[]) and e.entity_id::text=k.key
       where n.kind='connection_candidates'
   ) refs group by id`, [ids]);
   const counts = new Map<string, number>();
@@ -89,7 +90,7 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     const groupSources = sources.filter(s => groupIds.has(roots.get(s.id)!));
     const reasons = new Set<string>();
     if (violatesSeparationGroup(groupIds, separationGroups)) reasons.add('prior identity group separation');
-    if(creationPairs.some(p=>p.a!==p.b && groupIds.has(p.a) && groupIds.has(p.b))) {
+    if(creationPairs.some(p=>p.a!==p.b && p.a && p.b && groupIds.has(p.a) && groupIds.has(p.b))) {
       reasons.add('creation name-only match requires identity review');
     }
     for (const e of component) {
@@ -143,25 +144,19 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
   await mergeImportPeople(tx, by, report, findings, paths);
   // W13 also reviews manual/connector namesakes that the imported-person pass does
   // not own. Fold current queued components into the same stable decision groups.
-  const queued = await tx.query<{a:string;b:string;name:string}>(`select a.entity_id::text a,b.entity_id::text b,a.display_name name
-    from identity.possible_match p
-    join identity.entity a on a.entity_id=identity.canonical_entity_id(p.left_entity)
-    join identity.entity b on b.entity_id=identity.canonical_entity_id(p.right_entity)
-    where p.active and p.signals->>'rule'='creation-name-only' and a.entity_id<>b.entity_id
-      and a.retired_at is null and b.retired_at is null`);
-  for(const pair of queued) {
-    const ids=new Set([pair.a,pair.b]), reasons=new Set(['creation name-only match requires identity review']);
-    let changed=true;
-    while(changed) {
-      changed=false;
-      report.ambiguous=report.ambiguous.filter(g=>{
-        if(!g.entityIds.some(id=>ids.has(id)))return true;
-        for(const id of g.entityIds)ids.add(id);
-        reasons.add(g.reason);changed=true;return false;
-      });
-    }
-    report.ambiguous.push({name:pair.name,entityIds:[...ids].sort(),reason:[...reasons].join('; ')});
-  }
+  const queued = await tx.query<{a:string;b:string;name:string}>(`with pairs as materialized (
+    select left_entity,right_entity from identity.possible_match
+    where active and signals->>'rule'='creation-name-only'
+  ), endpoints as (select left_entity id from pairs union select right_entity from pairs),
+  roots as materialized (
+    select e.entity_id id,case when e.merged_into is null then e.entity_id
+      else identity.canonical_entity_id(e.entity_id) end root
+    from endpoints p join identity.entity e on e.entity_id=p.id
+  ) select a.entity_id::text a,b.entity_id::text b,a.display_name name
+    from pairs p join roots l on l.id=p.left_entity join roots r on r.id=p.right_entity
+    join identity.entity a on a.entity_id=l.root join identity.entity b on b.entity_id=r.root
+    where a.entity_id<>b.entity_id and a.retired_at is null and b.retired_at is null`);
+  report.ambiguous = foldIdentityReviewComponents(report.ambiguous, queued);
   for (const key of await recordDuplicateSeparations(tx, by, report)) separated.add(key);
   await suppressDeterministicSeparations(tx, report, separated);
   await suppressSeparatedIdentityGroups(tx, report);
@@ -177,34 +172,45 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
       await tx.exec('release savepoint identity_review_remaining');
     }
   }
-  // Compact membership constrains non-anchor pairs too; retire those queued edges in one statement.
-  await tx.query(`with endpoints as (
-    select signals->>'separationGroup' key,merged_entity id from identity.match_assertion
-      where kind='not_same_as' and undone_at is null and signals->>'separationGroup' is not null
-    union
-    select signals->>'separationGroup' key,canonical_entity id from identity.match_assertion
-      where kind='not_same_as' and undone_at is null and signals->>'separationGroup' is not null
-  ), memberships as (
-    -- Canonical ids through the function, for the few endpoints only: joining the
-    -- entity_resolution view against every match row ran for hours on 118k entities.
-    select identity.canonical_entity_id(e.id) canonical_id,array_agg(distinct e.key) groups from endpoints e group by 1
-  ), pairs as (
-    select p.edge_id,identity.canonical_entity_id(p.left_entity) l,identity.canonical_entity_id(p.right_entity) r
-      from identity.possible_match p where p.active and exists(select 1 from memberships)
-  ) update identity.possible_match p set active=false
-    from pairs x join memberships a on a.canonical_id=x.l join memberships b on b.canonical_id=x.r
-    where p.edge_id=x.edge_id and a.groups && b.groups`);
-  await tx.query(`update identity.possible_match set active=false where active
-    and (identity.canonical_entity_id(left_entity)=identity.canonical_entity_id(right_entity)
-      or (signals->>'rule'='creation-name-only' and exists(
-        select 1 from identity.match_assertion a
-        join identity.source_record l on l.source=a.left_source and l.source_id=a.left_source_id
-        join identity.source_record r on r.source=a.right_source and r.source_id=a.right_source_id
-        where a.kind='not_same_as' and a.undone_at is null
-          and least(identity.canonical_entity_id(l.entity_id),identity.canonical_entity_id(r.entity_id))=
-            least(identity.canonical_entity_id(left_entity),identity.canonical_entity_id(right_entity))
-          and greatest(identity.canonical_entity_id(l.entity_id),identity.canonical_entity_id(r.entity_id))=
-            greatest(identity.canonical_entity_id(left_entity),identity.canonical_entity_id(right_entity)))))`);
+  // Review callers roll back repairs; queue retirement cannot change this report.
+  if (options.reviewOnly) return report;
+  // Materialize canonical endpoints once per distinct entity, then compare sets.
+  // A correlated EXISTS used to resolve every assertion again for each queued pair.
+  await tx.query(`with active_pairs as materialized (
+    select edge_id,left_entity,right_entity,signals->>'rule' rule from identity.possible_match where active
+  ), assertions as materialized (
+    select m.merged_entity,m.canonical_entity,m.signals->>'separationGroup' group_key,
+      l.entity_id left_source_entity,r.entity_id right_source_entity
+    from identity.match_assertion m
+    left join identity.source_record l on l.source=m.left_source and l.source_id=m.left_source_id
+    left join identity.source_record r on r.source=m.right_source and r.source_id=m.right_source_id
+    where m.kind='not_same_as' and m.undone_at is null
+  ), endpoint_ids as (
+    select left_entity id from active_pairs union select right_entity from active_pairs
+    union select merged_entity from assertions union select canonical_entity from assertions
+    union select left_source_entity from assertions union select right_source_entity from assertions
+  ), roots as materialized (
+    select e.entity_id id,case when e.merged_into is null then e.entity_id
+      else identity.canonical_entity_id(e.entity_id) end canonical_id
+    from endpoint_ids i join identity.entity e on e.entity_id=i.id
+  ), pairs as materialized (
+    select p.edge_id,p.rule,a.canonical_id l,b.canonical_id r
+    from active_pairs p join roots a on a.id=p.left_entity join roots b on b.id=p.right_entity
+  ), separated as materialized (
+    select distinct least(l.canonical_id,r.canonical_id) l,greatest(l.canonical_id,r.canonical_id) r
+    from assertions a join roots l on l.id=a.left_source_entity join roots r on r.id=a.right_source_entity
+  ), memberships as materialized (
+    select r.canonical_id,array_agg(distinct a.group_key) groups from (
+      select group_key,merged_entity id from assertions where group_key is not null
+      union select group_key,canonical_entity from assertions where group_key is not null
+    ) a join roots r on r.id=a.id group by r.canonical_id
+  ), retired as (
+    select edge_id from pairs where l=r
+    union select p.edge_id from pairs p join separated s on s.l=least(p.l,p.r) and s.r=greatest(p.l,p.r)
+      where p.rule='creation-name-only'
+    union select p.edge_id from pairs p join memberships a on a.canonical_id=p.l
+      join memberships b on b.canonical_id=p.r where a.groups && b.groups
+  ) update identity.possible_match p set active=false from retired r where p.edge_id=r.edge_id`);
   return report;
 }
 

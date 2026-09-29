@@ -126,8 +126,12 @@ export async function storedPersonEvidence(tx: Queryable, ids: string[], finding
     personEvidence(value).forEach(r => reasons.add(r));
     evidence.set(id, reasons);
   };
-  const members = await tx.query<{ id: string; root: string }>(`select entity_id::text id,identity.canonical_entity_id(entity_id)::text root
-    from identity.entity where identity.canonical_entity_id(entity_id)=any($1::uuid[])`, [ids]);
+  const members = await tx.query<{ id: string; root: string }>(`with recursive members as (
+      select entity_id id,entity_id root from identity.entity
+        where entity_id=any($1::uuid[]) and merged_into is null
+      union all
+      select e.entity_id,m.root from members m join identity.entity e on e.merged_into=m.id
+    ) select id::text,root::text from members`, [ids]);
   const roots = new Map(members.map(m => [m.id, m.root]));
   for (const f of findings) if (roots.has(f.key)) addEvidence(roots.get(f.key)!, f);
   // Source-owned raw snapshots are read locally, including historical person evidence.

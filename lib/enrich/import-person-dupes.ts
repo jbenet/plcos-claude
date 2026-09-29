@@ -6,6 +6,7 @@ import { normalizeIdentityName } from '@/modules/identity/resolution';
 import type { Finding } from './schema';
 import type { Path } from './connect';
 import type { ImportDuplicateReport } from './import-dupes';
+import { resolvedIdentities } from './identity-roots';
 
 type Person = { id: string; root: string; name: string; created: string; retired: boolean };
 type Source = { id: string; source: string; key: string; resolver: string };
@@ -74,10 +75,9 @@ function readSignals(value: unknown, into: Signals) {
 
 /** Caller holds the identity lock. Original records stay put; only audited redirects change. */
 export async function mergeImportPeople(tx: Queryable, by: string, report: ImportDuplicateReport, findings: Finding[], paths: Path[]) {
-  const people = await tx.query<Person>(`select e.entity_id::text id,r.canonical_id::text root,
-    e.display_name name,e.created_at::text created,e.retired_at is not null retired
-    from identity.entity e join identity.entity_resolution r using(entity_id)
-    join identity.entity canonical on canonical.entity_id=r.canonical_id where canonical.entity_type='person'`);
+  const entities = await resolvedIdentities(tx);
+  const personRoots = new Set(entities.filter(e => e.id === e.root && e.type === 'person').map(e => e.id));
+  const people: Person[] = entities.filter(e => personRoots.has(e.root));
   const roots = new Map(people.map(p => [p.id, p.root]));
   const groups = new Map<string, Person[]>();
   for (const p of people) if (p.id === p.root && !p.retired) {
@@ -89,7 +89,18 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
   if (!ids.length) return;
   const sources = await tx.query<Source>(`select entity_id::text id,source,source_id key,resolved_by resolver
     from identity.source_record where entity_id=any($1::uuid[]) order by source,source_id`, [ids]);
-  const rootSources = (id: string) => sources.filter(s => roots.get(s.id) === id);
+  const sourcesByRoot = new Map<string, Source[]>(), membersByRoot = new Map<string, Person[]>();
+  const sourceOwners = new Set(sources.map(s => s.id));
+  const rootsByKey = new Map<string, Set<string>>();
+  for (const source of sources) {
+    const root = roots.get(source.id)!;
+    const owned = sourcesByRoot.get(root) ?? []; owned.push(source); sourcesByRoot.set(root, owned);
+    const matches = rootsByKey.get(source.key) ?? new Set<string>(); matches.add(root); rootsByKey.set(source.key, matches);
+  }
+  for (const person of people) {
+    const members = membersByRoot.get(person.root) ?? []; members.push(person); membersByRoot.set(person.root, members);
+  }
+  const rootSources = (id: string) => sourcesByRoot.get(id) ?? [];
   const established = (id: string) => rootSources(id).some(s => !internal(s.source));
   const signals = new Map([...duplicateRoots].map(id => [id, { orgs: new Set<string>(), urls: new Set<string>(), domains: new Set<string>() }]));
   const apply = (id: string, data: unknown) => { const s = signals.get(roots.get(id) ?? id); if (s) readSignals(data, s); };
@@ -111,8 +122,8 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
     from dakota.contact where entity_id=any($1::uuid[])`, [ids]);
   for (const c of contacts) apply(c.id, c);
   const keyOwner = (key: string) => roots.has(key) ? key : (() => {
-    const matches = [...new Set(sources.filter(s => s.key === key).map(s => roots.get(s.id)!))];
-    return matches.length === 1 ? matches[0]! : '';
+    const matches = rootsByKey.get(key);
+    return matches?.size === 1 ? matches.values().next().value! : '';
   })();
   for (const f of findings) if (['confirmed', 'probable'].includes(f.identity.match)) apply(keyOwner(f.key), f);
   const pathNotes = await tx.query<{ data: { paths?: Path[] } }>(`select data from research.note where kind='connection_candidates'`);
@@ -124,6 +135,17 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
     `select merged_entity::text a,canonical_entity::text b,left_source ls,left_source_id lk,right_source rs,right_source_id rk
      from identity.match_assertion where kind='not_same_as' or undone_at is not null`);
   const bySource = new Map(sources.map(s => [`${s.source}\0${s.key}`, roots.get(s.id)!]));
+  const separatedFrom = new Map<string, Set<string>>();
+  for (const c of constraints) {
+    const a = (c.a && roots.get(c.a)) || bySource.get(`${c.ls}\0${c.lk}`);
+    const b = (c.b && roots.get(c.b)) || bySource.get(`${c.rs}\0${c.rk}`);
+    if (a && b) { const others = separatedFrom.get(a) ?? new Set<string>(); others.add(b); separatedFrom.set(a, others); }
+  }
+  const ambiguousByMembers = new Map<string, ImportDuplicateReport['ambiguous'][number]>();
+  for (const group of report.ambiguous) {
+    const key = group.entityIds.join(':');
+    if (!ambiguousByMembers.has(key)) ambiguousByMembers.set(key, group);
+  }
   const corrected = new Set((await tx.query<{ id: string }>(`select entity_id::text id from identity.entity_type_correction
     where entity_id=any($1::uuid[])`, [ids])).map(c => roots.get(c.id)!));
   const shared = (a: string, b: string) => {
@@ -140,29 +162,30 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
       for (const a of component) for (const b of group) if (!component.has(b.id)
         && corroborates(a, b.id)) component.add(b.id);
       for (const id of component) remaining.delete(id);
-      const members = people.filter(p => component.has(p.root));
-      const ownedSources = sources.filter(s => component.has(roots.get(s.id)!));
+      const members = [...component].flatMap(id => membersByRoot.get(id) ?? []);
+      const ownedSources = [...component].flatMap(rootSources);
       const reasons = new Set<string>();
       if (violatesSeparationGroup(component, separationGroups)) reasons.add('prior identity group separation');
       if (component.size === 1) reasons.add('matching name without corroborating organization or personal URL');
       if (members.some(p => p.retired)) reasons.add('retired identity in component');
       if ([...component].some(id => corrected.has(id))) reasons.add('prior local type decision');
       if (ownedSources.some(s => s.source === 'app_user')) reasons.add('user account requires explicit roster resolution');
-      if (members.some(p => !sources.some(s => s.id === p.id))) reasons.add('identity has unknown provenance');
+      if (members.some(p => !sourceOwners.has(p.id))) reasons.add('identity has unknown provenance');
       for (const a of component) for (const b of component) if (a !== b && !corroborates(a, b)) reasons.add('corroboration does not identify every candidate in component');
       const external = new Map<string, Set<string>>();
       for (const s of ownedSources) if (!internal(s.source)) external.set(s.source, (external.get(s.source) ?? new Set()).add(s.key));
       for (const [source, keys] of external) if (keys.size > 1) reasons.add(`different external IDs from ${source}`);
-      for (const c of constraints) {
-        const a = (c.a && roots.get(c.a)) || bySource.get(`${c.ls}\0${c.lk}`);
-        const b = (c.b && roots.get(c.b)) || bySource.get(`${c.rs}\0${c.rk}`);
-        if (a && b && component.has(a) && component.has(b)) reasons.add('prior identity separation or reversed merge');
-      }
+      for (const a of component) for (const b of separatedFrom.get(a) ?? [])
+        if (component.has(b)) reasons.add('prior identity separation or reversed merge');
       if (reasons.size) {
         const entityIds = (component.size === 1 ? group.map(p => p.id) : [...component]).sort();
-        const previous = report.ambiguous.find(a => a.entityIds.join(':') === entityIds.join(':'));
+        const key = entityIds.join(':');
+        const previous = ambiguousByMembers.get(key);
         const reason = [...reasons].sort().join('; ');
-        if (!previous) report.ambiguous.push({ name: group[0]!.name, entityIds, reason });
+        if (!previous) {
+          const next = { name: group[0]!.name, entityIds, reason };
+          report.ambiguous.push(next); ambiguousByMembers.set(key, next);
+        }
         else if (!previous.reason.includes(reason)) previous.reason += `; ${reason}`;
         continue;
       }
