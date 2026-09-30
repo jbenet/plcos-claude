@@ -146,7 +146,9 @@ export async function identityResolutionProperties(check: Check, db: Db) {
     const counts=await resolving;
     await foreground;
     check('PROSPECTS3 foreground database requests stay below two seconds during fixture identity resolution',
-      requests > 1 && longestRequestMs < limitMs,
+      // At least one request while resolving: on a warm cluster resolution can finish within the 10 ms
+      // pause after the first, and "> 1" then failed with a 0 ms slowest request (29 Sep 2026).
+      requests >= 1 && longestRequestMs < limitMs,
       `${requests} invented-fixture request sequences; slowest ${Math.round(longestRequestMs)} ms (limit ${Math.round(limitMs)} ms = max(2 s, 25× the ${Math.round(baselineMs)} ms idle baseline)). This measures DB contention, not live page render time.`);
     check('IDRES matching folds accents, case and whitespace and recognizes formerly known as affiliations',
       await root(research)===affinity && counts.merges>0 && (counts.mergesByRule.affiliation??0)>0,
