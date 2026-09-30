@@ -24,7 +24,7 @@ export async function scopedReadData(user: Principal, query?: Db) {
   const affinityNotes = ids.length ? await db.query<NoteIdentity>(`with latest as materialized (
     select distinct on (source_id) source_id,
       nullif(trim(concat_ws(' ',payload#>>'{creator,firstName}',payload#>>'{creator,lastName}')),'') author,
-      coalesce(payload->>'createdAt',fetched_at::text) at,
+      coalesce(payload->>'createdAt',to_char(fetched_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"')) at,
       payload#>'{personsPreview,data}' persons, payload#>'{companiesPreview,data}' companies
     from sources.raw_record where source='affinity' and kind='note'
     order by source_id,fetched_at desc,id desc

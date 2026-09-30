@@ -100,8 +100,11 @@ export async function lpUnitPathDatabaseProperties(check: Check, db: Db) {
     // An old personal meeting must survive both LP-unit projection and the eight-touch preview.
     await db.query(`insert into meetings.meeting(entity_id,owner_id,kind,channel,held_on,attendees,source)
       values($1,$2,'intro','meeting','2020-01-02',array['fixture@example.org'],'us')`, [explicit, actor]);
+    // Dated from yesterday back, in JS: the database's current_date is UTC and can already be tomorrow
+    // in local time (20:00–24:00 in New York), which put one email in the future and failed this (29 Sep).
     for (let i = 0; i < 9; i++) await db.query(`insert into meetings.meeting(entity_id,owner_id,channel,held_on,attendees,source,direction)
-      values($1,$2,'email',current_date - $3::int,array['Invented Other Correspondent'],'affinity','theirs')`, [explicit, actor, i]);
+      values($1,$2,'email',$3::date,array['Invented Other Correspondent'],'affinity','theirs')`,
+      [explicit, actor, new Date(Date.now() - (i + 2) * 86_400_000).toISOString().slice(0, 10)]);
     await withDb(db, async () => {
       const contacts = (await lpContactsFor([firm])).get(firm) ?? [];
       check('LP unit contacts: active primary representatives and pursuit contacts form one deduplicated set',
