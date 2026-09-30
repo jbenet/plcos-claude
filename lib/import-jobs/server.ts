@@ -5,7 +5,7 @@ import type { Db } from '@/lib/db';
 import { config } from '@/config/deployment';
 import { withImportLock } from '@/lib/db/advisory';
 import { hostJobDb } from '@/lib/db/job-bridge';
-import { createImportJob,failImportJob } from './store';
+import { createImportJob,failImportJob,IMPORT_FAILURE } from './store';
 import type { ImportJob,ImportKind } from './types';
 
 // Both handles and receipts survive Next module reloads. Workers belong to this process.
@@ -25,6 +25,12 @@ async function recordWorkerExit(db:Db,id:string,error:string):Promise<void> {
   if(db.kind==='postgres'&&config.db.url)await withImportLock(config.db.url,job.kind,()=>failImportJob(db,id,error));
   else {await failImportJob(db,id,error);remember({...job,status:'failed',phase:'Stopped',error});}
 }
+/** A stopped job's receipt goes to the server log too: phase, error class and code, never record content.
+ * The worker's own stdout and stderr stay discarded, because a driver error printed there can quote rows. */
+async function logStopped(db:Db,id:string):Promise<void> {
+  const job=await db.one<Pick<ImportJob,'kind'|'status'|'error'>>('select kind,status,error from platform.import_job where id=$1',[id]);
+  if(job?.status==='failed')console.error(`[import] ${job.kind} job ${id.slice(0,8)} failed: ${job.error??IMPORT_FAILURE}`);
+}
 export async function queueImportJob(db:Db,kind:ImportKind,actor:string,input:Record<string,unknown>={}):Promise<ImportJob> {
   const job=await createImportJob(db,kind,actor,input);
   if(db.kind==='pglite')remember(job);
@@ -40,8 +46,8 @@ export function launchImportJob(db:Db,id:string,options?:{demoRoot?:string}):voi
   const stopped=(code:number|null)=>{
     if(didStop)return;didStop=true;
     dispose();children.delete(id);
-    if(code===0)return;
-    void recordWorkerExit(db,id,'Worker exited before completion. Review committed results before retrying.').catch(()=>{});
+    if(code===0){void logStopped(db,id).catch(()=>{});return;}
+    void recordWorkerExit(db,id,'Worker exited before completion. Review committed results before retrying.').then(()=>logStopped(db,id)).catch(()=>{});
   };
   try {
     if(db.kind==='pglite') {

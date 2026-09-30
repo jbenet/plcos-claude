@@ -6,7 +6,7 @@ import { connectJobDb,hostJobDb } from '../../lib/db/job-bridge';
 import { randomUUID } from 'node:crypto';
 import { openTestDb } from './database';
 import { migrate } from '../../lib/db/migrate';
-import { createImportJob, executeImportJob, IMPORT_FAILURE } from '../../lib/import-jobs/store';
+import { createImportJob, describeImportError, executeImportJob, IMPORT_FAILURE } from '../../lib/import-jobs/store';
 import { withImportLock } from '../../lib/db/advisory';
 import type { ImportJob } from '../../lib/import-jobs/types';
 import type { Check } from './harness';
@@ -72,9 +72,32 @@ export async function importJobProperties(check:Check) {
     await executeImportJob(db,first.id,async()=>{reran=true;return {};});
     check('IMPORT JOB completed receipt cannot be executed twice',!reran,'A second execution must claim queued status atomically.');
     const failed=await queued();
-    await executeImportJob(db,failed.id,async()=>{throw new Error('invented private row content');});
+    const thrownAt=new Error('invented private row content');
+    await executeImportJob(db,failed.id,async()=>{throw thrownAt;});
     const error=await db.one<ImportJob>('select * from platform.import_job where id=$1',[failed.id]);
-    check('IMPORT JOB error receipts contain no raw exception data',error?.status==='failed'&&error.error===IMPORT_FAILURE,'Fixed safe message; committed work remains reviewable.');
+    const line=Number(/import-jobs\.ts:(\d+):/.exec(thrownAt.stack??'')?.[1]);
+    check('IMPORT JOB error receipts contain no raw exception data',error?.status==='failed'&&!/invented|private/i.test(error.error??'')
+      &&error.error===`Import stopped at Starting (Error at scripts/properties/import-jobs.ts:${line}, 0 s into the phase, 0 s in all). ${IMPORT_FAILURE.replace('Import stopped. ','')}`,
+      `Where, what kind and how long, never the message: ${error?.error}`);
+    // 30 Sep 2026: "Import findings" stopped at phase 4/5 and its receipt was the fixed text alone.
+    // A driver error keeps its SQLSTATE and the schema object it names; its message and parameters stay out.
+    const timedOut=await queued();
+    await executeImportJob(db,timedOut.id,async(_job,progress)=>{
+      await progress('Importing findings',1,5);
+      await progress('Rebuilding research ties',4,5);
+      throw Object.assign(new Error('canceling statement: invented private row content'),{code:'57014',detail:'Key (name)=(Invented Person) exists.',table:'edge',schema:'network'});
+    });
+    const stoppedAt=(await db.one<ImportJob>('select * from platform.import_job where id=$1',[timedOut.id]))?.error??'';
+    check('IMPORT JOB a failed receipt names its phase, SQLSTATE, schema object and elapsed time, and no message text',
+      /^Import stopped at Rebuilding research ties \(57014 query_canceled \(statement timeout or cancel\) on network\.edge( at scripts\/properties\/import-jobs\.ts:\d+)?, \d+ s into the phase, \d+ s in all\)\. Review /.test(stoppedAt)
+        &&!/invented|private|Key \(/i.test(stoppedAt),stoppedAt);
+    const outside=Object.assign(new Error('invented'),{stack:'Error: invented\n    at f (/elsewhere/Invented Person/x.ts:1:1)\n    at g (/repo/node_modules/pg/lib/client.js:5:5)\n    at h (file:///repo/modules/network/build.ts:88:3)'});
+    check('IMPORT JOB error descriptions keep only this checkout\'s code frames and safe identifiers',
+      describeImportError(outside,'/repo')==='Error at modules/network/build.ts:88'
+        &&describeImportError('invented private row')==='a thrown non-Error value'
+        &&describeImportError(Object.assign(new Error('x'),{code:'23505',constraint:'Invented Person\'s key'}),'/repo')==='23505 unique_violation'
+        &&describeImportError(Object.assign(new Error('x'),{code:'ECONNRESET'}),'/repo')==='Error ECONNRESET',
+      'A dependency frame, a path outside the checkout and a constraint name that is not an identifier are dropped.');
     if(db.kind==='pglite') {
       const together=await Promise.all([createImportJob(db,'pursuits',actor),createImportJob(db,'pursuits',actor)]);
       check('IMPORT JOB PGlite concurrent clicks share one active receipt',together[0].id===together[1].id,'Worker threads use the one owner handle and the same partial unique index.');
@@ -92,9 +115,19 @@ export async function importJobProperties(check:Check) {
       const result=await wait(id);
       check('IMPORT JOB PGlite worker completes through the original DB owner',result.status==='completed'&&result.result?.merged===0,'Duplicate launch runs a single receipt; no second PGlite open, seed or connector request.');
       const bad=await createImportJob(db,'affinity',actor,{operation:'invented-invalid'});
-      launchImportJob(db,bad.id);
-      const stopped=await wait(bad.id);
-      check('IMPORT JOB PGlite worker failure has a safe persisted receipt',stopped.status==='failed'&&stopped.error===IMPORT_FAILURE,'An invalid operation fails before any connector request.');
+      const logged:string[]=[],consoleError=console.error;
+      console.error=(...args:unknown[])=>{logged.push(args.map(String).join(' '));};
+      let stopped:ImportJob, logLine:string|undefined;
+      try {
+        launchImportJob(db,bad.id);
+        stopped=await wait(bad.id);
+        for(const until=Date.now()+5000;Date.now()<until&&!(logLine=logged.find(l=>l.startsWith('[import] affinity')));)await new Promise(resolve=>setTimeout(resolve,25));
+      } finally { console.error=consoleError; }
+      check('IMPORT JOB PGlite worker failure has a safe persisted receipt',stopped.status==='failed'
+        &&/^Import stopped at Reading Affinity \(Error at lib\/import-jobs\/operations\.ts:\d+, /.test(stopped.error??''),
+        `An invalid operation fails before any connector request: ${stopped.error}`);
+      check('IMPORT JOB the server log gets the stopped receipt, not the worker\'s output',
+        logLine===`[import] affinity job ${bad.id.slice(0,8)} failed: ${stopped.error}`&&logged.length===1,logLine??`${logged.length} lines logged`);
       const {port1,port2}=new MessageChannel(),closeHost=hostJobDb(db,port1),remote=connectJobDb(port2,'pglite');
       await db.exec('create table public.thread_atomic (value integer)');
       await remote.transaction(async tx=>{await tx.query('insert into public.thread_atomic values (1)');});
