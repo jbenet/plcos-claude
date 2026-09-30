@@ -173,6 +173,33 @@ export async function networkNodesProperties(check: Check, db: Queryable) {
       'An outdated source does not leave a live unreviewed route or erase a recorded decision.');
     check('NODES import uses bounded batches rather than one query per edge',
       countedDb.edgeCalls() < 60, `${countedDb.edgeCalls()} edge SQL calls; ${countedDb.calls()} total calls including identity resolution for three complete imports.`);
+
+    // 30 Sep 2026: a source wrote a lone dash where an organization goes. Its key normalized to empty,
+    // the live database already had that empty-keyed organization, and since pinned nodes go through
+    // resolveEntity (c2c6b0c) its empty source ID threw inside "Rebuilding research ties".
+    const dashOrg = (await db.one<{ id: string }>(`insert into identity.entity (entity_type,display_name) values ('org','—') returning entity_id::text id`))!.id;
+    await db.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by) values('network_org','',$1,'rule:network-source-key')`, [dashOrg]);
+    const affiliate = (await db.one<{ id: string }>(`insert into identity.entity (entity_type,display_name) values ('person','Invented Dash Affiliate') returning entity_id::text id`))!.id;
+    const hub = (await db.one<{ id: string }>(`insert into network.edge (from_entity,to_entity,kind,tier,tie_band,evidence,valid_from)
+      values ($1,$2,'other','C','weak',$3::jsonb,'2026-09-26') returning edge_id::text id`,
+      [affiliate, dashOrg, JSON.stringify([{ derived: 'network_nodes', fromSource: `network_candidate:${affiliate}`, toSource: 'network_org:' }])]))!.id;
+    const symbols = empty();
+    symbols.candidates = [{ key: affiliate, name: 'Invented Dash Affiliate', type: 'person', org: '—', domains: [] }];
+    symbols.findings = [{ key: affiliate, name: 'Invented Dash Affiliate', identity: { match: 'confirmed', basis: 'Invented source identity' },
+      researched: { at: '2026-09-25', by: 'fixture', workflow: 'W1', version: '1' },
+      facts: ['—', 'Εταιρεία Άλφα', 'Εταιρεία Βήτα'].map((company) => ({ field: 'prior_role', value: 'Invented role',
+        detail: { company }, confidence: 'high', source: { kind: 'primary', url: 'https://example.org/dash' } })) }] as NetworkNodeInput['findings'];
+    const symbolPlan = planNetworkNodes(symbols, AT);
+    const orgs = symbolPlan.nodes.filter((n) => n.source === 'network_org');
+    check('NODES a name with no letter or digit plans no organization; other scripts keep one organization per name',
+      symbolPlan.nodes.every((n) => n.sourceId !== '' && n.name.trim() !== '—')
+        && orgs.filter((n) => n.name.startsWith('Εταιρεία')).length === 2 && new Set(orgs.map((n) => n.sourceId)).size === orgs.length,
+      `${orgs.length} organization nodes: ${orgs.map((n) => n.sourceId || '(empty)').join(', ')}`);
+    let threw = '';
+    try { await importNetworkNodes(db, symbolPlan, AT); } catch (error) { threw = error instanceof Error ? error.message : 'non-Error'; }
+    const hubLeft = await db.one<{ n: string }>('select count(*)::text n from network.edge where edge_id=$1', [hub]);
+    check('NODES a rebuild over an existing empty-keyed organization completes and retires its unreviewed ties',
+      !threw && hubLeft?.n === '0', threw ? `import threw: ${threw}` : `${hubLeft?.n} hub ties left`);
   } finally {
     const added = (await db.query<{ id: string }>('select entity_id::text as id from identity.entity')).map((r) => r.id).filter((id) => !before.has(id));
     const cleanup = [...createdCandidates, ...added];

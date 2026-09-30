@@ -54,6 +54,10 @@ const uuid = (s:string) => { const h=hash(s); return `${h.slice(0,8)}-${h.slice(
 const isUuid = (s:string) => /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(s);
 const isPL = (s:string) => ['pl','protocollabs'].includes(normalized(s));
 const sourceKey = (source:string,id:string) => `${source}:${id}`;
+/** An organization's source key: Latin letters and digits as before, other scripts' letters and digits
+ * where there are none (so two such names stay two organizations), and empty for no name at all. */
+const orgKey = (name:string) => isPL(name) ? 'pl'
+  : normalized(name) || name.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
 export const nodePairKey = (a:string,b:string,kind:string) => `${[a,b].sort().join('|')}|${kind}`;
 const day = (s:string|null|undefined, fallback:string) => /^\d{4}-\d{2}-\d{2}/.test(s??'') ? s!.slice(0,10) : fallback;
 const edgeKind = (kind:string): EdgeKind => ({worked_together:'colleague',cofounder:'colleague',
@@ -68,17 +72,20 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
     if (!nodes.has(key)) nodes.set(key,{key,source,sourceId:id,name,type,...extra});
     return key;
   };
-  const org=(name:string) => addNode('network_org',isPL(name)?'pl':normalized(name),isPL(name)?'PL':name,'org');
-  const pl=org('PL');
-  const addEdge=(from:string,to:string,kind:EdgeKind,tier:EvidenceTier,tie:TieDetails,source:string,note:string,
+  // A name with no letter or digit (a lone dash or symbol in a source) names no organization. Until
+  // 30 Sep 2026 it got the empty key: one "organization" joining everyone it was written against, whose
+  // empty source ID stopped every rebuild once pinned nodes went through resolveEntity (c2c6b0c).
+  const org=(name:string) => { const id=orgKey(name); return id ? addNode('network_org',id,isPL(name)?'PL':name,'org') : undefined; };
+  const pl=org('PL')!;
+  const addEdge=(from:string|undefined,to:string|undefined,kind:EdgeKind,tier:EvidenceTier,tie:TieDetails,source:string,note:string,
     rowIds:string[],asOf=today,lastVerifiedBy:string|null=null) => {
-    if (from!==to) edges.push({from,to,kind,tier,tie,source,note,rowIds,asOf,lastVerifiedBy});
+    if (from && to && from!==to) edges.push({from,to,kind,tier,tie,source,note,rowIds,asOf,lastVerifiedBy});
   };
   const affiliation=(person:string,name:string,source:string,rowIds:string[],asOf=today,employment=true) => {
-    if (!name.trim()) return;
+    const company=org(name);
+    if (!company) return;
     const personNode=nodes.get(person);
     if (employment && personNode && !uncertainIdentities.has(person)) personNode.organizations=[...new Set([...(personNode.organizations??[]),name])];
-    const company=org(name);
     if (employment && isPL(name) && nodes.get(person)?.type==='person') staff.add(person);
     addEdge(person,company,'other',employment?'C':'D',{kind:'proximity'},source,
       employment?'Recorded organizational affiliation; not a personal introduction.':'Organization named in the source; employment is not claimed.',rowIds,asOf);
@@ -151,7 +158,7 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
     if(r.eligible && person && lp && r.tier) addEdge(person,lp,r.channel==='email'?'corresponded':'met',r.tier,
       {kind:'acquaintance',lastInteraction:day(r.on,today)},r.source.url,'Named direct interaction in our records.',[r.recordId],day(r.source.as_of,today),r.source.last_verified_by??null);
   }
-  const knownOrgs=new Set([...nodes.values()].filter(n=>n.type==='org').map(n=>normalized(n.name)));
+  const knownOrgs=new Set([...nodes.values()].filter(n=>n.type==='org').map(n=>orgKey(n.name)).filter(Boolean));
   for(const f of input.findings) {
     const resolved=f.identity.match==='confirmed'||f.identity.match==='probable';
     const owner=(resolved?(candidateKeys.get(f.key)??warehouseKeys.get(f.key)):undefined)??
@@ -164,7 +171,8 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
       const organizations=new Set(['company','companies','organization','org','firm','fund','school','university','institution'].flatMap(k=>typeof fact.detail?.[k]==='string'?String(fact.detail[k]).split(/\s*;\s*/):[]));
       for(const name of organizations) {
         if(!name.trim()) continue;
-        org(name); knownOrgs.add(normalized(name));
+        if(!org(name)) continue;
+        knownOrgs.add(orgKey(name));
         if(['role','prior_role','affiliation','board'].includes(fact.field) && fact.scope!=='firm') affiliation(owner,name,fact.source.url,[f.key],day(fact.source.published??f.researched.at,today));
         else if(['investment','fund_lp','fund_gp','exit','education'].includes(fact.field)) {
           const from=fact.scope==='firm' && f.identity.canonical?.org ? org(f.identity.canonical.org) : owner;
@@ -176,7 +184,7 @@ export function planNetworkNodes(input:NetworkNodeInput, at=new Date()):NodePlan
     for(const c of f.connections??[]) {
       const source=c.source??`enrich/raw/${f.key}.json`;
       const to=(c.toHandle?teamKeys.get(c.toHandle):undefined)??
-        (isPL(c.to)||knownOrgs.has(normalized(c.to))||/\b(capital|ventures|partners|foundation|university|labs|inc|llc|fund)\b/i.test(c.to)?org(c.to):sourcedPerson(c.to,source));
+        (isPL(c.to)||knownOrgs.has(orgKey(c.to))||/\b(capital|ventures|partners|foundation|university|labs|inc|llc|fund)\b/i.test(c.to)?org(c.to):sourcedPerson(c.to,source));
       const from=c.scope==='firm' && f.identity.canonical?.org ? org(f.identity.canonical.org) : owner;
       const tier=c.scope==='firm' && c.tier<'C'?'C':c.tier;
       addEdge(from,to,c.kind,tier,c.tie??{kind: tier==='C'||tier==='D'?'proximity':c.kind==='colleague'?'worked_together':'acquaintance'},
@@ -315,7 +323,8 @@ export async function importNetworkNodes(tx:Queryable,plan:NodePlan,at=new Date(
   if(duplicateIds.length)await tx.query(`delete from network.edge where edge_id=any($1::uuid[]) and reviewed_at is null`,[duplicateIds]);
   // `current` already contains the evidence. Sets avoid repeated array membership scans
   // over every node for every stale edge; reviewed and mixed-provenance edges still survive.
-  const writtenIds=new Set([...rows.values()].map(r=>r.id)), nodeKeys=new Set(plan.nodes.map(n=>n.key));
+  // The empty organization key is retired (planNetworkNodes, 30 Sep 2026): its unreviewed ties are stale.
+  const writtenIds=new Set([...rows.values()].map(r=>r.id)), nodeKeys=new Set([...plan.nodes.map(n=>n.key),sourceKey('network_org','')]);
   const staleIds=current.filter(e=>!e.reviewed&&!writtenIds.has(e.id)&&e.evidence.length>0
     &&e.evidence.every(v=>v.derived==='network_nodes')
     &&e.evidence.some(v=>typeof v.fromSource==='string'&&typeof v.toSource==='string'
