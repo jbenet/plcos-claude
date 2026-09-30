@@ -56,7 +56,8 @@ with the password in the kit's own variable, never in the URL in a log · `LABOS
 the live-server setting from F3 · `AFFINITY_API_KEY`, `LINEAR_API_KEY`, and `ANTHROPIC_API_KEY` when wired.
 Leave `SCHEDULE_DAILY_AT` unset for the first day. Turn it on once a manual Affinity sync has worked
 from the container. The persistent volume mounts at `/app/data`, and the working files go in
-`/app/data/real/`. Memory: 4 GiB (see §5).
+`/app/data/real/`. Memory: 6 GiB asked, 4 GiB the floor (see §5). Every variable, with what it's for, is in
+[service.env.example](service.env.example); `bash scripts/preflight.sh` checks them and the machine (30 Sep).
 
 ## 2. Deploy approval and first boot (demo first)
 
@@ -75,7 +76,7 @@ from the container. The persistent volume mounts at `/app/data`, and the working
 |---|---|---|
 | a | Wait until no import job is `queued`/`running` on live, or fail it. A copied `running` row blocks that job kind on the target, and the rehearsal had to fail one by hand. Then stop the live server (`npm run dev:stop` stops Postgres too; stop only the Next server). Take `npm run backup -- event "pre-cutover"`. | backup: minutes |
 | b | `scripts/cutover.sh run --from plcos_live --to <RDS>`: freeze, `pg_dump -Fc`, restore `--no-owner --no-acl --single-transaction`, verify, strip Dakota, stop copied jobs, flip. | dump 15 s (190 MiB file, 1.45 GB database); restore 40 s locally, longer over the network (GUESS 1–3 min); verify 38 s |
-| c | Copy the working files to the volume: everything under `plcos-data/real` except `postgres/`, `database/` (6.9 GB of old PGlite), `database.lock`, `postgres.url`, `dakota/`, `logs/`, `rehearsal/`, and the hidden `.real-copy-*` snapshots (14 GB). What's left is **2.1 GB, 33,132 files**, not the 1.0 GB rev 3 assumed. | tar + upload: GUESS 2–5 min |
+| c | Copy the working files to the volume: everything under `plcos-data/real` except `postgres/`, `database/` (6.9 GB of old PGlite), `database.lock`, `postgres.url`, `dakota/`, `logs/`, `rehearsal/`, and the hidden `.real-copy-*` snapshots (14 GB). What's left is **2.1 GB, 33,132 files**, not the 1.0 GB rev 3 assumed. Since 30 Sep: `bash scripts/cutover-files.sh pack <real root> <out.tar.gz>`, which also leaves out the research export files (regenerated on the service) and checks the archive. | tar + upload: GUESS 2–5 min |
 | d | Point the app at RDS (settings above) and deploy (Approve). | about 1 min |
 
 Verify: `pg-verify` must say MATCH **before** target sanitation. The subsequent counts report intentional removals; do not expect source/target equality after stripping. In the rehearsal the three tables that differed (`route_cache`,

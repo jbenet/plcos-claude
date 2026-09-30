@@ -231,3 +231,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Feedback sheet — ported from the feedback-dev-kit's 0.1.1/0.1.2 round](entries/feedback-sheet-kit-port.md)
 - [Feedback — the filed screen is back: file several in a row](entries/filed-screen.md)
 - [Import findings — the ties rebuild stopped on a nameless organization; failed imports say where and why](entries/findings-rebuild-empty-org.md)
+
+- [Service prep — env template, preflight, backup restore drill, cutover file pack](entries/service-prep.md)

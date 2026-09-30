@@ -40,6 +40,7 @@ async function main() {
   await (await import('./properties/alias-join')).aliasJoinProperties(check);
   await (await import('./properties/strip-dakota')).stripDakotaProperties(check);
   await (await import('./properties/cutover-shell')).cutoverShellProperties(check);
+  await (await import('./properties/service-prep')).serviceEnvProperties(check);
   await (await import('./properties/postgres')).databaseProperties(check);
   await (await import('./properties/pglite-worker')).pgliteWorkerProperties(check);
   await (await import('./properties/postgres-preview')).postgresPreviewProperties(check);

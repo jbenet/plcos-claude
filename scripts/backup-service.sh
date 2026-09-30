@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Service only: BACKUP_COMMAND="bash scripts/backup-service.sh". Mac backups are unchanged.
+# Restore with scripts/backup-service-restore.sh; scripts/service-drill.sh rehearses both on invented data.
 set -euo pipefail
 : "${DATABASE_URL:?required}" "${BACKUP_BUCKET:?required}" "${BACKUP_GPG_PUBLIC_KEY:?required}"
 cd "$(dirname "$0")/.."
@@ -26,6 +27,8 @@ for item in database.dump files.tar.gz; do
   if [ "${BACKUP_DRY_RUN:-0}" = 1 ]; then
     echo "Would upload encrypted $item ($tables TABLE DATA entries) to $target/$stamp.${item#*.}.gpg"
     echo "Would list $target/ and delete objects dropped by backup-prune.py (300 GB per prefix)."
+    # The restore drill (scripts/service-drill.sh) keeps the encrypted files; nothing unencrypted leaves $stage.
+    if [ -n "${BACKUP_KEEP_DIR:-}" ]; then cp "$stage/$item.gpg" "$BACKUP_KEEP_DIR/$stamp.${item#*.}.gpg"; echo "Kept $BACKUP_KEEP_DIR/$stamp.${item#*.}.gpg"; fi
     continue
   fi
   aws s3 cp - "$target/$stamp.${item#*.}.gpg" < "$stage/$item.gpg"
