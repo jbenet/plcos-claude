@@ -133,9 +133,11 @@ try {
       const page = await context.newPage();
       let saved = false;
       await page.route('**/api/feedback', async route => {
-        const issue = await persist(route.request().postDataJSON() as Payload, count, count === 3);
+        const sent = route.request().postDataJSON() as Payload & { clientId: string };
+        const issue = await persist(sent, count, count === 3);
         saved = true;
-        await route.fulfill({ json: { id: issue.id, title: issue.title, location: issue.location } });
+        // The server's reply since the journal (ac26ce7): journaled, the client id echoed, the number if filed.
+        await route.fulfill({ status: 202, json: { journaled: true, clientId: sent.clientId, repeat: false, id: issue.id } });
       });
       await open(page);
       await add(page, method, count);
@@ -188,13 +190,64 @@ try {
       await page.waitForTimeout(500);
       assert.ok(captured);
       if (response === 'failure') await page.getByText('Invented response failure', { exact: false }).waitFor();
-      await page.reload({ waitUntil: 'networkidle' });
+      // Since the journal (ac26ce7) an unanswered report waits in this browser's outbox, not in the
+      // draft, and is sent again; the filed screen says where it is.
+      await page.getByRole('heading', { name: /^Kept in this browser/ }).waitFor();
+      await page.reload({ waitUntil: 'load' });
+      const kept = await page.evaluate(() => new Promise<number>((resolve) => {
+        const open = indexedDB.open('capitalos-outbox');
+        open.onerror = () => resolve(-1);
+        open.onsuccess = () => {
+          const count = open.result.transaction('entries', 'readonly').objectStore('entries').count();
+          count.onsuccess = () => resolve(count.result);
+          count.onerror = () => resolve(-1);
+        };
+      }));
+      assert.ok(kept >= 1, `the outbox keeps the report through a reload (${kept})`);
+      ok(`${response}: the report stays in this browser's outbox through response loss plus reload, and the box says so`);
       await page.getByRole('region', { name: 'Feedback regression fixture' }).getByRole('button').click();
-      await page.waitForFunction(() => document.querySelectorAll('.mdembed img').length === 3);
-      await roundTrip(page, 3);
-      ok(`${response}: filed scratch attachments and browser draft survive response loss plus reload`);
+      await page.locator('.mdrich').waitFor();
+      await add(page, 'picker', 3);
       await page.unroute('**/api/feedback');
     }
+    await context.close();
+  }
+
+  {
+    // Reports come in batches (issue 0017): File keeps the box open on a filed screen, and
+    // "Give more feedback" or ⌘/Ctrl+Enter starts the next one (lost in ac26ce7, restored 29 Sep).
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    // A dev server refuses feedback (only live files it), so the live server's reply is played here.
+    let next = 9001;
+    await page.route('**/api/feedback', async route => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      const sent = route.request().postDataJSON() as { clientId: string };
+      await route.fulfill({ status: 202, json: { journaled: true, clientId: sent.clientId, repeat: false, id: String(next++) } });
+    });
+    await page.goto(`${origin}/dev/feedback-regression`, { waitUntil: 'networkidle' });
+    for (const [n, words] of [[1, 'Invented first report in a batch'], [2, 'Invented second report in a batch']] as const) {
+      if (n === 1) await page.getByRole('region', { name: 'Feedback regression fixture' }).getByRole('button').click();
+      await page.locator('.mdrich').waitFor();
+      await page.locator('.shotthumb img').first().waitFor();
+      assert.equal((await page.locator('.mdrich').innerText()).trim(), '', `report ${n} starts empty`);
+      await page.locator('.mdrich').click();
+      await page.keyboard.type(words);
+      await page.getByRole('button', { name: 'File it', exact: true }).click();
+      await page.getByRole('button', { name: 'Give more feedback' }).waitFor();
+      await page.getByRole('heading', { name: /^Filed as issue \d+$/ }).waitFor({ timeout: 30_000 })
+        .catch(async (err) => { throw new Error(`report ${n}: the filed screen says "${await page.locator('.drawer h2:not(.fbhead)').innerText()}"`, { cause: err }); });
+      if (n === 1) await page.keyboard.press('Control+Enter');
+    }
+    await page.getByText('Filed while this was open · 2').waitFor();
+    assert.equal(await page.locator('.filedlist a.filedrow').count(), 2);
+    // FEEDBACK_SHOT=<path.png>: keep the filed screen for a changelog entry (invented reports only).
+    if (process.env.FEEDBACK_SHOT) await page.screenshot({ path: process.env.FEEDBACK_SHOT });
+    await page.getByRole('button', { name: 'Give more feedback' }).click();
+    await page.locator('.mdrich').waitFor();
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('.drawer').count(), 0);
+    ok('Filing keeps the box open on a filed screen; ⌘↵ and Give more feedback start the next; the batch is listed with numbers');
     await context.close();
   }
 

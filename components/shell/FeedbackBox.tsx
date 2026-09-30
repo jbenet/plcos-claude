@@ -16,6 +16,7 @@ import {
   discardDraft, listDrafts, readDraft, readPictures, writeDraft, writePictures, type DraftSummary,
 } from '@/lib/feedback-drafts';
 import { enqueue, startOutbox } from '@/lib/feedback-outbox';
+import { useOutbox } from './FeedbackOutbox';
 import { formatDate } from '@/lib/time';
 
 type Kind = 'bug' | 'request' | 'question' | 'chore';
@@ -213,6 +214,19 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
   const [error, setError] = useState<string | null>(null);
   const [imagesPending, setImagesPending] = useState(false);
   const [images, setImages] = useState<DroppedImage[]>([]);
+  /**
+   * Everything filed while this box has been open — reports come in batches (issue 0017). The
+   * number arrives from the outbox a moment after File (lib/feedback-outbox.ts), so it is
+   * recorded here when it does; the outbox only shows a filed number for a few seconds.
+   */
+  const [filedHere, setFiledHere] = useState<Array<{ clientId: string; title: string }>>([]);
+  const [filedIds, setFiledIds] = useState<Record<string, { id: string | null; error?: string }>>({});
+  const outbox = useOutbox();
+  useEffect(() => {
+    const mine = new Set(filedHere.map((f) => f.clientId));
+    const fresh = outbox.filed.filter((f) => mine.has(f.clientId) && !filedIds[f.clientId]);
+    if (fresh.length) setFiledIds((prev) => ({ ...prev, ...Object.fromEntries(fresh.map((f) => [f.clientId, { id: f.id, error: f.error }])) }));
+  }, [outbox.filed, filedHere, filedIds]);
 
   /**
    * The drawer and the editor are portalled to <body>.
@@ -254,7 +268,8 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
       }
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        void submitRef.current?.();
+        if (doneRef.current) againRef.current?.();
+        else void submitRef.current?.();
       }
       if (isShortcutsKey(e)) {
         e.preventDefault();
@@ -382,8 +397,9 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
     setError(null);
     // A picture deleted from the text is not sent (issue 0020) — it may be the wrong one.
     const packed = packAttachments(body, images);
+    let clientId: string;
     try {
-      await enqueue({
+      ({ entry: { clientId } } = await enqueue({
         title, body: packed.body, kind, priority, page: path, context,
         screenshots: shots.map((x) => x.dataUrl),
         images: packed.images.map((i) => ({ name: i.name, dataUrl: i.dataUrl })),
@@ -392,18 +408,45 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
          * against `attachment:1` needs an offset for the screenshots still attached.
          */
         imageOffset: shots.length,
-      });
+      }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setState('failed');
       return;
     }
-    // Kept in the outbox now: the draft goes, and nothing autosaves it back on the way out.
+    // Kept in the outbox now: the draft goes, and nothing autosaves it back. The box stays open on
+    // the filed screen, so the next report is one keystroke away (issue 0017; lost in ac26ce7).
+    setFiledHere((prev) => [...prev, { clientId, title: title.trim() || body.trim().split('\n')[0].slice(0, 90) }]);
     setState('saved');
     void discardDraft(draftPage);
-    onClose();
   };
   submitRef.current = submit;
+
+  /** Another report: a fresh box on this page, with a new automatic screenshot. */
+  const again = () => {
+    setFailed(false);
+    setError(null);
+    setState('idle');
+    load(path, null);
+  };
+  const againRef = useRef<(() => void) | null>(null);
+  againRef.current = again;
+  const doneRef = useRef(false);
+  doneRef.current = state === 'saved';
+
+  /** Where one filed report stands: its number, or where it is on the way to getting one. */
+  const standing = (clientId: string): { id: string | null; label: string } => {
+    const known = filedIds[clientId];
+    if (known?.error) return { id: null, label: `Refused by the server: ${known.error}` };
+    if (known?.id) return { id: known.id, label: `Filed as issue ${known.id}` };
+    if (known) return { id: null, label: 'Filed' };
+    if (outbox.onServer.some((n) => n.clientId === clientId)) return { id: null, label: 'Saved on the server · being filed' };
+    if (outbox.sending.includes(clientId)) return { id: null, label: 'Sending…' };
+    const kept = outbox.entries.find((e) => e.clientId === clientId);
+    if (kept) return { id: null, label: `Kept in this browser${kept.lastError ? ` (${kept.lastError})` : ''} · sent again when the server answers` };
+    return { id: null, label: 'Saved' };
+  };
+  const latest = filedHere.length ? standing(filedHere[filedHere.length - 1].clientId) : null;
 
   const ui = (
     <>
@@ -488,6 +531,48 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
           </div>
         )}
 
+        {state === 'saved' && latest ? (
+          <>
+            <h2>{latest.label}</h2>
+            <p className="sublede">
+              Thanks — it is in the queue with this page, your filters and any screenshots attached.
+              {!latest.id && ' Its number shows here when the server gives it one; you can close the box before then.'}
+            </p>
+            <div className="acts three">
+              <button className="btn p" onClick={again} autoFocus>
+                Give more feedback
+              </button>
+              {latest.id ? (
+                <a className="btn" href={`/developer/issues/${latest.id}`} style={{ textAlign: 'center' }}>
+                  Open the issue
+                </a>
+              ) : (
+                <span className="btn" aria-disabled="true" style={{ textAlign: 'center', opacity: 0.5 }}>
+                  Open the issue
+                </span>
+              )}
+              <button className="btn" onClick={onClose}>
+                Close
+              </button>
+            </div>
+            <div className="keyhint">
+              <span><kbd>⌘</kbd><kbd>↵</kbd> another</span>
+              <span><kbd>esc</kbd> close</span>
+            </div>
+            {filedHere.length > 1 && (
+              <div className="filedlist">
+                <div className="lbl">Filed while this was open · {filedHere.length}</div>
+                {filedHere.map((f) => {
+                  const st = standing(f.clientId);
+                  const text = <><span className="mono">{st.id ?? '…'}</span><span>{f.title || 'Untitled'}</span></>;
+                  return st.id
+                    ? <a key={f.clientId} href={`/developer/issues/${st.id}`} className="filedrow">{text}</a>
+                    : <div key={f.clientId} className="filedrow" data-tip={st.label}>{text}</div>;
+                })}
+              </div>
+            )}
+          </>
+        ) : (
         <>
             <div className="fbcols">
             <div className="fbshots">
@@ -680,6 +765,7 @@ function FeedbackDrawer({ profile, onClose }: { profile: 'demo' | 'real'; onClos
               <div className="ctx">{JSON.stringify(context, null, 2)}</div>
             </details>
         </>
+        )}
       </div>
     </>
   );
