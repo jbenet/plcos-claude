@@ -32,6 +32,12 @@ type PolicyTopology = {
   organizations: Set<string>;
   types: Map<string, string>;
 };
+/** One page of every entity, in primary-key order. ORDER BY names the table's uuid column
+ * (e.entity_id), never the output column `entity_id`, which is the ::text cast: that sorted the
+ * whole table for every page — 58 seq scans and top-N sorts; the topology rebuild took 4.45 s on
+ * 118K entities (2 Oct 2026) and takes 0.26 s walking the primary key. */
+export const topologyPageSql = (after: boolean) => `select e.entity_id::text, e.entity_type::text, e.display_name, e.merged_into::text
+  from identity.entity e ${after ? 'where e.entity_id > $1::uuid' : ''} order by e.entity_id limit 2048`;
 const topologyCache = new WeakMap<Db, { revision: string; value: Promise<PolicyTopology> }>();
 const revisionOf = async (db: Db) => (await db.one<{ revision: string }>(
   `select revision::text || ':' || current_date::text as revision from network.route_revision where singleton`,
@@ -75,8 +81,7 @@ async function policyTopology(db: Db): Promise<PolicyTopology> {
     let cursor: string | null = null;
     for (;;) {
       const rows: Array<{ entity_id: string; entity_type: string; display_name: string; merged_into: string | null }> = await db.query(
-        `select entity_id::text, entity_type::text, display_name, merged_into::text from identity.entity
-          ${cursor ? 'where entity_id > $1::uuid' : ''} order by entity_id limit 2048`, cursor ? [cursor] : [],
+        topologyPageSql(cursor !== null), cursor ? [cursor] : [],
       );
       for (const row of rows) records.set(row.entity_id, row);
       await yieldRouteWork();

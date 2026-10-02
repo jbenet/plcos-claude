@@ -219,9 +219,10 @@ async function resolvePass(db: Db, evidence: IdentityEvidence[], progress?: (sta
     on conflict(left_entity,right_entity) do update set active=true where not possible_match.active`,[a,b]);await pause();}
   cursor = '';
   for (;;) {
-    const old=await db.query<{edge_id:string;left_entity:string;right_entity:string;active:boolean}>(`select edge_id::text,left_entity::text,right_entity::text,active from identity.possible_match
-      where ${scoped ? '(left_entity=any($3::uuid[]) or right_entity=any($3::uuid[])) and' : ''} signals->>'source' is distinct from 'dakota' and signals->>'rule' is distinct from 'creation-name-only' and edge_id > coalesce(nullif($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
-      order by edge_id limit $2`,[cursor,batchSize,...(scoped ? [scoped.ids] : [])]);
+    // m.edge_id, the uuid: the bare name would sort by the ::text output column, a full sort per page.
+    const old=await db.query<{edge_id:string;left_entity:string;right_entity:string;active:boolean}>(`select m.edge_id::text,m.left_entity::text,m.right_entity::text,m.active from identity.possible_match m
+      where ${scoped ? '(m.left_entity=any($3::uuid[]) or m.right_entity=any($3::uuid[])) and' : ''} m.signals->>'source' is distinct from 'dakota' and m.signals->>'rule' is distinct from 'creation-name-only' and m.edge_id > coalesce(nullif($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
+      order by m.edge_id limit $2`,[cursor,batchSize,...(scoped ? [scoped.ids] : [])]);
     for(const p of old)if(p.active&&touchesTeam(p.left_entity,p.right_entity)&&!active.has(pair(p.left_entity,p.right_entity))){await db.query('update identity.possible_match set active=false where edge_id=$1',[p.edge_id]);await pause();}
     await pause();if(old.length<batchSize)break;cursor=old.at(-1)!.edge_id;
   }
