@@ -233,3 +233,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Import findings — the ties rebuild stopped on a nameless organization; failed imports say where and why](entries/findings-rebuild-empty-org.md)
 
 - [Service prep — env template, preflight, backup restore drill, cutover file pack](entries/service-prep.md)
+- [Page speed — the slow first click after a data change](entries/page-speed.md)
