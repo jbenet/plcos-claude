@@ -234,3 +234,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 
 - [Service prep — env template, preflight, backup restore drill, cutover file pack](entries/service-prep.md)
 - [W3 alias keys — every path filed under its LP's key](entries/w3-alias-keys.md)
+- [Page speed — the slow first click after a data change](entries/page-speed.md)

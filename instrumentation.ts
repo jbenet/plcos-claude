@@ -4,6 +4,8 @@
  * - The local activity refresher runs independently of page views (lib/activity).
  * - The feedback journal files whatever it holds from before a restart and starts the ingester's
  *   timer (lib/feedback-ingest.ts).
+ * - The page warm-up opens the main pages at start and again after the data changes, so the first
+ *   click after a write does not rebuild the shared page caches (lib/page-warm.ts).
  * All loaded lazily and never awaited, so a slow disk or a busy database cannot hold the start.
  */
 export async function register() {
@@ -11,5 +13,6 @@ export async function register() {
   void import('./lib/responsiveness').then((m) => m.startResponsivenessMonitor()).catch(() => undefined);
   void import('./lib/activity').then((m) => m.startActivity()).catch(() => undefined);
   void import('./lib/feedback-ingest').then((m) => m.startIngest()).catch(() => undefined);
+  void import('./lib/page-warm').then((m) => m.startPageWarm()).catch(() => undefined);
   if (process.env.SCHEDULE_DAILY_AT) void import('./lib/daily-timer').then((m) => m.startDailyTimer()).catch(() => console.error('[daily] Could not start timer.'));
 }

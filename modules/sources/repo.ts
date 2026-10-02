@@ -21,7 +21,7 @@ export async function recentRequests(source: string, limit = 50): Promise<Logged
   }>(
     `select id::text, at, source, endpoint, path, outcome, status, duration_ms,
             user_remaining, org_remaining, note
-       from sources.request_log where source = $1 order by at desc, id desc limit $2`,
+       from sources.request_log r where source = $1 order by r.at desc, r.id desc limit $2`,
     [source, limit],
   );
   return rows.map((r) => ({
