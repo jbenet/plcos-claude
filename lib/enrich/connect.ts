@@ -11,6 +11,8 @@ import type { Finding } from './schema';
 import type { WarehousePerson, WarehouseTie, WarehouseMatch } from './warehouse-graph';
 import { plNetworkPaths, materializeResearchNodes } from './pl-network';
 import { config } from '@/config/deployment';
+import { candidateKey } from './candidate-key';
+import { isEntityKey } from './connection-check';
 import { tieWarmth, investmentTie, type TieDetails, type Warmth } from '@/modules/network';
 
 /**
@@ -106,7 +108,16 @@ export function clip(text: string, max = 200): string {
   return end > 60 ? cut.slice(0, end + 1) : `${cut.replace(/\s+\S*$/, '')}…`;
 }
 
-export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: number; lpKeys: string[]; researched: number }> {
+/** W3's output: the rows for connections.jsonl, and apart from them the rows no LP key resolves. */
+export interface ConnectionResult {
+  paths: Path[]; lps: number; lpKeys: string[]; researched: number;
+  /** Rows filed under a key that is neither an LP's, a contact's nor an entity's: kept apart, never imported. */
+  unresolved: Path[];
+  /** Findings filed under another key (a research alias, a merged identity) moved to their LP's key. */
+  rekeyed: number;
+}
+
+export async function findPaths(dir: string): Promise<ConnectionResult> {
   const candidates = (await readFile(join(dir, 'candidates.jsonl'), 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Candidate);
   const findings = new Map<string, Finding>();
   for (const f of (await readdir(join(dir, 'raw')).catch(() => [])).filter((x) => x.endsWith('.json'))) {
@@ -117,19 +128,60 @@ export async function findPaths(dir: string): Promise<{ paths: Path[]; lps: numb
   const directory = (await readFile(join(dir, 'us', 'pl-directory.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
     .map((l) => JSON.parse(l) as PlDirectoryEntry);
   const warehouse = await readWarehouseGraph(dir);
-  return connectionPaths(candidates, findings, net, team, directory, new Date(), warehouse, await readConnectionPortfolio(dir));
+  // The export's alias map, the same one the checker reads (lib/enrich/candidate-key.ts).
+  const aliases = JSON.parse(await readFile(join(dir, 'entity-keys.json'), 'utf8').catch((error) => {
+    if (error.code !== 'ENOENT') throw error;
+    return '{}';
+  })) as Record<string, string>;
+  return connectionPaths(candidates, findings, net, team, directory, new Date(), warehouse, await readConnectionPortfolio(dir), aliases);
 }
+
+/**
+ * File each finding under its LP's key with the checker's resolver (candidateKey), against W3's
+ * endpoints: the LP units and the people who speak for them. A research key, or a person's key after
+ * a merge, otherwise leaves its ties on a row no LP owns. Where two findings land on one LP, the one
+ * already under its key stays its profile (else the newest), and every finding's own recorded ties
+ * still count. A finding no key or unique name resolves keeps its key: under an entity UUID its rows
+ * stay as a connector outside the LP set (the network build reads them); under any other key W3 sets
+ * them apart, since neither the checker nor the import can use them.
+ */
+export function resolveFindingKeys(findings: Map<string, Finding>, endpoints: ReadonlyArray<{ key: string; name: string }>,
+  aliases: Readonly<Record<string, string>> = {}): { byKey: Map<string, Finding>; all: Finding[]; rekeyed: number; unresolved: number } {
+  const byKey = new Map<string, Finding>();
+  const all: Finding[] = [];
+  let rekeyed = 0, unresolved = 0;
+  for (const f of findings.values()) {
+    const key = candidateKey(f, endpoints, aliases, f);
+    if (!key) unresolved++;
+    else if (key !== f.key) rekeyed++;
+    const filed = key && key !== f.key ? { ...f, key } : f;
+    all.push(filed);
+    // The finding already under the LP's key keeps the profile, so no LP loses the paths it had;
+    // among aliases alone, the newest.
+    const previous = byKey.get(filed.key);
+    const own = (x: Finding) => findings.get(x.key) === x;
+    if (!previous || (!own(previous) && (own(filed) || filed.researched.at > previous.researched.at))) byKey.set(filed.key, filed);
+  }
+  return { byKey, all, rekeyed, unresolved };
+}
+
+/** An LP unit, a contact of one, a sourced connector person, or another entity outside the LP set. */
+const ownedBy = (p: Path, endpoints: ReadonlyMap<string, unknown>) => endpoints.has(p.lp) || Boolean(p.lpPerson) || isEntityKey(p.lp);
 
 /** W3's pure join, also used by invented property fixtures. No files or database writes. */
 export function connectionPaths(candidates: Candidate[], findings: Map<string, Finding>, net: Network,
-  team: TeamMember[], directory: PlDirectoryEntry[] = [], at = new Date(), warehouse?: WarehouseGraph, portfolio?: PortfolioInput): { paths: Path[]; lps: number; lpKeys: string[]; researched: number } {
+  team: TeamMember[], directory: PlDirectoryEntry[] = [], at = new Date(), warehouse?: WarehouseGraph, portfolio?: PortfolioInput,
+  aliases: Readonly<Record<string, string>> = {}): ConnectionResult {
 
   const units = [...new Map(candidates.map(c => [c.key, c])).values()];
   const endpoints = new Map(units.map(c => [c.key, c]));
   for (const unit of units) if (unit.type !== 'person') for (const contact of unit.contacts ?? []) {
     if (contact.type === 'person' && !endpoints.has(contact.key)) endpoints.set(contact.key, contact);
   }
-  const result = entityConnectionPaths([...endpoints.values()], findings, net, team, directory, at, warehouse, portfolio);
+  const filed = resolveFindingKeys(findings, [...endpoints.values()], aliases);
+  const all = entityConnectionPaths([...endpoints.values()], filed.byKey, net, team, directory, at, warehouse, portfolio, filed.all);
+  const result = { ...all, paths: all.paths.filter(p => ownedBy(p, endpoints)) };
+  const unresolved = all.paths.filter(p => !ownedBy(p, endpoints));
   const byEndpoint = new Map<string, Path[]>();
   for (const path of result.paths) byEndpoint.set(path.lp, [...(byEndpoint.get(path.lp) ?? []), path]);
   const projected: Path[] = [];
@@ -154,11 +206,13 @@ export function connectionPaths(candidates: Candidate[], findings: Map<string, F
   }
   return { ...result, paths: [...result.paths, ...projected].sort((a, b) => a.tier.localeCompare(b.tier)
     || (b.warmth?.score ?? 0) - (a.warmth?.score ?? 0) || a.lp.localeCompare(b.lp) || a.other.name.localeCompare(b.other.name)),
-    lps: units.length, lpKeys: units.map(c => c.key) };
+    lps: units.length, lpKeys: units.map(c => c.key), researched: findings.size, unresolved, rekeyed: filed.rekeyed };
 }
 
+/** `findings` is one profile per LP; `allFindings` every finding, each filed under its LP's key. */
 function entityConnectionPaths(candidates: Candidate[], findings: Map<string, Finding>, net: Network,
-  team: TeamMember[], directory: PlDirectoryEntry[], at: Date, warehouse?: WarehouseGraph, portfolio?: PortfolioInput): { paths: Path[]; lps: number; lpKeys: string[]; researched: number } {
+  team: TeamMember[], directory: PlDirectoryEntry[], at: Date, warehouse?: WarehouseGraph, portfolio?: PortfolioInput,
+  allFindings: Finding[] = [...findings.values()]): { paths: Path[]; lps: number; lpKeys: string[]; researched: number } {
 
   // A connector need not be raising. The sourced personal backer roster is a separate
   // universe from active LPs; leaving it out made documented co-founder ties dead ends.
@@ -174,13 +228,19 @@ function entityConnectionPaths(candidates: Candidate[], findings: Map<string, Fi
   const descriptors = new Map(connectors.map((c) => [c.key, { key: c.key, name: c.name,
     source: net.backer_people.find((p) => norm(p.name) === norm(c.name))!.source }]));
   const paths: Path[] = [];
-  const pathKeys = new Set<string>();
+  const pathKeys = new Map<string, number>();
   const add = (p: Path) => {
     if (descriptors.has(p.lp)) p.lpPerson = descriptors.get(p.lp);
     if (p.other.key && descriptors.has(p.other.key)) p.other = { ...p.other, person: descriptors.get(p.other.key) };
     // Keep distinct supporting records; a weak affiliation must not discard a warm personal tie.
     const key = JSON.stringify([p.lp, p.other.name, p.kind, p.basis, p.warehouse?.ties.map((t) => t.key)]);
-    if (!pathKeys.has(key)) { pathKeys.add(key); paths.push(p); }
+    const seenAt = pathKeys.get(key);
+    if (seenAt === undefined) { pathKeys.set(key, paths.length); paths.push(p); return; }
+    // The same record twice for one LP (two findings filed under it): the better tier, and a source
+    // when only one of them names it.
+    const kept = paths[seenAt]!;
+    const better = p.tier < kept.tier ? p : kept, other = better === p ? kept : p;
+    paths[seenAt] = better.source || !other.source ? better : { ...better, source: other.source };
   };
 
   // Where each LP works, and every sentence the research wrote about them.
@@ -295,7 +355,7 @@ function entityConnectionPaths(candidates: Candidate[], findings: Map<string, Fi
   for (const c of connectors) for (const p of ourSidePaths(c, undefined, net, team, at)) add(p);
 
   // The ties the research itself recorded, on their tier — a firm's tie is C at most for the person.
-  for (const f of findings.values()) {
+  for (const f of allFindings) {
     if (f.identity.match === 'ambiguous' || f.identity.match === 'not_found') continue;
     for (const c of f.connections ?? []) {
       const tier = c.tier === 'B' && c.scope === 'firm' ? 'C' : c.tier;
@@ -322,7 +382,7 @@ function entityConnectionPaths(candidates: Candidate[], findings: Map<string, Fi
   const OUR_DOMAINS = new Set(net.orgs.flatMap((o) => o.domains ?? []));
   for (const c of candidates) for (const d of c.domains) if (!FREE_MAIL.test(d) && !OUR_DOMAINS.has(d)) atDomain.set(d, [...(atDomain.get(d) ?? []), c]);
   const byKeyAll = new Map(candidates.map((c) => [c.key, c]));
-  for (const f of findings.values()) {
+  for (const f of allFindings) {
     if (f.identity.match === 'ambiguous' || f.identity.match === 'not_found') continue;
     const from = byKeyAll.get(f.key);
     if (!from) continue;
