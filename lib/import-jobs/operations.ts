@@ -156,7 +156,8 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
         : null;
       // A read that stopped at its request cap finished its chunk: the receipt keeps the resume point, and the job
       // completes. Any other held or failed connector receipt is not a successful import.
-      const capped = run?.status==='failed' && Boolean((run.detail as {stoppedAtCap?:boolean}|null)?.stoppedAtCap);
+      // History marks a cap stop 'held' (resumable), the other reads 'failed'; both are a finished chunk (2 Oct 2026).
+      const capped = (run?.status==='failed' || run?.status==='held') && Boolean((run.detail as {stoppedAtCap?:boolean}|null)?.stoppedAtCap);
       if (capped) return {records:run!.records,requests:run!.requests,stoppedAtCap:true};
       if (!run || run.status!=='ok') throw new Error('Affinity operation stopped; inspect its run receipt.');
       if (operation==='translate') {
