@@ -16,6 +16,8 @@ const STREAMS = [
   { path: '/v2/chat-messages', kind: 'chat-message', delta: false },
 ] as const;
 const SOURCE = 'affinity';
+/** 2026-09-26T01:00:16.824Z → 2026-09-26T01:00:16Z, also inside an encoded cursor URL's filter. */
+export const wholeSeconds = (s: string) => s.replace(/(\d{2}:\d{2}:\d{2})\.\d{3}Z/g, '$1Z').replace(/(\d{2}%3A\d{2}%3A\d{2})\.\d{3}Z/gi, '$1Z');
 const KIND = 'history';
 export const HISTORY_CAP = 99;
 export const HISTORY_CAP_REST = 1000;
@@ -53,16 +55,21 @@ export async function readHistory(runBy: string | null, opts: HistoryOptions = {
   const previous = await latestRun(SOURCE, KIND);
   const complete = await latestRun(SOURCE, KIND, 'ok');
   const last = complete?.detail.through;
-  const since = !opts.full && typeof last === 'string' ? new Date(new Date(last).getTime() - 86_400_000).toISOString() : null;
+  // Affinity refuses a filter timestamp with milliseconds ("400 Invalid filter provided", 2 Oct 2026);
+  // meetings.ts and notes.ts already send whole seconds.
+  const since = !opts.full && typeof last === 'string' ? wholeSeconds(new Date(new Date(last).getTime() - 86_400_000).toISOString()) : null;
   const prior = previous?.detail as HistoryRunDetail | undefined;
   const resume = !opts.full && (previous?.status === 'failed' || previous?.status === 'running' || previous?.status === 'held') ? prior?.resume : null;
-  const steps: Step[] = resume?.steps ?? STREAMS.flatMap(s => (since && s.delta
+  // A resume point saved before that fix carries the refused filter; mend it rather than replay the 400.
+  const mend = <T extends { filter?: unknown } | undefined>(q: T): T => (q && typeof q.filter === 'string' ? { ...q, filter: wholeSeconds(q.filter) } : q);
+  const resumedSteps = resume?.steps?.map(st => ({ ...st, query: mend(st.query) }));
+  const steps: Step[] = resumedSteps ?? STREAMS.flatMap(s => (since && s.delta
     ? [`createdAt>=${since}`, `updatedAt>=${since}`] : [undefined]).map(filter => ({
       path: s.path, kind: s.kind, query: { limit: 100, ...(s.kind === 'person' ? { fieldTypes: ['global'] } : {}), ...(filter ? { filter } : {}) },
     })));
   let phase = resume?.phase ?? 0;
-  let next = resume?.next ?? steps[phase]!.path;
-  let query = resume?.query ?? steps[phase]!.query;
+  let next = resume?.next ? wholeSeconds(resume.next) : steps[phase]!.path;
+  let query = mend(resume?.query) ?? steps[phase]!.query;
   const visited = new Set(resume?.visited ?? []);
   const detail: HistoryRunDetail = {
     mode: resume ? prior!.mode : since ? 'since' : 'full',

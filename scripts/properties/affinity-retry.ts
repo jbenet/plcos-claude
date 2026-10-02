@@ -4,6 +4,13 @@ export async function affinityRetryProperties(ctx: AffinityContext) {
   const { check, scripted, ok, KEY, aff, attempt } = ctx;
   const { readHistory } = await import('../../lib/connectors/affinity/history');
   const { readMeetings } = await import('../../lib/connectors/affinity/meetings');
+  const { wholeSeconds } = await import('../../lib/connectors/affinity/history');
+  // Affinity answers 400 "Invalid filter provided" to a timestamp with milliseconds (2 Oct 2026).
+  check('Affinity history filters and resumed cursor URLs carry whole-second timestamps',
+    wholeSeconds('createdAt>=2026-09-26T01:00:16.824Z') === 'createdAt>=2026-09-26T01:00:16Z'
+      && wholeSeconds('/v2/meetings?filter=updatedAt%3E%3D2026-09-26T01%3A00%3A16.824Z&limit=100') === '/v2/meetings?filter=updatedAt%3E%3D2026-09-26T01%3A00%3A16Z&limit=100'
+      && wholeSeconds('createdAt>=2026-09-26T01:00:16Z') === 'createdAt>=2026-09-26T01:00:16Z',
+    'milliseconds removed from plain and URL-encoded filters; whole seconds unchanged');
   const timeout = () => { throw new DOMException('invented timeout', 'TimeoutError'); };
   for (const fault of ['timeout', 'body timeout', '500', '503', '429', 'mixed']) {
     const waits: number[] = [];
