@@ -38,6 +38,7 @@ async function main() {
   await (await import('./properties/enrich-batch')).enrichBatchProperties(check);
   await (await import('./properties/team-edges')).teamEdgesProperties(check);
   await (await import('./properties/alias-join')).aliasJoinProperties(check);
+  await (await import('./properties/w3-alias-keys')).w3AliasKeyProperties(check);
   await (await import('./properties/strip-dakota')).stripDakotaProperties(check);
   await (await import('./properties/cutover-shell')).cutoverShellProperties(check);
   await (await import('./properties/service-prep')).serviceEnvProperties(check);
