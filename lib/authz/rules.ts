@@ -46,6 +46,9 @@ export const actionRules = {
   'app/email/actions.ts#removeAttachmentAction': { action: 'mutate', scope: 'emailDraft' },
   'app/email/actions.ts#disconnectGmailAction': { action: 'mutate', scope: 'self' },
   'app/email/actions.ts#pasteConsentAction': { action: 'mutate', scope: 'self' },
+  // MCP tokens (docs/26): a person's own; the service revokes only the caller's.
+  'app/settings/actions.ts#createMcpTokenAction': { action: 'mutate', scope: 'self' },
+  'app/settings/actions.ts#revokeMcpTokenAction': { action: 'mutate', scope: 'self' },
   'app/grants/actions.ts#saveInvitation': { action: 'admin', scope: 'global' },
   'app/materials/actions.ts#proposeSend': { action: 'mutate', scope: 'vehicle' },
   'app/orgs/enrichment/select.ts#choose': { action: 'admin', scope: 'global' },

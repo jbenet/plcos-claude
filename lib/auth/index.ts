@@ -21,6 +21,17 @@ export interface AuthProvider {
 }
 
 export async function auth(): Promise<AuthProvider> {
+  // An MCP request acts as its token's owner (lib/auth/acting.ts); nobody can switch from there.
+  const { actingUser } = await import('./acting');
+  const acting = actingUser();
+  if (acting) {
+    return {
+      kind: config.auth.provider, switchable: false,
+      currentUser: async () => acting,
+      listUsers: async () => [acting],
+      switchUser: async () => { throw new Error('An MCP request acts as its token’s owner and cannot switch user.'); },
+    };
+  }
   if (config.auth.provider === 'labos') {
     const { labosAuth } = await import('./labos');
     return labosAuth();

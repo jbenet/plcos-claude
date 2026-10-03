@@ -2525,6 +2525,32 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '02-restriction-holds-a-tie-back', path: '/routes?mode=through&q=Rautio', fullPage: true, prepare: throughPick('Anselm Rautio') },
     { name: '03-through-a-team-member', path: '/routes?mode=through&q=Lior', fullPage: true, prepare: throughPick('Lior') },
   ],
+  // MCP access (docs/26): Preferences → MCP access, after making one token and revoking an older one.
+  // The token shown is minted by this demo server, on invented data.
+  mcp: [
+    {
+      name: '01-preferences-mcp-tokens',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        const card = page.locator('#mcp');
+        const make = async (label: string, draft: boolean) => {
+          await card.getByPlaceholder('Claude Code on the Mac').fill(label);
+          if (draft) await card.locator('input[name=tools][value=draft]').check();
+          await card.getByRole('button', { name: 'Make token' }).click();
+          await card.locator('code').first().waitFor();
+        };
+        await make('Claude Desktop (old laptop)', false);
+        await page.reload({ waitUntil: 'networkidle' });
+        await card.locator('tr', { hasText: 'Claude Desktop (old laptop)' }).getByRole('button', { name: 'Revoke' }).first().click();
+        await card.locator('tr', { hasText: 'Claude Desktop (old laptop)' }).getByText(/^revoked/).first().waitFor();
+        await make('Claude Code on the Mac', true);
+        await card.locator('tr', { hasText: 'Claude Code on the Mac' }).first().waitFor();
+        await card.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+  ],
   // Email drafts (docs/25), on the demo's fake Google: connect, draft from the strategy, move, the intro ask.
   'email-drafts': [
     {

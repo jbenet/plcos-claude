@@ -1,0 +1,95 @@
+import { config } from '@/config/deployment';
+import type { Queryable } from '@/lib/db';
+import type { AppUser, McpToken } from '@/modules/platform';
+
+/**
+ * The work envelope of an MCP token (AGENTS.md, Agent rules; docs/26-mcp.md §Safety). The token's
+ * row holds it: which tools, which vehicles, how many calls a day, until when. Every call is checked
+ * against it before the tool runs, and refused with the reason when it falls outside.
+ *
+ *   task                 "MCP client acting for <owner>"; the client's own task is not ours to know
+ *   scope                the owner's vehicles, narrowed by the token's (never widened)
+ *   allowed_evidence     what the owner may read, through lib/authz — nothing more
+ *   allowed_commands     the token's tools, each one registered in lib/mcp/tools.ts
+ *   budget               calls a minute (config) and a day (the token)
+ *   deadline             the token's expiry
+ *   output_schema        each tool's answer, marked as data
+ *   acceptance_criteria  none: tools only read or draft; a person accepts in the app
+ *   escalation_owner     the token's owner
+ */
+export interface Envelope {
+  tokenId: string;
+  owner: AppUser;
+  /** The principal every check uses: the owner, narrowed to the token's vehicles. */
+  principal: AppUser;
+  tools: ReadonlySet<string>;
+  callsPerDay: number;
+  expiresAt: Date;
+}
+
+/**
+ * The owner narrowed by the token. A token never widens: its vehicles intersect the owner's and it
+ * can approve nothing. And it never acts as an Admin: an Admin's token is a GP on all of the
+ * owner's vehicles (or the token's). Two reasons. The licensed Dakota values (R3) are Admin-only, and
+ * Dakota data never goes into a prompt to any agent (docs/agent-rules/real-data.md), which is where
+ * every MCP answer goes. And the policy lets an Admin through before it looks at vehicles
+ * (lib/authz/index.ts), so an Admin token limited to some vehicles would not be limited.
+ */
+export function narrowedPrincipal(owner: AppUser, vehicles: string[] | null): AppUser {
+  const access = owner.access === 'admin' ? 'gp' : owner.access;
+  if (vehicles === null) return { ...owner, access, approves: [] };
+  const allowed = owner.vehicles === null ? vehicles : vehicles.filter((v) => owner.vehicles!.includes(v));
+  return { ...owner, access, vehicles: [...new Set(allowed)], approves: [] };
+}
+
+export function envelopeFor(token: McpToken, owner: AppUser): Envelope {
+  return {
+    tokenId: token.tokenId, owner, principal: narrowedPrincipal(owner, token.vehicles),
+    tools: new Set(token.tools), callsPerDay: token.callsPerDay, expiresAt: new Date(token.expiresAt),
+  };
+}
+
+// ── Rate and budget ─────────────────────────────────────────────────────────────────────
+// In memory, one server process (docs/deploy/rev3: one machine). A day's count is read back from
+// the audit log the first time a token is seen after a restart, so restarting does not refill it.
+
+interface Window { minute: number[]; day: string; dayCount: number }
+const windows = new Map<string, Window>();
+const today = (now: number) => new Date(now).toISOString().slice(0, 10);
+
+export async function admitCall(env: Envelope, tool: string, q: Queryable, now = Date.now()): Promise<string | null> {
+  if (!env.tools.has(tool)) return `"${tool}" is not in this token's envelope. Allowed: ${[...env.tools].sort().join(', ') || 'nothing'}.`;
+  if (env.expiresAt.getTime() <= now) return 'This token has expired. Make a new one in Preferences.';
+  let w = windows.get(env.tokenId);
+  if (!w || w.day !== today(now)) {
+    const row = await q.one<{ n: string }>(`select count(*)::text n from platform.audit_log
+      where action = 'mcp.call' and subject_id = $1 and at >= $2::date and detail->>'outcome' <> 'rate_limited'`, [env.tokenId, today(now)]);
+    w = { minute: [], day: today(now), dayCount: Number(row?.n ?? 0) };
+    windows.set(env.tokenId, w);
+  }
+  w.minute = w.minute.filter((t) => now - t < 60_000);
+  if (w.minute.length >= config.mcp.callsPerMinute) return `More than ${config.mcp.callsPerMinute} calls in a minute. Wait and try again.`;
+  if (w.dayCount >= env.callsPerDay) return `This token's budget of ${env.callsPerDay} calls today is spent. It refills at midnight UTC.`;
+  w.minute.push(now);
+  w.dayCount++;
+  return null;
+}
+
+/** For the properties: forget the in-memory windows. */
+export function resetWindows() { windows.clear(); }
+
+// ── What the audit entry keeps ──────────────────────────────────────────────────────────
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Arguments that are a fixed choice (a vehicle's slug, a status), never typed words. */
+const CHOICES = new Set(['vehicle', 'status', 'kind', 'purpose', 'priority', 'list', 'mode']);
+/** Ids, choices, numbers and booleans as given; any other text only as its length, so words never reach the log. */
+export function auditArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(args ?? {}).slice(0, 20)) {
+    if (typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+    else if (typeof v === 'string') out[k] = UUID.test(v) || (CHOICES.has(k) && /^[a-z0-9 _-]{1,40}$/i.test(v)) ? v : { chars: v.length };
+    else if (v != null) out[k] = { type: Array.isArray(v) ? 'array' : typeof v };
+  }
+  return out;
+}

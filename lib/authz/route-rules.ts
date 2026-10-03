@@ -15,9 +15,11 @@ export const routeRules = {
   'app/api/identity/entity-type/route.ts#POST': 'admin',
   'app/api/identity/pursuit-merge/route.ts#POST': 'admin',
   'app/api/import-jobs/route.ts#GET': 'admin',
+  // MCP (docs/26-mcp.md): a bearer token, not the cookie; each tool call is then authorized as its owner.
+  'app/api/mcp/route.ts#POST': 'mcp',
   'app/api/profile/route.ts#GET': 'admin',
   'app/api/session/route.ts#POST': 'session',
   'app/dev/shot/[...path]/route.ts#GET': 'admin',
   'app/issues/shot/[...path]/route.ts#GET': 'admin',
-} as const satisfies Record<string, Action>;
+} as const satisfies Record<string, Action | 'mcp'>;
 export type RouteId = keyof typeof routeRules;

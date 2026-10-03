@@ -5,11 +5,22 @@ import { AuthorizationError, requireCan } from './index';
 
 /** One boundary per handler. Feedback deliberately journals without a roster/DB lookup. */
 export function withRoute(name: RouteId, handler: (request: Request, context: any, user: AppUser) => Promise<Response> | Response) {
+  // MCP authenticates by its own bearer token (lib/mcp/server.ts) and authorizes per tool call; the
+  // envelope rides in the context. No cookie, so no origin rule: a cross-site Origin is refused there.
+  if (routeRules[name] === 'mcp') {
+    return async (request: Request): Promise<Response> => {
+      const { mcpGuard } = await import('@/lib/mcp/server');
+      const guard = await mcpGuard(request);
+      if ('response' in guard) return guard.response;
+      return handler(request, guard, guard.env.principal);
+    };
+  }
   return async (request: Request, context?: any): Promise<Response> => {
     try {
       const policy = routeRules[name];
       if (!policy) throw new AuthorizationError();
       try {
+        if (policy === 'mcp') throw new AuthorizationError();
         if (policy === 'feedback' || policy === 'session') {
           // Session selection bootstraps identity; its handler validates the selected active user.
           // Feedback reporter identity is resolved only by the post-response ingester.

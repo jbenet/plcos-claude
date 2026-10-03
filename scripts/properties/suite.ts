@@ -89,6 +89,8 @@ export async function runProperties(check: Check) {
   await (await import('./lp-unit-decisions')).lpUnitDecisionProperties(check, db);
   await (await import('./security-governance')).securityGovernanceProperties(check, db);
   await (await import('./security-mutations')).securityMutationProperties(check, db);
+  // Last: it leaves invented users inactive and tokens revoked, since the audit log keeps them.
+  await (await import('./mcp')).mcpProperties(check, db);
   await db.close();
 
   await (await import('./pipeline')).hardeningVariations(check);

@@ -176,6 +176,20 @@ export const config = {
     /** Bytes by hash, outside the database and git. S3 later. */
     attachmentsDir: `data/${PROFILE}/email/attachments`,
   },
+  /**
+   * MCP access (docs/26-mcp.md): /api/mcp, authenticated by a per-person token made in Preferences.
+   * Read tools and draft-only write tools; nothing sends, accepts or moves money.
+   */
+  mcp: {
+    enabled: true as boolean,
+    callsPerMinute: 60, // GUESS — a chatty agent session; a loop over every LP trips it.
+    defaultCallsPerDay: 2000, // GUESS — a working day of agent reads, per token.
+    maxCallsPerDay: 20000, // GUESS — the most a person may grant one token.
+    tokenDays: 90, // GUESS — a quarter, then make a new one.
+    maxRequestBytes: 256 * 1024, // GUESS — a draft's text is ~20 KB; nothing needs more.
+    maxResponseBytes: 60_000, // GUESS — ~15K tokens of an agent's context per call.
+    maxRows: 100, // GUESS — rows in one list answer before paging.
+  },
   warehouse: {
     enabled: false,
     canonMode: 'inProcess' as CanonMode,

@@ -17,6 +17,8 @@ import { connect, createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from 'playwright';
 import type { Db } from '../lib/db';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 const ROOT = resolve(import.meta.dirname, '..');
 process.chdir(ROOT);
@@ -351,6 +353,54 @@ async function main() {
         const box = Object.values(fake.mailboxes)[0]!;
         const raw = box.messages[box.drafts[d!.gmail!]!]?.raw ?? '';
         same([Object.keys(box.drafts).length, raw.includes(mailSubject), raw.includes('one-pager.pdf'), fake.sendAttempts.length], [1, true, true, 0], 'the fake Gmail (drafts, subject, file, sends)');
+      } };
+    });
+
+    // MCP access (docs/26-mcp.md) ──────────────────────────────────────────────────────────
+    // A token made in Preferences, used by the SDK's own client over HTTP, then revoked there.
+    const mcpLabel = `${MARK} agent`;
+    const mcpSubject = `${MARK}: drafted over MCP`;
+    await check('MCP: make a token in Preferences, read and draft with the SDK client, revoke it, and the next call fails', async () => {
+      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      const card = page.locator('#mcp');
+      await card.getByPlaceholder('Claude Code on the Mac').fill(mcpLabel);
+      await card.locator('input[name=tools][value=draft]').check();
+      await card.getByRole('button', { name: 'Make token' }).click();
+      const secret = (await card.locator('code').first().innerText()).trim();
+      if (!secret.startsWith('plcos_mcp_')) throw new Error('no token was shown');
+      const client = new Client({ name: 'e2e', version: '0' });
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/api/mcp`), { requestInit: { headers: { Authorization: `Bearer ${secret}` } } }));
+      const tools = (await client.listTools()).tools.map((t) => t.name);
+      const answer = async (name: string, args: Record<string, unknown>) => {
+        const r = (await client.callTool({ name, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+        if (r.isError) throw new Error(`${name}: ${r.content[0]?.text}`);
+        return JSON.parse(r.content[0]!.text) as { data: any };
+      };
+      const found = await answer('search', { query: lp.page.name.slice(0, 12) });
+      const hit = (found.data as Array<{ pursuits: Array<{ pursuitId: string; vehicle: string }> }>).flatMap((e) => e.pursuits).find((x) => x.pursuitId === lp.page.id);
+      if (!hit) throw new Error(`search did not find ${lp.page.name}`);
+      const summary = await answer('lp_summary', { pursuitId: lp.page.id, routes: false });
+      await answer('pipeline', { vehicle: hit.vehicle, limit: 5 });
+      const draft = await answer('create_email_draft', { purpose: 'first_message', pursuitId: lp.page.id, subject: mcpSubject, body: 'Written by the e2e check over MCP.' });
+      const send = (await client.callTool({ name: 'send_email', arguments: {} })) as { isError?: boolean };
+      await client.close();
+      await page.reload({ waitUntil: 'networkidle' });
+      await card.locator('tr', { hasText: mcpLabel }).getByRole('button', { name: 'Revoke' }).click();
+      await card.locator('tr', { hasText: mcpLabel }).getByText(/^revoked/).waitFor();
+      const again = new Client({ name: 'e2e', version: '0' });
+      const refused = await again.connect(new StreamableHTTPClientTransport(new URL(`${base}/api/mcp`), { requestInit: { headers: { Authorization: `Bearer ${secret}` } } }))
+        .then(() => false, () => true);
+      if (tools.length !== 11 || summary.data.pursuitId !== lp.page.id || !draft.data.draftId || !send.isError || !refused) {
+        throw new Error(`tools ${tools.length}, summary ${summary.data.pursuitId === lp.page.id}, draft ${Boolean(draft.data.draftId)}, send refused ${Boolean(send.isError)}, revoked refused ${refused}`);
+      }
+      return { ui: `made a token, listed ${tools.length} tools, searched, summarised, read the pipeline, drafted, was refused a send; revoked it and the next connect failed`, verify: async (db) => {
+        const t = await db.one<{ id: string; revoked: boolean; hash: string }>('select token_id::text id, revoked_at is not null revoked, token_hash hash from platform.mcp_token where label = $1', [mcpLabel]);
+        same([t?.revoked, t?.hash.length], [true, 64], 'the token (revoked, stored only as a hash)');
+        const calls = await db.query<{ tool: string; outcome: string }>(`select detail->>'tool' tool, detail->>'outcome' outcome from platform.audit_log where action = 'mcp.call' and subject_id = $1 order by id`, [t!.id]);
+        same(calls.map((c) => `${c.tool}:${c.outcome}`), ['search:ok', 'lp_summary:ok', 'pipeline:ok', 'create_email_draft:ok', 'send_email:refused'], 'the audit entries for its calls');
+        same((await db.query<{ action: string }>(`select action from platform.audit_log where subject_id = $1 and action in ('mcp.token_created', 'mcp.token_revoked', 'mcp.refused') order by id`, [t!.id])).map((r) => r.action),
+          ['mcp.token_created', 'mcp.token_revoked', 'mcp.refused'], "the token's own audit entries");
+        same((await db.one<{ status: string; owner: string }>(`select d.status, u.handle owner from email.draft d join platform.app_user u on u.id = d.owner_id where d.subject = $1`, [mcpSubject])), { status: 'editing', owner: 'juan' }, 'the MCP draft (not moved, its owner)');
       } };
     });
 

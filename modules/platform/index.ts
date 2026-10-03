@@ -12,3 +12,6 @@ export {
   listSyncSources, listUsers, listVehicles, recentAudit,
 } from './repo';
 export { fileFeedback, type FeedbackCommand } from './service';
+export {
+  createMcpToken, findMcpToken, hashToken, listMcpTokens, looksLikeToken, revokeMcpToken, type McpToken, type NewToken, type TokenState,
+} from './mcp-tokens';
