@@ -67,6 +67,13 @@ a copy of it with `npm run preview`, and a sub-agent's worktree, which has no ro
   The feedback box stays open on the real server: an issue and its screenshots live in
   `plcos-data/real/issues`, inside our system, like every other real record (decided 27 Sep, when a
   branch tried to refuse all feedback once Dakota data was in the database).
+- **Gmail is drafts only, per user (2 Oct 2026, docs/25-email-drafts.md).** No Gmail scope makes drafts
+  without allowing sends, so the client in `lib/connectors/gmail/` enforces it: an allowlist of the draft and
+  header-only endpoints, no send method, properties that prove both. Each person's refresh token is one
+  Keychain item (`plcos-gmail` / their handle); the OAuth client is two (`npm run secret:store -- google-oauth-client-id`
+  and `…-secret`), handed to the live server by `scripts/with-google-oauth.sh`. Real Google is off until
+  `config.email.gmail.enabled`; the demo and the properties use the fake Google only. A move puts the draft's
+  words in the mover's own mailbox; the audit entry keeps counts, never words or addresses.
 - **Linear is read-only (27 Sep 2026, docs/24-linear.md).** Juan overrode "no connectors before L13"
   for it, as for Affinity. The personal key can write and cannot be scoped, so read-only is enforced in
   the client: only allowlisted GraphQL queries, each text checked for a mutation before sending, and

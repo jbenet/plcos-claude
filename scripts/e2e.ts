@@ -12,7 +12,7 @@
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { connect, createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from 'playwright';
@@ -220,6 +220,8 @@ async function main() {
   // seed's New and Sourcing rows are all firms. Both are invented and live only in data/demo/e2e.
   await rm(DIR, { recursive: true, force: true });
   await rm(`${DIR}.lock`, { force: true });
+  // The fake Google of the email drafts check (docs/25) keeps its mailbox beside the database.
+  await rm(`${DIR}.gmail-fake`, { recursive: true, force: true });
   await rm(LOG, { force: true });
   const reset = spawnSync(TSX, ['scripts/reset.ts'], { cwd: ROOT, env, encoding: 'utf8' });
   if (reset.status !== 0) throw new Error(`Seeding the demo database failed: ${(reset.stderr || reset.stdout).slice(-400)}`);
@@ -318,6 +320,37 @@ async function main() {
       if (!/Capacity|fit|No strategy or fit assessment/i.test(text)) throw new Error(`the panel shows no reasons: "${text.slice(0, 160)}"`);
       return { ui: 'the reasons panel loaded, with no failure message', verify: async (db) => {
         same(await movesOf(db, id), [], 'status changes from reading the reasons');
+      } };
+    });
+
+    // Email drafts (docs/25) ─────────────────────────────────────────────────────────────────
+    const mailSubject = `${MARK}: first message`;
+    await check('Email: connect the fake Gmail, draft a first message with a file on an LP page, move it to Gmail drafts', async () => {
+      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      await page.getByRole('link', { name: /Connect Gmail/ }).click();
+      await page.waitForURL(/gmail=connected/);
+      await page.goto(`${base}/targets/${lp.page.id}`, { waitUntil: 'networkidle' });
+      const box = page.locator('#email');
+      await box.getByRole('button', { name: 'Draft the first message' }).click();
+      await box.locator('.ProseMirror').waitFor();
+      await box.getByLabel('To').fill('Ana Ruiz <ana@example.org>');
+      await box.getByLabel('Subject').fill(mailSubject);
+      await box.locator('.ProseMirror').click();
+      await page.keyboard.type('One more line, typed by the check.');
+      await box.locator('input[type=file]').setInputFiles({ name: 'one-pager.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% invented\n') });
+      await box.getByText('one-pager.pdf').waitFor();
+      await box.getByRole('button', { name: 'Move to Gmail drafts' }).click();
+      await box.locator('[role="status"]', { hasText: /Made a draft in/ }).waitFor();
+      return { ui: 'connected, drafted, attached a file and moved it; the receipt named the fake Gmail', verify: async (db) => {
+        const d = await db.one<{ id: string; status: string; gmail: string | null; files: number }>(`select d.draft_id::text id, d.status, d.gmail_draft_id gmail,
+            (select count(*)::int from email.attachment a where a.draft_id = d.draft_id and a.removed_at is null) files
+          from email.draft d where d.pursuit_id = $1 and d.subject = $2`, [lp.page.id, mailSubject]);
+        same([d?.status, Boolean(d?.gmail), d?.files], ['in_gmail', true, 1], 'the draft (status, Gmail id, files)');
+        same((await db.one<{ n: number }>("select count(*)::int n from platform.audit_log where action = 'email.draft_moved' and subject_id = $1", [d!.id]))?.n, 1, 'move audit entries');
+        const fake = JSON.parse(await readFile(`${DIR}.gmail-fake/google.json`, 'utf8')) as { mailboxes: Record<string, { drafts: Record<string, string>; messages: Record<string, { raw: string }> }>; sendAttempts: unknown[] };
+        const box = Object.values(fake.mailboxes)[0]!;
+        const raw = box.messages[box.drafts[d!.gmail!]!]?.raw ?? '';
+        same([Object.keys(box.drafts).length, raw.includes(mailSubject), raw.includes('one-pager.pdf'), fake.sendAttempts.length], [1, true, true, 0], 'the fake Gmail (drafts, subject, file, sends)');
       } };
     });
 

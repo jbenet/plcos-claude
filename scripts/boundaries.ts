@@ -21,6 +21,8 @@ import { demoRealNameViolations } from './demo-names-check';
  *      being redirected in the middle of a client navigation, which Safari broke on.
  *   3b. The same for Linear (docs/24-linear.md): only lib/connectors/linear/ names its host or the
  *      variable that holds its key.
+ *   3c. The same for Google (docs/25-email-drafts.md): only lib/connectors/gmail/ names Gmail's or
+ *      Google OAuth's hosts or the OAuth client's variables. Its client makes drafts and cannot send.
  *   6. Browser code never calls crypto.randomUUID (issue 0104): it is undefined outside a secure
  *      context, and the live server is reached over plain http on the local network. A request
  *      key comes from lib/request-key.ts, which falls back to crypto.getRandomValues.
@@ -40,6 +42,9 @@ const DAKOTA = ['marketplace-as-a-service.herokuapp.com'];
 // Linear (docs/24-linear.md): only its connector names the host or the key's variable; its client sends queries only.
 const LINEAR = ['api.linear.app', 'LINEAR_API_KEY'];
 const LINEAR_PROPERTIES = new Set(['scripts/properties/linear.ts']);
+// Gmail drafts (docs/25): only its connector names Google's hosts or the OAuth client's variables.
+const GOOGLE = ['gmail.googleapis.com', 'oauth2.googleapis.com', 'accounts.google.com', 'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET'];
+const GOOGLE_PROPERTIES = new Set(['scripts/properties/email.ts']);
 // The original harness exception follows only the three files that hold those checks.
 const AFFINITY_PROPERTIES = new Set([
   'scripts/properties/affinity.ts', 'scripts/properties/affinity-notes.ts',
@@ -95,6 +100,12 @@ async function main() {
     if (!rel.startsWith(join('lib', 'connectors', 'linear')) && rel !== 'scripts/boundaries.ts' && !LINEAR_PROPERTIES.has(rel)) {
       for (const needle of LINEAR) {
         if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/linear/ talks to Linear`);
+      }
+    }
+
+    if (!rel.startsWith(join('lib', 'connectors', 'gmail')) && rel !== 'scripts/boundaries.ts' && !GOOGLE_PROPERTIES.has(rel)) {
+      for (const needle of GOOGLE) {
+        if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/gmail/ talks to Google`);
       }
     }
 

@@ -90,6 +90,27 @@ export async function authorizeAction(user: Principal & { id: string }, name: Ac
     case 'move': vehicle = await rows('select vehicle_id::text from strategy.move_vehicle where move_id = $1 and vehicle_id = $2', [value(input, 'id'), id(value(input, 'vehicleId'))]); break;
     case 'conflict': vehicle = await rows(`select a.vehicle_id::text from coordination.conflict_case c
       join coordination.ask a on a.ask_id in (c.claimant_a, c.claimant_b) where c.case_id = $1`, [id(value(input, 'caseId'))]); break;
+    // A person's own connection (docs/25): no vehicle; a viewer was refused above.
+    case 'self': return;
+    // An email draft is its owner's alone, on the vehicle it was made for.
+    case 'emailDraft': {
+      const d = await q.one<{ vehicle_id: string; owner_id: string }>('select vehicle_id::text, owner_id::text from email.draft where draft_id = $1', [id(value(input, 'draftId'))]);
+      if (!d || d.owner_id !== user.id) throw new AuthorizationError();
+      vehicle = [d.vehicle_id];
+      break;
+    }
+    case 'emailNew': {
+      const reply = value(input, 'replyToDraftId');
+      if (reply) {
+        const d = await q.one<{ vehicle_id: string; owner_id: string }>('select vehicle_id::text, owner_id::text from email.draft where draft_id = $1', [id(reply)]);
+        if (!d || d.owner_id !== user.id) throw new AuthorizationError();
+        vehicle = [d.vehicle_id];
+      } else if (value(input, 'pursuitId')) vehicle = await pursuitVehicles([value(input, 'pursuitId')]);
+      else vehicle = await byVehicle(value(input, 'vehicleId'));
+      const supplied = value(input, 'vehicleId');
+      if (supplied && !vehicle.includes(id(supplied))) throw new AuthorizationError();
+      break;
+    }
     case 'tickets': {
       const ids = values(input, 'ticketId');
       if (!ids.length) throw new AuthorizationError();

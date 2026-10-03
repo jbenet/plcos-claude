@@ -236,3 +236,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [W3 alias keys — every path filed under its LP's key](entries/w3-alias-keys.md)
 - [Page speed — the slow first click after a data change](entries/page-speed.md)
 - [Status first in every vehicle's list](entries/status-first.md)
+- [Email drafts — written here, moved into your own Gmail](entries/email-drafts.md)

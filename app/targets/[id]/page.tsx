@@ -46,6 +46,7 @@ import { listEntities } from '@/lib/authz/read/identity';
 import { listVehicles } from '@/modules/platform';
 import { BeforeOutreach } from '@/components/strategy/BeforeOutreach';
 import { findOpenTicket } from '@/modules/governance';
+import { EmailDrafts } from '@/components/email/EmailDrafts';
 
 export const dynamic = 'force-dynamic';
 
@@ -379,6 +380,15 @@ async function TargetWorkspace({ params, searchParams }: {
 
           <BeforeOutreach entityId={pursuit.entityId} />
           {strategyPursuits.map((p) => <SuggestedStrategy key={p.pursuitId} pursuitId={p.pursuitId} vehicleName={p.vehicleName} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />)}
+          {/* The first message, written here and moved to the person's own Gmail Drafts (docs/25). */}
+          <EmailDrafts
+            title="Email"
+            lede={`Write the first message to ${pursuit.entityName} about ${pursuit.vehicleName}. It starts from the suggested strategy when there is one; you move it into your own Gmail Drafts and send it from there.`}
+            where={{ pursuitId: pursuit.pursuitId }}
+            create={{ purpose: 'first_message', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId }}
+            path={`/targets/${pursuit.pursuitId}`}
+            startLabel="Draft the first message"
+          />
           <DakotaClaims entityId={pursuit.entityId} />
           <PublicProfile entityId={pursuit.entityId} />
           <ConnectionFeedback key={pursuit.entityId} lp={pursuit.entityId} />

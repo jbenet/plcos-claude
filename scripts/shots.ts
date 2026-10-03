@@ -2519,6 +2519,62 @@ const SHOTS: Record<string, Shot[]> = {
   'identity-review': [
     { name: '01-enrich-identity-review', path: '/dev/enrich', fullPage: true },
   ],
+  // Email drafts (docs/25), on the demo's fake Google: connect, draft from the strategy, move, the intro ask.
+  'email-drafts': [
+    {
+      name: '01-lp-first-message',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        const connect = page.getByRole('link', { name: /Connect Gmail/ });
+        if (await connect.count()) { await connect.click(); await page.waitForURL(/gmail=connected/); }
+        await openLp(page, 'Bram Kowalczyk');
+        const box = page.locator('#email');
+        const start = box.getByRole('button', { name: 'Draft the first message' });
+        if (await start.count()) { await start.click(); await box.locator('.ProseMirror').waitFor(); }
+        await box.getByLabel('To').fill('Bram Kowalczyk <bram@example.org>');
+        if (!(await box.getByText('one-pager.pdf').count())) {
+          await box.locator('input[type=file]').setInputFiles({ name: 'one-pager.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% invented demo file\n') });
+          await box.getByText('one-pager.pdf').waitFor();
+        }
+        await box.getByText('Saved', { exact: true }).waitFor({ timeout: 15000 });
+        await box.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+    {
+      name: '02-moved-and-the-message',
+      path: '/settings',
+      prepare: async (page) => {
+        await openLp(page, 'Bram Kowalczyk');
+        const box = page.locator('#email');
+        await box.getByRole('button', { name: /Move to Gmail drafts|Update the Gmail draft/ }).click();
+        await box.locator('[role="status"]', { hasText: /draft in/ }).waitFor({ timeout: 20000 });
+        await box.getByRole('button', { name: 'Preview the message' }).click();
+        await box.getByText('The message as it goes to Gmail').waitFor();
+        await box.getByRole('button', { name: /Update the Gmail draft/ }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -160));
+      },
+    },
+    {
+      name: '03-route-intro-ask',
+      path: '/settings',
+      prepare: async (page) => {
+        await openLp(page, 'Bram Kowalczyk');
+        await page.getByRole('link', { name: 'Find a Warm Intro' }).click();
+        await page.waitForURL(/routes/);
+        // The first route through a connector, opened: its intro ask box sits under its "Propose" button.
+        const routes = page.url();
+        const start = page.getByRole('button', { name: /^Draft the intro ask to / }).first();
+        for (let r = 0; r < 8 && !(await start.count()); r++) await page.goto(`${routes}&r=${r}`, { waitUntil: 'networkidle' });
+        await start.click();
+        const box = page.locator('#email');
+        await box.locator('.ProseMirror').waitFor();
+        await box.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+  ],
 };
 
 /** The seed mints uuids, so a fixed link is resolved at shot time. */
