@@ -13,6 +13,7 @@ if git grep -nE "^(<<<<<<<|>>>>>>>) " -- . ":!node_modules" >/dev/null 2>&1; the
   echo "FAIL conflict markers:"; git grep -lE "^(<<<<<<<|>>>>>>>) " -- . | head; exit 1
 fi
 
+bash scripts/deps-sync.sh . || { echo "FAIL dependencies"; exit 1; }
 echo "== tsc";        npm run -s check > "$tmp/tsc" 2>&1; rc1=$?; grep -E "error TS" "$tmp/tsc" | head -20; echo "tsc exit $rc1"
 echo "== boundaries"; npm run -s boundaries > "$tmp/b" 2>&1; rc2=$?; tail -3 "$tmp/b"; echo "boundaries exit $rc2"
 echo "== props (PGlite)"; npm run -s props > "$tmp/p" 2>&1; rc3=$?; grep -A1 -E "FAIL" "$tmp/p" | head -40; grep -E "properties hold" "$tmp/p"

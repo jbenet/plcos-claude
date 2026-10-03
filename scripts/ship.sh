@@ -11,6 +11,12 @@ GATE_DIR="${GATE_DIR:-$HOME/git/plc-os/plcos-claude-dev}" bash "$HERE/gate.sh" >
 prev=$(git rev-parse HEAD)
 git merge -q --ff-only claude/main || { echo "SHIP: ff-merge failed"; exit 1; }
 now=$(git rev-parse --short HEAD)
+# A changed lockfile needs its packages in live, and a restart to load them (2 Oct 2026).
+deps=0
+if ! git diff --quiet "$prev" HEAD -- package-lock.json; then
+  bash "$HERE/deps-sync.sh" "$LIVE" || { echo "SHIP: dependencies failed; rolling back"; git reset -q --hard "$prev"; bash "$HERE/deps-sync.sh" "$LIVE"; exit 1; }
+  deps=1
+fi
 restart() {
   kill $(pgrep -f "npm run dev:real") $(pgrep -f "next dev --hostname 0.0.0.0 --port 3000") \
     $(pgrep -f "^next-server" | while read p; do lsof -a -p $p -iTCP:3000 -sTCP:LISTEN >/dev/null 2>&1 && echo $p; done) 2>/dev/null
@@ -21,7 +27,7 @@ restart() {
     (cd "$LIVE" && nohup npm run dev:real >> "$LIVE/data/real/logs/live-3000.log" 2>&1 &)
   fi
 }
-[ "${1:-}" = "--restart" ] && restart
+{ [ "${1:-}" = "--restart" ] || [ "$deps" = 1 ]; } && restart
 sleep 20
 ok() {
   for p in /today /neurotech/pipeline /developer/enrich; do
@@ -35,5 +41,6 @@ ok() {
 for i in 1 2 3 4 5 6; do ok && { echo "SHIP ok $now"; exit 0; }; sleep 20; done
 echo "SHIP FAILED at $now: rolling live back to $(git rev-parse --short $prev)"
 git reset -q --hard "$prev"
+[ "$deps" = 1 ] && bash "$HERE/deps-sync.sh" "$LIVE"
 restart
 exit 2
