@@ -114,7 +114,9 @@ Half of what went wrong in the alternate designs was building the wrong layer fi
   seed data and fixtures until the product shape is proven. **Exceptions:** Affinity,
   read-only, from N38 (decided 22 Sep 2026, `docs/15`), and Linear, read-only (decided
   27 Sep 2026, `docs/24-linear.md`). Writes to either are still prohibited; Linear writes
-  wait for Juan's approval of the gated plan in docs/24.
+  wait for Juan's approval of the gated plan in docs/24. Gmail, **drafts only**, per user
+  (decided 2 Oct 2026, `docs/25-email-drafts.md`): drafts go into each person's own Gmail to
+  send themselves; only `lib/connectors/gmail/` talks to Google, and it cannot send.
 - **No auth integration.** Local user switcher only. LabOS comes later.
 - **No graph database.** Recursive CTEs in Postgres handle two- and three-hop enumeration
   at this scale.

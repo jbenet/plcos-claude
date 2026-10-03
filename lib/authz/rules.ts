@@ -1,5 +1,5 @@
 import type { Action } from './index';
-export type ScopeRule = 'context' | 'touch' | 'spvEntity' | 'signal' | 'global' | 'pursuit' | 'pursuitArg' | 'score' | 'bulk' | 'undo' | 'exposure' | 'suggestion' | 'play' | 'vehicleArg' | 'vehicle' | 'vehicleSlug' | 'move' | 'conflict' | 'tickets';
+export type ScopeRule = 'context' | 'touch' | 'spvEntity' | 'signal' | 'global' | 'pursuit' | 'pursuitArg' | 'score' | 'bulk' | 'undo' | 'exposure' | 'suggestion' | 'play' | 'vehicleArg' | 'vehicle' | 'vehicleSlug' | 'move' | 'conflict' | 'tickets' | 'emailNew' | 'emailDraft' | 'self';
 /** Closed manifest: a new action needs an explicit policy AND a first-statement wrapper. */
 export const actionRules = {
   'app/dev/linear/actions.ts#rebuildLinearAction': { action: 'admin', scope: 'global' },
@@ -37,6 +37,15 @@ export const actionRules = {
   'app/dev/enrich/actions.ts#reverseLpRepointAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#deriveSpvStanceAction': { action: 'admin', scope: 'global' },
   'app/dev/linear/actions.ts#syncLinearAction': { action: 'admin', scope: 'global' },
+  // Email drafts (docs/25): a draft is its owner's alone, and its vehicle comes from the record.
+  'app/email/actions.ts#createDraftAction': { action: 'mutate', scope: 'emailNew' },
+  'app/email/actions.ts#saveDraftAction': { action: 'mutate', scope: 'emailDraft' },
+  'app/email/actions.ts#previewDraftAction': { action: 'read', scope: 'emailDraft' },
+  'app/email/actions.ts#moveDraftAction': { action: 'mutate', scope: 'emailDraft' },
+  'app/email/actions.ts#discardDraftAction': { action: 'mutate', scope: 'emailDraft' },
+  'app/email/actions.ts#removeAttachmentAction': { action: 'mutate', scope: 'emailDraft' },
+  'app/email/actions.ts#disconnectGmailAction': { action: 'mutate', scope: 'self' },
+  'app/email/actions.ts#pasteConsentAction': { action: 'mutate', scope: 'self' },
   'app/grants/actions.ts#saveInvitation': { action: 'admin', scope: 'global' },
   'app/materials/actions.ts#proposeSend': { action: 'mutate', scope: 'vehicle' },
   'app/orgs/enrichment/select.ts#choose': { action: 'admin', scope: 'global' },

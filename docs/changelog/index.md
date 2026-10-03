@@ -237,3 +237,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Page speed — the slow first click after a data change](entries/page-speed.md)
 - [Status first in every vehicle's list](entries/status-first.md)
 - [Routes through — any node: our routes to it, whom it could introduce us to, and the gaps around it](entries/routes-through.md)
+- [Email drafts — written here, moved into your own Gmail](entries/email-drafts.md)

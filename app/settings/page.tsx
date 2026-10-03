@@ -5,6 +5,7 @@ import { PrefsReset } from '@/components/shell/PrefsReset';
 import { ThemePicker } from '@/components/shell/ThemePicker';
 import { auth } from '@/lib/auth';
 import { THEMES } from '@/lib/theme';
+import { GmailConnect } from '@/components/email/GmailConnect';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,8 @@ export const dynamic = 'force-dynamic';
  * was configured with, including nine constants labelled as guesses. Putting a theme
  * picker next to a circuit-breaker threshold would have been a category error.
  */
-async function Preferences() {
+async function Preferences({ searchParams }: { searchParams: Promise<{ gmail?: string }> }) {
+  const { gmail } = await searchParams;
   const a = await auth();
   const user = await a.currentUser();
 
@@ -53,8 +55,9 @@ async function Preferences() {
       <div className="lbl">Preferences</div>
       <h1>Your settings</h1>
       <p className="sublede">
-        What you choose for yourself, kept in this browser. Nothing on this page changes what a
-        number means, who can approve anything, or what anyone else sees.
+        What you choose for yourself, kept in this browser — except your Gmail connection, which
+        the server keeps for you alone. Nothing on this page changes what a number means, who can
+        approve anything, or what anyone else sees.
       </p>
 
       <div className="card">
@@ -83,6 +86,9 @@ async function Preferences() {
           <PrefsReset />
         </div>
       </div>
+
+      {/* Your own Gmail, for moving drafts there (docs/25). Not taste: it is audited and lives server-side. */}
+      <GmailConnect outcome={gmail} />
 
       <div className="card">
         <div className="chead">

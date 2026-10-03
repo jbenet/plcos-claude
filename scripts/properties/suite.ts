@@ -80,6 +80,7 @@ export async function runProperties(check: Check) {
   await (await import('./lp-stats')).lpStatsProperties(check, db);
   await (await import('./lp-unit-paths')).lpUnitPathDatabaseProperties(check, db);
   await (await import('./linear')).linearProperties(check, db);
+  await (await import('./email')).emailProperties(check, db);
   await (await import('./authz')).authzProperties(check, db);
   await (await import('./labos')).labosProperties(check, db);
   await (await import('./authz-read')).authzReadProperties(check, db);

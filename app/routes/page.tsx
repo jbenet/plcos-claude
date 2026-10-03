@@ -5,6 +5,7 @@ import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
+import { EmailDrafts } from '@/components/email/EmailDrafts';
 import { RouteNames } from '@/components/routes/RouteNames';
 import { ConnectionFeedback } from '@/components/routes/ConnectionFeedback';
 import { RouteGraph } from '@/components/routes/RouteGraph';
@@ -517,6 +518,17 @@ async function Routes({
                       );
                     })()
                   )}
+                  {/* The intro ask itself, as an email to the first connector, moved to the person's own Gmail (docs/25). */}
+                  {i === selected && route.connectorIds[0] && (route.verdict === 'recommend' || route.verdict === 'hold') && (selection.current && selection.current.kind !== 'grant_rail' ? (
+                    <EmailDrafts
+                      title="Intro ask email"
+                      lede={`Write to ${route.connectorNames[0]} asking for an introduction to ${search.targetName}, for ${selection.current.name}. Sending it is the ask: propose it above and have it approved first.`}
+                      where={{ entityId: search.targetId, connectorId: route.connectorIds[0], vehicleId: selection.current.id }}
+                      create={{ purpose: 'intro_ask', vehicleId: selection.current.id, entityId: search.targetId, connectorId: route.connectorIds[0] }}
+                      path="/routes"
+                      startLabel={`Draft the intro ask to ${route.connectorNames[0]}`}
+                    />
+                  ) : <p className="muted" style={{ fontSize: 12 }}>Pick a fund or SPV in the vehicle switcher to draft the intro ask as an email.</p>)}
                 </div>
               </div>
               </details>
