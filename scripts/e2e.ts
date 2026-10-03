@@ -480,6 +480,10 @@ async function main() {
       const heading = async (text: string) => {
         await page.locator('h1', { hasText: text }).first().waitFor({ timeout: 15000 });
       };
+      // No node chosen: the picker and a prompt, nothing heavy (the live 500 of 2 Oct 2026 was here).
+      const empty = await page.goto(`${base}/routes?mode=through`, { waitUntil: 'networkidle' });
+      if (!empty || empty.status() !== 200) throw new Error(`with no node chosen it answered ${empty?.status()}`);
+      if (!await visible(page.getByText('Pick someone to look through'), 5000)) throw new Error('with no node chosen there is no prompt');
       const res = await page.goto(`${base}/routes?target=${target.entityId}&mode=through`, { waitUntil: 'networkidle' });
       if (!res || res.status() !== 200) throw new Error(`answered ${res?.status()}`);
       await heading(`Routes through ${target.name}`);

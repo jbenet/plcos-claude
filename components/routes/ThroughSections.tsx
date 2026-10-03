@@ -191,7 +191,9 @@ export function ThroughSections({ view, hrefFor, moreHref, shown }: {
             </div>
           </div>
           <div className="lbl" style={{ marginTop: 12 }}>LPs reachable only through {view.nodeName}</div>
-          {view.onlyThrough.length ? (
+          {view.onlyThroughCoverage.failed ? (
+            <p className="warn" data-section-failed="only-through">This count did not finish. The rest of the page is complete; reload to try it again.</p>
+          ) : view.onlyThrough.length ? (
             <ul className="through-only">
               {view.onlyThrough.map((lp) => (
                 <li key={lp.entityId}><Link href={hrefFor(lp.entityId, 'to')}>{lp.name}</Link>{' '}
@@ -199,12 +201,13 @@ export function ThroughSections({ view, hrefFor, moreHref, shown }: {
               ))}
             </ul>
           ) : <p className="muted">None among the LPs {view.nodeName} ties to.</p>}
-          <p className="cover">
-            Read from the stored route searches: {view.onlyThroughCoverage.cached} of the {view.onlyThroughCoverage.lps} LPs {view.nodeName} ties to have one
+          {!view.onlyThroughCoverage.failed && <p className="cover">
+            Read from the stored route searches: {view.onlyThroughCoverage.cached} of the {view.onlyThroughCoverage.checked} LPs checked have one
             {view.onlyThroughCoverage.computedFrom ? `, computed ${view.onlyThroughCoverage.computedFrom === view.onlyThroughCoverage.computedTo ? view.onlyThroughCoverage.computedFrom : `${view.onlyThroughCoverage.computedFrom} to ${view.onlyThroughCoverage.computedTo}`}` : ''}.
-            {view.onlyThroughCoverage.checked < view.onlyThroughCoverage.lps && ` Only the first ${view.onlyThroughCoverage.checked} LPs, in the order above, were checked.`}
+            {view.onlyThroughCoverage.uncounted > 0 && ` ${view.onlyThroughCoverage.uncounted} of those ${view.onlyThroughCoverage.uncounted === 1 ? 'was' : 'were'} stored before shared paths were recorded, and ${view.onlyThroughCoverage.uncounted === 1 ? 'is' : 'are'} counted once refreshed (searches refresh daily).`}
+            {view.onlyThroughCoverage.checked < view.onlyThroughCoverage.lps && ` ${view.onlyThroughCoverage.lps - view.onlyThroughCoverage.checked} further LPs, after the first ${view.onlyThroughCoverage.checked} in the order above, were not checked.`}
             {' '}Candidate paths are counted before restriction and organization-size checks. An LP with no stored search is not counted either way.
-          </p>
+          </p>}
         </div>
         <Coverage
           corpus={`${g.total} current relationship ${g.total === 1 ? 'edge' : 'edges'} and possible identity matches touching ${view.nodeName}${g.inspected < g.total ? `, ${g.inspected} inspected` : ''}`}

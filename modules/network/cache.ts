@@ -148,13 +148,29 @@ async function store(db: Db, search: RouteSearch, kind: string, version: Awaited
     }),
   }));
   const serialized = encode({ ...compact, routes, evidence });
-  await db.query(`insert into network.route_cache (target_id, vehicle_kind, revision, input_revision, computed_at, search, best_score)
-    select $1::uuid, $2, $3, $4::bigint, now(), $5::jsonb, $6::numeric
+  const shared = search.structural ? sharedNodes(search.structural, search.targetId) : null;
+  await db.query(`insert into network.route_cache (target_id, vehicle_kind, revision, input_revision, computed_at, search, best_score, candidate_count, shared_nodes)
+    select $1::uuid, $2, $3, $4::bigint, now(), $5::jsonb, $6::numeric, $7::integer, $8::uuid[]
       where exists (select 1 from identity.entity where entity_id = $1::uuid)
     on conflict (target_id, vehicle_kind) do update set revision = excluded.revision,
-      input_revision = excluded.input_revision, computed_at = excluded.computed_at, search = excluded.search, best_score = excluded.best_score`,
-  [search.targetId, kind, version.generation, version.revision, serialized, search.stats?.bestScore ?? null]);
+      input_revision = excluded.input_revision, computed_at = excluded.computed_at, search = excluded.search, best_score = excluded.best_score,
+      candidate_count = excluded.candidate_count, shared_nodes = excluded.shared_nodes`,
+  [search.targetId, kind, version.generation, version.revision, serialized, search.stats?.bestScore ?? null,
+    shared?.candidates ?? null, shared?.nodes ?? null]);
   return serialized.length * 2;
+}
+
+/** Every node all candidate paths share, besides the target: "only through X" is X in this list.
+ * Stops as soon as the intersection is empty, so a well-connected target costs one or two paths. */
+export function sharedNodes(structural: NonNullable<RouteSearch['structural']>, targetId: string): { candidates: number; nodes: string[] } {
+  let shared: number[] | null = null;
+  for (const candidate of structural.candidates) {
+    const nodes = new Set<number>(candidate.nodes);
+    shared = shared === null ? [...nodes] : (shared as number[]).filter((n) => nodes.has(n));
+    if (!shared.length) break;
+  }
+  const ids = (shared ?? []).map((n) => structural.nodes[n]?.entityId).filter((id): id is string => Boolean(id) && id !== targetId);
+  return { candidates: structural.candidates.length, nodes: [...new Set(ids)] };
 }
 
 export interface PrecomputeCounts { targets: number; searches: number; milliseconds: number; complete: boolean }

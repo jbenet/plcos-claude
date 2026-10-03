@@ -55,7 +55,7 @@ only.*
 
 **Speed.** Our routes to X are the planner's cached search, unchanged. The rest is indexed lookups on X's own
 edges (evidence read for at most 2,000 of them, disclosed when cut), one pursuit query, the cached policy
-topology for restrictions, and the stored route searches for at most 100 of X's LPs. No graph walk per
+topology for restrictions, and one primary-key read of the stored route searches for X's LPs. No graph walk per
 request. On the demo a through page renders in 70–130 ms.
 
 **Links.** Routes through from the toggle on Routes to, from every person and organization page (beside a new
@@ -67,5 +67,25 @@ nothing through X; the gaps counts by source, kind, tier and date, and each warn
 first. `npm run e2e` opens a through link directly, toggles to Routes to, goes back and forward, and toggles
 back, checking the node and mode each time.
 
-**For Juan to decide.** The thin-team threshold (5 edges) and the caps (2,000 edges, 100 stored searches) are
+**Fix, same day: a 500 on the real data.** `/all/routes?mode=through` with no node chosen picked the first
+route source, a hub, and "LPs reachable only through X" then read every stored search's candidate paths: on
+the real cache (8K searches, 222 MB) 100 LPs ran past the 20 s statement timeout, and past five minutes in a
+read-only EXPLAIN. Now:
+
+- **Stored, not scanned.** Storing a route search also records how many candidate paths it has and the nodes
+  every one of them passes through (migration `network/015`). "Only through X" is a primary-key read of those
+  two columns: 10 ms for 2,000 LPs on the real database. Searches stored before the change say "counted once
+  refreshed"; the daily generation change re-stores them all within a day.
+- **Hubs are bounded where they are big.** X's edges are counted in full and evidence is read for 2,000, ties
+  to LPs we pursue and their contacts first. For the PL organization (~167K edges) that read takes ~0.3 s on
+  the real database. The thin-team warning counts the active team only, not every PL alumnus.
+- **No node, no work.** Through mode with no node chosen shows the picker and a prompt, and runs nothing heavy.
+- **Never a 500.** The through sections have an 8 s budget (a guess, past every measured node). Past it, or on
+  an error, the routes-to sections still render with a note that the rest did not finish and to reload. "Only
+  through X" failing alone says so in its own place.
+- **Checks.** A hub-scale property: an invented hub with 3,028 ties and a stored search for every pursued demo
+  LP renders in ~130 ms on PGlite, every LP tie inside the evidence cut, and "only through" read from the stored
+  shared nodes. A property for the shared-node computation. `npm run e2e` also opens through mode with no node.
+
+**For Juan to decide.** The thin-team threshold (5 edges), the caps (2,000 edges with evidence, 2,000 LPs checked) and the 8 s budget are
 guesses. "Only through X" reads the stored searches, so an LP nobody has searched yet is not counted either way.

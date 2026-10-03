@@ -109,6 +109,8 @@ export async function routesThroughDatabaseProperties({ check, db, id }: SeedCon
     await db.query('delete from coordination.restriction where restriction_id = any($1::uuid[])', [inserted]);
   }
 
+  await hubScale(check, db);
+
   const gaps = umeadi.gaps;
   const seeded = (await db.one<{ n: number }>(`select count(*)::int n from network.edge e
     where (identity.canonical_entity_id(e.from_entity) = $1 or identity.canonical_entity_id(e.to_entity) = $1)
@@ -116,4 +118,62 @@ export async function routesThroughDatabaseProperties({ check, db, id }: SeedCon
   check('THROUGH gaps total every current edge on the node, and the tier counts add up to it',
     gaps.total === seeded && gaps.inspected === seeded && TIERS.reduce((n, t) => n + gaps.byTier[t], 0) === seeded,
     `${seeded} seeded edges touch Umeadi; each is counted once by tier and at least once by source.`);
+}
+
+/**
+ * Hub scale (2 Oct 2026: the live PL node, ~167K edges, timed out in "only through X", which read every
+ * stored search's candidate paths). An invented hub with 3,000 invented ties plus a tie to every pursued
+ * demo LP, and a stored search for each of those LPs: the view must finish fast, keep every LP tie
+ * inside the evidence cut, and read "only through" from the stored shared nodes.
+ */
+async function hubScale(check: Check, db: SeedContext['db']) {
+  const { throughNode } = await import('../../modules/network/through');
+  const { revisionFor, sharedNodes } = await import('../../modules/network/cache');
+  const TIES = 3000;
+  const hub = (await db.one<{ id: string }>(`insert into identity.entity (entity_type, display_name)
+    values ('org', 'Invented Hub Collective') returning entity_id::text as id`))!.id;
+  const people = (await db.query<{ id: string }>(`insert into identity.entity (entity_type, display_name)
+    select 'person', 'Invented hub tie ' || g from generate_series(1, $1::int) g returning entity_id::text as id`, [TIES])).map((r) => r.id);
+  const lps = (await db.query<{ id: string }>(`select distinct identity.canonical_entity_id(p.entity_id)::text as id
+    from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id
+    where p.closed_at is null and v.phase <> 'historical'`)).map((r) => r.id);
+  try {
+    await db.query(`insert into network.edge (from_entity, to_entity, kind, tier, evidence, valid_from)
+      select $1::uuid, x, 'other', 'C', jsonb_build_array(jsonb_build_object('note', 'Invented hub membership',
+        'source', 'https://example.org/invented-hub', 'as_of', '2026-09-01', 'derived', 'network_nodes')), '2026-01-01'
+      from unnest($2::uuid[]) x`, [hub, [...people, ...lps]]);
+    const { generation } = await revisionFor(db);
+    // Every other LP's stored paths all pass through the hub; the rest have another way in.
+    const through = new Set(lps.filter((_, i) => i % 2 === 0));
+    await db.query(`insert into network.route_cache (target_id, vehicle_kind, revision, input_revision, computed_at, search, candidate_count, shared_nodes)
+      select x, 'fund', $2, 0, now(), '{"routes":[]}'::jsonb, 4, case when x = any($3::uuid[]) then array[$4::uuid] else '{}'::uuid[] end
+      from unnest($1::uuid[]) x
+      on conflict (target_id, vehicle_kind) do update set revision = excluded.revision, candidate_count = excluded.candidate_count,
+        shared_nodes = excluded.shared_nodes, search = excluded.search`, [lps, generation, [...through], hub]);
+    const started = performance.now();
+    const view = await throughNode(hub, { routesToNode: [], vehicleKind: 'fund' });
+    const ms = performance.now() - started;
+    const lpTies = new Set(view.onward.filter((t) => t.lps.some((l) => l.via === 'self')).map((t) => t.otherId));
+    const only = new Set(view.onlyThrough.map((x) => x.entityId));
+    // GUESS: 5 s on PGlite is generous; the live read of the same shape is ~0.3 s on Postgres.
+    check(`THROUGH hub scale: ${TIES + lps.length} ties render in under 5 s, LP ties first, "only through" from stored shared nodes`,
+      ms < 5000 && view.gaps.total === TIES + lps.length && view.gaps.inspected === 2000
+        && view.gaps.warnings.some((w) => w.key === 'truncated') && lps.every((id) => lpTies.has(id))
+        && [...through].every((id) => only.has(id)) && lps.filter((id) => !through.has(id)).every((id) => !only.has(id))
+        && !view.onlyThroughCoverage.failed && view.onlyThroughCoverage.cached === lps.length,
+      `${Math.round(ms)} ms. Evidence is read for 2,000 of ${TIES + lps.length} edges with every pursued LP among them; the ${through.size} LPs whose stored paths all share the hub are listed, the rest are not.`);
+  } finally {
+    await db.query('delete from network.route_cache where target_id = any($1::uuid[])', [lps]);
+    await db.query('delete from network.edge where from_entity = $1::uuid', [hub]);
+    await db.query('delete from identity.entity where entity_id = any($1::uuid[])', [[hub, ...people]]);
+  }
+
+  const structural = { nodes: ['s', 'a', 'h', 't', 'b'].map((entityId) => ({ entityId })), edges: [], roles: {},
+    candidates: [{ nodes: [0, 1, 2, 3] }, { nodes: [0, 4, 2, 3] }, { nodes: [0, 2, 3] }] };
+  const shared = sharedNodes(structural as never, 't');
+  const apart = sharedNodes({ ...structural, candidates: [...structural.candidates, { nodes: [4, 3] }] } as never, 't');
+  check('THROUGH stored shared nodes: what every candidate path passes through, never the target itself',
+    shared.candidates === 3 && shared.nodes.sort().join(',') === 'h,s' && apart.nodes.length === 0
+      && sharedNodes({ ...structural, candidates: [] } as never, 't').nodes.length === 0,
+    'Source s and hub h are on all three paths; a fourth path from b shares nothing; no paths share nothing.');
 }

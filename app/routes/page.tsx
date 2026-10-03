@@ -85,7 +85,8 @@ async function Routes({
   const shown = matched.slice(0, SHOWN);
   const entities = target && !pipelineEntities.some((e) => e.entityId === target)
     ? [...pipelineEntities, ...await listEntities([target])] : pipelineEntities;
-  const targetId = target ?? matched[0]?.entityId;
+  // Through mode opens on the picker: no node is chosen for you, so nothing heavy runs until one is.
+  const targetId = target ?? (through ? undefined : matched[0]?.entityId);
   const ownAffiliations = targetId ? await affiliationsFor([targetId]) : [];
   const firmIds = ownAffiliations.filter(a => a.current && a.personId === targetId).map(a => a.orgId);
   const firmAffiliations = firmIds.length ? await affiliationsFor(firmIds) : [];
@@ -130,9 +131,13 @@ async function Routes({
   const nodeHref = (id: string, mode: 'to' | 'through') => routeHref({ target: id, mode: mode === 'through' ? 'through' : undefined,
     r: undefined, page: undefined, family: undefined, show: undefined, exclude: undefined, tshow: undefined, removedPage: undefined });
   const throughShown = /^\d+$/.test(params.tshow ?? '') ? Math.max(40, Math.min(1000, Number(params.tshow))) : 40;
-  const throughView = through && targetId ? await throughNode(targetId, {
-    routesToNode: search?.routes ?? [], vehicleId: selection.current?.id, vehicleKind: selection.current?.kind ?? 'fund',
-  }) : null;
+  // A slow or failed through view never takes the page down: the routes-to sections still render,
+  // with a note in its place. GUESS: 8 s is past every measured node (PL itself, ~167K edges).
+  let throughFailed = false;
+  const throughView = through && targetId ? await Promise.race([
+    throughNode(targetId, { routesToNode: search?.routes ?? [], vehicleId: selection.current?.id, vehicleKind: selection.current?.kind ?? 'fund' }),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('through view over budget')), 8000).unref()),
+  ]).catch((error: unknown) => { throughFailed = true; console.error('[routes through]', error instanceof Error ? error.message : error); return null; }) : null;
   const ours = throughView?.source ?? null;
 
   /**
@@ -253,12 +258,20 @@ async function Routes({
         <Link href={modeHref('to')} className={through ? '' : 'on'} aria-current={through ? undefined : 'page'}>Routes to</Link>
         <Link href={modeHref('through')} className={through ? 'on' : ''} aria-current={through ? 'page' : undefined}>Routes through</Link>
       </nav>
-      <h1>{through ? 'Routes through' : 'Routes to'} {targetName ?? '—'}</h1>
+      <h1>{through ? 'Routes through' : 'Routes to'} {targetName ?? (through ? 'anyone' : '—')}</h1>
       <p className="routes-lede">{through
         ? <>Our routes to them, and who they could introduce us to beyond · a tie on file is not an offer to introduce · asks and sends need separate approval.</>
         : <>Team and PL routes · estimates carry uncertainty · asks and sends need separate approval.</>}</p>
       {(pickerAffiliations.length === 2000 || ownAffiliations.length === 2000 || firmAffiliations.length === 2000) && <p className="cover">Showing the first 2,000 affiliations per selected group. Other colleagues may not have been inspected.</p>}
-      {ours ? (
+      {through && !targetId ? (
+        <div className="card" data-through-empty>
+          <div className="chead"><h2>Pick someone to look through</h2><span className="lbl">nothing is chosen for you</span></div>
+          <div className="cbody">
+            <p>Choose anyone on the left: a teammate or PL, an LP, a connector, or search for any person or organization by name.
+              The page then shows our routes to them, who they could introduce us to, and the gaps in the records around them.</p>
+          </div>
+        </div>
+      ) : ours ? (
         <p className="intouch">
           <Glyph name="check" title="One of ours" tone="good" />
           <span><b>{targetName} is one of our route sources</b> ({ours.kind === 'pl' ? 'the PL organization' : 'team or PL staff'}). Routes start here, so
@@ -526,6 +539,14 @@ async function Routes({
       )}
       </>)}
 
+      {throughFailed && (
+        <div className="card warn" data-section-failed="through">
+          <div className="cbody">
+            <p><b>The through sections did not finish.</b> Our routes to {targetName ?? 'them'} above are complete. Who they could introduce
+              us to and the gaps panel took too long or failed this time; reload the page to try again.</p>
+          </div>
+        </div>
+      )}
       {throughView && <>
         {(ours || !search || search.routes.length === 0) && <ThroughMap view={throughView} routesIn={[]} routeIds={[]} founders={founders} />}
         <ThroughSections view={throughView} hrefFor={nodeHref} shown={throughShown}

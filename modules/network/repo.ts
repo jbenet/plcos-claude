@@ -301,20 +301,24 @@ export async function listEdgesForEntities(ids: string[], limit = 100): Promise<
   return [...(await edgesByIds(await edgeIdsForEntities(ids, Math.max(1, Math.min(1000, limit))))).values()];
 }
 /**
- * Every current edge touching one node, with full evidence, for the "routes through" view. Indexed
- * endpoint lookups only (no graph scan). The ids are counted in full; evidence is read for the first
- * `limit` of them by edge id, and the caller says when that cut applies.
+ * Current edges touching one node, with full evidence, for the "routes through" view. Indexed
+ * endpoint lookups only (no graph scan). All are counted; evidence is read for the first `limit`,
+ * ties to pursued LPs and their contacts first, then by edge id, and the caller says when that cut
+ * applies. The PL organization has ~167K edges (2 Oct 2026): this read takes ~0.3 s there.
  */
 export async function edgesTouching(id: string, limit = 2000): Promise<{ edges: Edge[]; total: number }> {
   const db = await getDb();
-  const keys = await db.query<{ id: string }>(`${WANTED}
-    select edges.edge_id::text as id from (
-      select edge_id from network.edge where from_entity in (select id from wanted) and (valid_to is null or valid_to >= current_date)
-      union select edge_id from network.edge where to_entity in (select id from wanted) and (valid_to is null or valid_to >= current_date)
-      union select edge_id from identity.possible_match where active and left_entity in (select id from wanted)
-      union select edge_id from identity.possible_match where active and right_entity in (select id from wanted)
-    ) edges order by edges.edge_id`, [[id]]);
-  const wanted = keys.slice(0, Math.max(1, limit)).map((r) => r.id);
+  const keys = await db.query<{ id: string; total: number }>(`${WANTED}, pursued as materialized (
+      select p.entity_id as id from strategy.active_pursuit p where p.closed_at is null
+      union select c.person_entity from strategy.pursuit_contact c join strategy.active_pursuit p using (pursuit_id) where p.closed_at is null
+    )
+    select edges.edge_id::text as id, (count(*) over ())::int as total from (
+      select edge_id, to_entity as other from network.edge where from_entity in (select id from wanted) and (valid_to is null or valid_to >= current_date)
+      union select edge_id, from_entity from network.edge where to_entity in (select id from wanted) and (valid_to is null or valid_to >= current_date)
+      union select edge_id, right_entity from identity.possible_match where active and left_entity in (select id from wanted)
+      union select edge_id, left_entity from identity.possible_match where active and right_entity in (select id from wanted)
+    ) edges order by (edges.other in (select id from pursued)) desc, edges.edge_id limit $2`, [[id], Math.max(1, limit)]);
+  const wanted = keys.map((r) => r.id);
   const edges: Edge[] = [];
   for (let offset = 0; offset < wanted.length; offset += 500) {
     const rows = await db.query<EdgeRow>(`${EDGE_SELECT} where e.edge_id = any($1::uuid[]) and f.entity_id <> t.entity_id
@@ -322,7 +326,7 @@ export async function edgesTouching(id: string, limit = 2000): Promise<{ edges: 
     edges.push(...rows.map(toEdge));
     await yieldRouteWork();
   }
-  return { edges, total: keys.length };
+  return { edges, total: keys[0]?.total ?? 0 };
 }
 
 export async function edgeCountsForEntities(ids: string[]): Promise<Map<string, number>> {

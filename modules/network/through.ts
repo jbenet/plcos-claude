@@ -101,7 +101,7 @@ export function throughGaps(input: {
   }
   const n = edges.length;
   const warnings: GapWarning[] = [];
-  if (input.total > n) warnings.push({ key: 'truncated', text: `${nodeName} has ${input.total.toLocaleString('en-US')} edges; the first ${n.toLocaleString('en-US')} by edge id were inspected for these counts.` });
+  if (input.total > n) warnings.push({ key: 'truncated', text: `${nodeName} has ${input.total.toLocaleString('en-US')} edges; the first ${n.toLocaleString('en-US')} (ties to LPs we pursue first, then by edge id) were inspected for these counts and the ties below.` });
   if (input.total === 0) warnings.push({ key: 'no_edges', text: `No relationship edges are on file for ${nodeName}. Nothing routes to or through them in our records: a gap in the material, not proof they know nobody.` });
   if (n > 0 && byTier.D === n) warnings.push({ key: 'only_d', text: `Every edge on ${nodeName} is tier D, proximity only. None establishes a relationship; each is a discovery clue.` });
   if (n > 1 && sources.size === 1) warnings.push({ key: 'one_source', text: `All ${n} edges on ${nodeName} come from one source, ${[...sources.keys()][0]}. The other corpora add nothing here yet.` });
@@ -160,7 +160,8 @@ export interface ThroughView {
   gaps: ThroughGaps;
   /** LPs we pursue whose cached candidate paths all pass through X, or that have none at all. */
   onlyThrough: Array<{ entityId: string; name: string; candidates: number }>;
-  onlyThroughCoverage: { lps: number; checked: number; cached: number; computedFrom: string | null; computedTo: string | null };
+  /** `failed`: the read did not finish; `uncounted`: stored before shared paths were recorded. */
+  onlyThroughCoverage: { lps: number; checked: number; cached: number; uncounted: number; failed: boolean; computedFrom: string | null; computedTo: string | null };
 }
 
 async function lpFlags(ids: string[]): Promise<Map<string, LpFlag[]>> {
@@ -209,22 +210,28 @@ async function restrictedOnward(ys: string[], pathNodes: string[], vehicleId?: s
   return new Set([...ys.filter((y) => policy.blocked.has(y)), ...rows.map((r) => r.id)]);
 }
 
-/** Which pursued LPs reach us only through X, read from the stored route searches (never recomputed here). */
+/** Which pursued LPs reach us only through X: one primary-key read of what each stored search's
+ * candidate paths all share (cache.ts sharedNodes). Searches stored before that column existed are
+ * reported as not yet counted, never guessed. */
 async function onlyThroughX(nodeId: string, lpIds: string[], vehicleKind: string) {
-  if (!lpIds.length) return { rows: [] as Array<{ id: string; total: number; through: number }>, computedFrom: null, computedTo: null };
+  const none = { rows: [] as Array<{ id: string; total: number; throughAll: boolean }>, uncounted: 0, computedFrom: null as string | null, computedTo: null as string | null };
+  if (!lpIds.length) return none;
   const db = await getDb();
   const { generation } = await revisionFor(db);
-  const rows = await db.query<{ id: string; total: number; through: number; computed_at: string }>(`
-    with c as (select target_id, computed_at, search->'structural' s from network.route_cache
-      where target_id = any($1::uuid[]) and vehicle_kind = $2 and revision = $3),
-    x as (select c.target_id, (n.i - 1)::int idx from c cross join lateral jsonb_array_elements(c.s->'nodes') with ordinality n(node, i)
-      where n.node->>'entityId' = $4)
-    select c.target_id::text id, max(c.computed_at)::text computed_at, count(k.cand)::int total,
-      count(k.cand) filter (where exists (select 1 from x where x.target_id = c.target_id and k.cand->'nodes' @> to_jsonb(x.idx)))::int through
-    from c left join lateral jsonb_array_elements(c.s->'candidates') k(cand) on true group by c.target_id`,
+  const found = await db.query<{ id: string; total: number | null; through_all: boolean | null; computed_at: string }>(`
+    select target_id::text as id, candidate_count as total, shared_nodes @> array[$4::uuid] as through_all, computed_at::text as computed_at
+      from network.route_cache where target_id = any($1::uuid[]) and vehicle_kind = $2 and revision = $3`,
   [lpIds, vehicleKind, generation, nodeId]);
-  const dates = rows.map((r) => r.computed_at.slice(0, 10)).sort();
-  return { rows, computedFrom: dates[0] ?? null, computedTo: dates.at(-1) ?? null };
+  const rows = found.flatMap((r) => r.total === null ? [] : [{ id: r.id, total: r.total, throughAll: Boolean(r.through_all) }]);
+  const dates = found.map((r) => r.computed_at.slice(0, 10)).sort();
+  return { rows, uncounted: found.length - rows.length, computedFrom: dates[0] ?? null, computedTo: dates.at(-1) ?? null };
+}
+
+async function teamEdgeCounts(): Promise<Array<{ name: string; edges: number }>> {
+  const team = await (await getDb()).query<{ id: string; name: string }>(`select distinct identity.canonical_entity_id(s.entity_id)::text as id, u.name
+    from identity.source_record s join platform.app_user u on u.handle = s.source_id where s.source = 'app_user' and u.active`);
+  const counts = await edgeCountsForEntities(team.map((t) => t.id));
+  return team.map((t) => ({ name: t.name, edges: counts.get(t.id) ?? 0 }));
 }
 
 /** The whole view for one node. `routesToNode` is the planner's (cached) search for X. */
@@ -267,27 +274,27 @@ export async function throughNode(nodeId: string, options: { routesToNode: Route
     }));
 
   const allLpIds = [...new Set(onward.flatMap((t) => t.lps.map((l) => l.entityId)))];
-  // GUESS: 100 stored searches bound one page read on a hub; the rest are disclosed as unchecked.
-  const lpIds = allLpIds.slice(0, 100);
-  const only = await onlyThroughX(nodeId, lpIds, options.vehicleKind ?? 'fund');
+  // GUESS: 2,000 primary-key reads bound one page on a hub; the rest are disclosed as unchecked.
+  const lpIds = allLpIds.slice(0, 2000);
+  // A section that fails says so; it never takes the page down with it.
+  const only = await onlyThroughX(nodeId, lpIds, options.vehicleKind ?? 'fund').catch(() => null);
   const lpName = new Map(onward.flatMap((t) => t.lps.map((l) => [l.entityId, l.name] as const)));
-  const cached = new Map(only.rows.map((r) => [r.id, r]));
+  const cached = new Map((only?.rows ?? []).map((r) => [r.id, r]));
   // No cached path at all counts only when the way through X is usable: then X is the only way we see.
   const viaX = new Set(onward.filter((t) => t.combinedTier !== null).flatMap((t) => t.lps.map((l) => l.entityId)));
   const onlyThrough = lpIds.flatMap((id) => {
     const row = cached.get(id);
-    return row && row.through === row.total && (row.total > 0 || viaX.has(id))
+    return row && (row.total > 0 ? row.throughAll : viaX.has(id))
       ? [{ entityId: id, name: lpName.get(id) ?? 'Unknown', candidates: row.total }] : [];
   }).sort((a, b) => a.name.localeCompare(b.name));
 
   const ownFlags = (await lpFlags([nodeId])).get(nodeId) ?? [];
-  const thinTeam = source?.kind === 'pl'
-    ? await edgeCountsForEntities(sources.filter((s) => !s.sourceOnly).map((s) => s.entityId)).then((counts) =>
-      sources.filter((s) => !s.sourceOnly).map((s) => ({ name: s.name, edges: counts.get(s.entityId) ?? 0 })))
-    : undefined;
+  // Through PL: which of the active team (app users, not every PL alumnus) has almost no edges.
+  const thinTeam = source?.kind === 'pl' ? await teamEdgeCounts().catch(() => undefined) : undefined;
   const gaps = throughGaps({ nodeName, edges: touching.edges, total: touching.total, isTeam: source?.kind === 'team',
     pursuedLp: ownFlags.some((f) => f.via === 'self'),
     usableRoutesToNode: source ? null : options.routesToNode.filter((r) => r.verdict === 'recommend').length, thinTeam });
   return { nodeId, nodeName, source, nodeRestricted, bestRoute, onward, restrictedOnward: restricted.size, gaps,
-    onlyThrough, onlyThroughCoverage: { lps: allLpIds.length, checked: lpIds.length, cached: only.rows.length, computedFrom: only.computedFrom, computedTo: only.computedTo } };
+    onlyThrough, onlyThroughCoverage: { lps: allLpIds.length, checked: lpIds.length, cached: (only?.rows.length ?? 0) + (only?.uncounted ?? 0), uncounted: only?.uncounted ?? 0,
+      failed: only === null, computedFrom: only?.computedFrom ?? null, computedTo: only?.computedTo ?? null } };
 }
