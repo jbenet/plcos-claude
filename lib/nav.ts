@@ -68,6 +68,8 @@ export const vehicleHome = (vehicleSlug: string | null) => `/${vehicleSlug ?? 'a
  * whichever vehicle is selected.
  */
 export const VEHICLE_MODULES: NavModule[] = [
+  // First, and out of the work-in-progress group (Juan, 2 Oct 2026): "promote the Vehicle Status page, call it just Status".
+  m('09', 'Status', 'vehicles', 'L6', 'Per-vehicle pipeline, velocity, and how the bottleneck moved.'),
   m('05', 'Portfolio', 'portfolio', 'L4', 'Sourced companies, founders and investments', true, ['fund', 'spv']),
   m('V', 'Visualizations', 'visualizations', 'L9',
     'Everything trying to happen at once, drawn ten ways: stations, people, drop-off, the fortnight ahead, instruments, the map, the plant, the moves, the grid, the economy.',
@@ -94,7 +96,6 @@ export const VEHICLE_MODULES: NavModule[] = [
   m('11', 'Meetings', 'meetings', 'L11', 'Prep brief, objection tagging, and the rung a reply actually justifies.'),
   m('10', 'Decision room', 'decisions', 'L11', 'Diligence questions, objections, evidence gaps, decision timeline.'),
   m('08', 'Soft → Hard', 'soft-hard', 'L6', 'Two separate tracks. Convertible soft is shown and never added to hard.'),
-  m('09', 'Vehicle status', 'vehicles', 'L6', 'Per-vehicle pipeline, velocity, and how the bottleneck moved.'),
   m('16', 'Materials & send gate', 'materials', 'L12', 'SEND ticket; wrong-wrap matrix; staleness.'),
   m('18', 'Close room', 'close', 'L8', 'Fund-cycle close: subscription pack, conditions, committee clock.'),
   m('19', 'SPV war room', 'spv', 'L8', 'invite → IOI → allocate → wire, with days-to-wire as the headline.', true, ['spv']),
@@ -103,7 +104,7 @@ export const VEHICLE_MODULES: NavModule[] = [
 ];
 
 /** Pages explicitly marked incomplete (issues 0075–0076). */
-export const WIP_MODULES = new Set(['asks', 'decisions', 'vehicles', 'materials', 'close', 'compliance']);
+export const WIP_MODULES = new Set(['asks', 'decisions', 'materials', 'close', 'compliance']);
 
 export function modulesForKind(kind: string, vehicleSlug?: string): NavModule[] {
   return VEHICLE_MODULES.filter((x) => (!x.kinds || x.kinds.includes(kind as 'fund')) && (!vehicleSlug || !x.vehicleSlugs || x.vehicleSlugs.includes(vehicleSlug)));

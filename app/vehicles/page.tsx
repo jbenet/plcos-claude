@@ -99,8 +99,8 @@ async function Vehicles({ searchParams }: { searchParams: Promise<{ closePage?: 
         </>
       }
     >
-      <div className="lbl">Module 09 · Convert &amp; coordinate <span className={`flag f-mute ${s.wip}`}>Work in progress</span></div>
-      <h1>Vehicle status</h1>
+      <div className="lbl">Module 09 · Convert &amp; coordinate</div>
+      <h1>Status</h1>
       <p className="sublede">
         {vehicle ? vehicle.name : 'Every vehicle'}: hard-only headline, the pipeline by status, and every LP in a close
         state with how far their money has got and what comes next.
