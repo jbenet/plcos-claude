@@ -29,6 +29,20 @@ export async function listEntities(ids?: string[]): Promise<Entity[]> {
   return rows.map(toEntity);
 }
 
+/** Any live person or organization by name, for pickers that reach beyond the pipeline. Names that
+ * start with the text come first. One bounded scan per typed search, never per keystroke. */
+export async function searchEntities(text: string, limit = 40): Promise<Entity[]> {
+  const q = text.trim();
+  if (!q) return [];
+  const take = Math.max(1, Math.min(200, Math.trunc(limit)));
+  const escaped = q.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const rows = await (await getDb()).query<Row>(
+    `select ${COLS} from identity.entity where merged_into is null and retired_at is null and display_name ilike $1
+      order by (display_name ilike $2) desc, lower(display_name), entity_id limit $3`,
+    [`%${escaped}%`, `${escaped}%`, take]);
+  return rows.map(toEntity);
+}
+
 /** A bounded discovery preview. Pipeline identities are retained first; remaining slots
  * contain the first names in the address book. Callers must disclose this scope. */
 export async function listEntityPreview(preferredIds: string[], limit = 1000): Promise<Entity[]> {

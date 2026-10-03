@@ -14,6 +14,7 @@ export async function runProperties(check: Check) {
   (await import('../warehouse-investor-properties')).warehouseInvestorProperties(check);
   (await import('../route-presentation-properties')).routePresentationProperties(check);
   (await import('./routes-layout-0086')).routesLayout0086Properties(check);
+  (await import('./routes-through')).routesThroughProperties(check);
   await (await import('../path-search-properties')).pathSearchProperties(check);
   await (await import('./create-match')).creationProperties(check);
   const db = await freshDb();
@@ -55,6 +56,7 @@ export async function runProperties(check: Check) {
   await (await import('../cache-overlay-properties')).cacheOverlayProperties(check, db);
   await (await import('../cache-source-properties')).cacheSourceProperties(check, db);
   await (await import('./network')).routeInputCacheProperties(seed);
+  await (await import('./routes-through')).routesThroughDatabaseProperties(seed);
   await (await import('./strategy')).strategyProperties(seed);
   await (await import('./vehicle-strategy')).vehicleStrategyProperties(check, db);
   await (await import('./strategy-per-vehicle')).strategyPerVehicleProperties(check, db);

@@ -35,7 +35,7 @@ type Sort = 'score' | 'name';
 /** The server sends only the first ranked matches. Route strength orders the list;
  * selection never bypasses search or the In touch filter. Portfolio membership is sourced.
  */
-export function TargetPicker({ targets, current, matched, total, q, sort, min, touchShown, hiddenInTouch, firstShown }: {
+export function TargetPicker({ targets, current, matched, total, q, sort, min, touchShown, hiddenInTouch, firstShown, through = false }: {
   targets: TargetRow[];
   current: string | undefined;
   /** How many match the search and the minimum; `targets` is the first of them. */
@@ -50,6 +50,8 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
   hiddenInTouch: number;
   /** How many ranked matches are drawn. */
   firstShown: number;
+  /** "Routes through": any node, not only LPs; the search reaches every person and organization. */
+  through?: boolean;
 }) {
   const router = useRouter();
   const path = usePathname();
@@ -83,12 +85,12 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
   return (
     <div className="route-picker">
       <div className="qhead">
-        <div className="lbl">Route to whom</div>
+        <div className="lbl">{through ? 'Route through whom' : 'Route to whom'}</div>
         <input
           className="qsearch"
           type="search"
           value={text}
-          placeholder="Name, or an org they act for"
+          placeholder={through ? 'Anyone: a person, org, LP or teammate' : 'Name, or an org they act for'}
           aria-label="Search targets"
           onChange={(e) => setText(e.target.value)}
         />
@@ -155,8 +157,9 @@ export function TargetPicker({ targets, current, matched, total, q, sort, min, t
       )}
       {targets.length === 0 && (
         <p className="qempty">
-          Nothing matches. The search covers names and the records around them — an
-          organisation a person acts for, or the people who act for an organisation.
+          {through
+            ? 'Nothing matches. The search covers the team, PL, the pipeline, and every person and organization by name.'
+            : 'Nothing matches. The search covers names and the records around them — an organisation a person acts for, or the people who act for an organisation.'}
         </p>
       )}
       </div>

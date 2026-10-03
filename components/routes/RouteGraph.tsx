@@ -7,13 +7,22 @@ import { Pager, usePage } from '@/components/floor/Paging';
 import { routeGraphArcLabels, routeGraphArcs, routeGraphLayout, routeReading } from './route-display';
 
 /** Shared entity nodes; every drawn route has an adjacent keyboard-accessible disclosure. */
-export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: allSelected, routeIds: allRouteIds, portfolioFounders = {} }: {
+export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: allSelected, routeIds: allRouteIds, portfolioFounders = {}, pageSize = 8, anchors: allAnchors, label, centerOn }: {
   routes: Route[]; fromName: string; targetName: string; selected: number; routeIds?: number[]; portfolioFounders?: Record<string, string[]>;
+  /** Routes drawn per page; the "through" map draws routes in and ties out together. */
+  pageSize?: number;
+  /** Element id each route's arcs open, in place of `route-<id>`. */
+  anchors?: string[];
+  /** Replaces "Routes to <target>" in the map's accessible name. */
+  label?: string;
+  /** Entity the map scrolls to first, when it is wider than its box. */
+  centerOn?: string;
 }) {
-  const paging = usePage(allRoutes.map((route, index) => ({ route, index })), 8, Math.floor(allSelected / 8));
-  useEffect(() => { paging.setPage(Math.floor(allSelected / 8)); }, [allSelected, paging.setPage]);
+  const paging = usePage(allRoutes.map((route, index) => ({ route, index })), pageSize, Math.floor(allSelected / pageSize));
+  useEffect(() => { paging.setPage(Math.floor(allSelected / pageSize)); }, [allSelected, paging.setPage, pageSize]);
   const routes = paging.rows.map(x => x.route);
   const routeIds = paging.rows.map(x => allRouteIds?.[x.index] ?? x.index);
+  const anchors = paging.rows.map((x, i) => allAnchors?.[x.index] ?? `route-${routeIds[i]}`);
   const selected = paging.rows.findIndex(x => x.index === allSelected);
   const [hovered, setHovered] = useState<string | null>(null);
   const arrowId = useId().replaceAll(':', '');
@@ -34,6 +43,11 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
   const arcs = routeGraphArcs(routes);
   const labels = routeGraphArcLabels(arcs, nodes, height);
   const positions = new Map(nodes.map((n) => [n.id, n]));
+  const centerX = centerOn ? positions.get(centerOn)?.x : undefined;
+  useEffect(() => {
+    const box = scrollRef.current;
+    if (box && centerX !== undefined) box.scrollLeft = Math.max(0, centerX - box.clientWidth / 2);
+  }, [centerX, width]);
   const activeArc = arcs.find((arc) => arc.key === hovered);
   const activeIndex = activeArc?.routeIndices.includes(selected) ? selected : activeArc?.routeIndices[0];
   const active = activeIndex === undefined ? null : routes[activeIndex];
@@ -42,7 +56,7 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
     onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt({ x: e.clientX - r.left, y: e.clientY - r.top, w: r.width }); }} onKeyDown={(e) => { if (e.key === 'Escape') setHovered(null); }}>
     <Pager {...paging} setPage={page => { paging.setPage(page); setHovered(null); }} label="routes in map; full comparison below" />
     <div className="route-map-scroll" ref={scrollRef}>
-      <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-label={`Routes to ${targetName}. One node per entity and one scored arc per directed relationship. Possible matching identity records share a node; source records remain separate. Full details in the comparison list.`}>
+      <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-label={`${label ?? `Routes to ${targetName}`}. One node per entity and one scored arc per directed relationship. Possible matching identity records share a node; source records remain separate. Full details in the comparison list.`}>
         <defs><marker id={arrowId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="context-stroke" /></marker></defs>
         {arcs.map((arc) => {
           const ri = arc.routeIndices.includes(selected) ? selected : arc.routeIndices[0]!;
@@ -55,9 +69,9 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
           const d = `M ${p.x} ${p.y} C ${midX} ${p.y}, ${midX} ${q.y}, ${q.x} ${q.y}`;
           const scoreLabel = arc.score === null ? 'Unscored' : `${Number(arc.score.toFixed(2))}/5`;
           const label = `${p.name} → ${q.name}: ${scoreLabel}, grade ${arc.grade}. ${arc.routeIndices.length} ${arc.routeIndices.length === 1 ? 'route' : 'routes'} use this relationship. Inspect in list.`;
-          return <a key={arc.key} data-from={arc.from} data-to={arc.to} href={`#route-${routeIds[ri]}`} aria-label={label}
+          return <a key={arc.key} data-from={arc.from} data-to={arc.to} href={`#${anchors[ri]}`} aria-label={label}
             onMouseEnter={() => setHovered(arc.key)} onFocus={() => { setHovered(arc.key); setAt(null); }} onBlur={() => setHovered(null)}
-            onClick={() => { const detail = document.getElementById(`route-${routeIds?.[ri] ?? ri}`); if (detail instanceof HTMLDetailsElement) detail.open = true; }}>
+            onClick={() => { const detail = document.getElementById(anchors[ri]!); if (detail instanceof HTMLDetailsElement) detail.open = true; }}>
             <path d={d} fill="none" stroke={colour} strokeWidth={1.5 + (arc.score ?? 0) / 2} opacity={hovered !== null && !on ? 0.18 : on ? 1 : 0.65}
               strokeDasharray={unavailable ? '5 4' : undefined} markerEnd={`url(#${arrowId})`} />
             <path d={d} fill="none" stroke="transparent" strokeWidth={14} />

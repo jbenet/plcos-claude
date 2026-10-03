@@ -61,6 +61,7 @@ export function WarmIntroBox({ search, entityId }: { search: RouteSearch | null;
           </>
         )}
         <Link className={`btn p ${s.warmCta}`} href={href}>Find a Warm Intro</Link>
+        <p className={s.warmNote}><Link href={`${href}&mode=through`}>Routes through them</Link>: who they could introduce us to, and the gaps in their records.</p>
         {usable.length > 0 && <p className={s.warmNote}>Route scores are the network scorer&rsquo;s estimates, 0–100, not chances. Opens this LP on the warm intro routes page.</p>}
       </div>
     </div>

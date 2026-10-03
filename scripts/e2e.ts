@@ -475,6 +475,30 @@ async function main() {
       } };
     });
 
+    // Routes through (2 Oct 2026): the mode lives in the address, so a link opens it and back/forward walk it.
+    await check('Routes: a "through" link opens, and To / Through toggles with back and forward', async () => {
+      const heading = async (text: string) => {
+        await page.locator('h1', { hasText: text }).first().waitFor({ timeout: 15000 });
+      };
+      const res = await page.goto(`${base}/routes?target=${target.entityId}&mode=through`, { waitUntil: 'networkidle' });
+      if (!res || res.status() !== 200) throw new Error(`answered ${res?.status()}`);
+      await heading(`Routes through ${target.name}`);
+      for (const id of ['#through-onward', '#through-gaps']) if (!await visible(page.locator(id), 5000)) throw new Error(`${id} is missing`);
+      const toggle = page.locator('nav.route-mode');
+      await toggle.getByRole('link', { name: 'Routes to' }).click();
+      await heading(`Routes to ${target.name}`);
+      if (page.url().includes('mode=through') || !page.url().includes(target.entityId)) throw new Error(`the toggle went to ${page.url()}`);
+      await page.goBack();
+      await heading(`Routes through ${target.name}`);
+      if (!page.url().includes('mode=through')) throw new Error('back did not return to the through view');
+      await page.goForward();
+      await heading(`Routes to ${target.name}`);
+      await toggle.getByRole('link', { name: 'Routes through' }).click();
+      await heading(`Routes through ${target.name}`);
+      if (!page.url().includes(target.entityId)) throw new Error('the toggle lost the selected node');
+      return { ui: 'opened from its address; To, back, forward and Through each showed the same node in the right mode', verify: async () => { /* read-only */ } };
+    });
+
     // A viewer ─────────────────────────────────────────────────────────────────────────────
     await check("A viewer's Selection offers no changes", async () => {
       const v = await viewer.newPage();

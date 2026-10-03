@@ -300,6 +300,31 @@ async function edgeIdsForEntities(ids: string[], limit: number): Promise<string[
 export async function listEdgesForEntities(ids: string[], limit = 100): Promise<Edge[]> {
   return [...(await edgesByIds(await edgeIdsForEntities(ids, Math.max(1, Math.min(1000, limit))))).values()];
 }
+/**
+ * Every current edge touching one node, with full evidence, for the "routes through" view. Indexed
+ * endpoint lookups only (no graph scan). The ids are counted in full; evidence is read for the first
+ * `limit` of them by edge id, and the caller says when that cut applies.
+ */
+export async function edgesTouching(id: string, limit = 2000): Promise<{ edges: Edge[]; total: number }> {
+  const db = await getDb();
+  const keys = await db.query<{ id: string }>(`${WANTED}
+    select edges.edge_id::text as id from (
+      select edge_id from network.edge where from_entity in (select id from wanted) and (valid_to is null or valid_to >= current_date)
+      union select edge_id from network.edge where to_entity in (select id from wanted) and (valid_to is null or valid_to >= current_date)
+      union select edge_id from identity.possible_match where active and left_entity in (select id from wanted)
+      union select edge_id from identity.possible_match where active and right_entity in (select id from wanted)
+    ) edges order by edges.edge_id`, [[id]]);
+  const wanted = keys.slice(0, Math.max(1, limit)).map((r) => r.id);
+  const edges: Edge[] = [];
+  for (let offset = 0; offset < wanted.length; offset += 500) {
+    const rows = await db.query<EdgeRow>(`${EDGE_SELECT} where e.edge_id = any($1::uuid[]) and f.entity_id <> t.entity_id
+      union all ${POSSIBLE_SELECT} and p.edge_id = any($1::uuid[])`, [wanted.slice(offset, offset + 500)]);
+    edges.push(...rows.map(toEdge));
+    await yieldRouteWork();
+  }
+  return { edges, total: keys.length };
+}
+
 export async function edgeCountsForEntities(ids: string[]): Promise<Map<string, number>> {
   if (!ids.length) return new Map();
   const rows = await (await getDb()).query<{ id: string; n: number }>(`with recursive wanted(id,root) as (

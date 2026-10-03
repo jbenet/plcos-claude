@@ -25,6 +25,10 @@ import { routeInputs, promotedRouteBases, graphRouteInputs, routeComparisonInput
 import { RouteSections } from '@/components/routes/RouteSections';
 import { RouteFilters } from '@/components/routes/RouteFilters';
 import { routeReading, routeSummaryFor } from '@/components/routes/route-display';
+import { ThroughMap, ThroughSections } from '@/components/routes/ThroughSections';
+import type { TargetRow } from '@/components/routes/TargetPicker';
+import { routeSources, throughNode } from '@/lib/authz/read/network';
+import { searchEntities } from '@/lib/authz/read/identity';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,13 +48,15 @@ const OTHER_LABEL: Record<CandidatePath['other']['type'], string> = {
 async function Routes({
   searchParams,
 }: {
-  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string; expanded?: string; page?: string; family?: string; exclude?: string; prefer?: string; warmth?: string; show?: string; removedPage?: string }>;
+  searchParams: Promise<{ target?: string; r?: string; q?: string; sort?: string; min?: string; touch?: string; expanded?: string; page?: string; family?: string; exclude?: string; prefer?: string; warmth?: string; show?: string; removedPage?: string; mode?: string; tshow?: string }>;
 }) {
   const selection = await vehicleSelection();
   const params = await searchParams;
   const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam, expanded, page, family } = params;
+  // "Routes through X" (Juan, 2 Oct 2026): the same page, toggled in the address, so any state links.
+  const through = params.mode === 'through';
   const user = await (await auth()).currentUser();
-  const { tiers, vehicles, affiliations: pickerAffiliations, fit, asks, team, entities: pipelineEntities, targets, contact, rows, founders } =
+  const { tiers, vehicles, affiliations: pickerAffiliations, fit, asks, team, entities: pipelineEntities, targets, contact, rows: pipelineRows, founders } =
     await routeInputs(selection.current?.id ?? '');
   // The server searches the targets (issue 0023): the page carries only the rows it draws.
   const SHOWN = 80;
@@ -58,13 +64,24 @@ async function Routes({
   const minScore = [60, 75].includes(Number(minParam)) ? Number(minParam) : 0;
   const needle = q.trim().toLowerCase();
   const touchShown = touchParam === '1';
+  // Through mode picks any node: our route sources first, the pipeline, then anyone the search names.
+  const plainRow = (entityId: string, name: string, isPerson: boolean, lpType: string): TargetRow => ({ entityId, name, isPerson, lpType,
+    lpIcon: isPerson ? 'person' : 'folder', score: null, provisional: false, borrowedFrom: null, related: [], blocker: null, touch: null, signals: [] });
+  const sourceRows = through ? (await routeSources()).map((s) => plainRow(s.entityId, s.name, !s.sourceOnly, s.sourceOnly ? 'PL organization' : 'Team or PL staff')) : [];
+  const searchRows = through && needle ? (await searchEntities(q, 40)).map((e) => plainRow(e.entityId, e.displayName, e.entityType === 'person', e.entityType)) : [];
+  const listed = new Set<string>();
+  const rows = through
+    ? [...sourceRows, ...pipelineRows, ...searchRows].filter((row) => !listed.has(row.entityId) && Boolean(listed.add(row.entityId)))
+    : pipelineRows;
+  const sourceIds = new Set(sourceRows.map((s) => s.entityId));
   const matching = rows
     .filter((t) => (minScore ? (t.score ?? -1) >= minScore : true))
     .filter((t) => !needle || t.name.toLowerCase().includes(needle) || t.related.some((x) => x.toLowerCase().includes(needle)));
   // In touch already: left out unless asked for, and counted, so none is dropped without a word.
   const hiddenInTouch = touchShown ? 0 : matching.filter((t) => t.touch).length;
   const matched = (touchShown ? matching : matching.filter((t) => !t.touch))
-    .sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name) : (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name)));
+    .sort((a, b) => Number(sourceIds.has(b.entityId)) - Number(sourceIds.has(a.entityId))
+      || (sort === 'name' ? a.name.localeCompare(b.name) : (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name)));
   const shown = matched.slice(0, SHOWN);
   const entities = target && !pipelineEntities.some((e) => e.entityId === target)
     ? [...pipelineEntities, ...await listEntities([target])] : pipelineEntities;
@@ -108,6 +125,15 @@ async function Routes({
     const query = new URLSearchParams(Object.entries(values).filter((entry): entry is [string, string] => entry[1] !== undefined));
     return `/routes?${query}`;
   };
+  // Toggling keeps the node and the filters; a node link from the through view starts that node fresh.
+  const modeHref = (mode: 'to' | 'through') => routeHref({ mode: mode === 'through' ? 'through' : undefined, r: undefined, tshow: undefined });
+  const nodeHref = (id: string, mode: 'to' | 'through') => routeHref({ target: id, mode: mode === 'through' ? 'through' : undefined,
+    r: undefined, page: undefined, family: undefined, show: undefined, exclude: undefined, tshow: undefined, removedPage: undefined });
+  const throughShown = /^\d+$/.test(params.tshow ?? '') ? Math.max(40, Math.min(1000, Number(params.tshow))) : 40;
+  const throughView = through && targetId ? await throughNode(targetId, {
+    routesToNode: search?.routes ?? [], vehicleId: selection.current?.id, vehicleKind: selection.current?.kind ?? 'fund',
+  }) : null;
+  const ours = throughView?.source ?? null;
 
   /**
    * What there is besides edges (issues 0027–0028, real). The target's name comes from the records
@@ -179,7 +205,7 @@ async function Routes({
   return (
     <Page
       crumbs={moduleCrumbs('routes', selection.current?.name ?? null)}
-      queue={<TargetPicker targets={shown} current={targetId} matched={matched.length} total={rows.length} q={q} sort={sort} min={minScore} touchShown={touchShown} hiddenInTouch={hiddenInTouch} firstShown={Math.min(matched.length, SHOWN)} />}
+      queue={<TargetPicker targets={shown} current={targetId} matched={matched.length} total={rows.length} q={q} sort={sort} min={minScore} touchShown={touchShown} hiddenInTouch={hiddenInTouch} firstShown={Math.min(matched.length, SHOWN)} through={through} />}
       inspector={
         <>
           <div className="lbl">Evidence tiers</div>
@@ -223,9 +249,22 @@ async function Routes({
     >
       <RouteSections>
       <div className="lbl">Module 05 · Warm intro routes</div>
-      <h1>Routes to {targetName ?? '—'}</h1>
-      <p className="routes-lede">Team and PL routes · estimates carry uncertainty · asks and sends need separate approval.</p>
+      <nav className="route-mode" aria-label="Route view">
+        <Link href={modeHref('to')} className={through ? '' : 'on'} aria-current={through ? undefined : 'page'}>Routes to</Link>
+        <Link href={modeHref('through')} className={through ? 'on' : ''} aria-current={through ? 'page' : undefined}>Routes through</Link>
+      </nav>
+      <h1>{through ? 'Routes through' : 'Routes to'} {targetName ?? '—'}</h1>
+      <p className="routes-lede">{through
+        ? <>Our routes to them, and who they could introduce us to beyond · a tie on file is not an offer to introduce · asks and sends need separate approval.</>
+        : <>Team and PL routes · estimates carry uncertainty · asks and sends need separate approval.</>}</p>
       {(pickerAffiliations.length === 2000 || ownAffiliations.length === 2000 || firmAffiliations.length === 2000) && <p className="cover">Showing the first 2,000 affiliations per selected group. Other colleagues may not have been inspected.</p>}
+      {ours ? (
+        <p className="intouch">
+          <Glyph name="check" title="One of ours" tone="good" />
+          <span><b>{targetName} is one of our route sources</b> ({ours.kind === 'pl' ? 'the PL organization' : 'team or PL staff'}). Routes start here, so
+            there is no route to them; below is everyone they tie to.</span>
+        </p>
+      ) : (<>
       {search?.ruleCounts && <details id="route-checks" className="card route-aux" open={params.removedPage !== undefined}>
         <summary>Route checks · {search.ruleCounts.restricted} removed for restrictions · {search.ruleCounts.largeOrganizations} organization hub paths removed</summary>
         <div className="cbody">
@@ -347,14 +386,15 @@ async function Routes({
           <RouteFilters intermediates={intermediates} />
           {familyId !== null && <p className="routes-lede">Viewing one route family · <Link href={routeHref({ family: undefined, page: undefined, r: undefined, show: undefined })}>Back to ranked routes</Link></p>}
           {params.prefer && <p className="routes-lede">{eligible.filter((x) => preferred(x.route)).length} routes match the preferred relationship in the available records. Other routes remain below them.</p>}
-          <details className="card route-graph-section" open>
+          {!through && <details className="card route-graph-section" open>
             <summary>Route map <span className="muted">· {displayedRoutes.length} paths · one node per person</span></summary>
             <RouteGraph routes={graphRouteInputs(displayedRoutes.map(({ route }) => route))} fromName={search.fromName} targetName={search.targetName}
               portfolioFounders={founders}
               selected={Math.max(0, displayedRoutes.findIndex(({ index }) => index === selected))} routeIds={displayedRoutes.map((x) => x.index)} />
-          </details>
+          </details>}
+          {throughView && <ThroughMap view={throughView} routesIn={displayedRoutes.map((x) => x.route)} routeIds={displayedRoutes.map((x) => x.index)} founders={founders} />}
           <div className="card route-comparison">
-            <div className="chead"><h2>Compare routes</h2><span className="lbl">{displayedRoutes.length} shown · {eligible.length} match</span></div>
+            <div className="chead"><h2>{through ? `Our routes to ${search.targetName}` : 'Compare routes'}</h2><span className="lbl">{displayedRoutes.length} shown · {eligible.length} match</span></div>
             <p className="route-comparison-key">Matching identity records share one map node; the list retains each record’s evidence. Route score /100 · every hop’s grade · weakest hop /5 · open a row for evidence and actions</p>
             {displayedRoutes.length === 0 && <p className="cbody">No recorded routes match these filters. Clear the excluded intermediate or lower the warmth minimum to inspect the available material.</p>}
             {displayedRoutes.map(({ route, index: i }) => (
@@ -484,6 +524,13 @@ async function Routes({
 
         </>
       )}
+      </>)}
+
+      {throughView && <>
+        {(ours || !search || search.routes.length === 0) && <ThroughMap view={throughView} routesIn={[]} routeIds={[]} founders={founders} />}
+        <ThroughSections view={throughView} hrefFor={nodeHref} shown={throughShown}
+          moreHref={(n) => `${routeHref({ tshow: String(n), r: undefined })}#through-onward`} />
+      </>}
 
       {targetId && <details className="card route-aux"><summary>Connection feedback</summary><ConnectionFeedback key={targetId} lp={targetId} /></details>}
 

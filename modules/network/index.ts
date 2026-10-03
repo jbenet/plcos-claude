@@ -15,3 +15,6 @@ export { routePage, ROUTES_PER_PAGE } from './presentation';
 export { precomputeRoutes, startRouteWarmup, routeWarmupProgress } from './cache';
 export { planRoutesLive } from './service';
 export { strategyRouteSummaries, type RecordedRoute } from './strategy-summary';
+export { throughNode, throughGaps, weakerTier, rankOnward, bestRouteTo, edgeSourceClasses, evidenceSourceClass, SOURCE_CLASSES, SOURCE_MEANS, THIN_TEAM_EDGES } from './through';
+export type { ThroughView, OnwardTie, ThroughGaps, SourceClass, LpFlag, GapWarning } from './through';
+export { edgesTouching } from './repo';

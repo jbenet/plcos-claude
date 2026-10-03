@@ -2149,6 +2149,25 @@ table.list.dated .ddetail{color:var(--muted);font-size:11.5px;margin:1px 0 0 23p
 .route-map svg{display:block;min-width:620px}
 .route-map svg a:focus-visible path:first-child{stroke:var(--ink);opacity:1}
 .route-map-key{font-size:10px;color:var(--muted);margin:0;padding:8px 0}
+/* Routes to / Routes through (2 Oct 2026): one page, the mode in the address. */
+.route-mode{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:8px 0 4px}
+.route-mode a{font-size:12px;padding:5px 12px;color:var(--muted);text-decoration:none;background:var(--surface)}
+.route-mode a+a{border-left:1px solid var(--line)}
+.route-mode a.on{background:var(--ink);color:var(--ground)}
+.through-map .route-map-key{padding:8px 14px}
+.through-table .tier{display:inline-flex;width:20px;height:20px;vertical-align:middle}
+.through-table .tier.none{background:var(--hair);color:var(--muted)}
+.through-table td{font-size:12px;padding:8px 10px}.through-table th{padding:8px 10px}
+.through-links{font-size:11px;margin-top:3px}
+.through-lp{white-space:nowrap}
+.through-evidence>span{display:block;line-height:1.45}
+.through-chain{font-size:11.5px;color:var(--muted)}
+.through-warnings{margin:0 0 12px;padding-left:18px;color:var(--clay);font-size:12.5px;line-height:1.5}
+.through-counts{display:grid;grid-template-columns:minmax(0,1fr);gap:4px}
+.through-counts td.mono{white-space:nowrap}
+.through-side p{font-size:11.5px;margin:4px 0 10px}
+.through-only{margin:4px 0;padding-left:18px;font-size:12.5px;line-height:1.6}
+@media (max-width:760px){.through-table thead{display:none}.through-table tr{display:block;border-bottom:1px solid var(--hair)}.through-table td{display:block;border:0;padding:4px 14px}}
 .route-hover{position:absolute;z-index:3;left:16px;bottom:36px;max-width:min(440px,calc(100% - 32px));max-height:250px;overflow:auto;background:var(--surface);border:1px solid var(--line);box-shadow:0 6px 20px #0002;border-radius:6px;padding:12px;font-size:12px}
 .route-hover p{margin:4px 0;font-size:11px}
 .route-hover small{color:var(--muted)}

@@ -204,6 +204,10 @@ async function OrgPage({ params }: { params: Promise<{ id: string }> }) {
       </div>
       <h1 style={{ marginTop: 8 }}>{entity.displayName}</h1>
       <p className="sublede">{summary?.body ?? TYPE_LABEL[entity.entityType]}</p>
+      <p className="routes-lede">
+        <Link href={`/routes?target=${entity.entityId}`}>Routes to {entity.displayName}</Link>{' · '}
+        <Link href={`/routes?target=${entity.entityId}&mode=through`}>Routes through {entity.displayName}</Link>
+      </p>
 
       {restrictions.length > 0 && (
         <div className="card" style={{ boxShadow: 'inset 3px 0 0 var(--clay)' }}>

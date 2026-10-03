@@ -21,3 +21,9 @@ export async function listEdgesForEntities(...args: Parameters<typeof raw.listEd
   const [user, data] = await Promise.all([currentUser(), raw.listEdgesForEntities(...args)]);
   return licensedAccess(user) ? data : data.map(edgeForDisplay);
 }
+/** Licensed evidence is redacted from X's onward ties exactly as on route hops; counts carry no content. */
+export async function throughNode(...args: Parameters<typeof raw.throughNode>) {
+  const [user, data] = await Promise.all([currentUser(), raw.throughNode(...args)]);
+  if (licensedAccess(user)) return data;
+  return { ...data, onward: data.onward.map((t) => ({ ...t, edges: t.edges.map(edgeForDisplay) })) };
+}

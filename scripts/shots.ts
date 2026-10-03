@@ -2519,7 +2519,23 @@ const SHOTS: Record<string, Shot[]> = {
   'identity-review': [
     { name: '01-enrich-identity-review', path: '/dev/enrich', fullPage: true },
   ],
+  // Routes through X (2 Oct 2026). The seed mints ids, so each shot picks its node in the picker.
+  'routes-through': [
+    { name: '01-through-a-connector', path: '/routes?mode=through&q=Umeadi', fullPage: true, prepare: throughPick('Orla Umeadi') },
+    { name: '02-restriction-holds-a-tie-back', path: '/routes?mode=through&q=Rautio', fullPage: true, prepare: throughPick('Anselm Rautio') },
+    { name: '03-through-a-team-member', path: '/routes?mode=through&q=Lior', fullPage: true, prepare: throughPick('Lior') },
+  ],
 };
+
+/** Open one node in the "Routes through" view from the picker, by its name. */
+function throughPick(name: string) {
+  return async (page: Page) => {
+    await asUser(page);
+    await page.locator('.route-picker a.tix').filter({ has: page.locator('.tixline b', { hasText: name }) }).first().click();
+    await page.locator('h1', { hasText: `Routes through ${name}` }).waitFor();
+    await page.waitForLoadState('networkidle');
+  };
+}
 
 /** The seed mints uuids, so a fixed link is resolved at shot time. */
 async function resolveTokens(page: Page, base: string, path: string): Promise<string> {
