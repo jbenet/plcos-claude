@@ -54,6 +54,6 @@ export async function deployToolingProperties(check: Check): Promise<void> {
     'Both stages pin .next regardless of DATA_PROFILE.');
   check('IMAGE runs as a non-root user', /^USER 10001:10001$/m.test(dockerfile) && !/^USER root/m.test(dockerfile), 'Fixed uid.');
   check('IMAGE fails the build on a traced private path', dockerfile.includes('scripts/check-build-traces.ts') && dockerfile.includes("-ipath '*plcos-data*'"), 'Tracing guard and final sweep.');
-  check('IMAGE refuses a context that is not a git archive', dockerfile.includes('GIT_COMMIT unset') && dockerfile.includes('[ ! -e .git ]'), 'Source stage.');
+  check('IMAGE refuses a context that is not a git archive', dockerfile.includes('(no commit given)') && dockerfile.includes('[ ! -e .git ]'), 'Source stage.');
   check('IMAGE context ignores data and secrets', ['data/*', '**/plcos-data', '.env', 'node_modules'].every(l => ignore.split('\n').includes(l)), '.dockerignore second fence.');
 }

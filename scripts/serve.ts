@@ -121,6 +121,11 @@ async function main() {
   // The live database (docs/21-postgres.md, switched 27 Sep 2026): the launcher is started from Juan's own
   // shell loop, so the choice lives in a file beside the real data rather than in his environment.
   // data/real/postgres.url holds a local loopback URL; deleting the file returns to PGlite (the rollback).
+  // After the move to the cloud (docs/deploy/railway.md §5h) the Mac's copy is the frozen rollback, never
+  // the live data again: a marker beside it makes dev:real and start:real refuse.
+  if (serve === 'real' && existsSync(join(layout.root, 'data', 'real', 'moved-to-cloud'))) {
+    refuse('The real data moved to the cloud (data/real/moved-to-cloud). This Mac keeps the frozen rollback copy; use the cloud app, or a pulled copy (bash scripts/cloud-pull.sh).');
+  }
   if (serve === 'real' && !env.DATABASE_URL) {
     try {
       const url = readFileSync(join(layout.root, 'data', 'real', 'postgres.url'), 'utf8').trim();

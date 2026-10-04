@@ -37,3 +37,20 @@ Tested on invented data only (the :5434 test cluster and scratch clusters, all d
 
 Not built yet (railway.md §2): database TLS for Railway's hosts, the build's commit variable, the volume
 owner, sign-in for a public URL (decision A), and a guard that stops `dev:real` on the Mac after the move.
+
+**4 Oct: Juan's decisions.**
+- Sign-in is Google OAuth on MailGuard's pattern, and every secret is entered in the app. Outside the app
+  there is only `PLCOS_SECRET`, which encrypts and signs, plus the database connection.
+- No public database port. Pulls and pushes go through our API; the move goes through Railway's SSH tunnel
+  and `scp`, both in Railway's CLI docs.
+- No S3 for now. Research runs in the cloud and on the Mac, and the Mac pushes results up.
+- The plan is rewritten to match.
+
+Four deploy fixes landed with it:
+- `*.railway.internal` connects without TLS. Railway's private network is WireGuard-encrypted, and its
+  Postgres has no public certificate.
+- The Dockerfile accepts Railway's commit variable.
+- An entrypoint started with `RAILWAY_RUN_UID=0` hands `/app/data` to uid 10001 and drops to it.
+- `npm run dev:real` refuses once `data/real/moved-to-cloud` exists.
+
+`railway.json` sets the healthcheck and one replica.
