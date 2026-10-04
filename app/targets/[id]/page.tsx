@@ -260,6 +260,7 @@ async function TargetWorkspace({ params, searchParams }: {
         </div>
       )}
       <p className="sublede">{pursuit.headline}</p>
+      <p className="muted" style={{ marginTop: -6 }}><a href="#email">Draft an email ↓</a></p>
 
       {(() => {
         const p = pursuit;
@@ -353,6 +354,17 @@ async function TargetWorkspace({ params, searchParams }: {
         <div>
           {tracks.map((t) => <CloseTrack key={t.exposure.exposureId} track={t} pursuitId={pursuit.pursuitId} />)}
 
+          {/* The first message, written here and moved to the person's own Gmail Drafts (docs/25). Above the
+              timeline (Juan, 3 Oct 2026: under a 4,000 px timeline and the strategies it was never seen). */}
+          <EmailDrafts
+            title="Email"
+            lede={`Write the first message to ${pursuit.entityName} about ${pursuit.vehicleName}. It starts from the suggested strategy when there is one; you move it into your own Gmail Drafts and send it from there.`}
+            where={{ pursuitId: pursuit.pursuitId }}
+            create={{ purpose: 'first_message', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId }}
+            path={`/targets/${pursuit.pursuitId}`}
+            startLabel="Draft the first message"
+          />
+
           <Timeline
             touches={shown}
             counted={counted}
@@ -380,15 +392,6 @@ async function TargetWorkspace({ params, searchParams }: {
 
           <BeforeOutreach entityId={pursuit.entityId} />
           {strategyPursuits.map((p) => <SuggestedStrategy key={p.pursuitId} pursuitId={p.pursuitId} vehicleName={p.vehicleName} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />)}
-          {/* The first message, written here and moved to the person's own Gmail Drafts (docs/25). */}
-          <EmailDrafts
-            title="Email"
-            lede={`Write the first message to ${pursuit.entityName} about ${pursuit.vehicleName}. It starts from the suggested strategy when there is one; you move it into your own Gmail Drafts and send it from there.`}
-            where={{ pursuitId: pursuit.pursuitId }}
-            create={{ purpose: 'first_message', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId }}
-            path={`/targets/${pursuit.pursuitId}`}
-            startLabel="Draft the first message"
-          />
           <DakotaClaims entityId={pursuit.entityId} />
           <PublicProfile entityId={pursuit.entityId} />
           <ConnectionFeedback key={pursuit.entityId} lp={pursuit.entityId} />
