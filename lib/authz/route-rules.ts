@@ -14,9 +14,14 @@ export const routeRules = {
   'app/api/import-jobs/route.ts#GET': 'admin',
   // MCP (docs/26-mcp.md): a bearer token, not the cookie; each tool call is then authorized as its owner.
   'app/api/mcp/route.ts#POST': 'mcp',
+  // The mail desk's outreach API (docs/27): the same bearer token with the outreach scope; each op is then
+  // authorized as the token's owner, through the UI's own rules. OPTIONS answers CORS preflight only.
+  'app/api/outreach/[op]/route.ts#GET': 'outreach',
+  'app/api/outreach/[op]/route.ts#POST': 'outreach',
+  'app/api/outreach/[op]/route.ts#OPTIONS': 'outreach',
   'app/api/profile/route.ts#GET': 'admin',
   'app/api/session/route.ts#POST': 'session',
   'app/dev/shot/[...path]/route.ts#GET': 'admin',
   'app/issues/shot/[...path]/route.ts#GET': 'admin',
-} as const satisfies Record<string, Action | 'mcp'>;
+} as const satisfies Record<string, Action | 'mcp' | 'outreach'>;
 export type RouteId = keyof typeof routeRules;

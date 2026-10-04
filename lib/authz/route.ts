@@ -15,12 +15,17 @@ export function withRoute(name: RouteId, handler: (request: Request, context: an
       return handler(request, guard, guard.env.principal);
     };
   }
+  // The outreach API (docs/27) authenticates by the same bearer token and authorizes per operation, in
+  // lib/outreach/http.ts. No cookie is read, so no cookie origin rule: CORS is checked there.
+  if (routeRules[name] === 'outreach') {
+    return async (request: Request, context?: any): Promise<Response> => handler(request, context, undefined as never);
+  }
   return async (request: Request, context?: any): Promise<Response> => {
     try {
       const policy = routeRules[name];
       if (!policy) throw new AuthorizationError();
       try {
-        if (policy === 'mcp') throw new AuthorizationError();
+        if (policy === 'mcp' || policy === 'outreach') throw new AuthorizationError();
         if (policy === 'feedback' || policy === 'session') {
           // Session selection bootstraps identity; its handler validates the selected active user.
           // Feedback reporter identity is resolved only by the post-response ingester.

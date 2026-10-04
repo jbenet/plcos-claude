@@ -9,6 +9,7 @@ import { appendAudit, findMcpToken } from '@/modules/platform';
 import { admitCall, auditArgs, envelopeFor, type Envelope } from './envelope';
 import { render, DATA_NOTICE } from './output';
 import { ToolRefused } from './reads';
+import { OutreachRefused } from '@/lib/outreach/reads';
 import { findTool, listing } from './tools';
 
 /**
@@ -40,7 +41,7 @@ export async function mcpGuard(request: Request): Promise<{ env: Envelope } | { 
   const secret = /^Bearer\s+(\S+)$/i.exec(request.headers.get('authorization') ?? '')?.[1];
   if (!secret) return deny(401, 'Send your MCP token as "Authorization: Bearer <token>". Make one in Preferences.', challenge);
   const db = await getDb();
-  const found = await findMcpToken(secret, db);
+  const found = await findMcpToken(secret, db, request.headers.get('user-agent'));
   if (!found) return deny(401, 'That token is not known here.', challenge);
   if (found.state !== 'live') {
     await appendAudit({ actorId: found.user.id, action: 'mcp.refused', subjectType: 'mcp_token', subjectId: found.token.tokenId, detail: { reason: found.state } }, db);
@@ -72,7 +73,7 @@ export async function callTool(env: Envelope, name: string, args: Record<string,
     bytes = out.bytes; truncated = out.truncated;
     return { content: [{ type: 'text', text: out.text }] };
   } catch (e) {
-    if (e instanceof ToolRefused || e instanceof MutationGuardError) return fail('refused', e.message);
+    if (e instanceof ToolRefused || e instanceof MutationGuardError || e instanceof OutreachRefused) return fail('refused', e.message);
     console.error('[mcp]', name, e instanceof Error ? e.message : e);
     return fail('error', 'The tool failed on the server. Nothing was changed by this call unless it says otherwise; try again, or use the app.');
   } finally {

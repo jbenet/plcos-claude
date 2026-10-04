@@ -6,11 +6,19 @@ import { createMcpTokenAction, type MadeToken } from '@/app/settings/actions';
 import s from './mcp.module.css';
 
 /** Make a token, and show it once with the command that connects Claude Code to it (docs/26-mcp.md). */
-export function McpTokenForm({ endpoint, vehicles, draftTools }: { endpoint: string; vehicles: Array<{ id: string; name: string }>; draftTools: string[] }) {
+export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false, days = 90 }: {
+  endpoint: string; vehicles: Array<{ id: string; name: string }>; draftTools: string[];
+  /** Offer the mail desk's outreach scope (docs/27): Admin only for now. */
+  outreach?: boolean;
+  /** The default expiry, in days. */
+  days?: number;
+}) {
   const router = useRouter();
   const [made, setMade] = useState<MadeToken | null>(null);
   const [busy, setBusy] = useState(false);
-  const command = made?.ok ? `claude mcp add --transport http --scope user capital-os ${endpoint} --header "Authorization: Bearer ${made.secret}"` : '';
+  const [preset, setPreset] = useState('read');
+  const command = made?.ok && preset.startsWith('outreach') ? `curl -H "Authorization: Bearer ${made.secret}" ${endpoint.replace(/\/api\/mcp$/, '/api/outreach/vehicles')}`
+    : made?.ok ? `claude mcp add --transport http --scope user capital-os ${endpoint} --header "Authorization: Bearer ${made.secret}"` : '';
   return (
     <>
       <form
@@ -31,9 +39,24 @@ export function McpTokenForm({ endpoint, vehicles, draftTools }: { endpoint: str
         </label>
         <fieldset className={s.row}>
           <legend>May</legend>
-          <label><input type="radio" name="tools" value="read" defaultChecked /> Read</label>
-          <label><input type="radio" name="tools" value="draft" /> Read, and {draftTools.join(' and ')}</label>
+          <label><input type="radio" name="tools" value="read" defaultChecked onChange={() => setPreset('read')} /> Read</label>
+          <label><input type="radio" name="tools" value="draft" onChange={() => setPreset('draft')} /> Read, and {draftTools.join(' and ')}</label>
+          {outreach && (
+            <>
+              <label><input type="radio" name="tools" value="outreach-read" onChange={() => setPreset('outreach-read')} /> Outreach desk: read the queue</label>
+              <label><input type="radio" name="tools" value="outreach-write" onChange={() => setPreset('outreach-write')} /> Outreach desk: read, record updates, ask for approvals, record sends</label>
+            </>
+          )}
         </fieldset>
+        <label className={s.row}>
+          <span>Expires</span>
+          <select name="days" defaultValue={String(days)}>
+            <option value="7">in a week</option>
+            <option value="30">in a month</option>
+            <option value="90">in three months</option>
+            <option value="365">in a year</option>
+          </select>
+        </label>
         {vehicles.length > 1 && (
           <fieldset className={s.row}>
             <legend>Vehicles</legend>
@@ -48,7 +71,7 @@ export function McpTokenForm({ endpoint, vehicles, draftTools }: { endpoint: str
         <div className={s.secret} role="status">
           <p style={{ margin: '0 0 6px' }}><b>{made.label}</b> — copy it now; it is not shown again.</p>
           <code className={s.code}>{made.secret}</code>
-          <p style={{ margin: '10px 0 6px' }}>Connect Claude Code (in a terminal):</p>
+          <p style={{ margin: '10px 0 6px' }}>{preset.startsWith('outreach') ? 'Try it (in a terminal):' : 'Connect Claude Code (in a terminal):'}</p>
           <code className={s.code}>{command}</code>
           <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => void navigator.clipboard?.writeText(command)}>Copy the command</button>
         </div>

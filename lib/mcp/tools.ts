@@ -3,6 +3,7 @@ import type { Envelope } from './envelope';
 import type { Answer } from './output';
 import * as reads from './reads';
 import * as writes from './writes';
+import { BUCKETS, outreachQueue, outreachVehicles } from '@/lib/outreach/reads';
 
 /**
  * The MCP tool registry (docs/26-mcp.md): the only tools the server has. Putting a tool name in a
@@ -87,6 +88,22 @@ export const TOOLS: readonly Tool[] = [
     description: 'What changed in Capital OS: the latest entries, or one entry\'s text by slug.',
     input: z.object({ slug: z.string().regex(/^[a-z0-9-]{1,80}$/).optional(), limit: limit(100, 20) }).strict(),
     run: (env, a) => reads.changelog(env.principal, a),
+  }),
+  // The mail desk's reads (docs/27-outreach-api.md), the same service as GET /api/outreach/*.
+  tool({
+    name: 'outreach_vehicles', title: 'Outreach: vehicles', kind: 'read',
+    description: 'The fund and SPV vehicles raising now: hard, soft and indicated (three separate figures, never added), the raise window and working days left, SPV seats by stage and days to wire.',
+    input: z.object({}).strict(),
+    run: async (env) => outreachVehicles(env.principal),
+  }),
+  tool({
+    name: 'outreach_queue', title: 'Outreach: the queue', kind: 'read',
+    description: 'The mail desk\'s queue for a vehicle (or "all"): each open LP with Capital OS\'s own status, close track and SPV seat stage (each with its label), the indication, contacts, the latest strategy, checks (restriction, accreditation, ask count, fund first, wrap; each says whether it blocks), materials and a bucket. Health details are redacted. Page with offset.',
+    input: z.object({ vehicle, bucket: z.enum(BUCKETS as [string, ...string[]]).optional(), limit: limit(100, 25), offset, pursuitId: uuid.optional() }).strict(),
+    run: async (env, a) => {
+      const q = await outreachQueue(env.principal, { ...a, limit: a.limit ?? 25 } as never);
+      return { data: { rows: q.data, total: q.total, offset: q.offset, counts: 'counts' in q ? q.counts : null, redacted: 'redacted' in q ? q.redacted : null }, coverage: q.coverage };
+    },
   }),
   tool({
     name: 'create_email_draft', title: 'Create an email draft', kind: 'draft',

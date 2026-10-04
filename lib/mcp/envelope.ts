@@ -51,7 +51,8 @@ export function envelopeFor(token: McpToken, owner: AppUser): Envelope {
 
 // ── Rate and budget ─────────────────────────────────────────────────────────────────────
 // In memory, one server process (docs/deploy/rev3: one machine). A day's count is read back from
-// the audit log the first time a token is seen after a restart, so restarting does not refill it.
+// the audit log the first time a token is seen after a restart, so restarting does not refill it. A token's
+// outreach calls (docs/27) count against the same budget as its MCP calls.
 
 interface Window { minute: number[]; day: string; dayCount: number }
 const windows = new Map<string, Window>();
@@ -63,7 +64,7 @@ export async function admitCall(env: Envelope, tool: string, q: Queryable, now =
   let w = windows.get(env.tokenId);
   if (!w || w.day !== today(now)) {
     const row = await q.one<{ n: string }>(`select count(*)::text n from platform.audit_log
-      where action = 'mcp.call' and subject_id = $1 and at >= $2::date and detail->>'outcome' <> 'rate_limited'`, [env.tokenId, today(now)]);
+      where action in ('mcp.call', 'outreach.call') and subject_id = $1 and at >= $2::date and detail->>'outcome' <> 'rate_limited'`, [env.tokenId, today(now)]);
     w = { minute: [], day: today(now), dayCount: Number(row?.n ?? 0) };
     windows.set(env.tokenId, w);
   }
@@ -82,7 +83,7 @@ export function resetWindows() { windows.clear(); }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Arguments that are a fixed choice (a vehicle's slug, a status), never typed words. */
-const CHOICES = new Set(['vehicle', 'status', 'kind', 'purpose', 'priority', 'list', 'mode']);
+const CHOICES = new Set(['vehicle', 'status', 'kind', 'purpose', 'priority', 'list', 'mode', 'bucket', 'choice']);
 /** Ids, choices, numbers and booleans as given; any other text only as its length, so words never reach the log. */
 export function auditArgs(args: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};

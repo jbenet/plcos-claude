@@ -92,11 +92,15 @@ export interface GuardBlock {
    * the situation is.
    */
   subsumedBy?: GuardBlock['rule'];
+  /** Reported, refusing nothing (config.guard.askLimit, Juan 4 Oct 2026). Only in `advisories`. */
+  advisory?: true;
 }
 
 export interface GuardReport {
   ok: boolean;
   blocks: GuardBlock[];
+  /** Rules that report without refusing: the ask cap, while config.guard.askLimit is 'advisory'. */
+  advisories: GuardBlock[];
   /** What the guard inspected, so an empty block list is not read as "nothing to find". */
   inspected: string;
 }

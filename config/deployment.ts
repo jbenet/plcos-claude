@@ -190,6 +190,23 @@ export const config = {
     maxResponseBytes: 60_000, // GUESS — ~15K tokens of an agent's context per call.
     maxRows: 100, // GUESS — rows in one list answer before paging.
   },
+  /**
+   * The outreach API for the mail desk (docs/27-outreach-api.md): /api/outreach/*, authenticated by an MCP
+   * token that carries the outreach scope ('outreach:read', and 'outreach:write' apart). Same envelope, rate
+   * limits and audit as MCP. Nothing here sends: the desk sends through MailGuard and records the send
+   * against an approved SEND ticket.
+   */
+  outreach: {
+    enabled: true as boolean,
+    /**
+     * Browser origins allowed to call the API across sites (CORS). Empty: none — a device app or a server
+     * sends no Origin and needs no entry. Exact origins only ("https://desk.example.com"), never a wildcard.
+     * A browser client also needs a short-lived token, not a device token (docs/27 §6); it is not built.
+     */
+    corsOrigins: [] as string[],
+    /** Rows in one queue answer before paging. GUESS — a wave of invites is tens, not hundreds. */
+    maxQueueRows: 300,
+  },
   warehouse: {
     enabled: false,
     canonMode: 'inProcess' as CanonMode,
@@ -207,6 +224,19 @@ export const config = {
     provider: (process.env.LABOS_ME_URL ? 'labos' : 'local') as AuthKind,
   },
   guard: {
+    /**
+     * Juan, 4 Oct 2026 (the mail desk): the cap "may be too small; raise it or don't enforce it until it's
+     * needed". 'advisory' reports it, without blocking an ask or a send; 'enforce' blocks as before.
+     * TODO(docs/27 §4): if it comes back as a block, count per vehicle (an SPV invite and a fund ask to the
+     * same person are different asks), not across every vehicle as asksToEntitySince does now.
+     */
+    askLimit: 'advisory' as 'advisory' | 'enforce',
+    /**
+     * Fund before SPV (Juan, 4 Oct 2026: "we have to pitch SPVs as we go"): an open fund discussion with an
+     * LP is flagged when an SPV is pitched to them, and never holds the SPV. The overlap is still recorded,
+     * with a dated follow-up (rule 5).
+     */
+    fundFirst: 'advisory' as 'advisory' | 'enforce',
     asksPerRelationshipPerQuarter: 1,
     asksPerConnectorPerQuarter: 3, // GUESS — v3 gave a 1–5 range and labelled it unverified.
     conflictWindowDays: 14, // GUESS — v3's default, never tested against our own calendar.

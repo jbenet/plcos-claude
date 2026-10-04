@@ -21,6 +21,7 @@ export async function evaluateGuards(
   q?: Queryable,
 ): Promise<GuardReport> {
   const blocks: GuardBlock[] = [];
+  const advisories: GuardBlock[] = [];
   const since = quarterAgo();
 
   // Rule 12. "Sourced, not applied for" is a state machine guard, not advice.
@@ -56,7 +57,12 @@ export async function evaluateGuards(
       evidence: `Most recent: ${last.vehicleName}, owned by ${last.ownerName}.`,
       opensCase: false,
     };
-    blocks.push(frequencyBlock);
+    // Advisory since 4 Oct 2026 (config.guard.askLimit): reported beside the blocks, refusing nothing.
+    if (config.guard.askLimit === 'enforce') blocks.push(frequencyBlock);
+    else {
+      frequencyBlock.advisory = true;
+      advisories.push(frequencyBlock);
+    }
   }
 
   if (args.connectorId) {
@@ -127,6 +133,7 @@ export async function evaluateGuards(
   return {
     ok: blocks.length === 0,
     blocks,
+    advisories,
     inspected:
       `Asks to this actor since ${since.toISOString().slice(0, 10)} across all vehicles, ` +
       `asks via this connector in the same period, restrictions on file for the target, and ` +
@@ -189,7 +196,10 @@ export async function proposeAsk(actorId: string, cmd: ProposeAskCommand) {
             'Moving the target to any pipeline stage',
             'Sending any material not named above',
           ],
-          basis: guard.blocks.map((b) => ({ label: RULE_LABEL[b.rule], value: b.message })),
+          basis: [
+            ...guard.blocks.map((b) => ({ label: RULE_LABEL[b.rule], value: b.message })),
+            ...guard.advisories.map((b) => ({ label: `${RULE_LABEL[b.rule]} (advisory)`, value: b.message })),
+          ],
         },
         vehicleId: cmd.vehicleId,
         expiresInDays: 7,
@@ -217,7 +227,7 @@ export async function proposeAsk(actorId: string, cmd: ProposeAskCommand) {
        values ($1, 'ask.proposed', 'ask', $2, $3)`,
       [actorId, askId, JSON.stringify({
         entity: cmd.entityName, vehicle: cmd.vehicleName, blocked: !guard.ok,
-        rules: guard.blocks.map((b) => b.rule),
+        rules: guard.blocks.map((b) => b.rule), advisories: guard.advisories.map((b) => b.rule),
       })],
     );
 

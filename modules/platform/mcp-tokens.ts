@@ -21,6 +21,8 @@ export interface McpToken {
   createdAt: Date;
   expiresAt: Date;
   lastUsedAt: Date | null;
+  /** The client's User-Agent at its last use, cut short: which device is behind it (docs/27 §2). */
+  lastUsedFrom: string | null;
   revokedAt: Date | null;
 }
 
@@ -32,7 +34,7 @@ export const looksLikeToken = (s: string) => s.startsWith(PREFIX) && /^[A-Za-z0-
 
 const cols = (t = '') => `${t}token_id::text "tokenId", ${t}user_id::text "userId", ${t}label, ${t}prefix, ${t}tools,
   ${t}vehicles::text[] vehicles, ${t}calls_per_day "callsPerDay", ${t}created_at "createdAt", ${t}expires_at "expiresAt",
-  ${t}last_used_at "lastUsedAt", ${t}revoked_at "revokedAt"`;
+  ${t}last_used_at "lastUsedAt", ${t}last_used_from "lastUsedFrom", ${t}revoked_at "revokedAt"`;
 
 export interface NewToken { label: string; tools: string[]; vehicles: string[] | null; callsPerDay: number; days: number }
 
@@ -70,7 +72,7 @@ export async function revokeMcpToken(owner: AppUser, tokenId: string, q?: Querya
  * that hash. Marks a live token used at most once a minute, so a busy client does not write a row a call.
  */
 export type TokenState = 'live' | 'revoked' | 'expired' | 'inactive';
-export async function findMcpToken(secret: string, q?: Queryable): Promise<{ token: McpToken; user: AppUser; state: TokenState } | null> {
+export async function findMcpToken(secret: string, q?: Queryable, from?: string | null): Promise<{ token: McpToken; user: AppUser; state: TokenState } | null> {
   if (!looksLikeToken(secret)) return null;
   const db = q ?? await getDb();
   const row = await db.one<McpToken & { user: AppUser; active: boolean; expired: boolean }>(`select ${cols('t.')},
@@ -81,8 +83,9 @@ export async function findMcpToken(secret: string, q?: Queryable): Promise<{ tok
   if (!row) return null;
   const { user, active, expired, ...token } = row;
   const state: TokenState = token.revokedAt ? 'revoked' : expired ? 'expired' : !active ? 'inactive' : 'live';
-  if (state === 'live' && (!token.lastUsedAt || Date.now() - new Date(token.lastUsedAt).getTime() > 60_000)) {
-    await db.query('update platform.mcp_token set last_used_at = now() where token_id = $1', [token.tokenId]);
+  const device = from ? from.replace(/[^\x20-\x7e]/g, '').slice(0, 120) : null;
+  if (state === 'live' && (!token.lastUsedAt || Date.now() - new Date(token.lastUsedAt).getTime() > 60_000 || (device && device !== token.lastUsedFrom))) {
+    await db.query('update platform.mcp_token set last_used_at = now(), last_used_from = coalesce($2, last_used_from) where token_id = $1', [token.tokenId, device]);
   }
   return { token, state, user: { ...user, vehicles: user.vehicles ?? null, approves: user.approves ?? [] } };
 }

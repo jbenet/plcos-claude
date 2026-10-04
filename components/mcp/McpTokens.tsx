@@ -5,6 +5,8 @@ import { can } from '@/lib/authz';
 import { READ_TOOLS, TOOLS } from '@/lib/mcp/tools';
 import { shortDate, ago } from '@/lib/time';
 import { listMcpTokens, listVehicles } from '@/modules/platform';
+import { config } from '@/config/deployment';
+import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
 import { McpTokenForm } from './McpTokenForm';
 import s from './mcp.module.css';
 
@@ -38,7 +40,8 @@ export async function McpTokens() {
         {user.access === 'viewer' ? (
           <p className="muted">Viewers do not make tokens yet.</p>
         ) : (
-          <McpTokenForm endpoint={endpoint} vehicles={mine.map((v) => ({ id: v.id, name: v.name }))} draftTools={drafts} />
+          <McpTokenForm endpoint={endpoint} vehicles={mine.map((v) => ({ id: v.id, name: v.name }))} draftTools={drafts}
+            outreach={user.access === 'admin' && config.outreach.enabled} days={config.mcp.tokenDays} />
         )}
         {tokens.length > 0 && (
           <table className={s.tokens}>
@@ -51,10 +54,12 @@ export async function McpTokens() {
                 return (
                   <tr key={t.tokenId} data-state={state}>
                     <td><b>{t.label}</b><br /><span className="mono muted" style={{ fontSize: 11 }}>{t.prefix}…</span></td>
-                    <td>{t.tools.some((x) => !READ_TOOLS.includes(x)) ? 'Read and draft' : 'Read'}</td>
+                    <td>{t.tools.includes(OUTREACH_WRITE) ? 'Outreach desk: read and write' : t.tools.includes(OUTREACH_READ) ? 'Outreach desk: read'
+                      : t.tools.some((x) => !READ_TOOLS.includes(x)) ? 'Read and draft' : 'Read'}</td>
                     <td>{t.vehicles ? t.vehicles.map((v) => vname.get(v) ?? 'unknown').join(', ') : 'All of yours'}</td>
                     <td>{shortDate(new Date(t.createdAt))}</td>
-                    <td>{t.lastUsedAt ? ago(new Date(t.lastUsedAt)) : 'never'}</td>
+                    <td>{t.lastUsedAt ? ago(new Date(t.lastUsedAt)) : 'never'}
+                      {t.lastUsedFrom && <><br /><span className="muted" style={{ fontSize: 11 }} title={t.lastUsedFrom}>from {t.lastUsedFrom.slice(0, 40)}{t.lastUsedFrom.length > 40 ? '…' : ''}</span></>}</td>
                     <td>
                       <span className={s.state} data-state={state}>
                         {state === 'live' ? `live until ${shortDate(new Date(t.expiresAt))}` : state === 'revoked' ? `revoked ${shortDate(new Date(t.revokedAt!))}` : 'expired'}
