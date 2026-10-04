@@ -9,7 +9,7 @@ You run workflow W5 in /Users/jbenet/git/plc-os/plcos-claude-live, the live fold
 ## Read set
 
 - Rules and shape: `AGENTS.md`, `docs/agent-rules/real-data.md`, `docs/agent-rules/domain.md`,
-  `docs/workflows/w5-strategy.md`, `lib/enrich/strategy.ts`, `lib/enrich/capacity.ts`, and only
+  `docs/workflows/w5-strategy.md`, `docs/email-guidelines.md` (for `firstMessage`), `lib/enrich/strategy.ts`, `lib/enrich/capacity.ts`, and only
   the `capacity` block of `config/deployment.ts`. Read `docs/COLLAB.md` only at "Recording workflow runs".
 - Inputs under `data/real/enrich/`: the launch's `batches/<batch>.txt`; assigned firms' `raw/<key>.json`
   and `strategy/<key>.json`; their matching rows in `candidates.jsonl`, `connections.jsonl` and

@@ -33,7 +33,7 @@ can send one flag away. Nothing now names Google's mail or OAuth hosts.
 **Changed:** follow-ups thread through mailguard's `replyTo` on the thread's latest sent or received message;
 pictures in the text travel as attached files (mailguard has no inline pictures), and the preview shows them so;
 display names outside ASCII are left off, since mailguard would mangle them. New: `email.mailguard_account`
-(migration 002), the config `config.email.provider = 'mailguard'`, `scripts/with-mailguard-token.sh`.
+(migration 003), the config `config.email.provider = 'mailguard'`, `scripts/with-mailguard-token.sh`.
 
 **Checked** on the fake mailguard only — 22 email properties (allowlist and 3,000 random requests; 16 named and 1,000
 random whoami answers; refused-and-not-stored at connect; widened-later, Keychain-key and revoked-key moves; threads;

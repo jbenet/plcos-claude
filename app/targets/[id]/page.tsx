@@ -11,8 +11,10 @@ import { Coverage } from '@/components/ui/Coverage';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import {
-  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, spvMarks, statusNeedsEvidence, strategyPursuitsFor, updatesFor,
+  IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, spvMarks, statusNeedsEvidence, strategyPursuitsFor, suggestionsFor, updatesFor,
 } from '@/lib/authz/read/strategy';
+import { chooseFirstEmail, KIND_LABEL } from '@/modules/email';
+import { routeReading } from '@/components/routes/route-display';
 import { getDb } from '@/lib/db';
 import { auditFor } from '@/modules/platform';
 import { StatusForm } from '@/components/strategy/StatusForm';
@@ -118,6 +120,22 @@ async function TargetWorkspace({ params, searchParams }: {
   const shown = [...everything, ...colleaguesAll];
   const counted = new Set([...touches, ...colleagues].map((t) => t.touchpointId));
   const touchSummary = summarize(touches);
+  // Which email to offer first (docs/email-guidelines.md §Kinds): the strategy's own first message
+  // when it has one; else the best warm route decides — through someone, to an LP who has not met
+  // us, the first email is the intro ask to that connector, not a cold note from whoever clicks.
+  const everSummary = summarize(everything);
+  const bestRoute = (routes?.routes ?? []).filter((r) => r.foldedUnder == null && r.verdict === 'recommend')
+    .sort((a, b) => routeReading(b).score - routeReading(a).score)[0] ?? null;
+  const openSuggestion = (await suggestionsFor(pursuit.pursuitId)).find((x) => x.status !== 'dismissed' && x.status !== 'withdrawn');
+  const emailPlan = chooseFirstEmail({
+    firstMessage: (openSuggestion?.data as { firstMessage?: unknown } | null)?.firstMessage ?? null,
+    best: bestRoute ? {
+      holder: bestRoute.fromName ?? routes?.fromName ?? null,
+      connector: bestRoute.connectorIds[0] ? { entityId: bestRoute.connectorIds[0], name: bestRoute.connectorNames[0] ?? 'the connector' } : null,
+      tier: bestRoute.weakestTier,
+    } : null,
+    metUs: everSummary.meetingDates.length > 0 || Boolean(everSummary.lastFromThem),
+  });
   // What the records here support, beside what the ladder has accepted (N57, docs/18).
   const file = onFile(pursuit, touches, tracks);
   const proposal = file.climb.length ? await findOpenTicket('STAGE', 'pursuit', pursuit.pursuitId) : null;
@@ -358,11 +376,16 @@ async function TargetWorkspace({ params, searchParams }: {
               timeline (Juan, 3 Oct 2026: under a 4,000 px timeline and the strategies it was never seen). */}
           <EmailDrafts
             title="Email"
-            lede={`Write the first message to ${pursuit.entityName} about ${pursuit.vehicleName}. It starts from the suggested strategy when there is one; you move it into your own Gmail Drafts and send it from there.`}
+            lede={`${KIND_LABEL[emailPlan.kind]}${emailPlan.sender ? `, from ${emailPlan.sender}` : ''}, about ${pursuit.vehicleName} alone. ${emailPlan.why} It starts from the suggested strategy’s own draft when it has a clean one, and empty otherwise; you move it into your own Gmail Drafts and send it from there.`}
             where={{ pursuitId: pursuit.pursuitId }}
-            create={{ purpose: 'first_message', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId }}
+            create={emailPlan.purpose === 'intro_ask' && emailPlan.connector
+              ? { purpose: 'intro_ask', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId, connectorId: emailPlan.connector.entityId }
+              : { purpose: 'first_message', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId }}
             path={`/targets/${pursuit.pursuitId}`}
-            startLabel="Draft the first message"
+            startLabel={emailPlan.purpose === 'intro_ask' && emailPlan.connector ? `Draft the intro ask to ${emailPlan.connector.name}` : 'Draft the first message'}
+            alternative={emailPlan.purpose === 'intro_ask' && emailPlan.connector
+              ? { label: 'Draft the first message to them instead', create: { purpose: 'first_message', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId } }
+              : null}
           />
 
           <Timeline

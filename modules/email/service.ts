@@ -20,7 +20,7 @@ import { grantGate } from '@/modules/grants';
 import { claimsFor } from '@/modules/research';
 import {
   claimMove, deleteMailguardAccount, draftsFor, getAttachment, getDraft, insertAttachment, insertDraft, mailguardAccountOf, recordMailguardCheck, recordMoved,
-  releaseMove, removeAttachmentRow, setStatus, touchMailguardAccount, updateDraftBody,
+  releaseMove, removeAttachmentRow, setStatus, touchMailguardAccount, updateDraftBody, getVoice, upsertVoice, deleteVoice,
 } from './repo';
 import { draftWarnings, prefillDraft } from './rules';
 import type { Attachment, Draft, DraftMode, DraftPurpose, DraftWarning, MoveBlock } from './types';
@@ -80,14 +80,17 @@ export async function createDraft(actor: Actor, n: NewDraft): Promise<string> {
   const previous = n.replyToDraftId ? await ownDraft(actor, n.replyToDraftId) : null;
   if (n.purpose === 'follow_up' && (!previous || previous.status !== 'in_gmail')) throw new DraftRefused('A follow-up answers a draft that was moved to Gmail.');
 
-  let strategy: { angle: string; askShape: string; suggestionId: string; madeAt: string } | null = null;
-  if (n.purpose === 'first_message' && pursuitId) {
-    const s = (await suggestionsFor(pursuitId)).find((x) => x.status !== 'dismissed');
-    const data = s?.data as { angle?: unknown; ask?: { shape?: unknown } } | undefined;
-    if (s && typeof data?.angle === 'string' && data.angle.trim()) strategy = { angle: data.angle.trim(), askShape: String(data.ask?.shape ?? ''), suggestionId: s.suggestionId, madeAt: s.madeAt.toISOString() };
+  // Only the strategy's own first message (W5 `firstMessage`) can start a draft; never its angle or
+  // analysis (docs/email-guidelines.md; Juan, 3 Oct 2026: "This is not a good email").
+  let strategy: { firstMessage: unknown; suggestionId: string; madeAt: string } | null = null;
+  if (n.purpose !== 'follow_up' && pursuitId) {
+    const s = (await suggestionsFor(pursuitId)).find((x) => x.status !== 'dismissed' && x.status !== 'withdrawn');
+    if (s) strategy = { firstMessage: (s.data as { firstMessage?: unknown } | null)?.firstMessage ?? null, suggestionId: s.suggestionId, madeAt: s.madeAt.toISOString() };
   }
   const start = prefillDraft({
-    purpose: n.purpose, senderName: actor.name, vehicleName: vehicle.name, lpName: lp?.displayName ?? null, lpIsPerson: lp?.entityType === 'person',
+    purpose: n.purpose, senderName: actor.name, vehicleName: vehicle.name, vehicleKind: vehicle.kind,
+    otherVehicles: vehicles.filter((v) => v.id !== vehicle!.id && v.phase !== 'historical').map((v) => ({ name: v.name })),
+    lpName: lp?.displayName ?? null, lpIsPerson: lp?.entityType === 'person',
     connectorName: connector?.displayName ?? null, connectorIsPerson: connector?.entityType === 'person', strategy, previousSubject: previous?.subject ?? null,
   });
   // The address on record, when the research found one; the person checks it.
@@ -227,12 +230,14 @@ export async function warningsFor(d: Draft): Promise<DraftWarning[]> {
   const vehicles = await listVehicles();
   const vehicle = vehicles.find((v) => v.id === d.vehicleId)!;
   const instrument = INSTRUMENT[vehicle.kind] ?? 'lp_commitment';
-  const [lpR, cR, rules, gate, asks] = await Promise.all([
+  const recipientId = d.purpose === 'intro_ask' ? d.connectorId : d.entityId;
+  const [lpR, cR, rules, gate, asks, recipient] = await Promise.all([
     d.entityId ? restrictionsFor(d.entityId) : [],
     d.connectorId ? restrictionsFor(d.connectorId) : [],
     listWrapRules(),
     vehicle.kind === 'grant_rail' && d.entityId ? grantGate(d.entityId) : null,
     d.purpose === 'intro_ask' ? listAsks(d.vehicleId) : [],
+    recipientId ? getEntity(recipientId) : null,
   ]);
   const rule = rules.find((r) => r.exemption === vehicle.exemption && r.instrument === instrument);
   const own = draftWarnings({
@@ -245,6 +250,8 @@ export async function warningsFor(d: Draft): Promise<DraftWarning[]> {
     grantGate: gate,
     introAsks: asks.filter((a) => a.entityId === d.entityId).map((a) => ({ status: a.status, connectorId: a.connectorId })),
     subject: d.subject, text: d.bodyText, attachmentCount: d.attachments.filter((a) => !a.inline).length,
+    recipient: recipient ? { name: recipient.displayName, isPerson: recipient.entityType === 'person' } : null,
+    intendedSender: d.prefill?.from ?? null, ownerName: d.ownerName,
   });
   if (!d.to.length) own.push({ level: 'check', rule: 'recipients', text: 'No recipient yet.' });
   return own;
@@ -506,4 +513,39 @@ export async function connectDemoMailguard(actor: Actor, runtime?: MailguardRunt
   if (rt.mode !== 'fake' || !rt.fakeDir) throw new DraftRefused('Demo tokens exist only on the demo, with its fake mailguard.');
   const key = await fakeMintKey(rt.fakeDir, { mailbox: `${actor.handle}@${FAKE_DOMAIN}` });
   return connectMailguard(actor, key, rt);
+}
+
+// ── A sender's voice (docs/email-guidelines.md §Voice) ──────────────────────────────────
+
+export interface Voice { style: string; samples: string[]; updatedAt: Date | null }
+
+export const VOICE_LIMITS = { styleChars: 4000, samples: 5, sampleChars: 6000 }; // GUESSES: a page of notes, a long email each
+
+/** Your own voice: style notes and up to five emails of yours. Empty when you have none. */
+export async function voiceOf(actor: Pick<Actor, 'id'>): Promise<Voice> {
+  const v = await getVoice(actor.id);
+  return v ? { style: v.style, samples: v.samples, updatedAt: v.updatedAt } : { style: '', samples: [], updatedAt: null };
+}
+
+/**
+ * Save your voice. Your own only, and only what you typed or pasted; the audit entry keeps the
+ * lengths, never the words. Saving it empty deletes the row.
+ */
+export async function saveVoice(actor: Pick<Actor, 'id'>, v: { style: string; samples: string[] }): Promise<Voice> {
+  const style = String(v.style ?? '').replace(/\r\n?/g, '\n').trim();
+  const samples = (v.samples ?? []).map((x) => String(x ?? '').replace(/\r\n?/g, '\n').trim()).filter(Boolean);
+  if (style.length > VOICE_LIMITS.styleChars) throw new DraftRefused(`The notes are over ${VOICE_LIMITS.styleChars.toLocaleString('en-US')} characters. Keep them to what a drafter needs.`);
+  if (samples.length > VOICE_LIMITS.samples) throw new DraftRefused(`Up to ${VOICE_LIMITS.samples} sample emails; three to five is plenty.`);
+  if (samples.some((x) => x.length > VOICE_LIMITS.sampleChars)) throw new DraftRefused(`A sample is over ${VOICE_LIMITS.sampleChars.toLocaleString('en-US')} characters. Paste one email, without the thread below it.`);
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    if (!style && !samples.length) {
+      const gone = await deleteVoice(actor.id, tx);
+      if (gone) await appendAudit({ actorId: actor.id, action: 'email.voice_deleted', subjectType: 'app_user', subjectId: actor.id, detail: {} }, tx);
+      return;
+    }
+    await upsertVoice(actor.id, style, samples, tx);
+    await appendAudit({ actorId: actor.id, action: 'email.voice_saved', subjectType: 'app_user', subjectId: actor.id, detail: { styleChars: style.length, samples: samples.length } }, tx);
+  });
+  return voiceOf(actor);
 }
