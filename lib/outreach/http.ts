@@ -8,7 +8,8 @@ import { DATA_NOTICE } from '@/lib/mcp/output';
 import { MutationGuardError } from '@/lib/mutation-policy';
 import { appendAudit, findMcpToken } from '@/modules/platform';
 import { BUCKETS, OutreachRefused, outreachQueue, outreachVehicles } from './reads';
-import { OUTREACH_READ, OUTREACH_WRITE, type OutreachScope } from './scopes';
+import { OUTREACH_READ, type OutreachScope } from './scopes';
+import { WRITE_OPS } from './writes';
 
 /**
  * /api/outreach/* for the mail desk (docs/27-outreach-api.md). A bearer token — an MCP token carrying the
@@ -41,9 +42,8 @@ const READS: Record<string, Op> = {
   },
 };
 
-/** Writes register here (lib/outreach/writes.ts); a name absent from both tables does not exist. */
-const OPS: Record<string, Op> = { ...READS };
-export function registerOps(ops: Record<string, Op>) { Object.assign(OPS, ops); }
+/** The operations: these and no others. A name absent here does not exist on the server. */
+const OPS: Record<string, Op> = { ...READS, ...WRITE_OPS };
 
 // ── CORS ────────────────────────────────────────────────────────────────────────────────
 

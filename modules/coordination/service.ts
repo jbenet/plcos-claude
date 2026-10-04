@@ -366,3 +366,37 @@ export async function adjudicateConflict(
     );
   });
 }
+
+export type OverlapChoice = 'mention_both' | 'send_separately' | 'wait';
+
+/**
+ * Record a coordinated overlap (docs/27 §4, rule 5): an SPV pitched to an LP with an open fund
+ * discussion. Not a block since 4 Oct 2026 — but never silent either: the choice and a dated follow-up
+ * are on the record, always. Returns the overlap's id.
+ */
+export async function recordOverlap(
+  actorId: string,
+  args: {
+    entityId: string; vehicleId: string; pursuitId: string; otherVehicleId: string; otherPursuitId: string | null;
+    choice: OverlapChoice; followUpOn: string; ticketId: string | null; note?: string | null;
+  },
+  q?: Queryable,
+): Promise<string> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.followUpOn)) {
+    throw new Error('An overlap needs a dated follow-up (rule 5): without one, the deferred side loses silently.');
+  }
+  const db = q ?? (await getDb());
+  const row = await db.one<{ id: string }>(
+    `insert into coordination.overlap (entity_id, vehicle_id, pursuit_id, other_vehicle_id, other_pursuit_id, choice,
+       follow_up_on, ticket_id, recorded_by, note)
+     values (identity.canonical_entity_id($1::uuid), $2, $3, $4, $5, $6, $7::date, $8, $9, $10) returning overlap_id::text id`,
+    [args.entityId, args.vehicleId, args.pursuitId, args.otherVehicleId, args.otherPursuitId, args.choice,
+     args.followUpOn, args.ticketId, actorId, args.note ?? null],
+  );
+  await db.query(
+    `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
+     values ($1, 'coordination.overlap_recorded', 'overlap', $2, $3)`,
+    [actorId, row!.id, JSON.stringify({ choice: args.choice, followUpOn: args.followUpOn, vehicleId: args.vehicleId, otherVehicleId: args.otherVehicleId, ticketId: args.ticketId })],
+  );
+  return row!.id;
+}

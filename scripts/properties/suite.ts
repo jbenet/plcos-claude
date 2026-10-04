@@ -95,6 +95,7 @@ export async function runProperties(check: Check) {
   // The mail desk's API (docs/27): indicated amounts, the outreach routes, tokens and redaction.
   await (await import('./outreach')).outreachProperties(check, db);
   await (await import('./outreach-api')).outreachReadProperties(check, db);
+  await (await import('./outreach-writes')).outreachWriteProperties(check, db);
   await db.close();
 
   await (await import('./pipeline')).hardeningVariations(check);
