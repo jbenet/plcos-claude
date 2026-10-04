@@ -22,8 +22,11 @@ fi
 
 read_item() {
   local status=0 value
-  value="$(env_or_command "$1" security find-generic-password -s "$SERVICE" -a "$2" -w 2>/dev/null)" || status=$?
+  # An unanswered Keychain prompt must not hold the live server down (4 Oct 2026: a ship's restart waited
+  # on it until the smoke test rolled back). After 15 s the read gives up and the server starts without it.
+  value="$(env_or_command "$1" perl -e 'alarm shift; exec @ARGV' 15 security find-generic-password -s "$SERVICE" -a "$2" -w 2>/dev/null)" || status=$?
   [ "$status" -eq 0 ] && printf '%s' "$value"
+  [ "$status" -eq 142 ] && echo "[mailguard] The Keychain prompt for $2 was not answered in 15 s; starting without it (choose Always Allow next time)." >&2
   return 0
 }
 
