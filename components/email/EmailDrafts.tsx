@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
-import { draftsOn, gmailStatus, moveBlocks, PURPOSE_LABEL, warningsFor, type Draft } from '@/modules/email';
+import { draftsOn, gmailStatus, moveBlocks, PURPOSE_LABEL, voiceOf, warningsFor, type Draft, type Voice } from '@/modules/email';
 import { EmailDraftBox, type DraftView, type GmailView } from './EmailDraftBox';
 import { NewDraftButton } from './NewDraftButton';
 import s from './email.module.css';
@@ -9,7 +9,8 @@ import s from './email.module.css';
 /**
  * The email box on a page that suggests an email (docs/25 §Where boxes appear): the LP page's first
  * message and follow-ups, and a route's intro ask. Shows the signed-in person's own drafts here —
- * nobody else's — with the newest open, and a button to start one.
+ * nobody else's — with the newest open, and a button to start one. On the LP page the button is the
+ * email the route calls for (docs/email-guidelines.md §Kinds), with the other kind beside it.
  */
 
 export interface DraftsWhere { pursuitId?: string; entityId?: string; connectorId?: string; vehicleId?: string }
@@ -19,18 +20,21 @@ async function origin(): Promise<string> {
   return `http://${h.get('host') ?? 'localhost'}`;
 }
 
-async function view(d: Draft): Promise<DraftView> {
+async function view(d: Draft, voice: Voice): Promise<DraftView> {
+  const fresh = d.status === 'editing' && d.revision === 1;
   return {
     draftId: d.draftId, purposeLabel: PURPOSE_LABEL[d.purpose], revision: d.revision,
     to: d.to.join(', '), cc: d.cc.join(', '), bcc: d.bcc.join(', '), subject: d.subject, mode: d.mode, doc: d.doc, text: d.bodyText,
     attachments: d.attachments.map((a) => ({ attachmentId: a.attachmentId, filename: a.filename, contentType: a.contentType, sizeBytes: a.sizeBytes, inline: a.inline })),
     status: d.status, gmailAccount: d.gmailAccount, movedAt: d.movedAt?.toISOString() ?? null, movedRevision: d.movedRevision,
-    prefillNote: d.status === 'editing' && d.revision === 1 ? d.prefill?.note ?? null : null,
+    prefillNote: fresh ? d.prefill?.note ?? null : null,
+    prefillSteps: fresh ? d.prefill?.steps ?? null : null,
+    voice: voice.style || voice.samples.length ? { style: voice.style, samples: voice.samples } : null,
     threaded: d.purpose === 'follow_up', warnings: await warningsFor(d), blocks: moveBlocks(d),
   };
 }
 
-export async function EmailDrafts({ title, lede, where, create, path, startLabel }: {
+export async function EmailDrafts({ title, lede, where, create, path, startLabel, alternative }: {
   title: string;
   lede: string;
   where: DraftsWhere;
@@ -38,13 +42,16 @@ export async function EmailDrafts({ title, lede, where, create, path, startLabel
   create: Record<string, string>;
   path: string;
   startLabel: string;
+  /** The other kind of email, offered beside the first (an intro ask's direct note, say). */
+  alternative?: { label: string; create: Record<string, string> } | null;
 }) {
   const user = await (await auth()).currentUser();
   if (user.access === 'viewer') return null;
-  const [drafts, g] = await Promise.all([draftsOn(user, where), gmailStatus(user, await origin())]);
+  const [drafts, g, voice] = await Promise.all([draftsOn(user, where), gmailStatus(user, await origin()), voiceOf(user)]);
   const gmail: GmailView = { mode: g.mode, email: g.email, why: g.why };
   const [open, ...rest] = drafts;
   const fields = { ...create, path };
+  const other = alternative ? { ...alternative.create, path } : null;
   return (
     <div className="card" id="email">
       <div className="chead">
@@ -54,16 +61,20 @@ export async function EmailDrafts({ title, lede, where, create, path, startLabel
       {!open ? (
         <div className={s.start}>
           <p>{lede}</p>
-          <NewDraftButton label={startLabel} fields={fields} />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <NewDraftButton label={startLabel} fields={fields} />
+            {alternative && other && <NewDraftButton label={alternative.label} primary={false} fields={other} />}
+          </div>
         </div>
       ) : (
         <>
-          <EmailDraftBox key={open.draftId} draft={await view(open)} gmail={gmail} path={path} />
+          <EmailDraftBox key={open.draftId} draft={await view(open, voice)} gmail={gmail} path={path} />
           <div className={s.start} style={{ paddingTop: 0, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {open.status === 'in_gmail' && (
               <NewDraftButton label="Write a follow-up in this thread" primary={false} fields={{ purpose: 'follow_up', vehicleId: open.vehicleId, replyToDraftId: open.draftId, path }} />
             )}
             <NewDraftButton label="Start another" primary={false} fields={fields} />
+            {alternative && other && <NewDraftButton label={alternative.label} primary={false} fields={other} />}
           </div>
         </>
       )}
@@ -78,7 +89,7 @@ export async function EmailDrafts({ title, lede, where, create, path, startLabel
                   {d.status === 'in_gmail' && d.movedAt ? `in Gmail since ${shortDate(d.movedAt)}` : `edited ${shortDate(d.updatedAt)}`}
                 </span>
               </summary>
-              <EmailDraftBox key={d.draftId} draft={await view(d)} gmail={gmail} path={path} />
+              <EmailDraftBox key={d.draftId} draft={await view(d, voice)} gmail={gmail} path={path} />
               {d.status === 'in_gmail' && (
                 <div className={s.start} style={{ paddingTop: 0 }}>
                   <NewDraftButton label="Write a follow-up in this thread" primary={false} fields={{ purpose: 'follow_up', vehicleId: d.vehicleId, replyToDraftId: d.draftId, path }} />
@@ -90,8 +101,8 @@ export async function EmailDrafts({ title, lede, where, create, path, startLabel
       )}
       <p className="cover">
         <b>A draft is not a send.</b> Moving puts it in your Gmail Drafts to review and send yourself. The checks above
-        the button read the restrictions, the vehicle&rsquo;s wrap rule and, for an intro ask, its approval; they warn and
-        never block, and every move is recorded.
+        the button read the restrictions, the vehicle&rsquo;s wrap rule, the email guidelines and, for an intro ask, its
+        approval; they warn and never block, and every move is recorded.
       </p>
     </div>
   );

@@ -240,3 +240,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Email drafts — written here, moved into your own Gmail](entries/email-drafts.md)
 - [MCP access — agents read and draft as you, with a token from Preferences](entries/mcp.md)
 - [The Email card sits above the timeline](entries/email-card-up.md)
+- [Email guidelines — drafts written to the recipient, by the route holder, about one vehicle](entries/email-guidelines.md)

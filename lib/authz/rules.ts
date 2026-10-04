@@ -49,6 +49,8 @@ export const actionRules = {
   // MCP tokens (docs/26): a person's own; the service revokes only the caller's.
   'app/settings/actions.ts#createMcpTokenAction': { action: 'mutate', scope: 'self' },
   'app/settings/actions.ts#revokeMcpTokenAction': { action: 'mutate', scope: 'self' },
+  // Your own voice for drafts (docs/email-guidelines.md §Voice): only ever the caller's row.
+  'app/settings/actions.ts#saveVoiceAction': { action: 'mutate', scope: 'self' },
   'app/grants/actions.ts#saveInvitation': { action: 'admin', scope: 'global' },
   'app/materials/actions.ts#proposeSend': { action: 'mutate', scope: 'vehicle' },
   'app/orgs/enrichment/select.ts#choose': { action: 'admin', scope: 'global' },

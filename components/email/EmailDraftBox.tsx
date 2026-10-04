@@ -38,6 +38,10 @@ export interface DraftView {
   movedAt: string | null;
   movedRevision: number | null;
   prefillNote: string | null;
+  /** The guideline's structure, when the draft started empty (docs/email-guidelines.md). */
+  prefillSteps: string[] | null;
+  /** The owner's own voice from Preferences, shown beside the editor; null when they have none. */
+  voice: { style: string; samples: string[] } | null;
   threaded: boolean;
   warnings: WarningView[];
   blocks: Array<{ field: string; text: string }>;
@@ -273,7 +277,30 @@ export function EmailDraftBox({ draft, gmail, path }: { draft: DraftView; gmail:
           {saving === 'saving' ? 'Saving…' : saving === 'dirty' ? 'Unsaved' : saving === 'conflict' ? 'Changed elsewhere' : saving === 'error' ? 'Not saved' : 'Saved'}
         </span>
       </div>
-      {draft.prefillNote && <p className={s.prefill}>{draft.prefillNote}</p>}
+      {draft.prefillNote && (
+        <div className={s.prefill}>
+          <p>{draft.prefillNote}</p>
+          {draft.prefillSteps && draft.prefillSteps.length > 0 && (
+            <ol aria-label="The structure of this email">{draft.prefillSteps.map((x, i) => <li key={i}>{x}</li>)}</ol>
+          )}
+        </div>
+      )}
+      {status === 'editing' && (
+        <details className={s.voice}>
+          <summary>{draft.voice ? 'Your voice' : 'Your voice: not written yet'}</summary>
+          {draft.voice ? (
+            <>
+              {draft.voice.style && <p className={s.voiceStyle}>{draft.voice.style}</p>}
+              {draft.voice.samples.map((x, i) => (
+                <details key={i} className={s.sample}><summary>Sample {i + 1}</summary><pre>{x}</pre></details>
+              ))}
+              <p className={s.voiceHint}>From Preferences → Your voice. Write it the way these read.</p>
+            </>
+          ) : (
+            <p className={s.voiceHint}>Add a few lines on how you write, and three to five emails you sent, in Preferences → Your voice. Drafts written for you follow them.</p>
+          )}
+        </details>
+      )}
 
       <div className={s.fields}>
         <label><span>To</span><input value={to} onChange={(e) => { setTo(e.target.value); changed(); }} placeholder="name@example.org, …" aria-label="To" autoComplete="off" /></label>

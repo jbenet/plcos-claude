@@ -161,3 +161,21 @@ export async function deleteGmailAccount(userId: string, q: Queryable): Promise<
 export async function touchGmailAccount(userId: string, q: Queryable): Promise<void> {
   await q.query('update email.gmail_account set last_used_at = now() where user_id = $1', [userId]);
 }
+
+// ── A sender's voice (docs/email-guidelines.md §Voice) ──────────────────────────────────
+
+export interface VoiceRow { style: string; samples: string[]; updatedAt: Date }
+
+export async function getVoice(userId: string, q?: Queryable): Promise<VoiceRow | null> {
+  const db = q ?? (await getDb());
+  return db.one<VoiceRow>('select style, samples, updated_at "updatedAt" from email.voice where user_id = $1', [userId]);
+}
+
+export async function upsertVoice(userId: string, style: string, samples: string[], q: Queryable): Promise<void> {
+  await q.query(`insert into email.voice (user_id, style, samples) values ($1, $2, $3)
+    on conflict (user_id) do update set style = excluded.style, samples = excluded.samples, updated_at = now()`, [userId, style, samples]);
+}
+
+export async function deleteVoice(userId: string, q: Queryable): Promise<boolean> {
+  return (await q.query<{ user_id: string }>('delete from email.voice where user_id = $1 returning user_id::text', [userId])).length > 0;
+}

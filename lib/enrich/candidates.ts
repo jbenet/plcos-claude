@@ -386,12 +386,18 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   const candidateKeys = new Set(set.map(c => c.key));
   const aliases = [...await importEntityKeys(db)].filter(([, key]) => candidateKeys.has(key));
   await writeFile(join(dir, 'entity-keys.json'), JSON.stringify(Object.fromEntries(aliases)) + '\n', 'utf8');
-  const team = await db.query<{ handle: string; name: string; role: string }>(
-    `select handle, name, role from platform.app_user where active order by name`);
+  // The voice rides on the same query, so the export's query count stays bounded (triage-export property).
+  const team = await db.query<{ handle: string; name: string; role: string; style: string | null; samples: string[] | null }>(
+    `select u.handle, u.name, u.role, v.style, v.samples from platform.app_user u left join email.voice v on v.user_id = u.id
+      where u.active order by u.name`);
   await writeFile(join(dir, 'vehicles.json'), JSON.stringify(await db.query('select slug, name from platform.vehicle')) + '\n', 'utf8');
   await writeFile(join(dir, 'team.json'), JSON.stringify(team.map((u) => ({
     handle: u.handle, name: u.name, role: u.role,
   })), null, 1) + '\n', 'utf8');
+  // Each sender's voice (docs/email-guidelines.md §Voice): their own notes and sample emails, which
+  // they chose for whoever drafts for them. W5 writes a first message in its sender's voice from it.
+  await mkdir(join(dir, 'us'), { recursive: true });
+  await writeFile(join(dir, 'us', 'voice.json'), JSON.stringify({ voices: team.filter((u) => u.style || u.samples?.length).map((u) => ({ handle: u.handle, name: u.name, style: u.style ?? '', samples: u.samples ?? [] })) }, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 });
   await writeTriageExport(dir, await makeTriageExport(dir, snapshot.candidates, snapshot.touches, snapshot.entries, team));
   // Identity review is independent. A cancelled statement rolls back its own transaction,
   // after the other research files have been written, and never suppresses their receipt.
