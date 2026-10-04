@@ -31,7 +31,7 @@ export async function runWorkflow(input: Record<string, unknown>, root: string =
     try { if (!(await realpath(file)).startsWith(dir + sep)) throw new Error('Input escapes enrich.'); attached[`${folder}/${k}.json`] = JSON.parse(await readFile(file, 'utf8')); }
     catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT' || protocol === 'w1c') throw e; }
   }
-  for (const file of protocol === 'w5' ? ['candidates.jsonl', 'connections.jsonl', 'triage.jsonl', 'us/team.json', 'us/network.json', 'presence/site.json'] : ['us/network.json']) {
+  for (const file of protocol === 'w5' ? ['candidates.jsonl', 'connections.jsonl', 'triage.jsonl', 'us/team.json', 'us/voice.json', 'us/network.json', 'presence/site.json'] : ['us/network.json']) {
     try {
       if (!(await realpath(join(dir, file))).startsWith(dir + sep)) throw new Error('Input escapes enrich.');
       const value = await readFile(join(dir, file), 'utf8');
@@ -40,7 +40,7 @@ export async function runWorkflow(input: Record<string, unknown>, root: string =
   }
   const doc = await readFile(`docs/workflows/${protocols[protocol]}.md`, 'utf8');
   const rules = await readFile('docs/agent-rules/real-data.md', 'utf8') + (protocol === 'w5'
-    ? await readFile('docs/agent-rules/domain.md', 'utf8') + await readFile('lib/enrich/capacity.ts', 'utf8')
+    ? await readFile('docs/agent-rules/domain.md', 'utf8') + await readFile('lib/enrich/capacity.ts', 'utf8') + await readFile('docs/email-guidelines.md', 'utf8')
     : protocol === 'w1c' ? (await readFile('docs/workflows/w1-profile.md', 'utf8')).split('## Facts')[1]!.split('## Capacity')[0] : '');
   const schema = await readFile(protocol === 'w5' ? 'lib/enrich/strategy.ts' : 'lib/enrich/schema.ts', 'utf8');
   const review = `fact-review-${Date.now()}.jsonl`;

@@ -34,6 +34,29 @@ export async function createMcpTokenAction(formData: FormData): Promise<MadeToke
   return { ok: true, secret, prefix: token.prefix, label: token.label };
 }
 
+export type SavedVoice = { ok: true; samples: number; styleChars: number; deleted: boolean } | { ok: false; error: string };
+
+/**
+ * Your voice (docs/email-guidelines.md §Voice): notes on how you write and up to five emails of
+ * yours, for whoever drafts for you. Your own only; saving it empty deletes it.
+ */
+export async function saveVoiceAction(formData: FormData): Promise<SavedVoice> {
+  const user = await requireAction('app/settings/actions.ts#saveVoiceAction', formData);
+  const { saveVoice, DraftRefused } = await import('@/modules/email');
+  const wipe = formData.get('delete') === '1';
+  try {
+    const v = await saveVoice(user, {
+      style: wipe ? '' : String(formData.get('style') ?? ''),
+      samples: wipe ? [] : formData.getAll('sample').map(String),
+    });
+    revalidatePath('/settings');
+    return { ok: true, samples: v.samples.length, styleChars: v.style.length, deleted: !v.style && !v.samples.length };
+  } catch (e) {
+    if (e instanceof DraftRefused) return { ok: false, error: e.message };
+    throw e;
+  }
+}
+
 export async function revokeMcpTokenAction(formData: FormData): Promise<void> {
   const user = await requireAction('app/settings/actions.ts#revokeMcpTokenAction', formData);
   const { revokeMcpToken } = await import('@/modules/platform');

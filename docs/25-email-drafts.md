@@ -122,9 +122,11 @@ displays. **Later:** S3, with the same hash as the key, when the service is depl
 
 ## 7. Where the boxes are
 
-- **LP page** (`/<vehicle>/pipeline/<id>`): "Email", under the suggested strategy. A first message starts from
-  the strategy's angle (W5) with a note that it was written about them and must be rewritten to them; amounts
-  are never filled in. The research's email claim, if any, fills To.
+- **LP page** (`/<vehicle>/pipeline/<id>`): "Email", above the timeline. It offers the email the route calls
+  for (docs/email-guidelines.md, 3 Oct 2026): the intro ask to the connector when the best route goes through
+  someone the LP hasn't met, else the first message to the LP. A draft starts from the strategy's own
+  `firstMessage` (W5 1.11) when it is clean, and empty with the guideline's structure otherwise; never from the
+  angle or the analysis, never with a template line or an amount. The research's email claim, if any, fills To.
 - **Warm intro routes**, on the selected route: "Intro ask email" to the first connector, about the target,
   for the vehicle in the switcher.
 - **Follow-up in this thread**, on any draft that went to Gmail.
@@ -142,6 +144,9 @@ Each person sees only their own drafts. Viewers see no box.
   checked; another vehicle named in the draft is flagged; attached files are noted as not checked against the
   materials matrix; a 506(b) vehicle warns against general solicitation.
 - **Grants (rule 12):** a grants-rail draft without a funder invitation shows **Stop**.
+- **Guidelines:** analysis, citations, third person about the recipient, a second message, an amount, private
+  terms, another vehicle's language or a performance claim show as **Check** (`lib/email/lint.ts`); so does a
+  draft the strategy gives to another sender.
 - **Intro asks (rule 3):** without an approved INTRO_ASK for that connector, the draft says to propose it and
   wait for approval before sending.
 - Warnings never block a move. Each move is audit-logged (`email.draft_moved`) with ids, counts, size, how it

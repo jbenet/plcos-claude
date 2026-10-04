@@ -20,10 +20,31 @@ export interface Attachment {
   contentId: string;
 }
 
+/** The kinds of email in docs/email-guidelines.md; the draft's purpose is how it is stored and checked. */
+export type EmailKind = 'intro_ask' | 'after_intro' | 'cold' | 'follow_up' | 'reply';
+
+export const KIND_LABEL: Record<EmailKind, string> = {
+  intro_ask: 'Intro ask to the connector',
+  after_intro: 'First message from the route holder',
+  cold: 'Cold note',
+  follow_up: 'Follow-up',
+  reply: 'Reply owed',
+};
+
+/**
+ * Where a new draft's first words came from. `strategy`: the strategy's own first message, as written
+ * (W5's `firstMessage`). `empty`: nothing clean to start from, so the box starts empty and `steps`
+ * lists the guideline's structure. `template` (before 3 Oct 2026) and `previous` (a follow-up) as before.
+ */
 export interface Prefill {
-  source: 'strategy' | 'template' | 'previous';
-  /** What a person should know before moving it: e.g. that a strategy's angle is written about them, not to them. */
+  source: 'strategy' | 'template' | 'previous' | 'empty';
+  /** What a person should know before moving it. */
   note: string;
+  /** The guideline's structure, for an empty box. */
+  steps?: string[];
+  kind?: EmailKind | null;
+  /** Who the strategy says sends it: the route holder. */
+  from?: string | null;
   suggestionId?: string | null;
   madeAt?: string | null;
 }
@@ -72,7 +93,7 @@ export interface Draft {
  */
 export interface DraftWarning {
   level: 'stop' | 'check' | 'note';
-  rule: 'restriction' | 'wrap' | 'grants' | 'intro_ticket' | 'other_vehicle' | 'recipients' | 'attachments' | 'size' | 'empty';
+  rule: 'restriction' | 'wrap' | 'grants' | 'intro_ticket' | 'other_vehicle' | 'recipients' | 'attachments' | 'size' | 'empty' | 'guidelines' | 'sender';
   text: string;
 }
 

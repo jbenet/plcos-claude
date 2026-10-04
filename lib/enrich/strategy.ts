@@ -10,8 +10,40 @@
  * and 2027.
  */
 import { bandByRule } from './capacity';
+import { greeted, lintEmail, sentenceCount, wordCount } from '../email/lint';
 
 export type Level = 'high' | 'medium' | 'low' | 'unknown';
+
+/**
+ * The kinds of email (docs/email-guidelines.md): an intro ask to the connector, with a note they can
+ * forward; the first message after an introduction (or from a team member who knows them); a cold
+ * note, rare; a follow-up to someone who has met us; a reply we owe.
+ */
+export type EmailKind = 'intro_ask' | 'after_intro' | 'cold' | 'follow_up' | 'reply';
+export const EMAIL_KINDS: EmailKind[] = ['intro_ask', 'after_intro', 'cold', 'follow_up', 'reply'];
+
+/**
+ * The next email to write, as its own field (W5 1.11, Juan 3 Oct 2026: "This is not a good email").
+ * The words go to the recipient as they stand: written to them, in the sender's voice, with none of
+ * the analysis — no sources, reading dates, notes, scores or instructions to ourselves. The LP page's
+ * Email box starts from this and nothing else.
+ */
+export interface FirstMessage {
+  kind: EmailKind;
+  /** The route holder who sends it: a team member's name as in us/team.json. */
+  from: string;
+  /** The recipient: the LP, or for an intro ask the connector. `key` is their entity key when known. */
+  to: { name: string; key?: string | null; isPerson?: boolean };
+  subject: string;
+  /** Greeting to sign-off, paragraphs separated by a blank line. Aim for 80–150 words. */
+  body: string;
+  /** An intro ask's note for the connector to forward: 3–4 sentences, written for the LP to read. */
+  blurb?: string | null;
+}
+
+/** GUESSES (docs/email-guidelines.md): the aim is 80–150 words; past these a draft is refused. */
+export const FIRST_MESSAGE_MAX_WORDS = 200;
+export const BLURB_MAX_WORDS = 100;
 
 export interface Strategy {
   key: string;
@@ -55,6 +87,8 @@ export interface Strategy {
   risks: string[];
   list: 'this year' | '2027' | 'not now';
   confidence: 'high' | 'medium' | 'low';
+  /** Optional until a W5 pass fills it; validated whenever present (`checkFirstMessage`). */
+  firstMessage?: FirstMessage;
 }
 
 const isStr = (x: unknown): x is string => typeof x === 'string' && x.trim().length > 0;
@@ -257,5 +291,60 @@ export function checkStrategy(s: unknown, expectKey?: string): string[] {
   if (!x.ask || !isStr(x.ask.vehicle)) p.push('ask needs a vehicle');
   if (!['this year', '2027', 'not now'].includes(x.list ?? '')) p.push('list must be this year, 2027 or not now');
   if (x.route && !['A', 'B', 'C', 'D'].includes(x.route.tier)) p.push('route tier must be A–D');
+  if (x.firstMessage !== undefined && x.firstMessage !== null) p.push(...checkFirstMessage(x));
+  return p;
+}
+
+/** The vehicle kind an ask names, for the one-vehicle check: an SPV, a fund, or not known. */
+export function askVehicleKind(ask: Partial<Strategy['ask']> | undefined): 'fund' | 'spv' | null {
+  if (!ask) return null;
+  if (ask.shape === 'SPV' || /\bspv\b/i.test(ask.vehicle ?? '')) return 'spv';
+  if (/fund|neurotech|crypto|rails/i.test(ask.vehicle ?? '')) return 'fund';
+  return null;
+}
+
+/**
+ * The first message against docs/email-guidelines.md: the right recipient and sender for the kind,
+ * the greeting to that recipient, no analysis or private detail in the words, one vehicle, and the
+ * length. Each problem starts "firstMessage".
+ */
+export function checkFirstMessage(x: Partial<Strategy>): string[] {
+  const p: string[] = [];
+  const m = x.firstMessage as Partial<FirstMessage> | undefined;
+  if (!m || typeof m !== 'object') return ['firstMessage must be an object'];
+  if (!EMAIL_KINDS.includes(m.kind as EmailKind)) p.push(`firstMessage.kind must be one of ${EMAIL_KINDS.join(', ')}`);
+  if (!isStr(m.from)) p.push('firstMessage needs from, the team member who sends it');
+  if (!m.to || !isStr(m.to.name)) p.push('firstMessage needs to.name');
+  if (!isStr(m.subject)) p.push('firstMessage needs a subject');
+  else if (m.subject.length > 90) p.push('firstMessage.subject is over 90 characters');
+  if (!isStr(m.body)) { p.push('firstMessage needs a body'); return p; }
+  const lpName = x.name ?? null;
+  const toLp = Boolean(m.to?.key && (m.to.key === x.key || m.to.key === x.entityId));
+  // Who it goes to, by kind: an intro ask goes to the connector, never the LP; the others to the LP.
+  if (m.kind === 'intro_ask') {
+    if (toLp || (m.to?.name && lpName && m.to.name.trim().toLowerCase() === lpName.trim().toLowerCase())) p.push('firstMessage: an intro ask goes to the connector, not the LP');
+    if (!x.route) p.push('firstMessage: an intro ask needs a route through someone');
+    if (!isStr(m.blurb)) p.push('firstMessage: an intro ask needs a blurb the connector can forward');
+    else {
+      const n = sentenceCount(m.blurb);
+      if (n < 2 || n > 5) p.push(`firstMessage.blurb has ${n} sentences; write 3–4`);
+      if (wordCount(m.blurb) > BLURB_MAX_WORDS) p.push(`firstMessage.blurb is over ${BLURB_MAX_WORDS} words`);
+    }
+  } else if (m.to?.key && !toLp) p.push('firstMessage: this kind goes to the LP, but to.key is someone else');
+  // A route through someone means the first email is the intro ask (or comes after it), not a cold note.
+  if (m.kind === 'cold' && x.route && (x.route.tier === 'A' || x.route.tier === 'B')) p.push(`firstMessage: a cold note while the route goes through ${x.route.via} (tier ${x.route.tier}); write the intro ask, or the message after it`);
+  if (m.kind === 'after_intro' && !x.route) p.push('firstMessage: after_intro needs the route it follows');
+  // The greeting addresses the recipient: an intro ask addressed to the LP is a cold note in disguise.
+  const hi = greeted(m.body);
+  if (hi && m.to?.name && !m.to.name.toLowerCase().split(/[\s,]+/).includes(hi.toLowerCase())) p.push(`firstMessage greets ${hi}, but goes to ${m.to.name}`);
+  const kind = askVehicleKind(x.ask);
+  const vehicle = kind ? { name: x.ask?.vehicle ?? '', kind } : null;
+  const lint = (text: string, recipient: { name: string | null; isPerson: boolean } | null, maxWords: number) =>
+    lintEmail(text, { recipient, vehicle, maxWords }).map((i) => `${i.text}${i.match ? ` (“${i.match}”)` : ''}`);
+  // The body talks to its recipient; an intro ask's body talks about the LP to the connector, which is fine.
+  const bodyTo = m.kind === 'intro_ask' ? null : { name: m.to?.name ?? lpName, isPerson: m.to?.isPerson ?? true };
+  for (const t of lint(m.body, bodyTo, FIRST_MESSAGE_MAX_WORDS)) p.push(`firstMessage.body: ${t}`);
+  if (isStr(m.blurb)) for (const t of lint(m.blurb, { name: lpName, isPerson: m.to?.isPerson ?? true }, BLURB_MAX_WORDS)) p.push(`firstMessage.blurb: ${t}`);
+  for (const t of lint(m.subject ?? '', null, 30)) p.push(`firstMessage.subject: ${t}`);
   return p;
 }

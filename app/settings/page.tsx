@@ -7,6 +7,7 @@ import { auth } from '@/lib/auth';
 import { THEMES } from '@/lib/theme';
 import { GmailConnect } from '@/components/email/GmailConnect';
 import { McpTokens } from '@/components/mcp/McpTokens';
+import { VoiceCard } from '@/components/email/VoiceCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,8 +57,8 @@ async function Preferences({ searchParams }: { searchParams: Promise<{ gmail?: s
       <div className="lbl">Preferences</div>
       <h1>Your settings</h1>
       <p className="sublede">
-        What you choose for yourself, kept in this browser — except your Gmail connection and your
-        MCP tokens, which the server keeps for you alone. Nothing on this page changes what a number means, who can
+        What you choose for yourself, kept in this browser — except your Gmail connection, your voice
+        for drafts and your MCP tokens, which the server keeps for you alone. Nothing on this page changes what a number means, who can
         approve anything, or what anyone else sees.
       </p>
 
@@ -90,6 +91,9 @@ async function Preferences({ searchParams }: { searchParams: Promise<{ gmail?: s
 
       {/* Your own Gmail, for moving drafts there (docs/25). Not taste: it is audited and lives server-side. */}
       <GmailConnect outcome={gmail} />
+
+      {/* How you write, for drafts written for you (docs/email-guidelines.md §Voice). Server-side: drafters read it. */}
+      <VoiceCard />
 
       {/* Tokens for agents over MCP (docs/26). Server-side and audited, like the Gmail connection. */}
       <McpTokens />
