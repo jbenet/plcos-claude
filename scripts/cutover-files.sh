@@ -19,7 +19,7 @@ case "$cmd" in list|pack) ;; *) sed -n 2,6p "$0" >&2; exit 2;; esac
 [ -d "$root" ] || { echo "Refused: $root is not a folder." >&2; exit 2; }
 root="$(cd "$root" && pwd -P)"
 
-EXCLUDE_DIRS=(postgres database dakota logs rehearsal backups)
+EXCLUDE_DIRS=(postgres database dakota logs rehearsal backups cloud-copy)
 EXCLUDE_FILES=(database.lock postgres.url .preview-copy)
 EXPORTS=(research-set.jsonl candidates.jsonl team.json triage.jsonl identity-review.jsonl lp-unit-review.jsonl)
 prune=()

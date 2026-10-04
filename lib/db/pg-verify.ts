@@ -33,6 +33,9 @@ export async function snapshot(url: string, batchSize = 5000): Promise<Snapshot>
   await client.connect();
   try {
     await client.query('begin isolation level repeatable read read only');
+    // Rows are hashed as text, so pin how values print, as pg-copy does: otherwise two servers in different
+    // time zones (the Mac's cluster and a cloud one in UTC) print every timestamptz differently and never match.
+    await client.query("set local timezone = 'UTC'; set local datestyle = 'ISO, YMD'; set local intervalstyle = 'postgres'; set local bytea_output = 'hex'; set local extra_float_digits = 3;");
     const q = client as unknown as Query;
     const tables = new Map<string, { count: number; checksum: string }>();
     const list = await client.query<{ schema: string; name: string }>(
