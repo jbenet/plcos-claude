@@ -101,12 +101,18 @@ export async function outreachReadProperties(check: Check, db: Db) {
     `vehicles: ${vFund.json?.data?.map((v: { slug: string }) => v.slug).join(',')}; queue on the SPV: ${qSpv.status}; all: ${qAll.json?.data?.length} rows, all on the fund; another vehicle's pursuit by id: ${qOne.json?.data?.length} rows; no scope: ${none.status}; no token: ${anon.status}; a write with a read token: ${write.status}`);
 
   // ── Restricted values ─────────────────────────────────────────────────────────────────
-  const vq = await call(viewerTok, 'queue', { vehicle: 'all', limit: '1000' });
+  // One LP at a time: the whole demo queue is longer than a page.
+  const rowsOf = async (secret: string) => {
+    const all = await Promise.all([bothSpv, bothFund, spvOnlyP].map((id) => call(secret, 'queue', { vehicle: 'all', pursuitId: id })));
+    return { status: all.every((r) => r.status === 200) ? 200 : all.find((r) => r.status !== 200)!.status, text: all.map((r) => r.text).join('\n'),
+      json: { data: all.flatMap((r) => r.json?.data ?? []) } };
+  };
+  const vq = await rowsOf(viewerTok);
   const vv = await call(viewerTok, 'vehicles');
-  const wq = await call(wide, 'queue', { vehicle: 'all', limit: '1000' });
+  const wq = await rowsOf(wide);
   const viewerText = vq.text + vv.text;
   check('Outreach API: restricted values never appear — no amounts, words, addresses or restriction reasons to a viewer, and licensed (Dakota) text to no token',
-    vq.status === 200 && vv.status === 200 && !viewerText.includes('765432') && !viewerText.includes('INVENTED_OUTREACH_R2_NEXT') && !viewerText.includes('INVENTED_OUTREACH_FIRST_STEP')
+    vq.status === 200 && vq.json.data.length === 3 && vv.status === 200 && !viewerText.includes('765432') && !viewerText.includes('INVENTED_OUTREACH_R2_NEXT') && !viewerText.includes('INVENTED_OUTREACH_FIRST_STEP')
     && !viewerText.includes('INVENTED_OUTREACH_R4_REASON') && vv.json.data.every((v: { hard: unknown }) => v.hard === null)
     && wq.status === 200 && !wq.text.includes('INVENTED_OUTREACH_R3_LICENSED') && wq.text.includes('INVENTED_OUTREACH_R4_REASON') && wq.text.includes('765432'),
     `viewer: ${vq.json?.data?.length} rows, amounts/words/reasons ${/765432|INVENTED_OUTREACH_R2|R4_REASON/.test(viewerText) ? 'LEAKED' : 'withheld'}; Juan's token: licensed ${wq.text.includes('R3_LICENSED') ? 'LEAKED' : 'absent'}, reasons and amounts ${wq.text.includes('R4_REASON') && wq.text.includes('765432') ? 'present' : 'MISSING'}`);

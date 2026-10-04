@@ -173,10 +173,10 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
       from strategy.pursuit p join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
       left join platform.app_user u on u.id = p.status_set_by where p.pursuit_id = any($1::uuid[])`, [ids]),
     // The latest strategy that was not dismissed or withdrawn; never one written from licensed (Dakota) data.
-    db.query<{ pursuit_id: string; data: Record<string, unknown>; made_at: Date | string }>(`select distinct on (pursuit_id) pursuit_id::text, data, made_at
-      from strategy.suggestion where pursuit_id = any($1::uuid[]) and status not in ('dismissed', 'withdrawn')
-        and data->>'source' is distinct from 'dakota'
-      order by pursuit_id, created_at desc, suggestion_id`, [ids]),
+    db.query<{ pursuit_id: string; data: Record<string, unknown>; made_at: Date | string }>(`select distinct on (s.pursuit_id) s.pursuit_id::text pursuit_id, s.data, s.made_at
+      from strategy.suggestion s where s.pursuit_id = any($1::uuid[]) and s.status not in ('dismissed', 'withdrawn')
+        and s.data->>'source' is distinct from 'dakota'
+      order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [ids]),
     db.query<{ entity_id: string; vehicle_id: string; name: string; status: PursuitStatus }>(`select identity.canonical_entity_id(p.entity_id)::text entity_id,
       p.vehicle_id::text, v.name, p.status::text status from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id
       where v.phase <> 'historical' and identity.canonical_entity_id(p.entity_id) = any($1::uuid[])`, [pageEntities]),

@@ -68,6 +68,8 @@ The registry is `lib/mcp/tools.ts`. A name absent there does not exist; a token 
 | `replies_owed` | read | LPs who spoke last with nothing from us since; LPs at Connecting waiting on a first reply | words on the vehicle |
 | `feedback_issues` | read | Open issues, or one in full (a Viewer gets no body) | any |
 | `changelog` | read | The latest entries, or one entry's text | any |
+| `outreach_vehicles` | read | The mail desk's vehicles: hard, soft and indicated apart, raise window, SPV seats (docs/27) | the vehicle |
+| `outreach_queue` | read | The mail desk's queue: status, close track and seat apart, checks, materials, bucket; health-redacted (docs/27) | the vehicle |
 | `create_email_draft` | draft | A first message or an intro ask, saved in the app for its owner; not moved to Gmail, not sent | GP on the vehicle |
 | `file_feedback` | draft | An issue, journaled like the feedback box; only the live app files | any GP |
 
@@ -137,7 +139,7 @@ restricted values, the registry, revocation, audit, budgets, size, the acting us
    Read and draft, and press Make token. Copy what it shows; it is not shown again.
 2. In a terminal: `claude mcp add --transport http --scope user capital-os http://localhost:3000/api/mcp --header "Authorization: Bearer plcos_mcp_…"`
    (Preferences shows this line with the token filled in). `--scope user` makes it available in every folder.
-3. In Claude Code, `/mcp` lists `capital-os` with 9 tools (or 11). Ask, for example, "Which LPs on PLC Neurotech
+3. In Claude Code, `/mcp` lists `capital-os` with 11 tools (or 13). Ask, for example, "Which LPs on PLC Neurotech
    owe a reply?"
 
 That command stores the token in `~/.claude.json`. To keep it out of the file, put the server in a project's

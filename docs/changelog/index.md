@@ -242,3 +242,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [The Email card sits above the timeline](entries/email-card-up.md)
 - [Email guidelines — drafts written to the recipient, by the route holder, about one vehicle](entries/email-guidelines.md)
 - [Email drafts go through mailguard, and only a drafts-only token is accepted](entries/mailguard.md)
+- [Indicated amounts, and an outreach API for the mail desk](entries/outreach-api.md)

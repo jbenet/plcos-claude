@@ -2562,6 +2562,61 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  // The mail desk's asks (docs/27): an indicated amount from the LP page's update box, shown beside soft and hard
+  // on the LP page and the vehicle's status; Preferences makes a desk token with the outreach scope.
+  outreach: [
+    {
+      name: '01-update-box-indicated',
+      path: '/neurotech/pipeline?status=discussing',
+      prepare: async (page) => {
+        await asUser(page);
+        const href = await page.evaluate(() => [...document.querySelectorAll('a')].map((a) => a.getAttribute('href') ?? '')
+          .find((h) => /\/pipeline\/[0-9a-f-]{36}$/.test(h)) ?? null);
+        if (!href) throw new Error('No LP at Discussing on the Neurotech pipeline');
+        await page.goto(new URL(href, page.url()).toString(), { waitUntil: 'networkidle' });
+        const box = page.getByPlaceholder("Add an update: what happened, what changed, what's next");
+        await box.fill('Call today with their CIO: they are thinking $3M-4M for the first close. Next: send the deck by Friday.');
+        await page.locator('input[name=indicated]').check();
+        await box.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -90));
+      },
+    },
+    {
+      name: '02-lp-page-indicated',
+      path: '/neurotech/pipeline?status=discussing',
+      prepare: async (page) => {
+        await asUser(page);
+        const href = await page.evaluate(() => [...document.querySelectorAll('a')].map((a) => a.getAttribute('href') ?? '')
+          .find((h) => /\/pipeline\/[0-9a-f-]{36}$/.test(h)) ?? null);
+        await page.goto(new URL(href!, page.url()).toString(), { waitUntil: 'networkidle' });
+        const box = page.getByPlaceholder("Add an update: what happened, what changed, what's next");
+        await box.fill('Call today with their CIO: they are thinking $3M-4M for the first close. Next: send the deck by Friday.');
+        await page.locator('input[name=indicated]').check();
+        await page.getByRole('button', { name: 'Save update' }).click();
+        await page.waitForFunction((b) => (b as HTMLTextAreaElement).value === '', await box.elementHandle());
+        await page.reload({ waitUntil: 'networkidle' });
+        const line = page.locator('[data-indicated]').first();
+        await line.waitFor();
+        await line.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      },
+    },
+    { name: '03-vehicle-status-indicated', path: '/neurotech/status', prepare: asUser },
+    {
+      name: '04-preferences-desk-token',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        const card = page.locator('#mcp');
+        await card.getByPlaceholder('Claude Code on the Mac').fill("Juan's iPad mail desk");
+        await card.locator('input[name=tools][value=outreach-write]').check();
+        await card.locator('select[name=days]').selectOption('30');
+        await card.getByRole('button', { name: 'Make token' }).click();
+        await card.locator('code').first().waitFor();
+        await card.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+  ],
   // Mailguard (docs/25 §12), on the demo's fake mailguard: Preferences → Email refuses a token that can send, then
   // connects a drafts-only one and tests it. Both tokens are invented by the fake.
   mailguard: [

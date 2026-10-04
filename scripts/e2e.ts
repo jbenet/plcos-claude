@@ -404,7 +404,7 @@ async function main() {
       const again = new Client({ name: 'e2e', version: '0' });
       const refused = await again.connect(new StreamableHTTPClientTransport(new URL(`${base}/api/mcp`), { requestInit: { headers: { Authorization: `Bearer ${secret}` } } }))
         .then(() => false, () => true);
-      if (tools.length !== 11 || summary.data.pursuitId !== lp.page.id || !draft.data.draftId || !send.isError || !refused) {
+      if (tools.length !== 13 || summary.data.pursuitId !== lp.page.id || !draft.data.draftId || !send.isError || !refused) {
         throw new Error(`tools ${tools.length}, summary ${summary.data.pursuitId === lp.page.id}, draft ${Boolean(draft.data.draftId)}, send refused ${Boolean(send.isError)}, revoked refused ${refused}`);
       }
       return { ui: `made a token, listed ${tools.length} tools, searched, summarised, read the pipeline, drafted, was refused a send; revoked it and the next connect failed`, verify: async (db) => {
@@ -415,6 +415,49 @@ async function main() {
         same((await db.query<{ action: string }>(`select action from platform.audit_log where subject_id = $1 and action in ('mcp.token_created', 'mcp.token_revoked', 'mcp.refused') order by id`, [t!.id])).map((r) => r.action),
           ['mcp.token_created', 'mcp.token_revoked', 'mcp.refused'], "the token's own audit entries");
         same((await db.one<{ status: string; owner: string }>(`select d.status, u.handle owner from email.draft d join platform.app_user u on u.id = d.owner_id where d.subject = $1`, [mcpSubject])), { status: 'editing', owner: 'juan' }, 'the MCP draft (not moved, its owner)');
+      } };
+    });
+
+    // The mail desk's outreach API (docs/27-outreach-api.md) ──────────────────────────────────
+    // A desk token made in Preferences, used over plain HTTP as a device would: read the vehicles and the
+    // queue, record an update with an indicated amount, ask for a SEND approval; the LP page shows the amount.
+    const deskLabel = `${MARK} desk`;
+    const deskKey = `e2e-desk-${Date.now().toString(36)}`;
+    await check('Outreach API: make a desk token in Preferences; read vehicles and the queue, record an indicated amount and ask for a SEND approval over HTTP; the LP page shows it', async () => {
+      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      const card = page.locator('#mcp');
+      await card.getByPlaceholder('Claude Code on the Mac').fill(deskLabel);
+      await card.locator('input[name=tools][value=outreach-write]').check();
+      await card.locator('select[name=days]').selectOption('30');
+      await card.getByRole('button', { name: 'Make token' }).click();
+      const secret = (await card.locator('code').first().innerText()).trim();
+      if (!secret.startsWith('plcos_mcp_')) throw new Error('no token was shown');
+      const api = async (method: 'GET' | 'POST', path: string, body?: unknown) => {
+        const res = await fetch(`${base}/api/outreach/${path}`, { method, headers: { Authorization: `Bearer ${secret}`, 'User-Agent': 'e2e mail desk', ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+        const json = await res.json() as { data?: any; error?: string };
+        if (!res.ok) throw new Error(`${method} ${path}: ${res.status} ${json.error ?? ''}`);
+        return json.data;
+      };
+      const vehicles = await api('GET', 'vehicles') as Array<{ slug: string; hard: number; soft: number; indicated: unknown }>;
+      const queue = await api('GET', `queue?vehicle=all&pursuitId=${lp.page.id}`) as Array<{ pursuitId: string; status: { label: string }; checks: unknown[]; bucket: string }>;
+      if (!vehicles.length || queue[0]?.pursuitId !== lp.page.id || !queue[0].status.label || !queue[0].checks.length) throw new Error(`vehicles ${vehicles.length}, queue row ${Boolean(queue[0])}`);
+      const update = await api('POST', 'update', { pursuitId: lp.page.id, words: `Desk note (${MARK}): they indicated $2M-3M.`, applied: { indicated: { low: 2_000_000, high: 3_000_000 } }, idempotencyKey: deskKey });
+      const ticket = await api('POST', 'tickets', { kind: 'SEND', pursuitId: lp.page.id, scope: { recipients: ['e2e-partner@invented.example'], purpose: 'invite' }, coordination: { choice: 'send_separately' } });
+      const unapproved = await fetch(`${base}/api/outreach/sent`, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'User-Agent': 'e2e mail desk', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticketId: ticket.ticketId, pursuitId: lp.page.id, recipients: ['e2e-partner@invented.example'], gmailMessageId: `e2e-${deskKey}`, sentAt: new Date().toISOString() }) });
+      await page.goto(`${base}/targets/${lp.page.id}`, { waitUntil: 'networkidle' });
+      const shown = (await page.locator('[data-indicated]').first().innerText()).replace(/\s+/g, ' ');
+      if (!update.applied?.indicated || !ticket.ticketId || unapproved.status !== 409 || !/Indicated: \$2(\.0)?M–\$3(\.0)?M/.test(shown)) {
+        throw new Error(`indicated ${Boolean(update.applied?.indicated)}, ticket ${Boolean(ticket.ticketId)}, send before approval ${unapproved.status}, page "${shown.slice(0, 80)}"`);
+      }
+      return { ui: `made a desk token; read ${vehicles.length} vehicles and the LP's queue row (${queue[0].bucket}); recorded $2M–$3M indicated; opened a SEND ticket; a send before approval was refused (409); the LP page reads "${shown.slice(0, 40)}…"`, verify: async (db) => {
+        const t = await db.one<{ id: string; tools: string[]; from: string | null; days: number }>(`select token_id::text id, tools, last_used_from "from", round(extract(epoch from expires_at - created_at) / 86400)::int days from platform.mcp_token where label = $1`, [deskLabel]);
+        same([t?.tools.includes('outreach:write'), t?.from, t?.days], [true, 'e2e mail desk', 30], 'the desk token (write scope, its device, a 30-day expiry)');
+        same((await db.one<{ low: string; high: string }>(`select low::text, high::text from pipeline.indication where pursuit_id = $1 and superseded_at is null order by recorded_at desc limit 1`, [lp.page.id])), { low: '2000000.00', high: '3000000.00' }, 'the indication');
+        same((await db.one<{ decision: string | null; requester: string; sent: boolean }>(`select t.decision::text decision, u.handle requester, s.sent_at is not null sent from email.outreach_send s
+          join governance.approval_ticket t on t.id = s.ticket_id join platform.app_user u on u.id = t.requested_by where s.ticket_id = $1`, [ticket.ticketId])), { decision: null, requester: 'mail-desk', sent: false }, 'the SEND ticket (undecided, asked by the desk, nothing sent)');
+        const calls = await db.query<{ op: string; outcome: string }>(`select detail->>'op' op, detail->>'outcome' outcome from platform.audit_log where action = 'outreach.call' and subject_id = $1 order by id`, [t!.id]);
+        same(calls.map((c) => `${c.op}:${c.outcome}`), ['vehicles:ok', 'queue:ok', 'update:ok', 'tickets:ok', 'sent:refused'], 'the audit entries for its calls');
       } };
     });
 

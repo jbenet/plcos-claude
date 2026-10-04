@@ -78,6 +78,23 @@ a copy of it with `npm run preview`, and a sub-agent's worktree, which has no ro
   by `scripts/with-mailguard-token.sh`. Never print, log or put a key on a command line. The demo and the
   properties use the fake mailguard only. A move puts the draft's words in the mover's own mailbox; the audit
   entry keeps counts and codes, never words, addresses or keys. Direct Gmail OAuth was removed.
+- **Drafting context to the Claude API is approved (Juan, 4 Oct 2026; docs/27-outreach-api.md §5).** The
+  mail desk may send an LP's strategy and timeline lines, as Capital OS's outreach API returns them, to the
+  Claude API to draft an email, with zero data retention and no training. Health details stay redacted.
+  - **Zero data retention is an agreement at the Anthropic organization level, not a request flag.** Before
+    the desk sends real records, confirm that the organization owning the API key it uses has ZDR in
+    place, and that the key is that organization's; a key from any other organization does not qualify.
+    Training is off by default on the API; it must stay so (the "no training" rule above).
+  - **"Health details" means:** a medical condition, a treatment, a diagnosis, a disability, mental health,
+    pregnancy, or genetic information — of the person or their family — and the events around them (a
+    hospital stay, surgery, medical leave, a death or a bereavement). `lib/redact-health.ts` replaces each
+    sentence that mentions one with "[health detail redacted]"; the outreach API runs every text field
+    through it before answering, so the desk never receives a health detail from Capital OS to pass on.
+    A disease or a kind of care named as an investment theme ("Parkinson's therapies") is not a health
+    detail; the same words about a person are.
+  - What is not approved: Dakota-licensed data (never in any prompt, above), and sending anything to a
+    model that trains on it. Capital OS itself does not call the Claude API to draft: that is the desk's
+    job, and an in-app drafter is not built.
 - **Linear is read-only (27 Sep 2026, docs/24-linear.md).** Juan overrode "no connectors before L13"
   for it, as for Affinity. The personal key can write and cannot be scoped, so read-only is enforced in
   the client: only allowlisted GraphQL queries, each text checked for a mutation before sending, and

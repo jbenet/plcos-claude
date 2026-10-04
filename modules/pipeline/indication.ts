@@ -108,7 +108,8 @@ type Row = {
 
 const toIndication = (r: Row): Indication => ({
   indicationId: r.indication_id, pursuitId: r.pursuit_id, entityId: r.entity_id, vehicleId: r.vehicle_id,
-  low: Number(r.low), high: Number(r.high), on: new Date(r.on), touchpointId: r.touchpoint_id, source: r.source, recordedByName: r.by_name,
+  // A date, not a moment: noon UTC, so it reads as the same day in every time zone.
+  low: Number(r.low), high: Number(r.high), on: new Date(`${new Date(r.on).toISOString().slice(0, 10)}T12:00:00Z`), touchpointId: r.touchpoint_id, source: r.source, recordedByName: r.by_name,
 });
 
 /**
