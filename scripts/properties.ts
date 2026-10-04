@@ -82,7 +82,11 @@ async function main() {
   if (failed.length > 0) process.exit(1);
 }
 
-main().catch((err: unknown) => {
+// A run whose event loop drains before the summary (a promise nothing keeps alive) used to exit 0
+// silently, and the gate counted it as a pass (2–4 Oct 2026). Unfinished is a failure.
+let finished = false;
+process.on('beforeExit', () => { if (!finished) { console.error('Property run ended before its summary: unfinished.'); process.exit(1); } });
+main().then(() => { finished = true; }, (err: unknown) => { finished = true; throw err; }).catch((err: unknown) => {
   console.error(err);
   process.exit(1);
 });

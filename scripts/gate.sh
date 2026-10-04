@@ -16,13 +16,13 @@ fi
 bash scripts/deps-sync.sh . || { echo "FAIL dependencies"; exit 1; }
 echo "== tsc";        npm run -s check > "$tmp/tsc" 2>&1; rc1=$?; grep -E "error TS" "$tmp/tsc" | head -20; echo "tsc exit $rc1"
 echo "== boundaries"; npm run -s boundaries > "$tmp/b" 2>&1; rc2=$?; tail -3 "$tmp/b"; echo "boundaries exit $rc2"
-echo "== props (PGlite)"; npm run -s props > "$tmp/p" 2>&1; rc3=$?; grep -A1 -E "FAIL" "$tmp/p" | head -40; grep -E "properties hold" "$tmp/p"
+echo "== props (PGlite)"; npm run -s props > "$tmp/p" 2>&1; rc3=$?; grep -q "properties hold" "$tmp/p" || { rc3=1; echo "FAIL props (PGlite) printed no summary:"; tail -5 "$tmp/p"; }; grep -A1 -E "FAIL" "$tmp/p" | head -40; grep -E "properties hold" "$tmp/p"
 
 rc4=0
 # Postgres: the invented-data test cluster (docs/21-postgres.md), if it's running.
 PG_TEST_URL="${PG_TEST_URL:-postgres://plcos@127.0.0.1:5434/plcos_test_props}"
 if /opt/homebrew/opt/postgresql@17/bin/pg_isready -h 127.0.0.1 -p 5434 -q 2>/dev/null; then
-  echo "== props (Postgres)"; DATABASE_URL="$PG_TEST_URL" npm run -s props > "$tmp/pg" 2>&1; rc4=$?
+  echo "== props (Postgres)"; DATABASE_URL="$PG_TEST_URL" npm run -s props > "$tmp/pg" 2>&1; rc4=$?; grep -q "properties hold" "$tmp/pg" || { rc4=1; echo "FAIL props (Postgres) printed no summary:"; tail -5 "$tmp/pg"; }
   grep -A1 -E "FAIL" "$tmp/pg" | head -40; grep -E "properties hold" "$tmp/pg"
 else
   echo "== props (Postgres): test cluster not running, skipped"
