@@ -42,7 +42,8 @@ export interface DraftView {
   warnings: WarningView[];
   blocks: Array<{ field: string; text: string }>;
 }
-export interface GmailView { mode: 'google' | 'fake' | 'off'; email: string | null; why: string | null }
+/** The person's mailguard connection, as the box needs it: the mailbox when the token passed its check; why not, otherwise. */
+export interface GmailView { mode: 'mailguard' | 'fake' | 'off'; email: string | null; why: string | null }
 
 const PICTURES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const kb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
@@ -241,7 +242,7 @@ export function EmailDraftBox({ draft, gmail, path }: { draft: DraftView; gmail:
         tone: 'ok',
         text: `${r.value.replaced ? 'Replaced the draft' : 'Made a draft'} in ${gmail.mode === 'fake' ? 'the demo’s fake Gmail' : 'your Gmail'} (${r.value.account})`
           + `${r.value.newMessageId ? ', as a new email: the earlier copy was sent or deleted there' : ''}`
-          + `${r.value.threadSource === 'gmail' ? ', in its thread' : ''}. Review it and send it from Gmail.`,
+          + `${r.value.threadSource === 'thread' ? ', in its thread' : r.value.threadSource === 'unthreaded' ? ', as a new thread (the earlier email was not sent yet, or the token cannot read thread headers)' : ''}. Review it and send it from Gmail.`,
       });
       router.refresh();
     } finally {
@@ -337,7 +338,7 @@ export function EmailDraftBox({ draft, gmail, path }: { draft: DraftView; gmail:
 
       <div className={s.actions}>
         <button type="button" className="btn p" onClick={() => void move()} disabled={!canMove}
-          title={gmail.mode === 'off' ? gmail.why ?? '' : !gmail.email ? 'Connect your Gmail in Preferences first' : ''}>
+          title={gmail.why ?? (!gmail.email ? 'Connect a drafts-only mailguard token in Preferences → Email first' : '')}>
           {busy === 'move' ? 'Moving…' : status === 'in_gmail' ? 'Update the Gmail draft' : 'Move to Gmail drafts'}
         </button>
         <button type="button" className="btn" onClick={() => void save()} disabled={saving === 'saved' || busy !== null}>Save</button>

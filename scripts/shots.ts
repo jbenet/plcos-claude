@@ -2551,15 +2551,49 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
-  // Email drafts (docs/25), on the demo's fake Google: connect, draft from the strategy, move, the intro ask.
+  // Mailguard (docs/25 §12), on the demo's fake mailguard: Preferences → Email refuses a token that can send, then
+  // connects a drafts-only one and tests it. Both tokens are invented by the fake.
+  mailguard: [
+    {
+      name: '01-refused-can-send',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        const card = page.locator('#email');
+        const forget = card.getByRole('button', { name: 'Forget this token' });
+        if (await forget.count()) { await forget.click(); await card.getByLabel('Your mailguard token').waitFor(); }
+        const { fakeDir } = await import('../lib/connectors/mailguard');
+        const { fakeMintKey } = await import('../lib/connectors/mailguard/fake');
+        const sender = await fakeMintKey(fakeDir(), { mailbox: 'someone@example.test', tool: 'Inbox helper', grant: ['draft', 'read.metadata', 'send'] });
+        await card.getByLabel('Your mailguard token').fill(sender);
+        await card.getByRole('button', { name: 'Connect', exact: true }).click();
+        await card.locator('[role="status"]', { hasText: 'This token can send email.' }).waitFor();
+        await card.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+    {
+      name: '02-connected-drafts-only',
+      path: '/settings',
+      prepare: async (page) => {
+        const card = page.locator('#email');
+        await card.getByRole('button', { name: 'Use a demo token (drafts only)' }).click();
+        await card.getByRole('button', { name: 'Test the connection' }).click();
+        await card.locator('[role="status"]', { hasText: /drafts-only/ }).waitFor();
+        await card.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+  ],
+  // Email drafts (docs/25), on the demo's fake mailguard: connect, draft from the strategy, move, the intro ask.
   'email-drafts': [
     {
       name: '01-lp-first-message',
       path: '/settings',
       prepare: async (page) => {
         await asUser(page);
-        const connect = page.getByRole('link', { name: /Connect Gmail/ });
-        if (await connect.count()) { await connect.click(); await page.waitForURL(/gmail=connected/); }
+        const connect = page.getByRole('button', { name: 'Use a demo token (drafts only)' });
+        if (await connect.count()) { await connect.click(); await page.getByRole('button', { name: 'Test the connection' }).waitFor(); }
         await openLp(page, 'Bram Kowalczyk');
         const box = page.locator('#email');
         const start = box.getByRole('button', { name: 'Draft the first message' });

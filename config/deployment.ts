@@ -155,18 +155,18 @@ export const config = {
     translateBatch: 200, // GUESS — same bound as Dakota's.
   },
   /**
-   * Email drafts moved into each person's own Gmail (Juan, 2 Oct 2026; docs/25-email-drafts.md).
-   * Nothing sends: the Gmail client makes drafts only, enforced by its allowlist. The demo always
-   * uses the fake Google in lib/connectors/gmail/fake.ts; real Google stays off until the OAuth
-   * client exists and this flag is turned on.
+   * Email drafts moved into each person's own Gmail (Juan, 2 Oct 2026; docs/25-email-drafts.md), through
+   * mailguard since 3 Oct 2026 (docs/25 §12): each person's key reaches only their own mailbox, and only
+   * a drafts-only key is accepted. Nothing sends. The demo always uses the fake mailguard in
+   * lib/connectors/mailguard/fake.ts.
    */
   email: {
-    gmail: {
-      enabled: false as boolean,
-      /** Also ask for gmail.metadata (headers only), so a follow-up lands in its thread. */
-      threads: true as boolean,
-      /** Registered on the Google OAuth client. Google allows http only for localhost, so the live Mac connects here. */
-      redirectUri: 'http://localhost:3000/api/email/google/callback',
+    provider: 'mailguard' as 'mailguard' | 'off',
+    mailguard: {
+      /** Mailguard's origin, e.g. https://mail.example.com. An address in the live server’s environment wins (scripts/with-mailguard-token.sh). */
+      url: null as string | null,
+      /** Whose key the Keychain item plcos-claude / mailguard-token is. A key pasted in Preferences wins over it. */
+      keychainTokenFor: 'juan',
     },
     /** Each file or picture. GUESS: a deck or a one-pager is a few MB. */
     maxAttachmentBytes: 10 * 1024 * 1024,

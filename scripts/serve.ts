@@ -20,7 +20,7 @@ import { join, resolve } from 'node:path';
 import { portFor, readLayout, type Layout, type Serve } from '../config/ports';
 import { withoutKey } from '../lib/connectors/affinity/key';
 import { withoutLinearKey } from '../lib/connectors/linear/key';
-import { withoutGoogleOauth } from '../lib/connectors/gmail/env';
+import { withoutMailguard } from '../lib/connectors/mailguard/env';
 import { lockHolder } from '../lib/db/lock';
 import { checkOpens, previewRefusal, takeCopy } from './preview-copy';
 
@@ -141,7 +141,7 @@ async function main() {
   }
 
   if (serve === 'preview') {
-    env = { ...withoutGoogleOauth(withoutLinearKey(withoutKey(env))), PREVIEW_COPY_AT: await prepareCopy(layout) };
+    env = { ...withoutMailguard(withoutLinearKey(withoutKey(env))), PREVIEW_COPY_AT: await prepareCopy(layout) };
     say(`serving the copy on :${port}, with no Affinity or Linear key. Anything changed there stays in the copy and is thrown away.`);
   } else {
     say(`${layout.folder}: ${serve === 'demo' ? 'the demo' : 'the real data'} on :${port}${production ? ', production build' : ''}`);
@@ -150,7 +150,7 @@ async function main() {
   const next = ['next', production ? 'start' : 'dev', '--hostname', '0.0.0.0', '--port', String(port), ...extra];
   // The live server reads both keys, each from its own Keychain item (docs/15, docs/24-linear.md), and
   // the Google OAuth client for Gmail drafts when it has been stored (docs/25).
-  const command = serve === 'real' ? [join(layout.root, 'scripts', 'with-affinity-key.sh'), join(layout.root, 'scripts', 'with-linear-key.sh'), join(layout.root, 'scripts', 'with-google-oauth.sh'), ...next] : next;
+  const command = serve === 'real' ? [join(layout.root, 'scripts', 'with-affinity-key.sh'), join(layout.root, 'scripts', 'with-linear-key.sh'), join(layout.root, 'scripts', 'with-mailguard-token.sh'), ...next] : next;
   const child = spawn(command[0]!, command.slice(1), { stdio: 'inherit', env });
   child.on('error', (err) => refuse(`Could not start ${command[0]}: ${err.message}`));
   // The terminal sends Ctrl-C to both; a signal sent to this process alone is passed on, so the

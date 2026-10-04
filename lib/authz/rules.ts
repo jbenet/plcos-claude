@@ -44,8 +44,10 @@ export const actionRules = {
   'app/email/actions.ts#moveDraftAction': { action: 'mutate', scope: 'emailDraft' },
   'app/email/actions.ts#discardDraftAction': { action: 'mutate', scope: 'emailDraft' },
   'app/email/actions.ts#removeAttachmentAction': { action: 'mutate', scope: 'emailDraft' },
-  'app/email/actions.ts#disconnectGmailAction': { action: 'mutate', scope: 'self' },
-  'app/email/actions.ts#pasteConsentAction': { action: 'mutate', scope: 'self' },
+  'app/email/actions.ts#connectMailguardAction': { action: 'mutate', scope: 'self' },
+  'app/email/actions.ts#testMailguardAction': { action: 'mutate', scope: 'self' },
+  'app/email/actions.ts#forgetMailguardAction': { action: 'mutate', scope: 'self' },
+  'app/email/actions.ts#demoMailguardAction': { action: 'mutate', scope: 'self' },
   // MCP tokens (docs/26): a person's own; the service revokes only the caller's.
   'app/settings/actions.ts#createMcpTokenAction': { action: 'mutate', scope: 'self' },
   'app/settings/actions.ts#revokeMcpTokenAction': { action: 'mutate', scope: 'self' },

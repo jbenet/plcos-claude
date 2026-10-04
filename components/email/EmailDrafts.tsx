@@ -1,7 +1,6 @@
-import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
-import { draftsOn, gmailStatus, moveBlocks, PURPOSE_LABEL, warningsFor, type Draft } from '@/modules/email';
+import { draftsOn, mailStatus, moveBlocks, PURPOSE_LABEL, warningsFor, type Draft } from '@/modules/email';
 import { EmailDraftBox, type DraftView, type GmailView } from './EmailDraftBox';
 import { NewDraftButton } from './NewDraftButton';
 import s from './email.module.css';
@@ -13,11 +12,6 @@ import s from './email.module.css';
  */
 
 export interface DraftsWhere { pursuitId?: string; entityId?: string; connectorId?: string; vehicleId?: string }
-
-async function origin(): Promise<string> {
-  const h = await headers();
-  return `http://${h.get('host') ?? 'localhost'}`;
-}
 
 async function view(d: Draft): Promise<DraftView> {
   return {
@@ -41,8 +35,8 @@ export async function EmailDrafts({ title, lede, where, create, path, startLabel
 }) {
   const user = await (await auth()).currentUser();
   if (user.access === 'viewer') return null;
-  const [drafts, g] = await Promise.all([draftsOn(user, where), gmailStatus(user, await origin())]);
-  const gmail: GmailView = { mode: g.mode, email: g.email, why: g.why };
+  const [drafts, g] = await Promise.all([draftsOn(user, where), mailStatus(user)]);
+  const gmail: GmailView = { mode: g.mode, email: g.ok ? g.mailbox : null, why: g.mode === 'off' ? g.why : g.connected && !g.ok ? g.reason : null };
   const [open, ...rest] = drafts;
   const fields = { ...create, path };
   return (

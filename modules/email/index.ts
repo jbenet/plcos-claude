@@ -3,7 +3,7 @@ export type { Attachment, Draft, DraftMode, DraftPurpose, DraftStatus, DraftWarn
 export { PURPOSE_LABEL } from './types';
 export { draftWarnings, prefillDraft, type CheckInput, type PrefillInput } from './rules';
 export {
-  addAttachment, createDraft, discardDraft, disconnectGmail, draftsOn, draftWithChecks, DraftRefused, finishGmailConnect, gmailStatus,
-  mimeFor, moveBlocks, moveDraft, previewDraft, readAttachment, removeAttachment, saveDraft, warningsFor,
-  type Actor, type DraftEdit, type GmailStatus, type Moved, type NewDraft, type Preview, type Saved,
+  addAttachment, connectDemoMailguard, connectMailguard, createDraft, discardDraft, draftsOn, draftWithChecks, DraftRefused, forgetMailguard,
+  mailStatus, mimeFor, moveBlocks, moveDraft, previewDraft, readAttachment, recipientFor, removeAttachment, saveDraft, testMailguard, warningsFor,
+  type Actor, type DraftEdit, type MailStatus, type Moved, type NewDraft, type Preview, type Saved, type ThreadSource,
 } from './service';

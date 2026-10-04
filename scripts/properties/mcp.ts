@@ -28,7 +28,7 @@ type Result = { isError?: boolean; content: Array<{ type: string; text: string }
 const FORBIDDEN = /send|approv|accept|decid|reject|status|stage|ladder|rung|money|wire|alloc|harden|close|import|sync|translat|connector|run_|workflow|move|merge|delete|discard|revoke|ticket/i;
 /** Service calls that act; none may be reachable from lib/mcp. */
 const FORBIDDEN_CALLS = ['moveDraft', 'discardDraft', 'decideTicket', 'decide(', 'decideMany', 'setPursuitStatus', 'requestLadderAdvance', 'recordWire',
-  'requestHarden', 'closeTrack', 'runWorkflow', 'importFindings', 'syncLinear', 'translate', 'draftClient', 'gmailClient', 'decideSuggestion', 'adjudicate', 'proposeSend'];
+  'requestHarden', 'closeTrack', 'runWorkflow', 'importFindings', 'syncLinear', 'translate', 'checkedClient', 'mailguardClient', 'connectMailguard', 'connectKey', 'decideSuggestion', 'adjudicate', 'proposeSend'];
 
 export async function mcpProperties(check: Check, db: Db) {
   resetWindows();

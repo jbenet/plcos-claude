@@ -222,8 +222,8 @@ async function main() {
   // seed's New and Sourcing rows are all firms. Both are invented and live only in data/demo/e2e.
   await rm(DIR, { recursive: true, force: true });
   await rm(`${DIR}.lock`, { force: true });
-  // The fake Google of the email drafts check (docs/25) keeps its mailbox beside the database.
-  await rm(`${DIR}.gmail-fake`, { recursive: true, force: true });
+  // The fake mailguard of the email drafts check (docs/25 §12) keeps its mailbox and keys beside the database.
+  await rm(`${DIR}.mailguard-fake`, { recursive: true, force: true });
   await rm(LOG, { force: true });
   const reset = spawnSync(TSX, ['scripts/reset.ts'], { cwd: ROOT, env, encoding: 'utf8' });
   if (reset.status !== 0) throw new Error(`Seeding the demo database failed: ${(reset.stderr || reset.stdout).slice(-400)}`);
@@ -325,12 +325,21 @@ async function main() {
       } };
     });
 
-    // Email drafts (docs/25) ─────────────────────────────────────────────────────────────────
+    // Email drafts (docs/25 §12) ──────────────────────────────────────────────────────────────
     const mailSubject = `${MARK}: first message`;
-    await check('Email: connect the fake Gmail, draft a first message with a file on an LP page, move it to Gmail drafts', async () => {
+    await check('Email: a mailguard token that can send is refused in Preferences; a drafts-only demo token connects; a first message with a file moves to Gmail drafts', async () => {
+      // An invented key at the fake mailguard that could send: pasting it must be refused, and nothing kept.
+      const { fakeMintKey } = await import('../lib/connectors/mailguard/fake');
+      const sender = await fakeMintKey(`${DIR}.mailguard-fake`, { mailbox: 'e2e@example.test', grant: ['draft', 'read.metadata', 'send'] });
       await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
-      await page.getByRole('link', { name: /Connect Gmail/ }).click();
-      await page.waitForURL(/gmail=connected/);
+      const card = page.locator('#email');
+      await card.getByLabel('Your mailguard token').fill(sender);
+      await card.getByRole('button', { name: 'Connect', exact: true }).click();
+      await card.locator('[role="status"]', { hasText: 'This token can send email. Make a drafts-only token in mailguard.' }).waitFor();
+      await card.getByRole('button', { name: 'Use a demo token (drafts only)' }).click();
+      await card.getByRole('button', { name: 'Test the connection' }).waitFor();
+      await card.getByRole('button', { name: 'Test the connection' }).click();
+      await card.locator('[role="status"]', { hasText: /drafts-only/ }).waitFor();
       await page.goto(`${base}/targets/${lp.page.id}`, { waitUntil: 'networkidle' });
       const box = page.locator('#email');
       await box.getByRole('button', { name: 'Draft the first message' }).click();
@@ -343,16 +352,21 @@ async function main() {
       await box.getByText('one-pager.pdf').waitFor();
       await box.getByRole('button', { name: 'Move to Gmail drafts' }).click();
       await box.locator('[role="status"]', { hasText: /Made a draft in/ }).waitFor();
-      return { ui: 'connected, drafted, attached a file and moved it; the receipt named the fake Gmail', verify: async (db) => {
+      return { ui: 'a send-capable token refused, the demo token connected and tested, drafted with a file and moved; the receipt named the fake Gmail', verify: async (db) => {
         const d = await db.one<{ id: string; status: string; gmail: string | null; files: number }>(`select d.draft_id::text id, d.status, d.gmail_draft_id gmail,
             (select count(*)::int from email.attachment a where a.draft_id = d.draft_id and a.removed_at is null) files
           from email.draft d where d.pursuit_id = $1 and d.subject = $2`, [lp.page.id, mailSubject]);
         same([d?.status, Boolean(d?.gmail), d?.files], ['in_gmail', true, 1], 'the draft (status, Gmail id, files)');
         same((await db.one<{ n: number }>("select count(*)::int n from platform.audit_log where action = 'email.draft_moved' and subject_id = $1", [d!.id]))?.n, 1, 'move audit entries');
-        const fake = JSON.parse(await readFile(`${DIR}.gmail-fake/google.json`, 'utf8')) as { mailboxes: Record<string, { drafts: Record<string, string>; messages: Record<string, { raw: string }> }>; sendAttempts: unknown[] };
-        const box = Object.values(fake.mailboxes)[0]!;
-        const raw = box.messages[box.drafts[d!.gmail!]!]?.raw ?? '';
-        same([Object.keys(box.drafts).length, raw.includes(mailSubject), raw.includes('one-pager.pdf'), fake.sendAttempts.length], [1, true, true, 0], 'the fake Gmail (drafts, subject, file, sends)');
+        same((await db.one<{ n: number }>("select count(*)::int n from platform.audit_log where action = 'email.mailguard_refused' and detail->>'code' = 'can_send' and detail->>'stored' = 'false'"))?.n, 1, 'the refused token’s audit entry');
+        const fake = JSON.parse(await readFile(`${DIR}.mailguard-fake/mailguard.json`, 'utf8')) as {
+          mailboxes: Record<string, { drafts: Record<string, string>; messages: Record<string, { subject: string; attachments: Array<{ filename: string }> }> }>; sendAttempts: unknown[];
+        };
+        const tokens = JSON.parse(await readFile(`${DIR}.mailguard-fake/tokens.json`, 'utf8')) as Record<string, string>;
+        const box = Object.entries(fake.mailboxes).find(([m]) => m !== 'e2e@example.test')![1];
+        const made = box.messages[box.drafts[d!.gmail!]!];
+        same([Object.keys(box.drafts).length, made?.subject === mailSubject, made?.attachments.some((a) => a.filename === 'one-pager.pdf'), fake.sendAttempts.length, Object.values(tokens).includes(sender)],
+          [1, true, true, 0, false], 'the fake mailguard (drafts, subject, file, sends, the refused token not kept)');
       } };
     });
 
