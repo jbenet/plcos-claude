@@ -24,7 +24,7 @@ import { relatedLpHeadings } from '@/lib/authz/read/headings';
 import { LpUnitCard, LpUnitLine } from '@/components/strategy/LpUnit';
 import { SpvCard } from '@/components/strategy/SpvCard';
 import { latestRun } from '@/modules/sources';
-import { CLOSE_STATE_LABEL, closeTracksFor } from '@/modules/pipeline';
+import { CLOSE_STATE_LABEL, closeTracksFor, indicationFor } from '@/modules/pipeline';
 import { CloseTrack } from '@/components/strategy/CloseTrack';
 import { usdM } from '@/lib/money';
 import { claimLabel, claimsFor, listSourceDocs, notesFor } from '@/lib/authz/read/research';
@@ -84,9 +84,11 @@ async function TargetWorkspace({ params, searchParams }: {
     updatesFor(pursuit.pursuitId),
     auditFor('pursuit', pursuit.pursuitId, ['pursuit.status_set']),
   ]);
-  const [docs, spvMarkMap] = await Promise.all([
+  const [docs, spvMarkMap, indicated] = await Promise.all([
     listSourceDocs([...new Set(claims.map((c) => c.provenance.source))]),
     spvMarks(await getDb(), [pursuit.entityId]),
+    // What they indicated (docs/27 §1): shown beside soft and hard, never added to either.
+    indicationFor(pursuit.entityId, pursuit.vehicleId),
   ]);
   const spvHere = spvMarkMap.get(pursuit.entityId);
   // Status changes, for the timeline (N61). Before N61 the log kept a reason only for a pass;
@@ -328,6 +330,15 @@ async function TargetWorkspace({ params, searchParams }: {
                 <b>Close track:</b> {CLOSE_STATE_LABEL[tracks[0].state]} · {usdM(tracks[0].exposure.amount)}
                 {tracks[0].signature && tracks[0].state === 'signed' ? ` · signed ${tracks[0].signature.on ? shortDate(tracks[0].signature.on) : `per ${tracks[0].signature.bySource === 'affinity' ? 'Affinity' : tracks[0].signature.bySource}, undated`}` : ''}
                 {tracks[0].exposure.track === 'hard' ? ` · ${usdM(tracks[0].wired)} wired` : ''}
+              </div>
+            )}
+            {indicated && (
+              <div className="said" data-indicated>
+                <b>Indicated:</b> {indicated.low === indicated.high ? usdM(indicated.low) : `${usdM(indicated.low)}–${usdM(indicated.high)}`}
+                {' · '}{shortDate(indicated.on)}
+                {indicated.source === 'spv seat' ? ' · IOI in the SPV war room' : indicated.recordedByName ? ` · recorded by ${indicated.recordedByName}` : ''}
+                {indicated.touchpointId ? ', from a touchpoint on the timeline' : ''}
+                <span className="muted"> — an indication, not a commitment: beside soft and hard, added to neither.</span>
               </div>
             )}
             <div className="said">

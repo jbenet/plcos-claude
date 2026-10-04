@@ -86,6 +86,9 @@ export async function addUpdateAction(formData: FormData): Promise<{ error?: str
         on: touchOn, read: (text('touchRead') || null) as Read | null,
       } : null,
       nextStep: formData.get('next') && text('nextStep') ? { step: text('nextStep'), on: day('nextStepOn', '00') } : null,
+      // An indicated amount (docs/27 §1): beside soft and hard, never either. Saved only when ticked.
+      indicated: formData.get('indicated') && text('indicatedLow')
+        ? { low: Number(text('indicatedLow')), high: text('indicatedHigh') ? Number(text('indicatedHigh')) : null } : null,
     });
     revalidatePath('/targets');
     revalidatePath(`/targets/${pursuitId}`);

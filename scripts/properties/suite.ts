@@ -92,6 +92,8 @@ export async function runProperties(check: Check) {
   await (await import('./security-mutations')).securityMutationProperties(check, db);
   // Last: it leaves invented users inactive and tokens revoked, since the audit log keeps them.
   await (await import('./mcp')).mcpProperties(check, db);
+  // The mail desk's API (docs/27): indicated amounts, the outreach routes, tokens and redaction.
+  await (await import('./outreach')).outreachProperties(check, db);
   await db.close();
 
   await (await import('./pipeline')).hardeningVariations(check);

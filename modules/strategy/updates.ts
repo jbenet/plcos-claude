@@ -19,6 +19,8 @@ export interface UpdateApplied {
   touchpointId?: string;
   touch?: { channel: string; on: string; ahead: boolean; read: string | null };
   nextStep?: { step: string; on: string | null };
+  /** An indicated amount the update recorded (docs/27 §1): never soft money, never summed into it. */
+  indicated?: { indicationId: string; low: number; high: number; on: string; touchpointId: string | null };
   /** What the reader suggested and the person left unticked: kept, so a wrong rule can be found. */
   declined?: string[];
 }

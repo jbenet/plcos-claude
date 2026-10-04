@@ -9,7 +9,7 @@ export { getPursuit, visualizationPursuits, pursuitCount, type VisualizationPurs
 export { LadderRefused, recordAdvance, recordClimb, requestAdvance, setNextStep, setStatus, StatusRefused, type ClimbRung } from './service';
 export { insertUpdate, recordApplied, updatesFor, type PursuitUpdate, type UpdateApplied } from './updates';
 export { decideSuggestion, openSuggestions, SuggestionRefused, suggestionsFor, strategyPursuitsFor, type Suggestion } from './suggestions';
-export { READER, dateIn, readUpdate, type TouchChannel, type UpdateSuggestion } from './reader';
+export { READER, amountRange, dateIn, readUpdate, type TouchChannel, type UpdateSuggestion } from './reader';
 export { vehicleStrategy, capacityEstimate, actionScore, conversionFor, statusId, type VehicleStrategy, type StrategyAction, type Transition } from './vehicle';
 export { consolidatePursuits, consolidatePursuitsInTransaction, reversePursuitMerge, pursuitReferences, type PursuitMergeReport } from './merge';
 export { repointPursuits, repointPursuitsInTransaction, reverseLpRepoint, decideLpUnitByPerson, recentLpRepoints, type LpUnitReport, type LpUnitDecisionRow } from './lp-units';

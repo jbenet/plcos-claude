@@ -12,10 +12,12 @@ import type { OutcomeReason, PassedBy, PursuitStatus } from './types';
  * It may suggest a status, the touchpoint the update describes (a meeting, a call, an email),
  * their read after it, and a next step. It never suggests a rung: the ladder moves on a STAGE
  * ticket, and reconciliation proposes one from the touchpoint once it is logged. It never
- * records an amount either; it points to the close track instead (rule 1). Pure: it runs in
- * the browser as someone types and again on the server, which keeps what it said.
+ * records an amount either; it points to the close track instead (rule 1). Since version 2 (docs/27
+ * §1) it also reads the amount as a range, which the box offers as an indicated amount — saved only
+ * when a person ticks it, and never soft money. Pure: it runs in the browser as someone types and
+ * again on the server, which keeps what it said.
  */
-export const READER = { name: 'rules', version: 1 } as const;
+export const READER = { name: 'rules', version: 2 } as const;
 
 export type TouchChannel = 'meeting' | 'call' | 'email' | 'message';
 
@@ -28,7 +30,8 @@ export type UpdateSuggestion =
     }
   | { kind: 'read'; read: Read; basis: string }
   | { kind: 'next'; step: string; on: string | null; basis: string }
-  | { kind: 'amount'; said: string; basis: string };
+  /** low and high since version 2: the words read as dollars, or null when they don't parse. */
+  | { kind: 'amount'; said: string; basis: string; low: number | null; high: number | null };
 
 /** Forward order; Passed is off to the side, and any status can reopen from it. */
 const ORDER: PursuitStatus[] = ['new', 'sourcing', 'selected', 'connecting', 'discussing', 'committed'];
@@ -130,6 +133,32 @@ const WANTS = /\b(?:want(?:s|ed)?|asked for|requested|need(?:s|ed)?|would like|w
 const NEXT = /\bnext(?: steps?)?\s*[:\-–—]\s*([^.\n;]+)/i;
 const FOLLOW = /\b(?:follow(?:ing)? up|check in|circle back|reconnect|revisit)\b/i;
 const BY = /\b(?:by|before|on|in|next)\s+(?:(?:the\s+)?(?:\d{1,2}(?:st|nd|rd|th)?\s+[a-z]{3,9}|[a-z]{3,9}\s+\d{1,2}|monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|week|(?:a|an|one|two|three|four|\d+)\s+(?:day|week|month)s?))\b/i;
+const UNIT = '(?:mm|m|k|million|thousand|bn|b|billion)';
+/** "$3M–4M", "$3-4M", "3 to 5 million", "$500k-$1M": two figures joined by a dash or "to". */
+const RANGE = new RegExp(`\\$?\\s?\\d[\\d.,]*\\s?${UNIT}?\\s?(?:-|–|—|to)\\s?\\$?\\s?\\d[\\d.,]*\\s?${UNIT}\\b`, 'i');
+const SCALE: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, mm: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9 };
+
+/**
+ * Dollars from the words: "$3M" → 3,000,000 both ends; "$3M–4M" → 3M to 4M; "3 to 5 million" →
+ * 3M to 5M (the unit of the second figure carries to a bare first). Null when a figure has neither
+ * a unit nor a dollar sign, so "2 meetings" is never an amount.
+ */
+export function amountRange(said: string): { low: number; high: number } | null {
+  const figures = [...said.matchAll(/(\$)?\s?(\d[\d,]*(?:\.\d+)?)\s?(mm|m|k|million|thousand|bn|b|billion)?\b/gi)];
+  if (!figures.length || figures.length > 2) return null;
+  const unitOf = (f: RegExpMatchArray) => f[3]?.toLowerCase() ?? null;
+  const last = unitOf(figures[figures.length - 1]!);
+  const values = figures.map((f) => {
+    const unit = unitOf(f) ?? (figures.length === 2 ? last : null);
+    if (!unit && !f[1]) return null;
+    const n = Number(f[2]!.replace(/,/g, ''));
+    return Number.isFinite(n) ? n * (unit ? SCALE[unit]! : 1) : null;
+  });
+  if (values.some((v) => v === null)) return null;
+  const [low, high = low] = values as number[];
+  return low! <= high! ? { low: low!, high: high! } : { low: high!, high: low! };
+}
+
 const MONEY = [/\$\s?\d[\d.,]*\s?(?:mm|m|k|million|thousand|bn|b)?\b/i, /\b\d[\d.,]*\s?(?:M|MM|K)\b/, /\b\d[\d.,]*\s?million\b/i];
 
 const REASON_WORDS: Array<[OutcomeReason, RegExp]> = [
@@ -225,10 +254,21 @@ export function readUpdate(text: string, ctx: { status: PursuitStatus; today: st
     out.push({ kind: 'next', step: words.slice(0, 140), on: when?.on ?? null, basis: quote(when && !stepHit[0].includes(when.basis) ? `${stepHit[0]} … ${when.basis}` : stepHit[0]) });
   }
 
-  // An amount is never recorded from an update: said where, and pointed at the close track.
-  for (const re of MONEY) {
-    const m = re.exec(body);
-    if (m) { out.push({ kind: 'amount', said: m[0].trim(), basis: quote(m[0]) }); break; }
+  // An amount is never recorded as money from an update: said where, pointed at the close track,
+  // and offered as an indicated amount (docs/27 §1) for a person to tick.
+  const range = RANGE.exec(body);
+  if (range) {
+    const parsed = amountRange(range[0]);
+    out.push({ kind: 'amount', said: range[0].trim(), basis: quote(range[0]), low: parsed?.low ?? null, high: parsed?.high ?? null });
+  } else {
+    for (const re of MONEY) {
+      const m = re.exec(body);
+      if (m) {
+        const parsed = amountRange(m[0]);
+        out.push({ kind: 'amount', said: m[0].trim(), basis: quote(m[0]), low: parsed?.low ?? null, high: parsed?.high ?? null });
+        break;
+      }
+    }
   }
   return out;
 }
