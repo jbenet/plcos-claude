@@ -23,7 +23,7 @@ export async function McpTokens() {
   const mine = vehicles.filter((v) => v.phase !== 'historical' && can(user, 'read', { vehicle: v.id }));
   const vname = new Map(vehicles.map((v) => [v.id, v.name]));
   const now = Date.now();
-  const drafts = TOOLS.filter((t) => t.kind === 'draft').map((t) => t.title.toLowerCase());
+  const drafts = TOOLS.filter((t) => t.policy.risk === 'propose' && !t.policy.scopes.length).map((t) => t.title.toLowerCase());
   return (
     <div className="card" id="mcp">
       <div className="chead">

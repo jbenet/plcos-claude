@@ -57,16 +57,18 @@ approved SEND ticket, and the rule above holds unchanged. Precisely (docs/27-out
 
 - Capital OS has no code that sends. The desk sends from its owner's own mailbox, through
   MailGuard.
-- The desk opens the ticket (`POST /api/outreach/tickets`), naming the LP and every recipient;
+- The desk opens the ticket (MCP `outreach_request_ticket`, or `POST /api/outreach/tickets`), naming the LP and every recipient;
   the scope authorizes one email to those recipients about that vehicle, once. It is requested
   by the inactive "Mail desk" actor, so the person who approves is never the requester, and no
   API operation approves anything.
 - A person approves it in Approvals. Approving runs nothing.
-- After sending, the desk records it (`POST /api/outreach/sent`) with the Gmail message id and the
+- After sending, the desk records it (`outreach_record_send`, or `POST /api/outreach/sent`) with the Gmail message id and the
   time. Capital OS refuses the record unless the ticket is approved, unexpired, for that pursuit,
   the recipients are within the approval, and the ticket has not been used; the same message
   again is the same record (idempotent), a second one is refused. A material in the email
   re-runs the wrap check at record time (rule 11).
+- A pipeline status may change through the desk (`outreach_update`) only as a box Juan ticked, through
+  the LP page's own service and guards; never a ladder rung, money or a ticket decision (Juan, 4 Oct).
 
 *Juan, 4 Oct 2026 — two guards became advisory.* "We have to pitch SPVs as we go": an open fund
 discussion no longer holds an SPV pitch. It is flagged (`blocking: false`), the desk chooses —

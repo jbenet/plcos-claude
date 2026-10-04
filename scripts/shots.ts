@@ -2616,6 +2616,29 @@ const SHOTS: Record<string, Shot[]> = {
         await page.evaluate(() => window.scrollBy(0, -70));
       },
     },
+    {
+      // Developer → Agent activity after a few juanmail calls over the REST wrapper (the same record as MCP).
+      name: '05-agent-activity',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        const card = page.locator('#mcp');
+        await card.getByPlaceholder('Claude Code on the Mac').fill('juanmail');
+        await card.locator('input[name=tools][value=outreach-write]').check();
+        await card.getByRole('button', { name: 'Make token' }).click();
+        const secret = (await card.locator('code').first().innerText()).trim();
+        const headers = { Authorization: `Bearer ${secret}`, 'X-Correlation-Id': 'wave-2026-10-04', 'User-Agent': 'juanmail-server/0.1' };
+        const base = new URL(page.url()).origin;
+        await page.request.get(`${base}/api/outreach/vehicles`, { headers });
+        const q = await (await page.request.get(`${base}/api/outreach/queue?vehicle=all&bucket=invite&limit=3`, { headers })).json() as { data: { rows: Array<{ pursuitId: string }> } };
+        const first = q.data.rows[0]?.pursuitId;
+        if (first) {
+          await page.request.post(`${base}/api/outreach/tickets`, { headers, data: { kind: 'SEND', pursuitId: first, scope: { recipients: ['partner@invented.example'] }, coordination: { choice: 'send_separately' } } });
+          await page.request.post(`${base}/api/outreach/sent`, { headers, data: { ticketId: '00000000-0000-4000-8000-000000000000', pursuitId: first, recipients: ['partner@invented.example'], gmailMessageId: 'invented-1', sentAt: new Date().toISOString() } });
+        }
+        await page.goto(`${base}/developer/agent-activity`, { waitUntil: 'networkidle' });
+      },
+    },
   ],
   // Mailguard (docs/25 §12), on the demo's fake mailguard: Preferences → Email refuses a token that can send, then
   // connects a drafts-only one and tests it. Both tokens are invented by the fake.

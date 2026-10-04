@@ -1,6 +1,7 @@
 # 26 — MCP access to Capital OS
 
-**Status:** phase 1 built on the branch `claude/mcp`, 2 Oct 2026; not merged or shipped.
+**Status:** phase 1 built on the branch `claude/mcp`, 2 Oct 2026. The data-driven policy, the outreach tools and the
+structured audit record were added on `claude/outreach-api`, 4 Oct 2026 (docs/27); not merged or shipped.
 
 Juan, 2 Oct 2026: "we should add: MCP access to PLCOS to enable a wide range of actions. plan this out and
 implement after email". So an agent — Claude Code, Claude Desktop, later others — can use the app as a person,
@@ -53,61 +54,100 @@ with that person's access or less. It reads, and it drafts. It does not send, ap
   preview server (writes are refused there). And the Mac serves plain `http` on the local network: from another
   device a token crosses the network unencrypted. Use `localhost` on the Mac; TLS comes with the deployed service.
 
-## 3. Tools
+## 3. Tools, and the policy each one carries
 
-The registry is `lib/mcp/tools.ts`. A name absent there does not exist; a token calls only the names it lists.
+The registry is `lib/mcp/tools.ts`. A name absent there does not exist. Since 4 Oct 2026 the policy is data, one entry
+per tool (Juan: "we can evolve the MCP rules, i think we'll end up with more tools wanting to do stuff"):
 
-| Tool | Kind | What it answers | Needs |
-| --- | --- | --- | --- |
-| `search` | read | People and organisations by name, the pursuits on your vehicles (status, owner), do-not-approach | any |
-| `lp_summary` | read | One LP on one vehicle: status, evidence, contact dates, latest strategy, open amounts (hard and soft apart), restrictions, top routes | the vehicle |
-| `routes_to` | read | Warm-intro routes to a target for a vehicle, by evidence tier, with coverage | the vehicle |
-| `routes_through` | read | Whom X could introduce us to, our route to X, LPs reachable only through X | every vehicle |
-| `pipeline` | read | A vehicle's LPs by status, counts, owner, next step, last touch | the vehicle |
-| `target_lists` | read | Open LPs on a strategy list: this year's close, 2027, not now, none | words on the vehicle |
-| `replies_owed` | read | LPs who spoke last with nothing from us since; LPs at Connecting waiting on a first reply | words on the vehicle |
-| `feedback_issues` | read | Open issues, or one in full (a Viewer gets no body) | any |
-| `changelog` | read | The latest entries, or one entry's text | any |
-| `outreach_vehicles` | read | The mail desk's vehicles: hard, soft and indicated apart, raise window, SPV seats (docs/27) | the vehicle |
-| `outreach_queue` | read | The mail desk's queue: status, close track and seat apart, checks, materials, bucket; health-redacted (docs/27) | the vehicle |
-| `create_email_draft` | draft | A first message or an intro ask, saved in the app for its owner; not moved to Gmail, not sent | GP on the vehicle |
-| `file_feedback` | draft | An issue, journaled like the feedback box; only the live app files | any GP |
+- **risk** — `read` (reads through `lib/authz`, writes nothing); `propose` (writes something a person reviews or approves:
+  a draft, a feedback report, a ticket opened for approval, an address to confirm — and decides nothing);
+  `write-guarded` (changes a record through the app's own service and guards, as boxes a person ticked);
+  `send-adjacent` (records that something already left through an approved channel; sends nothing);
+- **scopes** — what the token must carry beyond the tool's name (`[]`: the name in the token's list is enough);
+- **ticket** — `none`, `opens` (for a person to approve) or `requires-approved` (fails closed without one);
+- **approval** — whether a person approves or accepts it before it counts.
+
+A token may call a tool when its list names the tool, or, for a scoped tool, when it carries every scope the tool
+needs. `tools/list` returns each tool's policy in `_meta`.
+
+| Tool | Risk | Scopes | Ticket | What it does |
+| --- | --- | --- | --- | --- |
+| `search` | read | — | — | People and organisations by name, the pursuits on your vehicles (status, owner), do-not-approach |
+| `lp_summary` | read | — | — | One LP on one vehicle: status, evidence, contact dates, latest strategy, hard and soft apart, restrictions, top routes |
+| `routes_to` | read | — | — | Warm-intro routes to a target for a vehicle, by evidence tier, with coverage |
+| `routes_through` | read | — | — | Whom X could introduce us to, our route to X, LPs reachable only through X (every vehicle) |
+| `pipeline` | read | — | — | A vehicle's LPs by status, counts, owner, next step, last touch |
+| `target_lists` | read | — | — | Open LPs on a strategy list: this year's close, 2027, not now, none |
+| `replies_owed` | read | — | — | LPs who spoke last with nothing from us since; LPs at Connecting waiting on a first reply |
+| `feedback_issues` | read | — | — | Open issues, or one in full (a Viewer gets no body) |
+| `changelog` | read | — | — | The latest entries, or one entry's text |
+| `audit_recent` | read | — | — | Your own recent calls: tool, outcome, reason, ids affected, idempotency and correlation ids (§4) |
+| `outreach_vehicles` | read | outreach:read | — | The desk's vehicles: hard, soft and indicated apart, raise window, SPV seats (docs/27) |
+| `outreach_queue` | read | outreach:read | — | The desk's queue: status, close track and seat apart, checks, materials, bucket; `updatedSince` for polling; health-redacted |
+| `create_email_draft` | propose | — | — | A first message or an intro ask, saved in the app for its owner; not moved to Gmail, not sent |
+| `file_feedback` | propose | — | — | An issue, journaled like the feedback box, optionally about a logged call (`callId`); only the live app files |
+| `outreach_request_ticket` | propose | outreach:write | opens | A SEND (one email, named recipients) or INTRO_ASK ticket for a person to approve; never approves it |
+| `outreach_propose_contact` | propose | outreach:write | — | An address the person confirmed from Gmail, kept beside Affinity's, never over it |
+| `outreach_update` | write-guarded | outreach:write | — | The LP page's update box: words and the boxes the person ticked — status, touchpoint, next step, indicated amount |
+| `outreach_record_send` | send-adjacent | outreach:write | requires-approved | That the desk sent the email an approved SEND ticket covers: once, with the Gmail message id |
 
 A scoped GP's token reads only their vehicles. `search` leaves out LPs found only elsewhere and counts them; an LP
 it does show names the other vehicles it is on, with owner and no status, as the pages do (rule 5). Every list
 says what it covered and as of when (rule 7); an empty route list says it is not proof that no route exists.
 
-**Phase 2 writes (planned, not built).** `update_email_draft` (one's own, with the revision check);
-`propose_move` and `propose_task` — written as proposals, accepted by a person in the app with the existing
-idempotency key, never by the tool; `add_note` (a context note, authored by the token's owner, on a vehicle).
+**Status changes through `outreach_update` (Juan, 4 Oct 2026).** juanmail uses MCP, so the outreach writes are MCP
+tools. A status may change through `outreach_update` only as a box Juan ticked, through the same service and guards as
+the LP page's update box (`lib/updates.ts`): the LP page's own authorization rule, once per idempotency key, audited.
+It never records a ladder rung (rule 2; a logged meeting may propose one, for a person to approve), never money, and
+never decides a ticket.
 
-**Excluded, and why.**
+**Still excluded, and why.**
 
-- **Any send** — email, intro ask, materials — and **moving a draft to Gmail**. Rule 3 (SEND, INTRO_ASK) and
-  AGENTS.md: no tool sends anything. A move puts the words one click from sent; the person clicks Move in the app.
-- **Approvals, ticket decisions, accepting a suggestion or a run.** No tool accepts its own proposed task; acceptance
-  is a person's act with an idempotency key.
-- **Status changes behind a ticket** (a ladder rung is a STAGE ticket, rule 3), and in phase 1 the pipeline status
-  too: it is a person's plan (docs/17). An agent may propose one in phase 2.
-- **Money and allocation** — recording a wire, hardening soft to hard, allocation exceptions: MONEY and
-  ALLOCATION_EXCEPTION tickets, rule 10, Admin only.
+- **Sending** email, intro asks or materials, and **moving a draft to Gmail**. Capital OS sends nothing; the mail desk
+  sends through MailGuard, one email per approved SEND ticket, and `outreach_record_send` only records it (rule 3,
+  docs/agent-rules/domain.md).
+- **Approvals, ticket decisions, accepting a suggestion or a run.** No tool decides a ticket, its own or any; a desk
+  ticket is requested by the inactive Mail desk actor and decided by a person in Approvals.
+- **Ladder rungs** (STAGE tickets, rule 2–3).
+- **Money and allocation** — a wire, hardening soft to hard, allocation exceptions: MONEY and ALLOCATION_EXCEPTION
+  tickets, rule 10, Admin only. An indicated amount is not money (docs/27 §1).
 - **Imports, connector runs, workflow runs, merges, roster and weights.** Admin operations on the live server,
   recorded in the run ledger, some holding keys (Affinity, Dakota, Linear) that must not be reachable from an
-  agent's session; long-running, and not undone by a person reading a receipt.
+  agent's session.
 
-A property enumerates the registry and fails if a tool of any other kind appears, if a name reads like one of these
-acts, or if `lib/mcp/` mentions a service that performs one (`moveDraft`, `setPursuitStatus`, `recordWire`, …).
+**The hard rules are properties** (`scripts/properties/mcp.ts`), over the registry: every tool has a policy in the
+closed set; no tool is named for an approval, a decision, money, a status, a rung or an import; a tool named for a send
+or a ticket must have a ticket in its policy and a person approving; a send-adjacent tool requires an approved
+ticket; a write needs a scope; and neither `lib/mcp/` nor `lib/outreach/` mentions a service that sends, decides or
+moves money (`moveDraft`, `decideTicket`, `recordWire`, `harden(`, `mailguardClient`, `makeAsk`, …).
+
+**Adding a tool.** (1) A policy entry in `lib/mcp/tools.ts`: risk, scopes, ticket, approval, and an input schema.
+(2) A property for what it must never do, beside the registry's (`scripts/properties/`), and an end-to-end check if a
+person's flow depends on it. (3) A row in the table above, with why it is safe, and a changelog entry. A tool that
+needs a new risk class, or that would send, decide or move money, is a decision for Juan first, recorded in
+docs/agent-rules/domain.md.
 
 ## 4. Safety
 
 - **Work envelope** (AGENTS.md, Agent rules). The token row is the envelope: scope = the owner's vehicles narrowed by
-  the token's; allowed commands = its tools; budget = calls a minute and a day; deadline = its expiry; escalation
-  owner = its owner; no acceptance criteria, because nothing is accepted. Every call is checked before the tool runs
-  (`lib/mcp/envelope.ts`) and refused with the reason when outside it.
-- **Audit.** Every call writes `mcp.call` to `platform.audit_log`: the token, the owner, the tool, the outcome
-  (ok, refused, rate_limited, invalid, error), time, bytes, and the arguments — ids and fixed choices kept, typed
-  text only as its length, so no words reach the log. `mcp.token_created`, `mcp.token_revoked`, and `mcp.refused`
-  for a revoked, expired or inactive token. A draft also writes its own `email.draft_created`, as the owner.
+  the token's; allowed commands = its tools and scopes; budget = calls a minute and a day; deadline = its expiry;
+  escalation owner = its owner. Every call is checked before the tool runs (`lib/mcp/envelope.ts`, `allowed()` in
+  `lib/mcp/tools.ts`) and refused with the reason when outside it.
+- **One audit record per call** (Juan, 4 Oct 2026: "we will need to make sure all the actions are logged for audits,
+  feedback, improvement, etc."). Every MCP call, and every outreach REST call (the same `runTool`), writes one
+  `mcp.call` row to `platform.audit_log`: the owner (actor), the token (subject); `via` (mcp or rest), `client` (the
+  token's name: "juanmail", "Juan's iPad mail desk"), `tool`, `risk`, `scopes`; `inputHash` (SHA-256 of the
+  arguments as sent) and `args` (ids and fixed choices as given, any typed text only as its length, so no words reach
+  the log); `outcome` (ok, refused, rate_limited, invalid, error), `reason`, `ms`, `bytes`; `affected` (the pursuit,
+  ticket, draft, send, update… ids in the arguments or the answer); `idempotencyKey`; and `correlationId` — a client's
+  id for a chain of calls, sent as `_meta.correlationId` on the call or an `X-Correlation-Id` header. Refusals are
+  records too. `mcp.token_created`, `mcp.token_revoked`, and `mcp.refused` for a revoked, expired or inactive token.
+  A draft also writes its own `email.draft_created`, as the owner.
+- **Reading it.** Developer → Agent activity lists the calls, newest first, filtered by client, tool and outcome (an
+  Admin sees everyone's, anyone else their own); one call opens with its detail. `audit_recent` gives a client its
+  own history. **Feedback on a call:** the feedback box on that call's page records the call's id in the issue;
+  an agent passes `callId` to `file_feedback`. Indexes in platform 016.
+- **Retention:** everything is kept, for now. Nothing in the audit log is deleted; revisit when it is large.
 - **Rate.** 60 calls a minute (GUESS) and 2,000 a day (GUESS) per token, in memory; after a restart the day's count
   is read back from the audit log.
 - **Data, not instructions.** Record text — a strategy, a note, an issue, a name — is written by people and outside
@@ -139,7 +179,7 @@ restricted values, the registry, revocation, audit, budgets, size, the acting us
    Read and draft, and press Make token. Copy what it shows; it is not shown again.
 2. In a terminal: `claude mcp add --transport http --scope user capital-os http://localhost:3000/api/mcp --header "Authorization: Bearer plcos_mcp_…"`
    (Preferences shows this line with the token filled in). `--scope user` makes it available in every folder.
-3. In Claude Code, `/mcp` lists `capital-os` with 11 tools (or 13). Ask, for example, "Which LPs on PLC Neurotech
+3. In Claude Code, `/mcp` lists `capital-os` with 10 tools (or 12 with drafts, more with the outreach scope). Ask, for example, "Which LPs on PLC Neurotech
    owe a reply?"
 
 That command stores the token in `~/.claude.json`. To keep it out of the file, put the server in a project's

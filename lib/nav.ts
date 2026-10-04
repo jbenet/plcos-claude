@@ -197,6 +197,7 @@ export const STATIC_SECTIONS: NavSection[] = [
       { label: 'Modules', href: '/developer/modules' },
       { label: 'Workflows', href: '/developer/workflows' },
       { label: 'Agents', href: '/developer/agents' },
+      { label: 'Agent activity', href: '/developer/agent-activity' },
       { label: 'Data', href: '/developer/data' },
       { label: 'Affinity', href: '/developer/affinity' },
       { label: 'Linear', href: '/developer/linear' },

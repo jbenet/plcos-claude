@@ -88,13 +88,17 @@ export async function createEmailDraft(env: Envelope, a: {
   }
 }
 
-export async function fileFeedback(env: Envelope, a: { title: string; body?: string; kind?: string; priority?: string; page?: string }): Promise<Answer> {
+export async function fileFeedback(env: Envelope, a: { title: string; body?: string; kind?: string; priority?: string; page?: string; callId?: string }): Promise<Answer> {
   // The feedback box's rule (app/api/feedback/route.ts): only the live app files, so issue numbers never collide.
   if (!feedbackHome(config.data.profile).filesHere) {
     throw new ToolRefused('This server runs a branch in development. Feedback is filed from the live app, so issue numbers never collide (docs/COLLAB.md).');
   }
-  const checked = checkReport({ title: a.title, body: a.body ?? '', kind: a.kind, priority: a.priority, page: a.page ?? '/', context: { via: 'mcp', tokenId: env.tokenId } });
+  const checked = checkReport({ title: a.title, body: a.body ?? '', kind: a.kind, priority: a.priority, page: a.page ?? '/', context: { via: 'mcp', tokenId: env.tokenId, ...(a.callId ? { callId: a.callId } : {}) } });
   if (!checked.ok) throw new ToolRefused(checked.error);
+  // Feedback on a logged call (docs/26 §4): only one of this person's own.
+  if (a.callId && !(await (await getDb()).one(`select 1 from platform.audit_log where id = $1::bigint and action = 'mcp.call' and actor_id = $2`, [a.callId, env.owner.id]))) {
+    throw new ToolRefused('No call of yours with that id. Find yours with audit_recent.');
+  }
   const clientId = newRequestKey();
   // Journaled like the box; the ingester files it and resolves the reporter against the roster.
   await journal(join(process.cwd(), config.issues.dir), {

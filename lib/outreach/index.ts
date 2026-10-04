@@ -1,6 +1,6 @@
 /**
- * The mail desk's outreach API (docs/27-outreach-api.md). One service layer for the REST routes
- * (app/api/outreach/[op]) and the matching MCP read tools (lib/mcp/tools.ts).
+ * Outreach for juanmail (docs/27-outreach-api.md). The services behind the MCP outreach tools (lib/mcp/tools.ts),
+ * which are the primary interface, and the thin REST wrapper (app/api/outreach/[op]) that runs the same tools.
  */
 export { corsOrigin, preflight, serveOutreach } from './http';
 export { BUCKETS, FUND_FIRST_CHOICES, OutreachRefused, outreachQueue, outreachVehicles, type Bucket, type Check } from './reads';

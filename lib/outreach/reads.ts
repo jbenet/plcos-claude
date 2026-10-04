@@ -93,12 +93,45 @@ export type FundFirstChoice = (typeof FUND_FIRST_CHOICES)[number];
 type PRow = Awaited<ReturnType<typeof pipelineData>>['rows'][number];
 const OPEN_FUND = ['connecting', 'discussing', 'committed'];
 
-export interface QueueArgs { vehicle: string; bucket?: Bucket; limit?: number; offset?: number; pursuitId?: string }
+export interface QueueArgs { vehicle: string; bucket?: Bucket; limit?: number; offset?: number; pursuitId?: string; updatedSince?: string }
+
+/**
+ * When each pursuit last changed, among those that changed since `since` (docs/27 §4, periodic sync): its status,
+ * next step, an update or an indication (the audit log), a touchpoint, a strategy, the close track, the SPV seat, a
+ * restriction, a desk send, an address. One query; a pursuit with no change since is absent.
+ */
+async function changedSince(ids: string[], since: Date): Promise<Map<string, Date>> {
+  if (!ids.length) return new Map();
+  const rows = await (await getDb()).query<{ id: string; at: Date | string }>(`
+    with p as (select p.pursuit_id, identity.canonical_entity_id(p.entity_id) e, p.vehicle_id v, p.status_set_at, p.opened_at
+                 from strategy.pursuit p where p.pursuit_id = any($1::uuid[]))
+    select id, max(at) at from (
+      select p.pursuit_id::text id, greatest(p.status_set_at, p.opened_at) at from p
+      union all select a.subject_id, a.at from platform.audit_log a where a.subject_type = 'pursuit' and a.at >= $2 and a.subject_id = any($1::text[])
+      union all select p.pursuit_id::text, m.created_at from p join meetings.meeting m on identity.canonical_entity_id(m.entity_id) = p.e
+        and (m.vehicle_id is null or m.vehicle_id = p.v) where m.created_at >= $2
+      union all select p.pursuit_id::text, s.created_at from p join strategy.suggestion s on s.pursuit_id = p.pursuit_id where s.created_at >= $2
+      union all select p.pursuit_id::text, greatest(x.opened_at, ce.recorded_at) from p join pipeline.exposure x
+        on identity.canonical_entity_id(x.entity_id) = p.e and x.vehicle_id = p.v left join pipeline.commitment_event ce on ce.exposure_id = x.exposure_id
+      union all select p.pursuit_id::text, greatest(i.recorded_at, i.superseded_at) from p join pipeline.indication i on i.pursuit_id = p.pursuit_id
+      union all select p.pursuit_id::text, greatest(s.invited_at, s.ioi_at, s.allocated_at, s.wired_at) from p join close.spv_seat s
+        on identity.canonical_entity_id(s.entity_id) = p.e and s.vehicle_id = p.v
+      union all select p.pursuit_id::text, r.recorded_at from p join coordination.restriction r on identity.canonical_entity_id(r.entity_id) = p.e
+      union all select p.pursuit_id::text, greatest(o.requested_at, o.recorded_at) from p join email.outreach_send o on o.pursuit_id = p.pursuit_id
+      union all select p.pursuit_id::text, c.created_at from p join research.claim c on identity.canonical_entity_id(c.entity_id) = p.e
+        where c.field ~ '(^|\\.)email$' and c.created_at >= $2
+    ) t where at >= $2 group by id`, [ids, since]);
+  return new Map(rows.map((r) => [r.id, new Date(r.at)]));
+}
 
 export async function outreachQueue(user: AppUser, a: QueueArgs) {
+  // The next poll's updatedSince: taken before reading, so a change committed while this runs is seen next time.
+  const cursor = new Date().toISOString();
   if (a.vehicle === 'none') {
-    return { data: [], total: 0, offset: 0, coverage: { corpus: 'none', note: 'Every LP in Capital OS is on a vehicle: there are no pursuits without one. Use vehicle=all.' } };
+    return { data: { rows: [], total: 0, offset: 0, counts: null, cursor, redacted: null }, coverage: { corpus: 'none', note: 'Every LP in Capital OS is on a vehicle: there are no pursuits without one. Use vehicle=all.' } };
   }
+  const since = a.updatedSince ? new Date(a.updatedSince) : null;
+  if (since && Number.isNaN(since.getTime())) throw new OutreachRefused(400, 'updatedSince is not a time.');
   const vehicles = a.vehicle === 'all' ? await deskVehicles(user) : [await deskVehicle(user, a.vehicle)];
   const all = (await Promise.all(vehicles.map(async (v) => (await pipelineData(v.id)).rows.filter((r) => r.vehicleId === v.id && r.status !== 'passed'))))
     .flat().filter((r) => !a.pursuitId || r.id === a.pursuitId);
@@ -153,14 +186,15 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
       : ['new', 'sourcing', 'selected'].includes(r.status) ? 'invite' : 'follow_up';
     return { r, v, s, last, close, seat, indicated, replyOwed, funds, bucket };
   });
-  const chosen = base.filter((b) => !a.bucket || b.bucket === a.bucket)
+  const changed = since ? await changedSince(base.map((b) => b.r.id), since) : null;
+  const chosen = base.filter((b) => (!a.bucket || b.bucket === a.bucket) && (!changed || changed.has(b.r.id)))
     .sort((x, y) => BUCKETS.indexOf(x.bucket) - BUCKETS.indexOf(y.bucket) || (y.r.priority ?? -1) - (x.r.priority ?? -1) || x.r.name.localeCompare(y.r.name));
   const offset = a.offset ?? 0;
   const limit = Math.min(a.limit ?? 100, config.outreach.maxQueueRows);
   const page = chosen.slice(offset, offset + limit);
   const counts = Object.fromEntries(BUCKETS.map((b) => [b, base.filter((x) => x.bucket === b).length]));
   if (!page.length) {
-    return { data: [], total: chosen.length, offset, counts, coverage: queueCoverage(vehicles) };
+    return { data: { rows: [], total: chosen.length, offset, counts, cursor, redacted: null }, coverage: queueCoverage(vehicles) };
   }
 
   // The rest only for the page.
@@ -302,11 +336,12 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
       checks,
       materials: materialsByVehicle.get(v.id) ?? [],
       bucket: held ? 'held' as Bucket : b.bucket,
+      updatedAt: changed?.get(r.id)?.toISOString() ?? null,
     };
   });
   return {
-    data: rows, total: chosen.length, offset, counts,
-    redacted: redacted ? `${redacted} sentence${redacted === 1 ? '' : 's'} with a health detail redacted.` : null,
+    data: { rows, total: chosen.length, offset, counts, cursor,
+      redacted: redacted ? `${redacted} sentence${redacted === 1 ? '' : 's'} with a health detail redacted.` : null },
     coverage: queueCoverage(vehicles),
   };
 }

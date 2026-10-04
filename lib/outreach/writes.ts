@@ -13,9 +13,11 @@ import { logTouchpoint, TouchpointRefused } from '@/modules/meetings';
 import { IndicationRefused } from '@/modules/pipeline';
 import { appendAudit } from '@/modules/platform';
 import { StatusRefused } from '@/modules/strategy';
-import type { DeskContext, Op } from './http';
+import type { Envelope } from '@/lib/mcp/envelope';
+
+/** Who is calling: the token's envelope. */
+export interface DeskContext { env: Envelope }
 import { FUND_FIRST_CHOICES, OutreachRefused, outreachQueue, type Check } from './reads';
-import { OUTREACH_WRITE } from './scopes';
 
 /**
  * The mail desk's writes (docs/27-outreach-api.md §3–5). Each reuses the service the app's own page uses,
@@ -78,7 +80,7 @@ const deskActor = async (q: Queryable) => (await q.one<{ id: string }>(`select i
 // ── POST /api/outreach/update ───────────────────────────────────────────────────────────
 
 const statuses = ['new', 'sourcing', 'selected', 'connecting', 'discussing', 'committed', 'passed'] as const;
-const updateInput = z.object({
+export const updateInput = z.object({
   pursuitId: uuid,
   words: z.string().min(1).max(20000),
   applied: z.object({
@@ -90,7 +92,7 @@ const updateInput = z.object({
   idempotencyKey: key,
 }).strict();
 
-async function update(ctx: DeskContext, raw: Record<string, unknown>) {
+export async function update(ctx: DeskContext, raw: Record<string, unknown>) {
   const a = raw as z.infer<typeof updateInput>;
   const db = await getDb();
   const p = await deskPursuit(ctx, a.pursuitId, db);
@@ -115,7 +117,7 @@ async function update(ctx: DeskContext, raw: Record<string, unknown>) {
 
 // ── POST /api/outreach/tickets ──────────────────────────────────────────────────────────
 
-const ticketInput = z.object({
+export const ticketInput = z.object({
   kind: z.enum(['SEND', 'INTRO_ASK']),
   pursuitId: uuid,
   assetId: uuid.optional(),
@@ -131,7 +133,7 @@ const ticketInput = z.object({
 
 const plusDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 
-async function tickets(ctx: DeskContext, raw: Record<string, unknown>) {
+export async function requestTicket(ctx: DeskContext, raw: Record<string, unknown>) {
   const a = raw as z.infer<typeof ticketInput>;
   return once(ctx, 'tickets', a.idempotencyKey, async () => {
     const db = await getDb();
@@ -139,7 +141,7 @@ async function tickets(ctx: DeskContext, raw: Record<string, unknown>) {
     if (a.kind === 'SEND' && !a.scope.recipients?.length) throw new OutreachRefused(400, 'A SEND ticket names its recipients (scope.recipients): the approval covers them and nobody else.');
     if (a.kind === 'INTRO_ASK' && !a.connectorId) throw new OutreachRefused(400, 'An INTRO_ASK names the connector who would introduce (connectorId).');
     // The queue's own checks for this LP, now: a blocking one refuses before any ticket exists.
-    const row = (await outreachQueue(ctx.env.principal, { vehicle: p.slug, pursuitId: p.pursuit_id })).data[0] as { checks: Check[] } | undefined;
+    const row = (await outreachQueue(ctx.env.principal, { vehicle: p.slug, pursuitId: p.pursuit_id })).data.rows[0] as { checks: Check[] } | undefined;
     if (!row) throw new OutreachRefused(409, 'This LP is not in the queue (passed, or not readable): no ticket was opened.');
     const blocking = row.checks.filter((c) => !c.ok && c.blocking);
     if (blocking.length) throw new OutreachRefused(409, `Refused, no ticket opened: ${blocking.map((c) => `${c.rule}: ${c.detail}`).join(' ')}`);
@@ -227,7 +229,7 @@ async function tickets(ctx: DeskContext, raw: Record<string, unknown>) {
 
 // ── POST /api/outreach/contacts ─────────────────────────────────────────────────────────
 
-const contactInput = z.object({
+export const contactInput = z.object({
   entityId: uuid, email, source: z.literal('gmail'), confirmedBy: z.string().min(1).max(254), confirmedAt: isoTime.optional(), idempotencyKey: key.optional(),
 }).strict();
 
@@ -242,7 +244,7 @@ async function entityVehicles(entityId: string, q: Queryable): Promise<string[]>
       where identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id($1::uuid) and a.ended_on is null`, [entityId])).map((r) => r.v);
 }
 
-async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
+export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
   const a = raw as z.infer<typeof contactInput>;
   return once(ctx, 'contacts', a.idempotencyKey, async () => {
     requireMutationProfile();
@@ -290,14 +292,14 @@ async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
 
 // ── POST /api/outreach/sent ─────────────────────────────────────────────────────────────
 
-const sentInput = z.object({
+export const sentInput = z.object({
   ticketId: uuid, pursuitId: uuid, recipients: z.array(email).min(1).max(10),
   gmailMessageId: z.string().min(1).max(200).regex(/^[\w.@<>+=/-]+$/), sentAt: isoTime,
 }).strict();
 
 const SKEW_MS = 5 * 60_000; // GUESS — clock skew between the desk's device and this server.
 
-async function sent(ctx: DeskContext, raw: Record<string, unknown>) {
+export async function recordDeskSend(ctx: DeskContext, raw: Record<string, unknown>) {
   const a = raw as z.infer<typeof sentInput>;
   const db = await getDb();
   const p = await deskPursuit(ctx, a.pursuitId, db);
@@ -344,10 +346,3 @@ async function sent(ctx: DeskContext, raw: Record<string, unknown>) {
   });
 }
 
-/** The write operations; lib/outreach/http.ts serves them beside the reads. */
-export const WRITE_OPS: Record<string, Op> = {
-  update: { method: 'POST', scope: OUTREACH_WRITE, input: updateInput, run: update },
-  tickets: { method: 'POST', scope: OUTREACH_WRITE, input: ticketInput, run: tickets as Op['run'] },
-  contacts: { method: 'POST', scope: OUTREACH_WRITE, input: contactInput, run: contacts as Op['run'] },
-  sent: { method: 'POST', scope: OUTREACH_WRITE, input: sentInput, run: sent },
-};

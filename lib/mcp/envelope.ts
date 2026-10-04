@@ -19,6 +19,8 @@ import type { AppUser, McpToken } from '@/modules/platform';
  */
 export interface Envelope {
   tokenId: string;
+  /** The token's name: the client behind it ("juanmail", "Juan's iPad mail desk"), as its owner named it. */
+  label: string;
   owner: AppUser;
   /** The principal every check uses: the owner, narrowed to the token's vehicles. */
   principal: AppUser;
@@ -44,7 +46,7 @@ export function narrowedPrincipal(owner: AppUser, vehicles: string[] | null): Ap
 
 export function envelopeFor(token: McpToken, owner: AppUser): Envelope {
   return {
-    tokenId: token.tokenId, owner, principal: narrowedPrincipal(owner, token.vehicles),
+    tokenId: token.tokenId, label: token.label, owner, principal: narrowedPrincipal(owner, token.vehicles),
     tools: new Set(token.tools), callsPerDay: token.callsPerDay, expiresAt: new Date(token.expiresAt),
   };
 }
@@ -58,8 +60,8 @@ interface Window { minute: number[]; day: string; dayCount: number }
 const windows = new Map<string, Window>();
 const today = (now: number) => new Date(now).toISOString().slice(0, 10);
 
-export async function admitCall(env: Envelope, tool: string, q: Queryable, now = Date.now()): Promise<string | null> {
-  if (!env.tools.has(tool)) return `"${tool}" is not in this token's envelope. Allowed: ${[...env.tools].sort().join(', ') || 'nothing'}.`;
+export async function admitCall(env: Envelope, tool: string, q: Queryable, now = Date.now(), permitted = env.tools.has(tool)): Promise<string | null> {
+  if (!permitted) return `"${tool}" is not in this token's envelope. Allowed: ${[...env.tools].sort().join(', ') || 'nothing'}.`;
   if (env.expiresAt.getTime() <= now) return 'This token has expired. Make a new one in Preferences.';
   let w = windows.get(env.tokenId);
   if (!w || w.day !== today(now)) {

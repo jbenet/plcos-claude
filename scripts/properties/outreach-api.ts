@@ -46,7 +46,7 @@ export async function fixtures(db: Db) {
     returning id::text, handle, name, initials, role, email, access::text, vehicles::text[], approves`, [handle, `Invented ${handle}`, `${handle}@example.invalid`, access, scope]))!;
   const { createMcpToken } = await import('../../modules/platform');
   const token = async (owner: AppUser, tools: string[], vehicles: string[] | null = null) =>
-    (await createMcpToken(owner, { label: `props outreach ${owner.handle} ${tools.join('+')}`, tools, vehicles, callsPerDay: 1000, days: 30 }, db)).secret;
+    (await createMcpToken(owner, { label: `props outreach ${owner.handle} ${tools.join("+")}`.slice(0, 80), tools, vehicles, callsPerDay: 1000, days: 30 }, db)).secret;
   const entity = async (name: string, type = 'org') => (await db.one<{ id: string }>(`insert into identity.entity (entity_type, display_name) values ($1::identity.entity_type, $2) returning entity_id::text id`, [type, name]))!.id;
   const pursuit = async (e: string, v: string, status = 'selected') => (await db.one<{ id: string }>(`insert into strategy.pursuit (entity_id, vehicle_id, owner_id, status, next_step)
     values ($1, $2, $3, $4::strategy.pursuit_status, 'INVENTED_OUTREACH_R2_NEXT') returning pursuit_id::text id`, [e, v, juan.id, status]))!.id;
@@ -88,24 +88,24 @@ export async function outreachReadProperties(check: Check, db: Db) {
   // ── Scope ─────────────────────────────────────────────────────────────────────────────
   const vFund = await call(fundOnly, 'vehicles');
   const qSpv = await call(fundOnly, 'queue', { vehicle: spv.slug });
-  const qAll = await call(fundOnly, 'queue', { vehicle: 'all', limit: '1000' });
+  const qAll = await call(fundOnly, 'queue', { vehicle: 'all', limit: '300' });
   const qOne = await call(fundOnly, 'queue', { vehicle: 'all', pursuitId: bothSpv });
   const none = await call(noScope, 'queue', { vehicle: fund.slug });
   const anon = await call(null, 'vehicles');
   const write = await call(wide, 'update', {}, { method: 'POST', body: {} });
   check('Outreach API: a vehicle-limited token reads no other vehicle; a token without the outreach scope, or no token, reads nothing; a read token cannot write',
     vFund.status === 200 && vFund.json.data.every((v: { slug: string }) => v.slug === fund.slug) && qSpv.status === 404
-    && qAll.status === 200 && qAll.json.data.every((r: { vehicle: string }) => r.vehicle === fund.slug) && !qAll.text.includes('Invented Outreach SPV-only Org')
-    && qOne.status === 200 && qOne.json.data.length === 0
-    && none.status === 403 && anon.status === 401 && [403, 404].includes(write.status),
-    `vehicles: ${vFund.json?.data?.map((v: { slug: string }) => v.slug).join(',')}; queue on the SPV: ${qSpv.status}; all: ${qAll.json?.data?.length} rows, all on the fund; another vehicle's pursuit by id: ${qOne.json?.data?.length} rows; no scope: ${none.status}; no token: ${anon.status}; a write with a read token: ${write.status}`);
+    && qAll.status === 200 && qAll.json.data.rows.every((r: { vehicle: string }) => r.vehicle === fund.slug) && !qAll.text.includes('Invented Outreach SPV-only Org')
+    && qOne.status === 200 && qOne.json.data.rows.length === 0
+    && none.status === 403 && anon.status === 401 && write.status === 403,
+    `vehicles: ${vFund.json?.data?.map((v: { slug: string }) => v.slug).join(',')}; queue on the SPV: ${qSpv.status}; all: ${qAll.json?.data?.rows?.length} rows, all on the fund; another vehicle's pursuit by id: ${qOne.json?.data?.rows?.length} rows; no scope: ${none.status}; no token: ${anon.status}; a write with a read token: ${write.status}`);
 
   // ── Restricted values ─────────────────────────────────────────────────────────────────
   // One LP at a time: the whole demo queue is longer than a page.
   const rowsOf = async (secret: string) => {
     const all = await Promise.all([bothSpv, bothFund, spvOnlyP].map((id) => call(secret, 'queue', { vehicle: 'all', pursuitId: id })));
     return { status: all.every((r) => r.status === 200) ? 200 : all.find((r) => r.status !== 200)!.status, text: all.map((r) => r.text).join('\n'),
-      json: { data: all.flatMap((r) => r.json?.data ?? []) } };
+      json: { data: all.flatMap((r) => r.json?.data?.rows ?? []) } };
   };
   const vq = await rowsOf(viewerTok);
   const vv = await call(viewerTok, 'vehicles');
@@ -166,11 +166,11 @@ export async function outreachReadProperties(check: Check, db: Db) {
     `evil: ${evil.status}, preflight ${evilPre.status}; same origin: ${same.status}; allowlisted preflight ${pre.status} → ${pre.headers.get('access-control-allow-origin')}, credentials ${pre.headers.get('access-control-allow-credentials') ?? 'none'}`);
 
   // ── Audit and the device ──────────────────────────────────────────────────────────────
-  const audits = await db.query<{ op: string; outcome: string }>(`select detail->>'op' op, detail->>'outcome' outcome
-    from platform.audit_log where action = 'outreach.call' and actor_id in ($1, $2, $3)`, [juan.id, gpFund.id, viewer.id]);
+  const audits = await db.query<{ op: string; outcome: string; via: string }>(`select detail->>'tool' op, detail->>'outcome' outcome, detail->>'via' via
+    from platform.audit_log where action = 'mcp.call' and detail->>'via' = 'rest' and actor_id in ($1, $2, $3)`, [juan.id, gpFund.id, viewer.id]);
   const device = await db.one<{ from: string | null }>(`select last_used_from "from" from platform.mcp_token where user_id = $1 order by created_at desc limit 1`, [gpFund.id]);
-  check('Outreach API: every call writes an outreach.call audit entry with the op and outcome, refusals included; the token keeps the device it was last used from',
-    audits.length >= 10 && audits.some((a) => a.op === 'queue' && a.outcome === 'refused') && audits.some((a) => a.op === 'update' && a.outcome === 'refused')
-    && audits.some((a) => a.op === 'vehicles' && a.outcome === 'ok') && device?.from === 'props-desk/1.0 (invented device)',
+  check('Outreach API: every REST call writes the same mcp.call audit record as MCP (via rest), refusals included; the token keeps the device it was last used from',
+    audits.length >= 10 && audits.some((a) => a.op === 'outreach_queue' && a.outcome === 'refused') && audits.some((a) => a.op === 'outreach_update' && a.outcome === 'refused')
+    && audits.some((a) => a.op === 'outreach_vehicles' && a.outcome === 'ok') && device?.from === 'props-desk/1.0 (invented device)',
     `${audits.length} entries: ${[...new Set(audits.map((a) => `${a.op}:${a.outcome}`))].join(', ')}; device: ${device?.from}`);
 }

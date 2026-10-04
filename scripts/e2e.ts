@@ -404,7 +404,7 @@ async function main() {
       const again = new Client({ name: 'e2e', version: '0' });
       const refused = await again.connect(new StreamableHTTPClientTransport(new URL(`${base}/api/mcp`), { requestInit: { headers: { Authorization: `Bearer ${secret}` } } }))
         .then(() => false, () => true);
-      if (tools.length !== 13 || summary.data.pursuitId !== lp.page.id || !draft.data.draftId || !send.isError || !refused) {
+      if (tools.length !== 12 || summary.data.pursuitId !== lp.page.id || !draft.data.draftId || !send.isError || !refused) {
         throw new Error(`tools ${tools.length}, summary ${summary.data.pursuitId === lp.page.id}, draft ${Boolean(draft.data.draftId)}, send refused ${Boolean(send.isError)}, revoked refused ${refused}`);
       }
       return { ui: `made a token, listed ${tools.length} tools, searched, summarised, read the pipeline, drafted, was refused a send; revoked it and the next connect failed`, verify: async (db) => {
@@ -439,7 +439,7 @@ async function main() {
         return json.data;
       };
       const vehicles = await api('GET', 'vehicles') as Array<{ slug: string; hard: number; soft: number; indicated: unknown }>;
-      const queue = await api('GET', `queue?vehicle=all&pursuitId=${lp.page.id}`) as Array<{ pursuitId: string; status: { label: string }; checks: unknown[]; bucket: string }>;
+      const queue = (await api('GET', `queue?vehicle=all&pursuitId=${lp.page.id}`)).rows as Array<{ pursuitId: string; status: { label: string }; checks: unknown[]; bucket: string }>;
       if (!vehicles.length || queue[0]?.pursuitId !== lp.page.id || !queue[0].status.label || !queue[0].checks.length) throw new Error(`vehicles ${vehicles.length}, queue row ${Boolean(queue[0])}`);
       const update = await api('POST', 'update', { pursuitId: lp.page.id, words: `Desk note (${MARK}): they indicated $2M-3M.`, applied: { indicated: { low: 2_000_000, high: 3_000_000 } }, idempotencyKey: deskKey });
       const ticket = await api('POST', 'tickets', { kind: 'SEND', pursuitId: lp.page.id, scope: { recipients: ['e2e-partner@invented.example'], purpose: 'invite' }, coordination: { choice: 'send_separately' } });
@@ -456,8 +456,48 @@ async function main() {
         same((await db.one<{ low: string; high: string }>(`select low::text, high::text from pipeline.indication where pursuit_id = $1 and superseded_at is null order by recorded_at desc limit 1`, [lp.page.id])), { low: '2000000.00', high: '3000000.00' }, 'the indication');
         same((await db.one<{ decision: string | null; requester: string; sent: boolean }>(`select t.decision::text decision, u.handle requester, s.sent_at is not null sent from email.outreach_send s
           join governance.approval_ticket t on t.id = s.ticket_id join platform.app_user u on u.id = t.requested_by where s.ticket_id = $1`, [ticket.ticketId])), { decision: null, requester: 'mail-desk', sent: false }, 'the SEND ticket (undecided, asked by the desk, nothing sent)');
-        const calls = await db.query<{ op: string; outcome: string }>(`select detail->>'op' op, detail->>'outcome' outcome from platform.audit_log where action = 'outreach.call' and subject_id = $1 order by id`, [t!.id]);
-        same(calls.map((c) => `${c.op}:${c.outcome}`), ['vehicles:ok', 'queue:ok', 'update:ok', 'tickets:ok', 'sent:refused'], 'the audit entries for its calls');
+        const calls = await db.query<{ op: string; outcome: string }>(`select detail->>'tool' op, detail->>'outcome' outcome from platform.audit_log where action = 'mcp.call' and subject_id = $1 order by id`, [t!.id]);
+        same(calls.map((c) => `${c.op}:${c.outcome}`), ['outreach_vehicles:ok', 'outreach_queue:ok', 'outreach_update:ok', 'outreach_request_ticket:ok', 'outreach_record_send:refused'], 'the audit entries for its calls');
+      } };
+    });
+
+    // juanmail over MCP (docs/27: MCP is the primary interface) ───────────────────────────────
+    const juanmail = `${MARK} juanmail`;
+    const chain = `e2e-chain-${Date.now().toString(36)}`;
+    await check('Outreach over MCP: a juanmail token reads the queue, records an update, asks for a SEND approval, is refused a send before approval, and reads its own calls back by correlation id', async () => {
+      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      const card = page.locator('#mcp');
+      await card.getByPlaceholder('Claude Code on the Mac').fill(juanmail);
+      await card.locator('input[name=tools][value=outreach-write]').check();
+      await card.getByRole('button', { name: 'Make token' }).click();
+      const secret = (await card.locator('code').first().innerText()).trim();
+      if (!secret.startsWith('plcos_mcp_')) throw new Error('no token was shown');
+      const client = new Client({ name: 'juanmail-e2e', version: '0' });
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/api/mcp`), { requestInit: { headers: { Authorization: `Bearer ${secret}` } } }));
+      const tools = (await client.listTools()).tools.map((t) => t.name);
+      const answer = async (name: string, args: Record<string, unknown>) => {
+        const r = (await client.callTool({ name, arguments: args, _meta: { correlationId: chain } })) as { isError?: boolean; content: Array<{ text: string }> };
+        if (r.isError) return { error: r.content[0]?.text ?? 'error', data: null as any };
+        return { error: null, data: (JSON.parse(r.content[0]!.text) as { data: any }).data };
+      };
+      const queue = await answer('outreach_queue', { vehicle: 'all', pursuitId: lp.page.id });
+      const update = await answer('outreach_update', { pursuitId: lp.page.id, words: `juanmail note (${MARK}).`, applied: { nextStep: { step: 'Send the SPV note' } }, idempotencyKey: `${chain}-u` });
+      const ticket = await answer('outreach_request_ticket', { kind: 'SEND', pursuitId: lp.page.id, scope: { recipients: ['e2e-juanmail@invented.example'], purpose: 'follow_up' }, coordination: { choice: 'mention_both' } });
+      const early = await answer('outreach_record_send', { ticketId: ticket.data?.ticketId, pursuitId: lp.page.id, recipients: ['e2e-juanmail@invented.example'], gmailMessageId: `${chain}-m`, sentAt: new Date().toISOString() });
+      const mine = await answer('audit_recent', { correlationId: chain });
+      await client.close();
+      const want = ['outreach_vehicles', 'outreach_queue', 'outreach_update', 'outreach_request_ticket', 'outreach_propose_contact', 'outreach_record_send', 'audit_recent'];
+      if (!want.every((t) => tools.includes(t)) || queue.data?.rows?.[0]?.pursuitId !== lp.page.id || update.error || !ticket.data?.ticketId || !early.error || (mine.data?.length ?? 0) < 4) {
+        throw new Error(`tools ${want.filter((t) => !tools.includes(t)).join(',') || 'all'}; queue ${Boolean(queue.data?.rows?.[0])}; update ${update.error ?? 'ok'}; ticket ${ticket.error ?? 'ok'}; early send ${early.error ? 'refused' : 'ALLOWED'}; own calls ${mine.data?.length}`);
+      }
+      return { ui: `listed ${tools.length} tools; read the queue, recorded an update, opened a SEND ticket, was refused a send before approval; audit_recent found ${mine.data.length} calls in the chain`, verify: async (db) => {
+        const rows = await db.query<{ tool: string; outcome: string; via: string; client: string; hash: string; pursuit: string | null }>(`select detail->>'tool' tool, detail->>'outcome' outcome,
+          detail->>'via' via, detail->>'client' client, detail->>'inputHash' hash, detail->'affected'->>'pursuitId' pursuit from platform.audit_log
+          where action = 'mcp.call' and detail->>'correlationId' = $1 order by id`, [chain]);
+        same(rows.map((r) => `${r.tool}:${r.outcome}:${r.via}:${r.client === juanmail}:${r.hash?.length}`),
+          ['outreach_queue:ok:mcp:true:64', 'outreach_update:ok:mcp:true:64', 'outreach_request_ticket:ok:mcp:true:64', 'outreach_record_send:refused:mcp:true:64', 'audit_recent:ok:mcp:true:64'],
+          'the chain of calls in the audit log (tool, outcome, via, client, input hash)');
+        same(rows.slice(0, 4).every((r) => r.pursuit === lp.page.id), true, 'each call names the LP it touched');
       } };
     });
 
