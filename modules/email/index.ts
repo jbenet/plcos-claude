@@ -1,9 +1,13 @@
 /** Email drafts (docs/25-email-drafts.md). The module's only public surface. */
-export type { Attachment, Draft, DraftMode, DraftPurpose, DraftStatus, DraftWarning, MoveBlock, Prefill } from './types';
-export { PURPOSE_LABEL } from './types';
-export { draftWarnings, prefillDraft, type CheckInput, type PrefillInput } from './rules';
+export type { Attachment, Draft, DraftMode, DraftPurpose, DraftStatus, DraftWarning, EmailKind, MoveBlock, Prefill } from './types';
+export { KIND_LABEL, PURPOSE_LABEL } from './types';
 export {
-  addAttachment, createDraft, discardDraft, disconnectGmail, draftsOn, draftWithChecks, DraftRefused, finishGmailConnect, gmailStatus,
-  mimeFor, moveBlocks, moveDraft, previewDraft, readAttachment, removeAttachment, saveDraft, warningsFor,
-  type Actor, type DraftEdit, type GmailStatus, type Moved, type NewDraft, type Preview, type Saved,
+  chooseFirstEmail, draftWarnings, firstMessageProblems, prefillDraft, readFirstMessage, STEPS,
+  type CheckInput, type EmailPlan, type FirstMessageInput, type PrefillInput, type RouteHint,
+} from './rules';
+export {
+  addAttachment, connectDemoMailguard, connectMailguard, createDraft, discardDraft, draftsOn, draftWithChecks, DraftRefused, forgetMailguard,
+  mailStatus, mimeFor, moveBlocks, moveDraft, previewDraft, readAttachment, recipientFor, removeAttachment, saveDraft, saveVoice, testMailguard,
+  voiceOf, VOICE_LIMITS, warningsFor,
+  type Actor, type DraftEdit, type MailStatus, type Moved, type NewDraft, type Preview, type Saved, type ThreadSource, type Voice,
 } from './service';

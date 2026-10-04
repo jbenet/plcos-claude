@@ -14,5 +14,7 @@ export async function register() {
   void import('./lib/activity').then((m) => m.startActivity()).catch(() => undefined);
   void import('./lib/feedback-ingest').then((m) => m.startIngest()).catch(() => undefined);
   void import('./lib/page-warm').then((m) => m.startPageWarm()).catch(() => undefined);
+  // The mailguard token from the Keychain is checked for drafts-only once at start (docs/25 §12); the log says which, never the token.
+  void import('./lib/connectors/mailguard').then((m) => m.checkAtStart()).catch(() => console.error('[mailguard] Could not check the token at start.'));
   if (process.env.SCHEDULE_DAILY_AT) void import('./lib/daily-timer').then((m) => m.startDailyTimer()).catch(() => console.error('[daily] Could not start timer.'));
 }

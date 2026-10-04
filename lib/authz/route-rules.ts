@@ -6,9 +6,6 @@ export const routeRules = {
   // Email drafts (docs/25). Each handler also checks the draft is the caller's own.
   'app/api/email/attachment/route.ts#POST': 'mutate',
   'app/api/email/attachment/route.ts#GET': 'read',
-  'app/api/email/google/start/route.ts#GET': 'read',
-  'app/api/email/google/callback/route.ts#GET': 'read',
-  'app/api/email/google/fake-consent/route.ts#GET': 'read',
   'app/api/feedback/route.ts#POST': 'feedback',
   'app/api/feedback/route.ts#GET': 'feedback',
   'app/api/feedback/export/route.ts#GET': 'feedback',

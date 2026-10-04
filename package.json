@@ -10,6 +10,7 @@
     "build:real": "DATA_PROFILE=real NEXT_DIST_DIR=.next-real-prod next build",
     "start:real": "ulimit -n 65536 2>/dev/null; tsx scripts/serve.ts real --start",
     "key:store": "scripts/affinity-key.sh store",
+    "mailguard:check": "scripts/with-mailguard-token.sh tsx scripts/mailguard-check.ts",
     "key:status": "scripts/affinity-key.sh status",
     "key:forget": "scripts/affinity-key.sh forget",
     "dakota:store": "scripts/dakota-key.sh store",

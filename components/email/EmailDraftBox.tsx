@@ -38,11 +38,16 @@ export interface DraftView {
   movedAt: string | null;
   movedRevision: number | null;
   prefillNote: string | null;
+  /** The guideline's structure, when the draft started empty (docs/email-guidelines.md). */
+  prefillSteps: string[] | null;
+  /** The owner's own voice from Preferences, shown beside the editor; null when they have none. */
+  voice: { style: string; samples: string[] } | null;
   threaded: boolean;
   warnings: WarningView[];
   blocks: Array<{ field: string; text: string }>;
 }
-export interface GmailView { mode: 'google' | 'fake' | 'off'; email: string | null; why: string | null }
+/** The person's mailguard connection, as the box needs it: the mailbox when the token passed its check; why not, otherwise. */
+export interface GmailView { mode: 'mailguard' | 'fake' | 'off'; email: string | null; why: string | null }
 
 const PICTURES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const kb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
@@ -241,7 +246,7 @@ export function EmailDraftBox({ draft, gmail, path }: { draft: DraftView; gmail:
         tone: 'ok',
         text: `${r.value.replaced ? 'Replaced the draft' : 'Made a draft'} in ${gmail.mode === 'fake' ? 'the demo’s fake Gmail' : 'your Gmail'} (${r.value.account})`
           + `${r.value.newMessageId ? ', as a new email: the earlier copy was sent or deleted there' : ''}`
-          + `${r.value.threadSource === 'gmail' ? ', in its thread' : ''}. Review it and send it from Gmail.`,
+          + `${r.value.threadSource === 'thread' ? ', in its thread' : r.value.threadSource === 'unthreaded' ? ', as a new thread (the earlier email was not sent yet, or the token cannot read thread headers)' : ''}. Review it and send it from Gmail.`,
       });
       router.refresh();
     } finally {
@@ -273,7 +278,30 @@ export function EmailDraftBox({ draft, gmail, path }: { draft: DraftView; gmail:
           {saving === 'saving' ? 'Saving…' : saving === 'dirty' ? 'Unsaved' : saving === 'conflict' ? 'Changed elsewhere' : saving === 'error' ? 'Not saved' : 'Saved'}
         </span>
       </div>
-      {draft.prefillNote && <p className={s.prefill}>{draft.prefillNote}</p>}
+      {draft.prefillNote && (
+        <div className={s.prefill}>
+          <p>{draft.prefillNote}</p>
+          {draft.prefillSteps && draft.prefillSteps.length > 0 && (
+            <ol aria-label="The structure of this email">{draft.prefillSteps.map((x, i) => <li key={i}>{x}</li>)}</ol>
+          )}
+        </div>
+      )}
+      {status === 'editing' && (
+        <details className={s.voice}>
+          <summary>{draft.voice ? 'Your voice' : 'Your voice: not written yet'}</summary>
+          {draft.voice ? (
+            <>
+              {draft.voice.style && <p className={s.voiceStyle}>{draft.voice.style}</p>}
+              {draft.voice.samples.map((x, i) => (
+                <details key={i} className={s.sample}><summary>Sample {i + 1}</summary><pre>{x}</pre></details>
+              ))}
+              <p className={s.voiceHint}>From Preferences → Your voice. Write it the way these read.</p>
+            </>
+          ) : (
+            <p className={s.voiceHint}>Add a few lines on how you write, and three to five emails you sent, in Preferences → Your voice. Drafts written for you follow them.</p>
+          )}
+        </details>
+      )}
 
       <div className={s.fields}>
         <label><span>To</span><input value={to} onChange={(e) => { setTo(e.target.value); changed(); }} placeholder="name@example.org, …" aria-label="To" autoComplete="off" /></label>
@@ -337,7 +365,7 @@ export function EmailDraftBox({ draft, gmail, path }: { draft: DraftView; gmail:
 
       <div className={s.actions}>
         <button type="button" className="btn p" onClick={() => void move()} disabled={!canMove}
-          title={gmail.mode === 'off' ? gmail.why ?? '' : !gmail.email ? 'Connect your Gmail in Preferences first' : ''}>
+          title={gmail.why ?? (!gmail.email ? 'Connect a drafts-only mailguard token in Preferences → Email first' : '')}>
           {busy === 'move' ? 'Moving…' : status === 'in_gmail' ? 'Update the Gmail draft' : 'Move to Gmail drafts'}
         </button>
         <button type="button" className="btn" onClick={() => void save()} disabled={saving === 'saved' || busy !== null}>Save</button>

@@ -1,0 +1,71 @@
+/**
+ * Is a mailguard key drafts-only? Read from its own `GET /api/v1/me` answer, never by trying it
+ * (docs/25 §12.2; Juan, 3 Oct 2026: "error when connecting it if it lets you send").
+ *
+ * Pure and fail-closed: anything this function does not recognise is a refusal. It runs when a key is
+ * pasted (a refused key is not stored), at server start, before every move, and daily.
+ */
+
+/** Mailguard's capabilities (src/lib/policy/types.ts, read 3 Oct 2026). */
+export const KNOWN_CAPABILITIES = [
+  'read.metadata', 'read.body', 'read.attachments', 'draft', 'send',
+  'organize.labels', 'organize.inbox', 'organize.read', 'organize.star', 'organize.spam', 'organize.trash',
+  'labels.manage',
+] as const;
+/** What a grant may name besides a capability. */
+const WILDCARDS = ['*', 'read.*', 'organize.*'];
+/** Capabilities that put mail in someone else's inbox. Mailguard has one; a new one would be unknown, so refused. */
+export const SENDING = ['send'];
+/** What drafting needs, and what threading a follow-up needs. Anything else is shown as more than needed. */
+export const NEEDED = ['draft', 'read.metadata'];
+
+export const CAN_SEND = 'This token can send email. Make a drafts-only token in mailguard.';
+
+export type RefusalCode = 'can_send' | 'tool_grants_send' | 'unknown_capability' | 'no_draft' | 'expired' | 'malformed';
+
+export type Verdict =
+  | { ok: true; mailbox: string; tool: string; capabilities: string[]; canThread: boolean; extras: string[] }
+  | { ok: false; code: RefusalCode; reason: string; mailbox: string | null; tool: string | null; capabilities: string[] };
+
+const isStrings = (x: unknown): x is string[] => Array.isArray(x) && x.every((s) => typeof s === 'string');
+
+export function draftOnlyVerdict(answer: unknown, now = Date.now()): Verdict {
+  const a = (answer && typeof answer === 'object' ? answer : {}) as Record<string, unknown>;
+  const mailbox = typeof a.mailbox === 'string' && /^[^\s@]+@[^\s@]+$/.test(a.mailbox) ? a.mailbox.toLowerCase() : null;
+  const tool = typeof a.tool === 'string' ? a.tool.slice(0, 200) : null;
+  const capabilities = isStrings(a.capabilities) ? a.capabilities : [];
+  const no = (code: RefusalCode, reason: string): Verdict => ({ ok: false, code, reason, mailbox, tool, capabilities });
+
+  if (!mailbox || tool === null || !isStrings(a.capabilities) || !Array.isArray(a.layers)) {
+    return no('malformed', 'Mailguard’s answer about this token was not in the shape expected, so its permissions are unknown. Refused.');
+  }
+  // Sending first: the clearest reason wins when there are several.
+  if (capabilities.some((c) => SENDING.includes(c))) return no('can_send', CAN_SEND);
+  const unknown = capabilities.filter((c) => !(KNOWN_CAPABILITIES as readonly string[]).includes(c));
+  if (unknown.length) return no('unknown_capability', `This token has a permission this tool does not know (${unknown.slice(0, 3).join(', ').slice(0, 80)}), so it might send. Refused; make a drafts-only token in mailguard.`);
+
+  const layers = a.layers as unknown[];
+  let toolLayer: Record<string, unknown> | null = null;
+  for (const l of layers) {
+    const layer = (l && typeof l === 'object' ? l : {}) as Record<string, unknown>;
+    const policy = (layer.policy && typeof layer.policy === 'object' ? layer.policy : null) as Record<string, unknown> | null;
+    if (typeof layer.layer !== 'string' || !policy) return no('malformed', 'Mailguard’s answer about this token had a policy layer that could not be read. Refused.');
+    const grant = policy.grant ?? [];
+    if (!isStrings(grant)) return no('malformed', 'Mailguard’s answer about this token had a grant that could not be read. Refused.');
+    const odd = grant.filter((g) => !WILDCARDS.includes(g) && !(KNOWN_CAPABILITIES as readonly string[]).includes(g));
+    if (odd.length) return no('unknown_capability', `A ${layer.layer} policy on this token grants something this tool does not know (${odd.slice(0, 3).join(', ').slice(0, 80)}). Refused; make a drafts-only token in mailguard.`);
+    if (layer.layer === 'tool') toolLayer = policy;
+  }
+  if (!toolLayer) return no('malformed', 'Mailguard’s answer did not include the token’s own policy, so its permissions are unknown. Refused.');
+  // The token's own policy must not grant sending: then only another layer stops it, and that layer can be widened.
+  const own = toolLayer.grant as string[];
+  if (own.includes('send') || own.includes('*')) return no('tool_grants_send', `${CAN_SEND} (Its own policy grants ${own.includes('*') ? 'everything' : 'send'}; only another policy stops it today.)`);
+  const expires = toolLayer.expiresAt;
+  if (expires !== undefined && (typeof expires !== 'string' || !(Date.parse(expires) > now))) return no('expired', 'This token’s policy has expired in mailguard. Make a new drafts-only token there.');
+  if (!capabilities.includes('draft')) return no('no_draft', 'This token cannot make drafts. Give its tool the draft permission in mailguard (and read.metadata, for follow-ups).');
+
+  return { ok: true, mailbox, tool, capabilities, canThread: capabilities.includes('read.metadata'), extras: capabilities.filter((c) => !NEEDED.includes(c)) };
+}
+
+/** The mailbox's domain, for logs and reports: never the address. */
+export const domainOf = (mailbox: string | null) => (mailbox?.split('@')[1] ?? 'unknown');

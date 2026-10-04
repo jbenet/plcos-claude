@@ -142,22 +142,50 @@ export async function removeAttachmentRow(attachmentId: string, q: Queryable): P
   if (row) await q.query('update email.draft set revision = revision + 1, updated_at = now() where draft_id = $1', [row.draft_id]);
 }
 
-export async function gmailAccountOf(userId: string, q?: Queryable): Promise<{ email: string; scopes: string[]; connectedAt: Date; lastUsedAt: Date | null } | null> {
+export interface MailguardAccount { mailbox: string; toolName: string; capabilities: string[]; source: 'pasted' | 'keychain'; connectedAt: Date; checkedAt: Date; checkOk: boolean; checkCode: string | null; lastUsedAt: Date | null }
+
+export async function mailguardAccountOf(userId: string, q?: Queryable): Promise<MailguardAccount | null> {
   const db = q ?? (await getDb());
-  const r = await db.one<{ google_email: string; scopes: string[]; connected_at: Date | string; last_used_at: Date | string | null }>(
-    'select google_email, scopes, connected_at, last_used_at from email.gmail_account where user_id = $1', [userId]);
-  return r ? { email: r.google_email, scopes: r.scopes, connectedAt: new Date(r.connected_at), lastUsedAt: date(r.last_used_at) } : null;
+  const r = await db.one<{ mailbox: string; tool_name: string; capabilities: string[]; source: 'pasted' | 'keychain'; connected_at: Date | string; checked_at: Date | string; check_ok: boolean; check_code: string | null; last_used_at: Date | string | null }>(
+    'select mailbox, tool_name, capabilities, source, connected_at, checked_at, check_ok, check_code, last_used_at from email.mailguard_account where user_id = $1', [userId]);
+  return r ? {
+    mailbox: r.mailbox, toolName: r.tool_name, capabilities: r.capabilities, source: r.source, connectedAt: new Date(r.connected_at), checkedAt: new Date(r.checked_at),
+    checkOk: r.check_ok, checkCode: r.check_code, lastUsedAt: date(r.last_used_at),
+  } : null;
 }
 
-export async function upsertGmailAccount(userId: string, email: string, scopes: string[], q: Queryable): Promise<void> {
-  await q.query(`insert into email.gmail_account (user_id, google_email, scopes) values ($1,$2,$3)
-    on conflict (user_id) do update set google_email = excluded.google_email, scopes = excluded.scopes, connected_at = now(), last_used_at = null`, [userId, email, scopes]);
+/** Record what a check of the person's key found. Another mailbox or source counts as a new connection. */
+export async function recordMailguardCheck(userId: string, c: { mailbox: string; toolName: string; capabilities: string[]; source: 'pasted' | 'keychain'; ok: boolean; code: string | null }, q: Queryable): Promise<void> {
+  await q.query(`insert into email.mailguard_account (user_id, mailbox, tool_name, capabilities, source, check_ok, check_code) values ($1,$2,$3,$4,$5,$6,$7)
+    on conflict (user_id) do update set tool_name = excluded.tool_name, capabilities = excluded.capabilities, checked_at = now(),
+      check_ok = excluded.check_ok, check_code = excluded.check_code,
+      connected_at = case when email.mailguard_account.mailbox = excluded.mailbox and email.mailguard_account.source = excluded.source
+        then email.mailguard_account.connected_at else now() end,
+      mailbox = excluded.mailbox, source = excluded.source`, [userId, c.mailbox, c.toolName, c.capabilities, c.source, c.ok, c.code]);
 }
 
-export async function deleteGmailAccount(userId: string, q: Queryable): Promise<void> {
-  await q.query('delete from email.gmail_account where user_id = $1', [userId]);
+export async function deleteMailguardAccount(userId: string, q: Queryable): Promise<void> {
+  await q.query('delete from email.mailguard_account where user_id = $1', [userId]);
 }
 
-export async function touchGmailAccount(userId: string, q: Queryable): Promise<void> {
-  await q.query('update email.gmail_account set last_used_at = now() where user_id = $1', [userId]);
+export async function touchMailguardAccount(userId: string, q: Queryable): Promise<void> {
+  await q.query('update email.mailguard_account set last_used_at = now() where user_id = $1', [userId]);
+}
+
+// ── A sender's voice (docs/email-guidelines.md §Voice) ──────────────────────────────────
+
+export interface VoiceRow { style: string; samples: string[]; updatedAt: Date }
+
+export async function getVoice(userId: string, q?: Queryable): Promise<VoiceRow | null> {
+  const db = q ?? (await getDb());
+  return db.one<VoiceRow>('select style, samples, updated_at "updatedAt" from email.voice where user_id = $1', [userId]);
+}
+
+export async function upsertVoice(userId: string, style: string, samples: string[], q: Queryable): Promise<void> {
+  await q.query(`insert into email.voice (user_id, style, samples) values ($1, $2, $3)
+    on conflict (user_id) do update set style = excluded.style, samples = excluded.samples, updated_at = now()`, [userId, style, samples]);
+}
+
+export async function deleteVoice(userId: string, q: Queryable): Promise<boolean> {
+  return (await q.query<{ user_id: string }>('delete from email.voice where user_id = $1 returning user_id::text', [userId])).length > 0;
 }

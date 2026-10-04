@@ -1,7 +1,7 @@
 # 25 — Email drafts, moved into each person's Gmail
 
-**Status:** phase 1 built on a branch, 2 Oct 2026; not merged. Real Google is off
-(`config.email.gmail.enabled = false`) until the OAuth client in §4 exists. The demo uses a fake Google.
+**Status:** phase 1 merged 2 Oct 2026. **Since 3 Oct 2026 drafts reach Gmail through mailguard, not
+direct Gmail OAuth** (§12, which supersedes §1, §2 and §4). The demo uses a fake mailguard.
 
 Juan, 2 Oct 2026, in summary: email boxes where the tool suggests an email (to target LPs, to
 introducers); WYSIWYG tuned for email with no weird formatting, plus plain text; images and files; move a
@@ -122,9 +122,11 @@ displays. **Later:** S3, with the same hash as the key, when the service is depl
 
 ## 7. Where the boxes are
 
-- **LP page** (`/<vehicle>/pipeline/<id>`): "Email", under the suggested strategy. A first message starts from
-  the strategy's angle (W5) with a note that it was written about them and must be rewritten to them; amounts
-  are never filled in. The research's email claim, if any, fills To.
+- **LP page** (`/<vehicle>/pipeline/<id>`): "Email", above the timeline. It offers the email the route calls
+  for (docs/email-guidelines.md, 3 Oct 2026): the intro ask to the connector when the best route goes through
+  someone the LP hasn't met, else the first message to the LP. A draft starts from the strategy's own
+  `firstMessage` (W5 1.11) when it is clean, and empty with the guideline's structure otherwise; never from the
+  angle or the analysis, never with a template line or an amount. The research's email claim, if any, fills To.
 - **Warm intro routes**, on the selected route: "Intro ask email" to the first connector, about the target,
   for the vehicle in the switcher.
 - **Follow-up in this thread**, on any draft that went to Gmail.
@@ -142,6 +144,9 @@ Each person sees only their own drafts. Viewers see no box.
   checked; another vehicle named in the draft is flagged; attached files are noted as not checked against the
   materials matrix; a 506(b) vehicle warns against general solicitation.
 - **Grants (rule 12):** a grants-rail draft without a funder invitation shows **Stop**.
+- **Guidelines:** analysis, citations, third person about the recipient, a second message, an amount, private
+  terms, another vehicle's language or a performance claim show as **Check** (`lib/email/lint.ts`); so does a
+  draft the strategy gives to another sender.
 - **Intro asks (rule 3):** without an approved INTRO_ASK for that connector, the draft says to propose it and
   wait for approval before sending.
 - Warnings never block a move. Each move is audit-logged (`email.draft_moved`) with ids, counts, size, how it
@@ -179,3 +184,107 @@ address checks and an unfolded RFC 2047 subject; no threading, no attachments, n
   where the email was going anyway.
 - **Keychain access:** the server reads a person's refresh token without asking each time; anyone who can run
   commands as Juan on the Mac could too, as with the database beside it.
+
+## 12. Mailguard (3 Oct 2026)
+
+Juan, 3 Oct 2026: "instead of direct gmail auth, we built a new tool to use that scopes permissions for security.
+Please integrate it instead" — <https://github.com/jbenet/mailguard>. And, the same evening: "Make sure the
+mailguard token only lets you draft, and error when connecting it if it lets you send (for security)."
+
+### 12.1 How mailguard works (read from its repository, 3 Oct 2026; not run)
+
+- A small server between tools and Gmail. A person signs in with Google **once**, at mailguard; mailguard
+  holds the Gmail grant. Each **tool** they create there gets its own key, `mg_<12 letters/digits>_<40>`, and
+  its own policy. The key is sent as `Authorization: Bearer mg_…` to `/api/v1/*` (REST) or `/mcp`.
+- **Per person.** A key belongs to one tool of one person and acts on that person's one mailbox. There is no
+  workspace key, so each of us needs our own key; a key cannot reach someone else's mail.
+- **Policies** are three layers — system (admins), the person's, the tool's — and a request must pass all
+  three. Capabilities: `read.metadata`, `read.body`, `read.attachments`, `draft`, `send`, `organize.*`,
+  `labels.manage`; grants may use `read.*`, `organize.*` and `*`. `draft` lets a tool create, edit and delete
+  **its own** drafts; sending a draft (`POST /drafts/:id/send`) or a message (`POST /messages/send`) needs
+  `send`. So mailguard enforces drafts-only itself when the key lacks `send`, and audits every request,
+  refusals included.
+- **Drafts take fields, not MIME.** `POST /api/v1/drafts` with `{to, cc, bcc, subject, text, html,
+  attachments: [{filename, mimeType, data(base64)}], replyTo}`; `PUT /api/v1/drafts/:id` the same. Mailguard
+  writes the MIME itself, so the recipients its policy checks are the ones in the message. `replyTo` is a
+  Gmail message id: mailguard reads that message's headers (needs `read.metadata`) and sets the thread,
+  In-Reply-To, References and a "Re:" subject. A tool sees and edits only drafts it made; any other id is 404.
+- **Thread headers:** `GET /api/v1/threads/:id?format=metadata` (needs `read.metadata`) lists the thread's
+  messages this key may see, with ids and labels, never bodies.
+- **Introspection:** `GET /api/v1/me` (always allowed, touches no mail) answers `{tool, mailbox,
+  capabilities, layers}` — the effective capabilities (the intersection of the three layers) and each layer's
+  policy. This is how we read a key's permissions **without using them**.
+- **Errors** are JSON `{error, layer?, rule?, retryAfter?, requestId}`: 401 for a missing, malformed, wrong,
+  revoked or paused key, or a disabled account; 403 for a policy refusal (naming the layer and rule) or a
+  domain no longer allowed; 404 (never says why); 413 over 40 MB; 429 with `Retry-After` for a rate limit or
+  too many refused keys from one address; 503 when the person has no connected mailbox or the server is busy.
+- **Rate limits** are whatever the policies set per capability (per minute, hour, day); none by default.
+
+### 12.2 What changes
+
+- **A new connector, `lib/connectors/mailguard/`**, in the shape of the Gmail one: a four-entry allowlist
+  (`GET /me`; `POST /drafts`; `PUT /drafts/{id}`; `GET /threads/{id}?format=metadata`), a guarded transport
+  that refuses everything else before it leaves (any send route, delete, list, read of bodies, another host,
+  a method override, a GET with a body, a redirect), and a client with no send method. Mailguard enforcing
+  drafts-only is the first wall; ours stays as the second (defence in depth).
+- **The drafts-only check on the key.** Every key is introspected with `GET /me` and refused unless:
+  the answer is well formed; every capability and every grant is one mailguard documents (anything unknown
+  fails closed); `draft` is granted; `send` is not; the tool's own policy grants neither `send` nor `*`
+  (otherwise only another layer stands between it and sending, and an admin could widen that); and the
+  tool's policy has not expired. A key that can send gets: *"This token can send email. Make a drafts-only
+  token in mailguard."* It runs **when a key is pasted** (refused keys are not stored), **at server start**
+  for the Keychain key, **before every move**, and at least **daily** when Preferences is opened. A key that
+  fails stops drafting for that person until a good one is connected. We never test "can it send" by
+  sending.
+- **Per-person keys.** Preferences → Email takes a pasted key, checks it, and shows the mailbox it acts on,
+  the tool's name and what it may do, with **Test the connection** (one `GET /me`, no draft) and
+  **Forget**. A pasted key is one login-Keychain item per person (service `plcos-mailguard`, account = their
+  handle, written through `security -i` on standard input). Juan's key, already stored as
+  `plcos-claude / mailguard-token` (`npm run secret:store -- mailguard-token`), is handed to the live server
+  by `scripts/with-mailguard-token.sh` as `MAILGUARD_TOKEN` and belongs to the handle in
+  `config.email.mailguard.keychainTokenFor` (`juan`); a pasted key wins over it. Forgetting here does not
+  revoke the key at mailguard: revoke it there.
+- **Where mailguard is:** `config.email.mailguard.url`, or `MAILGUARD_URL` in the live server's environment
+  (the same script reads an optional Keychain item `mailguard-url`). https only, except `localhost`.
+- **Config:** `config.email.provider = 'mailguard'` (or `'off'`). Previews never see the key or the URL.
+- **Threading.** A follow-up reads the earlier draft's Gmail thread through mailguard (`format=metadata`),
+  takes the latest message that is not a draft, and sends its id as `replyTo`; mailguard sets the thread and
+  the reply headers. Without `read.metadata` the follow-up is a new thread, and the receipt says so.
+- **Message-IDs.** Mailguard does not take one from us; Gmail gives each draft its own. Two drafts are still
+  two threads (no `replyTo`), and a re-move after the Gmail copy was sent or deleted is a new draft.
+- **Pictures** in the text go as attached files: mailguard's MIME has no `multipart/related` for inline
+  pictures. The preview shows the message that way. **Names** in To/Cc/Bcc are sent only when plain ASCII;
+  mailguard drops other characters from display names, so `Zoë <z@x>` is sent as the bare address.
+- **The fake.** `lib/connectors/mailguard/fake.ts` answers the four endpoints and the send routes (recording
+  any send that reaches it, so the properties show our guard stops them first), keeps its mailbox in a JSON
+  file beside the demo database, and mints invented keys with any grant. In the demo, Preferences → Email
+  has **Use a demo key (drafts only)**.
+- **Audit:** `email.mailguard_connected`, `email.mailguard_refused` (with the reason code),
+  `email.mailguard_checked`, `email.mailguard_forgotten`, and the move entries as before (`transport:
+  'mailguard'` or `'fake'`). Never a key, a subject, words or an address. A new table
+  `email.mailguard_account` (migration 003) records which mailbox and tool each person connected and the last
+  check; the key itself is only in the Keychain.
+
+### 12.3 What stays
+
+The editor, the document normaliser and its HTML and text renderings, the drafts and attachments tables,
+the draft-time checks (rules 3, 8, 11, 12), move locking, ownership, the audit entries, the LP and route
+boxes, and our MIME builder — now only for **Preview the message**, which builds what mailguard will send.
+
+### 12.4 What is removed: direct Gmail OAuth
+
+Mailguard covers everything phase 1 needed (create, update, thread headers, which mailbox), so direct OAuth is
+**removed**, not kept as a fallback: `lib/connectors/gmail/`, the `/api/email/google/*` routes, the paste-back
+connect, `scripts/with-google-oauth.sh` and `config.email.gmail`. It was never enabled on live (no OAuth client
+existed), and keeping it would keep a `gmail.compose` grant — which can send — one config flag away. §1, §2 and
+§4 above are history. `npm run boundaries` now fails if anything names Google's API hosts. The
+`email.gmail_account` table stays (migrations are append-only); nothing writes it.
+
+### 12.5 What Juan does
+
+1. `npm run secret:store -- mailguard-url` with mailguard's address (or set `config.email.mailguard.url`).
+2. The key is already stored. Make sure its tool policy in mailguard grants `draft` and `read.metadata` only
+   (the Drafts template plus `read.metadata`; `read.body` is not needed).
+3. Restart `npm run dev:real`. The log says whether the Keychain key is drafts-only; Preferences → Email shows
+   the mailbox and **Test the connection**.
+4. Others: create a tool in mailguard with the same grant and paste its key in Preferences → Email.

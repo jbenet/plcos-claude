@@ -40,6 +40,17 @@ async function openLp(page: Page, name: string) {
   throw new Error(`No LP named ${name} in the pipeline`);
 }
 
+/** An LP's page by name on any vehicle's list: the address's /all/ wins over the switcher a page before set. */
+async function openLpAnyVehicle(page: Page, name: string) {
+  for (const status of ['selected', 'connecting', 'discussing', 'committed', 'passed', 'sourcing', 'new']) {
+    await page.goto(new URL(`/all/pipeline?status=${status}`, page.url()).toString(), { waitUntil: 'networkidle' });
+    const href = await page.evaluate((n) => [...document.querySelectorAll('a')]
+      .find((a) => /\/(targets|pipeline)\/[0-9a-f-]{36}$/.test(a.getAttribute('href') ?? '') && a.innerText.includes(n))?.getAttribute('href') ?? null, name);
+    if (href) { await page.goto(new URL(href, page.url()).toString(), { waitUntil: 'networkidle' }); return; }
+  }
+  throw new Error(`No LP named ${name} on any vehicle's list`);
+}
+
 const N61_UPDATE =
   "Met Bram and the family office's CIO on Tuesday. They want the deck and the track record before a second meeting — very keen on the thesis.";
 
@@ -527,7 +538,7 @@ const SHOTS: Record<string, Shot[]> = {
       name: '02-a-fact-check',
       path: '/all/pipeline',
       prepare: async (page) => {
-        await openLp(page, 'Thandiwe Petrescu');
+        await openLp(page, 'Paloma Jaramillo');
         await page.getByText(/Corrected on/).first().evaluate((el) => el.scrollIntoView({ block: 'center' })).catch(() => {});
         await page.waitForTimeout(300);
       },
@@ -2551,15 +2562,49 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
-  // Email drafts (docs/25), on the demo's fake Google: connect, draft from the strategy, move, the intro ask.
+  // Mailguard (docs/25 §12), on the demo's fake mailguard: Preferences → Email refuses a token that can send, then
+  // connects a drafts-only one and tests it. Both tokens are invented by the fake.
+  mailguard: [
+    {
+      name: '01-refused-can-send',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        const card = page.locator('#email');
+        const forget = card.getByRole('button', { name: 'Forget this token' });
+        if (await forget.count()) { await forget.click(); await card.getByLabel('Your mailguard token').waitFor(); }
+        const { fakeDir } = await import('../lib/connectors/mailguard');
+        const { fakeMintKey } = await import('../lib/connectors/mailguard/fake');
+        const sender = await fakeMintKey(fakeDir(), { mailbox: 'someone@example.test', tool: 'Inbox helper', grant: ['draft', 'read.metadata', 'send'] });
+        await card.getByLabel('Your mailguard token').fill(sender);
+        await card.getByRole('button', { name: 'Connect', exact: true }).click();
+        await card.locator('[role="status"]', { hasText: 'This token can send email.' }).waitFor();
+        await card.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+    {
+      name: '02-connected-drafts-only',
+      path: '/settings',
+      prepare: async (page) => {
+        const card = page.locator('#email');
+        await card.getByRole('button', { name: 'Use a demo token (drafts only)' }).click();
+        await card.getByRole('button', { name: 'Test the connection' }).click();
+        await card.locator('[role="status"]', { hasText: /drafts-only/ }).waitFor();
+        await card.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+  ],
+  // Email drafts (docs/25), on the demo's fake mailguard: connect, draft from the strategy, move, the intro ask.
   'email-drafts': [
     {
       name: '01-lp-first-message',
       path: '/settings',
       prepare: async (page) => {
         await asUser(page);
-        const connect = page.getByRole('link', { name: /Connect Gmail/ });
-        if (await connect.count()) { await connect.click(); await page.waitForURL(/gmail=connected/); }
+        const connect = page.getByRole('button', { name: 'Use a demo token (drafts only)' });
+        if (await connect.count()) { await connect.click(); await page.getByRole('button', { name: 'Test the connection' }).waitFor(); }
         await openLp(page, 'Bram Kowalczyk');
         const box = page.locator('#email');
         const start = box.getByRole('button', { name: 'Draft the first message' });
@@ -2604,6 +2649,71 @@ const SHOTS: Record<string, Shot[]> = {
         await box.locator('.ProseMirror').waitFor();
         await box.evaluate((el) => el.scrollIntoView({ block: 'start' }));
         await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+  ],
+  // Email guidelines (docs/email-guidelines.md), on invented demo data: your voice in Preferences; a first
+  // message from the strategy's own field; the intro ask the route calls for, empty with the structure; and
+  // the check when the strategy names another sender. The demo's fixture strategies carry `firstMessage`.
+  'email-guidelines': [
+    {
+      name: '01-preferences-your-voice',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        const card = page.locator('#voice');
+        await card.locator('textarea[name=style]').fill('Short and warm. First name, no “Dear”. One idea, then one question. I sign off “Best, Lior”. Never “circle back” or “excited to share”.');
+        const samples = card.locator('textarea[name=sample]');
+        await samples.nth(0).fill('Hi Ana,\n\nThanks for Tuesday. You asked how we choose between two teams on one problem: the one with its own data. Happy to show you two examples.\n\nWould Thursday at 4 work?\n\nBest,\nLior');
+        await samples.nth(1).fill('Hi Bo,\n\nQuick one: is the board still meeting on the 14th? If so, I will send the note the week before.\n\nBest,\nLior');
+        await card.getByRole('button', { name: 'Save my voice' }).click();
+        await card.locator('[role="status"]', { hasText: /^Saved/ }).waitFor();
+        await card.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+    {
+      name: '02-first-message-from-the-strategy',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        const connect = page.getByRole('button', { name: 'Use a demo token (drafts only)' });
+        if (await connect.count()) { await connect.click(); await page.getByRole('button', { name: 'Test the connection' }).waitFor(); }
+        await openLp(page, 'Bram Kowalczyk');
+        const box = page.locator('#email');
+        const start = box.getByRole('button', { name: 'Draft the first message' });
+        if (await start.count()) { await start.click(); await box.locator('.ProseMirror').waitFor(); }
+        await box.getByText('Your voice', { exact: true }).click();
+        await box.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+    {
+      name: '03-intro-ask-the-route-calls-for',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        // An LP whose best route goes through a connector, on an SPV's list.
+        await openLpAnyVehicle(page, 'Renata Corcoran');
+        const box = page.locator('#email');
+        const start = box.getByRole('button', { name: /^Draft the intro ask to / });
+        if (await start.count()) { await start.click(); await box.locator('.ProseMirror').waitFor(); }
+        await box.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+    {
+      name: '04-another-sender-holds-the-route',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        await openLpAnyVehicle(page, 'Paloma Jaramillo');
+        const box = page.locator('#email');
+        const start = box.getByRole('button', { name: 'Draft the first message' });
+        if (await start.count()) { await start.click(); await box.locator('.ProseMirror').waitFor(); }
+        await box.getByLabel('To').fill('Paloma Jaramillo <paloma@example.org>');
+        await box.getByText('Saved', { exact: true }).waitFor({ timeout: 15000 });
+        await box.locator('ul[aria-label="Checks on this draft"]').evaluate((el) => el.scrollIntoView({ block: 'center' }));
       },
     },
   ],

@@ -4,12 +4,12 @@ The rules in force, amendments 1.1–1.10 folded in; `docs/19-enrichment-workflo
 ## Read set for a batch
 
 Read this protocol once, `AGENTS.md`, `docs/agent-rules/real-data.md`, `docs/agent-rules/domain.md`,
-`lib/enrich/strategy.ts`, `lib/enrich/capacity.ts`, and only the `capacity` block of
+`docs/email-guidelines.md`, `lib/enrich/strategy.ts`, `lib/enrich/capacity.ts`, and only the `capacity` block of
 `config/deployment.ts`. Read only "Recording workflow runs" in `docs/COLLAB.md` for bookkeeping.
 
 All private input paths below are relative to `data/real/enrich/`: the launch's
 `batches/<batch>.txt`; assigned firms' `raw/<key>.json` and `strategy/<key>.json`; their matching
-rows in `candidates.jsonl`, `connections.jsonl` and `triage.jsonl`; `us/team.json`, `us/network.json`
+rows in `candidates.jsonl`, `connections.jsonl` and `triage.jsonl`; `us/team.json`, `us/voice.json`, `us/network.json`
 (including the Neurotech portfolio), and `presence/site.json`. Include each firm's colleagues and
 lead even across batch keys. Use these finished strategies for shape and tone; the launcher must
 name an exact `data/real/enrich/strategy/<key>.json` path for any additional example.
@@ -30,7 +30,8 @@ For each key in the batch, `data/real/enrich/batches/<batch>.txt`:
   first; `restrictions`;
 - its paths in `connections.jsonl`, re-read just before writing each firm (it is regenerated as findings
   land); its line in `triage.jsonl`; its strategy and its colleagues', with their `made.revised`;
-- our side: `us/team.json`, `us/network.json`, `presence/site.json`, the Neurotech portfolio in `us/network.json`;
+- our side: `us/team.json`, `us/voice.json` (each sender's own style notes and sample emails), `us/network.json`,
+  `presence/site.json`, the Neurotech portfolio in `us/network.json`;
 - `lib/enrich/strategy.ts` (the shape), `lib/enrich/capacity.ts` and the `capacity` block of
   `config/deployment.ts` (the size table and the angel floor); `docs/agent-rules/real-data.md` and `docs/agent-rules/domain.md`.
 
@@ -60,6 +61,8 @@ The shape:
     next    { what, who, when, material?, lookAgain? }
     ask     { vehicle, shape, range?, unit? }
     openQuestions, risks, list: this year | 2027 | not now, confidence
+    firstMessage? { kind: intro_ask | after_intro | cold | follow_up | reply, from,
+                    to: { name, key?, isPerson? }, subject, body, blurb? }
 
 `ask.shape` is fund commitment, SPV, re-up or upsize, intro to others, advice, verify first, firm-level
 ask, co-invest, or none yet. `made.version` is a string: JSON reads the number 1.10 as 1.1.
@@ -249,6 +252,24 @@ its `made.at`. `made.revised` lists each change made by rule after writing, with
   Jan 2027, "not now" on 5 Apr 2027, guesses for a person to change — in `made.revised`, without moving
   `made.at`, so a colleague's pin stays valid.
 
+## The first message (1.11)
+
+The email itself, as `firstMessage`, separate from the analysis. Its substance follows
+[docs/email-guidelines.md](../email-guidelines.md); read it before writing one (Juan, 3 Oct 2026: "This is
+not a good email", when the angle was pasted into a draft).
+
+- **The next email to send, and its kind from the route:** through a connector the LP hasn't met, an
+  `intro_ask` to that connector with a 3–4 sentence `blurb` they can forward; `after_intro` once the
+  introduction is made or when the route holder knows them; `follow_up` for someone who has met us;
+  `reply` when the last word is theirs; `cold` only with no route.
+- **`from` is the route holder**, and `body` is in their voice (`us/voice.json` when they have one).
+- **Written to them:** no sources, reading dates, notes, scores, tiers or instructions to ourselves; no
+  third person about the recipient; no amounts; no other LPs; no non-public portfolio detail. The `angle`
+  is why they'd care, for us; `body` is what they read.
+- **One vehicle** — `ask.vehicle`'s — and no performance claims or promises (506(c)).
+- 80–150 words. Leave the field out rather than write a weak one: the Email box then starts empty with the
+  guideline's structure. The checker refuses one that fails the guidelines' machine checks.
+
 ## One firm, one ask
 
 - Colleagues at one firm — by work domain, organization and W3's same-firm links; a colleague the
@@ -312,7 +333,8 @@ own, not only a re-pin. The checker's lists feed the next batch — `--lead-move
 Fix what it reports for your keys. It refuses a strategy whose key doesn't match its file name; with no
 fit; a score without a basis; no angle; a next step without what and who, or one that reads as an
 automatic send; an ask without a vehicle; a list other than this year, 2027 or not now; a route tier
-outside A–D. Its gates, counted by name and listed by `--gated`:
+outside A–D; a `firstMessage` that fails docs/email-guidelines.md (wrong recipient for its kind, a greeting
+to someone else, analysis or private detail in the words, two vehicles, over 200 words). Its gates, counted by name and listed by `--gated`:
 
 - "this year, without the evidence gate" — no word from them in the last 90 days and no meeting in the
   contact counted for any of their pursuits (the relationship's one-to-ones where the export has none),

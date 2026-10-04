@@ -502,7 +502,17 @@
     "The neuromodulation checks are the office’s, not necessarily his: ask before citing them."
    ],
    "list": "this year",
-   "confidence": "medium"
+   "confidence": "medium",
+   "firstMessage": {
+    "kind": "follow_up",
+    "from": "Lior",
+    "to": {
+     "name": "Bram Kowalczyk",
+     "isPerson": true
+    },
+    "subject": "BCI as the next platform",
+    "body": "Hi Bram,\n\nThanks again for the time when we met. You said on a podcast that BCI is the next platform, and that you like being early with a manager. That is close to how we built PLC Neurotech I: early teams building brain-computer interfaces and the tools around them.\n\nI see you're speaking at the neurotech conference in November. Would you have 20 minutes there to meet one of our founders and hear where they think the clinic is heading?\n\nBest,\nLior"
+   }
   },
   {
    "name": "Thandiwe Petrescu",
@@ -558,7 +568,17 @@
    ],
    "risks": [],
    "list": "this year",
-   "confidence": "high"
+   "confidence": "high",
+   "firstMessage": {
+    "kind": "follow_up",
+    "from": "Keziah Grimaldo",
+    "to": {
+     "name": "Thandiwe Petrescu",
+     "isPerson": true
+    },
+    "subject": "Who else should see the fund?",
+    "body": "Hi Thandiwe,\n\nThank you again for backing PLC Neurotech I. Your foundation's work on the research our teams build on is a big part of why it feels like a fit.\n\nA question: are there two or three families in your office who should hear about it? I'd be glad to give them a short briefing on the portfolio, with you there or without.\n\nBest,\nKeziah"
+   }
   }
  ],
  "network": {

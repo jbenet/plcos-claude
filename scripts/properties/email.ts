@@ -1,26 +1,27 @@
 /**
- * Email drafts (docs/25-email-drafts.md), on the fake Google in lib/connectors/gmail/fake.ts and
- * invented data only. Nothing here reaches Google.
- *   - the allowlist refuses every send endpoint, by any route the code offers, and the client has no send;
+ * Email drafts (docs/25-email-drafts.md), on the fake mailguard in lib/connectors/mailguard/fake.ts and
+ * invented data only. Nothing here reaches mailguard or Google.
+ *   - the mailguard allowlist refuses every send, delete and read of bodies, by any route the code offers; the client has no send;
+ *   - a key is accepted only when mailguard's own answer says it is drafts-only: one that can send, an
+ *     unknown permission, a malformed answer, an expired or draft-less policy are refused and not stored;
+ *     a key widened later is caught before the next move; a revoked one fails cleanly;
  *   - the MIME is well formed: structure, encoded headers, line lengths, CRLF, unique Message-IDs;
- *   - a reply or follow-up threads; a new email does not;
+ *   - a follow-up threads through mailguard's replyTo; a new email does not;
  *   - the plain-text and HTML parts carry the same words;
  *   - the editor's schema and the server's normaliser strip what an email should not carry;
- *   - each move writes an audit entry, with counts and no words or addresses;
- *   - OAuth: PKCE, a wider grant is refused and revoked, disconnect revokes.
+ *   - each move and each check writes an audit entry, with counts and no words, addresses or key.
  */
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getSchema } from '@tiptap/react';
 import type { Db } from '../../lib/db';
-import { ALLOWED, GMAIL_ORIGIN, GOOGLE_REVOKE_URL, GOOGLE_TOKEN_URL, MUST_REFUSE, SCOPES, allowedRequest } from '../../lib/connectors/gmail/allowlist';
-import { gmailClient } from '../../lib/connectors/gmail/client';
-import { FAKE_CLIENT, FAKE_DOMAIN, fakeConsent, fakeReceive, fakeSendInGmail, fakeTransport, readFake } from '../../lib/connectors/gmail/fake';
-import { DraftOnlyViolation, guarded } from '../../lib/connectors/gmail/fetch';
-import { beginConnect, completeConnect, disconnect, type GmailRuntime } from '../../lib/connectors/gmail';
-import { wantedScopes } from '../../lib/connectors/gmail/oauth';
-import { memoryStore } from '../../lib/connectors/gmail/tokens';
+import { ALLOWED, MUST_REFUSE, allowedRequest, parseBase } from '../../lib/connectors/mailguard/allowlist';
+import { DraftOnlyViolation, guarded, mailguardClient, type MailguardTransport } from '../../lib/connectors/mailguard/client';
+import { FAKE_BASE, FAKE_DOMAIN, fakeMintKey, fakeReceive, fakeRevoke, fakeSendInGmail, fakeSetGrant, fakeTransport, readFake } from '../../lib/connectors/mailguard/fake';
+import { CAN_SEND, KNOWN_CAPABILITIES, draftOnlyVerdict } from '../../lib/connectors/mailguard/scope';
+import { memoryStore } from '../../lib/connectors/mailguard/tokens';
+import { connection, type MailguardRuntime } from '../../lib/connectors/mailguard';
 import { EMAIL_MARKS, EMAIL_NODES, normalizeDoc, renderHtml, renderText, textToDoc, type DocNode } from '../../lib/email/doc';
 import { buildMime, newMessageId, parseAddresses } from '../../lib/email/mime';
 import { decodeWords, header, leaves, parseMime } from '../../lib/email/mime-parse';
@@ -58,61 +59,86 @@ const htmlWords = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&lt;/
 /** The words of the text part, without what plain text adds: link addresses, bullets and numbers. */
 const textWords = (text: string) => text.replace(/ \((?:https?:\/\/|)[^()\s]+\)/g, '').split(/\s+/).filter((w) => w && w !== '-' && !/^\d+\.$/.test(w));
 
+/** A whoami answer as mailguard gives it, for the pure checks. */
+const whoami = (capabilities: string[], toolGrant: string[] = capabilities, extra: Record<string, unknown> = {}) => ({
+  tool: 'Invented tool', mailbox: 'someone@example.org', capabilities,
+  layers: [{ layer: 'system', policy: { grant: ['*'] } }, { layer: 'tool', policy: { grant: toolGrant, ...extra } }],
+});
+
 export async function emailProperties(check: Check, db: Db) {
-  const dir = await mkdtemp(join(tmpdir(), 'plcos-gmail-fake-'));
+  const dir = await mkdtemp(join(tmpdir(), 'plcos-mailguard-fake-'));
   try {
     // ── 1. Draft-only: the allowlist refuses every send ────────────────────────────────────
     {
       const transport = fakeTransport(dir);
-      const send = guarded(transport);
+      const send = guarded(transport, FAKE_BASE);
+      // Even a key that could send everything at "mailguard": the guard stops it first.
+      const wide = await fakeMintKey(dir, { mailbox: `wide@${FAKE_DOMAIN}`, grant: ['*'] });
+      const auth = { authorization: `Bearer ${wide}` };
       let refused = 0;
       for (const m of MUST_REFUSE) {
-        try { await send(new URL(m.path, GMAIL_ORIGIN), { method: m.method as 'POST', headers: { authorization: 'Bearer x' }, body: m.method === 'GET' ? undefined : '{}' }); }
+        try { await send(new URL(m.path, FAKE_BASE), { method: m.method as 'POST', headers: auth, body: m.method === 'GET' ? undefined : '{}' }); }
         catch (e) { if (e instanceof DraftOnlyViolation) refused++; }
       }
-      // Smuggling: a format that returns bodies, a header that would change the method, a GET with a body, another host.
+      // Smuggling: a header that would change the method, a GET with a body, another host, plain http, credentials in the URL,
+      // a format that returns bodies, an extra parameter, no key, a key that is not one.
       const sneaky: Array<() => Promise<unknown>> = [
-        () => send(new URL('/gmail/v1/users/me/drafts/r1?format=raw', GMAIL_ORIGIN), { method: 'GET', headers: {} }),
-        () => send(new URL('/gmail/v1/users/me/threads/t1?format=full', GMAIL_ORIGIN), { method: 'GET', headers: {} }),
-        () => send(new URL('/gmail/v1/users/me/drafts/r1?alt=media', GMAIL_ORIGIN), { method: 'GET', headers: {} }),
-        () => send(new URL('/gmail/v1/users/me/drafts', GMAIL_ORIGIN), { method: 'POST', headers: { 'X-HTTP-Method-Override': 'POST' }, body: '{}' }),
-        () => send(new URL('/gmail/v1/users/me/drafts/send', GMAIL_ORIGIN), { method: 'PUT', headers: {}, body: '{}' }),
-        () => send(new URL('/gmail/v1/users/me/profile', GMAIL_ORIGIN), { method: 'GET', headers: {}, body: 'x' }),
-        () => send(new URL('https://www.googleapis.com/gmail/v1/users/me/drafts'), { method: 'POST', headers: {}, body: '{}' }),
-        () => send(new URL(GOOGLE_TOKEN_URL), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'grant_type=client_credentials' }),
-        () => send(new URL(GOOGLE_REVOKE_URL), { method: 'GET', headers: {} }),
+        () => send(new URL('/api/v1/drafts', FAKE_BASE), { method: 'POST', headers: { ...auth, 'X-HTTP-Method-Override': 'POST' }, body: '{}' }),
+        () => send(new URL('/api/v1/me', FAKE_BASE), { method: 'GET', headers: auth, body: 'x' }),
+        () => send(new URL('https://mailguard.elsewhere.example/api/v1/drafts'), { method: 'POST', headers: auth, body: '{}' }),
+        () => send(new URL('http://mailguard.fake.example.test/api/v1/drafts'), { method: 'POST', headers: auth, body: '{}' }),
+        () => send(new URL('https://u:p@mailguard.fake.example.test/api/v1/me'), { method: 'GET', headers: auth }),
+        () => send(new URL('/api/v1/threads/t1?format=full', FAKE_BASE), { method: 'GET', headers: auth }),
+        () => send(new URL('/api/v1/threads/t1?format=metadata&q=x', FAKE_BASE), { method: 'GET', headers: auth }),
+        () => send(new URL('/api/v1/drafts?send=1', FAKE_BASE), { method: 'POST', headers: auth, body: '{}' }),
+        () => send(new URL('/api/v1/me', FAKE_BASE), { method: 'GET', headers: {} }),
+        () => send(new URL('/api/v1/me', FAKE_BASE), { method: 'GET', headers: { authorization: 'Bearer not-a-key' } }),
       ];
       let sneakyRefused = 0;
       for (const s of sneaky) { try { await s(); } catch (e) { if (e instanceof DraftOnlyViolation) sneakyRefused++; } }
       const state = await readFake(dir);
       // The fake itself would "send" if it were reached: the guard, not the fake, is what stops it.
-      const reachDir = await mkdtemp(join(tmpdir(), 'plcos-gmail-reach-'));
-      const rawFake = fakeTransport(reachDir);
-      await rawFake(new URL('/gmail/v1/users/me/messages/send', GMAIL_ORIGIN), { method: 'POST', headers: { authorization: 'Bearer none' }, body: '{}' });
-      const client = gmailClient({ transport, accessToken: async () => 'x' });
-      check('Email: the Gmail allowlist refuses every send endpoint and every smuggled variant before the transport',
-        refused === MUST_REFUSE.length && sneakyRefused === sneaky.length && state.sendAttempts.length === 0
-          && !Object.keys(client).some((k) => /send|insert|import|delete/i.test(k)),
-        `${refused}/${MUST_REFUSE.length} named, ${sneakyRefused}/${sneaky.length} smuggled refused; fake saw ${state.sendAttempts.length} sends; client methods: ${Object.keys(client).join(', ')}`);
+      const reachDir = await mkdtemp(join(tmpdir(), 'plcos-mailguard-reach-'));
+      const reachKey = await fakeMintKey(reachDir, { mailbox: `wide@${FAKE_DOMAIN}`, grant: ['*'] });
+      await fakeTransport(reachDir)(new URL('/api/v1/messages/send', FAKE_BASE), { method: 'POST', headers: { authorization: `Bearer ${reachKey}` }, body: '{}' });
+      const reached = (await readFake(reachDir)).sendAttempts.length;
       await rm(reachDir, { recursive: true, force: true });
+      const client = mailguardClient({ transport, base: FAKE_BASE, key: wide });
+      check('Email: the mailguard allowlist refuses every send, delete and body read, and every smuggled variant, before the transport — even with a key that could send',
+        refused === MUST_REFUSE.length && sneakyRefused === sneaky.length && state.sendAttempts.length === 0 && reached === 1
+          && !Object.keys(client).some((k) => /send|delete|trash|modify|label/i.test(k)),
+        `${refused}/${MUST_REFUSE.length} named, ${sneakyRefused}/${sneaky.length} smuggled refused; the guarded fake saw ${state.sendAttempts.length} sends, the bare fake ${reached}; client methods: ${Object.keys(client).join(', ')}`);
 
-      // Independently of the allowlist's own table: random method × path, allowed only if it is one of these five shapes.
+      // Independently of the allowlist's own table: random method × path × query, allowed only if it is one of the four shapes.
       const r = rng(7);
-      const segs = ['users', 'me', 'drafts', 'messages', 'threads', 'send', 'import', 'profile', 'r123', 'batch', 'settings', 'labels', 'attachments', 't9'];
-      const expected = (m: string, p: string) => /^\/gmail\/v1\/users\/me\/(profile|drafts|drafts\/[^/]+|threads\/[^/]+|messages\/[^/]+)$/.test(p) && !/\/(send|import|batch\w*)$/.test(p) && (
-        (m === 'GET' && p === '/gmail/v1/users/me/profile') || (m === 'POST' && p === '/gmail/v1/users/me/drafts')
-        || (['GET', 'PUT'].includes(m) && /\/drafts\/[^/]+$/.test(p)) || (m === 'GET' && /\/(threads|messages)\/[^/]+$/.test(p)));
+      const segs = ['api', 'v1', 'me', 'drafts', 'threads', 'messages', 'send', 'labels', 'r123', 't9', 'attachments', 'modify', 'trash', 'mcp'];
+      const queries = ['', '', '?format=metadata', '?format=full', '?format=metadata&x=1', '?q=1'];
+      const id = (x: string) => /^[A-Za-z0-9_-]+$/.test(x) && x !== 'send';
+      const expected = (m: string, p: string, q: string) => {
+        const s = p.split('/').slice(1);
+        if (s[0] !== 'api' || s[1] !== 'v1') return false;
+        const [a, b] = [s[2], s[3]];
+        if (s.length === 3 && m === 'GET' && a === 'me') return q === '';
+        if (s.length === 3 && m === 'POST' && a === 'drafts') return q === '';
+        if (s.length === 4 && m === 'PUT' && a === 'drafts' && id(b!)) return q === '';
+        if (s.length === 4 && m === 'GET' && a === 'threads' && id(b!)) return q === '?format=metadata';
+        return false;
+      };
       let agree = 0, sendAllowed = 0;
       const N = 3000;
       for (let i = 0; i < N; i++) {
         const m = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'][Math.floor(r() * 5)]!;
-        const p = `/gmail/v1/users/me/${Array.from({ length: 1 + Math.floor(r() * 3) }, () => segs[Math.floor(r() * segs.length)]).join('/')}`;
-        const ok = 'endpoint' in allowedRequest(m, new URL(p, GMAIL_ORIGIN));
-        if (ok === expected(m, p)) agree++;
+        const tail = Array.from({ length: 1 + Math.floor(r() * 3) }, () => segs[Math.floor(r() * segs.length)]).join('/');
+        const p = r() < 0.8 ? `/api/v1/${tail}` : `/${tail}`;
+        const q = queries[Math.floor(r() * queries.length)]!;
+        const ok = 'endpoint' in allowedRequest(m, new URL(`${p}${q}`, FAKE_BASE), FAKE_BASE);
+        if (ok === expected(m, p, q)) agree++;
         if (ok && /send/.test(p)) sendAllowed++;
       }
-      check('Email: 3,000 random Gmail requests are allowed exactly when they are one of the six draft and header shapes; none that sends',
-        agree === N && sendAllowed === 0 && ALLOWED.length === 6, `${agree}/${N} agree; ${sendAllowed} send paths allowed; ${ALLOWED.length} allowlist entries`);
+      const bases = ['https://mail.example.com', 'http://localhost:3999', 'http://mail.example.com', 'https://mail.example.com/api', 'not a url', ''].map((b) => parseBase(b) instanceof URL);
+      check('Email: 3,000 random mailguard requests are allowed exactly when they are one of the four draft, thread-header and whoami shapes; none that sends; mailguard’s address must be https (or this machine)',
+        agree === N && sendAllowed === 0 && ALLOWED.length === 4 && bases.join() === 'true,true,false,false,false,false',
+        `${agree}/${N} agree; ${sendAllowed} send paths allowed; ${ALLOWED.length} allowlist entries; addresses ${bases.join(',')}`);
     }
 
     // ── 2. MIME ───────────────────────────────────────────────────────────────────────────
@@ -282,98 +308,170 @@ export async function emailProperties(check: Check, db: Db) {
         JSON.stringify({ clean: rules(clean), viaConnector: rules(viaConnector), noWrap: rules(noWrap), unapproved: rules(unapproved), grants: rules(grants), b506: rules(b506) }));
     }
 
-    // ── 6. OAuth on the fake ─────────────────────────────────────────────────────────────
-    const store = memoryStore();
-    const rt: GmailRuntime = {
-      mode: 'fake', authorizeUrl: 'http://fake.example.test/consent', client: { ...FAKE_CLIENT, redirectUri: 'http://localhost:3999/api/email/google/callback' },
-      transport: fakeTransport(dir), store, scopes: wantedScopes(true), fakeDir: dir,
-    };
-    const consent = async (handle: string, scopes = rt.scopes) => {
-      const { url, pending } = beginConnect({ ...rt, scopes }, handle, null);
-      const back = new URL(await fakeConsent(dir, new URL(url).searchParams));
-      return { code: back.searchParams.get('code')!, pending, url };
-    };
+    // ── 6. The key must be drafts-only, read from mailguard's own answer ─────────────────
     {
-      const c = await consent('juan');
-      const u = new URL(c.url);
-      const grant = await completeConnect(rt, 'juan', c.code, c.pending);
-      // A replayed code, a wrong verifier, and a grant wider than asked.
-      let replay = false, wrongVerifier = false, wider = false;
-      try { await completeConnect(rt, 'juan', c.code, c.pending); } catch { replay = true; }
-      const d = await consent('juan');
-      try { await completeConnect(rt, 'juan', d.code, { ...d.pending, verifier: 'x'.repeat(43) }); } catch { wrongVerifier = true; }
-      const before = (await readFake(dir)).revoked;
-      const w = await consent('juan', [...rt.scopes, 'https://www.googleapis.com/auth/gmail.send']);
-      try { await completeConnect(rt, 'juan', w.code, { ...w.pending, scopes: rt.scopes }); } catch (e) { wider = e instanceof DraftOnlyViolation; }
-      const revokedWider = (await readFake(dir)).revoked === before + 1;
-      check('Email: connecting uses PKCE, offline access and no merged grants; a replayed code, a wrong verifier and a wider grant are refused (the wider one revoked)',
-        grant.email === `juan@${FAKE_DOMAIN}` && u.searchParams.get('code_challenge_method') === 'S256' && u.searchParams.get('access_type') === 'offline'
-          && u.searchParams.get('include_granted_scopes') === 'false' && u.searchParams.get('scope') === `${SCOPES.compose} ${SCOPES.metadata}`
-          && replay && wrongVerifier && wider && revokedWider && (await store.get('juan'))?.refreshToken.startsWith('fake-rt-') === true,
-        JSON.stringify({ email: grant.email, replay, wrongVerifier, wider, revokedWider }));
+      const v = (a: unknown) => draftOnlyVerdict(a, Date.parse('2026-10-03T12:00:00Z'));
+      const code = (a: unknown) => { const x = v(a); return x.ok ? 'ok' : x.code; };
+      const cases: Array<[string, unknown, string]> = [
+        ['drafts and headers', whoami(['draft', 'read.metadata']), 'ok'],
+        ['drafts only', whoami(['draft']), 'ok'],
+        ['can send', whoami(['draft', 'read.metadata', 'send']), 'can_send'],
+        ['everything', whoami([...KNOWN_CAPABILITIES], ['*']), 'can_send'],
+        ['its own policy grants *, the system stops send', whoami(['draft', 'read.metadata'], ['*']), 'tool_grants_send'],
+        ['its own policy grants send, the system stops it', whoami(['draft'], ['draft', 'send']), 'tool_grants_send'],
+        ['an unknown capability', whoami(['draft', 'mail.forward']), 'unknown_capability'],
+        ['an unknown grant', whoami(['draft'], ['draft', 'forward']), 'unknown_capability'],
+        ['no draft', whoami(['read.metadata']), 'no_draft'],
+        ['expired', whoami(['draft'], ['draft'], { expiresAt: '2026-10-01T00:00:00Z' }), 'expired'],
+        ['an unreadable expiry', whoami(['draft'], ['draft'], { expiresAt: 'soon' }), 'expired'],
+        ['no layers', { tool: 't', mailbox: 'a@b.org', capabilities: ['draft'] }, 'malformed'],
+        ['no tool layer', { ...whoami(['draft']), layers: [{ layer: 'system', policy: { grant: ['*'] } }] }, 'malformed'],
+        ['capabilities not a list', { ...whoami(['draft']), capabilities: 'draft' }, 'malformed'],
+        ['no mailbox', { ...whoami(['draft']), mailbox: 'nobody' }, 'malformed'],
+        ['nothing', null, 'malformed'],
+      ];
+      const wrong = cases.filter(([, a, want]) => code(a) !== want).map(([name, a]) => `${name}: ${code(a)}`);
+      const sendText = v(whoami(['draft', 'send']));
+      // Random answers: accepted exactly when draft is in, send is out, everything is known and the tool's own grant names neither send nor *.
+      const r = rng(31);
+      const pool = [...KNOWN_CAPABILITIES, 'forward', 'send.later', 'read.*'];
+      let agree = 0, sendAccepted = 0;
+      for (let i = 0; i < 1000; i++) {
+        const caps = pool.filter(() => r() < 0.25);
+        const grant = r() < 0.15 ? ['*'] : caps.filter((c) => r() < 0.9);
+        const want = caps.includes('draft') && !caps.includes('send') && caps.every((c) => (KNOWN_CAPABILITIES as readonly string[]).includes(c))
+          && !grant.includes('*') && !grant.includes('send') && grant.every((g) => (KNOWN_CAPABILITIES as readonly string[]).includes(g) || g === 'read.*');
+        const got = v(whoami(caps, grant));
+        if (got.ok === want) agree++;
+        if (got.ok && (caps.includes('send') || grant.includes('send') || grant.includes('*'))) sendAccepted++;
+      }
+      check('Email: a mailguard key is drafts-only only when its own whoami says so — send, an own grant of send or *, anything unknown, no draft, an expired policy or a malformed answer are refused; 1,000 random answers agree and none that can send passes',
+        wrong.length === 0 && !sendText.ok && sendText.reason === CAN_SEND && agree === 1000 && sendAccepted === 0,
+        wrong.join('; ') || `${agree}/1000 agree; ${sendAccepted} send-capable accepted; refusal: ${sendText.ok ? '' : sendText.reason}`);
     }
 
-    // ── 7. Drafts end to end on the fake: move, threads, audit, ownership ────────────────
+    // ── 7. Connecting, and drafts end to end on the fake ─────────────────────────────────
     {
       const email = await import('../../modules/email');
       const { authorizeAction } = await import('../../lib/authz/server');
       const users = await db.query<{ id: string; handle: string; name: string; email: string; access: string; vehicles: string[] | null; approves: string[] }>(
         "select id::text, handle, name, email, access::text, vehicles, approves from platform.app_user where handle in ('juan') or access = 'gp' order by handle = 'juan' desc, handle limit 2");
       const juan = users[0]!, other = users[1]!;
-      const pursuits = await db.query<{ id: string; vehicle: string }>("select pursuit_id::text id, vehicle_id::text vehicle from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id where v.kind <> 'grant_rail' order by pursuit_id limit 2");
-      const origin = 'http://localhost:3999';
       const actor = { id: juan.id, handle: juan.handle, name: juan.name, email: juan.email };
+      const mailbox = `juan@${FAKE_DOMAIN}`;
+      const store = memoryStore();
+      const base: MailguardRuntime = { mode: 'fake', base: FAKE_BASE, transport: fakeTransport(dir), store, envKey: null, fakeDir: dir };
+      const refusedWith = async (work: () => Promise<unknown>) => { try { await work(); return null; } catch (e) { return e instanceof email.DraftRefused ? e.message : `threw ${(e as Error).name}`; } };
+      const calls = async (name: string) => (await readFake(dir)).calls[name] ?? 0;
+
+      // Connect: a key that can send is refused and not stored; so is one with an unknown permission, or not a key at all; a narrowed one is kept.
+      const sender = await fakeMintKey(dir, { mailbox, grant: ['draft', 'read.metadata', 'send'] });
+      const sendRefusal = await refusedWith(() => email.connectMailguard(actor, sender, base));
+      const storedAfterSend = await store.get(juan.handle);
+      const odd: MailguardTransport = async (url, init) => url.pathname === '/api/v1/me'
+        ? { status: 200, text: async () => JSON.stringify(whoami(['draft', 'mail.forward'])) } : base.transport(url, init);
+      const oddKey = await fakeMintKey(dir, { mailbox });
+      const unknownRefusal = await refusedWith(() => email.connectMailguard(actor, oddKey, { ...base, transport: odd }));
+      const whoamisBefore = await calls('whoami');
+      const formatRefusal = await refusedWith(() => email.connectMailguard(actor, 'mg_short', base));
+      const formatSentNothing = (await calls('whoami')) === whoamisBefore;
+      const storedAfterRefusals = await store.get(juan.handle);
+      const key = await fakeMintKey(dir, { mailbox, grant: ['draft', 'read.metadata'] });
+      const connected = await email.connectMailguard(actor, key, base);
+      check('Email: connecting refuses a key that can send ("This token can send email…"), one with an unknown permission and one that is not a key (sending nothing), storing none; a drafts-only key is kept',
+        sendRefusal === CAN_SEND && storedAfterSend === null && !!unknownRefusal && /does not know/.test(unknownRefusal) && !!formatRefusal && formatSentNothing
+          && storedAfterRefusals === null && connected.ok && connected.mailbox === mailbox && connected.canThread && (await store.get(juan.handle)) === key,
+        JSON.stringify({ sendRefusal, unknownRefusal: unknownRefusal?.slice(0, 60), formatRefusal: formatRefusal?.slice(0, 40), formatSentNothing, kept: (await store.get(juan.handle)) === key }));
+
+      const pursuits = await db.query<{ id: string; vehicle: string }>("select pursuit_id::text id, vehicle_id::text vehicle from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id where v.kind <> 'grant_rail' order by pursuit_id limit 2");
       const first = await email.createDraft(actor, { purpose: 'first_message', vehicleId: pursuits[0]!.vehicle, pursuitId: pursuits[0]!.id });
       const second = await email.createDraft(actor, { purpose: 'first_message', vehicleId: pursuits[1]!.vehicle, pursuitId: pursuits[1]!.id });
       const fill = async (id: string, subject: string) => {
         const d = (await email.draftWithChecks(actor, id)).draft;
-        await email.saveDraft(actor, id, { revision: d.revision, to: 'Ana Ruiz <ana@example.org>', cc: '', bcc: '', subject, mode: 'rich', doc: d.doc });
+        await email.saveDraft(actor, id, { revision: d.revision, to: 'Ana Ruiz <ana@example.org>, Zoë Ödegaard <zoe@example.org>', cc: '', bcc: '', subject, mode: 'rich', doc: d.doc });
       };
       await fill(first, 'Invented subject one');
       await fill(second, 'Invented subject two');
-      const m1 = await email.moveDraft(actor, first, origin, rt);
-      const m2 = await email.moveDraft(actor, second, origin, rt);
+      const m1 = await email.moveDraft(actor, first, base);
+      const m2 = await email.moveDraft(actor, second, base);
       const d1 = (await email.draftWithChecks(actor, first)).draft;
       const d2 = (await email.draftWithChecks(actor, second)).draft;
-      check('Email: two new emails land as two Gmail drafts in two threads, with different Message-IDs and no In-Reply-To',
-        m1.threadId !== m2.threadId && d1.messageId !== d2.messageId && !d1.inReplyTo && d1.status === 'in_gmail' && m1.threadSource === 'new',
-        JSON.stringify({ t1: m1.threadId, t2: m2.threadId }));
+      const box = () => readFake(dir).then((s) => s.mailboxes[mailbox]!);
+      const made1 = (await box()).messages[(await box()).drafts[m1.gmailDraftId]!]!;
+      check('Email: two new emails land through mailguard as two Gmail drafts in two threads, with no reply headers; names outside ASCII go as bare addresses',
+        m1.threadId !== m2.threadId && d1.messageId !== d2.messageId && !made1.inReplyTo && d1.status === 'in_gmail' && m1.threadSource === 'new'
+          && made1.subject === 'Invented subject one' && made1.to.join(', ') === 'Ana Ruiz <ana@example.org>, zoe@example.org' && m1.account === mailbox,
+        JSON.stringify({ t1: m1.threadId, t2: m2.threadId, to: made1.to }));
 
-      // A second move replaces the same Gmail draft; once it is sent there, a move makes a new email.
-      const again = await email.moveDraft(actor, first, origin, rt);
-      await fakeSendInGmail(dir, `juan@${FAKE_DOMAIN}`, again.gmailDraftId, '<gmail-rewrote-it@mail.example>');
-      const renewed = await email.moveDraft(actor, first, origin, rt);
+      // A second move replaces the same Gmail draft; once it is sent there, a move makes a new one.
+      const again = await email.moveDraft(actor, first, base);
+      await fakeSendInGmail(dir, mailbox, again.gmailDraftId);
+      const renewed = await email.moveDraft(actor, first, base);
       const d1b = (await email.draftWithChecks(actor, first)).draft;
-      check('Email: moving again replaces the Gmail draft; after it was sent in Gmail, the next move is a new email with a new Message-ID',
-        again.replaced && again.gmailDraftId === m1.gmailDraftId && !renewed.replaced && renewed.newMessageId && d1b.messageId !== d1.messageId,
+      check('Email: moving again replaces the Gmail draft; after it was sent in Gmail, the next move is a new draft with a new Message-ID in our records',
+        again.replaced && again.gmailDraftId === m1.gmailDraftId && !renewed.replaced && renewed.newMessageId && renewed.gmailDraftId !== m1.gmailDraftId && d1b.messageId !== d1.messageId,
         JSON.stringify({ again: again.replaced, renewed: renewed.newMessageId }));
 
-      // The LP answers in the thread; the follow-up answers that answer.
-      const firstThread = m2.threadId;
-      await fakeSendInGmail(dir, `juan@${FAKE_DOMAIN}`, m2.gmailDraftId, '<sent-by-gmail@mail.example>');
-      await fakeReceive(dir, `juan@${FAKE_DOMAIN}`, firstThread, { 'Message-ID': '<their-answer@example.org>', References: '<sent-by-gmail@mail.example>', 'In-Reply-To': '<sent-by-gmail@mail.example>', Subject: 'Re: Invented subject two' });
+      // The LP answers in the thread; the follow-up answers that answer, through mailguard's replyTo.
+      await fakeSendInGmail(dir, mailbox, m2.gmailDraftId);
+      const answer = await fakeReceive(dir, mailbox, m2.threadId, 'Re: Invented subject two');
       const follow = await email.createDraft(actor, { purpose: 'follow_up', vehicleId: pursuits[1]!.vehicle, replyToDraftId: second });
       await fill(follow, 'Re: Invented subject two');
-      const mf = await email.moveDraft(actor, follow, origin, rt);
-      const fake = await readFake(dir);
-      const box = fake.mailboxes[`juan@${FAKE_DOMAIN}`]!;
-      const made = box.messages[box.drafts[mf.gmailDraftId]!]!;
-      const top = parseMime(made.raw);
-      check('Email: a follow-up lands in the thread and answers its latest message, read from Gmail’s headers (not our guess at the sent Message-ID)',
-        made.threadId === firstThread && header(top, 'in-reply-to') === '<their-answer@example.org>'
-          && (header(top, 'references') ?? '').split(/\s+/).join(' ') === '<sent-by-gmail@mail.example> <their-answer@example.org>'
-          && decodeWords(header(top, 'subject') ?? '') === 'Re: Invented subject two' && mf.threadSource === 'gmail',
-        JSON.stringify({ thread: made.threadId === firstThread, irt: header(top, 'in-reply-to'), refs: header(top, 'references') }));
-      check('Email: nothing was sent — the fake Gmail recorded no send attempt through any of it', fake.sendAttempts.length === 0, `${fake.sendAttempts.length} send attempts`);
+      const mf = await email.moveDraft(actor, follow, base);
+      const made = (await box()).messages[(await box()).drafts[mf.gmailDraftId]!]!;
+      const theirs = (await box()).messages[answer]!;
+      check('Email: a follow-up lands in the thread and answers its latest sent or received message (mailguard sets the headers from Gmail’s), never a draft',
+        made.threadId === m2.threadId && made.inReplyTo === theirs.messageIdHeader && (made.references ?? '').endsWith(theirs.messageIdHeader) && mf.threadSource === 'thread',
+        JSON.stringify({ thread: made.threadId === m2.threadId, irt: made.inReplyTo, source: mf.threadSource }));
 
+      // Widened at mailguard after connecting: the next move checks first and stops before writing anything.
+      await fakeSetGrant(dir, key, ['draft', 'read.metadata', 'send']);
+      const createsBefore = (await calls('drafts.create')) + (await calls('drafts.update'));
+      const widened = await refusedWith(() => email.moveDraft(actor, second, base));
+      const wroteNothing = (await calls('drafts.create')) + (await calls('drafts.update')) === createsBefore;
+      const widenedStatus = await connection(base, juan.handle, 0);
+      await fakeSetGrant(dir, key, ['draft', 'read.metadata']);
+      const narrowedAgain = await email.moveDraft(actor, second, base);
+      check('Email: a key widened to send after it was connected is caught by the check before the next move — refused, nothing written — and works again once narrowed',
+        !!widened && widened.startsWith(CAN_SEND) && wroteNothing && widenedStatus.inspection?.ok === false && narrowedAgain.gmailDraftId.length > 0,
+        JSON.stringify({ widened: widened?.slice(0, 70), wroteNothing }));
+
+      // The Keychain's key (handed to the live server at start) is checked the same way.
+      const envStore = memoryStore();
+      const envSender = await fakeMintKey(dir, { mailbox, grant: ['draft', 'send'] });
+      const envRt: MailguardRuntime = { ...base, store: envStore, envKey: { handle: juan.handle, key: envSender } };
+      const envRefused = await refusedWith(() => email.moveDraft(actor, second, envRt));
+      const envStatus = await connection(envRt, juan.handle, 0);
+      const envGood: MailguardRuntime = { ...envRt, envKey: { handle: juan.handle, key } };
+      const envMoved = await email.moveDraft(actor, second, envGood);
+      check('Email: the Keychain key is held to the same check — one that can send stops drafting for its owner; a drafts-only one moves',
+        !!envRefused && envRefused.startsWith(CAN_SEND) && envStatus.source === 'keychain' && envStatus.inspection?.ok === false && envMoved.replaced,
+        JSON.stringify({ envRefused: envRefused?.slice(0, 50), source: envStatus.source }));
+
+      // Revoked at mailguard: a clean refusal that names no key.
+      const spare = await fakeMintKey(dir, { mailbox });
+      const spareStore = memoryStore();
+      await spareStore.put(juan.handle, spare);
+      await fakeRevoke(dir, spare);
+      const revoked = await refusedWith(() => email.moveDraft(actor, second, { ...base, store: spareStore }));
+      const fake = await readFake(dir);
+      check('Email: a revoked key fails cleanly — the move is refused in words, with no key in them — and nothing was ever sent',
+        !!revoked && /does not accept this token/.test(revoked) && !/mg_/.test(revoked) && fake.sendAttempts.length === 0 && !fake.calls.send,
+        JSON.stringify({ revoked: revoked?.slice(0, 80), sends: fake.sendAttempts.length }));
+
+      await email.testMailguard(actor, base);
       const audits = await db.query<{ action: string; detail: Record<string, unknown> }>(
-        "select action, detail from platform.audit_log where subject_type = 'email_draft' and subject_id = any($1::text[]) order by at", [[first, second, follow]]);
+        "select action, detail from platform.audit_log where (subject_type = 'email_draft' and subject_id = any($1::text[])) or (subject_type = 'app_user' and subject_id = $2 and action like 'email.mailguard_%') order by at",
+        [[first, second, follow], juan.id]);
       const moves = audits.filter((a) => a.action === 'email.draft_moved');
-      const text = JSON.stringify(moves);
-      check('Email: every move is audit-logged with counts, ids and the warnings shown — never the subject, the words or an address',
-        moves.length === 5 && moves.every((m) => typeof m.detail.gmailDraftId === 'string' && typeof m.detail.bytes === 'number' && Array.isArray(m.detail.warnings))
-          && !/Invented subject|ana@example\.org|Ana Ruiz/.test(text),
-        `${moves.length} move entries of ${audits.length}; ${text.slice(0, 160)}`);
+      const kinds = new Set(audits.map((a) => a.action));
+      const text = JSON.stringify(audits);
+      check('Email: every move and every key check is audit-logged — counts, ids, codes and the warnings shown — never the subject, the words, an address or a key',
+        moves.length === 7 && moves.every((m) => typeof m.detail.gmailDraftId === 'string' && typeof m.detail.bytes === 'number' && Array.isArray(m.detail.warnings))
+          && ['email.mailguard_connected', 'email.mailguard_refused', 'email.mailguard_checked', 'email.draft_move_failed'].every((k) => kinds.has(k))
+          && audits.some((a) => a.action === 'email.mailguard_refused' && a.detail.code === 'can_send' && a.detail.stored === false)
+          && !/Invented subject|ana@example\.org|Ana Ruiz|mg_[0-9A-Za-z]{12}_/.test(text),
+        `${moves.length} moves of ${audits.length} entries; kinds ${[...kinds].join(', ')}`);
 
       // Ownership: another person cannot read, save or move it; a double click cannot move twice.
       const otherP = { access: other.access as 'gp', vehicles: other.vehicles, approves: other.approves, id: other.id };
@@ -383,8 +481,7 @@ export async function emailProperties(check: Check, db: Db) {
       }
       await authorizeAction({ access: 'admin', vehicles: null, approves: [], id: juan.id }, 'app/email/actions.ts#moveDraftAction', [{ draftId: first }], db);
       await db.query("update email.draft set moving_since = now() where draft_id = $1", [second]);
-      let locked = false;
-      try { await email.moveDraft(actor, second, origin, rt); } catch (e) { locked = e instanceof email.DraftRefused && /being moved/.test(e.message); }
+      const locked = /being moved/.test((await refusedWith(() => email.moveDraft(actor, second, base))) ?? '');
       await db.query('update email.draft set moving_since = null where draft_id = $1', [second]);
       // A stale revision is refused rather than overwriting.
       let stale = false;
@@ -392,13 +489,11 @@ export async function emailProperties(check: Check, db: Db) {
       check('Email: a draft is its owner’s alone; a move in progress refuses a second; an edit on a stale revision is refused',
         refusedOther === 3 && locked && stale, JSON.stringify({ refusedOther, locked, stale }));
 
-      // Disconnect revokes at Google and forgets the token.
-      const before = (await readFake(dir)).revoked;
-      const out = await disconnect(rt, 'juan');
-      let after = false;
-      try { await email.moveDraft(actor, first, origin, rt); } catch (e) { after = e instanceof email.DraftRefused; }
-      check('Email: disconnecting revokes the grant at Google and forgets it; a move after that is refused',
-        out.revoked && (await readFake(dir)).revoked === before + 1 && !(await store.get('juan')) && after, JSON.stringify(out));
+      // Forget: the key is gone here, and a move after that is refused.
+      await email.forgetMailguard(actor, base);
+      const afterForget = await refusedWith(() => email.moveDraft(actor, first, base));
+      check('Email: forgetting the key removes it here; a move after that is refused and asks for a drafts-only token',
+        (await store.get(juan.handle)) === null && !!afterForget && /drafts-only mailguard token/.test(afterForget), afterForget ?? 'moved');
     }
   } finally {
     await rm(dir, { recursive: true, force: true });

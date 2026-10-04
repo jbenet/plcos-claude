@@ -1,23 +1,18 @@
 'use server';
 import { requireAction } from '@/lib/authz/server';
 
-import { cookies, headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
 /**
- * Email drafts (docs/25-email-drafts.md). Every action here writes a draft or moves one into the
- * person's own Gmail Drafts. None sends: the Gmail client has no send to call.
+ * Email drafts (docs/25-email-drafts.md). Every action here writes a draft, moves one into the
+ * person's own Gmail Drafts through mailguard, or connects their mailguard token. None sends: the
+ * mailguard client has no send to call, and only a token that cannot send is accepted.
  *
  * Each answers with a receipt the editor shows — or with the refusal, in words — rather than
  * throwing, so a refused move leaves the person's typing where it was.
  */
 
 type Receipt<T> = { ok: true; value: T } | { ok: false; error: string; blocks?: Array<{ field: string; text: string }> };
-
-async function origin(): Promise<string> {
-  const h = await headers();
-  return h.get('origin') ?? `http://${h.get('host') ?? 'localhost'}`;
-}
 
 async function receipt<T>(work: () => Promise<T>): Promise<Receipt<T>> {
   const { DraftRefused } = await import('@/modules/email');
@@ -26,7 +21,7 @@ async function receipt<T>(work: () => Promise<T>): Promise<Receipt<T>> {
   } catch (e) {
     if (e instanceof DraftRefused) return { ok: false, error: e.message, blocks: e.blocks };
     const name = e instanceof Error ? e.name : '';
-    if (['DraftOnlyViolation', 'GmailError', 'OAuthError'].includes(name)) return { ok: false, error: (e as Error).message };
+    if (['DraftOnlyViolation', 'MailguardError', 'KeyRefused', 'NotConnected'].includes(name)) return { ok: false, error: (e as Error).message };
     throw e;
   }
 }
@@ -72,7 +67,7 @@ export async function moveDraftAction(input: { draftId: string }) {
   const user = await requireAction('app/email/actions.ts#moveDraftAction', input);
   const { moveDraft } = await import('@/modules/email');
   return receipt(async () => {
-    const moved = await moveDraft(user, input.draftId, await origin());
+    const moved = await moveDraft(user, input.draftId);
     return moved;
   });
 }
@@ -99,32 +94,42 @@ export async function removeAttachmentAction(input: { draftId: string; attachmen
   });
 }
 
-export async function disconnectGmailAction(formData: FormData): Promise<void> {
-  const user = await requireAction('app/email/actions.ts#disconnectGmailAction', formData);
-  const { disconnectGmail } = await import('@/modules/email');
-  await disconnectGmail(user, await origin());
+export type ConnectResult = { ok: boolean; message: string };
+
+/**
+ * Connect a mailguard token (docs/25 §12): checked with mailguard's GET /api/v1/me first, and kept only
+ * if it can make drafts and cannot send. A refused token is not stored. The token never comes back.
+ */
+export async function connectMailguardAction(formData: FormData): Promise<ConnectResult> {
+  const user = await requireAction('app/email/actions.ts#connectMailguardAction', formData);
+  const { connectMailguard } = await import('@/modules/email');
+  const r = await receipt(() => connectMailguard(user, String(formData.get('token') ?? '')));
+  revalidatePath('/settings');
+  return r.ok ? { ok: true, message: `Connected: drafts-only, for ${r.value.mailbox}.` } : { ok: false, message: r.error };
+}
+
+/** Test the connection: one harmless read (GET /api/v1/me), no draft. */
+export async function testMailguardAction(formData: FormData): Promise<ConnectResult> {
+  const user = await requireAction('app/email/actions.ts#testMailguardAction', formData);
+  const { testMailguard } = await import('@/modules/email');
+  const r = await receipt(() => testMailguard(user));
+  revalidatePath('/settings');
+  if (!r.ok) return { ok: false, message: r.error };
+  const s = r.value;
+  return s.ok ? { ok: true, message: `Mailguard answered: ${s.mailbox}, tool “${s.tool}”, drafts-only.` } : { ok: false, message: s.reason ?? s.why ?? 'Refused.' };
+}
+
+export async function forgetMailguardAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/email/actions.ts#forgetMailguardAction', formData);
+  const { forgetMailguard } = await import('@/modules/email');
+  await forgetMailguard(user);
   revalidatePath('/settings');
 }
 
-/**
- * Finish a connect from another device (docs/25 §Per-user OAuth): Google can only send the browser
- * back to localhost, so on an iPad the last page fails to load — but its address carries the code,
- * and pasting it here finishes the connect with the same checks as the callback.
- */
-export async function pasteConsentAction(formData: FormData): Promise<{ ok: boolean; message: string }> {
-  const user = await requireAction('app/email/actions.ts#pasteConsentAction', formData);
-  const { finishGmailConnect } = await import('@/modules/email');
-  const { readPending, PENDING_COOKIE } = await import('@/lib/email/pending');
-  let url: URL;
-  try { url = new URL(String(formData.get('url') ?? '').trim()); } catch { return { ok: false, message: 'That is not an address. Copy the whole address of the page Google sent you to.' }; }
-  const jar = await cookies();
-  const pending = readPending(jar.get(PENDING_COOKIE)?.value);
-  if (!pending || url.searchParams.get('state') !== pending.state) return { ok: false, message: 'That address does not match the connect you started here. Start again from Connect.' };
-  const code = url.searchParams.get('code');
-  if (!code) return { ok: false, message: url.searchParams.get('error') === 'access_denied' ? 'Google says the request was declined.' : 'The address has no code in it.' };
-  const from = await origin();
-  const r = await receipt(() => finishGmailConnect(user, from, code, pending));
-  jar.delete(PENDING_COOKIE);
+/** The demo only: an invented drafts-only token from the fake mailguard. */
+export async function demoMailguardAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/email/actions.ts#demoMailguardAction', formData);
+  const { connectDemoMailguard } = await import('@/modules/email');
+  await connectDemoMailguard(user);
   revalidatePath('/settings');
-  return r.ok ? { ok: true, message: `Connected ${r.value}.` } : { ok: false, message: r.error };
 }

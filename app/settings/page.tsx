@@ -5,8 +5,9 @@ import { PrefsReset } from '@/components/shell/PrefsReset';
 import { ThemePicker } from '@/components/shell/ThemePicker';
 import { auth } from '@/lib/auth';
 import { THEMES } from '@/lib/theme';
-import { GmailConnect } from '@/components/email/GmailConnect';
+import { MailguardConnect } from '@/components/email/MailguardConnect';
 import { McpTokens } from '@/components/mcp/McpTokens';
+import { VoiceCard } from '@/components/email/VoiceCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,8 +18,7 @@ export const dynamic = 'force-dynamic';
  * was configured with, including nine constants labelled as guesses. Putting a theme
  * picker next to a circuit-breaker threshold would have been a category error.
  */
-async function Preferences({ searchParams }: { searchParams: Promise<{ gmail?: string }> }) {
-  const { gmail } = await searchParams;
+async function Preferences() {
   const a = await auth();
   const user = await a.currentUser();
 
@@ -56,8 +56,8 @@ async function Preferences({ searchParams }: { searchParams: Promise<{ gmail?: s
       <div className="lbl">Preferences</div>
       <h1>Your settings</h1>
       <p className="sublede">
-        What you choose for yourself, kept in this browser — except your Gmail connection and your
-        MCP tokens, which the server keeps for you alone. Nothing on this page changes what a number means, who can
+        What you choose for yourself, kept in this browser — except your mailguard token, your voice
+        for drafts and your MCP tokens, which the server keeps for you alone. Nothing on this page changes what a number means, who can
         approve anything, or what anyone else sees.
       </p>
 
@@ -88,10 +88,13 @@ async function Preferences({ searchParams }: { searchParams: Promise<{ gmail?: s
         </div>
       </div>
 
-      {/* Your own Gmail, for moving drafts there (docs/25). Not taste: it is audited and lives server-side. */}
-      <GmailConnect outcome={gmail} />
+      {/* Your mailguard token, for moving drafts into your Gmail (docs/25 §12). Not taste: it is audited and lives server-side. */}
+      <MailguardConnect />
 
-      {/* Tokens for agents over MCP (docs/26). Server-side and audited, like the Gmail connection. */}
+      {/* How you write, for drafts written for you (docs/email-guidelines.md §Voice). Server-side: drafters read it. */}
+      <VoiceCard />
+
+      {/* Tokens for agents over MCP (docs/26). Server-side and audited, like the mailguard token. */}
       <McpTokens />
 
       <div className="card">

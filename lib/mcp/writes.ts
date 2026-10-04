@@ -71,8 +71,8 @@ export async function createEmailDraft(env: Envelope, a: {
       link: draft.pursuitId ? `/${vehicle.slug}/pipeline/${draft.pursuitId}#email` : `/${vehicle.slug}/routes?target=${draft.entityId ?? ''}`,
       data: {
         draftId, status: draft.status, purpose: draft.purpose, vehicle: vehicle.slug, lp: draft.entityName, connector: draft.connectorName,
-        // The words you gave come back; words filled in from the records (a strategy's angle, which may rest on
-        // licensed data) stay in the app, where its owner reviews them.
+        // The words you gave come back; words filled in from the records (a strategy's first message, which may
+        // rest on licensed data) stay in the app, where its owner reviews them.
         subject: draft.subject, body: a.body !== undefined ? draft.bodyText : undefined,
         prefilledFrom: a.body === undefined ? draft.prefill?.source ?? null : null,
         // The address on record is filled in from the research; it is not echoed unless you gave it.
