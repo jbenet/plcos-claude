@@ -226,13 +226,19 @@ the likely setting. Confirm it once, after setup, with a wrong code carrying `X-
 audit address must equal the client address in Railway's HTTP log. It matters only while `/setup` is open, and
 for the addresses in the audit log.
 
-**The evening** (freeze to open: about 30–45 minutes, GUESS; the rehearsal replaces this):
+**Done on 5 Oct 2026.**
+- The rehearsal took 741 s, then the move 789 s; both said MATCH: 135 tables, 1,609,149 rows, 6 sequences, and every
+  view, function, trigger, index and constraint.
+- The live Mac server was stopped at 08:45 UTC, and `moved-to-cloud` was set at once.
+- The frozen Mac `plcos_live` is kept until 19 Oct.
+
+**The evening, as measured** (freeze to open was about 45 minutes, most of it the restore over the tunnel):
 
 | Step | What | Time |
 |---|---|---|
 | a | No import job queued or running. Stop the Mac's Next server only (`npm run dev:stop` would stop Postgres too). `npm run backup -- event "pre-railway"`. Open the tunnel. | minutes |
-| c | `bash scripts/cutover.sh run --from postgres://plcos_app@127.0.0.1:57433/plcos_live --to postgres://plcos_app@127.0.0.1:55432/plcos_live --keep-dakota --grants scripts/railway-grants.sql` | 5–15 min, GUESS (home upload) |
-| d | Files: `bash scripts/cutover-files.sh pack ../plcos-data/real <outside>/files.tar.gz` (Dakota's replica included; it leaves out the databases, logs, snapshots and the research exports), `scp` it up, and unpack it into `/app/data/real` with `railway ssh`. Runs alongside c. | 5–10 min, GUESS |
+| c | `bash scripts/cutover.sh run --from postgres://plcos_app@127.0.0.1:57433/plcos_live --to postgres://plcos_app@127.0.0.1:55432/plcos_live --keep-dakota --grants scripts/railway-grants.sql` | 789 s measured, with the restore through the tunnel ~11–12 min of it |
+| d | Files: `bash scripts/cutover-files.sh pack ../plcos-data/real <outside>/files.tar.gz` (Dakota's replica included; it leaves out the databases, logs, snapshots and the research exports), `scp` it up, and unpack it into `/app/data/real` with `railway ssh`. Runs alongside c. | 37,914 files: pack 42 s (554 MiB), scp 235 s (~2.4 MB/s), unpack 15 s |
 | e | c must say **MATCH**; `cutover-files.sh` checks its own archive. Close the tunnel. | in c |
 | f | Before switching, copy the settings Juan entered in `/setup` on the demo: `pg_dump --data-only -t platform.setting plcos_demo \| psql plcos_live` through the tunnel. Same `PLCOS_SECRET`, and the encryption binds only each setting's name, so they decrypt; the setup-done marker comes along, so no `/setup` reopens. Then `DATA_PROFILE=real`, `DATABASE_URL` pointing at `plcos_live`, and redeploy. **The files (d) must be on the volume first**: the real profile loads `/app/data/real/init.jsonc` at boot, and the redeploy's entrypoint hands the root-owned unpacked files to uid 10001. Add the missing connector keys in Settings → Connections. Leave the daily schedule off. | 10 min |
 | g | Smoke, signed in as admin: `/today`, each vehicle's overview, pipeline, selection and strategy, `/orgs/g/lps`, `/developer/enrich`. Make one reversible note. Run **Export the research set** (149 s in rehearsal). Pull a first copy to the Mac (§6). | 15 min |
