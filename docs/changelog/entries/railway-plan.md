@@ -54,3 +54,9 @@ Four deploy fixes landed with it:
 - `npm run dev:real` refuses once `data/real/moved-to-cloud` exists.
 
 `railway.json` sets the healthcheck and one replica.
+
+**4 Oct, Dakota.** Juan: Railway "should be our db same way as pl's warehouse". The move is now one hop:
+`cutover.sh --keep-dakota` goes through the tunnel. `cutover-files.sh` packs Dakota's raw replica, so the
+cloud's sync continues from its last pull, and its property now expects the replica in the archive.
+docs/agent-rules/real-data.md says our database includes the cloud deployment and the copies pulled from
+it. Dakota's other rules stand.

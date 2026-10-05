@@ -5,11 +5,13 @@
 #   bash scripts/cutover-files.sh pack <real root> <out.tar.gz>     archive them; then upload and unpack
 #                                                                  under /app/data/real on the volume
 #
+# Dakota's raw replica (dakota/) goes too: the cloud database is "our db" like PL's warehouse (Juan,
+# 4 Oct 2026; docs/deploy/railway.md decision C), so the cloud's sync continues from its last pull.
+#
 # Left out, and why:
 #   postgres/ database/ database.lock postgres.url   the database moves by pg_dump (cutover.sh), not as files
-#   dakota/                                          Dakota stays on the Mac (rev 3 decision 3)
 #   logs/ rehearsal/ backups/ .real-copy-* .preview-copy   local history, snapshots and copies
-#   the research export files in enrich/             regenerated on the service from the stripped database
+#   the research export files in enrich/             regenerated on the service from the moved database
 #                                                    (runbook §3: "Export the research set"); today's copies
 #                                                    can carry Dakota-derived titles and profile links
 # The archive is listed back and refused if any excluded path is in it. Prints counts only, never names.
@@ -19,7 +21,7 @@ case "$cmd" in list|pack) ;; *) sed -n 2,6p "$0" >&2; exit 2;; esac
 [ -d "$root" ] || { echo "Refused: $root is not a folder." >&2; exit 2; }
 root="$(cd "$root" && pwd -P)"
 
-EXCLUDE_DIRS=(postgres database dakota logs rehearsal backups cloud-copy)
+EXCLUDE_DIRS=(postgres database logs rehearsal backups cloud-copy)
 EXCLUDE_FILES=(database.lock postgres.url .preview-copy)
 EXPORTS=(research-set.jsonl candidates.jsonl team.json triage.jsonl identity-review.jsonl lp-unit-review.jsonl)
 prune=()

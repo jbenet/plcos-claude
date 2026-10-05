@@ -46,7 +46,9 @@ a copy of it with `npm run preview`, and a sub-agent's worktree, which has no ro
   Juan: "they are very touchy about their data, so make sure dakota data does not leave our system and
   get accidentally placed anywhere else. should just go into our db." So Dakota records live only in
   `plcos-data/real/dakota/` (the raw replica) and our database (the PL warehouse also holds some, read-only
-  for us). Never in git, a changelog, an issue, a screenshot, an artifact, a published page, a web search,
+  for us). **Our database includes the cloud deployment** (Juan, 4 Oct 2026: Railway "should be our db same
+  way as pl's warehouse"): its Postgres and its volume's `data/real/dakota/`, and the copies pulled from it
+  into `plcos-data/real` (docs/deploy/railway.md). Never in git, a changelog, an issue, a screenshot, an artifact, a published page, a web search,
   a prompt to any agent, or any file outside those two places; a report about Dakota work gives counts.
   Only `lib/connectors/dakota/` talks to Dakota (`npm run boundaries`), only a workflow runs it
   (`scripts/dakota-sync.ts`, recorded in the ledger), and only reads: sign-in, list and count, nothing
