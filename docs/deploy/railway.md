@@ -1,91 +1,113 @@
-# Capital OS on Railway (3 Oct 2026)
+# Capital OS on Railway (3 Oct 2026; decisions 4 Oct)
 
 Juan, 3 Oct: deploy to Railway to manage his own infra, move the database off the Mac, keep a quick local
 copy for testing, and run workflows in the cloud with results synced down. This replaces PL's LabOS app
-as the target for now. Almost everything built for [rev 3](rev3.md) carries over: the image, the import
-child process, the daily timer, the encrypted backup, `cutover.sh` and the Dakota strip. What changes is
-where it runs, how people sign in, and a few small code changes (§2).
+as the target. Almost everything built for [rev 3](rev3.md) carries over: the image, the import child
+process, the daily timer, `cutover.sh` and the Dakota strip.
 
-**The rule:** one web service and one Postgres. Nothing else until something measured needs it.
+**The rules:**
+- One web service and one Postgres. Nothing else until something measured needs it.
+- **Our API is the only door** (Juan, 4 Oct). The database has no public port. Pulls, pushes and
+  sign-ins go through the app, which checks who is asking and logs it. One-off admin work (the move, a
+  rollback) goes through Railway's SSH, which only Juan's keys open.
+- **Secrets live in the app** (Juan, 4 Oct; MailGuard's design). Only two values sit outside it:
+  - `PLCOS_SECRET`, the key that encrypts the stored secrets and signs sessions;
+  - the database connection.
+  Everything else is entered in `/setup` or in Settings, encrypted in the database. This covers the
+  Google client, the connector keys, the Anthropic key and the tokens.
+- The cloud is the only writer of its database.
 
 ## 1. The shape
 
 | Part | What | Notes |
 |---|---|---|
-| **Web service** | Built from the GitHub repo with the existing `Dockerfile`: `next build`, then `next start` (the production build; see the page-speed and prod-build changelog entries) | Import jobs run as child processes of this server, as on the Mac. The daily timer (`SCHEDULE_DAILY_AT`) and the backup (`BACKUP_COMMAND`) run inside it too. No worker service, no cron service, no Redis. |
-| **Volume** on the web service | Mounted at `/app/data`; the working files live in `/app/data/real` | About 2.2 GB today: research (`enrich/`, 2.1 GB, 37K files), issues, materials, intake, workflow ledger. Start at 10 GB. |
-| **Postgres 17** | Railway's Postgres template, pinned to 17 to match the Mac | Holds the only copy of the real data after cutover. The Mac's cluster is 2.3 GB on disk today; the last measured dump was 190–222 MiB (28 Sep). |
-| **Region** | US West | Juan is on Pacific time. |
-| **Size** | Memory limit 8 GB, 2+ vCPU | Measured (06-measurements): the server peaks at 1.25 GiB under 10 users, the findings import child at 2.43 GiB. Railway bills for what is used, not the limit. |
+| **Web service** | Built from GitHub with the existing `Dockerfile`: `next build`, then `next start` (the production build; see the page-speed and prod-build changelog entries); `railway.json` sets the healthcheck and one replica | Import jobs run as child processes of this server, as on the Mac. The daily timer runs inside it too. No worker or cron service, no Redis. |
+| **Volume** on the web service | Mounted at `/app/data`; working files in `/app/data/real` | About 2.2 GB today: research (`enrich/`, 2.1 GB, 37K files), issues, materials, intake, workflow ledger. Start at 10 GB. |
+| **Postgres 17** | Railway's template, pinned to 17 to match the Mac; private network only | The only copy of the real data after cutover. The Mac's cluster is 2.3 GB on disk; the last measured dump was 190–222 MiB (28 Sep). |
+| **Size** | Juan's existing Railway plan; raise it if needed | Measured (06-measurements): the server peaks at 1.25 GiB under 10 users, the findings import child at 2.43 GiB. Memory limit at least 4 GB, ideally 8. |
 
-The Mac becomes a development machine: demo servers, previews of local copies (§6), and Dakota (§7).
+The Mac becomes a development machine. It serves demos and previews of pulled copies (§6), and runs local
+research that pushes its results up (§7). Dakota stays there until decision C.
 
-## 2. Code changes before the first real deploy
+## 2. What to build before the first real deploy
 
-None of these is built yet. Together they are about half a day, plus sign-in (decision A).
-
-| # | Change | Why |
+| # | Change | State |
 |---|---|---|
-| 1 | **Database TLS on Railway.** Off loopback, the app demands a certificate it can verify (`lib/db/postgres.ts`), and the real profile refuses a non-loopback database unless `LABOS_ME_URL` is set (`config/deployment.ts`). Allow `*.railway.internal` without TLS, and accept `sslmode=require` for the public proxy. | Railway's private network has no public certificate (Railway says the network itself is encrypted; check), and its proxy certificate is self-signed. `pg-verify` and `strip-dakota` connect through the same client at cutover. |
-| 2 | **Commit for the build.** The Dockerfile refuses an empty `GIT_COMMIT`. Fall back to Railway's `RAILWAY_GIT_COMMIT_SHA`. | Railway passes service variables to `ARG`s at build time (check on the first build). |
-| 3 | **Volume owner.** The image runs as uid 10001; Railway mounts volumes owned by root. Add a tiny entrypoint that fixes the owner and drops to 10001, or set `RAILWAY_RUN_UID=0` until then. | Otherwise the first write to `/app/data` fails. |
-| 4 | **Sign-in and "this is the live server".** Both key on `LABOS_ME_URL` today (`config/ports.ts` `isLiveServer`). If sign-in is not LabOS (decision A), replace that with one explicit setting. | The local user switcher must never serve real data on a public URL. Today the code already refuses to start that way: real data plus a remote database needs `LABOS_ME_URL`, which hides the switcher. Keep that property. |
-| 5 | **The Mac stops being live.** After cutover, `npm run dev:real` refuses when `data/real` holds a `moved-to-cloud` marker. | Habit would otherwise write to the frozen Mac database, or fall back to the 6.9 GB stale PGlite copy if `postgres.url` were removed. |
+| 1 | **Settings, `/setup` and Google sign-in** (§3), copied from MailGuard. Also replaces "this is the live server" (today it keys on `LABOS_ME_URL`) with sign-in being on, and lets the real profile use a remote database once it is. | Building |
+| 2 | **Pull and push through the API** (§6, §7): an admin's snapshot token streams a database dump down; a push token sends finished research files up for the cloud's own importers. `cloud-pull.sh` switches to it. | Main dev session |
+| 3 | **Database TLS on the private network.** Off loopback the app demands a verifiable certificate; `*.railway.internal` has none, and Railway encrypts that network with WireGuard. | **Done** (`lib/db/postgres.ts`) |
+| 4 | **Commit for the build.** The Dockerfile now also accepts Railway's `RAILWAY_GIT_COMMIT_SHA`. | **Done** |
+| 5 | **Volume owner.** Railway mounts volumes as root, and the image runs as uid 10001. With `RAILWAY_RUN_UID=0` (Railway's documented switch), `scripts/docker-entrypoint.sh` starts as root only to hand `/app/data` to 10001, then drops to it. Elsewhere the image still starts as 10001. | **Done** |
+| 6 | **The Mac stops being live.** `npm run dev:real` refuses once `data/real/moved-to-cloud` exists. | **Done** (`scripts/serve.ts`) |
 
-Already fixed on this branch: `pg-verify` hashed rows as text in each server's own time zone, so the Mac's
-cluster (Los Angeles) and a UTC cloud database could never match and the cutover would always stop. It now
-pins UTC, as `pg-copy` does. Rev 3's rehearsals were Mac to Mac, which is why nobody saw it.
+Also fixed: `pg-verify` hashed rows as text in each server's own time zone. A Los Angeles cluster and a
+UTC one could never match, so every cutover off the Mac would have stopped. It now pins UTC, as `pg-copy`
+does.
 
-## 3. Sign-in on a public URL
+## 3. Settings, `/setup` and sign-in (decided 4 Oct)
 
-Today anyone on the Mac's network can pick any user from the switcher. On Railway the app has a public URL,
-so the switcher must never be reachable with real data. Two ways:
+Juan, 4 Oct: Google OAuth, "just copy that flow" from MailGuard; and all secrets configurable inside the
+app, with a `/setup` that guides you from scratch. The design, adapted from MailGuard (which uses SQLite)
+to our Postgres:
 
-- **LabOS (no new code).** The server reads LabOS's `authToken` cookie and asks LabOS's `/me` who it is
-  (the labos-signin entry). The browser sends that cookie only to LabOS's own domain. So this works only if
-  PL lets the app live on a domain that receives the cookie. Ask PL Infra.
-- **Google sign-in with an allowlist (about 1–2 days).** Reuse the Google OAuth client from Gmail drafts
-  (docs/25), add the Railway URL as a redirect, and map each verified email to its `platform.app_user`. Anyone
-  else is refused. This also gives Gmail drafts the https redirect they need to work from the cloud.
+- **The key.** `PLCOS_SECRET` (32+ random bytes, base64), set as a sealed Railway variable. Each purpose
+  gets its own subkey through HKDF-SHA256. Secrets are encrypted with AES-256-GCM; sessions and the OAuth
+  state are signed with HMAC. If `PLCOS_SECRET` is unset, the app makes one on the volume, and Settings
+  recommends moving it into the variable.
+- **Stored secrets.** One `platform.setting` table, with each secret encrypted on its own. A registry names
+  every setting: label, secret or not, validation, and the environment variable that overrides it. An env
+  value always wins, so the Mac's Keychain wrappers keep working. Each connector declares its own setting
+  inside its own folder, so the boundaries hold. A stored secret is never shown again: the UI shows `••••`
+  plus its last four characters, with **Replace** and **Remove**. Every change is audit-logged by field
+  name, never by value.
+- **`/setup`.** It stays open until Google sign-in is configured. On boot the server prints a one-time code
+  in its log; Railway's Deploy Logs show it. Wrong codes are rate-limited. The steps:
+  1. The public address, taken from Railway's domain.
+  2. The Google OAuth client, with the console steps and a copyable redirect URI.
+  3. The first admin's email.
+  4. Optionally: Affinity, Linear and Anthropic.
 
-Until one of them works, Railway runs the demo only. MCP tokens (`/api/mcp`) are bearer tokens and work
-either way; they move with the database. Point `claude mcp add` at the new URL.
+  Then "Continue with Google". After that, `/setup` says it's set up, and the rest lives in Settings →
+  Connections. It warns when no volume is mounted at the data folder.
+- **Sign-in.** Google with PKCE and a signed state cookie, MailGuard's flow:
+  - It accepts only a verified email from a Google Workspace account that matches an active
+    `platform.app_user`. There is no self-sign-up.
+  - The session is a signed cookie with a per-user epoch, so an admin can sign someone out everywhere.
+  - Cookie-acting route handlers refuse cross-site POSTs.
+  - Roles stay as they are. The local switcher never serves real data on a public URL.
+  - MCP tokens are bearer tokens and keep working. Point `claude mcp add` at the new URL.
 
-## 4. Setting it up (Railway UI; CLI in brackets)
+## 4. Setting it up
 
 **Variables.** `npx tsx scripts/railway-env.ts` prints this table from
-[service.env.example](service.env.example), so the two can't drift. Type values into the service's Variables
-tab, and seal the secret ones (Railway hides sealed values after saving). Never put a value in chat, a file,
-a commit or this doc. Each Mac Keychain item becomes a Railway variable: the Affinity key, the Linear key,
-and new Postgres passwords, not the Mac's. The `admin` role becomes Railway's own `postgres` superuser,
-which only Juan uses. "Mailguard" is not named anywhere in this repo; if it is a token, it follows the same
-rule.
+[service.env.example](service.env.example) (the settings work will add `PLCOS_SECRET` there). Seal the
+secret ones. Never put a value in chat, a file, a commit or this doc.
 
 | Variable | Tag | Secret | On Railway |
 |---|---|---|---|
 | `DATA_PROFILE` | required |  | `demo` for the first boot, `real` at cutover. |
-| `LABOS_ME_URL` | required |  | Decision A. Set only if LabOS sign-in can reach the Railway domain; otherwise the sign-in that replaces it. |
+| `LABOS_ME_URL` | required |  | Leave unset: sign-in is Google (§3). |
 | `DATABASE_URL` | required |  | `postgresql://plcos_app@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/plcos_demo` first, then `…/plcos_live`. No password in it. |
-| `PGPASSWORD` | optional | yes | The `plcos_app` password you set on Railway Postgres (§4 step 3). Not the Mac's: new passwords for the cloud. |
+| `PGPASSWORD` | optional | yes | The `plcos_app` password you set on Railway Postgres (§4 step 2). One of the two secrets that live outside the app. |
 | `PGSSLMODE` | optional |  | Leave unset on the private network (code change 1). |
-| `AFFINITY_API_KEY` | required-real | yes | Keychain `plcos-affinity`. Set at cutover. |
-| `LINEAR_API_KEY` | required-real | yes | Keychain `plcos-linear` / `api-key`. Set at cutover. |
+| `AFFINITY_API_KEY` | required-real | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
+| `LINEAR_API_KEY` | required-real | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `DAKOTA_USERNAME` | never |  | **Never set.** Dakota stays on the Mac (decision C). |
 | `DAKOTA_PASSWORD` | never |  | **Never set.** See DAKOTA_USERNAME. |
 | `CLOUDSDK_AUTH_ACCESS_TOKEN` | never |  | **Never set** on Railway. |
-| `GOOGLE_OAUTH_CLIENT_ID` | never |  | **Not yet.** Gmail drafts move to the cloud with decision A's Google option, or later (docs/25). |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | never | yes | **Not yet.** Gmail drafts move to the cloud with decision A's Google option, or later (docs/25). |
-| `ANTHROPIC_API_KEY` | later | yes | From an Anthropic workspace with a monthly limit. Set when the cloud research jobs start (§7). |
+| `GOOGLE_OAUTH_CLIENT_ID` | never |  | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | never | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
+| `ANTHROPIC_API_KEY` | later | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `ANTHROPIC_MODEL` | optional |  | Leave unset (the default works). |
-| `FEEDBACK_EXPORT_TOKEN` | required-real | yes | A new random token (`openssl rand -hex 32`); the Mac keeps its copy with `npm run secret:store -- feedback-export-token`. |
+| `FEEDBACK_EXPORT_TOKEN` | required-real | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `SCHEDULE_DAILY_AT` | later |  | `03:00` (UTC), the day after a manual Affinity sync works from Railway. |
 | `PAGE_WARM` | optional |  | Leave unset (the default works). |
-| `BACKUP_COMMAND` | required-real |  | `bash scripts/backup-service.sh` |
-| `BACKUP_BUCKET` | required-real |  | The S3 bucket in your AWS account (decision D). |
-| `BACKUP_GPG_PUBLIC_KEY` | required-real | yes | The armored public half only (rev3.md "Backups"). The private half never goes to Railway. |
-| `AWS_REGION` | optional |  | The bucket's region. |
-| `AWS_ACCESS_KEY_ID` | optional | yes | An IAM user that can only put, list and delete under the bucket's `plcos-*` prefixes. Railway has no AWS role. |
-| `AWS_SECRET_ACCESS_KEY` | optional | yes | That IAM user's secret. |
+| `BACKUP_COMMAND` | required-real |  | Leave unset: no S3 for now. Railway backs up its volumes, and the Mac keeps encrypted pulls (§8). |
+| `BACKUP_BUCKET` | required-real |  | Leave unset (no S3 for now, §8). |
+| `BACKUP_GPG_PUBLIC_KEY` | required-real | yes | Leave unset (no S3 for now, §8). |
+| `AWS_REGION` | optional |  | Leave unset (no S3 for now, §8). |
+| `AWS_ACCESS_KEY_ID` | optional | yes | Leave unset (no S3 for now, §8). |
+| `AWS_SECRET_ACCESS_KEY` | optional | yes | Leave unset (no S3 for now, §8). |
 | `BACKUP_DRY_RUN` | optional |  | Leave unset (the default works). |
 | `BACKUP_KEEP_DIR` | optional |  | Leave unset (the default works). |
 | `NODE_ENV` | image |  | Do not set: the Dockerfile sets it. |
@@ -102,78 +124,84 @@ rule.
 | `PREVIEW_COPY_AT` | never |  | **Never set** on Railway. |
 | `PGLITE_DIR` | never |  | **Never set** on Railway. |
 | `ENRICH_DIR` | never |  | **Never set** on Railway. |
-| `RAILWAY_RUN_UID` | railway | | `0` only if the volume is not writable by the image's user 10001 (code change 3); remove it once that change lands. |
+| `RAILWAY_RUN_UID` | railway | | `0`: the entrypoint starts as root only to hand `/app/data` to user 10001, then drops to it (§2). |
 
 **Steps, once:**
 
-1. **Project.** New project, region US West. Plan: Pro (decision B). [`railway login`, `railway init`]
-2. **Postgres.** Add → Database → PostgreSQL. In its settings, pin the image to version 17 and run
-   `select version()` to confirm. Turn on its volume backups (daily). Leave the public TCP proxy on for
-   now (cutover and pulls use it; decision G).
-3. **Roles.** Connect as `postgres` [`railway connect Postgres`] and run:
+1. **Postgres.** In Juan's Railway project: Add → Database → PostgreSQL. Pin the image to 17 and run
+   `select version()`. Turn on its daily volume backups. **Remove its public TCP proxy** (Settings →
+   Networking).
+2. **Roles,** from a shell in the web service (`railway ssh`, then `psql` as `postgres`):
    ```sql
    create role plcos_app login;  \password plcos_app
    create role plcos_ro login;   \password plcos_ro
    create database plcos_demo owner plcos_app;
    create database plcos_live owner plcos_app;
    ```
-   `\password` asks for each password without showing it. Put the `plcos_app` one in the web service's
-   `PGPASSWORD`. Keep the `plcos_ro` one only on the Mac, inside the pull URL (§6). This is the Mac's
-   split: `plcos_app` owns everything, and `plcos_ro` reads (docs/21 "Roles").
-4. **Web service.** Add → GitHub repo → this repo, branch `master`. Railway finds the `Dockerfile`. Settings:
-   healthcheck path `/api/health`; restart on failure; memory limit 8 GB. Add a volume, mounted at `/app/data`,
-   10 GB. Deploy only from GitHub, never `railway up` from a checkout: GitHub holds only tracked files, which
-   is the same guarantee as rev 3's `git archive`, and the Dockerfile's guards still refuse any `data/` path.
-5. **Variables** for the demo: `DATA_PROFILE=demo`, `DATABASE_URL` to `plcos_demo`, `PGPASSWORD`, plus code
-   changes 1–3. Deploy.
-6. **Check:** `/api/health` gives 200 and the demo pages load. Run `bash scripts/preflight.sh --dry` in the
-   container [`railway ssh`].
-7. **Deploys from then on:** Railway builds every push to `master`. Juan pushes only after
-   `scripts/ship.sh` passes, as today. Rollback is one click: Deployments → an earlier one → Redeploy.
+   `\password` asks for each password without showing it. This is the Mac's split: `plcos_app` owns
+   everything, and `plcos_ro` only reads (docs/21 "Roles").
+3. **Web service.** Add → GitHub repo → this repo, watching a `deploy` branch (Settings → Source), so a
+   release is a choice: `git push origin master:deploy` (MailGuard's practice). Add a volume at `/app/data`,
+   10 GB. Then set the variables:
+   - `RAILWAY_RUN_UID=0`;
+   - `PLCOS_SECRET` (`openssl rand -base64 32`, sealed);
+   - `DATABASE_URL` pointing at `plcos_demo`, with `PGPASSWORD`;
+   - `DATA_PROFILE=demo`.
+
+   Deploy only from GitHub, never `railway up` from a checkout. GitHub holds only tracked files, and the
+   Dockerfile's guards still refuse any `data/` path.
+4. **Networking → Generate Domain.** Open `https://<domain>/setup`, enter the code from the Deploy Logs, and
+   follow the page. It shows the redirect URI to add to the Google OAuth client.
+5. **Check:** `/api/health` gives 200, sign-in works, and the demo pages load. Run
+   `bash scripts/preflight.sh --dry` through `railway ssh`.
+6. **Deploys from then on:** Juan fast-forwards `deploy` after `scripts/ship.sh` passes. Rollback is one
+   click: Deployments → an earlier one → Redeploy.
 
 ## 5. Moving the database (one evening, rehearsed first)
 
-**Dakota never reaches Railway.** Rev 3's `cutover.sh` restored everything into the target, then stripped
-Dakota there. On Railway that would put Dakota rows on Railway's disk, WAL and volume backups, even if only
-for minutes. So strip on the Mac first, then move the stripped copy. Two hops, both with the existing
-script, and no new code:
+**No public port, even for the move.** Railway's SSH forwards ports into the project's private network
+(docs.railway.com/cli/ssh), so the Mac reaches Postgres through a tunnel that only Juan's SSH key opens:
+`ssh -N -L 55432:postgres.railway.internal:5432 <domain>@ssh.railway.com`. Railway's `scp` reaches the
+container's filesystem, including the volume, which is how the working files go up. Both are confirmed in
+Railway's docs and checked for real in the rehearsal. The fallback is the Postgres TCP proxy, on for that
+hour only.
 
-- **Hop 1 (Mac → Mac):** freeze the live database, copy it into an empty `plcos_stripped` on the Mac's own
-  cluster, verify, strip Dakota (510 s in rehearsal 3), and stop copied jobs.
-- **Hop 2 (Mac → Railway):** freeze `plcos_stripped`, copy it to Railway's empty `plcos_live`, verify for an
-  exact MATCH, and apply [railway-grants.sql](../../scripts/railway-grants.sql). `--keep-dakota` here only
-  skips a second strip, because there is nothing left to strip.
+**Dakota (decision C, open):** until Juan decides, Dakota is stripped on the Mac first and never reaches
+Railway. That takes two hops, both with the existing script:
+- **Hop 1 (Mac → Mac):** freeze live and copy it into an empty `plcos_stripped` on the Mac's cluster. Verify,
+  strip Dakota (510 s in rehearsal 3), and stop the copied jobs.
+- **Hop 2 (Mac → Railway, through the tunnel):** freeze `plcos_stripped`, copy it to Railway's empty
+  `plcos_live`, verify for an exact MATCH, and apply [railway-grants.sql](../../scripts/railway-grants.sql).
+  `--keep-dakota` only skips a second strip.
 
-**Rehearse once,** into a scratch `plcos_rehearsal` on Railway, a week before. It measures the real network
-times and checks code change 1 against Railway's certificate. Then drop it.
+If Dakota may live on Railway, this is one hop with `--keep-dakota`, and its sync moves to the cloud.
 
-**The evening** (freeze to open: about 30–45 minutes, GUESS; the rehearsal replaces this number):
+**Rehearse once,** into a scratch `plcos_rehearsal`, a week before, to measure the real times.
+
+**The evening** (freeze to open: about 30–45 minutes, GUESS; the rehearsal replaces this):
 
 | Step | What | Time |
 |---|---|---|
-| a | No import job queued or running. Stop the Mac's Next server (not Postgres). `npm run backup -- event "pre-railway"`. | minutes |
-| b | Hop 1: `bash scripts/cutover.sh run --from postgres://plcos_app@127.0.0.1:57433/plcos_live --to postgres://plcos_app@127.0.0.1:57433/plcos_stripped` | about 10 min (rehearsed) |
-| c | Hop 2: `bash scripts/cutover.sh run --from …/plcos_stripped --to postgres://plcos_app@<proxy host>:<port>/plcos_live?sslmode=require --keep-dakota --grants scripts/railway-grants.sql` | 5–15 min, GUESS: the uncompressed rows go up Juan's home upload |
-| d | Files: `bash scripts/cutover-files.sh pack ../plcos-data/real <outside>/files.tar.gz` (it leaves out the databases, `dakota/`, logs, snapshots and the research exports), then unpack it into `/app/data/real` through `railway ssh`. Runs alongside c. | 5–10 min, GUESS |
-| e | Verify: c must say **MATCH**. `cutover-files.sh` checks its own archive. | in c |
-| f | Variables: `DATA_PROFILE=real`, `DATABASE_URL` to `plcos_live`, the keys, sign-in; leave `SCHEDULE_DAILY_AT` unset. Redeploy. | 3 min |
-| g | Smoke, as admin: `/today`, each vehicle's overview, pipeline, selection and strategy, `/orgs/g/lps`, `/developer/enrich`. Make one reversible note. Run **Export the research set**, which rebuilds the exports step d left out (149 s in rehearsal). Take the first backup by hand. | 15 min |
-| h | On the Mac: drop the `moved-to-cloud` marker into `data/real` (code change 5). | 1 min |
+| a | No import job queued or running. Stop the Mac's Next server (not Postgres). `npm run backup -- event "pre-railway"`. Open the tunnel. | minutes |
+| b | Hop 1: `bash scripts/cutover.sh run --from postgres://plcos_app@127.0.0.1:57433/plcos_live --to postgres://plcos_app@127.0.0.1:57433/plcos_stripped` | ~10 min (rehearsed) |
+| c | Hop 2: `bash scripts/cutover.sh run --from …/plcos_stripped --to postgres://plcos_app@127.0.0.1:55432/plcos_live --keep-dakota --grants scripts/railway-grants.sql` | 5–15 min, GUESS (home upload) |
+| d | Files: `bash scripts/cutover-files.sh pack ../plcos-data/real <outside>/files.tar.gz` (it leaves out the databases, `dakota/`, logs, snapshots and the research exports), `scp` it up, and unpack it into `/app/data/real` with `railway ssh`. Runs alongside c. | 5–10 min, GUESS |
+| e | c must say **MATCH**; `cutover-files.sh` checks its own archive. Close the tunnel. | in c |
+| f | `DATA_PROFILE=real` and `DATABASE_URL` pointing at `plcos_live`. Redeploy. The settings and keys entered in the demo stay in `plcos_demo`, so enter them again in Settings, or move that one table. Leave the daily schedule off. | 5 min |
+| g | Smoke, signed in as admin: `/today`, each vehicle's overview, pipeline, selection and strategy, `/orgs/g/lps`, `/developer/enrich`. Make one reversible note. Run **Export the research set** (149 s in rehearsal). Pull a first copy to the Mac (§6). | 15 min |
+| h | On the Mac: `touch data/real/moved-to-cloud` in the live folder. | 1 min |
 
 Passwords for b and c: `cutover.sh` takes URLs without passwords. Use a temporary pgpass file made from the
-Keychain (`PGPASSFILE=$(mktemp)`, mode 600) and delete it straight after.
+Keychain (`PGPASSFILE=$(mktemp)`, mode 600), and delete it straight after.
 
-If `railway ssh` can't stream a file into the container (check this in the rehearsal), put the archive in the
-backup bucket under a one-day prefix, encrypted with a one-time passphrase (`gpg -c`), and fetch it from
-inside the container with `aws s3 cp`.
+**Rollback** (14 days, decided 4 Oct). Before anyone writes on Railway, unfreeze the Mac and restart it:
+`bash scripts/cutover.sh unfreeze --db <Mac plcos_live>`, remove the marker. After writes, run
+`scripts/cutover-reverse.sh` from Railway into a new Mac database, through the tunnel. Keep the frozen Mac
+database and the pre-move backup for 14 days.
 
-**Rollback.** Before anyone writes on Railway: `bash scripts/cutover.sh unfreeze --db <Mac plcos_live>` and
-restart the Mac server. After writes: `scripts/cutover-reverse.sh` from Railway into a new Mac database.
-Keep the frozen Mac database and the pre-move backup for 14 days (decision H).
+## 6. Local copies for testing (cloud → Mac, through the API)
 
-## 6. Local copies for testing (one way: cloud → Mac)
-
-[scripts/cloud-pull.sh](../../scripts/cloud-pull.sh) pulls a fresh copy of the cloud database into its own
+[scripts/cloud-pull.sh](../../scripts/cloud-pull.sh) puts a fresh copy of the cloud database into its own
 local cluster and serves the app on it:
 
 ```bash
@@ -182,105 +210,89 @@ bash scripts/cloud-pull.sh pull  --to postgres://plcos@127.0.0.1:57434/plcos_cop
 bash scripts/cloud-pull.sh serve --to postgres://plcos@127.0.0.1:57434/plcos_copy   # from a dev worktree
 ```
 
-- It reads the cloud as `plcos_ro`, over Railway's public proxy, so it **cannot** change the cloud. It refuses
-  any other role off this machine. The pull URL is one Keychain item (`plcos-railway` / `pull-url`) and the
-  copy cluster's password is another (`plcos-railway` / `copy`). Neither is printed or put on a command line.
-- The copy lives in `plcos-data/real/cloud-copy/`, beside the real data. That cluster listens only on 127.0.0.1
-  and has no Unix socket. The script refuses the Mac's live port (57433) and any database not named
-  `plcos_copy…`. It restores into `plcos_copy_incoming`, checks the table count, and only then replaces the
-  last copy. A failed pull leaves the previous copy in place.
-- `serve` runs the app with `PREVIEW_COPY_AT` set to the time the copy was taken. The app then shows the copy
-  banner, refuses every write, and runs no connector (the existing preview rules). It has no keys. It refuses
-  to run in the live folder.
-- **Time, at today's size:** about 2–4 minutes (GUESS). Measured locally, the dump takes 15–17 s and the
-  restore 40–45 s. Over the proxy, the rows come down uncompressed, so the download dominates (at 100 Mbit/s,
-  about a minute).
-- **Tested** on invented data only: the test cluster (:5434) and scratch clusters. That covered two pulls in
-  a row, a failed pull that kept the last copy, a SCRAM-password cluster, every refusal, a pull as `plcos_ro`
-  after `railway-grants.sql`, and `serve` (health 200, copy banner, no errors).
+- **Down through our API.** The server runs `pg_dump` against its own private database and streams the dump
+  to whoever holds an admin's snapshot token. Tokens are minted in Preferences, like MCP tokens, and each
+  pull is audit-logged. The token is one Keychain item on the Mac. (Being built. Today's script reads a
+  Postgres URL, and was tested that way on invented data.)
+- **The copy is a preview.**
+  - It lives in `plcos-data/real/cloud-copy/`, in a cluster that listens only on 127.0.0.1.
+  - It replaces the last copy only after the new one restores and checks out.
+  - `serve` sets `PREVIEW_COPY_AT`, so the app shows the copy banner, refuses every write and runs no
+    connector.
+- **Time at today's size:** about 2–4 minutes (GUESS). Locally, the dump takes 15–17 s and the restore 40–45 s.
+- **Files:** most pages read only the database, so a pull brings the database by default. The same token can
+  fetch a tar of the working files when a test needs them (2.2 GB).
+- **The 25 GB under `plcos-data/real`** mostly never moves:
+  - The old PGlite snapshots (14 GB) and database (6.9 GB) stay until Juan deletes them.
+  - The Postgres cluster (2.3 GB) becomes the frozen rollback copy.
+  - About 2.2 GB of working files move up once.
 
-**The 25 GB under `plcos-data/real`:** most of it never moves. Two old PGlite snapshots (14 GB) and the old
-PGlite database (6.9 GB) stay on the Mac until Juan deletes them. The Postgres cluster (2.3 GB) becomes the
-frozen rollback copy. Dakota (50 MB) stays on the Mac. About 2.2 GB of working files move up once, at
-cutover. A pull brings down **the database only**: almost every page reads only the database. If a local test
-needs the files, take them from the nightly encrypted backup in S3 (§8). That needs the backup's private key on
-the Mac (decision D).
+## 7. Workflows: in the cloud and on the Mac (decided 4 Oct)
 
-## 7. Workflows: run in the cloud, see results on the Mac
+Juan, 4 Oct: "we should be able to run research from both cloud and local … run those research agents here
+and push up results".
 
-- **Already in the server:** imports (child processes, one heavy job at a time), the Affinity and Linear
-  syncs, the SPV derivation, the daily timer and the backup. On Railway they run as they do on the Mac.
-- **Research (W1, W1c, W5):** the buttons on Developer → Enrichment call the Anthropic API from the server
-  (workflow-api entry). They write the same files to the volume, and the existing importers take it from
-  there. They need `ANTHROPIC_API_KEY`, from a workspace with a monthly limit (rev 3: $1,500, a GUESS).
-- **Making a batch** is still a script (`scripts/enrich-batch.ts`). Run it in the container through
-  `railway ssh` until a button exists. That button is the first workflow gap to close.
-- **Where the files live: on the Railway volume.** The code reads and writes them as it does today, so the
-  volume needs no code change. 2.2 GB fits, and the nightly backup carries them. S3 would mean rewriting every
-  file reader, and listing 37K small files there is slow. Postgres would mean a migration for files that are
-  mostly inputs and logs; promote a file into a table when the schema rule says so, not before.
-- **Stays on the Mac:**
-  - Dakota: the raw replica, its sync and its key (decision C).
-  - Polaris, the PL warehouse: it signs in with Juan's own gcloud login, and its 369 MB of extracts in
-    `enrich/warehouse` go up only if Juan says so (decision E).
-  - The old PGlite files and snapshots.
-- **Mac-side research workers** (Claude Code sub-agents, ChatGPT) stop writing real research at cutover. What
-  they wrote would have to go up, and nothing goes up. If they are wanted later, add a narrow upload instead:
-  an admin hands the cloud a finished findings file, and the cloud's own importer validates it. That carries
-  inputs only, never database state (decision F).
+- **In the cloud:**
+  - What already runs in the server: imports, the Affinity and Linear syncs, the SPV derivation and the
+    daily timer.
+  - The W1, W1c and W5 buttons call the Anthropic API, with the key entered in Settings.
+  - Making a batch is still a script. Run it with `railway ssh` until a button exists.
+- **On the Mac:**
+  - Claude Code sub-agents and ChatGPT run research against a pulled copy, plus what only the Mac has
+    (Dakota, Polaris with Juan's gcloud login).
+  - They **push the results up** with a push token. A push carries only the finished files W1, W1c and W5
+    already write (findings, reviews, strategies), never database rows.
+  - The cloud checks each file with the importers' own validators, files it under `enrich/inbox/`, records a
+    ledger run, and imports it the usual way. A rejected file comes back with the reason.
+  - While Dakota stays on the Mac, a push refuses any claim whose source is Dakota. Research may find people
+    through Dakota, but only public sources go up.
+- **Where the files live: on the Railway volume,** read and written as today, with no code change.
 
-**Why there is no two-way sync.** Both sides would take writes: notes, statuses, imports and the routes
-derived from them. Merging means conflict rules for every table, tombstones for deletes, and replaying the
-derived caches. Those are the hardest parts of a distributed system, and the audit log and approval tickets
-would have to survive them too. One writer avoids all of it. **The cloud is the only source of truth.** A
-local copy is a read-only preview that is thrown away at the next pull. Nothing on the Mac writes to the
-cloud database. If the Mac needs to change something, it does it through the cloud app, like anyone else.
+**Why this is not two-way sync.** Sync would merge two writable databases: conflict rules for every table,
+deletes, and rebuilt caches. Here there is one writer. Copies come down as read-only previews. Results go up
+as new input files, which the cloud validates and imports itself, exactly like a button press. Nothing on
+the Mac ever writes the cloud database.
 
-## 8. Backups
+## 8. Backups (decided 4 Oct: no S3 for now)
 
-- **Railway's volume backups** on the Postgres service, daily. This is the fast restore. Check what the plan
-  keeps.
-- **The encrypted off-site copy:** `BACKUP_COMMAND="bash scripts/backup-service.sh"`, unchanged
-  (service-backup entry). It runs `pg_dump` of the Railway database plus a tar of the working files, encrypts
-  both to the GPG public key, uploads them to S3, and thins them with the Mac's retention policy and the
-  300 GB cap. On Railway the AWS access comes from an IAM user limited to the bucket's `plcos-*` prefixes
-  (`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`), because there is no role. The restore drill
-  (`scripts/service-drill.sh`) already passed; repeat it once against a real Railway backup.
-- **The Mac's daily backup** keeps covering what stays there (Dakota, the frozen copy) until decision H.
+- **Railway's volume backups,** daily, on Postgres and on the web volume, for a quick restore.
+- **The Mac holds the off-site copy.** A daily pull (§6) keeps an encrypted dump in `~/plcos-backups`, with
+  the Mac's existing encryption, retention and 300 GB cap. That covers losing the Railway project, which
+  Railway's backups don't.
+- **`PLCOS_SECRET`** goes in Juan's password manager too. Without it, a restored database's stored secrets
+  can't be read; they have to be entered again.
+- S3 (`backup-service.sh`) stays unused until the Mac stops being a reliable second home for backups.
 
 ## 9. Cost (GUESS, from Railway's prices as remembered; check railway.com/pricing)
 
 | Item | Rough monthly |
 |---|---|
-| Pro plan seat (includes $20 of usage) | $20 |
-| Web service: about 1.5 GB average memory, more during imports; under half a vCPU on average | $15–30 |
-| Postgres: about 1 GB memory, little CPU | $8–15 |
-| Volumes and backups: about 15 GB | $2–5 |
-| Egress: pulls (~1 GB each) and pages | $1–5 |
-| **Railway total** | **about $35–65 a month** |
+| Web service: ~1.5 GB average memory, more during imports; under half a vCPU on average | $15–30 |
+| Postgres: ~1 GB memory, little CPU | $8–15 |
+| Volumes and backups: ~15 GB | $2–5 |
+| Egress: daily pulls (~200 MB each) and pages | $1–3 |
+| **Usage, on top of Juan's existing plan** | **about $25–55 a month** |
 
-Outside Railway: the Anthropic API (capped by the workspace limit) and S3 (a few dollars).
+## 10. Decisions
 
-## 10. Decisions for Juan
+| | Decision | Answer (4 Oct) |
+|---|---|---|
+| A | Sign-in | Google OAuth, MailGuard's flow; secrets set in the app through `/setup` |
+| B | Plan | Juan's existing Railway plan, raised if needed |
+| C | Dakota on Railway | **Open**; what we know is below |
+| D | S3 | Not now: Railway's backups plus the Mac's encrypted pulls |
+| E | Polaris extracts and other working files go up | Yes: "its our own PL level deployment" |
+| F | Research | Both cloud and Mac; the Mac pushes results up |
+| G | Database port | None: pulls and pushes through our API; the move through Railway's SSH tunnel |
+| H | Rollback window | 14 days |
 
-- **A. Sign-in.** Ask PL whether LabOS's cookie can reach an app on Railway (no code). If not, Google sign-in
-  with an allowlist (1–2 days). *Recommend: ask PL today, and build Google sign-in if the answer is no or slow.
-  Until then Railway runs the demo only.*
-- **B. Plan.** Pro, so the service can have 8 GB and larger volumes, and the database gets backups.
-  *Recommend Pro.*
-- **C. Dakota.** Strip at the move and keep Dakota on the Mac (rev 3 decision 3), or ask Dakota whether a
-  database Juan hosts on Railway counts as "our system". *Recommend strip now and ask. If they say yes,
-  Dakota syncs straight into Railway with its own variables; nothing has to go up from the Mac.*
-- **D. The bucket and the keys.** An S3 bucket in your AWS account, and an IAM user for Railway. Should files be
-  pullable to the Mac? That needs a second backup key whose private half sits in the Mac Keychain, so the
-  offline key stays offline. *Recommend: bucket yes; the second key only when a local test needs the files.*
-- **E. Which files go up.** The Polaris extracts (`enrich/warehouse`, 369 MB), and whether to scan
-  `enrich/raw`, `enrich/batches` and `prospects/` for Dakota-derived fields first (open since 30 Sep).
-  *Recommend: run the scan (counts only), and leave the Polaris extracts on the Mac.*
-- **F. Mac research workers after the move.** Stop them and use the cloud API jobs, or add the findings
-  upload later. *Recommend: API jobs first; build the upload only if subscription-run workers are clearly
-  cheaper.*
-- **G. The public database proxy.** Leave it on, so pulls work any time (password, read-only role), or turn it
-  on only while pulling. *Recommend on, with a long random `plcos_ro` password; turn it off if it's ever
-  unused for a month.*
-- **H. Rollback window.** 14 days for the frozen Mac database, then the Mac's real backups stop. *Recommend 14.*
+**C: what we know about Dakota.**
+- The repo holds no copy of Dakota's subscription agreement or terms. docs/20 records only the API.
+- The rule we follow is Juan's (27 Sep): "dakota data does not leave our system … should just go into our db".
+- PL's own warehouse (Polaris, on Google Cloud) already holds some Dakota data (docs/agent-rules/real-data.md).
+  So PL already keeps Dakota records in a cloud database it controls.
+- Rev 3 held Dakota back from PL's RDS "until Dakota's terms allow it". That was caution, not a known term.
+
+If Juan's Railway project counts as "our db" the same way, Dakota moves up. The cutover is then one hop, the
+sync runs in the cloud, and the Mac-only Dakota path goes away. Every pull would then carry Dakota to the Mac,
+which holds it today anyway. If it doesn't count, keep the strip, and run Dakota-aided research on the Mac.

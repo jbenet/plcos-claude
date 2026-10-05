@@ -19,6 +19,8 @@ import type { AppUser, McpToken } from '@/modules/platform';
  */
 export interface Envelope {
   tokenId: string;
+  /** The token's name: the client behind it ("juanmail", "Juan's iPad mail desk"), as its owner named it. */
+  label: string;
   owner: AppUser;
   /** The principal every check uses: the owner, narrowed to the token's vehicles. */
   principal: AppUser;
@@ -44,26 +46,27 @@ export function narrowedPrincipal(owner: AppUser, vehicles: string[] | null): Ap
 
 export function envelopeFor(token: McpToken, owner: AppUser): Envelope {
   return {
-    tokenId: token.tokenId, owner, principal: narrowedPrincipal(owner, token.vehicles),
+    tokenId: token.tokenId, label: token.label, owner, principal: narrowedPrincipal(owner, token.vehicles),
     tools: new Set(token.tools), callsPerDay: token.callsPerDay, expiresAt: new Date(token.expiresAt),
   };
 }
 
 // ── Rate and budget ─────────────────────────────────────────────────────────────────────
 // In memory, one server process (docs/deploy/rev3: one machine). A day's count is read back from
-// the audit log the first time a token is seen after a restart, so restarting does not refill it.
+// the audit log the first time a token is seen after a restart, so restarting does not refill it. A token's
+// outreach calls (docs/27) count against the same budget as its MCP calls.
 
 interface Window { minute: number[]; day: string; dayCount: number }
 const windows = new Map<string, Window>();
 const today = (now: number) => new Date(now).toISOString().slice(0, 10);
 
-export async function admitCall(env: Envelope, tool: string, q: Queryable, now = Date.now()): Promise<string | null> {
-  if (!env.tools.has(tool)) return `"${tool}" is not in this token's envelope. Allowed: ${[...env.tools].sort().join(', ') || 'nothing'}.`;
+export async function admitCall(env: Envelope, tool: string, q: Queryable, now = Date.now(), permitted = env.tools.has(tool)): Promise<string | null> {
+  if (!permitted) return `"${tool}" is not in this token's envelope. Allowed: ${[...env.tools].sort().join(', ') || 'nothing'}.`;
   if (env.expiresAt.getTime() <= now) return 'This token has expired. Make a new one in Preferences.';
   let w = windows.get(env.tokenId);
   if (!w || w.day !== today(now)) {
     const row = await q.one<{ n: string }>(`select count(*)::text n from platform.audit_log
-      where action = 'mcp.call' and subject_id = $1 and at >= $2::date and detail->>'outcome' <> 'rate_limited'`, [env.tokenId, today(now)]);
+      where action in ('mcp.call', 'outreach.call') and subject_id = $1 and at >= $2::date and detail->>'outcome' <> 'rate_limited'`, [env.tokenId, today(now)]);
     w = { minute: [], day: today(now), dayCount: Number(row?.n ?? 0) };
     windows.set(env.tokenId, w);
   }
@@ -82,7 +85,7 @@ export function resetWindows() { windows.clear(); }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Arguments that are a fixed choice (a vehicle's slug, a status), never typed words. */
-const CHOICES = new Set(['vehicle', 'status', 'kind', 'purpose', 'priority', 'list', 'mode']);
+const CHOICES = new Set(['vehicle', 'status', 'kind', 'purpose', 'priority', 'list', 'mode', 'bucket', 'choice']);
 /** Ids, choices, numbers and booleans as given; any other text only as its length, so words never reach the log. */
 export function auditArgs(args: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};

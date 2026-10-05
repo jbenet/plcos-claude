@@ -119,7 +119,7 @@ elif [[ "$FROM" =~ ^http://(127\.0\.0\.1|localhost)(:[0-9]+)?$ ]]; then proto='=
 else die "--from must be https://<host> (http only on 127.0.0.1, for tests)"; fi
 src_host="${FROM#*://}"
 if [ -n "${CLOUD_SNAPSHOT_TOKEN+set}" ]; then token="$CLOUD_SNAPSHOT_TOKEN"; else token="$(keychain snapshot-token || true)"; fi
-[[ "$token" =~ ^plcos_snap_[A-Za-z0-9_-]{30,80}$ ]] \
+[[ "$token" =~ ^plcos_mcp_[A-Za-z0-9_-]{30,80}$ ]] \
   || die "no snapshot token: an Admin makes one in Preferences → MCP access, stored as Keychain item plcos-railway / snapshot-token"
 mkdir -p "$DIR"; chmod 700 "$DIR"
 dump="$DIR/incoming.dump"; toc="$DIR/incoming.toc"; heads="$DIR/incoming.headers"; files="$DIR/incoming-files.tar.gz"; stage="$DIR/keep-stage"

@@ -15,8 +15,14 @@ export function withRoute(name: RouteId, handler: (request: Request, context: an
       return handler(request, guard, guard.env.principal);
     };
   }
-  // Cloud sync (docs/deploy/railway.md §6–§7): a bearer token of the endpoint's own scope, checked with its
-  // owner's current access before the handler runs. No cookie; any browser Origin is refused there.
+  // The outreach API (docs/27) authenticates by the same bearer token and authorizes per operation, in
+  // lib/outreach/http.ts. No cookie is read, so no cookie origin rule: CORS is checked there.
+  if (routeRules[name] === 'outreach') {
+    return async (request: Request, context?: any): Promise<Response> => handler(request, context, undefined as never);
+  }
+  // Cloud sync (docs/deploy/railway.md §6–§7): the same bearer token, carrying the endpoint's scope
+  // (lib/sync/scopes.ts), checked with its owner's current access before the handler runs. No cookie; any
+  // browser Origin is refused there.
   const sync = routeRules[name];
   if (sync === 'sync:snapshot' || sync === 'sync:push') {
     return async (request: Request): Promise<Response> => {
@@ -31,7 +37,7 @@ export function withRoute(name: RouteId, handler: (request: Request, context: an
       const policy = routeRules[name];
       if (!policy) throw new AuthorizationError();
       try {
-        if (policy === 'mcp' || policy === 'sync:snapshot' || policy === 'sync:push') throw new AuthorizationError();
+        if (policy === 'mcp' || policy === 'outreach' || policy === 'sync:snapshot' || policy === 'sync:push') throw new AuthorizationError();
         if (policy === 'feedback' || policy === 'session') {
           // Session selection bootstraps identity; its handler validates the selected active user.
           // Feedback reporter identity is resolved only by the post-response ingester.

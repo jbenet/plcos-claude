@@ -36,6 +36,7 @@ export function UpdateBox({ pursuitId, status, today, glyph }: { pursuitId: stri
     status?: string; passedBy?: string; reason?: string;
     touch?: boolean; channel?: TouchChannel; on?: string; read?: string;
     next?: boolean; step?: string; nextOn?: string;
+    indicated?: boolean; low?: string; high?: string;
   }>({});
   const set = (k: keyof typeof pick, v: unknown) => { setPick((p) => ({ ...p, [k]: v })); setResult(null); };
 
@@ -62,12 +63,18 @@ export function UpdateBox({ pursuitId, status, today, glyph }: { pursuitId: stri
   const step = pick.step ?? sug.next?.step ?? '';
   const nextOn = pick.nextOn ?? sug.next?.on ?? '';
   const changes = Boolean(to && to !== status);
+  // An indicated amount (docs/27 §1): offered from the words, saved only when ticked; never soft money.
+  const indicated = pick.indicated ?? false;
+  const low = pick.low ?? (sug.amount?.low != null ? String(sug.amount.low) : '');
+  const high = pick.high ?? (sug.amount?.high != null && sug.amount.high !== sug.amount.low ? String(sug.amount.high) : '');
+  const money = (v: string) => (Number(v) >= 1e6 ? `$${+(Number(v) / 1e6).toFixed(2)}M` : Number(v) >= 1e3 ? `$${+(Number(v) / 1e3).toFixed(1)}K` : `$${v}`);
 
   const will = [
     'add this update to the timeline',
     changes ? `set the status to ${STATUS_LABEL[to as PursuitStatus]}${passed && passedBy ? ` (${PASSED_BY_LABEL[passedBy].toLowerCase()}, ${reason.replace(/_/g, ' ')})` : ''}, from ${STATUS_LABEL[status]}` : null,
     touch ? (ahead ? `put ${a(CHANNEL_WORD[channel])} on record for ${day(on)}` : `log ${a(CHANNEL_WORD[channel])} on ${day(on)}${read ? `, their read ${READ_LABEL[read as Read].toLowerCase()}` : ''}`) : null,
     next && step ? `make the next step “${step}”${nextOn ? `, by ${day(nextOn)}` : ''}` : null,
+    indicated && low ? `record ${money(low)}${high && high !== low ? `–${money(high)}` : ''} as indicated, beside soft and hard and in neither` : null,
   ].filter(Boolean) as string[];
 
   const basis = (s: { basis: string } | undefined, shown: boolean) => (s && shown ? <span className="basis">from &ldquo;{s.basis}&rdquo;</span> : null);
@@ -158,8 +165,21 @@ export function UpdateBox({ pursuitId, status, today, glyph }: { pursuitId: stri
             </div>
 
             {sug.amount && (
+              <div className="sug">
+                <label className="check">
+                  <input type="checkbox" name="indicated" checked={indicated} onChange={(e) => set('indicated', e.target.checked)} />
+                  <span>Indicated</span>
+                </label>
+                <span>$</span>
+                <input type="number" name="indicatedLow" aria-label="Indicated amount, or the low end" min={0} step="any" value={low} disabled={!indicated} onChange={(e) => set('low', e.target.value)} style={{ width: 120 }} />
+                <span>to $</span>
+                <input type="number" name="indicatedHigh" aria-label="The high end, if a range" min={0} step="any" value={high} placeholder="same" disabled={!indicated} onChange={(e) => set('high', e.target.value)} style={{ width: 120 }} />
+                {basis(sug.amount, pick.low === undefined)}
+              </div>
+            )}
+            {sug.amount && (
               <p className="basis warnish" style={{ margin: '6px 0 0' }}>
-                It mentions {sug.amount.said}. An amount isn&rsquo;t recorded from an update: record it on the close track, where soft and hard are kept apart (rule 1).
+                It mentions {sug.amount.said}. Ticked, that is kept as an indicated amount: shown beside soft and hard and added to neither. A soft commitment is recorded on the close track (rule 1).
               </p>
             )}
             {touch && !ahead && (channel === 'meeting' || channel === 'call') && (

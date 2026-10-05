@@ -1,0 +1,355 @@
+import { config } from '@/config/deployment';
+import { can } from '@/lib/authz';
+import { pipelineData } from '@/lib/authz/read/pipeline';
+import { getDb } from '@/lib/db';
+import { redactHealth } from '@/lib/redact-health';
+import { SPV_STAGE_LABEL, spvRooms, workingDaysUntil, type SpvStage } from '@/modules/close';
+import { INSUFFICIENT_FOR_506C } from '@/modules/compliance';
+import { checkWrap, listAssets, type Audience, type PermittedUse } from '@/modules/content';
+import { READS, READ_LABEL, raiseWindows, summarize, touchpointsByPair, type Touchpoint } from '@/modules/meetings';
+import { CLOSE_STATE_LABEL, closeStates, currentIndications, indicatedTotals, vehicleTotals, type CloseState } from '@/modules/pipeline';
+import { listVehicles, type AppUser, type Vehicle } from '@/modules/platform';
+import { STATUS_LABEL, lpContactsFor, type PursuitStatus } from '@/modules/strategy';
+
+/**
+ * The mail desk's reads (docs/27-outreach-api.md §3): GET /api/outreach/vehicles and /queue, and the MCP
+ * tools outreach_vehicles and outreach_queue — one service for both. Each answer is an explicit projection,
+ * and every value passes can() for its vehicle and field class: R1 amounts, R2 words (and contact
+ * addresses), R4 restriction reasons. Licensed (Dakota) values never appear: a token is never an Admin
+ * (lib/mcp/envelope.ts), so the pipeline facade drops them, and contacts and strategies from Dakota are
+ * left out here. Text fields are health-redacted (lib/redact-health.ts), since the desk drafts with Claude.
+ *
+ * Capital OS's own words come back for its own states, each apart and with its label (§2): the pipeline
+ * status (seven), the close track (soft → signed → hard → closed), the SPV seat stage. The desk shows
+ * these and invents none.
+ */
+
+export class OutreachRefused extends Error {
+  constructor(readonly status: number, message: string) { super(message); this.name = 'OutreachRefused'; }
+}
+
+const day = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : null);
+const words = (u: AppUser, vehicle: string) => can(u, 'read', { vehicle, fieldClass: 'R2' });
+const amounts = (u: AppUser, vehicle: string) => can(u, 'read', { vehicle, fieldClass: 'R1' });
+const reasons = (u: AppUser, vehicle: string) => can(u, 'read', { vehicle, fieldClass: 'R4' });
+const KINDS = new Set(['fund', 'spv']);
+const instrumentOf = (v: Vehicle) => (v.kind === 'spv' ? 'spv' : 'lp_commitment');
+
+/** Fund and SPV vehicles that are raising and that this principal may read. */
+async function deskVehicles(user: AppUser): Promise<Vehicle[]> {
+  return (await listVehicles()).filter((v) => v.phase !== 'historical' && KINDS.has(v.kind) && can(user, 'read', { vehicle: v.id }));
+}
+
+/** The same answer for "no such vehicle" and "not yours", so a slug's existence is not a probe. */
+export async function deskVehicle(user: AppUser, ref: string): Promise<Vehicle> {
+  const v = (await deskVehicles(user)).find((x) => x.slug === ref || x.id === ref);
+  if (!v) throw new OutreachRefused(404, `No vehicle "${ref.slice(0, 80)}" among yours.`);
+  return v;
+}
+
+// ── GET /api/outreach/vehicles ──────────────────────────────────────────────────────────
+
+export async function outreachVehicles(user: AppUser) {
+  const vehicles = await deskVehicles(user);
+  const ids = vehicles.map((v) => v.id);
+  const [totals, indicated, rooms, windows] = await Promise.all([vehicleTotals(), indicatedTotals(ids), spvRooms(), raiseWindows()]);
+  const rows = await Promise.all(vehicles.map(async (v) => {
+    const t = totals.find((x) => x.vehicleId === v.id);
+    const i = indicated.get(v.id);
+    const room = rooms.find((r) => r.vehicleId === v.id);
+    const closes = windows.get(v.id)?.closes ?? null;
+    const money = amounts(user, v.id);
+    const seats = (stage: SpvStage) => room?.seats.filter((s) => s.stage === stage).length ?? 0;
+    return {
+      slug: v.slug, name: v.name, kind: v.kind as 'fund' | 'spv', exemption: v.exemption,
+      // Rule 1: hard, soft and indicated are three figures, each its own; nothing here adds them.
+      target: money ? v.targetAmount : null, hard: money ? t?.hard ?? 0 : null, soft: money ? t?.soft ?? 0 : null,
+      indicated: money ? (i ? { low: i.low, high: i.high, count: i.count } : { low: 0, high: 0, count: 0 }) : null,
+      windowEnds: day(closes), workingDaysLeft: closes ? await workingDaysUntil(closes) : null,
+      seats: v.kind === 'spv' ? { invited: seats('invited'), ioi: seats('ioi'), allocated: seats('allocated'), wired: seats('wired') } : null,
+      daysToWire: room?.daysToWire ?? null, daysToWireN: room?.seats.filter((s) => s.wired).length ?? 0,
+      ...(money ? {} : { withheld: 'Amounts are withheld at your access.' }),
+    };
+  }));
+  return {
+    data: rows,
+    coverage: {
+      corpus: 'The fund and SPV vehicles raising now that your token reads; hard and soft from the close track, indicated from what LPs said.',
+      note: 'Hard, soft and indicated are separate figures and are never added together, within a vehicle or across vehicles (rule 1).',
+    },
+  };
+}
+
+// ── GET /api/outreach/queue ─────────────────────────────────────────────────────────────
+
+export type Bucket = 'reply_owed' | 'money' | 'invite' | 'follow_up' | 'held';
+export const BUCKETS: Bucket[] = ['reply_owed', 'money', 'invite', 'follow_up', 'held'];
+export interface Check { rule: 'restriction' | 'accreditation' | 'ask_count' | 'fund_first' | 'wrap'; ok: boolean; blocking: boolean; detail: string; choices?: string[] }
+
+/** The choices the desk offers when an SPV meets an open fund discussion (Juan, 4 Oct 2026). */
+export const FUND_FIRST_CHOICES = ['mention_both', 'send_separately', 'wait'] as const;
+export type FundFirstChoice = (typeof FUND_FIRST_CHOICES)[number];
+
+type PRow = Awaited<ReturnType<typeof pipelineData>>['rows'][number];
+const OPEN_FUND = ['connecting', 'discussing', 'committed'];
+
+export interface QueueArgs { vehicle: string; bucket?: Bucket; limit?: number; offset?: number; pursuitId?: string; updatedSince?: string }
+
+/**
+ * When each pursuit last changed, among those that changed since `since` (docs/27 §4, periodic sync): its status,
+ * next step, an update or an indication (the audit log), a touchpoint, a strategy, the close track, the SPV seat, a
+ * restriction, a desk send, an address. One query; a pursuit with no change since is absent.
+ */
+async function changedSince(ids: string[], since: Date): Promise<Map<string, Date>> {
+  if (!ids.length) return new Map();
+  const rows = await (await getDb()).query<{ id: string; at: Date | string }>(`
+    with p as (select p.pursuit_id, identity.canonical_entity_id(p.entity_id) e, p.vehicle_id v, p.status_set_at, p.opened_at
+                 from strategy.pursuit p where p.pursuit_id = any($1::uuid[]))
+    select id, max(at) at from (
+      select p.pursuit_id::text id, greatest(p.status_set_at, p.opened_at) at from p
+      union all select a.subject_id, a.at from platform.audit_log a where a.subject_type = 'pursuit' and a.at >= $2 and a.subject_id = any($1::text[])
+      union all select p.pursuit_id::text, m.created_at from p join meetings.meeting m on identity.canonical_entity_id(m.entity_id) = p.e
+        and (m.vehicle_id is null or m.vehicle_id = p.v) where m.created_at >= $2
+      union all select p.pursuit_id::text, s.created_at from p join strategy.suggestion s on s.pursuit_id = p.pursuit_id where s.created_at >= $2
+      union all select p.pursuit_id::text, greatest(x.opened_at, ce.recorded_at) from p join pipeline.exposure x
+        on identity.canonical_entity_id(x.entity_id) = p.e and x.vehicle_id = p.v left join pipeline.commitment_event ce on ce.exposure_id = x.exposure_id
+      union all select p.pursuit_id::text, greatest(i.recorded_at, i.superseded_at) from p join pipeline.indication i on i.pursuit_id = p.pursuit_id
+      union all select p.pursuit_id::text, greatest(s.invited_at, s.ioi_at, s.allocated_at, s.wired_at) from p join close.spv_seat s
+        on identity.canonical_entity_id(s.entity_id) = p.e and s.vehicle_id = p.v
+      union all select p.pursuit_id::text, r.recorded_at from p join coordination.restriction r on identity.canonical_entity_id(r.entity_id) = p.e
+      union all select p.pursuit_id::text, greatest(o.requested_at, o.recorded_at) from p join email.outreach_send o on o.pursuit_id = p.pursuit_id
+      union all select p.pursuit_id::text, c.created_at from p join research.claim c on identity.canonical_entity_id(c.entity_id) = p.e
+        where c.field ~ '(^|\\.)email$' and c.created_at >= $2
+    ) t where at >= $2 group by id`, [ids, since]);
+  return new Map(rows.map((r) => [r.id, new Date(r.at)]));
+}
+
+export async function outreachQueue(user: AppUser, a: QueueArgs) {
+  // The next poll's updatedSince: taken before reading, so a change committed while this runs is seen next time.
+  const cursor = new Date().toISOString();
+  if (a.vehicle === 'none') {
+    return { data: { rows: [], total: 0, offset: 0, counts: null, cursor, redacted: null }, coverage: { corpus: 'none', note: 'Every LP in Capital OS is on a vehicle: there are no pursuits without one. Use vehicle=all.' } };
+  }
+  const since = a.updatedSince ? new Date(a.updatedSince) : null;
+  if (since && Number.isNaN(since.getTime())) throw new OutreachRefused(400, 'updatedSince is not a time.');
+  const vehicles = a.vehicle === 'all' ? await deskVehicles(user) : [await deskVehicle(user, a.vehicle)];
+  const all = (await Promise.all(vehicles.map(async (v) => (await pipelineData(v.id)).rows.filter((r) => r.vehicleId === v.id && r.status !== 'passed'))))
+    .flat().filter((r) => !a.pursuitId || r.id === a.pursuitId);
+  const vById = new Map(vehicles.map((v) => [v.id, v]));
+  const db = await getDb();
+  const pairs = all.map((r) => ({ entityId: r.entityId, vehicleId: r.vehicleId }));
+  const entityIds = [...new Set(all.map((r) => r.entityId))];
+  const key = (r: { entityId: string; vehicleId: string }) => `${r.entityId}:${r.vehicleId}`;
+
+  // What the bucket needs, for every row: one query each.
+  const [touches, closes, seats, indications, fundOpen] = await Promise.all([
+    touchpointsByPair(pairs),
+    closeStates(pairs),
+    db.query<{ entity_id: string; vehicle_id: string; stage: SpvStage; amount: string | null }>(`select identity.canonical_entity_id(entity_id)::text entity_id,
+      vehicle_id::text, stage::text stage, amount::text from close.spv_seat where vehicle_id = any($1::uuid[])`, [vehicles.map((v) => v.id)]),
+    currentIndications(vehicles.map((v) => v.id)),
+    // Fund before SPV (advisory since 4 Oct 2026): an open fund discussion with the same LP.
+    entityIds.length ? db.query<{ entity_id: string; vehicle_id: string; name: string; status: PursuitStatus }>(`select identity.canonical_entity_id(p.entity_id)::text entity_id,
+      p.vehicle_id::text, v.name, p.status::text status from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id
+      where v.kind = 'fund' and v.phase <> 'historical' and p.closed_at is null and p.status::text = any($2::text[])
+        and identity.canonical_entity_id(p.entity_id) = any($1::uuid[])`, [entityIds, OPEN_FUND]) : Promise.resolve([]),
+  ]);
+  const seatOf = new Map(seats.map((s) => [`${s.entity_id}:${s.vehicle_id}`, s]));
+  // Whether the wrap matrix covers the vehicle at all (rule 11); each material is checked on its own below.
+  const wrapRuleFor = new Map(await Promise.all(vehicles.map(async (v) => {
+    const w = await checkWrap({ exemption: v.exemption, instrument: instrumentOf(v), audience: 'lp_memo', permittedUse: 'internal' });
+    return [v.id, w.rule !== null] as const;
+  })));
+  const summaries = new Map(pairs.map((p) => {
+    const list = touches.get(key(p)) ?? [];
+    const s = summarize(list);
+    const own = list.filter((t) => !t.viaOrganization && t.on && t.channel !== 'research');
+    const last = own.reduce<Touchpoint | null>((x, t) => (!x || t.on! > x.on! ? t : x), null);
+    return [key(p), { s, last }] as const;
+  }));
+
+  const base = all.map((r) => {
+    const v = vById.get(r.vehicleId)!;
+    const { s, last } = summaries.get(key(r))!;
+    const close = closes.get(key(r)) ?? null;
+    const seat = seatOf.get(key(r)) ?? null;
+    const indicated = indications.get(key(r)) ?? null;
+    const replyOwed = s.lastFromThem && !s.awaitingSince ? { since: day(s.lastFromThem)! } : null;
+    const funds = v.kind === 'spv' ? fundOpen.filter((f) => f.entity_id === r.entityId) : [];
+    const restricted = r.doNotContact;
+    // Held: a blocking check fails. The ask cap is advisory (config.guard.askLimit) and counted per page row.
+    const fundBlocks = funds.length > 0 && config.guard.fundFirst === 'enforce';
+    const held = restricted || fundBlocks || wrapRuleFor.get(v.id) !== true;
+    const money = r.status === 'committed' || Boolean(indicated)
+      || (close && close.state !== 'closed' && close.state !== 'withdrawn') || (seat && (seat.stage === 'ioi' || seat.stage === 'allocated'));
+    const bucket: Bucket = held ? 'held' : replyOwed ? 'reply_owed' : money ? 'money'
+      : ['new', 'sourcing', 'selected'].includes(r.status) ? 'invite' : 'follow_up';
+    return { r, v, s, last, close, seat, indicated, replyOwed, funds, bucket };
+  });
+  const changed = since ? await changedSince(base.map((b) => b.r.id), since) : null;
+  const chosen = base.filter((b) => (!a.bucket || b.bucket === a.bucket) && (!changed || changed.has(b.r.id)))
+    .sort((x, y) => BUCKETS.indexOf(x.bucket) - BUCKETS.indexOf(y.bucket) || (y.r.priority ?? -1) - (x.r.priority ?? -1) || x.r.name.localeCompare(y.r.name));
+  const offset = a.offset ?? 0;
+  const limit = Math.min(a.limit ?? 100, config.outreach.maxQueueRows);
+  const page = chosen.slice(offset, offset + limit);
+  const counts = Object.fromEntries(BUCKETS.map((b) => [b, base.filter((x) => x.bucket === b).length]));
+  if (!page.length) {
+    return { data: { rows: [], total: chosen.length, offset, counts, cursor, redacted: null }, coverage: queueCoverage(vehicles) };
+  }
+
+  // The rest only for the page.
+  const ids = page.map((b) => b.r.id);
+  const pageEntities = [...new Set(page.map((b) => b.r.entityId))];
+  const quarterAgo = new Date(Date.now() - 92 * 86_400_000);
+  const [meta, strategies, others, restrictions, accreditation, asks, assets, orgContacts] = await Promise.all([
+    db.query<{ id: string; set_at: Date | string | null; set_by: string | null; source: string; type: string }>(`select p.pursuit_id::text id,
+      p.status_set_at set_at, u.name set_by, p.status_source source, e.entity_type::text type
+      from strategy.pursuit p join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
+      left join platform.app_user u on u.id = p.status_set_by where p.pursuit_id = any($1::uuid[])`, [ids]),
+    // The latest strategy that was not dismissed or withdrawn; never one written from licensed (Dakota) data.
+    db.query<{ pursuit_id: string; data: Record<string, unknown>; made_at: Date | string }>(`select distinct on (s.pursuit_id) s.pursuit_id::text pursuit_id, s.data, s.made_at
+      from strategy.suggestion s where s.pursuit_id = any($1::uuid[]) and s.status not in ('dismissed', 'withdrawn')
+        and s.data->>'source' is distinct from 'dakota'
+      order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [ids]),
+    db.query<{ entity_id: string; vehicle_id: string; name: string; status: PursuitStatus }>(`select identity.canonical_entity_id(p.entity_id)::text entity_id,
+      p.vehicle_id::text, v.name, p.status::text status from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id
+      where v.phase <> 'historical' and identity.canonical_entity_id(p.entity_id) = any($1::uuid[])`, [pageEntities]),
+    db.query<{ entity_id: string; scope: string; channel: string | null; instruction: string }>(`select identity.canonical_entity_id(entity_id)::text entity_id,
+      scope::text, channel, instruction from coordination.restriction
+      where identity.canonical_entity_id(entity_id) = any($1::uuid[]) and (expires_at is null or expires_at >= current_date)`, [pageEntities]),
+    db.query<{ entity_id: string; vehicle_id: string; status: string; method: string; expires_on: Date | string | null }>(`select
+      identity.canonical_entity_id(entity_id)::text entity_id, vehicle_id::text, status::text, method::text, expires_on
+      from compliance.accreditation where identity.canonical_entity_id(entity_id) = any($1::uuid[])`, [pageEntities]),
+    db.query<{ entity_id: string; n: number }>(`select identity.canonical_entity_id(entity_id)::text entity_id, count(*)::int n
+      from coordination.ask where made_at is not null and made_at >= $2 and identity.canonical_entity_id(entity_id) = any($1::uuid[])
+      group by 1`, [pageEntities, quarterAgo]),
+    listAssets(),
+    Promise.all(vehicles.map(async (v) => [v.id, await lpContactsFor(page.filter((b) => b.r.vehicleId === v.id).map((b) => b.r.entityId), v.id, { excludeDakota: true })] as const)),
+  ]);
+  const contactsBy = new Map(orgContacts);
+  const people = [...new Set([...page.map((b) => b.r.entityId), ...orgContacts.flatMap(([, m]) => [...m.values()].flat().map((c) => c.entityId))])];
+  const emails = people.length ? await db.query<{ entity_id: string; value: string; source: string; origin: string | null; as_of: Date | string; verified_at: Date | string | null; verified_by: string | null }>(`
+    select identity.canonical_entity_id(c.entity_id)::text entity_id, c.value, c.source, d.origin, c.as_of, c.last_verified_at verified_at, u.name verified_by
+      from research.claim c left join research.source_doc d on d.doc_id = c.source left join platform.app_user u on u.id = c.last_verified_by
+     where identity.canonical_entity_id(c.entity_id) = any($1::uuid[]) and c.superseded_by is null and c.field ~ '(^|\\.)email$'
+       and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
+     order by c.last_verified_at desc nulls last, c.as_of desc`, [people]) : [];
+  const metaOf = new Map(meta.map((m) => [m.id, m]));
+  const strategyOf = new Map(strategies.map((s) => [s.pursuit_id, s]));
+  const rules = new Map<string, Awaited<ReturnType<typeof checkWrap>>>();
+  const materialsFor = async (v: Vehicle) => {
+    const list = assets.filter((x) => x.audience && (x.vehicleId === v.id || x.vehicleId === null) && x.status !== 'draft' && x.status !== 'withdrawn').slice(0, 20);
+    return Promise.all(list.map(async (x) => {
+      const k = `${v.id}:${x.assetId}`;
+      if (!rules.has(k)) rules.set(k, await checkWrap({ exemption: v.exemption, instrument: instrumentOf(v), audience: x.audience as Audience, permittedUse: x.permittedUse as PermittedUse }));
+      const w = rules.get(k)!;
+      return { assetId: x.assetId, title: x.title, permittedUse: x.permittedUse, allowed: w.allowed && x.status === 'approved' && x.flags.length === 0 };
+    }));
+  };
+  const materialsByVehicle = new Map(await Promise.all(vehicles.map(async (v) => [v.id, await materialsFor(v)] as const)));
+
+  let redacted = 0;
+  const clean = (t: string | null | undefined) => {
+    if (!t) return t ?? null;
+    const r = redactHealth(t);
+    redacted += r.redacted;
+    return r.text;
+  };
+
+  const rows = page.map((b) => {
+    const { r, v, s, last, close, seat, indicated, replyOwed, funds } = b;
+    const m = metaOf.get(r.id);
+    const w = words(user, v.id), money = amounts(user, v.id), why = reasons(user, v.id);
+    const strat = strategyOf.get(r.id);
+    const sd = (strat?.data ?? {}) as { angle?: string; next?: { what?: string }; confidence?: string };
+    const isPerson = m?.type === 'person';
+    const addressOf = (entityId: string) => emails.filter((e) => e.entity_id === entityId).slice(0, 3).map((e) => ({
+      email: e.value.trim(),
+      source: /gmail/i.test(e.source) || /gmail/i.test(e.origin ?? '') ? 'gmail' : /affinity/i.test(e.source) || /affinity/i.test(e.origin ?? '') ? 'affinity' : 'research',
+      confirmedAt: day(e.verified_at), confirmedBy: e.verified_by,
+    }));
+    const contacts = !w ? [] : isPerson
+      ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x }))
+      : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x })));
+    const blanket = restrictions.filter((x) => x.entity_id === r.entityId && x.scope === 'blanket');
+    const emailBarred = restrictions.filter((x) => x.entity_id === r.entityId && x.scope === 'channel' && /mail/i.test(x.channel ?? ''));
+    const connectorOnly = restrictions.filter((x) => x.entity_id === r.entityId && x.scope === 'connector');
+    const acc = accreditation.find((x) => x.entity_id === r.entityId && x.vehicle_id === v.id);
+    const strict = v.exemption === '506(c)' || v.exemption === 'unknown';
+    const verified = acc && acc.status === 'verified' && !INSUFFICIENT_FOR_506C.includes(acc.method as never) && !(acc.expires_on && new Date(acc.expires_on) < new Date());
+    const asked = asks.find((x) => x.entity_id === r.entityId)?.n ?? 0;
+    const cap = config.guard.asksPerRelationshipPerQuarter;
+    const barred = blanket.length + emailBarred.length > 0;
+    const checks: Check[] = [
+      {
+        rule: 'restriction', ok: !barred, blocking: barred,
+        detail: barred ? (why ? [...blanket, ...emailBarred].map((x) => clean(x.instruction)).join(' · ') : 'A do-not-approach restriction is on file. Reasons withheld at your access: check with the owner.')
+          : connectorOnly.length ? 'A restriction on a connector is on file: a direct email is not barred, an intro through that connector is.' : 'No restriction on file.',
+      },
+      {
+        rule: 'accreditation', ok: !strict || Boolean(verified), blocking: false,
+        detail: !strict ? `${v.exemption}: verification is not required.` : verified ? 'Verified by reasonable steps, unexpired.'
+          : `${v.exemption}: not verified yet (${acc ? acc.status : 'no record'}). Needed before money moves, not before an invitation.`,
+      },
+      {
+        rule: 'ask_count', ok: asked < cap, blocking: asked >= cap && config.guard.askLimit === 'enforce',
+        detail: `${asked} ask${asked === 1 ? '' : 's'} made to them this quarter, across every vehicle; the cap is ${cap}${config.guard.askLimit === 'advisory' ? ', advisory (Juan, 4 Oct 2026)' : ''}.`,
+      },
+      ...(v.kind === 'spv' ? [{
+        rule: 'fund_first' as const, ok: funds.length === 0, blocking: funds.length > 0 && config.guard.fundFirst === 'enforce',
+        detail: funds.length ? `An open fund discussion: ${funds.map((f) => `${f.name} (${STATUS_LABEL[f.status]})`).join(', ')}. Pitch the SPV alongside it — mention both in one note, send the SPV separately, or wait. Opening a ticket records the overlap with a dated follow-up (rule 5).`
+          : 'No open fund discussion with them.',
+        ...(funds.length ? { choices: [...FUND_FIRST_CHOICES] } : {}),
+      }] : []),
+      {
+        rule: 'wrap', ok: wrapRuleFor.get(v.id) === true, blocking: wrapRuleFor.get(v.id) !== true,
+        detail: wrapRuleFor.get(v.id) ? `${v.exemption} × ${instrumentOf(v)}: covered by the wrap matrix; each material says whether it may go.` : `No wrap rule covers ${v.exemption} × ${instrumentOf(v)}: nothing may be sent for this vehicle.`,
+      },
+    ];
+    const held = checks.some((c) => !c.ok && c.blocking);
+    const closeTrack = close ? {
+      state: close.state as CloseState, label: CLOSE_STATE_LABEL[close.state],
+      amount: money ? close.exposure.amount : null, wired: money ? close.wired : null,
+      // Capital calls are not recorded yet: "called" stays null until they are (docs/27 §3).
+      called: null as number | null,
+    } : null;
+    const otherVehicles = others.filter((o) => o.entity_id === r.entityId && o.vehicle_id !== v.id).map((o) => can(user, 'read', { vehicle: o.vehicle_id })
+      ? { name: o.name, status: { value: o.status, label: STATUS_LABEL[o.status] } }
+      // Rule 5: presence on another vehicle stays visible for coordination, without its status.
+      : { name: o.name, status: null });
+    return {
+      pursuitId: r.id, vehicle: v.slug,
+      entity: { id: r.entityId, name: r.name, kind: isPerson ? 'person' : 'org', contacts },
+      owner: r.owner,
+      status: { value: r.status, label: STATUS_LABEL[r.status], setAt: day(m?.set_at), setBy: m?.source === 'us' ? m.set_by : m?.source ?? null },
+      ...(w ? {
+        nextStep: clean(r.next), nextStepOn: r.nextOn?.slice(0, 10) ?? null,
+        read: r.read ? { value: READS.find((x) => READ_LABEL[x] === r.read) ?? null, label: r.read, on: r.readOn?.slice(0, 10) ?? null, suggested: r.readSuggested } : null,
+        strategy: strat ? { headline: clean(sd.angle ?? null), firstStep: clean(sd.next?.what ?? null), confidence: sd.confidence ?? null, asOf: day(strat.made_at) } : null,
+      } : { nextStep: null, nextStepOn: null, read: null, strategy: null, withheld: 'Words are withheld at your access.' }),
+      closeTrack,
+      seat: seat ? { stage: seat.stage, label: SPV_STAGE_LABEL[seat.stage], amount: money && seat.amount !== null ? Number(seat.amount) : null } : null,
+      indicated: indicated && money ? { low: indicated.low, high: indicated.high, at: day(indicated.on), touchpointId: indicated.touchpointId, source: indicated.source } : null,
+      otherVehicles,
+      replyOwed,
+      lastTouch: last ? { kind: last.channel, on: day(last.on), direction: last.direction } : s.lastTouch ? { kind: s.lastTouchChannel, on: day(s.lastTouch), direction: null } : null,
+      checks,
+      materials: materialsByVehicle.get(v.id) ?? [],
+      bucket: held ? 'held' as Bucket : b.bucket,
+      updatedAt: changed?.get(r.id)?.toISOString() ?? null,
+    };
+  });
+  return {
+    data: { rows, total: chosen.length, offset, counts, cursor,
+      redacted: redacted ? `${redacted} sentence${redacted === 1 ? '' : 's'} with a health detail redacted.` : null },
+    coverage: queueCoverage(vehicles),
+  };
+}
+
+function queueCoverage(vehicles: Vehicle[]) {
+  return {
+    corpus: `Open LPs (not passed) on ${vehicles.map((v) => v.name).join(', ') || 'no vehicle'}, with their contact log, close track, SPV seat, indication, restrictions, accreditation and asks this quarter.`,
+    buckets: 'reply_owed: they spoke last; money: committed, an indication, a close track not yet closed, or an SPV seat at IOI or allocated; invite: new, sourcing or selected; follow_up: the rest; held: a blocking check fails.',
+    note: 'A reply sent outside what is recorded here is not seen. An address on file is not proof it is current.',
+  };
+}

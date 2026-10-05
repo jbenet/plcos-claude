@@ -1,7 +1,7 @@
 /* Vehicle status (issue 0075). */
 .wip { margin-left: 8px; letter-spacing: 0; text-transform: none; font-family: var(--sans, inherit); vertical-align: 1px; }
 .scroll { overflow-x: auto; }
-.kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 
 .two { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 13px; align-items: start; }
 

@@ -7,5 +7,5 @@ export {
   asksToEntitySince, asksViaConnectorSince, competingAsks, connectorLoad, getAsk,
   blanketRestricted, getConflictForAsk, listAsks, listConflicts, listRestrictions, restrictionsFor,
 } from './repo';
-export { adjudicateConflict, evaluateGuards, makeAsk, proposeAsk } from './service';
+export { adjudicateConflict, evaluateGuards, makeAsk, proposeAsk, recordOverlap, type OverlapChoice } from './service';
 export type { ProposeAskCommand } from './service';

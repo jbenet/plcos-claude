@@ -97,33 +97,33 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
   const refusal = pushRefusal();
   if (refusal) return answer(403, 'refused', { error: refusal }, { reason: 'profile' });
   const declared = Number(request.headers.get('content-length') ?? 0);
-  if (declared > config.sync.maxPushBytes) return answer(413, 'rejected', { error: `The push is larger than ${config.sync.maxPushBytes} bytes; push the batch in parts.` }, { reason: 'size', bytes: declared });
-  if (g.__syncPushBusy) return answer(409, 'busy', { error: 'Another push is being taken. Try again in a moment.' });
+  if (declared > config.sync.maxPushBytes) return answer(413, 'invalid', { error: `The push is larger than ${config.sync.maxPushBytes} bytes; push the batch in parts.` }, { reason: 'size', bytes: declared });
+  if (g.__syncPushBusy) return answer(409, 'refused', { error: 'Another push is being taken. Try again in a moment.' }, { reason: 'busy' });
   g.__syncPushBusy = true;
   try {
     const raw = await request.text();
     const bytes = Buffer.byteLength(raw, 'utf8');
-    if (bytes > config.sync.maxPushBytes) return answer(413, 'rejected', { error: `The push is larger than ${config.sync.maxPushBytes} bytes; push the batch in parts.` }, { reason: 'size', bytes });
+    if (bytes > config.sync.maxPushBytes) return answer(413, 'invalid', { error: `The push is larger than ${config.sync.maxPushBytes} bytes; push the batch in parts.` }, { reason: 'size', bytes });
     let input: unknown;
-    try { input = JSON.parse(raw); } catch { return answer(400, 'rejected', { error: 'The push is not JSON.', rejected: [{ path: null, problems: ['not JSON'] }] }, { reason: 'json', bytes }); }
+    try { input = JSON.parse(raw); } catch { return answer(400, 'invalid', { error: 'The push is not JSON.', rejected: [{ path: null, problems: ['not JSON'] }] }, { reason: 'json', bytes }); }
     const { bundle, rejections } = checkBundle(input, config.sync.maxPushFiles);
     const workflow = (input as { workflow?: unknown })?.workflow;
     const shape = { workflow: typeof workflow === 'string' ? workflow.slice(0, 8) : null, files: Array.isArray((input as { files?: unknown })?.files) ? (input as { files: unknown[] }).files.length : 0, bytes };
     const dakota = rejections.filter((r) => r.problems.some((p) => p.includes('Dakota'))).length;
-    if (!bundle) return answer(422, 'rejected', { error: 'Refused; nothing was written.', rejected: rejections }, { ...shape, reason: 'invalid', rejectedFiles: rejections.length, dakota });
+    if (!bundle) return answer(422, 'invalid', { error: 'Refused; nothing was written.', rejected: rejections }, { ...shape, reason: 'invalid', rejectedFiles: rejections.length, dakota });
 
     const hash = bundleHash(bundle);
     const db = o.db ?? await getDb();
     const seen = await db.one<{ run_id: string; job_id: string | null; created_at: Date }>('select run_id::text, job_id::text, created_at from platform.sync_push where content_hash = $1', [hash]);
-    if (seen) return answer(200, 'duplicate', { duplicate: true, runId: seen.run_id, contentHash: hash, import: seen.job_id ? { jobId: seen.job_id } : null,
-      message: `Already taken on ${new Date(seen.created_at).toISOString()}; nothing was written again.` }, { ...shape, hash, runId: seen.run_id });
+    if (seen) return answer(200, 'ok', { duplicate: true, runId: seen.run_id, contentHash: hash, import: seen.job_id ? { jobId: seen.job_id } : null,
+      message: `Already taken on ${new Date(seen.created_at).toISOString()}; nothing was written again.` }, { ...shape, hash, runId: seen.run_id, duplicate: true });
 
     const root = resolve(o.root ?? resolve(process.cwd(), config.data.root));
     const enrich = join(await realpath(root), 'enrich');
     await mkdir(enrich, { recursive: true });
     const enrichReal = await realpath(enrich);
     const contradictions = await serverProblems(bundle, enrichReal);
-    if (contradictions.length) return answer(422, 'rejected', { error: 'Refused; nothing was written.', rejected: contradictions }, { ...shape, hash, reason: 'server', rejectedFiles: contradictions.length });
+    if (contradictions.length) return answer(422, 'invalid', { error: 'Refused; nothing was written.', rejected: contradictions }, { ...shape, hash, reason: 'server', rejectedFiles: contradictions.length });
 
     const ledger = { root };
     let runId: string;

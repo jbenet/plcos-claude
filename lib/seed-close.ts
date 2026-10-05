@@ -137,3 +137,26 @@ export async function seedClose(db: Db): Promise<{ conditions: number; seats: nu
 
   return { conditions, seats };
 }
+
+/**
+ * Invented indications (docs/27 §1): one LP in discussion on the first fund said a range, so the
+ * LP page and the vehicle's status show an indicated amount beside soft and hard. The SPV seats at
+ * IOI above read as indications too, without a row here. Runs after the statuses are set.
+ */
+export async function seedIndications(db: Db): Promise<{ indications: number }> {
+  const row = await db.one<{ pursuit_id: string; entity_id: string; vehicle_id: string; owner_id: string }>(
+    `select p.pursuit_id::text, p.entity_id::text, p.vehicle_id::text, p.owner_id::text
+       from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id
+       join identity.entity e on e.entity_id = p.entity_id
+      where v.slug = 'neurotech' and p.status = 'discussing' and e.entity_type = 'org'
+        and not exists (select 1 from pipeline.exposure x where x.entity_id = p.entity_id and x.vehicle_id = p.vehicle_id)
+      order by e.display_name limit 1`,
+  );
+  if (!row) return { indications: 0 };
+  await db.query(
+    `insert into pipeline.indication (pursuit_id, entity_id, vehicle_id, low, high, indicated_on, recorded_by)
+     values ($1, $2, $3, 2000000, 3000000, '2026-09-30', $4)`,
+    [row.pursuit_id, row.entity_id, row.vehicle_id, row.owner_id],
+  );
+  return { indications: 1 };
+}

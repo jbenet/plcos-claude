@@ -219,10 +219,10 @@ async function Approvals({
                 <span className="lbl">checked now, not when the ticket was opened</span>
               </div>
               <div className="guardlist">
-                {guard.blocks.map((b) => (
+                {[...guard.blocks, ...guard.advisories].map((b) => (
                   <div className={`row${b.subsumedBy ? ' same' : ''}`} key={b.rule}>
-                    <span className={`gr${b.rule === 'cross_vehicle_conflict' ? ' info' : ''}`}>
-                      {RULE_LABEL[b.rule].toUpperCase()}
+                    <span className={`gr${b.rule === 'cross_vehicle_conflict' || b.advisory ? ' info' : ''}`}>
+                      {RULE_LABEL[b.rule].toUpperCase()}{b.advisory ? ' · ADVISORY' : ''}
                     </span>
                     <div className="t">
                       <b>{b.message}</b>

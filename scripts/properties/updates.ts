@@ -85,7 +85,7 @@ export async function updateProperties(ctx: AffinityContext & { n: (sql: string,
     empty instanceof st.StatusRefused && saved.created && !twice.created && twice.updateId === saved.updateId && rows === 1 && logged === 1 &&
       after?.status === 'discussing' && after.status_source === 'us' && after.status_reason === 'Met them yesterday; they want the deck.' &&
       after.next_step === 'Send the deck' && tied === 1 && rungs1 === rungs0 && saved.proposed && asked === 1 &&
-      stored?.applied.status?.from === target!.status && stored.applied.touchpointId !== undefined && stored.suggested.reader === 'rules-1',
+      stored?.applied.status?.from === target!.status && stored.applied.touchpointId !== undefined && stored.suggested.reader === `rules-${st.READER.version}`,
     `empty refused: ${empty instanceof st.StatusRefused}; saved ${saved.created}, again ${twice.created ? 'SAVED TWICE' : 'found the first'}; ${rows} update, ${logged} meeting logged; ` +
       `status ${target!.status} → ${after?.status} (${after?.status_source}), why "${after?.status_reason}", next "${after?.next_step}"; audit tied to the update: ${tied}; ` +
       `rungs ${rungs0} → ${rungs1}; ladder proposal from the system: ${asked}; reader pinned: ${stored?.suggested.reader}`,

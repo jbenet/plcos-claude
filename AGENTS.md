@@ -92,9 +92,17 @@ The [full domain rules](docs/agent-rules/domain.md) define the evidence and exce
   acceptance_criteria, escalation_owner}`. A policy check validates each tool call against
   it. **Delegation cannot increase permission** — a child task gets the same or narrower
   scope.
-- **No tool sends anything, and no tool accepts its own proposed task.** Drafts and
+- **Capital OS sends nothing, and no tool accepts its own proposed task.** Drafts and
   proposals only; a human accepts. Acceptance uses a stable idempotency key so a double
   click cannot create duplicates.
+- **One external tool may send, one email per approved SEND ticket.** Juan decided on 4 Oct
+  2026 that a tool may send: the mail desk drafts first, then sends rate-limited through a
+  MailGuard key, replies first, then invites. No code in Capital OS sends. The desk (juanmail)
+  asks for the ticket (MCP `outreach_request_ticket`), a person approves it in Approvals, the
+  desk sends, and Capital OS records the send once (`outreach_record_send`, docs/27): refused
+  unless the ticket is approved, unexpired, for that pursuit and those recipients, and unused.
+  MCP tools carry a data-driven policy (docs/26 §3); none sends, decides a ticket or moves money.
+  Invariant 3 is unchanged; details in [Domain rules](docs/agent-rules/domain.md).
 - **Run records pin resolved config and input hashes.** Editing a prompt must not
   retroactively change what a completed run meant.
 - Prompt changes run against a **protected set of example cases** before landing. The agent

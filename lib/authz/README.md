@@ -17,7 +17,9 @@ all SPVs. Administrative imports, money/close recording, scoring, invitations an
 operations require Admin. GP approval grants currently cover STAGE, INTRO_ASK and SEND;
 MONEY/ALLOCATION_EXCEPTION stay Admin-only until named per-vehicle approvers are configured.
 
-HTTP handlers use `withRoute` with a closed route manifest. Health is fixed DB-free liveness. Feedback POSTs check origin/profile only;
+HTTP handlers use `withRoute` with a closed route manifest. Two policies take a bearer token instead of the
+cookie: `mcp` (docs/26) and `outreach` (docs/27); each authorizes per tool or operation as the token's owner,
+narrowed by the token, through `can()` and the same action rules as the pages. Health is fixed DB-free liveness. Feedback POSTs check origin/profile only;
 feedback GETs read journal state only. Neither resolves a user or touches the database
 on the request path. Reporter resolution happens at ingest. Local switching remains intentional until an
 actual authentication provider is integrated. These checks do not turn the local handle

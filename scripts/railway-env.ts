@@ -13,7 +13,7 @@ type Row = { name: string; tag: string; secret: boolean };
 // What to enter on Railway, by the template's tag. A per-name note below replaces it.
 const BY_TAG: Record<string, string> = {
   required: 'Set it.',
-  'required-real': 'Set it at cutover (step 5f).',
+  'required-real': 'Set it at cutover (§5 step f).',
   later: 'Leave unset at cutover; set it afterwards.',
   optional: 'Leave unset (the default works).',
   image: 'Do not set: the Dockerfile sets it.',
@@ -25,19 +25,19 @@ const BY_TAG: Record<string, string> = {
 // in "Keychain" are where the Mac keeps the same secret today, to copy from by hand, never through a file.
 const RAILWAY: Record<string, string> = {
   DATA_PROFILE: '`demo` for the first boot, `real` at cutover.',
-  LABOS_ME_URL: 'Decision A. Set only if LabOS sign-in can reach the Railway domain; otherwise the sign-in that replaces it.',
+  LABOS_ME_URL: 'Leave unset: sign-in is Google (§3).',
   DATABASE_URL: '`postgresql://plcos_app@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/plcos_demo` first, then `…/plcos_live`. No password in it.',
-  PGPASSWORD: 'The `plcos_app` password you set on Railway Postgres (§4 step 3). Not the Mac\'s: new passwords for the cloud.',
+  PGPASSWORD: 'The `plcos_app` password you set on Railway Postgres (§4 step 2). One of the two secrets that live outside the app.',
   PGSSLMODE: 'Leave unset on the private network (code change 1).',
-  ANTHROPIC_API_KEY: 'From an Anthropic workspace with a monthly limit. Set when the cloud research jobs start (§7).',
-  FEEDBACK_EXPORT_TOKEN: 'A new random token (`openssl rand -hex 32`); the Mac keeps its copy with `npm run secret:store -- feedback-export-token`.',
+  ANTHROPIC_API_KEY: 'Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins.',
+  FEEDBACK_EXPORT_TOKEN: 'Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins.',
   SCHEDULE_DAILY_AT: '`03:00` (UTC), the day after a manual Affinity sync works from Railway.',
-  BACKUP_COMMAND: '`bash scripts/backup-service.sh`',
-  BACKUP_BUCKET: 'The S3 bucket in your AWS account (decision D).',
-  BACKUP_GPG_PUBLIC_KEY: 'The armored public half only (rev3.md "Backups"). The private half never goes to Railway.',
-  AWS_REGION: 'The bucket\'s region.',
-  AWS_ACCESS_KEY_ID: 'An IAM user that can only put, list and delete under the bucket\'s `plcos-*` prefixes. Railway has no AWS role.',
-  AWS_SECRET_ACCESS_KEY: 'That IAM user\'s secret.',
+  BACKUP_COMMAND: 'Leave unset: no S3 for now. Railway backs up its volumes, and the Mac keeps encrypted pulls (§8).',
+  BACKUP_BUCKET: 'Leave unset (no S3 for now, §8).',
+  BACKUP_GPG_PUBLIC_KEY: 'Leave unset (no S3 for now, §8).',
+  AWS_REGION: 'Leave unset (no S3 for now, §8).',
+  AWS_ACCESS_KEY_ID: 'Leave unset (no S3 for now, §8).',
+  AWS_SECRET_ACCESS_KEY: 'Leave unset (no S3 for now, §8).',
   PORT: 'Do not set: Railway sets it, and the image listens on it.',
   GIT_COMMIT: 'Build argument; code change 2 takes it from Railway\'s commit variable.',
   DAKOTA_USERNAME: '**Never set.** Dakota stays on the Mac (decision C).',
@@ -46,15 +46,15 @@ const RAILWAY: Record<string, string> = {
 
 // Connector variables are matched by prefix: only each connector's own folder names them (npm run boundaries).
 const BY_PREFIX: Array<[string, string]> = [
-  ['AFFINITY_', 'Keychain `plcos-affinity`. Set at cutover.'],
-  ['LINEAR_', 'Keychain `plcos-linear` / `api-key`. Set at cutover.'],
-  ['GOOGLE_OAUTH_', '**Not yet.** Gmail drafts move to the cloud with decision A\'s Google option, or later (docs/25).'],
+  ['AFFINITY_', 'Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins.'],
+  ['LINEAR_', 'Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins.'],
+  ['GOOGLE_OAUTH_', 'Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins.'],
 ];
 const note = (r: Row) => RAILWAY[r.name] ?? BY_PREFIX.find(([p]) => r.name.startsWith(p))?.[1] ?? BY_TAG[r.tag];
 
 // Railway's own settings that are not in the template, because the code never reads them.
 const EXTRA: Array<[string, string]> = [
-  ['RAILWAY_RUN_UID', '`0` only if the volume is not writable by the image\'s user 10001 (code change 3); remove it once that change lands.'],
+  ['RAILWAY_RUN_UID', '`0`: the entrypoint starts as root only to hand `/app/data` to user 10001, then drops to it (§2).'],
 ];
 
 export function readTemplate(path = 'docs/deploy/service.env.example'): Row[] {

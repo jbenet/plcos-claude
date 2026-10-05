@@ -1,8 +1,9 @@
 /**
  * Cloud pull and push (docs/deploy/railway.md §6–§7), on invented data, the demo profile and the test
  * cluster only. Never the live checkout, the live cluster (:57433) or real data.
- *   - scopes: only an Admin mints a snapshot token, a Viewer no push token; a push token cannot snapshot,
- *     a snapshot token cannot push, an MCP token can do neither, and a sync token is refused by /api/mcp;
+ *   - scopes (lib/sync/scopes.ts, in the MCP token's tools like the outreach scopes): only an Admin mints a
+ *     snapshot token, a Viewer no push token; a push token cannot snapshot, a snapshot token cannot push, an
+ *     MCP token can do neither, and a sync token lists and calls no MCP tool;
  *     a revoked token, a demoted owner and a browser Origin are refused; every refusal is audited;
  *   - push: the importer's validators and the Dakota refusal answer every reason by file and write nothing;
  *     an accepted push is kept in the inbox, published, recorded in the ledger and queues the import once;
@@ -28,7 +29,8 @@ import { dakotaClaims } from '../../lib/sync/dakota';
 import { EXCLUDE_DIRS, EXCLUDE_FILES, EXPORTS, filesToCarry } from '../../lib/sync/files';
 import { acceptPush } from '../../lib/sync/push';
 import { snapshotResponse } from '../../lib/sync/snapshot';
-import { createMcpToken, createSyncToken, revokeMcpToken, TokenRefused, type AppUser } from '../../modules/platform';
+import { SYNC_PUSH, SYNC_SNAPSHOT } from '../../lib/sync/scopes';
+import { createMcpToken, revokeMcpToken, TokenRefused, type AppUser } from '../../modules/platform';
 import type { Check, Db } from './harness';
 
 const PG_BIN = '/opt/homebrew/opt/postgresql@17/bin';
@@ -73,27 +75,31 @@ export async function syncProperties(check: Check, db: Db) {
   const gp = await user('sync-gp', 'gp');
   const viewer = await user('sync-viewer', 'viewer');
   const admin2 = await user('sync-admin', 'admin');
-  const mint = async (owner: AppUser, scope: 'snapshot' | 'push') => (await createSyncToken(owner, { label: `props ${scope}`, scope, days: 30 }, db));
+  const mint = async (owner: AppUser, scope: 'snapshot' | 'push') => createMcpToken(owner,
+    { label: `props ${scope}`, tools: [scope === 'snapshot' ? SYNC_SNAPSHOT : SYNC_PUSH], vehicles: null, callsPerDay: 100, days: 30 }, db);
 
   // ── Minting ────────────────────────────────────────────────────────────────────────────
   const refusedMint = async (owner: AppUser, scope: 'snapshot' | 'push') => { try { await mint(owner, scope); return false; } catch (e) { return e instanceof TokenRefused; } };
   const gpSnap = await refusedMint(gp, 'snapshot'), viewerPush = await refusedMint(viewer, 'push'), viewerSnap = await refusedMint(viewer, 'snapshot');
   const snap = await mint(juan, 'snapshot'), push = await mint(gp, 'push'), adminPush = await mint(juan, 'push');
   const mcp = (await createMcpToken(juan, { label: 'props sync mcp', tools: ['search'], vehicles: null, callsPerDay: 100, days: 30 }, db)).secret;
-  const stored = await db.query<{ scope: string; prefix: string; token_hash: string }>(`select scope, prefix, token_hash from platform.mcp_token where token_id = any($1::uuid[])`, [[snap.token.tokenId, push.token.tokenId]]);
-  check('SYNC tokens: only an Admin mints a snapshot token and a Viewer mints no push token; stored hashed, one scope each, with a scope prefix',
-    gpSnap && viewerPush && viewerSnap && snap.secret.startsWith('plcos_snap_') && push.secret.startsWith('plcos_push_')
+  const stored = await db.query<{ tools: string[]; prefix: string; token_hash: string }>(`select tools, prefix, token_hash from platform.mcp_token where token_id = any($1::uuid[])`, [[snap.token.tokenId, push.token.tokenId]]);
+  check('SYNC tokens: only an Admin mints a snapshot token and a Viewer mints no push token; stored hashed, the scope alone in the token\'s tools',
+    gpSnap && viewerPush && viewerSnap && snap.secret.startsWith('plcos_mcp_')
     && stored.length === 2 && stored.every((r) => /^[0-9a-f]{64}$/.test(r.token_hash) && !r.token_hash.includes(snap.secret) && r.prefix.length < 20)
-    && stored.map((r) => r.scope).sort().join() === 'push,snapshot',
-    `GP snapshot refused: ${gpSnap}; Viewer push refused: ${viewerPush}; scopes ${stored.map((r) => r.scope).sort().join(', ')}`);
+    && stored.map((r) => r.tools.join()).sort().join(' ') === `${SYNC_PUSH} ${SYNC_SNAPSHOT}`,
+    `GP snapshot refused: ${gpSnap}; Viewer push refused: ${viewerPush}; tools ${stored.map((r) => r.tools.join()).sort().join(', ')}`);
 
   // ── Scope, per use ─────────────────────────────────────────────────────────────────────
-  const auditOf = async (tokenId: string) => db.query<{ action: string; detail: Record<string, any> }>(`select action, detail from platform.audit_log where subject_id = $1 and action in ('sync.call', 'sync.refused', 'mcp.refused') order by id`, [tokenId]);
+  const auditOf = async (tokenId: string) => db.query<{ action: string; detail: Record<string, any> }>(`select action, detail from platform.audit_log where subject_id = $1 and action in ('mcp.call', 'mcp.refused') order by id`, [tokenId]);
   const pushOnSnap = await get(push.secret);
   const snapOnPush = await post(snap.secret, { workflow: 'W1', files: [] });
   const mcpOnSnap = await get(mcp);
-  const syncOnMcp = await MCP(new Request(`${base}/api/mcp`, { method: 'POST', headers: { authorization: `Bearer ${push.secret}`, 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) }));
+  const mcpCall = async (body: Record<string, unknown>) => (await MCP(new Request(`${base}/api/mcp`, { method: 'POST',
+    headers: { authorization: `Bearer ${push.secret}`, 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, ...body }) }))).json().catch(() => ({})) as Record<string, any>;
+  const syncList = await mcpCall({ method: 'tools/list', params: {} });
+  const syncCall = await mcpCall({ method: 'tools/call', params: { name: 'search', arguments: { query: 'Invented' } } });
   const none = await get(null);
   const browser = await get(snap.secret, '', { origin: base });
   const demoted = await mint(admin2, 'snapshot');
@@ -104,14 +110,14 @@ export async function syncProperties(check: Check, db: Db) {
   const afterRevoke = await get(revokedToken.secret);
   const pushAudit = await auditOf(push.token.tokenId), demotedAudit = await auditOf(demoted.token.tokenId);
   check('SYNC scope: a push token cannot snapshot, a snapshot token cannot push, an MCP token neither, and /api/mcp refuses a sync token',
-    pushOnSnap.status === 403 && snapOnPush.status === 403 && mcpOnSnap.status === 403 && syncOnMcp.status === 403
-    && pushAudit.some((a) => a.action === 'sync.refused' && a.detail.reason === 'scope' && a.detail.endpoint === 'snapshot')
-    && pushAudit.some((a) => a.action === 'mcp.refused' && a.detail.reason === 'scope'),
-    `statuses ${[pushOnSnap, snapOnPush, mcpOnSnap, syncOnMcp].map((r) => r.status).join(', ')}; refusals audited`);
+    pushOnSnap.status === 403 && snapOnPush.status === 403 && mcpOnSnap.status === 403
+    && Array.isArray(syncList.result?.tools) && syncList.result.tools.length === 0 && syncCall.result?.isError === true
+    && pushAudit.some((a) => a.action === 'mcp.call' && a.detail.via === 'sync' && a.detail.tool === 'sync_snapshot' && a.detail.outcome === 'refused' && a.detail.reason === 'scope'),
+    `statuses ${[pushOnSnap, snapOnPush, mcpOnSnap].map((r) => r.status).join(', ')}; on /api/mcp ${syncList.result?.tools?.length ?? '?'} tools listed, search ${syncCall.result?.isError ? 'refused' : 'answered'}; refusals audited`);
   check('SYNC scope: no token, a browser Origin, a revoked token and an owner no longer Admin are refused, each refusal of a known token audited',
     none.status === 401 && browser.status === 403 && afterDemotion.status === 403 && afterRevoke.status === 401
-    && demotedAudit.some((a) => a.action === 'sync.refused' && a.detail.reason === 'role')
-    && (await auditOf(revokedToken.token.tokenId)).some((a) => a.detail.reason === 'revoked'),
+    && demotedAudit.some((a) => a.action === 'mcp.call' && a.detail.outcome === 'refused' && a.detail.reason === 'role')
+    && (await auditOf(revokedToken.token.tokenId)).some((a) => a.action === 'mcp.refused' && a.detail.reason === 'revoked' && a.detail.via === 'sync'),
     `statuses ${[none, browser, afterDemotion, afterRevoke].map((r) => r.status).join(', ')}`);
 
   // ── Push: refused with every reason, nothing written ─────────────────────────────────────
@@ -190,14 +196,15 @@ export async function syncProperties(check: Check, db: Db) {
       && reviewFile.trim().split('\n').length === 1 && queued.length === 2,
       `older ${older.status}, same date ${sameDate.status}, bad review ${wrongCount.status}, W1c ${w1c.status} replacing ${w1c.body.replaced}`);
     const audits = await auditOf(push.token.tokenId);
-    const calls = audits.filter((a) => a.action === 'sync.call');
+    const calls = audits.filter((a) => a.action === 'mcp.call' && a.detail.tool === 'sync_push');
     const outcomes = calls.map((a) => a.detail.outcome);
-    check('SYNC audit: every push is a sync.call with its outcome, counts and hash, and no word of a file',
-      ['rejected', 'ok', 'duplicate'].every((o) => outcomes.includes(o)) && calls.every((a) => a.detail.endpoint === 'push' && typeof a.detail.ms === 'number')
-      && calls.some((a) => a.detail.outcome === 'rejected' && a.detail.dakota >= 2)
+    check('SYNC audit: every push is an mcp.call row (via sync, the shape of MCP and outreach calls) with its outcome, counts and hash, and no word of a file',
+      ['invalid', 'ok'].every((o) => outcomes.includes(o)) && calls.some((a) => a.detail.duplicate === true)
+      && calls.every((a) => a.detail.via === 'sync' && a.detail.risk === 'write-guarded' && a.detail.scopes?.[0] === SYNC_PUSH && typeof a.detail.ms === 'number')
+      && calls.some((a) => a.detail.outcome === 'invalid' && a.detail.dakota >= 2)
       && calls.some((a) => a.detail.outcome === 'ok' && /^[0-9a-f]{64}$/.test(a.detail.hash) && a.detail.runId === runId)
       && !JSON.stringify(audits).includes(WORD) && !JSON.stringify(audits).includes('Invented page') && !JSON.stringify(audits).includes(push.secret),
-      `${calls.length} calls: ${[...new Set(outcomes)].join(', ')}`);
+      `${calls.length} calls: ${[...new Set(outcomes)].join(', ')}, one a duplicate`);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -67,7 +67,7 @@ export async function snapshotResponse(caller: SyncCaller, wantFiles: boolean, o
   const refusal = snapshotRefusal();
   if (refusal) { await auditSync(caller, 'snapshot', 'refused', { what, reason: 'profile' }); return syncError(403, refusal); }
   if (!wantFiles && !config.db.url) { await auditSync(caller, 'snapshot', 'refused', { what, reason: 'pglite' }); return syncError(501, 'This server runs on PGlite; a database snapshot needs Postgres.'); }
-  if (g.__syncSnapshotBusy) { await auditSync(caller, 'snapshot', 'busy', { what }); return syncError(409, 'A snapshot is already streaming. Try again when it finishes.'); }
+  if (g.__syncSnapshotBusy) { await auditSync(caller, 'snapshot', 'refused', { what, reason: 'busy' }); return syncError(409, 'A snapshot is already streaming. Try again when it finishes.'); }
   g.__syncSnapshotBusy = true;
   const taken = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   let child: Child;

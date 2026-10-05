@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/db';
 import { reconcilePursuit } from '@/lib/reconcile';
 import { logTouchpoint, type Channel, type Direction, type Read } from '@/modules/meetings';
+import { indicationRange, recordIndication } from '@/modules/pipeline';
 import {
   READER, StatusRefused, getPursuit, insertUpdate, readUpdate, recordApplied, setNextStep, setStatus,
   type PassedBy, type PursuitStatus, type UpdateApplied, type UpdateSuggestion,
@@ -24,6 +25,12 @@ export interface UpdateInput {
   status?: { to: PursuitStatus; passedBy?: PassedBy | null; reason?: string | null } | null;
   touch?: { channel: Channel; direction: Direction | null; on: Date; read: Read | null } | null;
   nextStep?: { step: string; on: Date | null } | null;
+  /**
+   * An indicated amount (docs/27 §1): low = high for one number. Dated by the touchpoint this
+   * update logs, else by `on`, else today; sourced to that touchpoint, or to `touchpointId`. It is
+   * recorded beside soft and hard, never as either (rule 1).
+   */
+  indicated?: { low: number; high?: number | null; on?: Date | null; touchpointId?: string | null } | null;
 }
 
 export interface UpdateResult {
@@ -47,7 +54,7 @@ function taken(s: UpdateSuggestion, input: UpdateInput): boolean {
     case 'touch': return Boolean(input.touch);
     case 'read': return input.touch?.read === s.read;
     case 'next': return Boolean(input.nextStep);
-    case 'amount': return false;
+    case 'amount': return Boolean(input.indicated);
   }
 }
 
@@ -55,6 +62,8 @@ export async function addUpdate(actorId: string, input: UpdateInput): Promise<Up
   const body = input.body.trim();
   if (!body) throw new StatusRefused('An update needs words: what happened, or what changed.');
   if (!input.idempotencyKey.trim()) throw new StatusRefused('This form has no key; reload the page and save again.');
+  // Checked before the transaction, so a bad amount refuses the whole update with a clear reason.
+  if (input.indicated) indicationRange(input.indicated.low, input.indicated.high);
   const before = await getPursuit(input.pursuitId);
   if (!before) throw new Error(`No pursuit ${input.pursuitId}`);
   const suggestions = readUpdate(body, { status: before.status, today: new Date().toISOString().slice(0, 10) });
@@ -100,7 +109,16 @@ export async function addUpdate(actorId: string, input: UpdateInput): Promise<Up
       applied.touch = { channel: t.channel, on: t.on.toISOString().slice(0, 10), ahead: t.on.getTime() > endOfToday.getTime(), read: t.read };
     }
 
-    const declined = suggestions.filter((s) => s.kind !== 'amount' && !taken(s, input)).map((s) => s.kind);
+    if (input.indicated) {
+      const i = input.indicated;
+      const on = input.touch && !applied.touch?.ahead ? input.touch.on : i.on ?? new Date();
+      const touchpointId = applied.touch && !applied.touch.ahead ? applied.touchpointId! : i.touchpointId ?? null;
+      const { low, high } = indicationRange(i.low, i.high);
+      const indicationId = await recordIndication(actorId, { pursuitId: p.pursuitId, low, high, on, touchpointId, updateId }, { q: tx });
+      applied.indicated = { indicationId, low, high, on: on.toISOString().slice(0, 10), touchpointId };
+    }
+
+    const declined = suggestions.filter((s) => !taken(s, input)).map((s) => s.kind);
     if (declined.length) applied.declined = declined;
     await recordApplied(tx, updateId, applied);
     await tx.query(

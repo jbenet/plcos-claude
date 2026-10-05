@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getDb, type Queryable } from '@/lib/db';
 import { openTicket, requireApprovedTicket } from '@/modules/governance';
 import { getAsset, listWrapRules } from './repo';
 import { USE_RANK, type Audience, type WrapCheck } from './types';
@@ -147,6 +147,17 @@ export async function recordSend(actorId: string, sendId: string, ticketId: stri
     await requireApprovedTicket(tx, {
       kind: 'SEND', subjectType: 'send', subjectId: sendId, ticketId,
     });
+    await markSendSent(actorId, sendId, tx);
+  });
+}
+
+/**
+ * The send as done, re-running the wrap check first: a material whose wrap no longer passes, or whose
+ * claims changed since approval, is refused and nothing is marked. Called inside a transaction that
+ * already checked the SEND ticket — recordSend's, or the mail desk's record of its send (docs/27 §4).
+ */
+export async function markSendSent(actorId: string, sendId: string, tx: Queryable, at: Date = new Date()): Promise<void> {
+  {
     const row = await tx.one<{ asset_id: string; vehicle_id: string; instrument: string; status: string }>(
       'select asset_id, vehicle_id, instrument::text as instrument, status::text as status from content.send where send_id = $1',
       [sendId],
@@ -170,15 +181,45 @@ export async function recordSend(actorId: string, sendId: string, ticketId: stri
     }
 
     await tx.query(
-      "update content.send set status = 'sent', sent_at = now() where send_id = $1",
-      [sendId],
+      "update content.send set status = 'sent', sent_at = $2 where send_id = $1",
+      [sendId, at],
     );
     await tx.query(
       `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
        values ($1, 'send.sent', 'send', $2, $3)`,
       [actorId, sendId, JSON.stringify({ asset: asset!.title })],
     );
-  });
+  }
+}
+
+/**
+ * The mail desk's material (docs/27 §4): the same checks as requestSend — the wrap matrix, an approved
+ * asset, no open refresh flag — and the same content.send row, so wrong-wrap sends still count every
+ * material that leaves. It opens no ticket: the desk's SEND ticket covers the email and its material
+ * together, and approving it runs nothing (the desk sends, then records the send).
+ */
+export async function proposeDeskSend(
+  actorId: string,
+  args: { assetId: string; entityId: string; vehicleId: string; instrument: string },
+  tx: Queryable,
+): Promise<{ sendId: string | null; check: WrapCheck; title: string; version: number }> {
+  const asset = await getAsset(args.assetId, tx);
+  if (!asset) return { sendId: null, check: { allowed: false, rule: null, refusals: ['No such material.'] }, title: '', version: 0 };
+  const vehicle = (await tx.one<{ exemption: string }>('select exemption from platform.vehicle where id = $1', [args.vehicleId]))!;
+  const check = await checkWrap({ exemption: vehicle.exemption, instrument: args.instrument, audience: asset.audience, permittedUse: asset.permittedUse });
+  if (asset.status !== 'approved') { check.refusals.push(`The asset is "${asset.status}", not approved. Only approved material is sendable.`); check.allowed = false; }
+  if (asset.flags.length > 0) { check.refusals.push(`${asset.flags.length} open refresh flag${asset.flags.length === 1 ? '' : 's'}: a claim underneath this asset changed.`); check.allowed = false; }
+  if (!check.allowed) return { sendId: null, check, title: asset.title, version: asset.version };
+  const row = await tx.one<{ send_id: string }>(
+    `insert into content.send (asset_id, entity_id, vehicle_id, instrument, status, requested_by)
+     values ($1, identity.canonical_entity_id($2::uuid), $3, $4::pipeline.instrument, 'proposed', $5) returning send_id::text`,
+    [args.assetId, args.entityId, args.vehicleId, args.instrument, actorId],
+  );
+  await tx.query(
+    `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail) values ($1, 'send.proposed', 'send', $2, $3)`,
+    [actorId, row!.send_id, JSON.stringify({ asset: asset.title, via: 'mail desk', instrument: args.instrument })],
+  );
+  return { sendId: row!.send_id, check, title: asset.title, version: asset.version };
 }
 
 /**

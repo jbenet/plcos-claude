@@ -4,7 +4,10 @@ import { auth } from '@/lib/auth';
 import { can } from '@/lib/authz';
 import { READ_TOOLS, TOOLS } from '@/lib/mcp/tools';
 import { shortDate, ago } from '@/lib/time';
-import { listMcpTokens, listVehicles, maySyncScope } from '@/modules/platform';
+import { listMcpTokens, listVehicles } from '@/modules/platform';
+import { config } from '@/config/deployment';
+import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
+import { grantRefusal, SYNC_PUSH, SYNC_SNAPSHOT } from '@/lib/sync/scopes';
 import { McpTokenForm } from './McpTokenForm';
 import s from './mcp.module.css';
 
@@ -21,7 +24,7 @@ export async function McpTokens() {
   const mine = vehicles.filter((v) => v.phase !== 'historical' && can(user, 'read', { vehicle: v.id }));
   const vname = new Map(vehicles.map((v) => [v.id, v.name]));
   const now = Date.now();
-  const drafts = TOOLS.filter((t) => t.kind === 'draft').map((t) => t.title.toLowerCase());
+  const drafts = TOOLS.filter((t) => t.policy.risk === 'propose' && !t.policy.scopes.length).map((t) => t.title.toLowerCase());
   return (
     <div className="card" id="mcp">
       <div className="chead">
@@ -36,16 +39,17 @@ export async function McpTokens() {
           change a status or move money: those tools do not exist on the server. Every call is logged with the tool and the token.
         </p>
         <p>
-          Two other kinds move data between this server and the Mac (docs/deploy/railway.md §6–§7), and do nothing else: a
+          Two more kinds move data between this server and the Mac (docs/deploy/railway.md §6–§7) and do nothing else: a
           {' '}<b>snapshot</b> token lets <span className="mono">scripts/cloud-pull.sh</span> copy the whole database down (Admins only), and a
           {' '}<b>push</b> token lets <span className="mono">scripts/cloud-push.sh</span> send finished research up, checked and imported like the
-          server&rsquo;s own. Neither works on this MCP endpoint, and every use is logged.
+          server&rsquo;s own. Neither opens an MCP tool, and every use is logged.
         </p>
         {user.access === 'viewer' ? (
           <p className="muted">Viewers do not make tokens yet.</p>
         ) : (
           <McpTokenForm endpoint={endpoint} vehicles={mine.map((v) => ({ id: v.id, name: v.name }))} draftTools={drafts}
-            syncScopes={(['snapshot', 'push'] as const).filter((x) => maySyncScope(user, x))} />
+            outreach={user.access === 'admin' && config.outreach.enabled} days={config.mcp.tokenDays}
+            sync={(['snapshot', 'push'] as const).filter((x) => !grantRefusal(user, [x === 'snapshot' ? SYNC_SNAPSHOT : SYNC_PUSH]))} />
         )}
         {tokens.length > 0 && (
           <table className={s.tokens}>
@@ -58,10 +62,13 @@ export async function McpTokens() {
                 return (
                   <tr key={t.tokenId} data-state={state}>
                     <td><b>{t.label}</b><br /><span className="mono muted" style={{ fontSize: 11 }}>{t.prefix}…</span></td>
-                    <td>{t.scope === 'snapshot' ? 'Snapshot (cloud-pull)' : t.scope === 'push' ? 'Push research (cloud-push)' : t.tools.some((x) => !READ_TOOLS.includes(x)) ? 'Read and draft' : 'Read'}</td>
-                    <td>{t.scope !== 'mcp' ? 'The whole server' : t.vehicles ? t.vehicles.map((v) => vname.get(v) ?? 'unknown').join(', ') : 'All of yours'}</td>
+                    <td>{t.tools.includes(SYNC_SNAPSHOT) ? 'Snapshot (cloud-pull)' : t.tools.includes(SYNC_PUSH) ? 'Push research (cloud-push)'
+                      : t.tools.includes(OUTREACH_WRITE) ? 'Outreach desk: read and write' : t.tools.includes(OUTREACH_READ) ? 'Outreach desk: read'
+                      : t.tools.some((x) => !READ_TOOLS.includes(x)) ? 'Read and draft' : 'Read'}</td>
+                    <td>{t.vehicles ? t.vehicles.map((v) => vname.get(v) ?? 'unknown').join(', ') : 'All of yours'}</td>
                     <td>{shortDate(new Date(t.createdAt))}</td>
-                    <td>{t.lastUsedAt ? ago(new Date(t.lastUsedAt)) : 'never'}</td>
+                    <td>{t.lastUsedAt ? ago(new Date(t.lastUsedAt)) : 'never'}
+                      {t.lastUsedFrom && <><br /><span className="muted" style={{ fontSize: 11 }} title={t.lastUsedFrom}>from {t.lastUsedFrom.slice(0, 40)}{t.lastUsedFrom.length > 40 ? '…' : ''}</span></>}</td>
                     <td>
                       <span className={s.state} data-state={state}>
                         {state === 'live' ? `live until ${shortDate(new Date(t.expiresAt))}` : state === 'revoked' ? `revoked ${shortDate(new Date(t.revokedAt!))}` : 'expired'}

@@ -44,7 +44,7 @@ if [[ "$TO" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then proto='=https'
 elif [[ "$TO" =~ ^http://(127\.0\.0\.1|localhost)(:[0-9]+)?$ ]]; then proto='=http'
 else die "--to must be https://<host> (http only on 127.0.0.1, for tests)"; fi
 if [ -n "${CLOUD_PUSH_TOKEN+set}" ]; then token="$CLOUD_PUSH_TOKEN"; else token="$(keychain push-token || true)"; fi
-[[ "$token" =~ ^plcos_push_[A-Za-z0-9_-]{30,80}$ ]] \
+[[ "$token" =~ ^plcos_mcp_[A-Za-z0-9_-]{30,80}$ ]] \
   || die "no push token: make one in Preferences → MCP access and store it as Keychain item plcos-railway / push-token"
 
 bundle() { (cd "$HERE" && node --import tsx scripts/cloud-push-bundle.ts "$@" ${pass[@]+"${pass[@]}"} "${files[@]}"); }

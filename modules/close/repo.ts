@@ -7,7 +7,7 @@ import type {
 const DAY = 86_400_000;
 
 /** Working days between now and `to`, minus anything the calendar says is suppressed. */
-async function workingDaysUntil(to: Date, now = new Date()): Promise<number> {
+export async function workingDaysUntil(to: Date, now = new Date()): Promise<number> {
   const periods = (await listPeriods()).filter((p) => p.suppressUrgency);
   let days = 0;
   for (let t = now.getTime(); t <= to.getTime(); t += DAY) {
@@ -233,6 +233,25 @@ export async function syncCountersignature(
         and p.status <> 'countersigned'
       returning p.item_id`,
     [entityId, vehicleId, at],
+  );
+  return rows.length;
+}
+
+/**
+ * Keep the SPV war room's IOI stage in step with an indication recorded on the LP (docs/27 §1).
+ * An invited seat moves to "IOI given", dated; a seat already at IOI takes the new amount. A seat
+ * further on (allocated, wired) or passed is left alone: the indication is history by then. Called
+ * from pipeline.recordIndication, in its transaction. Creates no seat: inviting is the room's act.
+ */
+export async function syncIoi(entityId: string, vehicleId: string, on: Date, amount: number, q?: Queryable): Promise<number> {
+  const db = q ?? (await getDb());
+  const rows = await db.query<{ seat_id: string }>(
+    `update close.spv_seat
+        set stage = 'ioi', ioi_at = coalesce(ioi_at, $3), amount = $4
+      where vehicle_id = $2 and identity.canonical_entity_id(entity_id) = identity.canonical_entity_id($1::uuid)
+        and stage in ('invited', 'ioi')
+      returning seat_id`,
+    [entityId, vehicleId, on, amount],
   );
   return rows.length;
 }

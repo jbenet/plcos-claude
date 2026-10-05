@@ -6,7 +6,7 @@ import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { usdM, multiple } from '@/lib/money';
 import { shortDate, formatDate } from '@/lib/time';
-import { CLOSE_PAGE_SIZE, INSTRUMENT_LABEL, vehicleCloseStatus, vehicleStatusCounts, vehicleTotals } from '@/modules/pipeline';
+import { CLOSE_PAGE_SIZE, INSTRUMENT_LABEL, indicatedTotals, vehicleCloseStatus, vehicleStatusCounts, vehicleTotals } from '@/modules/pipeline';
 import { conditionsFor, listCycles } from '@/modules/close';
 import { listMeetings } from '@/modules/meetings';
 import { STATUSES } from '@/lib/authz/read/strategy';
@@ -30,10 +30,12 @@ async function Vehicles({ searchParams }: { searchParams: Promise<{ closePage?: 
   const vehicleId = vehicle?.id ?? null;
   const sp = await searchParams;
   const now = new Date();
-  const [totals, counts, close, cycles, meetings] = await Promise.all([
+  const [totals, counts, close, cycles, meetings, indicatedBy] = await Promise.all([
     vehicleTotals(), vehicleStatusCounts(vehicleId), vehicleCloseStatus(vehicleId, Number(sp.closePage ?? 1)),
-    listCycles(), listMeetings(vehicleId),
+    listCycles(), listMeetings(vehicleId), indicatedTotals(vehicleId ? [vehicleId] : null),
   ]);
+  // What LPs indicated (docs/27 §1): its own figure, beside soft and hard and added to neither.
+  const indicated = vehicleId ? indicatedBy.get(vehicleId) ?? null : null;
   const mine = vehicle ? totals.find((t) => t.vehicleId === vehicle.id) ?? null : null;
   const cycle = cycles.find((c) => c.status === 'open' && (!vehicleId || c.vehicleId === vehicleId)) ?? null;
   const conditions = cycle ? (await conditionsFor(cycle.cycleId)).filter((c) => c.status === 'open' || c.status === 'failed') : [];
@@ -110,6 +112,7 @@ async function Vehicles({ searchParams }: { searchParams: Promise<{ closePage?: 
         <div className={`kpis ${s.kpis}`}>
           <div className="kpi"><div className="lbl">Hard</div><div className="n g">{usdM(mine.hard)}</div><div className="f">signed and countersigned · {mine.hardCount} LP{mine.hardCount === 1 ? '' : 's'}</div></div>
           <div className="kpi"><div className="lbl">Soft</div><div className="n">{usdM(mine.soft)}</div><div className="f">beside hard, never in it · {mine.softCount} LP{mine.softCount === 1 ? '' : 's'}</div></div>
+          <div className="kpi" data-indicated><div className="lbl">Indicated</div><div className="n">{indicated ? indicated.low === indicated.high ? usdM(indicated.low) : `${usdM(indicated.low)}–${usdM(indicated.high)}` : '—'}</div><div className="f">said, not committed · in neither soft nor hard · {indicated?.count ?? 0} LP{indicated?.count === 1 ? '' : 's'}</div></div>
           <div className="kpi"><div className="lbl">Cash received</div><div className="n">{usdM(mine.cash)}</div><div className="f">wired, within hard</div></div>
           <div className="kpi"><div className="lbl">Gap to target</div><div className="n">{mine.gapToTarget === null ? '—' : usdM(mine.gapToTarget)}</div><div className="f">{mine.target ? `hard against ${usdM(mine.target, 0)}` : 'no target set'}</div></div>
           <div className="kpi soft"><div className="lbl">Coverage</div><div className="n q">{mine.coverage === null ? '—' : multiple(mine.coverage)}</div><div className="f">hard + soft over target: a pipeline measure, not money</div></div>

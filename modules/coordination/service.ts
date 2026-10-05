@@ -21,6 +21,7 @@ export async function evaluateGuards(
   q?: Queryable,
 ): Promise<GuardReport> {
   const blocks: GuardBlock[] = [];
+  const advisories: GuardBlock[] = [];
   const since = quarterAgo();
 
   // Rule 12. "Sourced, not applied for" is a state machine guard, not advice.
@@ -56,7 +57,12 @@ export async function evaluateGuards(
       evidence: `Most recent: ${last.vehicleName}, owned by ${last.ownerName}.`,
       opensCase: false,
     };
-    blocks.push(frequencyBlock);
+    // Advisory since 4 Oct 2026 (config.guard.askLimit): reported beside the blocks, refusing nothing.
+    if (config.guard.askLimit === 'enforce') blocks.push(frequencyBlock);
+    else {
+      frequencyBlock.advisory = true;
+      advisories.push(frequencyBlock);
+    }
   }
 
   if (args.connectorId) {
@@ -127,6 +133,7 @@ export async function evaluateGuards(
   return {
     ok: blocks.length === 0,
     blocks,
+    advisories,
     inspected:
       `Asks to this actor since ${since.toISOString().slice(0, 10)} across all vehicles, ` +
       `asks via this connector in the same period, restrictions on file for the target, and ` +
@@ -189,7 +196,10 @@ export async function proposeAsk(actorId: string, cmd: ProposeAskCommand) {
             'Moving the target to any pipeline stage',
             'Sending any material not named above',
           ],
-          basis: guard.blocks.map((b) => ({ label: RULE_LABEL[b.rule], value: b.message })),
+          basis: [
+            ...guard.blocks.map((b) => ({ label: RULE_LABEL[b.rule], value: b.message })),
+            ...guard.advisories.map((b) => ({ label: `${RULE_LABEL[b.rule]} (advisory)`, value: b.message })),
+          ],
         },
         vehicleId: cmd.vehicleId,
         expiresInDays: 7,
@@ -217,7 +227,7 @@ export async function proposeAsk(actorId: string, cmd: ProposeAskCommand) {
        values ($1, 'ask.proposed', 'ask', $2, $3)`,
       [actorId, askId, JSON.stringify({
         entity: cmd.entityName, vehicle: cmd.vehicleName, blocked: !guard.ok,
-        rules: guard.blocks.map((b) => b.rule),
+        rules: guard.blocks.map((b) => b.rule), advisories: guard.advisories.map((b) => b.rule),
       })],
     );
 
@@ -355,4 +365,38 @@ export async function adjudicateConflict(
       })],
     );
   });
+}
+
+export type OverlapChoice = 'mention_both' | 'send_separately' | 'wait';
+
+/**
+ * Record a coordinated overlap (docs/27 §4, rule 5): an SPV pitched to an LP with an open fund
+ * discussion. Not a block since 4 Oct 2026 — but never silent either: the choice and a dated follow-up
+ * are on the record, always. Returns the overlap's id.
+ */
+export async function recordOverlap(
+  actorId: string,
+  args: {
+    entityId: string; vehicleId: string; pursuitId: string; otherVehicleId: string; otherPursuitId: string | null;
+    choice: OverlapChoice; followUpOn: string; ticketId: string | null; note?: string | null;
+  },
+  q?: Queryable,
+): Promise<string> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.followUpOn)) {
+    throw new Error('An overlap needs a dated follow-up (rule 5): without one, the deferred side loses silently.');
+  }
+  const db = q ?? (await getDb());
+  const row = await db.one<{ id: string }>(
+    `insert into coordination.overlap (entity_id, vehicle_id, pursuit_id, other_vehicle_id, other_pursuit_id, choice,
+       follow_up_on, ticket_id, recorded_by, note)
+     values (identity.canonical_entity_id($1::uuid), $2, $3, $4, $5, $6, $7::date, $8, $9, $10) returning overlap_id::text id`,
+    [args.entityId, args.vehicleId, args.pursuitId, args.otherVehicleId, args.otherPursuitId, args.choice,
+     args.followUpOn, args.ticketId, actorId, args.note ?? null],
+  );
+  await db.query(
+    `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
+     values ($1, 'coordination.overlap_recorded', 'overlap', $2, $3)`,
+    [actorId, row!.id, JSON.stringify({ choice: args.choice, followUpOn: args.followUpOn, vehicleId: args.vehicleId, otherVehicleId: args.otherVehicleId, ticketId: args.ticketId })],
+  );
+  return row!.id;
 }

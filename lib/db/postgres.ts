@@ -25,7 +25,10 @@ export async function openPostgres(url: string, options: PostgresOptions = {}): 
   const worker = process.env.PLCOS_IMPORT_WORKER === '1';
   // A database off this machine (the deployed app's RDS) is always TLS with a verified certificate;
   // the image adds the RDS CA bundle through NODE_EXTRA_CA_CERTS.
-  const remote = !['127.0.0.1', 'localhost', '[::1]', ''].includes(new URL(url).hostname);
+  // Railway's private network (*.railway.internal) is WireGuard-encrypted and its Postgres has no public
+  // certificate to verify (docs/deploy/railway.md §2), so it connects like loopback.
+  const host = new URL(url).hostname;
+  const remote = !['127.0.0.1', 'localhost', '[::1]', ''].includes(host) && !host.endsWith('.railway.internal');
   const pool = new Pool({
     connectionString: url,
     ...(remote ? { ssl: { rejectUnauthorized: true } } : {}),

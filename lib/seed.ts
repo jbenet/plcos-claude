@@ -98,9 +98,11 @@ export async function seed(db: Db): Promise<Record<string, number>> {
   const spv = await seedSpv(db);
   const { seedStrategic } = await import('./seed-strategic');
   const strategic = await seedStrategic(db);
+  const { seedIndications } = await import('./seed-close');
+  const indications = await seedIndications(db);
   return {
     users: users.length, vehicles: vehicles.length, sources: sources.length,
-    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring, signals: signals.inserted, ...meetings, ...content, ...agents, ...compliance, ...library, ...fit, ...standup, ...plays, ...floor, ...statuses, ...spv, ...strategic,
+    ...research, ...network, ...coordination, ...strategy, ...pipeline, ...calendar, ...close, ...scoring, signals: signals.inserted, ...meetings, ...content, ...agents, ...compliance, ...library, ...fit, ...standup, ...plays, ...floor, ...statuses, ...spv, ...strategic, ...indications,
   };
 }
 

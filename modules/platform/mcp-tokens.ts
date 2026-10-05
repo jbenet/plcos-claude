@@ -21,31 +21,29 @@ export interface McpToken {
   createdAt: Date;
   expiresAt: Date;
   lastUsedAt: Date | null;
+  /** The client's User-Agent at its last use, cut short: which device is behind it (docs/27 §2). */
+  lastUsedFrom: string | null;
   revokedAt: Date | null;
-  /** What the token is for (migration 015): the MCP endpoint, a database snapshot, or a research push. */
-  scope: TokenScope;
 }
 
-/**
- * One scope per token. 'snapshot' and 'push' are the cloud sync tokens (docs/deploy/railway.md §6–§7):
- * they reach only /api/sync/snapshot and /api/sync/push, and the MCP endpoint refuses them.
- */
-export type TokenScope = 'mcp' | 'snapshot' | 'push';
-export const TOKEN_SCOPES: readonly TokenScope[] = ['mcp', 'snapshot', 'push'];
-const PREFIXES: Record<TokenScope, string> = { mcp: 'plcos_mcp_', snapshot: 'plcos_snap_', push: 'plcos_push_' };
-const PREFIX = PREFIXES.mcp;
+const PREFIX = 'plcos_mcp_';
 export const hashToken = (secret: string) => createHash('sha256').update(secret, 'utf8').digest('hex');
 /** 32 random bytes; the visible prefix says what the string is if it turns up somewhere. */
-export const newTokenSecret = (scope: TokenScope = 'mcp') => `${PREFIXES[scope]}${randomBytes(32).toString('base64url')}`;
-export const looksLikeToken = (s: string) => Object.values(PREFIXES).some((p) => s.startsWith(p)) && /^[A-Za-z0-9_-]{40,80}$/.test(s);
+export const newTokenSecret = () => `${PREFIX}${randomBytes(32).toString('base64url')}`;
+export const looksLikeToken = (s: string) => s.startsWith(PREFIX) && /^[A-Za-z0-9_-]{40,80}$/.test(s);
 
 const cols = (t = '') => `${t}token_id::text "tokenId", ${t}user_id::text "userId", ${t}label, ${t}prefix, ${t}tools,
   ${t}vehicles::text[] vehicles, ${t}calls_per_day "callsPerDay", ${t}created_at "createdAt", ${t}expires_at "expiresAt",
-  ${t}last_used_at "lastUsedAt", ${t}revoked_at "revokedAt", ${t}scope`;
+  ${t}last_used_at "lastUsedAt", ${t}last_used_from "lastUsedFrom", ${t}revoked_at "revokedAt"`;
 
 export interface NewToken { label: string; tools: string[]; vehicles: string[] | null; callsPerDay: number; days: number }
 
+/** A token entry its owner may not hold (lib/sync/scopes.ts: the sync scopes' grants); the caller's check came first. */
+export class TokenRefused extends Error {}
+
 export async function createMcpToken(owner: AppUser, t: NewToken, q?: Db): Promise<{ token: McpToken; secret: string }> {
+  const refusal = (await import('@/lib/sync/scopes')).grantRefusal(owner, t.tools);
+  if (refusal) throw new TokenRefused(refusal);
   const secret = newTokenSecret();
   const db = q ?? await getDb();
   const token = await db.transaction(async (tx) => {
@@ -54,33 +52,6 @@ export async function createMcpToken(owner: AppUser, t: NewToken, q?: Db): Promi
     [owner.id, t.label, hashToken(secret), secret.slice(0, PREFIX.length + 4), t.tools, t.vehicles, t.callsPerDay, t.days]))!;
     await appendAudit({ actorId: owner.id, action: 'mcp.token_created', subjectType: 'mcp_token', subjectId: token.tokenId,
       detail: { prefix: token.prefix, tools: t.tools, vehicles: t.vehicles, callsPerDay: t.callsPerDay, days: t.days } }, tx);
-    return token;
-  });
-  return { token, secret };
-}
-
-/** Who may make a sync token: a snapshot is the whole database, so Admins only; a push, a GP or an Admin. */
-export function maySyncScope(owner: Pick<AppUser, 'access'>, scope: Exclude<TokenScope, 'mcp'>): boolean {
-  return scope === 'snapshot' ? owner.access === 'admin' : owner.access === 'admin' || owner.access === 'gp';
-}
-export class TokenRefused extends Error {}
-
-/**
- * A cloud sync token (docs/deploy/railway.md §6–§7). No tools and no vehicles: it reaches one sync
- * endpoint, checked again on every use against its owner's current access. The service refuses a
- * scope the owner may not have, whatever the caller checked first.
- */
-export async function createSyncToken(owner: AppUser, t: { label: string; scope: Exclude<TokenScope, 'mcp'>; days: number }, q?: Db): Promise<{ token: McpToken; secret: string }> {
-  if (!['snapshot', 'push'].includes(t.scope)) throw new TokenRefused('Unknown token scope.');
-  if (!maySyncScope(owner, t.scope)) throw new TokenRefused(t.scope === 'snapshot' ? 'Only an Admin can make a snapshot token.' : 'Only a GP or an Admin can make a push token.');
-  const secret = newTokenSecret(t.scope);
-  const db = q ?? await getDb();
-  const token = await db.transaction(async (tx) => {
-    const token = (await tx.one<McpToken>(`insert into platform.mcp_token (user_id, label, token_hash, prefix, tools, vehicles, calls_per_day, expires_at, scope)
-      values ($1, $2, $3, $4, '{}', null, 1, now() + make_interval(days => $5), $6) returning ${cols()}`,
-    [owner.id, t.label, hashToken(secret), secret.slice(0, PREFIXES[t.scope].length + 4), t.days, t.scope]))!;
-    await appendAudit({ actorId: owner.id, action: 'mcp.token_created', subjectType: 'mcp_token', subjectId: token.tokenId,
-      detail: { prefix: token.prefix, scope: t.scope, days: t.days } }, tx);
     return token;
   });
   return { token, secret };
@@ -106,7 +77,7 @@ export async function revokeMcpToken(owner: AppUser, tokenId: string, q?: Querya
  * that hash. Marks a live token used at most once a minute, so a busy client does not write a row a call.
  */
 export type TokenState = 'live' | 'revoked' | 'expired' | 'inactive';
-export async function findMcpToken(secret: string, q?: Queryable): Promise<{ token: McpToken; user: AppUser; state: TokenState } | null> {
+export async function findMcpToken(secret: string, q?: Queryable, from?: string | null): Promise<{ token: McpToken; user: AppUser; state: TokenState } | null> {
   if (!looksLikeToken(secret)) return null;
   const db = q ?? await getDb();
   const row = await db.one<McpToken & { user: AppUser; active: boolean; expired: boolean }>(`select ${cols('t.')},
@@ -117,8 +88,9 @@ export async function findMcpToken(secret: string, q?: Queryable): Promise<{ tok
   if (!row) return null;
   const { user, active, expired, ...token } = row;
   const state: TokenState = token.revokedAt ? 'revoked' : expired ? 'expired' : !active ? 'inactive' : 'live';
-  if (state === 'live' && (!token.lastUsedAt || Date.now() - new Date(token.lastUsedAt).getTime() > 60_000)) {
-    await db.query('update platform.mcp_token set last_used_at = now() where token_id = $1', [token.tokenId]);
+  const device = from ? from.replace(/[^\x20-\x7e]/g, '').slice(0, 120) : null;
+  if (state === 'live' && (!token.lastUsedAt || Date.now() - new Date(token.lastUsedAt).getTime() > 60_000 || (device && device !== token.lastUsedFrom))) {
+    await db.query('update platform.mcp_token set last_used_at = now(), last_used_from = coalesce($2, last_used_from) where token_id = $1', [token.tokenId, device]);
   }
   return { token, state, user: { ...user, vehicles: user.vehicles ?? null, approves: user.approves ?? [] } };
 }

@@ -3,5 +3,5 @@ export type {
 } from './types';
 export { PACK_LABEL, SPV_STAGES, SPV_STAGE_LABEL } from './types';
 export {
-  bandwidthAlerts, conditionsFor, listCycles, packFor, spvRooms, syncCountersignature,
+  bandwidthAlerts, conditionsFor, listCycles, packFor, spvRooms, syncCountersignature, syncIoi, workingDaysUntil,
 } from './repo';

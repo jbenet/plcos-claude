@@ -7,3 +7,7 @@ export {
   CloseRefused, harden, recordCash, recordClosing, recordSignature, recordWire, requestHardening, reviseSoft, withdraw,
 } from './service';
 export { vehicleStatusCounts, vehicleCloseStatus, CLOSE_PAGE_SIZE } from './status';
+export {
+  currentIndications, indicatedTotals, indicationFor, indicationRange, recordIndication, IndicationRefused,
+  type Indication, type IndicatedTotals,
+} from './indication';

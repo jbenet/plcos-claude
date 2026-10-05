@@ -24,11 +24,16 @@ import type { Check, Db } from './harness';
 
 type Result = { isError?: boolean; content: Array<{ type: string; text: string }> };
 
-/** Names a tool must never have: each is an act a person does in the app, behind a ticket or a click. */
-const FORBIDDEN = /send|approv|accept|decid|reject|status|stage|ladder|rung|money|wire|alloc|harden|close|import|sync|translat|connector|run_|workflow|move|merge|delete|discard|revoke|ticket/i;
-/** Service calls that act; none may be reachable from lib/mcp. */
+/** Names no tool may have: each is an act a person does in the app, behind a ticket or a click. */
+const FORBIDDEN = /approv|accept|decid|reject|status|stage|ladder|rung|money|wire|alloc|harden|close|import|sync|translat|connector|run_|workflow|move|merge|delete|discard|revoke/i;
+/** Named for a send or a ticket: allowed only to a tool whose policy says a person approves first (docs/26 §3). */
+const SEND_OR_TICKET = /send|ticket/i;
+/** Service calls that send, decide or move money; none may be reachable from lib/mcp or lib/outreach. */
 const FORBIDDEN_CALLS = ['moveDraft', 'discardDraft', 'decideTicket', 'decide(', 'decideMany', 'setPursuitStatus', 'requestLadderAdvance', 'recordWire',
-  'requestHarden', 'closeTrack', 'runWorkflow', 'importFindings', 'syncLinear', 'translate', 'checkedClient', 'mailguardClient', 'connectMailguard', 'connectKey', 'decideSuggestion', 'adjudicate', 'proposeSend'];
+  'requestHarden', 'harden(', 'recordCash', 'reviseSoft', 'recordSignature', 'recordClosing', 'recordAdvance', 'recordClimb', 'closeTrackAction', 'runWorkflow',
+  'importFindings', 'syncLinear', 'translate', 'checkedClient', 'mailguardClient', 'connectMailguard', 'connectKey', 'decideSuggestion', 'adjudicate',
+  'proposeSend', 'makeAsk', 'applyApprovedTicket', 'recordSend('];
+const RISKS = ['read', 'propose', 'write-guarded', 'send-adjacent'];
 
 export async function mcpProperties(check: Check, db: Db) {
   resetWindows();
@@ -47,17 +52,22 @@ export async function mcpProperties(check: Check, db: Db) {
   const json = (r: Result) => JSON.parse(text(r)) as { about: string; data: any; truncated: unknown };
 
   // ── The registry ──────────────────────────────────────────────────────────────────────
-  const badNames = TOOLS.filter((t) => FORBIDDEN.test(t.name) || !['read', 'draft'].includes(t.kind));
-  const sources = await readdir(join(process.cwd(), 'lib/mcp'));
+  const badNames = TOOLS.filter((t) => FORBIDDEN.test(t.name) || !RISKS.includes(t.policy.risk)
+    || (SEND_OR_TICKET.test(t.name) && !(t.policy.approval && t.policy.ticket !== 'none'))
+    || (t.policy.risk === 'send-adjacent' && t.policy.ticket !== 'requires-approved')
+    || (t.policy.risk !== 'read' && t.policy.risk !== 'propose' && !t.policy.scopes.length));
   const reach: string[] = [];
-  for (const f of sources) {
-    const src = await readFile(join(process.cwd(), 'lib/mcp', f), 'utf8');
-    for (const name of FORBIDDEN_CALLS) if (src.includes(name)) reach.push(`${f}: ${name}`);
+  for (const dir of ['lib/mcp', 'lib/outreach']) {
+    for (const f of await readdir(join(process.cwd(), dir))) {
+      const src = await readFile(join(process.cwd(), dir, f), 'utf8');
+      for (const name of FORBIDDEN_CALLS) if (src.includes(name)) reach.push(`${dir}/${f}: ${name}`);
+    }
   }
-  check('MCP: the registry holds only read and draft tools, none named for a send, approval, status, money, import or connector act',
-    badNames.length === 0 && reach.length === 0 && new Set(TOOL_NAMES).size === TOOL_NAMES.length
-    && TOOLS.filter((t) => t.kind === 'draft').map((t) => t.name).sort().join(',') === 'create_email_draft,file_feedback',
-    `${TOOLS.length} tools (${READ_TOOLS.length} read); ${badNames.map((t) => t.name).join(', ') || 'no bad names'}; ${reach.join(', ') || 'no acting service reachable from lib/mcp'}`);
+  check('MCP: every tool has a policy (read, propose, write-guarded, send-adjacent); none is named for, or reaches, a send, a ticket decision, a status-by-ticket or money act',
+    badNames.length === 0 && reach.length === 0 && new Set(TOOLS.map((t) => t.name)).size === TOOLS.length
+    && TOOLS.filter((t) => t.policy.risk === 'propose' && !t.policy.scopes.length).map((t) => t.name).sort().join(',') === 'create_email_draft,file_feedback'
+    && TOOLS.filter((t) => t.policy.risk !== 'read').every((t) => t.policy.risk === 'propose' ? t.policy.approval : t.policy.scopes.length > 0),
+    `${TOOLS.length} tools: ${RISKS.map((r) => `${TOOLS.filter((t) => t.policy.risk === r).length} ${r}`).join(', ')}; ${badNames.map((t) => t.name).join(', ') || 'no bad names'}; ${reach.join(', ') || 'no acting service reachable from lib/mcp or lib/outreach'}`);
 
   // ── Fixtures: two vehicles, an LP on both, one only on the second, users and tokens ──────
   const vehicles = await db.query<{ id: string; slug: string }>(`select id::text, slug from platform.vehicle where phase <> 'historical' and kind <> 'grant_rail' order by sort_order limit 2`);

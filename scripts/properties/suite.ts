@@ -92,6 +92,11 @@ export async function runProperties(check: Check) {
   await (await import('./security-mutations')).securityMutationProperties(check, db);
   // Last: it leaves invented users inactive and tokens revoked, since the audit log keeps them.
   await (await import('./mcp')).mcpProperties(check, db);
+  // The mail desk's API (docs/27): indicated amounts, the outreach routes, tokens and redaction.
+  await (await import('./outreach')).outreachProperties(check, db);
+  await (await import('./outreach-api')).outreachReadProperties(check, db);
+  await (await import('./outreach-writes')).outreachWriteProperties(check, db);
+  await (await import('./outreach-mcp')).outreachMcpProperties(check, db);
   // Cloud pull and push (docs/deploy/railway.md §6–§7): sync tokens, the push checks, and on Postgres the round trip.
   await (await import('./sync')).syncProperties(check, db);
   await db.close();
