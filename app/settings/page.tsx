@@ -66,7 +66,7 @@ async function Preferences() {
         <div className="card">
           <div className="chead"><h2>Connections</h2><span className="lbl">admins · the server, not you</span></div>
           <div className="cbody">
-            <p>The public address, Google sign-in, the connector keys and the tokens this server uses. Kept encrypted, changed by admins, every change logged. <Link href="/settings/connections">Open Settings → Connections</Link>. Who can sign in is in <Link href="/settings/people">Settings → People</Link>.</p>
+            <p>The public address, Google sign-in, the connector keys and the tokens this server uses. Kept encrypted, changed by admins, every change logged. <Link href="/settings/connections">Open Settings → Connections</Link>. Who can sign in is in <Link href="/settings/people">Settings → People</Link>; the funds and SPVs, and adding one, in <Link href="/settings/vehicles">Settings → Vehicles</Link>.</p>
           </div>
         </div>
       )}

@@ -61,6 +61,8 @@ export const actionRules = {
   'app/settings/people/actions.ts#setPersonActiveAction': { action: 'admin', scope: 'global' },
   'app/settings/people/actions.ts#updateAddressesAction': { action: 'admin', scope: 'global' },
   'app/settings/people/actions.ts#signOutEverywhereAction': { action: 'admin', scope: 'global' },
+  // Settings → Vehicles: an Admin adds a vehicle (the init file's row, made in the app). Admin, global; a refusal is audit-logged.
+  'app/settings/vehicles/actions.ts#createVehicleAction': { action: 'admin', scope: 'global' },
   'app/settings/actions.ts#createMcpTokenAction': { action: 'mutate', scope: 'self' },
   'app/settings/actions.ts#revokeMcpTokenAction': { action: 'mutate', scope: 'self' },
   // Your own voice for drafts (docs/email-guidelines.md §Voice): only ever the caller's row.

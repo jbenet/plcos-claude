@@ -7,20 +7,10 @@ import type { Db, Queryable } from '@/lib/db';
 import { enrichDir } from './candidates';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
 import { STATUS_LABEL, type PursuitStatus } from '@/modules/strategy';
+import { parseProspectFile, type Prospect, type ProspectFile, type ProspectProblem } from './prospect-rows';
 
-export interface Prospect {
-  entityId?: string | null; entityType?: 'person' | 'org';
-  personKey?: string | null; name: string; org: string | null; vehicle: string;
-  status: 'new' | 'sourcing' | 'passed';
-  decidedAt?: string;
-  emailDomain?: string; personalUrls?: string[];
-  capacity: { band: string; basis: string; guess: boolean };
-  reason: string; strategic: boolean;
-  route: { best: string; score: number } | null;
-  sources: Array<string | Record<string, unknown>>;
-}
-export interface ProspectFile { file: string; text: string; mtimeMs?: number; inProgress?: boolean }
-export interface ProspectProblem { file: string; line: number; name?: string; vehicle?: string; reason: string }
+export { parseProspectFile, prospectFileProblems, prospectProblems, type Prospect, type ProspectFile, type ProspectProblem } from './prospect-rows';
+
 export interface ProspectLoser extends ProspectProblem {
   status: Prospect['status'];
   winner: { file: string; line: number; status: Prospect['status'] };
@@ -33,31 +23,8 @@ export interface ProspectResult {
   losers: ProspectLoser[];
 }
 const object = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
-const words = (x: unknown): x is string => typeof x === 'string' && !!x.trim();
 const normalized = normalizeIdentityName;
 const RULE = 'juan-prospects-2026-09-26';
-
-/** Notes retain supplied evidence; this import does not turn estimates into verified claims. */
-export function prospectProblems(x: unknown): string[] {
-  if (!object(x)) return ['Expected a prospect object'];
-  const errors: string[] = [];
-  if (x.personKey != null && !words(x.personKey)) errors.push('personKey must be nonempty text, null or absent');
-  if (x.entityId != null && !words(x.entityId)) errors.push('entityId must be nonempty text, null or absent');
-  if (x.entityType !== undefined && x.entityType !== 'person' && x.entityType !== 'org') errors.push('entityType must be person or org');
-  if (x.emailDomain !== undefined && !words(x.emailDomain)) errors.push('emailDomain must be nonempty text');
-  if (x.personalUrls !== undefined && (!Array.isArray(x.personalUrls) || !x.personalUrls.every(words))) errors.push('personalUrls must be a text array');
-  for (const k of ['name', 'vehicle', 'reason']) if (!words(x[k])) errors.push(`${k} must be nonempty text`);
-  if (x.org !== null && !words(x.org)) errors.push('org must be nonempty text or null');
-  if (x.status !== 'new' && x.status !== 'sourcing' && x.status !== 'passed') errors.push('status must be new, sourcing or passed');
-  if (x.decidedAt !== undefined && (typeof x.decidedAt !== 'string'
-    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(x.decidedAt)
-    || !Number.isFinite(Date.parse(x.decidedAt)))) errors.push('decidedAt must be an ISO timestamp with a timezone');
-  if (!object(x.capacity) || !words(x.capacity.band) || !words(x.capacity.basis) || typeof x.capacity.guess !== 'boolean') errors.push('capacity needs band, basis and a boolean guess');
-  if (typeof x.strategic !== 'boolean') errors.push('strategic must be boolean');
-  if (x.route !== null && (!object(x.route) || !words(x.route.best) || typeof x.route.score !== 'number' || !Number.isFinite(x.route.score))) errors.push('route must be null or have best text and a finite score');
-  if (!Array.isArray(x.sources) || !x.sources.length || x.sources.some(s => !words(s) && !(object(s) && Object.keys(s).length))) errors.push('sources must contain source strings or objects');
-  return errors;
-}
 
 /** Deterministic source identity: never tied to a vehicle, file, line or planning fields. */
 export function prospectPersonKey(p: Prospect): string {
@@ -71,42 +38,25 @@ export function prospectPersonKey(p: Prospect): string {
   return `unkeyed:v1:${createHash('sha256').update(JSON.stringify([normalized(p.name), normalized(p.org ?? ''), sources])).digest('hex')}`;
 }
 
-/** Read only settled inputs. Recheck after reading so a concurrent append cannot import a prefix. */
-export async function readProspectFiles(dir = join(enrichDir(), 'prospects')): Promise<ProspectFile[]> {
+/**
+ * Read only settled inputs. Recheck after reading so a concurrent append cannot import a prefix.
+ *
+ * A file is settled when it has not changed for two minutes — a person or an agent may still be writing a
+ * hand-placed one. `settled` names files known complete although new: a cloud push (lib/sync/push.ts)
+ * writes its file whole, by a temporary name and a link, before it queues the import, and passes the name.
+ * Only those skip the wait; every other file still waits, and every file is still re-checked after reading.
+ */
+export async function readProspectFiles(dir = join(enrichDir(), 'prospects'), settled: ReadonlySet<string> = new Set()): Promise<ProspectFile[]> {
   const names = await readdir(dir).catch((e: NodeJS.ErrnoException) => { if (e.code === 'ENOENT') return []; throw e; });
   return Promise.all(names.filter(n => n.endsWith('.jsonl')).sort().map(async file => {
     const path = join(dir, file), before = await stat(path);
-    if (Date.now() - before.mtimeMs < 120_000) return { file, text: '', inProgress: true };
+    const young = (mtimeMs: number) => !settled.has(file) && Date.now() - mtimeMs < 120_000;
+    if (young(before.mtimeMs)) return { file, text: '', inProgress: true };
     const text = await readFile(path, 'utf8'), after = await stat(path);
     if (after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs || after.size !== before.size
-      || after.ino !== before.ino || Date.now() - after.mtimeMs < 120_000) return { file, text: '', inProgress: true };
+      || after.ino !== before.ino || young(after.mtimeMs)) return { file, text: '', inProgress: true };
     return { file, text, mtimeMs: after.mtimeMs };
   }));
-}
-
-/** Row errors are isolated; a whole JSON document/array is not a JSON-lines file. */
-export function parseProspectFile(file: ProspectFile): { records: Array<{ p: Prospect; line: number }>; invalid: ProspectProblem[] } {
-  const records: Array<{ p: Prospect; line: number }> = [], invalid: ProspectProblem[] = [];
-  if (file.inProgress) return { records, invalid };
-  const lines = file.text.split('\n');
-  try {
-    const whole: unknown = JSON.parse(file.text);
-    if (Array.isArray(whole) || (object(whole) && lines.filter(l => l.trim()).length > 1)) {
-      return { records, invalid: [{ file: file.file, line: 1, reason: 'File skipped: expected JSON lines, not a JSON document or array' }] };
-    }
-  } catch { /* Multiple JSON values are normal for JSON lines. */ }
-  let parsed = 0;
-  for (const [index, line] of lines.entries()) {
-    if (!line.trim()) continue;
-    let value: unknown;
-    try { value = JSON.parse(line); parsed++; }
-    catch { invalid.push({ file: file.file, line: index + 1, reason: 'Invalid JSON; row skipped' }); continue; }
-    const errors = prospectProblems(value);
-    if (errors.length) invalid.push({ file: file.file, line: index + 1, reason: errors.join('; ') });
-    else records.push({ p: value as Prospect, line: index + 1 });
-  }
-  if (!parsed && invalid.length) return { records: [], invalid: [{ file: file.file, line: 1, reason: 'File skipped: no JSON lines could be read' }] };
-  return { records, invalid };
 }
 
 type Identity = { id: string; name: string; type: string; merged: string | null; retired: string | null };

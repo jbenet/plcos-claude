@@ -22,6 +22,8 @@ export const routeRules = {
   'app/api/profile/route.ts#GET': 'admin',
   // Cloud pull and push (docs/deploy/railway.md §6–§7): a bearer token of the endpoint's own scope, not the cookie.
   'app/api/sync/push/route.ts#POST': 'sync:push',
+  // The state of an import a push queued, to the person who pushed it (lib/sync/push.ts, pushStatus).
+  'app/api/sync/push/route.ts#GET': 'sync:push',
   'app/api/sync/snapshot/route.ts#GET': 'sync:snapshot',
   'app/api/session/route.ts#POST': 'session',
   // Google sign-in and first-run setup (docs/deploy/railway.md §3): nobody is signed in yet. Each handler

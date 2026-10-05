@@ -5,6 +5,7 @@ import { config } from '@/config/deployment';
 import { parseJsonc } from '@/lib/jsonc';
 import type { Db, Queryable } from '@/lib/db';
 import { recordActivity } from '@/lib/activity/log';
+import { writeVehicle } from '@/modules/platform';
 
 /**
  * The real profile's first rows (N38, docs/15).
@@ -349,6 +350,15 @@ export async function addressProblems(db: Queryable, team: TeamMember[]): Promis
 }
 
 /**
+ * The file's vehicles, by the same row writer Settings → Vehicles uses (modules/platform/vehicles.ts): an
+ * upsert by slug, in the file's order. A vehicle made in the app and absent from the file is left alone
+ * (a reload never deletes); one the file names is updated to match it.
+ */
+export async function applyVehicles(db: Queryable, vehicles: VehicleInit[]): Promise<void> {
+  for (const [i, v] of vehicles.entries()) await writeVehicle(db, v, i + 1, 'update');
+}
+
+/**
  * Put the file's people and vehicles into the database. Creates the file from the template
  * the first time. Refuses outside the real profile, and refuses a file with any problem —
  * half an init file is a team with nobody on it, or a vehicle with no exemption.
@@ -385,20 +395,7 @@ export async function loadInit(db: Db): Promise<InitReport> {
     // An address held by someone else is a problem like any other: nothing is applied.
     const clashes = await applyTeam(tx, team);
     if (clashes.length) { report.problems.push(...clashes); return; }
-    for (const [i, v] of vehicles.entries()) {
-      await tx.query(
-        `insert into platform.vehicle (slug, name, kind, exemption, target_amount, sort_order, phase,
-                                       raise_opens_on, raise_closes_on, raise_window_note, aliases)
-         values ($1,$2,$3::platform.vehicle_kind,$4,$5,$6,$7,$8,$9,$10,$11)
-         on conflict (slug) do update set name = excluded.name, kind = excluded.kind,
-           exemption = excluded.exemption, target_amount = excluded.target_amount,
-           sort_order = excluded.sort_order, phase = excluded.phase,
-           raise_opens_on = excluded.raise_opens_on, raise_closes_on = excluded.raise_closes_on,
-           raise_window_note = excluded.raise_window_note, aliases = excluded.aliases`,
-        [v.slug, v.name, v.kind, v.exemption, v.target, i + 1, v.phase,
-         v.raise.opens, v.raise.closes, v.raise.note, v.aliases],
-      );
-    }
+    await applyVehicles(tx, vehicles);
     await tx.query(
       `insert into platform.source_sync (source, label, status, last_sync_at, detail)
        values ('init', 'Init file', 'ok', now(), $1)

@@ -251,3 +251,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [The access level "GP" is now "Team", and the init file can deactivate](entries/access-team.md)
 - [The page warm-up works behind Google sign-in](entries/warm-session.md)
 - [Shipping once the data is in the cloud](entries/ship-cloud.md)
+- [A vehicle added in the app, and prospects pushed up from the Mac](entries/cloud-vehicle-prospects.md)

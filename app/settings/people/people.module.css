@@ -4,6 +4,10 @@
 .field > span{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--label);margin-bottom:5px}
 .field input[type=text],.field input:not([type]),.field input[type=email]{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
 .add fieldset:nth-of-type(2){grid-column:span 2}
+/* Settings → Vehicles shares this form's look: selects, dates and a line under a field. */
+.field select,.field input[type=date]{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
+.field small{display:block;margin-top:4px;font-size:11.5px;line-height:1.4}
+.field input[aria-invalid=true]{border-color:var(--clay)}
 .access,.vehicles{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px}
 .access label,.vehicles label{display:inline-flex;gap:5px;align-items:center}
 .access input,.vehicles input{accent-color:var(--accent)}

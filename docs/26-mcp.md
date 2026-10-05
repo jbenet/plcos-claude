@@ -78,6 +78,8 @@ push endpoints, `GET /api/sync/snapshot` and `POST /api/sync/push` (docs/deploy/
 declares a policy the same way (`lib/sync/scopes.ts`, risk `read` and `write-guarded`) and is checked by the same
 `allowed`; who may hold each scope is checked when the token is made and on every use. Preferences makes them as
 two more choices under "May"; a sync token holds its scope alone. Their uses are `mcp.call` rows with `via: sync`.
+Since 5 Oct 2026 `sync:push` also takes a prospects file and opens `GET /api/sync/push?job=<id>`, the counts of the
+import a push queued, to the person who pushed. No new scope: it is the same kind of guarded write.
 
 | Tool | Risk | Scopes | Ticket | What it does |
 | --- | --- | --- | --- | --- |

@@ -108,6 +108,8 @@ export async function runProperties(check: Check) {
   // The page warm-up behind Google sign-in (lib/auth/warm.ts).
   await step('warm-session.warmSessionProperties', async () => (await import('./warm-session')).warmSessionProperties(check, db));
   await step('railway-setup.railwaySetupProperties', async () => (await import('./railway-setup')).railwaySetupProperties(check, db));
+  // A vehicle added in the app, and prospects pushed from the Mac into it (5 Oct 2026). After the rest: it adds vehicles.
+  await step('cloud-vehicle-prospects.cloudVehicleProspectsProperties', async () => (await import('./cloud-vehicle-prospects')).cloudVehicleProspectsProperties(check, db));
   await db.close();
 
   await step('pipeline.hardeningVariations', async () => (await import('./pipeline')).hardeningVariations(check));

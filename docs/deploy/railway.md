@@ -314,6 +314,10 @@ and push up results".
     push token (a GP's or an Admin's, Keychain item `plcos-railway / push-token`). A push carries only the
     finished files W1, W1c and W5 already write (findings, a review with its corrected findings, strategies),
     never database rows.
+  - **Prospects** (5 Oct): `bash scripts/cloud-push.sh prospects <file.jsonl>…` sends researched LPs in the
+    format of `docs/prospects-import.md`. The cloud runs Add prospects on them as you, so the pursuits are
+    yours, and the script prints the counts. A vehicle made on the cloud (Settings → Vehicles) is not on the
+    Mac yet: check the file first with `scripts/prospects-check.ts --vehicle <slug> <file>`.
   - The cloud checks each file with the importers' own validators, files it under `enrich/inbox/<run>/`,
     records a ledger run, and imports it the usual way. A rejected file comes back with the reason.
   - A claim sourced from Dakota is validated like any other (Juan, 4 Oct: the cloud is our system, as PL's
@@ -347,6 +351,23 @@ and push up results".
   `push`, the Mac's run as parent) and queues the findings import as the token's owner. Idempotent by
   content hash (`platform.sync_push`): the same content again answers the first run (200, `duplicate`) and
   writes nothing.
+- **A prospects push** (5 Oct): `{ workflow: "prospects", files: [{ path: "prospects/<name>.jsonl", content:
+  "<the file's text>" }] }`. The text travels as written, so line numbers are the file's. Every line passes the
+  importer's own row checks (`lib/enrich/prospect-rows.ts`, the ones `scripts/prospects-check.ts` runs), every
+  `vehicle` is a slug the server has, and a Team member's rows name only vehicles they may change. One failing
+  line refuses the whole push (422, `line N: reason`) and writes nothing. Accepted, the file is kept under
+  `enrich/inbox/<run>/` and written to `enrich/prospects/<date>-push-<run>-<name>.jsonl`, a new name each run,
+  by a hard link that fails rather than replace a file. Then the prospects import is queued as the token's
+  owner, the job Developer → Enrich → Add prospects queues, so each new pursuit is theirs. The importer reads
+  only files unchanged for two minutes, since someone may still be writing a file placed by hand. The push
+  names its own files in the job, and only those skip the wait. The server wrote them whole before queueing,
+  and every other file still waits, even one a job names. A running prospects import refuses a push (409)
+  before anything is written. Same scope, `sync:push`: a prospects push is one more set of finished files for
+  the server's own importer, like a W1 push, with the same holders and audit.
+- **`GET /api/sync/push?job=<id>`** answers the person who pushed: the import's status, phase and counts
+  (added, existing, ambiguous, invalid, in progress, …), plus how many of their own file's rows won or lost
+  against other files. Counts only, never names. Anyone else gets a 404. `cloud-push.sh` asks it for up to two
+  minutes after a prospects push; `cloud-push.sh status <id>` asks again later.
 
 **Why this is not two-way sync.** Sync would merge two writable databases: conflict rules for every table,
 deletes, and rebuilt caches. Here there is one writer. Copies come down as read-only previews. Results go up

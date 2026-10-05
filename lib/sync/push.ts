@@ -1,14 +1,16 @@
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
+import { copyFile, link, mkdir, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { config } from '@/config/deployment';
 import { isLiveServer } from '@/config/ports';
 import { getDb, type Db } from '@/lib/db';
 import { factReviewProblems } from '@/lib/enrich/fact-review';
+import { parseProspectFile, prospectFileProblems, pushedProspectsName } from '@/lib/enrich/prospect-rows';
+import { can } from '@/lib/authz';
 import { mutationProfileAllowed } from '@/lib/mutation-policy';
 import { beginRun, finishRun } from '@/lib/workflows/ledger';
 import { auditSync, type SyncCaller } from './auth';
-import { bundleHash, checkBundle, keyOf, REVIEW, writtenAt, type PushBundle, type Rejection } from './bundle';
+import { bundleHash, checkBundle, keyOf, PROSPECTS, REVIEW, writtenAt, type PushBundle, type Rejection } from './bundle';
 
 /**
  * POST /api/sync/push (docs/deploy/railway.md §7; Juan, 4 Oct 2026, decision F: research runs in the cloud
@@ -23,14 +25,23 @@ import { bundleHash, checkBundle, keyOf, REVIEW, writtenAt, type PushBundle, typ
  *   5. published into enrich/raw, enrich/strategy or enrich/ as the workflow would have written it;
  *   6. followed by the normal findings import, queued as the token's owner.
  * A refused push writes nothing and answers every reason, by file. Only an accepted push touches disk.
+ *
+ * A prospects push (docs/prospects-import.md; 5 Oct 2026, so researched LPs for a vehicle made on the
+ * cloud reach it from the Mac) differs in three places: every line is checked by the importer's own rules
+ * and every vehicle slug against the server's vehicles — and, for a Team member, against the vehicles they
+ * may change — and one bad line refuses the whole push; the file is published under enrich/prospects/ by a
+ * new, run-specific name, never over a file there; and the import queued is the prospects import (the one
+ * Developer → Enrich → Add prospects queues), as the token's owner, naming the file so the importer reads it
+ * now rather than after its two-minute settle wait (lib/enrich/prospects.ts). GET ?job=<id> answers the
+ * import's state and counts to the person who pushed it.
  */
 
 const g = globalThis as typeof globalThis & { __syncPushBusy?: boolean };
-const PROTOCOLS: Record<PushBundle['workflow'], string> = { W1: 'w1-profile', W1c: 'w1c-fact-check', W5: 'w5-strategy' };
+const PROTOCOLS: Record<PushBundle['workflow'], string> = { W1: 'docs/workflows/w1-profile.md', W1c: 'docs/workflows/w1c-fact-check.md', W5: 'docs/workflows/w5-strategy.md', prospects: 'docs/prospects-import.md' };
 const sha = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type QueueImport = (db: Db, actor: string) => Promise<{ id: string; status: string }>;
+export type QueueImport = (db: Db, actor: string, kind: 'findings' | 'prospects', input: Record<string, unknown>) => Promise<{ id: string; status: string }>;
 export interface PushOptions { root?: string; db?: Db; queue?: QueueImport }
 export interface PushAnswer { status: number; body: Record<string, unknown> }
 
@@ -40,9 +51,31 @@ export function pushRefusal(): string | null {
   return null;
 }
 
-const text = (path: string, content: unknown) => REVIEW.test(path) ? (content as unknown[]).map((r) => JSON.stringify(r)).join('\n') + '\n' : JSON.stringify(content, null, 2);
+const text = (path: string, content: unknown) => PROSPECTS.test(path) ? String(content) : REVIEW.test(path) ? (content as unknown[]).map((r) => JSON.stringify(r)).join('\n') + '\n' : JSON.stringify(content, null, 2);
 async function readJson(path: string): Promise<unknown | undefined> {
   try { return JSON.parse(await readFile(path, 'utf8')); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined; return null; }
+}
+
+/**
+ * A prospects file against the server: each row's vehicle is one it has, and one the pusher may change (a
+ * Team member's vehicles; an Admin's are all). By line, like the row checks; the push is refused whole.
+ */
+async function prospectsProblems(bundle: PushBundle, db: Db, caller: SyncCaller): Promise<Rejection[]> {
+  const vehicles = new Map((await db.query<{ id: string; slug: string }>('select id::text, slug from platform.vehicle')).map((v) => [v.slug, v.id]));
+  const slugs = new Set(vehicles.keys());
+  const out: Rejection[] = [];
+  for (const f of bundle.files) {
+    const name = PROSPECTS.exec(f.path)![1]!;
+    const { problems } = prospectFileProblems(name, String(f.content), slugs);
+    const lines = problems.map((p) => ({ line: p.line, reason: p.reason }));
+    for (const { p, line } of parseProspectFile({ file: name, text: String(f.content), inProgress: false }).records) {
+      const id = vehicles.get(p.vehicle);
+      if (id && !can(caller.user, 'mutate', { vehicle: id })) lines.push({ line, reason: `vehicle "${p.vehicle}" is not one you can change; an Admin pushes it, or gives you that vehicle in Settings → People` });
+    }
+    lines.sort((a, b) => a.line - b.line);
+    if (lines.length) out.push({ path: f.path, problems: lines.map((l) => `line ${l.line}: ${l.reason}`) });
+  }
+  return out;
 }
 
 /** What the server holds that the push would contradict. */
@@ -75,7 +108,7 @@ async function serverProblems(bundle: PushBundle, enrich: string): Promise<Rejec
 
 async function protocolHash(workflow: PushBundle['workflow'], given?: string): Promise<string> {
   if (given && /^[0-9a-f]{64}$/i.test(given)) return given.toLowerCase();
-  return sha(await readFile(join(process.cwd(), 'docs/workflows', `${PROTOCOLS[workflow]}.md`), 'utf8').catch(() => `protocol ${workflow}`));
+  return sha(await readFile(join(process.cwd(), PROTOCOLS[workflow]), 'utf8').catch(() => `protocol ${workflow}`));
 }
 
 /** Write a file by temporary name and rename, inside enrich only; refuses to follow a link out of it. */
@@ -86,6 +119,19 @@ async function place(enrich: string, path: string, data: string, tag: string): P
   const temporary = `${target}.${tag}.tmp`;
   await writeFile(temporary, data, { flag: 'wx', mode: 0o600 });
   await rename(temporary, target);
+}
+
+/**
+ * Write a file that must be new: by temporary name, then a hard link, which fails if the name is taken
+ * (EEXIST) — so nothing already in the folder is ever replaced, even by a write racing this one.
+ */
+export async function placeNew(enrich: string, path: string, data: string, tag: string): Promise<void> {
+  const target = join(enrich, path);
+  await mkdir(dirname(target), { recursive: true });
+  if (!(await realpath(dirname(target)) + sep).startsWith(enrich + sep)) throw new Error('A path escapes enrich.');
+  const temporary = `${target}.${tag}.tmp`;
+  await writeFile(temporary, data, { flag: 'wx', mode: 0o600 });
+  try { await link(temporary, target); } finally { await unlink(temporary).catch(() => undefined); }
 }
 
 export async function acceptPush(caller: SyncCaller, request: Request, o: PushOptions = {}): Promise<PushAnswer> {
@@ -121,8 +167,13 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
     const enrich = join(await realpath(root), 'enrich');
     await mkdir(enrich, { recursive: true });
     const enrichReal = await realpath(enrich);
-    const contradictions = await serverProblems(bundle, enrichReal);
+    const prospects = bundle.workflow === 'prospects';
+    const contradictions = prospects ? await prospectsProblems(bundle, db, caller) : await serverProblems(bundle, enrichReal);
     if (contradictions.length) return answer(422, 'invalid', { error: 'Refused; nothing was written.', rejected: contradictions }, { ...shape, hash, reason: 'server', rejectedFiles: contradictions.length });
+    // The prospects import takes one job at a time (lib/import-jobs/store.ts): wait for one running, before anything is written.
+    if (prospects && await db.one(`select 1 from platform.import_job where kind = 'prospects' and status in ('queued', 'running')`)) {
+      return answer(409, 'refused', { error: 'A prospects import is running on the server. Push again when it finishes; nothing was written.' }, { ...shape, hash, reason: 'import-busy' });
+    }
 
     const ledger = { root };
     let runId: string;
@@ -143,9 +194,10 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
       return answer(503, 'error', { error: 'The workflow ledger could not record this push (it may need an Admin\'s review); nothing was written.' }, { ...shape, hash, reason: 'ledger' });
     }
     let written = 0, replaced = 0, job: { id: string; status: string } | null = null, importNote: string | null = null;
+    const published: string[] = [];
     const finish = (ok: boolean, reason: string | null) => finishRun(runId, {
       counts: { selected: bundle.files.length, written, valid: ok ? written : 0, failed: ok ? 0 : bundle.files.length - written, skipped: null },
-      checks: [{ name: 'importer validation', status: 'pass' }, { name: 'not older than the server', status: 'pass' }],
+      checks: [{ name: 'importer validation', status: 'pass' }, { name: prospects ? 'vehicles known and permitted' : 'not older than the server', status: 'pass' }],
       usage: { input: null, output: null, cacheRead: null, cacheWrite: null, cost: null, source: 'estimated', method: 'unavailable: pushed from another machine; its own run has the usage' },
       outcome: ok ? 'succeeded' : 'failed', reason }, ledger);
     try {
@@ -154,8 +206,14 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
       await place(enrichReal, `${inbox}/receipt.json`, JSON.stringify({ runId, contentHash: hash, workflow: bundle.workflow, files: bundle.files.map((f) => f.path),
         token: caller.token.prefix, by: caller.user.handle, at: new Date().toISOString(), parentRunId: bundle.run?.id ?? null }, null, 2), runId);
       for (const f of bundle.files) await place(enrichReal, `${inbox}/${f.path}`, text(f.path, f.content), runId);
-      // 5. Published where the workflow writes, keeping what it replaces.
-      for (const f of bundle.files) {
+      // 5. Published where the workflow writes, keeping what it replaces. A prospects file is new, by run.
+      if (prospects) for (const f of bundle.files) {
+        const path = `prospects/${pushedProspectsName(runId, PROSPECTS.exec(f.path)![1]!)}`;
+        await placeNew(enrichReal, path, text(f.path, f.content), runId);
+        published.push(path);
+        written++;
+      }
+      else for (const f of bundle.files) {
         const target = join(enrichReal, f.path);
         const before = await readFile(target, 'utf8').catch(() => null);
         if (before !== null && before !== text(f.path, f.content)) {
@@ -164,23 +222,28 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
           replaced++;
         }
         await place(enrichReal, f.path, text(f.path, f.content), runId);
+        published.push(f.path);
         written++;
       }
       await db.query(`insert into platform.sync_push (content_hash, run_id, token_id, user_id, workflow, files) values ($1, $2, $3, $4, $5, $6)`,
         [hash, runId, caller.token.tokenId, caller.user.id, bundle.workflow, bundle.files.length]);
       // 6. The normal findings import (raw and strategy files); a review file is read by the quality page.
-      const imports = bundle.files.some((f) => keyOf(f.path) !== null);
+      // Prospects: the prospects import, naming the files written whole above so it reads them now.
+      const imports = prospects || bundle.files.some((f) => keyOf(f.path) !== null);
       if (imports) {
+        const kind = prospects ? 'prospects' as const : 'findings' as const;
+        const input = prospects ? { settled: published.map((p) => p.slice('prospects/'.length)) } : {};
         try {
-          job = await (o.queue ?? (async (d, actor) => (await import('@/lib/import-jobs/server')).queueImportJob(d, 'findings', actor)))(db, caller.user.id);
+          job = await (o.queue ?? (async (d, actor, k, i) => (await import('@/lib/import-jobs/server')).queueImportJob(d, k, actor, i)))(db, caller.user.id, kind, input);
           await db.query('update platform.sync_push set job_id = $2 where content_hash = $1', [hash, job.id]);
-          if (job.status === 'running') importNote = 'A findings import was already running and may not include these files; run Import findings again when it finishes.';
+          if (job.status === 'running') importNote = prospects ? 'A prospects import was already running; the file is in place and the next Add prospects reads it.'
+            : 'A findings import was already running and may not include these files; run Import findings again when it finishes.';
         } catch (e) {
-          importNote = `The files are in place but the import was not queued (${e instanceof Error ? e.message.slice(0, 120) : 'error'}); run Import findings from Developer → Enrichment.`;
+          importNote = `The files are in place but the import was not queued (${e instanceof Error ? e.message.slice(0, 120) : 'error'}); run ${prospects ? 'Add prospects' : 'Import findings'} from Developer → Enrichment.`;
         }
       }
       await finish(true, null);
-      return answer(201, 'ok', { runId, contentHash: hash, files: bundle.files.map((f) => f.path), replaced,
+      return answer(201, 'ok', { runId, contentHash: hash, files: bundle.files.map((f) => f.path), ...(prospects ? { published } : {}), replaced,
         import: job ? { jobId: job.id, status: job.status } : null, ...(importNote ? { note: importNote } : {}) },
       { ...shape, hash, runId, replaced, jobId: job?.id ?? null });
     } catch (e) {
@@ -191,4 +254,28 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
   } finally {
     g.__syncPushBusy = false;
   }
+}
+
+/**
+ * GET /api/sync/push?job=<id>: the state of the import a push queued, to the person whose token pushed it
+ * (another person's job answers 404, as an unknown one does). Counts only — added, existing, ambiguous and
+ * the rest the import reports, and for a prospects push its own files' rows won and lost — never a name.
+ */
+export async function pushStatus(caller: SyncCaller, request: Request, o: { db?: Db } = {}): Promise<PushAnswer> {
+  const started = Date.now(), id = new URL(request.url).searchParams.get('job') ?? '';
+  if (!UUID.test(id)) return { status: 400, body: { ok: false, error: 'Give the import job id the push answered, as ?job=<id>.' } };
+  const db = o.db ?? await getDb();
+  const row = await db.one<{ id: string; kind: string; status: string; phase: string; result: Record<string, unknown> | null; error: string | null;
+    input: { settled?: unknown } | null; created_at: Date; finished_at: Date | null; workflow: string }>(
+    `select j.id::text, j.kind::text, j.status, j.phase, j.result, j.error, j.input, j.created_at, j.finished_at, p.workflow
+       from platform.import_job j join platform.sync_push p on p.job_id = j.id
+      where j.id = $1 and p.user_id = $2 limit 1`, [id, caller.user.id]);
+  await auditSync(caller, 'push', row ? 'ok' : 'invalid', { op: 'status', ms: Date.now() - started, reason: row ? undefined : 'unknown-job', jobId: id });
+  if (!row) return { status: 404, body: { ok: false, error: 'No import from a push of yours has that id.' } };
+  const counts = Object.fromEntries(Object.entries(row.result ?? {}).filter(([, v]) => typeof v === 'number'));
+  const mine = new Set(Array.isArray(row.input?.settled) ? (row.input!.settled as unknown[]).map(String) : []);
+  const perFile = ((row.result?.precedence as { perFile?: Array<{ file: string; won: number; lost: number }> } | undefined)?.perFile ?? []).filter((f) => mine.has(f.file));
+  return { status: 200, body: { ok: true, job: { id: row.id, kind: row.kind, workflow: row.workflow, status: row.status, phase: row.phase,
+    error: row.error, createdAt: new Date(row.created_at).toISOString(), finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null,
+    counts, ...(perFile.length ? { pushed: perFile } : {}) } } };
 }

@@ -27,13 +27,33 @@ mapping. An affiliation does not assert a warm personal tie. Conflicting key map
 name mismatches, wrong entity types and inactive identities still require correction and
 are listed with their file and line; missing identities alone no longer block import.
 
-`status` is `new` or `sourcing`; `vehicle` is an existing vehicle slug. `org` may be null.
+`status` is `new`, `sourcing` or `passed`; `vehicle` is an existing vehicle slug (an Admin adds a vehicle in
+Settings → Vehicles). `org` may be null.
 Capacity requires nonempty `band` and `basis` and a boolean `guess`. `strategic` is boolean.
 `route` is null or `{ "best": "description", "score": 60 }`; the score must be finite and
 is retained as supplied, never interpreted as consent. `sources` is a nonempty array of
 source strings or objects; preserve their provenance. Capacity, fit and route remain
 supplied research context, not verified claims. This action does not make an independent
 capacity or fit judgment and does not impose $500K as a hard cutoff.
+
+Before handing a file over, check it with the importer's own rules:
+`DATA_PROFILE=real npx tsx scripts/prospects-check.ts <file.jsonl>`. It prints line numbers and reasons, never
+row contents. It also checks each `vehicle` against the slugs this Mac knows: the last research export
+(`enrich/vehicles.json`) and the init file. No database is opened. A vehicle just added on the cloud server
+(Settings → Vehicles) is not on the Mac yet. Add `--vehicle <slug>` (repeatable) to treat that slug as known;
+the run says it did.
+
+From the Mac, push the file to the cloud server: `bash scripts/cloud-push.sh prospects <file.jsonl>`
+(docs/deploy/railway.md §7a). The server checks every line and every vehicle slug again, against its own
+vehicles. A Team member may push rows only for vehicles they can change. One bad line refuses the whole push,
+by line number, and nothing is written. Accepted, the file is written to `enrich/prospects/` under a new
+name (`<date>-push-<run>-<name>.jsonl`, never over an existing file). The server then runs Add prospects as
+the token's owner, so the new pursuits are theirs, exactly as if they had clicked the button. The script
+prints the added, existing and ambiguous counts; `cloud-push.sh status <job id>` asks again later.
+
+The importer reads only files unchanged for two minutes, because someone may still be writing a file placed
+by hand. A pushed file is written whole before the import is queued, and the job names it, so it is read at
+once. Every other file in the folder still waits.
 
 On the live server, open **Developer → Enrich → Add prospects to the pipeline**. All files
 and vehicle slugs validate before any pursuit is written. A malformed line prevents the
