@@ -42,15 +42,26 @@ echo "Working files to move: $count files, $(( bytes / 1048576 )) MiB (excluded:
 case "$(cd "$(dirname "$out")" && pwd -P)/" in "$root"/*) echo "Refused: the archive must be written outside $root." >&2; exit 2;; esac
 [ ! -e "$out" ] || { echo "Refused: $out exists." >&2; exit 2; }
 umask 077
-tar -C "$root" --null -T "$list" -czf "$out"
+# macOS tar (bsdtar) adds an AppleDouble "._name" entry for every file with extended attributes (for example
+# com.apple.provenance), and its own `tar -t` hides them: the 5 Oct rehearsal unpacked 75,772 files for 37,886.
+# COPYFILE_DISABLE stops them, and the archive is read back by Python's tarfile, which shows every entry.
+export COPYFILE_DISABLE=1
+mac=(); tar --version 2>/dev/null | grep -q bsdtar && mac=(--no-mac-metadata)
+tar -C "$root" ${mac[@]+"${mac[@]}"} --null -T "$list" -czf "$out"
+entries() { python3 -c 'import sys, tarfile
+with tarfile.open(sys.argv[1], "r:gz") as t:
+    for m in t:
+        print(m.name + ("/" if m.isdir() else ""))' "$out"; }
+apple="$(entries | awk -F/ '{ if ($NF ~ /^\._/) n++ } END { print n + 0 }')"
+[ "$apple" = 0 ] || { rm -f "$out"; echo "Refused: $apple AppleDouble (._) entries reached the archive; it was deleted." >&2; exit 1; }
 # The fence: read the archive back and refuse anything that should not be in it.
-bad="$(tar -tzf "$out" | sed 's#^\./##' | awk -v dirs="${EXCLUDE_DIRS[*]}" -v files="${EXCLUDE_FILES[*]}" -v ex="${EXPORTS[*]}" '
+bad="$(entries | sed 's#^\./##' | awk -v dirs="${EXCLUDE_DIRS[*]}" -v files="${EXCLUDE_FILES[*]}" -v ex="${EXPORTS[*]}" '
   BEGIN { n = split(dirs, d, " "); m = split(files, f, " "); k = split(ex, e, " ") }
   { for (i = 1; i <= n; i++) if ($0 == d[i] || index($0, d[i] "/") == 1) { print; next }
     for (i = 1; i <= m; i++) if ($0 == f[i]) { print; next }
     for (i = 1; i <= k; i++) if ($0 == "enrich/" e[i]) { print; next }
     if ($0 ~ /(^|\/)\.real-copy-/) print }' | wc -l | tr -d ' ')"
 if [ "$bad" != 0 ]; then rm -f "$out"; echo "Refused: $bad excluded paths reached the archive; it was deleted." >&2; exit 1; fi
-in_archive="$(tar -tzf "$out" | grep -vc '/$' || true)"
+in_archive="$(entries | grep -vc '/$' || true)"
 [ "$in_archive" = "$count" ] || { rm -f "$out"; echo "Refused: the archive has $in_archive entries, expected $count; it was deleted." >&2; exit 1; }
 echo "Packed $count files into $(basename "$out") ($(( $(wc -c < "$out") / 1048576 )) MiB compressed); no excluded path inside."
