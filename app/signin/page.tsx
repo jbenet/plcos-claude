@@ -29,7 +29,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   return (
     <main className={s.page}>
       <div className={s.narrow} style={{ maxWidth: 440, paddingTop: '8vh' }}>
-        <a className={s.brand} href="/"><span className={s.mark}>{config.product.mark}</span><span><b>{config.product.name}</b><span>{config.data.profile === 'real' ? 'Real data' : 'Demo data'}</span></span></a>
+        <a className={s.brand} href="/"><span className={s.mark}>{config.product.mark}</span><span><b>{config.product.name}</b><span className={s.sub}>{config.data.profile === 'real' ? 'Real data' : 'Demo data'}</span></span></a>
         <div className={s.card}>
           <div className={s.head}>
             <h1>{local ? 'No sign-in here' : 'Sign in'}</h1>

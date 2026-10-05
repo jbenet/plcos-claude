@@ -40,7 +40,7 @@ const GoogleG = () => (
 );
 
 export function SetupWizard({ brand, fields, suggestedUrl, suggestedFrom, consoleLinks, warnings }: {
-  brand: { mark: string; name: string };
+  brand: { mark: string; name: string; profile: string };
   fields: Record<Name, FieldInfo>;
   suggestedUrl: string;
   suggestedFrom: 'saved' | 'railway' | 'request';
@@ -103,7 +103,7 @@ export function SetupWizard({ brand, fields, suggestedUrl, suggestedFrom, consol
   if (done) {
     return (
       <div className={s.narrow}>
-        <a className={s.brand} href="/"><span className={s.mark}>{brand.mark}</span><span><b>{brand.name}</b><span>First-run setup</span></span></a>
+        <a className={s.brand} href="/"><span className={s.mark}>{brand.mark}</span><span><b>{brand.name}</b><span className={s.sub}>First-run setup · {brand.profile}</span></span></a>
         <div className={s.card}>
           <div className={s.done}>
             <div className={s.tick} aria-hidden>✓</div>
@@ -132,7 +132,7 @@ export function SetupWizard({ brand, fields, suggestedUrl, suggestedFrom, consol
   return (
     <div className={s.frame}>
       <aside className={s.aside}>
-        <a className={s.brand} href="/"><span className={s.mark}>{brand.mark}</span><span><b>{brand.name}</b><span>First-run setup</span></span></a>
+        <a className={s.brand} href="/"><span className={s.mark}>{brand.mark}</span><span><b>{brand.name}</b><span className={s.sub}>First-run setup · {brand.profile}</span></span></a>
         <ol className={s.steps}>
           {STEPS.map((x, i) => {
             const state = i === step ? 'current' : i <= reached ? 'done' : 'locked';
@@ -151,34 +151,33 @@ export function SetupWizard({ brand, fields, suggestedUrl, suggestedFrom, consol
 
       <form className={s.card} onSubmit={(e) => { e.preventDefault(); if (!missing && !pending) void next(); }} noValidate>
         <div className={s.head}>
-          <div className={s.mobileStep}>Step {step + 1} of {STEPS.length} · {STEPS[step]!.title}</div>
           {step === 0 && <>
-            <div className="lbl">Step 1 of 6</div>
+            <div className="lbl">Step 1 of 6 · {STEPS[0]!.title}</div>
             <h1>Enter the setup code</h1>
             <p>The server printed a one-time code when it started. On Railway: the service → <b>Deployments</b> → <b>View logs</b>, and look for <i>Not set up yet</i>. It proves you run this server.</p>
           </>}
           {step === 1 && <>
-            <div className="lbl">Step 2 of 6</div>
+            <div className="lbl">Step 2 of 6 · {STEPS[1]!.title}</div>
             <h1>The public address</h1>
             <p>Where people reach the app. Google sends them back here after they sign in, so it must be exactly what the browser shows.</p>
           </>}
           {step === 2 && <>
-            <div className="lbl">Step 3 of 6</div>
+            <div className="lbl">Step 3 of 6 · {STEPS[2]!.title}</div>
             <h1>Google sign-in</h1>
             <p>An OAuth client in your Google Workspace&rsquo;s Cloud project. It asks Google for a name and an email only — never mail.</p>
           </>}
           {step === 3 && <>
-            <div className="lbl">Step 4 of 6</div>
+            <div className="lbl">Step 4 of 6 · {STEPS[3]!.title}</div>
             <h1>The first admin</h1>
             <p>Your Google Workspace address. You get admin access, and can then open Settings → Connections. Nobody signs up: a person signs in only once their address is on the roster.</p>
           </>}
           {step === 4 && <>
-            <div className="lbl">Step 5 of 6 · optional</div>
+            <div className="lbl">Step 5 of 6 · {STEPS[4]!.title} · optional</div>
             <h1>Connectors</h1>
             <p>Each can be skipped and added later in Settings → Connections. The connector keys are used only by the real profile; the demo uses fakes.</p>
           </>}
           {step === 5 && <>
-            <div className="lbl">Step 6 of 6</div>
+            <div className="lbl">Step 6 of 6 · {STEPS[5]!.title}</div>
             <h1>Review and finish</h1>
             <p>Every value is checked before any is saved. If one is wrong, nothing is written and you are taken back to it.</p>
           </>}

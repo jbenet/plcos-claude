@@ -6,7 +6,7 @@
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:26px;color:var(--ink);text-decoration:none}
 .mark{width:30px;height:30px;border-radius:7px;background:var(--rail);color:var(--rail-ink);display:grid;place-items:center;font-family:var(--display);font-weight:600;font-size:16px}
 .brand b{font-family:var(--display);font-size:16px;font-weight:600}
-.brand span{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.sub{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:2px}
 
 .aside{position:sticky;top:32px}
 .steps{list-style:none;margin:0;padding:0;counter-reset:step}
@@ -20,7 +20,6 @@
 .steps li small{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
 .asideNote{margin-top:22px;padding-top:16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.55}
 
-.mobileStep{display:none;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--label);margin-bottom:10px}
 
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .head{padding:22px 26px 6px}
@@ -86,7 +85,6 @@
   .frame{grid-template-columns:1fr;gap:0}
   .aside{position:static}
   .steps,.asideNote{display:none}
-  .mobileStep{display:block}
   .head,.body{padding-left:18px;padding-right:18px}
   .foot{padding:12px 18px;flex-wrap:wrap}
   .page{padding-top:24px}

@@ -22,11 +22,12 @@ export default async function SetupPage() {
   const open = setupOpen();
   const storage = storageWarning();
   const volumeKey = secretSource().source === 'volume';
+  const profileLabel = config.data.profile === 'real' ? 'Real data' : 'Demo data';
 
   const Brand = () => (
     <a className={s.brand} href="/">
       <span className={s.mark}>{config.product.mark}</span>
-      <span><b>{config.product.name}</b><span>First-run setup</span></span>
+      <span><b>{config.product.name}</b><span className={s.sub}>First-run setup · {profileLabel}</span></span>
     </a>
   );
 
@@ -69,7 +70,7 @@ export default async function SetupPage() {
   return (
     <main className={s.page}>
       <SetupWizard
-        brand={{ mark: config.product.mark, name: config.product.name }}
+        brand={{ mark: config.product.mark, name: config.product.name, profile: profileLabel }}
         fields={fields}
         suggestedUrl={suggested}
         suggestedFrom={settingValue('app.publicUrl') ? 'saved' : platformUrl() ? 'railway' : 'request'}

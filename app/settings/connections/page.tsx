@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { config } from '@/config/deployment';
+import { deployedServer } from '@/config/sign-in';
 import { auth } from '@/lib/auth';
 import { can } from '@/lib/authz';
 import { dataDir, secretSource, storageWarning } from '@/lib/settings/key';
@@ -132,7 +133,7 @@ export default async function ConnectionsPage() {
         <div className="cbody">
           <div className="fact"><span>PLCOS_SECRET</span><span>{key.source === 'env' ? 'set' : key.source === 'volume' ? 'not set: a key on the volume' : 'not set: a dev key in this checkout'}</span></div>
           <div className="fact"><span>Database</span><span>{config.db.url ? 'DATABASE_URL' : 'local PGlite'}</span></div>
-          <div className="fact"><span>Data folder</span><span className="mono" style={{ fontSize: 11.5 }}>{dataDir()}</span></div>
+          <div className="fact"><span>Data folder</span><span className="mono" style={{ fontSize: 11.5 }}>{deployedServer() ? dataDir() : 'data/ in this checkout'}</span></div>
         </div>
         <p className="cover"><b>Why these two stay out.</b> PLCOS_SECRET encrypts everything above, so a page cannot set it; the database connection is how this server finds the page at all. Keep a copy of PLCOS_SECRET in a password manager: without it a restored database&rsquo;s keys must be entered again.{rows.some((r) => r.updatedAt) ? ` Last change here ${ago(new Date(rows.map((r) => r.updatedAt ?? '').sort().pop()!))}.` : ''}</p>
       </div>
