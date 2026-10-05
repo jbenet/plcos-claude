@@ -1,4 +1,5 @@
 import type { Db } from '@/lib/db';
+import { withSharedDb } from '@/lib/db/scheduling';
 import type { EvidenceTier } from './types';
 import type { RawPath } from './repo';
 
@@ -24,7 +25,7 @@ export async function graphSnapshot(db: Db): Promise<GraphSnapshot> {
   const key = version!.key;
   const previous = snapshots.get(db);
   if (previous?.key === key) return previous.value;
-  const value = (async (): Promise<GraphSnapshot> => {
+  const value = withSharedDb(async (): Promise<GraphSnapshot> => {
     const adjacency = new Map<string, Link[]>();
     const canonicalIds = new Map<string, string>();
     const redirects = new Map<string, string | null>();
@@ -119,7 +120,7 @@ export async function graphSnapshot(db: Db): Promise<GraphSnapshot> {
         to: Number.isFinite(to) ? new Date(to) : null },
       tiers: [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([tier, count]) => ({ tier, ...count })),
     };
-  })();
+  });
   snapshots.set(db, { key, value });
   try { return await value; }
   catch (error) { if (snapshots.get(db)?.value === value) snapshots.delete(db); throw error; }

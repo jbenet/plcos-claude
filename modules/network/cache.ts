@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
 import { config } from '@/config/deployment';
 import { getDb, withDb, type Db } from '@/lib/db';
-import { withForegroundDb, withBackgroundDb, DbBusyError } from '@/lib/db/scheduling';
+import { withForegroundDb, withBackgroundDb, withSharedDb, DbBusyError } from '@/lib/db/scheduling';
 import { computeStructuralRoutes, routeGraph } from './service';
 import { canonicalRouteEntity, routeTouchesChanges, routeSources } from './repo';
 import type { Edge, RouteSearch } from './types';
@@ -20,9 +20,10 @@ const sourceSignatures = new WeakMap<Db, { revision: string; value: Promise<stri
 async function sourceSignature(db: Db, revision: string): Promise<string> {
   const prior = sourceSignatures.get(db);
   if (prior?.revision === revision) return prior.value;
-  const value = withDb(db, async () => createHash('sha256').update(JSON.stringify(
+  // The warm-up starts this as maintenance and a page read joins it: shared, so foreground (withSharedDb).
+  const value = withSharedDb(() => withDb(db, async () => createHash('sha256').update(JSON.stringify(
     (await routeSources()).sort((a, b) => a.entityId.localeCompare(b.entityId)),
-  )).digest('hex').slice(0, 16));
+  )).digest('hex').slice(0, 16)));
   sourceSignatures.set(db, { revision, value });
   try { return await value; }
   catch (error) { if (sourceSignatures.get(db)?.value === value) sourceSignatures.delete(db); throw error; }

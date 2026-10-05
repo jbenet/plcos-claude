@@ -1,5 +1,6 @@
 import type { Db, Queryable } from '@/lib/db';
 import { normalizeIdentityName } from './resolution';
+import { withSharedDb } from '@/lib/db/scheduling';
 
 export interface TeamRosterName { handle: string; name: string }
 /** A sourced roster names an existing account by handle; names never identify an account. */
@@ -52,7 +53,7 @@ export async function teamLabels(q: Queryable) {
   const revision = (await q.one<{ revision: string }>('select revision::text from network.route_revision where singleton'))!.revision;
   const previous = labelCache.get(q);
   if (previous?.revision === revision) return previous.value;
-  const value = readTeamLabels(q);
+  const value = withSharedDb(() => readTeamLabels(q));
   labelCache.set(q, { revision, value });
   try { return await value; }
   catch (error) { if (labelCache.get(q)?.value === value) labelCache.delete(q); throw error; }

@@ -1,5 +1,5 @@
 import { getDb, type Db } from '@/lib/db';
-import { DbBusyError } from '@/lib/db/scheduling';
+import { DbBusyError, withSharedDb } from '@/lib/db/scheduling';
 
 class RevisionChanged extends Error {}
 // GUESS — two retries tolerate brief imports without an unbounded page rebuild loop.
@@ -26,7 +26,8 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
     }
     const key = JSON.stringify(args), prior = state.entries.get(key);
     if (prior) return prior;
-    const value: Promise<T> = Promise.resolve().then(async () => {
+    // Shared with whoever asks next, so it never runs at maintenance priority (withSharedDb).
+    const value: Promise<T> = withSharedDb(() => Promise.resolve().then(async () => {
       try {
         const result = await load(...args);
         // Concurrent callers share this validated promise, never the unvalidated load.
@@ -36,7 +37,7 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
         if (state.entries.get(key) === value) state.entries.delete(key);
         throw error;
       }
-    });
+    }));
     state.entries.set(key, value);
     if (state.entries.size > limit) state.entries.delete(state.entries.keys().next().value!);
     return value;

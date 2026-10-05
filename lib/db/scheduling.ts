@@ -62,6 +62,15 @@ export function cancellableDb(db: Db, signal: AbortSignal): Queryable {
 /** Only explicitly scoped maintenance work yields its place to interactive queries. */
 export const withBackgroundDb = <T>(work: () => Promise<T>): Promise<T> => background.run(true, work);
 
+/**
+ * Work that other callers can join — an in-flight memo shared under a revision — runs at foreground
+ * priority, whoever starts it. A page read inside withForegroundDb holds maintenance back; when the route
+ * warm-up (maintenance) had started the memo, its queries waited for that read and the read waited for
+ * them. Nothing else was left to run, so the property process drained before its summary (5 Oct 2026);
+ * on a server the page would hang and every later maintenance query queue behind it.
+ */
+export const withSharedDb = <T>(work: () => Promise<T>): Promise<T> => background.run(false, work);
+
 /** Keep maintenance out of a complete multi-query read, including intentional I/O yields. */
 export function withForegroundDb<T>(db: Db, work: () => Promise<T>): Promise<T> {
   const scheduled = state.handles.get(prioritizeDb(db));

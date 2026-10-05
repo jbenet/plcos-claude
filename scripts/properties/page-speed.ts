@@ -15,7 +15,7 @@ import { warmDecision, warmPaths, type WarmState } from '../../lib/page-warm';
 // Reviewed hits that are not keyset paging over a large table. A new hit fails until reviewed.
 const REVIEWED = new Set([
   'modules/content/repo.ts:76 order by instrument', // a dozen wrap rules; text order is the display order
-  'modules/network/repo.ts:159 order by tier', // four aggregated rows
+  'modules/network/repo.ts:160 order by tier', // four aggregated rows
   'modules/strategy/repo.ts:115 order by rung', // one LP's ladder events; callers regroup them
 ]);
 

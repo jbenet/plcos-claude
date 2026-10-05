@@ -1,4 +1,5 @@
 import { getDb, type Db } from '@/lib/db';
+import { withSharedDb } from '@/lib/db/scheduling';
 import { yieldRouteWork } from './path-search';
 
 export type OrganizationRouteSize = { members: number; headcount: number | null };
@@ -49,7 +50,7 @@ async function policyTopology(db: Db): Promise<PolicyTopology> {
   const revision = await revisionOf(db);
   const previous = topologyCache.get(db);
   if (previous?.revision === revision) return previous.value;
-  const value = (async () => {
+  const value = withSharedDb(async () => {
     // Cached route reads need identity and organization facts, not the entire relationship
     // adjacency index. Only uncached path searches pay for graphSnapshot's full edge scan.
     const canonical = new Map<string, string>();
@@ -115,7 +116,7 @@ async function policyTopology(db: Db): Promise<PolicyTopology> {
       if (rows) rows.push(id); else aliases.set(resolved, [id]);
     }
     return { canonical, aliases, group, members, organizations, types };
-  })();
+  });
   topologyCache.set(db, { revision, value });
   try { return await value; }
   catch (error) { if (topologyCache.get(db)?.value === value) topologyCache.delete(db); throw error; }
