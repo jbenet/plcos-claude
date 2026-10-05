@@ -38,7 +38,12 @@ const cols = (t = '') => `${t}token_id::text "tokenId", ${t}user_id::text "userI
 
 export interface NewToken { label: string; tools: string[]; vehicles: string[] | null; callsPerDay: number; days: number }
 
+/** A token entry its owner may not hold (lib/sync/scopes.ts: the sync scopes' grants); the caller's check came first. */
+export class TokenRefused extends Error {}
+
 export async function createMcpToken(owner: AppUser, t: NewToken, q?: Db): Promise<{ token: McpToken; secret: string }> {
+  const refusal = (await import('@/lib/sync/scopes')).grantRefusal(owner, t.tools);
+  if (refusal) throw new TokenRefused(refusal);
   const secret = newTokenSecret();
   const db = q ?? await getDb();
   const token = await db.transaction(async (tx) => {

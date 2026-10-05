@@ -7,6 +7,7 @@ import { shortDate, ago } from '@/lib/time';
 import { listMcpTokens, listVehicles } from '@/modules/platform';
 import { config } from '@/config/deployment';
 import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
+import { grantRefusal, SYNC_PUSH, SYNC_SNAPSHOT } from '@/lib/sync/scopes';
 import { McpTokenForm } from './McpTokenForm';
 import s from './mcp.module.css';
 
@@ -37,11 +38,18 @@ export async function McpTokens() {
           the changelog) and, if you allow it, {drafts.join(' and ')}. It cannot send an email, approve or accept anything,
           change a status or move money: those tools do not exist on the server. Every call is logged with the tool and the token.
         </p>
+        <p>
+          Two more kinds move data between this server and the Mac (docs/deploy/railway.md §6–§7) and do nothing else: a
+          {' '}<b>snapshot</b> token lets <span className="mono">scripts/cloud-pull.sh</span> copy the whole database down (Admins only), and a
+          {' '}<b>push</b> token lets <span className="mono">scripts/cloud-push.sh</span> send finished research up, checked and imported like the
+          server&rsquo;s own. Neither opens an MCP tool, and every use is logged.
+        </p>
         {user.access === 'viewer' ? (
           <p className="muted">Viewers do not make tokens yet.</p>
         ) : (
           <McpTokenForm endpoint={endpoint} vehicles={mine.map((v) => ({ id: v.id, name: v.name }))} draftTools={drafts}
-            outreach={user.access === 'admin' && config.outreach.enabled} days={config.mcp.tokenDays} />
+            outreach={user.access === 'admin' && config.outreach.enabled} days={config.mcp.tokenDays}
+            sync={(['snapshot', 'push'] as const).filter((x) => !grantRefusal(user, [x === 'snapshot' ? SYNC_SNAPSHOT : SYNC_PUSH]))} />
         )}
         {tokens.length > 0 && (
           <table className={s.tokens}>
@@ -54,7 +62,8 @@ export async function McpTokens() {
                 return (
                   <tr key={t.tokenId} data-state={state}>
                     <td><b>{t.label}</b><br /><span className="mono muted" style={{ fontSize: 11 }}>{t.prefix}…</span></td>
-                    <td>{t.tools.includes(OUTREACH_WRITE) ? 'Outreach desk: read and write' : t.tools.includes(OUTREACH_READ) ? 'Outreach desk: read'
+                    <td>{t.tools.includes(SYNC_SNAPSHOT) ? 'Snapshot (cloud-pull)' : t.tools.includes(SYNC_PUSH) ? 'Push research (cloud-push)'
+                      : t.tools.includes(OUTREACH_WRITE) ? 'Outreach desk: read and write' : t.tools.includes(OUTREACH_READ) ? 'Outreach desk: read'
                       : t.tools.some((x) => !READ_TOOLS.includes(x)) ? 'Read and draft' : 'Read'}</td>
                     <td>{t.vehicles ? t.vehicles.map((v) => vname.get(v) ?? 'unknown').join(', ') : 'All of yours'}</td>
                     <td>{shortDate(new Date(t.createdAt))}</td>

@@ -34,7 +34,7 @@ research that pushes its results up (§7). Dakota moves to the cloud with everyt
 | # | Change | State |
 |---|---|---|
 | 1 | **Settings, `/setup` and Google sign-in** (§3), copied from MailGuard. Also replaces "this is the live server" (today it keys on `LABOS_ME_URL`) with sign-in being on, and lets the real profile use a remote database once it is. | Building |
-| 2 | **Pull and push through the API** (§6, §7): an admin's snapshot token streams a database dump down; a push token sends finished research files up for the cloud's own importers. `cloud-pull.sh` switches to it. | Main dev session |
+| 2 | **Pull and push through the API** (§6, §7): an admin's snapshot token streams a database dump down; a push token sends finished research files up for the cloud's own importers. `cloud-pull.sh` switches to it. | **Built** on `claude/cloud-sync` (§7a), not merged |
 | 3 | **Database TLS on the private network.** Off loopback the app demands a verifiable certificate; `*.railway.internal` has none, and Railway encrypts that network with WireGuard. | **Done** (`lib/db/postgres.ts`) |
 | 4 | **Commit for the build.** The Dockerfile now also accepts Railway's `RAILWAY_GIT_COMMIT_SHA`. | **Done** |
 | 5 | **Volume owner.** Railway mounts volumes as root, and the image runs as uid 10001. With `RAILWAY_RUN_UID=0` (Railway's documented switch), `scripts/docker-entrypoint.sh` starts as root only to hand `/app/data` to 10001, then drops to it. Elsewhere the image still starts as 10001. | **Done** |
@@ -124,6 +124,7 @@ secret ones. Never put a value in chat, a file, a commit or this doc.
 | `PREVIEW_COPY_AT` | never |  | **Never set** on Railway. |
 | `PGLITE_DIR` | never |  | **Never set** on Railway. |
 | `ENRICH_DIR` | never |  | **Never set** on Railway. |
+| `SYNC_DEMO_SNAPSHOT` | never |  | **Never set** on Railway. |
 | `RAILWAY_RUN_UID` | railway | | `0`: the entrypoint starts as root only to hand `/app/data` to user 10001, then drops to it (§2). |
 
 **Steps, once:**
@@ -200,23 +201,37 @@ database and the pre-move backup for 14 days.
 local cluster and serves the app on it:
 
 ```bash
-bash scripts/cloud-pull.sh init  --to postgres://plcos@127.0.0.1:57434/plcos_copy   # once
-bash scripts/cloud-pull.sh pull  --to postgres://plcos@127.0.0.1:57434/plcos_copy   # each time
-bash scripts/cloud-pull.sh serve --to postgres://plcos@127.0.0.1:57434/plcos_copy   # from a dev worktree
+bash scripts/cloud-pull.sh init  --to postgres://plcos@127.0.0.1:57434/plcos_copy          # once
+bash scripts/cloud-pull.sh pull  --to postgres://plcos@127.0.0.1:57434/plcos_copy --keep   # daily
+bash scripts/cloud-pull.sh serve --to postgres://plcos@127.0.0.1:57434/plcos_copy          # from a dev worktree
 ```
 
-- **Down through our API.** The server runs `pg_dump` against its own private database and streams the dump
-  to whoever holds an admin's snapshot token. Tokens are minted in Preferences, like MCP tokens, and each
-  pull is audit-logged. The token is one Keychain item on the Mac. (Being built. Today's script reads a
-  Postgres URL, and was tested that way on invented data.)
+- **Down through our API.** `pull` asks `GET /api/sync/snapshot` with an Admin's snapshot token. The server
+  runs `pg_dump -Fc` against its own private database and streams the dump. The token is minted in
+  Preferences → MCP access and kept in one Keychain item, `plcos-railway / snapshot-token`; the app's address
+  is `--from`, `CLOUD_APP_URL` or the item `plcos-railway / app-url`. Each pull is audit-logged (§7a).
+- **`--keep` is the off-site copy** (decision D). It also fetches the working files (`?files=1`), then packs
+  the dump and the files into one archive and encrypts it into `~/plcos-backups` with `backup-real.sh`'s
+  method and passphrase, as `plcos-cloud-<time>-daily.tar.gz.gpg`. `backup-prune.py` thins these with the
+  Mac's own backups. Restore with `npm run backup:restore -- <file> <empty dir>`; it holds
+  `cloud/database.dump` and `cloud/files.tar.gz`. The archive is kept before the restore, so a failed restore
+  still leaves it.
 - **The copy is a preview.**
   - It lives in `plcos-data/real/cloud-copy/`, in a cluster that listens only on 127.0.0.1.
   - It replaces the last copy only after the new one restores and checks out.
   - `serve` sets `PREVIEW_COPY_AT`, so the app shows the copy banner, refuses every write and runs no
     connector.
 - **Time at today's size:** about 2–4 minutes (GUESS). Locally, the dump takes 15–17 s and the restore 40–45 s.
-- **Files:** most pages read only the database, so a pull brings the database by default. The same token can
-  fetch a tar of the working files when a test needs them (2.2 GB).
+- **Files:** most pages read only the database, so a pull without `--keep` brings the database alone. The
+  files archive leaves out what cutover leaves out: the server reads `cutover-files.sh`'s own three lists on
+  each request (the databases, logs, snapshots, copies and the regenerated research exports), so what moves
+  up at cutover is what a pull brings down. About 2.2 GB raw today.
+- **Dakota comes down too** (Juan, 4 Oct: the cloud database "should be our db same way as pl's warehouse"):
+  the cloud and a pulled copy are both our system. MCP and every agent-facing answer still withhold licensed
+  Dakota values (the GP view, docs/26).
+- **Tested** on invented data only: the property suite pulls the route's dump through `cloud-pull.sh` into a
+  scratch cluster on a free port, compares every table's row count (130 tables, all equal), and opens the
+  `--keep` archive with its passphrase. Never the live cluster or real data.
 - **The 25 GB under `plcos-data/real`** mostly never moves:
   - The old PGlite snapshots (14 GB) and database (6.9 GB) stay until Juan deletes them.
   - The Postgres cluster (2.3 GB) becomes the frozen rollback copy.
@@ -235,13 +250,43 @@ and push up results".
 - **On the Mac:**
   - Claude Code sub-agents and ChatGPT run research against a pulled copy, which includes Dakota, plus
     Polaris with Juan's gcloud login, which stays on the Mac.
-  - They **push the results up** with a push token. A push carries only the finished files W1, W1c and W5
-    already write (findings, reviews, strategies), never database rows.
-  - The cloud checks each file with the importers' own validators, files it under `enrich/inbox/`, records a
-    ledger run, and imports it the usual way. A rejected file comes back with the reason.
-  - Dakota's rule is unchanged inside our system. Its private fields never go to an outside service, a web
-    search or an agent's prompt. Pushes stay between our own Mac and our own cloud.
+  - They **push the results up** with `bash scripts/cloud-push.sh [--run <Mac ledger run>] <file>…` and a
+    push token (a GP's or an Admin's, Keychain item `plcos-railway / push-token`). A push carries only the
+    finished files W1, W1c and W5 already write (findings, a review with its corrected findings, strategies),
+    never database rows.
+  - The cloud checks each file with the importers' own validators, files it under `enrich/inbox/<run>/`,
+    records a ledger run, and imports it the usual way. A rejected file comes back with the reason.
+  - A claim sourced from Dakota is validated like any other (Juan, 4 Oct: the cloud is our system, as PL's
+    warehouse is). Its private fields still never go to an outside service, a web search or an agent's
+    prompt; pushes stay between our own Mac and our own cloud.
 - **Where the files live: on the Railway volume,** read and written as today, with no code change.
+
+### 7a. The pull and push API (built 4 Oct, `claude/cloud-sync`)
+
+- **Tokens.** Two scopes in the MCP token model, beside the outreach scopes: `sync:snapshot` and `sync:push`
+  ride in `platform.mcp_token.tools` (`lib/sync/scopes.ts`). Each endpoint declares a policy like an MCP tool
+  (risk, scopes) and is checked by the registry's own `allowed`. Who may hold a scope is data too: snapshot
+  Admin only, push GP or Admin. That is checked when the token is made (Preferences, and the service) and on
+  every use against the owner's access then. A sync token holds its scope alone, so it lists and calls no MCP
+  tool. Hashed at rest, revocable, with an expiry and last use, like every token. Every use is one
+  `mcp.call` row in the audit log, `via: sync`, the shape of MCP and outreach calls; a revoked or expired
+  token is `mcp.refused`. No browser requests: any `Origin` is refused.
+- **`GET /api/sync/snapshot`.** `pg_dump -Fc` of the server's own `DATABASE_URL`. The password goes to
+  `pg_dump` only in its environment, never on its command line, and the child gets no other variable of the
+  server's. `?files=1` streams a gzipped tar of the data root instead. One at a time: 409 while one streams.
+  The status waits for the first bytes, so a dump that fails at once is a 500 with a reason; one that fails
+  later cuts the body short, which curl reports and the pull refuses. Refused on a preview copy, on a
+  real-profile server that is not the live one, and on the demo unless `SYNC_DEMO_SNAPSHOT=1` (tests only).
+- **`POST /api/sync/push`.** `{ workflow: W1 | W1c | W5, files: [{ path, content }], run? }`, paths as under
+  `enrich/` (20 MB and 500 files at most, GUESSES). All-or-nothing: shape, paths, the importers' validators
+  (`check`, `checkStrategy`, the W1c review rows), then against what the server holds.
+  An older finding or strategy never replaces a newer one. A review is graded against the server's finding.
+  A review file name is never reused for other rows. A refusal (422) lists every reason by file and writes
+  nothing. An accepted push (201) is kept as received under `enrich/inbox/<run>/` (with any file it replaces
+  under `replaced/`) and published where the workflow writes. It is recorded as a ledger run (operation
+  `push`, the Mac's run as parent) and queues the findings import as the token's owner. Idempotent by
+  content hash (`platform.sync_push`): the same content again answers the first run (200, `duplicate`) and
+  writes nothing.
 
 **Why this is not two-way sync.** Sync would merge two writable databases: conflict rules for every table,
 deletes, and rebuilt caches. Here there is one writer. Copies come down as read-only previews. Results go up
@@ -251,8 +296,8 @@ the Mac ever writes the cloud database.
 ## 8. Backups (decided 4 Oct: no S3 for now)
 
 - **Railway's volume backups,** daily, on Postgres and on the web volume, for a quick restore.
-- **The Mac holds the off-site copy.** A daily pull (§6) keeps an encrypted dump in `~/plcos-backups`, with
-  the Mac's existing encryption, retention and 300 GB cap. That covers losing the Railway project, which
+- **The Mac holds the off-site copy.** A daily `pull --keep` (§6) keeps the encrypted dump and working files
+  in `~/plcos-backups`, with the Mac's existing encryption, retention and 300 GB cap. That covers losing the Railway project, which
   Railway's backups don't.
 - **`PLCOS_SECRET`** goes in Juan's password manager too. Without it, a restored database's stored secrets
   can't be read; they have to be entered again.

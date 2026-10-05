@@ -191,6 +191,15 @@ export const config = {
     maxRows: 100, // GUESS — rows in one list answer before paging.
   },
   /**
+   * Cloud pull and push through the app's own API (docs/deploy/railway.md §6–§7; Juan, 4 Oct 2026: no
+   * public database port). A snapshot is pg_dump of this server's own database, one at a time; a push is
+   * one finished W1, W1c or W5 output, validated by the importer's own checks.
+   */
+  sync: {
+    maxPushBytes: 20 * 1024 * 1024, // GUESS — a finding is 10–30 KB; a 200-LP batch fits with room.
+    maxPushFiles: 500, // GUESS — the largest batch a worker writes, with its review file.
+  },
+  /**
    * The outreach API for the mail desk (docs/27-outreach-api.md): /api/outreach/*, authenticated by an MCP
    * token that carries the outreach scope ('outreach:read', and 'outreach:write' apart). Same envelope, rate
    * limits and audit as MCP. Nothing here sends: the desk sends through MailGuard and records the send

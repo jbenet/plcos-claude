@@ -13,5 +13,5 @@ export {
 } from './repo';
 export { fileFeedback, type FeedbackCommand } from './service';
 export {
-  createMcpToken, findMcpToken, hashToken, listMcpTokens, looksLikeToken, revokeMcpToken, type McpToken, type NewToken, type TokenState,
+  createMcpToken, findMcpToken, hashToken, listMcpTokens, looksLikeToken, revokeMcpToken, TokenRefused, type McpToken, type NewToken, type TokenState,
 } from './mcp-tokens';
