@@ -181,7 +181,8 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
    - `DATABASE_URL` pointing at `plcos_demo`, with `PGPASSWORD`;
    - `DATA_PROFILE=demo`.
 
-   Deploy only from GitHub, never `railway up` from a checkout. GitHub holds only tracked files, and the
+   Check that a push actually starts a build: on 5 Oct the new service had no source trigger until it was
+   reconnected (Settings → Source shows the repo and the `deploy` branch). Deploy only from GitHub, never `railway up` from a checkout. GitHub holds only tracked files, and the
    Dockerfile's guards still refuse any `data/` path.
 4. **Networking → Generate Domain.** Open `https://<domain>/setup`, enter the code from the Deploy Logs, and
    follow the page. It shows the redirect URI to add to the Google OAuth client.
@@ -210,6 +211,12 @@ that rev 3 needed. Dakota's raw replica (`dakota/`, 50 MB) goes up with the work
 sync then carries on from the last pull, with the Dakota sign-in entered in Settings.
 
 **Rehearse once,** into a scratch `plcos_rehearsal`, a week before, to measure the real times.
+
+**The client address behind Railway's edge.** Measured on 5 Oct: with one trusted proxy hop, the audit log recorded
+an address of Railway's own edge (shared by many clients), not the client's, and never a forged one. Two hops is
+the likely setting. Confirm it once, after setup, with a wrong code carrying `X-Forwarded-For: 203.0.113.9`: the
+audit address must equal the client address in Railway's HTTP log. It matters only while `/setup` is open, and
+for the addresses in the audit log.
 
 **The evening** (freeze to open: about 30–45 minutes, GUESS; the rehearsal replaces this):
 
