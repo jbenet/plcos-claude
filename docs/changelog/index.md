@@ -244,3 +244,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Email drafts go through mailguard, and only a drafts-only token is accepted](entries/mailguard.md)
 - [Indicated amounts, and outreach tools for juanmail over MCP](entries/outreach-api.md)
 - [Railway plan — one service and one Postgres, with local copies one way](entries/railway-plan.md)
+- [Settings in the app, a guided /setup, and Google sign-in](entries/railway-setup.md)

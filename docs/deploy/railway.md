@@ -33,7 +33,7 @@ research that pushes its results up (§7). Dakota stays there until decision C.
 
 | # | Change | State |
 |---|---|---|
-| 1 | **Settings, `/setup` and Google sign-in** (§3), copied from MailGuard. Also replaces "this is the live server" (today it keys on `LABOS_ME_URL`) with sign-in being on, and lets the real profile use a remote database once it is. | Building |
+| 1 | **Settings, `/setup` and Google sign-in** (§3), copied from MailGuard. Also replaces "this is the live server" (it keyed on `LABOS_ME_URL`) with a deployed sign-in being on, and lets the real profile use a remote database once it is. | **Done** (branch `claude/railway-setup`, migration platform 017) |
 | 2 | **Pull and push through the API** (§6, §7): an admin's snapshot token streams a database dump down; a push token sends finished research files up for the cloud's own importers. `cloud-pull.sh` switches to it. | Main dev session |
 | 3 | **Database TLS on the private network.** Off loopback the app demands a verifiable certificate; `*.railway.internal` has none, and Railway encrypts that network with WireGuard. | **Done** (`lib/db/postgres.ts`) |
 | 4 | **Commit for the build.** The Dockerfile now also accepts Railway's `RAILWAY_GIT_COMMIT_SHA`. | **Done** |
@@ -76,30 +76,41 @@ to our Postgres:
   - Cookie-acting route handlers refuse cross-site POSTs.
   - Roles stay as they are. The local switcher never serves real data on a public URL.
   - MCP tokens are bearer tokens and keep working. Point `claude mcp add` at the new URL.
+- **As built (4 Oct).** Which sign-in a server uses is `config/sign-in.ts`: Google when the image says so
+  (`PLCOS_DEPLOYED=1`, set in the Dockerfile) or Railway's variables are present, LabOS with `LABOS_ME_URL`,
+  the switcher on the Mac. The sign-in client lives in its own connector, `lib/connectors/google-signin`
+  (openid, email and profile only; the removed Gmail OAuth client's variables stay forbidden), with new
+  variable names `GOOGLE_SIGNIN_CLIENT_ID` / `_SECRET` for when the environment should win. Mailguard's
+  address is a setting too; each person's mailguard key is still theirs, and a Railway server has no store
+  for it yet.
 
 ## 4. Setting it up
 
 **Variables.** `npx tsx scripts/railway-env.ts` prints this table from
-[service.env.example](service.env.example) (the settings work will add `PLCOS_SECRET` there). Seal the
-secret ones. Never put a value in chat, a file, a commit or this doc.
+[service.env.example](service.env.example). Only `PLCOS_SECRET` and the database connection are entered here;
+the rest are entered in the app (/setup, then Settings → Connections). Seal the secret ones. Never put a value in chat, a file, a commit or this doc.
 
 | Variable | Tag | Secret | On Railway |
 |---|---|---|---|
 | `DATA_PROFILE` | required |  | `demo` for the first boot, `real` at cutover. |
-| `LABOS_ME_URL` | required |  | Leave unset: sign-in is Google (§3). |
+| `LABOS_ME_URL` | optional |  | Leave unset: sign-in is Google (§3). |
+| `PLCOS_SECRET` | required | yes | `openssl rand -base64 32`, sealed. One of the two values that live outside the app; keep a copy in a password manager (§8). |
+| `PLCOS_PUBLIC_URL` | optional |  | Leave unset: /setup fills it from Railway's domain. |
+| `GOOGLE_SIGNIN_CLIENT_ID` | optional |  | Leave unset: enter it in /setup (then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
+| `GOOGLE_SIGNIN_CLIENT_SECRET` | optional | yes | Leave unset: enter it in /setup (then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `DATABASE_URL` | required |  | `postgresql://plcos_app@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/plcos_demo` first, then `…/plcos_live`. No password in it. |
 | `PGPASSWORD` | optional | yes | The `plcos_app` password you set on Railway Postgres (§4 step 2). One of the two secrets that live outside the app. |
 | `PGSSLMODE` | optional |  | Leave unset on the private network (code change 1). |
-| `AFFINITY_API_KEY` | required-real | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
-| `LINEAR_API_KEY` | required-real | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
-| `DAKOTA_USERNAME` | never |  | **Never set.** Dakota stays on the Mac (decision C). |
-| `DAKOTA_PASSWORD` | never |  | **Never set.** See DAKOTA_USERNAME. |
+| `AFFINITY_API_KEY` | optional | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
+| `LINEAR_API_KEY` | optional | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
+| `DAKOTA_USERNAME` | optional |  | Leave unset: enter it in Settings → Connections, encrypted with PLCOS_SECRET (decision C: Dakota moves to the cloud). An env value still wins. |
+| `DAKOTA_PASSWORD` | optional | yes | Leave unset: enter it in Settings → Connections, encrypted with PLCOS_SECRET. An env value still wins. |
 | `CLOUDSDK_AUTH_ACCESS_TOKEN` | never |  | **Never set** on Railway. |
-| `GOOGLE_OAUTH_CLIENT_ID` | never |  | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | never | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
-| `ANTHROPIC_API_KEY` | later | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
+| `MAILGUARD_URL` | optional |  | Leave unset: enter it in Settings → Connections. An env value still wins. |
+| `MAILGUARD_TOKEN` | never | yes | **Never set** on Railway. |
+| `ANTHROPIC_API_KEY` | optional | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `ANTHROPIC_MODEL` | optional |  | Leave unset (the default works). |
-| `FEEDBACK_EXPORT_TOKEN` | required-real | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
+| `FEEDBACK_EXPORT_TOKEN` | optional | yes | Leave unset: enter it in Settings → Connections, encrypted with PLCOS_SECRET. An env value still wins. |
 | `SCHEDULE_DAILY_AT` | later |  | `03:00` (UTC), the day after a manual Affinity sync works from Railway. |
 | `PAGE_WARM` | optional |  | Leave unset (the default works). |
 | `BACKUP_COMMAND` | required-real |  | Leave unset: no S3 for now. Railway backs up its volumes, and the Mac keeps encrypted pulls (§8). |
@@ -116,6 +127,11 @@ secret ones. Never put a value in chat, a file, a commit or this doc.
 | `NODE_EXTRA_CA_CERTS` | image |  | Do not set: the Dockerfile sets it. |
 | `PGSSLROOTCERT` | image |  | Do not set: the Dockerfile sets it. |
 | `GIT_COMMIT` | image |  | Build argument; code change 2 takes it from Railway's commit variable. |
+| `PLCOS_DEPLOYED` | image |  | Do not set: the Dockerfile sets it (Google sign-in, never the user switcher). |
+| `RAILWAY_PUBLIC_DOMAIN` | platform |  | Do not set: Railway sets it. |
+| `RAILWAY_ENVIRONMENT_ID` | platform |  | Do not set: Railway sets it. |
+| `RAILWAY_PROJECT_ID` | platform |  | Do not set: Railway sets it. |
+| `RAILWAY_VOLUME_MOUNT_PATH` | platform |  | Do not set: Railway sets it. |
 | `PLCOS_IMPORT_WORKER` | internal |  | Do not set: the code sets it. |
 | `PLCOS_INTERNAL_ROUTING_KEY` | internal |  | Do not set: the code sets it. |
 | `NEXT_RUNTIME` | internal |  | Do not set: the code sets it. |

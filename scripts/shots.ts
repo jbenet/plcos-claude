@@ -54,6 +54,36 @@ async function openLpAnyVehicle(page: Page, name: string) {
 const N61_UPDATE =
   "Met Bram and the family office's CIO on Tuesday. They want the deck and the track record before a second meeting — very keen on the thesis.";
 
+/**
+ * /setup on a demo started as a deployed server (PLCOS_DEPLOYED=1, PORT=3113), up to a step. The code is
+ * the one that server printed in its log, passed as SHOT_SETUP_CODE. Every value is invented.
+ */
+async function setupTo(page: Page, step: number) {
+  const code = process.env.SHOT_SETUP_CODE;
+  if (!code) throw new Error('Set SHOT_SETUP_CODE to the code the demo server printed.');
+  const next = async () => { await page.locator('form button[type=submit]').click(); await page.waitForTimeout(300); };
+  await page.locator('input[name=code]').fill(code);
+  if (step === 0) return;
+  await next();
+  await page.getByRole('heading', { name: 'The public address' }).waitFor();
+  await page.locator('input[name=publicUrl]').fill('https://raise.example.org');
+  if (step === 1) return;
+  await next();
+  await page.locator('input[name=googleClientId]').fill('1234567890-invented.apps.googleusercontent.com');
+  await page.locator('input[name=googleClientSecret]').fill('GOCSPX-invented-demo-secret');
+  if (step === 2) return;
+  await next();
+  await page.locator('input[name=adminEmail]').fill('juan@example.com');
+  if (step === 3) return;
+  await next();
+  await page.locator('input[name=linearKey]').fill('lin_api_inventeddemokey0042');
+  if (step === 4) return;
+  await next();
+  if (step === 5) return;
+  await next();
+  await page.getByText('Continue with Google').waitFor();
+}
+
 const SHOTS: Record<string, Shot[]> = {
   L1: [
     { name: '01-today', path: '/today' },
@@ -2538,6 +2568,23 @@ const SHOTS: Record<string, Shot[]> = {
   ],
   // MCP access (docs/26): Preferences → MCP access, after making one token and revoking an older one.
   // The token shown is minted by this demo server, on invented data.
+  // Settings, /setup and Google sign-in (docs/deploy/railway.md §3). 01–08 against a demo started with
+  // PLCOS_DEPLOYED=1 PORT=3113 and SHOT_SETUP_CODE from its log (08 finishes setup); 09 against the same
+  // demo restarted without PLCOS_DEPLOYED, as juan.
+  'railway-setup': [
+    { name: '01-setup-code', path: '/setup', prepare: (page) => setupTo(page, 0) },
+    { name: '02-setup-address', path: '/setup', prepare: (page) => setupTo(page, 1) },
+    { name: '03-setup-google', path: '/setup', fullPage: true, prepare: (page) => setupTo(page, 2) },
+    { name: '04-setup-admin', path: '/setup', prepare: (page) => setupTo(page, 3) },
+    { name: '05-setup-connectors', path: '/setup', fullPage: true, prepare: (page) => setupTo(page, 4) },
+    { name: '06-setup-review', path: '/setup', prepare: (page) => setupTo(page, 5) },
+    { name: '07-setup-mobile', path: '/setup', width: 390, fullPage: true, prepare: (page) => setupTo(page, 2) },
+    { name: '08-setup-done', path: '/setup', prepare: (page) => setupTo(page, 6) },
+    {
+      name: '09-settings-connections', path: '/today', fullPage: true,
+      prepare: async (page) => { await asUser(page); await page.goto(new URL('/settings/connections', page.url()).toString(), { waitUntil: 'networkidle' }); },
+    },
+  ],
   mcp: [
     {
       name: '01-preferences-mcp-tokens',
@@ -2831,7 +2878,14 @@ async function refuseReal(base: string) {
   if (config.data.profile === 'real') {
     throw new Error('Refusing to take screenshots in the real profile. Screenshots are committed and published.');
   }
-  const res = await fetch(`${base}/api/profile`).catch(() => null);
+  const res = await fetch(`${base}/api/profile`, { redirect: 'manual', headers: { cookie: `${USER_COOKIE}=juan` } }).catch(() => null);
+  // Behind Google sign-in (a demo started with PLCOS_DEPLOYED=1, railway-setup) every API asks to sign in
+  // first; /setup and /signin say which data the server holds instead.
+  if (res && res.status >= 300 && res.status < 400) {
+    const page = await fetch(`${base}/setup`).then((r) => r.text()).catch(() => '');
+    if (!page.includes('Demo data')) throw new Error(`${base} does not say it serves the demo. Screenshots only ever show the demo.`);
+    return;
+  }
   if (!res || !res.ok) throw new Error(`${base}/api/profile did not answer — is the demo server running?`);
   const { profile } = (await res.json()) as { profile?: string };
   if (profile !== 'demo') {

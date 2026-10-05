@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Check } from './harness';
 
-const TAGS = new Set(['required', 'required-real', 'later', 'optional', 'image', 'internal', 'never']);
+const TAGS = new Set(['required', 'required-real', 'later', 'optional', 'image', 'internal', 'never', 'platform']);
 
 async function sources(dir: string, out: string[] = []): Promise<string[]> {
   for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
@@ -60,13 +60,13 @@ export async function serviceEnvProperties(check: Check): Promise<void> {
   try {
     // Preflight: names only. An invented secret-looking value must never reach its output.
     const decoy = 'invented-decoy-value-7f3a';
-    const env: Record<string, string> = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', DATA_PROFILE: 'real', DAKOTA_PASSWORD: decoy };
+    const env: Record<string, string> = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', DATA_PROFILE: 'real', CLOUDSDK_AUTH_ACCESS_TOKEN: decoy };
     env[[...template.keys()].find(n => n.startsWith('AFFINITY'))!] = decoy;
     const run = spawnSync('bash', ['scripts/preflight.sh', '--dry'], { encoding: 'utf8', timeout: 60_000, env: env as NodeJS.ProcessEnv });
     const out = `${run.stdout}${run.stderr}`;
     check('PREFLIGHT prints variable names, never values, and fails a Mac-only variable',
-      run.status === 1 && !out.includes(decoy) && /FAIL env-forbidden +must be unset on the service: DAKOTA_PASSWORD/.test(out)
-        && /FAIL env +unset: .*LABOS_ME_URL/.test(out) && /FAIL database +DATABASE_URL unset/.test(out),
+      run.status === 1 && !out.includes(decoy) && /FAIL env-forbidden +must be unset on the service: CLOUDSDK_AUTH_ACCESS_TOKEN/.test(out)
+        && /FAIL env +unset: .*PLCOS_SECRET/.test(out) && /FAIL database +DATABASE_URL unset/.test(out),
       'Dry run with invented values; DATA_PROFILE=real makes the real-only keys required.');
 
     // Cutover files: an invented real root with every excluded kind of path, plus files that must go.
