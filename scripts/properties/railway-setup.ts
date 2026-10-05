@@ -37,6 +37,10 @@ import { resolveLocalUser } from '../../lib/auth/local-user';
 import { bootRefusal, dataDir } from '../../lib/settings/key';
 import { clientIp } from '../../lib/settings/floodgate';
 import { takeCopy } from '../preview-copy';
+import { databaseStore } from '../../lib/connectors/mailguard/tokens';
+import { personSecret } from '../../lib/settings/person-secrets';
+import { maskSecret } from '../../lib/settings/store';
+import { readFile as readF } from 'node:fs/promises';
 import { mkdtemp, mkdir as mkdirp, readdir, rm as rmrf, writeFile as writeF } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -61,7 +65,7 @@ const store = (phase: 'action' | 'render', cookie: string, pathname: string): St
   onUpdateCookies: undefined, previewProps: undefined, isHmrRefresh: false, serverComponentsHmrCache: undefined, hmrRefreshHash: undefined, fallbackParams: null,
 });
 const inRequest = <T>(db: Db, phase: 'action' | 'render', cookie: string, pathname: string, work: () => Promise<T>) =>
-  withDb(db, () => workAsyncStorage.run({ route: pathname, isStaticGeneration: false } as WorkStore,
+  withDb(db, () => workAsyncStorage.run({ route: pathname, isStaticGeneration: false, incrementalCache: {}, pendingRevalidatedTags: [] } as unknown as WorkStore,
     () => workUnitAsyncStorage.run(store(phase, cookie, pathname), () => phase === 'action' ? actionAsyncStorage.run({ isAction: true }, work) : work())));
 
 /** Every string in a React element tree's props, server components left unexecuted: what the page hands down. */
@@ -89,6 +93,7 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     values ('setup-props-gp', 'Invented Setup GP', 'IG', 'Invented (props)', 'setup-gp@example.invalid', 'gp') returning id::text, handle`))!;
   const inactive = (await db.one<{ id: string }>(`insert into platform.app_user (handle, name, initials, role, email, access, active)
     values ('setup-props-gone', 'Invented Gone', 'IX', 'Invented (props)', 'gone@example.invalid', 'gp', false) returning id::text`))!;
+  let demoted: string[] = [];
   try {
     for (const n of envNames) delete process.env[n];
     process.env.PLCOS_SECRET = Buffer.alloc(32, 7).toString('base64'); // invented test key
@@ -351,15 +356,20 @@ export async function railwaySetupProperties(check: Check, db: Db) {
         && (await auditCount(['signin'])) > 0,
       'A __Host- session cookie (Secure, Path=/, no Domain) on an https address; the person is the roster row, with its access.');
 
-    // ── Non-admins are refused on every Connections action, and logged ───────────────────────
+    // ── Non-admins are refused on every Connections and People action, and logged ────────────
     const actions = await import('../../app/settings/connections/actions');
+    const people = await import('../../app/settings/people/actions');
+    const rosterBefore = JSON.stringify(await db.query('select id, access, vehicles::text[], active, session_epoch from platform.app_user order by id'));
     const settingsBefore = JSON.stringify(await db.query('select key, value from platform.setting order by key'));
     const refusedBefore = await auditCount(['authz.refused']);
     const attempts: Array<() => Promise<unknown>> = [
       () => actions.saveSettingAction(null, form({ key: 'app.publicUrl', value: 'https://evil.example' })),
       () => actions.clearSettingAction(form({ key: 'google.clientSecret' })),
       () => actions.checkSettingAction(null, form({ key: 'anthropic.apiKey', value: 'sk-ant-invented' })),
-      () => actions.signOutEverywhereAction(form({ userId: juan.id })),
+      () => people.addPersonAction(null, form({ name: 'Invented Intruder', email: 'intruder@example.invalid', access: 'admin', allVehicles: 'on' })),
+      () => people.updatePersonAction(null, form({ userId: gp.id, access: 'admin', allVehicles: 'on' })),
+      () => people.setPersonActiveAction(null, form({ userId: juan.id, active: '0' })),
+      () => people.signOutEverywhereAction(null, form({ userId: juan.id })),
     ];
     const gpSession = await sessionFor(gp.id);
     const outcomes: boolean[] = [];
@@ -368,14 +378,47 @@ export async function railwaySetupProperties(check: Check, db: Db) {
       catch (e) { outcomes.push(isRedirectError(e) && getURLFromRedirectError(e) === '/access-denied'); }
     }
     const { default: ConnectionsPage } = await import('../../app/settings/connections/page');
-    let pageRefused = false;
+    const { default: PeoplePage } = await import('../../app/settings/people/page');
+    let pageRefused = false, peopleRefused = false;
     try { await inRequest(db, 'render', gpSession, '/settings/connections', () => ConnectionsPage()); }
     catch (e) { pageRefused = isRedirectError(e) && getURLFromRedirectError(e) === '/access-denied'; }
+    try { await inRequest(db, 'render', gpSession, '/settings/people', () => PeoplePage()); }
+    catch (e) { peopleRefused = isRedirectError(e) && getURLFromRedirectError(e) === '/access-denied'; }
     const refusedRows = await db.query<{ subject_id: string }>(`select subject_id from platform.audit_log where action = 'authz.refused' and actor_id = $1 order by id`, [gp.id]);
-    check('CONNECTIONS a non-admin is refused on every action and the page, each refusal logged, nothing changed',
-      outcomes.length === 4 && outcomes.every(Boolean) && pageRefused && await auditCount(['authz.refused']) === refusedBefore + 5
-        && refusedRows.length === 5 && JSON.stringify(await db.query('select key, value from platform.setting order by key')) === settingsBefore,
-      'Save, Remove, Check and Sign out everywhere redirect to the refusal page; one authz.refused row each, with the action’s name.');
+    check('CONNECTIONS and PEOPLE a non-admin is refused on every action and both pages, each refusal logged, nothing changed',
+      outcomes.length === 7 && outcomes.every(Boolean) && pageRefused && peopleRefused && await auditCount(['authz.refused']) === refusedBefore + 9
+        && refusedRows.length === 9 && JSON.stringify(await db.query('select key, value from platform.setting order by key')) === settingsBefore
+        && JSON.stringify(await db.query('select id, access, vehicles::text[], active, session_epoch from platform.app_user order by id')) === rosterBefore,
+      'Save, Remove, Check, Add, Edit, Deactivate and Sign out everywhere redirect to the refusal page; one authz.refused row each, with the action’s name; settings and roster unchanged.');
+
+    // ── People: the roster Google sign-in admits ─────────────────────────────────────────────
+    demoted = (await db.query<{ id: string }>(`update platform.app_user set access = 'gp' where access = 'admin' and id <> $1 returning id::text`, [juan.id])).map((r) => r.id);
+    const juanSession = await sessionFor(juan.id);
+    const asJuan = <T>(work: () => Promise<T>) => inRequest(db, 'action', juanSession, '/settings/people', work);
+    const vehicle = (await db.one<{ id: string }>(`select id::text from platform.vehicle order by sort_order limit 1`))!.id;
+    const added = await asJuan(() => people.addPersonAction(null, form({ name: 'Invented Newcomer', email: 'Newcomer@Example.invalid', access: 'gp', vehicle })));
+    const row = await db.one<{ id: string; email: string; access: string; vehicles: string[] }>(`select id::text, email, access::text, vehicles::text[] from platform.app_user where email = 'newcomer@example.invalid'`);
+    const dupe = await asJuan(() => people.addPersonAction(null, form({ name: 'Invented Twin', email: 'NEWCOMER@example.invalid', access: 'viewer', allVehicles: 'on' })));
+    const demoteLast = await asJuan(() => people.updatePersonAction(null, form({ userId: juan.id, access: 'gp', allVehicles: 'on' })));
+    const deactivateLast = await asJuan(() => people.setPersonActiveAction(null, form({ userId: juan.id, active: '0' })));
+    const newcomerEpoch = async () => (await db.one<{ e: number }>('select session_epoch e from platform.app_user where id = $1', [row!.id]))!.e;
+    const e0 = await newcomerEpoch();
+    const off = await asJuan(() => people.setPersonActiveAction(null, form({ userId: row!.id, active: '0' })));
+    const e1 = await newcomerEpoch();
+    const dupeWhileOff = await asJuan(() => people.addPersonAction(null, form({ name: 'Invented Twin', email: 'newcomer@example.invalid', access: 'viewer', allVehicles: 'on' })));
+    const on = await asJuan(() => people.setPersonActiveAction(null, form({ userId: row!.id, active: '1' })));
+    const juanAfter = await db.one<{ access: string; active: boolean }>(`select access::text, active from platform.app_user where id = $1`, [juan.id]);
+    Object.assign(config.auth, { provider: 'local' });
+    const onMac = await inRequest(db, 'action', `${USER_COOKIE}=${juan.handle}`, '/settings/people', () => people.addPersonAction(null, form({ name: 'Invented Mac', email: 'mac@example.invalid', access: 'gp', allVehicles: 'on' })));
+    Object.assign(config.auth, { provider: 'google' });
+    check('PEOPLE an admin adds, deactivates and reactivates people; addresses are unique ignoring case; the last admin stays',
+      added?.ok === true && row?.email === 'newcomer@example.invalid' && row.access === 'gp' && JSON.stringify(row.vehicles) === JSON.stringify([vehicle])
+        && dupe?.ok === false && demoteLast?.ok === false && /no active admin/.test(demoteLast.ok === false ? demoteLast.error : '')
+        && deactivateLast?.ok === false && juanAfter?.access === 'admin' && juanAfter.active
+        && off?.ok === true && e1 === e0 + 1 && dupeWhileOff?.ok === false && /reactivate/.test(dupeWhileOff.ok === false ? dupeWhileOff.error : '') && on?.ok === true
+        && onMac?.ok === false && !(await db.one(`select 1 from platform.app_user where email = 'mac@example.invalid'`))
+        && await auditCount(['people.added', 'people.deactivated', 'people.reactivated']) >= 3,
+      'Add a GP on one vehicle (address stored lower-case); the same address in another case is refused; the only admin can be neither demoted nor deactivated; deactivating raises the epoch; under the switcher the page changes nothing.');
 
     // ── No secret in audit rows, the log or the pages ────────────────────────────────────────
     await withDb(db, () => writeSettings(checkSettings({ 'anthropic.apiKey': DECOY }), { actorId: juan.id, via: 'settings' }));
@@ -406,6 +449,26 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     check('KEYS the readers use the store when the environment is unset, and a preview copy gets none',
       JSON.stringify(live) === JSON.stringify(['invented-affinity-key-0042', 'lin_api_invented0042', DECOY, CLIENT_ID, 'invented-dakota-pass-0042']) && preview.every((k) => k === null || k === undefined),
       'affinityKey, linearKey, anthropicKey, Dakota’s sign-in and the Google client read the encrypted settings synchronously; with copyTakenAt every one is empty.');
+
+    // ── Per-person mailguard keys, in the app ─────────────────────────────────────────────────
+    const mgKey = `mg_invented0042_${'a1B2c3D4e5'.repeat(4)}`;
+    const store = databaseStore();
+    await withDb(db, () => store.put(juan.handle, mgKey));
+    const rawKey = (await db.one<{ value: string }>(`select value from platform.person_secret where user_id = $1 and purpose = 'mailguard'`, [juan.id]))!.value;
+    const readBack = await withDb(db, () => store.get(juan.handle));
+    const gpHas = await withDb(db, () => store.get(gp.handle));
+    // A row copied to another person does not decrypt for them.
+    await db.query(`insert into platform.person_secret (user_id, purpose, value) values ($1, 'mailguard', $2)`, [gp.id, rawKey]);
+    const copiedToGp = await withDb(db, () => personSecret(gp.id, 'mailguard'));
+    const actionsSource = await readF('app/email/actions.ts', 'utf8');
+    const ownOnly = !/formData\.get\(['"](handle|userId|user)['"]\)/.test(actionsSource);
+    await withDb(db, () => store.delete(juan.handle));
+    const afterDelete = await withDb(db, () => store.get(juan.handle));
+    await db.query(`delete from platform.person_secret where user_id = $1`, [gp.id]);
+    check('MAILGUARD each person’s key is kept encrypted in the app, bound to its owner, shown only masked, and set or removed only by its owner',
+      readBack === mgKey && !rawKey.includes(mgKey) && !rawKey.includes(mgKey.slice(-12)) && gpHas === null && copiedToGp === null
+        && maskSecret(mgKey) === `••••${mgKey.slice(-4)}` && maskSecret('short-key') === '••••' && ownOnly && afterDelete === null,
+      'AES-256-GCM under the person-secret subkey, bound to user and purpose; the email actions take no other person’s id, so an admin cannot read or set another’s key.');
 
     const scratch = await mkdtemp(join(tmpdir(), 'preview-key-'));
     try {
@@ -439,7 +502,8 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     retireSetupCode();
     await db.query('delete from platform.setting');
     await db.query('update platform.app_user set session_epoch = 0 where id = $1', [juan.id]);
-    await db.query(`update platform.app_user set active = false where handle in ('setup-props-gp', 'setup-props-gone')`);
+    await db.query(`update platform.app_user set active = false where handle in ('setup-props-gp', 'setup-props-gone') or email = 'newcomer@example.invalid'`);
+    if (demoted.length) await db.query(`update platform.app_user set access = 'admin' where id = any($1::uuid[])`, [demoted]);
     forgetSettings();
     await loadSettings(db);
   }

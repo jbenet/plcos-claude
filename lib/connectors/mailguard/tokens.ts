@@ -10,6 +10,8 @@ import { KEY_FORMAT } from './allowlist';
  *             their handle, for a key pasted in Preferences. Written through `security -i` on standard
  *             input, so the key is never on a command line.
  *   file      the demo's fake mailguard only: invented keys in a 0600 file next to its database.
+ *   database  a deployed server (Railway has no Keychain): platform.person_secret, each key encrypted on its
+ *             own under PLCOS_SECRET's person-secret subkey, bound to its owner (lib/settings/person-secrets.ts).
  *   memory    the properties.
  *
  * Juan's key, stored with `npm run secret:store -- mailguard-token`, is not read here: it reaches the
@@ -17,7 +19,7 @@ import { KEY_FORMAT } from './allowlist';
  */
 
 export interface TokenStore {
-  readonly kind: 'keychain' | 'file' | 'memory';
+  readonly kind: 'keychain' | 'file' | 'memory' | 'database';
   get(handle: string): Promise<string | null>;
   put(handle: string, key: string): Promise<void>;
   delete(handle: string): Promise<void>;
@@ -91,6 +93,40 @@ export function keychainStore(): TokenStore {
     async delete(h) {
       checkHandle(h);
       await security(['delete-generic-password', '-s', SERVICE, '-a', h]);
+    },
+  };
+}
+
+/** The purpose a mailguard key is kept under in platform.person_secret. */
+export const MAILGUARD_PURPOSE = 'mailguard';
+
+/**
+ * A deployed server's store: platform.person_secret, by the person's id. Only the person themself reaches
+ * it — the callers pass the acting user's own handle — and nothing here lists anyone's keys.
+ */
+export function databaseStore(): TokenStore {
+  const idOf = async (h: string) => {
+    checkHandle(h);
+    const { getUserByHandle } = await import('@/modules/platform');
+    const user = await getUserByHandle(h);
+    if (!user) throw new Error('Not an active person.');
+    return user.id;
+  };
+  return {
+    kind: 'database',
+    async get(h) {
+      const { personSecret } = await import('@/lib/settings/person-secrets');
+      const key = await personSecret(await idOf(h), MAILGUARD_PURPOSE);
+      return key && KEY_FORMAT.test(key) ? key : null;
+    },
+    async put(h, k) {
+      checkKey(k);
+      const { setPersonSecret } = await import('@/lib/settings/person-secrets');
+      await setPersonSecret(await idOf(h), MAILGUARD_PURPOSE, k);
+    },
+    async delete(h) {
+      const { clearPersonSecret } = await import('@/lib/settings/person-secrets');
+      await clearPersonSecret(await idOf(h), MAILGUARD_PURPOSE);
     },
   };
 }

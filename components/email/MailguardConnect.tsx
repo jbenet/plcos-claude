@@ -2,6 +2,8 @@ import { demoMailguardAction, forgetMailguardAction } from '@/app/email/actions'
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import { mailStatus } from '@/modules/email';
+import { keyFor, mailguardRuntime } from '@/lib/connectors/mailguard';
+import { maskSecret } from '@/lib/settings/store';
 import { PasteToken, TestConnection } from './MailguardForms';
 
 /** What each capability lets the token do, in words. */
@@ -28,6 +30,10 @@ export async function MailguardConnect() {
   const user = await (await auth()).currentUser();
   if (user.access === 'viewer') return null;
   const g = await mailStatus(user);
+  // Your own key, never anyone else's, and never in full: •••• and the last four of a long one.
+  const rt = mailguardRuntime();
+  const mine = rt.mode === 'off' ? null : await keyFor(rt, user.handle).catch(() => null);
+  const kept = rt.mode !== 'off' && rt.store.kind === 'database' ? 'kept encrypted in the app' : 'kept in the Keychain';
   const where = g.mode === 'fake' ? 'the demo’s fake mailguard' : g.mode === 'mailguard' ? 'mailguard' : 'off';
   return (
     <div className="card" id="email">
@@ -41,7 +47,7 @@ export async function MailguardConnect() {
         ) : g.connected && g.ok ? (
           <>
             <div className="fact"><span>Mailbox</span><span>{g.mailbox}</span></div>
-            <div className="fact"><span>Token</span><span>tool “{g.tool}” · {g.source === 'keychain' ? 'from the Keychain item plcos-claude / mailguard-token' : 'pasted here, kept in the Keychain'}</span></div>
+            <div className="fact"><span>Token</span><span>{mine ? <span className="mono">{maskSecret(mine.key)}</span> : null} tool “{g.tool}” · {g.source === 'keychain' ? 'from the Keychain item plcos-claude / mailguard-token' : `pasted here, ${kept}`}</span></div>
             <div className="fact"><span>May</span><span>{g.capabilities.map((c) => SAYS[c] ?? c).join('; ')}. It cannot send: mailguard refuses sends for this token, and this tool has no send in it.</span></div>
             {!g.canThread && <div className="fact"><span>Follow-ups</span><span style={{ color: 'var(--amber)' }}>start new threads: give the tool read.metadata in mailguard to reply in the thread.</span></div>}
             {g.extras.length > 0 && <div className="fact"><span>More than needed</span><span style={{ color: 'var(--amber)' }}>{g.extras.join(', ')} — drafting needs only draft and read.metadata. Narrow the tool in mailguard.</span></div>}
@@ -50,10 +56,11 @@ export async function MailguardConnect() {
               <TestConnection />
               {g.source === 'pasted' && (
                 <form action={forgetMailguardAction} style={{ marginTop: 8 }}>
-                  <button className="btn" type="submit">Forget this token</button>
+                  <button className="btn" type="submit">Remove this token</button>
                 </form>
               )}
             </div>
+            {g.source === 'pasted' && <PasteToken label="Replace with another token" />}
             <p className="muted" style={{ fontSize: 11.5, marginBottom: 0 }}>
               Forgetting removes the token from this Mac; it stays valid at mailguard until you revoke it there. Drafts
               already in Gmail stay there.{g.source === 'keychain' ? ' To use another token, paste it below; it takes the Keychain item’s place for you.' : ''}

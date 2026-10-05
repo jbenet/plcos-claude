@@ -93,6 +93,9 @@ export function settingSource(key: string): 'env' | 'app' | 'unset' {
 /** Google sign-in can work: both halves of the client are known. */
 export const googleConfigured = (): boolean => SIGN_IN_KEYS.every((k) => !!settingValue(k));
 
+/** A secret for a page: •••• and its last four when it is 16+ characters long, else •••• alone. */
+export const maskSecret = (v: string): string => (v.length >= 16 ? `••••${v.slice(-4)}` : '••••');
+
 export interface SettingView {
   key: string; label: string; group: SettingGroup; secret: boolean; env: string | null; help: string; placeholder: string;
   source: 'env' | 'app' | 'unset';
@@ -113,7 +116,7 @@ export function settingsView(): SettingView[] {
     const app = env ? { value: undefined, unreadable: false } : appValue(def);
     const source = env ? 'env' : cache().rows.has(def.key) ? 'app' : 'unset';
     const v = env ?? app.value;
-    const shown = !v ? '' : !def.secret ? v : env ? '' : v.length >= 16 ? `••••${v.slice(-4)}` : '••••';
+    const shown = !v ? '' : !def.secret ? v : env ? '' : maskSecret(v);
     return {
       key: def.key, label: def.label, group: def.group, secret: def.secret, env: def.env, help: def.help, placeholder: def.placeholder,
       source, shown, unreadable: app.unreadable, updatedAt: cache().rows.get(def.key)?.updatedAt ?? null,

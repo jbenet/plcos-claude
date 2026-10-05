@@ -3,7 +3,8 @@ import { KEY_FORMAT, parseBase } from './allowlist';
 import { DraftOnlyViolation, httpsTransport, MailguardError, mailguardClient, type MailguardClient, type MailguardRequestLog, type MailguardTransport } from './client';
 import { FAKE_BASE, fakeTransport } from './fake';
 import { domainOf, draftOnlyVerdict, type RefusalCode } from './scope';
-import { fileStore, keychainStore, memoryStore, type TokenStore } from './tokens';
+import { databaseStore, fileStore, keychainStore, memoryStore, type TokenStore } from './tokens';
+import { deployedServer } from '@/config/sign-in';
 import { settingValue } from '@/lib/settings/store';
 import { MAILGUARD_ADDRESS_SETTING } from './setting';
 
@@ -49,7 +50,8 @@ export function mailguardRuntime(overrides: Partial<MailguardRuntime> = {}): Run
   if (!(base instanceof URL)) return { mode: 'off', why: base.why };
   const key = process.env.MAILGUARD_TOKEN?.trim();
   return {
-    mode: 'mailguard', base, transport: httpsTransport(), store: keychainStore(),
+    // A deployed server keeps each person's key in the database, encrypted; the Mac keeps the Keychain.
+    mode: 'mailguard', base, transport: httpsTransport(), store: deployedServer() ? databaseStore() : keychainStore(),
     envKey: key ? { handle: config.email.mailguard.keychainTokenFor, key } : null, fakeDir: null, ...overrides,
   };
 }

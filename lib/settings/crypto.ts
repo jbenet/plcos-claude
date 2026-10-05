@@ -6,7 +6,7 @@
 import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { rootSecret } from './key';
 
-export type Purpose = 'settings' | 'session' | 'oauth';
+export type Purpose = 'settings' | 'session' | 'oauth' | 'person-secret';
 
 const subkeys = new Map<string, { root: Buffer; key: Buffer }>();
 function subkey(purpose: Purpose): Buffer {
@@ -22,19 +22,19 @@ function subkey(purpose: Purpose): Buffer {
  * AES-256-GCM, a fresh 12-byte IV each time. Output: base64(iv | tag | ciphertext). `bound` is
  * authenticated with it (the setting's key), so a value moved to another row does not decrypt.
  */
-export function encrypt(plain: string, bound: string): string {
+export function encrypt(plain: string, bound: string, purpose: 'settings' | 'person-secret' = 'settings'): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', subkey('settings'), iv);
+  const cipher = createCipheriv('aes-256-gcm', subkey(purpose), iv);
   cipher.setAAD(Buffer.from(bound, 'utf8'));
   const ct = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
   return Buffer.concat([iv, cipher.getAuthTag(), ct]).toString('base64');
 }
 
 /** Throws when the key changed, the value was moved, or a byte was altered. */
-export function decrypt(sealed: string, bound: string): string {
+export function decrypt(sealed: string, bound: string, purpose: 'settings' | 'person-secret' = 'settings'): string {
   const buf = Buffer.from(sealed, 'base64');
   if (buf.length < 29) throw new Error('Sealed value is too short.');
-  const decipher = createDecipheriv('aes-256-gcm', subkey('settings'), buf.subarray(0, 12));
+  const decipher = createDecipheriv('aes-256-gcm', subkey(purpose), buf.subarray(0, 12));
   decipher.setAAD(Buffer.from(bound, 'utf8'));
   decipher.setAuthTag(buf.subarray(12, 28));
   return Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]).toString('utf8');
