@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type { AppUser } from '@/lib/auth';
 import { requireMutationOrigin, requireMutationProfile, MutationGuardError } from '@/lib/mutation-policy';
 import { routeRules, type RouteId } from './route-rules';
@@ -67,5 +68,21 @@ export function withRoute(name: RouteId, handler: (request: Request, context: an
     }
   };
 }
-/** Fixed, DB-free liveness, with no application data. */
-export function healthRoute() { return Response.json({ ok: true }); }
+let imageCommit: string | null | undefined;
+/** The commit a deployed image was built from (.image-commit, written by the Dockerfile), or null elsewhere. */
+function builtFrom(): string | null {
+  if (imageCommit !== undefined) return imageCommit;
+  try {
+    const text = readFileSync(`${process.cwd()}/.image-commit`, 'utf8').trim();
+    imageCommit = /^[0-9a-f]{7,40}$/.test(text) ? text.slice(0, 12) : null;
+  } catch { imageCommit = null; }
+  return imageCommit;
+}
+/**
+ * Fixed, DB-free liveness, with no application data. On a deployed image it also names the commit it was built
+ * from, so `scripts/ship.sh --deploy` can tell when Railway is serving what it pushed (5 Oct 2026).
+ */
+export function healthRoute() {
+  const commit = builtFrom();
+  return Response.json(commit ? { ok: true, commit } : { ok: true });
+}
