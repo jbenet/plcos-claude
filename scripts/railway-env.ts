@@ -30,6 +30,8 @@ const RAILWAY: Record<string, string> = {
   PLCOS_SECRET: '`openssl rand -base64 32`, sealed. One of the two values that live outside the app; keep a copy in a password manager (§8).',
   PLCOS_PUBLIC_URL: 'Leave unset: /setup fills it from Railway\'s domain.',
   PLCOS_DEPLOYED: 'Do not set: the Dockerfile sets it (Google sign-in, never the user switcher).',
+  PLCOS_SIGNIN_DOMAINS: 'Leave unset (empty is right unless the Workspace signs in with an alias domain).',
+  PLCOS_TRUSTED_PROXY_HOPS: 'Leave unset: 1, Railway\'s edge. The rehearsal confirms it (§4 step 5).',
   DATABASE_URL: '`postgresql://plcos_app@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/plcos_demo` first, then `…/plcos_live`. No password in it.',
   PGPASSWORD: 'The `plcos_app` password you set on Railway Postgres (§4 step 2). One of the two secrets that live outside the app.',
   PGSSLMODE: 'Leave unset on the private network (code change 1).',

@@ -213,7 +213,7 @@ export function SetupWizard({ brand, fields, suggestedUrl, suggestedFrom, consol
             {input('googleClientSecret', fields.googleClientSecret)}
           </>}
 
-          {step === 3 && input('adminEmail', { label: 'Admin email', placeholder: 'you@your-workspace.org', help: 'A verified address in a Google Workspace (not @gmail.com). An existing person with this address becomes an admin; otherwise one is added.' }, { type: 'email', inputMode: 'email', autoFocus: true })}
+          {step === 3 && input('adminEmail', { label: 'Admin email', placeholder: 'you@your-workspace.org', help: 'A verified address at your Google Workspace’s own domain (not @gmail.com, and not an alias domain: those are allowed later in Settings → Connections). An existing person with this address becomes an admin; otherwise one is added.' }, { type: 'email', inputMode: 'email', autoFocus: true })}
 
           {step === 4 && optional.map(({ name, what }) => {
             const f = fields[name];

@@ -5,6 +5,8 @@
  * prints a new code anyway.
  */
 import { isIP } from 'node:net';
+import { PROXY_HOPS_SETTING } from './registry';
+import { settingValue } from './store';
 
 export const SETUP_FAILS_PER_ADDRESS = 10;
 export const SETUP_FAILS_TOTAL = 10_000;
@@ -45,12 +47,18 @@ export function addressKey(ip: string | null): string {
   return ip;
 }
 
-/** Has this address, or everyone together, had too many wrong codes this hour? */
+/**
+ * Has this address had too many wrong codes this hour? Past the total cap, only an address with no wrong
+ * code this hour may still try: guessing from many addresses then gets one try per new address an hour,
+ * and the operator, who has made no mistakes, is never locked out by strangers filling the total. A request
+ * with no address is refused while the total is over: it cannot be told apart.
+ */
 export function setupBlocked(ip: string | null, now = Date.now()): boolean {
   const st = state();
-  if (current(st.all, now).n >= SETUP_FAILS_TOTAL) return true;
-  // With no client address everyone would share one bucket, and anyone could fill it: total cap only.
-  return !!ip && current(st.by.get(addressKey(ip)), now).n >= SETUP_FAILS_PER_ADDRESS;
+  const mine = ip ? current(st.by.get(addressKey(ip)), now).n : 0;
+  if (mine >= SETUP_FAILS_PER_ADDRESS) return true;
+  if (current(st.all, now).n >= SETUP_FAILS_TOTAL) return !ip || mine > 0;
+  return false;
 }
 
 export function noteSetupFailure(ip: string | null, now = Date.now()): void {
@@ -69,18 +77,29 @@ export function resetSetupFloodgate() {
   delete (globalThis as typeof globalThis & { __plcosRefusals?: unknown }).__plcosRefusals;
 }
 
-const PRIVATE = /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|169\.254\.|::1$|f[cd][0-9a-f]{2}:|fe80:)/i;
+/**
+ * How many proxies in front of this server append to X-Forwarded-For. Railway's edge is one. GUESS: the
+ * rehearsal must confirm how Railway's edge sets the header (docs/deploy/railway.md §4). Settings →
+ * Connections, or PLCOS_TRUSTED_PROXY_HOPS, overrides it; 0 trusts the header not at all.
+ */
+export const TRUSTED_PROXY_HOPS = 1; // GUESS
+
+export function trustedHops(): number {
+  const v = Number(settingValue(PROXY_HOPS_SETTING.key) ?? TRUSTED_PROXY_HOPS);
+  return Number.isInteger(v) && v >= 0 && v <= 5 ? v : TRUSTED_PROXY_HOPS;
+}
 
 /**
- * The client's address. The proxy in front (Railway's edge) appends the address it saw to
- * X-Forwarded-For, so the right-most public entry is the one nobody upstream could forge.
+ * The client's address: the entry the outermost trusted proxy appended, counted from the right. Everything
+ * to its left came from the client and could say anything. With fewer entries than trusted hops the request
+ * did not come through the proxies, and with 0 hops the header is not trusted: no address, so only the
+ * total limits apply.
  */
-export function clientIp(h: Pick<Headers, 'get'>): string | null {
-  const entries = (h.get('x-forwarded-for') ?? '').split(',').map((s) => s.trim().replace(/^\[|\](:\d+)?$/g, '')).filter((s) => isIP(s));
-  for (let i = entries.length - 1; i >= 0; i--) if (!PRIVATE.test(entries[i]!)) return entries[i]!.slice(0, 64);
-  if (entries.length) return entries[0]!.slice(0, 64);
-  const real = h.get('x-real-ip')?.trim() ?? '';
-  return isIP(real) ? real : null;
+export function clientIp(h: Pick<Headers, 'get'>, hops = trustedHops()): string | null {
+  if (hops <= 0) return null;
+  const entries = (h.get('x-forwarded-for') ?? '').split(',').map((s) => s.trim().replace(/^\[|\](:\d+)?$/g, ''));
+  const ip = entries.length >= hops ? entries[entries.length - hops]! : '';
+  return isIP(ip) ? ip.slice(0, 64) : null;
 }
 
 /**

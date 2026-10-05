@@ -76,6 +76,11 @@ to our Postgres:
   - Cookie-acting route handlers refuse cross-site POSTs.
   - Roles stay as they are. The local switcher never serves real data on a public URL.
   - MCP tokens are bearer tokens and keep working. Point `claude mcp add` at the new URL.
+- **Setup never reopens (5 Oct, security review).** Finishing it writes `setup.completedAt`; after that a lost
+  or rotated `PLCOS_SECRET`, or a removed Google client, does not reopen it. An admin re-enters Google in
+  Settings → Connections; if nobody can sign in, the two `GOOGLE_SIGNIN_` variables on the service win and let
+  an admin in. A deployed server with no `PLCOS_SECRET` and no volume at the data folder refuses to start.
+  Settings are read-only under the Mac's user switcher.
 - **As built (4 Oct).** Which sign-in a server uses is `config/sign-in.ts`: Google when the image says so
   (`PLCOS_DEPLOYED=1`, set in the Dockerfile) or Railway's variables are present, LabOS with `LABOS_ME_URL`,
   the switcher on the Mac. The sign-in client lives in its own connector, `lib/connectors/google-signin`
@@ -98,6 +103,8 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
 | `PLCOS_PUBLIC_URL` | optional |  | Leave unset: /setup fills it from Railway's domain. |
 | `GOOGLE_SIGNIN_CLIENT_ID` | optional |  | Leave unset: enter it in /setup (then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `GOOGLE_SIGNIN_CLIENT_SECRET` | optional | yes | Leave unset: enter it in /setup (then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
+| `PLCOS_SIGNIN_DOMAINS` | optional |  | Leave unset (empty is right unless the Workspace signs in with an alias domain). |
+| `PLCOS_TRUSTED_PROXY_HOPS` | optional |  | Leave unset: 1, Railway's edge. The rehearsal confirms it (§4 step 5). |
 | `DATABASE_URL` | required |  | `postgresql://plcos_app@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/plcos_demo` first, then `…/plcos_live`. No password in it. |
 | `PGPASSWORD` | optional | yes | The `plcos_app` password you set on Railway Postgres (§4 step 2). One of the two secrets that live outside the app. |
 | `PGSSLMODE` | optional |  | Leave unset on the private network (code change 1). |
@@ -170,6 +177,10 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
    follow the page. It shows the redirect URI to add to the Google OAuth client.
 5. **Check:** `/api/health` gives 200, sign-in works, and the demo pages load. Run
    `bash scripts/preflight.sh --dry` through `railway ssh`.
+   **Also confirm how Railway's edge sets `X-Forwarded-For`.** The setup-code limits count wrong codes by the
+   address the outermost trusted proxy appended (`PLCOS_TRUSTED_PROXY_HOPS`, default 1, a GUESS). Send a request
+   with a made-up `X-Forwarded-For: 192.0.2.1` and check that the audit row of a wrong code names your real
+   address, not 192.0.2.1. If it does not, set the hop count in Settings → Connections.
 6. **Deploys from then on:** Juan fast-forwards `deploy` after `scripts/ship.sh` passes. Rollback is one
    click: Deployments → an earlier one → Redeploy.
 

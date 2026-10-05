@@ -34,9 +34,33 @@ function decode(text: string, where: string): Buffer {
   return buf;
 }
 
+/**
+ * Why a deployed server must not start, if it must not: PLCOS_SECRET is unset and Railway says no volume
+ * holds the data folder, so a key made now would be a new one on every deploy, and every stored secret (the
+ * Google client included) would stop decrypting at the next one. Null when it may start.
+ */
+export function bootRefusal(env: Record<string, string | undefined> = process.env): string | null {
+  if (!deployedServer(env) || env.PLCOS_SECRET?.trim()) return null;
+  const warning = storageWarning(env);
+  return warning
+    ? `[setup] Refusing to start: PLCOS_SECRET is not set, and the key would be made on a disk that is lost on every deploy. ${warning} Or set PLCOS_SECRET (openssl rand -base64 32) as a sealed variable.`
+    : null;
+}
+
+/** A key file another process is writing this instant can read as empty; wait briefly before giving up. */
+function readKeyFile(file: string): string {
+  for (let i = 0; ; i++) {
+    const text = readFileSync(/* turbopackIgnore: true */ file, 'utf8').trim();
+    if (text || i >= 20) return text;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25); // 20 × 25 ms
+  }
+}
+
 function load(): { key: Buffer; source: SecretSource; file: string | null } {
   const fromEnv = process.env.PLCOS_SECRET?.trim();
   if (fromEnv) return { key: decode(fromEnv, 'PLCOS_SECRET'), source: 'env', file: null };
+  const refusal = bootRefusal();
+  if (refusal) throw new Error(refusal);
   const file = secretFile();
   if (!existsSync(/* turbopackIgnore: true */ file)) {
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
@@ -46,7 +70,7 @@ function load(): { key: Buffer; source: SecretSource; file: string | null } {
     try { chmodSync(/* turbopackIgnore: true */ file, 0o600); } catch { /* a volume that refuses chmod still works */ }
     if (deployedServer()) console.warn(`[setup] PLCOS_SECRET is not set: made one at ${file}. Move it into the PLCOS_SECRET variable (Settings → Connections says how).`);
   }
-  return { key: decode(readFileSync(/* turbopackIgnore: true */ file, 'utf8'), file), source: deployedServer() ? 'volume' : 'dev-file', file };
+  return { key: decode(readKeyFile(file), file), source: deployedServer() ? 'volume' : 'dev-file', file };
 }
 
 export function rootSecret(): Buffer {

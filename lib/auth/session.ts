@@ -11,8 +11,13 @@ import type { Queryable } from '@/lib/db';
 import { sign, verifySignature } from '@/lib/settings/crypto';
 import type { AppUser } from '@/modules/platform';
 
-export const SESSION_COOKIE = `${config.data.cookiePrefix}session`;
-export const OAUTH_COOKIE = `${config.data.cookiePrefix}oauth`;
+/**
+ * The cookies' names. Over https they carry the `__Host-` prefix, so the browser accepts them only Secure,
+ * for Path=/ and with no Domain: a sibling subdomain cannot plant one. Locally (plain http) they keep the
+ * port in the name instead, as every cookie here does.
+ */
+export const sessionCookie = (secure: boolean) => `${secure ? '__Host-' : ''}${config.data.cookiePrefix}session`;
+export const oauthCookie = (secure: boolean) => `${secure ? '__Host-' : ''}${config.data.cookiePrefix}oauth`;
 
 /** The cookie for a person who just signed in. `days` comes from Settings (session.days), default 30. */
 export function sessionValue(user: { id: string; sessionEpoch: number }, days: number, now = Date.now()): { value: string; maxAge: number } {
@@ -37,6 +42,9 @@ export function sessionClaims(value: string | undefined | null, now = Date.now()
   if (Number(exp) <= now) return null;
   return { uid, epoch: Number(epoch), expires: Number(exp) };
 }
+
+/** The reporter a feedback journal entry carries: the session's user and epoch, checked again at ingest. */
+export const reporterOf = (c: SessionClaims) => `uid:${c.uid}:${c.epoch}`;
 
 /** The signed-in person, or null: a bad signature, an expired cookie, an inactive person or a raised epoch. */
 export async function userFromSession(value: string | undefined | null, q?: Queryable, now = Date.now()): Promise<AppUser | null> {

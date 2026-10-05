@@ -24,7 +24,7 @@ export const GOOGLE_CLIENT_SECRET_SETTING: SettingDef = {
   group: 'signin',
   secret: true,
   env: 'GOOGLE_SIGNIN_CLIENT_SECRET',
-  help: 'Shown when the client is made, beside its ID. Removing it closes sign-in for everyone and reopens /setup.',
+  help: 'Shown when the client is made, beside its ID. Removing it stops anyone signing in until a new one is entered; setup does not reopen.',
   placeholder: 'GOCSPX-…',
   validate: (v) => tokenValue('google.clientSecret', 'The Google client secret', v, { min: 10, pattern: /^[\w-]+$/, patternWhy: 'A Google client secret is letters, digits, - and _.' }),
 };

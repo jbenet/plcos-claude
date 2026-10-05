@@ -9,6 +9,8 @@ export interface RowView {
   key: string; label: string; secret: boolean; env: string | null; help: string; placeholder: string;
   source: 'env' | 'app' | 'unset'; shown: string; unreadable: boolean; updatedAt: string | null;
   checkable: boolean; removeWarning: string | null;
+  /** The Mac's user switcher: shown, never changed from here. */
+  readOnly: boolean;
 }
 
 function Source({ v }: { v: RowView }) {
@@ -34,7 +36,7 @@ export function SettingRow({ v }: { v: RowView }) {
       </div>
       <p className={s.help}>{v.help}{v.unreadable ? ' The stored value was encrypted with another PLCOS_SECRET: enter it again.' : ''}</p>
 
-      {v.source !== 'env' && (editing ? (
+      {v.source !== 'env' && !v.readOnly && (editing ? (
         <form action={save} className={s.form}>
           <input type="hidden" name="key" value={v.key} />
           <input type={v.secret ? 'password' : 'text'} name="value" autoComplete="off" spellCheck={false} required aria-label={v.label}
@@ -53,7 +55,7 @@ export function SettingRow({ v }: { v: RowView }) {
           </form>
         </div>
       ))}
-      {v.source === 'env' && v.checkable && (
+      {(v.source === 'env' || v.readOnly) && v.checkable && (
         <form action={check} className={s.form}><input type="hidden" name="key" value={v.key} /><button className="btn" disabled={checking}>{checking ? 'Checking…' : 'Check the key'}</button></form>
       )}
       {result && <p className={result.ok ? s.ok : s.bad} role="status">{result.ok ? result.message : result.error}</p>}

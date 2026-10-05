@@ -8,13 +8,29 @@
 import { randomBytes } from 'node:crypto';
 import { config } from '@/config/deployment';
 import { sameText } from './crypto';
-import { googleConfigured, settingValue } from './store';
-import { PUBLIC_URL_SETTING } from './registry';
+import { googleConfigured, hasStoredRow, settingValue, unreadableSettings } from './store';
+import { PUBLIC_URL_SETTING, settingDef, SIGN_IN_KEYS } from './registry';
+
+/** The sign-in client's variables, named by its own connector's declaration. */
+const SIGN_IN_ENV = SIGN_IN_KEYS.map((k) => settingDef(k)?.env ?? k);
 
 const g = globalThis as typeof globalThis & { __plcosSetupCode?: string; __plcosSetupAnnounced?: boolean };
 
-/** Open while this server signs in with Google and the Google client is not known. Never on the Mac. */
-export const setupOpen = (): boolean => config.auth.provider === 'google' && !googleConfigured();
+/**
+ * Written in the setup transaction (platform.setting, outside the registry, so no page can change it).
+ * Once it exists setup never reopens: not when PLCOS_SECRET changes, not when the Google client is removed.
+ * Re-entering Google after that is an admin's job in Settings → Connections (or, if nobody can sign in,
+ * the sign-in client's two variables set on the service, which win).
+ */
+export const SETUP_DONE_KEY = 'setup.completedAt';
+
+/**
+ * Open only while this server signs in with Google, setup has never been completed, and no Google client is
+ * stored or set — a stored one that does not decrypt keeps it closed too (announceAtBoot says so, loudly).
+ * Never on the Mac.
+ */
+export const setupOpen = (): boolean => config.auth.provider === 'google' && !hasStoredRow(SETUP_DONE_KEY)
+  && !SIGN_IN_KEYS.some((k) => hasStoredRow(k)) && !googleConfigured();
 
 /** The current code, made on first use: three groups of four hex digits (48 bits). */
 export function setupCode(): string {
@@ -36,6 +52,17 @@ export function checkSetupCode(input: unknown): boolean {
 
 /** After setup, a fresh code, so the old one (seen in the log) is no use. */
 export function retireSetupCode() { delete g.__plcosSetupCode; delete g.__plcosSetupAnnounced; }
+
+/**
+ * Take the code out of play at once, synchronously, before a finish does anything that waits: a second
+ * finish arriving meanwhile cannot use it. Give it back with `releaseSetupCode` if the finish fails.
+ */
+export function holdSetupCode(): string | undefined {
+  const held = g.__plcosSetupCode;
+  delete g.__plcosSetupCode;
+  return held;
+}
+export function releaseSetupCode(held: string | undefined) { if (held) g.__plcosSetupCode = held; }
 
 /** The address Railway gives the service, when it runs there. */
 export function platformUrl(env: Record<string, string | undefined> = process.env): string | null {
@@ -64,6 +91,12 @@ export async function announceAtBoot(): Promise<void> {
   if (config.auth.provider !== 'google') return;
   const { settingsReady } = await import('./store');
   await settingsReady();
+  const unreadable = unreadableSettings();
+  if (unreadable.length) {
+    console.error(`[setup] ${unreadable.length} stored secret(s) do not decrypt with this server's PLCOS_SECRET (${unreadable.join(', ')}). `
+      + `The key changed or was lost. Setup stays closed. Restore PLCOS_SECRET, or set ${SIGN_IN_ENV.join(' and ')} `
+      + 'on the service, sign in as an admin, and enter the others again in Settings → Connections.');
+  }
   announceSetup();
 }
 

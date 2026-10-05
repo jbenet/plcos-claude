@@ -16,6 +16,7 @@ const WHY: Record<string, string> = {
   'not-configured': 'Google sign-in is not configured on this server yet.',
   'email-unverified': 'Google has not verified that address.',
   'not-workspace': 'Sign in with your organization’s Google Workspace account, not a personal Google account.',
+  'domain-mismatch': 'That address is not at your Workspace’s own domain. An admin can allow an alias domain in Settings → Connections.',
   'not-on-roster': 'That address is not on this app’s roster, or the person is inactive. Ask an admin to add you.',
   'ambiguous-email': 'More than one person here has that address. Ask an admin to fix the roster.',
 };

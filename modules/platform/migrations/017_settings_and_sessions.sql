@@ -15,3 +15,19 @@ create table platform.setting (
 -- A Google session is a signed cookie naming the user and this number. Raising it signs that person out
 -- everywhere at once, with no session table.
 alter table platform.app_user add column session_epoch integer not null default 0;
+
+-- Deactivating a person raises their epoch too, so the cookies they held do not come back to life if they
+-- are made active again later. Every path that deactivates someone gets it, not only the app's own.
+create function platform.retire_sessions_on_deactivate() returns trigger
+language plpgsql as $$
+begin
+  if old.active and not new.active then
+    new.session_epoch := old.session_epoch + 1;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger app_user_retire_sessions
+before update of active on platform.app_user
+for each row execute function platform.retire_sessions_on_deactivate();

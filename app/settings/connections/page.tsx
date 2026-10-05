@@ -19,8 +19,8 @@ export const dynamic = 'force-dynamic';
 
 const CHECKABLE = new Set(['anthropic.apiKey', 'affinity.apiKey']);
 const REMOVE_WARNING: Record<string, string> = {
-  'google.clientId': 'Remove the Google client ID? Nobody can sign in without it, you included: the server goes back to first-run setup, with a new code in its log.',
-  'google.clientSecret': 'Remove the Google client secret? Nobody can sign in without it, you included: the server goes back to first-run setup, with a new code in its log.',
+  'google.clientId': 'Remove the Google client ID? Nobody can sign in again until a new one is entered here. Setup does not reopen: if every admin is signed out, the sign-in variables on the service are the way back in.',
+  'google.clientSecret': 'Remove the Google client secret? Nobody can sign in again until a new one is entered here. Setup does not reopen: if every admin is signed out, the sign-in variables on the service are the way back in.',
   'app.publicUrl': 'Remove the saved public address? The app falls back to Railway’s domain, then the address each request came to.',
 };
 
@@ -39,8 +39,10 @@ export default async function ConnectionsPage() {
   const h = await headers();
   const base = publicUrl(h);
   const rows = settingsView();
+  // Under the Mac's user switcher anyone on the network can pick an admin: nothing is changed from here.
+  const readOnly = config.auth.provider !== 'google' && config.auth.provider !== 'labos';
   const by = (group: SettingView['group']) => rows.filter((r) => r.group === group).map((r): RowView => ({
-    ...r, checkable: CHECKABLE.has(r.key), removeWarning: REMOVE_WARNING[r.key] ?? null,
+    ...r, checkable: CHECKABLE.has(r.key), removeWarning: REMOVE_WARNING[r.key] ?? null, readOnly,
   }));
   const key = secretSource();
   const storage = storageWarning();
@@ -53,7 +55,7 @@ export default async function ConnectionsPage() {
         <>
           <div className="lbl">How these are kept</div>
           <div className="kv"><span>Sign-in</span><span>{config.auth.provider === 'google' ? 'Google' : config.auth.provider === 'labos' ? 'LabOS' : 'user switcher'}</span></div>
-          <div className="kv"><span>Set up</span><span>{config.auth.provider !== 'google' ? 'not needed' : setupOpen() ? 'open' : 'done'}</span></div>
+          <div className="kv"><span>Set up</span><span>{config.auth.provider !== 'google' ? 'not needed' : setupOpen() ? 'open' : 'closed for good'}</span></div>
           <div className="kv"><span>Encryption key</span><span>{key.source === 'env' ? 'PLCOS_SECRET' : key.source === 'volume' ? 'on the volume' : 'dev file'}</span></div>
           <div className="kv"><span>Stored here</span><span>{rows.filter((r) => r.source === 'app').length} of {rows.length}</span></div>
           <div className="scope">
@@ -71,6 +73,12 @@ export default async function ConnectionsPage() {
         PLCOS_SECRET and never shown again in full. Your own preferences are in <Link href="/settings">Preferences</Link>.
       </p>
 
+      {readOnly && (
+        <div className="scope" style={{ marginTop: 0 }}>
+          <b>Read-only on this server.</b>
+          <p>It uses the user switcher, so anyone on the network could pick an admin: settings are changed only on a deployed server with sign-in. Here the keys come from the environment, through the Keychain wrappers.</p>
+        </div>
+      )}
       {storage && <div className="warn" style={{ marginBottom: 16 }}><b>Storage.</b><p>{storage}</p></div>}
       {key.source === 'volume' && (
         <div className="warn" style={{ marginBottom: 16 }}>

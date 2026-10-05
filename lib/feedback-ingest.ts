@@ -58,6 +58,9 @@ async function fileOne(entry: InboxEntry, opts: IngestOptions): Promise<{ id: st
       // Resolve before writing the issue receipt. A busy or failed lookup leaves the durable
       // journal pending; only a successful lookup with no active users means unknown.
       const user = await resolveLocalUser(entry.reporter);
+      // A signed session's reporter (lib/auth/reporter.ts) whose person is gone or was signed out everywhere
+      // since: refused, never filed as nobody.
+      if (!user && entry.reporter?.startsWith('uid:')) throw new Refusal('Your session ended before this was filed. Sign in and send it again.');
       return fileFeedback(user, {
         title: r.title.trim() || r.body, body: r.body, kind: r.kind as never, priority: r.priority as never,
         page: r.page, context: { ...r.context, journaledAt: entry.receivedAt }, attachments: attachmentsOf(r),

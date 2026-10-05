@@ -12,7 +12,7 @@
 import { SettingError } from './types';
 import { checkSettings, googleConfigured, settingsReady, settingSource, writeSettings, type SettingPatch } from './store';
 import { noteSetupFailure, setupBlocked } from './floodgate';
-import { checkSetupCode, retireSetupCode, setupOpen } from './setup';
+import { checkSetupCode, holdSetupCode, releaseSetupCode, retireSetupCode, SETUP_DONE_KEY, setupOpen } from './setup';
 import { ANTHROPIC_SETTING } from '@/lib/workflows/setting';
 import { AFFINITY_SETTING } from '@/lib/connectors/affinity/setting';
 import { LINEAR_SETTING } from '@/lib/connectors/linear/setting';
@@ -49,6 +49,10 @@ export async function runSetup(input: SetupInput, from: { ip: string | null }): 
   if (input.mode === 'check') return { ok: true, done: false, message: 'The code is right.' };
   if (input.mode !== 'finish') return { ok: false, status: 400, field: null, error: 'Unknown step.' };
 
+  // The code leaves play now, before anything waits, so two finishes cannot both use it. It comes back only
+  // if this one fails.
+  const held = holdSetupCode();
+  let finished = false;
   // Every value, checked before anything is written.
   const patch: SettingPatch = {};
   try {
@@ -73,12 +77,15 @@ export async function runSetup(input: SetupInput, from: { ip: string | null }): 
 
     let adminId = '';
     await writeSettings(changes, { actorId: null, via: 'setup' }, async (tx) => {
-      const { ensureAdmin } = await import('@/modules/platform');
+      const { ensureAdmin, upsertSettingRow } = await import('@/modules/platform');
       const { user, created } = await ensureAdmin(tx, email);
       adminId = user.id;
+      // Setup is done for good: it never reopens, whatever happens to the key or the Google client.
+      await upsertSettingRow(tx, SETUP_DONE_KEY, new Date().toISOString(), false, null);
       await appendAudit({ actorId: null, action: 'setup.complete', subjectType: 'app_user', subjectId: user.id,
         detail: { keys: changes.map((c) => c.def.key), adminCreated: created, ...(from.ip ? { ip: from.ip } : {}) } }, tx);
     });
+    finished = true;
     retireSetupCode();
     return { ok: true, done: googleConfigured() && !!adminId, message: 'Set up. Sign in with Google as the admin you named.' };
   } catch (e) {
@@ -87,5 +94,7 @@ export async function runSetup(input: SetupInput, from: { ip: string | null }): 
       return { ok: false, status: 400, field, error: e.message };
     }
     throw e;
+  } finally {
+    if (!finished) releaseSetupCode(held);
   }
 }

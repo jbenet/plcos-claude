@@ -75,6 +75,14 @@ export function settingValue(key: string): string | undefined {
   return appValue(def).value;
 }
 
+/** Whether this process holds a stored row for the key, whether or not it decrypts. */
+export const hasStoredRow = (key: string): boolean => cache().rows.has(key);
+
+/** Stored secrets that do not decrypt with this server's PLCOS_SECRET: a changed or lost key. */
+export function unreadableSettings(): string[] {
+  return SETTINGS.filter((def) => def.secret && appValue(def).unreadable).map((def) => def.key);
+}
+
 export function settingSource(key: string): 'env' | 'app' | 'unset' {
   const def = settingDef(key);
   if (!def) return 'unset';
@@ -88,7 +96,10 @@ export const googleConfigured = (): boolean => SIGN_IN_KEYS.every((k) => !!setti
 export interface SettingView {
   key: string; label: string; group: SettingGroup; secret: boolean; env: string | null; help: string; placeholder: string;
   source: 'env' | 'app' | 'unset';
-  /** A plain value in full; a secret as •••• and its last four; an env-set secret as nothing at all. */
+  /**
+   * A plain value in full; a secret as •••• and its last four when it is at least 16 characters long (a short
+   * one would give too much of itself away), else as •••• alone; an env-set secret as nothing at all.
+   */
   shown: string;
   /** Stored, but it does not decrypt with this server's PLCOS_SECRET. */
   unreadable: boolean;
@@ -102,7 +113,7 @@ export function settingsView(): SettingView[] {
     const app = env ? { value: undefined, unreadable: false } : appValue(def);
     const source = env ? 'env' : cache().rows.has(def.key) ? 'app' : 'unset';
     const v = env ?? app.value;
-    const shown = !v ? '' : !def.secret ? v : env ? '' : `••••${v.slice(-4)}`;
+    const shown = !v ? '' : !def.secret ? v : env ? '' : v.length >= 16 ? `••••${v.slice(-4)}` : '••••';
     return {
       key: def.key, label: def.label, group: def.group, secret: def.secret, env: def.env, help: def.help, placeholder: def.placeholder,
       source, shown, unreadable: app.unreadable, updatedAt: cache().rows.get(def.key)?.updatedAt ?? null,
@@ -118,6 +129,12 @@ export interface CheckedChange { def: SettingDef; value: string | null }
  * value each refuse all of it. `null` removes a stored value.
  */
 export function checkSettings(patch: SettingPatch): CheckedChange[] {
+  // Only a server with a real sign-in keeps settings. On the Mac's user switcher anyone on the network can
+  // pick an admin, so nothing may be changed from a page there: its keys come from the environment
+  // (the Keychain wrappers) instead.
+  if (config.auth.provider !== 'google' && config.auth.provider !== 'labos') {
+    throw new SettingError('', 'Settings are changed only on a deployed server with sign-in. On the Mac, keys come from the environment (the Keychain wrappers).');
+  }
   const out: CheckedChange[] = [];
   for (const [key, raw] of Object.entries(patch)) {
     const def = settingDef(key);

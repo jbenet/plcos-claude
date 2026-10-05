@@ -19,8 +19,8 @@ import { sameText } from '@/lib/settings/crypto';
 import { clientIp, logThisRefusal } from '@/lib/settings/floodgate';
 import { publicUrl, setupOpen } from '@/lib/settings/setup';
 import { settingsReady, settingValue } from '@/lib/settings/store';
-import { SESSION_DAYS_SETTING } from '@/lib/settings/registry';
-import { cookieAttributes, cookieFrom, OAUTH_COOKIE, readStateCookie, SESSION_COOKIE, sessionClaims, sessionValue, stateCookie } from './session';
+import { SESSION_DAYS_SETTING, SIGNIN_DOMAINS_SETTING } from '@/lib/settings/registry';
+import { cookieAttributes, cookieFrom, oauthCookie, readStateCookie, sessionClaims, sessionCookie, sessionValue, stateCookie } from './session';
 
 function redirect(to: string, cookies: string[] = []): Response {
   const headers = new Headers({ location: to, 'cache-control': 'no-store' });
@@ -40,13 +40,13 @@ export async function startSignIn(request: Request): Promise<Response> {
   const verifier = randomBytes(32).toString('base64url');
   const challenge = createHash('sha256').update(verifier).digest('base64url');
   return redirect(signInUrl(client, state, challenge), [
-    cookieAttributes(OAUTH_COOKIE, stateCookie(state, verifier), config.auth.stateSeconds, base.startsWith('https://')),
+    cookieAttributes(oauthCookie(base.startsWith('https://')), stateCookie(state, verifier), config.auth.stateSeconds, base.startsWith('https://')),
   ]);
 }
 
 export type SignInRefusal =
   | 'oauth-state' | 'oauth-code' | 'oauth-exchange' | 'google-error' | 'not-configured'
-  | 'email-unverified' | 'not-workspace' | 'not-on-roster' | 'ambiguous-email';
+  | 'email-unverified' | 'not-workspace' | 'domain-mismatch' | 'not-on-roster' | 'ambiguous-email';
 
 /** Step two: Google sent the browser back. Every way out clears the state cookie. */
 export async function finishSignIn(request: Request): Promise<Response> {
@@ -55,7 +55,7 @@ export async function finishSignIn(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const base = publicUrl(request.headers);
   const secure = base.startsWith('https://');
-  const clearState = cookieAttributes(OAUTH_COOKIE, '', 0, secure);
+  const clearState = cookieAttributes(oauthCookie(secure), '', 0, secure);
   const ip = clientIp(request.headers);
 
   const refuse = async (rule: SignInRefusal, extra: { email?: string; hd?: string | null; userId?: string } = {}) => {
@@ -69,7 +69,7 @@ export async function finishSignIn(request: Request): Promise<Response> {
   };
 
   if (config.auth.provider !== 'google') return redirect(`${base}/`, [clearState]);
-  const pending = readStateCookie(cookieFrom(request.headers.get('cookie'), OAUTH_COOKIE));
+  const pending = readStateCookie(cookieFrom(request.headers.get('cookie'), oauthCookie(secure)));
   const state = url.searchParams.get('state') ?? '';
   if (!pending || !sameText(state, pending.state)) return refuse('oauth-state');
   // Google's error codes are short words; anything else is someone writing into the log and the URL.
@@ -86,6 +86,11 @@ export async function finishSignIn(request: Request): Promise<Response> {
   // Anyone who once had a work address can make a personal Google account with it and keep it after they
   // leave. Only a Workspace organization that proved it owns a domain can manage accounts at it (hd).
   if (!who.hd) return refuse('not-workspace', { email: who.email, hd: null });
+  // The organization must be the one at the address's own domain: an alias domain counts only when listed in
+  // Settings → Connections (signin.extraDomains, empty by default).
+  const domain = who.email.split('@').pop() ?? '';
+  const extra = (settingValue(SIGNIN_DOMAINS_SETTING.key) ?? '').split(/[\s,]+/).filter(Boolean);
+  if (domain !== who.hd && !extra.includes(domain)) return refuse('domain-mismatch', { email: who.email, hd: who.hd });
   const people = await activeUsersByEmail(who.email);
   if (people.length === 0) return refuse('not-on-roster', { email: who.email, hd: who.hd });
   if (people.length > 1) return refuse('ambiguous-email', { email: who.email, hd: who.hd });
@@ -94,16 +99,17 @@ export async function finishSignIn(request: Request): Promise<Response> {
   const days = Number(settingValue(SESSION_DAYS_SETTING.key) ?? config.auth.sessionDays) || config.auth.sessionDays;
   const session = sessionValue(person, days);
   await appendAudit({ actorId: person.id, action: 'signin', subjectType: 'app_user', subjectId: person.id, detail: { provider: 'google', hd: who.hd, ...(ip ? { ip } : {}) } });
-  return redirect(`${base}/today`, [clearState, cookieAttributes(SESSION_COOKIE, session.value, session.maxAge, secure)]);
+  return redirect(`${base}/today`, [clearState, cookieAttributes(sessionCookie(secure), session.value, session.maxAge, secure)]);
 }
 
 /** Sign out this browser. The cookie goes whether or not it was valid. */
 export async function signOut(request: Request): Promise<Response> {
   const base = publicUrl(request.headers);
-  const claims = sessionClaims(cookieFrom(request.headers.get('cookie'), SESSION_COOKIE));
+  const secure = base.startsWith('https://');
+  const claims = sessionClaims(cookieFrom(request.headers.get('cookie'), sessionCookie(secure)));
   if (claims) {
     const { appendAudit } = await import('@/modules/platform');
     await appendAudit({ actorId: claims.uid, action: 'signout', subjectType: 'app_user', subjectId: claims.uid, detail: { provider: 'google' } }).catch(() => undefined);
   }
-  return redirect(`${base}/signin?signedOut=1`, [cookieAttributes(SESSION_COOKIE, '', 0, base.startsWith('https://'))]);
+  return redirect(`${base}/signin?signedOut=1`, [cookieAttributes(sessionCookie(secure), '', 0, secure)]);
 }

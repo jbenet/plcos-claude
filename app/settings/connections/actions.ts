@@ -35,9 +35,7 @@ export async function clearSettingAction(formData: FormData): Promise<void> {
   } catch (e) {
     if (!(e instanceof SettingError)) throw e;
   }
-  // Without Google sign-in nobody can sign in to undo this: setup reopens, with a new code in the log.
-  const { announceSetup, retireSetupCode, setupOpen } = await import('@/lib/settings/setup');
-  if (setupOpen()) { retireSetupCode(); announceSetup(); }
+  // Setup never reopens once completed (lib/settings/setup.ts): an admin enters a new Google client here.
   revalidatePath('/settings/connections');
 }
 

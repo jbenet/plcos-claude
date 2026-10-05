@@ -12,6 +12,11 @@ import { join } from 'node:path';
 
 /** The file that marks data/real as a copy made here. It holds the time the copy was taken. */
 export const MARKER = '.preview-copy';
+/**
+ * The key that decrypts the settings kept in the database (lib/settings/key.ts). A copy never carries it
+ * beside the encrypted rows: the preview's own key cannot read them, so they read as unset.
+ */
+export const NEVER_COPIED = new Set(['dev-secret', 'secret']);
 
 const isLink = (p: string) => {
   try {
@@ -81,7 +86,7 @@ export function takeCopy(source: string, root: string): { takenAt: string; how: 
     mkdirSync(tmp, {recursive:true});
     how='clone';
     for(const entry of readdirSync(source)) {
-      if(entry==='dakota')continue;
+      if(entry==='dakota'||NEVER_COPIED.has(entry))continue;
       if(copyTree(join(source,entry),join(tmp,entry))==='copy')how='copy';
     }
     // A lock names the process that has a database open (lib/db/lock.ts): in the source, the live
@@ -90,6 +95,7 @@ export function takeCopy(source: string, root: string): { takenAt: string; how: 
     // Dakota's raw replica stays in plcos-data/real only (docs/20-dakota.md: its data never leaves our
     // system); a dev copy gets the database, never the replica files.
     rmSync(join(tmp, 'dakota'), { recursive: true, force: true });
+    for (const f of NEVER_COPIED) rmSync(join(tmp, f), { force: true });
     writeFileSync(join(tmp, MARKER), `${takenAt}\n`);
   } catch (err) {
     rmSync(tmp, { recursive: true, force: true });

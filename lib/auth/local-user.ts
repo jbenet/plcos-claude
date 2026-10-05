@@ -5,12 +5,14 @@ import { getUserByHandle, listUsers, type AppUser } from '@/modules/platform';
  * A cookie is only a selector, never a reporter identity. Lookup failures propagate so callers can retry.
  */
 export async function resolveLocalUser(handle: string | null | undefined, q?: Queryable): Promise<AppUser | null> {
-  // Behind Google sign-in the journal carries the signed session's user id (lib/auth/reporter.ts): that
-  // person if still active, and nobody else — never the roster's first user.
+  // Behind Google sign-in the journal carries the signed session's user id and epoch (lib/auth/reporter.ts):
+  // that person if still active and not signed out everywhere since, and nobody else — never the roster's
+  // first user.
   if (handle?.startsWith('uid:')) {
+    const [, id, epoch] = handle.split(':');
     const { sessionUser } = await import('@/modules/platform');
-    const found = await sessionUser(handle.slice(4), q);
-    if (!found) return null;
+    const found = id && epoch && /^\d+$/.test(epoch) ? await sessionUser(id, q) : null;
+    if (!found || found.sessionEpoch !== Number(epoch)) return null;
     const { sessionEpoch: _, ...user } = found;
     return user;
   }

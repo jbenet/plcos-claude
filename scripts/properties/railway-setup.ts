@@ -27,12 +27,19 @@ import { USER_COOKIE } from '../../lib/auth/cookie';
 import { decrypt, encrypt } from '../../lib/settings/crypto';
 import { forgetRootSecret, secretSource } from '../../lib/settings/key';
 import { SETTINGS, settingDef } from '../../lib/settings/registry';
-import { checkSettings, forgetSettings, googleConfigured, loadSettings, settingsView, settingValue, writeSettings } from '../../lib/settings/store';
+import { checkSettings, forgetSettings, googleConfigured, loadSettings, settingsView, settingValue, unreadableSettings, writeSettings } from '../../lib/settings/store';
 import { SettingError } from '../../lib/settings/types';
 import { addressKey, noteSetupFailure, resetSetupFloodgate, setupBlocked, SETUP_FAILS_PER_ADDRESS, SETUP_FAILS_TOTAL } from '../../lib/settings/floodgate';
-import { announceSetup, retireSetupCode, setupCode, setupOpen } from '../../lib/settings/setup';
+import { announceAtBoot, announceSetup, retireSetupCode, setupCode, setupOpen, SETUP_DONE_KEY } from '../../lib/settings/setup';
 import { runSetup } from '../../lib/settings/setup-service';
-import { SESSION_COOKIE, sessionValue, userFromSession } from '../../lib/auth/session';
+import { reporterOf, sessionClaims, sessionCookie, sessionValue, userFromSession } from '../../lib/auth/session';
+import { resolveLocalUser } from '../../lib/auth/local-user';
+import { bootRefusal, dataDir } from '../../lib/settings/key';
+import { clientIp } from '../../lib/settings/floodgate';
+import { takeCopy } from '../preview-copy';
+import { mkdtemp, mkdir as mkdirp, readdir, rm as rmrf, writeFile as writeF } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fakeConsent, GOOGLE_AUTHORIZE_URL, useFakeGoogle } from '../../lib/connectors/google-signin/signin';
 import { googleClientId } from '../../lib/connectors/google-signin/client-settings';
 import { affinityKey } from '../../lib/connectors/affinity/key';
@@ -91,6 +98,18 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     await loadSettings(db);
     resetSetupFloodgate();
     retireSetupCode();
+    // Settings are kept only behind a real sign-in; the switcher case is checked on its own below.
+    Object.assign(config.auth, { provider: 'google' });
+    /** A session cookie for a person at their current epoch, under both names (__Host- over https, plain over http). */
+    const sessionFor = async (id: string) => {
+      const e = (await db.one<{ e: number }>('select session_epoch e from platform.app_user where id = $1', [id]))!.e;
+      const v = encodeURIComponent(sessionValue({ id, sessionEpoch: e }, 30).value);
+      return `${sessionCookie(true)}=${v}; ${sessionCookie(false)}=${v}`;
+    };
+    const upsertMarker = async () => {
+      await db.query(`insert into platform.setting (key, value, secret) values ($1, $2, false) on conflict (key) do nothing`, [SETUP_DONE_KEY, new Date().toISOString()]);
+      await loadSettings(db);
+    };
     const settingRows = async () => (await db.one<{ n: number }>('select count(*)::int n from platform.setting'))!.n;
     const auditCount = async (actions: string[]) => (await db.one<{ n: number }>('select count(*)::int n from platform.audit_log where action = any($1)', [actions]))!.n;
 
@@ -113,7 +132,7 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     try { checkSettings({ 'anthropic.apiKey': null }); } catch (e) { refusedClear = e instanceof SettingError; }
     const { saveSettingAction } = await import('../../app/settings/connections/actions');
     const form = (o: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(o)) f.set(k, v); return f; };
-    const viaUi = await inRequest(db, 'action', `${USER_COOKIE}=${juan.handle}`, '/settings/connections',
+    const viaUi = await inRequest(db, 'action', await sessionFor(juan.id), '/settings/connections',
       () => saveSettingAction(null, form({ key: 'anthropic.apiKey', value: 'sk-ant-invented-other' })));
     const envView = settingsView().find((v) => v.key === 'anthropic.apiKey')!;
     check('SETTINGS an environment value wins, and neither the store nor the Connections action can change that field',
@@ -133,6 +152,24 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     check('SETTINGS validation refuses credentials in a URL, javascript:, CRLF, a bad client ID, an unknown key and an out-of-range number',
       bad.every(refuses) && !refuses({ 'app.publicUrl': `${PUBLIC}/` }) && checkSettings({ 'app.publicUrl': `${PUBLIC}/` })[0]!.value === PUBLIC && await settingRows() === before,
       `${bad.length} invented bad values refused, nothing written; a good address is normalized to its origin.`);
+
+    // ── The Mac's user switcher keeps nothing ────────────────────────────────────────────────
+    Object.assign(config.auth, { provider: 'local' });
+    const switcherRefused = refuses({ 'mailguard.url': 'https://mail.example.test' });
+    const switcherUi = await inRequest(db, 'action', `${USER_COOKIE}=${juan.handle}`, '/settings/connections',
+      () => saveSettingAction(null, form({ key: 'mailguard.url', value: 'https://mail.example.test' })));
+    check('SETTINGS under the Mac’s user switcher nothing is written, even by an admin, so nobody on the network can repoint a connector',
+      switcherRefused && switcherUi?.ok === false && /deployed server/.test(switcherUi.ok === false ? switcherUi.error : '') && settingValue('mailguard.url') === undefined,
+      'checkSettings refuses unless the provider is google or labos; the Connections action answers why; the Mac keeps its environment and Keychain path.');
+
+    // ── Masking ───────────────────────────────────────────────────────────────────────────────
+    Object.assign(config.auth, { provider: 'google' });
+    await withDb(db, () => writeSettings(checkSettings({ 'dakota.password': 'shortpw1' }), { actorId: juan.id, via: 'settings' }));
+    const short = settingsView().find((v) => v.key === 'dakota.password')!;
+    await withDb(db, () => writeSettings(checkSettings({ 'dakota.password': null }), { actorId: juan.id, via: 'settings' }));
+    check('SETTINGS a secret under 16 characters shows only that it is set; a longer one its last four',
+      short.shown === '••••' && short.source === 'app' && view.shown === `••••${DECOY.slice(-4)}`,
+      'An 8-character invented password shows as ••••, the 33-character decoy as •••• and four.');
 
     // ── /setup ───────────────────────────────────────────────────────────────────────────────
     Object.assign(config.auth, { provider: 'local' });
@@ -157,12 +194,20 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     const v6 = setupBlocked('2001:db8:1:2:ffff::9') && !setupBlocked('2001:db8:1:3::1') && addressKey('::ffff:203.0.113.9') === ip;
     const later = !setupBlocked('2001:db8:1:2::1', Date.now() + 3_600_001);
     resetSetupFloodgate();
+    noteSetupFailure('192.0.2.88');
     for (let i = 0; i < SETUP_FAILS_TOTAL; i++) noteSetupFailure(null);
-    const total = setupBlocked('192.0.2.77') && setupBlocked(null);
+    const total = !setupBlocked('192.0.2.77') && setupBlocked('192.0.2.88') && setupBlocked(null);
+    const cleanStillIn = await withDb(db, () => runSetup({ mode: 'check', code }, { ip: '192.0.2.77' }));
     resetSetupFloodgate();
-    check('SETUP wrong codes are limited: 10 an hour per address (an IPv6 /64 is one), 10,000 an hour in total',
-      !blocked.ok && blocked.status === 429 && other.ok && v6 && later && total,
-      'The eleventh try from one address is refused even with the right code; another address still works; the window ends after an hour.');
+    check('SETUP wrong codes are limited: 10 an hour per address (an IPv6 /64 is one); past 10,000 in total only a clean address may try',
+      !blocked.ok && blocked.status === 429 && other.ok && v6 && later && total && cleanStillIn.ok,
+      'The eleventh try from one address is refused even with the right code; past the total cap an address with no wrong code still gets in with the right one; one that failed, and an unknown one, do not.');
+
+    const xff = (v: string) => new Headers({ 'x-forwarded-for': v });
+    check('SETUP the client address is the one the trusted proxy appended, counted from the right',
+      clientIp(xff('6.6.6.6, 203.0.113.5')) === '203.0.113.5' && clientIp(xff('6.6.6.6, 203.0.113.5'), 2) === '6.6.6.6'
+        && clientIp(xff('203.0.113.5'), 0) === null && clientIp(xff('203.0.113.5'), 2) === null && clientIp(xff('not-an-address')) === null,
+      'One hop by default (a GUESS until the rehearsal); a client’s own X-Forwarded-For entries to the left are ignored; 0 hops trusts none.');
 
     const rowsBefore = await settingRows();
     const usersBefore = (await db.one<{ n: number }>('select count(*)::int n from platform.app_user'))!.n;
@@ -185,15 +230,46 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     const completesBefore = await auditCount(['setup.complete']);
     const crossSite = await post({ mode: 'finish', code, ...values }, 'https://evil.example');
     const crossRows = await settingRows();
-    const done = await post({ mode: 'finish', code, ...values });
+    // Two finishes at once with the right code (the code survived the failed attempts above): one wins.
+    const [first, second] = await Promise.all([post({ mode: 'finish', code, ...values }), post({ mode: 'finish', code, ...values, adminEmail: 'second-invented@example.com' })]);
+    const done = first.status === 200 ? first : second;
     const doneBody = await done.json() as { ok: boolean };
+    const raced = [first.status, second.status].sort().join(',');
+    const secondAdmin = await db.one(`select 1 from platform.app_user where email = 'second-invented@example.com'`);
     const admin = await db.one<{ access: string }>(`select access::text from platform.app_user where id = $1`, [juan.id]);
     const again = await post({ mode: 'check', code });
     check('SETUP finishes through the real route: one transaction of settings, the first admin and audit rows; then it closes',
       crossSite.status === 403 && crossRows === rowsBefore && done.status === 200 && doneBody.ok && googleConfigured() && !setupOpen()
         && admin?.access === 'admin' && settingValue('app.publicUrl') === PUBLIC && again.status === 409
-        && await auditCount(['setup.complete']) === completesBefore + 1,
-      'A cross-site POST is refused before anything is read; the finish writes four settings and makes the named person an admin; /setup then answers “already set up”.');
+        && await auditCount(['setup.complete']) === completesBefore + 1 && raced === '200,403' && !secondAdmin,
+      'A cross-site POST is refused before anything is read; a failed finish gave the code back; of two concurrent finishes one wins and the other’s code no longer exists; /setup then answers “already set up”.');
+
+    // ── Setup never reopens ──────────────────────────────────────────────────────────────────
+    await withDb(db, () => writeSettings(checkSettings({ 'google.clientSecret': null }), { actorId: juan.id, via: 'settings' }));
+    const afterRemoval = setupOpen();
+    await withDb(db, () => writeSettings(checkSettings({ 'google.clientSecret': CLIENT_SECRET }), { actorId: juan.id, via: 'settings' }));
+    process.env.PLCOS_SECRET = Buffer.alloc(32, 9).toString('base64'); // another invented key: "rotated" or lost
+    forgetRootSecret();
+    const unreadable = unreadableSettings();
+    const afterRotation = setupOpen();
+    await db.query('delete from platform.setting where key = $1', [SETUP_DONE_KEY]);
+    await loadSettings(db);
+    const unmarkedButStored = setupOpen();
+    const before2 = logs.length;
+    await withDb(db, () => announceAtBoot());
+    const loud = logs.slice(before2).some((l) => l.includes('do not decrypt') && l.includes('Setup stays closed'));
+    const reopenTry = await withDb(db, () => runSetup({ mode: 'check', code: setupCode() }, { ip: '192.0.2.99' }));
+    process.env.PLCOS_SECRET = Buffer.alloc(32, 7).toString('base64');
+    forgetRootSecret();
+    await upsertMarker();
+    check('SETUP never reopens: not when the Google client is removed, not when PLCOS_SECRET changes, not when stored sign-in rows do not decrypt',
+      !afterRemoval && unreadable.includes('google.clientSecret') && !afterRotation && !unmarkedButStored && loud && reopenTry.ok === false && reopenTry.status === 409,
+      'A completion marker closes it for good; even without the marker, a stored sign-in client that does not decrypt keeps it closed and the boot log says so loudly.');
+    check('BOOT a deployed server with no PLCOS_SECRET and no volume at the data folder refuses to start, and says why',
+      /Refusing to start/.test(bootRefusal({ PLCOS_DEPLOYED: '1', RAILWAY_PROJECT_ID: 'invented' }) ?? '')
+        && bootRefusal({ PLCOS_DEPLOYED: '1', RAILWAY_PROJECT_ID: 'invented', RAILWAY_VOLUME_MOUNT_PATH: dataDir() }) === null
+        && bootRefusal({ PLCOS_DEPLOYED: '1', RAILWAY_PROJECT_ID: 'invented', PLCOS_SECRET: 'x' }) === null && bootRefusal({}) === null,
+      'A key made on a disk lost at every deploy would orphan every stored secret; with a volume, or the variable, or on the Mac, it starts.');
 
     // ── Sessions ─────────────────────────────────────────────────────────────────────────────
     const epoch0 = (await db.one<{ e: number }>('select session_epoch e from platform.app_user where id = $1', [juan.id]))!.e;
@@ -208,6 +284,18 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     check('SESSION cookie: a tampered, an expired and an old-epoch cookie are each refused',
       okUser?.id === juan.id && tamperedOk && expired === null && afterEpoch === null,
       'uid.epoch.expires.sig, HMAC-SHA256 under the session subkey; raising the epoch signs the person out everywhere.');
+    const gpEpoch = (await db.one<{ e: number }>('select session_epoch e from platform.app_user where id = $1', [gp.id]))!.e;
+    const gpCookie = sessionValue({ id: gp.id, sessionEpoch: gpEpoch }, 30).value;
+    const gpReporter = reporterOf(sessionClaims(gpCookie)!);
+    const reporterBefore = await withDb(db, () => resolveLocalUser(gpReporter, db));
+    await db.query('update platform.app_user set active = false where id = $1', [gp.id]);
+    await db.query('update platform.app_user set active = true where id = $1', [gp.id]);
+    const revived = await withDb(db, () => userFromSession(gpCookie, db));
+    const reporterAfter = await withDb(db, () => resolveLocalUser(gpReporter, db));
+    const oldReporter = await withDb(db, () => resolveLocalUser(`uid:${gp.id}`, db));
+    check('SESSION deactivating a person raises their epoch, and feedback carries the epoch, so neither an old cookie nor a queued report outlives sign-out',
+      reporterBefore?.id === gp.id && revived === null && reporterAfter === null && oldReporter === null,
+      'Deactivate and reactivate: the old cookie stays dead; a journal entry made before is refused at ingest instead of being filed as somebody.');
 
     // ── The callback, through the real route handlers, with the fake Google ──────────────────
     useFakeGoogle({ clientSecret: CLIENT_SECRET });
@@ -226,32 +314,42 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     };
     const refusals = async () => (await db.query<{ rule: string }>(`select detail->>'rule' rule from platform.audit_log where action = 'signin.refused' order by id`)).map((r) => r.rule);
     const priorRefusals = (await refusals()).length;
-    const workspace = { sub: 'invented-sub-1', email: juan.email.toUpperCase(), email_verified: true, hd: 'example.test' };
+    const juanDomain = juan.email.split('@')[1]!;
+    const workspace = { sub: 'invented-sub-1', email: juan.email.toUpperCase(), email_verified: true, hd: juanDomain };
     const badState = await signIn(workspace, (s) => `${s.slice(0, -2)}zz`);
     const unverified = await signIn({ ...workspace, email_verified: false });
     const personal = await signIn({ sub: 'invented-sub-2', email: juan.email, email_verified: true });
-    const unknown = await signIn({ ...workspace, email: 'nobody-invented@example.test' });
-    const gone = await signIn({ ...workspace, email: 'gone@example.invalid' });
+    const unknown = await signIn({ ...workspace, email: `nobody-invented@${juanDomain}` });
+    const gone = await signIn({ ...workspace, email: 'gone@example.invalid', hd: 'example.invalid' });
+    const alias = await signIn({ ...workspace, hd: 'invented-workspace.test' });
+    await withDb(db, () => writeSettings(checkSettings({ 'signin.extraDomains': juanDomain }), { actorId: juan.id, via: 'settings' }));
+    const aliasAllowed = await signIn({ ...workspace, hd: 'invented-workspace.test' });
+    await withDb(db, () => writeSettings(checkSettings({ 'signin.extraDomains': null }), { actorId: juan.id, via: 'settings' }));
     const known = await signIn(workspace);
-    const session = known.cookies.find((c) => c.startsWith(`${SESSION_COOKIE}=`))?.split(';')[0]?.slice(SESSION_COOKIE.length + 1) ?? '';
+    const SESSION = sessionCookie(true);
+    const sessionSet = known.cookies.find((c) => c.startsWith(`${SESSION}=`)) ?? '';
+    const session = sessionSet.split(';')[0]?.slice(SESSION.length + 1) ?? '';
     const admitted = await withDb(db, () => userFromSession(decodeURIComponent(session), db));
     const rules = (await refusals()).slice(priorRefusals);
     const scope = new URL(known.location).searchParams;
     check('SIGN-IN start: PKCE S256, a signed state cookie for ten minutes, sign-in scopes only',
       known.begun.status === 303 && known.location.startsWith(GOOGLE_AUTHORIZE_URL) && scope.get('code_challenge_method') === 'S256'
         && scope.get('scope') === 'openid email profile' && scope.get('redirect_uri') === `${PUBLIC}/auth/google/callback`
-        && /HttpOnly/.test(known.begun.headers.get('set-cookie') ?? '') && /Max-Age=600/.test(known.begun.headers.get('set-cookie') ?? ''),
-      'The redirect URI is built from the public address; no Gmail scope is asked for.');
-    check('SIGN-IN callback refuses a bad state, an unverified email, a non-Workspace account, an unknown and an inactive email, and logs why',
+        && /HttpOnly/.test(known.begun.headers.get('set-cookie') ?? '') && /Max-Age=600/.test(known.begun.headers.get('set-cookie') ?? '')
+        && (known.begun.headers.get('set-cookie') ?? '').startsWith('__Host-'),
+      'The redirect URI is built from the public address; no Gmail scope is asked for; over https the state cookie is __Host-.');
+    check('SIGN-IN callback refuses a bad state, an unverified email, a non-Workspace account, another organization’s hd, an unknown and an inactive email, and logs why',
       badState.to.endsWith('/signin?error=oauth-state') && unverified.to.endsWith('error=email-unverified') && personal.to.endsWith('error=not-workspace')
-        && unknown.to.endsWith('error=not-on-roster') && gone.to.endsWith('error=not-on-roster')
-        && JSON.stringify(rules) === JSON.stringify(['oauth-state', 'email-unverified', 'not-workspace', 'not-on-roster', 'not-on-roster'])
-        && [badState, unverified, personal, unknown, gone].every((r) => !r.cookies.some((c) => c.startsWith(`${SESSION_COOKIE}=`) && !/Max-Age=0/.test(c))),
-      'Through the real /auth/google and callback handlers with the fake Google; each refusal is one signin.refused row with its rule and no session.');
+        && unknown.to.endsWith('error=not-on-roster') && gone.to.endsWith('error=not-on-roster') && alias.to.endsWith('error=domain-mismatch')
+        && aliasAllowed.to === `${PUBLIC}/today`
+        && JSON.stringify(rules) === JSON.stringify(['oauth-state', 'email-unverified', 'not-workspace', 'not-on-roster', 'not-on-roster', 'domain-mismatch'])
+        && [badState, unverified, personal, unknown, gone, alias].every((r) => !r.cookies.some((c) => c.includes('session=') && !/Max-Age=0/.test(c))),
+      'Through the real /auth/google and callback handlers with the fake Google; each refusal is one signin.refused row with its rule and no session; an hd that is not the address’s own domain is admitted only once that domain is listed.');
     check('SIGN-IN callback admits a verified Workspace address on the roster (any case) with their role',
-      known.to === `${PUBLIC}/today` && admitted?.id === juan.id && admitted?.access === 'admin' && /Secure/.test(known.cookies.join(';'))
+      known.to === `${PUBLIC}/today` && admitted?.id === juan.id && admitted?.access === 'admin'
+        && /; Secure/.test(sessionSet) && /; Path=\//.test(sessionSet) && !/Domain=/i.test(sessionSet) && SESSION.startsWith('__Host-')
         && (await auditCount(['signin'])) > 0,
-      'A session cookie, Secure on an https address; the person is the roster row, with its access.');
+      'A __Host- session cookie (Secure, Path=/, no Domain) on an https address; the person is the roster row, with its access.');
 
     // ── Non-admins are refused on every Connections action, and logged ───────────────────────
     const actions = await import('../../app/settings/connections/actions');
@@ -263,15 +361,15 @@ export async function railwaySetupProperties(check: Check, db: Db) {
       () => actions.checkSettingAction(null, form({ key: 'anthropic.apiKey', value: 'sk-ant-invented' })),
       () => actions.signOutEverywhereAction(form({ userId: juan.id })),
     ];
-    Object.assign(config.auth, { provider: 'local' });
+    const gpSession = await sessionFor(gp.id);
     const outcomes: boolean[] = [];
     for (const attempt of attempts) {
-      try { await inRequest(db, 'action', `${USER_COOKIE}=${gp.handle}`, '/settings/connections', attempt); outcomes.push(false); }
+      try { await inRequest(db, 'action', gpSession, '/settings/connections', attempt); outcomes.push(false); }
       catch (e) { outcomes.push(isRedirectError(e) && getURLFromRedirectError(e) === '/access-denied'); }
     }
     const { default: ConnectionsPage } = await import('../../app/settings/connections/page');
     let pageRefused = false;
-    try { await inRequest(db, 'render', `${USER_COOKIE}=${gp.handle}`, '/settings/connections', () => ConnectionsPage()); }
+    try { await inRequest(db, 'render', gpSession, '/settings/connections', () => ConnectionsPage()); }
     catch (e) { pageRefused = isRedirectError(e) && getURLFromRedirectError(e) === '/access-denied'; }
     const refusedRows = await db.query<{ subject_id: string }>(`select subject_id from platform.audit_log where action = 'authz.refused' and actor_id = $1 order by id`, [gp.id]);
     check('CONNECTIONS a non-admin is refused on every action and the page, each refusal logged, nothing changed',
@@ -281,13 +379,13 @@ export async function railwaySetupProperties(check: Check, db: Db) {
 
     // ── No secret in audit rows, the log or the pages ────────────────────────────────────────
     await withDb(db, () => writeSettings(checkSettings({ 'anthropic.apiKey': DECOY }), { actorId: juan.id, via: 'settings' }));
-    const page = await inRequest(db, 'render', `${USER_COOKIE}=${juan.handle}`, '/settings/connections', () => ConnectionsPage());
+    const page = await inRequest(db, 'render', await sessionFor(juan.id), '/settings/connections', () => ConnectionsPage());
     const pageText = strings(page).join('\n');
     const { default: SetupPage } = await import('../../app/setup/page');
     const { SetupWizard } = await import('../../app/setup/SetupWizard');
-    await db.query(`delete from platform.setting where key like 'google.%'`);
+    // /setup as it was before anyone finished it.
+    await db.query(`delete from platform.setting where key like 'google.%' or key = $1`, [SETUP_DONE_KEY]);
     await loadSettings(db);
-    Object.assign(config.auth, { provider: 'google' });
     const setupEl = await inRequest(db, 'render', '', '/setup', () => SetupPage());
     const wizard = (setupEl as { props: { children: ReactNode } }).props.children as unknown as { props: Parameters<typeof SetupWizard>[0] };
     const setupHtml = renderToStaticMarkup(createElement(SetupWizard, wizard.props));
@@ -308,6 +406,19 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     check('KEYS the readers use the store when the environment is unset, and a preview copy gets none',
       JSON.stringify(live) === JSON.stringify(['invented-affinity-key-0042', 'lin_api_invented0042', DECOY, CLIENT_ID, 'invented-dakota-pass-0042']) && preview.every((k) => k === null || k === undefined),
       'affinityKey, linearKey, anthropicKey, Dakota’s sign-in and the Google client read the encrypted settings synchronously; with copyTakenAt every one is empty.');
+
+    const scratch = await mkdtemp(join(tmpdir(), 'preview-key-'));
+    try {
+      const source = join(scratch, 'source');
+      await mkdirp(join(source, 'database'), { recursive: true });
+      await writeF(join(source, 'dev-secret'), 'invented'); await writeF(join(source, 'database', 'x'), 'invented'); await writeF(join(source, 'notes.json'), '{}');
+      await mkdirp(join(scratch, 'root', 'data'), { recursive: true });
+      takeCopy(source, join(scratch, 'root'));
+      const copied = await readdir(join(scratch, 'root', 'data', 'real'));
+      check('KEYS a preview copy never carries the settings key beside the encrypted rows',
+        !copied.includes('dev-secret') && !copied.includes('secret') && copied.includes('database') && copied.includes('notes.json'),
+        'An invented real folder copied by scripts/preview-copy.ts: the database and files arrive; dev-secret does not.');
+    } finally { await rmrf(scratch, { recursive: true, force: true }); }
 
     // ── Cross-site POSTs ──────────────────────────────────────────────────────────────────────
     const { POST: signout } = await import('../../app/auth/signout/route');
