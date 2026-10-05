@@ -47,6 +47,14 @@ export function bootRefusal(env: Record<string, string | undefined> = process.en
     : null;
 }
 
+/** At boot (instrumentation.ts): stop the process, saying why, when bootRefusal says it must not start. */
+export function refuseKeylessBoot(): void {
+  const refusal = bootRefusal();
+  if (!refusal) return;
+  console.error(refusal);
+  process.exit(1);
+}
+
 /** A key file another process is writing this instant can read as empty; wait briefly before giving up. */
 function readKeyFile(file: string): string {
   for (let i = 0; ; i++) {

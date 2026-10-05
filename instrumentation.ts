@@ -12,8 +12,7 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs' || process.env.NEXT_PHASE === 'phase-production-build') return;
   // A deployed server with no PLCOS_SECRET and no volume would make a new key on every deploy, and its stored
   // secrets would stop decrypting at the next one: it does not start, and the log says why.
-  const refusal = (await import('./lib/settings/key')).bootRefusal();
-  if (refusal) { console.error(refusal); process.exit(1); }
+  (await import('./lib/settings/key')).refuseKeylessBoot();
   void import('./lib/responsiveness').then((m) => m.startResponsivenessMonitor()).catch(() => undefined);
   void import('./lib/activity').then((m) => m.startActivity()).catch(() => undefined);
   void import('./lib/feedback-ingest').then((m) => m.startIngest()).catch(() => undefined);

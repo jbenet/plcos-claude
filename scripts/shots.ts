@@ -84,6 +84,19 @@ async function setupTo(page: Page, step: number) {
   await page.getByText('Continue with Google').waitFor();
 }
 
+/**
+ * Signed in with Google on that demo, without Google: a session cookie for the admin /setup named, signed
+ * with the same invented PLCOS_SECRET the server was started with. SHOT_ADMIN_ID and SHOT_ADMIN_EPOCH come
+ * from the demo's own (test-cluster) database.
+ */
+async function signedInAt(page: Page, path: string) {
+  const id = process.env.SHOT_ADMIN_ID, epoch = Number(process.env.SHOT_ADMIN_EPOCH ?? 0);
+  if (!id || !process.env.PLCOS_SECRET) throw new Error('Set SHOT_ADMIN_ID and the server\'s PLCOS_SECRET.');
+  const { sessionCookie, sessionValue } = await import('../lib/auth/session');
+  await page.context().addCookies([{ name: sessionCookie(true), value: encodeURIComponent(sessionValue({ id, sessionEpoch: epoch }, 1).value), url: page.url().replace(/^http:/, 'https:'), secure: true, httpOnly: true, sameSite: 'Lax' }]);
+  await page.goto(new URL(path, page.url()).toString(), { waitUntil: 'networkidle' });
+}
+
 const SHOTS: Record<string, Shot[]> = {
   L1: [
     { name: '01-today', path: '/today' },
@@ -2568,9 +2581,9 @@ const SHOTS: Record<string, Shot[]> = {
   ],
   // MCP access (docs/26): Preferences → MCP access, after making one token and revoking an older one.
   // The token shown is minted by this demo server, on invented data.
-  // Settings, /setup and Google sign-in (docs/deploy/railway.md §3). 01–08 against a demo started with
-  // PLCOS_DEPLOYED=1 PORT=3113 and SHOT_SETUP_CODE from its log (08 finishes setup); 09 against the same
-  // demo restarted without PLCOS_DEPLOYED, as juan.
+  // Settings, /setup and Google sign-in (docs/deploy/railway.md §3), against a demo started with
+  // PLCOS_DEPLOYED=1 PORT=3113 and an invented PLCOS_SECRET, with SHOT_SETUP_CODE from its log. 08 finishes
+  // setup; 09–10 are signed in as the admin it named (signedInAt).
   'railway-setup': [
     { name: '01-setup-code', path: '/setup', prepare: (page) => setupTo(page, 0) },
     { name: '02-setup-address', path: '/setup', prepare: (page) => setupTo(page, 1) },
@@ -2580,10 +2593,8 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '06-setup-review', path: '/setup', prepare: (page) => setupTo(page, 5) },
     { name: '07-setup-mobile', path: '/setup', width: 390, fullPage: true, prepare: (page) => setupTo(page, 2) },
     { name: '08-setup-done', path: '/setup', prepare: (page) => setupTo(page, 6) },
-    {
-      name: '09-settings-connections', path: '/today', fullPage: true,
-      prepare: async (page) => { await asUser(page); await page.goto(new URL('/settings/connections', page.url()).toString(), { waitUntil: 'networkidle' }); },
-    },
+    { name: '09-settings-connections', path: '/setup', fullPage: true, prepare: (page) => signedInAt(page, '/settings/connections') },
+    { name: '10-settings-people', path: '/setup', fullPage: true, prepare: (page) => signedInAt(page, '/settings/people') },
   ],
   mcp: [
     {
