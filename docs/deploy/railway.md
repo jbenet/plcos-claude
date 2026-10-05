@@ -215,9 +215,16 @@ sync then carries on from the last pull, with the Dakota sign-in entered in Sett
 | c | `bash scripts/cutover.sh run --from postgres://plcos_app@127.0.0.1:57433/plcos_live --to postgres://plcos_app@127.0.0.1:55432/plcos_live --keep-dakota --grants scripts/railway-grants.sql` | 5–15 min, GUESS (home upload) |
 | d | Files: `bash scripts/cutover-files.sh pack ../plcos-data/real <outside>/files.tar.gz` (Dakota's replica included; it leaves out the databases, logs, snapshots and the research exports), `scp` it up, and unpack it into `/app/data/real` with `railway ssh`. Runs alongside c. | 5–10 min, GUESS |
 | e | c must say **MATCH**; `cutover-files.sh` checks its own archive. Close the tunnel. | in c |
-| f | `DATA_PROFILE=real` and `DATABASE_URL` pointing at `plcos_live`. Redeploy. The settings and keys entered in the demo stay in `plcos_demo`, so enter them again in Settings, or move that one table. Leave the daily schedule off. | 5 min |
+| f | `DATA_PROFILE=real` and `DATABASE_URL` pointing at `plcos_live`. Redeploy. The real database has no settings yet, so `/setup` opens on it with a new code in the Deploy Logs: Juan runs it straight away. He enters the same Google client, himself as the first admin (his `app_user` row already carries his Workspace address, per the pre-move check below), then the connector keys. Copying `platform.setting` from `plcos_demo` instead would work, since both use the same `PLCOS_SECRET`, but it would also copy the demo's setup marker. Leave the daily schedule off. | 10 min |
 | g | Smoke, signed in as admin: `/today`, each vehicle's overview, pipeline, selection and strategy, `/orgs/g/lps`, `/developer/enrich`. Make one reversible note. Run **Export the research set** (149 s in rehearsal). Pull a first copy to the Mac (§6). | 15 min |
 | h | On the Mac: `touch data/real/moved-to-cloud` in the live folder. | 1 min |
+
+**Before the evening: every team member's sign-in address.** Google sign-in admits a person only when
+their `platform.app_user.email` (active) is the address they sign in with, for example
+juan@plcapital.xyz. On the Mac's live server:
+- check each team row's address (counts and handles only);
+- fix any that differ, so the move carries the right ones;
+- or plan to fix them in Settings → People right after step f.
 
 Passwords for b and c: `cutover.sh` takes URLs without passwords. Use a temporary pgpass file made from the
 Keychain (`PGPASSFILE=$(mktemp)`, mode 600), and delete it straight after.
