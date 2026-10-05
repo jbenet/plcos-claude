@@ -302,6 +302,14 @@ bash scripts/cloud-pull.sh serve --to postgres://plcos@127.0.0.1:57434/plcos_cop
   - The Postgres cluster (2.3 GB) becomes the frozen rollback copy.
   - About 2.2 GB of working files move up once.
 
+**The daily pull (5 Oct).** The Mac's daily loop runs from the live checkout: once a day,
+`bash scripts/cloud-pull.sh pull --to postgres://plcos@127.0.0.1:57434/plcos_copy --keep` (log in
+`~/.plcos-helpers/backups.log`). It replaced the old Mac backup loop, since the Mac's own database is frozen.
+- Its Keychain items (`plcos-railway` / `snapshot-token`, `app-url`, `copy`) are readable without a prompt, so it
+  runs unattended. Juan, 5 Oct: "Don't need to ask for this". This is a deliberate exception to the "every read
+  asks" rule for these items only.
+- `--keep` never deletes a backup.
+
 ## 7. Workflows: in the cloud and on the Mac (decided 4 Oct)
 
 Juan, 4 Oct: "we should be able to run research from both cloud and local … run those research agents here
