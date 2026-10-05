@@ -50,7 +50,7 @@ export function ProposeButton({
           </select>
         </label>
         <button className="btn p" type="submit" disabled={pending}>
-          {pending ? 'Proposing…' : 'Propose the ask'}
+          {pending ? 'Recording…' : 'Record the ask'}
         </button>
       </div>
       <dl className="pwhere">
@@ -58,9 +58,11 @@ export function ProposeButton({
         <dd>{suggestion}</dd>
         <dt>Where it goes</dt>
         <dd>
-          This writes the ask, runs the four guards, and opens an <b>INTRO_ASK</b> ticket in
-          Approvals with its scope stated. <b>Nobody is contacted</b> until that ticket is
-          approved, and the owner is who the approval authorises to make it.
+          This writes the ask with its owner and runs the four guards: a restriction on the
+          target blocks it, in red, and a collision with another vehicle opens a case to
+          coordinate. <b>No approval is needed</b> — a person makes the ask by sending the email
+          (Juan, 5 Oct 2026); only an autonomous agent needs an <b>INTRO_ASK</b> ticket.
+          <b> Nobody is contacted</b> by this button.
         </dd>
       </dl>
     </form>

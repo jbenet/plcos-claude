@@ -93,3 +93,35 @@ export async function decideMany(formData: FormData): Promise<void> {
   }
   redirect(`/approvals?${q.toString()}`);
 }
+
+/**
+ * Decide an autonomous agent's tickets at once (Juan, 5 Oct 2026: tickets are for agents only, so an agent's run is
+ * approved as a batch). Each is its own ticket, decided by decideTicket with its own audit line and the same rule
+ * as one decision; a ticket that is not an open SEND or INTRO_ASK an agent asked for is skipped, whatever the form says.
+ */
+export async function decideAgentBatch(formData: FormData): Promise<void> {
+  const user = await requireAction('app/approvals/actions.ts#decideAgentBatch', formData);
+  const decision = String(formData.get('decision')) === 'approve' ? 'approve' : 'reject';
+  const ids = [...new Set(formData.getAll('ticketId').map(String))];
+  const note = String(formData.get('note') ?? '').trim();
+  const agents = await agentActorIds();
+  let done = 0, skipped = 0;
+  for (const id of ids) {
+    const ticket = await getTicket(id);
+    if (!ticket || ticket.decision || !['SEND', 'INTRO_ASK'].includes(ticket.kind) || !agents.has(ticket.requestedBy)) { skipped++; continue; }
+    await decideTicket(user.id, id, decision, `Decided in a batch of ${ids.length} agent tickets${note ? `. ${note}` : ''}`);
+    done++;
+  }
+  revalidatePath('/approvals');
+  revalidatePath('/today');
+  const q = new URLSearchParams({ view: 'agent', [decision === 'approve' ? 'approved' : 'rejected']: String(done) });
+  if (skipped) q.set('failed', String(skipped));
+  redirect(`/approvals?${q.toString()}`);
+}
+
+/** The actors an autonomous agent requests tickets as: the inactive Mail desk (platform 015). */
+async function agentActorIds(): Promise<Set<string>> {
+  const { getDb } = await import('@/lib/db');
+  const rows = await (await getDb()).query<{ id: string }>(`select id::text from platform.app_user where handle = 'mail-desk'`);
+  return new Set(rows.map((r) => r.id));
+}

@@ -246,3 +246,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Railway plan — one service and one Postgres, with local copies one way](entries/railway-plan.md)
 - [Cloud pull and push — through the app's own API, with tokens from Preferences](entries/cloud-sync.md)
 - [Settings in the app, a guided /setup, and Google sign-in](entries/railway-setup.md)
+- [No tickets for people, and the email trail is the record](entries/comms-trace.md)

@@ -16,7 +16,15 @@ import type { AppUser, McpToken } from '@/modules/platform';
  *   output_schema        each tool's answer, marked as data
  *   acceptance_criteria  none: tools only read or draft; a person accepts in the app
  *   escalation_owner     the token's owner
+ *
+ * Autonomy (Juan, 5 Oct 2026; modules/governance/autonomy.ts). A token acts for its owner interactively — a
+ * person clicked — unless it, or the call, is flagged autonomous: the token carries AUTONOMOUS_MARK in its
+ * list, or the call says `_meta.autonomous: true` (MCP) or `X-Autonomous: 1` (REST). A call can only add
+ * the flag, never take it off a token that carries it. Only an autonomous call needs a SEND or INTRO_ASK
+ * ticket; without an approved one it is refused.
  */
+export const AUTONOMOUS_MARK = 'mode:autonomous';
+
 export interface Envelope {
   tokenId: string;
   /** The token's name: the client behind it ("juanmail", "Juan's iPad mail desk"), as its owner named it. */
@@ -27,6 +35,8 @@ export interface Envelope {
   tools: ReadonlySet<string>;
   callsPerDay: number;
   expiresAt: Date;
+  /** No person in the loop for this call: the token is marked autonomous, or the call says so. */
+  autonomous: boolean;
 }
 
 /**
@@ -48,6 +58,7 @@ export function envelopeFor(token: McpToken, owner: AppUser): Envelope {
   return {
     tokenId: token.tokenId, label: token.label, owner, principal: narrowedPrincipal(owner, token.vehicles),
     tools: new Set(token.tools), callsPerDay: token.callsPerDay, expiresAt: new Date(token.expiresAt),
+    autonomous: token.tools.includes(AUTONOMOUS_MARK),
   };
 }
 
@@ -85,7 +96,7 @@ export function resetWindows() { windows.clear(); }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Arguments that are a fixed choice (a vehicle's slug, a status), never typed words. */
-const CHOICES = new Set(['vehicle', 'status', 'kind', 'purpose', 'priority', 'list', 'mode', 'bucket', 'choice']);
+const CHOICES = new Set(['vehicle', 'status', 'kind', 'purpose', 'priority', 'list', 'mode', 'bucket', 'choice', 'direction']);
 /** Ids, choices, numbers and booleans as given; any other text only as its length, so words never reach the log. */
 export function auditArgs(args: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};

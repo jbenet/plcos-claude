@@ -259,14 +259,17 @@ export function draftWarnings(c: CheckInput): DraftWarning[] {
   if (c.attachmentCount > 0) out.push({ level: 'note', rule: 'attachments', text: `${c.attachmentCount === 1 ? 'The attached file is' : `The ${c.attachmentCount} attached files are`} not checked against the materials matrix. Attach only material approved for ${c.vehicle.name}.` });
   // Rule 12.
   if (c.vehicle.kind === 'grant_rail' && c.grantGate?.blocked) out.push({ level: 'stop', rule: 'grants', text: c.grantGate.reason ?? 'Grants-rail outreach needs a funder invitation on file.' });
-  // Rule 3: an intro ask is gated by an approved INTRO_ASK ticket. A draft is not the ask; sending it is.
+  // Rule 3 since 5 Oct 2026: a person needs no INTRO_ASK ticket — sending this email is the ask, theirs to
+  // make with the context in front of them. What is on file is said, so the sender sees it; never a gate.
   if (c.purpose === 'intro_ask') {
     const mine = c.introAsks.filter((a) => a.connectorId === c.connectorId);
-    if (!mine.some((a) => a.status === 'approved' || a.status === 'made')) {
-      out.push({ level: 'check', rule: 'intro_ticket', text: mine.some((a) => a.status === 'proposed')
-        ? 'The intro ask for this route is proposed and not yet approved. Wait for the approval before sending this email.'
-        : 'No intro ask is on file for this route. Propose it (INTRO_ASK) and have it approved before sending this email.' });
+    const others = c.introAsks.filter((a) => a.connectorId !== c.connectorId && (a.status === 'proposed' || a.status === 'approved' || a.status === 'made'));
+    if (mine.some((a) => a.status === 'blocked')) {
+      out.push({ level: 'check', rule: 'intro_ticket', text: 'The ask on file for this route is blocked by a guard. Read why on the asks page before you send.' });
+    } else if (!mine.length) {
+      out.push({ level: 'note', rule: 'intro_ticket', text: 'No ask is on file for this route; sending this email is the ask. No approval is needed.' });
     }
+    if (others.length) out.push({ level: 'note', rule: 'intro_ticket', text: `${others.length} other ${others.length === 1 ? 'ask is' : 'asks are'} on file for them, through someone else.` });
   }
   // The email guidelines (docs/email-guidelines.md): what never goes in an email, and one vehicle.
   // A warning, never a block: the person may have discussed an amount, say. Another vehicle by name

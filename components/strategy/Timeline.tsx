@@ -16,6 +16,7 @@ import {
 import { EntryBox } from './EntryBox';
 import { TIMELINE_PAGE, TimelineRows, type TimelineOption, type TimelineRow } from './TimelineRows';
 import { TagControl, TagVehicles, type TagVehicle } from './TagControl';
+import { SOURCE_LABEL, type SameAs } from '@/lib/comms/trace';
 
 /** A status change from the audit log (N61): what it was, what it became, who, and why. */
 export interface StatusEvent {
@@ -99,9 +100,19 @@ function noteMark(n: NoteView): Mark {
 
 function source(t: Touchpoint): string {
   if (t.source === 'us') return 'logged here';
+  if (t.source === 'gmail') return SOURCE_LABEL.gmail;
   if (t.sourceRef?.startsWith('interaction:')) return 'Affinity';
   return t.source;
 }
+
+/** Another source's record of the same event (5 Oct 2026): "also in Gmail — matched by date and participants, medium". */
+function alsoIn(list: SameAs[] | undefined): string {
+  if (!list?.length) return '';
+  return list.map((m) => ` · also in ${SOURCE_LABEL[m.source]} (by ${m.by}, ${m.confidence})`).join('');
+}
+
+/** A note from elsewhere on the trace (5 Oct 2026): a PLC OS context note, or a Linear issue linked to the pursuit. */
+export interface TraceExtra { key: string; at: Date; source: 'plcos' | 'linear'; label: string; text: string; by: string | null; href: string | null }
 
 /**
  * A note's text behind its summary, closed like a message in a thread. A note that mentions
@@ -212,8 +223,10 @@ function nowSaid(a: EventAbout, why: string): string {
   return `${a.kind === 'vehicles' ? a.vehicles.map((v) => v.name).join(', ') : a.kind === 'unclear' ? 'a raise, vehicle unclear' : 'general'} — ${why}`;
 }
 
-function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate, about, tagging }: {
+function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate, about, tagging, same, subject }: {
   t: Touchpoint; c?: TouchContext; now: number;
+  /** The same event in another source, and the Gmail subject when a message is (or matched) this row. */
+  same?: SameAs[]; subject?: string;
   rungs?: LadderEvent[]; waiting?: LadderRung[]; proposalId?: string | null;
   /** Logged by an update: its words are the update's, shown there. */
   fromUpdate?: PursuitUpdate;
@@ -234,10 +247,11 @@ function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate,
           {on ? shortDate(on) : 'undated'}{!t.on && t.scheduledFor ? ' · scheduled' : ''} · {CHANNEL_LABEL[t.channel]}
           {t.direction && !isEvent(t) ? ` · ${DIRECTION_LABEL[t.direction]}` : ''}
           {isEvent(t) ? ` · an event, ${t.groupSize} of ours on it` : ''}
-          {t.viaOrganization ? ` · with ${t.viaOrganization}` : t.viaContact ? ` · with ${t.viaContact}` : ''} · {source(t)}
+          {t.viaOrganization ? ` · with ${t.viaOrganization}` : t.viaContact ? ` · with ${t.viaContact}` : ''} · {source(t)}{alsoIn(same)}
           {c?.what && SIGNALS.includes(c.what) ? <> · <b className="whatword">{WHAT_LABEL[c.what]}</b></> : null}
         </div>
         {c?.title && <div className="t"><b>{c.title}</b></div>}
+        {!c?.title && subject && t.source !== 'gmail' && <div className="t"><b>{subject}</b></div>}
         {fromUpdate ? (
           <div className="t"><span className="muted">Logged from {fromUpdate.createdByName}&rsquo;s update of {shortDate(fromUpdate.createdAt)}</span></div>
         ) : c?.text ? (
@@ -377,6 +391,24 @@ function NoteRow({ n, about, tagging }: { n: NoteView; about: EventAbout; taggin
   );
 }
 
+function ExtraRow({ x }: { x: TraceExtra }) {
+  const long = x.text.length > CLIP;
+  return (
+    <div className="tl-row" data-trace-source={x.source}>
+      <Glyph name={x.source === 'linear' ? 'list' : 'note'} title={x.label} />
+      <div className="anote">
+        <div className="p2"><span className="vtag none">General</span> {shortDate(x.at)} · <b className="whatword">{x.label}</b>{x.by ? ` · ${x.by}` : ''}{x.href ? <> · <a href={x.href} rel="noreferrer" target="_blank">open</a></> : null}</div>
+        {long ? (
+          <details className="thread">
+            <summary><span className="t">{x.text.slice(0, CLIP).trimEnd()}…</span><span className="open">the rest</span></summary>
+            <div className="t full">{x.text}</div>
+          </details>
+        ) : <div className="t" style={{ whiteSpace: 'pre-line' }}>{x.text}</div>}
+      </div>
+    </div>
+  );
+}
+
 /** Their read, a person's or a suggestion from a note — and, for a suggestion, the two answers. */
 function TheirRead({ r, pursuitId }: { r: ShownRead | null; pursuitId: string }) {
   if (!r) return <>nobody has recorded one</>;
@@ -433,6 +465,7 @@ type Item = { at: number; key: string } & (
   | { kind: 'update'; u: PursuitUpdate }
   | { kind: 'status'; s: StatusEvent }
   | { kind: 'rung'; e: LadderEvent }
+  | { kind: 'extra'; x: TraceExtra }
 );
 
 const MARK: Record<'update' | 'status' | 'rung', Mark> = {
@@ -467,6 +500,11 @@ export function Timeline(props: {
   /** The last calendar read stopped at its cap: some meetings are not here yet (rule 7). */
   calendarPartial?: boolean;
   context?: Record<string, TouchContext>;
+  /** The comms trace (5 Oct 2026): for a row, the same event in other sources; a Gmail message's subject; where the app's log and the trace disagree; notes from PLC OS and Linear. */
+  sameAs?: Record<string, SameAs[]>;
+  subjects?: Record<string, string>;
+  mismatches?: string[];
+  extras?: TraceExtra[];
   read?: ShownRead | null;
   /** N61: the status now, for the update row; the updates; status changes; the ladder. */
   status: PursuitStatus;
@@ -518,9 +556,10 @@ export function Timeline(props: {
     ...(props.statusEvents ?? []).filter((x) => !x.updateId && x.from !== x.to)
       .map((x, i): Item => ({ kind: 'status', s: x, key: `s:${i}:${x.at.getTime()}`, at: x.at.getTime() })),
     ...ladder.filter((e) => !refs.has(e.evidenceRef)).map((e): Item => ({ kind: 'rung', e, key: `r:${e.eventId}`, at: e.occurredAt.getTime() })),
-  ].sort((a, b) => b.at - a.at);
+    ...(props.extras ?? []).map((x): Item => ({ kind: 'extra', x, key: `x:${x.key}`, at: x.at.getTime() })),
+  ].sort((a, b) => b.at - a.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   const aboutOf = (x: Item): EventAbout =>
-    x.kind === 'touch' ? eventAbout(x.t, windows) : x.kind === 'note' ? noteAbout(x.n, windows) : own(vehicle);
+    x.kind === 'touch' ? eventAbout(x.t, windows) : x.kind === 'note' ? noteAbout(x.n, windows) : x.kind === 'extra' ? { kind: 'none' } : own(vehicle);
   const groupsOf = (a: EventAbout) => (a.kind === 'vehicles' ? a.vehicles.map((v) => v.slug) : [a.kind]);
   const row = (x: Item, a: EventAbout) => {
     switch (x.kind) {
@@ -530,8 +569,10 @@ export function Timeline(props: {
             key={x.key} t={x.t} c={props.context?.[x.t.touchpointId]} now={now}
             rungs={rungsOn.get(x.t.touchpointId)} waiting={waitingOn.get(x.t.touchpointId)} proposalId={props.proposalId}
             fromUpdate={byUpdate.get(x.t.touchpointId)} about={a} tagging={tagging}
+            same={props.sameAs?.[x.t.touchpointId]} subject={props.subjects?.[x.t.touchpointId] || undefined}
           />
         );
+      case 'extra': return <ExtraRow key={x.key} x={x.x} />;
       case 'note': return <NoteRow key={x.key} n={x.n} about={a} tagging={tagging} />;
       case 'update': return <UpdateRow key={x.key} u={x.u} vehicle={vehicle} />;
       case 'status': return <StatusRow key={x.key} s={x.s} vehicle={vehicle} />;
@@ -556,7 +597,8 @@ export function Timeline(props: {
   // The key: each icon on this timeline once, with its words (colour is never the only signal).
   const key = new Map<string, Mark>();
   for (const x of items) {
-    const m = x.kind === 'touch' ? touchMark(x.t, now) : x.kind === 'note' ? noteMark(x.n) : MARK[x.kind];
+    const m = x.kind === 'touch' ? touchMark(x.t, now) : x.kind === 'note' ? noteMark(x.n)
+      : x.kind === 'extra' ? { name: (x.x.source === 'linear' ? 'list' : 'note') as GlyphName, title: x.x.label } : MARK[x.kind];
     if (!key.has(m.title)) key.set(m.title, m);
   }
   if (rungsOn.size && !key.has(MARK.rung.title)) key.set(MARK.rung.title, MARK.rung);
@@ -588,7 +630,14 @@ export function Timeline(props: {
           <span>{s.lastTouch ? `${shortDate(s.lastTouch)}${s.lastTouchChannel ? ` · ${CHANNEL_LABEL[s.lastTouchChannel].toLowerCase()}` : ''}` : 'none on record'}</span>
         </div>
         {s.awaitingSince && <div className="fact"><span>Waiting on them</span><span>since {shortDate(s.awaitingSince)} — we reached out, nothing from them since</span></div>}
+        {s.lastFromThem && !s.awaitingSince && <div className="fact"><span>We owe a reply</span><span>since {shortDate(s.lastFromThem)} — they wrote last</span></div>}
         {s.nextMeeting && <div className="fact"><span>Next meeting</span><span>{shortDate(s.nextMeeting)}</span></div>}
+        {(props.mismatches?.length ?? 0) > 0 && (
+          <div className="fact" data-mismatch>
+            <span>Log and trace</span>
+            <span>The app&rsquo;s log and the mail trace disagree; the trace is what is shown. {props.mismatches!.slice(0, 3).join(' ')}{props.mismatches!.length > 3 ? ` And ${props.mismatches!.length - 3} more.` : ''}</span>
+          </div>
+        )}
         <div className="fact">
           <span>Their read</span>
           <span><TheirRead r={props.read ?? (s.read ? { ...s.read, suggested: false, basis: null, noteId: null, superseded: null, old: false } : null)} pursuitId={props.pursuitId} /></span>
@@ -626,9 +675,11 @@ export function Timeline(props: {
         )}
       </div>
       <p className="cover">
-        <b>What this covers:</b> touchpoints logged here, and those Affinity has — each list
-        entry&rsquo;s last email and meetings, the calendar, and meeting, call and email notes — as of
-        the last translation, about anything. Each row says which vehicle it is about: named in it,
+        <b>What this covers:</b> the comms trace — touchpoints logged here, those Affinity has (each list
+        entry&rsquo;s last email and meetings, the calendar, and meeting, call and email notes) as of the
+        last translation, and the Gmail messages juanmail reported, one row per message: one Affinity also
+        has is matched by Message-ID, else by date and participants, and says how sure the match is. With
+        the team&rsquo;s notes here and in Affinity, and Linear issues linked to this pursuit. About anything. Each row says which vehicle it is about: named in it,
         or tagged by Claude or a person. Only rows tagged with {props.vehicleName}, inside its raise
         window, count for this pursuit and its ladder; a row about a raise that doesn&rsquo;t say which
         counts for none until someone tags it. A meeting nobody logged and no calendar saw is not here.

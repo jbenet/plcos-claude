@@ -1,5 +1,5 @@
 import { getDb, type Queryable } from '@/lib/db';
-import { openTicket, requireApprovedTicket } from '@/modules/governance';
+import { PERSON, openTicket, requireApprovedTicket, ticketNeeded, type Acting } from '@/modules/governance';
 import { getAsset, listWrapRules } from './repo';
 import { USE_RANK, type Audience, type WrapCheck } from './types';
 
@@ -14,8 +14,9 @@ export async function checkWrap(args: {
   instrument: string;
   audience: Audience | null;
   permittedUse: 'public' | 'accredited_only' | 'internal';
-}): Promise<WrapCheck> {
-  const rules = await listWrapRules();
+}, q?: Queryable): Promise<WrapCheck> {
+  // Inside a transaction, read through it: on PGlite's one connection a read outside an open transaction waits on it forever.
+  const rules = await listWrapRules(q);
   const rule = rules.find((r) => r.exemption === args.exemption && r.instrument === args.instrument) ?? null;
   const refusals: string[] = [];
 
@@ -47,11 +48,14 @@ export async function checkWrap(args: {
 /**
  * Ask to send. The wrap check runs first: a refusal is recorded and no ticket is opened,
  * because an approval queue full of things that may not legally be sent trains people to
- * approve without reading.
+ * approve without reading. A person who passes it needs no SEND ticket (Juan, 5 Oct 2026): the
+ * send is cleared, they send it themselves and mark it sent, and the wrap is checked again then
+ * (rule 11). Only an autonomous agent's send opens a ticket.
  */
 export async function requestSend(
   actorId: string,
   args: { assetId: string; entityId: string; vehicleId: string; instrument: string },
+  acting: Acting = PERSON,
 ): Promise<{ sendId: string; ticketId: string | null; check: WrapCheck }> {
   const db = await getDb();
   const asset = await getAsset(args.assetId);
@@ -106,6 +110,7 @@ export async function requestSend(
     );
 
     if (!check.allowed) return { sendId, ticketId: null, check };
+    if (!ticketNeeded('SEND', acting)) return { sendId, ticketId: null, check };
 
     const ticketId = await openTicket(
       actorId,
@@ -140,13 +145,18 @@ export async function requestSend(
   });
 }
 
-/** Fails closed without an approved SEND ticket, and re-runs the wrap check. */
-export async function recordSend(actorId: string, sendId: string, ticketId: string | null): Promise<void> {
+/**
+ * Mark a material sent, re-running the wrap check. For an autonomous agent (or whenever a ticket is
+ * named) it fails closed without an approved SEND ticket; a person sending it themselves needs none.
+ */
+export async function recordSend(actorId: string, sendId: string, ticketId: string | null, acting: Acting = PERSON): Promise<void> {
   const db = await getDb();
   await db.transaction(async (tx) => {
-    await requireApprovedTicket(tx, {
-      kind: 'SEND', subjectType: 'send', subjectId: sendId, ticketId,
-    });
+    if (ticketNeeded('SEND', acting) || ticketId) {
+      await requireApprovedTicket(tx, {
+        kind: 'SEND', subjectType: 'send', subjectId: sendId, ticketId,
+      });
+    }
     await markSendSent(actorId, sendId, tx);
   });
 }
@@ -172,7 +182,7 @@ export async function markSendSent(actorId: string, sendId: string, tx: Queryabl
     const check = await checkWrap({
       exemption: vehicle!.exemption, instrument: row.instrument,
       audience: asset!.audience, permittedUse: asset!.permittedUse,
-    });
+    }, tx);
     if (!check.allowed || asset!.flags.length > 0) {
       throw new Error(
         'The wrap check no longer passes, or a claim underneath the asset changed since ' +
@@ -206,7 +216,7 @@ export async function proposeDeskSend(
   const asset = await getAsset(args.assetId, tx);
   if (!asset) return { sendId: null, check: { allowed: false, rule: null, refusals: ['No such material.'] }, title: '', version: 0 };
   const vehicle = (await tx.one<{ exemption: string }>('select exemption from platform.vehicle where id = $1', [args.vehicleId]))!;
-  const check = await checkWrap({ exemption: vehicle.exemption, instrument: args.instrument, audience: asset.audience, permittedUse: asset.permittedUse });
+  const check = await checkWrap({ exemption: vehicle.exemption, instrument: args.instrument, audience: asset.audience, permittedUse: asset.permittedUse }, tx);
   if (asset.status !== 'approved') { check.refusals.push(`The asset is "${asset.status}", not approved. Only approved material is sendable.`); check.allowed = false; }
   if (asset.flags.length > 0) { check.refusals.push(`${asset.flags.length} open refresh flag${asset.flags.length === 1 ? '' : 's'}: a claim underneath this asset changed.`); check.allowed = false; }
   if (!check.allowed) return { sendId: null, check, title: asset.title, version: asset.version };

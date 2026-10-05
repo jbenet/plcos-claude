@@ -8,9 +8,11 @@ import { listVehicles } from '@/modules/platform';
 import { getEntity } from '@/modules/identity';
 
 /**
- * Turn a route into a proposed ask. This contacts nobody: it writes the ask, runs the four
- * guards, opens an INTRO_ASK ticket with a stated scope, and opens a conflict case if
- * another vehicle is already in the way. Then it hands you to the queue.
+ * Turn a route into an ask on record. This contacts nobody: it writes the ask with its owner, runs
+ * the four guards, and opens a conflict case if another vehicle is already in the way. A person
+ * needs no INTRO_ASK ticket (Juan, 5 Oct 2026: tickets are for autonomous agents only); the owner
+ * makes the ask by sending the email, and the guards' findings are on the asks page and the email
+ * box. Then it hands you to the asks.
  */
 export async function proposeFromRoute(formData: FormData): Promise<void> {
   const authorizedUser = await requireAction('app/routes/actions.ts#proposeFromRoute', formData);
@@ -28,7 +30,7 @@ export async function proposeFromRoute(formData: FormData): Promise<void> {
   const vehicle = vehicles.find((v) => v.slug === vehicleSlug);
   if (!target || !vehicle) throw new Error('Unknown target or vehicle.');
 
-  const { ticketId } = await proposeAsk(user.id, {
+  const { askId, ticketId } = await proposeAsk(user.id, {
     entityId: target.entityId,
     entityName: target.displayName,
     connectorId: connector?.entityId ?? null,
@@ -45,7 +47,9 @@ export async function proposeFromRoute(formData: FormData): Promise<void> {
     ownerId,
   });
 
-  redirect(`/approvals?t=${ticketId}`);
+  revalidatePath('/asks');
+  // A person's ask opens no ticket; an ask only ever opens one for an autonomous agent.
+  redirect(ticketId ? `/approvals?t=${ticketId}` : `/asks?ask=${askId}`);
 }
 
 /**

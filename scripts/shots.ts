@@ -2440,7 +2440,7 @@ const SHOTS: Record<string, Shot[]> = {
           .getAttribute('value');
         await page.locator('select[name="vehicleId"]').selectOption(vehicleValue!);
         await page.locator('select[name="instrument"]').selectOption('spv');
-        await page.getByRole('button', { name: /Check and request/ }).click();
+        await page.getByRole('button', { name: /Check the wrap/ }).click();
         await page.waitForTimeout(1200);
       },
     },
@@ -2700,6 +2700,46 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  // The comms trace and agent-only tickets (Juan, 5 Oct 2026; docs/27 §5–§7a): juanmail reports invented Gmail messages
+  // for an LP with a restriction on file; the LP page shows the context panel and the merged timeline; an agent's
+  // tickets wait in Approvals as one batch.
+  'comms-trace': [
+    {
+      name: '01-lp-context-panel',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        const pursuitId = await commsFixture(page);
+        await page.goto(new URL(`/targets/${pursuitId}`, page.url()).toString(), { waitUntil: 'networkidle' });
+        const panel = page.locator('[data-outreach-context]');
+        await panel.waitFor();
+        await panel.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+    {
+      name: '02-timeline-from-the-trace',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        const pursuitId = await commsFixture(page);
+        await page.goto(new URL(`/targets/${pursuitId}`, page.url()).toString(), { waitUntil: 'networkidle' });
+        const tl = page.locator('#timeline');
+        await tl.waitFor();
+        await tl.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await page.evaluate(() => window.scrollBy(0, -70));
+      },
+    },
+    {
+      name: '03-approvals-agent-batch',
+      path: '/settings',
+      prepare: async (page) => {
+        await asUser(page);
+        await commsFixture(page, true);
+        await page.goto(new URL('/approvals?view=agent', page.url()).toString(), { waitUntil: 'networkidle' });
+      },
+    },
+  ],
   // Mailguard (docs/25 §12), on the demo's fake mailguard: Preferences → Email refuses a token that can send, then
   // connects a drafts-only one and tests it. Both tokens are invented by the fake.
   mailguard: [
@@ -2856,6 +2896,41 @@ const SHOTS: Record<string, Shot[]> = {
     },
   ],
 };
+
+/**
+ * The comms trace's invented fixture (5 Oct 2026): a desk token from Preferences, then three Gmail messages reported for
+ * the LP with a restriction on file (Solveig Quaresma, on her first pursuit) — theirs, ours, theirs — and, with
+ * `tickets`, two autonomous SEND tickets on the first invite LPs. Reported once: comms_ingest is idempotent by Message-ID.
+ */
+async function commsFixture(page: Page, tickets = false): Promise<string> {
+  const base = new URL(page.url()).origin;
+  await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+  const card = page.locator('#mcp');
+  await card.getByPlaceholder('Claude Code on the Mac').fill('juanmail');
+  await card.locator('input[name=tools][value=outreach-write]').check();
+  await card.getByRole('button', { name: 'Make token' }).click();
+  const secret = (await card.locator('code').first().innerText()).trim();
+  const headers = { Authorization: `Bearer ${secret}`, 'User-Agent': 'juanmail-server/0.1' };
+  await openLp(page, 'Solveig Quaresma');
+  const pursuitId = /\/(?:targets|pipeline)\/([0-9a-f-]{36})/.exec(page.url())?.[1];
+  if (!pursuitId) throw new Error('No pursuit for Solveig Quaresma');
+  const day = (n: number, h: number) => { const d = new Date(Date.now() - n * 86_400_000); d.setUTCHours(h, 0, 0, 0); return d.toISOString(); };
+  const me = 'juan@example.com', them = 'solveig@invented-trust.example';
+  const thread = { threadId: 'invented-thread-1' };
+  await page.request.post(`${base}/api/outreach/comms`, { headers, data: { messages: [
+    { messageId: '<invented-1@mail.invented.example>', gmailMessageId: 'invented-g1', ...thread, date: day(4, 14), direction: 'received', from: them, to: [me], subject: 'Questions on the PRI structure', pursuitId },
+    { messageId: '<invented-2@mail.invented.example>', gmailMessageId: 'invented-g2', ...thread, date: day(3, 9), direction: 'sent', from: me, to: [them], cc: ['mara@example.com'], subject: 'Re: Questions on the PRI structure', pursuitId },
+    { messageId: '<invented-3@mail.invented.example>', gmailMessageId: 'invented-g3', ...thread, date: day(1, 16), direction: 'received', from: them, to: [me], subject: 'Re: Questions on the PRI structure', pursuitId },
+  ] } });
+  if (tickets) {
+    const q = await (await page.request.get(`${base}/api/outreach/queue?vehicle=all&bucket=invite&limit=3`, { headers })).json() as { data: { rows: Array<{ pursuitId: string }> } };
+    for (const [i, row] of q.data.rows.slice(0, 2).entries()) {
+      await page.request.post(`${base}/api/outreach/tickets`, { headers: { ...headers, 'X-Autonomous': '1' },
+        data: { kind: 'SEND', pursuitId: row.pursuitId, scope: { recipients: [`partner${i + 1}@invented.example`], purpose: 'invite' }, coordination: { choice: 'send_separately' } } });
+    }
+  }
+  return pursuitId;
+}
 
 /** Open one node in the "Routes through" view from the picker, by its name. */
 function throughPick(name: string) {

@@ -6,7 +6,9 @@ import { redactHealth } from '@/lib/redact-health';
 import { SPV_STAGE_LABEL, spvRooms, workingDaysUntil, type SpvStage } from '@/modules/close';
 import { INSUFFICIENT_FOR_506C } from '@/modules/compliance';
 import { checkWrap, listAssets, type Audience, type PermittedUse } from '@/modules/content';
-import { READS, READ_LABEL, raiseWindows, summarize, touchpointsByPair, type Touchpoint } from '@/modules/meetings';
+import { READS, READ_LABEL, raiseWindows, summarize, type Touchpoint } from '@/modules/meetings';
+import { tracePairs } from '@/lib/comms/read';
+import { SOURCE_LABEL, traceState, type Merged } from '@/lib/comms/trace';
 import { CLOSE_STATE_LABEL, closeStates, currentIndications, indicatedTotals, vehicleTotals, type CloseState } from '@/modules/pipeline';
 import { listVehicles, type AppUser, type Vehicle } from '@/modules/platform';
 import { STATUS_LABEL, lpContactsFor, type PursuitStatus } from '@/modules/strategy';
@@ -98,7 +100,7 @@ export interface QueueArgs { vehicle: string; bucket?: Bucket; limit?: number; o
 /**
  * When each pursuit last changed, among those that changed since `since` (docs/27 §4, periodic sync): its status,
  * next step, an update or an indication (the audit log), a touchpoint, a strategy, the close track, the SPV seat, a
- * restriction, a desk send, an address. One query; a pursuit with no change since is absent.
+ * restriction, a desk send, an address, a message in the comms trace or a link. One query; a pursuit with no change since is absent.
  */
 async function changedSince(ids: string[], since: Date): Promise<Map<string, Date>> {
   if (!ids.length) return new Map();
@@ -118,6 +120,9 @@ async function changedSince(ids: string[], since: Date): Promise<Map<string, Dat
         on identity.canonical_entity_id(s.entity_id) = p.e and s.vehicle_id = p.v
       union all select p.pursuit_id::text, r.recorded_at from p join coordination.restriction r on identity.canonical_entity_id(r.entity_id) = p.e
       union all select p.pursuit_id::text, greatest(o.requested_at, o.recorded_at) from p join email.outreach_send o on o.pursuit_id = p.pursuit_id
+      union all select p.pursuit_id::text, c.updated_at from p join email.comms_message c on c.updated_at >= $2
+        and exists (select 1 from unnest(c.entity_ids) x where identity.canonical_entity_id(x) = p.e)
+      union all select p.pursuit_id::text, l.linked_at from p join email.message_link l on l.pursuit_id = p.pursuit_id where l.linked_at >= $2
       union all select p.pursuit_id::text, c.created_at from p join research.claim c on identity.canonical_entity_id(c.entity_id) = p.e
         where c.field ~ '(^|\\.)email$' and c.created_at >= $2
     ) t where at >= $2 group by id`, [ids, since]);
@@ -142,8 +147,9 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
   const key = (r: { entityId: string; vehicleId: string }) => `${r.entityId}:${r.vehicleId}`;
 
   // What the bucket needs, for every row: one query each.
-  const [touches, closes, seats, indications, fundOpen] = await Promise.all([
-    touchpointsByPair(pairs),
+  // The comms trace, not the app's log (Juan, 5 Oct 2026): Affinity and the Gmail messages juanmail reported, merged.
+  const [traces, closes, seats, indications, fundOpen] = await Promise.all([
+    tracePairs(pairs),
     closeStates(pairs),
     db.query<{ entity_id: string; vehicle_id: string; stage: SpvStage; amount: string | null }>(`select identity.canonical_entity_id(entity_id)::text entity_id,
       vehicle_id::text, stage::text stage, amount::text from close.spv_seat where vehicle_id = any($1::uuid[])`, [vehicles.map((v) => v.id)]),
@@ -160,8 +166,9 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
     const w = await checkWrap({ exemption: v.exemption, instrument: instrumentOf(v), audience: 'lp_memo', permittedUse: 'internal' });
     return [v.id, w.rule !== null] as const;
   })));
+  const empty: Merged = { touches: [], sameAs: new Map(), messageOf: new Map(), flags: [] };
   const summaries = new Map(pairs.map((p) => {
-    const list = touches.get(key(p)) ?? [];
+    const list = (traces.get(key(p)) ?? empty).touches;
     const s = summarize(list);
     const own = list.filter((t) => !t.viaOrganization && t.on && t.channel !== 'research');
     const last = own.reduce<Touchpoint | null>((x, t) => (!x || t.on! > x.on! ? t : x), null);
@@ -272,8 +279,11 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
       ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x }))
       : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x })));
     const blanket = restrictions.filter((x) => x.entity_id === r.entityId && x.scope === 'blanket');
-    const emailBarred = restrictions.filter((x) => x.entity_id === r.entityId && x.scope === 'channel' && /mail/i.test(x.channel ?? ''));
+    // A channel restriction that names no channel bars email too: fail closed on what it does not say.
+    const emailBarred = restrictions.filter((x) => x.entity_id === r.entityId && x.scope === 'channel' && (!x.channel || /mail/i.test(x.channel)));
     const connectorOnly = restrictions.filter((x) => x.entity_id === r.entityId && x.scope === 'connector');
+    // Any other restriction (another channel) is surfaced too, never read as "none on file" (5 Oct 2026).
+    const otherChannel = restrictions.filter((x) => x.entity_id === r.entityId && x.scope === 'channel' && x.channel && !/mail/i.test(x.channel));
     const acc = accreditation.find((x) => x.entity_id === r.entityId && x.vehicle_id === v.id);
     const strict = v.exemption === '506(c)' || v.exemption === 'unknown';
     const verified = acc && acc.status === 'verified' && !INSUFFICIENT_FOR_506C.includes(acc.method as never) && !(acc.expires_on && new Date(acc.expires_on) < new Date());
@@ -282,9 +292,12 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
     const barred = blanket.length + emailBarred.length > 0;
     const checks: Check[] = [
       {
-        rule: 'restriction', ok: !barred, blocking: barred,
+        // Always surfaced (5 Oct 2026): any restriction on file fails this check; only one that bars email blocks.
+        rule: 'restriction', ok: !barred && !connectorOnly.length && !otherChannel.length, blocking: barred,
         detail: barred ? (why ? [...blanket, ...emailBarred].map((x) => clean(x.instruction)).join(' · ') : 'A do-not-approach restriction is on file. Reasons withheld at your access: check with the owner.')
-          : connectorOnly.length ? 'A restriction on a connector is on file: a direct email is not barred, an intro through that connector is.' : 'No restriction on file.',
+          : connectorOnly.length ? `A restriction on a connector is on file: a direct email is not barred, an intro through that connector is.${why ? ` ${connectorOnly.map((x) => clean(x.instruction)).join(' · ')}` : ''}`
+            : otherChannel.length ? `A restriction is on file: not by ${otherChannel.map((x) => x.channel).join(', ')}. Email is not barred.${why ? ` ${otherChannel.map((x) => clean(x.instruction)).join(' · ')}` : ''}`
+              : 'No restriction on file.',
       },
       {
         rule: 'accreditation', ok: !strict || Boolean(verified), blocking: false,
@@ -333,6 +346,18 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
       otherVehicles,
       replyOwed,
       lastTouch: last ? { kind: last.channel, on: day(last.on), direction: last.direction } : s.lastTouch ? { kind: s.lastTouchChannel, on: day(s.lastTouch), direction: null } : null,
+      // The comms trace for this LP (5 Oct 2026): the latest touches with their source, who owes the next word, the
+      // thread and who on the team holds it, and where the app's log disagrees with the trace.
+      trace: (() => {
+        const t = traceState(traces.get(key(r)) ?? empty);
+        return {
+          last: t.last.map((x) => ({ on: day(x.on), kind: x.channel, direction: x.direction, source: x.source, sourceLabel: SOURCE_LABEL[x.source],
+            subject: w ? clean(x.subject) : null, team: x.team, sameAs: x.sameAs.map((m) => ({ source: m.source, by: m.by, confidence: m.confidence })) })),
+          owes: t.owes ? { by: t.owes.by, since: day(t.owes.since) } : null,
+          thread: t.thread ? { subject: w ? clean(t.thread.subject) : null, team: t.thread.team, holder: t.thread.holder, messages: t.thread.messages, last: day(t.thread.last) } : null,
+          mismatches: (traces.get(key(r))?.flags ?? []).map((f) => ({ kind: f.kind, at: day(f.at), text: f.text })),
+        };
+      })(),
       checks,
       materials: materialsByVehicle.get(v.id) ?? [],
       bucket: held ? 'held' as Bucket : b.bucket,
@@ -348,8 +373,8 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
 
 function queueCoverage(vehicles: Vehicle[]) {
   return {
-    corpus: `Open LPs (not passed) on ${vehicles.map((v) => v.name).join(', ') || 'no vehicle'}, with their contact log, close track, SPV seat, indication, restrictions, accreditation and asks this quarter.`,
+    corpus: `Open LPs (not passed) on ${vehicles.map((v) => v.name).join(', ') || 'no vehicle'}, with the comms trace (Affinity's records and the Gmail messages juanmail reported, merged), close track, SPV seat, indication, restrictions, accreditation and asks this quarter.`,
     buckets: 'reply_owed: they spoke last; money: committed, an indication, a close track not yet closed, or an SPV seat at IOI or allocated; invite: new, sourcing or selected; follow_up: the rest; held: a blocking check fails.',
-    note: 'A reply sent outside what is recorded here is not seen. An address on file is not proof it is current.',
+    note: 'A reply in a mailbox juanmail does not read, and Affinity has not synced, is not seen. An address on file is not proof it is current. comms_trace gives one LP\'s whole timeline.',
   };
 }

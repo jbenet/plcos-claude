@@ -1,6 +1,6 @@
 import { config } from '@/config/deployment';
 import { getDb, type Queryable } from '@/lib/db';
-import { openTicket, requireApprovedTicket } from '@/modules/governance';
+import { PERSON, openTicket, requireApprovedTicket, ticketNeeded, type Acting } from '@/modules/governance';
 import { RULE_LABEL, type ConflictReason, type GuardBlock, type GuardReport } from './types';
 import {
   asksToEntitySince, asksViaConnectorSince, competingAsks, getAsk, restrictionsFor,
@@ -160,10 +160,12 @@ export interface ProposeAskCommand {
 }
 
 /**
- * Propose an ask. This never contacts anyone: it writes the ask, runs the guards, opens
- * an INTRO_ASK ticket, and opens a ConflictCase if another vehicle is already in the way.
+ * Propose an ask. This never contacts anyone: it writes the ask, runs the guards, and opens a
+ * ConflictCase if another vehicle is already in the way. An INTRO_ASK ticket is opened only for an
+ * autonomous agent (Juan, 5 Oct 2026, modules/governance/autonomy.ts): a person's ask is theirs to
+ * make, with the guards' findings in front of them, and needs no approval.
  */
-export async function proposeAsk(actorId: string, cmd: ProposeAskCommand) {
+export async function proposeAsk(actorId: string, cmd: ProposeAskCommand, acting: Acting = PERSON) {
   const db = await getDb();
   return db.transaction(async (tx) => {
     const guard = await evaluateGuards(
@@ -180,7 +182,7 @@ export async function proposeAsk(actorId: string, cmd: ProposeAskCommand) {
     );
     const askId = rows[0]!.ask_id;
 
-    const ticketId = await openTicket(
+    const ticketId = !ticketNeeded('INTRO_ASK', acting) ? null : await openTicket(
       actorId,
       {
         kind: 'INTRO_ASK',
@@ -206,7 +208,7 @@ export async function proposeAsk(actorId: string, cmd: ProposeAskCommand) {
       },
       tx,
     );
-    await tx.query('update coordination.ask set ticket_id = $2 where ask_id = $1', [askId, ticketId]);
+    if (ticketId) await tx.query('update coordination.ask set ticket_id = $2 where ask_id = $1', [askId, ticketId]);
 
     let conflictCaseId: string | null = null;
     if (conflicting) {
@@ -228,6 +230,7 @@ export async function proposeAsk(actorId: string, cmd: ProposeAskCommand) {
       [actorId, askId, JSON.stringify({
         entity: cmd.entityName, vehicle: cmd.vehicleName, blocked: !guard.ok,
         rules: guard.blocks.map((b) => b.rule), advisories: guard.advisories.map((b) => b.rule),
+        autonomous: acting.autonomous, ticket: ticketId !== null,
       })],
     );
 
@@ -236,9 +239,10 @@ export async function proposeAsk(actorId: string, cmd: ProposeAskCommand) {
 }
 
 /**
- * Record that the ask was actually made. Fails closed without an approved, unexpired
- * INTRO_ASK ticket, and re-runs the guards — an approval from four days ago does not
- * license an ask that a newer conflict has since blocked.
+ * Record that the ask was actually made. For an autonomous agent it fails closed without an
+ * approved, unexpired INTRO_ASK ticket; a person needs none (Juan, 5 Oct 2026). Either way it
+ * re-runs the guards — an approval from four days ago does not license an ask that a newer
+ * conflict has since blocked, and a restriction refuses whoever asks.
  */
 export async function makeAsk(
   actorId: string,
@@ -246,15 +250,18 @@ export async function makeAsk(
   ticketId: string | null,
   channel: string,
   override?: { reason: string },
+  acting: Acting = PERSON,
+  q?: Queryable,
 ): Promise<void> {
-  const db = await getDb();
-  await db.transaction(async (tx) => {
+  const run = async (tx: Queryable) => {
     const ask = await getAsk(askId, tx);
     if (!ask) throw new Error(`No ask ${askId}`);
 
-    await requireApprovedTicket(tx, {
-      kind: 'INTRO_ASK', subjectType: 'ask', subjectId: askId, ticketId,
-    });
+    if (ticketNeeded('INTRO_ASK', acting) || ticketId) {
+      await requireApprovedTicket(tx, {
+        kind: 'INTRO_ASK', subjectType: 'ask', subjectId: askId, ticketId,
+      });
+    }
 
     const guard = await evaluateGuards(
       { entityId: ask.entityId, connectorId: ask.connectorId, vehicleId: ask.vehicleId },
@@ -305,9 +312,21 @@ export async function makeAsk(
     await tx.query(
       `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
        values ($1, 'ask.made', 'ask', $2, $3)`,
-      [actorId, askId, JSON.stringify({ entity: ask.entityName, vehicle: ask.vehicleName, channel })],
+      [actorId, askId, JSON.stringify({ entity: ask.entityName, vehicle: ask.vehicleName, channel, autonomous: acting.autonomous, ticketId })],
     );
-  });
+  };
+  if (q) return run(q);
+  const db = await getDb();
+  await db.transaction(run);
+}
+
+/**
+ * The ask went out as an email the mail desk linked (outreach_link_message, docs/27): recorded as made,
+ * by email, through makeAsk — so the ticket (for an autonomous agent) and the guards are checked exactly
+ * as for any made ask. Inside the caller's transaction.
+ */
+export async function recordAskEmailed(actorId: string, askId: string, ticketId: string | null, acting: Acting, tx: Queryable): Promise<void> {
+  await makeAsk(actorId, askId, ticketId, 'email', undefined, acting, tx);
 }
 
 /**

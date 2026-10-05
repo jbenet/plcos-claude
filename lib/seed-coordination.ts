@@ -89,8 +89,9 @@ export async function seedCoordination(db: Db): Promise<{ asks: number; tickets:
       basis: Array<{ label: string; value: string; source?: string }>;
     }> = [
       {
+        // An agent's send (5 Oct 2026: a person's needs no ticket): the mail desk, for Mara.
         kind: 'SEND', label: 'Neurotech primer v4 → Kowalczyk Family Office', subjectType: 'material_send',
-        by: 'mara', vehicle: 'neurotech',
+        by: 'mail-desk', vehicle: 'neurotech',
         authorizes: 'Sending the approved Neurotech primer, version 4, to Bram Kowalczyk and nobody else.',
         excludes: ['Sending the track record appendix', 'Any statement about the Rails vehicle', 'Forwarding rights'],
         basis: [
@@ -126,9 +127,12 @@ export async function seedCoordination(db: Db): Promise<{ asks: number; tickets:
   });
 
   // The live one, through the real command path: guards run, a ticket opens, and the
-  // collision with Rails produces a ConflictCase rather than a silent block.
+  // collision with Rails produces a ConflictCase rather than a silent block. Since 5 Oct 2026 only an
+  // autonomous agent's ask opens a ticket, so the demo's is the mail desk's, asked for its owner.
   const { proposeAsk } = await import('@/modules/coordination');
-  await proposeAsk(u('juan'), {
+  const { AUTONOMOUS } = await import('@/modules/governance');
+  await proposeAsk(u('mail-desk'), {
+    ownerId: u('juan'),
     entityId: e('Solveig Quaresma'),
     entityName: 'Solveig Quaresma',
     connectorId: e('Orla Umeadi'),
@@ -139,7 +143,7 @@ export async function seedCoordination(db: Db): Promise<{ asks: number; tickets:
     carries:
       'One opt-in request to Orla Umeadi regarding Solveig Quaresma, carrying the approved ' +
       'Neurotech primer (v4) and the PRI structure note, and nothing else.',
-  });
+  }, AUTONOMOUS);
 
   const counts = await db.one<{ asks: string; tickets: string }>(
     `select (select count(*)::text from coordination.ask) as asks,

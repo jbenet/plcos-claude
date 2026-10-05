@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from '@/components/ui/AppLink';
-import { proposeSend } from '@/app/materials/actions';
+import { markSentAction, proposeSend } from '@/app/materials/actions';
 
 export interface Option {
   id: string;
@@ -10,9 +10,10 @@ export interface Option {
 }
 
 /**
- * The send gate. The wrap check runs before a ticket exists: a refusal is recorded and no
- * approval is requested, because an approval queue full of things that may not legally be
- * sent trains people to approve without reading.
+ * The send gate. The wrap check runs first: a refusal is recorded, because "wrong-wrap sends = 0"
+ * is measured, not assumed. A person who passes it needs no approval (Juan, 5 Oct 2026: SEND
+ * tickets are for autonomous agents only): the material is cleared, they send it from their own
+ * mailbox and mark it sent here, and the wrap is checked again at that moment (rule 11).
  */
 export function SendGate({
   assets, entities, vehicles, instruments,
@@ -22,7 +23,8 @@ export function SendGate({
   vehicles: Option[];
   instruments: Option[];
 }) {
-  const [state, setState] = useState<{ refusals?: string[]; ticketId?: string } | null>(null);
+  const [state, setState] = useState<{ refusals?: string[]; ticketId?: string; sendId?: string } | null>(null);
+  const [sent, setSent] = useState<{ error?: string; sent?: boolean } | null>(null);
   const [pending, setPending] = useState(false);
   // Controlled, so the form still shows what was checked after the page revalidates. A
   // refusal that appears next to a reset form is a refusal about nothing.
@@ -36,6 +38,7 @@ export function SendGate({
       className="cbody"
       action={async (fd) => {
         setPending(true);
+        setSent(null);
         setState(await proposeSend(fd));
         setPending(false);
       }}
@@ -88,7 +91,7 @@ export function SendGate({
       {state?.refusals && (
         <div className="warn" style={{ marginBottom: 12 }}>
           <div className="lbl" style={{ color: 'var(--clay)' }}>
-            Refused by the wrap check — no ticket was opened
+            Refused by the wrap check — this material may not go to them
           </div>
           {state.refusals.map((r) => (
             <p key={r}>{r}</p>
@@ -97,6 +100,26 @@ export function SendGate({
             The refusal is on the record. That is what makes &ldquo;wrong-wrap sends = 0&rdquo; a
             measurement rather than an assumption.
           </p>
+        </div>
+      )}
+
+      {state?.sendId && !state.ticketId && (
+        <div className="scope" style={{ marginTop: 0, marginBottom: 12 }} data-cleared>
+          <div className="lbl">Wrap check passed · cleared to send</div>
+          <p>
+            No approval is needed: send it from your own mailbox. Then mark it sent here — the wrap is
+            checked again at that moment, so a material that changed since is refused and not counted.
+          </p>
+          {sent?.sent ? (
+            <p className="flag f-ok" style={{ display: 'inline-block' }}>Marked sent</p>
+          ) : (
+            <button className="btn" type="button" style={{ marginTop: 8 }} onClick={async () => {
+              const fd = new FormData();
+              fd.set('sendId', state.sendId!);
+              setSent(await markSentAction(fd));
+            }}>I sent it — mark it sent</button>
+          )}
+          {sent?.error && <p className="warnline">{sent.error}</p>}
         </div>
       )}
 
@@ -114,7 +137,7 @@ export function SendGate({
       )}
 
       <button className="btn p" type="submit" disabled={pending}>
-        {pending ? 'Checking the wrap…' : 'Check and request'}
+        {pending ? 'Checking the wrap…' : 'Check the wrap'}
       </button>
     </form>
   );

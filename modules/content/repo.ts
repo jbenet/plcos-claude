@@ -64,8 +64,8 @@ export async function getAsset(assetId: string, q?: Queryable): Promise<Asset | 
   return (await decorate([row], q))[0] ?? null;
 }
 
-export async function listWrapRules(): Promise<WrapRule[]> {
-  const db = await getDb();
+export async function listWrapRules(q?: Queryable): Promise<WrapRule[]> {
+  const db = q ?? await getDb();
   const rows = await db.query<{
     rule_id: string; exemption: string; instrument: string;
     // Cast to text[]: a built-in OID the driver always knows how to parse. Reading

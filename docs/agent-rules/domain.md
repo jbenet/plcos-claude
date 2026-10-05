@@ -42,7 +42,7 @@ none (before N81 it counted for every vehicle raising on its date). The fundrais
 an email's addresses only, never a meeting's invitees or a note's author. The LP's timeline shows
 every record, labelled with its vehicle or "General", and filters by fund.
 
-**3. Five approval-ticket kinds gate mutations, before the fact.**
+**3. Five approval-ticket kinds gate mutations, before the fact — SEND and INTRO_ASK for agents only.**
 
 `SEND` · `INTRO_ASK` · `MONEY` · `STAGE` · `ALLOCATION_EXCEPTION`
 
@@ -50,10 +50,45 @@ Every mutating command in those families takes a `ticketId` and **fails closed**
 approved, unexpired one. One open ticket per subject per kind. An approval authorizes a
 *specific bounded action*, stated in the ticket's `scope` — never an opaque bundle.
 
+*Juan, 5 Oct 2026 — no SEND or INTRO_ASK tickets for people.* "this seems like complexity overkill. i think we
+want to be super clear on what outreach has happened and equip senders with clear visual info so they can make
+the best decision there, but not create super complex approval flows that will just grind things to confusion or
+halts. if this was for automated agents only, ok, but not for humans (we're slow)". So, precisely
+(`modules/governance/autonomy.ts`, `ticketNeeded`):
+
+- **A person never needs a SEND or INTRO_ASK ticket**: anyone using the app, or a token acting for its owner
+  interactively — a person clicked. Recording an ask on the routes page opens none; a material that passes the wrap
+  check is cleared, sent by the person and marked sent (the wrap is checked again then, rule 11); an intro-ask
+  draft no longer says to wait for an approval; juanmail's links need none.
+- **Instead the sender sees the context** where they draft or send — the LP page's Email card, the routes page's
+  intro-ask box, juanmail's queue rows (`trace`, `checks`): the last touches with dates, direction and source; who
+  owes a reply; the other vehicles in play and their status; who on the team is in the thread and who holds it;
+  restrictions as a red flag, always shown, never silently skipped; the material's compliance (the wrap rule,
+  506(c) accreditation, which materials may go).
+- **"Autonomous" is a flag, never a guess**: a token whose list carries `mode:autonomous`, or a call marked
+  `_meta.autonomous: true` (MCP) or `X-Autonomous: 1` (REST) — juanmail running a batch with no human click. A call
+  can add the flag, never remove it. An autonomous SEND or INTRO_ASK fails closed without an approved, unexpired
+  ticket; a person approves an agent's tickets, singly or as a batch (Approvals → the agent's sends).
+- **Unchanged:** MONEY, STAGE and ALLOCATION_EXCEPTION need a ticket from everyone. None of them blocks a person's
+  ordinary outreach (checked 5 Oct 2026): STAGE is the ladder, which no send moves (the status needs no ticket),
+  and MONEY and ALLOCATION_EXCEPTION are the close track. Restrictions (rule 8), the grants gate (rule 12) and the
+  wrap check (rule 11) are not tickets and hold for everyone.
+
+*Juan, 5 Oct 2026 — the email trail is the record.* "as much as possible we should record all this stuff from
+events directly in email and let email be the state. we may need to record info happened outside of email but that
+should be a note ... let the actual comms trace reveal what happened ... im not against logging this stuff, but
+you'll have to reconcile with actual comms anyway". Recording a send became linking a message
+(`outreach_link_message`), which creates no outreach state; the LP's timeline, last touch, who owes a reply and who
+holds the thread are read from the merged comms trace (Affinity's records and the Gmail messages juanmail reports
+through `comms_ingest`, one row per message); the app's logs stay an audit of actions, and where one disagrees with
+the trace the trace is shown and the disagreement flagged. Something that happened outside email is a note
+(docs/27-outreach-api.md §5–§6).
+
 *Juan, 4 Oct 2026 — a tool may send.* Juan decided that the mail desk (an external tool, not
 Capital OS) drafts first, then gets rate-limited send rights through a MailGuard key, replies
-first, then invites (the desk's feedback, 4 Oct). This changes who presses send, not the gate: each email still needs its own
-approved SEND ticket, and the rule above holds unchanged. Precisely (docs/27-outreach-api.md):
+first, then invites (the desk's feedback, 4 Oct). *Superseded in part on 5 Oct 2026, above:* a desk send a person
+clicks needs no ticket; the ticket below is for the desk acting autonomously, and `outreach_record_send` became
+`outreach_link_message`. As it stood on 4 Oct (docs/27-outreach-api.md):
 
 - Capital OS has no code that sends. The desk sends from its owner's own mailbox, through
   MailGuard.
@@ -95,7 +130,7 @@ relationship: a C or D tie routes, ranked below better-evidenced ties and labell
 and gains or loses confidence as evidence arrives (docs/21). *Juan, 26 Sep 2026:* "don't have humans
 confirm info. That makes a brittle system. Instead model the uncertainty, and gather more evidence over
 time. If humans see something wrong while using the app, they can flag it there" (the feedback box, issue
-0040). Human sign-off stays on actions (rule 3: sends, intro asks, money), not on information.
+0040). Human sign-off stays on actions (rule 3: an agent's sends and intro asks, money, the ladder), not on information.
 *Juan, 26 Sep 2026:* Protocol Labs is our own network, so affiliation there is strong evidence. Two people who are
 or were at PL are warmly tied, with no email or meeting needed. Every PL team member can be the source of a
 route. Everyone in the PL network is tied to the PL team, and where no particular team member is known, a

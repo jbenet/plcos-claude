@@ -14,14 +14,17 @@ export async function coordinationProperties({ check, db }: SeedContext) {
     `${halfAdjudicated[0]!.n} incomplete adjudications`,
   );
 
+  // Since 5 Oct 2026 only an autonomous agent's ask needs a ticket; a person's needs none.
   const ungatedAsks = await db.query<{ n: string }>(
-    `select count(*)::text as n from coordination.ask
-      where status in ('proposed','blocked') and ticket_id is null`,
+    `select count(*)::text as n from coordination.ask a
+      where a.status in ('proposed','blocked') and a.ticket_id is null
+        and exists (select 1 from platform.audit_log l where l.action = 'ask.proposed' and l.subject_id = a.ask_id::text
+                      and l.detail->>'autonomous' = 'true')`,
   );
   check(
-    'Every live ask carries an approval ticket',
+    'Every live ask an autonomous agent proposed carries an approval ticket',
     Number(ungatedAsks[0]!.n) === 0,
-    `${ungatedAsks[0]!.n} live asks with no ticket`,
+    `${ungatedAsks[0]!.n} agent asks with no ticket`,
   );
 
 }

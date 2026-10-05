@@ -19,7 +19,14 @@ import type { Answer } from './output';
  * Refusals are logged like the rest. Nothing is deleted: retention is "keep everything" for now (docs/26 §4).
  */
 
-export interface CallMeta { via: 'mcp' | 'rest'; correlationId: string | null; origin?: string | null }
+export interface CallMeta {
+  via: 'mcp' | 'rest'; correlationId: string | null; origin?: string | null;
+  /** The call says no person is in the loop (`_meta.autonomous: true`, or `X-Autonomous: 1`): it can only add autonomy. */
+  autonomous?: boolean;
+}
+
+/** A client's autonomy flag: true only for an explicit true (or "1"/"true" in a header). */
+export const autonomousOf = (v: unknown): boolean => v === true || v === 'true' || v === '1';
 
 const KEY = /^[\w.:-]{1,100}$/;
 export const correlationOf = (v: unknown): string | null => (typeof v === 'string' && KEY.test(v) ? v : null);
@@ -32,7 +39,7 @@ export function inputHash(args: unknown): string {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const IDS = ['pursuitId', 'ticketId', 'draftId', 'sendId', 'askId', 'overlapId', 'updateId', 'entityId', 'claimId', 'indicationId', 'touchpointId', 'conflictCaseId', 'connectorId', 'assetId'];
+const IDS = ['pursuitId', 'ticketId', 'draftId', 'sendId', 'askId', 'overlapId', 'updateId', 'entityId', 'claimId', 'indicationId', 'touchpointId', 'conflictCaseId', 'connectorId', 'assetId', 'linkId'];
 
 /** The ids a call touched, from its arguments and the top of its answer. */
 export function affectedIds(args: Record<string, unknown>, answer: Answer | null): Record<string, string> {
@@ -54,6 +61,7 @@ export function auditDetail(env: Envelope, a: {
     outcome: a.outcome, reason: a.reason?.slice(0, 300) ?? null, ms: a.ms, bytes: a.bytes, truncated: a.truncated,
     inputHash: inputHash(a.args), args: auditArgs(a.args), affected: affectedIds(a.args, a.answer),
     idempotencyKey: correlationOf(a.args?.idempotencyKey), correlationId: a.meta.correlationId, origin: a.meta.origin ?? null,
+    autonomous: env.autonomous || a.meta.autonomous === true,
   };
 }
 
@@ -73,6 +81,7 @@ export async function auditRecent(env: Envelope, a: { tool?: string; outcome?: s
       callId: r.id, at: new Date(r.at).toISOString(), token: r.token, client: r.detail.client ?? null, via: r.detail.via ?? 'mcp',
       tool: r.detail.tool, outcome: r.detail.outcome, reason: r.detail.reason ?? null, ms: r.detail.ms ?? null,
       affected: r.detail.affected ?? {}, idempotencyKey: r.detail.idempotencyKey ?? null, correlationId: r.detail.correlationId ?? null,
+      autonomous: r.detail.autonomous === true,
     })),
     coverage: { corpus: `Your own calls${(a.token ?? 'this') === 'this' ? ' with this token' : ', with any of your tokens'}, from the audit log.`,
       note: 'Arguments are kept as ids and lengths, never words. To report a problem with a call, file_feedback with its callId.' },

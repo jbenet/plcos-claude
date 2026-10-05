@@ -300,12 +300,14 @@ export async function emailProperties(check: Check, db: Db) {
       const blanket = draftWarnings({ ...base, purpose: 'first_message', lpRestrictions: [{ scope: 'blanket', connectorId: null, connectorName: null, channel: null, instruction: 'Do not approach.' }] });
       const noWrap = draftWarnings({ ...base, wrap: { ...base.wrap, found: false }, text: 'Also about SPV Two.' });
       const unapproved = draftWarnings({ ...base, introAsks: [{ status: 'proposed', connectorId: 'c1' }] });
+      const blockedAsk = draftWarnings({ ...base, introAsks: [{ status: 'blocked', connectorId: 'c1' }] });
+      const noAsk = draftWarnings({ ...base, introAsks: [] });
       const grants = draftWarnings({ ...base, purpose: 'first_message', vehicle: { ...base.vehicle, kind: 'grant_rail', exemption: 'n/a' }, grantGate: { blocked: true, reason: 'No invitation.' } });
       const b506 = draftWarnings({ ...base, purpose: 'first_message', vehicle: { ...base.vehicle, exemption: '506(b)' } });
-      check('Email: draft-time checks warn on restrictions (stop through the barred connector, note through another), a missing wrap rule, another vehicle named, an unapproved intro ask, 506(b) and the grants gate',
+      check('Email: draft-time checks warn on restrictions (stop through the barred connector, note through another), a missing wrap rule, another vehicle named, 506(b) and the grants gate; an intro ask needs no approval (5 Oct 2026) — a blocked ask on file is a check, none on file a note',
         rules(clean) === '' && rules(viaConnector) === 'stop:restriction' && rules(otherConnector) === 'note:restriction' && rules(blanket) === 'stop:restriction'
-          && rules(noWrap) === 'check:other_vehicle check:wrap' && rules(unapproved) === 'check:intro_ticket' && rules(grants) === 'stop:grants' && rules(b506) === 'check:wrap',
-        JSON.stringify({ clean: rules(clean), viaConnector: rules(viaConnector), noWrap: rules(noWrap), unapproved: rules(unapproved), grants: rules(grants), b506: rules(b506) }));
+          && rules(noWrap) === 'check:other_vehicle check:wrap' && rules(unapproved) === '' && rules(blockedAsk) === 'check:intro_ticket' && rules(noAsk) === 'note:intro_ticket' && rules(grants) === 'stop:grants' && rules(b506) === 'check:wrap',
+        JSON.stringify({ clean: rules(clean), viaConnector: rules(viaConnector), noWrap: rules(noWrap), unapproved: rules(unapproved), blockedAsk: rules(blockedAsk), noAsk: rules(noAsk), grants: rules(grants), b506: rules(b506) }));
     }
 
     // ── 6. The key must be drafts-only, read from mailguard's own answer ─────────────────

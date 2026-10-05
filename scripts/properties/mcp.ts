@@ -54,7 +54,8 @@ export async function mcpProperties(check: Check, db: Db) {
   // ── The registry ──────────────────────────────────────────────────────────────────────
   const badNames = TOOLS.filter((t) => FORBIDDEN.test(t.name) || !RISKS.includes(t.policy.risk)
     || (SEND_OR_TICKET.test(t.name) && !(t.policy.approval && t.policy.ticket !== 'none'))
-    || (t.policy.risk === 'send-adjacent' && t.policy.ticket !== 'requires-approved')
+    // A send-adjacent tool records; one that links our own sends fails closed for an agent (5 Oct 2026: 'agent-only').
+    || (t.policy.risk === 'send-adjacent' && (t.policy.ticket === 'opens' || (/send|link/.test(t.name) && !['requires-approved', 'agent-only'].includes(t.policy.ticket))))
     || (t.policy.risk !== 'read' && t.policy.risk !== 'propose' && !t.policy.scopes.length));
   const reach: string[] = [];
   for (const dir of ['lib/mcp', 'lib/outreach']) {

@@ -74,7 +74,13 @@ The [full domain rules](docs/agent-rules/domain.md) define the evidence and exce
 
 1. Hard-only headline; soft stays separate. Never blend AUM across vehicles.
 2. Six explicit, evidenced consent rungs; pipeline status is separate.
-3. SEND, INTRO_ASK, MONEY, STAGE and ALLOCATION_EXCEPTION fail closed without a bounded, approved, unexpired ticket.
+3. MONEY, STAGE and ALLOCATION_EXCEPTION fail closed without a bounded, approved, unexpired ticket. SEND and
+   INTRO_ASK do too, but only for an autonomous agent — a token or a call flagged autonomous, such as juanmail
+   running a batch with no human click. A person (the app, or a token acting for them interactively) needs no
+   ticket to draft or send, and sees the outreach context instead; restrictions still show in red and still refuse
+   an agent. *Juan, 5 Oct 2026:* "this seems like complexity overkill ... equip senders with clear visual info so
+   they can make the best decision there, but not create super complex approval flows ... if this was for automated
+   agents only, ok, but not for humans (we're slow)". Details in [Domain rules](docs/agent-rules/domain.md), rule 3.
 4. Agent success, task acceptance, investor approval, legal close and cash receipt are separate states.
 5. Coordinate vehicle overlaps; record collisions and a dated follow-up for the loser.
 6. Model A–D ties as uncertainty, never gate information on a person. PL affiliation is strong evidence.
