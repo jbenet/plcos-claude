@@ -41,7 +41,10 @@ export const addDays = (iso: string, days: number) => {
 };
 
 // A Linear member is ours when their address is someone's email or linearEmail.
-const OURS = `lower(m.email) in (lower(u.email), lower(u.linear_email))`;
+// A Linear member is ours by their Linear address first, then by any of their addresses (login, default-to,
+// alias; platform.user_address), then app_user.email.
+const OURS = `(lower(m.email) = lower(u.linear_email) or lower(m.email) = lower(u.email)
+  or exists (select 1 from platform.user_address ua where ua.user_id = u.id and lower(ua.address) = lower(m.email)))`;
 
 const ISSUE_SELECT = `
   select i.id, i.identifier, i.title, i.url, coalesce(i.priority, 0) priority, i.due_date::text due, i.completed_at, i.updated_at,

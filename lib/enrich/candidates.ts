@@ -197,7 +197,9 @@ async function researchSnapshot() {
   ]);
   const emailRecords = await latestRaw<unknown>('affinity', 'email');
   const emails = emailEntriesByPerson(emailRecords.map(r => r.payload));
-  const roster = await db.query<{ name: string; handle: string; email: string }>('select name, handle, email from platform.app_user where active');
+  const roster = await db.query<{ name: string; handle: string; email: string; addresses: string[] }>(`select u.name, u.handle, u.email,
+    coalesce((select array_agg(lower(a.address)) from platform.user_address a where a.user_id = u.id), '{}') addresses
+    from platform.app_user u where u.active`);
   const init = await initForMatching();
   const affinityUsers = await latestRaw<AffinityUser>('affinity', 'user');
   const emailEvidence = emailEvidenceIndex([

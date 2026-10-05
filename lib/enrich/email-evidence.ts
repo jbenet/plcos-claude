@@ -8,11 +8,12 @@ export interface EmailEvidence {
   direction?: 'sent' | 'received';
   team?: string[];
 }
-export type EmailTeamMember = { name: string; email?: string | null; affinityEmail?: string | null };
+export type EmailTeamMember = { name: string; email?: string | null; affinityEmail?: string | null; addresses?: string[] };
 type Participant = { person?: { id?: number; type?: string; primaryEmailAddress?: string | null; emailAddresses?: string[] }; emailAddress?: string; userId?: number };
 export function emailTeamResolver(team: EmailTeamMember[], users: Array<{ id: number; primaryEmailAddress?: string | null; emailAddresses?: string[] }> = []) {
   const addresses = (p: Participant) => [p.emailAddress, p.person?.primaryEmailAddress, ...(p.person?.emailAddresses ?? [])].filter((e): e is string => !!e).map(e => e.trim().toLowerCase());
-  const matches = (emails: string[]) => team.filter(t => [t.email, t.affinityEmail].some(e => e && emails.includes(e.trim().toLowerCase())));
+  // Any of a member's addresses (default-to, login, aliases) or their Affinity address.
+  const matches = (emails: string[]) => team.filter(t => [t.email, t.affinityEmail, ...(t.addresses ?? [])].some(e => e && emails.includes(e.trim().toLowerCase())));
   return (p: Participant): string | undefined => {
     const found = new Set(matches(addresses(p)).map(t => t.name));
     // Affinity internal person IDs are user IDs; external IDs are a separate namespace.

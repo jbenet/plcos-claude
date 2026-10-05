@@ -143,7 +143,7 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
       const teamByAffinity = new Map<number, string>();
       for (const u of found.users as AffinityUser[]) {
         const email = u.primaryEmailAddress?.toLowerCase();
-        const member = init.team.find((t) => email && [t.affinityEmail?.toLowerCase(), t.email?.toLowerCase()].includes(email));
+        const member = init.team.find((t) => email && [t.affinityEmail, t.email, t.login, ...(t.aliases ?? [])].some((a) => a?.toLowerCase() === email));
         if (member && users.get(member.handle)) teamByAffinity.set(u.id, users.get(member.handle)!);
       }
 
@@ -402,7 +402,7 @@ const CHANNEL_OF: Record<Interaction['type'], string> = { email: 'email', meetin
  */
 export async function touchpoints(
   tx: Queryable, entries: E[], notes: AffinityNote[], meetings: AffinityMeeting[],
-  team: Array<{ handle: string; email?: string | null; affinityEmail?: string | null }>,
+  team: Array<{ handle: string; email?: string | null; affinityEmail?: string | null; login?: string | null; aliases?: string[] }>,
   users: Map<string, string>, placeholder: string,
   vehicles: AboutVehicle[] = [], domains: string[] = [], firmNames: string[] = [],
   persons: PersonIdentity[] = [], interactions: Interaction[] = [],
@@ -433,7 +433,7 @@ export async function touchpoints(
   for (const t of team) {
     const id = users.get(t.handle);
     if (!id) continue;
-    for (const e of [t.email, t.affinityEmail]) if (e) {
+    for (const e of [t.email, t.affinityEmail, t.login, ...(t.aliases ?? [])]) if (e) {
       const email = e.trim().toLowerCase();
       if (byEmail.has(email) && byEmail.get(email) !== id) ambiguousEmails.add(email);
       byEmail.set(email, id);
