@@ -78,11 +78,14 @@ export function resetSetupFloodgate() {
 }
 
 /**
- * How many proxies in front of this server append to X-Forwarded-For. Railway's edge is one. GUESS: the
- * rehearsal must confirm how Railway's edge sets the header (docs/deploy/railway.md §4). Settings →
- * Connections, or PLCOS_TRUSTED_PROXY_HOPS, overrides it; 0 trusts the header not at all.
+ * How many proxies in front of this server append to X-Forwarded-For. On Railway it is two, measured on 5 Oct
+ * 2026: the edge appends the client and then its own edge node, so with two hops the audit row named Railway's
+ * logged client address and ignored a forged X-Forwarded-For (docs/deploy/railway.md §4). Elsewhere one, a
+ * GUESS for a single reverse proxy. Settings → Connections, or PLCOS_TRUSTED_PROXY_HOPS, overrides it; 0
+ * trusts the header not at all.
  */
-export const TRUSTED_PROXY_HOPS = 1; // GUESS
+export const defaultProxyHops = (env: Record<string, string | undefined> = process.env): number => (env.RAILWAY_ENVIRONMENT_ID ? 2 : 1);
+export const TRUSTED_PROXY_HOPS = defaultProxyHops();
 
 export function trustedHops(): number {
   const v = Number(settingValue(PROXY_HOPS_SETTING.key) ?? TRUSTED_PROXY_HOPS);

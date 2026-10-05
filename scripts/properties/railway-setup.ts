@@ -35,7 +35,7 @@ import { runSetup } from '../../lib/settings/setup-service';
 import { reporterOf, sessionClaims, sessionCookie, sessionValue, userFromSession } from '../../lib/auth/session';
 import { resolveLocalUser } from '../../lib/auth/local-user';
 import { bootRefusal, dataDir } from '../../lib/settings/key';
-import { clientIp } from '../../lib/settings/floodgate';
+import { clientIp, defaultProxyHops } from '../../lib/settings/floodgate';
 import { takeCopy } from '../preview-copy';
 import { databaseStore } from '../../lib/connectors/mailguard/tokens';
 import { personSecret } from '../../lib/settings/person-secrets';
@@ -209,6 +209,8 @@ export async function railwaySetupProperties(check: Check, db: Db) {
       'The eleventh try from one address is refused even with the right code; past the total cap an address with no wrong code still gets in with the right one; one that failed, and an unknown one, do not.');
 
     const xff = (v: string) => new Headers({ 'x-forwarded-for': v });
+    check('SETUP the proxy-hop default is 2 on Railway (the client, then its edge node; measured 5 Oct 2026) and 1 elsewhere',
+      defaultProxyHops({ RAILWAY_ENVIRONMENT_ID: 'invented' }) === 2 && defaultProxyHops({}) === 1, '');
     check('SETUP the client address is the one the trusted proxy appended, counted from the right',
       clientIp(xff('6.6.6.6, 203.0.113.5')) === '203.0.113.5' && clientIp(xff('6.6.6.6, 203.0.113.5'), 2) === '6.6.6.6'
         && clientIp(xff('203.0.113.5'), 0) === null && clientIp(xff('203.0.113.5'), 2) === null && clientIp(xff('not-an-address')) === null,
