@@ -202,7 +202,7 @@ export async function emailGuidelineProperties(check: Check, db: Db) {
   {
     const email = await import('../../modules/email');
     const users = await db.query<{ id: string; handle: string; name: string; email: string }>(
-      "select id::text, handle, name, email from platform.app_user where active and access in ('admin','gp') order by handle = 'juan' desc, handle limit 2");
+      "select id::text, handle, name, email from platform.app_user where active and access in ('admin','team') order by handle = 'juan' desc, handle limit 2");
     const [me, other] = users as [typeof users[number], typeof users[number]];
     const actor = { id: me.id, handle: me.handle, name: me.name, email: me.email };
     const fund = (await db.one<{ id: string; name: string }>("select id::text, name from platform.vehicle where kind = 'fund' and phase <> 'historical' order by sort_order limit 1"))!;

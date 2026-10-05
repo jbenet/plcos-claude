@@ -11,8 +11,8 @@ import { validate as validateInit, upsertTeamMember } from '../../lib/real/init'
 
 export async function authzProperties(check: Check, db: Db) {
   const admin: Principal = { access: 'admin', vehicles: [] };
-  const gp: Principal = { access: 'gp', vehicles: null };
-  const scoped: Principal = { access: 'gp', vehicles: ['a'], approves: ['STAGE'] };
+  const gp: Principal = { access: 'team', vehicles: null };
+  const scoped: Principal = { access: 'team', vehicles: ['a'], approves: ['STAGE'] };
   const viewer: Principal = { access: 'viewer', vehicles: null };
   const fields: FieldClass[] = ['R1','R2','R3','R4'];
   const writes: Action[] = ['mutate','admin','approve'];
@@ -77,13 +77,13 @@ export async function authzProperties(check: Check, db: Db) {
   const roster = (extra: Record<string, unknown>) => validateInit({ team: [{ handle: 'invented', name: 'Invented', ...extra }], vehicles: [{ slug: 'invented', name: 'Invented', kind: 'fund', exemption: '506(c)' }] });
   check('Authz: roster grants validate role, explicit vehicle UUID scope and permitted approval kinds',
     roster({ access: 'viewer', vehicles: [], approves: [] }).init?.team[0]?.access === 'viewer'
-    && roster({ access: 'gp', vehicles: null, approves: ['STAGE'] }).init?.team[0]?.vehicles === null
+    && roster({ access: 'team', vehicles: null, approves: ['STAGE'] }).init?.team[0]?.vehicles === null
     && !roster({ access: 'root' }).init && !roster({ vehicles: ['not-a-uuid'] }).init && !roster({ approves: ['MONEY'] }).init,
     'omitted grants preserve compatibility; invalid grants fail before any roster write');
   const users = await db.query<{ id: string; handle: string; access: string; vehicles: string[] | null }>('select id::text, handle, access::text, vehicles from platform.app_user where active');
   check('Authz: migration and fictional roster seed Juan as Admin and the team as GP with all vehicles',
     users.find(u => u.handle === 'juan')?.access === 'admin'
-    && users.filter(u => ['mara','sam','ines','tomas'].includes(u.handle)).every(u => u.access === 'gp' && u.vehicles === null),
+    && users.filter(u => ['mara','sam','ines','tomas'].includes(u.handle)).every(u => u.access === 'team' && u.vehicles === null),
     'existing free-text job titles remain separate from access roles');
   const actor = users.find(u => u.handle === 'juan')!.id;
   const member = { handle: 'invented-roster-grants', name: 'Invented roster grants', initials: 'IR', role: 'Invented title', email: 'fixture@example.test', affinityEmail: null, linearEmail: null };
@@ -91,10 +91,10 @@ export async function authzProperties(check: Check, db: Db) {
     await upsertTeamMember(db, { ...member, access: 'viewer', vehicles: [], approves: [] });
     await upsertTeamMember(db, member);
     const retained = await db.one<{ access: string; vehicles: string[] }>('select access::text,vehicles from platform.app_user where handle=$1', [member.handle]);
-    await upsertTeamMember(db, { ...member, access: 'gp', vehicles: null, approves: ['STAGE'] });
+    await upsertTeamMember(db, { ...member, access: 'team', vehicles: null, approves: ['STAGE'] });
     const changed = await db.one<{ access: string; vehicles: string[] | null; approves: string[] }>('select access::text,vehicles,approves from platform.app_user where handle=$1', [member.handle]);
     check('Authz: roster reload preserves omitted grants and applies deliberate access changes',
-      retained?.access === 'viewer' && retained.vehicles.length === 0 && changed?.access === 'gp' && changed.vehicles === null && changed.approves.join(',') === 'STAGE',
+      retained?.access === 'viewer' && retained.vehicles.length === 0 && changed?.access === 'team' && changed.vehicles === null && changed.approves.join(',') === 'STAGE',
       'Viewer/no vehicles survives an old-format reload; explicit GP/all/approver update takes effect');
   } finally { await db.query('delete from platform.app_user where handle=$1', [member.handle]); }
   const principal = { ...gp, id: actor };

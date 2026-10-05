@@ -28,7 +28,7 @@ async function guarded(work: () => Promise<string>): Promise<PeopleResult> {
 
 const vehiclesOf = (formData: FormData): string[] | null =>
   formData.get('allVehicles') === 'on' ? null : formData.getAll('vehicle').map(String).filter(Boolean);
-const accessOf = (formData: FormData) => String(formData.get('access') ?? '') as 'admin' | 'gp' | 'viewer';
+const accessOf = (formData: FormData) => String(formData.get('access') ?? '') as 'admin' | 'team' | 'viewer';
 
 export async function addPersonAction(_prev: PeopleResult, formData: FormData): Promise<PeopleResult> {
   const user = await requireAction('app/settings/people/actions.ts#addPersonAction', _prev, formData);

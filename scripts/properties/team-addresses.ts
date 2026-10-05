@@ -41,7 +41,7 @@ export async function teamAddressProperties(check: Check, db: Db) {
   const savedProvider = config.auth.provider;
   const savedSecret = process.env.PLCOS_SECRET;
   const handles = ['addr-props-ana', 'addr-props-ben', 'addr-props-cy'];
-  const user = async (handle: string, email: string, access = 'gp') => (await db.one<{ id: string }>(`insert into platform.app_user (handle, name, initials, role, email, access)
+  const user = async (handle: string, email: string, access = 'team') => (await db.one<{ id: string }>(`insert into platform.app_user (handle, name, initials, role, email, access)
     values ($1, $2, 'IA', 'Invented (props)', $3, $4::platform.access_role) returning id::text`, [handle, `Invented ${handle}`, email, access]))!.id;
   const emailOf = async (id: string) => (await db.one<{ email: string }>('select email from platform.app_user where id = $1', [id]))!.email;
   const kinds = async (id: string) => (await addressesOf(id, db)).map((a) => `${a.kind}:${a.address}`).sort().join(' ');
@@ -74,7 +74,7 @@ export async function teamAddressProperties(check: Check, db: Db) {
     const anaEpoch = (await db.one<{ e: number }>('select session_epoch e from platform.app_user where id = $1', [ana]))!.e;
     const v = encodeURIComponent(sessionValue({ id: ana, sessionEpoch: anaEpoch }, 1).value);
     const anaCookie = `${sessionCookie(true)}=${v}; ${sessionCookie(false)}=${v}`;
-    const addClash = await inRequest(db, anaCookie, '/settings/people', () => addPersonAction(null, form({ name: 'Invented Clash', email: 'Ana.Alias@invented-alias.test', access: 'gp', allVehicles: 'on' })));
+    const addClash = await inRequest(db, anaCookie, '/settings/people', () => addPersonAction(null, form({ name: 'Invented Clash', email: 'Ana.Alias@invented-alias.test', access: 'team', allVehicles: 'on' })));
     const editClash = await inRequest(db, anaCookie, '/settings/people', () => updateAddressesAction(null, form({ userId: ben, default: 'ben@invented-default.test', login: '', aliases: 'ana.alias@invented-alias.test' })));
     check('ADDRESSES an address belongs to one person: the database, Add person and Edit addresses refuse a second owner',
       dbRefused && addClash?.ok === false && editClash?.ok === false && /already belongs/.test(editClash.ok === false ? editClash.error : '')
@@ -114,6 +114,24 @@ export async function teamAddressProperties(check: Check, db: Db) {
         && inFile.some((p) => /same@invented\.test is also ina's address/.test(p))
         && badShape.some((p) => /aliases must be a list/.test(p)) && badShape.some((p) => /login must be an email/.test(p)),
       'Dropping an alias from the file drops it here; a clash with another person leaves every row as it was; the shape is validated.');
+
+    // ── The init file deactivates; the access level is "team" (Juan, 5 Oct 2026) ─────────────────
+    const cyNow = { ...cyFull, aliases: ['cy.two@invented-alias.test'] };
+    const state = async () => (await db.one<{ active: boolean; epoch: number; access: string }>(
+      'select active, session_epoch epoch, access::text from platform.app_user where id = $1', [cy]))!;
+    const before = await state();
+    const off = await db.transaction((tx) => applyTeam(tx, [{ ...cyNow, active: false }]));
+    const deactivated = await state();
+    await db.transaction((tx) => applyTeam(tx, [cyNow]));
+    const kept = await state();
+    await db.transaction((tx) => applyTeam(tx, [{ ...cyNow, active: true }]));
+    const back = await state();
+    const badActive = validateInit({ team: [{ handle: 'iz', name: 'Invented', active: 'no' }], vehicles: [], answers: {} }).problems;
+    const labels = (await db.query<{ v: string }>(`select unnest(enum_range(null::platform.access_role))::text v`)).map((r) => r.v).join(',');
+    check('INIT "active": false deactivates (and signs them out), omitting it keeps the state; the access levels are admin, team, viewer',
+      off.length === 0 && before.active && !deactivated.active && deactivated.epoch > before.epoch && !kept.active && back.active
+        && badActive.some((p) => /active must be true or false/.test(p)) && labels === 'admin,team,viewer' && before.access === 'team',
+      'Deactivating through the file raises the session epoch (migration 018\'s trigger); "gp" was renamed "team" (migration 020).');
 
     // ── Mail matching by an alias ──────────────────────────────────────────────────────────
     const team = await teamAddresses(db);

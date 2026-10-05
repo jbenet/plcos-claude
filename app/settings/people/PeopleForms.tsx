@@ -6,7 +6,7 @@ import s from './people.module.css';
 
 export interface VehicleOption { id: string; name: string }
 export interface PersonRow {
-  id: string; name: string; email: string; role: string; access: 'admin' | 'gp' | 'viewer'; vehicles: string[] | null; active: boolean; you: boolean;
+  id: string; name: string; email: string; role: string; access: 'admin' | 'team' | 'viewer'; vehicles: string[] | null; active: boolean; you: boolean;
   addresses: Array<{ address: string; kind: 'login' | 'default' | 'alias' }>;
 }
 
@@ -46,7 +46,7 @@ export function Addresses({ p, readOnly }: { p: PersonRow; readOnly: boolean }) 
 
 const ACCESS = [
   { v: 'admin', label: 'Admin', says: 'everything, every vehicle, Settings' },
-  { v: 'gp', label: 'GP', says: 'reads and changes the vehicles chosen' },
+  { v: 'team', label: 'Team', says: 'reads and changes the vehicles chosen' },
   { v: 'viewer', label: 'Viewer', says: 'reads the vehicles chosen, changes nothing' },
 ] as const;
 
@@ -70,7 +70,7 @@ function Vehicles({ vehicles, chosen, access }: { vehicles: VehicleOption[]; cho
 
 export function AddPerson({ vehicles, readOnly }: { vehicles: VehicleOption[]; readOnly: boolean }) {
   const [state, run, pending] = useActionState<PeopleResult, FormData>(addPersonAction, null);
-  const [access, setAccess] = useState<'admin' | 'gp' | 'viewer'>('gp');
+  const [access, setAccess] = useState<'admin' | 'team' | 'viewer'>('team');
   return (
     <form action={run} className={s.add}>
       <label className={s.field}><span>Name</span><input name="name" required autoComplete="off" placeholder="Alex Example" disabled={readOnly} /></label>

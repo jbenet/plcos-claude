@@ -9,19 +9,19 @@ import type { Policy } from '@/lib/mcp/tools';
  *
  * Who may hold each scope is data too, checked when a token is made (modules/platform/mcp-tokens.ts) and
  * again on every use against the owner's access then (lib/sync/auth.ts): a snapshot is the whole database,
- * so Admins only; a push hands the server finished research to import, so a GP or an Admin.
+ * so Admins only; a push hands the server finished research to import, so a Team member or an Admin.
  */
 export const SYNC_SNAPSHOT = 'sync:snapshot';
 export const SYNC_PUSH = 'sync:push';
 export const SYNC_SCOPES = [SYNC_SNAPSHOT, SYNC_PUSH] as const;
 export type SyncScopeName = (typeof SYNC_SCOPES)[number];
 
-export interface Endpoint { name: string; route: string; policy: Policy; grant: readonly ('admin' | 'gp' | 'viewer')[] }
+export interface Endpoint { name: string; route: string; policy: Policy; grant: readonly ('admin' | 'team' | 'viewer')[] }
 export const SYNC_ENDPOINTS: Record<'snapshot' | 'push', Endpoint> = {
   snapshot: { name: 'sync_snapshot', route: 'GET /api/sync/snapshot', grant: ['admin'],
     policy: { risk: 'read', scopes: [SYNC_SNAPSHOT], ticket: 'none', approval: false } },
   // It writes research files the normal import then maps, through the importer's own validators: guarded writes.
-  push: { name: 'sync_push', route: 'POST /api/sync/push', grant: ['admin', 'gp'],
+  push: { name: 'sync_push', route: 'POST /api/sync/push', grant: ['admin', 'team'],
     policy: { risk: 'write-guarded', scopes: [SYNC_PUSH], ticket: 'none', approval: false } },
 };
 
@@ -29,7 +29,7 @@ export const SYNC_ENDPOINTS: Record<'snapshot' | 'push', Endpoint> = {
 export function grantRefusal(owner: { access: string }, tools: readonly string[]): string | null {
   for (const e of Object.values(SYNC_ENDPOINTS)) {
     if (e.policy.scopes.some((s) => tools.includes(s)) && !(e.grant as readonly string[]).includes(owner.access)) {
-      return e.grant.length === 1 ? `Only an Admin can make a ${e.policy.scopes[0]} token.` : `Only a GP or an Admin can make a ${e.policy.scopes[0]} token.`;
+      return e.grant.length === 1 ? `Only an Admin can make a ${e.policy.scopes[0]} token.` : `Only a Team member or an Admin can make a ${e.policy.scopes[0]} token.`;
     }
   }
   return null;

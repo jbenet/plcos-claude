@@ -70,7 +70,7 @@ export async function outreachMcpProperties(check: Check, db: Db) {
     `${records.length} records in the chain; update: ${JSON.stringify({ via: u?.via, risk: u?.risk, outcome: u?.outcome, affected: Object.keys(u?.affected ?? {}), key: u?.idempotencyKey })}; early send: ${e?.outcome} (${String(e?.reason).slice(0, 60)})`);
 
   // ── audit_recent: one's own, by correlation id ────────────────────────────────────────
-  const other = await user('outreach-mcp-other', 'gp', null);
+  const other = await user('outreach-mcp-other', 'team', null);
   const otherClient = await connect(await token(other, [...READ_TOOLS, OUTREACH_READ]));
   await call(otherClient, 'outreach_vehicles', {}, chain);
   const mine = await call(writer, 'audit_recent', { correlationId: chain });

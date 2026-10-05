@@ -77,8 +77,8 @@ export async function mcpProperties(check: Check, db: Db) {
   const user = async (handle: string, access: string, scope: string[] | null) => (await db.one<AppUser>(`insert into platform.app_user (handle, name, initials, role, email, access, vehicles)
     values ($1, $2, 'IM', 'Invented (props)', $3, $4::platform.access_role, $5::uuid[]) on conflict (handle) do update set active = true, access = excluded.access, vehicles = excluded.vehicles
     returning id::text, handle, name, initials, role, email, access::text, vehicles::text[], approves`, [handle, `Invented ${handle}`, `${handle}@example.invalid`, access, scope]))!;
-  const gpA = await user('mcp-gp-a', 'gp', [A.id]);
-  const gpAll = await user('mcp-gp-all', 'gp', null);
+  const gpA = await user('mcp-gp-a', 'team', [A.id]);
+  const gpAll = await user('mcp-gp-all', 'team', null);
   const viewer = await user('mcp-viewer', 'viewer', null);
   const entity = async (name: string) => (await db.one<{ id: string }>(`insert into identity.entity (entity_type, display_name) values ('org', $1) returning entity_id::text id`, [name]))!.id;
   const both = await entity('Invented MCP Both Org');
@@ -120,7 +120,7 @@ export async function mcpProperties(check: Check, db: Db) {
   const aA = await call(adminNarrow, 'lp_summary', { pursuitId: onA, routes: false });
   check('MCP: a token narrows its owner\'s vehicles and never widens them; an Admin\'s token is a GP, limited when its vehicles are',
     nB.isError === true && aB.isError === true && !aA.isError && !text(aA).includes('INVENTED_MCP_R3_LICENSED')
-    && narrowedPrincipal(gpA, [A.id, B.id]).vehicles!.join() === A.id && narrowedPrincipal(juan, [A.id]).access === 'gp' && narrowedPrincipal(juan, null).access === 'gp',
+    && narrowedPrincipal(gpA, [A.id, B.id]).vehicles!.join() === A.id && narrowedPrincipal(juan, [A.id]).access === 'team' && narrowedPrincipal(juan, null).access === 'team',
     'B refused for both narrowed tokens; the intersection drops a vehicle the owner lacks');
 
   // ── Restricted values ─────────────────────────────────────────────────────────────────

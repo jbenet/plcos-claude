@@ -90,9 +90,9 @@ export async function railwaySetupProperties(check: Check, db: Db) {
   for (const k of ['log', 'warn', 'error'] as const) console[k] = (...a: unknown[]) => { logs.push(a.map(String).join(' ')); original[k](...a); };
   const juan = (await db.one<{ id: string; handle: string; email: string }>(`select id::text, handle, email from platform.app_user where handle = 'juan'`))!;
   const gp = (await db.one<{ id: string; handle: string }>(`insert into platform.app_user (handle, name, initials, role, email, access)
-    values ('setup-props-gp', 'Invented Setup GP', 'IG', 'Invented (props)', 'setup-gp@example.invalid', 'gp') returning id::text, handle`))!;
+    values ('setup-props-gp', 'Invented Setup GP', 'IG', 'Invented (props)', 'setup-gp@example.invalid', 'team') returning id::text, handle`))!;
   const inactive = (await db.one<{ id: string }>(`insert into platform.app_user (handle, name, initials, role, email, access, active)
-    values ('setup-props-gone', 'Invented Gone', 'IX', 'Invented (props)', 'gone@example.invalid', 'gp', false) returning id::text`))!;
+    values ('setup-props-gone', 'Invented Gone', 'IX', 'Invented (props)', 'gone@example.invalid', 'team', false) returning id::text`))!;
   let demoted: string[] = [];
   try {
     for (const n of envNames) delete process.env[n];
@@ -392,14 +392,14 @@ export async function railwaySetupProperties(check: Check, db: Db) {
       'Save, Remove, Check, Add, Edit, Deactivate and Sign out everywhere redirect to the refusal page; one authz.refused row each, with the action’s name; settings and roster unchanged.');
 
     // ── People: the roster Google sign-in admits ─────────────────────────────────────────────
-    demoted = (await db.query<{ id: string }>(`update platform.app_user set access = 'gp' where access = 'admin' and id <> $1 returning id::text`, [juan.id])).map((r) => r.id);
+    demoted = (await db.query<{ id: string }>(`update platform.app_user set access = 'team' where access = 'admin' and id <> $1 returning id::text`, [juan.id])).map((r) => r.id);
     const juanSession = await sessionFor(juan.id);
     const asJuan = <T>(work: () => Promise<T>) => inRequest(db, 'action', juanSession, '/settings/people', work);
     const vehicle = (await db.one<{ id: string }>(`select id::text from platform.vehicle order by sort_order limit 1`))!.id;
-    const added = await asJuan(() => people.addPersonAction(null, form({ name: 'Invented Newcomer', email: 'Newcomer@Example.invalid', access: 'gp', vehicle })));
+    const added = await asJuan(() => people.addPersonAction(null, form({ name: 'Invented Newcomer', email: 'Newcomer@Example.invalid', access: 'team', vehicle })));
     const row = await db.one<{ id: string; email: string; access: string; vehicles: string[] }>(`select id::text, email, access::text, vehicles::text[] from platform.app_user where email = 'newcomer@example.invalid'`);
     const dupe = await asJuan(() => people.addPersonAction(null, form({ name: 'Invented Twin', email: 'NEWCOMER@example.invalid', access: 'viewer', allVehicles: 'on' })));
-    const demoteLast = await asJuan(() => people.updatePersonAction(null, form({ userId: juan.id, access: 'gp', allVehicles: 'on' })));
+    const demoteLast = await asJuan(() => people.updatePersonAction(null, form({ userId: juan.id, access: 'team', allVehicles: 'on' })));
     const deactivateLast = await asJuan(() => people.setPersonActiveAction(null, form({ userId: juan.id, active: '0' })));
     const newcomerEpoch = async () => (await db.one<{ e: number }>('select session_epoch e from platform.app_user where id = $1', [row!.id]))!.e;
     const e0 = await newcomerEpoch();
@@ -409,10 +409,10 @@ export async function railwaySetupProperties(check: Check, db: Db) {
     const on = await asJuan(() => people.setPersonActiveAction(null, form({ userId: row!.id, active: '1' })));
     const juanAfter = await db.one<{ access: string; active: boolean }>(`select access::text, active from platform.app_user where id = $1`, [juan.id]);
     Object.assign(config.auth, { provider: 'local' });
-    const onMac = await inRequest(db, 'action', `${USER_COOKIE}=${juan.handle}`, '/settings/people', () => people.addPersonAction(null, form({ name: 'Invented Mac', email: 'mac@example.invalid', access: 'gp', allVehicles: 'on' })));
+    const onMac = await inRequest(db, 'action', `${USER_COOKIE}=${juan.handle}`, '/settings/people', () => people.addPersonAction(null, form({ name: 'Invented Mac', email: 'mac@example.invalid', access: 'team', allVehicles: 'on' })));
     Object.assign(config.auth, { provider: 'google' });
     check('PEOPLE an admin adds, deactivates and reactivates people; addresses are unique ignoring case; the last admin stays',
-      added?.ok === true && row?.email === 'newcomer@example.invalid' && row.access === 'gp' && JSON.stringify(row.vehicles) === JSON.stringify([vehicle])
+      added?.ok === true && row?.email === 'newcomer@example.invalid' && row.access === 'team' && JSON.stringify(row.vehicles) === JSON.stringify([vehicle])
         && dupe?.ok === false && demoteLast?.ok === false && /no active admin/.test(demoteLast.ok === false ? demoteLast.error : '')
         && deactivateLast?.ok === false && juanAfter?.access === 'admin' && juanAfter.active
         && off?.ok === true && e1 === e0 + 1 && dupeWhileOff?.ok === false && /reactivate/.test(dupeWhileOff.ok === false ? dupeWhileOff.error : '') && on?.ok === true

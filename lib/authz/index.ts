@@ -1,5 +1,5 @@
 /** Server-independent policy. Unknown roles/actions and unresolved scopes fail closed. */
-export type Role = 'admin' | 'gp' | 'viewer';
+export type Role = 'admin' | 'team' | 'viewer';
 export type FieldClass = 'R1' | 'R2' | 'R3' | 'R4';
 export type Action = 'read' | 'mutate' | 'admin' | 'approve' | 'feedback' | 'session';
 export interface Principal {
@@ -10,7 +10,7 @@ export interface Principal {
 }
 export interface Scope { vehicle?: string | readonly string[] | null; fieldClass?: FieldClass; ticketKind?: string }
 export function can(user: Principal | null | undefined, action: Action, scope: Scope = {}): boolean {
-  if (!user || !['admin', 'gp', 'viewer'].includes(user.access)) return false;
+  if (!user || !['admin', 'team', 'viewer'].includes(user.access)) return false;
   if (!['read', 'mutate', 'admin', 'approve', 'feedback', 'session'].includes(action)) return false;
   if (scope.fieldClass && !['R1', 'R2', 'R3', 'R4'].includes(scope.fieldClass)) return false;
   if (user.vehicles !== null && !Array.isArray(user.vehicles)) return false;

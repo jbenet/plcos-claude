@@ -73,7 +73,7 @@ export default async function PeoplePage() {
                 <tr key={p.id} data-active={p.active}>
                   <td><b>{p.name}</b>{p.you && <span className="flag f-ok" style={{ marginLeft: 8 }}>you</span>}{!p.active && <span className="flag f-mute" style={{ marginLeft: 8 }}>deactivated</span>}<br /><span className={s.muted}>{p.role}</span></td>
                   <td><Addresses p={p} readOnly={readOnly} /></td>
-                  <td>{p.access === 'admin' ? 'Admin' : p.access === 'gp' ? 'GP' : 'Viewer'}<br /><span className={s.muted}>{p.access === 'admin' || p.vehicles === null ? 'all vehicles' : p.vehicles.length ? p.vehicles.map((v) => vname.get(v) ?? 'unknown').join(', ') : 'no vehicles'}</span></td>
+                  <td>{p.access === 'admin' ? 'Admin' : p.access === 'team' ? 'Team' : 'Viewer'}<br /><span className={s.muted}>{p.access === 'admin' || p.vehicles === null ? 'all vehicles' : p.vehicles.length ? p.vehicles.map((v) => vname.get(v) ?? 'unknown').join(', ') : 'no vehicles'}</span></td>
                   <td><PersonControls p={p} vehicles={options} readOnly={readOnly} /></td>
                 </tr>
               ))}

@@ -19,7 +19,7 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
   endpoint: string; vehicles: Array<{ id: string; name: string }>; draftTools: string[];
   /** Offer the mail desk's outreach scope (docs/27): Admin only for now. */
   outreach?: boolean;
-  /** The cloud sync scopes this person may hold (lib/sync/scopes.ts): snapshot for an Admin, push for a GP or an Admin. */
+  /** The cloud sync scopes this person may hold (lib/sync/scopes.ts): snapshot for an Admin, push for a Team member or an Admin. */
   sync?: Array<'snapshot' | 'push'>;
   /** The default expiry, in days. */
   days?: number;

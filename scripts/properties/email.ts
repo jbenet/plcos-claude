@@ -357,7 +357,7 @@ export async function emailProperties(check: Check, db: Db) {
       const email = await import('../../modules/email');
       const { authorizeAction } = await import('../../lib/authz/server');
       const users = await db.query<{ id: string; handle: string; name: string; email: string; access: string; vehicles: string[] | null; approves: string[] }>(
-        "select id::text, handle, name, email, access::text, vehicles, approves from platform.app_user where handle in ('juan') or access = 'gp' order by handle = 'juan' desc, handle limit 2");
+        "select id::text, handle, name, email, access::text, vehicles, approves from platform.app_user where handle in ('juan') or access = 'team' order by handle = 'juan' desc, handle limit 2");
       const juan = users[0]!, other = users[1]!;
       const actor = { id: juan.id, handle: juan.handle, name: juan.name, email: juan.email };
       const mailbox = `juan@${FAKE_DOMAIN}`;
@@ -476,7 +476,7 @@ export async function emailProperties(check: Check, db: Db) {
         `${moves.length} moves of ${audits.length} entries; kinds ${[...kinds].join(', ')}`);
 
       // Ownership: another person cannot read, save or move it; a double click cannot move twice.
-      const otherP = { access: other.access as 'gp', vehicles: other.vehicles, approves: other.approves, id: other.id };
+      const otherP = { access: other.access as 'team', vehicles: other.vehicles, approves: other.approves, id: other.id };
       let refusedOther = 0;
       for (const name of ['app/email/actions.ts#saveDraftAction', 'app/email/actions.ts#moveDraftAction', 'app/email/actions.ts#previewDraftAction'] as const) {
         try { await authorizeAction(otherP, name, [{ draftId: first }], db); } catch { refusedOther++; }

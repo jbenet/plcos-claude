@@ -1,7 +1,7 @@
 import { withRoute } from '@/lib/authz/route';
 /**
  * One finished W1, W1c or W5 output from the Mac (docs/deploy/railway.md §7), sent by scripts/cloud-push.sh
- * with a push token (a GP's or an Admin's). Validated, kept, recorded and imported, or refused with every
+ * with a push token (a Team member's or an Admin's). Validated, kept, recorded and imported, or refused with every
  * reason and nothing written. Idempotent by content hash.
  */
 export const dynamic = 'force-dynamic';
