@@ -99,8 +99,9 @@ tar -C "$stage" -cz real | passphrase_in=1 gpg --batch --quiet --pinentry-mode l
 chmod 600 "$file"
 shasum -a 256 "$file" | awk '{print $1}' > "$file.sha256"
 
-# 4. Thin old backups (scripts/backup-prune.py): events kept 2 days; dailies thinned with age; 300 GB cap.
-python3 "$HERE/scripts/backup-prune.py" "$OUT" "$MAX_GB"
+# 4. Thinning old backups is off unless asked for (Juan, 5 Oct 2026: no local backup is deleted). With
+# PLCOS_BACKUP_PRUNE=1, scripts/backup-prune.py keeps events 2 days, thins dailies with age, caps at 300 GB.
+if [ "${PLCOS_BACKUP_PRUNE:-0}" = 1 ]; then python3 "$HERE/scripts/backup-prune.py" "$OUT" "$MAX_GB"; fi
 size="$(du -h "$file" | awk '{print $1}')"
 [ -n "$REASON" ] && printf '%s\n' "$REASON" > "$file.reason"
 echo "Backup $file ($size, $KIND${REASON:+: $REASON}), snapshot opened: $tables. Kept $(ls -1 "$OUT"/plcos-real-*.tar.gz.gpg | wc -l | tr -d ' ') backups in $OUT."

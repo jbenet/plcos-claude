@@ -26,6 +26,13 @@ export async function deployToolingProperties(check: Check): Promise<void> {
       ...process.env, PATH: `${scratch}:${process.env.PATH}`, DATA_PROFILE: 'demo', DATABASE_URL: 'postgres://invented',
       BACKUP_BUCKET: 'invented', BACKUP_GPG_PUBLIC_KEY: 'invented', BACKUP_DRY_RUN: '1',
     } });
+    // Juan, 5 Oct 2026: no local backup is deleted. The Mac's backup and the cloud pull's --keep thin only when asked.
+    const macScripts = await Promise.all(['scripts/backup-real.sh', 'scripts/cloud-pull.sh'].map(f => readFile(f, 'utf8')));
+    check('BACKUP the Mac\'s backups are never thinned unless PLCOS_BACKUP_PRUNE=1 (backup-real.sh, cloud-pull.sh --keep)',
+      macScripts.every(src => src.split('\n').filter(l => l.includes('backup-prune.py') && !l.trim().startsWith('#'))
+        .every(l => /if \[ "\$\{PLCOS_BACKUP_PRUNE:-0\}" = 1 \]; then/.test(l))
+        && src.includes('backup-prune.py')),
+      'Every call to backup-prune.py in either script sits behind the opt-in.');
     check('BACKUP refuses zero TABLE DATA before encryption or AWS', run.status !== 0 && run.stderr.includes('no TABLE DATA') && !`${run.stdout}${run.stderr}`.includes('UNEXPECTED'), 'Command stubs; no database, keys or network.');
   } finally { await rm(scratch, { recursive: true, force: true }); }
 

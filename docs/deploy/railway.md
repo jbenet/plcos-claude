@@ -220,11 +220,10 @@ flag. So:
 
 Check that a plain (non-TLS) `psql` connects through the tunnel: `pg_isready` doesn't authenticate.
 
-**The client address behind Railway's edge.** Measured on 5 Oct: with one trusted proxy hop, the audit log recorded
-an address of Railway's own edge (shared by many clients), not the client's, and never a forged one. Two hops is
-the likely setting. Confirm it once, after setup, with a wrong code carrying `X-Forwarded-For: 203.0.113.9`: the
-audit address must equal the client address in Railway's HTTP log. It matters only while `/setup` is open, and
-for the addresses in the audit log.
+**The client address behind Railway's edge: two hops (confirmed 5 Oct).** With one trusted hop, the audit log recorded
+one of Railway's edge servers, shared by many clients. `PLCOS_TRUSTED_PROXY_HOPS=2` is set on `plcos-app`. A sign-in
+refusal carrying a forged `X-Forwarded-For: 203.0.113.9` was audited with the client address from Railway's HTTP log,
+not the forged one. So the limits and the audit rows name the real client and can't be forged.
 
 **Done on 5 Oct 2026.**
 - The rehearsal took 741 s, then the move 789 s; both said MATCH: 135 tables, 1,609,149 rows, 6 sequences, and every

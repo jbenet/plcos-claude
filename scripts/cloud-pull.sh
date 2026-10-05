@@ -15,7 +15,7 @@
 # --keep also keeps the pull as the off-site copy (decision D: no S3): the dump and a tar of the working
 # files (GET /api/sync/snapshot?files=1), packed and encrypted into ~/plcos-backups exactly as
 # scripts/backup-real.sh does (same passphrase, plcos-backup / passphrase), named plcos-cloud-<time>-daily,
-# and thinned by scripts/backup-prune.py with the Mac's own backups. Restore one with
+# and never deleted (PLCOS_BACKUP_PRUNE=1 thins them with the Mac's own backups, by scripts/backup-prune.py). Restore one with
 # npm run backup:restore -- <file> <empty dir>: it holds cloud/database.dump and cloud/files.tar.gz.
 #
 # Secrets, never printed and never on a command line:
@@ -175,7 +175,8 @@ if [ "$KEEP" = 1 ]; then
   chmod 600 "$kept"
   shasum -a 256 "$kept" | awk '{print $1}' > "$kept.sha256"
   rm -rf "$stage"
-  python3 "$HERE/scripts/backup-prune.py" "$OUT" "${MAX_GB:-300}"
+  # Never deletes a backup unless asked (Juan, 5 Oct 2026); PLCOS_BACKUP_PRUNE=1 thins as backup-real.sh would.
+  if [ "${PLCOS_BACKUP_PRUNE:-0}" = 1 ]; then python3 "$HERE/scripts/backup-prune.py" "$OUT" "${MAX_GB:-300}"; fi
   say "    kept $(basename "$kept") ($(du -h "$kept" | awk '{print $1}'), $nfiles files and the dump)"
 fi
 
