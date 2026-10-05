@@ -77,9 +77,13 @@ export async function serviceEnvProperties(check: Check): Promise<void> {
       'logs/server.log', 'rehearsal/x.dump', 'backups/b.gpg', '.real-copy-20260928/database/x', '.preview-copy',
       'enrich/identity-review.jsonl', 'enrich/research-set.jsonl', 'enrich/lp-unit-review.jsonl'];
     for (const f of [...keep, ...drop]) { await mkdir(dirname(join(root, f)), { recursive: true }); await writeFile(join(root, f), 'invented\n'); }
+    // macOS: an extended attribute makes bsdtar add a hidden AppleDouble "._" entry unless the script stops it (5 Oct rehearsal).
+    if (process.platform === 'darwin') spawnSync('xattr', ['-w', 'com.example.invented', 'yes', join(root, keep[0]!)]);
     const out1 = join(scratch, 'files.tar.gz');
     const pack = spawnSync('bash', ['scripts/cutover-files.sh', 'pack', root, out1], { encoding: 'utf8' });
-    const listed = spawnSync('tar', ['-tzf', out1], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean).map(s => s.replace(/^\.\//, '')).sort();
+    // Python's tarfile shows every entry; macOS `tar -t` hides AppleDouble ones.
+    const listed = spawnSync('python3', ['-c', 'import sys, tarfile\nfor m in tarfile.open(sys.argv[1]):\n    m.isdir() or print(m.name)', out1], { encoding: 'utf8' })
+      .stdout.split('\n').filter(Boolean).map(s => s.replace(/^\.\//, '')).sort();
     check('CUTOVER FILES pack moves the working files, Dakota\'s replica included, and leaves out databases, snapshots and exports',
       pack.status === 0 && JSON.stringify(listed) === JSON.stringify([...keep].sort()) && /Packed 6 files/.test(pack.stdout),
       `Invented tree: ${keep.length} kept, ${drop.length} excluded paths absent from the archive.`);
