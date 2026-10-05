@@ -13,5 +13,9 @@ export {
 } from './repo';
 export { fileFeedback, type FeedbackCommand } from './service';
 export {
+  activeAdminCount, activeUsersByEmail, deleteSettingRow, ensureAdmin, raiseSessionEpoch, readSettingRows, sessionUser,
+  upsertSettingRow, type SettingRow,
+} from './settings';
+export {
   createMcpToken, findMcpToken, hashToken, listMcpTokens, looksLikeToken, revokeMcpToken, type McpToken, type NewToken, type TokenState,
 } from './mcp-tokens';

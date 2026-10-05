@@ -4,6 +4,7 @@ import { SECTION } from '@/lib/nav';
 import { PrefsReset } from '@/components/shell/PrefsReset';
 import { config, GUESSED_CONSTANTS } from '@/config/deployment';
 import { auth } from '@/lib/auth';
+import { anthropicKey } from '@/lib/workflows/key';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,7 +104,7 @@ async function Settings() {
             </div>
             <div className="fact">
               <span>Agent API key</span>
-              <span>{config.agentRuntime.apiKey ? 'present' : 'not set'}</span>
+              <span>{anthropicKey() ? 'present' : 'not set'}</span>
             </div>
           </div>
         </div>

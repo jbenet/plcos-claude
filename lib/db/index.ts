@@ -92,6 +92,16 @@ export function getDb(): Promise<Db> {
 }
 
 /**
+ * The handle this process already opened, or null. Never boots one: the settings cache refreshes through
+ * it in the background (lib/settings/store.ts), and must not open a database a script is about to delete.
+ */
+export function openedDb(): Promise<Db> | null {
+  const scoped = scopedDb.getStore();
+  if (scoped) return Promise.resolve(scoped);
+  return g.__capitalOsDb ? g.__capitalOsDb.then(prioritizeDb) : null;
+}
+
+/**
  * A dev server applies a migration added while it runs (N81). Its code reloads as it is edited,
  * but migrations ran once, at boot, so new code could query a column its database doesn't have —
  * and the real server restarts only when the Keychain hands over the Affinity key, which asks Juan.
@@ -152,6 +162,9 @@ async function boot(dir?: string): Promise<Db> {
     : await (await import('./pglite')).openPglite(dir ?? config.db.localDir);
   const { migrate } = await import('./migrate');
   await migrate(db);
+  // The settings kept in the app (lib/settings/store.ts): the key readers are synchronous, so they read a
+  // cache that is filled here, after the migrations and before anything else asks.
+  await (await import('../settings/store')).loadSettings(db);
 
   // Publish the handle before seeding. The seed calls module services, those services call
   // getDb(), and without this line that call would await the promise it is running inside.

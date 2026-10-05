@@ -9,6 +9,7 @@ import { capacityBandLabel } from '@/lib/capacity-bands';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
+import { anthropicKey } from '@/lib/workflows/key';
 import { ago, formatDate } from '@/lib/time';
 import { RESEARCH_STATUSES, enrichDir, inResearchSet } from '@/lib/enrich/candidates';
 import { Prospects } from './Prospects';
@@ -125,8 +126,8 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
           <ExportStatus status={exportStatus} />
           <form action={runWorkflowAction} style={{ marginTop: 12 }}>
             <label>Batch path <input name="batch" required placeholder={join(dir, 'batches', 'batch.jsonl')} /></label>{' '}
-            {['w1', 'w1c', 'w5'].map(protocol => <button key={protocol} className="btn" name="protocol" value={protocol} disabled={!process.env.ANTHROPIC_API_KEY}>Run {protocol.toUpperCase()}</button>)}
-            {!process.env.ANTHROPIC_API_KEY && <span className="muted"> Set ANTHROPIC_API_KEY to run workflows.</span>}
+            {['w1', 'w1c', 'w5'].map(protocol => <button key={protocol} className="btn" name="protocol" value={protocol} disabled={!anthropicKey()}>Run {protocol.toUpperCase()}</button>)}
+            {!anthropicKey() && <span className="muted"> Enter an Anthropic key in <Link href="/settings/connections">Settings → Connections</Link> to run workflows.</span>}
           </form>
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>
             <button className="btn p" type="submit">Export the research set</button>

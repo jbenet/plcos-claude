@@ -5,6 +5,7 @@ import { config } from '@/config/deployment';
 import { BLOCKED_DOMAINS, check } from '@/lib/enrich/schema';
 import { checkStrategy } from '@/lib/enrich/strategy';
 import { beginRun, finishRun, type Usage } from './ledger';
+import { anthropicKey } from './key';
 
 const MAX_TURNS = 8; // GUESS: bounded server-tool continuations per batch.
 const MAX_TOKENS = 32000; // GUESS: total generated tokens per batch, across continuations.
@@ -13,8 +14,8 @@ const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 
 /** One human-started job. The provider can research, but cannot read or write local files. */
 export async function runWorkflow(input: Record<string, unknown>, root: string = config.data.root): Promise<Record<string, unknown>> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('Workflow refused: ANTHROPIC_API_KEY is not set.');
+  const key = anthropicKey();
+  if (!key) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
   const protocol = input.protocol as keyof typeof protocols;
   if (!Object.hasOwn(protocols, protocol) || typeof input.batch !== 'string') throw new Error('Expected protocol w1, w1c or w5 and a batch path.');
   const dir = await realpath(join(root, 'enrich')), batches = await realpath(join(dir, 'batches'));

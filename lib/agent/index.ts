@@ -5,7 +5,6 @@
  * types rather than left to discipline: a run is authorized by a work envelope, and no
  * tool sends anything or accepts its own proposed task — every result is a *proposal*.
  */
-import { config } from '@/config/deployment';
 
 export interface WorkEnvelope {
   task: string;
@@ -39,9 +38,11 @@ export interface Agent {
 }
 
 export async function agent(): Promise<Agent> {
-  if (config.agentRuntime.apiKey) {
+  const { anthropicKey } = await import('@/lib/workflows/key');
+  const key = anthropicKey();
+  if (key) {
     const { claudeAgent } = await import('./claude');
-    return claudeAgent(config.agentRuntime.apiKey);
+    return claudeAgent(key);
   }
   const { stubAgent } = await import('./stub');
   return stubAgent();

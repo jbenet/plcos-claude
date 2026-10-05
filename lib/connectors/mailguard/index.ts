@@ -4,11 +4,14 @@ import { DraftOnlyViolation, httpsTransport, MailguardError, mailguardClient, ty
 import { FAKE_BASE, fakeTransport } from './fake';
 import { domainOf, draftOnlyVerdict, type RefusalCode } from './scope';
 import { fileStore, keychainStore, memoryStore, type TokenStore } from './tokens';
+import { settingValue } from '@/lib/settings/store';
+import { MAILGUARD_ADDRESS_SETTING } from './setting';
 
 /**
  * Which mailguard this server talks to, and where each person's key is kept (docs/25 §12).
  *
- *   mailguard  the live server only: mailguard's address from MAILGUARD_URL or config, keys from the
+ *   mailguard  the live server only: mailguard's address from MAILGUARD_URL, else Settings → Connections
+ *              (lib/connectors/mailguard/setting.ts), else config; keys from the
  *              Keychain — pasted ones per person, and Juan's from MAILGUARD_TOKEN, which
  *              scripts/with-mailguard-token.sh reads from `plcos-claude / mailguard-token`.
  *   fake       the demo, always: lib/connectors/mailguard/fake.ts, beside the demo database.
@@ -42,7 +45,7 @@ export function mailguardRuntime(overrides: Partial<MailguardRuntime> = {}): Run
     return { mode: 'fake', base: FAKE_BASE, transport: fakeTransport(dir), store: fileStore(`${dir}/tokens.json`), envKey: null, fakeDir: dir, ...overrides };
   }
   if (config.data.copyTakenAt) return { mode: 'off', why: 'This is a preview, a copy of the real data: it never holds anyone’s mailguard token.' };
-  const base = parseBase(process.env.MAILGUARD_URL ?? config.email.mailguard.url);
+  const base = parseBase(settingValue(MAILGUARD_ADDRESS_SETTING.key) ?? config.email.mailguard.url);
   if (!(base instanceof URL)) return { mode: 'off', why: base.why };
   const key = process.env.MAILGUARD_TOKEN?.trim();
   return {

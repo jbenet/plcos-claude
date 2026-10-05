@@ -6,6 +6,7 @@ import { executeImportJob } from '../lib/import-jobs/store';
 import { runImportOperation } from '../lib/import-jobs/operations';
 import type { ImportJob } from '../lib/import-jobs/types';
 import { requireImportParent } from '../lib/import-jobs/parent';
+import { loadSettings } from '../lib/settings/store';
 
 requireImportParent();
 
@@ -15,6 +16,8 @@ async function main() {
   // Parent has already migrated and initialized. No boot, seeding, PGlite handle or init file here.
   const db=await openPostgres(config.db.url,{statementTimeoutMs:0,max:2});
   try {
+    // The keys an import may need are kept in the app (lib/settings/store.ts): load them, as the server did at boot.
+    await loadSettings(db);
     const job=await db.one<ImportJob>('select * from platform.import_job where id=$1',[id]);
     if(!job||job.status!=='queued')return;
     await withImportLock(config.db.url,job.kind,()=>withDb(db,()=>executeImportJob(db,id,(j,p)=>runImportOperation(db,j,p))),()=>process.exit(1));

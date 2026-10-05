@@ -1,3 +1,5 @@
+import { signInKind, signInProviderOn, type SignInKind } from './sign-in';
+
 /**
  * Every deferred decision lives here. One file.
  *
@@ -10,7 +12,7 @@ export type AffinityTier = 'scale' | 'advanced' | 'enterprise' | null;
 export type AffinitySyncMode = 'deferred' | 'poll' | 'dataShare';
 export type CanonMode = 'inProcess' | 'warehouse';
 export type IssueProvider = 'file' | 'linear' | 'github';
-export type AuthKind = 'local' | 'labos';
+export type AuthKind = SignInKind;
 export type DataProfile = 'demo' | 'real';
 
 /**
@@ -52,13 +54,14 @@ function copyTakenAt(): string | null {
 
 /**
  * On the Mac the real profile is this machine only, so a connection string pointing somewhere else
- * is refused rather than quietly obeyed. The deployed LabOS app (rev 3: LABOS_ME_URL set) uses the
- * database PL provisions, over TLS verified against the RDS bundle (lib/db/postgres.ts, Dockerfile).
+ * is refused rather than quietly obeyed. A deployed server with its own sign-in (LabOS, rev 3; or
+ * Google on Railway, docs/deploy/railway.md §3) uses the database it was given, over TLS verified by
+ * lib/db/postgres.ts.
  */
 function databaseUrl(): string | null {
   const url = process.env.DATABASE_URL?.trim() || null;
   if (process.env.POSTGRES_REHEARSAL === '1' && !url) throw new Error('Postgres rehearsal requires DATABASE_URL.');
-  if (url && PROFILE === 'real' && !process.env.LABOS_ME_URL) {
+  if (url && PROFILE === 'real' && !signInProviderOn()) {
     const parsed = new URL(url);
     if (!['postgres:', 'postgresql:'].includes(parsed.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname) || parsed.search || parsed.hash) {
       throw new Error('DATABASE_URL is set in the real profile: only local Postgres is approved (docs/21-postgres.md).');
@@ -218,10 +221,17 @@ export const config = {
      * pull request. Feedback filed while looking at real data can quote it, or carry a
      * screenshot of it, so it stays with the data instead.
      */
-    dir: PROFILE === 'real' || process.env.LABOS_ME_URL ? `data/${PROFILE}/issues` : 'issues',
+    dir: PROFILE === 'real' || signInProviderOn() ? `data/${PROFILE}/issues` : 'issues',
   },
   auth: {
-    provider: (process.env.LABOS_ME_URL ? 'labos' : 'local') as AuthKind,
+    /** config/sign-in.ts: labos with LABOS_ME_URL, google on a deployed server, local on the Mac. */
+    provider: signInKind() as AuthKind,
+    /** How long a Google sign-in lasts, unless Settings → Connections says otherwise. */
+    sessionDays: 30, // GUESS — MailGuard's default; a month between sign-ins.
+    /** The OAuth state cookie's life: the round trip to Google's consent screen. */
+    stateSeconds: 600,
+    /** Re-read the stored settings this often, so another process's change arrives. */
+    settingsTtlMs: 30_000, // GUESS — short enough that a Replace is felt at once, long enough to cost nothing.
   },
   guard: {
     /**
@@ -427,10 +437,6 @@ export const config = {
     /** Set DATABASE_URL and the Db seam resolves to node-postgres instead. */
     url: databaseUrl(),
     rehearsal: process.env.POSTGRES_REHEARSAL === '1',
-  },
-  agentRuntime: {
-    /** No key present → the Agent seam is a no-op that refuses rather than guesses. */
-    apiKey: process.env.ANTHROPIC_API_KEY ?? null,
   },
 } as const;
 
