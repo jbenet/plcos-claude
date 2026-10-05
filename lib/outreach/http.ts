@@ -1,6 +1,6 @@
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
-import { correlationOf } from '@/lib/mcp/audit';
+import { autonomousOf, correlationOf } from '@/lib/mcp/audit';
 import { envelopeFor } from '@/lib/mcp/envelope';
 import { DATA_NOTICE } from '@/lib/mcp/output';
 import { runTool } from '@/lib/mcp/server';
@@ -23,7 +23,11 @@ const OPS: Record<string, { tool: string; method: 'GET' | 'POST' }> = {
   update: { tool: 'outreach_update', method: 'POST' },
   tickets: { tool: 'outreach_request_ticket', method: 'POST' },
   contacts: { tool: 'outreach_propose_contact', method: 'POST' },
+  link: { tool: 'outreach_link_message', method: 'POST' },
+  // Deprecated for one release (5 Oct 2026): /sent runs the old name, an alias of outreach_link_message.
   sent: { tool: 'outreach_record_send', method: 'POST' },
+  comms: { tool: 'comms_ingest', method: 'POST' },
+  trace: { tool: 'comms_trace', method: 'GET' },
   audit: { tool: 'audit_recent', method: 'GET' },
 };
 
@@ -45,7 +49,7 @@ export function preflight(request: Request): Response {
   if (!origin) return new Response(null, { status: 403, headers: { Vary: 'Origin' } });
   return new Response(null, { status: 204, headers: {
     ...corsHeaders(origin), 'Access-Control-Allow-Methods': 'GET, POST',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Correlation-Id', 'Access-Control-Max-Age': '600',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Correlation-Id, X-Autonomous', 'Access-Control-Max-Age': '600',
   } });
 }
 
@@ -77,7 +81,8 @@ export async function serveOutreach(request: Request, op: string, method: 'GET' 
     return fail(401, `That token is ${found.state === 'inactive' ? 'for someone no longer active' : found.state}.`, challenge);
   }
   const env = envelopeFor(found.token, found.user);
-  const meta = { via: 'rest' as const, correlationId: correlationOf(request.headers.get('x-correlation-id')), origin: origin || null };
+  const meta = { via: 'rest' as const, correlationId: correlationOf(request.headers.get('x-correlation-id')), origin: origin || null,
+    autonomous: autonomousOf(request.headers.get('x-autonomous')) };
   const spec = Object.hasOwn(OPS, op) ? OPS[op]! : null;
   // An unknown op or the wrong method is still a call: logged under its own name, refused.
   if (!spec || spec.method !== method) {

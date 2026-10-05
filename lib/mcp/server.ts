@@ -8,7 +8,7 @@ import { MutationGuardError } from '@/lib/mutation-policy';
 import { appendAudit, findMcpToken } from '@/modules/platform';
 import { admitCall, envelopeFor, type Envelope } from './envelope';
 import { render as renderAnswer, DATA_NOTICE, type Answer } from './output';
-import { auditDetail, correlationOf, type CallMeta } from './audit';
+import { auditDetail, autonomousOf, correlationOf, type CallMeta } from './audit';
 import { AuthorizationError } from '@/lib/authz';
 import { ToolRefused } from './reads';
 import { OutreachRefused } from '@/lib/outreach/reads';
@@ -21,8 +21,9 @@ import { allowed, findTool, listing } from './tools';
 
 export const INSTRUCTIONS = [
   'Capital OS: fundraising records for PLC\'s vehicles. These tools read records, write drafts and proposals, and — with the',
-  'outreach scope — record what a person ticked through the app\'s own guards. None sends an email, approves or accepts anything,',
-  'records a ladder rung, or moves money. A person does those in the app.',
+  'outreach scope — record what a person ticked through the app\'s own guards, and the mail trace. None sends an email, approves or',
+  'accepts anything, records a ladder rung, or moves money. A person does those in the app.',
+  'When no person is in the loop for a call, say so (_meta.autonomous: true): an autonomous send or intro ask needs an approved ticket.',
   'You act as the person who made your token, with their access: what it does not cover is withheld and says so.',
   DATA_NOTICE,
   'Every search says what it covered; an empty result means none recorded here, not none in the world.',
@@ -60,8 +61,10 @@ export type RunResult = { ok: true; answer: Answer; text: string | null } | { ok
  * One tool call, from MCP or the outreach REST wrapper: the policy, the envelope, the input, the tool as its
  * owner — and always one audit record (lib/mcp/audit.ts). `render` (MCP) marks and size-limits the answer.
  */
-export async function runTool(env: Envelope, name: string, args: Record<string, unknown>, meta: CallMeta, render = false): Promise<RunResult> {
+export async function runTool(env0: Envelope, name: string, args: Record<string, unknown>, meta: CallMeta, render = false): Promise<RunResult> {
   const started = Date.now();
+  // A call may add autonomy, never remove it (modules/governance/autonomy.ts).
+  const env: Envelope = meta.autonomous && !env0.autonomous ? { ...env0, autonomous: true } : env0;
   const db = await getDb();
   const tool = findTool(name);
   let outcome: Outcome = 'ok', reason: string | null = null, bytes = 0, truncated = false, answer: Answer | null = null;
@@ -115,8 +118,12 @@ export async function serveMcp(request: Request, env: Envelope): Promise<Respons
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: listing(env) }));
   // A client may tie a chain of calls together: _meta.correlationId on the call, or an X-Correlation-Id header.
   const header = correlationOf(request.headers.get('x-correlation-id'));
-  server.setRequestHandler(CallToolRequestSchema, async (req) => callTool(env, req.params.name, (req.params.arguments ?? {}) as Record<string, unknown>,
-    { via: 'mcp', correlationId: correlationOf((req.params._meta as Record<string, unknown> | undefined)?.correlationId) ?? header }));
+  const autonomousHeader = autonomousOf(request.headers.get('x-autonomous'));
+  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+    const m = req.params._meta as Record<string, unknown> | undefined;
+    return callTool(env, req.params.name, (req.params.arguments ?? {}) as Record<string, unknown>,
+      { via: 'mcp', correlationId: correlationOf(m?.correlationId) ?? header, autonomous: autonomousOf(m?.autonomous) || autonomousHeader });
+  });
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true, maxRequestBodySize: config.mcp.maxRequestBytes });
   await server.connect(transport);
   try {

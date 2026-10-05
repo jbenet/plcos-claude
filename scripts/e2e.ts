@@ -246,7 +246,24 @@ async function main() {
     const used = new Set([...orgs.slice(0, 5), person, page].map((r) => r.id));
     const spare = all.filter((r) => (r.status === 'new' || r.status === 'sourcing') && !used.has(r.id)).slice(0, 2);
     if (spare.length < 2) throw new Error('The demo seed no longer has two spare LPs at New or Sourcing for the keyboard check.');
-    return { org: [orgs[0]!, orgs[1]!, orgs[2]!, orgs[3]!, orgs[4]!] as const, person, pipe: [selected[0]!, selected[1]!, selected[2]!] as const, page, spare: [spare[0]!, spare[1]!] as const };
+    // The comms trace (5 Oct 2026): an LP on a fund that no other check touches, with a restriction that does not bar
+    // email (surfaced, never skipped), an address on record, and Affinity's record of one email from them, three days ago.
+    const funds = new Set((await db.query<{ id: string }>(`select p.pursuit_id::text id from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id
+      where v.kind = 'fund' and v.phase <> 'historical'`)).map((r) => r.id));
+    const taken = new Set([...used, ...spare.map((r) => r.id), ...selected.slice(0, 3).map((r) => r.id)]);
+    const ctx = all.find((r) => funds.has(r.id) && ['discussing', 'connecting'].includes(r.status) && !taken.has(r.id));
+    if (!ctx) throw new Error('The demo seed no longer has a spare LP on a fund at Discussing or Connecting for the comms check.');
+    const juan = (await db.one<{ id: string; email: string; name: string }>(`select id::text, lower(email) email, name from platform.app_user where handle = 'juan'`))!;
+    await db.query(`insert into coordination.restriction (entity_id, scope, channel, instruction, recorded_by) values ($1, 'channel', 'phone', 'Invented (e2e): no calls, email only.', $2)`, [ctx.entityId, juan.id]);
+    await db.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body)
+      values ('e2e:comms', 'Invented e2e record', 'crm', 'affinity', current_date, 'weak', 'Invented', '') on conflict do nothing`);
+    await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'e2e-lp@invented-e2e.example', 'e2e:comms', current_date, 'medium')`, [ctx.entityId]);
+    await db.query(`insert into meetings.meeting (entity_id, channel, direction, held_on, owner_id, attendees, source, source_ref, about, about_vehicles, about_by)
+      values ($1, 'email', 'theirs', $4::date, $2, $3, 'affinity', 'interaction:email:e2e-1:entity:e2e', 'other', '{}', 'rule')`,
+    // The UTC day three days ago, as the check's Gmail message is dated (the database's current_date is local time).
+    [ctx.entityId, juan.id, [juan.name], new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10)]);
+    return { org: [orgs[0]!, orgs[1]!, orgs[2]!, orgs[3]!, orgs[4]!] as const, person, pipe: [selected[0]!, selected[1]!, selected[2]!] as const, page, spare: [spare[0]!, spare[1]!] as const,
+      ctx, juan };
   });
   const [o1, o2, o3, o4, o5] = lp.org;
   const [p1, p2, p3] = lp.pipe;
@@ -423,7 +440,7 @@ async function main() {
     // queue, record an update with an indicated amount, ask for a SEND approval; the LP page shows the amount.
     const deskLabel = `${MARK} desk`;
     const deskKey = `e2e-desk-${Date.now().toString(36)}`;
-    await check('Outreach API: make a desk token in Preferences; read vehicles and the queue, record an indicated amount and ask for a SEND approval over HTTP; the LP page shows it', async () => {
+    await check('Outreach API: make a desk token in Preferences; read vehicles and the queue, record an indicated amount and ask for an autonomous SEND approval over HTTP; the LP page shows it', async () => {
       await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
       const card = page.locator('#mcp');
       await card.getByPlaceholder('Claude Code on the Mac').fill(deskLabel);
@@ -432,8 +449,8 @@ async function main() {
       await card.getByRole('button', { name: 'Make token' }).click();
       const secret = (await card.locator('code').first().innerText()).trim();
       if (!secret.startsWith('plcos_mcp_')) throw new Error('no token was shown');
-      const api = async (method: 'GET' | 'POST', path: string, body?: unknown) => {
-        const res = await fetch(`${base}/api/outreach/${path}`, { method, headers: { Authorization: `Bearer ${secret}`, 'User-Agent': 'e2e mail desk', ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+      const api = async (method: 'GET' | 'POST', path: string, body?: unknown, extra: Record<string, string> = {}) => {
+        const res = await fetch(`${base}/api/outreach/${path}`, { method, headers: { Authorization: `Bearer ${secret}`, 'User-Agent': 'e2e mail desk', ...extra, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
         const json = await res.json() as { data?: any; error?: string };
         if (!res.ok) throw new Error(`${method} ${path}: ${res.status} ${json.error ?? ''}`);
         return json.data;
@@ -442,7 +459,8 @@ async function main() {
       const queue = (await api('GET', `queue?vehicle=all&pursuitId=${lp.page.id}`)).rows as Array<{ pursuitId: string; status: { label: string }; checks: unknown[]; bucket: string }>;
       if (!vehicles.length || queue[0]?.pursuitId !== lp.page.id || !queue[0].status.label || !queue[0].checks.length) throw new Error(`vehicles ${vehicles.length}, queue row ${Boolean(queue[0])}`);
       const update = await api('POST', 'update', { pursuitId: lp.page.id, words: `Desk note (${MARK}): they indicated $2M-3M.`, applied: { indicated: { low: 2_000_000, high: 3_000_000 } }, idempotencyKey: deskKey });
-      const ticket = await api('POST', 'tickets', { kind: 'SEND', pursuitId: lp.page.id, scope: { recipients: ['e2e-partner@invented.example'], purpose: 'invite' }, coordination: { choice: 'send_separately' } });
+      // A person needs no ticket (5 Oct 2026); the desk asks for one only for a send no person clicks.
+      const ticket = await api('POST', 'tickets', { kind: 'SEND', pursuitId: lp.page.id, scope: { recipients: ['e2e-partner@invented.example'], purpose: 'invite' }, coordination: { choice: 'send_separately' } }, { 'X-Autonomous': '1' });
       const unapproved = await fetch(`${base}/api/outreach/sent`, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'User-Agent': 'e2e mail desk', 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticketId: ticket.ticketId, pursuitId: lp.page.id, recipients: ['e2e-partner@invented.example'], gmailMessageId: `e2e-${deskKey}`, sentAt: new Date().toISOString() }) });
       await page.goto(`${base}/targets/${lp.page.id}`, { waitUntil: 'networkidle' });
@@ -509,18 +527,18 @@ async function main() {
       const client = new Client({ name: 'juanmail-e2e', version: '0' });
       await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/api/mcp`), { requestInit: { headers: { Authorization: `Bearer ${secret}` } } }));
       const tools = (await client.listTools()).tools.map((t) => t.name);
-      const answer = async (name: string, args: Record<string, unknown>) => {
-        const r = (await client.callTool({ name, arguments: args, _meta: { correlationId: chain } })) as { isError?: boolean; content: Array<{ text: string }> };
+      const answer = async (name: string, args: Record<string, unknown>, meta: Record<string, unknown> = {}) => {
+        const r = (await client.callTool({ name, arguments: args, _meta: { correlationId: chain, ...meta } })) as { isError?: boolean; content: Array<{ text: string }> };
         if (r.isError) return { error: r.content[0]?.text ?? 'error', data: null as any };
         return { error: null, data: (JSON.parse(r.content[0]!.text) as { data: any }).data };
       };
       const queue = await answer('outreach_queue', { vehicle: 'all', pursuitId: lp.page.id });
       const update = await answer('outreach_update', { pursuitId: lp.page.id, words: `juanmail note (${MARK}).`, applied: { nextStep: { step: 'Send the SPV note' } }, idempotencyKey: `${chain}-u` });
-      const ticket = await answer('outreach_request_ticket', { kind: 'SEND', pursuitId: lp.page.id, scope: { recipients: ['e2e-juanmail@invented.example'], purpose: 'follow_up' }, coordination: { choice: 'mention_both' } });
+      const ticket = await answer('outreach_request_ticket', { kind: 'SEND', pursuitId: lp.page.id, scope: { recipients: ['e2e-juanmail@invented.example'], purpose: 'follow_up' }, coordination: { choice: 'mention_both' } }, { autonomous: true });
       const early = await answer('outreach_record_send', { ticketId: ticket.data?.ticketId, pursuitId: lp.page.id, recipients: ['e2e-juanmail@invented.example'], gmailMessageId: `${chain}-m`, sentAt: new Date().toISOString() });
       const mine = await answer('audit_recent', { correlationId: chain });
       await client.close();
-      const want = ['outreach_vehicles', 'outreach_queue', 'outreach_update', 'outreach_request_ticket', 'outreach_propose_contact', 'outreach_record_send', 'audit_recent'];
+      const want = ['outreach_vehicles', 'outreach_queue', 'outreach_update', 'outreach_request_ticket', 'outreach_propose_contact', 'outreach_link_message', 'outreach_record_send', 'comms_ingest', 'comms_trace', 'audit_recent'];
       if (!want.every((t) => tools.includes(t)) || queue.data?.rows?.[0]?.pursuitId !== lp.page.id || update.error || !ticket.data?.ticketId || !early.error || (mine.data?.length ?? 0) < 4) {
         throw new Error(`tools ${want.filter((t) => !tools.includes(t)).join(',') || 'all'}; queue ${Boolean(queue.data?.rows?.[0])}; update ${update.error ?? 'ok'}; ticket ${ticket.error ?? 'ok'}; early send ${early.error ? 'refused' : 'ALLOWED'}; own calls ${mine.data?.length}`);
       }
@@ -532,6 +550,82 @@ async function main() {
           ['outreach_queue:ok:mcp:true:64', 'outreach_update:ok:mcp:true:64', 'outreach_request_ticket:ok:mcp:true:64', 'outreach_record_send:refused:mcp:true:64', 'audit_recent:ok:mcp:true:64'],
           'the chain of calls in the audit log (tool, outcome, via, client, input hash)');
         same(rows.slice(0, 4).every((r) => r.pursuit === lp.page.id), true, 'each call names the LP it touched');
+      } };
+    });
+
+    // The comms trace and agent-only tickets (Juan, 5 Oct 2026; docs/27 §5–§7a) ─────────────────
+    // juanmail reports Gmail messages (one Affinity has too), links a person's send without a ticket, is refused an
+    // autonomous one without, asks for two autonomous tickets that a person approves in one batch, then links one. The
+    // LP page's context panel shows the restriction, who owes a reply and the thread, and the timeline the merged trace.
+    const comms = `${MARK} comms`;
+    const ctxChain = `e2e-comms-${Date.now().toString(36)}`;
+    await check('Comms trace: juanmail ingests Gmail metadata and links sends (a person\'s with no ticket, an agent\'s only with one, approved in a batch); the LP page shows the context panel and the merged timeline', async () => {
+      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      const card = page.locator('#mcp');
+      await card.getByPlaceholder('Claude Code on the Mac').fill(comms);
+      await card.locator('input[name=tools][value=outreach-write]').check();
+      await card.getByRole('button', { name: 'Make token' }).click();
+      const secret = (await card.locator('code').first().innerText()).trim();
+      if (!secret.startsWith('plcos_mcp_')) throw new Error('no token was shown');
+      const client = new Client({ name: 'juanmail-e2e', version: '0' });
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/api/mcp`), { requestInit: { headers: { Authorization: `Bearer ${secret}` } } }));
+      const answer = async (name: string, args: Record<string, unknown>, meta: Record<string, unknown> = {}) => {
+        const r = (await client.callTool({ name, arguments: args, _meta: { correlationId: ctxChain, ...meta } })) as { isError?: boolean; content: Array<{ text: string }> };
+        if (r.isError) return { error: r.content[0]?.text ?? 'error', data: null as any };
+        return { error: null, data: (JSON.parse(r.content[0]!.text) as { data: any }).data };
+      };
+      const ago = (days: number, hour: number) => { const d = new Date(Date.now() - days * 86_400_000); d.setUTCHours(hour, 0, 0, 0); return d.toISOString(); };
+      const me = lp.juan.email, them = 'e2e-lp@invented-e2e.example', id = (n: number) => `<e2e-${n}-${ctxChain}@invented-e2e.example>`;
+      const ingest = await answer('comms_ingest', { messages: [
+        { messageId: id(1), gmailMessageId: `${ctxChain}-g1`, threadId: `${ctxChain}-t`, date: ago(3, 15), direction: 'received', from: them, to: [me], subject: 'Invented: a question on the fund' },
+        { messageId: id(2), gmailMessageId: `${ctxChain}-g2`, threadId: `${ctxChain}-t`, date: ago(2, 10), direction: 'sent', from: me, to: [them], subject: 'Re: Invented: a question on the fund', pursuitId: lp.ctx.id },
+        { messageId: id(3), gmailMessageId: `${ctxChain}-g3`, threadId: `${ctxChain}-t`, date: ago(1, 9), direction: 'received', from: them, to: [me], subject: 'Re: Invented: a question on the fund', pursuitId: lp.ctx.id },
+      ] });
+      const again = await answer('comms_ingest', { messages: [{ messageId: id(1), gmailMessageId: `${ctxChain}-g1`, date: ago(3, 15), direction: 'received', from: them, to: [me] }] });
+      const link = { pursuitId: lp.ctx.id, gmailMessageId: `${ctxChain}-g2`, messageId: id(2), date: ago(2, 10), direction: 'sent', from: me, to: [them], subject: 'Re: Invented: a question on the fund' };
+      const personLink = await answer('outreach_link_message', link);
+      const send4 = { pursuitId: lp.ctx.id, gmailMessageId: `${ctxChain}-g4`, messageId: id(4), date: new Date().toISOString(), direction: 'sent', from: me, to: [them], subject: 'Invented: the deck' };
+      const refused = await answer('outreach_link_message', send4, { autonomous: true });
+      const t1 = await answer('outreach_request_ticket', { kind: 'SEND', pursuitId: lp.ctx.id, scope: { recipients: [them], purpose: 'follow_up' } }, { autonomous: true });
+      const t2 = await answer('outreach_request_ticket', { kind: 'SEND', pursuitId: lp.ctx.id, scope: { recipients: ['e2e-partner2@invented-e2e.example'], purpose: 'invite' } }, { autonomous: true });
+      const personAsk = await answer('outreach_request_ticket', { kind: 'SEND', pursuitId: lp.ctx.id, scope: { recipients: [them], purpose: 'follow_up' } });
+      const trace = await answer('comms_trace', { pursuitId: lp.ctx.id });
+      if (ingest.error || ingest.data?.new !== 3 || again.data?.already !== 1 || !personLink.data?.linked || !refused.error || !t1.data?.ticketId || !t2.data?.ticketId
+        || personAsk.data?.opened !== false || trace.data?.state?.owes?.by !== 'us') {
+        throw new Error(`ingest ${JSON.stringify(ingest.data ?? ingest.error).slice(0, 100)}; again ${again.data?.already}; person link ${personLink.data?.linked ?? personLink.error}; autonomous without a ticket ${refused.error ? 'refused' : 'ALLOWED'}; tickets ${Boolean(t1.data?.ticketId)}/${Boolean(t2.data?.ticketId)}; person asking: opened ${personAsk.data?.opened}; owes ${trace.data?.state?.owes?.by ?? trace.error}`);
+      }
+      // A person approves the agent's two tickets as one batch.
+      await page.goto(`${base}/approvals?view=agent`, { waitUntil: 'networkidle' });
+      const batch = page.locator('[data-agent-batch]');
+      // Only this check's two: the others (the desk check's, the seed's) stay undecided.
+      for (const box of await batch.locator('input[name="ticketId"]').all()) await box.uncheck();
+      for (const t of [t1.data.ticketId, t2.data.ticketId]) await batch.locator(`input[value="${t}"]`).check();
+      await batch.getByRole('button', { name: 'Approve the checked' }).click();
+      await page.locator('[data-agent-receipt]').waitFor();
+      const receipt = (await page.locator('[data-agent-receipt]').innerText()).replace(/\s+/g, ' ');
+      const agentLink = await answer('outreach_link_message', { ...send4, ticketId: t1.data.ticketId }, { autonomous: true });
+      await client.close();
+      if (!/Approved: 2\b/.test(receipt) || !agentLink.data?.ticketUsed) throw new Error(`batch receipt "${receipt}"; agent link ${agentLink.data?.ticketUsed ?? agentLink.error}`);
+      // The LP page: the context panel and the merged timeline.
+      await page.goto(`${base}/targets/${lp.ctx.id}`, { waitUntil: 'networkidle' });
+      const panel = page.locator('[data-outreach-context]');
+      const restriction = (await panel.locator('[data-restriction]').innerText()).replace(/\s+/g, ' ');
+      const owes = await panel.locator('[data-owes]').getAttribute('data-owes');
+      const thread = (await panel.locator('[data-thread]').innerText()).replace(/\s+/g, ' ');
+      const timeline = (await page.locator('#timeline').innerText()).replace(/\s+/g, ' ');
+      if (!/no calls, email only/.test(restriction) || owes !== 'us' || !thread.includes(lp.juan.name) || !/Gmail, via juanmail/.test(timeline) || !/also in Gmail/.test(timeline)) {
+        throw new Error(`restriction "${restriction.slice(0, 60)}"; owes ${owes}; thread "${thread.slice(0, 80)}"; timeline gmail ${/Gmail, via juanmail/.test(timeline)}, matched ${/also in Gmail/.test(timeline)}`);
+      }
+      return { ui: `ingested 3 messages (again: already); linked a person's send with no ticket; an autonomous one was refused until a person approved the agent's 2 tickets in one batch ("${receipt.slice(0, 30)}"); the LP page shows the restriction, "${owes}" owe a reply, the thread with ${lp.juan.name}, and Gmail rows merged with Affinity's`, verify: async (db) => {
+        same((await db.one<{ n: number }>(`select count(*)::int n from email.comms_message where message_id like $1`, [`%${ctxChain}%`]))?.n, 3, 'the Gmail messages (one row each, once)');
+        same((await db.query<{ ticket: boolean; autonomous: boolean }>(`select ticket_id is not null ticket, autonomous from email.message_link where pursuit_id = $1 order by linked_at`, [lp.ctx.id]))
+          .map((r) => `${r.ticket}:${r.autonomous}`), ['false:false', 'true:true'], 'the links (a person\'s without a ticket, the agent\'s with one)');
+        same((await db.query<{ d: string; batch: boolean; requester: string }>(`select decision::text d, decision_note like 'Decided in a batch%' batch, u.handle requester from governance.approval_ticket t
+          join platform.app_user u on u.id = t.requested_by where t.id = any($1::uuid[]) order by t.created_at`, [[t1.data.ticketId, t2.data.ticketId]])).map((r) => `${r.d}:${r.batch}:${r.requester}`),
+          ['approve:true:mail-desk', 'approve:true:mail-desk'], 'the agent tickets (approved in one batch, asked by the desk)');
+        same((await db.one<{ sent: boolean }>(`select sent_at is not null sent from email.outreach_send where ticket_id = $1`, [t1.data.ticketId]))?.sent, true, 'the used ticket');
+        same((await db.one<{ n: number }>(`select count(*)::int n from meetings.meeting where identity.canonical_entity_id(entity_id) = identity.canonical_entity_id($1::uuid)
+          and created_at > now() - interval '1 hour' and source <> 'affinity'`, [lp.ctx.entityId]))?.n, 0, 'touchpoints written by linking or ingesting (none)');
       } };
     });
 

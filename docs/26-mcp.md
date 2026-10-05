@@ -62,9 +62,12 @@ per tool (Juan: "we can evolve the MCP rules, i think we'll end up with more too
 - **risk** — `read` (reads through `lib/authz`, writes nothing); `propose` (writes something a person reviews or approves:
   a draft, a feedback report, a ticket opened for approval, an address to confirm — and decides nothing);
   `write-guarded` (changes a record through the app's own service and guards, as boxes a person ticked);
-  `send-adjacent` (records that something already left through an approved channel; sends nothing);
+  `send-adjacent` (records what already moved through mail — a message sent or received, its metadata; sends nothing);
 - **scopes** — what the token must carry beyond the tool's name (`[]`: the name in the token's list is enough);
-- **ticket** — `none`, `opens` (for a person to approve) or `requires-approved` (fails closed without one);
+- **ticket** — `none`, `opens` (for a person to approve), `requires-approved` (fails closed without one), or
+  `agent-only` (fails closed without one for an autonomous call; a person needs none — Juan, 5 Oct 2026, docs/27 §7a).
+  A call is autonomous when it says so (`_meta.autonomous: true`, or `X-Autonomous: 1` over REST) or its token carries
+  `mode:autonomous`; every audit record says which;
 - **approval** — whether a person approves or accepts it before it counts.
 
 A token may call a tool when its list names the tool, or, for a scoped tool, when it carries every scope the tool
@@ -89,13 +92,16 @@ two more choices under "May"; a sync token holds its scope alone. Their uses are
 | `changelog` | read | — | — | The latest entries, or one entry's text |
 | `audit_recent` | read | — | — | Your own recent calls: tool, outcome, reason, ids affected, idempotency and correlation ids (§4) |
 | `outreach_vehicles` | read | outreach:read | — | The desk's vehicles: hard, soft and indicated apart, raise window, SPV seats (docs/27) |
-| `outreach_queue` | read | outreach:read | — | The desk's queue: status, close track and seat apart, checks, materials, bucket; `updatedSince` for polling; health-redacted |
+| `outreach_queue` | read | outreach:read | — | The desk's queue: status, close track and seat apart, checks, materials, bucket, and the comms trace's summary (last touches, who owes, the thread, mismatches); `updatedSince` for polling; health-redacted |
+| `comms_trace` | read | outreach:read | — | One LP's merged timeline from the comms trace: Affinity, Gmail via juanmail, PLC OS and Affinity notes, linked Linear issues, each with its source, one row per event (docs/27 §6a) |
 | `create_email_draft` | propose | — | — | A first message or an intro ask, saved in the app for its owner; not moved to Gmail, not sent |
 | `file_feedback` | propose | — | — | An issue, journaled like the feedback box, optionally about a logged call (`callId`); only the live app files |
-| `outreach_request_ticket` | propose | outreach:write | opens | A SEND (one email, named recipients) or INTRO_ASK ticket for a person to approve; never approves it |
+| `outreach_request_ticket` | propose | outreach:write | opens | For an autonomous call only: a SEND (one email, named recipients) or INTRO_ASK ticket for a person to approve; never approves it. A person's call opens nothing and gets the checks |
 | `outreach_propose_contact` | propose | outreach:write | — | An address the person confirmed from Gmail, kept beside Affinity's, never over it |
 | `outreach_update` | write-guarded | outreach:write | — | The LP page's update box: words and the boxes the person ticked — status, touchpoint, next step, indicated amount |
-| `outreach_record_send` | send-adjacent | outreach:write | requires-approved | That the desk sent the email an approved SEND ticket covers: once, with the Gmail message id |
+| `outreach_link_message` | send-adjacent | outreach:write | agent-only | A message the desk sent or read, linked to one LP by its ids and metadata, once; creates no outreach state; an autonomous send needs an approved ticket, which it marks used |
+| `outreach_record_send` | send-adjacent | outreach:write | agent-only | Deprecated (5 Oct 2026): the old arguments, run as `outreach_link_message`; removed next release |
+| `comms_ingest` | send-adjacent | outreach:write | — | Message metadata the desk sees in Gmail, sent and received: idempotent by Message-ID, writes nothing else |
 
 A scoped GP's token reads only their vehicles. `search` leaves out LPs found only elsewhere and counts them; an LP
 it does show names the other vehicles it is on, with owner and no status, as the pages do (rule 5). Every list
@@ -110,8 +116,8 @@ never decides a ticket.
 **Still excluded, and why.**
 
 - **Sending** email, intro asks or materials, and **moving a draft to Gmail**. Capital OS sends nothing; the mail desk
-  sends through MailGuard, one email per approved SEND ticket, and `outreach_record_send` only records it (rule 3,
-  docs/agent-rules/domain.md).
+  sends through MailGuard — with an approved SEND ticket only when it acts autonomously (5 Oct 2026) — and
+  `outreach_link_message` only links the message (rule 3, docs/agent-rules/domain.md).
 - **Approvals, ticket decisions, accepting a suggestion or a run.** No tool decides a ticket, its own or any; a desk
   ticket is requested by the inactive Mail desk actor and decided by a person in Approvals.
 - **Ladder rungs** (STAGE tickets, rule 2–3).
@@ -123,8 +129,8 @@ never decides a ticket.
 
 **The hard rules are properties** (`scripts/properties/mcp.ts`), over the registry: every tool has a policy in the
 closed set; no tool is named for an approval, a decision, money, a status, a rung or an import; a tool named for a send
-or a ticket must have a ticket in its policy and a person approving; a send-adjacent tool requires an approved
-ticket; a write needs a scope; and neither `lib/mcp/` nor `lib/outreach/` mentions a service that sends, decides or
+or a ticket must have a ticket in its policy and a person approving; a send-adjacent tool opens no ticket, and one
+that links a send fails closed for an agent (`requires-approved` or `agent-only`); a write needs a scope; and neither `lib/mcp/` nor `lib/outreach/` mentions a service that sends, decides or
 moves money (`moveDraft`, `decideTicket`, `recordWire`, `harden(`, `mailguardClient`, `makeAsk`, …).
 
 **Adding a tool.** (1) A policy entry in `lib/mcp/tools.ts`: risk, scopes, ticket, approval, and an input schema.

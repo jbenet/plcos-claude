@@ -49,6 +49,8 @@ import { listVehicles } from '@/modules/platform';
 import { BeforeOutreach } from '@/components/strategy/BeforeOutreach';
 import { findOpenTicket } from '@/modules/governance';
 import { EmailDrafts } from '@/components/email/EmailDrafts';
+import { OutreachContext } from '@/components/outreach/OutreachContext';
+import { linearFor, traceFor } from '@/lib/comms/read';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +72,7 @@ async function TargetWorkspace({ params, searchParams }: {
   // The routes page's own search — team scope, three hops, this vehicle — so the warm intro box
   // and the page it opens agree (issue 0093).
   const vehicleKind = vehicles.find((v) => v.id === pursuit.vehicleId)?.kind ?? 'fund';
-  const [claims, notes, restrictions, routes, signals, affinityNotes, tracks, calendar, readings, everything, updates, statusLog] = await Promise.all([
+  const [claims, notes, restrictions, routes, signals, affinityNotes, tracks, calendar, readings, logged, updates, statusLog] = await Promise.all([
     claimsFor(pursuit.entityId),
     notesFor(pursuit.entityId),
     restrictionsFor(pursuit.entityId),
@@ -84,6 +86,16 @@ async function TargetWorkspace({ params, searchParams }: {
     updatesFor(pursuit.pursuitId),
     auditFor('pursuit', pursuit.pursuitId, ['pursuit.status_set']),
   ]);
+  // The comms trace (Juan, 5 Oct 2026): Affinity's records merged with the Gmail messages juanmail reported, one
+  // row per message, each with its source. Everything below — the timeline, last touch, who owes a reply — reads it.
+  const [trace, linear] = await Promise.all([traceFor(pursuit.entityId, logged), linearFor(pursuit.pursuitId)]);
+  const everything = trace.touches;
+  // Notes from elsewhere on the same thread (5 Oct 2026): the team's context notes here, and Linear issues linked to the pursuit.
+  const extras = [
+    ...notes.filter((n) => n.kind === 'context').map((n) => ({ key: `pn:${n.noteId}`, at: n.createdAt, source: 'plcos' as const, label: 'PLC OS note', text: n.body, by: n.author, href: null })),
+    ...linear.filter((i) => i.completedAt ?? i.createdAt).map((i) => ({ key: `li:${i.id}`, at: (i.completedAt ?? i.createdAt)!, source: 'linear' as const,
+      label: i.completedAt ? 'Linear issue, done' : 'Linear issue', text: [i.identifier, i.title].filter(Boolean).join(' '), by: null, href: i.url })),
+  ];
   const [docs, spvMarkMap, indicated] = await Promise.all([
     listSourceDocs([...new Set(claims.map((c) => c.provenance.source))]),
     spvMarks(await getDb(), [pursuit.entityId]),
@@ -383,6 +395,11 @@ async function TargetWorkspace({ params, searchParams }: {
         <div>
           {tracks.map((t) => <CloseTrack key={t.exposure.exposureId} track={t} pursuitId={pursuit.pursuitId} />)}
 
+          {/* What the sender needs to decide, in place of an approval (Juan, 5 Oct 2026). */}
+          <OutreachContext entityId={pursuit.entityId} vehicleId={pursuit.vehicleId} pursuitId={pursuit.pursuitId} trace={trace}
+            connectorId={emailPlan.purpose === 'intro_ask' ? emailPlan.connector?.entityId ?? null : null}
+            connectorName={emailPlan.purpose === 'intro_ask' ? emailPlan.connector?.name ?? null : null} />
+
           {/* The first message, written here and moved to the person's own Gmail Drafts (docs/25). Above the
               timeline (Juan, 3 Oct 2026: under a 4,000 px timeline and the strategies it was never seen). */}
           <EmailDrafts
@@ -411,6 +428,10 @@ async function TargetWorkspace({ params, searchParams }: {
             vehicleName={pursuit.vehicleName}
             calendarPartial={Boolean((calendar?.detail as { stoppedAtCap?: boolean } | undefined)?.stoppedAtCap)}
             context={context}
+            sameAs={Object.fromEntries(trace.sameAs)}
+            subjects={Object.fromEntries([...trace.messageOf].map(([k, m]) => [k, m.subject ?? '']))}
+            mismatches={trace.flags.map((f) => f.text)}
+            extras={extras}
             read={theirRead}
             status={pursuit.status}
             today={new Date().toISOString().slice(0, 10)}

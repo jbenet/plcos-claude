@@ -97,6 +97,8 @@ export async function runProperties(check: Check) {
   await (await import('./outreach-api')).outreachReadProperties(check, db);
   await (await import('./outreach-writes')).outreachWriteProperties(check, db);
   await (await import('./outreach-mcp')).outreachMcpProperties(check, db);
+  // The comms trace and who needs a ticket (5 Oct 2026, docs/27 §5–§7).
+  await (await import('./comms')).commsProperties(check, db);
   // Cloud pull and push (docs/deploy/railway.md §6–§7): sync tokens, the push checks, and on Postgres the round trip.
   await (await import('./sync')).syncProperties(check, db);
   await db.close();

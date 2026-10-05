@@ -1,5 +1,5 @@
 import type { Action } from './index';
-export type ScopeRule = 'context' | 'touch' | 'spvEntity' | 'signal' | 'global' | 'pursuit' | 'pursuitArg' | 'score' | 'bulk' | 'undo' | 'exposure' | 'suggestion' | 'play' | 'vehicleArg' | 'vehicle' | 'vehicleSlug' | 'move' | 'conflict' | 'tickets' | 'emailNew' | 'emailDraft' | 'self';
+export type ScopeRule = 'context' | 'touch' | 'spvEntity' | 'signal' | 'global' | 'pursuit' | 'pursuitArg' | 'score' | 'bulk' | 'undo' | 'exposure' | 'suggestion' | 'play' | 'vehicleArg' | 'vehicle' | 'vehicleSlug' | 'move' | 'conflict' | 'tickets' | 'emailNew' | 'emailDraft' | 'self' | 'contentSend';
 /** Closed manifest: a new action needs an explicit policy AND a first-statement wrapper. */
 export const actionRules = {
   'app/dev/linear/actions.ts#rebuildLinearAction': { action: 'admin', scope: 'global' },
@@ -9,6 +9,8 @@ export const actionRules = {
   'app/approvals/actions.ts#decide': { action: 'approve', scope: 'tickets' },
   'app/approvals/actions.ts#adjudicate': { action: 'mutate', scope: 'conflict' },
   'app/approvals/actions.ts#decideMany': { action: 'approve', scope: 'tickets' },
+  // Agent tickets in a batch (5 Oct 2026): each checked ticket is checked as one decision would be.
+  'app/approvals/actions.ts#decideAgentBatch': { action: 'approve', scope: 'tickets' },
   'app/dev/affinity/actions.ts#runConnectionTest': { action: 'admin', scope: 'global' },
   'app/dev/affinity/actions.ts#runDiscovery': { action: 'admin', scope: 'global' },
   'app/dev/affinity/actions.ts#runSliceAction': { action: 'admin', scope: 'global' },
@@ -55,6 +57,8 @@ export const actionRules = {
   'app/settings/actions.ts#saveVoiceAction': { action: 'mutate', scope: 'self' },
   'app/grants/actions.ts#saveInvitation': { action: 'admin', scope: 'global' },
   'app/materials/actions.ts#proposeSend': { action: 'mutate', scope: 'vehicle' },
+  // A person marks a cleared material sent (Juan, 5 Oct 2026: no SEND ticket for a person); its vehicle from the stored send.
+  'app/materials/actions.ts#markSentAction': { action: 'mutate', scope: 'contentSend' },
   'app/orgs/enrichment/select.ts#choose': { action: 'admin', scope: 'global' },
   'app/plays/actions.ts#assign': { action: 'mutate', scope: 'play' },
   'app/plays/actions.ts#propose': { action: 'mutate', scope: 'vehicleArg' },

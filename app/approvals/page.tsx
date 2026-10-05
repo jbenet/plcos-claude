@@ -6,6 +6,8 @@ import { SECTION } from '@/lib/nav';
 import { DecideForm } from '@/components/approvals/DecideForm';
 import { AdjudicateForm } from '@/components/approvals/AdjudicateForm';
 import { ReconcileBatch } from '@/components/approvals/ReconcileBatch';
+import { AgentBatch } from '@/components/approvals/AgentBatch';
+import { getDb } from '@/lib/db';
 import { RecheckRungs } from '@/components/approvals/RecheckRungs';
 import { rungsToRecheck } from '@/lib/reconcile';
 import { config } from '@/config/deployment';
@@ -33,13 +35,18 @@ async function Approvals({
 }) {
   const sp = await searchParams;
   const { t } = sp;
-  const [all, decided] = await Promise.all([listOpenTickets(), listDecidedTickets(6)]);
+  const [all, decided, agents] = await Promise.all([listOpenTickets(), listDecidedTickets(6),
+    (async () => new Set((await (await getDb()).query<{ id: string }>(`select id::text from platform.app_user where handle = 'mail-desk'`)).map((r) => r.id)))()]);
   // Reconciliation's proposals (N57) are one item in the queue and one page of their own.
   const isProposal = (x: ApprovalTicket) => x.kind === 'STAGE' && x.scope.apply?.command === 'strategy.recordClimb';
+  // An autonomous agent's sends and asks (5 Oct 2026): the only SEND and INTRO_ASK tickets, approved as a batch.
+  const isAgent = (x: ApprovalTicket) => (x.kind === 'SEND' || x.kind === 'INTRO_ASK') && agents.has(x.requestedBy);
   const proposals = all.filter(isProposal);
+  const agentTickets = all.filter(isAgent);
   const open = all.filter((x) => !isProposal(x));
-  const batch = sp.view === 'reconcile' || (!t && open.length === 0 && proposals.length > 0);
-  const selected = batch ? null : all.find((x) => x.id === t) ?? open[0] ?? null;
+  const agentView = sp.view === 'agent';
+  const batch = !agentView && (sp.view === 'reconcile' || (!t && open.length === 0 && proposals.length > 0));
+  const selected = batch || agentView ? null : all.find((x) => x.id === t) ?? open[0] ?? null;
   const receipt = sp.approved || sp.rejected || sp.failed
     ? { approved: sp.approved ? Number(sp.approved) : undefined, rejected: sp.rejected ? Number(sp.rejected) : undefined, failed: sp.failed ? Number(sp.failed) : undefined }
     : null;
@@ -66,8 +73,9 @@ async function Approvals({
             <div className="lbl">Module 24 · gate, not record</div>
             <h2>{all.length} open</h2>
             <p>
-              One open ticket per subject per kind. Every mutating command in the five families
-              fails closed without an approved, unexpired one.
+              One open ticket per subject per kind. MONEY, STAGE and ALLOCATION_EXCEPTION fail closed
+              without an approved, unexpired one; SEND and INTRO_ASK only for an autonomous agent — a
+              person needs none (5 Oct 2026).
             </p>
           </div>
           {open.map((ticket) => {
@@ -90,6 +98,18 @@ async function Approvals({
               </Link>
             );
           })}
+
+          {agentTickets.length > 0 && (
+            <Link href="/approvals?view=agent" className={`tix${agentView ? ' on' : ''}`} data-agent-batch-link>
+              <div className="tixtop">
+                <span className={`kind ${KIND_CLASS.SEND}`}>AGENT</span>
+                <span className="age">{agentTickets.length} tickets</span>
+              </div>
+              <b>Approve the agent&rsquo;s sends together</b>
+              <p>SEND and INTRO_ASK asked for with no person in the loop</p>
+              <span className="flag f-ok">Batch</span>
+            </Link>
+          )}
 
           {proposals.length > 0 && (
             <Link href="/approvals?view=reconcile" className={`tix${batch ? ' on' : ''}`}>
@@ -127,7 +147,9 @@ async function Approvals({
         </>
       }
     >
-      {batch ? (
+      {agentView ? (
+        <AgentBatch tickets={agentTickets} receipt={receipt} />
+      ) : batch ? (
         <>
           <ReconcileBatch proposals={proposals} receipt={receipt} />
           <RecheckRungs rows={await rungsToRecheck()} />

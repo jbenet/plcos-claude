@@ -44,8 +44,8 @@ export const KIND_CLASS: Record<ApprovalKind, string> = {
 };
 
 export const KIND_GATES: Record<ApprovalKind, string> = {
-  SEND: 'Any material leaving the building.',
-  INTRO_ASK: 'Asking a connector to make an introduction.',
+  SEND: 'An autonomous agent sending an email or material with no person in the loop (a person needs none, since 5 Oct 2026).',
+  INTRO_ASK: 'An autonomous agent asking a connector for an introduction (a person needs none, since 5 Oct 2026).',
   MONEY: 'Recording a commitment or a receipt.',
   STAGE: 'Advancing a target along the consent ladder.',
   ALLOCATION_EXCEPTION: 'Breaking an allocation rule on purpose.',

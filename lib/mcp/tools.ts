@@ -4,7 +4,8 @@ import type { Answer } from './output';
 import * as reads from './reads';
 import * as writes from './writes';
 import { BUCKETS, outreachQueue, outreachVehicles } from '@/lib/outreach/reads';
-import { contactInput, recordDeskSend, contacts, requestTicket, sentInput, ticketInput, update, updateInput } from '@/lib/outreach/writes';
+import { contactInput, contacts, requestTicket, ticketInput, update, updateInput } from '@/lib/outreach/writes';
+import { commsTrace, ingest, ingestInput, link, linkInput, recordSendAlias, sentInput, traceInput } from '@/lib/outreach/comms';
 import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
 import { auditRecent } from './audit';
 
@@ -19,9 +20,11 @@ import { auditRecent } from './audit';
  *                             ticket opened for approval, an address to confirm), and decides nothing;
  *             write-guarded   changes a record through the app's own service and guards, as the boxes a person
  *                             ticked (the LP page's update box), never a ladder rung, money or a ticket decision;
- *             send-adjacent   records that something already left through an approved channel; sends nothing.
+ *             send-adjacent   records what already moved through mail — a message sent or received, its metadata —
+ *                             and sends nothing.
  *   scopes    the token scopes it needs beyond its name ([] = the name in the token's list is enough);
- *   ticket    'none', 'opens' (for a person to approve) or 'requires-approved' (fails closed without one);
+ *   ticket    'none', 'opens' (for a person to approve), 'requires-approved' (fails closed without one), or
+ *             'agent-only' (fails closed without one for an autonomous call; a person needs none — Juan, 5 Oct 2026);
  *   approval  whether a person approves or accepts what it does before it counts.
  * The hard rules stay properties over this registry (scripts/properties/mcp.ts): no tool sends mail, decides or
  * approves a ticket (its own or any), or moves money; none is named for those acts; none reaches a service that
@@ -32,7 +35,7 @@ export type Risk = 'read' | 'propose' | 'write-guarded' | 'send-adjacent';
 export interface Policy {
   risk: Risk;
   scopes: readonly string[];
-  ticket: 'none' | 'opens' | 'requires-approved';
+  ticket: 'none' | 'opens' | 'requires-approved' | 'agent-only';
   approval: boolean;
 }
 
@@ -136,8 +139,8 @@ export const TOOLS: readonly Tool[] = [
     run: (env, a) => update({ env }, a),
   }),
   tool({
-    name: 'outreach_request_ticket', title: 'Outreach: ask for an approval', policy: { risk: 'propose', scopes: [OUTREACH_WRITE], ticket: 'opens', approval: true },
-    description: 'Open a SEND (one email to named recipients) or INTRO_ASK ticket for a person to approve in Capital OS. Never approves it. A blocking check refuses before any ticket; an SPV with an open fund discussion needs coordination.choice.',
+    name: 'outreach_request_ticket', title: 'Outreach: ask for an approval (autonomous only)', policy: { risk: 'propose', scopes: [OUTREACH_WRITE], ticket: 'opens', approval: true },
+    description: 'Only when no person is in the loop (the call marked _meta.autonomous: true, or an autonomous token): open a SEND (one email to named recipients) or INTRO_ASK ticket for a person to approve in Capital OS. Never approves it. A person needs no ticket (5 Oct 2026): called for one, it opens nothing and answers the checks. A blocking check refuses before any ticket; an SPV with an open fund discussion needs coordination.choice.',
     input: ticketInput,
     run: (env, a) => requestTicket({ env }, a),
   }),
@@ -147,11 +150,30 @@ export const TOOLS: readonly Tool[] = [
     input: contactInput,
     run: (env, a) => contacts({ env }, a),
   }),
+  // The comms trace (Juan, 5 Oct 2026: "let email be the state"). docs/27 §5–§6.
   tool({
-    name: 'outreach_record_send', title: 'Outreach: record a send', policy: { risk: 'send-adjacent', scopes: [OUTREACH_WRITE], ticket: 'requires-approved', approval: true },
-    description: 'Record that the mail desk sent the email an approved SEND ticket covers: once, with the Gmail message id and time. Refused unless the ticket is approved, unexpired, for this LP and these recipients, and unused. Sends nothing.',
+    name: 'outreach_link_message', title: 'Outreach: link a message', policy: { risk: 'send-adjacent', scopes: [OUTREACH_WRITE], ticket: 'agent-only', approval: true },
+    description: 'After sending (or reading) one message about one LP: its Gmail id, thread id, Message-ID, date, from/to/cc, subject and direction; no body unless you send one. Logged with the agent ticket it used, if any, which is marked used. Creates no outreach state: the trace is the record. Idempotent by Message-ID. An autonomous send needs an approved SEND ticket covering its recipients; a person\'s needs none. Sends nothing.',
+    input: linkInput,
+    run: (env, a) => link({ env }, a),
+  }),
+  tool({
+    name: 'outreach_record_send', title: 'Outreach: record a send (deprecated)', policy: { risk: 'send-adjacent', scopes: [OUTREACH_WRITE], ticket: 'agent-only', approval: true },
+    description: 'Deprecated (5 Oct 2026), kept for one release: the old arguments, run as outreach_link_message. Use outreach_link_message.',
     input: sentInput,
-    run: (env, a) => recordDeskSend({ env }, a),
+    run: (env, a) => recordSendAlias({ env }, a),
+  }),
+  tool({
+    name: 'comms_ingest', title: 'Comms: report mail metadata', policy: { risk: 'send-adjacent', scopes: [OUTREACH_WRITE], ticket: 'none', approval: false },
+    description: 'Report the messages you see in Gmail, sent and received: Message-ID, Gmail and thread ids, date, direction, from/to/cc, subject, and the LP when you know it. Metadata only, never a body. Writes those and nothing else; idempotent by Message-ID; de-duplicated with Affinity\'s records when read. Up to 100 a call.',
+    input: ingestInput,
+    run: (env, a) => ingest({ env }, a),
+  }),
+  tool({
+    name: 'comms_trace', title: 'Comms: one LP\'s merged timeline', policy: OUT_READ,
+    description: 'One LP\'s timeline from the comms trace: Affinity\'s emails, meetings and calls, the Gmail messages you reported, PLC OS updates and notes, Affinity notes and linked Linear issues — each with its source, one row per event (matched by Message-ID, else date, participants and subject, with a confidence). With last touch, who owes a reply, who holds the thread, and where the app\'s log and the trace disagree.',
+    input: traceInput,
+    run: (env, a) => commsTrace({ env }, a),
   }),
   // Your own calls (docs/26 §4): what this person's tokens did, for a client's own history.
   tool({

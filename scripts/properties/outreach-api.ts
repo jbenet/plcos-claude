@@ -14,7 +14,7 @@ import { config } from '../../config/deployment';
 import type { AppUser } from '../../modules/platform';
 import type { Check, Db } from './harness';
 
-export type Call = (secret: string | null, op: string, query?: Record<string, string>, init?: { method?: string; body?: unknown; origin?: string }) =>
+export type Call = (secret: string | null, op: string, query?: Record<string, string>, init?: { method?: string; body?: unknown; origin?: string; headers?: Record<string, string> }) =>
   Promise<{ status: number; headers: Headers; text: string; json: any }>;
 
 /** Calls the real route handlers, as an HTTP client would. */
@@ -27,6 +27,7 @@ export async function outreachClient(): Promise<Call> {
     if (secret) headers.authorization = `Bearer ${secret}`;
     if (init.origin) headers.origin = init.origin;
     if (init.body !== undefined) headers['content-type'] = 'application/json';
+    Object.assign(headers, init.headers ?? {});
     const request = new Request(url, { method: init.method ?? 'GET', headers, body: init.body === undefined ? undefined : JSON.stringify(init.body) });
     const ctx = { params: Promise.resolve({ op }) };
     const res = init.method === 'OPTIONS' ? await route.OPTIONS(request, ctx) : init.method === 'POST' ? await route.POST(request, ctx) : await route.GET(request, ctx);

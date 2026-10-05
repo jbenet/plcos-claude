@@ -70,13 +70,14 @@ async function Materials() {
       <h1>Materials &amp; send gate</h1>
       <p className="sublede">
         What may be said depends on the vehicle and the instrument, and it is checked before the
-        approval rather than after the send. A 506(b) SPV cannot carry a public primer, and the
+        send and again when it is marked sent. A person needs no approval to send a cleared material
+        (Juan, 5 Oct 2026); only an autonomous agent does. A 506(b) SPV cannot carry a public primer, and the
         grants rail is never framed as an investment offering.
       </p>
 
       <div className="card">
         <div className="chead">
-          <h2>Propose a send</h2>
+          <h2>Check a send</h2>
           <span className="lbl">the wrap check runs first</span>
         </div>
         <SendGate

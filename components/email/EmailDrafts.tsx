@@ -95,8 +95,9 @@ export async function EmailDrafts({ title, lede, where, create, path, startLabel
       )}
       <p className="cover">
         <b>A draft is not a send.</b> Moving puts it in your Gmail Drafts to review and send yourself. The checks above
-        the button read the restrictions, the vehicle&rsquo;s wrap rule, the email guidelines and, for an intro ask, its
-        approval; they warn and never block, and every move is recorded.
+        the button read the restrictions, the vehicle&rsquo;s wrap rule, the email guidelines and, for an intro ask, the
+        asks on file; they warn and never block, and every move is recorded. A person needs no approval to send
+        (Juan, 5 Oct 2026).
       </p>
     </div>
   );

@@ -245,3 +245,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Indicated amounts, and outreach tools for juanmail over MCP](entries/outreach-api.md)
 - [Railway plan — one service and one Postgres, with local copies one way](entries/railway-plan.md)
 - [Cloud pull and push — through the app's own API, with tokens from Preferences](entries/cloud-sync.md)
+- [No tickets for people, and the email trail is the record](entries/comms-trace.md)
