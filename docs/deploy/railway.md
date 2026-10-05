@@ -24,7 +24,7 @@ process, the daily timer and `cutover.sh`.
 | **Web service** | Built from GitHub with the existing `Dockerfile`: `next build`, then `next start` (the production build; see the page-speed and prod-build changelog entries); `railway.json` sets the healthcheck and one replica | Import jobs run as child processes of this server, as on the Mac. The daily timer runs inside it too. No worker or cron service, no Redis. |
 | **Volume** on the web service | Mounted at `/app/data`; working files in `/app/data/real` | About 2.2 GB today: research (`enrich/`, 2.1 GB, 37K files), issues, materials, intake, workflow ledger. Start at 10 GB. |
 | **Postgres 17** | Railway's template, pinned to 17 to match the Mac; private network only | The only copy of the real data after cutover. The Mac's cluster is 2.3 GB on disk; the last measured dump was 190–222 MiB (28 Sep). |
-| **Size** | Juan's existing Railway plan; raise it if needed | Measured (06-measurements): the server peaks at 1.25 GiB under 10 users, the findings import child at 2.43 GiB. Memory limit at least 4 GB, ideally 8. |
+| **Size** | Juan's existing Railway plan (Hobby, 5 Oct: 5 GB per volume, 8 GB memory and 8 vCPU per service); raise it when a volume passes ~80% | Measured (06-measurements): the server peaks at 1.25 GiB under 10 users, the findings import child at 2.43 GiB. Memory limit at least 4 GB, ideally 8. |
 
 The Mac becomes a development machine. It serves demos and previews of pulled copies (§6), and runs local
 research that pushes its results up (§7). Dakota moves to the cloud with everything else (decision C).
@@ -160,7 +160,8 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
 1. **Postgres.** In Juan's Railway project: Add → Database → PostgreSQL. Pin the image to 17 **before first use**: the
    template now defaults to 18 (5 Oct 2026), and the image's pg_dump 17 can't dump an 18 server (snapshots, pulls,
    backups). Set the source image to `ghcr.io/railwayapp-templates/postgres-ssl:17`, with a fresh volume if 18 already
-   ran, and run `select version()`. Turn on its daily volume backups. **Remove its public TCP proxy** (Settings →
+   ran, and run `select version()`. Turn on its volume backups in the dashboard (Railway keeps daily ones 6 days, weekly 27, monthly
+   89, billed at volume rates for what changed; its docs limit them by no plan). **Remove its public TCP proxy** (Settings →
    Networking).
 2. **Roles,** from a shell in the web service (`railway ssh`, then `psql` as `postgres`):
    ```sql
@@ -172,8 +173,8 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
    `\password` asks for each password without showing it. This is the Mac's split: `plcos_app` owns
    everything, and `plcos_ro` only reads (docs/21 "Roles").
 3. **Web service.** Add → GitHub repo → this repo, watching a `deploy` branch (Settings → Source), so a
-   release is a choice: `git push origin master:deploy` (MailGuard's practice). Add a volume at `/app/data`,
-   10 GB. Then set the variables:
+   release is a choice: `git push origin master:deploy` (MailGuard's practice). Add a volume at `/app/data`:
+   10 GB on Pro, 5 GB on Hobby (Hobby's cap), which holds today's ~2.2 GB of working files. Then set the variables:
    - `RAILWAY_RUN_UID=0`;
    - `PLCOS_SECRET` (`openssl rand -base64 32`, sealed);
    - `DATABASE_URL` pointing at `plcos_demo`, with `PGPASSWORD`;
