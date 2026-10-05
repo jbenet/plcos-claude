@@ -76,5 +76,27 @@ async function applyMigrations(db: Db): Promise<{ applied: string[] }> {
       perform network.install_read_triggers();
     end if;
   end $$;`);
+  // Every schema readable by the read-only role (docs/21): backups pg_dump as plcos_ro, and a new schema
+  // made without the grant (email, 2 Oct 2026) stopped every daily backup until someone looked. Postgres
+  // only, and only where the role exists; a grant the migrator may not give is skipped, not fatal.
+  if (db.kind === 'postgres') await db.exec(READ_ROLE_GRANTS);
   return { applied };
 }
+
+const READ_ROLE_GRANTS = `do $$
+declare s text;
+begin
+  if not exists (select 1 from pg_roles where rolname = 'plcos_ro') then return; end if;
+  for s in select nspname from pg_namespace
+    where nspname !~ '^pg_' and nspname <> 'information_schema'
+      and not has_schema_privilege('plcos_ro', oid, 'USAGE') loop
+    begin
+      execute format('grant usage on schema %I to plcos_ro', s);
+      execute format('grant select on all tables in schema %I to plcos_ro', s);
+      execute format('grant select on all sequences in schema %I to plcos_ro', s);
+      raise notice 'granted plcos_ro read on schema %', s;
+    exception when insufficient_privilege then
+      raise warning 'cannot grant plcos_ro read on schema % (not its owner); backups will fail', s;
+    end;
+  end loop;
+end $$;`;
