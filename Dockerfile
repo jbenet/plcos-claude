@@ -51,9 +51,8 @@ RUN npm run build \
  && node --import tsx scripts/check-build-traces.ts .next \
  && rm -rf .next/cache
 
-# ---- prod-deps: runtime dependencies only, plus tsx at its locked version -----------------------
-# The server starts TypeScript import workers through tsx (a devDependency; next.config.ts lists it
-# as a server external), so it is installed on its own at exactly the version package-lock.json pins.
+# ---- prod-deps: runtime dependencies only, tsx among them ---------------------------------------
+# The server starts TypeScript import workers through tsx (next.config.ts lists it as a server external).
 FROM base AS prod-deps
 COPY --from=source /app/package.json /app/package-lock.json ./
 # tsx is a runtime dependency (scripts and import jobs run through it), so npm ci installs it from the
