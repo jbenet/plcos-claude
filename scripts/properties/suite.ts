@@ -102,6 +102,9 @@ export async function runProperties(check: Check) {
   await step('comms.commsProperties', async () => (await import('./comms')).commsProperties(check, db));
   // The desk's second round (5 Oct 2026, docs/27 §4–§4b): hop ids and addresses, top connectors, REST routes, passed LPs, paging.
   await step('outreach-desk.outreachDeskProperties', async () => (await import('./outreach-desk')).outreachDeskProperties(check, db));
+  // The desk's third round (5 Oct 2026, docs/27 §4a–§4c, §5): askFirst, first-hop connectors and their targets, ask history,
+  // one message linked to several LPs, signedCount.
+  await step('outreach-desk-v3.outreachDeskV3Properties', async () => (await import('./outreach-desk-v3')).outreachDeskV3Properties(check, db));
   // Cloud pull and push (docs/deploy/railway.md §6–§7): sync tokens, the push checks, and on Postgres the round trip.
   await step('sync.syncProperties', async () => (await import('./sync')).syncProperties(check, db));
   // Settings, /setup and Google sign-in (docs/deploy/railway.md §3). Last: it leaves two invented users inactive.

@@ -138,9 +138,15 @@ export const TOOLS: readonly Tool[] = [
   }),
   tool({
     name: 'top_connectors', title: 'Outreach: top connectors for a vehicle', policy: OUT_READ,
-    description: 'The people who sit on the most and best warm routes to a vehicle\'s open LPs: for each, entityId, name, how many open LPs they reach, the best route score through them, a few example pursuitIds, whether a restriction is on file, and (where readable) their best address. Built from the same routes as routes_to; only recommended routes count.',
-    input: z.object({ vehicle, limit: limit(100, 20) }).strict(),
-    run: (env, a) => topConnectors(env.principal, a),
+    description: `The people who sit on the most and best warm routes to a vehicle\'s open LPs: for each, entityId, name, how many open LPs they reach, the best route score through them, a few example pursuitIds, how many routes have them as the first hop past the team (asFirstHop, the person the team emails) versus deeper (asDeeperHop), reachableDirectly, the intro asks made to them this quarter (asksThisQuarter) and the last one (lastAsk), whether a restriction is on file, and (where readable) their best address. firstHopOnly ranks first-hop appearances only. With entityId: that one connector\'s targets instead — every open LP on the vehicle they reach, with the route score, best first, paged by cursor/nextCursor (${config.outreach.defaultQueueRows} rows by default, at most ${config.outreach.maxQueueRows}). Built from the same routes as routes_to; only recommended routes count.`,
+    input: z.object({
+      vehicle, limit: limit(config.outreach.maxQueueRows, 20).describe('Connectors: at most 100 (default 20). With entityId, targets: at most 500 (default 25).'),
+      firstHopOnly: z.boolean().optional().describe('Count only routes on which the connector is the first hop past the team member (default false).'),
+      entityId: uuid.optional().describe('One connector: list the open LPs they reach on this vehicle instead.'),
+      cursor: z.string().min(1).max(400).optional().describe('With entityId: the previous answer\'s nextCursor.'),
+    }).strict(),
+    // Over MCP a target page must fit the response limit; it is cut from its end and nextCursor follows (docs/27 §4c).
+    run: (env, a) => topConnectors(env.principal, a, env.via === 'mcp' ? { maxBytes: config.mcp.maxResponseBytes - 6000 } : {}),
   }),
   // The mail desk's writes (docs/27). Each runs the app's own service as the token's owner; none sends or approves.
   tool({
@@ -164,7 +170,7 @@ export const TOOLS: readonly Tool[] = [
   // The comms trace (Juan, 5 Oct 2026: "let email be the state"). docs/27 §5–§6.
   tool({
     name: 'outreach_link_message', title: 'Outreach: link a message', policy: { risk: 'send-adjacent', scopes: [OUTREACH_WRITE], ticket: 'agent-only', approval: true },
-    description: 'After sending (or reading) one message about one LP: its Gmail id, thread id, Message-ID, date, from/to/cc, subject and direction; no body unless you send one. Logged with the agent ticket it used, if any, which is marked used. Creates no outreach state: the trace is the record. Idempotent by Message-ID. An autonomous send needs an approved SEND ticket covering its recipients; a person\'s needs none. Sends nothing.',
+    description: 'After sending (or reading) one message about one LP (pursuitId), or about several (pursuitIds, 1–10, such as an intro ask naming three): its Gmail id, thread id, Message-ID, date, from/to/cc, subject and direction; no body unless you send one. Several LPs are linked all or none, each authorized on its own. Logged with the agent ticket it used, if any, which is marked used. Creates no outreach state: the trace is the record. Idempotent by Message-ID. An autonomous send needs an approved ticket covering its recipients, and may name one LP only (an approval covers one email about one LP); a person\'s needs none. Sends nothing.',
     input: linkInput,
     run: (env, a) => link({ env }, a),
   }),

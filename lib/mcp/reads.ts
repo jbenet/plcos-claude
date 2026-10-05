@@ -129,8 +129,10 @@ async function routeAnswer(user: AppUser, vehicleId: string, search: RouteSearch
   const routes = dto.routes.slice(0, limit);
   const people = routes.flatMap((r) => [...r.hops, ...(r.introducer ? [r.introducer] : [])]);
   const c = await routeContacts(user, vehicleId, people);
+  // askFirst (the person the team emails) is hops[0], so its address is among the hops'; the introducer carries the ask on.
   return { ...dto,
-    routes: routes.map((r) => ({ ...r, hops: r.hops.map((h: Hop) => c.at(h)), introducer: r.introducer ? c.at(r.introducer) : null })),
+    routes: routes.map((r) => ({ ...r, hops: r.hops.map((h: Hop) => c.at(h)), askFirst: r.askFirst ? c.at(r.askFirst) : null,
+      introducer: r.introducer ? c.at(r.introducer) : null })),
     routesFound: dto.routes.length, addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
     empty: dto.routes.length ? null : 'No supported route in the material inspected. That is not proof that no route exists (rule 7).' };
 }
@@ -232,7 +234,9 @@ export async function routesThrough(user: AppUser, a: { nodeId: string; vehicle?
     data: {
       node: view.nodeName, nodeId, ours: view.source?.kind ?? null, doNotApproach: view.nodeRestricted,
       ...('contact' in node ? { nodeContact: node.contact } : {}), addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
-      bestRouteToNode: best ? { from: best.fromName ?? null, fromEntityId: best.fromEntity ?? null, hops: bestHops.map((h) => c.at(h)) } : null,
+      bestRouteToNode: best ? { from: best.fromName ?? null, fromEntityId: best.fromEntity ?? null, hops: bestHops.map((h) => c.at(h)),
+        // The first hop past the team member: whom the team emails to reach the node (docs/27 §4a).
+        askFirst: bestHops[0] ? c.at({ entityId: bestHops[0].entityId, name: bestHops[0].name, direct: bestHops.length === 1 }) : null } : null,
       onward: view.nodeRestricted ? [] : view.onward.slice(0, limit).map((t) => ({
         entityId: t.otherId, name: t.otherName, tieTier: t.edges[0]?.tier ?? null, routeTier: t.combinedTier, sources: t.sources,
         lps: t.lps.map((l) => ({ name: l.name, vehicle: l.vehicleSlug, status: l.status, via: l.via })),

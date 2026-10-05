@@ -357,6 +357,8 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
       // The close module's own record (pipeline.commitment_event): the latest signature, the closing, and once hard
       // the commitment less what has wired. Dates are not amounts; the outstanding amount is R1.
       signedOn: day(close.signature?.on), closedOn: day(close.closedOn), outstanding: money ? close.outstanding : null,
+      // How many times documents were signed for this commitment: its signed and re-signed events (5 Oct 2026, docs/27 §4).
+      signedCount: close.events.filter((e) => e.step === 'signed' || e.step === 'resigned').length,
       // Capital calls are not recorded yet: "called" stays null until they are (docs/27 §4).
       called: null as number | null,
     } : null;

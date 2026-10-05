@@ -21,6 +21,7 @@ import { appendAudit, findMcpToken } from '@/modules/platform';
 const OPS: Record<string, { tool: string; method: 'GET' | 'POST'; rename?: Record<string, string> }> = {
   vehicles: { tool: 'outreach_vehicles', method: 'GET' },
   queue: { tool: 'outreach_queue', method: 'GET' },
+  // With entityId, one connector's targets (docs/27 §4c): the same tool, which answers that list instead.
   connectors: { tool: 'top_connectors', method: 'GET' },
   // Thin wrappers over the MCP route tools (docs/27 §4a): the same tool, its own scopes, the same answer.
   'routes-to': { tool: 'routes_to', method: 'GET', rename: { entityId: 'targetId' } },
@@ -67,7 +68,7 @@ function queryArgs(url: URL, rename: Record<string, string> = {}): Record<string
   for (const [k0, v] of url.searchParams) {
     const k = Object.hasOwn(rename, k0) ? rename[k0]! : k0;
     out[k] = /^(limit|offset)$/.test(k) && /^\d+$/.test(v) ? Number(v)
-      : k === 'includePassed' && /^(1|true|0|false)$/.test(v) ? v === '1' || v === 'true' : v;
+      : /^(includePassed|firstHopOnly)$/.test(k) && /^(1|true|0|false)$/.test(v) ? v === '1' || v === 'true' : v;
   }
   return out;
 }

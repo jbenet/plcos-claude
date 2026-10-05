@@ -190,7 +190,11 @@ export function mergeTrace(touches: Touchpoint[], messages: CommsMessage[], link
 
   // The app's log against the trace.
   const traced = new Set(unique.map((m) => m.messageId));
+  // One message linked to several of this LP's pursuits (pursuitIds, docs/27 §5) is one message here: flagged once.
+  const seenLinks = new Set<string>();
   for (const l of [...links].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime() || (a.messageId < b.messageId ? -1 : 1))) {
+    if (seenLinks.has(l.messageId)) continue;
+    seenLinks.add(l.messageId);
     if (!traced.has(l.messageId)) {
       flags.push({ kind: 'linked_not_in_trace', at: l.sentAt, ref: l.messageId,
         text: `${l.linkedByName}'s mail desk linked a message ${l.direction === 'ours' ? 'sent' : 'received'} ${dayOf(l.sentAt)} that the mail trace has not shown yet.` });

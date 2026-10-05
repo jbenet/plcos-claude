@@ -254,3 +254,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [A vehicle added in the app, and prospects pushed up from the Mac](entries/cloud-vehicle-prospects.md)
 - [The real data moved to Railway](entries/railway-move.md)
 - [The mail desk's second round: route ids and addresses, top connectors, paging](entries/outreach-desk-v2.md)
+- [The mail desk's third round: whom to ask first, a connector's targets, ask history, one message for several LPs](entries/outreach-desk-v3.md)

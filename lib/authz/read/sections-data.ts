@@ -9,11 +9,15 @@ export function projectRoutes(user: Principal, vehicle: string, search: RouteSea
     target: search.targetName, from: search.fromName,
     // Ids are not licensed values: each hop and the introducer (the last person before the target, who carries the
     // ask) name their entity, so a client can address an intro ask or look further through a hop (docs/27 §4a).
+    // askFirst is the first hop past the team member: the person the team emails (docs/27 §4a, 5 Oct 2026). A route's
+    // source is always the last team member on it (or the PL node), so this is hops[0]; on a one-hop route it is the
+    // target itself (or its contact), `direct`, with no introducer.
     routes: search.routes.map(r => {
       // A legacy or compact route may lack connector lists; then there is no introducer to name.
-      const ids = r.connectorIds ?? [], carrier = ids.length - 1;
+      const ids = r.connectorIds ?? [], carrier = ids.length - 1, head = r.hops[0];
       return { from: r.fromName ?? search.fromName, fromEntityId: r.fromEntity ?? null, verdict: r.verdict,
         hops: r.hops.map(h => ({ entityId: h.toEntity, name: h.toName, tier: h.edge.tier })),
+        askFirst: head ? { entityId: head.toEntity, name: head.toName, direct: r.hops.length === 1 } : null,
         introducer: carrier >= 0 ? { entityId: ids[carrier]!, name: r.connectorNames?.[carrier] ?? 'Unknown' } : null,
       };
     }),

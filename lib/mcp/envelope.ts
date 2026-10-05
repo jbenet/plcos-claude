@@ -105,6 +105,8 @@ export function auditArgs(args: Record<string, unknown>): Record<string, unknown
   for (const [k, v] of Object.entries(args ?? {}).slice(0, 20)) {
     if (typeof v === 'number' || typeof v === 'boolean') out[k] = v;
     else if (typeof v === 'string') out[k] = UUID.test(v) || (CHOICES.has(k) && /^[a-z0-9 _-]{1,40}$/i.test(v)) ? v : { chars: v.length };
+    // A short list of ids (pursuitIds, ticketIds) is ids as given; any other list only its type.
+    else if (Array.isArray(v) && v.length && v.length <= 10 && v.every((x) => typeof x === 'string' && UUID.test(x))) out[k] = v;
     else if (v != null) out[k] = { type: Array.isArray(v) ? 'array' : typeof v };
   }
   return out;

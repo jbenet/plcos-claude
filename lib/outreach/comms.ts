@@ -135,13 +135,15 @@ export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
 // ── outreach_link_message (and the deprecated outreach_record_send) ──────────────────────
 
 export const linkInput = z.object({
-  pursuitId: uuid,
+  pursuitId: uuid.optional().describe('The LP this message is about. Or pursuitIds, for one message about several.'),
+  pursuitIds: z.array(uuid).min(1).max(10).optional()
+    .describe('One message about several LPs (1–10), such as an intro ask naming three: linked to each, all or none. Each LP is authorized on its own. A person\'s send only: an autonomous send about several LPs is refused (409), since an approval covers one email about one LP.'),
   gmailMessageId: gmailId, threadId: gmailId.optional(),
   messageId: z.string().min(3).max(400).optional().describe('The Message-ID header: matches the message in the trace.'),
   date: isoTime, direction: z.enum(['sent', 'received']),
   from: email, to: z.array(email).max(50).default([]), cc: z.array(email).max(50).default([]),
   subject: z.string().max(998).optional(),
-  ticketId: uuid.optional().describe('The agent ticket this send used, if any. An autonomous send needs one; a person\'s does not.'),
+  ticketId: uuid.optional().describe('The agent ticket this send used, if any. An autonomous send needs one; a person\'s does not. Not with pursuitIds.'),
   body: z.string().max(100_000).optional().describe('Only if you mean to keep it here. Never needed.'),
 }).strict();
 
@@ -177,12 +179,62 @@ async function ticketFor(q: Queryable, ticketId: string | null, pursuitId: strin
   throw new OutreachRefused(404, 'No agent send or intro ask is under that ticket. Nothing was linked.');
 }
 
+type Desk = Awaited<ReturnType<typeof pursuitFor>>;
+
+/**
+ * Use an agent ticket for a sent message, inside the link's transaction: approved, unexpired, sent after the approval,
+ * unused, and — for a SEND — every recipient within it; a material's wrap check runs again. Marks it used. Any refusal
+ * throws, and the whole link rolls back.
+ */
+async function useTicket(tx: Queryable, ticket: Ticketed, a: { sentAt: Date; recipients: string[]; gmailMessageId: string; ownerId: string; acting: typeof PERSON }) {
+  try {
+    await requireApprovedTicket(tx, ticket.kind === 'SEND'
+      ? { kind: 'SEND', subjectType: ticket.contentSendId ? 'send' : 'outreach_send', subjectId: ticket.contentSendId ?? ticket.sendId, ticketId: ticket.ticketId }
+      : { kind: 'INTRO_ASK', subjectType: 'ask', subjectId: ticket.askId, ticketId: ticket.ticketId });
+  } catch (e) {
+    if (e instanceof TicketRequired) throw new OutreachRefused(409, `${e.message} Nothing was linked.`);
+    throw e;
+  }
+  const decided = (await tx.one<{ at: Date | string | null }>('select decided_at at from governance.approval_ticket where id = $1', [ticket.ticketId]))?.at;
+  if (decided && a.sentAt.getTime() < new Date(decided).getTime() - SKEW_MS) throw new OutreachRefused(409, 'The message was sent before the approval: a ticket covers a send after it. Nothing was linked.');
+  if (ticket.kind === 'SEND') {
+    if (ticket.sentAt) throw new OutreachRefused(409, 'That ticket was used already. An approval covers one send; ask again for another.');
+    const outside = a.recipients.filter((r) => !ticket.recipients.includes(r));
+    if (outside.length) throw new OutreachRefused(409, `${outside.length} recipient${outside.length === 1 ? ' is' : 's are'} outside the approval. Nothing was linked.`);
+    if (ticket.contentSendId) {
+      try { await markSendSent(a.ownerId, ticket.contentSendId, tx, a.sentAt); } catch (e) { throw new OutreachRefused(409, e instanceof Error ? e.message : 'The wrap check refused.'); }
+    }
+    await tx.query(`update email.outreach_send set sent_at = $2, gmail_message_id = $3, recorded_by = $4, recorded_at = now() where send_id = $1`,
+      [ticket.sendId, a.sentAt, a.gmailMessageId, a.ownerId]);
+  } else {
+    if (ticket.status === 'made') throw new OutreachRefused(409, 'That intro ask was made already. Nothing was linked.');
+    try { await recordAskEmailed(a.ownerId, ticket.askId, ticket.ticketId, a.acting, tx); } catch (e) { throw new OutreachRefused(409, `${e instanceof Error ? e.message : 'The ask was refused.'} Nothing was linked.`); }
+  }
+}
+
+/**
+ * One message about several LPs (pursuitIds, docs/27 §5): a person's link only, when the message was sent. An agent
+ * ticket approves one email about one LP — a SEND to that LP's recipients (email 004 keeps one ticket per Gmail message,
+ * outreach_send_gmail_idx), an INTRO_ASK for that LP — and rule 3 approves a specific bounded action, never a bundle. An
+ * email spending several approvals at once is an action nobody approved as one, so an autonomous send about several LPs
+ * is refused before anything is written; it may link each LP's own email, each under its own ticket. A person needs no
+ * ticket, and a multi-LP link uses none: an agent ticket open for one of those LPs stays open, for its own email.
+ */
+export const MULTI_AUTONOMOUS_REFUSAL = 'An autonomous send about several LPs is refused: an approval covers one email about one LP, so one message cannot spend several. Link each LP\'s own email under its own ticket, or have a person link this one (no _meta.autonomous / X-Autonomous). Nothing was linked.';
+
 export async function link(ctx: Ctx, raw: Record<string, unknown>) {
   requireMutationProfile();
   const a = linkInput.parse(raw);
+  if (Boolean(a.pursuitId) === Boolean(a.pursuitIds)) throw new OutreachRefused(400, 'Name the LP with pursuitId, or several with pursuitIds (1–10): one or the other.');
+  if (a.ticketId && a.pursuitIds) throw new OutreachRefused(400, 'A message about several LPs uses no ticket: it is linked for a person only.');
+  const multi = Boolean(a.pursuitIds);
+  if (multi && ctx.env.autonomous && a.direction === 'sent') throw new OutreachRefused(409, MULTI_AUTONOMOUS_REFUSAL);
   const db = await getDb();
   const owner = ctx.env.owner;
-  const p = await pursuitFor(ctx, a.pursuitId, db, true);
+  // Each LP is authorized on its own (its vehicle, as the LP page's rule): one the caller may not change refuses them all.
+  const ps: Desk[] = [];
+  for (const id of a.pursuitIds ?? [a.pursuitId!]) ps.push(await pursuitFor(ctx, id, db, true));
+  if (new Set(ps.map((p) => p.pursuit_id)).size !== ps.length) throw new OutreachRefused(400, 'pursuitIds names one LP twice.');
   const sentAt = new Date(a.date);
   if (sentAt.getTime() > Date.now() + SKEW_MS) throw new OutreachRefused(400, 'date is in the future.');
   const { key } = keyOf(a.messageId, a.gmailMessageId);
@@ -191,63 +243,61 @@ export async function link(ctx: Ctx, raw: Record<string, unknown>) {
   const recipients = [...new Set([...a.to, ...a.cc])].sort();
   const acting = ctx.env.autonomous ? AUTONOMOUS : PERSON;
   return db.transaction(async (tx) => {
-    // Once: the same message again is the same link.
-    const prior = await tx.one<{ link_id: string; pursuit: string; ticket_id: string | null }>(
-      `select link_id::text, strategy.canonical_pursuit_id(pursuit_id)::text pursuit, ticket_id::text from email.message_link where message_id = $1`, [key]);
-    if (prior) {
-      if (prior.pursuit !== p.pursuit_id) throw new OutreachRefused(409, 'That message is linked to another LP already.');
-      if (a.ticketId && prior.ticket_id && prior.ticket_id !== a.ticketId) throw new OutreachRefused(409, 'That message is linked under another ticket already.');
-      return { data: { linked: false, already: true, linkId: prior.link_id, messageId: key, ticketId: prior.ticket_id } };
-    }
-    let ticket: Ticketed | null = null;
-    if (ours) {
-      ticket = await ticketFor(tx, a.ticketId ?? null, p.pursuit_id, p.entity_id, p.vehicle_id, recipients);
-      // A person needs no ticket; an autonomous send fails closed without an approved one (rule 3, 5 Oct 2026).
-      if (!ticket && acting.autonomous) {
-        throw new OutreachRefused(409, 'An autonomous send needs an approved, unexpired SEND ticket covering these recipients (outreach_request_ticket, then a person approves it). Nothing was linked.');
+    // Once: the same message again is the same link — to the same LP, or the same set of them (or part of it).
+    const prior = await tx.query<{ link_id: string; pursuit: string; ticket_id: string | null }>(
+      `select l.link_id::text, strategy.canonical_pursuit_id(l.pursuit_id)::text pursuit, l.ticket_id::text from email.message_link l
+        where l.message_id = $1 order by l.linked_at, l.link_id`, [key]);
+    if (prior.length) {
+      const rows = ps.map((p) => prior.find((r) => r.pursuit === p.pursuit_id));
+      if (rows.some((r) => !r)) {
+        throw new OutreachRefused(409, multi ? 'That message is linked to other LPs already: a message is linked once, to one set of LPs. Nothing was linked.' : 'That message is linked to another LP already.');
       }
-      if (ticket) {
-        try {
-          await requireApprovedTicket(tx, ticket.kind === 'SEND'
-            ? { kind: 'SEND', subjectType: ticket.contentSendId ? 'send' : 'outreach_send', subjectId: ticket.contentSendId ?? ticket.sendId, ticketId: ticket.ticketId }
-            : { kind: 'INTRO_ASK', subjectType: 'ask', subjectId: ticket.askId, ticketId: ticket.ticketId });
-        } catch (e) {
-          if (e instanceof TicketRequired) throw new OutreachRefused(409, `${e.message} Nothing was linked.`);
-          throw e;
-        }
-        const decided = (await tx.one<{ at: Date | string | null }>('select decided_at at from governance.approval_ticket where id = $1', [ticket.ticketId]))?.at;
-        if (decided && sentAt.getTime() < new Date(decided).getTime() - SKEW_MS) throw new OutreachRefused(409, 'The message was sent before the approval: a ticket covers a send after it. Nothing was linked.');
-        if (ticket.kind === 'SEND') {
-          const send = ticket;
-          if (send.sentAt) throw new OutreachRefused(409, 'That ticket was used already. An approval covers one send; ask again for another.');
-          const outside = recipients.filter((r) => !send.recipients.includes(r));
-          if (outside.length) throw new OutreachRefused(409, `${outside.length} recipient${outside.length === 1 ? ' is' : 's are'} outside the approval. Nothing was linked.`);
-          if (send.contentSendId) {
-            try { await markSendSent(owner.id, send.contentSendId, tx, sentAt); } catch (e) { throw new OutreachRefused(409, e instanceof Error ? e.message : 'The wrap check refused.'); }
-          }
-          await tx.query(`update email.outreach_send set sent_at = $2, gmail_message_id = $3, recorded_by = $4, recorded_at = now() where send_id = $1`,
-            [send.sendId, sentAt, a.gmailMessageId, owner.id]);
-        } else {
-          if (ticket.status === 'made') throw new OutreachRefused(409, 'That intro ask was made already. Nothing was linked.');
-          try { await recordAskEmailed(owner.id, ticket.askId, ticket.ticketId, acting, tx); } catch (e) { throw new OutreachRefused(409, `${e instanceof Error ? e.message : 'The ask was refused.'} Nothing was linked.`); }
-        }
-      }
+      if (a.ticketId && rows[0]!.ticket_id && rows[0]!.ticket_id !== a.ticketId) throw new OutreachRefused(409, 'That message is linked under another ticket already.');
+      return multi
+        ? { data: { linked: false, already: true, messageId: key, links: rows.map((r) => ({ pursuitId: r!.pursuit, linkId: r!.link_id, ticketId: r!.ticket_id })) } }
+        : { data: { linked: false, already: true, linkId: rows[0]!.link_id, messageId: key, ticketId: rows[0]!.ticket_id } };
     }
-    const link = (await tx.one<{ id: string }>(`insert into email.message_link (message_id, gmail_id, thread_id, sent_at, direction, from_addr, to_addrs, cc_addrs, subject, body,
-        pursuit_id, ticket_id, outreach_send_id, autonomous, linked_by, token_id)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) returning link_id::text id`,
-    [key, a.gmailMessageId, a.threadId ?? null, sentAt, ours ? 'ours' : 'theirs', a.from, a.to, a.cc, a.subject ?? null, a.body ?? null,
-      p.pursuit_id, ticket?.ticketId ?? null, ticket?.kind === 'SEND' ? ticket.sendId : null, acting.autonomous, owner.id, ctx.env.tokenId]))!.id;
+    const links = new Map<string, { linkId: string; ticket: Ticketed | null }>();
+    for (const p of ps) {
+      let ticket: Ticketed | null = null;
+      // A message about several LPs uses no ticket (a person's link only, above); one LP's message, as before.
+      if (ours && !multi) {
+        ticket = await ticketFor(tx, a.ticketId ?? null, p.pursuit_id, p.entity_id, p.vehicle_id, recipients);
+        // A person needs no ticket; an autonomous send fails closed without an approved one (rule 3, 5 Oct 2026).
+        if (!ticket && acting.autonomous) {
+          throw new OutreachRefused(409, 'An autonomous send needs an approved, unexpired SEND ticket covering these recipients (outreach_request_ticket, then a person approves it). Nothing was linked.');
+        }
+        if (ticket) await useTicket(tx, ticket, { sentAt, recipients, gmailMessageId: a.gmailMessageId, ownerId: owner.id, acting });
+      }
+      const linkId = (await tx.one<{ id: string }>(`insert into email.message_link (message_id, gmail_id, thread_id, sent_at, direction, from_addr, to_addrs, cc_addrs, subject, body,
+          pursuit_id, ticket_id, outreach_send_id, autonomous, linked_by, token_id)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) returning link_id::text id`,
+      [key, a.gmailMessageId, a.threadId ?? null, sentAt, ours ? 'ours' : 'theirs', a.from, a.to, a.cc, a.subject ?? null, a.body ?? null,
+        p.pursuit_id, ticket?.ticketId ?? null, ticket?.kind === 'SEND' ? ticket.sendId : null, acting.autonomous, owner.id, ctx.env.tokenId]))!.id;
+      links.set(p.pursuit_id, { linkId, ticket });
+    }
     const inTrace = Boolean(await tx.one('select 1 from email.comms_message where message_id = $1', [key]));
-    await appendAudit({ actorId: owner.id, action: 'outreach.message_linked', subjectType: 'message_link', subjectId: link,
-      detail: { messageId: key, gmailMessageId: a.gmailMessageId, threadId: a.threadId ?? null, sentAt: sentAt.toISOString(), direction: ours ? 'ours' : 'theirs',
-        recipients: recipients.length, subjectChars: a.subject?.length ?? 0, body: a.body !== undefined, pursuitId: p.pursuit_id, ticketId: ticket?.ticketId ?? null,
-        ticketKind: ticket?.kind ?? null, autonomous: acting.autonomous, tokenId: ctx.env.tokenId, inTrace } }, tx);
-    return { data: {
-      linked: true, linkId: link, messageId: key, pursuitId: p.pursuit_id, ticketId: ticket?.ticketId ?? null, ticketUsed: Boolean(ticket), inTrace,
-      next: inTrace ? 'Linked to the message in the trace. Nothing else was written: no touchpoint, status or rung.'
-        : 'Linked. The trace has not shown this message yet (comms_ingest, or Affinity\'s next read): until it does, the LP page flags the link. Nothing else was written.',
-    } };
+    for (const p of ps) {
+      const l = links.get(p.pursuit_id)!;
+      await appendAudit({ actorId: owner.id, action: 'outreach.message_linked', subjectType: 'message_link', subjectId: l.linkId,
+        detail: { messageId: key, gmailMessageId: a.gmailMessageId, threadId: a.threadId ?? null, sentAt: sentAt.toISOString(), direction: ours ? 'ours' : 'theirs',
+          recipients: recipients.length, subjectChars: a.subject?.length ?? 0, body: a.body !== undefined, pursuitId: p.pursuit_id, ticketId: l.ticket?.ticketId ?? null,
+          ticketKind: l.ticket?.kind ?? null, autonomous: acting.autonomous, tokenId: ctx.env.tokenId, inTrace, ...(multi ? { lps: ps.length } : {}) } }, tx);
+    }
+    const next = inTrace ? 'Linked to the message in the trace. Nothing else was written: no touchpoint, status or rung.'
+      : 'Linked. The trace has not shown this message yet (comms_ingest, or Affinity\'s next read): until it does, the LP page flags the link. Nothing else was written.';
+    if (multi) {
+      return { data: {
+        linked: true, messageId: key, pursuitIds: ps.map((p) => p.pursuit_id),
+        links: ps.map((p) => {
+          const l = links.get(p.pursuit_id)!;
+          return { pursuitId: p.pursuit_id, linkId: l.linkId, ticketId: l.ticket?.ticketId ?? null, ticketUsed: Boolean(l.ticket) };
+        }),
+        inTrace, next: `${next} One link per LP, made together.`,
+      } };
+    }
+    const only = links.get(ps[0]!.pursuit_id)!;
+    return { data: { linked: true, linkId: only.linkId, messageId: key, pursuitId: ps[0]!.pursuit_id, ticketId: only.ticket?.ticketId ?? null, ticketUsed: Boolean(only.ticket), inTrace, next } };
   });
 }
 

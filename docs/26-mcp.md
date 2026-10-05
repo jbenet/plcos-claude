@@ -2,9 +2,12 @@
 
 **Status:** shipped. Phase 1 was built on `claude/mcp` (2 Oct 2026); the data-driven policy, the outreach tools and the
 structured audit record on `claude/outreach-api` (4 Oct 2026, docs/27), and the comms-trace tools on `claude/comms-trace`.
-All are on master since 4 Oct 2026 (merge `89a710f`) and ship with it. **Built on `claude/outreach-desk-v2`, 5 Oct 2026, not
-merged yet:** ids, restriction flags and readable addresses on route hops, `top_connectors`, the queue's cursor paging and
-`includePassed`, and `_meta.status` on error results (docs/27 §4–§5).
+All are on master since 4 Oct 2026 (merge `89a710f`) and ship with it. The desk's second round — ids, restriction flags
+and readable addresses on route hops, `top_connectors`, the queue's cursor paging and `includePassed`, and `_meta.status` on
+error results (docs/27 §4–§5) — merged on 5 Oct 2026 (`648e03b`) and is live on `deploy` at `0b3715e`. **Built on
+`claude/outreach-desk-v3`, 5 Oct 2026, not merged yet:** `askFirst` on every route, first-hop counts, `firstHopOnly`, ask
+history and one connector's targets on `top_connectors`, `pursuitIds` on `outreach_link_message`, and the close track's
+`signedCount` (docs/27 §4–§5).
 
 Juan, 2 Oct 2026: "we should add: MCP access to PLCOS to enable a wide range of actions. plan this out and
 implement after email". So an agent — Claude Code, Claude Desktop, later others — can use the app as a person,
@@ -90,7 +93,7 @@ import a push queued, to the person who pushed. No new scope: it is the same kin
 | --- | --- | --- | --- | --- |
 | `search` | read | — | — | People and organisations by name, the pursuits on your vehicles (status, owner), do-not-approach |
 | `lp_summary` | read | — | — | One LP on one vehicle: status, evidence, contact dates, latest strategy, hard and soft apart, restrictions, top routes |
-| `routes_to` | read | — | — | Warm-intro routes to a target for a vehicle, by evidence tier, with coverage; each hop and the introducer with its entityId, `doNotApproach`, and its best address where R2 is readable (docs/27 §4a) |
+| `routes_to` | read | — | — | Warm-intro routes to a target for a vehicle, by evidence tier, with coverage; each hop, `askFirst` (the first hop past the team: whom the desk emails) and the introducer (who carries the ask to the target) with its entityId, `doNotApproach`, and its best address where R2 is readable (docs/27 §4a) |
 | `routes_through` | read | — | — | Whom X could introduce us to, our route to X (hops as routes_to's), LPs reachable only through X (every vehicle) |
 | `pipeline` | read | — | — | A vehicle's LPs by status, counts, owner, next step, last touch |
 | `target_lists` | read | — | — | Open LPs on a strategy list: this year's close, 2027, not now, none |
@@ -99,15 +102,15 @@ import a push queued, to the person who pushed. No new scope: it is the same kin
 | `changelog` | read | — | — | The latest entries, or one entry's text |
 | `audit_recent` | read | — | — | Your own recent calls: tool, outcome, reason, ids affected, idempotency and correlation ids (§4) |
 | `outreach_vehicles` | read | outreach:read | — | The desk's vehicles: hard, soft and indicated apart, raise window, SPV seats (docs/27) |
-| `outreach_queue` | read | outreach:read | — | The desk's queue: status, close track (with its dates) and seat apart, checks, materials, bucket, and the comms trace's summary (last touches, who owes, the thread, mismatches); `updatedSince` for polling; 25 rows by default, up to 500, paged by `cursor`/`nextCursor`; passed LPs only with `includePassed`; health-redacted |
-| `top_connectors` | read | outreach:read | — | The people on the most and best warm routes to a vehicle's open LPs, from routes_to's routes: LPs reached, best score, example pursuitIds (docs/27 §4b) |
+| `outreach_queue` | read | outreach:read | — | The desk's queue: status, close track (with its dates and `signedCount`) and seat apart, checks, materials, bucket, and the comms trace's summary (last touches, who owes, the thread, mismatches); `updatedSince` for polling; 25 rows by default, up to 500, paged by `cursor`/`nextCursor`; passed LPs only with `includePassed`; health-redacted |
+| `top_connectors` | read | outreach:read | — | The people on the most and best warm routes to a vehicle's open LPs, from routes_to's routes: LPs reached, best score, example pursuitIds, routes as first hop or deeper, `reachableDirectly`, asks this quarter and the last ask; `firstHopOnly` ranks first hops only; with `entityId`, that connector's targets, paged (docs/27 §4b–§4c) |
 | `comms_trace` | read | outreach:read | — | One LP's merged timeline from the comms trace: Affinity, Gmail via juanmail, PLC OS and Affinity notes, linked Linear issues, each with its source, one row per event (docs/27 §6a) |
 | `create_email_draft` | propose | — | — | A first message or an intro ask, saved in the app for its owner; not moved to Gmail, not sent |
 | `file_feedback` | propose | — | — | An issue, journaled like the feedback box, optionally about a logged call (`callId`); only the live app files |
 | `outreach_request_ticket` | propose | outreach:write | opens | For an autonomous call only: a SEND (one email, named recipients) or INTRO_ASK ticket for a person to approve; never approves it. A person's call opens nothing and gets the checks |
 | `outreach_propose_contact` | propose | outreach:write | — | An address the person confirmed from Gmail, kept beside Affinity's, never over it |
 | `outreach_update` | write-guarded | outreach:write | — | The LP page's update box: words and the boxes the person ticked — status, touchpoint, next step, indicated amount |
-| `outreach_link_message` | send-adjacent | outreach:write | agent-only | A message the desk sent or read, linked to one LP by its ids and metadata, once; creates no outreach state; an autonomous send needs an approved ticket, which it marks used |
+| `outreach_link_message` | send-adjacent | outreach:write | agent-only | A message the desk sent or read, linked to one LP (or to several with `pursuitIds`, all or none, each authorized) by its ids and metadata, once; creates no outreach state; an autonomous send needs an approved ticket, which it marks used, and names one LP only |
 | `outreach_record_send` | send-adjacent | outreach:write | agent-only | Deprecated (5 Oct 2026): the old arguments, run as `outreach_link_message`; removed next release |
 | `comms_ingest` | send-adjacent | outreach:write | — | Message metadata the desk sees in Gmail, sent and received: idempotent by Message-ID, writes nothing else |
 

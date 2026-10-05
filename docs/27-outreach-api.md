@@ -3,10 +3,13 @@
 **Status:** shipped. Built on `claude/outreach-api` (4 Oct 2026) and revised on `claude/comms-trace` for three decisions of
 Juan's (§7a): no SEND or INTRO_ASK tickets for people, only for autonomous agents; "record the send" became "link the
 message"; the outreach timeline is built from the comms trace. Both are on master since 4 Oct 2026 (merge `89a710f`), so
-they ship with it: the MCP tools, the REST wrapper, the queue, the writes, the comms trace. **Built on
-`claude/outreach-desk-v2`, 5 Oct 2026, not merged yet:** juanmail's second round of feedback — ids and addresses on route
-hops and REST for routes (§4a), `top_connectors` (§4b), passed LPs on request, the queue's explicit limit and cursor
-paging and the close track's dates (§4), `_meta.status` on MCP errors and the fixed "not the live server" sentence (§5).
+they ship with it: the MCP tools, the REST wrapper, the queue, the writes, the comms trace. juanmail's second round of
+feedback — ids and addresses on route hops and REST for routes (§4a), `top_connectors` (§4b), passed LPs on request, the
+queue's explicit limit and cursor paging and the close track's dates (§4), `_meta.status` on MCP errors and the fixed "not
+the live server" sentence (§5) — merged on 5 Oct 2026 (`648e03b`) and is live on `deploy` at `0b3715e`. **Built on
+`claude/outreach-desk-v3`, 5 Oct 2026, not merged yet:** its third round — `askFirst` on every route (§4a); first-hop and
+deeper counts, `reachableDirectly`, `firstHopOnly` and ask history on `top_connectors` (§4b); one connector's targets
+(§4c); one message linked to several LPs (§5); and the close track's `signedCount` (§4).
 
 **juanmail** is Juan's mail desk: an Outreach tab for the SPV war room now, a module of his mail client later. It runs
 its own server, and all syncing between Capital OS and juanmail happens from there. It reads Capital OS and writes back
@@ -78,7 +81,8 @@ Every queue row returns three states apart, each with Capital OS's label, so jua
 | `outreach_vehicles` | `GET /api/outreach/vehicles` | outreach:read |
 | `outreach_queue` | `GET /api/outreach/queue?vehicle=…` | outreach:read |
 | `comms_trace` | `GET /api/outreach/trace?pursuitId=…` | outreach:read |
-| `top_connectors` | `GET /api/outreach/connectors?vehicle=…&limit=…` (§4b) | outreach:read |
+| `top_connectors` | `GET /api/outreach/connectors?vehicle=…&limit=…[&firstHopOnly=1]` (§4b) | outreach:read |
+| `top_connectors` with `entityId` | `GET /api/outreach/connectors?vehicle=…&entityId=…[&limit=…&cursor=…]` (§4c) | outreach:read |
 | `routes_to` | `GET /api/outreach/routes-to?entityId=…&vehicle=…` (§4a) | the tool's name in the token, as over MCP |
 | `routes_through` | `GET /api/outreach/routes-through?entityId=…[&vehicle=…]` (§4a) | the tool's name in the token, as over MCP |
 | `audit_recent` | `GET /api/outreach/audit` | (any token) |
@@ -111,8 +115,8 @@ take it as `targetId` (routes_to) and `nodeId` (routes_through).
     "nextStep": "Send the deck", "nextStepOn": "2026-10-08",
     "read": { "value": "interested", "label": "Interested", "on": "2026-10-01", "suggested": false },
     "strategy": { "headline": "They back neurotech founders. [health detail redacted]", "firstStep": "…", "confidence": "medium", "asOf": "2026-09-30" },
-    "closeTrack": { "state": "signed", "label": "Signed", "amount": 1000000, "wired": 0, "signedOn": "2026-10-02", "closedOn": null,
-                    "outstanding": null, "called": null },
+    "closeTrack": { "state": "signed", "label": "Signed", "amount": 1000000, "wired": 0, "signedOn": "2026-10-02", "signedCount": 2,
+                    "closedOn": null, "outstanding": null, "called": null },
     "seat": { "stage": "ioi", "label": "IOI given", "amount": 3000000 },
     "indicated": { "low": 3000000, "high": 4000000, "at": "2026-10-03", "touchpointId": "…", "source": "us" },
     "otherVehicles": [{ "name": "PLC Neurotech I", "status": { "value": "discussing", "label": "Discussing" } }],
@@ -179,6 +183,11 @@ Over MCP the same: `{ "vehicle": "spv-cortex", "limit": 2, "cursor": "eyJ2Ijox�
   `signedOn`, the latest signature's date (null if undated or unsigned); `closedOn`, the closing's; and `outstanding`, once
   the commitment is hard, what has not wired yet (an amount, so R1: null without it, and null before hard). `called` stays
   null: **capital calls are not recorded yet**, so no call has a date or an amount here.
+- **`signedCount`** (5 Oct 2026): how many times documents were signed for that commitment — its `signed` and `resigned`
+  events in `pipeline.commitment_event`, a source's claim among them, so 2 means signed once and re-signed once (the entity
+  changed, the documents were amended). 0 when no signature is recorded; `signedOn` is the latest one's date. A
+  subscription pack returned in the close room with no signature event is not counted, as `signedOn` does not read it
+  either. A count, not an amount: shown wherever the close track is.
 - **`lastTouch.kind` can be null.** It is the channel of the LP's last touch in the trace; when the trace has no dated
   touch of the LP's own, `lastTouch` falls back to the contact summary's date, whose channel and `direction` may be
   unknown, so both are null then. Read `lastTouch.on` either way.
@@ -209,6 +218,14 @@ Now every hop and introducer in `routes_to`, `routes_through` (and `lp_summary`'
 
 - **`entityId`** — on each hop, on the route's source (`fromEntityId`), and on its **`introducer`**: the last person before
   the target, who carries the ask (null when the source knows the target directly). `routes_through` adds `nodeId`.
+- **`askFirst`** (5 Oct 2026) — **the person a desk emails**: the first hop past the team member, with `entityId`, `name`,
+  `doNotApproach` and, where readable, `contact`, as the hops have. **The introducer is who eventually carries the ask to
+  the target.** On a two-hop route they are the same person. On a three-hop route they differ: Juan → Ravi → Mei → the LP
+  means Juan emails Ravi (`askFirst`), Ravi asks Mei, and Mei introduces the LP (`introducer`). On a one-hop route
+  `askFirst` is the target itself, or the contact who speaks for an organisation, with `direct: true` and no introducer:
+  that is a first message, not an intro ask. A route's source is always the last team member on it (a path through two
+  team members starts at the second), or the PL node; from the PL node, `askFirst` is reached through the PL network
+  (rule 6). `routes_through`'s `bestRouteToNode` carries one too. A restriction on `askFirst` is flagged, as on any hop.
 - **`doNotApproach`** — true when a restriction of any scope is on file for that entity (rule 8). It flags; it never
   removes or clears. Whether a route may be used is still its `verdict` (`excluded` for a restriction on the target, or a
   connector the restriction names), and a path through a barred person is still left out by the planner, as before.
@@ -227,15 +244,24 @@ GET /api/outreach/routes-to?entityId=7f3a…&vehicle=spv-cortex
                  "hops": [{ "entityId": "5e6f…", "name": "Ravi Invented", "tier": "B", "doNotApproach": false,
                             "contact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" } },
                           { "entityId": "7f3a…", "name": "Invented Family Office", "tier": "B", "doNotApproach": false, "contact": null }],
+                 "askFirst": { "entityId": "5e6f…", "name": "Ravi Invented", "direct": false, "doNotApproach": false,
+                               "contact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" } },
                  "introducer": { "entityId": "5e6f…", "name": "Ravi Invented", "doNotApproach": false,
-                                 "contact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" } } }],
-    "routesFound": 1, "coverage": { "edges": 412, "maxHops": 3, "from": "2019-01-01T00:00:00.000Z", "to": "2026-10-04T00:00:00.000Z" } } }
+                                 "contact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" } } },
+               { "from": "Juan", "fromEntityId": "1c2d…", "verdict": "recommend",
+                 "hops": [{ "entityId": "5e6f…", "name": "Ravi Invented", "tier": "B", … },
+                          { "entityId": "8a9b…", "name": "Mei Invented", "tier": "B", … },
+                          { "entityId": "7f3a…", "name": "Invented Family Office", "tier": "C", … }],
+                 "askFirst": { "entityId": "5e6f…", "name": "Ravi Invented", "direct": false, … },
+                 "introducer": { "entityId": "8a9b…", "name": "Mei Invented", … } }],
+    "routesFound": 2, "coverage": { "edges": 412, "maxHops": 3, "from": "2019-01-01T00:00:00.000Z", "to": "2026-10-04T00:00:00.000Z" } } }
 
 GET /api/outreach/routes-through?entityId=5e6f…
 { "tool": "routes_through", "data": { "node": "Ravi Invented", "nodeId": "5e6f…", "doNotApproach": false,
     "nodeContact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" }, "addresses": "shown",
     "bestRouteToNode": { "from": "Juan", "fromEntityId": "1c2d…",
-                         "hops": [{ "entityId": "5e6f…", "name": "Ravi Invented", "tier": "B", "doNotApproach": false, "contact": { … } }] },
+                         "hops": [{ "entityId": "5e6f…", "name": "Ravi Invented", "tier": "B", "doNotApproach": false, "contact": { … } }],
+                         "askFirst": { "entityId": "5e6f…", "name": "Ravi Invented", "direct": true, "doNotApproach": false, "contact": { … } } },
     "onward": [{ "entityId": "7f3a…", "name": "Invented Family Office", "tieTier": "B", "routeTier": "B", "lps": [ … ] }], … } }
 ```
 
@@ -261,22 +287,85 @@ the most and best warm routes to a vehicle's open LPs.
   restriction, a spent ask cap — never do (rule 8).
 - **Each connector:** `entityId`, `name`, `lps` (open LPs reached), `bestScore`, `bestBand`, up to three
   `examplePursuitIds` (their best first), `doNotApproach`, and `contact` under §4a's rule. Ranked by `lps`, then `bestScore`.
+- **First hop or deeper** (5 Oct 2026). `asFirstHop` counts the recommended routes on which they are the first hop past the
+  team member — the person the team emails (§4a's `askFirst`) — and `asDeeperHop` the ones on which someone else must
+  ask them first. `reachableDirectly` is `asFirstHop > 0`. Someone the team reaches only through another person is still
+  listed by default, flagged `reachableDirectly: false`. **`firstHopOnly=1`** (REST) or `firstHopOnly: true` (MCP) counts
+  only first-hop routes: `lps`, `bestScore` and the ranking are then over the LPs they reach as the first hop, and anyone
+  never a first hop is left out. The answer says which in `firstHopOnly`.
+- **Ask history** (5 Oct 2026). `asksThisQuarter`: the intro asks made to that person this calendar quarter (in UTC), across
+  every vehicle. `lastAsk`: `{ on, replied, basis }` for the latest ask made to them, or `null` when none is recorded.
+  Both read `coordination.ask` — the record the ask cap counts (`asksPerConnectorPerQuarter`): an ask recorded on the routes
+  page, and an agent's INTRO_ASK once its email is linked (§5). A proposed ask never made does not count. `replied` is
+  `true` when the ask's outcome says they answered (or `status` is answered), or the mail trace holds a message from their
+  side after the ask; `false` when the outcome is "no reply", or the trace holds our message to them since the ask and
+  nothing back; `null` when neither is on record — not known, never "no" (rule 7). `basis` says which. **What it cannot
+  see:** an intro ask a person emails without recording it (juanmail linking it to the LP, with no INTRO_ASK ticket, records
+  a message, not an ask), and a reply in a mailbox juanmail does not read. So `asksThisQuarter` is the recorded count — the
+  same number the cap and the queue's `ask_count` check use — not a count of every email.
 - **Coverage (rule 7):** `lpsOpen`, `lpsInspected`, `lpsReached`, `complete`. Planning stops after
   `config.outreach.connectorsBudgetMs` (15 s, GUESS), highest-priority LPs first; routes are cached as they are planned,
   so asking again reaches further. `limit` defaults to 20, at most 100.
 
 ```json
 GET /api/outreach/connectors?vehicle=spv-cortex&limit=2
-{ "tool": "top_connectors", "data": { "vehicle": "spv-cortex", "total": 14, "lpsOpen": 31, "lpsInspected": 31, "lpsReached": 22,
-    "complete": true, "addresses": "shown",
+{ "tool": "top_connectors", "data": { "vehicle": "spv-cortex", "firstHopOnly": false, "total": 14, "lpsOpen": 31, "lpsInspected": 31,
+    "lpsReached": 22, "complete": true, "addresses": "shown",
     "connectors": [
       { "entityId": "5e6f…", "name": "Ravi Invented", "lps": 6, "bestScore": 71.5, "bestBand": "strong",
-        "examplePursuitIds": ["0b6e…", "4c1d…", "9a0f…"], "doNotApproach": false,
-        "contact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" } },
-      { "entityId": "a1b2…", "name": "Invented Angel Group", "lps": 4, "bestScore": 58, "bestBand": "warm",
-        "examplePursuitIds": ["c3d4…", "e5f6…", "0718…"], "doNotApproach": false, "contact": null }] },
+        "examplePursuitIds": ["0b6e…", "4c1d…", "9a0f…"], "asFirstHop": 7, "asDeeperHop": 1, "reachableDirectly": true,
+        "doNotApproach": false, "contact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" },
+        "asksThisQuarter": 1, "lastAsk": { "on": "2026-10-02", "replied": true, "basis": "the mail trace: a message from them after the ask" } },
+      { "entityId": "8a9b…", "name": "Mei Invented", "lps": 4, "bestScore": 58, "bestBand": "warm",
+        "examplePursuitIds": ["c3d4…", "e5f6…", "0718…"], "asFirstHop": 0, "asDeeperHop": 5, "reachableDirectly": false,
+        "doNotApproach": false, "contact": null, "asksThisQuarter": 0, "lastAsk": null }] },
   "coverage": { "counted": "Only routes the planner recommends; 3 held or excluded routes were not counted (rule 8). …", … } }
+
+GET /api/outreach/connectors?vehicle=spv-cortex&limit=2&firstHopOnly=1
+{ "tool": "top_connectors", "data": { "vehicle": "spv-cortex", "firstHopOnly": true, "total": 9, …,
+    "connectors": [
+      { "entityId": "5e6f…", "name": "Ravi Invented", "lps": 6, "asFirstHop": 7, "asDeeperHop": 1, "reachableDirectly": true, … },
+      { "entityId": "c0d1…", "name": "Invented Angel Group", "lps": 3, "asFirstHop": 3, "asDeeperHop": 0, "reachableDirectly": true, … }] } }
 ```
+
+Over MCP: `{ "vehicle": "spv-cortex", "limit": 2, "firstHopOnly": true }`.
+
+## 4c. One connector's targets (5 Oct 2026)
+
+`GET /api/outreach/connectors?vehicle=<slug>&entityId=<connector>` — over MCP, `top_connectors` with `entityId` (one tool, so
+the policy, scope and audit stay one; a separate tool name would read as a "connector run", which the registry forbids). It
+lists every open LP on that vehicle the connector reaches by a recommended route, best route score first.
+
+- **Who may read it:** the same rule as §4b — open LPs on a vehicle the token's owner reads; another vehicle is 404. The
+  connector's name comes from the routes: an id on no route here comes back with `name: null` and no rows, so an id is
+  never a way to look a person up.
+- **Each row:** `pursuitId`, `entityId`, `name`, `status` (value and label), `score` and `band` (the best recommended route
+  through them to that LP), `position` (`first`: they are `askFirst` on that route; `deeper`: someone asks them first),
+  `hops`, the route's `introducer`, and `routes` (how many recommended routes through them reach it). With `firstHopOnly`,
+  only first-hop routes count.
+- **`connector`:** their `entityId`, `name`, `doNotApproach`, `contact` (§4a's rule), `asFirstHop`, `asDeeperHop`,
+  `reachableDirectly`, `asksThisQuarter` and `lastAsk` (§4b).
+- **Order and paging, as the queue's (§4):** score descending, then pursuit id, so the order is total. `limit` (25 by default,
+  at most 500) and `cursor` (the answer's `nextCursor`, null at the end); the answer has `offset` and `total`. A cursor from another connector,
+  vehicle or `firstHopOnly` is refused (400). Over MCP a page that would not fit is cut from its end (`heldBack`) and
+  `nextCursor` continues from there.
+- **Coverage:** `lpsOpen`, `lpsInspected`, `complete`, as §4b: rows come only from the LPs planned within the time budget.
+
+```json
+GET /api/outreach/connectors?vehicle=spv-cortex&entityId=5e6f…&limit=2
+{ "tool": "top_connectors", "data": { "vehicle": "spv-cortex", "firstHopOnly": false,
+    "connector": { "entityId": "5e6f…", "name": "Ravi Invented", "doNotApproach": false, "contact": { … },
+                   "asFirstHop": 7, "asDeeperHop": 1, "reachableDirectly": true, "asksThisQuarter": 1, "lastAsk": { … } },
+    "rows": [
+      { "pursuitId": "0b6e…", "entityId": "7f3a…", "name": "Invented Family Office", "status": { "value": "selected", "label": "Selected" },
+        "score": 71.5, "band": "strong", "position": "first", "hops": 2, "introducer": { "entityId": "5e6f…", "name": "Ravi Invented" }, "routes": 1 },
+      { "pursuitId": "4c1d…", "entityId": "2b3c…", "name": "Invented Endowment", "status": { "value": "discussing", "label": "Discussing" },
+        "score": 64, "band": "warm", "position": "first", "hops": 3, "introducer": { "entityId": "8a9b…", "name": "Mei Invented" }, "routes": 2 }],
+    "total": 6, "offset": 0, "limit": 2, "nextCursor": "eyJ2IjoxLCJhIjoiNGMxZC4uLiIsInAiOjIs…",
+    "lpsOpen": 31, "lpsInspected": 31, "complete": true, "addresses": "shown" } }
+```
+
+Over MCP: `{ "vehicle": "spv-cortex", "entityId": "5e6f…", "limit": 2, "cursor": "eyJ2Ijox…" }`.
 
 ## 5. Write
 
@@ -360,6 +449,17 @@ address again supersedes only the earlier Gmail confirmation. `confirmedBy` must
   "direction": "sent", "from": "juan@…", "to": ["ana@invented.example"], "cc": [], "subject": "The SPV", "ticketId": "…optional" }
 ```
 
+One message about three LPs — an intro ask to Ravi naming them, sent by Juan (no `_meta.autonomous` / `X-Autonomous`):
+
+```json
+POST /api/outreach/link
+{ "pursuitIds": ["0b6e…", "4c1d…", "9a0f…"], "gmailMessageId": "18d…", "messageId": "<CAG…@mail.gmail.com>",
+  "date": "2026-10-05T16:20:00Z", "direction": "sent", "from": "juan@…", "to": ["ravi@invented.example"],
+  "subject": "Three introductions for Cortex" }
+→ { "data": { "linked": true, "messageId": "cag…@mail.gmail.com", "pursuitIds": ["0b6e…", "4c1d…", "9a0f…"],
+              "links": [{ "pursuitId": "0b6e…", "linkId": "…", "ticketId": null, "ticketUsed": false }, …], "inTrace": false, "next": "…" } }
+```
+
 - **It creates no outreach state.** No touchpoint, status, rung or ticket: the email trail is the record (§6a). The link
   is an audit of what the desk did — its `outreach.message_linked` entry carries the ids, the date, the direction and
   counts, never the words — matched to the message in the trace by Message-ID. Until the trace shows the message
@@ -372,6 +472,23 @@ address again supersedes only the earlier Gmail confirmation. `confirmedBy` must
   agent ticket covers it, it is linked and marked used all the same. A used SEND ticket records its Gmail id on
   `email.outreach_send`; an INTRO_ASK's ask is recorded as made, by email, through the ask's own service and guards.
   A material's wrap check runs again.
+- **One message, several LPs** (5 Oct 2026). An intro ask to Ravi can name three of our LPs; send `pursuitIds` (1–10) in
+  place of `pursuitId`, and the one message is linked to each, **all or none, in one transaction**: one link row per LP
+  (email 021), one `outreach.message_linked` audit entry per LP. **Each LP is authorized on its own** — the LP page's rule
+  for its vehicle — so one the caller may not change refuses the whole call (404) and nothing is linked. The same message
+  with the same set (or a subset) again is `already`; with any other LP it is refused (409): a message is linked once,
+  to one set of LPs. Naming one LP twice is 400; `pursuitId` with `pursuitIds` is 400.
+- **Several LPs: a person's send only.** An autonomous call that links a *sent* message to several LPs is refused (409,
+  "An autonomous send about several LPs is refused…") before anything is written, even when every LP has an approved
+  ticket. Why: an agent ticket approves one email about one LP — a SEND names that pursuit and its recipients, and email
+  004 keeps one ticket per Gmail message (`outreach_send_gmail_idx`); an INTRO_ASK names one LP on one vehicle — and rule 3
+  approves a specific bounded action, never a bundle. One email spending three approvals is an action nobody approved as
+  one, so "one approved ticket per send" would no longer hold. The desk can still send each LP's own email under its own
+  ticket, autonomously, or have a person link the combined one. A person's multi-LP link needs no ticket and **uses
+  none**: an agent ticket open for one of those LPs stays open for its own email (for a single LP, an approved ticket that
+  covers the message is still used, as before). `ticketId` with `pursuitIds` is 400. A *received* message about several
+  LPs uses no ticket, so an autonomous call may link it. Allowing autonomous multi-LP sends would take a ticket that
+  approves one email about named LPs — a decision for Juan (§10).
 - **No body** unless `body` is sent explicitly; it is never needed.
 - **Send the Message-ID header** whenever the desk has it. Without it the key is the Gmail id, which belongs to one
   mailbox: the message is still linked once, but it can match Affinity's record of the same email only by day and
@@ -494,8 +611,24 @@ part is `lib/redact-health.ts`, applied to every text field the queue returns. N
 6. **Marking a token autonomous in Preferences.** The flag works on a call today; a token is marked by `mode:autonomous`
    in its list, which Preferences cannot set yet (the settings pages are the deploy branch's this week). Add the
    checkbox there when that branch lands.
+7. **A person's intro asks are not counted as asks** (5 Oct 2026). `asksThisQuarter` and the ask cap read
+   `coordination.ask`; an intro ask Juan sends from juanmail and links to the LP is a linked message, not a recorded ask,
+   so it is not counted. Either juanmail records the ask too (the routes page's "record an ask" has no API yet), or a link
+   says it was an intro ask to a named connector and that counts. Until then the count is a floor.
+8. **Autonomous intro asks about several LPs** (5 Oct 2026). Refused today (§5): a ticket approves one email about one
+   LP. If juanmail should send them alone, an INTRO_ASK ticket would name the connector and every LP the one email asks
+   about, approved as one action.
 
 ## 11. Tests
+
+Since 5 Oct 2026, the desk's third round (`scripts/properties/outreach-desk-v3.ts`, through the real REST and MCP handlers,
+on two invented vehicles and the fund): `askFirst` is the first hop past the team member on 1-, 2- and 3-hop routes, with
+the introducer unchanged; `top_connectors` counts first-hop and deeper routes, flags `reachableDirectly: false`, and
+`firstHopOnly` ranks first hops only, the same over REST and MCP; a connector's targets list every open LP they reach and
+no other, best score first, once through by cursor, and nothing on a vehicle the caller does not read; `asksThisQuarter`
+counts only this calendar quarter's made asks, and `lastAsk` reads a reply from the trace; a message linked to several
+LPs is one link per LP, all or none, each LP authorized, and an autonomous send about several is refused with no ticket
+used; `signedCount` counts signed and re-signed events.
 
 Since 5 Oct 2026, the desk's second round (`scripts/properties/outreach-desk.ts`, through the real REST and MCP handlers,
 on two invented vehicles): every route hop and introducer carries its entityId; a hop's address shows only where
