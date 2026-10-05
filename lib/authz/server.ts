@@ -2,7 +2,7 @@ import type { AppUser } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { requireServerActionMutation } from '@/lib/mutation-guard';
 import { getDb, type Queryable } from '@/lib/db';
-import { AuthorizationError, requireCan, type Principal } from './index';
+import { AuthorizationError, can, requireCan, type Principal } from './index';
 import { actionRules, type ActionId, type ScopeRule } from './rules';
 
 const value = (input: unknown, key: string): unknown => input instanceof FormData ? input.get(key) : (input as Record<string, unknown> | null)?.[key];
@@ -16,6 +16,12 @@ const id = (v: unknown): string => {
 export async function authorizeAction(user: Principal & { id: string }, name: ActionId, args: unknown[], q: Queryable): Promise<void> {
   const rule = actionRules[name];
   if (!rule) throw new AuthorizationError();
+  // A refused Admin action is a security event, not noise: logged with the action's name, never its input.
+  if (rule.action === 'admin' && !can(user, 'admin')) {
+    const { appendAudit } = await import('@/modules/platform');
+    await appendAudit({ actorId: user.id, action: 'authz.refused', subjectType: 'action', subjectId: name, detail: { action: name, access: user.access } }, q).catch(() => undefined);
+    throw new AuthorizationError();
+  }
   // Fail before reading target details for a role that cannot invoke this operation at all.
   if (user.access === 'viewer' && !['read', 'feedback', 'session'].includes(rule.action)) throw new AuthorizationError();
   if (rule.action === 'admin') { requireCan(user, 'admin'); return; }
@@ -144,14 +150,7 @@ export async function requireAction(name: ActionId, ...args: unknown[]): Promise
   } catch (error) {
     // A policy refusal is expected, not a server failure. Next carries this redirect
     // through both enhanced actions and ordinary form posts (303, then the message).
-    if (error instanceof AuthorizationError) {
-      // A refused Admin action is a security event, not noise: logged with the action's name, never its input.
-      if (actionRules[name]?.action === 'admin') {
-        const { appendAudit } = await import('@/modules/platform');
-        await appendAudit({ actorId: user.id, action: 'authz.refused', subjectType: 'action', subjectId: name, detail: { action: name, access: user.access } }).catch(() => undefined);
-      }
-      redirect('/access-denied');
-    }
+    if (error instanceof AuthorizationError) redirect('/access-denied');
     throw error;
   }
   return user;
