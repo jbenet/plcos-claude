@@ -4,6 +4,7 @@ import type { Queryable } from '@/lib/db';
 import { config } from '@/config/deployment';
 import { auth, type AppUser } from '@/lib/auth';
 import { USER_COOKIE } from '@/lib/auth/cookie';
+import { WARM_COOKIE } from '@/lib/auth/warm';
 import { getUserByHandle } from '@/modules/platform';
 
 import { MutationGuardError, requireMutationOrigin, requireMutationProfile } from './mutation-policy';
@@ -12,6 +13,8 @@ export { MutationGuardError, requireMutationOrigin, requireMutationProfile, muta
 /** No local provider fallback: an absent, unknown or inactive cookie is anonymous. */
 export async function requireMutationUser(): Promise<AppUser> {
   requireMutationProfile();
+  // The page warm-up's pass reads pages and nothing else: a request carrying one never writes (lib/auth/warm.ts).
+  if ((await cookies()).get(WARM_COOKIE)?.value) throw new MutationGuardError('A page warm-up cannot make changes.', 403);
   if (config.auth.provider !== 'local') return (await auth()).currentUser();
   const handle = (await cookies()).get(USER_COOKIE)?.value;
   return resolveMutationUser(handle);
@@ -28,6 +31,7 @@ export async function mutationRouteGuard(request: Request): Promise<{ user: AppU
   try {
     requireMutationOrigin(request);
     requireMutationProfile();
+    if (new RequestCookies(request.headers).get(WARM_COOKIE)?.value) throw new MutationGuardError('A page warm-up cannot make changes.', 403);
     const user = config.auth.provider === 'local'
       ? await resolveMutationUser(new RequestCookies(request.headers).get(USER_COOKIE)?.value)
       : await (await auth()).currentUser();

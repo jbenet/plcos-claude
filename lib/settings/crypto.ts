@@ -6,7 +6,7 @@
 import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { rootSecret } from './key';
 
-export type Purpose = 'settings' | 'session' | 'oauth' | 'person-secret';
+export type Purpose = 'settings' | 'session' | 'oauth' | 'person-secret' | 'warm';
 
 const subkeys = new Map<string, { root: Buffer; key: Buffer }>();
 function subkey(purpose: Purpose): Buffer {

@@ -104,6 +104,8 @@ export async function runProperties(check: Check) {
   // Settings, /setup and Google sign-in (docs/deploy/railway.md §3). Last: it leaves two invented users inactive.
   // A person's addresses (migration 019): login, default-to and aliases.
   await (await import('./team-addresses')).teamAddressProperties(check, db);
+  // The page warm-up behind Google sign-in (lib/auth/warm.ts).
+  await (await import('./warm-session')).warmSessionProperties(check, db);
   await (await import('./railway-setup')).railwaySetupProperties(check, db);
   await db.close();
 

@@ -249,3 +249,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [No tickets for people, and the email trail is the record](entries/comms-trace.md)
 - [A person's addresses — a login, a default-to, and aliases](entries/team-addresses.md)
 - [The access level "GP" is now "Team", and the init file can deactivate](entries/access-team.md)
+- [The page warm-up works behind Google sign-in](entries/warm-session.md)
