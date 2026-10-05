@@ -10,7 +10,7 @@ import { migrate } from '../../lib/db/migrate';
 import { orderByShadows } from '../../lib/dev/sql-order-shadow';
 import { scan } from '../sql-shadow-scan';
 import { topologyPageSql } from '../../modules/network/route-policy';
-import { warmDecision, warmPaths, type WarmState } from '../../lib/page-warm';
+import { needsSignIn, warmDecision, warmPaths, type WarmState } from '../../lib/page-warm';
 
 // Reviewed hits that are not keyset paging over a large table. A new hit fails until reviewed.
 const REVIEWED = new Set([
@@ -55,6 +55,10 @@ export async function pageSpeedProperties(check: Check) {
       rows.length === 2048 && next.length === 2048 && new Set(ids).size === ids.length && ids.every((id, i) => i === 0 || ids[i - 1]! < id), `${rows.length}+${next.length}`);
   } finally { await db.close(); }
 
+  // A redirect to sign-in or setup is not a failure (5 Oct 2026: "14 failed" at each Railway boot).
+  check('page-speed warm: a redirect to sign-in or setup counts as needing a sign-in, not as a failure',
+    needsSignIn(307, '/signin?next=%2Ftoday') && needsSignIn(307, 'http://127.0.0.1:3000/setup') && needsSignIn(302, '/signin')
+      && !needsSignIn(500, null) && !needsSignIn(307, '/today') && !needsSignIn(307, '/signing-room') && !needsSignIn(200, '/signin'), '');
   // The warm-up's decision.
   const s = (o: Partial<WarmState> = {}): WarmState => ({ seen: null, warmed: null, lastWarmAt: 0, running: false, ...o });
   const at = 1_000_000;

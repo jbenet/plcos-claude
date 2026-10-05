@@ -68,17 +68,26 @@ async function targets(first: boolean): Promise<string[]> {
   return warmPaths(slugs, lp);
 }
 
-async function warm(port: string, paths: string[]): Promise<{ ok: number; failed: number }> {
-  let ok = 0, failed = 0;
+/**
+ * A page that redirects to sign-in or setup was not rendered, so it is not a failure and not a warm-up.
+ * Where every page does (a deploy with sign-in, 5 Oct 2026: "14 failed" at each Railway boot), an
+ * unsigned loopback request can warm nothing, and the warm-up stops instead of logging failures.
+ */
+export function needsSignIn(status: number, location: string | null): boolean {
+  return status >= 300 && status < 400 && /^(https?:\/\/[^/]+)?\/(signin|setup)(\b|$)/.test(location ?? '');
+}
+
+async function warm(port: string, paths: string[]): Promise<{ ok: number; failed: number; signin: number }> {
+  let ok = 0, failed = 0, signin = 0;
   // One at a time: a warm-up must not crowd out a person's request.
   for (const path of paths) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(PAGE_TIMEOUT_MS), redirect: 'manual' });
       await res.arrayBuffer(); // the render finishes only when the stream is read
-      if (res.ok) ok++; else failed++;
+      if (res.ok) ok++; else if (needsSignIn(res.status, res.headers.get('location'))) signin++; else failed++;
     } catch { failed++; }
   }
-  return { ok, failed };
+  return { ok, failed, signin };
 }
 
 const g = globalThis as typeof globalThis & { __capitalOsPageWarm?: { timer: NodeJS.Timeout; state: WarmState } };
@@ -97,7 +106,12 @@ export function startPageWarm(): void {
     state.running = true;
     const first = state.warmed === null, started = performance.now();
     try {
-      const { ok, failed } = await warm(port, await targets(first));
+      const { ok, failed, signin } = await warm(port, await targets(first));
+      if (ok === 0 && signin > 0) {
+        clearInterval(timer);
+        console.log('[warm] off: pages here need a sign-in, so a loopback request cannot warm them');
+        return;
+      }
       console.log(`[warm] ${ok} page${ok === 1 ? '' : 's'} rebuilt in ${((performance.now() - started) / 1000).toFixed(1)} s ${first ? 'at start' : 'after a data change'}${failed ? `; ${failed} failed` : ''}`);
     } catch {
       console.log('[warm] skipped: the database could not be read');
