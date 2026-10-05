@@ -219,11 +219,13 @@ sync then carries on from the last pull, with the Dakota sign-in entered in Sett
 | g | Smoke, signed in as admin: `/today`, each vehicle's overview, pipeline, selection and strategy, `/orgs/g/lps`, `/developer/enrich`. Make one reversible note. Run **Export the research set** (149 s in rehearsal). Pull a first copy to the Mac (§6). | 15 min |
 | h | On the Mac: `touch data/real/moved-to-cloud` in the live folder. | 1 min |
 
-**Before the evening: every team member's sign-in address.** Google sign-in admits a person only when
-their `platform.app_user.email` (active) is the address they sign in with, for example
-juan@plcapital.xyz. On the Mac's live server:
-- check each team row's address (counts and handles only);
-- fix any that differ, so the move carries the right ones;
+**Before the evening: every team member's addresses.** Google sign-in admits an active person signing in with
+any of their addresses (`platform.user_address`, migration 019): the `login` (the Google sign-in, for example
+someone@plcapital.xyz), the default-to `email` (the one we email them at) and any `aliases`, all set in
+`data/real/init.jsonc`. On the Mac's live server:
+- give each team member their `login` and `aliases` in the init file, and load it (Developer → Data); an address
+  listed on two people, or already someone else's, is reported and nothing is applied;
+- check each team row has an address they sign in with (counts and handles only);
 - or plan to fix them in Settings → People right after step f.
 
 Passwords for b and c: `cutover.sh` takes URLs without passwords. Use a temporary pgpass file made from the

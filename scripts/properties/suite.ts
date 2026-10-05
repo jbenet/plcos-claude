@@ -102,6 +102,8 @@ export async function runProperties(check: Check) {
   // Cloud pull and push (docs/deploy/railway.md §6–§7): sync tokens, the push checks, and on Postgres the round trip.
   await (await import('./sync')).syncProperties(check, db);
   // Settings, /setup and Google sign-in (docs/deploy/railway.md §3). Last: it leaves two invented users inactive.
+  // A person's addresses (migration 019): login, default-to and aliases.
+  await (await import('./team-addresses')).teamAddressProperties(check, db);
   await (await import('./railway-setup')).railwaySetupProperties(check, db);
   await db.close();
 
