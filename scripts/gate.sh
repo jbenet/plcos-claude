@@ -20,7 +20,10 @@ echo "== props (PGlite)"; npm run -s props > "$tmp/p" 2>&1; rc3=$?; grep -q "pro
 
 rc4=0
 # Postgres: the invented-data test cluster (docs/21-postgres.md), if it's running.
-PG_TEST_URL="${PG_TEST_URL:-postgres://plcos@127.0.0.1:5434/plcos_test_props}"
+# One test database per checkout: parallel gates in different worktrees shared one and failed with
+# "database is being accessed by other users" (5 Oct 2026).
+PG_TEST_DB="plcos_test_props_$(basename "$PWD" | tr -c 'a-zA-Z0-9\n' '_' | tr 'A-Z' 'a-z' | cut -c1-40)"
+PG_TEST_URL="${PG_TEST_URL:-postgres://plcos@127.0.0.1:5434/$PG_TEST_DB}"
 if /opt/homebrew/opt/postgresql@17/bin/pg_isready -h 127.0.0.1 -p 5434 -q 2>/dev/null; then
   echo "== props (Postgres)"; DATABASE_URL="$PG_TEST_URL" npm run -s props > "$tmp/pg" 2>&1; rc4=$?; grep -q "properties hold" "$tmp/pg" || { rc4=1; echo "FAIL props (Postgres) printed no summary:"; tail -5 "$tmp/pg"; }
   grep -A1 -E "FAIL" "$tmp/pg" | head -40; grep -E "properties hold" "$tmp/pg"
