@@ -58,47 +58,56 @@ async function candidates(tx: Queryable, only?: string): Promise<Candidate[]> {
     order by v.sort_order, e.display_name, p.pursuit_id`, [only ?? null]);
 }
 
+/** Each query started only when the one before has answered; the answers in order. */
+async function inSequence<T extends (() => Promise<unknown>)[]>(...queries: T): Promise<{ [K in keyof T]: Awaited<ReturnType<T[K]>> }> {
+  const out: unknown[] = [];
+  for (const q of queries) out.push(await q());
+  return out as { [K in keyof T]: Awaited<ReturnType<T[K]>> };
+}
+
 /** Everything the rules read, for a batch of people, in a handful of queries. */
 async function gather(tx: Queryable, list: Candidate[]): Promise<Facts> {
   const people = [...new Set(list.map(c => c.person))], pursuits = list.map(c => c.id);
   const aliases = `with recursive alias as (
       select entity_id, entity_id person from identity.entity where entity_id=any($1::uuid[])
       union all select e.entity_id, a.person from identity.entity e join alias a on e.merged_into=a.entity_id)`;
-  const [affiliations, claims, profiles, prospects, money, rungs, units, pools] = await Promise.all([
-    tx.query<{ person: string; org: string; name: string; type: string; role: string | null; primary: boolean; source: string | null }>(
+  // One after another: these share one client (a transaction), which runs one query at a time anyway, and
+  // pg deprecates queuing a second query on a busy client (removed in pg@9).
+  const [affiliations, claims, profiles, prospects, money, rungs, units, pools] = await inSequence(
+    () => tx.query<{ person: string; org: string; name: string; type: string; role: string | null; primary: boolean; source: string | null }>(
       `${aliases} select a.person::text, o.entity_id::text org, o.display_name name, o.entity_type::text type, f.role, f.is_primary "primary", f.source
         from identity.affiliation f join alias a on a.entity_id=f.person_entity
         join identity.entity o on o.entity_id=identity.canonical_entity_id(f.org_entity)
         where f.ended_on is null and o.retired_at is null and o.entity_type<>'person'
         order by a.person, f.is_primary desc, f.as_of desc nulls last`, [people]),
-    tx.query<{ person: string; field: string; value: string; id: string }>(
+    () => tx.query<{ person: string; field: string; value: string; id: string }>(
       `${aliases} select a.person::text, c.field, c.value, c.claim_id::text id from research.claim c join alias a on a.entity_id=c.entity_id
         where c.field in ('public.investment','public.fund_lp','public.investor_type') and c.confidence<>'low'`, [people]),
-    tx.query<{ person: string; t: string | null }>(
+    () => tx.query<{ person: string; t: string | null }>(
       `${aliases} select distinct on (a.person) a.person::text, n.data->'profile'->>'investorType' t from research.note n join alias a on a.entity_id=n.entity_id
         where n.kind='public_profile' order by a.person, n.created_at desc`, [people]),
-    tx.query<{ person: string; org: string | null; id: string }>(
+    () => tx.query<{ person: string; org: string | null; id: string }>(
       `${aliases} select a.person::text, n.data->>'org' org, n.note_id::text id from research.note n join alias a on a.entity_id=n.entity_id
         where n.data->>'source'='prospects' and coalesce(n.data->>'entityType','person')='person'`, [people]),
-    tx.query<{ person: string; vehicle: string; name: string; track: string }>(
+    () => tx.query<{ person: string; vehicle: string; name: string; track: string }>(
       `${aliases} select a.person::text, x.vehicle_id::text vehicle, v.name, x.track::text track from pipeline.exposure x
         join alias a on a.entity_id=x.entity_id join platform.vehicle v on v.id=x.vehicle_id`, [people]),
-    tx.query<{ id: string }>(`select distinct pursuit_id::text id from strategy.ladder_event where pursuit_id=any($1::uuid[]) and rung::text=any($2::text[])`, [pursuits, HIGH_RUNGS]),
-    tx.query<{ id: string; unit: string | null }>(
+    () => tx.query<{ id: string }>(`select distinct pursuit_id::text id from strategy.ladder_event where pursuit_id=any($1::uuid[]) and rung::text=any($2::text[])`, [pursuits, HIGH_RUNGS]),
+    () => tx.query<{ id: string; unit: string | null }>(
       `select distinct on (s.pursuit_id) s.pursuit_id::text id, s.data->'ask'->>'unit' unit from strategy.suggestion s
         where s.pursuit_id=any($1::uuid[]) and s.status in ('proposed','accepted') order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [pursuits]),
-    tx.query<{ person: string }>(`${aliases} select distinct a.person::text from pipeline.capital_pool p join alias a on a.entity_id=p.entity_id`, [people]),
-  ]);
+    () => tx.query<{ person: string }>(`${aliases} select distinct a.person::text from pipeline.capital_pool p join alias a on a.entity_id=p.entity_id`, [people]),
+  );
   const orgIds = [...new Set(affiliations.map(a => a.org))];
-  const [lps, monies, dakota, derived] = await Promise.all([
-    tx.query<{ id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text id from strategy.active_pursuit`),
-    tx.query<{ id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text id from pipeline.exposure
+  const [lps, monies, dakota, derived] = await inSequence(
+    () => tx.query<{ id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text id from strategy.active_pursuit`),
+    () => tx.query<{ id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text id from pipeline.exposure
       union select distinct identity.canonical_entity_id(entity_id)::text from pipeline.capital_pool`),
-    tx.query<{ id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text id from identity.source_record where source='dakota'
+    () => tx.query<{ id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text id from identity.source_record where source='dakota'
       and identity.canonical_entity_id(entity_id)=any($1::uuid[])`, [orgIds]),
-    tx.query<{ person: string; org: string }>(`select identity.canonical_entity_id(person_entity)::text person, identity.canonical_entity_id(org_entity)::text org
+    () => tx.query<{ person: string; org: string }>(`select identity.canonical_entity_id(person_entity)::text person, identity.canonical_entity_id(org_entity)::text org
       from identity.affiliation where source like 'investing-organization:%' and ended_on is null`),
-  ]);
+  );
   const isLp = new Set(lps.map(r => r.id)), hasMoney = new Set(monies.map(r => r.id)), inDakota = new Set(dakota.map(r => r.id));
   const researched = new Set(derived.map(r => `${r.person}:${r.org}`));
   const facts: Facts = { firms: new Map(), personal: new Map(), foPrincipal: new Set(), orgMoney: new Set(), softHere: new Set(),

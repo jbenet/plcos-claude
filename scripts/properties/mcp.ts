@@ -25,10 +25,12 @@ import type { Check, Db } from './harness';
 type Result = { isError?: boolean; content: Array<{ type: string; text: string }> };
 
 /**
- * Names no tool may have: each is an act a person does in the app, behind a ticket or a click. "connector" means a
- * connector run (Affinity, Linear); the one exception is top_connectors, a read of the people on warm routes (docs/27 §4b).
+ * Names no tool may have: each is an act a person does in the app, behind a ticket or a click. A connector run is
+ * named by its system (Affinity, Linear, Dakota, Polaris, Gmail, mailguard, DocSend) or by running, syncing or
+ * importing. "connector" alone is a person on a warm route (docs/27 §4b), so a read of them may say so
+ * (5 Oct 2026: the old blanket rule forced one connector's targets into top_connectors).
  */
-const FORBIDDEN = /approv|accept|decid|reject|status|stage|ladder|rung|money|wire|alloc|harden|close|import|sync|translat|(?<!^top_)connector|run_|workflow|move|merge|delete|discard|revoke/i;
+const FORBIDDEN = /approv|accept|decid|reject|status|stage|ladder|rung|money|wire|alloc|harden|close|import|sync|translat|affinity|linear|dakota|polaris|gmail|mailguard|docsend|run_|_run|workflow|move|merge|delete|discard|revoke/i;
 /** Named for a send or a ticket: allowed only to a tool whose policy says a person approves first (docs/26 §3). */
 const SEND_OR_TICKET = /send|ticket/i;
 /** Service calls that send, decide or move money; none may be reachable from lib/mcp or lib/outreach. */

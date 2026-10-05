@@ -8,6 +8,7 @@ import { LINEAR_SETTING } from '@/lib/connectors/linear/setting';
 import { DAKOTA_PASSWORD_SETTING, DAKOTA_USERNAME_SETTING } from '@/lib/connectors/dakota/setting';
 import { MAILGUARD_ADDRESS_SETTING } from '@/lib/connectors/mailguard/setting';
 import { ANTHROPIC_SETTING } from '@/lib/workflows/setting';
+import { CLOUD_WORKFLOWS_SETTING } from '@/lib/workflows/cloud-setting';
 import { FEEDBACK_EXPORT_SETTING } from '@/app/api/feedback/export/setting';
 import { publicUrlValue, SettingError, type SettingDef } from './types';
 
@@ -81,6 +82,7 @@ export const SETTINGS: readonly SettingDef[] = [
   DAKOTA_USERNAME_SETTING,
   DAKOTA_PASSWORD_SETTING,
   ANTHROPIC_SETTING,
+  CLOUD_WORKFLOWS_SETTING,
   MAILGUARD_ADDRESS_SETTING,
   FEEDBACK_EXPORT_SETTING,
 ];

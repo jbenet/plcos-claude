@@ -9,7 +9,7 @@ import { capacityBandLabel } from '@/lib/capacity-bands';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
-import { anthropicKey } from '@/lib/workflows/key';
+import { anthropicKey, cloudWorkflowsOn } from '@/lib/workflows/key';
 import { ago, formatDate } from '@/lib/time';
 import { RESEARCH_STATUSES, enrichDir, inResearchSet } from '@/lib/enrich/candidates';
 import { Prospects } from './Prospects';
@@ -19,7 +19,7 @@ import { listPursuits, openSuggestions, STATUS_LABEL } from '@/lib/authz/read/st
 import type { Strategy } from '@/lib/enrich/strategy';
 import type { Triage } from '@/lib/enrich/triage';
 import { latestRun } from '@/modules/sources';
-import { exportResearchSetAction, importFindingsAction, sourceBulkAction, runWorkflowAction } from './actions';
+import { exportResearchSetAction, importFindingsAction, sourceBulkAction, runWorkflowAction, runCloudFactCheckAction } from './actions';
 import { addedInBulk, BULK_DAY } from '@/lib/enrich/unsourced';
 import { readResearchExportStatus } from '@/lib/enrich/export-status';
 import { ExportStatus } from './ExportStatus';
@@ -129,6 +129,14 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
             {['w1', 'w1c', 'w5'].map(protocol => <button key={protocol} className="btn" name="protocol" value={protocol} disabled={!anthropicKey()}>Run {protocol.toUpperCase()}</button>)}
             {!anthropicKey() && <span className="muted"> Enter an Anthropic key in <Link href="/settings/connections">Settings → Connections</Link> to run workflows.</span>}
           </form>
+          {cloudWorkflowsOn() && anthropicKey() && (
+            <form action={runCloudFactCheckAction} style={{ marginTop: 12 }}>
+              <label>Batch file <input name="batch" required placeholder="w1c-07a.jsonl" /></label>{' '}
+              <label>Review file <input name="review" required pattern="fact-review-[0-9]{2}[a-z]\.jsonl" placeholder="fact-review-07a.jsonl" /></label>{' '}
+              <button className="btn" type="submit">Fact check in the cloud</button>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>W1c on this server: reads only the cited pages, grades, corrects nothing. At most {config.cloudWorkflows.w1c.maxFindings} findings.</span>
+            </form>
+          )}
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>
             <button className="btn p" type="submit">Export the research set</button>
             <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>

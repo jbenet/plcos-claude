@@ -25,6 +25,7 @@ export const actionRules = {
   'app/dev/data/actions.ts#reloadInit': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#addProspectsAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#runWorkflowAction': { action: 'admin', scope: 'global' },
+  'app/dev/enrich/actions.ts#runCloudFactCheckAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#exportResearchSetAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#importFindingsAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#sourceBulkAction': { action: 'admin', scope: 'global' },

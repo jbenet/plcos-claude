@@ -226,3 +226,17 @@ export async function runWorkflowAction(formData: FormData): Promise<void> {
   revalidatePath('/dev/enrich');
   redirect('/developer/enrich');
 }
+
+/**
+ * The cloud fact check (docs/28-cloud-workflows.md): W1c run by this server, off unless an Admin turns on
+ * Cloud workflows. Grades only; the review file is named by round and part, and is never written over.
+ */
+export async function runCloudFactCheckAction(formData: FormData): Promise<void> {
+  const authorizedUser = await requireAction('app/dev/enrich/actions.ts#runCloudFactCheckAction', formData);
+  const { anthropicKey, cloudWorkflowsOn } = await import('@/lib/workflows/key');
+  if (!cloudWorkflowsOn()) throw new Error('Cloud workflows are off. An Admin turns them on in Settings → Connections.');
+  if (!anthropicKey()) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
+  await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: 'w1c-cloud', batch: formData.get('batch'), review: formData.get('review') });
+  revalidatePath('/dev/enrich');
+  redirect('/developer/enrich');
+}

@@ -203,6 +203,27 @@ export const config = {
     maxPushFiles: 500, // GUESS — the largest batch a worker writes, with its review file.
   },
   /**
+   * Workflows the app runs itself (docs/28-cloud-workflows.md). Off unless an Admin turns on
+   * Settings → Connections → "Cloud workflows"; these are the bounds of one run, written into its envelope.
+   */
+  cloudWorkflows: {
+    w1c: {
+      model: 'claude-haiku-4-5', // The fact-checker agent's model (.claude/agents/fact-checker.md): the check is mechanical.
+      maxFindings: 25, // GUESS — one batch; the Mac's fact-checker took 20–30 findings a part.
+      maxTokens: 600_000, // GUESS — about 20K input a finding (facts plus excerpts of its pages) with room.
+      maxSeconds: 1800, // GUESS — 30 minutes; pages are read one at a time.
+      maxOutputTokensPerFinding: 4000, // GUESS — a review row is 1–2K tokens of JSON.
+    },
+    pages: {
+      maxBytes: 3 * 1024 * 1024, // GUESS — a long firm page is under 1 MB of HTML.
+      maxChars: 40_000, // GUESS — the page text given to the model, per page.
+      timeoutMs: 20_000,
+      maxRedirects: 3,
+      secIntervalMs: 1100, // SEC's fair-access policy: at most one request a second from us (W1 1.48).
+      hostIntervalMs: 500, // GUESS — no bursts at any one site.
+    },
+  },
+  /**
    * The outreach API for the mail desk (docs/27-outreach-api.md): /api/outreach/*, authenticated by an MCP
    * token that carries the outreach scope ('outreach:read', and 'outreach:write' apart). Same envelope, rate
    * limits and audit as MCP. Nothing here sends: the desk sends through MailGuard and records the send
