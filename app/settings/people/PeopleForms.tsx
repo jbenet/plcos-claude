@@ -1,12 +1,47 @@
 'use client';
 
 import { useActionState, useState } from 'react';
-import { addPersonAction, setPersonActiveAction, signOutEverywhereAction, updatePersonAction, type PeopleResult } from './actions';
+import { addPersonAction, setPersonActiveAction, signOutEverywhereAction, updateAddressesAction, updatePersonAction, type PeopleResult } from './actions';
 import s from './people.module.css';
 
 export interface VehicleOption { id: string; name: string }
 export interface PersonRow {
   id: string; name: string; email: string; role: string; access: 'admin' | 'gp' | 'viewer'; vehicles: string[] | null; active: boolean; you: boolean;
+  addresses: Array<{ address: string; kind: 'login' | 'default' | 'alias' }>;
+}
+
+const KIND = { login: 'login', default: 'default-to', alias: 'alias' } as const;
+
+/** A person's addresses with their kind; Edit opens the login, default-to and aliases. */
+export function Addresses({ p, readOnly }: { p: PersonRow; readOnly: boolean }) {
+  const [state, run, pending] = useActionState<PeopleResult, FormData>(updateAddressesAction, null);
+  const [open, setOpen] = useState(false);
+  const login = p.addresses.find((a) => a.kind === 'login')?.address ?? '';
+  const def = p.addresses.find((a) => a.kind === 'default')?.address ?? p.email;
+  const aliases = p.addresses.filter((a) => a.kind === 'alias').map((a) => a.address);
+  return (
+    <div className={s.addresses}>
+      <ul>
+        {p.addresses.length === 0 && p.email && <li><span className="mono">{p.email}</span> <span className={s.kind}>default-to</span></li>}
+        {p.addresses.map((a) => (
+          <li key={a.address}><span className="mono">{a.address}</span> <span className={s.kind} data-kind={a.kind}>{a.kind === 'default' && !login ? 'login · default-to' : KIND[a.kind]}</span></li>
+        ))}
+      </ul>
+      {!readOnly && p.active && (open ? (
+        <form action={run} className={s.addressForm}>
+          <input type="hidden" name="userId" value={p.id} />
+          <label><span>Login (Google sign-in)</span><input name="login" type="email" defaultValue={login} placeholder="same as default-to" autoComplete="off" /></label>
+          <label><span>Default-to (we email them here)</span><input name="default" type="email" required defaultValue={def} autoComplete="off" /></label>
+          <label><span>Aliases, one per line</span><textarea name="aliases" rows={2} defaultValue={aliases.join('\n')} /></label>
+          <span className={s.actionsRow}>
+            <button className="btn p" disabled={pending}>{pending ? 'Saving…' : 'Save addresses'}</button>
+            <button type="button" className="btn" onClick={() => setOpen(false)}>Cancel</button>
+          </span>
+        </form>
+      ) : <button type="button" className={s.linkBtn} onClick={() => setOpen(true)}>Edit addresses</button>)}
+      <Result r={state} />
+    </div>
+  );
 }
 
 const ACCESS = [
