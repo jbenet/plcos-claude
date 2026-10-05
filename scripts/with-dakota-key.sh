@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run a command with DAKOTA_USERNAME and DAKOTA_PASSWORD from the macOS Keychain (docs/20-dakota.md).
 # Each read asks Juan. Values go into this process's environment only: never echoed, never in a file.
+# The environment wins over a sign-in entered in Settings → Connections (lib/connectors/dakota/key.ts).
 set -euo pipefail
 source "$(dirname "$0")/env-or-command.sh"
 SERVICE="plcos-dakota"

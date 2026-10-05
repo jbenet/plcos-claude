@@ -5,6 +5,7 @@
 import { AFFINITY_SETTING } from '@/lib/connectors/affinity/setting';
 import { GOOGLE_CLIENT_ID_SETTING, GOOGLE_CLIENT_SECRET_SETTING } from '@/lib/connectors/google-signin/setting';
 import { LINEAR_SETTING } from '@/lib/connectors/linear/setting';
+import { DAKOTA_PASSWORD_SETTING, DAKOTA_USERNAME_SETTING } from '@/lib/connectors/dakota/setting';
 import { MAILGUARD_ADDRESS_SETTING } from '@/lib/connectors/mailguard/setting';
 import { ANTHROPIC_SETTING } from '@/lib/workflows/setting';
 import { FEEDBACK_EXPORT_SETTING } from '@/app/api/feedback/export/setting';
@@ -43,6 +44,8 @@ export const SETTINGS: readonly SettingDef[] = [
   SESSION_DAYS_SETTING,
   AFFINITY_SETTING,
   LINEAR_SETTING,
+  DAKOTA_USERNAME_SETTING,
+  DAKOTA_PASSWORD_SETTING,
   ANTHROPIC_SETTING,
   MAILGUARD_ADDRESS_SETTING,
   FEEDBACK_EXPORT_SETTING,

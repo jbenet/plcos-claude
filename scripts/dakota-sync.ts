@@ -1,5 +1,6 @@
 /**
- * The Dakota workflow (docs/20-dakota.md). Run through the Keychain wrapper, from the live folder:
+ * The Dakota workflow (docs/20-dakota.md). On the Mac, through the Keychain wrapper, from the live folder
+ * (on a deployed server the sign-in comes from Settings → Connections instead):
  *
  *   scripts/with-dakota-key.sh env DATA_PROFILE=real npx tsx scripts/dakota-sync.ts test
  *
@@ -17,12 +18,27 @@ import { beginRun, finishRun, realRoot } from '../lib/workflows/ledger';
 
 const MODULES = ['account', 'contact', 'investment', 'investment_strategy'];
 
+/**
+ * The sign-in: from the environment (scripts/with-dakota-key.sh on the Mac), else the one entered in
+ * Settings → Connections, read from the database only when the environment has none.
+ */
+async function signIn(): Promise<{ username: string; password: string }> {
+  const { dakotaSignIn } = await import('../lib/connectors/dakota/key');
+  let found = dakotaSignIn();
+  if (!found) {
+    const { settingsReady } = await import('../lib/settings/store');
+    await settingsReady();
+    found = dakotaSignIn();
+  }
+  if (!found) throw new Error('No Dakota sign-in: enter it in Settings → Connections, or run through scripts/with-dakota-key.sh.');
+  return found;
+}
+
 async function main() {
   const op = process.argv[2];
   if (op === 'pull') return pull();
   if (op !== 'test') throw new Error('usage: dakota-sync.ts test|pull');
-  const user = process.env.DAKOTA_USERNAME, pass = process.env.DAKOTA_PASSWORD;
-  if (!user || !pass) throw new Error('No Dakota sign-in in the environment: run through scripts/with-dakota-key.sh');
+  const { username: user, password: pass } = await signIn();
   const root = await realRoot();
   const protocol = createHash('sha256').update('dakota-test-v1: sign in, count_only per module, no records').digest('hex');
   const runId = await beginRun({ parentRunId: null, workflow: 'dakota', operation: 'test', protocol: { version: 'v1', hash: protocol },
@@ -51,8 +67,7 @@ async function main() {
  * translating into the database can be redone without asking Dakota again. Stops at the first 429/5xx.
  */
 async function pull() {
-  const user = process.env.DAKOTA_USERNAME, pass = process.env.DAKOTA_PASSWORD;
-  if (!user || !pass) throw new Error('No Dakota sign-in in the environment: run through scripts/with-dakota-key.sh');
+  const { username: user, password: pass } = await signIn();
   const root = await realRoot();
   const mods = (process.argv[3] ?? 'account,contact').split(',') as Array<'account' | 'contact'>;
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
