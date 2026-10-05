@@ -12,7 +12,11 @@
 // a question, so an unknown stays visibly unknown instead of becoming a default.
 {
   // Who uses the tool. The handle is short and lowercase. It appears in URLs and on anything
-  // a person files. affinityEmail is the address they sign in to Affinity with, which is how
+  // a person files. Their addresses: email is their default-to (the one they mostly use, and the one
+  // we email them at); login is the address they sign in with (Google), when it is not email; aliases
+  // are their other addresses. They sign in with any of these, and mail from any of them is theirs.
+  // An address belongs to one person: one listed on two people, or already someone else's, stops the
+  // file loading until it is fixed. affinityEmail is the address they sign in to Affinity with, which is how
   // an Affinity owner or note author is matched to a person here. linearEmail is optional: the
   // address they sign in to Linear with, when it is not their email, so "My Linear" finds them.
   // Optional access grants: access = admin | gp | viewer; vehicles = UUID[] or null (all).
@@ -20,7 +24,7 @@
   // approves = ["STAGE", "INTRO_ASK", "SEND"] for named GP approvers within their vehicle scope.
   // Money/allocation require an independent Admin; requesting your own ticket never grants approval.
   "team": [
-    { "handle": "juan", "name": "Juan", "initials": "J", "role": null, "email": null, "affinityEmail": null, "linearEmail": null }
+    { "handle": "juan", "name": "Juan", "initials": "J", "role": null, "email": null, "login": null, "aliases": [], "affinityEmail": null, "linearEmail": null }
   ],
 
   // One entry per vehicle.

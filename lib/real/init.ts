@@ -26,7 +26,12 @@ export interface TeamMember {
   name: string;
   initials: string;
   role: string | null;
+  /** Their default-to address: the one they mostly use, and the one we email them at (app_user.email). */
   email: string | null;
+  /** The address they sign in with (Google), when it is not `email`. Optional. */
+  login?: string | null;
+  /** Other addresses of theirs. Sign-in and mail matching accept any of them. Optional. */
+  aliases?: string[];
   /** The address they sign in to Affinity with — how an owner or a note author finds them. */
   affinityEmail: string | null;
   /** The address they sign in to Linear with, when it is not `email` — how "My Linear" finds their issues. Optional. */
@@ -122,6 +127,11 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !=
 const initialsOf = (name: string) =>
   name.split(/\s+/).filter(Boolean).map((w) => w[0]!.toUpperCase()).slice(0, 2).join('');
 
+/** Every address of a team member the file names (default-to, login, aliases), lower-cased. */
+export function memberAddresses(t: Pick<TeamMember, 'email' | 'login' | 'aliases'>): string[] {
+  return [...new Set([t.email, t.login, ...(t.aliases ?? [])].filter((a): a is string => !!a && !!a.trim()).map((a) => a.trim().toLowerCase()))];
+}
+
 export function validate(raw: unknown): { init: RealInit | null; problems: string[] } {
   const problems: string[] = [];
   const obj = (raw ?? {}) as Record<string, unknown>;
@@ -144,18 +154,34 @@ export function validate(raw: unknown): { init: RealInit | null; problems: strin
       if (!name) problems.push(`${at}.name is required.`);
       if (t?.access !== undefined && !['admin', 'gp', 'viewer'].includes(String(t.access))) problems.push(`${at}.access must be admin, gp or viewer.`);
       if (t?.vehicles !== undefined && t.vehicles !== null && (!Array.isArray(t.vehicles) || t.vehicles.some(v => typeof v !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)))) problems.push(`${at}.vehicles must be null (all) or a list of vehicle UUIDs.`);
+      const addr = (v: unknown) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+      if (t?.email !== undefined && t.email !== null && t.email !== '' && !addr(t.email)) problems.push(`${at}.email must be an email address.`);
+      if (t?.login !== undefined && t.login !== null && t.login !== '' && !addr(t.login)) problems.push(`${at}.login must be an email address.`);
+      if (t?.aliases !== undefined && (!Array.isArray(t.aliases) || t.aliases.some((a) => !addr(a)))) problems.push(`${at}.aliases must be a list of email addresses.`);
       if (t?.approves !== undefined && (!Array.isArray(t.approves) || t.approves.some(k => !['STAGE', 'INTRO_ASK', 'SEND'].includes(String(k))))) problems.push(`${at}.approves may contain STAGE, INTRO_ASK and SEND; money/allocation require Admin.`);
       if (handle && name) {
         team.push({
           handle, name,
           initials: str(t.initials) ?? initialsOf(name),
           role: str(t.role), email: str(t.email), affinityEmail: str(t.affinityEmail), linearEmail: str(t.linearEmail),
+          ...(t.login === undefined ? {} : { login: str(t.login) }),
+          ...(Array.isArray(t.aliases) ? { aliases: (t.aliases as unknown[]).filter((a): a is string => typeof a === 'string').map((a) => a.trim()) } : {}),
           ...(t.access === undefined ? {} : { access: t.access as TeamMember['access'] }),
           ...(t.vehicles === undefined ? {} : { vehicles: t.vehicles as TeamMember['vehicles'] }),
           ...(t.approves === undefined ? {} : { approves: t.approves as string[] }),
         });
       }
     });
+  }
+
+  // An address names one person: the same address on two people in the file is a problem, never a guess.
+  const owner = new Map<string, string>();
+  for (const t of team) {
+    for (const a of memberAddresses(t)) {
+      const was = owner.get(a);
+      if (was && was !== t.handle) problems.push(`team.${t.handle}: ${a} is also ${was}'s address. An address belongs to one person.`);
+      else owner.set(a, t.handle);
+    }
   }
 
   const vehicles: VehicleInit[] = [];
@@ -287,6 +313,34 @@ export async function upsertTeamMember(db: Queryable, t: TeamMember): Promise<vo
            approves = coalesce($9::text[], app_user.approves)`,
     [t.handle, t.name, t.initials, t.role ?? '', t.email ?? '', t.access ?? null, t.vehicles ?? null, t.vehicles !== undefined, t.approves ?? null, t.linearEmail ?? null],
   );
+  // Their addresses become exactly the file's: default-to, login, aliases (platform.user_address).
+  const { setAddresses } = await import('@/modules/platform');
+  const id = (await db.one<{ id: string }>('select id::text from platform.app_user where handle = $1', [t.handle]))!.id;
+  await setAddresses(db, id, { default: t.email, login: t.login ?? null, aliases: t.aliases ?? [] });
+}
+
+/** The file's team, all or nothing: the address clashes if there are any (and nothing written), else []. */
+export async function applyTeam(db: Queryable, team: TeamMember[]): Promise<string[]> {
+  const clashes = await addressProblems(db, team);
+  if (clashes.length) return clashes;
+  for (const t of team) await upsertTeamMember(db, t);
+  return [];
+}
+
+/**
+ * Addresses in the file that someone else already holds in the database: reported as problems before anything
+ * is applied, never silently moved from one person to another.
+ */
+export async function addressProblems(db: Queryable, team: TeamMember[]): Promise<string[]> {
+  const problems: string[] = [];
+  for (const t of team) {
+    const addresses = memberAddresses(t);
+    if (!addresses.length) continue;
+    const rows = await db.query<{ address: string; handle: string }>(`select a.address, u.handle from platform.user_address a
+      join platform.app_user u on u.id = a.user_id where lower(a.address) = any($1::text[]) and u.handle <> $2`, [addresses, t.handle]);
+    for (const r of rows) problems.push(`team.${t.handle}: ${r.address.toLowerCase()} already belongs to ${r.handle}. Remove it from one of them first.`);
+  }
+  return problems;
 }
 
 /**
@@ -323,7 +377,9 @@ export async function loadInit(db: Db): Promise<InitReport> {
     // A successful load already applied this exact file. Avoid no-op upserts on boot:
     // even unchanged rows fire statement triggers and invalidate persisted route caches.
     if (last?.hash === report.hash) return;
-    for (const t of team) await upsertTeamMember(tx, t);
+    // An address held by someone else is a problem like any other: nothing is applied.
+    const clashes = await applyTeam(tx, team);
+    if (clashes.length) { report.problems.push(...clashes); return; }
     for (const [i, v] of vehicles.entries()) {
       await tx.query(
         `insert into platform.vehicle (slug, name, kind, exemption, target_amount, sort_order, phase,
@@ -355,6 +411,7 @@ export async function loadInit(db: Db): Promise<InitReport> {
     );
     imported = true;
   });
+  if (report.problems.length) console.error(`[init] ${INIT_PATH} was not loaded:\n  ${report.problems.join('\n  ')}`);
   if (imported) await recordActivity({ source: 'intake', at: activityAt, segment: 'init', requests: 0,
     bytesIn: await stat(abs).then(s => s.size, () => null), bytesOut: 0, records: team.length + vehicles.length });
   return report;
