@@ -72,7 +72,7 @@ export async function syncProperties(check: Check, db: Db) {
   const user = async (handle: string, access: string) => (await db.one<AppUser>(`insert into platform.app_user (handle, name, initials, role, email, access, vehicles)
     values ($1, $2, 'IS', 'Invented (props)', $3, $4::platform.access_role, null) on conflict (handle) do update set active = true, access = excluded.access, vehicles = excluded.vehicles
     returning id::text, handle, name, initials, role, email, access::text, vehicles::text[], approves`, [handle, `Invented ${handle}`, `${handle}@example.invalid`, access]))!;
-  const gp = await user('sync-gp', 'gp');
+  const gp = await user('sync-gp', 'team');
   const viewer = await user('sync-viewer', 'viewer');
   const admin2 = await user('sync-admin', 'admin');
   const mint = async (owner: AppUser, scope: 'snapshot' | 'push') => createMcpToken(owner,
@@ -103,7 +103,7 @@ export async function syncProperties(check: Check, db: Db) {
   const none = await get(null);
   const browser = await get(snap.secret, '', { origin: base });
   const demoted = await mint(admin2, 'snapshot');
-  await db.query(`update platform.app_user set access = 'gp' where id = $1`, [admin2.id]);
+  await db.query(`update platform.app_user set access = 'team' where id = $1`, [admin2.id]);
   const afterDemotion = await get(demoted.secret);
   const revokedToken = await mint(juan, 'snapshot');
   await revokeMcpToken(juan, revokedToken.token.tokenId, db);

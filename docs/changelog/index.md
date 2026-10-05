@@ -248,3 +248,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Settings in the app, a guided /setup, and Google sign-in](entries/railway-setup.md)
 - [No tickets for people, and the email trail is the record](entries/comms-trace.md)
 - [A person's addresses — a login, a default-to, and aliases](entries/team-addresses.md)
+- [The access level "GP" is now "Team", and the init file can deactivate](entries/access-team.md)

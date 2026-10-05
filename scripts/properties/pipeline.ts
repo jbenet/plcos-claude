@@ -174,7 +174,7 @@ async function ticketDecisionProperties(check: Check, db: Awaited<ReturnType<typ
     `insert into platform.app_user(handle,name,initials,role,email,access,vehicles,approves,active)
      values($1,$1,'FX','Invented test actor',$1 || '@example.test',$2::platform.access_role,$3::uuid[],$4::text[],$5) returning id::text`,
     [handle, access, [inside], ['STAGE', 'INTRO_ASK', 'SEND'], active]))!.id;
-  const gp = await actor('invented-authz-approver', 'gp');
+  const gp = await actor('invented-authz-approver', 'team');
   const viewer = await actor('invented-authz-viewer', 'viewer');
   const inactive = await actor('invented-authz-inactive', 'admin', false);
   const entity = (await db.one<{ id: string }>(`insert into identity.entity(entity_type,display_name)

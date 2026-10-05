@@ -41,14 +41,14 @@ export interface Envelope {
 
 /**
  * The owner narrowed by the token. A token never widens: its vehicles intersect the owner's and it
- * can approve nothing. And it never acts as an Admin: an Admin's token is a GP on all of the
+ * can approve nothing. And it never acts as an Admin: an Admin's token is a Team member on all of the
  * owner's vehicles (or the token's). Two reasons. The licensed Dakota values (R3) are Admin-only, and
  * Dakota data never goes into a prompt to any agent (docs/agent-rules/real-data.md), which is where
  * every MCP answer goes. And the policy lets an Admin through before it looks at vehicles
  * (lib/authz/index.ts), so an Admin token limited to some vehicles would not be limited.
  */
 export function narrowedPrincipal(owner: AppUser, vehicles: string[] | null): AppUser {
-  const access = owner.access === 'admin' ? 'gp' : owner.access;
+  const access = owner.access === 'admin' ? 'team' : owner.access;
   if (vehicles === null) return { ...owner, access, approves: [] };
   const allowed = owner.vehicles === null ? vehicles : vehicles.filter((v) => owner.vehicles!.includes(v));
   return { ...owner, access, vehicles: [...new Set(allowed)], approves: [] };

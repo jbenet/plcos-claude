@@ -11,7 +11,7 @@ import type { StatsData } from '../../lib/lp-stats/data';
 
 export async function authzReadProperties(check: Check, db: Db) {
   const viewer: Principal = { access: 'viewer', vehicles: null };
-  const gp: Principal = { access: 'gp', vehicles: null };
+  const gp: Principal = { access: 'team', vehicles: null };
   const admin: Principal = { access: 'admin', vehicles: null };
   const owner = (await db.one<{ id: string }>(`select id::text from platform.app_user where handle='juan'`))!.id;
   const vehicles = await db.query<{ id: string }>(`select id::text from platform.vehicle order by sort_order limit 2`);

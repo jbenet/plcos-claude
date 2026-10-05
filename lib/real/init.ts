@@ -36,10 +36,12 @@ export interface TeamMember {
   affinityEmail: string | null;
   /** The address they sign in to Linear with, when it is not `email` — how "My Linear" finds their issues. Optional. */
   linearEmail: string | null;
-  /** Omitted grants preserve existing rows; new rows default to Juan Admin / team GP. */
+  /** Omitted grants preserve existing rows; new rows default to Juan Admin / everyone else Team. */
   access?: import('@/lib/authz').Role;
   vehicles?: string[] | null;
   approves?: string[];
+  /** false deactivates them (they can no longer sign in; their history stays). Omitted keeps the row's state. */
+  active?: boolean;
 }
 
 export interface VehicleInit {
@@ -152,12 +154,13 @@ export function validate(raw: unknown): { init: RealInit | null; problems: strin
       else if (seen.has(handle)) problems.push(`${at}.handle "${handle}" appears twice.`);
       else seen.add(handle);
       if (!name) problems.push(`${at}.name is required.`);
-      if (t?.access !== undefined && !['admin', 'gp', 'viewer'].includes(String(t.access))) problems.push(`${at}.access must be admin, gp or viewer.`);
+      if (t?.access !== undefined && !['admin', 'team', 'viewer'].includes(String(t.access))) problems.push(`${at}.access must be admin, team or viewer.`);
       if (t?.vehicles !== undefined && t.vehicles !== null && (!Array.isArray(t.vehicles) || t.vehicles.some(v => typeof v !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)))) problems.push(`${at}.vehicles must be null (all) or a list of vehicle UUIDs.`);
       const addr = (v: unknown) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
       if (t?.email !== undefined && t.email !== null && t.email !== '' && !addr(t.email)) problems.push(`${at}.email must be an email address.`);
       if (t?.login !== undefined && t.login !== null && t.login !== '' && !addr(t.login)) problems.push(`${at}.login must be an email address.`);
       if (t?.aliases !== undefined && (!Array.isArray(t.aliases) || t.aliases.some((a) => !addr(a)))) problems.push(`${at}.aliases must be a list of email addresses.`);
+      if (t?.active !== undefined && typeof t.active !== 'boolean') problems.push(`${at}.active must be true or false.`);
       if (t?.approves !== undefined && (!Array.isArray(t.approves) || t.approves.some(k => !['STAGE', 'INTRO_ASK', 'SEND'].includes(String(k))))) problems.push(`${at}.approves may contain STAGE, INTRO_ASK and SEND; money/allocation require Admin.`);
       if (handle && name) {
         team.push({
@@ -169,6 +172,7 @@ export function validate(raw: unknown): { init: RealInit | null; problems: strin
           ...(t.access === undefined ? {} : { access: t.access as TeamMember['access'] }),
           ...(t.vehicles === undefined ? {} : { vehicles: t.vehicles as TeamMember['vehicles'] }),
           ...(t.approves === undefined ? {} : { approves: t.approves as string[] }),
+          ...(typeof t.active === 'boolean' ? { active: t.active } : {}),
         });
       }
     });
@@ -300,8 +304,8 @@ export async function readInit(): Promise<InitReport> {
 /** Explicit grant fields change permissions; omitted fields cannot widen an existing user's access. */
 export async function upsertTeamMember(db: Queryable, t: TeamMember): Promise<void> {
   await db.query(
-    `insert into platform.app_user (handle, name, initials, role, email, access, vehicles, approves, linear_email)
-         values ($1,$2,$3,$4,$5,coalesce($6::platform.access_role,case when $1 = 'juan' then 'admin'::platform.access_role else 'gp'::platform.access_role end),$7::uuid[],coalesce($9::text[],'{}'),$10)
+    `insert into platform.app_user (handle, name, initials, role, email, access, vehicles, approves, linear_email, active)
+         values ($1,$2,$3,$4,$5,coalesce($6::platform.access_role,case when $1 = 'juan' then 'admin'::platform.access_role else 'team'::platform.access_role end),$7::uuid[],coalesce($9::text[],'{}'),$10,coalesce($11::boolean,true))
          on conflict (handle) do update set name = coalesce((
            select a.detail->>'name' from platform.audit_log a
            where a.subject_type='app_user' and a.subject_id=app_user.id::text
@@ -310,8 +314,9 @@ export async function upsertTeamMember(db: Queryable, t: TeamMember): Promise<vo
            role = excluded.role, email = excluded.email, linear_email = excluded.linear_email,
            access = coalesce($6::platform.access_role, app_user.access),
            vehicles = case when $8::boolean then excluded.vehicles else app_user.vehicles end,
-           approves = coalesce($9::text[], app_user.approves)`,
-    [t.handle, t.name, t.initials, t.role ?? '', t.email ?? '', t.access ?? null, t.vehicles ?? null, t.vehicles !== undefined, t.approves ?? null, t.linearEmail ?? null],
+           approves = coalesce($9::text[], app_user.approves),
+           active = coalesce($11::boolean, app_user.active)`,
+    [t.handle, t.name, t.initials, t.role ?? '', t.email ?? '', t.access ?? null, t.vehicles ?? null, t.vehicles !== undefined, t.approves ?? null, t.linearEmail ?? null, t.active ?? null],
   );
   // Their addresses become exactly the file's: default-to, login, aliases (platform.user_address).
   const { setAddresses } = await import('@/modules/platform');

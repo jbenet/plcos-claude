@@ -62,7 +62,7 @@ export async function outreachReadProperties(check: Check, db: Db) {
   resetWindows();
   const call = await outreachClient();
   const { juan, fund, spv, user, token, entity, pursuit } = await fixtures(db);
-  const gpFund = await user('outreach-gp-fund', 'gp', [fund.id]);
+  const gpFund = await user('outreach-gp-fund', 'team', [fund.id]);
   const viewer = await user('outreach-viewer', 'viewer', null);
 
   // An LP on both vehicles, in an open fund discussion; one only on the SPV, restricted.

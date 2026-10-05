@@ -7,7 +7,7 @@ import { grantRefusal, SYNC_ENDPOINTS } from './scopes';
  * Who may use the cloud sync endpoints (docs/deploy/railway.md §6–§7; Juan, 4 Oct 2026, decision G: no
  * public database port, so pulls and pushes go through the app and its own auth). A bearer token of the
  * endpoint's scope in its `tools` (lib/sync/scopes.ts, checked by the MCP registry's own `allowed`), live,
- * whose owner is active and still holds the access the scope's grant needs — an Admin for a snapshot, a GP
+ * whose owner is active and still holds the access the scope's grant needs — an Admin for a snapshot, a Team member
  * or an Admin for a push — checked on every use, not only when it was made.
  * No cookie is read, and a request from a browser page (any Origin) is refused.
  *
@@ -30,7 +30,7 @@ export async function syncGuard(request: Request, scope: SyncScope): Promise<{ c
   if (request.headers.get('origin')) return { response: syncError(403, 'The sync endpoints take no browser requests; use scripts/cloud-pull.sh or scripts/cloud-push.sh.') };
   const challenge = { 'WWW-Authenticate': 'Bearer realm="capital-os-sync"' };
   const secret = /^Bearer\s+(\S+)$/i.exec(request.headers.get('authorization') ?? '')?.[1];
-  if (!secret) return { response: json(401, { ok: false, error: `Send a ${scope} token as "Authorization: Bearer <token>". An ${scope === 'snapshot' ? 'Admin' : 'Admin or a GP'} makes one in Preferences → MCP access.` }, challenge) };
+  if (!secret) return { response: json(401, { ok: false, error: `Send a ${scope} token as "Authorization: Bearer <token>". An ${scope === 'snapshot' ? 'Admin' : 'Admin or a Team member'} makes one in Preferences → MCP access.` }, challenge) };
   const db = await getDb();
   const found = await findMcpToken(secret, db, request.headers.get('user-agent'));
   if (!found) return { response: json(401, { ok: false, error: 'That token is not known here.' }, challenge) };
@@ -44,7 +44,7 @@ export async function syncGuard(request: Request, scope: SyncScope): Promise<{ c
   };
   const endpoint = SYNC_ENDPOINTS[scope];
   if (!allowed({ tools: new Set(found.token.tools) }, endpoint as never)) return refuse(403, 'scope', `That token does not carry the ${endpoint.policy.scopes.join(', ')} scope.`);
-  if (grantRefusal(found.user, endpoint.policy.scopes)) return refuse(403, 'role', scope === 'snapshot' ? 'A snapshot token works only while its owner is an Admin.' : 'A push token works only while its owner is a GP or an Admin.');
+  if (grantRefusal(found.user, endpoint.policy.scopes)) return refuse(403, 'role', scope === 'snapshot' ? 'A snapshot token works only while its owner is an Admin.' : 'A push token works only while its owner is a Team member or an Admin.');
   return { caller: { token: found.token, user: found.user } };
 }
 

@@ -11,7 +11,7 @@ import { AddressClash, AddressInvalid, ownerOfAddress, setAddresses, type Addres
  *   - the last active admin can be neither deactivated nor demoted.
  * Deactivating raises the person's session epoch (the trigger in migration 018).
  */
-export type Access = 'admin' | 'gp' | 'viewer';
+export type Access = 'admin' | 'team' | 'viewer';
 export interface Person extends AppUser { active: boolean }
 
 export class PeopleRefused extends Error {
@@ -66,7 +66,7 @@ export async function addPerson(actorId: string, input: NewPerson): Promise<Pers
   const email = input.email.trim().toLowerCase();
   if (!name) throw new PeopleRefused('Give the person a name.');
   if (!EMAIL.test(email) || email.length > 254) throw new PeopleRefused('Give a full email address, like alex@example.org.');
-  if (!['admin', 'gp', 'viewer'].includes(input.access)) throw new PeopleRefused('Choose admin, GP or viewer.');
+  if (!['admin', 'team', 'viewer'].includes(input.access)) throw new PeopleRefused('Choose admin, team or viewer.');
   const db = await getDb();
   return db.transaction(async (tx) => {
     await lockRoster(tx);
@@ -76,7 +76,7 @@ export async function addPerson(actorId: string, input: NewPerson): Promise<Pers
     if (holder) throw new PeopleRefused('A deactivated person has that address: reactivate them instead.');
     const vehicles = await checkVehicles(tx, input.access, input.vehicles);
     const handle = await freeHandle(tx, email);
-    const role = (input.role ?? '').trim().slice(0, 80) || ({ admin: 'Admin', gp: 'General Partner', viewer: 'Viewer' } as const)[input.access];
+    const role = (input.role ?? '').trim().slice(0, 80) || ({ admin: 'Admin', team: 'PLC Team', viewer: 'Viewer' } as const)[input.access];
     const person = (await tx.one<Person>(`insert into platform.app_user (handle, name, initials, role, email, access, vehicles)
       values ($1, $2, $3, $4, $5, $6::platform.access_role, $7::uuid[]) returning ${COLUMNS}`, [handle, name, initialsOf(name), role, email, input.access, vehicles]))!;
     await appendAudit({ actorId, action: 'people.added', subjectType: 'app_user', subjectId: person.id, detail: { access: input.access, vehicles: vehicles?.length ?? 'all' } }, tx);
@@ -86,7 +86,7 @@ export async function addPerson(actorId: string, input: NewPerson): Promise<Pers
 
 export async function updatePerson(actorId: string, id: string, change: { access: Access; vehicles: string[] | null }): Promise<Person> {
   if (!UUID.test(id)) throw new PeopleRefused('Unknown person.');
-  if (!['admin', 'gp', 'viewer'].includes(change.access)) throw new PeopleRefused('Choose admin, GP or viewer.');
+  if (!['admin', 'team', 'viewer'].includes(change.access)) throw new PeopleRefused('Choose admin, team or viewer.');
   const db = await getDb();
   return db.transaction(async (tx) => {
     await lockRoster(tx);
