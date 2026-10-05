@@ -11,7 +11,6 @@ import { publicUrl, setupOpen } from '@/lib/settings/setup';
 import { settingsReady, settingsView, type SettingView } from '@/lib/settings/store';
 import { ago } from '@/lib/time';
 import { appendAudit, listUsers } from '@/modules/platform';
-import { signOutEverywhereAction } from './actions';
 import { SettingRow, type RowView } from './SettingRow';
 import s from './connections.module.css';
 
@@ -112,27 +111,9 @@ export default async function ConnectionsPage() {
       </div>
 
       <div className="card">
-        <div className="chead"><h2>People and sessions</h2><span className="lbl">{people.length} with an address</span></div>
+        <div className="chead"><h2>People</h2><span className="lbl">{people.length} with an address</span></div>
         <div className="cbody">
-          <p>Who can sign in: an active person on the roster whose address is a verified Google Workspace account. Sign out everywhere ends every session that person holds, on every device.</p>
-          <table className={s.people}>
-            <thead><tr><th>Person</th><th>Address</th><th>Access</th><th /></tr></thead>
-            <tbody>
-              {people.map((p) => (
-                <tr key={p.id}>
-                  <td><b>{p.name}</b>{p.id === user.id && <span className="flag f-ok" style={{ marginLeft: 8 }}>you</span>}</td>
-                  <td className="mono" style={{ fontSize: 11.5 }}>{p.email}</td>
-                  <td>{p.access}</td>
-                  <td>
-                    <form action={signOutEverywhereAction}>
-                      <input type="hidden" name="userId" value={p.id} />
-                      <button className="btn">Sign out everywhere</button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <p>Who can sign in, their access, deactivation and Sign out everywhere are in <Link href="/settings/people">Settings → People</Link>.</p>
         </div>
       </div>
 

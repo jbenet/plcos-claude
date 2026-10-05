@@ -1,0 +1,26 @@
+/* Settings → People (docs/deploy/railway.md §3). */
+.add{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px;align-items:start}
+.field{display:block;border:0;margin:0;padding:0;min-width:0}
+.field > span{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--label);margin-bottom:5px}
+.field input[type=text],.field input:not([type]),.field input[type=email]{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
+.add fieldset:nth-of-type(2){grid-column:span 2}
+.access,.vehicles{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px}
+.access label,.vehicles label{display:inline-flex;gap:5px;align-items:center}
+.access input,.vehicles input{accent-color:var(--accent)}
+.actions{grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.ok{margin:0;font-size:12.5px;color:var(--green)}
+.bad{margin:0;font-size:12.5px;color:var(--clay)}
+.muted{color:var(--muted);font-size:12.5px}
+.table{width:100%;border-collapse:collapse;font-size:12.5px}
+.table th{text-align:left;font-family:var(--mono);font-size:10px;font-weight:400;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:4px 8px 6px 0;border-bottom:1px solid var(--line)}
+.table td{padding:9px 8px 9px 0;border-bottom:1px solid var(--hair);vertical-align:top}
+.table tr[data-active="false"] td{color:var(--muted)}
+.controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+.edit{display:flex;gap:8px;flex-wrap:wrap;align-items:center;width:100%;justify-content:flex-end}
+.edit select{font:inherit;font-size:12.5px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);width:auto}
+@media (max-width: 760px){
+  .add{grid-template-columns:1fr}
+  .add fieldset:nth-of-type(2){grid-column:auto}
+  .table th:nth-child(2),.table td:nth-child(2){display:none}
+  .controls{justify-content:flex-start}
+}

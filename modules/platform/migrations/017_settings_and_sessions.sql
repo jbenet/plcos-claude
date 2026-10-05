@@ -31,3 +31,14 @@ $$;
 create trigger app_user_retire_sessions
 before update of active on platform.app_user
 for each row execute function platform.retire_sessions_on_deactivate();
+
+-- Secrets that belong to one person (their mailguard key): each AES-256-GCM under a subkey of PLCOS_SECRET
+-- for this purpose, bound to the person and the purpose, so a row moved to someone else does not decrypt.
+-- Only the person reads or replaces their own; an admin can neither (lib/settings/person-secrets.ts).
+create table platform.person_secret (
+  user_id     uuid not null references platform.app_user(id),
+  purpose     text not null check (purpose ~ '^[a-z][a-z0-9.-]{1,40}$'),
+  value       text not null check (length(value) between 1 and 8000),
+  updated_at  timestamptz not null default now(),
+  primary key (user_id, purpose)
+);

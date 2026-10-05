@@ -60,14 +60,3 @@ export async function checkSettingAction(_prev: SettingResult, formData: FormDat
   await appendAudit({ actorId: user.id, action: 'settings.check', subjectType: 'setting', subjectId: key, detail: { key, ok: result.ok } });
   return result;
 }
-
-/** Sign a person out everywhere: their session epoch goes up, and every cookie they hold stops working. */
-export async function signOutEverywhereAction(formData: FormData): Promise<void> {
-  const user = await requireAction('app/settings/connections/actions.ts#signOutEverywhereAction', formData);
-  const { appendAudit, raiseSessionEpoch } = await import('@/modules/platform');
-  const id = String(formData.get('userId') ?? '');
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return;
-  const epoch = await raiseSessionEpoch(id);
-  if (epoch !== null) await appendAudit({ actorId: user.id, action: 'session.signed_out_everywhere', subjectType: 'app_user', subjectId: id, detail: { epoch } });
-  revalidatePath('/settings/connections');
-}
