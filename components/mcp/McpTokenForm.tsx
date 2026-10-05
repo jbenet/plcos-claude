@@ -3,14 +3,30 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createMcpTokenAction, type MadeToken } from '@/app/settings/actions';
+import { createSyncTokenAction } from '@/app/sync/actions';
 import s from './mcp.module.css';
 
-/** Make a token, and show it once with the command that connects Claude Code to it (docs/26-mcp.md). */
-export function McpTokenForm({ endpoint, vehicles, draftTools }: { endpoint: string; vehicles: Array<{ id: string; name: string }>; draftTools: string[] }) {
+/** Where each cloud sync token is kept on the Mac (docs/deploy/railway.md §6–§7), and what reads it. */
+const SYNC_USE: Record<'snapshot' | 'push', { item: string; script: string }> = {
+  snapshot: { item: 'snapshot-token', script: 'bash scripts/cloud-pull.sh pull --to postgres://plcos@127.0.0.1:57434/plcos_copy' },
+  push: { item: 'push-token', script: 'bash scripts/cloud-push.sh <finished output file>' },
+};
+
+/**
+ * Make a token, and show it once with what connects it (docs/26-mcp.md): the Claude Code command for an
+ * MCP token, or for a cloud sync token the Keychain item the pull or push script reads it from.
+ */
+export function McpTokenForm({ endpoint, vehicles, draftTools, syncScopes = [] }: {
+  endpoint: string; vehicles: Array<{ id: string; name: string }>; draftTools: string[]; syncScopes?: Array<'snapshot' | 'push'>;
+}) {
   const router = useRouter();
-  const [made, setMade] = useState<MadeToken | null>(null);
+  const [made, setMade] = useState<(MadeToken & { scope?: string }) | null>(null);
   const [busy, setBusy] = useState(false);
-  const command = made?.ok ? `claude mcp add --transport http --scope user capital-os ${endpoint} --header "Authorization: Bearer ${made.secret}"` : '';
+  const [scope, setScope] = useState('read');
+  const sync = made?.ok && (made.scope === 'snapshot' || made.scope === 'push') ? SYNC_USE[made.scope] : null;
+  const command = !made?.ok ? ''
+    : sync ? `security add-generic-password -s plcos-railway -a ${sync.item} -U -w`
+      : `claude mcp add --transport http --scope user capital-os ${endpoint} --header "Authorization: Bearer ${made.secret}"`;
   return (
     <>
       <form
@@ -19,9 +35,11 @@ export function McpTokenForm({ endpoint, vehicles, draftTools }: { endpoint: str
           e.preventDefault();
           setBusy(true);
           try {
-            const r = await createMcpTokenAction(new FormData(e.currentTarget));
-            setMade(r);
-            if (r.ok) { (e.target as HTMLFormElement).reset(); router.refresh(); }
+            const data = new FormData(e.currentTarget);
+            const chosen = String(data.get('tools') ?? 'read');
+            const r = chosen === 'snapshot' || chosen === 'push' ? await createSyncTokenAction(data) : await createMcpTokenAction(data);
+            setMade({ ...r, scope: chosen });
+            if (r.ok) { (e.target as HTMLFormElement).reset(); setScope('read'); router.refresh(); }
           } finally { setBusy(false); }
         }}
       >
@@ -29,12 +47,14 @@ export function McpTokenForm({ endpoint, vehicles, draftTools }: { endpoint: str
           <span>Name</span>
           <input name="label" maxLength={80} placeholder="Claude Code on the Mac" required />
         </label>
-        <fieldset className={s.row}>
+        <fieldset className={s.row} onChange={(e) => setScope((e.target as HTMLInputElement).value)}>
           <legend>May</legend>
           <label><input type="radio" name="tools" value="read" defaultChecked /> Read</label>
           <label><input type="radio" name="tools" value="draft" /> Read, and {draftTools.join(' and ')}</label>
+          {syncScopes.includes('snapshot') && <label><input type="radio" name="tools" value="snapshot" /> Snapshot: copy the whole database to the Mac (cloud-pull)</label>}
+          {syncScopes.includes('push') && <label><input type="radio" name="tools" value="push" /> Push: send finished research up (cloud-push)</label>}
         </fieldset>
-        {vehicles.length > 1 && (
+        {vehicles.length > 1 && scope !== 'snapshot' && scope !== 'push' && (
           <fieldset className={s.row}>
             <legend>Vehicles</legend>
             {vehicles.map((v) => <label key={v.id}><input type="checkbox" name="vehicle" value={v.id} /> {v.name}</label>)}
@@ -48,8 +68,9 @@ export function McpTokenForm({ endpoint, vehicles, draftTools }: { endpoint: str
         <div className={s.secret} role="status">
           <p style={{ margin: '0 0 6px' }}><b>{made.label}</b> — copy it now; it is not shown again.</p>
           <code className={s.code}>{made.secret}</code>
-          <p style={{ margin: '10px 0 6px' }}>Connect Claude Code (in a terminal):</p>
+          <p style={{ margin: '10px 0 6px' }}>{sync ? 'Keep it in the Mac’s Keychain (in a terminal; it asks for the token, hidden as you paste):' : 'Connect Claude Code (in a terminal):'}</p>
           <code className={s.code}>{command}</code>
+          {sync && <p style={{ margin: '10px 0 0' }} className="muted">Then <span className="mono">{sync.script}</span> reads it from there.</p>}
           <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => void navigator.clipboard?.writeText(command)}>Copy the command</button>
         </div>
       )}

@@ -15,8 +15,11 @@ export const routeRules = {
   // MCP (docs/26-mcp.md): a bearer token, not the cookie; each tool call is then authorized as its owner.
   'app/api/mcp/route.ts#POST': 'mcp',
   'app/api/profile/route.ts#GET': 'admin',
+  // Cloud pull and push (docs/deploy/railway.md §6–§7): a bearer token of the endpoint's own scope, not the cookie.
+  'app/api/sync/push/route.ts#POST': 'sync:push',
+  'app/api/sync/snapshot/route.ts#GET': 'sync:snapshot',
   'app/api/session/route.ts#POST': 'session',
   'app/dev/shot/[...path]/route.ts#GET': 'admin',
   'app/issues/shot/[...path]/route.ts#GET': 'admin',
-} as const satisfies Record<string, Action | 'mcp'>;
+} as const satisfies Record<string, Action | 'mcp' | 'sync:snapshot' | 'sync:push'>;
 export type RouteId = keyof typeof routeRules;

@@ -6,6 +6,7 @@ Usage: backup-prune.py <backup dir> <max GB> [--dry-run]
 The stdin mode prints only dropped object keys; it never deletes local files.
 
 Files are plcos-real-<YYYYMMDDTHHMMZ>[-daily|-event].tar.gz.gpg; a name with no kind reads as an event.
+plcos-cloud-<…> files (scripts/cloud-pull.sh --keep, the cloud's off-site copy) are thinned with them, as one series.
 The older a backup is, the sparser the ones kept:
   - event backups (taken around a very large update): kept 2 days
   - dailies: every one for 14 days, then one per ISO week to 8 weeks, one per month to 12 months,
@@ -22,7 +23,7 @@ ALL_DAILY_DAYS = 14 # GUESS
 WEEKLY_WEEKS = 8    # GUESS
 MONTHLY_MONTHS = 12 # GUESS
 
-NAME = re.compile(r'^plcos-real-(\d{8}T\d{4}Z)(?:-(daily|event))?\.tar\.gz\.gpg$')
+NAME = re.compile(r'^plcos-(?:real|cloud)-(\d{8}T\d{4}Z)(?:-(daily|event))?\.tar\.gz\.gpg$')
 
 
 def main():

@@ -42,6 +42,11 @@ export async function mcpGuard(request: Request): Promise<{ env: Envelope } | { 
   const db = await getDb();
   const found = await findMcpToken(secret, db);
   if (!found) return deny(401, 'That token is not known here.', challenge);
+  // A cloud sync token (snapshot or push) reaches only its own endpoint; its tools list is empty anyway.
+  if (found.token.scope !== 'mcp') {
+    await appendAudit({ actorId: found.user.id, action: 'mcp.refused', subjectType: 'mcp_token', subjectId: found.token.tokenId, detail: { reason: 'scope', scope: found.token.scope } }, db);
+    return deny(403, 'That token is not an MCP token. Make one in Preferences → MCP access.');
+  }
   if (found.state !== 'live') {
     await appendAudit({ actorId: found.user.id, action: 'mcp.refused', subjectType: 'mcp_token', subjectId: found.token.tokenId, detail: { reason: found.state } }, db);
     return deny(401, `That token is ${found.state === 'inactive' ? 'for someone no longer active' : found.state}. Make a new one in Preferences.`, challenge);

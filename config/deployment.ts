@@ -190,6 +190,16 @@ export const config = {
     maxResponseBytes: 60_000, // GUESS — ~15K tokens of an agent's context per call.
     maxRows: 100, // GUESS — rows in one list answer before paging.
   },
+  /**
+   * Cloud pull and push through the app's own API (docs/deploy/railway.md §6–§7; Juan, 4 Oct 2026: no
+   * public database port). A snapshot is pg_dump of this server's own database, one at a time; a push is
+   * one finished W1, W1c or W5 output, validated by the importer's own checks.
+   */
+  sync: {
+    tokenDays: 90, // GUESS — as MCP tokens: a quarter, then make a new one.
+    maxPushBytes: 20 * 1024 * 1024, // GUESS — a finding is 10–30 KB; a 200-LP batch fits with room.
+    maxPushFiles: 500, // GUESS — the largest batch a worker writes, with its review file.
+  },
   warehouse: {
     enabled: false,
     canonMode: 'inProcess' as CanonMode,

@@ -15,12 +15,23 @@ export function withRoute(name: RouteId, handler: (request: Request, context: an
       return handler(request, guard, guard.env.principal);
     };
   }
+  // Cloud sync (docs/deploy/railway.md §6–§7): a bearer token of the endpoint's own scope, checked with its
+  // owner's current access before the handler runs. No cookie; any browser Origin is refused there.
+  const sync = routeRules[name];
+  if (sync === 'sync:snapshot' || sync === 'sync:push') {
+    return async (request: Request): Promise<Response> => {
+      const { syncGuard } = await import('@/lib/sync/auth');
+      const guard = await syncGuard(request, sync === 'sync:snapshot' ? 'snapshot' : 'push');
+      if ('response' in guard) return guard.response;
+      return handler(request, guard, guard.caller.user);
+    };
+  }
   return async (request: Request, context?: any): Promise<Response> => {
     try {
       const policy = routeRules[name];
       if (!policy) throw new AuthorizationError();
       try {
-        if (policy === 'mcp') throw new AuthorizationError();
+        if (policy === 'mcp' || policy === 'sync:snapshot' || policy === 'sync:push') throw new AuthorizationError();
         if (policy === 'feedback' || policy === 'session') {
           // Session selection bootstraps identity; its handler validates the selected active user.
           // Feedback reporter identity is resolved only by the post-response ingester.
