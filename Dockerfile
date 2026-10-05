@@ -56,9 +56,10 @@ RUN npm run build \
 # as a server external), so it is installed on its own at exactly the version package-lock.json pins.
 FROM base AS prod-deps
 COPY --from=source /app/package.json /app/package-lock.json ./
+# tsx is a runtime dependency (scripts and import jobs run through it), so npm ci installs it from the
+# lockfile. A separate unlocked `npm install tsx` re-resolved the whole tree from package.json's ranges and
+# failed on Railway's first build (5 Oct 2026: @tiptap/extension-image 3.31.4 against a pinned core).
 RUN npm ci --omit=dev \
- && TSX_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/tsx'].version")" \
- && npm install --no-save --no-package-lock --omit=dev "tsx@${TSX_VERSION}" \
  && npm cache clean --force
 
 # ---- runtime -------------------------------------------------------------------------------------
