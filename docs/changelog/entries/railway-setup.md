@@ -4,13 +4,14 @@
 |---|---|
 | ![/setup, step 1: the setup code from the server log, with the six steps down the left](docs/changelog/shots/railway-setup/01-setup-code.webp) | **Step 1, the code.** A deployed server that is not set up prints one line at boot: “Not set up yet. Open …/setup and enter the code XXXX-XXXX-XXXX”. The code is the credential; ten wrong tries an hour from one address (an IPv6 /64 counts once), 10,000 in total. |
 | ![/setup, step 2: the public address, filled in from the request, and the redirect URI it makes](docs/changelog/shots/railway-setup/02-setup-address.webp) | **Step 2, the address.** Filled in from Railway's domain (here, the address the page was opened at). The Google redirect URI under it changes as you type. |
-| ![/setup, step 3: the Google Cloud console steps with links, the copyable redirect URI, and the client ID and secret](docs/changelog/shots/railway-setup/03-setup-google.webp) | **Step 3, Google.** Five steps in the Cloud console, each a link: a project, Branding, Audience → **Internal**, a Web client with the redirect URI to copy, then the ID and secret here. |
+| ![/setup, step 3: the Google Cloud console steps with links, the copyable redirect URI, and the client ID and secret](docs/changelog/shots/railway-setup/03-setup-google.webp) | **Step 3, Google.** Five steps in the Cloud console, each a link: a project, Branding, Audience, a Web client with the redirect URI to copy, then the ID and secret here. Audience says when to choose **Internal** (one Workspace) and when **External** (Testing with up to 100 test users, or in production: name, email and profile need no verification). |
 | ![/setup, step 4: the first admin's Workspace address](docs/changelog/shots/railway-setup/04-setup-admin.webp) | **Step 4, the first admin.** An existing person with that address becomes an admin; otherwise one is added. Nobody signs up. |
 | ![/setup, step 5: Affinity, Linear and Anthropic, each skippable](docs/changelog/shots/railway-setup/05-setup-connectors.webp) | **Step 5, connectors.** Each can be skipped and added later. |
 | ![/setup, step 6: a review of every value, secrets as their last four characters](docs/changelog/shots/railway-setup/06-setup-review.webp) | **Step 6, review.** Nothing is saved until here, and then all of it is checked first: one wrong value writes nothing and takes you back to it, with everything else still typed. |
 | ![/setup on a phone: one column, the step named above the card](docs/changelog/shots/railway-setup/07-setup-mobile.webp) | **On a phone,** one column, the step named above the card. |
 | ![/setup done: Continue with Google](docs/changelog/shots/railway-setup/08-setup-done.webp) | **Done.** The code is retired; /setup now only says the server is set up. |
-| ![Settings → Connections: the address, Google sign-in, connectors, tokens, people and sessions, and what stays in the environment](docs/changelog/shots/railway-setup/09-settings-connections.webp) | **Settings → Connections** (Admins). Every setting, where its value comes from (the environment, the app, or nowhere), Replace, Remove, and Check for Anthropic and Affinity. Secrets show as •••• and their last four. People and sessions has Sign out everywhere. |
+| ![Settings → Connections: the address and sign-in, connectors, tokens, and what stays in the environment](docs/changelog/shots/railway-setup/09-settings-connections.webp) | **Settings → Connections** (Admins, signed in with Google). Every setting, where its value comes from (the environment, the app, or nowhere), Replace, Remove, and Check for Anthropic and Affinity. A secret shows as •••• and its last four only when 16+ characters long. Read-only under the Mac's user switcher. |
+| ![Settings → People: add a person, and everyone with their access, Edit, Deactivate and Sign out everywhere](docs/changelog/shots/railway-setup/10-settings-people.webp) | **Settings → People** (Admins). How Google sign-in's roster grows: add a person by name, Workspace address, access and vehicles; change access; deactivate (signed out everywhere) and reactivate. An address belongs to one active person; the last admin stays. |
 
 Juan, 4 Oct: "setup all secrets in the server to be configurable from settings inside the server; make a very
 nice /setup that guides you through setting it all up from scratch … the only local secret is the key for the
@@ -42,19 +43,29 @@ page is behind it; /setup and /signin are not. The Mac's servers keep the switch
 back to it. "Is this the live server" and the remote-database guard now key on a deployed sign-in being on, so
 LabOS still works. MCP tokens are unchanged.
 
+**Hardened after a security review (5 Oct).** Setup closes for good once finished: a removed Google client, a
+rotated or lost `PLCOS_SECRET`, or stored sign-in rows that no longer decrypt never reopen it (the boot log says so).
+A deployed server with no `PLCOS_SECRET` and no volume refuses to start. A finish takes the code out of play before
+it waits. Deactivating a person raises their epoch; feedback carries the epoch. Settings are read-only under the
+switcher. `__Host-` cookies over https. `hd` must equal the address's domain unless listed. The client address is
+the one the trusted proxy appended (1 hop, a GUESS the rehearsal confirms), and past the total cap only an address
+with no wrong code may try. A preview copy leaves the key behind.
+
+**People and per-person keys.** Settings → People adds and manages the roster. Each person's mailguard key is kept
+in the app on a deployed server (`platform.person_secret`, AES-256-GCM under its own subkey, bound to its owner);
+Preferences shows it only masked, with Replace and Remove, and only its owner sets it. The Mac keeps the Keychain.
+
 **Also:** feedback behind Google needs a signed session (no anonymous issues from the internet); the origin
 check accepts the proxy's forwarded scheme, which Railway's TLS edge needs; a refused Admin action is logged.
 
 **Templates.** `PLCOS_SECRET` is `[required]` in `service.env.example`; the keys that now live in the app are
 `[optional]`, Dakota's included (no longer `[never]`); a `[platform]` tag covers Railway's own variables. railway.md §4's table is regenerated.
 
-**Not done.** Each person's mailguard key is still kept in the Mac's Keychain, which a Railway server does not
-have, so drafting to Gmail from Railway waits for a database-backed key store. A deployed server's roster comes
-from the demo seed or `init.jsonc`; there is no page to add people yet.
-
-Tests: 15 new properties (`scripts/properties/railway-setup.ts`), on PGlite and on Postgres, through the real
-route handlers and a fake Google: encryption at rest, the environment winning, validation, the setup code and
-its limits, a failed setup writing nothing, session tampering, expiry and epoch, the callback's five refusals and
-one admission, a non-admin refused and logged on every Connections action, no decoy secret in audit rows, logs or
-either page, the key readers, and cross-site POSTs. Invented data only; nothing contacted Google, Railway or any
-other service.
+Tests: 26 properties (`scripts/properties/railway-setup.ts`), on PGlite and on Postgres, through the real
+route handlers and a fake Google: encryption at rest, the environment winning, validation, the switcher refusing
+writes, masking, the setup code and its limits, the trusted proxy hop, a failed setup writing nothing, two
+concurrent finishes, setup never reopening, the boot refusal, session tampering, expiry, epoch and deactivation,
+the callback's six refusals and its admissions, a non-admin refused and logged on every Connections and People
+action, People's rules, per-person keys, no decoy secret in audit rows, logs or pages, the key readers, preview
+copies, token routes needing no session, and cross-site POSTs. Invented data only; nothing contacted Google,
+Railway or any other service.

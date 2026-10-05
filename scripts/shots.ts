@@ -19,6 +19,8 @@ interface Shot {
   fullPage?: boolean;
   /** Narrower than the design boards, for the layouts that have to survive a small window. */
   width?: number;
+  /** A taller window instead of a full-page stitch, which repeats the fixed demo bar down the page. */
+  height?: number;
 }
 
 /** Select the demo's first user by cookie, and reload: server actions refuse a browser with none. */
@@ -2591,7 +2593,7 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '04-setup-admin', path: '/setup', prepare: (page) => setupTo(page, 3) },
     { name: '05-setup-connectors', path: '/setup', fullPage: true, prepare: (page) => setupTo(page, 4) },
     { name: '06-setup-review', path: '/setup', prepare: (page) => setupTo(page, 5) },
-    { name: '07-setup-mobile', path: '/setup', width: 390, fullPage: true, prepare: (page) => setupTo(page, 2) },
+    { name: '07-setup-mobile', path: '/setup', width: 390, height: 1900, prepare: (page) => setupTo(page, 2) },
     { name: '08-setup-done', path: '/setup', prepare: (page) => setupTo(page, 6) },
     { name: '09-settings-connections', path: '/setup', fullPage: true, prepare: (page) => signedInAt(page, '/settings/connections') },
     { name: '10-settings-people', path: '/setup', fullPage: true, prepare: (page) => signedInAt(page, '/settings/people') },
@@ -2933,7 +2935,7 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1440, height: 940 }, deviceScaleFactor: 2 });
 
   for (const shot of shots) {
-    await page.setViewportSize({ width: shot.width ?? 1440, height: shot.width && shot.width > 1500 ? 1150 : 940 });
+    await page.setViewportSize({ width: shot.width ?? 1440, height: shot.height ?? (shot.width && shot.width > 1500 ? 1150 : 940) });
     const path = await resolveTokens(page, base, shot.path);
     await page.goto(base + path, { waitUntil: 'networkidle' });
     await page.evaluate(() => document.fonts.ready);
