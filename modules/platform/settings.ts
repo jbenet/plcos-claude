@@ -26,13 +26,15 @@ export async function deleteSettingRow(q: Queryable, key: string): Promise<boole
 const USER_COLUMNS = 'id::text, handle, name, initials, role, email, access::text, vehicles::text[], approves';
 
 /**
- * The active people whose email is this address, ignoring case. More than one is ambiguous, and the
- * caller refuses the sign-in rather than guess.
+ * The active people who hold this address, ignoring case: any of their addresses (login, default-to or alias,
+ * platform.user_address), or their app_user.email. More than one is ambiguous, and the caller refuses the
+ * sign-in rather than guess.
  */
 export async function activeUsersByEmail(email: string, q?: Queryable): Promise<Array<AppUser & { sessionEpoch: number }>> {
   const db = q ?? await getDb();
-  return db.query(`select ${USER_COLUMNS}, session_epoch "sessionEpoch" from platform.app_user
-    where active and email <> '' and lower(email) = lower($1)`, [email.trim()]);
+  return db.query(`select ${USER_COLUMNS}, session_epoch "sessionEpoch" from platform.app_user u
+    where active and (exists (select 1 from platform.user_address a where a.user_id = u.id and lower(a.address) = lower($1))
+      or (email <> '' and lower(email) = lower($1)))`, [email.trim()]);
 }
 
 /** The person a session names, if they are still active, with their current epoch. */
@@ -64,10 +66,11 @@ export async function activeAdminCount(q?: Queryable): Promise<number> {
  */
 export async function ensureAdmin(q: Queryable, email: string): Promise<{ user: AppUser; created: boolean }> {
   const address = email.trim().toLowerCase();
-  const existing = await q.query<AppUser>(`select ${USER_COLUMNS} from platform.app_user where active and lower(email) = $1`, [address]);
+  const existing = await activeUsersByEmail(address, q);
   if (existing.length > 1) throw new Error(`More than one active person has the address ${address}. Make it unique first.`);
   if (existing.length === 1) {
     const user = (await q.one<AppUser>(`update platform.app_user set access = 'admin', vehicles = null where id = $1 returning ${USER_COLUMNS}`, [existing[0]!.id]))!;
+    // (any of their addresses: an existing person named by an alias becomes the admin, not a new person)
     return { user, created: false };
   }
   const local = address.split('@')[0]!.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'admin';

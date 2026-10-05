@@ -16,8 +16,12 @@ export {
   activeAdminCount, activeUsersByEmail, deleteSettingRow, ensureAdmin, raiseSessionEpoch, readSettingRows, sessionUser,
   upsertSettingRow, type SettingRow,
 } from './settings';
-export { addPerson, listPeople, PeopleRefused, setPersonActive, updatePerson, type Access, type NewPerson, type Person } from './people';
+export { addPerson, listPeople, PeopleRefused, setPersonActive, updateAddresses, updatePerson, type Access, type NewPerson, type Person } from './people';
 export { deletePersonSecret, readPersonSecret, writePersonSecret } from './person-secrets';
+export {
+  AddressClash, AddressInvalid, addressClashes, addressesOf, allAddresses, normalizeAddressSet, ownerOfAddress, setAddresses,
+  type AddressKind, type AddressSet, type UserAddress,
+} from './addresses';
 export {
   createMcpToken, findMcpToken, hashToken, listMcpTokens, looksLikeToken, revokeMcpToken, TokenRefused, type McpToken, type NewToken, type TokenState,
 } from './mcp-tokens';
