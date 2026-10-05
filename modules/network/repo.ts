@@ -1,4 +1,5 @@
 import { getDb, type Db } from '@/lib/db';
+import { withSharedDb } from '@/lib/db/scheduling';
 import { edgeGrade } from './warmth';
 import { graphSnapshot, pathsFromSnapshot, yieldRouteWork } from './path-search';
 import type { Edge, EdgeKind, EvidenceTier } from './types';
@@ -155,7 +156,7 @@ async function edgeSummary(): Promise<{ coverage: { edges: number; from: Date | 
     from network.edge_revision where singleton`))!.key;
   const prior = summaries.get(db);
   if (prior?.key === key) return prior.value;
-  const value = (async () => {
+  const value = withSharedDb(async () => {
     const rows = await db.query<{ tier: EvidenceTier; n: number; reviewed: number; since: string | null; until: string | null }>(`
       with totals as (
         select tier::text tier, count(*)::int n, count(reviewed_by)::int reviewed,
@@ -177,7 +178,7 @@ async function edgeSummary(): Promise<{ coverage: { edges: number; from: Date | 
       from: dates.length ? new Date(Math.min(...dates)) : null,
       to: ends.length ? new Date(Math.max(...ends)) : null },
       tiers: rows.map(({ tier,n,reviewed }) => ({ tier,n,reviewed })) };
-  })();
+  });
   summaries.set(db,{ key,value });
   try { return await value; } catch(error) { if (summaries.get(db)?.value === value) summaries.delete(db); throw error; }
 }
@@ -210,7 +211,8 @@ export async function routeSources(): Promise<RouteSource[]> {
   const revision = await evidenceRevision(db);
   const previous = sourceRosters.get(db);
   if (previous?.revision === revision) return previous.value;
-  const value = readRouteSources(db);
+  // Shared under the revision, so never at maintenance priority: the warm-up and a page read both join it.
+  const value = withSharedDb(() => readRouteSources(db));
   sourceRosters.set(db, { revision, value });
   try { return await value; }
   catch (error) { if (sourceRosters.get(db)?.value === value) sourceRosters.delete(db); throw error; }
