@@ -40,8 +40,8 @@ const RAILWAY: Record<string, string> = {
   AWS_SECRET_ACCESS_KEY: 'Leave unset (no S3 for now, §8).',
   PORT: 'Do not set: Railway sets it, and the image listens on it.',
   GIT_COMMIT: 'Build argument; code change 2 takes it from Railway\'s commit variable.',
-  DAKOTA_USERNAME: '**Never set.** Dakota stays on the Mac (decision C).',
-  DAKOTA_PASSWORD: '**Never set.** See DAKOTA_USERNAME.',
+  DAKOTA_USERNAME: 'Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. Dakota now lives in the cloud too (decision C).',
+  DAKOTA_PASSWORD: 'Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins.',
 };
 
 // Connector variables are matched by prefix: only each connector's own folder names them (npm run boundaries).

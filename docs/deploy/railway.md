@@ -3,7 +3,7 @@
 Juan, 3 Oct: deploy to Railway to manage his own infra, move the database off the Mac, keep a quick local
 copy for testing, and run workflows in the cloud with results synced down. This replaces PL's LabOS app
 as the target. Almost everything built for [rev 3](rev3.md) carries over: the image, the import child
-process, the daily timer, `cutover.sh` and the Dakota strip.
+process, the daily timer and `cutover.sh`.
 
 **The rules:**
 - One web service and one Postgres. Nothing else until something measured needs it.
@@ -27,7 +27,7 @@ process, the daily timer, `cutover.sh` and the Dakota strip.
 | **Size** | Juan's existing Railway plan; raise it if needed | Measured (06-measurements): the server peaks at 1.25 GiB under 10 users, the findings import child at 2.43 GiB. Memory limit at least 4 GB, ideally 8. |
 
 The Mac becomes a development machine. It serves demos and previews of pulled copies (§6), and runs local
-research that pushes its results up (§7). Dakota stays there until decision C.
+research that pushes its results up (§7). Dakota moves to the cloud with everything else (decision C).
 
 ## 2. What to build before the first real deploy
 
@@ -92,11 +92,11 @@ secret ones. Never put a value in chat, a file, a commit or this doc.
 | `PGSSLMODE` | optional |  | Leave unset on the private network (code change 1). |
 | `AFFINITY_API_KEY` | required-real | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `LINEAR_API_KEY` | required-real | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
-| `DAKOTA_USERNAME` | never |  | **Never set.** Dakota stays on the Mac (decision C). |
-| `DAKOTA_PASSWORD` | never |  | **Never set.** See DAKOTA_USERNAME. |
+| `DAKOTA_USERNAME` | never |  | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. Dakota now lives in the cloud too (decision C). |
+| `DAKOTA_PASSWORD` | never |  | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `CLOUDSDK_AUTH_ACCESS_TOKEN` | never |  | **Never set** on Railway. |
-| `GOOGLE_OAUTH_CLIENT_ID` | never |  | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | never | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
+| `MAILGUARD_URL` | optional |  | Leave unset (the default works). |
+| `MAILGUARD_TOKEN` | never | yes | **Never set** on Railway. |
 | `ANTHROPIC_API_KEY` | later | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `ANTHROPIC_MODEL` | optional |  | Leave unset (the default works). |
 | `FEEDBACK_EXPORT_TOKEN` | required-real | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
@@ -166,15 +166,11 @@ container's filesystem, including the volume, which is how the working files go 
 Railway's docs and checked for real in the rehearsal. The fallback is the Postgres TCP proxy, on for that
 hour only.
 
-**Dakota (decision C, open):** until Juan decides, Dakota is stripped on the Mac first and never reaches
-Railway. That takes two hops, both with the existing script:
-- **Hop 1 (Mac → Mac):** freeze live and copy it into an empty `plcos_stripped` on the Mac's cluster. Verify,
-  strip Dakota (510 s in rehearsal 3), and stop the copied jobs.
-- **Hop 2 (Mac → Railway, through the tunnel):** freeze `plcos_stripped`, copy it to Railway's empty
-  `plcos_live`, verify for an exact MATCH, and apply [railway-grants.sql](../../scripts/railway-grants.sql).
-  `--keep-dakota` only skips a second strip.
-
-If Dakota may live on Railway, this is one hop with `--keep-dakota`, and its sync moves to the cloud.
+**Dakota moves too (decision C, Juan 4 Oct: "it should be our db same way as pl's warehouse").** So it
+is one hop, Mac → Railway through the tunnel. `cutover.sh` freezes, dumps, restores, verifies for an exact
+MATCH, and applies [railway-grants.sql](../../scripts/railway-grants.sql). `--keep-dakota` skips the strip
+that rev 3 needed. Dakota's raw replica (`dakota/`, 50 MB) goes up with the working files. The cloud's Dakota
+sync then carries on from the last pull, with the Dakota sign-in entered in Settings.
 
 **Rehearse once,** into a scratch `plcos_rehearsal`, a week before, to measure the real times.
 
@@ -183,9 +179,8 @@ If Dakota may live on Railway, this is one hop with `--keep-dakota`, and its syn
 | Step | What | Time |
 |---|---|---|
 | a | No import job queued or running. Stop the Mac's Next server (not Postgres). `npm run backup -- event "pre-railway"`. Open the tunnel. | minutes |
-| b | Hop 1: `bash scripts/cutover.sh run --from postgres://plcos_app@127.0.0.1:57433/plcos_live --to postgres://plcos_app@127.0.0.1:57433/plcos_stripped` | ~10 min (rehearsed) |
-| c | Hop 2: `bash scripts/cutover.sh run --from …/plcos_stripped --to postgres://plcos_app@127.0.0.1:55432/plcos_live --keep-dakota --grants scripts/railway-grants.sql` | 5–15 min, GUESS (home upload) |
-| d | Files: `bash scripts/cutover-files.sh pack ../plcos-data/real <outside>/files.tar.gz` (it leaves out the databases, `dakota/`, logs, snapshots and the research exports), `scp` it up, and unpack it into `/app/data/real` with `railway ssh`. Runs alongside c. | 5–10 min, GUESS |
+| c | `bash scripts/cutover.sh run --from postgres://plcos_app@127.0.0.1:57433/plcos_live --to postgres://plcos_app@127.0.0.1:55432/plcos_live --keep-dakota --grants scripts/railway-grants.sql` | 5–15 min, GUESS (home upload) |
+| d | Files: `bash scripts/cutover-files.sh pack ../plcos-data/real <outside>/files.tar.gz` (Dakota's replica included; it leaves out the databases, logs, snapshots and the research exports), `scp` it up, and unpack it into `/app/data/real` with `railway ssh`. Runs alongside c. | 5–10 min, GUESS |
 | e | c must say **MATCH**; `cutover-files.sh` checks its own archive. Close the tunnel. | in c |
 | f | `DATA_PROFILE=real` and `DATABASE_URL` pointing at `plcos_live`. Redeploy. The settings and keys entered in the demo stay in `plcos_demo`, so enter them again in Settings, or move that one table. Leave the daily schedule off. | 5 min |
 | g | Smoke, signed in as admin: `/today`, each vehicle's overview, pipeline, selection and strategy, `/orgs/g/lps`, `/developer/enrich`. Make one reversible note. Run **Export the research set** (149 s in rehearsal). Pull a first copy to the Mac (§6). | 15 min |
@@ -238,14 +233,14 @@ and push up results".
   - The W1, W1c and W5 buttons call the Anthropic API, with the key entered in Settings.
   - Making a batch is still a script. Run it with `railway ssh` until a button exists.
 - **On the Mac:**
-  - Claude Code sub-agents and ChatGPT run research against a pulled copy, plus what only the Mac has
-    (Dakota, Polaris with Juan's gcloud login).
+  - Claude Code sub-agents and ChatGPT run research against a pulled copy, which includes Dakota, plus
+    Polaris with Juan's gcloud login, which stays on the Mac.
   - They **push the results up** with a push token. A push carries only the finished files W1, W1c and W5
     already write (findings, reviews, strategies), never database rows.
   - The cloud checks each file with the importers' own validators, files it under `enrich/inbox/`, records a
     ledger run, and imports it the usual way. A rejected file comes back with the reason.
-  - While Dakota stays on the Mac, a push refuses any claim whose source is Dakota. Research may find people
-    through Dakota, but only public sources go up.
+  - Dakota's rule is unchanged inside our system. Its private fields never go to an outside service, a web
+    search or an agent's prompt. Pushes stay between our own Mac and our own cloud.
 - **Where the files live: on the Railway volume,** read and written as today, with no code change.
 
 **Why this is not two-way sync.** Sync would merge two writable databases: conflict rules for every table,
@@ -279,20 +274,18 @@ the Mac ever writes the cloud database.
 |---|---|---|
 | A | Sign-in | Google OAuth, MailGuard's flow; secrets set in the app through `/setup` |
 | B | Plan | Juan's existing Railway plan, raised if needed |
-| C | Dakota on Railway | **Open**; what we know is below |
+| C | Dakota on Railway | Yes: "it should be our db same way as pl's warehouse". One-hop move; Dakota's sync runs in the cloud |
 | D | S3 | Not now: Railway's backups plus the Mac's encrypted pulls |
 | E | Polaris extracts and other working files go up | Yes: "its our own PL level deployment" |
 | F | Research | Both cloud and Mac; the Mac pushes results up |
 | G | Database port | None: pulls and pushes through our API; the move through Railway's SSH tunnel |
 | H | Rollback window | 14 days |
 
-**C: what we know about Dakota.**
-- The repo holds no copy of Dakota's subscription agreement or terms. docs/20 records only the API.
-- The rule we follow is Juan's (27 Sep): "dakota data does not leave our system … should just go into our db".
-- PL's own warehouse (Polaris, on Google Cloud) already holds some Dakota data (docs/agent-rules/real-data.md).
-  So PL already keeps Dakota records in a cloud database it controls.
-- Rev 3 held Dakota back from PL's RDS "until Dakota's terms allow it". That was caution, not a known term.
+**C: what we knew about Dakota when Juan decided.**
+- No copy of Dakota's terms in the repo.
+- Juan's rule (27 Sep): "should just go into our db".
+- PL's warehouse on Google Cloud already holds Dakota data.
 
-If Juan's Railway project counts as "our db" the same way, Dakota moves up. The cutover is then one hop, the
-sync runs in the cloud, and the Mac-only Dakota path goes away. Every pull would then carry Dakota to the Mac,
-which holds it today anyway. If it doesn't count, keep the strip, and run Dakota-aided research on the Mac.
+Juan, 4 Oct: Railway is "our db" the same way. Dakota's other rules stand, inside and outside the cloud:
+read-only, only its connector talks to it, and its private fields never leave our system
+(docs/agent-rules/real-data.md).

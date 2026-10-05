@@ -71,16 +71,17 @@ export async function serviceEnvProperties(check: Check): Promise<void> {
 
     // Cutover files: an invented real root with every excluded kind of path, plus files that must go.
     const root = join(scratch, 'real');
-    const keep = ['enrich/raw/invented-a.json', 'enrich/batches/b1.txt', 'issues/0001.md', 'workflows/runs.jsonl', 'prospects/p.json'];
-    const drop = ['postgres/PG_VERSION', 'database/pglite.bin', 'database.lock', 'postgres.url', 'dakota/raw/account.jsonl',
+    const keep = ['enrich/raw/invented-a.json', 'enrich/batches/b1.txt', 'issues/0001.md', 'workflows/runs.jsonl', 'prospects/p.json',
+      'dakota/raw/account.jsonl'];
+    const drop = ['postgres/PG_VERSION', 'database/pglite.bin', 'database.lock', 'postgres.url',
       'logs/server.log', 'rehearsal/x.dump', 'backups/b.gpg', '.real-copy-20260928/database/x', '.preview-copy',
       'enrich/identity-review.jsonl', 'enrich/research-set.jsonl', 'enrich/lp-unit-review.jsonl'];
     for (const f of [...keep, ...drop]) { await mkdir(dirname(join(root, f)), { recursive: true }); await writeFile(join(root, f), 'invented\n'); }
     const out1 = join(scratch, 'files.tar.gz');
     const pack = spawnSync('bash', ['scripts/cutover-files.sh', 'pack', root, out1], { encoding: 'utf8' });
     const listed = spawnSync('tar', ['-tzf', out1], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean).map(s => s.replace(/^\.\//, '')).sort();
-    check('CUTOVER FILES pack moves the working files and leaves out databases, Dakota, snapshots and exports',
-      pack.status === 0 && JSON.stringify(listed) === JSON.stringify([...keep].sort()) && /Packed 5 files/.test(pack.stdout),
+    check('CUTOVER FILES pack moves the working files, Dakota\'s replica included, and leaves out databases, snapshots and exports',
+      pack.status === 0 && JSON.stringify(listed) === JSON.stringify([...keep].sort()) && /Packed 6 files/.test(pack.stdout),
       `Invented tree: ${keep.length} kept, ${drop.length} excluded paths absent from the archive.`);
     const inside = spawnSync('bash', ['scripts/cutover-files.sh', 'pack', root, join(root, 'enrich', 'x.tar.gz')], { encoding: 'utf8' });
     const again = spawnSync('bash', ['scripts/cutover-files.sh', 'pack', root, out1], { encoding: 'utf8' });
