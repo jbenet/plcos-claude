@@ -157,8 +157,10 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
 
 **Steps, once:**
 
-1. **Postgres.** In Juan's Railway project: Add → Database → PostgreSQL. Pin the image to 17 and run
-   `select version()`. Turn on its daily volume backups. **Remove its public TCP proxy** (Settings →
+1. **Postgres.** In Juan's Railway project: Add → Database → PostgreSQL. Pin the image to 17 **before first use**: the
+   template now defaults to 18 (5 Oct 2026), and the image's pg_dump 17 can't dump an 18 server (snapshots, pulls,
+   backups). Set the source image to `ghcr.io/railwayapp-templates/postgres-ssl:17`, with a fresh volume if 18 already
+   ran, and run `select version()`. Turn on its daily volume backups. **Remove its public TCP proxy** (Settings →
    Networking).
 2. **Roles,** from a shell in the web service (`railway ssh`, then `psql` as `postgres`):
    ```sql
