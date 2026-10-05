@@ -9,7 +9,8 @@
  *   - its signature holds under the `warm` subkey of PLCOS_SECRET (never the session's, so no session cookie
  *     is a warm pass and no warm pass is a session);
  *   - the proxy's signed routing context says it is a GET for one of the paths the warmer asked to warm;
- *   - it came to this server's loopback address;
+ *   - the Host header names this server's loopback address. A client sets that header, so this is defence in
+ *     depth only: the gate is the unguessable value held in this process's memory, never Host alone;
  *   - the admin is still active, an admin, and at the epoch it was minted for.
  * The mutation guard and every server action refuse any request that carries one (lib/mutation-guard.ts), so
  * even a leaked pass could not write. Nothing here is reachable from a route, an action, a header or the
@@ -64,6 +65,3 @@ export async function warmPassUser(value: string | undefined | null, h: Pick<Hea
   const { sessionEpoch: _, ...person } = user;
   return person;
 }
-
-/** Whether a request carries a warm pass at all: the mutation guard refuses it outright. */
-export const carriesWarmPass = (cookieValue: string | undefined | null): boolean => !!cookieValue;
