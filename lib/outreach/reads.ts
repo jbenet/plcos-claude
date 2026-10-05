@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
 import { config } from '@/config/deployment';
 import { can } from '@/lib/authz';
 import { pipelineData } from '@/lib/authz/read/pipeline';
 import { getDb } from '@/lib/db';
+import { addressesFor } from './addresses';
 import { redactHealth } from '@/lib/redact-health';
 import { SPV_STAGE_LABEL, spvRooms, workingDaysUntil, type SpvStage } from '@/modules/close';
 import { INSUFFICIENT_FOR_506C } from '@/modules/compliance';
@@ -84,8 +86,10 @@ export async function outreachVehicles(user: AppUser) {
 
 // ── GET /api/outreach/queue ─────────────────────────────────────────────────────────────
 
-export type Bucket = 'reply_owed' | 'money' | 'invite' | 'follow_up' | 'held';
+export type Bucket = 'reply_owed' | 'money' | 'invite' | 'follow_up' | 'held' | 'passed';
+/** The open buckets, in the queue's order. `passed` comes after them, and only with includePassed (docs/27 §4). */
 export const BUCKETS: Bucket[] = ['reply_owed', 'money', 'invite', 'follow_up', 'held'];
+export const QUEUE_BUCKETS: Bucket[] = [...BUCKETS, 'passed'];
 export interface Check { rule: 'restriction' | 'accreditation' | 'ask_count' | 'fund_first' | 'wrap'; ok: boolean; blocking: boolean; detail: string; choices?: string[] }
 
 /** The choices the desk offers when an SPV meets an open fund discussion (Juan, 4 Oct 2026). */
@@ -95,7 +99,34 @@ export type FundFirstChoice = (typeof FUND_FIRST_CHOICES)[number];
 type PRow = Awaited<ReturnType<typeof pipelineData>>['rows'][number];
 const OPEN_FUND = ['connecting', 'discussing', 'committed'];
 
-export interface QueueArgs { vehicle: string; bucket?: Bucket; limit?: number; offset?: number; pursuitId?: string; updatedSince?: string }
+export interface QueueArgs {
+  vehicle: string; bucket?: Bucket; limit?: number; offset?: number; cursor?: string; pursuitId?: string; updatedSince?: string;
+  /** Opt in to LPs that passed (docs/27 §4): never included by default; each comes back marked passed. */
+  includePassed?: boolean;
+}
+/** How the answer is carried: over MCP it must fit the response limit, so the page is cut to fit and nextCursor follows. */
+export interface QueueFit { maxBytes?: number }
+
+/**
+ * Paging (docs/27 §4). `nextCursor` is opaque to the client: base64url of the last row's pursuit id, the position
+ * after it, and a hash of the query it pages. The next page starts after that row if it is still in the queue,
+ * else at the position; a cursor from another query is refused. A full pass over an unchanging queue returns
+ * every row exactly once (a property); a row that changes between pages is seen again with updatedSince.
+ */
+const queryKey = (a: QueueArgs) => createHash('sha256')
+  .update(JSON.stringify([a.vehicle, a.bucket ?? null, a.pursuitId ?? null, a.updatedSince ?? null, a.includePassed === true])).digest('base64url').slice(0, 12);
+export function encodeCursor(a: QueueArgs, after: string, position: number): string {
+  return Buffer.from(JSON.stringify({ v: 1, a: after, p: position, q: queryKey(a) })).toString('base64url');
+}
+function decodeCursor(a: QueueArgs, cursor: string): { after: string; position: number } {
+  let c: { v?: unknown; a?: unknown; p?: unknown; q?: unknown } | null = null;
+  try { c = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')); } catch { /* refused below */ }
+  if (!c || c.v !== 1 || typeof c.a !== 'string' || typeof c.p !== 'number' || !Number.isInteger(c.p) || c.p < 0) {
+    throw new OutreachRefused(400, 'cursor is not one this server gave. Pass the previous answer\'s nextCursor; its cursor field is the polling time, for updatedSince.');
+  }
+  if (c.q !== queryKey(a)) throw new OutreachRefused(400, 'That cursor pages a different query. Keep vehicle, bucket, pursuitId, updatedSince and includePassed as they were.');
+  return { after: c.a, position: c.p };
+}
 
 /**
  * When each pursuit last changed, among those that changed since `since` (docs/27 §4, periodic sync): its status,
@@ -129,16 +160,20 @@ async function changedSince(ids: string[], since: Date): Promise<Map<string, Dat
   return new Map(rows.map((r) => [r.id, new Date(r.at)]));
 }
 
-export async function outreachQueue(user: AppUser, a: QueueArgs) {
+export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit = {}) {
   // The next poll's updatedSince: taken before reading, so a change committed while this runs is seen next time.
   const cursor = new Date().toISOString();
+  const limit = Math.min(a.limit ?? config.outreach.defaultQueueRows, config.outreach.maxQueueRows);
+  if (a.cursor && a.offset !== undefined) throw new OutreachRefused(400, 'Page with cursor or with offset, not both.');
+  if (a.bucket === 'passed' && !a.includePassed) throw new OutreachRefused(400, 'Passed LPs are left out unless you ask for them: add includePassed.');
+  const start = a.cursor ? decodeCursor(a, a.cursor) : null;
   if (a.vehicle === 'none') {
-    return { data: { rows: [], total: 0, offset: 0, counts: null, cursor, redacted: null }, coverage: { corpus: 'none', note: 'Every LP in Capital OS is on a vehicle: there are no pursuits without one. Use vehicle=all.' } };
+    return { data: { rows: [], total: 0, offset: 0, limit, nextCursor: null, counts: null, cursor, redacted: null }, coverage: { corpus: 'none', note: 'Every LP in Capital OS is on a vehicle: there are no pursuits without one. Use vehicle=all.' } };
   }
   const since = a.updatedSince ? new Date(a.updatedSince) : null;
   if (since && Number.isNaN(since.getTime())) throw new OutreachRefused(400, 'updatedSince is not a time.');
   const vehicles = a.vehicle === 'all' ? await deskVehicles(user) : [await deskVehicle(user, a.vehicle)];
-  const all = (await Promise.all(vehicles.map(async (v) => (await pipelineData(v.id)).rows.filter((r) => r.vehicleId === v.id && r.status !== 'passed'))))
+  const all = (await Promise.all(vehicles.map(async (v) => (await pipelineData(v.id)).rows.filter((r) => r.vehicleId === v.id && (a.includePassed || r.status !== 'passed')))))
     .flat().filter((r) => !a.pursuitId || r.id === a.pursuitId);
   const vById = new Map(vehicles.map((v) => [v.id, v]));
   const db = await getDb();
@@ -189,19 +224,23 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
     const held = restricted || fundBlocks || wrapRuleFor.get(v.id) !== true;
     const money = r.status === 'committed' || Boolean(indicated)
       || (close && close.state !== 'closed' && close.state !== 'withdrawn') || (seat && (seat.stage === 'ioi' || seat.stage === 'allocated'));
-    const bucket: Bucket = held ? 'held' : replyOwed ? 'reply_owed' : money ? 'money'
+    // A passed LP is its own bucket, after the open ones; its checks still run, a restriction among them.
+    const bucket: Bucket = r.status === 'passed' ? 'passed' : held ? 'held' : replyOwed ? 'reply_owed' : money ? 'money'
       : ['new', 'sourcing', 'selected'].includes(r.status) ? 'invite' : 'follow_up';
     return { r, v, s, last, close, seat, indicated, replyOwed, funds, bucket };
   });
   const changed = since ? await changedSince(base.map((b) => b.r.id), since) : null;
   const chosen = base.filter((b) => (!a.bucket || b.bucket === a.bucket) && (!changed || changed.has(b.r.id)))
-    .sort((x, y) => BUCKETS.indexOf(x.bucket) - BUCKETS.indexOf(y.bucket) || (y.r.priority ?? -1) - (x.r.priority ?? -1) || x.r.name.localeCompare(y.r.name));
-  const offset = a.offset ?? 0;
-  const limit = Math.min(a.limit ?? 100, config.outreach.maxQueueRows);
+    // A total order (the id last), so a position and a row's place are stable between pages.
+    .sort((x, y) => QUEUE_BUCKETS.indexOf(x.bucket) - QUEUE_BUCKETS.indexOf(y.bucket) || (y.r.priority ?? -1) - (x.r.priority ?? -1)
+      || x.r.name.localeCompare(y.r.name) || (x.r.id < y.r.id ? -1 : x.r.id > y.r.id ? 1 : 0));
+  const anchor = start ? chosen.findIndex((b) => b.r.id === start.after) : -1;
+  const offset = start ? (anchor >= 0 ? anchor + 1 : Math.min(start.position, chosen.length)) : a.offset ?? 0;
   const page = chosen.slice(offset, offset + limit);
-  const counts = Object.fromEntries(BUCKETS.map((b) => [b, base.filter((x) => x.bucket === b).length]));
+  const counts = Object.fromEntries((a.includePassed ? QUEUE_BUCKETS : BUCKETS).map((b) => [b, base.filter((x) => x.bucket === b).length]));
+  const next = (shown: number) => (offset + shown < chosen.length && shown > 0 ? encodeCursor(a, chosen[offset + shown - 1]!.r.id, offset + shown) : null);
   if (!page.length) {
-    return { data: { rows: [], total: chosen.length, offset, counts, cursor, redacted: null }, coverage: queueCoverage(vehicles) };
+    return { data: { rows: [], total: chosen.length, offset, limit, nextCursor: null, counts, cursor, redacted: null }, coverage: queueCoverage(vehicles, a.includePassed) };
   }
 
   // The rest only for the page.
@@ -235,12 +274,8 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
   ]);
   const contactsBy = new Map(orgContacts);
   const people = [...new Set([...page.map((b) => b.r.entityId), ...orgContacts.flatMap(([, m]) => [...m.values()].flat().map((c) => c.entityId))])];
-  const emails = people.length ? await db.query<{ entity_id: string; value: string; source: string; origin: string | null; as_of: Date | string; verified_at: Date | string | null; verified_by: string | null }>(`
-    select identity.canonical_entity_id(c.entity_id)::text entity_id, c.value, c.source, d.origin, c.as_of, c.last_verified_at verified_at, u.name verified_by
-      from research.claim c left join research.source_doc d on d.doc_id = c.source left join platform.app_user u on u.id = c.last_verified_by
-     where identity.canonical_entity_id(c.entity_id) = any($1::uuid[]) and c.superseded_by is null and c.field ~ '(^|\\.)email$'
-       and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
-     order by c.last_verified_at desc nulls last, c.as_of desc`, [people]) : [];
+  // Addresses only where words are readable (R2), as before: the same reader as the route hops' contacts.
+  const emails = await addressesFor(page.some((b) => words(user, b.v.id)) ? people : []);
   const metaOf = new Map(meta.map((m) => [m.id, m]));
   const strategyOf = new Map(strategies.map((s) => [s.pursuit_id, s]));
   const rules = new Map<string, Awaited<ReturnType<typeof checkWrap>>>();
@@ -270,11 +305,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
     const strat = strategyOf.get(r.id);
     const sd = (strat?.data ?? {}) as { angle?: string; next?: { what?: string }; confidence?: string };
     const isPerson = m?.type === 'person';
-    const addressOf = (entityId: string) => emails.filter((e) => e.entity_id === entityId).slice(0, 3).map((e) => ({
-      email: e.value.trim(),
-      source: /gmail/i.test(e.source) || /gmail/i.test(e.origin ?? '') ? 'gmail' : /affinity/i.test(e.source) || /affinity/i.test(e.origin ?? '') ? 'affinity' : 'research',
-      confirmedAt: day(e.verified_at), confirmedBy: e.verified_by,
-    }));
+    const addressOf = (entityId: string) => (emails.get(entityId) ?? []).slice(0, 3);
     const contacts = !w ? [] : isPerson
       ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x }))
       : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x })));
@@ -323,7 +354,10 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
     const closeTrack = close ? {
       state: close.state as CloseState, label: CLOSE_STATE_LABEL[close.state],
       amount: money ? close.exposure.amount : null, wired: money ? close.wired : null,
-      // Capital calls are not recorded yet: "called" stays null until they are (docs/27 §3).
+      // The close module's own record (pipeline.commitment_event): the latest signature, the closing, and once hard
+      // the commitment less what has wired. Dates are not amounts; the outstanding amount is R1.
+      signedOn: day(close.signature?.on), closedOn: day(close.closedOn), outstanding: money ? close.outstanding : null,
+      // Capital calls are not recorded yet: "called" stays null until they are (docs/27 §4).
       called: null as number | null,
     } : null;
     const otherVehicles = others.filter((o) => o.entity_id === r.entityId && o.vehicle_id !== v.id).map((o) => can(user, 'read', { vehicle: o.vehicle_id })
@@ -360,21 +394,30 @@ export async function outreachQueue(user: AppUser, a: QueueArgs) {
       })(),
       checks,
       materials: materialsByVehicle.get(v.id) ?? [],
-      bucket: held ? 'held' as Bucket : b.bucket,
+      bucket: b.bucket === 'passed' ? 'passed' as Bucket : held ? 'held' as Bucket : b.bucket,
+      passed: r.status === 'passed',
       updatedAt: changed?.get(r.id)?.toISOString() ?? null,
     };
   });
+  // Over MCP the answer must fit the response limit: rows are held back from the end until it does, and nextCursor
+  // continues from the last row sent, so nothing is skipped (render would otherwise halve the list with no cursor).
+  let fitted = rows;
+  if (fit.maxBytes) {
+    while (fitted.length > 1 && Buffer.byteLength(JSON.stringify(fitted)) > fit.maxBytes) fitted = fitted.slice(0, -1);
+  }
   return {
-    data: { rows, total: chosen.length, offset, counts, cursor,
+    data: { rows: fitted, total: chosen.length, offset, limit, nextCursor: next(fitted.length), counts, cursor,
+      ...(fitted.length < rows.length ? { heldBack: `${rows.length - fitted.length} row${rows.length - fitted.length === 1 ? '' : 's'} held back to fit the answer's size limit; nextCursor continues from here.` } : {}),
       redacted: redacted ? `${redacted} sentence${redacted === 1 ? '' : 's'} with a health detail redacted.` : null },
-    coverage: queueCoverage(vehicles),
+    coverage: queueCoverage(vehicles, a.includePassed),
   };
 }
 
-function queueCoverage(vehicles: Vehicle[]) {
+function queueCoverage(vehicles: Vehicle[], includePassed = false) {
   return {
-    corpus: `Open LPs (not passed) on ${vehicles.map((v) => v.name).join(', ') || 'no vehicle'}, with the comms trace (Affinity's records and the Gmail messages juanmail reported, merged), close track, SPV seat, indication, restrictions, accreditation and asks this quarter.`,
-    buckets: 'reply_owed: they spoke last; money: committed, an indication, a close track not yet closed, or an SPV seat at IOI or allocated; invite: new, sourcing or selected; follow_up: the rest; held: a blocking check fails.',
+    paging: `${config.outreach.defaultQueueRows} rows by default, at most ${config.outreach.maxQueueRows}; pass nextCursor as cursor for the next page (null at the end). total counts every row this query matches.`,
+    corpus: `${includePassed ? 'LPs, open and passed (each passed row marked passed),' : 'Open LPs (not passed)'} on ${vehicles.map((v) => v.name).join(', ') || 'no vehicle'}, with the comms trace (Affinity's records and the Gmail messages juanmail reported, merged), close track, SPV seat, indication, restrictions, accreditation and asks this quarter.`,
+    buckets: 'reply_owed: they spoke last; money: committed, an indication, a close track not yet closed, or an SPV seat at IOI or allocated; invite: new, sourcing or selected; follow_up: the rest; held: a blocking check fails; passed (only with includePassed): the LP passed.',
     note: 'A reply in a mailbox juanmail does not read, and Affinity has not synced, is not seen. An address on file is not proof it is current. comms_trace gives one LP\'s whole timeline.',
   };
 }

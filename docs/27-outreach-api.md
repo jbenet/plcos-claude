@@ -1,8 +1,12 @@
 # 27 — Outreach for juanmail: MCP tools, and a thin REST wrapper
 
-**Status:** built on the branch `claude/outreach-api`, 4 Oct 2026. Revised on `claude/comms-trace`, 5 Oct 2026, for three
-decisions of Juan's (§7a): no SEND or INTRO_ASK tickets for people, only for autonomous agents; "record the send" became
-"link the message"; the outreach timeline is built from the comms trace. Not merged or shipped.
+**Status:** shipped. Built on `claude/outreach-api` (4 Oct 2026) and revised on `claude/comms-trace` for three decisions of
+Juan's (§7a): no SEND or INTRO_ASK tickets for people, only for autonomous agents; "record the send" became "link the
+message"; the outreach timeline is built from the comms trace. Both are on master since 4 Oct 2026 (merge `89a710f`), so
+they ship with it: the MCP tools, the REST wrapper, the queue, the writes, the comms trace. **Built on
+`claude/outreach-desk-v2`, 5 Oct 2026, not merged yet:** juanmail's second round of feedback — ids and addresses on route
+hops and REST for routes (§4a), `top_connectors` (§4b), passed LPs on request, the queue's explicit limit and cursor
+paging and the close track's dates (§4), `_meta.status` on MCP errors and the fixed "not the live server" sentence (§5).
 
 **juanmail** is Juan's mail desk: an Outreach tab for the SPV war room now, a module of his mail client later. It runs
 its own server, and all syncing between Capital OS and juanmail happens from there. It reads Capital OS and writes back
@@ -74,7 +78,14 @@ Every queue row returns three states apart, each with Capital OS's label, so jua
 | `outreach_vehicles` | `GET /api/outreach/vehicles` | outreach:read |
 | `outreach_queue` | `GET /api/outreach/queue?vehicle=…` | outreach:read |
 | `comms_trace` | `GET /api/outreach/trace?pursuitId=…` | outreach:read |
+| `top_connectors` | `GET /api/outreach/connectors?vehicle=…&limit=…` (§4b) | outreach:read |
+| `routes_to` | `GET /api/outreach/routes-to?entityId=…&vehicle=…` (§4a) | the tool's name in the token, as over MCP |
+| `routes_through` | `GET /api/outreach/routes-through?entityId=…[&vehicle=…]` (§4a) | the tool's name in the token, as over MCP |
 | `audit_recent` | `GET /api/outreach/audit` | (any token) |
+
+Every REST answer is `{ about, op, tool, asOf, coverage, data }`, and `data` is exactly what the MCP tool answers in its
+`data` (a property checks this for the routes and top_connectors). A REST query names the target `entityId`; the MCP tools
+take it as `targetId` (routes_to) and `nodeId` (routes_through).
 
 `outreach_vehicles` → the fund and SPV vehicles raising now that the token reads:
 
@@ -87,7 +98,7 @@ Every queue row returns three states apart, each with Capital OS's label, so jua
 ```
 
 `outreach_queue` takes `vehicle` (a slug, `all`, or `none`, which answers empty since every LP is on a vehicle),
-`bucket`, `limit` (≤ 300, GUESS; 25 by default over MCP), `offset`, `pursuitId`, and **`updatedSince`**:
+`bucket`, `limit`, `cursor` (or the older `offset`, not both), `pursuitId`, `includePassed`, and **`updatedSince`**:
 
 ```json
 { "data": { "rows": [{
@@ -96,10 +107,12 @@ Every queue row returns three states apart, each with Capital OS's label, so jua
                 "contacts": [{ "name": "Ana Invented", "email": "ana@invented.example", "source": "gmail", "confirmedAt": "2026-10-04", "confirmedBy": "Juan" }] },
     "owner": "Juan",
     "status": { "value": "discussing", "label": "Discussing", "setAt": "2026-10-01", "setBy": "Juan" },
+    "passed": false,
     "nextStep": "Send the deck", "nextStepOn": "2026-10-08",
     "read": { "value": "interested", "label": "Interested", "on": "2026-10-01", "suggested": false },
     "strategy": { "headline": "They back neurotech founders. [health detail redacted]", "firstStep": "…", "confidence": "medium", "asOf": "2026-09-30" },
-    "closeTrack": { "state": "soft", "label": "Soft", "amount": 1000000, "wired": 0, "called": null },
+    "closeTrack": { "state": "signed", "label": "Signed", "amount": 1000000, "wired": 0, "signedOn": "2026-10-02", "closedOn": null,
+                    "outstanding": null, "called": null },
     "seat": { "stage": "ioi", "label": "IOI given", "amount": 3000000 },
     "indicated": { "low": 3000000, "high": 4000000, "at": "2026-10-03", "touchpointId": "…", "source": "us" },
     "otherVehicles": [{ "name": "PLC Neurotech I", "status": { "value": "discussing", "label": "Discussing" } }],
@@ -120,9 +133,55 @@ Every queue row returns three states apart, each with Capital OS's label, so jua
       { "rule": "wrap", "ok": true, "blocking": false, "detail": "506(c) × spv: covered by the wrap matrix…" }],
     "materials": [{ "assetId": "…", "title": "Cortex one-pager (LP memo)", "permittedUse": "accredited_only", "allowed": true }],
     "bucket": "reply_owed", "updatedAt": "2026-10-04T18:02:11Z" }],
-  "total": 12, "offset": 0, "counts": { "reply_owed": 2, "money": 3, "invite": 5, "follow_up": 1, "held": 1 },
+  "total": 12, "offset": 0, "limit": 25, "nextCursor": null,
+  "counts": { "reply_owed": 2, "money": 3, "invite": 5, "follow_up": 1, "held": 1 },
   "cursor": "2026-10-04T18:05:00Z", "redacted": "1 sentence with a health detail redacted." } }
 ```
+
+- **How many rows (5 Oct 2026).** 25 by default (`config.outreach.defaultQueueRows`, GUESS), the same over REST and MCP,
+  and every answer says which in `limit`. Ask for up to 500 (`maxQueueRows`, GUESS); more is refused (400). `total` counts
+  every row the query matches, before paging (cheap: the rows are read for the buckets anyway).
+- **Paging.** Pass the answer's `nextCursor` as the next call's `cursor`, with the same `vehicle`, `bucket`, `pursuitId`,
+  `updatedSince` and `includePassed`; it is `null` on the last page. The cursor is opaque (it names the last row sent and
+  the position after it; no names, so it is safe in a URL). A cursor from another query, or one this server did not give,
+  is refused (400), as is `cursor` with `offset`. Rows are in a total order — bucket, priority, name, id — so a pass over a
+  queue that does not change returns every row exactly once (a property, over REST and MCP). If the last row sent has
+  left the queue meanwhile, the next page starts at its position; rows that changed are seen again with `updatedSince`.
+- **Over MCP** an answer must fit the response limit (docs/26 §4). A page that would not fit is cut from its end and says
+  so (`heldBack`); `nextCursor` continues from the last row sent, so nothing is skipped (before, the list was halved with
+  no way to reach the rest). Over REST a page is never cut.
+- **Two cursors, two jobs.** `nextCursor` pages; `cursor` is the polling time for the next `updatedSince`. When paging
+  through a poll, keep the first page's `cursor`.
+- **Passed LPs, on request.** By default the queue holds only open LPs. `includePassed=1` (REST) or `includePassed: true`
+  (MCP) adds the LPs that passed, each with `passed: true`, `status.value: "passed"` and its own bucket, `passed`, after
+  the open ones; `counts.passed` appears only then, and `bucket=passed` without it is refused. Every row has `passed`.
+  Their checks still run: a restriction on a passed LP is still flagged.
+
+```json
+GET /api/outreach/queue?vehicle=spv-cortex&limit=2
+{ "data": { "rows": [ { "pursuitId": "0b6e…", … }, { "pursuitId": "4c1d…", … } ], "total": 5, "offset": 0, "limit": 2,
+            "nextCursor": "eyJ2IjoxLCJhIjoiNGMxZC4uLiIsInAiOjIs…", "cursor": "2026-10-05T09:00:00Z", … } }
+
+GET /api/outreach/queue?vehicle=spv-cortex&limit=2&cursor=eyJ2IjoxLCJhIjoiNGMxZC4uLiIsInAiOjIs…
+{ "data": { "rows": [ …two more… ], "total": 5, "offset": 2, "limit": 2, "nextCursor": "eyJ2IjoxLCJhIjoi…", … } }
+
+GET /api/outreach/queue?vehicle=spv-cortex&includePassed=1&bucket=passed
+{ "data": { "rows": [ { "pursuitId": "9a0f…", "passed": true, "bucket": "passed",
+                        "status": { "value": "passed", "label": "Passed", "setAt": "2026-09-20", "setBy": "affinity" }, … } ],
+            "counts": { "reply_owed": 2, "money": 1, "invite": 1, "follow_up": 0, "held": 1, "passed": 1 }, … } }
+```
+
+Over MCP the same: `{ "vehicle": "spv-cortex", "limit": 2, "cursor": "eyJ2Ijox…", "includePassed": true }`.
+
+- **`status.setBy`** is the name of the person who set the status, when it was set here (`status_source` is "us"), and
+  otherwise the source it was read from, as a word — `"affinity"` for a status read from Affinity — never a person then.
+- **The close track's dates** (5 Oct 2026) come from the close module's own record (`pipeline.commitment_event`):
+  `signedOn`, the latest signature's date (null if undated or unsigned); `closedOn`, the closing's; and `outstanding`, once
+  the commitment is hard, what has not wired yet (an amount, so R1: null without it, and null before hard). `called` stays
+  null: **capital calls are not recorded yet**, so no call has a date or an amount here.
+- **`lastTouch.kind` can be null.** It is the channel of the LP's last touch in the trace; when the trace has no dated
+  touch of the LP's own, `lastTouch` falls back to the contact summary's date, whose channel and `direction` may be
+  unknown, so both are null then. Read `lastTouch.on` either way.
 
 - **Periodic sync.** Every answer has a `cursor` (the time it began reading). Pass it as the next call's
   `updatedSince`, and the queue answers only the LPs that changed since — status, next step, an update or an
@@ -143,6 +202,82 @@ Every queue row returns three states apart, each with Capital OS's label, so jua
 - **Withheld:** amounts without R1, words and addresses without R2, restriction reasons without R4. Contacts and
   strategies from Dakota never appear. `called` is null: capital calls are not recorded yet.
 
+## 4a. Routes, with ids and addresses (5 Oct 2026)
+
+juanmail's builders: route hops lacked identifiers, so the desk could neither address an intro ask nor look through a hop.
+Now every hop and introducer in `routes_to`, `routes_through` (and `lp_summary`'s routes) carries:
+
+- **`entityId`** — on each hop, on the route's source (`fromEntityId`), and on its **`introducer`**: the last person before
+  the target, who carries the ask (null when the source knows the target directly). `routes_through` adds `nodeId`.
+- **`doNotApproach`** — true when a restriction of any scope is on file for that entity (rule 8). It flags; it never
+  removes or clears. Whether a route may be used is still its `verdict` (`excluded` for a restriction on the target, or a
+  connector the restriction names), and a path through a barred person is still left out by the planner, as before.
+  Reasons stay R4 (`restrictionReasons`).
+- **`contact`** — the best address on record (`email`; `source`: gmail, affinity or research; `confirmedAt`), or null when
+  there is none — only where the token's owner reads addresses: words (R2) on the route's vehicle, or for
+  `routes_through` without a vehicle, R2 on every vehicle. Otherwise there is no `contact` key at all, and `addresses`
+  says they were withheld: a Viewer gets none, and a user outside the vehicle gets no route. Licensed (Dakota) addresses
+  never appear. One reader serves the queue's `contacts` and these (`lib/outreach/addresses.ts`).
+
+```json
+GET /api/outreach/routes-to?entityId=7f3a…&vehicle=spv-cortex
+{ "tool": "routes_to", "data": {
+    "target": "Invented Family Office", "from": "Juan", "restrictionCount": 0, "restrictionReasons": [], "addresses": "shown",
+    "routes": [{ "from": "Juan", "fromEntityId": "1c2d…", "verdict": "recommend",
+                 "hops": [{ "entityId": "5e6f…", "name": "Ravi Invented", "tier": "B", "doNotApproach": false,
+                            "contact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" } },
+                          { "entityId": "7f3a…", "name": "Invented Family Office", "tier": "B", "doNotApproach": false, "contact": null }],
+                 "introducer": { "entityId": "5e6f…", "name": "Ravi Invented", "doNotApproach": false,
+                                 "contact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" } } }],
+    "routesFound": 1, "coverage": { "edges": 412, "maxHops": 3, "from": "2019-01-01T00:00:00.000Z", "to": "2026-10-04T00:00:00.000Z" } } }
+
+GET /api/outreach/routes-through?entityId=5e6f…
+{ "tool": "routes_through", "data": { "node": "Ravi Invented", "nodeId": "5e6f…", "doNotApproach": false,
+    "nodeContact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" }, "addresses": "shown",
+    "bestRouteToNode": { "from": "Juan", "fromEntityId": "1c2d…",
+                         "hops": [{ "entityId": "5e6f…", "name": "Ravi Invented", "tier": "B", "doNotApproach": false, "contact": { … } }] },
+    "onward": [{ "entityId": "7f3a…", "name": "Invented Family Office", "tieTier": "B", "routeTier": "B", "lps": [ … ] }], … } }
+```
+
+A Viewer's `routes_to` answer has the same routes with no `contact` keys, and
+`"addresses": "Addresses are withheld at your access: they are words (R2) on this vehicle."`
+
+**REST for routes.** `GET /api/outreach/routes-to?entityId=…&vehicle=…` and `GET /api/outreach/routes-through?entityId=…`
+(optionally `&vehicle=`, `&limit=`) run the MCP tools `routes_to` and `routes_through` through the same `runTool`: the same
+policy (a read; the token must list the tool, exactly as over MCP), envelope, budget and audit record, and the same
+`data` (a property compares them). `routes_through` still needs access to every vehicle.
+
+## 4b. Top connectors (5 Oct 2026)
+
+`top_connectors` (MCP) and `GET /api/outreach/connectors?vehicle=<slug>&limit=<n>` (outreach:read): the people who sit on
+the most and best warm routes to a vehicle's open LPs.
+
+- **Rows:** the vehicle's open pursuits (not passed), on a vehicle the token's owner reads — the queue's rule; another
+  vehicle is "no vehicle among yours" (404).
+- **No new scoring model.** For each LP it reads the routes `routes_to` reads (`planRoutes`, through the authorization
+  facade) and counts: a connector is anyone between the source and the LP (the route's `connectorIds`); each LP counts
+  once per connector; `bestScore` is the best route score through them (0–100: the route scorer's relative, uncalibrated
+  estimate, never a probability) with its band. Only routes the planner recommends count; held and excluded ones — a
+  restriction, a spent ask cap — never do (rule 8).
+- **Each connector:** `entityId`, `name`, `lps` (open LPs reached), `bestScore`, `bestBand`, up to three
+  `examplePursuitIds` (their best first), `doNotApproach`, and `contact` under §4a's rule. Ranked by `lps`, then `bestScore`.
+- **Coverage (rule 7):** `lpsOpen`, `lpsInspected`, `lpsReached`, `complete`. Planning stops after
+  `config.outreach.connectorsBudgetMs` (15 s, GUESS), highest-priority LPs first; routes are cached as they are planned,
+  so asking again reaches further. `limit` defaults to 20, at most 100.
+
+```json
+GET /api/outreach/connectors?vehicle=spv-cortex&limit=2
+{ "tool": "top_connectors", "data": { "vehicle": "spv-cortex", "total": 14, "lpsOpen": 31, "lpsInspected": 31, "lpsReached": 22,
+    "complete": true, "addresses": "shown",
+    "connectors": [
+      { "entityId": "5e6f…", "name": "Ravi Invented", "lps": 6, "bestScore": 71.5, "bestBand": "strong",
+        "examplePursuitIds": ["0b6e…", "4c1d…", "9a0f…"], "doNotApproach": false,
+        "contact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" } },
+      { "entityId": "a1b2…", "name": "Invented Angel Group", "lps": 4, "bestScore": 58, "bestBand": "warm",
+        "examplePursuitIds": ["c3d4…", "e5f6…", "0718…"], "doNotApproach": false, "contact": null }] },
+  "coverage": { "counted": "Only routes the planner recommends; 3 held or excluded routes were not counted (rule 8). …", … } }
+```
+
 ## 5. Write
 
 | MCP tool | REST | Risk (docs/26 §3) |
@@ -155,8 +290,18 @@ Every queue row returns three states apart, each with Capital OS's label, so jua
 | `outreach_record_send` (deprecated) | `POST /api/outreach/sent` | the old arguments, run as `outreach_link_message`; removed next release |
 
 All need `outreach:write`. Over REST a refusal is `{ error }` with 400 (input), 403 (scope, access), 404 (not yours, or
-no such), 409 (a rule refused: nothing was written) or 422 (the service refused); over MCP it is an error result with
-the same message.
+no such), 409 (a rule refused: nothing was written), 422 (the service refused) or 429 (rate); over MCP it is an error
+result with the same message and, since 5 Oct 2026, the same code in `_meta.status` (reads too):
+
+```json
+{ "isError": true, "content": [{ "type": "text", "text": "No vehicle \"spv-other\" among yours." }], "_meta": { "status": 404 } }
+```
+
+**Not the live server.** A write on a server that is not the live one — a preview copy of live, or a checkout that is not
+live — is refused with 403 and this fixed sentence, which the desk may show as it is (`NOT_LIVE_REFUSAL` in
+`lib/mutation-policy.ts`; it changes only with this doc):
+
+> Nothing was changed: this server is not the live one (it may be a preview copy), and real records change only on the live server.
 
 **`outreach_update`** — the LP page's update box, exactly (`lib/updates.ts`): one transaction, once per key. The
 indicated amount is folded in here, not a tool of its own.
@@ -228,6 +373,11 @@ address again supersedes only the earlier Gmail confirmation. `confirmedBy` must
   `email.outreach_send`; an INTRO_ASK's ask is recorded as made, by email, through the ask's own service and guards.
   A material's wrap check runs again.
 - **No body** unless `body` is sent explicitly; it is never needed.
+- **Send the Message-ID header** whenever the desk has it. Without it the key is the Gmail id, which belongs to one
+  mailbox: the message is still linked once, but it can match Affinity's record of the same email only by day and
+  participants (`medium`) or day alone (`low`), never `exact`; a copy reported from another mailbox is the same message
+  only by minute, sender, recipients and subject; and the link matches the trace only if `comms_ingest` reported the same
+  Gmail id.
 
 **`outreach_record_send`** (deprecated, one release): the 4 Oct arguments — `ticketId`, `pursuitId`, `recipients`,
 `gmailMessageId`, `sentAt` — run as `outreach_link_message` (from the owner's address, direction sent). It no longer
@@ -346,6 +496,15 @@ part is `lib/redact-health.ts`, applied to every text field the queue returns. N
    checkbox there when that branch lands.
 
 ## 11. Tests
+
+Since 5 Oct 2026, the desk's second round (`scripts/properties/outreach-desk.ts`, through the real REST and MCP handlers,
+on two invented vehicles): every route hop and introducer carries its entityId; a hop's address shows only where
+addresses are readable — never to a Viewer or a user outside the vehicle, and a licensed address to no one;
+`top_connectors` counts only open LPs on a vehicle the caller reads, through recommended routes; REST and MCP route
+answers are equal; passed LPs come back only with `includePassed`, marked passed; paging with `nextCursor` returns every
+row exactly once, by REST and MCP, with the default limit explicit and a foreign cursor refused; over MCP a large page is
+cut to fit and the cursor continues; an MCP error carries the REST status in `_meta.status`; the close track carries
+`signedOn`, `closedOn` and `outstanding`.
 
 Since 5 Oct 2026 (`scripts/properties/comms.ts`, `outreach-writes.ts`): a person's ask, material send and link need no
 ticket, and an autonomous one is refused without an approved one (asks, materials, MCP and REST links); a link is

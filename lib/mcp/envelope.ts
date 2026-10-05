@@ -37,6 +37,8 @@ export interface Envelope {
   expiresAt: Date;
   /** No person in the loop for this call: the token is marked autonomous, or the call says so. */
   autonomous: boolean;
+  /** How this call arrived (set by runTool): an MCP answer must fit the response limit, a REST one need not. */
+  via?: 'mcp' | 'rest';
 }
 
 /**

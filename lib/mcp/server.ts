@@ -64,7 +64,7 @@ export type RunResult = { ok: true; answer: Answer; text: string | null } | { ok
 export async function runTool(env0: Envelope, name: string, args: Record<string, unknown>, meta: CallMeta, render = false): Promise<RunResult> {
   const started = Date.now();
   // A call may add autonomy, never remove it (modules/governance/autonomy.ts).
-  const env: Envelope = meta.autonomous && !env0.autonomous ? { ...env0, autonomous: true } : env0;
+  const env: Envelope = { ...env0, via: meta.via, autonomous: env0.autonomous || meta.autonomous === true };
   const db = await getDb();
   const tool = findTool(name);
   let outcome: Outcome = 'ok', reason: string | null = null, bytes = 0, truncated = false, answer: Answer | null = null;
@@ -109,7 +109,8 @@ export async function runTool(env0: Envelope, name: string, args: Record<string,
 /** One MCP tool call: runTool, answered as MCP content. */
 export async function callTool(env: Envelope, name: string, args: Record<string, unknown>, meta: CallMeta = { via: 'mcp', correlationId: null }): Promise<CallToolResult> {
   const r = await runTool(env, name, args, meta, true);
-  return r.ok ? { content: [{ type: 'text', text: r.text! }] } : { isError: true, content: [{ type: 'text', text: r.message }] };
+  // An error carries the same HTTP-style status REST answers (400, 403, 404, 409, 422, 429…) in _meta.status (docs/26 §3).
+  return r.ok ? { content: [{ type: 'text', text: r.text! }] } : { isError: true, content: [{ type: 'text', text: r.message }], _meta: { status: r.status } };
 }
 
 /** Serve one Streamable HTTP request with a fresh, stateless server bound to this token's envelope. */

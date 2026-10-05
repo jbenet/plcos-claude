@@ -1,7 +1,10 @@
 # 26 — MCP access to Capital OS
 
-**Status:** phase 1 built on the branch `claude/mcp`, 2 Oct 2026. The data-driven policy, the outreach tools and the
-structured audit record were added on `claude/outreach-api`, 4 Oct 2026 (docs/27); not merged or shipped.
+**Status:** shipped. Phase 1 was built on `claude/mcp` (2 Oct 2026); the data-driven policy, the outreach tools and the
+structured audit record on `claude/outreach-api` (4 Oct 2026, docs/27), and the comms-trace tools on `claude/comms-trace`.
+All are on master since 4 Oct 2026 (merge `89a710f`) and ship with it. **Built on `claude/outreach-desk-v2`, 5 Oct 2026, not
+merged yet:** ids, restriction flags and readable addresses on route hops, `top_connectors`, the queue's cursor paging and
+`includePassed`, and `_meta.status` on error results (docs/27 §4–§5).
 
 Juan, 2 Oct 2026: "we should add: MCP access to PLCOS to enable a wide range of actions. plan this out and
 implement after email". So an agent — Claude Code, Claude Desktop, later others — can use the app as a person,
@@ -71,7 +74,9 @@ per tool (Juan: "we can evolve the MCP rules, i think we'll end up with more too
 - **approval** — whether a person approves or accepts it before it counts.
 
 A token may call a tool when its list names the tool, or, for a scoped tool, when it carries every scope the tool
-needs. `tools/list` returns each tool's policy in `_meta`.
+needs. `tools/list` returns each tool's policy in `_meta`. An error result carries, in `_meta.status`, the HTTP-style code
+the REST wrapper answers for the same refusal: 400 (arguments), 403 (scope, access), 404 (not yours, or no such), 409,
+422, 429 (rate) or 500 (5 Oct 2026, docs/27 §5).
 
 Two more scopes open no tool: `sync:snapshot` (Admin only) and `sync:push` (GP or Admin) open the cloud pull and
 push endpoints, `GET /api/sync/snapshot` and `POST /api/sync/push` (docs/deploy/railway.md §7a). Each endpoint
@@ -85,8 +90,8 @@ import a push queued, to the person who pushed. No new scope: it is the same kin
 | --- | --- | --- | --- | --- |
 | `search` | read | — | — | People and organisations by name, the pursuits on your vehicles (status, owner), do-not-approach |
 | `lp_summary` | read | — | — | One LP on one vehicle: status, evidence, contact dates, latest strategy, hard and soft apart, restrictions, top routes |
-| `routes_to` | read | — | — | Warm-intro routes to a target for a vehicle, by evidence tier, with coverage |
-| `routes_through` | read | — | — | Whom X could introduce us to, our route to X, LPs reachable only through X (every vehicle) |
+| `routes_to` | read | — | — | Warm-intro routes to a target for a vehicle, by evidence tier, with coverage; each hop and the introducer with its entityId, `doNotApproach`, and its best address where R2 is readable (docs/27 §4a) |
+| `routes_through` | read | — | — | Whom X could introduce us to, our route to X (hops as routes_to's), LPs reachable only through X (every vehicle) |
 | `pipeline` | read | — | — | A vehicle's LPs by status, counts, owner, next step, last touch |
 | `target_lists` | read | — | — | Open LPs on a strategy list: this year's close, 2027, not now, none |
 | `replies_owed` | read | — | — | LPs who spoke last with nothing from us since; LPs at Connecting waiting on a first reply |
@@ -94,7 +99,8 @@ import a push queued, to the person who pushed. No new scope: it is the same kin
 | `changelog` | read | — | — | The latest entries, or one entry's text |
 | `audit_recent` | read | — | — | Your own recent calls: tool, outcome, reason, ids affected, idempotency and correlation ids (§4) |
 | `outreach_vehicles` | read | outreach:read | — | The desk's vehicles: hard, soft and indicated apart, raise window, SPV seats (docs/27) |
-| `outreach_queue` | read | outreach:read | — | The desk's queue: status, close track and seat apart, checks, materials, bucket, and the comms trace's summary (last touches, who owes, the thread, mismatches); `updatedSince` for polling; health-redacted |
+| `outreach_queue` | read | outreach:read | — | The desk's queue: status, close track (with its dates) and seat apart, checks, materials, bucket, and the comms trace's summary (last touches, who owes, the thread, mismatches); `updatedSince` for polling; 25 rows by default, up to 500, paged by `cursor`/`nextCursor`; passed LPs only with `includePassed`; health-redacted |
+| `top_connectors` | read | outreach:read | — | The people on the most and best warm routes to a vehicle's open LPs, from routes_to's routes: LPs reached, best score, example pursuitIds (docs/27 §4b) |
 | `comms_trace` | read | outreach:read | — | One LP's merged timeline from the comms trace: Affinity, Gmail via juanmail, PLC OS and Affinity notes, linked Linear issues, each with its source, one row per event (docs/27 §6a) |
 | `create_email_draft` | propose | — | — | A first message or an intro ask, saved in the app for its owner; not moved to Gmail, not sent |
 | `file_feedback` | propose | — | — | An issue, journaled like the feedback box, optionally about a logged call (`callId`); only the live app files |
@@ -130,7 +136,8 @@ never decides a ticket.
   agent's session.
 
 **The hard rules are properties** (`scripts/properties/mcp.ts`), over the registry: every tool has a policy in the
-closed set; no tool is named for an approval, a decision, money, a status, a rung or an import; a tool named for a send
+closed set; no tool is named for an approval, a decision, money, a status, a rung, an import or a connector run (`top_connectors`,
+a read of the people on warm routes, is the one name excepted from "connector"); a tool named for a send
 or a ticket must have a ticket in its policy and a person approving; a send-adjacent tool opens no ticket, and one
 that links a send fails closed for an agent (`requires-approved` or `agent-only`); a write needs a scope; and neither `lib/mcp/` nor `lib/outreach/` mentions a service that sends, decides or
 moves money (`moveDraft`, `decideTicket`, `recordWire`, `harden(`, `mailguardClient`, `makeAsk`, …).
@@ -168,7 +175,9 @@ docs/agent-rules/domain.md.
   sources and can carry an injected instruction. Every answer is JSON whose first field says so, and the server's
   instructions repeat it. Words filled into a draft from the records are not echoed back.
 - **Size.** Requests up to 256 KB; answers up to 60 KB, with the longest lists halved until they fit and strings cut
-  at 4,000 characters, marked as cut; at most 100 rows a call, paged with `offset`. All GUESSES, in `config.mcp`.
+  at 4,000 characters, marked as cut; at most 100 rows a call, paged with `offset`. All GUESSES, in `config.mcp`. The
+  outreach queue is the exception (5 Oct 2026): up to 500 rows a call, and a page that would not fit is cut from its end
+  with `heldBack`, so its `nextCursor` still reaches every row (docs/27 §4).
 - **Circuit breaker.** While correction burden is over budget, the draft tools refuse.
 - **Training.** Answers go into the client's model context. Claude runs under Juan's Anthropic account with training
   off (AGENTS.md). A token belongs in a client that meets the same rule, and nowhere else.

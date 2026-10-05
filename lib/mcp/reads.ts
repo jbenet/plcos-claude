@@ -15,6 +15,7 @@ import { restrictionsFor } from '@/modules/coordination';
 import { suggestionsFor } from '@/modules/strategy';
 import { listVehicles, type AppUser, type Vehicle } from '@/modules/platform';
 import type { RouteSearch } from '@/modules/network';
+import { ADDRESSES_WITHHELD, bestAddresses } from '@/lib/outreach/addresses';
 import type { Answer } from './output';
 
 /**
@@ -96,11 +97,41 @@ async function canonicalPursuit(id: string, q: Queryable): Promise<string | null
 
 const MAX_ROUTES = 5; // GUESS — the top few; the routes page has the rest.
 
-function routeAnswer(user: AppUser, vehicleId: string, search: RouteSearch | null, limit: number) {
+/** Every entity among these with a current restriction on file, of any scope (rule 8): flagged, never dropped. */
+export async function restrictedAmong(ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const rows = await (await getDb()).query<{ entity: string }>(`select distinct identity.canonical_entity_id(entity_id)::text entity from coordination.restriction
+    where identity.canonical_entity_id(entity_id) = any($1::uuid[]) and (expires_at is null or expires_at >= current_date)`, [[...new Set(ids)]]);
+  return new Set(rows.map((r) => r.entity));
+}
+
+type Hop = { entityId: string; name: string; tier: string };
+type Person = { entityId: string; name: string };
+/**
+ * Route hops and introducers with what a desk needs to act on them (docs/27 §4a): each one's entityId, whether a
+ * restriction is on file for it (`doNotApproach`, any scope; the route's verdict still says whether it may be used),
+ * and, where the reader may read addresses on this vehicle (R2; with no vehicle, every vehicle), its best address
+ * with source and confirmation date. A restriction is never stripped to make a route usable; an address the read
+ * rules withhold is not sent, and the answer says so.
+ */
+export async function routeContacts(user: AppUser, vehicleId: string | null, people: Person[]) {
+  const ids = [...new Set(people.map((p) => p.entityId))];
+  const [{ shown, best }, barred] = await Promise.all([bestAddresses(user, vehicleId, ids), restrictedAmong(ids)]);
+  const at = <T extends Person>(p: T) => ({ ...p, doNotApproach: barred.has(p.entityId),
+    ...(shown ? { contact: best.has(p.entityId) ? { email: best.get(p.entityId)!.email, source: best.get(p.entityId)!.source, confirmedAt: best.get(p.entityId)!.confirmedAt } : null } : {}) });
+  return { shown, at };
+}
+
+async function routeAnswer(user: AppUser, vehicleId: string, search: RouteSearch | null, limit: number) {
   const shown = search && !licensedAccess(user) ? redactLicensedRoutes(search) : search;
   const dto = projectRoutes(user, vehicleId, shown);
   if (!dto) return null;
-  return { ...dto, routes: dto.routes.slice(0, limit), routesFound: dto.routes.length,
+  const routes = dto.routes.slice(0, limit);
+  const people = routes.flatMap((r) => [...r.hops, ...(r.introducer ? [r.introducer] : [])]);
+  const c = await routeContacts(user, vehicleId, people);
+  return { ...dto,
+    routes: routes.map((r) => ({ ...r, hops: r.hops.map((h: Hop) => c.at(h)), introducer: r.introducer ? c.at(r.introducer) : null })),
+    routesFound: dto.routes.length, addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
     empty: dto.routes.length ? null : 'No supported route in the material inspected. That is not proof that no route exists (rule 7).' };
 }
 
@@ -129,7 +160,7 @@ export async function lpSummary(user: AppUser, a: { pursuitId: string; routes?: 
   const s = suggestions.find((x) => x.status !== 'dismissed' && (licensed || x.data?.source !== 'dakota'));
   const sd = (s?.data ?? {}) as { angle?: string; ask?: { shape?: string }; list?: string; confidence?: string; next?: { what?: string }; risks?: string[] };
   const routes = a.routes === false ? null
-    : routeAnswer(user, p.vehicleId, await planRoutes(user.handle, p.entityId, 3, vehicle.kind, 'team', undefined, { vehicleId: p.vehicleId }), MAX_ROUTES);
+    : await routeAnswer(user, p.vehicleId, await planRoutes(user.handle, p.entityId, 3, vehicle.kind, 'team', undefined, { vehicleId: p.vehicleId }), MAX_ROUTES);
   return {
     link: `/${vehicle.slug}/pipeline/${p.pursuitId}`,
     data: {
@@ -174,7 +205,7 @@ export async function routesTo(user: AppUser, a: { targetId: string; vehicle: st
     const ours = await db.one('select 1 from strategy.active_pursuit where identity.canonical_entity_id(entity_id) = $1::uuid and vehicle_id = $2', [target.id, v.id]);
     if (!ours) throw new ToolRefused(`You read routes only to LPs on your vehicles, and ${v.name} has no pursuit of this one.`);
   }
-  const answer = routeAnswer(user, v.id, await planRoutes(user.handle, target.id, 3, v.kind, 'team', undefined, { vehicleId: v.id }), a.limit ?? 10);
+  const answer = await routeAnswer(user, v.id, await planRoutes(user.handle, target.id, 3, v.kind, 'team', undefined, { vehicleId: v.id }), a.limit ?? 10);
   return { data: answer ?? { target: target.name, routes: [], empty: 'No routes were computed for this target.' }, link: `/${v.slug}/routes?target=${target.id}`,
     coverage: answer ? { ...answer.coverage, note: 'Routes start from the team and the PL network, up to three hops, and rank by evidence tier (A strongest).' } : undefined };
 }
@@ -190,12 +221,18 @@ export async function routesThrough(user: AppUser, a: { nodeId: string; vehicle?
     new Promise<never>((_, reject) => setTimeout(() => reject(new ToolRefused('The through view took too long for this node. Try the routes page.')), THROUGH_BUDGET_MS).unref()),
   ]);
   const limit = a.limit ?? 20;
-  const hops = (r: NonNullable<typeof view.bestRoute>) => r.hops.map((h) => ({ name: h.toName, tier: h.edge.tier }));
+  // The node is the introducer here; its route's hops carry ids, flags and (where readable) addresses, as routes_to's do.
+  const best = view.bestRoute;
+  const bestHops = best ? best.hops.map((h) => ({ entityId: h.toEntity, name: h.toName, tier: h.edge.tier })) : [];
+  const nodeId = (await (await getDb()).one<{ id: string }>('select identity.canonical_entity_id($1::uuid)::text id', [a.nodeId]))?.id ?? a.nodeId;
+  const c = await routeContacts(user, v?.id ?? null, [{ entityId: nodeId, name: view.nodeName }, ...bestHops]);
+  const node = c.at({ entityId: nodeId, name: view.nodeName });
   return {
     link: `/routes?target=${a.nodeId}&mode=through`,
     data: {
-      node: view.nodeName, ours: view.source?.kind ?? null, doNotApproach: view.nodeRestricted,
-      bestRouteToNode: view.bestRoute ? { from: view.bestRoute.fromName ?? null, hops: hops(view.bestRoute) } : null,
+      node: view.nodeName, nodeId, ours: view.source?.kind ?? null, doNotApproach: view.nodeRestricted,
+      ...('contact' in node ? { nodeContact: node.contact } : {}), addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
+      bestRouteToNode: best ? { from: best.fromName ?? null, fromEntityId: best.fromEntity ?? null, hops: bestHops.map((h) => c.at(h)) } : null,
       onward: view.nodeRestricted ? [] : view.onward.slice(0, limit).map((t) => ({
         entityId: t.otherId, name: t.otherName, tieTier: t.edges[0]?.tier ?? null, routeTier: t.combinedTier, sources: t.sources,
         lps: t.lps.map((l) => ({ name: l.name, vehicle: l.vehicleSlug, status: l.status, via: l.via })),

@@ -100,6 +100,8 @@ export async function runProperties(check: Check) {
   await step('outreach-mcp.outreachMcpProperties', async () => (await import('./outreach-mcp')).outreachMcpProperties(check, db));
   // The comms trace and who needs a ticket (5 Oct 2026, docs/27 §5–§7).
   await step('comms.commsProperties', async () => (await import('./comms')).commsProperties(check, db));
+  // The desk's second round (5 Oct 2026, docs/27 §4–§4b): hop ids and addresses, top connectors, REST routes, passed LPs, paging.
+  await step('outreach-desk.outreachDeskProperties', async () => (await import('./outreach-desk')).outreachDeskProperties(check, db));
   // Cloud pull and push (docs/deploy/railway.md §6–§7): sync tokens, the push checks, and on Postgres the round trip.
   await step('sync.syncProperties', async () => (await import('./sync')).syncProperties(check, db));
   // Settings, /setup and Google sign-in (docs/deploy/railway.md §3). Last: it leaves two invented users inactive.

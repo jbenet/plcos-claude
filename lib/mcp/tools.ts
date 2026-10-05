@@ -3,7 +3,9 @@ import type { Envelope } from './envelope';
 import type { Answer } from './output';
 import * as reads from './reads';
 import * as writes from './writes';
-import { BUCKETS, outreachQueue, outreachVehicles } from '@/lib/outreach/reads';
+import { QUEUE_BUCKETS, outreachQueue, outreachVehicles } from '@/lib/outreach/reads';
+import { topConnectors } from '@/lib/outreach/connectors';
+import { config } from '@/config/deployment';
 import { contactInput, contacts, requestTicket, ticketInput, update, updateInput } from '@/lib/outreach/writes';
 import { commsTrace, ingest, ingestInput, link, linkInput, recordSendAlias, sentInput, traceInput } from '@/lib/outreach/comms';
 import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
@@ -75,13 +77,13 @@ export const TOOLS: readonly Tool[] = [
   }),
   tool({
     name: 'routes_to', title: 'Routes to a person or organisation', policy: READ,
-    description: 'Warm-intro routes from the team and the PL network to a target, for one vehicle, ranked by evidence tier (A–D), with what was inspected.',
+    description: 'Warm-intro routes from the team and the PL network to a target, for one vehicle, ranked by evidence tier (A–D), with what was inspected. Each hop and the introducer carry their entityId, whether a restriction is on file (doNotApproach), and, where your access reads addresses on the vehicle, the best address with its source and confirmation date.',
     input: z.object({ targetId: uuid, vehicle, limit: limit(20, 10) }).strict(),
     run: (env, a) => reads.routesTo(env.principal, a),
   }),
   tool({
     name: 'routes_through', title: 'Routes through a node', policy: READ,
-    description: 'Whom a person or organisation could introduce us to, our best route to them, and which LPs are reachable only through them. Needs access to every vehicle.',
+    description: 'Whom a person or organisation could introduce us to, our best route to them (hops with entityIds, flags and, where readable, addresses), and which LPs are reachable only through them. Needs access to every vehicle.',
     input: z.object({ nodeId: uuid, vehicle: vehicle.optional(), limit: limit(50, 20) }).strict(),
     run: (env, a) => reads.routesThrough(env.principal, a),
   }),
@@ -124,12 +126,21 @@ export const TOOLS: readonly Tool[] = [
   }),
   tool({
     name: 'outreach_queue', title: 'Outreach: the queue', policy: OUT_READ,
-    description: 'The mail desk\'s queue for a vehicle (or "all"): each open LP with Capital OS\'s own status, close track and SPV seat stage (each with its label), the indication, contacts, the latest strategy, checks (restriction, accreditation, ask count, fund first, wrap; each says whether it blocks), materials and a bucket. Health details are redacted. Page with offset.',
+    description: `The mail desk\'s queue for a vehicle (or "all"): each open LP with Capital OS\'s own status, close track (with signedOn, closedOn, outstanding) and SPV seat stage (each with its label), the indication, contacts, the latest strategy, checks (restriction, accreditation, ask count, fund first, wrap; each says whether it blocks), materials and a bucket. Health details are redacted. ${config.outreach.defaultQueueRows} rows unless you pass limit (at most ${config.outreach.maxQueueRows}); pass nextCursor as cursor for the next page (null at the end); total counts every match. Passed LPs only with includePassed, each marked passed.`,
     input: z.object({
-      vehicle, bucket: z.enum(BUCKETS as [string, ...string[]]).optional(), limit: limit(300, 25), offset, pursuitId: uuid.optional(),
-      updatedSince: z.string().datetime({ offset: true }).optional().describe('Only rows changed since this time: pass the previous answer\'s cursor to poll for changes.'),
+      vehicle, bucket: z.enum(QUEUE_BUCKETS as [string, ...string[]]).optional(), limit: limit(config.outreach.maxQueueRows, config.outreach.defaultQueueRows), offset, pursuitId: uuid.optional(),
+      cursor: z.string().min(1).max(400).optional().describe('The previous answer\'s nextCursor: the next page of the same query.'),
+      includePassed: z.boolean().optional().describe('Also the LPs that passed, each marked passed (default false).'),
+      updatedSince: z.string().datetime({ offset: true }).optional().describe('Only rows changed since this time: pass the previous answer\'s cursor (the polling time, not nextCursor) to poll for changes.'),
     }).strict(),
-    run: async (env, a) => outreachQueue(env.principal, { ...a, limit: a.limit ?? 25 } as never),
+    // Over MCP the answer must fit the response limit; the queue cuts the page to fit and nextCursor follows (docs/27 §4).
+    run: async (env, a) => outreachQueue(env.principal, a as never, env.via === 'mcp' ? { maxBytes: config.mcp.maxResponseBytes - 6000 } : {}),
+  }),
+  tool({
+    name: 'top_connectors', title: 'Outreach: top connectors for a vehicle', policy: OUT_READ,
+    description: 'The people who sit on the most and best warm routes to a vehicle\'s open LPs: for each, entityId, name, how many open LPs they reach, the best route score through them, a few example pursuitIds, whether a restriction is on file, and (where readable) their best address. Built from the same routes as routes_to; only recommended routes count.',
+    input: z.object({ vehicle, limit: limit(100, 20) }).strict(),
+    run: (env, a) => topConnectors(env.principal, a),
   }),
   // The mail desk's writes (docs/27). Each runs the app's own service as the token's owner; none sends or approves.
   tool({
