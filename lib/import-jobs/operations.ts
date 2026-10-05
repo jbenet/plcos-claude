@@ -38,6 +38,25 @@ async function spvJob(db: Db, actor: string): Promise<Record<string, unknown>> {
   }
 }
 
+/**
+ * Add prospects (docs/prospects-import.md): every settled file in enrich/prospects, as `actor`. A cloud push
+ * (lib/sync/push.ts) names in `input.settled` the files it wrote whole, so they are read now rather than after
+ * the two-minute settle wait; only names of the pushed form count (settledNames), and every other file in the
+ * folder is read as the button reads it. `dir` is for the properties, which run it on a scratch folder.
+ */
+export async function prospectsJob(db: Db, actor: string, input: Record<string, unknown>, progress: ImportProgress, dir?: string): Promise<Record<string, unknown>> {
+  await progress('Reading prospect files',0,2);
+  const { readProspectFiles,addProspects } = await import('@/lib/enrich/prospects');
+  const { settledNames } = await import('@/lib/enrich/prospect-rows');
+  const files = await readProspectFiles(dir,settledNames(input.settled));
+  await progress('Adding prospects',1,2);
+  const r = await addProspects(db,actor,files);
+  const counts = {files:r.files,added:r.added,existing:r.existing,ambiguous:r.ambiguous,invalid:r.invalid.length,inProgress:r.inProgress.length,
+    moved:r.moved,toSourcing:r.toSourcing,toPassed:r.toPassed,kept:r.kept,lost:r.losers.length};
+  await appendAudit({actorId:actor,action:'enrich.prospects',subjectType:'enrich',detail:{...counts,perFile:r.perFile}});
+  return {...counts,precedence:{perFile:r.perFile,losers:r.losers.slice(0,5),lost:r.losers.length}};
+}
+
 /** Worker operations use the actor captured by the human's request, never a cookie or action context. */
 export async function runImportOperation(db: Db, job: ImportJob, progress: ImportProgress): Promise<Record<string, unknown>> {
   const actor = job.actor;
@@ -88,17 +107,7 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
       await progress('Deriving SPV stance',0,1);
       return spvJob(db,actor);
     }
-    case 'prospects': {
-      await progress('Reading prospect files',0,2);
-      const { readProspectFiles,addProspects } = await import('@/lib/enrich/prospects');
-      const files = await readProspectFiles();
-      await progress('Adding prospects',1,2);
-      const r = await addProspects(db,actor,files);
-      const counts = {files:r.files,added:r.added,existing:r.existing,ambiguous:r.ambiguous,invalid:r.invalid.length,inProgress:r.inProgress.length,
-        moved:r.moved,toSourcing:r.toSourcing,toPassed:r.toPassed,kept:r.kept,lost:r.losers.length};
-      await appendAudit({actorId:actor,action:'enrich.prospects',subjectType:'enrich',detail:{...counts,perFile:r.perFile}});
-      return {...counts,precedence:{perFile:r.perFile,losers:r.losers.slice(0,5),lost:r.losers.length}};
-    }
+    case 'prospects': return prospectsJob(db,actor,job.input,progress);
     case 'duplicates':
     case 'pursuits': {
       await progress(job.kind==='duplicates'?'Merging duplicate identities':'Consolidating pursuits',0,1);

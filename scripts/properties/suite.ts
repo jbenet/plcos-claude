@@ -105,6 +105,8 @@ export async function runProperties(check: Check) {
   // A person's addresses (migration 019): login, default-to and aliases.
   await (await import('./team-addresses')).teamAddressProperties(check, db);
   await (await import('./railway-setup')).railwaySetupProperties(check, db);
+  // A vehicle added in the app, and prospects pushed from the Mac into it (5 Oct 2026). After the rest: it adds vehicles.
+  await (await import('./cloud-vehicle-prospects')).cloudVehicleProspectsProperties(check, db);
   await db.close();
 
   await (await import('./pipeline')).hardeningVariations(check);

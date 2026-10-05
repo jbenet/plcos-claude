@@ -3,17 +3,21 @@
  * anything leaves it: the importer's validators (lib/sync/bundle.ts), the same
  * checks the server runs again.
  *
- *   node --import tsx scripts/cloud-push-bundle.ts [--check] [--workflow W1|W1c|W5] [--run <mac run id>]
+ *   node --import tsx scripts/cloud-push-bundle.ts [--check] [--workflow W1|W1c|W5|prospects] [--run <mac run id>]
  *     [--source claude-code|chatgpt|script] [--agent <name>] [--model <id>] <file>...
  *
  * Each <file> is an output where its workflow wrote it — …/enrich/raw/<key>.json,
  * …/enrich/strategy/[<vehicle>/]<key>.json, …/enrich/fact-review-<NN><part>.jsonl — or one bundle
- * ({ workflow, files }) made earlier. The workflow is read from the paths unless given. With --check it
+ * ({ workflow, files }) made earlier. The workflow is read from the paths unless given. A prospects file
+ * (docs/prospects-import.md) is a <name>.jsonl anywhere with --workflow prospects, or any file under
+ * …/enrich/prospects/: it travels as its text, so the server's line numbers are the file's. Its rows are
+ * checked here by the importer's rules; whether each vehicle exists is the server's to say. With --check it
  * prints counts and problems only; without, it prints the body on stdout, and nothing at all if a check fails.
  * Problems name files and fields, never their content.
  */
 import { readFile, realpath } from 'node:fs/promises';
-import { checkBundle, RAW, REVIEW, STRATEGY, type PushBundle, type PushWorkflow } from '../lib/sync/bundle';
+import { basename } from 'node:path';
+import { checkBundle, PROSPECTS, RAW, REVIEW, STRATEGY, type PushBundle, type PushWorkflow } from '../lib/sync/bundle';
 import { config } from '../config/deployment';
 
 async function main() {
@@ -32,7 +36,15 @@ async function main() {
   let bundle: Partial<PushBundle>;
   const first = files.length === 1 && files[0]!.endsWith('.json') ? JSON.parse(await readFile(files[0]!, 'utf8')) as Partial<PushBundle> : null;
   if (first && Array.isArray(first.files) && typeof first.workflow === 'string') bundle = first;
-  else {
+  else if (opt.workflow === 'prospects' || (!opt.workflow && files.every((f) => f.endsWith('.jsonl') && f.includes('/enrich/prospects/')))) {
+    const out: PushBundle['files'] = [];
+    for (const f of files) {
+      const path = `prospects/${basename(f)}`;
+      if (!PROSPECTS.test(path)) throw new Error(`${basename(f)}: a prospects file is <name>.jsonl, the name letters, digits, dot, dash or underscore`);
+      out.push({ path, content: await readFile(await realpath(f), 'utf8') });
+    }
+    bundle = { workflow: 'prospects', files: out };
+  } else {
     const out: PushBundle['files'] = [];
     for (const f of files) {
       const real = await realpath(f);
@@ -67,7 +79,8 @@ async function main() {
     console.error(`cloud-push: the push is ${Buffer.byteLength(body)} bytes, over the server's ${config.sync.maxPushBytes}; push the batch in parts.`);
     process.exit(1);
   }
-  if (checkOnly) console.error(`cloud-push: ${ok.files.length} file${ok.files.length === 1 ? '' : 's'}, ${ok.workflow}, checked here: valid.`);
+  if (checkOnly) console.error(`cloud-push: ${ok.files.length} file${ok.files.length === 1 ? '' : 's'}, ${ok.workflow}, checked here: valid.`
+    + (ok.workflow === 'prospects' ? ' The server checks each vehicle slug (scripts/prospects-check.ts --vehicle <slug> checks a new one here).' : ''));
   else process.stdout.write(body);
 }
 
