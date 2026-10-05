@@ -24,7 +24,7 @@ process, the daily timer and `cutover.sh`.
 | **Web service** | Built from GitHub with the existing `Dockerfile`: `next build`, then `next start` (the production build; see the page-speed and prod-build changelog entries); `railway.json` sets the healthcheck and one replica | Import jobs run as child processes of this server, as on the Mac. The daily timer runs inside it too. No worker or cron service, no Redis. |
 | **Volume** on the web service | Mounted at `/app/data`; working files in `/app/data/real` | About 2.2 GB today: research (`enrich/`, 2.1 GB, 37K files), issues, materials, intake, workflow ledger. Start at 10 GB. |
 | **Postgres 17** | Railway's template, pinned to 17 to match the Mac; private network only | The only copy of the real data after cutover. The Mac's cluster is 2.3 GB on disk; the last measured dump was 190–222 MiB (28 Sep). |
-| **Size** | Juan's existing Railway plan (Hobby, 5 Oct: 5 GB per volume, 8 GB memory and 8 vCPU per service); raise it when a volume passes ~80% | Measured (06-measurements): the server peaks at 1.25 GiB under 10 users, the findings import child at 2.43 GiB. Memory limit at least 4 GB, ideally 8. |
+| **Size** | Railway Pro (Juan upgraded on 5 Oct): app volume 10 GB, Postgres volume 20 GB (resized in the dashboard; neither the API nor the CLI can), 8 GB memory and 8 vCPU per service. Pro bills for the GB used, not the capacity. | Measured (06-measurements): the server peaks at 1.25 GiB under 10 users, the findings import child at 2.43 GiB. Memory limit at least 4 GB, ideally 8. |
 
 The Mac becomes a development machine. It serves demos and previews of pulled copies (§6), and runs local
 research that pushes its results up (§7). Dakota moves to the cloud with everything else (decision C).
@@ -160,8 +160,8 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
 1. **Postgres.** In Juan's Railway project: Add → Database → PostgreSQL. Pin the image to 17 **before first use**: the
    template now defaults to 18 (5 Oct 2026), and the image's pg_dump 17 can't dump an 18 server (snapshots, pulls,
    backups). Set the source image to `ghcr.io/railwayapp-templates/postgres-ssl:17`, with a fresh volume if 18 already
-   ran, and run `select version()`. Turn on its volume backups in the dashboard (Railway keeps daily ones 6 days, weekly 27, monthly
-   89, billed at volume rates for what changed; its docs limit them by no plan). **Remove its public TCP proxy** (Settings →
+   ran, and run `select version()`. Volume backups: on since 5 Oct, daily at 22:15 UTC (kept 6 days) and weekly on Saturdays (kept 27
+   days), billed at volume rates for what changed. **Remove its public TCP proxy** (Settings →
    Networking).
 2. **Roles,** from a shell in the web service (`railway ssh`, then `psql` as `postgres`):
    ```sql
@@ -174,7 +174,8 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
    everything, and `plcos_ro` only reads (docs/21 "Roles").
 3. **Web service.** Add → GitHub repo → this repo, watching a `deploy` branch (Settings → Source), so a
    release is a choice: `git push origin master:deploy` (MailGuard's practice). Add a volume at `/app/data`:
-   10 GB on Pro, 5 GB on Hobby (Hobby's cap), which holds today's ~2.2 GB of working files. Then set the variables:
+   10 GB, holding today's ~2.2 GB of working files. The web service is named `plcos-app`, so CLI commands take
+   `--service plcos-app`. Then set the variables:
    - `RAILWAY_RUN_UID=0`;
    - `PLCOS_SECRET` (`openssl rand -base64 32`, sealed);
    - `DATABASE_URL` pointing at `plcos_demo`, with `PGPASSWORD`;
@@ -195,12 +196,12 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
 
 ## 5. Moving the database (one evening, rehearsed first)
 
-**No public port, even for the move.** Railway's SSH forwards ports into the project's private network
-(docs.railway.com/cli/ssh), so the Mac reaches Postgres through a tunnel that only Juan's SSH key opens:
-`ssh -N -L 55432:postgres.railway.internal:5432 <domain>@ssh.railway.com`. Railway's `scp` reaches the
-container's filesystem, including the volume, which is how the working files go up. Both are confirmed in
-Railway's docs and checked for real in the rehearsal. The fallback is the Postgres TCP proxy, on for that
-hour only.
+**No public port, even for the move.** Railway's SSH forwards ports (docs.railway.com/cli/ssh), so the Mac
+reaches Postgres through a tunnel that only Juan's SSH key opens. The tunnel goes into Postgres's own
+container and its loopback. It was tested on 5 Oct: `pg_isready` said "accepting connections":
+`ssh -N -L 55432:127.0.0.1:5432 <postgres service instance>@ssh.railway.com`. Railway's `scp` reaches a
+container's filesystem, including its volume, which is how the working files go up to `plcos-app`. The
+fallback is the Postgres TCP proxy, turned on for that hour only.
 
 **Dakota moves too (decision C, Juan 4 Oct: "it should be our db same way as pl's warehouse").** So it
 is one hop, Mac → Railway through the tunnel. `cutover.sh` freezes, dumps, restores, verifies for an exact
