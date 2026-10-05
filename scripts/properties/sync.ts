@@ -20,7 +20,7 @@ import { createServer as netServer } from 'node:net';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import pg from 'pg';
+import { openPostgres } from '../../lib/db/postgres';
 import { config } from '../../config/deployment';
 import { readRuns } from '../../lib/workflows/ledger';
 import { syncGuard } from '../../lib/sync/auth';
@@ -109,7 +109,7 @@ export async function syncProperties(check: Check, db: Db) {
   await revokeMcpToken(juan, revokedToken.token.tokenId, db);
   const afterRevoke = await get(revokedToken.secret);
   const pushAudit = await auditOf(push.token.tokenId), demotedAudit = await auditOf(demoted.token.tokenId);
-  check('SYNC scope: a push token cannot snapshot, a snapshot token cannot push, an MCP token neither, and /api/mcp refuses a sync token',
+  check('SYNC scope: a push token cannot snapshot, a snapshot token cannot push, an MCP token neither, and a sync token lists and calls no MCP tool',
     pushOnSnap.status === 403 && snapOnPush.status === 403 && mcpOnSnap.status === 403
     && Array.isArray(syncList.result?.tools) && syncList.result.tools.length === 0 && syncCall.result?.isError === true
     && pushAudit.some((a) => a.action === 'mcp.call' && a.detail.via === 'sync' && a.detail.tool === 'sync_snapshot' && a.detail.outcome === 'refused' && a.detail.reason === 'scope'),
@@ -245,6 +245,7 @@ export async function syncProperties(check: Check, db: Db) {
     delete process.env.SYNC_DEMO_SNAPSHOT;
     await rm(fixture, { recursive: true, force: true });
   }
+  await scriptPush(check, db, push.secret);
   await db.query(`update platform.app_user set active = false where handle in ('sync-gp', 'sync-viewer', 'sync-admin')`);
   for (const t of [snap, push, adminPush, demoted]) await revokeMcpToken(t === push ? gp : t === demoted ? admin2 : juan, t.token.tokenId, db);
 }
@@ -281,14 +282,16 @@ async function roundTrip(check: Check, db: Db, GET: (r: Request) => Promise<Resp
     };
     const before = await counts((sql) => db.query<{ n: string }>(sql));
     const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: scratch, PG_BIN, COPY_PGPASSWORD: copyPw, CLOUD_SNAPSHOT_TOKEN: secret,
-      CLOUD_APP_URL: `http://127.0.0.1:${appPort}`, PLCOS_BACKUPS: join(scratch, 'backups'), CLOUD_KEEP_PASSPHRASE_FILE: join(scratch, 'pass'), MAX_GB: '1' };
+      CLOUD_APP_URL: `http://127.0.0.1:${appPort}`, PLCOS_BACKUPS: join(scratch, 'backups'), CLOUD_KEEP_PASSPHRASE_FILE: join(scratch, 'pass'), MAX_GB: '1' } as unknown as NodeJS.ProcessEnv;
     await writeFile(join(scratch, 'pass'), 'invented passphrase for the props', { mode: 0o600 });
     const to = `postgres://plcos@127.0.0.1:${port}/plcos_copy`;
     const init = await run('bash', ['scripts/cloud-pull.sh', 'init', '--to', to, '--dir', dir], env);
     const pull = await run('bash', ['scripts/cloud-pull.sh', 'pull', '--to', to, '--dir', dir, '--keep'], env);
-    const copy = new pg.Client({ host: '127.0.0.1', port, user: 'plcos', password: copyPw, database: 'plcos_copy' });
     let after: Record<string, string> = {};
-    if (pull.code === 0) { await copy.connect(); after = await counts(async (sql) => (await copy.query<{ n: string }>(sql)).rows); await copy.end(); }
+    if (pull.code === 0) {
+      const copy = await openPostgres(`postgres://plcos:${encodeURIComponent(copyPw)}@127.0.0.1:${port}/plcos_copy`);
+      try { after = await counts((sql) => copy.query<{ n: string }>(sql)); } finally { await copy.close(); }
+    }
     const differ = tables.map(({ t }) => t).filter((t) => before[t] !== after[t]);
     const backups = await readdir(join(scratch, 'backups')).catch(() => [] as string[]);
     const kept = backups.find((f) => /^plcos-cloud-\d{8}T\d{4}Z-daily\.tar\.gz\.gpg$/.test(f));
@@ -302,6 +305,50 @@ async function roundTrip(check: Check, db: Db, GET: (r: Request) => Promise<Resp
   } finally {
     server?.close();
     spawnSync(`${PG_BIN}/pg_ctl`, ['-D', join(dir, 'postgres'), '-m', 'fast', '-w', 'stop'], { stdio: 'ignore' });
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+/**
+ * scripts/cloud-push.sh end to end against the push route's own guard and service, served on loopback into a
+ * scratch data root: a Dakota-sourced finding is refused on the Mac and never sent; a valid one is taken; the
+ * same file again is answered as already taken; the token never reaches the output.
+ */
+async function scriptPush(check: Check, db: Db, secret: string) {
+  const scratch = await mkdtemp(join(tmpdir(), 'plcos-sync-push-'));
+  const root = join(scratch, 'server'), mac = join(scratch, 'mac', 'enrich', 'raw');
+  let server: Server | null = null, requests = 0;
+  try {
+    await mkdir(root, { recursive: true }); await mkdir(mac, { recursive: true });
+    await writeFile(join(mac, 'sync-script.json'), JSON.stringify(finding('sync-script', '2026-10-01')));
+    await writeFile(join(mac, 'sync-script-dakota.json'), JSON.stringify(finding('sync-script-dakota', '2026-10-01', {
+      facts: [{ field: 'check_size', value: '$5M', source: { url: 'https://invented.example/x', kind: 'database', title: 'Dakota Marketplace profile' }, confidence: 'high' }] })));
+    server = createServer(async (req, res) => {
+      requests++;
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      const request = () => new Request(`http://127.0.0.1${req.url}`, { method: 'POST', body: Buffer.concat(chunks),
+        headers: Object.entries(req.headers).flatMap(([k, v]) => (typeof v === 'string' ? [[k, v]] : [])) as [string, string][] });
+      const guard = await syncGuard(request(), 'push');
+      const out = 'response' in guard ? { status: guard.response.status, body: await guard.response.json() }
+        : await acceptPush(guard.caller, request(), { root, db, queue: async () => ({ id: '00000000-0000-4000-8000-0000000000b2', status: 'queued' }) });
+      res.writeHead(out.status, { 'content-type': 'application/json' }); res.end(JSON.stringify(out.body));
+    });
+    const port = await new Promise<number>((resolve) => server!.listen(0, '127.0.0.1', () => resolve((server!.address() as { port: number }).port)));
+    const env = { PATH: process.env.PATH, HOME: scratch, CLOUD_PUSH_TOKEN: secret, CLOUD_APP_URL: `http://127.0.0.1:${port}` } as unknown as NodeJS.ProcessEnv;
+    const dakota = await run('bash', ['scripts/cloud-push.sh', join(mac, 'sync-script-dakota.json')], env);
+    const sentForDakota = requests;
+    const first = await run('bash', ['scripts/cloud-push.sh', '--run', '11111111-2222-4333-8444-666666666666', join(mac, 'sync-script.json')], env);
+    const again = await run('bash', ['scripts/cloud-push.sh', join(mac, 'sync-script.json')], env);
+    const taken = await readFile(join(root, 'enrich', 'raw', 'sync-script.json'), 'utf8').catch(() => '');
+    const all = dakota.out + first.out + again.out;
+    check('SYNC cloud-push.sh: a Dakota-sourced finding is refused on the Mac and never sent; a valid one is taken and imported; the same file again is already taken',
+      dakota.code === 1 && /nothing was sent/.test(dakota.out) && /Dakota/.test(dakota.out) && sentForDakota === 0
+      && first.code === 0 && /taken: run [0-9a-f-]{36}, 1 files/.test(first.out) && /findings import/.test(first.out) && JSON.parse(taken || '{}').key === 'sync-script'
+      && again.code === 0 && /already taken/.test(again.out) && requests === 2 && !all.includes(secret),
+      `Dakota push exit ${dakota.code} with ${sentForDakota} requests; first exit ${first.code}; again exit ${again.code}; ${requests} requests in all; no token in the output`);
+  } finally {
+    server?.close();
     await rm(scratch, { recursive: true, force: true });
   }
 }

@@ -70,6 +70,12 @@ per tool (Juan: "we can evolve the MCP rules, i think we'll end up with more too
 A token may call a tool when its list names the tool, or, for a scoped tool, when it carries every scope the tool
 needs. `tools/list` returns each tool's policy in `_meta`.
 
+Two more scopes open no tool: `sync:snapshot` (Admin only) and `sync:push` (GP or Admin) open the cloud pull and
+push endpoints, `GET /api/sync/snapshot` and `POST /api/sync/push` (docs/deploy/railway.md §7a). Each endpoint
+declares a policy the same way (`lib/sync/scopes.ts`, risk `read` and `write-guarded`) and is checked by the same
+`allowed`; who may hold each scope is checked when the token is made and on every use. Preferences makes them as
+two more choices under "May"; a sync token holds its scope alone. Their uses are `mcp.call` rows with `via: sync`.
+
 | Tool | Risk | Scopes | Ticket | What it does |
 | --- | --- | --- | --- | --- |
 | `search` | read | — | — | People and organisations by name, the pursuits on your vehicles (status, owner), do-not-approach |

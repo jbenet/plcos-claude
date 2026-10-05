@@ -37,12 +37,15 @@ export function pgDumpBinary(): string {
   return 'pg_dump';
 }
 
+/** The search path a child needs, and nothing else of this server's environment. */
+const childPath = (env: NodeJS.ProcessEnv = process.env) => env.PATH ?? '/usr/bin:/bin';
+
 /** The child's whole environment: the connection as PG* variables, password included, and nothing else of ours. */
 export function pgDumpEnv(url: string, env: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const u = new URL(url);
   if (!['postgres:', 'postgresql:'].includes(u.protocol)) throw new Error('DATABASE_URL is not a postgres URL.');
   const out: Record<string, string> = {
-    PATH: env.PATH ?? '/usr/bin:/bin', PGHOST: u.hostname.replace(/^\[|\]$/g, ''), PGPORT: u.port || '5432',
+    PATH: childPath(env), PGHOST: u.hostname.replace(/^\[|\]$/g, ''), PGPORT: u.port || '5432',
     PGDATABASE: decodeURIComponent(u.pathname.replace(/^\//, '')), PGCONNECT_TIMEOUT: '15',
   };
   if (u.username) out.PGUSER = decodeURIComponent(u.username);
@@ -77,11 +80,11 @@ export async function snapshotResponse(caller: SyncCaller, wantFiles: boolean, o
       const root = await realpath(o.root ?? resolve(process.cwd(), config.data.root));
       const list = await filesToCarry(root);
       count = list.length;
-      child = spawn('tar', ['-C', root, '--null', '-T', '-', '-czf', '-'], { stdio: ['pipe', 'pipe', 'pipe'], env: { PATH: process.env.PATH ?? '/usr/bin:/bin' } }) as Child;
+      child = spawn('tar', ['-C', root, '--null', '-T', '-', '-czf', '-'], { stdio: ['pipe', 'pipe', 'pipe'], env: { PATH: childPath() } as unknown as NodeJS.ProcessEnv }) as Child;
       child.stdin!.on('error', () => undefined);
       child.stdin!.end(list.map((f) => `${f}\0`).join(''));
     } else {
-      child = spawn(pgDumpBinary(), ['-Fc', '-w'], { stdio: ['ignore', 'pipe', 'pipe'], env: pgDumpEnv(config.db.url!) }) as Child;
+      child = spawn(pgDumpBinary(), ['-Fc', '-w'], { stdio: ['ignore', 'pipe', 'pipe'], env: pgDumpEnv(config.db.url!) as unknown as NodeJS.ProcessEnv }) as Child;
     }
   } catch (e) {
     g.__syncSnapshotBusy = false;

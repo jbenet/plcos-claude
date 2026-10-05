@@ -19,7 +19,9 @@ MONEY/ALLOCATION_EXCEPTION stay Admin-only until named per-vehicle approvers are
 
 HTTP handlers use `withRoute` with a closed route manifest. Two policies take a bearer token instead of the
 cookie: `mcp` (docs/26) and `outreach` (docs/27); each authorizes per tool or operation as the token's owner,
-narrowed by the token, through `can()` and the same action rules as the pages. Health is fixed DB-free liveness. Feedback POSTs check origin/profile only;
+narrowed by the token, through `can()` and the same action rules as the pages. Two more, `sync:snapshot` and
+`sync:push` (docs/deploy/railway.md §7a), check the token's scope and its owner's current role before the handler
+runs (lib/sync/auth.ts). Health is fixed DB-free liveness. Feedback POSTs check origin/profile only;
 feedback GETs read journal state only. Neither resolves a user or touches the database
 on the request path. Reporter resolution happens at ingest. Local switching remains intentional until an
 actual authentication provider is integrated. These checks do not turn the local handle
