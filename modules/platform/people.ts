@@ -8,7 +8,7 @@ import { appendAudit } from './repo';
  * transaction, whatever the page sent:
  *   - an email belongs to at most one active person, ignoring case;
  *   - the last active admin can be neither deactivated nor demoted.
- * Deactivating raises the person's session epoch (the trigger in migration 017).
+ * Deactivating raises the person's session epoch (the trigger in migration 018).
  */
 export type Access = 'admin' | 'gp' | 'viewer';
 export interface Person extends AppUser { active: boolean }

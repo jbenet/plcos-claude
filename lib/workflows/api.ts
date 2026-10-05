@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { config } from '@/config/deployment';
 import { BLOCKED_DOMAINS, check } from '@/lib/enrich/schema';
 import { checkStrategy } from '@/lib/enrich/strategy';
+import { factReviewProblems } from '@/lib/enrich/fact-review';
 import { beginRun, finishRun, type Usage } from './ledger';
 import { anthropicKey } from './key';
 
@@ -79,12 +80,7 @@ export async function runWorkflow(input: Record<string, unknown>, root: string =
         if (protocol === 'w1c' && f.path === review) {
           if (!Array.isArray(f.content) || f.content.length !== keys.length || new Set(f.content.map(r => r.key)).size !== keys.length) throw new Error('Incomplete fact review.');
           for (const r of f.content) {
-            const original = attached[`raw/${r.key}.json`] as { facts: unknown[] };
-            const grades = ['supported', 'partly', 'not supported', 'someone else', 'unavailable'];
-            if (!keys.includes(r.key) || !['holds', 'doubt', 'wrong'].includes(r.identity) || typeof r.identityNote !== 'string'
-              || !Array.isArray(r.facts) || r.facts.length !== original.facts.length
-              || r.facts.some((f: { i: number; grade: string; note: string }, i: number) => f.i !== i || !grades.includes(f.grade) || typeof f.note !== 'string')
-              || ['supported', 'partly', 'notSupported', 'someoneElse', 'unavailable'].some((k, i) => r.counts?.[k] !== r.facts.filter((f: { grade: string }) => f.grade === grades[i]).length)) throw new Error('Invalid fact review.');
+            if (!keys.includes(r?.key) || factReviewProblems(r, attached[`raw/${r.key}.json`] as { facts: unknown[] }).length) throw new Error('Invalid fact review.');
           }
           continue;
         }

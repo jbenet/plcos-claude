@@ -19,5 +19,5 @@ export {
 export { addPerson, listPeople, PeopleRefused, setPersonActive, updatePerson, type Access, type NewPerson, type Person } from './people';
 export { deletePersonSecret, readPersonSecret, writePersonSecret } from './person-secrets';
 export {
-  createMcpToken, findMcpToken, hashToken, listMcpTokens, looksLikeToken, revokeMcpToken, type McpToken, type NewToken, type TokenState,
+  createMcpToken, findMcpToken, hashToken, listMcpTokens, looksLikeToken, revokeMcpToken, TokenRefused, type McpToken, type NewToken, type TokenState,
 } from './mcp-tokens';

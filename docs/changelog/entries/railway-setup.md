@@ -23,7 +23,7 @@ dev key sits under the profile's data folder, which git ignores. Each purpose ha
 secrets are AES-256-GCM, bound to their setting's key; sessions and the OAuth state are HMAC-SHA256, compared in
 constant time.
 
-**Settings in `platform.setting`** (migration `platform/017_settings_and_sessions.sql`, which also adds a
+**Settings in `platform.setting`** (migration `platform/018_settings_and_sessions.sql`, which also adds a
 per-person `session_epoch`). Each connector declares its own setting in its own folder, so the boundaries hold;
 `lib/settings/registry.ts` assembles them: the public address, the Google client, session length, Affinity,
 Linear, Dakota's sign-in (Juan, 4 Oct: Dakota moves to the cloud), Anthropic, mailguard's address (it was

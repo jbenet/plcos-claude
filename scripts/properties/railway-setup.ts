@@ -483,6 +483,15 @@ export async function railwaySetupProperties(check: Check, db: Db) {
         'An invented real folder copied by scripts/preview-copy.ts: the database and files arrive; dev-secret does not.');
     } finally { await rmrf(scratch, { recursive: true, force: true }); }
 
+    // ── Token routes need no session behind Google sign-in ───────────────────────────────────
+    const { GET: snapshot } = await import('../../app/api/sync/snapshot/route');
+    const { POST: mcpPost } = await import('../../app/api/mcp/route');
+    const noToken = await withDb(db, () => snapshot(new Request(`${ORIGIN}/api/sync/snapshot`, { headers: { host: 'localhost:3113' } })));
+    const mcpNoToken = await withDb(db, () => mcpPost(new Request(`${ORIGIN}/api/mcp`, { method: 'POST', headers: { host: 'localhost:3113', 'content-type': 'application/json' }, body: '{}' })));
+    check('TOKENS the sync and MCP routes answer for themselves behind Google sign-in: no session cookie needed, no redirect to /signin',
+      config.auth.provider === 'google' && [noToken, mcpNoToken].every((r) => (r.status === 401 || r.status === 403) && !r.headers.get('location')),
+      'Without a token each refuses with its own 401/403; with one, the bearer token is the identity, as before.');
+
     // ── Cross-site POSTs ──────────────────────────────────────────────────────────────────────
     const { POST: signout } = await import('../../app/auth/signout/route');
     const evil = await withDb(db, () => signout(new Request(`${ORIGIN}/auth/signout`, { method: 'POST', headers: { origin: 'https://evil.example', host: 'localhost:3113', 'sec-fetch-site': 'cross-site' } })));

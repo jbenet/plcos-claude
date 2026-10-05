@@ -1,7 +1,7 @@
 import { getDb, type Queryable } from '@/lib/db';
 
 /**
- * platform.person_secret rows (migration 017). The values arrive sealed by lib/settings/person-secrets.ts;
+ * platform.person_secret rows (migration 018). The values arrive sealed by lib/settings/person-secrets.ts;
  * this file never sees a plaintext secret. Every function takes the person's own id: there is no "list
  * everyone's" here, so no page can show or set another person's secret.
  */

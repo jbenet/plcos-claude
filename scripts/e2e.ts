@@ -461,6 +461,40 @@ async function main() {
       } };
     });
 
+    // Cloud sync tokens (docs/deploy/railway.md §6–§7) ──────────────────────────────────────────
+    // A push token made in Preferences opens neither the snapshot endpoint nor an MCP tool; the demo serves no
+    // snapshot at all (SYNC_DEMO_SNAPSHOT is unset). The push itself is covered by the properties, on a scratch root.
+    const syncLabel = `${MARK} push`;
+    await check('Cloud sync: make a push token in Preferences; it cannot take a snapshot and lists no MCP tool; revoked, it is refused', async () => {
+      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      const card = page.locator('#mcp');
+      await card.getByPlaceholder('Claude Code on the Mac').fill(syncLabel);
+      await card.locator('input[name=tools][value=push]').check();
+      await card.getByRole('button', { name: 'Make token' }).click();
+      const secret = (await card.locator('code').first().innerText()).trim();
+      const keychain = (await card.locator('code').nth(1).innerText()).trim();
+      if (!secret.startsWith('plcos_mcp_') || !keychain.includes('plcos-railway -a push-token') || keychain.includes(secret)) throw new Error('no push token, or the Keychain line is wrong');
+      const auth = { Authorization: `Bearer ${secret}` };
+      const snapshot = await fetch(`${base}/api/sync/snapshot`, { headers: auth });
+      const client = new Client({ name: 'e2e', version: '0' });
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/api/mcp`), { requestInit: { headers: auth } }));
+      const tools = (await client.listTools()).tools.length;
+      await client.close();
+      await page.reload({ waitUntil: 'networkidle' });
+      const row = card.locator('tr', { hasText: syncLabel });
+      const may = (await row.locator('td').nth(1).innerText()).trim();
+      await row.getByRole('button', { name: 'Revoke' }).click();
+      await row.getByText(/^revoked/).waitFor();
+      const after = await fetch(`${base}/api/sync/push`, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: '{}' });
+      if (snapshot.status !== 403 || tools !== 0 || !may.startsWith('Push') || after.status !== 401) throw new Error(`snapshot ${snapshot.status}, ${tools} MCP tools, listed as "${may}", revoked push ${after.status}`);
+      return { ui: 'made a push token (shown with its Keychain line), was refused a snapshot, listed no MCP tool; revoked it and a push was refused', verify: async (db) => {
+        const t = await db.one<{ id: string; tools: string[] }>('select token_id::text id, tools from platform.mcp_token where label = $1', [syncLabel]);
+        same(t?.tools, ['sync:push'], 'the push token (its scope alone)');
+        same((await db.query<{ action: string; reason: string }>(`select action, detail->>'reason' reason from platform.audit_log where subject_id = $1 and action in ('mcp.call', 'mcp.refused') and detail->>'via' = 'sync' order by id`, [t!.id]))
+          .map((r) => `${r.action}:${r.reason}`), ['mcp.call:scope', 'mcp.refused:revoked'], 'the audit entries for its uses');
+      } };
+    });
+
     // juanmail over MCP (docs/27: MCP is the primary interface) ───────────────────────────────
     const juanmail = `${MARK} juanmail`;
     const chain = `e2e-chain-${Date.now().toString(36)}`;
