@@ -9,10 +9,8 @@ import { withRoute } from '@/lib/authz/route';
  */
 import { join } from 'node:path';
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { config } from '@/config/deployment';
 import { feedbackHome } from '@/config/ports';
-import { USER_COOKIE } from '@/lib/auth/cookie';
 import { isClientId } from '@/lib/feedback-journal';
 import { checkReport, inboxStatus, journal } from '@/lib/feedback-inbox';
 import { newRequestKey } from '@/lib/request-key';
@@ -35,6 +33,10 @@ export const POST = withRoute('app/api/feedback/route.ts#POST', async function(r
       { status: 403 },
     );
   }
+  // Behind Google sign-in, only a signed-in person files (lib/auth/reporter.ts); no database here either.
+  const { feedbackReporter } = await import('@/lib/auth/reporter');
+  const who = await feedbackReporter();
+  if ('refused' in who) return who.refused;
   let raw: Record<string, unknown>;
   try {
     raw = (await req.json()) as Record<string, unknown>;
@@ -53,7 +55,7 @@ export const POST = withRoute('app/api/feedback/route.ts#POST', async function(r
   try {
     // Capture only the local selector here. Ingest resolves app_user before naming the reporter;
     // a reporter supplied in the request body is never used.
-    const reporter = (await cookies()).get(USER_COOKIE)?.value || null;
+    const reporter = who.reporter;
     const done = await journal(issuesRoot(), {
       kind: 'issue', clientId, receivedAt: new Date().toISOString(), reporter, request: checked.value,
     });

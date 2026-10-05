@@ -22,7 +22,7 @@ const VEHICLE_ROUTES = new Set(['visualizations', 'strategy', 'calendar', 'fit',
 export const RESERVED = new Set([
   '_next', 'api', 'developer', 'dev', 'issues', 'agents', 'm', 'today', 'approvals', 'standup', 'everything', 'orgs', 'rnd', 'access-denied',
   'research', 'forecast', 'content', 'performance', 'library', 'relationships', 'operations', 'plays', 'settings', 'system',
-  'calendar', 'visualizations', 'fit', 'stats', 'favicon.ico', ...Object.values(MODULE_PAGES), ...Object.keys(MODULE_PAGES),
+  'calendar', 'visualizations', 'fit', 'stats', 'favicon.ico', 'setup', 'signin', 'auth', ...Object.values(MODULE_PAGES), ...Object.keys(MODULE_PAGES),
 ]);
 /** The Developer section's pages that live outside /dev. */
 export const DEV_PAGES: Record<string, string> = { issues: '/issues', agents: '/agents' };

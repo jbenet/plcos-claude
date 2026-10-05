@@ -49,6 +49,11 @@ export const actionRules = {
   'app/email/actions.ts#forgetMailguardAction': { action: 'mutate', scope: 'self' },
   'app/email/actions.ts#demoMailguardAction': { action: 'mutate', scope: 'self' },
   // MCP tokens (docs/26): a person's own; the service revokes only the caller's.
+  // Settings → Connections (docs/deploy/railway.md §3): Admin only; a refusal is audit-logged.
+  'app/settings/connections/actions.ts#saveSettingAction': { action: 'admin', scope: 'global' },
+  'app/settings/connections/actions.ts#clearSettingAction': { action: 'admin', scope: 'global' },
+  'app/settings/connections/actions.ts#checkSettingAction': { action: 'admin', scope: 'global' },
+  'app/settings/connections/actions.ts#signOutEverywhereAction': { action: 'admin', scope: 'global' },
   'app/settings/actions.ts#createMcpTokenAction': { action: 'mutate', scope: 'self' },
   'app/settings/actions.ts#revokeMcpTokenAction': { action: 'mutate', scope: 'self' },
   // Your own voice for drafts (docs/email-guidelines.md §Voice): only ever the caller's row.

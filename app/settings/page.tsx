@@ -61,6 +61,16 @@ async function Preferences() {
         approve anything, or what anyone else sees.
       </p>
 
+      {/* Admins: the server's own settings live one page over (docs/deploy/railway.md §3). */}
+      {user.access === 'admin' && (
+        <div className="card">
+          <div className="chead"><h2>Connections</h2><span className="lbl">admins · the server, not you</span></div>
+          <div className="cbody">
+            <p>The public address, Google sign-in, the connector keys and the tokens this server uses. Kept encrypted, changed by admins, every change logged. <Link href="/settings/connections">Open Settings → Connections</Link>.</p>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="chead">
           <h2>Theme</h2>
@@ -100,16 +110,26 @@ async function Preferences() {
       <div className="card">
         <div className="chead">
           <h2>Who you are</h2>
-          <span className="lbl">local user switcher</span>
+          <span className="lbl">{a.kind === 'google' ? 'Google sign-in' : a.kind === 'labos' ? 'LabOS' : 'local user switcher'}</span>
         </div>
         <div className="cbody">
           <div className="fact"><span>Signed in as</span><span>{user.name} · {user.role}</span></div>
           <div className="fact"><span>Provider</span><span>{a.kind}</span></div>
-          <p style={{ marginTop: 10 }}>
-            This is not a login. Identity is a cookie holding a handle; no password is checked and
-            none is simulated, because a simulated one is the thing that would quietly survive into
-            a deployment. Switch user from the bottom of the rail.
-          </p>
+          {a.kind === 'google' ? (
+            <>
+              <p style={{ marginTop: 10 }}>
+                Signed in with your Google Workspace account ({user.email}). The session is a signed cookie;
+                an admin can end all of yours at once from Settings → Connections.
+              </p>
+              <form method="post" action="/auth/signout"><button className="btn" type="submit">Sign out</button></form>
+            </>
+          ) : (
+            <p style={{ marginTop: 10 }}>
+              This is not a login. Identity is a cookie holding a handle; no password is checked and
+              none is simulated, because a simulated one is the thing that would quietly survive into
+              a deployment. Switch user from the bottom of the rail.
+            </p>
+          )}
         </div>
       </div>
     </Page>

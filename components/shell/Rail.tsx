@@ -68,7 +68,10 @@ async function LoadedRail() {
         </div>
         {/* The user, and beside them the system's state (issue 0114): one quiet mark, words on a tap. */}
         <div className={st.me}>
-          {a.switchable ? <UserSwitcher user={user} users={users} unset={(await cookies()).get(USER_COOKIE)?.value !== user.handle} /> : <span>{user.name}</span>}
+          {a.switchable ? <UserSwitcher user={user} users={users} unset={(await cookies()).get(USER_COOKIE)?.value !== user.handle} />
+            : a.kind === 'google'
+              ? <form method="post" action="/auth/signout" style={{ display: 'contents' }}><span>{user.name}</span> <button type="submit" className="btn" style={{ padding: '2px 8px', fontSize: 11 }} title="Sign out of this browser">Sign out</button></form>
+              : <span>{user.name}</span>}
           <SystemStatus />
         </div>
       </div>

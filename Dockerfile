@@ -76,7 +76,8 @@ LABEL org.opencontainers.image.title="capital-os" \
 # The RDS CA bundle, so connections to PL's database verify its certificate (node and libpq).
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
 RUN chmod 644 /etc/ssl/certs/rds-global-bundle.pem
-ENV NODE_ENV=production NEXT_DIST_DIR=.next PORT=8080 GIT_COMMIT=${GIT_COMMIT} \
+# PLCOS_DEPLOYED=1: this is a deployed server, which signs people in with Google (config/sign-in.ts).
+ENV NODE_ENV=production NEXT_DIST_DIR=.next PORT=8080 GIT_COMMIT=${GIT_COMMIT} PLCOS_DEPLOYED=1 \
     NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem PGSSLROOTCERT=/etc/ssl/certs/rds-global-bundle.pem
 
 # A fixed non-root uid, so the persistent volume's permissions can be set by number.

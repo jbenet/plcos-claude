@@ -129,6 +129,19 @@ export async function testConnection(testedBy: string | null): Promise<Connectio
   }
 }
 
+/**
+ * Settings → Connections → Check: does the key work? One whoami (the fake answers in the demo). Says the
+ * account's name, never the key; nothing is recorded but the admin's audit row.
+ */
+export async function checkAffinityKey(): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  try {
+    const who = await affinity().get<WhoAmI>('/v2/auth/whoami');
+    return { ok: true, message: `The key works: Affinity account ${who.tenant?.name ?? 'unnamed'}.` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Affinity did not answer.' };
+  }
+}
+
 /** What a grant's scopes mean for this tool, in words. */
 export function readScopes(scopes: string[]): string {
   const writes = scopes.some((s) => s === 'api' || s === 'mcp');

@@ -16,5 +16,7 @@ export async function register() {
   void import('./lib/page-warm').then((m) => m.startPageWarm()).catch(() => undefined);
   // The mailguard token from the Keychain is checked for drafts-only once at start (docs/25 §12); the log says which, never the token.
   void import('./lib/connectors/mailguard').then((m) => m.checkAtStart()).catch(() => console.error('[mailguard] Could not check the token at start.'));
+  // A deployed server that is not set up yet prints its one-time /setup code (docs/deploy/railway.md §3).
+  void import('./lib/settings/setup').then((m) => m.announceAtBoot()).catch(() => console.error('[setup] Could not check whether setup is open.'));
   if (process.env.SCHEDULE_DAILY_AT) void import('./lib/daily-timer').then((m) => m.startDailyTimer()).catch(() => console.error('[daily] Could not start timer.'));
 }

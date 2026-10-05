@@ -14,6 +14,14 @@ import { config } from '@/config/deployment';
 import { feedbackHome } from '@/config/ports';
 import { FeedbackButton } from '@/components/shell/FeedbackBox';
 import { isDbBusy } from '@/lib/db/scheduling';
+import { routingContext } from '@/lib/internal-routing';
+
+/**
+ * Pages anyone may open on a deployed server, before signing in: first-run setup and the sign-in page
+ * (docs/deploy/railway.md §3). They render without the rail, which would need a signed-in person. The path
+ * comes from the proxy's signed routing context, never from a header a browser could send.
+ */
+const PUBLIC_PAGES = new Set(['/setup', '/signin']);
 
 // Every page reads the live database, so none is rendered at build time (issue 0023): a production
 // build otherwise opened the real database while the running server held it.
@@ -34,12 +42,23 @@ export const metadata: Metadata = {
  */
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
+function PublicShell({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" data-theme={themeAttr(DEFAULT_THEME)} suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} /></head>
+      <body className={config.data.profile}>{children}</body>
+    </html>
+  );
+}
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  if (PUBLIC_PAGES.has(routingContext(await headers())?.asked ?? '')) return <PublicShell>{children}</PublicShell>;
   // The address the browser asked for, when the proxy rewrote it (proxy.ts), and the vehicle in view:
   // what AppLink needs to put an old address in its place on the server as on the client.
   let context: [string | null, Awaited<ReturnType<typeof vehicleSelection>>];
   try {
-    if (config.auth.provider === 'labos') await currentUser();
+    // A deployed sign-in (LabOS, or Google: off to /signin without a valid session) gates every page here.
+    if (config.auth.provider === 'labos' || config.auth.provider === 'google') await currentUser();
     context = await Promise.all([headers().then((h) => h.get('x-asked-path')), vehicleSelection()]);
   } catch (error) {
     if (config.auth.provider === 'labos' && error instanceof MutationGuardError) return <html lang="en"><body><main>{error.message}</main></body></html>;

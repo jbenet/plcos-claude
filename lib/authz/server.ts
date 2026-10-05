@@ -144,7 +144,14 @@ export async function requireAction(name: ActionId, ...args: unknown[]): Promise
   } catch (error) {
     // A policy refusal is expected, not a server failure. Next carries this redirect
     // through both enhanced actions and ordinary form posts (303, then the message).
-    if (error instanceof AuthorizationError) redirect('/access-denied');
+    if (error instanceof AuthorizationError) {
+      // A refused Admin action is a security event, not noise: logged with the action's name, never its input.
+      if (actionRules[name]?.action === 'admin') {
+        const { appendAudit } = await import('@/modules/platform');
+        await appendAudit({ actorId: user.id, action: 'authz.refused', subjectType: 'action', subjectId: name, detail: { action: name, access: user.access } }).catch(() => undefined);
+      }
+      redirect('/access-denied');
+    }
     throw error;
   }
   return user;

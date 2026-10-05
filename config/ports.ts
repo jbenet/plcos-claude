@@ -1,5 +1,6 @@
 import { lstatSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
+import { signInProviderOn } from './sign-in';
 
 /**
  * Which ports this checkout's servers use (docs/COLLAB.md). `.ports.json` at the repo root is a
@@ -106,9 +107,12 @@ export function readLayout(root: string = process.cwd()): Layout {
   return { root: resolve(root), folder, row, role: row?.role ?? 'dev', live: live?.role === 'live' ? live : null };
 }
 
-/** LabOS is the deployed live server; without it, retain the local checkout role. */
+/**
+ * A deployed server with its own sign-in (LabOS, or Google on Railway; config/sign-in.ts) is the live
+ * server for its data. Without one, the local checkout's role decides.
+ */
 export function isLiveServer(root: string = process.cwd(), env: Record<string, string | undefined> = process.env): boolean {
-  if (env.LABOS_ME_URL) return true;
+  if (signInProviderOn(env)) return true;
   try { return readLayout(root).role === 'live'; } catch { return false; }
 }
 
@@ -151,7 +155,7 @@ export function portFor(serve: Serve, layout: Layout, env: Record<string, string
  * cannot be read files nothing.
  */
 export function feedbackHome(profile: 'demo' | 'real', root: string = process.cwd()): { filesHere: boolean; livePort: number | null } {
-  if (process.env.LABOS_ME_URL) return { filesHere: true, livePort: null };
+  if (signInProviderOn()) return { filesHere: true, livePort: null };
   try {
     const layout = readLayout(root);
     return { filesHere: isLiveServer(root), livePort: (profile === 'real' ? layout.live?.real : layout.live?.demo) ?? null };

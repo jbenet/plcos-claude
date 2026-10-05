@@ -26,9 +26,11 @@ export function withRoute(name: RouteId, handler: (request: Request, context: an
       if (!policy) throw new AuthorizationError();
       try {
         if (policy === 'mcp' || policy === 'outreach') throw new AuthorizationError();
-        if (policy === 'feedback' || policy === 'session') {
+        if (policy === 'feedback' || policy === 'session' || policy === 'public') {
           // Session selection bootstraps identity; its handler validates the selected active user.
           // Feedback reporter identity is resolved only by the post-response ingester.
+          // Public handlers (Google sign-in, /setup) run before anyone is signed in and check for themselves.
+          // Every POST here must come from this server's own page: a cross-site POST is refused.
           if (name.endsWith('#POST')) { requireMutationOrigin(request); requireMutationProfile(); }
           return await handler(request, context, undefined as never);
         }

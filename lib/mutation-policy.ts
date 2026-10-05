@@ -12,8 +12,13 @@ export function requireMutationOrigin(request: Request): void {
   const url = new URL(request.url);
   // Next's route URL can name its bind address. Host is the address the browser requested;
   // forwarded-host is deliberately not trusted.
-  const expected = `${url.protocol}//${request.headers.get('host') || url.host}`;
-  if (!origin || origin !== expected || (site !== null && site !== 'same-origin')) {
+  const host = request.headers.get('host') || url.host;
+  const expected = `${url.protocol}//${host}`;
+  // Behind a TLS-terminating proxy (Railway's edge) the server sees http while the browser says https. The
+  // scheme the proxy reports may stand in for ours; the host still must match.
+  const forwarded = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  const viaProxy = forwarded === 'https' || forwarded === 'http' ? `${forwarded}://${host}` : null;
+  if (!origin || (origin !== expected && origin !== viaProxy) || (site !== null && site !== 'same-origin')) {
     throw new MutationGuardError('Use this server’s own page to make changes.', 403);
   }
 }

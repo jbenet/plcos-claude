@@ -25,6 +25,9 @@ import { demoRealNameViolations } from './demo-names-check';
  *      the mailguard token and address; its client makes drafts and cannot send. Nothing names Gmail's or
  *      Google OAuth's hosts or a Google OAuth client's variables: direct Gmail OAuth was removed on
  *      3 Oct 2026, and a way around mailguard would not be scoped.
+ *   3d. Google sign-in (docs/deploy/railway.md §3): only lib/connectors/google-signin/ names Google's OAuth
+ *      hosts or the sign-in client's variables, and it never names a Gmail scope: it signs people in
+ *      (openid, email, profile) and can reach no mail.
  *   6. Browser code never calls crypto.randomUUID (issue 0104): it is undefined outside a secure
  *      context, and the live server is reached over plain http on the local network. A request
  *      key comes from lib/request-key.ts, which falls back to crypto.getRandomValues.
@@ -46,7 +49,11 @@ const LINEAR = ['api.linear.app', 'LINEAR_API_KEY'];
 const LINEAR_PROPERTIES = new Set(['scripts/properties/linear.ts']);
 // Email drafts (docs/25 §12): Gmail only through mailguard. Nothing names Google's mail or OAuth hosts;
 // only the mailguard connector names its token's and address's variables.
-const GOOGLE = ['gmail.googleapis.com', 'oauth2.googleapis.com', 'accounts.google.com', 'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET'];
+const GOOGLE = ['gmail.googleapis.com', 'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET'];
+// Google sign-in (docs/deploy/railway.md §3): only its connector names Google's OAuth hosts or its client's
+// variables, and that connector names no Gmail scope.
+const GOOGLE_SIGNIN = ['oauth2.googleapis.com', 'accounts.google.com', 'GOOGLE_SIGNIN_CLIENT_ID', 'GOOGLE_SIGNIN_CLIENT_SECRET'];
+const GOOGLE_SIGNIN_PROPERTIES = new Set(['scripts/properties/railway-setup.ts']);
 const MAILGUARD = ['MAILGUARD_TOKEN', 'MAILGUARD_URL'];
 // The original harness exception follows only the three files that hold those checks.
 const AFFINITY_PROPERTIES = new Set([
@@ -110,6 +117,14 @@ async function main() {
       for (const needle of GOOGLE) {
         if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — Gmail is reached only through mailguard (lib/connectors/mailguard/)`);
       }
+    }
+    if (!rel.startsWith(join('lib', 'connectors', 'google-signin')) && rel !== 'scripts/boundaries.ts' && !GOOGLE_SIGNIN_PROPERTIES.has(rel)) {
+      for (const needle of GOOGLE_SIGNIN) {
+        if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/google-signin/ talks to Google sign-in`);
+      }
+    }
+    if (rel.startsWith(join('lib', 'connectors', 'google-signin')) && /googleapis\.com\/auth\/gmail|mail\.google\.com/.test(text)) {
+      violations.push(`${rel}: names a Gmail scope — Google sign-in asks for openid, email and profile only`);
     }
     if (!rel.startsWith(join('lib', 'connectors', 'mailguard')) && rel !== 'scripts/boundaries.ts') {
       for (const needle of MAILGUARD) {

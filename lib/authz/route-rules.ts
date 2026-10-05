@@ -21,7 +21,13 @@ export const routeRules = {
   'app/api/outreach/[op]/route.ts#OPTIONS': 'outreach',
   'app/api/profile/route.ts#GET': 'admin',
   'app/api/session/route.ts#POST': 'session',
+  // Google sign-in and first-run setup (docs/deploy/railway.md §3): nobody is signed in yet. Each handler
+  // checks for itself (the signed state cookie, the setup code); a POST must come from this origin.
+  'app/auth/google/route.ts#GET': 'public',
+  'app/auth/google/callback/route.ts#GET': 'public',
+  'app/auth/signout/route.ts#POST': 'public',
+  'app/setup/submit/route.ts#POST': 'public',
   'app/dev/shot/[...path]/route.ts#GET': 'admin',
   'app/issues/shot/[...path]/route.ts#GET': 'admin',
-} as const satisfies Record<string, Action | 'mcp' | 'outreach'>;
+} as const satisfies Record<string, Action | 'mcp' | 'outreach' | 'public'>;
 export type RouteId = keyof typeof routeRules;

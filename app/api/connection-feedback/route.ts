@@ -6,8 +6,6 @@ import { withRoute } from '@/lib/authz/route';
  * (lib/feedback-ingest.ts), which saves it through saveConnectionFeedback — deduped on the id — or
  * moves it to inbox/refused/ with the reason. Static imports stay light (a property checks them).
  */
-import { cookies } from 'next/headers';
-import { USER_COOKIE } from '@/lib/auth/cookie';
 import { join } from 'node:path';
 import { NextResponse } from 'next/server';
 import { config } from '@/config/deployment';
@@ -21,11 +19,14 @@ const fileLater = () => setImmediate(() => {
 });
 
 export const POST = withRoute('app/api/connection-feedback/route.ts#POST', async function(req: Request) {
+  const { feedbackReporter } = await import('@/lib/auth/reporter');
+  const who = await feedbackReporter();
+  if ('refused' in who) return who.refused;
   let input;
   try { input = feedbackInput(await req.json()); }
   catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : 'Invalid feedback.' }, { status: 400 }); }
   try {
-    const reporter = (await cookies()).get(USER_COOKIE)?.value || null;
+    const reporter = who.reporter;
     const done = await journal(issuesRoot(), {
       kind: 'connection', clientId: input.id, receivedAt: new Date().toISOString(), reporter,
       request: { lp: input.lp, page: input.page, text: input.text },
