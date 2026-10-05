@@ -317,7 +317,7 @@ function questions(
   // file: the tool cannot attribute their rows, or switch to them, until they are.
   const known = new Set((init?.team ?? []).map((t) => t.name.toLowerCase()));
   for (const t of init?.team ?? []) {
-    const u = users.find((x) => x.primaryEmailAddress && [t.affinityEmail, t.email].includes(x.primaryEmailAddress));
+    const u = users.find((x) => x.primaryEmailAddress && [t.affinityEmail, t.email, t.login, ...(t.aliases ?? [])].some((a) => a?.toLowerCase() === x.primaryEmailAddress!.toLowerCase()));
     if (u) known.add(personName(u).toLowerCase());
   }
   const roles = new Map<string, Map<string, number>>();

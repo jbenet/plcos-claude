@@ -38,9 +38,11 @@ const REACH = `
      group by r.for_entity, m.message_id
   )`;
 
-/** Who on the team an address belongs to, by name. */
+/** Who on the team an address belongs to, by name: any of their addresses (login, default-to, alias). */
 export async function teamAddresses(q: Queryable): Promise<Map<string, string>> {
-  const rows = await q.query<{ email: string; name: string }>(`select lower(trim(email)) email, name from platform.app_user
+  const rows = await q.query<{ email: string; name: string }>(`select lower(trim(a.address)) email, u.name from platform.user_address a
+      join platform.app_user u on u.id = a.user_id where u.role <> 'system'
+    union select lower(trim(email)) email, name from platform.app_user
     where coalesce(trim(email), '') <> '' and role <> 'system'`);
   return new Map(rows.map((r) => [r.email, r.name]));
 }

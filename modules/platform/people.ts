@@ -1,6 +1,7 @@
 import { getDb, type Queryable } from '@/lib/db';
 import type { AppUser } from './types';
 import { appendAudit } from './repo';
+import { AddressClash, AddressInvalid, ownerOfAddress, setAddresses, type AddressSet } from './addresses';
 
 /**
  * The roster, as Settings → People changes it (docs/deploy/railway.md §3): this is how Google sign-in's
@@ -69,9 +70,10 @@ export async function addPerson(actorId: string, input: NewPerson): Promise<Pers
   const db = await getDb();
   return db.transaction(async (tx) => {
     await lockRoster(tx);
-    const same = await tx.query<{ active: boolean }>(`select active from platform.app_user where lower(email) = $1`, [email]);
-    if (same.some((r) => r.active)) throw new PeopleRefused('Someone active already has that address.');
-    if (same.length) throw new PeopleRefused('A deactivated person has that address: reactivate them instead.');
+    // Any of anyone's addresses (login, default-to, alias), active or not: an address names one person.
+    const holder = await ownerOfAddress(email, tx);
+    if (holder?.active) throw new PeopleRefused('Someone active already has that address.');
+    if (holder) throw new PeopleRefused('A deactivated person has that address: reactivate them instead.');
     const vehicles = await checkVehicles(tx, input.access, input.vehicles);
     const handle = await freeHandle(tx, email);
     const role = (input.role ?? '').trim().slice(0, 80) || ({ admin: 'Admin', gp: 'General Partner', viewer: 'Viewer' } as const)[input.access];
@@ -113,6 +115,28 @@ export async function setPersonActive(actorId: string, id: string, active: boole
     const after = (await tx.one<Person>(`update platform.app_user set active = $2 where id = $1 returning ${COLUMNS}`, [id, active]))!;
     if (await adminsLeft(tx) === 0) throw new PeopleRefused('That would leave no active admin. Make someone else an admin first.');
     if (before.active !== active) await appendAudit({ actorId, action: active ? 'people.reactivated' : 'people.deactivated', subjectType: 'app_user', subjectId: id, detail: {} }, tx);
+    return after;
+  });
+}
+
+/**
+ * A person's addresses, exactly as given: the login (their Google sign-in), the default-to (what we email them
+ * at; app_user.email follows it) and aliases. An address that belongs to someone else is refused, never moved.
+ */
+export async function updateAddresses(actorId: string, id: string, set: AddressSet): Promise<Person> {
+  if (!UUID.test(id)) throw new PeopleRefused('Unknown person.');
+  if (!set.default?.trim()) throw new PeopleRefused('Give a default-to address: it is the one we email them at.');
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    await lockRoster(tx);
+    const before = await tx.one<Person>(`select ${COLUMNS} from platform.app_user where id = $1`, [id]);
+    if (!before) throw new PeopleRefused('Unknown person.');
+    let applied: AddressSet;
+    try { applied = await setAddresses(tx, id, set); }
+    catch (e) { if (e instanceof AddressClash || e instanceof AddressInvalid) throw new PeopleRefused(e.message); throw e; }
+    const after = (await tx.one<Person>(`select ${COLUMNS} from platform.app_user where id = $1`, [id]))!;
+    await appendAudit({ actorId, action: 'people.addresses_updated', subjectType: 'app_user', subjectId: id,
+      detail: { login: !!applied.login, defaultChanged: before.email.toLowerCase() !== after.email.toLowerCase(), aliases: applied.aliases.length } }, tx);
     return after;
   });
 }

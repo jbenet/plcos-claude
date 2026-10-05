@@ -59,6 +59,7 @@ export const actionRules = {
   'app/settings/people/actions.ts#addPersonAction': { action: 'admin', scope: 'global' },
   'app/settings/people/actions.ts#updatePersonAction': { action: 'admin', scope: 'global' },
   'app/settings/people/actions.ts#setPersonActiveAction': { action: 'admin', scope: 'global' },
+  'app/settings/people/actions.ts#updateAddressesAction': { action: 'admin', scope: 'global' },
   'app/settings/people/actions.ts#signOutEverywhereAction': { action: 'admin', scope: 'global' },
   'app/settings/actions.ts#createMcpTokenAction': { action: 'mutate', scope: 'self' },
   'app/settings/actions.ts#revokeMcpTokenAction': { action: 'mutate', scope: 'self' },

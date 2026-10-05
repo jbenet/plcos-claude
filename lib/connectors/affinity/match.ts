@@ -84,7 +84,8 @@ export function matchTeam(init: RealInit, users: AffinityUser[]): UserMatch[] {
   return init.team.map((t) => {
     const byAffinity = find(t.affinityEmail);
     if (byAffinity) return { handle: t.handle, name: t.name, via: 'affinityEmail' as const, user: byAffinity };
-    const byEmail = t.affinityEmail ? null : find(t.email);
+    // Without an affinityEmail: their default-to, then their login and aliases.
+    const byEmail = t.affinityEmail ? null : [t.email, t.login ?? null, ...(t.aliases ?? [])].map(find).find(Boolean) ?? null;
     return { handle: t.handle, name: t.name, via: byEmail ? ('email' as const) : null, user: byEmail };
   });
 }

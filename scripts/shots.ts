@@ -2598,6 +2598,26 @@ const SHOTS: Record<string, Shot[]> = {
     { name: '09-settings-connections', path: '/setup', fullPage: true, prepare: (page) => signedInAt(page, '/settings/connections') },
     { name: '10-settings-people', path: '/setup', fullPage: true, prepare: (page) => signedInAt(page, '/settings/people') },
   ],
+  // A person's addresses (docs/changelog/entries/team-addresses.md): the same deployed-mode demo as
+  // railway-setup, after its setup, signed in as the admin it named. One person's addresses are set first.
+  'team-addresses': [
+    {
+      name: '01-people-addresses', path: '/setup', fullPage: true,
+      prepare: async (page) => {
+        await signedInAt(page, '/settings/people');
+        const row = page.locator('tr', { hasText: 'Keziah' }).first();
+        await row.getByRole('button', { name: 'Edit addresses' }).click();
+        await row.locator('input[name=login]').fill('keziah@invented-login.test');
+        await row.locator('input[name=default]').fill('keziah@example.com');
+        await row.locator('textarea[name=aliases]').fill('k.grimaldo@invented-alias.test\nkeziah.g@invented-alias.test');
+        await row.getByRole('button', { name: 'Save addresses' }).click();
+        await row.getByText(/addresses saved/).waitFor();
+        const other = page.locator('tr', { hasText: 'Fiachra' }).first();
+        await other.getByRole('button', { name: 'Edit addresses' }).click();
+        await other.locator('textarea[name=aliases]').fill('fiachra@invented-alias.test');
+      },
+    },
+  ],
   mcp: [
     {
       name: '01-preferences-mcp-tokens',

@@ -247,3 +247,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Cloud pull and push — through the app's own API, with tokens from Preferences](entries/cloud-sync.md)
 - [Settings in the app, a guided /setup, and Google sign-in](entries/railway-setup.md)
 - [No tickets for people, and the email trail is the record](entries/comms-trace.md)
+- [A person's addresses — a login, a default-to, and aliases](entries/team-addresses.md)

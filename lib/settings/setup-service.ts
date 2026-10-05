@@ -69,6 +69,10 @@ export async function runSetup(input: SetupInput, from: { ip: string | null }): 
     const email = typeof input.adminEmail === 'string' ? input.adminEmail.trim().toLowerCase() : '';
     if (!EMAIL.test(email) || email.length > 254) return { ok: false, status: 400, field: 'adminEmail', error: 'Enter the first admin’s Google Workspace address, like you@example.org.' };
     if ((await activeUsersByEmail(email)).length > 1) return { ok: false, status: 400, field: 'adminEmail', error: 'More than one active person already has that address. Use another, or make it unique first.' };
+    // Any of a person's addresses names them; one held by a deactivated person cannot become a new admin.
+    const { ownerOfAddress } = await import('@/modules/platform');
+    const holder = await ownerOfAddress(email);
+    if (holder && !holder.active) return { ok: false, status: 400, field: 'adminEmail', error: 'That address belongs to a deactivated person. Use another address.' };
     // With these values, Google sign-in would be configured; otherwise nobody could sign in afterwards.
     const willHave = (key: string) => settingSource(key) === 'env' || !!patch[key];
     if (!willHave(GOOGLE_CLIENT_ID_SETTING.key) || !willHave(GOOGLE_CLIENT_SECRET_SETTING.key)) {

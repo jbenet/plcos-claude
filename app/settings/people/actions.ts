@@ -58,6 +58,19 @@ export async function setPersonActiveAction(_prev: PeopleResult, formData: FormD
   });
 }
 
+/** A person's addresses: login, default-to and aliases (one per line or comma-separated). */
+export async function updateAddressesAction(_prev: PeopleResult, formData: FormData): Promise<PeopleResult> {
+  const user = await requireAction('app/settings/people/actions.ts#updateAddressesAction', _prev, formData);
+  return guarded(async () => {
+    const { updateAddresses } = await import('@/modules/platform');
+    const p = await updateAddresses(user.id, String(formData.get('userId') ?? ''), {
+      login: String(formData.get('login') ?? ''), default: String(formData.get('default') ?? ''),
+      aliases: String(formData.get('aliases') ?? '').split(/[\s,;]+/).filter(Boolean),
+    });
+    return `${p.name}'s addresses saved. We email them at ${p.email}.`;
+  });
+}
+
 /** Sign a person out everywhere: their session epoch goes up, and every cookie they hold stops working. */
 export async function signOutEverywhereAction(_prev: PeopleResult, formData: FormData): Promise<PeopleResult> {
   const user = await requireAction('app/settings/people/actions.ts#signOutEverywhereAction', _prev, formData);

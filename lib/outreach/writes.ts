@@ -268,7 +268,10 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
     requireMutationProfile();
     const owner = ctx.env.owner;
     // Juan picks the address in the wave review; the confirmation is the token owner's own, never someone else's.
-    if (![owner.handle, owner.email.toLowerCase()].includes(a.confirmedBy.trim().toLowerCase())) {
+    // Any of the owner's addresses (login, default-to, alias) names them.
+    const { addressesOf } = await import('@/modules/platform');
+    const mine = [owner.handle, owner.email.toLowerCase(), ...(await addressesOf(owner.id)).map((x) => x.address.toLowerCase())];
+    if (!mine.includes(a.confirmedBy.trim().toLowerCase())) {
       throw new OutreachRefused(403, 'confirmedBy is the token\'s owner: a desk confirms addresses only for the person it acts as.');
     }
     const db = await getDb();

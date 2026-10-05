@@ -71,6 +71,7 @@ async function readTeamLabels(q: Queryable) {
       where not e.entity_id=any(a.seen)
   ) select id,name,name alias from team
   union all select id,name,email from team where email is not null
+  union all select t.id,t.name,ua.address from team t join platform.user_address ua on ua.user_id::text=t.id
   union all select id,name,display_name from aliases
   union all select t.id,t.name,a.detail->>'previousName' from team t join platform.audit_log a
     on a.subject_id::text=t.id and a.subject_type='app_user' and a.action='identity.team_roster_updated'
