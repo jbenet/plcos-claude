@@ -5,7 +5,8 @@
  *     snapshot token, a Viewer no push token; a push token cannot snapshot, a snapshot token cannot push, an
  *     MCP token can do neither, and a sync token lists and calls no MCP tool;
  *     a revoked token, a demoted owner and a browser Origin are refused; every refusal is audited;
- *   - push: the importer's validators and the Dakota refusal answer every reason by file and write nothing;
+ *   - push: the importer's validators answer every reason by file and write nothing; a Dakota-sourced claim is
+ *     validated like any other (Juan, 4 Oct 2026: the cloud is our system, as PL's warehouse is);
  *     an accepted push is kept in the inbox, published, recorded in the ledger and queues the import once;
  *     the same push again is a duplicate; an older file never replaces a newer one; a W1c review is graded
  *     against the server's finding; the audit carries no file words;
@@ -25,8 +26,7 @@ import { config } from '../../config/deployment';
 import { readRuns } from '../../lib/workflows/ledger';
 import { syncGuard } from '../../lib/sync/auth';
 import { bundleHash } from '../../lib/sync/bundle';
-import { dakotaClaims } from '../../lib/sync/dakota';
-import { EXCLUDE_DIRS, EXCLUDE_FILES, EXPORTS, filesToCarry } from '../../lib/sync/files';
+import { cutoverExclusions, filesToCarry } from '../../lib/sync/files';
 import { acceptPush } from '../../lib/sync/push';
 import { snapshotResponse } from '../../lib/sync/snapshot';
 import { SYNC_PUSH, SYNC_SNAPSHOT } from '../../lib/sync/scopes';
@@ -125,27 +125,25 @@ export async function syncProperties(check: Check, db: Db) {
   const inboxBefore = await readdir(join(demoEnrich, 'inbox')).catch(() => [] as string[]);
   const noSource = finding('sync-bad', '2026-09-30'); (noSource.facts[0]!.source as { url: string }).url = 'not a url';
   const dakotaSource = finding('sync-dakota', '2026-09-30', { facts: [{ field: 'aum', value: '$2B', source: { url: 'https://dakota.com/profile/invented', kind: 'database', title: 'Dakota Marketplace' }, confidence: 'high' }] });
-  const dakotaCited = finding('sync-cites', '2026-09-30', { profile: { summary: `Per Dakota, an allocator ${WORD}.`, investorType: 'fo_principal' } });
-  const strategyCites = { key: 'sync-strat', name: 'Invented', scores: { capacity: { band: 'unknown', basis: 'Dakota shows $40M in assets' } } };
+  const strategyBad = { key: 'sync-strat', name: 'Invented', scores: { capacity: { band: 'unknown', basis: 'invented' } } };
   const invalidJson = await post(push.secret, '{"workflow": ');
   const bad = await post(push.secret, { workflow: 'W1', files: [
     { path: 'raw/sync-good.json', content: finding('sync-good', '2026-09-30') },
-    { path: 'raw/sync-bad.json', content: noSource }, { path: 'raw/sync-dakota.json', content: dakotaSource }, { path: 'raw/sync-cites.json', content: dakotaCited },
+    { path: 'raw/sync-bad.json', content: noSource }, { path: 'raw/sync-dakota.json', content: dakotaSource },
     { path: 'strategy/sync-strat.json', content: {} }, { path: '../escape.json', content: {} }] });
   const badBody = await bad.json() as { ok: boolean; rejected: Array<{ path: string; problems: string[] }> };
-  const w5 = await (await post(push.secret, { workflow: 'W5', files: [{ path: 'strategy/sync-strat.json', content: strategyCites }] })).json() as typeof badBody;
+  const w5 = await (await post(push.secret, { workflow: 'W5', files: [{ path: 'strategy/sync-strat.json', content: strategyBad }] })).json() as typeof badBody;
   const by = (p: string) => badBody.rejected?.find((r) => r.path === p)?.problems ?? [];
   const inboxAfter = await readdir(join(demoEnrich, 'inbox')).catch(() => [] as string[]);
-  const statesPass = dakotaClaims(finding('x', '2026-01-01')).length === 0 && dakotaClaims({ source: { url: 'https://www.nd.gov/north-dakota' }, note: 'South Dakota and Dakota Capital' }).length === 0;
-  check('SYNC push: refused with every reason by file — the importer\'s validators, paths, and any claim sourced from or citing Dakota — and nothing written',
+  check('SYNC push: refused with every reason by file — the importer\'s validators and paths — and nothing written; a Dakota-sourced claim is validated like any other',
     invalidJson.status === 400 && bad.status === 422 && badBody.ok === false && !by('raw/sync-good.json').length
     && by('raw/sync-bad.json').some((p) => p.includes('source URL'))
-    && by('raw/sync-dakota.json').some((p) => p.includes('the source is Dakota')) && by('raw/sync-cites.json').some((p) => p.includes('cites Dakota'))
+    && !by('raw/sync-dakota.json').length
     && by('strategy/sync-strat.json').length > 0 && by('../escape.json').length > 0
-    && w5.rejected?.some((r) => r.problems.some((p) => p.includes('scores.capacity.basis') && p.includes('Dakota'))) === true
-    && statesPass && inboxBefore.length === inboxAfter.length
+    && w5.rejected?.some((r) => r.path === 'strategy/sync-strat.json' && r.problems.length > 0) === true
+    && inboxBefore.length === inboxAfter.length
     && !(await stat(join(demoEnrich, 'raw', 'sync-good.json')).catch(() => null)),
-    `${badBody.rejected?.length ?? 0} files refused in the W1 push; the W5 Dakota citation refused; North and South Dakota pass`);
+    `${badBody.rejected?.length ?? 0} files refused in the W1 push (the valid and the Dakota-sourced findings not among them); the bad W5 strategy refused`);
 
   // ── Push: accepted, kept, recorded, imported once; idempotent ─────────────────────────────
   const root = await mkdtemp(join(tmpdir(), 'plcos-sync-props-'));
@@ -201,7 +199,7 @@ export async function syncProperties(check: Check, db: Db) {
     check('SYNC audit: every push is an mcp.call row (via sync, the shape of MCP and outreach calls) with its outcome, counts and hash, and no word of a file',
       ['invalid', 'ok'].every((o) => outcomes.includes(o)) && calls.some((a) => a.detail.duplicate === true)
       && calls.every((a) => a.detail.via === 'sync' && a.detail.risk === 'write-guarded' && a.detail.scopes?.[0] === SYNC_PUSH && typeof a.detail.ms === 'number')
-      && calls.some((a) => a.detail.outcome === 'invalid' && a.detail.dakota >= 2)
+      && calls.some((a) => a.detail.outcome === 'invalid' && a.detail.rejectedFiles >= 3)
       && calls.some((a) => a.detail.outcome === 'ok' && /^[0-9a-f]{64}$/.test(a.detail.hash) && a.detail.runId === runId)
       && !JSON.stringify(audits).includes(WORD) && !JSON.stringify(audits).includes('Invented page') && !JSON.stringify(audits).includes(push.secret),
       `${calls.length} calls: ${[...new Set(outcomes)].join(', ')}, one a duplicate`);
@@ -220,14 +218,15 @@ export async function syncProperties(check: Check, db: Db) {
   const fixture = await mkdtemp(join(tmpdir(), 'plcos-sync-files-'));
   try {
     const put = async (p: string) => { await mkdir(join(fixture, p, '..'), { recursive: true }); await writeFile(join(fixture, p), 'invented'); };
-    const keep = ['enrich/raw/a.json', 'enrich/inbox/r/receipt.json', 'issues/0001.md', 'workflows/runs.jsonl', 'notes.txt'];
-    const drop = ['postgres/PG_VERSION', 'database/x', 'dakota/raw/x.json', 'logs/a.log', 'rehearsal/x', 'backups/x', 'cloud-copy/x', 'database.lock', 'postgres.url', '.preview-copy',
-      'enrich/research-set.jsonl', 'enrich/candidates.jsonl', 'enrich/team.json', 'enrich/triage.jsonl', 'enrich/identity-review.jsonl', 'enrich/lp-unit-review.jsonl', '.real-copy-1/x', 'enrich/.real-copy-2'];
+    // The fixture is built from cutover-files.sh's own lists, so a change there (Dakota now moves up) is followed here.
+    const x = await cutoverExclusions();
+    const keep = ['enrich/raw/a.json', 'enrich/inbox/r/receipt.json', 'issues/0001.md', 'workflows/runs.jsonl', 'notes.txt',
+      ...(x.dirs.includes('dakota') ? [] : ['dakota/raw/x.json'])];
+    const drop = [...x.dirs.map((d) => `${d}/x`), ...x.files, ...x.exports.map((e) => `enrich/${e}`), '.real-copy-1/x', 'enrich/.real-copy-2'];
     for (const p of [...keep, ...drop]) await put(p);
     const carried = await filesToCarry(fixture);
     const script = await readFile('scripts/cutover-files.sh', 'utf8');
-    const list = (name: string) => new RegExp(`^${name}=\\(([^)]*)\\)`, 'm').exec(script)?.[1]?.trim().split(/\s+/) ?? [];
-    const same = (a: readonly string[], b: string[]) => [...a].sort().join() === [...b].sort().join();
+    const listsRead = x.dirs.length > 3 && x.files.length > 1 && x.exports.length > 3 && x.dirs.every((d) => script.includes(d));
     const caller = { token: snap.token, user: juan };
     const tar = await snapshotResponse(caller, true, { root: fixture });
     const archive = join(fixture, '..', `${fixture.split('/').pop()}.tgz`);
@@ -236,7 +235,7 @@ export async function syncProperties(check: Check, db: Db) {
     await rm(archive, { force: true });
     check('SYNC snapshot: refused on an unflagged demo and on PGlite, 409 while one streams; the files archive carries what cutover carries, by cutover-files.sh\'s own lists',
       unflagged.status === 403 && (db.kind === 'postgres' ? busy?.status === 409 : pglite?.status === 501)
-      && same(EXCLUDE_DIRS, list('EXCLUDE_DIRS')) && same(EXCLUDE_FILES, list('EXCLUDE_FILES')) && same(EXPORTS, list('EXPORTS'))
+      && listsRead
       && carried.join() === [...keep].sort().join() && tar.status === 200 && tar.headers.get('x-snapshot-files') === String(keep.length) && listed.join() === [...keep].sort().join(),
       `unflagged demo ${unflagged.status}; ${db.kind === 'postgres' ? `busy ${busy?.status}` : `PGlite ${pglite?.status}`}; ${listed.length} of ${keep.length + drop.length} fixture files in the archive`);
 
@@ -311,8 +310,8 @@ async function roundTrip(check: Check, db: Db, GET: (r: Request) => Promise<Resp
 
 /**
  * scripts/cloud-push.sh end to end against the push route's own guard and service, served on loopback into a
- * scratch data root: a Dakota-sourced finding is refused on the Mac and never sent; a valid one is taken; the
- * same file again is answered as already taken; the token never reaches the output.
+ * scratch data root: an invalid finding is refused on the Mac and never sent; a valid one is taken; the same
+ * file again is answered as already taken; the token never reaches the output.
  */
 async function scriptPush(check: Check, db: Db, secret: string) {
   const scratch = await mkdtemp(join(tmpdir(), 'plcos-sync-push-'));
@@ -321,8 +320,9 @@ async function scriptPush(check: Check, db: Db, secret: string) {
   try {
     await mkdir(root, { recursive: true }); await mkdir(mac, { recursive: true });
     await writeFile(join(mac, 'sync-script.json'), JSON.stringify(finding('sync-script', '2026-10-01')));
-    await writeFile(join(mac, 'sync-script-dakota.json'), JSON.stringify(finding('sync-script-dakota', '2026-10-01', {
-      facts: [{ field: 'check_size', value: '$5M', source: { url: 'https://invented.example/x', kind: 'database', title: 'Dakota Marketplace profile' }, confidence: 'high' }] })));
+    const invalid = finding('sync-script-bad', '2026-10-01');
+    (invalid.facts[0]!.source as { url: string }).url = 'not a url';
+    await writeFile(join(mac, 'sync-script-bad.json'), JSON.stringify(invalid));
     server = createServer(async (req, res) => {
       requests++;
       const chunks: Buffer[] = [];
@@ -336,17 +336,17 @@ async function scriptPush(check: Check, db: Db, secret: string) {
     });
     const port = await new Promise<number>((resolve) => server!.listen(0, '127.0.0.1', () => resolve((server!.address() as { port: number }).port)));
     const env = { PATH: process.env.PATH, HOME: scratch, CLOUD_PUSH_TOKEN: secret, CLOUD_APP_URL: `http://127.0.0.1:${port}` } as unknown as NodeJS.ProcessEnv;
-    const dakota = await run('bash', ['scripts/cloud-push.sh', join(mac, 'sync-script-dakota.json')], env);
-    const sentForDakota = requests;
+    const bad = await run('bash', ['scripts/cloud-push.sh', join(mac, 'sync-script-bad.json')], env);
+    const sentForBad = requests;
     const first = await run('bash', ['scripts/cloud-push.sh', '--run', '11111111-2222-4333-8444-666666666666', join(mac, 'sync-script.json')], env);
     const again = await run('bash', ['scripts/cloud-push.sh', join(mac, 'sync-script.json')], env);
     const taken = await readFile(join(root, 'enrich', 'raw', 'sync-script.json'), 'utf8').catch(() => '');
-    const all = dakota.out + first.out + again.out;
-    check('SYNC cloud-push.sh: a Dakota-sourced finding is refused on the Mac and never sent; a valid one is taken and imported; the same file again is already taken',
-      dakota.code === 1 && /nothing was sent/.test(dakota.out) && /Dakota/.test(dakota.out) && sentForDakota === 0
+    const all = bad.out + first.out + again.out;
+    check('SYNC cloud-push.sh: an invalid finding is refused on the Mac and never sent; a valid one is taken and imported; the same file again is already taken',
+      bad.code === 1 && /nothing was sent/.test(bad.out) && /source URL/.test(bad.out) && sentForBad === 0
       && first.code === 0 && /taken: run [0-9a-f-]{36}, 1 files/.test(first.out) && /findings import/.test(first.out) && JSON.parse(taken || '{}').key === 'sync-script'
       && again.code === 0 && /already taken/.test(again.out) && requests === 2 && !all.includes(secret),
-      `Dakota push exit ${dakota.code} with ${sentForDakota} requests; first exit ${first.code}; again exit ${again.code}; ${requests} requests in all; no token in the output`);
+      `invalid push exit ${bad.code} with ${sentForBad} requests; first exit ${first.code}; again exit ${again.code}; ${requests} requests in all; no token in the output`);
   } finally {
     server?.close();
     await rm(scratch, { recursive: true, force: true });

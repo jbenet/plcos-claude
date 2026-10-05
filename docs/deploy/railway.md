@@ -228,8 +228,12 @@ bash scripts/cloud-pull.sh serve --to postgres://plcos@127.0.0.1:57434/plcos_cop
     connector.
 - **Time at today's size:** about 2–4 minutes (GUESS). Locally, the dump takes 15–17 s and the restore 40–45 s.
 - **Files:** most pages read only the database, so a pull without `--keep` brings the database alone. The
-  files archive leaves out what cutover leaves out (`cutover-files.sh`'s lists, checked by a property): the
-  databases, `dakota/`, logs, snapshots, copies and the regenerated research exports. About 2.2 GB raw today.
+  files archive leaves out what cutover leaves out: the server reads `cutover-files.sh`'s own three lists on
+  each request (the databases, logs, snapshots, copies and the regenerated research exports), so what moves
+  up at cutover is what a pull brings down. About 2.2 GB raw today.
+- **Dakota comes down too** (Juan, 4 Oct: the cloud database "should be our db same way as pl's warehouse"):
+  the cloud and a pulled copy are both our system. MCP and every agent-facing answer still withhold licensed
+  Dakota values (the GP view, docs/26).
 - **Tested** on invented data only: the property suite pulls the route's dump through `cloud-pull.sh` into a
   scratch cluster on a free port, compares every table's row count (130 tables, all equal), and opens the
   `--keep` archive with its passphrase. Never the live cluster or real data.
@@ -257,9 +261,8 @@ and push up results".
     never database rows.
   - The cloud checks each file with the importers' own validators, files it under `enrich/inbox/<run>/`,
     records a ledger run, and imports it the usual way. A rejected file comes back with the reason.
-  - While Dakota stays on the Mac, a push refuses any claim whose source is Dakota, on the Mac before
-    anything is sent and again on the server. Research may find people through Dakota, but only public
-    sources go up.
+  - A claim sourced from Dakota is validated like any other (Juan, 4 Oct: the cloud is our system, as PL's
+    warehouse is).
 - **Where the files live: on the Railway volume,** read and written as today, with no code change.
 
 ### 7a. The pull and push API (built 4 Oct, `claude/cloud-sync`)
@@ -280,7 +283,7 @@ and push up results".
   real-profile server that is not the live one, and on the demo unless `SYNC_DEMO_SNAPSHOT=1` (tests only).
 - **`POST /api/sync/push`.** `{ workflow: W1 | W1c | W5, files: [{ path, content }], run? }`, paths as under
   `enrich/` (20 MB and 500 files at most, GUESSES). All-or-nothing: shape, paths, the importers' validators
-  (`check`, `checkStrategy`, the W1c review rows) and the Dakota refusal, then against what the server holds.
+  (`check`, `checkStrategy`, the W1c review rows), then against what the server holds.
   An older finding or strategy never replaces a newer one. A review is graded against the server's finding.
   A review file name is never reused for other rows. A refusal (422) lists every reason by file and writes
   nothing. An accepted push (201) is kept as received under `enrich/inbox/<run>/` (with any file it replaces

@@ -9,10 +9,10 @@
 # output per push; the workflow is read from the paths. --run names the Mac's ledger run, which the cloud
 # records as the push's parent.
 #
-# Checked here first, with the importer's own validators and the Dakota refusal, and nothing is sent if
-# any check fails (Dakota data never leaves the Mac). The server checks again, refuses an older file over a
-# newer one, keeps what arrived under enrich/inbox/<run>/, records a ledger run, and queues the findings
-# import. The same push twice is taken once.
+# Checked here first, with the importer's own validators, and nothing is sent if any check fails. The
+# server checks again, refuses an older file over a newer one, keeps what arrived under
+# enrich/inbox/<run>/, records a ledger run, and queues the findings import. The same push twice is
+# taken once.
 #
 # Secrets, never printed and never on a command line:
 #   the push token   Keychain item plcos-railway / push-token (CLOUD_PUSH_TOKEN for tests); a GP or an

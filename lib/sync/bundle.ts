@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { check } from '@/lib/enrich/schema';
 import { checkStrategy } from '@/lib/enrich/strategy';
 import { factReviewProblems } from '@/lib/enrich/fact-review';
-import { dakotaProblems } from './dakota';
 
 /**
  * A push (docs/deploy/railway.md §7, decision F): one finished W1, W1c or W5 output, as the files the
@@ -14,7 +13,8 @@ import { dakotaProblems } from './dakota';
  *     "run": { "id": "<the Mac's ledger run id>", "source": "claude-code", "agent": "…", "model": "…" } }   (optional)
  *
  * A review file's content is its rows, as a list. These checks need no server state, so the Mac runs
- * them before sending (scripts/cloud-push.sh) and the server runs them again.
+ * them before sending (scripts/cloud-push.sh) and the server runs them again. A claim sourced from Dakota
+ * is validated like any other: the cloud is our system, as PL's warehouse is (Juan, 4 Oct 2026).
  */
 export type PushWorkflow = 'W1' | 'W1c' | 'W5';
 export interface PushFile { path: string; content: unknown }
@@ -80,7 +80,6 @@ export function checkBundle(input: unknown, maxFiles: number): { bundle: PushBun
         });
       }
     }
-    problems.push(...dakotaProblems(f.content));
     if (problems.length) rejections.push({ path, problems });
   });
   if (b.workflow === 'W1c') {
@@ -91,7 +90,6 @@ export function checkBundle(input: unknown, maxFiles: number): { bundle: PushBun
       if (unreviewed.length) rejections.push({ path: null, problems: [`${unreviewed.length} corrected findings have no row in the review: ${unreviewed.slice(0, 10).join(', ')}`] });
     }
   }
-  rejections.push(...(b.run ? dakotaProblems(b.run).map((p) => ({ path: 'run', problems: [p] })) : []));
   return { bundle: rejections.length ? null : { workflow: b.workflow as PushWorkflow, files: b.files as PushFile[], run: b.run }, rejections };
 }
 

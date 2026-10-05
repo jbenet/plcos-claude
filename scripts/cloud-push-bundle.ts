@@ -1,6 +1,6 @@
 /**
  * The push body for scripts/cloud-push.sh (docs/deploy/railway.md §7), checked here on the Mac before
- * anything leaves it: the importer's validators and the Dakota refusal (lib/sync/bundle.ts), the same
+ * anything leaves it: the importer's validators (lib/sync/bundle.ts), the same
  * checks the server runs again.
  *
  *   node --import tsx scripts/cloud-push-bundle.ts [--check] [--workflow W1|W1c|W5] [--run <mac run id>]
@@ -67,7 +67,7 @@ async function main() {
     console.error(`cloud-push: the push is ${Buffer.byteLength(body)} bytes, over the server's ${config.sync.maxPushBytes}; push the batch in parts.`);
     process.exit(1);
   }
-  if (checkOnly) console.error(`cloud-push: ${ok.files.length} file${ok.files.length === 1 ? '' : 's'}, ${ok.workflow}, checked here: valid, no Dakota claims.`);
+  if (checkOnly) console.error(`cloud-push: ${ok.files.length} file${ok.files.length === 1 ? '' : 's'}, ${ok.workflow}, checked here: valid.`);
   else process.stdout.write(body);
 }
 

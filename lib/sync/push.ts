@@ -14,7 +14,7 @@ import { bundleHash, checkBundle, keyOf, REVIEW, writtenAt, type PushBundle, typ
  * POST /api/sync/push (docs/deploy/railway.md §7; Juan, 4 Oct 2026, decision F: research runs in the cloud
  * and on the Mac, and the Mac pushes its results up). One finished W1, W1c or W5 output:
  *
- *   1. checked whole — shape, paths, the importer's own validators, no Dakota (./bundle.ts) — and against
+ *   1. checked whole — shape, paths, the importer's own validators (./bundle.ts) — and against
  *      what the server holds: an older finding or strategy never replaces a newer one, a review grades the
  *      server's finding, a review file name is not reused for other rows;
  *   2. idempotent by content hash: the same push again answers the first run and writes nothing;
@@ -109,8 +109,7 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
     const { bundle, rejections } = checkBundle(input, config.sync.maxPushFiles);
     const workflow = (input as { workflow?: unknown })?.workflow;
     const shape = { workflow: typeof workflow === 'string' ? workflow.slice(0, 8) : null, files: Array.isArray((input as { files?: unknown })?.files) ? (input as { files: unknown[] }).files.length : 0, bytes };
-    const dakota = rejections.filter((r) => r.problems.some((p) => p.includes('Dakota'))).length;
-    if (!bundle) return answer(422, 'invalid', { error: 'Refused; nothing was written.', rejected: rejections }, { ...shape, reason: 'invalid', rejectedFiles: rejections.length, dakota });
+    if (!bundle) return answer(422, 'invalid', { error: 'Refused; nothing was written.', rejected: rejections }, { ...shape, reason: 'invalid', rejectedFiles: rejections.length });
 
     const hash = bundleHash(bundle);
     const db = o.db ?? await getDb();
@@ -146,7 +145,7 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
     let written = 0, replaced = 0, job: { id: string; status: string } | null = null, importNote: string | null = null;
     const finish = (ok: boolean, reason: string | null) => finishRun(runId, {
       counts: { selected: bundle.files.length, written, valid: ok ? written : 0, failed: ok ? 0 : bundle.files.length - written, skipped: null },
-      checks: [{ name: 'importer validation', status: 'pass' }, { name: 'no Dakota claims', status: 'pass' }, { name: 'not older than the server', status: 'pass' }],
+      checks: [{ name: 'importer validation', status: 'pass' }, { name: 'not older than the server', status: 'pass' }],
       usage: { input: null, output: null, cacheRead: null, cacheWrite: null, cost: null, source: 'estimated', method: 'unavailable: pushed from another machine; its own run has the usage' },
       outcome: ok ? 'succeeded' : 'failed', reason }, ledger);
     try {
