@@ -439,6 +439,11 @@ export async function railwaySetupProperties(check: Check, db: Db) {
         && secrets.every((x) => !audits.includes(x) && !logs.join('\n').includes(x) && !pageText.includes(x) && !setupHtml.includes(x) && !setupHtml.includes(code) && !setupHtml.includes(setupCode())),
       `Searched ${audits.split('\n').length} audit rows, ${logs.length} log lines and both pages for three invented decoys and the setup code.`);
 
+    const wizardSource = await readF('app/setup/SetupWizard.tsx', 'utf8');
+    check('SETUP the Google step says when to choose Internal and when External (Testing with test users, or in production)',
+      ['<b>Internal</b>', '<b>External</b>', '<b>Testing</b>', 'Test users', 'up to 100', 'without verification', 'only people on its roster'].every((t) => wizardSource.includes(t)),
+      'Step 3 of /setup, in the wizard’s own words; our checks (roster, verified address, hd) are the same either way.');
+
     // ── Key readers: the store when the environment is unset; nothing for a preview copy ─────
     await withDb(db, () => writeSettings(checkSettings({ 'affinity.apiKey': 'invented-affinity-key-0042', 'google.clientId': CLIENT_ID, 'dakota.username': 'invented-dakota-user', 'dakota.password': 'invented-dakota-pass-0042' }), { actorId: juan.id, via: 'settings' }));
     Object.assign(config.data, { profile: 'real', copyTakenAt: null });

@@ -203,7 +203,13 @@ export function SetupWizard({ brand, fields, suggestedUrl, suggestedFrom, consol
             <ol className={s.guide}>
               <li>Open the <a href={consoleLinks.newProject} target="_blank" rel="noreferrer">Google Cloud console</a>, signed in with your Workspace account, and pick or create a project for this app.</li>
               <li><a href={consoleLinks.branding} target="_blank" rel="noreferrer">Google Auth Platform → Branding</a>: an app name (<em>{brand.name}</em>) and a support email.</li>
-              <li><a href={consoleLinks.audience} target="_blank" rel="noreferrer">Audience</a>: choose <b>Internal</b>. Only people in your Workspace can sign in, and Google needs no review.</li>
+              <li><a href={consoleLinks.audience} target="_blank" rel="noreferrer">Audience</a>: who Google lets reach the consent screen.
+                <ul className={s.choices}>
+                  <li><b>Internal</b> if everyone who will sign in has an address in this Workspace. Only its own accounts get through, and Google needs no review.</li>
+                  <li><b>External</b> if people from other Workspaces will sign in too. Either leave it in <b>Testing</b> and add each of them under Test users (up to 100; Google asks them again after 7 days, which is harmless here, since nothing is kept from Google but who they are), or <b>Publish</b> it: an app that asks only for name, email and profile goes into production without verification.</li>
+                </ul>
+                Either way, this app still admits only people on its roster, with a verified address at their own Workspace&rsquo;s domain.
+              </li>
               <li><a href={consoleLinks.clients} target="_blank" rel="noreferrer">Clients → Create client</a>: type <b>Web application</b>. Under <b>Authorized redirect URIs</b>, add:
                 <Copy value={redirectUri} />
               </li>

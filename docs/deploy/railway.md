@@ -76,6 +76,11 @@ to our Postgres:
   - Cookie-acting route handlers refuse cross-site POSTs.
   - Roles stay as they are. The local switcher never serves real data on a public URL.
   - MCP tokens are bearer tokens and keep working. Point `claude mcp add` at the new URL.
+- **Other Workspaces (Juan, 4 Oct).** The deploy runs on the plcapital.xyz Workspace. Google's consent screen
+  decides who reaches sign-in: **Internal** admits only that Workspace's accounts; **External** in Testing admits
+  up to 100 listed test users (their consent lapses after 7 days, harmless here since no refresh token is kept);
+  External **in production** needs no verification for name, email and profile only. Our own checks stay the
+  same whichever is chosen: on the roster, a verified address, `hd` equal to its domain unless allowed.
 - **Setup never reopens (5 Oct, security review).** Finishing it writes `setup.completedAt`; after that a lost
   or rotated `PLCOS_SECRET`, or a removed Google client, does not reopen it. An admin re-enters Google in
   Settings → Connections; if nobody can sign in, the two `GOOGLE_SIGNIN_` variables on the service win and let

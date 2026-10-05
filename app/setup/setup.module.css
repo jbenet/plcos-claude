@@ -57,6 +57,8 @@
 .guide > li::before{content:counter(g);position:absolute;left:0;top:12px;width:24px;height:24px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-family:var(--mono);font-size:11px;display:grid;place-items:center;border:1px solid var(--accent-line)}
 .guide a{color:var(--ink);font-weight:500}
 .guide b{font-weight:600}
+.choices{margin:8px 0 6px;padding-left:18px}
+.choices li{margin:4px 0;font-size:13px;line-height:1.5}
 .guide em{font-style:normal;font-family:var(--mono);font-size:12px;background:var(--accent-wash);border:1px solid var(--line);border-radius:4px;padding:0 5px}
 
 .copy{display:flex;align-items:center;gap:8px;margin-top:8px;max-width:100%}
