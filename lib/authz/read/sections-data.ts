@@ -7,9 +7,16 @@ export function projectRoutes(user: Principal, vehicle: string, search: RouteSea
   if (!search || !can(user, 'read', { vehicle })) return null;
   return {
     target: search.targetName, from: search.fromName,
-    routes: search.routes.map(r => ({ from: r.fromName ?? search.fromName, verdict: r.verdict,
-      hops: r.hops.map(h => ({ name: h.toName, tier: h.edge.tier })),
-    })),
+    // Ids are not licensed values: each hop and the introducer (the last person before the target, who carries the
+    // ask) name their entity, so a client can address an intro ask or look further through a hop (docs/27 §4a).
+    routes: search.routes.map(r => {
+      // A legacy or compact route may lack connector lists; then there is no introducer to name.
+      const ids = r.connectorIds ?? [], carrier = ids.length - 1;
+      return { from: r.fromName ?? search.fromName, fromEntityId: r.fromEntity ?? null, verdict: r.verdict,
+        hops: r.hops.map(h => ({ entityId: h.toEntity, name: h.toName, tier: h.edge.tier })),
+        introducer: carrier >= 0 ? { entityId: ids[carrier]!, name: r.connectorNames?.[carrier] ?? 'Unknown' } : null,
+      };
+    }),
     restrictionCount: search.restrictions.length,
     restrictionReasons: can(user, 'read', { vehicle, fieldClass: 'R4' }) ? search.restrictions.map(r => r.instruction) : [],
     coverage: { edges: search.coverage.edges, maxHops: search.coverage.maxHops,

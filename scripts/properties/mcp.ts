@@ -24,8 +24,11 @@ import type { Check, Db } from './harness';
 
 type Result = { isError?: boolean; content: Array<{ type: string; text: string }> };
 
-/** Names no tool may have: each is an act a person does in the app, behind a ticket or a click. */
-const FORBIDDEN = /approv|accept|decid|reject|status|stage|ladder|rung|money|wire|alloc|harden|close|import|sync|translat|connector|run_|workflow|move|merge|delete|discard|revoke/i;
+/**
+ * Names no tool may have: each is an act a person does in the app, behind a ticket or a click. "connector" means a
+ * connector run (Affinity, Linear); the one exception is top_connectors, a read of the people on warm routes (docs/27 §4b).
+ */
+const FORBIDDEN = /approv|accept|decid|reject|status|stage|ladder|rung|money|wire|alloc|harden|close|import|sync|translat|(?<!^top_)connector|run_|workflow|move|merge|delete|discard|revoke/i;
 /** Named for a send or a ticket: allowed only to a tool whose policy says a person approves first (docs/26 §3). */
 const SEND_OR_TICKET = /send|ticket/i;
 /** Service calls that send, decide or move money; none may be reachable from lib/mcp or lib/outreach. */

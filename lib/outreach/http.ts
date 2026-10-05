@@ -17,9 +17,14 @@ import { appendAudit, findMcpToken } from '@/modules/platform';
  * the API reads no cookie.
  */
 
-const OPS: Record<string, { tool: string; method: 'GET' | 'POST' }> = {
+/** `rename`: a query parameter the REST op names differently from the tool's argument (routes take entityId). */
+const OPS: Record<string, { tool: string; method: 'GET' | 'POST'; rename?: Record<string, string> }> = {
   vehicles: { tool: 'outreach_vehicles', method: 'GET' },
   queue: { tool: 'outreach_queue', method: 'GET' },
+  connectors: { tool: 'top_connectors', method: 'GET' },
+  // Thin wrappers over the MCP route tools (docs/27 §4a): the same tool, its own scopes, the same answer.
+  'routes-to': { tool: 'routes_to', method: 'GET', rename: { entityId: 'targetId' } },
+  'routes-through': { tool: 'routes_through', method: 'GET', rename: { entityId: 'nodeId' } },
   update: { tool: 'outreach_update', method: 'POST' },
   tickets: { tool: 'outreach_request_ticket', method: 'POST' },
   contacts: { tool: 'outreach_propose_contact', method: 'POST' },
@@ -57,9 +62,13 @@ const json = (status: number, body: unknown, headers: Record<string, string> = {
   Response.json(body, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
 
 /** Query strings are text; the tools take numbers and booleans where they mean them. */
-function queryArgs(url: URL): Record<string, unknown> {
+function queryArgs(url: URL, rename: Record<string, string> = {}): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const [k, v] of url.searchParams) out[k] = /^(limit|offset)$/.test(k) && /^\d+$/.test(v) ? Number(v) : v;
+  for (const [k0, v] of url.searchParams) {
+    const k = Object.hasOwn(rename, k0) ? rename[k0]! : k0;
+    out[k] = /^(limit|offset)$/.test(k) && /^\d+$/.test(v) ? Number(v)
+      : k === 'includePassed' && /^(1|true|0|false)$/.test(v) ? v === '1' || v === 'true' : v;
+  }
   return out;
 }
 
@@ -91,7 +100,7 @@ export async function serveOutreach(request: Request, op: string, method: 'GET' 
     return r.ok ? fail(500, 'Unexpected.') : fail(spec ? 405 : 404, msg, spec ? { Allow: spec.method } : {});
   }
   let args: Record<string, unknown>;
-  if (method === 'GET') args = queryArgs(new URL(request.url));
+  if (method === 'GET') args = queryArgs(new URL(request.url), spec.rename);
   else {
     try { args = (await request.json()) as Record<string, unknown>; } catch { return fail(400, 'The body is not JSON.'); }
     if (!args || typeof args !== 'object' || Array.isArray(args)) return fail(400, 'The body is a JSON object.');

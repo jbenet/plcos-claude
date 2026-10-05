@@ -27,8 +27,15 @@ export function mutationProfileAllowed(profile: 'demo' | 'real', copyTakenAt: st
   return profile === 'demo' || (!copyTakenAt && role === 'live');
 }
 
+/**
+ * The refusal a server that is not the live one gives for a change to real data — a preview copy, or a checkout
+ * that is not live. A fixed, user-facing sentence: the mail desk shows it verbatim (docs/27 §5), so change it only
+ * with the doc. Nothing was written when it is returned.
+ */
+export const NOT_LIVE_REFUSAL = 'Nothing was changed: this server is not the live one (it may be a preview copy), and real records change only on the live server.';
+
 export function requireMutationProfile(): void {
   if (config.data.profile !== 'real') return;
   const live = mutationProfileAllowed(config.data.profile, config.data.copyTakenAt, isLiveServer() ? 'live' : 'dev');
-  if (!live) throw new MutationGuardError('Change real data on the live server.', 403);
+  if (!live) throw new MutationGuardError(NOT_LIVE_REFUSAL, 403);
 }

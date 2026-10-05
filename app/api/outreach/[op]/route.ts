@@ -1,8 +1,10 @@
 import { withRoute } from '@/lib/authz/route';
 /**
- * The mail desk's outreach API (docs/27-outreach-api.md): GET /api/outreach/vehicles and /queue; POST
- * /api/outreach/update, /tickets, /contacts and /sent. A bearer token with the outreach scope; each op runs
- * as the token's owner through the authorization layer and the UI's own services (lib/outreach/).
+ * The mail desk's outreach API (docs/27-outreach-api.md), a thin REST wrapper over MCP tools (lib/outreach/http.ts):
+ *   GET  /api/outreach/vehicles, /queue, /trace, /audit, /connectors, /routes-to, /routes-through
+ *   POST /api/outreach/update, /tickets, /contacts, /link, /comms, and /sent (deprecated: the old name of /link)
+ * A bearer token with the tool's scope (outreach:read, outreach:write; the route reads need their tool's name); each
+ * op runs as the token's owner through the authorization layer and the UI's own services (lib/outreach/).
  */
 export const dynamic = 'force-dynamic';
 

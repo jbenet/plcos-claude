@@ -216,8 +216,12 @@ export const config = {
      * A browser client also needs a short-lived token, not a device token (docs/27 §6); it is not built.
      */
     corsOrigins: [] as string[],
-    /** Rows in one queue answer before paging. GUESS — a wave of invites is tens, not hundreds. */
-    maxQueueRows: 300,
+    /** Rows in a queue answer when the call names no limit (docs/27 §4). GUESS — a page a person reads at once. */
+    defaultQueueRows: 25,
+    /** The most rows one queue answer may ask for; page with nextCursor past it. GUESS — juanmail asked for 500 (5 Oct 2026). */
+    maxQueueRows: 500,
+    /** How long top_connectors plans routes before it answers with what it inspected (rule 7). GUESS. */
+    connectorsBudgetMs: 15_000,
   },
   warehouse: {
     enabled: false,
