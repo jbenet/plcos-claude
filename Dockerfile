@@ -27,9 +27,12 @@ WORKDIR /app
 # ---- source: the archived commit, checked before anything runs against it --------------------
 FROM base AS source
 ARG GIT_COMMIT=""
+# Railway builds from GitHub and passes the commit as RAILWAY_GIT_COMMIT_SHA (docs/deploy/railway.md §2).
+ARG RAILWAY_GIT_COMMIT_SHA=""
 COPY . .
 RUN set -eu; \
-    [ -n "$GIT_COMMIT" ] || { echo "Refused: build with scripts/image-build.sh (GIT_COMMIT unset)." >&2; exit 1; }; \
+    GIT_COMMIT="${GIT_COMMIT:-$RAILWAY_GIT_COMMIT_SHA}"; \
+    [ -n "$GIT_COMMIT" ] || { echo "Refused: build with scripts/image-build.sh, or on Railway from GitHub (no commit given)." >&2; exit 1; }; \
     [ ! -e .git ] || { echo "Refused: the context has .git; it must be a git archive." >&2; exit 1; }; \
     extra="$(find data -mindepth 1 ! -path data/README.md -print -quit 2>/dev/null || true)"; \
     [ -z "$extra" ] || { echo "Refused: the context has files under data/ beyond data/README.md." >&2; exit 1; }; \
@@ -95,4 +98,6 @@ USER 10001:10001
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/health').then(r=>process.exit(r.status===200?0:1),()=>process.exit(1))"]
+# Started as root only where a platform asks for it (Railway, RAILWAY_RUN_UID=0); it drops to 10001.
+ENTRYPOINT ["sh", "/app/scripts/docker-entrypoint.sh"]
 CMD ["sh", "-c", "exec node node_modules/next/dist/bin/next start --hostname 0.0.0.0 --port \"${PORT:-8080}\""]

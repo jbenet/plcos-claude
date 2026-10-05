@@ -1,5 +1,8 @@
 # Capital OS as a team service: rev 3, one machine (28 Sep 2026)
 
+**3 Oct 2026: the target is now Railway, run by Juan: [railway.md](railway.md).** The parts below carry over;
+the PL-specific ones (the LabOS app, RDS, the PL ask) are on hold.
+
 Rev 3 replaces rev 2. The rule: make it exist and work first, then scale only when something forces it.
 It runs what works on the Mac today, on one machine, with LabOS sign-in in front of it. Rev 2's other
 mechanisms are removed; the last table lists each one and what would bring it back.
