@@ -19,7 +19,7 @@ import { listPursuits, openSuggestions, STATUS_LABEL } from '@/lib/authz/read/st
 import type { Strategy } from '@/lib/enrich/strategy';
 import type { Triage } from '@/lib/enrich/triage';
 import { latestRun } from '@/modules/sources';
-import { exportResearchSetAction, importFindingsAction, sourceBulkAction, runWorkflowAction, runCloudFactCheckAction, runCloudProfileAction } from './actions';
+import { exportResearchSetAction, importFindingsAction, sourceBulkAction, runWorkflowAction, runCloudFactCheckAction, runCloudProfileAction, runCloudStrategyAction } from './actions';
 import { addedInBulk, BULK_DAY } from '@/lib/enrich/unsourced';
 import { readResearchExportStatus } from '@/lib/enrich/export-status';
 import { ExportStatus } from './ExportStatus';
@@ -144,6 +144,13 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
               <label>Batch file <input name="batch" required placeholder="w1-12a.jsonl" /></label>{' '}
               <button className="btn" type="submit">Profile in the cloud</button>
               <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>W1 on this server: searches and reads public pages, keeps a finding on file before replacing it. At most {config.cloudWorkflows.w1.maxLps} LPs.</span>
+            </form>
+          )}
+          {cloudWorkflowsOn() && anthropicKey() && (
+            <form action={runCloudStrategyAction} style={{ marginTop: 12 }}>
+              <label>Batch file <input name="batch" required placeholder="w5-04a.txt" /></label>{' '}
+              <button className="btn" type="submit">Write strategies in the cloud</button>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>W5 on this server: no web, from our records and the research; the server sets the pins and keeps a strategy on file before replacing it. Nothing is imported or sent. At most {config.cloudWorkflows.w5.maxLps} LPs.</span>
             </form>
           )}
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>

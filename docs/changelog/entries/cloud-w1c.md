@@ -23,6 +23,11 @@ fails the validator, dates the correction itself, and keeps the original under `
 server's own page reader. The model sees only what a search may carry; each query is checked as it comes back; a fact
 whose page wasn't read in the run, or whose quote isn't on it, becomes an unconfirmed caution.
 
+**Strategies (W5) in the cloud** (6 Oct). "Write strategies in the cloud" writes up to eight LPs' strategies with
+the large model and no tools, from the files the protocol names. The server writes `made` and its pins from the files,
+holds each strategy to the importer's layout (one file per LP and vehicle) and `checkStrategy`, counts the evidence
+gates as warnings, and keeps a strategy on file before replacing it. Nothing is imported or sent.
+
 **The first-cut buttons** (Run W1 / W1c / W5) now need Cloud workflows on too (docs/28 §8).
 
 **What it records.** A work envelope (its only evidence the cited pages, its only commands reading a cited page and

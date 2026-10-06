@@ -150,8 +150,20 @@ the Mac's fact-checker on the same findings.
    page was not read in this run or whose quote is not on it, and runs `check`; a rejected finding goes to
    `enrich/rejects/`. A finding on file is kept under `enrich/inbox/<run>/replaced/` first. Sonnet, the system
    prompt (protocol plus schema) cached.
-4. **W5 (strategies).** No web. Inputs from the server's own files and database; output through
-   `checkStrategy`. Opus-class model, per the throughput rules.
+4. **W5 (strategies). Built 6 Oct** (`lib/workflows/cloud-w5.ts`; "Write strategies in the cloud", at most 8 LPs).
+   No web and no tools. The server gathers what the protocol's read set names, for the batch's keys only: the
+   finding, the rows in `candidates.jsonl`, `connections.jsonl` and `triage.jsonl`, the strategies on file in both
+   layouts, the batch colleagues' strategies, and our side (`us/team.json` or the export's `team.json`,
+   `us/voice.json`, `us/network.json`, `presence/site.json`) with the vehicles. The rules (W5 up to its sub-agent
+   steps, then its check; real-data, domain, email guidelines, `strategy.ts`, `capacity.ts`, the capacity config)
+   and our side go in the system prompt, cached. One call an LP. The server then writes `made` itself (today,
+   `claude (cloud)`, the protocol's version, and the pins: the finding's `researched.at`, the close track by
+   `moneyKey`, the best tier among the LP's paths, and for a firm-level strategy the lead's `made.at` read from its
+   file), drops any `revised` the model wrote, holds the file layout to the importer's rules (a folder is a known
+   slug equal to `ask.vehicle`; a top-level file names exactly one vehicle and keeps it; one file per LP and
+   vehicle), and runs `checkStrategy`. A refused strategy goes to `enrich/rejects/`; the evidence gates are counted
+   as warnings for a person. Opus, per the throughput rules. W5 sends our records (status, money, notes, voice
+   samples) to Anthropic, as the first cut did; principle 6 covers it.
 5. **Retire or fence the first cut.** Fenced (6 Oct, see §8): `lib/workflows/api.ts` and its buttons now need
    Cloud workflows on, like the rest. Its W1c path should go once `w1c-cloud` has a real run behind it, because it
    gives W1c web search.
@@ -161,7 +173,8 @@ the Mac's fact-checker on the same findings.
 - Turn on "Cloud workflows" on Railway for a first five-finding W1c run? It sends those findings and their
   cited pages' text to Anthropic under the key in Settings.
 - Is the Anthropic workspace behind the Railway key the zero-retention one, with a monthly spend limit?
-- Fence the first-cut buttons behind the setting now (recommended), or leave them until slice 2?
+- Retire the first cut's W1c path (it gives W1c web search) once `w1c-cloud` has a real run behind it? Fenced meanwhile (§8).
+- Which batch first for each: five W1c findings, three W1 LPs and one small W5 firm are the suggested trials.
 
 ## 8. Choices made without Juan (night of 5–6 Oct 2026)
 
@@ -172,3 +185,11 @@ builder's choices, not Juan's decisions (docs/decisions/ records only his); each
   they queue, refuse while the setting is off, as the cloud fact check does. Before, an Anthropic key alone
   turned them on. Reason: the setting is the one place that says this server sends research to Anthropic, and
   the first cut's W1c gives the model web search, which W1c's rules forbid.
+- **Cloud W5 sees colleagues in its batch only.** The protocol asks for a firm's colleagues and lead even across
+  batch keys. The cloud runner gives each LP the strategies of the other LPs in its batch and, for a lead it names,
+  reads that lead's file wherever it is, but does not go looking for colleagues outside the batch. Reason: the
+  batches are cut with the firm kept whole (`enrich-batch.ts w5`), and a wider read would mean the server choosing
+  records by work domain on its own. Revisit if the check reports firms asked twice after a cloud pass.
+- **The server, not the model, writes a strategy's pins.** The protocol has the writer set `made.inputs`; in the
+  cloud the server computes them from the same files, so a strategy can never pin inputs it was not given.
+

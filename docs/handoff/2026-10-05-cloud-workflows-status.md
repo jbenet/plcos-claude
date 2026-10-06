@@ -12,7 +12,13 @@ no real data, no Railway access, nothing pushed to master or deploy. For the int
    fix in `finishRun`, which recorded activity under the Mac's layout even when given a server root.
 4. **Cleanups**: lp-units `gather` no longer queues queries on a busy pg client; the MCP tool-name rule names
    connector systems instead of banning "connector".
-5. Changelog entry `cloud-w1c` (screenshots owed: the new settings row and the Enrichment form).
+5. Changelog entry `cloud-w1c`, with its two screenshots (6 Oct; `npm run shots -- cloud-w1c` retakes them on a demo
+   started with `PLCOS_CLOUD_WORKFLOWS=on` and an invented key).
+6. **Overnight, 6 Oct** (Juan away; choices recorded in docs/28 §8):
+   - the first-cut Run W1 / W1c / W5 buttons fenced behind Cloud workflows;
+   - W1c corrections (slice 2, `cloud-w1c-correct.ts`), on a tick;
+   - W1 in the cloud (`cloud-w1.ts`): web search with checked queries, the server's page reader, minimal LP rows;
+   - W5 in the cloud (`cloud-w5.ts`): no tools, server-written pins, the importer's layout rules.
 
 ## How it was checked here
 
@@ -30,7 +36,6 @@ lockfile was restored and `npm ci` used instead.
 
 ## Waiting on Juan
 
-- Merge, gate on the Mac, take the two screenshots, ship.
+- Merge, gate on the Mac, ship. The screenshots are taken.
 - Then, to try it: turn on Cloud workflows on Railway and run a five-finding W1c batch, comparing its grades with
   the Mac's fact-checker on the same findings. That sends those findings and their pages' text to Anthropic.
-- Decide whether to fence the first-cut W1/W1c/W5 buttons (`lib/workflows/api.ts`) behind the same setting now.

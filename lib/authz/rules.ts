@@ -27,6 +27,7 @@ export const actionRules = {
   'app/dev/enrich/actions.ts#runWorkflowAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#runCloudFactCheckAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#runCloudProfileAction': { action: 'admin', scope: 'global' },
+  'app/dev/enrich/actions.ts#runCloudStrategyAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#exportResearchSetAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#importFindingsAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#sourceBulkAction': { action: 'admin', scope: 'global' },

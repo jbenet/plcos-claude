@@ -225,6 +225,13 @@ export const config = {
       maxFetchesPerLp: 8, // W1: "two reads that worked", "about six" pages only, plus a read per key signal.
       maxOutputTokensPerTurn: 16000, // GUESS — a finding is 3–8K tokens of JSON.
     },
+    w5: {
+      model: 'claude-opus-5-5', // Strategy is judgment-heavy: the large model, per the throughput rules and the strategy-writer agent.
+      maxLps: 8, // GUESS — a firm kept whole; the Mac's W5 batches were 5–10 LPs.
+      maxTokens: 1_500_000, // GUESS — the rules are ~60K tokens a call (cached after the first) plus 10–40K of an LP's records.
+      maxSeconds: 3600, // GUESS
+      maxOutputTokensPerLp: 16000, // GUESS — a strategy is 2–5K tokens of JSON; two vehicles and a first message, more.
+    },
     pages: {
       maxBytes: 3 * 1024 * 1024, // GUESS — a long firm page is under 1 MB of HTML.
       maxChars: 40_000, // GUESS — the page text given to the model, per page.

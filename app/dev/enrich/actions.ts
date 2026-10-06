@@ -252,3 +252,14 @@ export async function runCloudProfileAction(formData: FormData): Promise<void> {
   revalidatePath('/dev/enrich');
   redirect('/developer/enrich');
 }
+
+/** W5 strategies in the cloud (docs/28 §6.4), off unless an Admin turns on Cloud workflows. */
+export async function runCloudStrategyAction(formData: FormData): Promise<void> {
+  const authorizedUser = await requireAction('app/dev/enrich/actions.ts#runCloudStrategyAction', formData);
+  const { anthropicKey, cloudWorkflowsOn } = await import('@/lib/workflows/key');
+  if (!cloudWorkflowsOn()) throw new Error('Cloud workflows are off. An Admin turns them on in Settings → Connections.');
+  if (!anthropicKey()) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
+  await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: 'w5-cloud', batch: formData.get('batch') });
+  revalidatePath('/dev/enrich');
+  redirect('/developer/enrich');
+}
