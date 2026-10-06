@@ -9,6 +9,7 @@ import s from './mcp.module.css';
 const SYNC_USE: Record<string, { item: string; script: string }> = {
   snapshot: { item: 'snapshot-token', script: 'bash scripts/cloud-pull.sh pull --to postgres://plcos@127.0.0.1:57434/plcos_copy' },
   push: { item: 'push-token', script: 'bash scripts/cloud-push.sh <finished output file>' },
+  'push-vehicles': { item: 'push-token', script: 'bash scripts/cloud-push.sh <finished output file>; bash scripts/cloud-vehicle.sh <vehicle.json>' },
 };
 
 /**
@@ -20,7 +21,7 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
   /** Offer the mail desk's outreach scope (docs/27): Admin only for now. */
   outreach?: boolean;
   /** The cloud sync scopes this person may hold (lib/sync/scopes.ts): snapshot for an Admin, push for a Team member or an Admin. */
-  sync?: Array<'snapshot' | 'push'>;
+  sync?: Array<'snapshot' | 'push' | 'push-vehicles'>;
   /** The default expiry, in days. */
   days?: number;
 }) {
@@ -62,6 +63,7 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
           )}
           {sync.includes('snapshot') && <label><input type="radio" name="tools" value="snapshot" onChange={() => setPreset('snapshot')} /> Snapshot: copy the whole database to the Mac (cloud-pull)</label>}
           {sync.includes('push') && <label><input type="radio" name="tools" value="push" onChange={() => setPreset('push')} /> Push: send finished research up (cloud-push)</label>}
+          {sync.includes('push-vehicles') && <label><input type="radio" name="tools" value="push-vehicles" onChange={() => setPreset('push-vehicles')} /> Push and add vehicles: research up, and new vehicles as you (cloud-push, cloud-vehicle)</label>}
         </fieldset>
         <label className={s.row}>
           <span>Expires</span>

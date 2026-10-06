@@ -382,6 +382,15 @@ and push up results".
   against other files. Counts only, never names. Anyone else gets a 404. `cloud-push.sh` asks it for up to two
   minutes after a prospects push; `cloud-push.sh status <id>` asks again later.
 
+- **`POST /api/sync/vehicles`** (6 Oct; Juan: "i really want you to be able to do this"). An Admin adds a vehicle
+  by token, so Claude can add one without anyone clicking through Settings → Vehicles. One JSON object (`name`,
+  `slug`, `kind`, `exemption`, optional `phase`, `target`, `opens`, `closes`, `aliases`; 4 KB at most; an unknown
+  field is 422) goes to `createVehicle`, the form's own writer, so its checks hold: Admin only, the exemption never
+  defaulted, a taken slug or name refused (409) and never updated, one `vehicle.created` audit row. It needs a third
+  scope, `sync:vehicles`, which only an Admin holds; Preferences offers it as "Push and add vehicles", a token
+  with `sync:push` and `sync:vehicles`. Nothing edits or removes a vehicle this way. `scripts/cloud-vehicle.sh
+  <vehicle.json>` sends it with the Keychain's `push-token`.
+
 **Why this is not two-way sync.** Sync would merge two writable databases: conflict rules for every table,
 deletes, and rebuilt caches. Here there is one writer. Copies come down as read-only previews. Results go up
 as new input files, which the cloud validates and imports itself, exactly like a button press. Nothing on

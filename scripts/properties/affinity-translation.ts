@@ -155,7 +155,8 @@ export async function affinityTranslationProperties(ctx: AffinityContext & { rep
   check(
     'Affinity’s interactions become dated touchpoints, one each, and translating again adds none',
     nadiaSum.meetingDates.map((d) => d.toISOString().slice(0, 10)).join(',') === '2026-06-18,2026-07-09,2026-08-21,2026-09-10' &&
-      nadiaSum.nextMeeting?.toISOString().slice(0, 10) === '2026-10-06' &&
+      // The scheduled walkthrough sits far ahead (moved from 6 Oct 2026, the day it turned into the past and broke this check).
+      nadiaSum.nextMeeting?.toISOString().slice(0, 10) === '2031-10-06' &&
       nadiaLog.every((t) => t.vehicleId === null && t.summary === null) && touchBefore > 0 && touchBefore === touchAfter,
     `meetings ${nadiaSum.meetingDates.map((d) => d.toISOString().slice(0, 10)).join(', ')}, next ${nadiaSum.nextMeeting?.toISOString().slice(0, 10)}; ${nadiaLog.length} touchpoints, none tied to a vehicle, no text copied; Affinity touchpoints ${touchBefore} → ${touchAfter}`,
   );
