@@ -99,7 +99,7 @@ outcome: `succeeded`, `partial` (a budget or deadline reached, or some findings 
 `agents.run` (kind `cloud-w1c`, status `proposed` when anything was graded) with its tool calls, and one
 `workflow.cloud_run` audit row with counts.
 
-**Model and cost.** `claude-haiku-4-5`, the fact-checker agent's model. At about 20K input and 1–2K output
+**Model and cost.** `claude-sonnet-5-5`, the fact-checker agent's model since 6 Oct (it was Haiku; see §8). At about 20K input and 1–2K output
 tokens a finding, a 25-finding run is about 0.5M input and 50K output tokens. The price per token is not
 recorded here; check the console before a large pass (ledger `usage.cost` stays null, not zero).
 
@@ -205,4 +205,10 @@ builder's choices, not Juan's decisions (docs/decisions/ records only his); each
   whole run. The brief is a person's words; its help text says to name no LP of ours.
 - **Cloud-sourced rows are always guesses with no route.** `capacity.guess` is forced true and `route` null: the
   model sees none of our paths, and a person confirms capacity. Grant rails are not sourced (invariant 12).
+- **The fact check moved from Haiku to Sonnet** (6 Oct), on the Mac's agent and in the cloud. On round 1006 the
+  Haiku fact-checkers took shortcuts on all four first batches: grading by keyword overlap, writing placeholder
+  grades, deleting their own file, grading "partly" by keyword-match percentage. Redone on Sonnet, they read the
+  pages. The cloud runner has no tools and checks quotes mechanically, which blocks most of those shortcuts, but
+  not grading by overlap; it costs several times more per finding. Two of the bad runs were finished as
+  succeeded in the ledger; their corrections are noted beside the ledger on the Mac.
 

@@ -106,7 +106,7 @@ export async function cloudW1cProperties(check: Check) {
          from agents.run r left join agents.tool_call t on t.run_id = r.run_id where r.agent_kind = 'cloud-w1c' group by r.run_id order by r.started_at desc limit 1`);
     const audit = await db.one<{ detail: Record<string, unknown> }>(`select detail from platform.audit_log where action = 'workflow.cloud_run' order by at desc limit 1`);
     check('The run is pinned in the ledger and the envelope, every page and call is a recorded tool call, and the audit has counts only',
-      ledger.issues.length === 0 && run?.outcome === 'partial' && run.start?.source === 'app' && run.start.operation === 'cloud' && run.start.model === 'claude-haiku-4-5'
+      ledger.issues.length === 0 && run?.outcome === 'partial' && run.start?.source === 'app' && run.start.operation === 'cloud' && run.start.model === 'claude-sonnet-5-5'
       && run.finish?.counts.valid === 2 && run.finish.counts.failed === 1 && run.finish.usage?.source === 'measured' && run.finish.usage.input === 3000 && run.finish.usage.output === 600
       && result.graded === 2 && result.failed === 1 && result.pages.cited === 6 && result.pages.read === 4
       && agentRun?.status === 'proposed' && Number(agentRun.n) === 6 + 1 + 3 && agentRun.refused === '0'
@@ -114,7 +114,7 @@ export async function cloudW1cProperties(check: Check) {
       `outcome ${run?.outcome}; tool calls ${agentRun?.n}; ${JSON.stringify(result.pages)}`);
     const sent = calls[0]!;
     check('The model gets no tools, only the finding and its pages, with the page script stripped and image names kept',
-      !('tools' in sent) && sent.model === 'claude-haiku-4-5' && /## Grading/.test(sent.system) && /## Facts/.test(sent.system)
+      !('tools' in sent) && sent.model === 'claude-sonnet-5-5' && /## Grading/.test(sent.system) && /## Facts/.test(sent.system)
       && !sent.user.includes('hidden') && sent.user.includes('example-robotics.png') && calls.length === 3,
       `${calls.length} calls`);
 

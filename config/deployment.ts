@@ -208,7 +208,7 @@ export const config = {
    */
   cloudWorkflows: {
     w1c: {
-      model: 'claude-haiku-4-5', // The fact-checker agent's model (.claude/agents/fact-checker.md): the check is mechanical.
+      model: 'claude-sonnet-5-5', // The fact-checker agent's model since 6 Oct (.claude/agents/fact-checker.md): Haiku took shortcuts on round 1006.
       maxFindings: 25, // GUESS — one batch; the Mac's fact-checker took 20–30 findings a part.
       maxTokens: 600_000, // GUESS — about 20K input a finding (facts plus excerpts of its pages) with room.
       maxSeconds: 1800, // GUESS — 30 minutes; pages are read one at a time.

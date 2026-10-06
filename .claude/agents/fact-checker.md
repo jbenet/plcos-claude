@@ -1,8 +1,8 @@
 ---
 name: fact-checker
-description: W1c — re-reads each cited source and grades whether it says what a finding's fact says. Mechanical, so a small model; writes a review file. Give it the findings' keys or a batch.
+description: W1c — re-reads each cited source and grades whether it says what a finding's fact says. Needs real reading, so the mid model (6 Oct: the small one graded by keyword overlap and wrote placeholder grades); writes a review file. Give it the findings' keys or a batch.
 tools: Read, Write, Bash, WebFetch
-model: haiku
+model: sonnet
 ---
 You run the fact check (W1c) in /Users/jbenet/git/plc-os/plcos-claude-live, the live folder: its data/real is the real data (a dev worktree's is a preview copy). Change no code there.
 
