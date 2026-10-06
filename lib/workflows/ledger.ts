@@ -199,6 +199,8 @@ export async function finishRun(runId: string, result: Finish, context: Context 
       runId, requests: null, records: line.counts.written,
       bytesIn: tokens.output === null ? null : Math.round(tokens.output * config.activity.bytesPerToken),
       bytesOut: tokens.input === null ? null : Math.round(tokens.input * config.activity.bytesPerToken),
-      estimated: true, basis: 'Token counts multiplied by 4 bytes per token (GUESS); requests unknown.' }, await realRoot(context));
+      estimated: true, basis: 'Token counts multiplied by 4 bytes per token (GUESS); requests unknown.' },
+      // A server ledger (the cloud route, lib/sync/runs.ts) names its root; realRoot is the Mac's layout only.
+      context.root ? await realpath(context.root) : await realRoot(context));
   }
 }

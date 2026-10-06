@@ -220,9 +220,57 @@ export async function deriveSpvStanceAction(): Promise<{ error?: string; message
 
 export async function runWorkflowAction(formData: FormData): Promise<void> {
   const authorizedUser = await requireAction('app/dev/enrich/actions.ts#runWorkflowAction', formData);
-  const { anthropicKey } = await import('@/lib/workflows/key');
+  const { anthropicKey, cloudWorkflowsOn } = await import('@/lib/workflows/key');
+  if (!cloudWorkflowsOn()) throw new Error('Cloud workflows are off. An Admin turns them on in Settings → Connections.');
   if (!anthropicKey()) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
   await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: formData.get('protocol'), batch: formData.get('batch') });
+  revalidatePath('/dev/enrich');
+  redirect('/developer/enrich');
+}
+
+/**
+ * The cloud fact check (docs/28-cloud-workflows.md): W1c run by this server, off unless an Admin turns on
+ * Cloud workflows. Grades only; the review file is named by round and part, and is never written over.
+ */
+export async function runCloudFactCheckAction(formData: FormData): Promise<void> {
+  const authorizedUser = await requireAction('app/dev/enrich/actions.ts#runCloudFactCheckAction', formData);
+  const { anthropicKey, cloudWorkflowsOn } = await import('@/lib/workflows/key');
+  if (!cloudWorkflowsOn()) throw new Error('Cloud workflows are off. An Admin turns them on in Settings → Connections.');
+  if (!anthropicKey()) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
+  await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: 'w1c-cloud', batch: formData.get('batch'), review: formData.get('review'), correct: formData.get('correct') === 'on' });
+  revalidatePath('/dev/enrich');
+  redirect('/developer/enrich');
+}
+
+/** W1 profiles in the cloud (docs/28 §6.3), off unless an Admin turns on Cloud workflows. */
+export async function runCloudProfileAction(formData: FormData): Promise<void> {
+  const authorizedUser = await requireAction('app/dev/enrich/actions.ts#runCloudProfileAction', formData);
+  const { anthropicKey, cloudWorkflowsOn } = await import('@/lib/workflows/key');
+  if (!cloudWorkflowsOn()) throw new Error('Cloud workflows are off. An Admin turns them on in Settings → Connections.');
+  if (!anthropicKey()) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
+  await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: 'w1-cloud', batch: formData.get('batch') });
+  revalidatePath('/dev/enrich');
+  redirect('/developer/enrich');
+}
+
+/** W5 strategies in the cloud (docs/28 §6.4), off unless an Admin turns on Cloud workflows. */
+export async function runCloudStrategyAction(formData: FormData): Promise<void> {
+  const authorizedUser = await requireAction('app/dev/enrich/actions.ts#runCloudStrategyAction', formData);
+  const { anthropicKey, cloudWorkflowsOn } = await import('@/lib/workflows/key');
+  if (!cloudWorkflowsOn()) throw new Error('Cloud workflows are off. An Admin turns them on in Settings → Connections.');
+  if (!anthropicKey()) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
+  await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: 'w5-cloud', batch: formData.get('batch') });
+  revalidatePath('/dev/enrich');
+  redirect('/developer/enrich');
+}
+
+/** Prospect sourcing in the cloud (docs/28 §6.2), off unless an Admin turns on Cloud workflows. */
+export async function runCloudSourcingAction(formData: FormData): Promise<void> {
+  const authorizedUser = await requireAction('app/dev/enrich/actions.ts#runCloudSourcingAction', formData);
+  const { anthropicKey, cloudWorkflowsOn } = await import('@/lib/workflows/key');
+  if (!cloudWorkflowsOn()) throw new Error('Cloud workflows are off. An Admin turns them on in Settings → Connections.');
+  if (!anthropicKey()) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
+  await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: 'sourcing-cloud', vehicle: formData.get('vehicle'), brief: formData.get('brief'), count: Number(formData.get('count')) || null });
   revalidatePath('/dev/enrich');
   redirect('/developer/enrich');
 }

@@ -1,4 +1,5 @@
 import type { Db, Queryable } from '@/lib/db';
+import { WorkflowRefusal } from '@/lib/workflows/refusal';
 import type { ImportJob, ImportKind, ImportProgress } from './types';
 
 export const IMPORT_FAILURE = 'Import stopped. Review the last committed results before retrying; completed changes are preserved.';
@@ -96,7 +97,7 @@ export async function executeImportJob(db: Db, id: string,
   } catch (error) {
     // Driver and connector exceptions can contain records or credentials: never their message or
     // parameters. The receipt says where and what kind (describeImportError); the server logs it.
-    const refused = job.kind === 'workflow' && error instanceof Error && error.message === 'Workflow refused: ANTHROPIC_API_KEY is not set.';
+    const refused = job.kind === 'workflow' && (error instanceof WorkflowRefusal || (error instanceof Error && error.message === 'Workflow refused: ANTHROPIC_API_KEY is not set.'));
     await failImportJob(db,id,refused ? (error as Error).message : importFailureText(current,error,Date.now()-phaseAt,Date.now()-startedAt));
   } finally { clearInterval(heartbeat); }
 }

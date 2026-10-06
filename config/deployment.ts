@@ -203,6 +203,56 @@ export const config = {
     maxPushFiles: 500, // GUESS — the largest batch a worker writes, with its review file.
   },
   /**
+   * Workflows the app runs itself (docs/28-cloud-workflows.md). Off unless an Admin turns on
+   * Settings → Connections → "Cloud workflows"; these are the bounds of one run, written into its envelope.
+   */
+  cloudWorkflows: {
+    w1c: {
+      model: 'claude-sonnet-5-5', // The fact-checker agent's model since 6 Oct (.claude/agents/fact-checker.md): Haiku took shortcuts on round 1006.
+      maxFindings: 25, // GUESS — one batch; the Mac's fact-checker took 20–30 findings a part.
+      maxTokens: 600_000, // GUESS — about 20K input a finding (facts plus excerpts of its pages) with room.
+      maxSeconds: 1800, // GUESS — 30 minutes; pages are read one at a time.
+      maxOutputTokensPerFinding: 4000, // GUESS — a review row is 1–2K tokens of JSON.
+      maxOutputTokensPerCorrection: 16000, // GUESS — a whole finding is 3–8K tokens of JSON.
+    },
+    w1: {
+      model: 'claude-sonnet-5-5', // Research, per the throughput rules (docs/agent-rules/operations.md): the mid model.
+      maxLps: 10, // GUESS — a first cloud batch; the Mac's batches were 15 with whole firms together.
+      maxTokens: 2_000_000, // GUESS — the protocol and schema are ~25K tokens a turn (cached), about eight turns an LP.
+      maxSeconds: 3600, // GUESS
+      maxTurnsPerLp: 12, // GUESS — four searches and two to six reads, with continuations.
+      maxSearchesPerLp: 6, // W1: "about four searches … per LP", with room for a strong signal's source.
+      maxFetchesPerLp: 8, // W1: "two reads that worked", "about six" pages only, plus a read per key signal.
+      maxOutputTokensPerTurn: 16000, // GUESS — a finding is 3–8K tokens of JSON.
+    },
+    w5: {
+      model: 'claude-opus-5-5', // Strategy is judgment-heavy: the large model, per the throughput rules and the strategy-writer agent.
+      maxLps: 8, // GUESS — a firm kept whole; the Mac's W5 batches were 5–10 LPs.
+      maxTokens: 1_500_000, // GUESS — the rules are ~60K tokens a call (cached after the first) plus 10–40K of an LP's records.
+      maxSeconds: 3600, // GUESS
+      maxOutputTokensPerLp: 16000, // GUESS — a strategy is 2–5K tokens of JSON; two vehicles and a first message, more.
+    },
+    sourcing: {
+      model: 'claude-sonnet-5-5', // Research, as W1: the mid model.
+      maxProspects: 15, // GUESS — a reviewable file; the Mac's sourcing passes added 10–30 a vehicle.
+      maxBriefChars: 1500, // GUESS
+      maxTokens: 1_500_000, // GUESS — one long conversation; the system prompt is small and cached.
+      maxSeconds: 3600, // GUESS
+      maxTurns: 30, // GUESS — searches and reads for about fifteen people.
+      maxSearches: 20, // GUESS — per request, Anthropic's max_uses.
+      maxFetches: 40, // GUESS — two or three pages a prospect.
+      maxOutputTokensPerTurn: 16000, // GUESS — fifteen rows are about 5K tokens of JSON.
+    },
+    pages: {
+      maxBytes: 3 * 1024 * 1024, // GUESS — a long firm page is under 1 MB of HTML.
+      maxChars: 40_000, // GUESS — the page text given to the model, per page.
+      timeoutMs: 20_000,
+      maxRedirects: 3,
+      secIntervalMs: 1100, // SEC's fair-access policy: at most one request a second from us (W1 1.48).
+      hostIntervalMs: 500, // GUESS — no bursts at any one site.
+    },
+  },
+  /**
    * The outreach API for the mail desk (docs/27-outreach-api.md): /api/outreach/*, authenticated by an MCP
    * token that carries the outreach scope ('outreach:read', and 'outreach:write' apart). Same envelope, rate
    * limits and audit as MCP. Nothing here sends: the desk sends through MailGuard and records the send

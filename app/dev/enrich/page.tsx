@@ -9,7 +9,7 @@ import { capacityBandLabel } from '@/lib/capacity-bands';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { config } from '@/config/deployment';
-import { anthropicKey } from '@/lib/workflows/key';
+import { anthropicKey, cloudWorkflowsOn } from '@/lib/workflows/key';
 import { ago, formatDate } from '@/lib/time';
 import { RESEARCH_STATUSES, enrichDir, inResearchSet } from '@/lib/enrich/candidates';
 import { Prospects } from './Prospects';
@@ -19,7 +19,7 @@ import { listPursuits, openSuggestions, STATUS_LABEL } from '@/lib/authz/read/st
 import type { Strategy } from '@/lib/enrich/strategy';
 import type { Triage } from '@/lib/enrich/triage';
 import { latestRun } from '@/modules/sources';
-import { exportResearchSetAction, importFindingsAction, sourceBulkAction, runWorkflowAction } from './actions';
+import { exportResearchSetAction, importFindingsAction, sourceBulkAction, runWorkflowAction, runCloudFactCheckAction, runCloudProfileAction, runCloudStrategyAction, runCloudSourcingAction } from './actions';
 import { addedInBulk, BULK_DAY } from '@/lib/enrich/unsourced';
 import { readResearchExportStatus } from '@/lib/enrich/export-status';
 import { ExportStatus } from './ExportStatus';
@@ -126,9 +126,42 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
           <ExportStatus status={exportStatus} />
           <form action={runWorkflowAction} style={{ marginTop: 12 }}>
             <label>Batch path <input name="batch" required placeholder={join(dir, 'batches', 'batch.jsonl')} /></label>{' '}
-            {['w1', 'w1c', 'w5'].map(protocol => <button key={protocol} className="btn" name="protocol" value={protocol} disabled={!anthropicKey()}>Run {protocol.toUpperCase()}</button>)}
+            {['w1', 'w1c', 'w5'].map(protocol => <button key={protocol} className="btn" name="protocol" value={protocol} disabled={!anthropicKey() || !cloudWorkflowsOn()}>Run {protocol.toUpperCase()}</button>)}
             {!anthropicKey() && <span className="muted"> Enter an Anthropic key in <Link href="/settings/connections">Settings → Connections</Link> to run workflows.</span>}
+            {anthropicKey() && !cloudWorkflowsOn() && <span className="muted"> Turn on Cloud workflows in <Link href="/settings/connections">Settings → Connections</Link> to run workflows on this server.</span>}
           </form>
+          {cloudWorkflowsOn() && anthropicKey() && (
+            <form action={runCloudFactCheckAction} style={{ marginTop: 12 }}>
+              <label>Batch file <input name="batch" required placeholder="w1c-07a.jsonl" /></label>{' '}
+              <label>Review file <input name="review" required pattern="fact-review-[0-9]{2}[a-z]\.jsonl" placeholder="fact-review-07a.jsonl" /></label>{' '}
+              <label><input type="checkbox" name="correct" /> and correct the findings</label>{' '}
+              <button className="btn" type="submit">Fact check in the cloud</button>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>W1c on this server: reads only the cited pages and grades; corrects only when ticked, from those pages, keeping each original. At most {config.cloudWorkflows.w1c.maxFindings} findings.</span>
+            </form>
+          )}
+          {cloudWorkflowsOn() && anthropicKey() && (
+            <form action={runCloudProfileAction} style={{ marginTop: 12 }}>
+              <label>Batch file <input name="batch" required placeholder="w1-12a.jsonl" /></label>{' '}
+              <button className="btn" type="submit">Profile in the cloud</button>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>W1 on this server: searches and reads public pages, keeps a finding on file before replacing it. At most {config.cloudWorkflows.w1.maxLps} LPs.</span>
+            </form>
+          )}
+          {cloudWorkflowsOn() && anthropicKey() && (
+            <form action={runCloudStrategyAction} style={{ marginTop: 12 }}>
+              <label>Batch file <input name="batch" required placeholder="w5-04a.txt" /></label>{' '}
+              <button className="btn" type="submit">Write strategies in the cloud</button>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>W5 on this server: no web, from our records and the research; the server sets the pins and keeps a strategy on file before replacing it. Nothing is imported or sent. At most {config.cloudWorkflows.w5.maxLps} LPs.</span>
+            </form>
+          )}
+          {cloudWorkflowsOn() && anthropicKey() && (
+            <form action={runCloudSourcingAction} style={{ marginTop: 12 }}>
+              <label>Vehicle slug <input name="vehicle" required placeholder="neurotech" /></label>{' '}
+              <label>How many <input name="count" type="number" min={1} max={config.cloudWorkflows.sourcing.maxProspects} defaultValue={10} style={{ width: 60 }} /></label>{' '}
+              <label style={{ display: 'block', marginTop: 6 }}>What to look for <textarea name="brief" required minLength={20} maxLength={config.cloudWorkflows.sourcing.maxBriefChars} rows={2} style={{ width: '100%' }} placeholder="Topic words, kinds of investor, places. Name no LP of ours: the brief guides public searches." /></label>
+              <button className="btn" type="submit">Source prospects in the cloud</button>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>Searches public pages for people who fit the vehicle; writes a new file in enrich/prospects for Add prospects. The model sees no record of ours. At most {config.cloudWorkflows.sourcing.maxProspects}.</span>
+            </form>
+          )}
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>
             <button className="btn p" type="submit">Export the research set</button>
             <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>

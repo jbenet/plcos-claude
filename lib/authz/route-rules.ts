@@ -25,6 +25,8 @@ export const routeRules = {
   // The state of an import a push queued, to the person who pushed it (lib/sync/push.ts, pushStatus).
   'app/api/sync/push/route.ts#GET': 'sync:push',
   'app/api/sync/snapshot/route.ts#GET': 'sync:snapshot',
+  // The workflow ledger in the cloud (lib/sync/runs.ts): a Mac run's begin and finish, with a push token.
+  'app/api/sync/runs/route.ts#POST': 'sync:push',
   'app/api/session/route.ts#POST': 'session',
   // Google sign-in and first-run setup (docs/deploy/railway.md §3): nobody is signed in yet. Each handler
   // checks for itself (the signed state cookie, the setup code); a POST must come from this origin.

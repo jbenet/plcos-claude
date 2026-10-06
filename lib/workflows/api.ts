@@ -6,7 +6,8 @@ import { BLOCKED_DOMAINS, check } from '@/lib/enrich/schema';
 import { checkStrategy } from '@/lib/enrich/strategy';
 import { factReviewProblems } from '@/lib/enrich/fact-review';
 import { beginRun, finishRun, type Usage } from './ledger';
-import { anthropicKey } from './key';
+import { anthropicKey, cloudWorkflowsOn } from './key';
+import { WorkflowRefusal } from './refusal';
 
 const MAX_TURNS = 8; // GUESS: bounded server-tool continuations per batch.
 const MAX_TOKENS = 32000; // GUESS: total generated tokens per batch, across continuations.
@@ -15,8 +16,10 @@ const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 
 /** One human-started job. The provider can research, but cannot read or write local files. */
 export async function runWorkflow(input: Record<string, unknown>, root: string = config.data.root): Promise<Record<string, unknown>> {
+  // Fenced behind Cloud workflows with the rest (docs/28 §6.5; decided overnight 6 Oct 2026 while Juan was away).
+  if (!cloudWorkflowsOn()) throw new WorkflowRefusal('Cloud workflows are off. An Admin turns them on in Settings → Connections; nothing was run.');
   const key = anthropicKey();
-  if (!key) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
+  if (!key) throw new WorkflowRefusal('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
   const protocol = input.protocol as keyof typeof protocols;
   if (!Object.hasOwn(protocols, protocol) || typeof input.batch !== 'string') throw new Error('Expected protocol w1, w1c or w5 and a batch path.');
   const dir = await realpath(join(root, 'enrich')), batches = await realpath(join(dir, 'batches'));

@@ -139,8 +139,9 @@ never decides a ticket.
   agent's session.
 
 **The hard rules are properties** (`scripts/properties/mcp.ts`), over the registry: every tool has a policy in the
-closed set; no tool is named for an approval, a decision, money, a status, a rung, an import or a connector run (`top_connectors`,
-a read of the people on warm routes, is the one name excepted from "connector"); a tool named for a send
+closed set; no tool is named for an approval, a decision, money, a status, a rung, an import or a connector run (a connector run is
+named by its system, Affinity, Linear, Dakota, Polaris, Gmail, mailguard or DocSend, or by running, syncing or importing;
+"connector" alone is a person on a warm route, so `top_connectors` and any read of them may say so); a tool named for a send
 or a ticket must have a ticket in its policy and a person approving; a send-adjacent tool opens no ticket, and one
 that links a send fails closed for an agent (`requires-approved` or `agent-only`); a write needs a scope; and neither `lib/mcp/` nor `lib/outreach/` mentions a service that sends, decides or
 moves money (`moveDraft`, `decideTicket`, `recordWire`, `harden(`, `mailguardClient`, `makeAsk`, …).

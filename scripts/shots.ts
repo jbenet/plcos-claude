@@ -2915,6 +2915,26 @@ const SHOTS: Record<string, Shot[]> = {
       },
     },
   ],
+  // Needs a demo started with PLCOS_CLOUD_WORKFLOWS=on and an invented ANTHROPIC_API_KEY, or the forms are hidden.
+  'cloud-w1c': [
+    {
+      name: '01-cloud-workflows-setting',
+      path: '/settings/connections',
+      prepare: async (page) => {
+        await asUser(page);
+        await page.locator('b', { hasText: /^Cloud workflows$/ }).first().evaluate((el) => el.scrollIntoView({ block: 'center' }));
+        await page.evaluate(() => window.scrollBy(0, 120));
+      },
+    },
+    {
+      name: '02-enrichment-cloud-forms',
+      path: '/dev/enrich',
+      prepare: async (page) => {
+        await asUser(page);
+        await page.getByRole('button', { name: 'Fact check in the cloud' }).evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      },
+    },
+  ],
 };
 
 /**
