@@ -138,9 +138,9 @@ the Mac's fact-checker on the same findings.
    (LinkedIn never, brokers never, public addresses only). Output through `check` and the findings import.
 4. **W5 (strategies).** No web. Inputs from the server's own files and database; output through
    `checkStrategy`. Opus-class model, per the throughput rules.
-5. **Retire or fence the first cut.** Recommended: put `lib/workflows/api.ts` behind the same setting now,
-   and remove its W1c path once `w1c-cloud` has a real run behind it, because it gives W1c web search.
-   Not done in this slice, because it changes what the live buttons do.
+5. **Retire or fence the first cut.** Fenced (6 Oct, see §8): `lib/workflows/api.ts` and its buttons now need
+   Cloud workflows on, like the rest. Its W1c path should go once `w1c-cloud` has a real run behind it, because it
+   gives W1c web search.
 
 ## 7. Open questions for Juan
 
@@ -148,3 +148,13 @@ the Mac's fact-checker on the same findings.
   cited pages' text to Anthropic under the key in Settings.
 - Is the Anthropic workspace behind the Railway key the zero-retention one, with a monthly spend limit?
 - Fence the first-cut buttons behind the setting now (recommended), or leave them until slice 2?
+
+## 8. Choices made without Juan (night of 5–6 Oct 2026)
+
+Juan was away and asked for work to continue, with any choice made, written down and kept going. These are a
+builder's choices, not Juan's decisions (docs/decisions/ records only his); each is reversible in one commit.
+
+- **The first-cut buttons are behind Cloud workflows.** Run W1 / W1c / W5 on Developer → Enrichment, and the job
+  they queue, refuse while the setting is off, as the cloud fact check does. Before, an Anthropic key alone
+  turned them on. Reason: the setting is the one place that says this server sends research to Anthropic, and
+  the first cut's W1c gives the model web search, which W1c's rules forbid.

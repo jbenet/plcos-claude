@@ -126,8 +126,9 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
           <ExportStatus status={exportStatus} />
           <form action={runWorkflowAction} style={{ marginTop: 12 }}>
             <label>Batch path <input name="batch" required placeholder={join(dir, 'batches', 'batch.jsonl')} /></label>{' '}
-            {['w1', 'w1c', 'w5'].map(protocol => <button key={protocol} className="btn" name="protocol" value={protocol} disabled={!anthropicKey()}>Run {protocol.toUpperCase()}</button>)}
+            {['w1', 'w1c', 'w5'].map(protocol => <button key={protocol} className="btn" name="protocol" value={protocol} disabled={!anthropicKey() || !cloudWorkflowsOn()}>Run {protocol.toUpperCase()}</button>)}
             {!anthropicKey() && <span className="muted"> Enter an Anthropic key in <Link href="/settings/connections">Settings → Connections</Link> to run workflows.</span>}
+            {anthropicKey() && !cloudWorkflowsOn() && <span className="muted"> Turn on Cloud workflows in <Link href="/settings/connections">Settings → Connections</Link> to run workflows on this server.</span>}
           </form>
           {cloudWorkflowsOn() && anthropicKey() && (
             <form action={runCloudFactCheckAction} style={{ marginTop: 12 }}>

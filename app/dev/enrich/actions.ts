@@ -220,7 +220,8 @@ export async function deriveSpvStanceAction(): Promise<{ error?: string; message
 
 export async function runWorkflowAction(formData: FormData): Promise<void> {
   const authorizedUser = await requireAction('app/dev/enrich/actions.ts#runWorkflowAction', formData);
-  const { anthropicKey } = await import('@/lib/workflows/key');
+  const { anthropicKey, cloudWorkflowsOn } = await import('@/lib/workflows/key');
+  if (!cloudWorkflowsOn()) throw new Error('Cloud workflows are off. An Admin turns them on in Settings → Connections.');
   if (!anthropicKey()) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
   await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: formData.get('protocol'), batch: formData.get('batch') });
   revalidatePath('/dev/enrich');

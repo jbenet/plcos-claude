@@ -11,7 +11,7 @@ import type { Check } from './harness';
 
 export async function workflowApiProperties(check: Check) {
   const root = await mkdtemp(join(tmpdir(), 'workflow-api-')), dir = join(root, 'enrich');
-  const originalFetch = globalThis.fetch, originalKey = process.env.ANTHROPIC_API_KEY, originalModel = process.env.ANTHROPIC_MODEL;
+  const originalFetch = globalThis.fetch, originalKey = process.env.ANTHROPIC_API_KEY, originalModel = process.env.ANTHROPIC_MODEL, originalCloud = process.env.PLCOS_CLOUD_WORKFLOWS;
   const finding = { key: 'invented', name: 'Invented Person', researched: { at: '2026-09-28', by: 'fixture', workflow: 'W1', version: '1.50' }, identity: { match: 'not_found', basis: 'Invented test' }, facts: [] };
   const reply = (stop_reason: string, content: unknown[]) => Response.json({ stop_reason, content, usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 2, cache_creation_input_tokens: 3 } });
   const output = (files: unknown[]) => [{ type: 'text', text: JSON.stringify({ files }) }];
@@ -20,7 +20,7 @@ export async function workflowApiProperties(check: Check) {
   try {
     await mkdir(join(dir, 'batches'), { recursive: true });
     await writeFile(batch, JSON.stringify({ key: 'invented', name: 'Invented Person' }));
-    process.env.ANTHROPIC_API_KEY = 'invented-stub-only'; delete process.env.ANTHROPIC_MODEL;
+    process.env.ANTHROPIC_API_KEY = 'invented-stub-only'; delete process.env.ANTHROPIC_MODEL; process.env.PLCOS_CLOUD_WORKFLOWS = 'on';
     globalThis.fetch = async (_url, init) => {
       calls.push(JSON.parse(String(init?.body)));
       return calls.length === 1 ? reply('pause_turn', [{ type: 'server_tool_use', id: 'invented-tool', name: 'web_search', input: { query: 'invented' } }])
@@ -40,6 +40,9 @@ export async function workflowApiProperties(check: Check) {
 
     let refused = 0;
     const fails = async (input: Record<string, unknown>) => { try { await runWorkflow(input, root); } catch { refused++; } };
+    process.env.PLCOS_CLOUD_WORKFLOWS = 'off';
+    await fails({ protocol: 'w1', batch });
+    process.env.PLCOS_CLOUD_WORKFLOWS = 'on';
     delete process.env.ANTHROPIC_API_KEY;
     await fails({ protocol: 'w1', batch });
     process.env.ANTHROPIC_API_KEY = 'invented-stub-only'; process.env.ANTHROPIC_MODEL = 'invented-model';
@@ -57,14 +60,15 @@ export async function workflowApiProperties(check: Check) {
     globalThis.fetch = async () => { turns++; return reply('pause_turn', []); };
     await fails({ protocol: 'w1', batch });
     const runs = (await readRuns({ root })).runs;
-    check('Workflow API refuses missing keys, escaped paths, invalid output and exhausted turns',
-      refused === 6 && w5NoTools && turns === 8 && runs.slice(1).every(r => r.outcome === 'failed')
+    check('Workflow API refuses with Cloud workflows off, missing keys, escaped paths, invalid output and exhausted turns',
+      refused === 7 && w5NoTools && turns === 8 && runs.slice(1).every(r => r.outcome === 'failed')
       && (await readdir(join(dir, 'rejects'))).length === 3 && JSON.parse(await readFile(join(dir, 'raw/invented.json'), 'utf8')).name === 'Invented Person',
       'No network or real key; W5 has no web tools; whole-output validation preserves previous findings.');
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = originalKey;
     if (originalModel === undefined) delete process.env.ANTHROPIC_MODEL; else process.env.ANTHROPIC_MODEL = originalModel;
+    if (originalCloud === undefined) delete process.env.PLCOS_CLOUD_WORKFLOWS; else process.env.PLCOS_CLOUD_WORKFLOWS = originalCloud;
     await rm(root, { recursive: true, force: true });
   }
 }
