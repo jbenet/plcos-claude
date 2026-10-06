@@ -18,10 +18,10 @@ export async function createMcpTokenAction(formData: FormData): Promise<MadeToke
   const label = String(formData.get('label') ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
   if (!label) return { ok: false, error: 'Name the token after where it will live, e.g. “Claude Code on the Mac”.' };
   const preset = String(formData.get('tools') ?? 'read');
-  if (!['read', 'draft', 'outreach-read', 'outreach-write', 'snapshot', 'push'].includes(preset)) return { ok: false, error: 'Choose what the token may do.' };
+  if (!['read', 'draft', 'outreach-read', 'outreach-write', 'snapshot', 'push', 'push-vehicles'].includes(preset)) return { ok: false, error: 'Choose what the token may do.' };
   // Cloud sync (docs/deploy/railway.md §6–§7): the scope alone, no tools or vehicles; who may hold it is data in lib/sync/scopes.ts.
-  const { grantRefusal, SYNC_PUSH, SYNC_SNAPSHOT } = await import('@/lib/sync/scopes');
-  const sync = preset === 'snapshot' ? [SYNC_SNAPSHOT] : preset === 'push' ? [SYNC_PUSH] : null;
+  const { grantRefusal, SYNC_PUSH, SYNC_SNAPSHOT, SYNC_VEHICLES } = await import('@/lib/sync/scopes');
+  const sync = preset === 'snapshot' ? [SYNC_SNAPSHOT] : preset === 'push' ? [SYNC_PUSH] : preset === 'push-vehicles' ? [SYNC_PUSH, SYNC_VEHICLES] : null;
   const refused = sync && grantRefusal(user, sync);
   if (refused) return { ok: false, error: refused };
   // The mail desk's scope (docs/27-outreach-api.md): Admin only for now (Juan, 4 Oct 2026: the desk is his alone).

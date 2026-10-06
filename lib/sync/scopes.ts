@@ -13,16 +13,21 @@ import type { Policy } from '@/lib/mcp/tools';
  */
 export const SYNC_SNAPSHOT = 'sync:snapshot';
 export const SYNC_PUSH = 'sync:push';
-export const SYNC_SCOPES = [SYNC_SNAPSHOT, SYNC_PUSH] as const;
+/** Add a vehicle as the token's owner (Juan, 6 Oct 2026: "i really want you to be able to do this"). Admins only. */
+export const SYNC_VEHICLES = 'sync:vehicles';
+export const SYNC_SCOPES = [SYNC_SNAPSHOT, SYNC_PUSH, SYNC_VEHICLES] as const;
 export type SyncScopeName = (typeof SYNC_SCOPES)[number];
 
 export interface Endpoint { name: string; route: string; policy: Policy; grant: readonly ('admin' | 'team' | 'viewer')[] }
-export const SYNC_ENDPOINTS: Record<'snapshot' | 'push', Endpoint> = {
+export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles', Endpoint> = {
   snapshot: { name: 'sync_snapshot', route: 'GET /api/sync/snapshot', grant: ['admin'],
     policy: { risk: 'read', scopes: [SYNC_SNAPSHOT], ticket: 'none', approval: false } },
   // It writes research files the normal import then maps, through the importer's own validators: guarded writes.
   push: { name: 'sync_push', route: 'POST /api/sync/push', grant: ['admin', 'team'],
     policy: { risk: 'write-guarded', scopes: [SYNC_PUSH], ticket: 'none', approval: false } },
+  // Adds a vehicle through the same createVehicle the Settings → Vehicles form calls, so its checks hold: Admin only.
+  vehicles: { name: 'vehicle_create', route: 'POST /api/sync/vehicles', grant: ['admin'],
+    policy: { risk: 'write-guarded', scopes: [SYNC_VEHICLES], ticket: 'none', approval: false } },
 };
 
 /** Why `owner` may not hold these token entries, or null. Only the sync scopes carry a grant rule here. */

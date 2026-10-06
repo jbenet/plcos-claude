@@ -17,7 +17,7 @@ import { grantRefusal, SYNC_ENDPOINTS } from './scopes';
  * activity and audit_recent show sync calls beside the rest. A revoked, expired or inactive token is
  * `mcp.refused`, as on /api/mcp.
  */
-export type SyncScope = 'snapshot' | 'push';
+export type SyncScope = 'snapshot' | 'push' | 'vehicles';
 export interface SyncCaller { token: McpToken; user: AppUser }
 /** mcp.call's outcomes; a duplicate push is 'ok' with duplicate: true, a busy endpoint 'refused' with reason busy. */
 export type SyncOutcome = 'ok' | 'refused' | 'invalid' | 'error';
@@ -30,7 +30,7 @@ export async function syncGuard(request: Request, scope: SyncScope): Promise<{ c
   if (request.headers.get('origin')) return { response: syncError(403, 'The sync endpoints take no browser requests; use scripts/cloud-pull.sh or scripts/cloud-push.sh.') };
   const challenge = { 'WWW-Authenticate': 'Bearer realm="capital-os-sync"' };
   const secret = /^Bearer\s+(\S+)$/i.exec(request.headers.get('authorization') ?? '')?.[1];
-  if (!secret) return { response: json(401, { ok: false, error: `Send a ${scope} token as "Authorization: Bearer <token>". An ${scope === 'snapshot' ? 'Admin' : 'Admin or a Team member'} makes one in Preferences → MCP access.` }, challenge) };
+  if (!secret) return { response: json(401, { ok: false, error: `Send a ${scope} token as "Authorization: Bearer <token>". An ${scope === 'push' ? 'Admin or a Team member' : 'Admin'} makes one in Preferences → MCP access.` }, challenge) };
   const db = await getDb();
   const found = await findMcpToken(secret, db, request.headers.get('user-agent'));
   if (!found) return { response: json(401, { ok: false, error: 'That token is not known here.' }, challenge) };
@@ -44,7 +44,7 @@ export async function syncGuard(request: Request, scope: SyncScope): Promise<{ c
   };
   const endpoint = SYNC_ENDPOINTS[scope];
   if (!allowed({ tools: new Set(found.token.tools) }, endpoint as never)) return refuse(403, 'scope', `That token does not carry the ${endpoint.policy.scopes.join(', ')} scope.`);
-  if (grantRefusal(found.user, endpoint.policy.scopes)) return refuse(403, 'role', scope === 'snapshot' ? 'A snapshot token works only while its owner is an Admin.' : 'A push token works only while its owner is a Team member or an Admin.');
+  if (grantRefusal(found.user, endpoint.policy.scopes)) return refuse(403, 'role', scope === 'push' ? 'A push token works only while its owner is a Team member or an Admin.' : `A ${scope} token works only while its owner is an Admin.`);
   return { caller: { token: found.token, user: found.user } };
 }
 

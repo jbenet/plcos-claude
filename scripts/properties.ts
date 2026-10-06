@@ -55,6 +55,7 @@ async function main() {
   await step('workflow-api', async () => (await import('./properties/workflow-api')).workflowApiProperties(check));
   await step('cloud-w1c', async () => (await import('./properties/cloud-w1c')).cloudW1cProperties(check));
   await step('sync-runs', async () => (await import('./properties/sync-runs')).syncRunsProperties(check));
+  await step('sync-vehicles', async () => (await import('./properties/sync-vehicles')).syncVehiclesProperties(check));
   await step('cloud-w1', async () => (await import('./properties/cloud-w1')).cloudW1Properties(check));
   await step('cloud-w5', async () => (await import('./properties/cloud-w5')).cloudW5Properties(check));
   await step('cloud-sourcing', async () => (await import('./properties/cloud-sourcing')).cloudSourcingProperties(check));

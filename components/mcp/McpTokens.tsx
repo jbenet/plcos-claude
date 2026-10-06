@@ -7,7 +7,7 @@ import { shortDate, ago } from '@/lib/time';
 import { listMcpTokens, listVehicles } from '@/modules/platform';
 import { config } from '@/config/deployment';
 import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
-import { grantRefusal, SYNC_PUSH, SYNC_SNAPSHOT } from '@/lib/sync/scopes';
+import { grantRefusal, SYNC_PUSH, SYNC_VEHICLES, SYNC_SNAPSHOT } from '@/lib/sync/scopes';
 import { McpTokenForm } from './McpTokenForm';
 import s from './mcp.module.css';
 
@@ -49,7 +49,7 @@ export async function McpTokens() {
         ) : (
           <McpTokenForm endpoint={endpoint} vehicles={mine.map((v) => ({ id: v.id, name: v.name }))} draftTools={drafts}
             outreach={user.access === 'admin' && config.outreach.enabled} days={config.mcp.tokenDays}
-            sync={(['snapshot', 'push'] as const).filter((x) => !grantRefusal(user, [x === 'snapshot' ? SYNC_SNAPSHOT : SYNC_PUSH]))} />
+            sync={(['snapshot', 'push', 'push-vehicles'] as const).filter((x) => !grantRefusal(user, x === 'snapshot' ? [SYNC_SNAPSHOT] : x === 'push' ? [SYNC_PUSH] : [SYNC_PUSH, SYNC_VEHICLES]))} />
         )}
         {tokens.length > 0 && (
           <table className={s.tokens}>

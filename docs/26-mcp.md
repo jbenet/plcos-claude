@@ -88,6 +88,9 @@ declares a policy the same way (`lib/sync/scopes.ts`, risk `read` and `write-gua
 two more choices under "May"; a sync token holds its scope alone. Their uses are `mcp.call` rows with `via: sync`.
 Since 5 Oct 2026 `sync:push` also takes a prospects file and opens `GET /api/sync/push?job=<id>`, the counts of the
 import a push queued, to the person who pushed. No new scope: it is the same kind of guarded write.
+Since 6 Oct 2026 a third, `sync:vehicles` (Admin only), opens `POST /api/sync/vehicles`: an Admin adds a vehicle by
+token through `createVehicle`, the Settings form's writer (railway.md §7a). Preferences offers it with `sync:push` as
+"Push and add vehicles".
 
 | Tool | Risk | Scopes | Ticket | What it does |
 | --- | --- | --- | --- | --- |
