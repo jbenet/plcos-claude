@@ -38,5 +38,9 @@ who began a run finishes it.
 the MCP tool-name rule names connector systems instead of banning the word "connector", which is a person on a route.
 
 Tested on invented findings and pages with the model stubbed (`scripts/properties/cloud-w1c.ts`,
-`scripts/properties/sync-runs.ts`). No real page or API call has been made. Screenshots of the new setting row and form
-are owed: this was built in a cloud session, and the integrator takes them at merge.
+`scripts/properties/sync-runs.ts`). No real page or API call has been made.
+
+| | |
+|---|---|
+| ![Settings → Connections: the Anthropic API key row and, below it, Cloud workflows set to on from the environment](docs/changelog/shots/cloud-w1c/01-cloud-workflows-setting.webp) | **The setting.** Cloud workflows sits under the Anthropic API key in Settings → Connections; here the demo sets it from `PLCOS_CLOUD_WORKFLOWS=on` with an invented key. |
+| ![Developer → Enrichment: the Run W1, W1c and W5 buttons, the Fact check in the cloud form with its "and correct the findings" tick, and the Profile in the cloud form](docs/changelog/shots/cloud-w1c/02-enrichment-cloud-forms.webp) | **The forms.** With it on, Developer → Enrichment enables Run W1 / W1C / W5 and shows Fact check in the cloud (batch file, review file, the correction tick) and Profile in the cloud. |
