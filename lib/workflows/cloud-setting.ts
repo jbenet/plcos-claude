@@ -12,7 +12,7 @@ export const CLOUD_WORKFLOWS_SETTING: SettingDef = {
   group: 'connectors',
   secret: false,
   env: 'PLCOS_CLOUD_WORKFLOWS',
-  help: 'on lets this server run research workflows itself (Developer → Enrichment: the W1c fact check, and the Run W1/W1c/W5 buttons), with the Anthropic key above. Turn it on only if that key is from a zero-retention workspace with training off. off, or empty, refuses every cloud run.',
+  help: 'on lets this server run research workflows itself (Developer → Enrichment: the W1c fact check, W1 profiles, and the Run W1/W1c/W5 buttons), with the Anthropic key above. Turn it on only if that key is from a zero-retention workspace with training off. off, or empty, refuses every cloud run.',
   placeholder: 'off',
   validate: (v) => {
     const t = v.trim().toLowerCase();

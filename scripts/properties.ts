@@ -55,6 +55,7 @@ async function main() {
   await step('workflow-api', async () => (await import('./properties/workflow-api')).workflowApiProperties(check));
   await step('cloud-w1c', async () => (await import('./properties/cloud-w1c')).cloudW1cProperties(check));
   await step('sync-runs', async () => (await import('./properties/sync-runs')).syncRunsProperties(check));
+  await step('cloud-w1', async () => (await import('./properties/cloud-w1')).cloudW1Properties(check));
   await step('daily-timer', async () => (await import('./properties/daily-timer')).dailyTimerProperties(check));
   await step('cache-retries', async () => (await import('./properties/cache-retries')).cacheRetryProperties(check));
   await step('suite', async () => (await import('./properties/suite')).runProperties(check));

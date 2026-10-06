@@ -215,6 +215,16 @@ export const config = {
       maxOutputTokensPerFinding: 4000, // GUESS — a review row is 1–2K tokens of JSON.
       maxOutputTokensPerCorrection: 16000, // GUESS — a whole finding is 3–8K tokens of JSON.
     },
+    w1: {
+      model: 'claude-sonnet-5-5', // Research, per the throughput rules (docs/agent-rules/operations.md): the mid model.
+      maxLps: 10, // GUESS — a first cloud batch; the Mac's batches were 15 with whole firms together.
+      maxTokens: 2_000_000, // GUESS — the protocol and schema are ~25K tokens a turn (cached), about eight turns an LP.
+      maxSeconds: 3600, // GUESS
+      maxTurnsPerLp: 12, // GUESS — four searches and two to six reads, with continuations.
+      maxSearchesPerLp: 6, // W1: "about four searches … per LP", with room for a strong signal's source.
+      maxFetchesPerLp: 8, // W1: "two reads that worked", "about six" pages only, plus a read per key signal.
+      maxOutputTokensPerTurn: 16000, // GUESS — a finding is 3–8K tokens of JSON.
+    },
     pages: {
       maxBytes: 3 * 1024 * 1024, // GUESS — a long firm page is under 1 MB of HTML.
       maxChars: 40_000, // GUESS — the page text given to the model, per page.

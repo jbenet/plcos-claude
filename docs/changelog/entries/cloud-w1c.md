@@ -19,6 +19,10 @@ validator.
 refuses one that changes the identity, name or capacity band, reaches past the cited pages, drops a supported fact or
 fails the validator, dates the correction itself, and keeps the original under `enrich/inbox/<run>/replaced/`.
 
+**Profiles (W1) in the cloud** (6 Oct). "Profile in the cloud" researches up to ten LPs with web search and the
+server's own page reader. The model sees only what a search may carry; each query is checked as it comes back; a fact
+whose page wasn't read in the run, or whose quote isn't on it, becomes an unconfirmed caution.
+
 **The first-cut buttons** (Run W1 / W1c / W5) now need Cloud workflows on too (docs/28 §8).
 
 **What it records.** A work envelope (its only evidence the cited pages, its only commands reading a cited page and

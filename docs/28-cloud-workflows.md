@@ -140,8 +140,16 @@ the Mac's fact-checker on the same findings.
    so each query is checked before it leaves: names, organizations, titles, locations and topic words only,
    never a status, amount, note, list name or the fact of the pipeline (real-data.md). Output is a prospects
    file through the prospects import, as the push takes it.
-3. **W1 (profiles).** The same server `search` tool plus a server `fetch` tool built on `cited-pages.ts`
-   (LinkedIn never, brokers never, public addresses only). Output through `check` and the findings import.
+3. **W1 (profiles). Built 6 Oct** (`lib/workflows/cloud-w1.ts`; "Profile in the cloud", at most 10 LPs). The
+   model is given only the batch row's name, organization, title, location, work domains and Affinity's links
+   (`minimalRow`): status, amounts, notes and lists never reach the prompt. Tools: Anthropic's `web_search`
+   (brokers and LinkedIn blocked, six uses an LP) and the server's own `fetch_page` on `cited-pages.ts` (eight
+   reads an LP). Anthropic runs the searches, so each query is checked as it comes back: one carrying an amount,
+   our pipeline or one of our vehicles' names fails that LP and marks the run's query check failed. Before
+   writing, the server sets `researched` and `queries` from what ran, moves to `profile.cautions` any fact whose
+   page was not read in this run or whose quote is not on it, and runs `check`; a rejected finding goes to
+   `enrich/rejects/`. A finding on file is kept under `enrich/inbox/<run>/replaced/` first. Sonnet, the system
+   prompt (protocol plus schema) cached.
 4. **W5 (strategies).** No web. Inputs from the server's own files and database; output through
    `checkStrategy`. Opus-class model, per the throughput rules.
 5. **Retire or fence the first cut.** Fenced (6 Oct, see §8): `lib/workflows/api.ts` and its buttons now need

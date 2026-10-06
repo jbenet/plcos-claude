@@ -19,7 +19,7 @@ import { listPursuits, openSuggestions, STATUS_LABEL } from '@/lib/authz/read/st
 import type { Strategy } from '@/lib/enrich/strategy';
 import type { Triage } from '@/lib/enrich/triage';
 import { latestRun } from '@/modules/sources';
-import { exportResearchSetAction, importFindingsAction, sourceBulkAction, runWorkflowAction, runCloudFactCheckAction } from './actions';
+import { exportResearchSetAction, importFindingsAction, sourceBulkAction, runWorkflowAction, runCloudFactCheckAction, runCloudProfileAction } from './actions';
 import { addedInBulk, BULK_DAY } from '@/lib/enrich/unsourced';
 import { readResearchExportStatus } from '@/lib/enrich/export-status';
 import { ExportStatus } from './ExportStatus';
@@ -137,6 +137,13 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
               <label><input type="checkbox" name="correct" /> and correct the findings</label>{' '}
               <button className="btn" type="submit">Fact check in the cloud</button>
               <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>W1c on this server: reads only the cited pages and grades; corrects only when ticked, from those pages, keeping each original. At most {config.cloudWorkflows.w1c.maxFindings} findings.</span>
+            </form>
+          )}
+          {cloudWorkflowsOn() && anthropicKey() && (
+            <form action={runCloudProfileAction} style={{ marginTop: 12 }}>
+              <label>Batch file <input name="batch" required placeholder="w1-12a.jsonl" /></label>{' '}
+              <button className="btn" type="submit">Profile in the cloud</button>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>W1 on this server: searches and reads public pages, keeps a finding on file before replacing it. At most {config.cloudWorkflows.w1.maxLps} LPs.</span>
             </form>
           )}
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>
