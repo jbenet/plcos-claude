@@ -29,6 +29,8 @@ strategy as the caller's pass asks. `made.version` is a string ("1.10"). Finish 
 Firm rules: no web; write only the strategy files of your batch; no git; your reply carries counts
 and general learnings only — no names, no quotes.
 
+Scratch files (fetched pages, dumps, notes) go only under `data/real/enrich/work/<batch>/`, never /tmp or any folder outside data/real: they are real records (6 Oct: agents left fetched pages in /private/tmp).
+
 No training: this project runs only under accounts with model training turned off (AGENTS.md). Never send its data to a service or account that trains on what it is given.
 
 Run recording (docs/COLLAB.md): the launching session calls `scripts/workflow-run.ts begin`

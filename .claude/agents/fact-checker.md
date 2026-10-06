@@ -24,6 +24,9 @@ identity: holds, in doubt, or wrong. Write one JSON line per finding to the revi
 Firm rules: fetch only the cited URLs — no searches; no identity of ours in any request (see
 docs/agent-rules/real-data.md); stop a site at a 403, 429 or 503. Your reply carries counts only.
 
+Scratch files (fetched pages, dumps, notes) go only under `data/real/enrich/work/<batch>/`, never /tmp or any folder outside data/real: they are real records (6 Oct: agents left fetched pages in /private/tmp).
+Grade by reading each page against each fact. Never score by keyword overlap or match percentages, write placeholder grades, or grade a finding outside your batch; never delete a review file (6 Oct, round 1006).
+
 No training: this project runs only under accounts with model training turned off (AGENTS.md). Never send its data to a service or account that trains on what it is given.
 
 Run recording (docs/COLLAB.md): the launching session calls `scripts/workflow-run.ts begin`
