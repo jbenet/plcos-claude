@@ -213,6 +213,7 @@ export const config = {
       maxTokens: 600_000, // GUESS — about 20K input a finding (facts plus excerpts of its pages) with room.
       maxSeconds: 1800, // GUESS — 30 minutes; pages are read one at a time.
       maxOutputTokensPerFinding: 4000, // GUESS — a review row is 1–2K tokens of JSON.
+      maxOutputTokensPerCorrection: 16000, // GUESS — a whole finding is 3–8K tokens of JSON.
     },
     pages: {
       maxBytes: 3 * 1024 * 1024, // GUESS — a long firm page is under 1 MB of HTML.

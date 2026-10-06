@@ -127,9 +127,15 @@ the Mac's fact-checker on the same findings.
 
 ## 6. Next slices, in order
 
-1. **W1c corrections.** The second step of W1c, from the grades, on the pages already read: a corrected
-   finding is written with a dated `researched.corrected` entry and goes through the normal findings import.
-   Behind its own launch choice, as the protocol says.
+1. **W1c corrections. Built 6 Oct** (`lib/workflows/cloud-w1c-correct.ts`). A tick on the launch form
+   ("and correct the findings"). After a finding is graded, and only if a grade is partly, not supported or
+   someone else, a second call proposes the corrected finding from the pages already read. The server refuses
+   it if it changes the identity, the name or the capacity band, cites a page the finding didn't cite, changes
+   a fact on a page that wasn't read, carries a quote that isn't on its page, drops or changes a supported or
+   unavailable fact, or fails the importer's validator. The server, not the model, writes the dated
+   `researched.corrected` entry (`by: "claude (cloud), W1c"`); `researched.at` stays. The original is kept
+   under `enrich/inbox/<run>/replaced/raw/` before the corrected finding replaces it. The import is not
+   queued: Import findings picks the corrections up, as with the first cut's output.
 2. **Prospect sourcing for a vehicle.** Needs search. A server-implemented `search` tool, not Anthropic's,
    so each query is checked before it leaves: names, organizations, titles, locations and topic words only,
    never a status, amount, note, list name or the fact of the pipeline (real-data.md). Output is a prospects

@@ -19,7 +19,7 @@ export async function cloudW1cProperties(check: Check) {
   const root = await mkdtemp(join(tmpdir(), 'cloud-w1c-')), dir = join(root, 'enrich');
   const A = 'https://firm.example.org/team', B = 'https://news.example.net/story', L = 'https://www.linkedin.com/in/invented',
     M = 'http://169.254.169.254/latest/meta-data', S1 = 'https://www.sec.gov/cgi-bin/one', S2 = 'https://www.sec.gov/cgi-bin/two';
-  const fact = (url: string, value: string, quote?: string) => ({ field: 'role', value, source: { url, kind: 'web' }, confidence: 'medium', ...(quote ? { quote } : {}), detail: { company: 'Invented Capital Partners' } });
+  const fact = (url: string, value: string, quote?: string) => ({ field: 'role', value, source: { url, kind: 'primary' }, confidence: 'medium', ...(quote ? { quote } : {}), detail: { company: 'Invented Capital Partners' } });
   const finding = (key: string, facts: unknown[]) => ({ key, name: 'Invented Person', researched: { at: '2026-10-01', by: 'fixture', workflow: 'W1', version: '1.50' },
     identity: { match: 'confirmed', basis: 'Invented fixture' }, facts });
   const one = finding('invented-one', [
@@ -50,7 +50,7 @@ export async function cloudW1cProperties(check: Check) {
   const callModel = async (_key: string, req: ModelRequest) => {
     calls.push(req);
     const key = (JSON.parse(req.user) as { key: string }).key;
-    const text = key === 'invented-three' ? 'not json' : answer(key, key === 'invented-one' ? 4 : 3);
+    const text = key === 'invented-three' ? 'not json' : answer(key, (JSON.parse(req.user) as { facts: unknown[] }).facts.length);
     return { text, stop: 'end_turn', usage: { input: 1000, output: 200, cacheRead: 0, cacheWrite: 0 } };
   };
   try {
@@ -122,6 +122,47 @@ export async function cloudW1cProperties(check: Check) {
     await refuses({ batch: 'w1c-07a.jsonl', review: 'fact-review-07a.jsonl' });
     const unchanged = (await readFile(join(dir, 'fact-review-07a.jsonl'), 'utf8')).trim().split('\n').length === 2;
     check('A finished round\'s review file is never written over', refusals.at(-1) === 'refused' && unchanged, refusals.at(-1) ?? '');
+
+    // The second step: corrections, asked for, held to the protocol, recorded by the server, originals kept.
+    const four = finding('invented-four', [fact(A, 'Founder of Invented Capital Partners', 'founded Invented Capital Partners')]);
+    await writeFile(join(dir, 'raw', 'invented-four.json'), JSON.stringify(four));
+    await writeFile(join(dir, 'batches', 'w1c-08a.jsonl'), ['invented-one', 'invented-two', 'invented-four'].map((key) => JSON.stringify({ key })).join('\n'));
+    const fixes: string[] = [];
+    const correcting = async (k: string, req: ModelRequest) => {
+      if (!/second step/.test(req.system)) return callModel(k, req);
+      const sent = JSON.parse(req.user) as { finding: { key: string } };
+      fixes.push(sent.finding.key);
+      const proposed = sent.finding.key === 'invented-one'
+        ? { ...one, facts: [one.facts[0], fact(A, 'Partner at Invented Capital Partners', 'Pat Example is a Partner at Invented Capital Partners'), one.facts[2], one.facts[3]] }
+        : { ...four, identity: { match: 'confirmed', basis: 'A stronger basis the model made up' } };
+      return { text: JSON.stringify({ finding: proposed, what: 'Cut one fact to its page\'s words.' }), stop: 'end_turn', usage: { input: 2000, output: 800, cacheRead: 0, cacheWrite: 0 } };
+    };
+    const fixed = await runCloudFactCheck({ batch: 'w1c-08a.jsonl', review: 'fact-review-08a.jsonl', correct: true }, juan, root, { ...deps, callModel: correcting, now: () => Date.parse('2026-10-06T03:00:00Z') });
+    const oneAfter = JSON.parse(await readFile(join(dir, 'raw', 'invented-one.json'), 'utf8'));
+    const fourAfter = JSON.parse(await readFile(join(dir, 'raw', 'invented-four.json'), 'utf8'));
+    const keptOriginal = JSON.parse(await readFile(join(dir, 'inbox', fixed.runId, 'replaced', 'raw', 'invented-one.json'), 'utf8').catch(() => '{}'));
+    const fixedRun = (await readRuns({ root })).runs.find((x) => x.runId === fixed.runId);
+    check('Corrections run only where a grade calls for one, pass the protocol\'s limits, are dated by the server and keep the original',
+      fixes.sort().join() === 'invented-four,invented-one' && fixed.corrected === 1 && fixed.correctionsRefused === 1
+      && oneAfter.facts[1].value === 'Partner at Invented Capital Partners' && JSON.stringify(oneAfter.facts[0]) === JSON.stringify(one.facts[0])
+      && oneAfter.researched.at === '2026-10-01' && oneAfter.researched.corrected?.length === 1
+      && oneAfter.researched.corrected[0].by === 'claude (cloud), W1c' && oneAfter.researched.corrected[0].at === '2026-10-06'
+      && JSON.stringify(keptOriginal) === JSON.stringify(one) && JSON.stringify(fourAfter) === JSON.stringify(four)
+      && fixedRun?.finish?.checks.some((c) => c.name === 'corrections held to the protocol' && c.status === 'pass') === true,
+      `fixes ${fixes.join(',')}; corrected ${fixed.corrected}, refused ${fixed.correctionsRefused}`);
+    const { correctionProblems } = await import('../../lib/workflows/cloud-w1c-correct');
+    const readPages = new Map([[A, { url: A, state: 'read' as const, why: null, status: 200, text: 'Pat Example is a Partner at Invented Capital Partners.', truncated: false, sec: false }]]);
+    const g = [{ i: 0, grade: 'partly', note: '' }];
+    const base = finding('invented-five', [fact(A, 'Partner', 'Partner at Invented Capital Partners')]) as never as import('../../lib/enrich/schema').Finding;
+    const refusedKinds = [
+      { ...base, facts: [fact('https://elsewhere.example.org/', 'Partner', 'Partner')] },
+      { ...base, facts: [fact(A, 'Partner', 'a quote the page does not have')] },
+      { ...base, profile: { summary: 'x', investorType: 'angel', capacity: { band: '1m-5m', basis: 'made up' } } },
+      { ...base, name: 'Another Name' },
+    ].map((x) => correctionProblems(base, x, g, readPages).length > 0);
+    const keptSupported = correctionProblems(base, { ...base, facts: [] }, [{ i: 0, grade: 'supported', note: '' }], readPages).length > 0;
+    check('A correction is refused for a new page, a quote not on its page, a changed capacity band or name, or a supported fact dropped',
+      refusedKinds.every(Boolean) && keptSupported && correctionProblems(base, base, g, readPages).length === 0, JSON.stringify(refusedKinds) + correctionProblems(base, base, g, readPages).join('; '));
 
     check('Page text and quote helpers: public addresses only, scripts dropped, quotes matched after normalising',
       !publicAddress('127.0.0.1') && !publicAddress('10.1.2.3') && !publicAddress('169.254.169.254') && !publicAddress('192.168.0.1') && !publicAddress('::1')

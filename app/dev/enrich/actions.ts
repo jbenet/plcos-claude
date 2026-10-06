@@ -237,7 +237,7 @@ export async function runCloudFactCheckAction(formData: FormData): Promise<void>
   const { anthropicKey, cloudWorkflowsOn } = await import('@/lib/workflows/key');
   if (!cloudWorkflowsOn()) throw new Error('Cloud workflows are off. An Admin turns them on in Settings → Connections.');
   if (!anthropicKey()) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
-  await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: 'w1c-cloud', batch: formData.get('batch'), review: formData.get('review') });
+  await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: 'w1c-cloud', batch: formData.get('batch'), review: formData.get('review'), correct: formData.get('correct') === 'on' });
   revalidatePath('/dev/enrich');
   redirect('/developer/enrich');
 }

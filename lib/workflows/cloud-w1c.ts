@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { readFile, realpath } from 'node:fs/promises';
-import { basename, join, resolve, sep } from 'node:path';
+import { copyFile, mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { factReviewProblems, FACT_GRADES } from '@/lib/enrich/fact-review';
@@ -8,6 +8,7 @@ import type { Finding } from '@/lib/enrich/schema';
 import { placeNew } from '@/lib/sync/push';
 import { createEnvelope, EnvelopeViolation } from '@/modules/agents';
 import { appendAudit } from '@/modules/platform';
+import { correctionProblems, correctionSystemPrompt, withCorrection } from './cloud-w1c-correct';
 import { PageReader, quoteOnPage, type CitedPage, type PageDeps } from './cited-pages';
 import { cloudWorkflowsOn, anthropicKey } from './key';
 import { beginRun, finishRun, type Usage } from './ledger';
@@ -84,6 +85,7 @@ export async function w1cSystemPrompt(cwd = process.cwd()): Promise<string> {
 const usageZero = (): Usage & { source: 'measured' } => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: null, source: 'measured', method: 'Anthropic usage fields, summed per call' });
 
 export interface CloudResult { runId: string; review: string | null; findings: number; graded: number; failed: number; skipped: number;
+  corrected: number; correctionsRefused: number;
   grades: Record<string, number>; pages: { cited: number; read: number; unavailable: number; requests: number }; outcome: string; reason: string | null }
 
 export async function runCloudFactCheck(input: Record<string, unknown>, actor: string, root: string = config.data.root, deps: CloudDeps = {}): Promise<CloudResult> {
@@ -116,6 +118,8 @@ export async function runCloudFactCheck(input: Record<string, unknown>, actor: s
   if (await readFile(join(dir, review)).then(() => true, () => false)) throw new WorkflowRefusal(`${review} is already on the server; name this round's file anew.`);
   const cited = [...new Set([...findings.values()].flatMap((f) => f.facts.map((x) => x?.source?.url).filter((u): u is string => typeof u === 'string' && /^https?:\/\//.test(u))))];
   const system = await w1cSystemPrompt();
+  const correct = input.correct === true;
+  const correctionSystem = correct ? await correctionSystemPrompt() : null;
   const inputHash = sha(batchText + '\n' + JSON.stringify([...findings.entries()]));
   const configHash = sha(JSON.stringify(config.cloudWorkflows));
 
@@ -126,7 +130,7 @@ export async function runCloudFactCheck(input: Record<string, unknown>, actor: s
   try {
     envelopeId = await createEnvelope(actor, {
       task: `W1c fact check in the cloud: grade ${keys.length} findings against their cited pages`,
-      scope: `enrich/raw for the batch's keys (read); enrich/${review} (write, new)`,
+      scope: `enrich/raw for the batch's keys (read${correct ? '; corrected findings written back, originals kept under enrich/inbox' : ''}); enrich/${review} (write, new)`,
       allowedEvidence: cited, allowedCommands: [...W1C_COMMANDS],
       budget: { tokens: c.maxTokens, seconds: c.maxSeconds }, deadline,
       outputSchema: 'fact-review row, lib/enrich/fact-review.ts', escalationOwnerId: actor,
@@ -157,13 +161,15 @@ export async function runCloudFactCheck(input: Record<string, unknown>, actor: s
   const model = c.model;
   const ledger = { root };
   const runId = await beginRun({ parentRunId: null, workflow: 'W1c', operation: 'cloud',
-    protocol: { version: null, hash: sha(system) }, source: 'app', agent: 'Capital OS cloud W1c (Anthropic Messages API, no tools)', model,
+    protocol: { version: null, hash: sha(system + (correctionSystem ?? '')) }, source: 'app', agent: 'Capital OS cloud W1c (Anthropic Messages API, no tools)', model,
     launchFolder: `import job, envelope ${envelopeId}`, workerFolder: process.cwd(),
     batch: { id: basename(batch), manifest: `enrich/batches/${basename(batch)}`, hash: inputHash, planned: keys.length } }, ledger);
 
   const usage = usageZero();
   const grades: Record<string, number> = Object.fromEntries(FACT_GRADES.map((g) => [g, 0]));
   const rows: string[] = [];
+  const corrections = new Map<string, Finding>();
+  let correctionsRefused = 0;
   let graded = 0, failed = 0, skipped = 0, stopReason: string | null = null, written: string | null = null;
   const reader = new PageReader(deps.pages);
   const pages = new Map<string, CitedPage>();
@@ -217,10 +223,37 @@ export async function runCloudFactCheck(input: Record<string, unknown>, actor: s
       for (const x of row.facts) grades[x.grade] = (grades[x.grade] ?? 0) + 1;
       rows.push(JSON.stringify(clean));
       graded++;
+
+      // The second step, only when the launch asks for it and only where a grade calls for it.
+      if (!correctionSystem || !row.facts.some((x) => ['partly', 'not supported', 'someone else'].includes(x.grade))) continue;
+      if ((usage.input ?? 0) + (usage.output ?? 0) >= c.maxTokens) { stopReason = 'token budget reached'; continue; }
+      if (policy('anthropic-messages')) { stopReason = 'deadline reached'; continue; }
+      let fix: ModelReply;
+      try {
+        fix = await (deps.callModel ?? anthropicMessages)(key, { model, system: correctionSystem, maxTokens: c.maxOutputTokensPerCorrection,
+          user: JSON.stringify({ finding: f, grades: clean, pages: given }) });
+      } catch { correctionsRefused++; continue; }
+      usage.input! += fix.usage.input + fix.usage.cacheRead + fix.usage.cacheWrite; usage.output! += fix.usage.output;
+      usage.cacheRead! += fix.usage.cacheRead; usage.cacheWrite! += fix.usage.cacheWrite;
+      let proposal: { finding?: Finding; what?: unknown };
+      try { proposal = JSON.parse(fix.text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch { correctionsRefused++; continue; }
+      if (fix.stop !== 'end_turn' || typeof proposal?.what !== 'string' || !proposal.what.trim()
+        || correctionProblems(f, proposal.finding, row.facts, pages).length) { correctionsRefused++; continue; }
+      corrections.set(k, withCorrection(f, proposal.finding!, proposal.what.trim(), new Date(now()).toISOString().slice(0, 10)));
     }
 
     // 7. The review file, new, with the rows that passed.
     if (rows.length) { await placeNew(dir, review, rows.join('\n') + '\n', runId); written = review; }
+    // Corrected findings replace their originals, each kept first under enrich/inbox/<run>/replaced/, as a push does.
+    for (const [k, fixed] of corrections) {
+      const target = join(dir, 'raw', `${k}.json`), kept = join(dir, 'inbox', runId, 'replaced', 'raw', `${k}.json`);
+      await mkdir(dirname(kept), { recursive: true });
+      if (!(await realpath(dirname(kept))).startsWith(dir + sep) || !(await realpath(target)).startsWith(dir + sep)) throw new Error('A path escapes enrich.');
+      await copyFile(target, kept);
+      const temporary = `${target}.${runId}.tmp`;
+      await writeFile(temporary, JSON.stringify(fixed, null, 2), { flag: 'wx', mode: 0o600 });
+      await rename(temporary, target);
+    }
   } catch (e) {
     crashed = true;
     throw e;
@@ -232,16 +265,17 @@ export async function runCloudFactCheck(input: Record<string, unknown>, actor: s
     const read = [...pages.values()].filter((p) => p.state === 'read').length;
     for (const [tool, allowed, refusal] of toolCalls) await db.query('insert into agents.tool_call (run_id, tool, allowed, refusal) values ($1,$2,$3,$4)', [agentRun, tool, allowed, refusal]);
     await db.query(`update agents.run set status = $2::agents.run_status, output = $3, rationale = $4, finished_at = now() where run_id = $1`,
-      [agentRun, graded ? 'proposed' : 'unavailable', JSON.stringify({ review: written, graded, failed, skipped, grades, ledgerRun: runId }), reason]);
+      [agentRun, graded ? 'proposed' : 'unavailable', JSON.stringify({ review: written, graded, failed, skipped, grades, corrected: written ? corrections.size : 0, correctionsRefused, ledgerRun: runId }), reason]);
     await appendAudit({ actorId: actor, action: 'workflow.cloud_run', subjectType: 'agent_run', subjectId: agentRun,
-      detail: { workflow: 'W1c', ledgerRun: runId, review: written, findings: keys.length, graded, failed, skipped, grades,
+      detail: { workflow: 'W1c', ledgerRun: runId, review: written, findings: keys.length, graded, failed, skipped, grades, corrected: written ? corrections.size : 0, correctionsRefused,
         pages: { cited: cited.length, read, requests: reader.requests }, tokens: { input: usage.input, output: usage.output }, outcome } }, db);
     await finishRun(runId, {
       counts: { selected: keys.length, written: graded, valid: graded, failed, skipped },
       checks: [{ name: 'fact-review validator', status: graded ? 'pass' : 'not-run' }, { name: 'only cited pages read', status: 'pass' },
-        { name: 'quotes checked against their pages', status: read ? 'pass' : 'not-run' }],
+        { name: 'quotes checked against their pages', status: read ? 'pass' : 'not-run' },
+        { name: 'corrections held to the protocol', status: correct ? 'pass' : 'not-run' }],
       usage, outcome, reason }, ledger);
-    result = { runId, review: written, findings: keys.length, graded, failed, skipped, grades,
+    result = { runId, review: written, findings: keys.length, graded, failed, skipped, grades, corrected: written ? corrections.size : 0, correctionsRefused,
       pages: { cited: cited.length, read, unavailable: cited.length - read, requests: reader.requests }, outcome, reason };
   }
   return result!;

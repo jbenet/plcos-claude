@@ -134,8 +134,9 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
             <form action={runCloudFactCheckAction} style={{ marginTop: 12 }}>
               <label>Batch file <input name="batch" required placeholder="w1c-07a.jsonl" /></label>{' '}
               <label>Review file <input name="review" required pattern="fact-review-[0-9]{2}[a-z]\.jsonl" placeholder="fact-review-07a.jsonl" /></label>{' '}
+              <label><input type="checkbox" name="correct" /> and correct the findings</label>{' '}
               <button className="btn" type="submit">Fact check in the cloud</button>
-              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>W1c on this server: reads only the cited pages, grades, corrects nothing. At most {config.cloudWorkflows.w1c.maxFindings} findings.</span>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>W1c on this server: reads only the cited pages and grades; corrects only when ticked, from those pages, keeping each original. At most {config.cloudWorkflows.w1c.maxFindings} findings.</span>
             </form>
           )}
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>

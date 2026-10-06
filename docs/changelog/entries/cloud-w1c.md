@@ -13,7 +13,13 @@ no tools, so "only the cited pages" holds by construction.
 **What it writes.** A new `enrich/fact-review-<NN><part>.jsonl`, never over one, which the fact-quality counts read
 as they read the Mac's. A fact whose page wasn't read is graded unavailable whatever the model said; a "supported" fact
 whose quote is not on its page word for word becomes "partly"; counts are recomputed and every row passes the push's
-validator. It corrects no finding yet.
+validator.
+
+**Corrections, when ticked** (6 Oct). A second call proposes the corrected finding from the same pages; the server
+refuses one that changes the identity, name or capacity band, reaches past the cited pages, drops a supported fact or
+fails the validator, dates the correction itself, and keeps the original under `enrich/inbox/<run>/replaced/`.
+
+**The first-cut buttons** (Run W1 / W1c / W5) now need Cloud workflows on too (docs/28 §8).
 
 **What it records.** A work envelope (its only evidence the cited pages, its only commands reading a cited page and
 calling the model, a token budget and a deadline; a frozen circuit breaker refuses it), every page read and model call
