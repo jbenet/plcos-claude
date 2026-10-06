@@ -136,10 +136,16 @@ the Mac's fact-checker on the same findings.
    `researched.corrected` entry (`by: "claude (cloud), W1c"`); `researched.at` stays. The original is kept
    under `enrich/inbox/<run>/replaced/raw/` before the corrected finding replaces it. The import is not
    queued: Import findings picks the corrections up, as with the first cut's output.
-2. **Prospect sourcing for a vehicle.** Needs search. A server-implemented `search` tool, not Anthropic's,
-   so each query is checked before it leaves: names, organizations, titles, locations and topic words only,
-   never a status, amount, note, list name or the fact of the pipeline (real-data.md). Output is a prospects
-   file through the prospects import, as the push takes it.
+2. **Prospect sourcing for a vehicle. Built 6 Oct** (`lib/workflows/cloud-sourcing.ts`; "Source prospects in the
+   cloud": a vehicle slug, a count up to 15, and a brief of what to look for). The model is given the vehicle's
+   name and kind and the brief, never a record of ours, so it cannot carry an LP or the pipeline into a search.
+   It searches with Anthropic's `web_search` (each query checked as it comes back, as W1's: one that breaks the
+   rules keeps nothing from the run) and reads with the server's `fetch_page`, through the loop W1 now shares
+   (`researchLoop`). The server sets each row's vehicle, status `new`, entity type, `personKey`
+   (`cloud-sourced:<name>--<org>`, stable across runs and vehicles), `capacity.guess: true` and `route: null`;
+   keeps only sources read in the run (none, refused); drops LinkedIn and any email domain; needs a country; and
+   runs `prospectProblems`. The file lands new as `enrich/prospects/<date>-cloud-<run>-<vehicle>.jsonl`; the
+   import is not queued (Add prospects reads it after its settle wait). A grant rail is refused.
 3. **W1 (profiles). Built 6 Oct** (`lib/workflows/cloud-w1.ts`; "Profile in the cloud", at most 10 LPs). The
    model is given only the batch row's name, organization, title, location, work domains and Affinity's links
    (`minimalRow`): status, amounts, notes and lists never reach the prompt. Tools: Anthropic's `web_search`
@@ -192,4 +198,11 @@ builder's choices, not Juan's decisions (docs/decisions/ records only his); each
   records by work domain on its own. Revisit if the check reports firms asked twice after a cloud pass.
 - **The server, not the model, writes a strategy's pins.** The protocol has the writer set `made.inputs`; in the
   cloud the server computes them from the same files, so a strategy can never pin inputs it was not given.
+- **Sourcing searches with Anthropic's tool, checked after the fact.** §6.2 planned a server-side search tool so
+  each query is checked before it leaves. The server has no search provider (none is approved, and adding one is a
+  connector), so sourcing uses Anthropic's `web_search` like W1 and relies on input minimisation: the model holds
+  no record of ours, only the vehicle and the brief. The query check is the alarm, and one bad query discards the
+  whole run. The brief is a person's words; its help text says to name no LP of ours.
+- **Cloud-sourced rows are always guesses with no route.** `capacity.guess` is forced true and `route` null: the
+  model sees none of our paths, and a person confirms capacity. Grant rails are not sourced (invariant 12).
 

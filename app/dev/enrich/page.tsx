@@ -19,7 +19,7 @@ import { listPursuits, openSuggestions, STATUS_LABEL } from '@/lib/authz/read/st
 import type { Strategy } from '@/lib/enrich/strategy';
 import type { Triage } from '@/lib/enrich/triage';
 import { latestRun } from '@/modules/sources';
-import { exportResearchSetAction, importFindingsAction, sourceBulkAction, runWorkflowAction, runCloudFactCheckAction, runCloudProfileAction, runCloudStrategyAction } from './actions';
+import { exportResearchSetAction, importFindingsAction, sourceBulkAction, runWorkflowAction, runCloudFactCheckAction, runCloudProfileAction, runCloudStrategyAction, runCloudSourcingAction } from './actions';
 import { addedInBulk, BULK_DAY } from '@/lib/enrich/unsourced';
 import { readResearchExportStatus } from '@/lib/enrich/export-status';
 import { ExportStatus } from './ExportStatus';
@@ -151,6 +151,15 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
               <label>Batch file <input name="batch" required placeholder="w5-04a.txt" /></label>{' '}
               <button className="btn" type="submit">Write strategies in the cloud</button>
               <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>W5 on this server: no web, from our records and the research; the server sets the pins and keeps a strategy on file before replacing it. Nothing is imported or sent. At most {config.cloudWorkflows.w5.maxLps} LPs.</span>
+            </form>
+          )}
+          {cloudWorkflowsOn() && anthropicKey() && (
+            <form action={runCloudSourcingAction} style={{ marginTop: 12 }}>
+              <label>Vehicle slug <input name="vehicle" required placeholder="neurotech" /></label>{' '}
+              <label>How many <input name="count" type="number" min={1} max={config.cloudWorkflows.sourcing.maxProspects} defaultValue={10} style={{ width: 60 }} /></label>{' '}
+              <label style={{ display: 'block', marginTop: 6 }}>What to look for <textarea name="brief" required minLength={20} maxLength={config.cloudWorkflows.sourcing.maxBriefChars} rows={2} style={{ width: '100%' }} placeholder="Topic words, kinds of investor, places. Name no LP of ours: the brief guides public searches." /></label>
+              <button className="btn" type="submit">Source prospects in the cloud</button>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>Searches public pages for people who fit the vehicle; writes a new file in enrich/prospects for Add prospects. The model sees no record of ours. At most {config.cloudWorkflows.sourcing.maxProspects}.</span>
             </form>
           )}
           <form action={exportResearchSetAction} style={{ marginTop: 12 }}>

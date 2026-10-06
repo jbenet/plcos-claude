@@ -65,6 +65,7 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
       // The cloud fact check (docs/28) has its own runner: envelope, cited pages only, no model tools.
       if (job.input.protocol === 'w1c-cloud') return { ...await (await import('@/lib/workflows/cloud-w1c')).runCloudFactCheck(job.input, actor) };
       if (job.input.protocol === 'w5-cloud') return { ...await (await import('@/lib/workflows/cloud-w5')).runCloudStrategy(job.input, actor) };
+      if (job.input.protocol === 'sourcing-cloud') return { ...await (await import('@/lib/workflows/cloud-sourcing')).runCloudSourcing(job.input, actor) };
       if (job.input.protocol === 'w1-cloud') return { ...await (await import('@/lib/workflows/cloud-w1')).runCloudProfile(job.input, actor) };
       return (await import('@/lib/workflows/api')).runWorkflow(job.input);
     case 'network': {

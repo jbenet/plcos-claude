@@ -75,7 +75,7 @@ export function queryRefusal(q: string, ours: string[]): string | null {
   return null;
 }
 
-const urlKey = (u: string) => { try { const x = new URL(u); x.hash = ''; return x.toString().replace(/\/$/, ''); } catch { return u; } };
+export const urlKey = (u: string) => { try { const x = new URL(u); x.hash = ''; return x.toString().replace(/\/$/, ''); } catch { return u; } };
 
 export async function w1SystemPrompt(cwd = process.cwd()): Promise<{ text: string; version: string }> {
   const w1 = await readFile(join(cwd, 'docs/workflows/w1-profile.md'), 'utf8');
@@ -171,52 +171,13 @@ export async function runCloudProfile(input: Record<string, unknown>, actor: str
     for (const row of rows) {
       const k = row.key as string;
       if (stopReason) { skipped++; continue; }
-      const read = new Map<string, CitedPage>();
-      const queries: string[] = [];
-      let lpFetches = 0, refusedQuery: string | null = null, final: string | null = null;
-      const messages: Array<{ role: string; content: unknown }> = [{ role: 'user', content: JSON.stringify({
-        lp: minimalRow(row), findingOnFile: onFile.get(k) ?? null, nearUs: network, today: new Date(now()).toISOString().slice(0, 10) }) }];
-      for (let turn = 0; turn < c.maxTurnsPerLp; turn++) {
-        if ((usage.input ?? 0) + (usage.output ?? 0) >= c.maxTokens) { stopReason = 'token budget reached'; break; }
-        if (record('anthropic-messages', now() > deadline.getTime() ? 'past the run\'s deadline' : null)) { stopReason = 'deadline reached'; break; }
-        let r: ToolResponse;
-        try {
-          r = await (deps.callModel ?? anthropicWithTools)(key, { model, max_tokens: c.maxOutputTokensPerTurn, tools, messages,
-            system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] });
-        } catch { break; }
-        const u = r.usage ?? {};
-        usage.input! += (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0); usage.output! += u.output_tokens ?? 0;
-        usage.cacheRead! += u.cache_read_input_tokens ?? 0; usage.cacheWrite! += u.cache_creation_input_tokens ?? 0;
-        for (const b of r.content) if (b.type === 'server_tool_use' && b.name === 'web_search') {
-          const q = typeof b.input?.query === 'string' ? b.input.query : '';
-          queries.push(q); searches++;
-          const why = queryRefusal(q, ours);
-          record('web-search', why);
-          if (why) { refusedQuery = why; queryRefusals++; }
-        }
-        if (refusedQuery) break;
-        if (r.stop_reason === 'end_turn') { final = r.content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join(''); break; }
-        messages.push({ role: 'assistant', content: r.content });
-        if (r.stop_reason === 'pause_turn') continue;
-        if (r.stop_reason !== 'tool_use') break;
-        const results: unknown[] = [];
-        for (const b of r.content) if (b.type === 'tool_use') {
-          const url = typeof b.input?.url === 'string' ? b.input.url : '';
-          let host = 'unparsable address';
-          try { host = new URL(url).hostname; } catch { /* recorded as unparsable */ }
-          const refusal = b.name !== 'fetch_page' ? 'not a tool this run has'
-            : lpFetches >= c.maxFetchesPerLp ? 'this LP\'s page budget is spent' : now() > deadline.getTime() ? 'past the run\'s deadline' : null;
-          record(`fetch-page ${host}`, refusal);
-          if (refusal) { results.push({ type: 'tool_result', tool_use_id: b.id, content: `Not read: ${refusal}.`, is_error: true }); continue; }
-          lpFetches++; fetches++;
-          const page = await reader.read(url);
-          if (page.state === 'read') read.set(urlKey(url), page);
-          results.push({ type: 'tool_result', tool_use_id: b.id, content: page.state === 'read'
-            ? page.text.slice(0, config.cloudWorkflows.pages.maxChars) + (page.truncated ? '\n[cut: the page is longer]' : '')
-            : `Not read: ${page.why}.`, ...(page.state === 'read' ? {} : { is_error: true }) });
-        }
-        messages.push({ role: 'user', content: results });
-      }
+      const turn = await researchLoop({ key, model, system, tools, maxTurns: c.maxTurnsPerLp, maxFetches: c.maxFetchesPerLp, maxOutputTokens: c.maxOutputTokensPerTurn,
+        tokenBudget: c.maxTokens, deadline, now, usage, record, reader, ours, callModel: deps.callModel,
+        user: JSON.stringify({ lp: minimalRow(row), findingOnFile: onFile.get(k) ?? null, nearUs: network, today: new Date(now()).toISOString().slice(0, 10) }) });
+      const { read, queries, final, refusedQuery } = turn;
+      searches += turn.searches; fetches += turn.fetches;
+      if (turn.stop) stopReason = turn.stop;
+      if (refusedQuery) queryRefusals++;
       if (refusedQuery || final === null) { failed++; continue; }
 
       // Held to W1 before it is written.
@@ -275,4 +236,64 @@ export async function runCloudProfile(input: Record<string, unknown>, actor: str
     result = { runId, lps: rows.length, written, failed, skipped, replaced, demotedFacts: demoted, searches, fetches, queryRefusals, outcome, reason };
   }
   return result!;
+}
+
+export interface LoopResult { final: string | null; queries: string[]; read: Map<string, CitedPage>; refusedQuery: string | null; searches: number; fetches: number; stop: string | null }
+
+/**
+ * One research conversation with web search and the server's fetch_page (W1 per LP, sourcing per run):
+ * every query checked as it comes back (one that breaks the rules ends the conversation), every page read
+ * through the server's reader within its budget, every call and read checked against the deadline and
+ * recorded. Usage is added to `usage` as it is measured.
+ */
+export async function researchLoop(o: {
+  key: string; model: string; system: string; user: string; tools: unknown[]; maxTurns: number; maxFetches: number; maxOutputTokens: number;
+  tokenBudget: number; deadline: Date; now: () => number; usage: Usage; record: (tool: string, refusal: string | null) => string | null;
+  reader: PageReader; ours: string[]; callModel?: CallTools;
+}): Promise<LoopResult> {
+  const read = new Map<string, CitedPage>(), queries: string[] = [];
+  let fetches = 0, refusedQuery: string | null = null, final: string | null = null, stop: string | null = null;
+  const messages: Array<{ role: string; content: unknown }> = [{ role: 'user', content: o.user }];
+  for (let turn = 0; turn < o.maxTurns; turn++) {
+    if ((o.usage.input ?? 0) + (o.usage.output ?? 0) >= o.tokenBudget) { stop = 'token budget reached'; break; }
+    if (o.record('anthropic-messages', o.now() > o.deadline.getTime() ? 'past the run\'s deadline' : null)) { stop = 'deadline reached'; break; }
+    let r: ToolResponse;
+    try {
+      r = await (o.callModel ?? anthropicWithTools)(o.key, { model: o.model, max_tokens: o.maxOutputTokens, tools: o.tools, messages,
+        system: [{ type: 'text', text: o.system, cache_control: { type: 'ephemeral' } }] });
+    } catch { break; }
+    const u = r.usage ?? {};
+    o.usage.input! += (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0); o.usage.output! += u.output_tokens ?? 0;
+    o.usage.cacheRead! += u.cache_read_input_tokens ?? 0; o.usage.cacheWrite! += u.cache_creation_input_tokens ?? 0;
+    for (const b of r.content) if (b.type === 'server_tool_use' && b.name === 'web_search') {
+      const q = typeof b.input?.query === 'string' ? b.input.query : '';
+      queries.push(q);
+      const why = queryRefusal(q, o.ours);
+      o.record('web-search', why);
+      if (why) refusedQuery = why;
+    }
+    if (refusedQuery) break;
+    if (r.stop_reason === 'end_turn') { final = r.content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join(''); break; }
+    messages.push({ role: 'assistant', content: r.content });
+    if (r.stop_reason === 'pause_turn') continue;
+    if (r.stop_reason !== 'tool_use') break;
+    const results: unknown[] = [];
+    for (const b of r.content) if (b.type === 'tool_use') {
+      const url = typeof b.input?.url === 'string' ? b.input.url : '';
+      let host = 'unparsable address';
+      try { host = new URL(url).hostname; } catch { /* recorded as unparsable */ }
+      const refusal = b.name !== 'fetch_page' ? 'not a tool this run has'
+        : fetches >= o.maxFetches ? 'the page budget is spent' : o.now() > o.deadline.getTime() ? 'past the run\'s deadline' : null;
+      o.record(`fetch-page ${host}`, refusal);
+      if (refusal) { results.push({ type: 'tool_result', tool_use_id: b.id, content: `Not read: ${refusal}.`, is_error: true }); continue; }
+      fetches++;
+      const page = await o.reader.read(url);
+      if (page.state === 'read') read.set(urlKey(url), page);
+      results.push({ type: 'tool_result', tool_use_id: b.id, content: page.state === 'read'
+        ? page.text.slice(0, config.cloudWorkflows.pages.maxChars) + (page.truncated ? '\n[cut: the page is longer]' : '')
+        : `Not read: ${page.why}.`, ...(page.state === 'read' ? {} : { is_error: true }) });
+    }
+    messages.push({ role: 'user', content: results });
+  }
+  return { final, queries, read, refusedQuery, searches: queries.length, fetches, stop };
 }

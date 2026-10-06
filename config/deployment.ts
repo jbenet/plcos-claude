@@ -232,6 +232,17 @@ export const config = {
       maxSeconds: 3600, // GUESS
       maxOutputTokensPerLp: 16000, // GUESS — a strategy is 2–5K tokens of JSON; two vehicles and a first message, more.
     },
+    sourcing: {
+      model: 'claude-sonnet-5-5', // Research, as W1: the mid model.
+      maxProspects: 15, // GUESS — a reviewable file; the Mac's sourcing passes added 10–30 a vehicle.
+      maxBriefChars: 1500, // GUESS
+      maxTokens: 1_500_000, // GUESS — one long conversation; the system prompt is small and cached.
+      maxSeconds: 3600, // GUESS
+      maxTurns: 30, // GUESS — searches and reads for about fifteen people.
+      maxSearches: 20, // GUESS — per request, Anthropic's max_uses.
+      maxFetches: 40, // GUESS — two or three pages a prospect.
+      maxOutputTokensPerTurn: 16000, // GUESS — fifteen rows are about 5K tokens of JSON.
+    },
     pages: {
       maxBytes: 3 * 1024 * 1024, // GUESS — a long firm page is under 1 MB of HTML.
       maxChars: 40_000, // GUESS — the page text given to the model, per page.

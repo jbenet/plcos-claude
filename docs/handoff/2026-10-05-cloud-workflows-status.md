@@ -18,7 +18,8 @@ no real data, no Railway access, nothing pushed to master or deploy. For the int
    - the first-cut Run W1 / W1c / W5 buttons fenced behind Cloud workflows;
    - W1c corrections (slice 2, `cloud-w1c-correct.ts`), on a tick;
    - W1 in the cloud (`cloud-w1.ts`): web search with checked queries, the server's page reader, minimal LP rows;
-   - W5 in the cloud (`cloud-w5.ts`): no tools, server-written pins, the importer's layout rules.
+   - W5 in the cloud (`cloud-w5.ts`): no tools, server-written pins, the importer's layout rules;
+   - prospect sourcing in the cloud (`cloud-sourcing.ts`), sharing W1's research loop.
 
 ## How it was checked here
 

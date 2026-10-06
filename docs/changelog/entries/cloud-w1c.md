@@ -28,6 +28,11 @@ the large model and no tools, from the files the protocol names. The server writ
 holds each strategy to the importer's layout (one file per LP and vehicle) and `checkStrategy`, counts the evidence
 gates as warnings, and keeps a strategy on file before replacing it. Nothing is imported or sent.
 
+**Prospect sourcing in the cloud** (6 Oct). "Source prospects in the cloud" takes a vehicle, a count and a brief,
+searches public pages and writes a new prospects file for Add prospects. The model never sees a record of ours; the
+server sets the row's vehicle, status, key and guess, keeps only sources read in the run, and runs the importer's
+row check.
+
 **The first-cut buttons** (Run W1 / W1c / W5) now need Cloud workflows on too (docs/28 §8).
 
 **What it records.** A work envelope (its only evidence the cited pages, its only commands reading a cited page and

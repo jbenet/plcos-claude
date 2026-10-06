@@ -263,3 +263,14 @@ export async function runCloudStrategyAction(formData: FormData): Promise<void> 
   revalidatePath('/dev/enrich');
   redirect('/developer/enrich');
 }
+
+/** Prospect sourcing in the cloud (docs/28 §6.2), off unless an Admin turns on Cloud workflows. */
+export async function runCloudSourcingAction(formData: FormData): Promise<void> {
+  const authorizedUser = await requireAction('app/dev/enrich/actions.ts#runCloudSourcingAction', formData);
+  const { anthropicKey, cloudWorkflowsOn } = await import('@/lib/workflows/key');
+  if (!cloudWorkflowsOn()) throw new Error('Cloud workflows are off. An Admin turns them on in Settings → Connections.');
+  if (!anthropicKey()) throw new Error('Workflow refused: no Anthropic key (Settings → Connections, or ANTHROPIC_API_KEY).');
+  await queueImportJob(await getDb(), 'workflow', authorizedUser.id, { protocol: 'sourcing-cloud', vehicle: formData.get('vehicle'), brief: formData.get('brief'), count: Number(formData.get('count')) || null });
+  revalidatePath('/dev/enrich');
+  redirect('/developer/enrich');
+}
