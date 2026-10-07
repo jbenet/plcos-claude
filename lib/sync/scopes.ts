@@ -13,9 +13,15 @@ import type { Policy } from '@/lib/mcp/tools';
  */
 export const SYNC_SNAPSHOT = 'sync:snapshot';
 export const SYNC_PUSH = 'sync:push';
-/** Add a vehicle as the token's owner (Juan, 6 Oct 2026: "i really want you to be able to do this"). Admins only. */
-export const SYNC_VEHICLES = 'sync:vehicles';
-export const SYNC_SCOPES = [SYNC_SNAPSHOT, SYNC_PUSH, SYNC_VEHICLES] as const;
+/**
+ * The broad Admin scope (Juan, 7 Oct 2026: "something w/ very broad perms", after "i really want you to be able to
+ * do this. i dont want to do this stuff myself"). Admins only. It opens every endpoint here (pull, push, the
+ * cloud ledger) and every Admin-by-token endpoint, such as adding a vehicle; a new Admin endpoint takes this scope
+ * rather than a scope of its own. It is not the MCP tools or the outreach desk, and no endpoint under it sends,
+ * decides a ticket or moves money: those stay with a person (AGENTS.md, Agent rules; invariant 3).
+ */
+export const SYNC_ADMIN = 'sync:admin';
+export const SYNC_SCOPES = [SYNC_SNAPSHOT, SYNC_PUSH, SYNC_ADMIN] as const;
 export type SyncScopeName = (typeof SYNC_SCOPES)[number];
 
 export interface Endpoint { name: string; route: string; policy: Policy; grant: readonly ('admin' | 'team' | 'viewer')[] }
@@ -27,11 +33,17 @@ export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles', Endpoint> 
     policy: { risk: 'write-guarded', scopes: [SYNC_PUSH], ticket: 'none', approval: false } },
   // Adds a vehicle through the same createVehicle the Settings → Vehicles form calls, so its checks hold: Admin only.
   vehicles: { name: 'vehicle_create', route: 'POST /api/sync/vehicles', grant: ['admin'],
-    policy: { risk: 'write-guarded', scopes: [SYNC_VEHICLES], ticket: 'none', approval: false } },
+    policy: { risk: 'write-guarded', scopes: [SYNC_ADMIN], ticket: 'none', approval: false } },
 };
+
+/** The scopes a token's entries carry: the Admin scope carries every sync scope. */
+export function heldScopes(tools: readonly string[]): Set<string> {
+  return new Set(tools.includes(SYNC_ADMIN) ? [...tools, ...SYNC_SCOPES] : tools);
+}
 
 /** Why `owner` may not hold these token entries, or null. Only the sync scopes carry a grant rule here. */
 export function grantRefusal(owner: { access: string }, tools: readonly string[]): string | null {
+  if (tools.includes(SYNC_ADMIN) && owner.access !== 'admin') return `Only an Admin can make a ${SYNC_ADMIN} token.`;
   for (const e of Object.values(SYNC_ENDPOINTS)) {
     if (e.policy.scopes.some((s) => tools.includes(s)) && !(e.grant as readonly string[]).includes(owner.access)) {
       return e.grant.length === 1 ? `Only an Admin can make a ${e.policy.scopes[0]} token.` : `Only a Team member or an Admin can make a ${e.policy.scopes[0]} token.`;

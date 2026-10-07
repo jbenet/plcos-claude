@@ -55,6 +55,6 @@ Tested on invented findings and pages with the model stubbed (`scripts/propertie
 | ![Settings → Connections: the Anthropic API key row and, below it, Cloud workflows set to on from the environment](docs/changelog/shots/cloud-w1c/01-cloud-workflows-setting.webp) | **The setting.** Cloud workflows sits under the Anthropic API key in Settings → Connections; here the demo sets it from `PLCOS_CLOUD_WORKFLOWS=on` with an invented key. |
 | ![Developer → Enrichment: the Run W1, W1c and W5 buttons, the Fact check in the cloud form with its "and correct the findings" tick, and the Profile in the cloud form](docs/changelog/shots/cloud-w1c/02-enrichment-cloud-forms.webp) | **The forms.** With it on, Developer → Enrichment enables Run W1 / W1C / W5 and shows Fact check in the cloud (batch file, review file, the correction tick) and Profile in the cloud. |
 
-**Vehicles by token** (6 Oct). An Admin's token with the new `sync:vehicles` scope ("Push and add vehicles" in
-Preferences → MCP access) adds a vehicle through `POST /api/sync/vehicles` and `scripts/cloud-vehicle.sh`, under the
+**Vehicles by token, and an Admin token** (6–7 Oct). An Admin's token with the new `sync:admin` scope ("Admin" in
+Preferences → MCP access) opens every sync endpoint and Admin tasks by token, first adding a vehicle through `POST /api/sync/vehicles` and `scripts/cloud-vehicle.sh`, under the
 same checks and audit as Settings → Vehicles. A taken slug or name is refused; nothing edits or removes a vehicle.

@@ -1,12 +1,12 @@
 import { syncGuard } from '../../lib/sync/auth';
-import { SYNC_PUSH, SYNC_VEHICLES } from '../../lib/sync/scopes';
+import { SYNC_ADMIN, SYNC_PUSH } from '../../lib/sync/scopes';
 import { addVehicle } from '../../lib/sync/vehicles';
 import { createMcpToken, type AppUser } from '../../modules/platform';
 import { freshDb, type Check } from './harness';
 
 /**
- * Adding a vehicle by token (lib/sync/vehicles.ts) on invented vehicles: an Admin's sync:vehicles token adds
- * one through createVehicle; a Team member cannot hold the scope; a push-only token is refused; a taken slug
+ * Adding a vehicle by token (lib/sync/vehicles.ts) on invented vehicles: an Admin's sync:admin token adds
+ * one through createVehicle and opens the other sync endpoints too; a Team member cannot hold the scope; a push-only token is refused; a taken slug
  * and unknown fields are refused with nothing written; every call is audited.
  */
 export async function syncVehiclesProperties(check: Check) {
@@ -17,9 +17,9 @@ export async function syncVehiclesProperties(check: Check) {
     values ('vehicles-gp', 'Invented vehicles-gp', 'IV', 'Invented (props)', 'vehicles-gp@example.invalid', 'team', null)
     on conflict (handle) do update set active = true returning ${sel}`))!;
   const mint = (owner: AppUser, tools: string[]) => createMcpToken(owner, { label: 'props vehicles', tools, vehicles: null, callsPerDay: 100, days: 30 }, db);
-  const admin = await mint(juan, [SYNC_PUSH, SYNC_VEHICLES]), pushOnly = await mint(juan, [SYNC_PUSH]);
+  const admin = await mint(juan, [SYNC_ADMIN]), pushOnly = await mint(juan, [SYNC_PUSH]);
   let teamRefused = false;
-  try { await mint(gp, [SYNC_PUSH, SYNC_VEHICLES]); } catch { teamRefused = true; }
+  try { await mint(gp, [SYNC_ADMIN]); } catch { teamRefused = true; }
   const call = async (secret: string, body: unknown) => {
     const req = () => new Request('http://localhost:3119/api/sync/vehicles', { method: 'POST', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' }, body: typeof body === 'string' ? body : JSON.stringify(body) });
     const guard = await syncGuard(req(), 'vehicles');
@@ -46,6 +46,19 @@ export async function syncVehiclesProperties(check: Check) {
     made.status === 201 && made.body.slug === 'spv-invented-props' && again.status === 409 && sameName.status === 409 && (await count()) === 1
     && row?.kind === 'spv' && row.exemption === '506(c)' && row.phase === 'active' && created?.n === 1,
     `${made.status} ${again.status} ${sameName.status}`);
+  const opens = async (secret: string, scope: 'snapshot' | 'push') => !('response' in await syncGuard(new Request('http://localhost:3119/api/sync/x', { headers: { authorization: `Bearer ${secret}` } }), scope));
+  const adminOpens = await opens(admin.secret, 'snapshot') && await opens(admin.secret, 'push');
+  const pushNoSnapshot = !(await opens(pushOnly.secret, 'snapshot'));
+  // An Admin token stops working once its owner is no longer an Admin, for every endpoint it opened.
+  const boss = (await db.one<AppUser>(`insert into platform.app_user (handle, name, initials, role, email, access, vehicles)
+    values ('vehicles-boss', 'Invented vehicles-boss', 'IB', 'Invented (props)', 'vehicles-boss@example.invalid', 'admin', null)
+    on conflict (handle) do update set active = true, access = 'admin' returning ${sel}`))!;
+  const bossToken = await mint(boss, [SYNC_ADMIN]);
+  const before2 = await opens(bossToken.secret, 'push');
+  await db.query("update platform.app_user set access = 'team' where handle = 'vehicles-boss'");
+  const demoted = !(await opens(bossToken.secret, 'push')) && !(await opens(bossToken.secret, 'snapshot'));
+  check('The Admin token opens pull and push as well, a push token does not pull, and a demoted Admin\'s token opens nothing',
+    adminOpens && pushNoSnapshot && before2 && demoted, `${adminOpens} ${pushNoSnapshot} ${before2} ${demoted}`);
   check('Vehicles by token: every call is audited as the token\'s',
-    audit.length === 6 && audit.every((a) => a.detail.via === 'sync') && audit.some((a) => a.detail.outcome === 'ok'), `${audit.length} audit rows`);
+    audit.length >= 6 && audit.every((a) => a.detail.via === 'sync') && audit.some((a) => a.detail.outcome === 'ok'), `${audit.length} audit rows`);
 }

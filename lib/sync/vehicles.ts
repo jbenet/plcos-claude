@@ -8,7 +8,7 @@ import { pushRefusal, type PushAnswer } from './push';
  * after token ... maybe need to dev it in"), so Claude can add one without a person clicking through
  * Settings → Vehicles. The same writer as that form (createVehicle in modules/platform/vehicles.ts) and so
  * the same rules: Admin only, every field checked, the exemption never defaulted, a taken slug or name
- * refused and never updated, one `vehicle.created` audit row. A sync:vehicles token, which only an Admin
+ * refused and never updated, one `vehicle.created` audit row. A sync:admin token, which only an Admin
  * holds; nothing here edits or removes a vehicle. Every call is one `mcp.call` audit row too.
  *
  *   { "name", "slug", "kind", "exemption", "phase"?, "target"?, "opens"?, "closes"?, "aliases"? } → 201 { slug, name }
