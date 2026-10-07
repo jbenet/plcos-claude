@@ -80,9 +80,12 @@ function builtFrom(): string | null {
 }
 /**
  * Fixed, DB-free liveness, with no application data. On a deployed image it also names the commit it was built
- * from, so `scripts/ship.sh --deploy` can tell when Railway is serving what it pushed (5 Oct 2026).
+ * from, so `scripts/ship.sh --deploy` can tell when Railway is serving what it pushed (5 Oct 2026). While import
+ * workers this server started are running it counts them (`importing`), so a deploy can wait rather than restart
+ * the server under them (7 Oct 2026). A count only, read from lib/import-jobs/server.ts's handle set.
  */
 export function healthRoute() {
   const commit = builtFrom();
-  return Response.json(commit ? { ok: true, commit } : { ok: true });
+  const importing = (globalThis as { __importChildren?: Set<string> }).__importChildren?.size ?? 0;
+  return Response.json({ ok: true, ...(commit ? { commit } : {}), ...(importing ? { importing } : {}) });
 }

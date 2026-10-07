@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { compare } from '../../lib/db/pg-verify';
+import { healthRoute } from '../../lib/authz/route';
 import type { Check } from './harness';
 
 export async function deployToolingProperties(check: Check): Promise<void> {
@@ -63,4 +64,21 @@ export async function deployToolingProperties(check: Check): Promise<void> {
   check('IMAGE fails the build on a traced private path', dockerfile.includes('scripts/check-build-traces.ts') && dockerfile.includes("-ipath '*plcos-data*'"), 'Tracing guard and final sweep.');
   check('IMAGE refuses a context that is not a git archive', dockerfile.includes('(no commit given)') && dockerfile.includes('[ ! -e .git ]'), 'Source stage.');
   check('IMAGE context ignores data and secrets', ['data/*', '**/plcos-data', '.env', 'node_modules'].every(l => ignore.split('\n').includes(l)), '.dockerignore second fence.');
+
+  // ---- a deploy waits for running imports (7 Oct 2026: deploys restarted the server under every findings import)
+  const g = globalThis as { __importChildren?: Set<string> };
+  const had = g.__importChildren;
+  try {
+    g.__importChildren = new Set();
+    const idle = await healthRoute().json() as Record<string, unknown>;
+    g.__importChildren = new Set(['invented-a', 'invented-b']);
+    const busy = await healthRoute().json() as Record<string, unknown>;
+    check('HEALTH counts running import workers, and says nothing of them when there are none',
+      idle.ok === true && !('importing' in idle) && busy.importing === 2 && Object.keys(busy).every(k => ['ok', 'commit', 'importing'].includes(k)),
+      `idle ${JSON.stringify(idle)}; busy ${JSON.stringify(busy)}`);
+  } finally { g.__importChildren = had; }
+  const ship = await readFile('scripts/ship.sh', 'utf8');
+  const deployFn = ship.split('deploy() {')[1] ?? '';
+  check('SHIP --deploy waits while /api/health counts running imports, before it pushes',
+    /"importing":/.test(deployFn) && deployFn.indexOf('"importing":') < deployFn.indexOf('git push -q origin master:deploy'), 'scripts/ship.sh deploy().');
 }

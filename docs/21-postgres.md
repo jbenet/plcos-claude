@@ -64,7 +64,11 @@ that an investor approved anything or that a workflow proposal was accepted.
 This is local process supervision and database status, not durable cloud orchestration.
 A normal server can recover a queued job; it marks a running job with a heartbeat older
 than 60 seconds as failed only after confirming that its advisory lock is free. Interrupted
-running work is never silently replayed. Rehearsal suppresses automatic recovery and Dakota
+running work is not replayed, with one exception: a findings import, which reads every pushed
+file again from the start, is queued again and its stopped receipt says so (7 Oct 2026: each
+deploy restarted the server under the running findings import, and none finished that day).
+`/api/health` counts the import workers a server is running, and `scripts/ship.sh --deploy`
+waits while there are any. Rehearsal suppresses automatic recovery and Dakota
 resumption; an explicit permitted action is required. Before retrying a failed or interrupted
 job, inspect its progress and the operation's
 idempotency rules. Do not assume a failed job rolled back every earlier committed batch.
