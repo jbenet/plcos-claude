@@ -177,6 +177,47 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
       `version ${version ?? 'NONE'}; same: ${same.status} ${JSON.stringify(same.json?.data)}; other: ${other.status} ${other.json?.data?.version === version ? 'same version' : 'DIFFERENT'}; `
       + `targets: ${JSON.stringify(sameTargets.json?.data)}; after a write: ${JSON.stringify(replanned.json?.data)?.slice(0, 120)}`);
 
+    // ── The light contacts read (7 Oct 2026) ───────────────────────────────────────────────
+    const personLp = await entity('Invented V3 LP Person', 'person');
+    const pPerson = await pursuit(personLp, V1.id, 'discussing');
+    await db.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body) values
+      ('props-desk-v3-research', 'Invented research note', 'fixture', 'public', current_date, 'weak', 'Invented', '') on conflict do nothing`);
+    await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'person@invented-v3.example', 'props-desk-v3-research', current_date, 'medium')`, [personLp]);
+    type CRow = { pursuitId: string; vehicle: string; entity: { id: string; name: string; kind: string }; status: { value: string; label: string }; passed: boolean; contacts: Array<{ email: string }> };
+    const light = await rest(oneTok, 'contacts', { vehicle: V1.slug });
+    const lRows = (light.json?.data?.rows ?? []) as CRow[];
+    const lIds = lRows.map((r) => r.pursuitId);
+    const withPassed = await rest(oneTok, 'contacts', { vehicle: V1.slug, includePassed: '1' });
+    const passedRow = ((withPassed.json?.data?.rows ?? []) as CRow[]).find((r) => r.pursuitId === pPassed);
+    const everyOne = await rest(oneTok, 'contacts', { vehicle: 'all' });
+    const lightMcp = await mcp(oneMcp, 'outreach_contacts', { vehicle: V1.slug });
+    const lVersion = light.json?.data?.version as string | undefined;
+    const lCursor = light.json?.data?.cursor as string | undefined;
+    const lSame = await rest(oneTok, 'contacts', { vehicle: V1.slug, ifChanged: lVersion ?? 'none' });
+    const lQuiet = await rest(oneTok, 'contacts', { vehicle: V1.slug, updatedSince: lCursor ?? '' });
+    await db.query(`update strategy.pursuit set status = 'discussing', status_set_at = now() where pursuit_id = $1`, [pDirect]);
+    const lMoved = await rest(oneTok, 'contacts', { vehicle: V1.slug, ifChanged: lVersion ?? 'none' });
+    const lSince = await rest(oneTok, 'contacts', { vehicle: V1.slug, updatedSince: lCursor ?? '' });
+    const lOutside = await rest(twoTok, 'contacts', { vehicle: V1.slug });
+    const proposeStill = await rest(oneTok, 'contacts', {}, { method: 'POST', body: {} });
+    const personRow = lRows.find((r) => r.pursuitId === pPerson);
+    check('Outreach desk v3: GET contacts answers every open LP on the vehicle in one page with only pursuit, name, kind, status (with its label), passed and the addresses on file; passed LPs only with includePassed; vehicle=all keeps to the vehicles the token reads; MCP says the same; ifChanged with the version is { unchanged: true }; after a status change the version moves and updatedSince keeps only that row; another vehicle\'s reader is refused; POST contacts still proposes an address',
+      light.status === 200 && [pNear, pDeep, pDirect, pPerson].every((p) => lIds.includes(p)) && !lIds.includes(pPassed) && !lIds.includes(pOther)
+      && light.json.data.total === lRows.length && light.json.data.nextOffset === null
+      && lRows.every((r) => Object.keys(r).sort().join() === 'contacts,entity,passed,pursuitId,status,vehicle' && r.passed === false && r.vehicle === V1.slug && typeof r.status.label === 'string')
+      && personRow?.entity.kind === 'person' && personRow.contacts.some((c) => c.email === 'person@invented-v3.example')
+      && passedRow?.passed === true && passedRow.status.value === 'passed'
+      && everyOne.status === 200 && ((everyOne.json.data.rows ?? []) as CRow[]).every((r) => r.vehicle === V1.slug)
+      && JSON.stringify(lightMcp.data?.rows) === JSON.stringify(lRows) && lightMcp.data?.version === lVersion
+      && typeof lVersion === 'string' && lSame.status === 200 && lSame.json.data.unchanged === true && lSame.json.data.version === lVersion && !('rows' in lSame.json.data)
+      && lQuiet.status === 200 && lQuiet.json.data.rows.length === 0
+      && lMoved.status === 200 && lMoved.json.data.version !== lVersion && Array.isArray(lMoved.json.data.rows)
+      && lSince.status === 200 && (lSince.json.data.rows as CRow[]).map((r) => r.pursuitId).join() === pDirect
+      && lOutside.status === 404 && !lOutside.text.includes(pNear) && proposeStill.status !== 405 && proposeStill.status !== 404,
+      `${light.status}: ${lRows.length} rows (passed in ${lIds.includes(pPassed)}), keys ${lRows[0] ? Object.keys(lRows[0]).sort().join() : 'none'}; person ${JSON.stringify(personRow?.contacts)}; with passed ${passedRow?.passed}; `
+      + `all: ${everyOne.status} ${((everyOne.json?.data?.rows ?? []) as CRow[]).map((r) => r.vehicle).filter((v, i, a) => a.indexOf(v) === i).join()}; MCP equal ${JSON.stringify(lightMcp.data?.rows) === JSON.stringify(lRows)}${lightMcp.error ? ` (${lightMcp.error.slice(0, 120)})` : ''}; `
+      + `same ${JSON.stringify(lSame.json?.data)}; quiet ${lQuiet.json?.data?.rows?.length}; moved ${lMoved.json?.data?.version === lVersion ? 'SAME VERSION' : 'new version'}; since ${(lSince.json?.data?.rows ?? []).length} rows; outside ${lOutside.status}; POST ${proposeStill.status}`);
+
     // ── Ask history ───────────────────────────────────────────────────────────────────────
     const lastOn = thisQuarter.toISOString().slice(0, 10);
     check('Outreach desk v3: asksThisQuarter counts the intro asks made to that person this calendar quarter (not last quarter\'s, not one never made), and lastAsk says when and whether they replied, from the mail trace',

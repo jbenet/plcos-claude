@@ -428,3 +428,68 @@ function queueCoverage(vehicles: Vehicle[], includePassed = false) {
     note: 'A reply in a mailbox juanmail does not read, and Affinity has not synced, is not seen. An address on file is not proof it is current. comms_trace gives one LP\'s whole timeline.',
   };
 }
+
+// ── GET /api/outreach/contacts ──────────────────────────────────────────────────────────
+
+export interface ContactsArgs {
+  vehicle: string; updatedSince?: string; includePassed?: boolean; offset?: number;
+  /** The previous answer's version: if this answer would say the same, it is { unchanged: true, version, cursor } instead. */
+  ifChanged?: string;
+}
+
+/**
+ * The light contacts read (docs/27 §4d, JuanMail 7 Oct 2026): for every LP on a vehicle (or "all") its pursuit, name,
+ * status and passed, and the addresses on file for it, in one page and nothing else. The mail client matches its mail to
+ * LPs with it without paying for the queue's checks, trace and strategy. Addresses are R2, as in the queue: a reader
+ * without words on the vehicle gets its rows with contacts empty and `withheld`. `version` hashes the rows (not the
+ * polling cursor), so ifChanged answers { unchanged: true } when nothing a row shows has moved.
+ */
+export async function outreachContacts(user: AppUser, a: ContactsArgs, fit: QueueFit = {}) {
+  const cursor = new Date().toISOString();
+  const since = a.updatedSince ? new Date(a.updatedSince) : null;
+  if (since && Number.isNaN(since.getTime())) throw new OutreachRefused(400, 'updatedSince is not a time.');
+  const vehicles = a.vehicle === 'all' ? await deskVehicles(user) : [await deskVehicle(user, a.vehicle)];
+  const all = (await Promise.all(vehicles.map(async (v) => (await pipelineData(v.id)).rows
+    .filter((r) => r.vehicleId === v.id && (a.includePassed || r.status !== 'passed')).map((r) => ({ r, v })))))
+    .flat().sort((x, y) => x.v.slug.localeCompare(y.v.slug) || x.r.name.localeCompare(y.r.name) || (x.r.id < y.r.id ? -1 : x.r.id > y.r.id ? 1 : 0));
+  const changed = since ? await changedSince(all.map((b) => b.r.id), since) : null;
+  const chosen = changed ? all.filter((b) => changed.has(b.r.id)) : all;
+  const readable = vehicles.filter((v) => words(user, v.id));
+  const entityIds = [...new Set(chosen.map((b) => b.r.entityId))];
+  const db = await getDb();
+  // r.entityId is already canonical (the pipeline facade resolves it), so the kind is a plain lookup.
+  const [kinds, orgContacts] = await Promise.all([
+    entityIds.length ? db.query<{ id: string; type: string }>(`select entity_id::text id, entity_type::text type from identity.entity where entity_id = any($1::uuid[])`, [entityIds]) : Promise.resolve([]),
+    Promise.all(readable.map(async (v) => [v.id, await lpContactsFor(chosen.filter((b) => b.v.id === v.id).map((b) => b.r.entityId), v.id, { excludeDakota: true })] as const)),
+  ]);
+  const kindOf = new Map(kinds.map((k) => [k.id, k.type === 'person' ? 'person' as const : 'org' as const]));
+  const contactsBy = new Map(orgContacts);
+  const people = [...new Set([...chosen.filter((b) => contactsBy.has(b.v.id)).map((b) => b.r.entityId), ...orgContacts.flatMap(([, m]) => [...m.values()].flat().map((c) => c.entityId))])];
+  const emails = await addressesFor(people);
+  const addressOf = (entityId: string) => (emails.get(entityId) ?? []).slice(0, 3);
+  const rows = chosen.map(({ r, v }) => {
+    const kind = kindOf.get(r.entityId) ?? 'org';
+    const w = contactsBy.has(v.id);
+    const contacts = !w ? [] : kind === 'person'
+      ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x }))
+      : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x })));
+    return {
+      pursuitId: r.id, vehicle: v.slug, entity: { id: r.entityId, name: r.name, kind },
+      status: { value: r.status, label: STATUS_LABEL[r.status] }, passed: r.status === 'passed', contacts,
+      ...(w ? {} : { withheld: 'Addresses are withheld at your access: they are words (R2) on this vehicle.' }),
+    };
+  });
+  const version = createHash('sha256').update(JSON.stringify(rows)).digest('base64url').slice(0, 16);
+  const coverage = {
+    corpus: `${a.includePassed ? 'LPs, open and passed,' : 'Open LPs (not passed)'} on ${vehicles.map((v) => v.name).join(', ') || 'no vehicle'}${since ? `, changed since ${since.toISOString()}` : ''}: pursuit, name, status and the addresses on file (gmail, affinity or research; never licensed).`,
+    note: 'One page: every matching LP. Over MCP an answer too large for the response limit is cut and nextOffset continues it. Pass version as ifChanged to hear { unchanged: true } when no row moved; pass cursor as updatedSince for only the rows that changed. outreach_queue has the rest.',
+  };
+  if (a.ifChanged && a.ifChanged === version) return { data: { unchanged: true as const, version, cursor }, coverage };
+  const offset = Math.min(a.offset ?? 0, rows.length);
+  let fitted = rows.slice(offset);
+  if (fit.maxBytes) {
+    while (fitted.length > 1 && Buffer.byteLength(JSON.stringify(fitted)) > fit.maxBytes) fitted = fitted.slice(0, fitted.length - Math.max(1, Math.floor(fitted.length / 10)));
+  }
+  const nextOffset = offset + fitted.length < rows.length ? offset + fitted.length : null;
+  return { data: { rows: fitted, total: rows.length, offset, nextOffset, version, cursor }, coverage };
+}

@@ -81,6 +81,7 @@ Every queue row returns three states apart, each with Capital OS's label, so jua
 | `outreach_vehicles` | `GET /api/outreach/vehicles` | outreach:read |
 | `outreach_queue` | `GET /api/outreach/queue?vehicle=…` | outreach:read |
 | `comms_trace` | `GET /api/outreach/trace?pursuitId=…` | outreach:read |
+| `outreach_contacts` | `GET /api/outreach/contacts?vehicle=…[&updatedSince=…&ifChanged=…&includePassed=1]` (§4d) | outreach:read |
 | `top_connectors` | `GET /api/outreach/connectors?vehicle=…&limit=…[&firstHopOnly=1]` (§4b) | outreach:read |
 | `top_connectors` with `entityId` | `GET /api/outreach/connectors?vehicle=…&entityId=…[&limit=…&cursor=…]` (§4c) | outreach:read |
 | `routes_to` | `GET /api/outreach/routes-to?entityId=…&vehicle=…` (§4a) | the tool's name in the token, as over MCP |
@@ -372,6 +373,34 @@ GET /api/outreach/connectors?vehicle=spv-cortex&entityId=5e6f…&limit=2
 ```
 
 Over MCP: `{ "vehicle": "spv-cortex", "entityId": "5e6f…", "limit": 2, "cursor": "eyJ2Ijox…" }`.
+
+## 4d. Every LP and its addresses, light (7 Oct 2026)
+
+JuanMail matches its mail to LPs. The queue carries far more than that needs (checks, the trace, strategy, materials) and
+pages 25 rows at a time, so it asked for a read with only what matching takes, for every LP at once.
+
+`GET /api/outreach/contacts?vehicle=<slug or id, or all>` (MCP `outreach_contacts`) answers, for every open LP on the
+vehicle (or on every vehicle the token reads), in one page:
+
+```json
+{ "data": {
+    "rows": [
+      { "pursuitId": "0b6e…", "vehicle": "spv-cortex", "entity": { "id": "7f3a…", "name": "Invented Family Office", "kind": "org" },
+        "status": { "value": "selected", "label": "Selected" }, "passed": false,
+        "contacts": [{ "name": "Ravi Invented", "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-05", "confirmedBy": "Juan Benet" }] }],
+    "total": 1, "offset": 0, "nextOffset": null, "version": "Qk1x…", "cursor": "2026-10-07T08:10:00.000Z" } }
+```
+
+- `contacts` are the queue's, by the same reader (lib/outreach/addresses.ts): for a person, their own addresses; for an
+  organisation, its contacts' (from the pursuit and affiliations, never licensed). At most three per person, best first.
+  Addresses are R2: on a vehicle where the token does not read words, a row has `contacts: []` and `withheld`.
+- `includePassed=1` adds the LPs that passed, each `passed: true`. Without it they are left out, as in the queue.
+- `updatedSince=<the previous cursor>` keeps only the rows that changed since then, by the queue's own test (§4).
+- `version` hashes the rows (not `cursor`). `ifChanged=<version>` answers `{ "unchanged": true, "version", "cursor" }`
+  when no row would differ.
+- Order: vehicle slug, then name, then pursuit id. Over REST every row comes back. Over MCP an answer larger than the
+  response limit is cut from its end, and `offset=<nextOffset>` continues it; `version` is always the whole answer's.
+- `POST /api/outreach/contacts` is unchanged: it records an address confirmed in Gmail (`outreach_propose_contact`, §5).
 
 ## 5. Write
 

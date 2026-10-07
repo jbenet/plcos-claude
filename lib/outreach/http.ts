@@ -18,8 +18,12 @@ import { appendAudit, findMcpToken } from '@/modules/platform';
  * the API reads no cookie.
  */
 
-/** `rename`: a query parameter the REST op names differently from the tool's argument (routes take entityId). */
-const OPS: Record<string, { tool: string; method: 'GET' | 'POST'; rename?: Record<string, string> }> = {
+/**
+ * `rename`: a query parameter the REST op names differently from the tool's argument (routes take entityId).
+ * `get`: the tool a GET of a POST op runs instead (/contacts: POST proposes an address, GET reads every LP's).
+ */
+type Op = { tool: string; method: 'GET' | 'POST'; rename?: Record<string, string>; get?: { tool: string } };
+const OPS: Record<string, Op> = {
   vehicles: { tool: 'outreach_vehicles', method: 'GET' },
   queue: { tool: 'outreach_queue', method: 'GET' },
   // With entityId, one connector's targets (docs/27 §4c): the same tool, which answers that list instead.
@@ -29,7 +33,8 @@ const OPS: Record<string, { tool: string; method: 'GET' | 'POST'; rename?: Recor
   'routes-through': { tool: 'routes_through', method: 'GET', rename: { entityId: 'nodeId' } },
   update: { tool: 'outreach_update', method: 'POST' },
   tickets: { tool: 'outreach_request_ticket', method: 'POST' },
-  contacts: { tool: 'outreach_propose_contact', method: 'POST' },
+  // GET reads every LP's pursuit, status and addresses (docs/27 §4d); POST records one address confirmed in Gmail.
+  contacts: { tool: 'outreach_propose_contact', method: 'POST', get: { tool: 'outreach_contacts' } },
   link: { tool: 'outreach_link_message', method: 'POST' },
   // Deprecated for one release (5 Oct 2026): /sent runs the old name, an alias of outreach_link_message.
   sent: { tool: 'outreach_record_send', method: 'POST' },
@@ -118,12 +123,14 @@ async function serve(request: Request, op: string, method: 'GET' | 'POST'): Prom
   const env = envelopeFor(found.token, found.user);
   const meta = { via: 'rest' as const, correlationId: correlationOf(request.headers.get('x-correlation-id')), origin: origin || null,
     autonomous: autonomousOf(request.headers.get('x-autonomous')) };
-  const spec = Object.hasOwn(OPS, op) ? OPS[op]! : null;
+  const entry = Object.hasOwn(OPS, op) ? OPS[op]! : null;
+  const spec: Op | null = entry?.get && method === 'GET' ? { tool: entry.get.tool, method: 'GET' } : entry;
   // An unknown op or the wrong method is still a call: logged under its own name, refused.
   if (!spec || spec.method !== method) {
     const r = await runTool(env, `rest:${op.slice(0, 40)}`, {}, meta);
-    const msg = !spec ? `No operation "${op.slice(0, 40)}".` : `${op} takes ${spec.method}.`;
-    return r.ok ? fail(500, 'Unexpected.') : fail(spec ? 405 : 404, msg, spec ? { Allow: spec.method } : {});
+    const allow = spec?.get ? `GET, ${spec.method}` : spec?.method ?? '';
+    const msg = !spec ? `No operation "${op.slice(0, 40)}".` : `${op} takes ${allow}.`;
+    return r.ok ? fail(500, 'Unexpected.') : fail(spec ? 405 : 404, msg, spec ? { Allow: allow } : {});
   }
   let args: Record<string, unknown>;
   if (method === 'GET') args = queryArgs(new URL(request.url), spec.rename);

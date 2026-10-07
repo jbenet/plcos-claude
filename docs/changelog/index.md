@@ -259,3 +259,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [New feedback wakes project dev](entries/feedback-signal.md)
 - [Slow outreach calls say where their time went](entries/outreach-timing.md)
 - [Top connectors answer at once when nothing changed](entries/outreach-connectors-kept.md)
+- [Every LP and its addresses in one light read](entries/outreach-lp-contacts.md)
