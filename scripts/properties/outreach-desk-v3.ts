@@ -280,10 +280,14 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
       metAfter: replyOwedFrom([tp('2026-09-05', 'email', 'theirs'), tp('2026-09-07', 'call', 'both')]),
       autoReply: replyOwedFrom([tp('2026-09-05', 'email', 'theirs', { aboutBasis: 'Automatic reply: out of office' })]),
       firm: replyOwedFrom([tp('2026-09-05', 'email', 'theirs', { viaOrganization: 'Invented Firm' })]),
+      list: replyOwedFrom([tp('2026-09-01', 'email', 'ours'), tp('2026-09-05', 'email', 'theirs', { groupSize: 3 })]),
+      update: replyOwedFrom([tp('2026-09-05', 'email', 'theirs', { groupSize: 1, aboutBasis: 'a company\'s update to its investors (“newsletter”)' })]),
+      listThenOwn: replyOwedFrom([tp('2026-09-05', 'email', 'theirs'), tp('2026-09-08', 'email', 'theirs', { groupSize: 6 })]),
     };
-    check('Outreach desk v3: a reply is owed when their latest email or message came after anything of ours (a message, or a meeting or call together); a meeting is never their unanswered message, nor an automatic reply or their firm\'s mail',
+    check('Outreach desk v3: a reply is owed when their latest email or message came after anything of ours (a message, or a meeting or call together); a meeting is never their unanswered message, nor an automatic reply, their firm\'s mail, a message to a list of three or more of our parties, or a company\'s update to its investors',
       owedCases.meetingLast === null && owedCases.theirEmail?.since === '2026-09-05' && owedCases.answered === null && owedCases.metAfter === null
-      && owedCases.autoReply === null && owedCases.firm === null, JSON.stringify(owedCases));
+      && owedCases.autoReply === null && owedCases.firm === null && owedCases.list === null && owedCases.update === null
+      && owedCases.listThenOwn?.since === '2026-09-05', JSON.stringify(owedCases));
 
     // ── Ask history ───────────────────────────────────────────────────────────────────────
     const lastOn = thisQuarter.toISOString().slice(0, 10);
