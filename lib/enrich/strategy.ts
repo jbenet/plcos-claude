@@ -184,6 +184,10 @@ export const CONTEXT_BY_RULE = `(n.data ? 'rule' or n.data->>'source' = 'prospec
 export function correctionReach(c: { by?: string | null; what?: string | null }): 'none' | 'spv' | 'all' {
   const by = c.by ?? '', what = c.what ?? '';
   if (/\bW1c\b/.test(by)) return 'all';
+  // The merge of an LP's older findings (7 Oct 2026) adds back facts the strategy's writer had in front of them, either
+  // as the newest finding of its day or carried by hand; reopening ~300 strategies written that morning bought nothing.
+  // Strategies written from a refresh before the merge, which may have missed them, are listed by the checker (--merged).
+  if (/enrich-merge-findings/.test(by)) return 'none';
   // Connector research names itself in its round as often as in its words: "cold1-04", "cold1 batch 05", "evening e-2 connection-only".
   if (/connector evidence|connection-only|sourced ties added/i.test(what) || /\bcold\d|connection-only/i.test(by)) return 'none';
   if (/\bSPV\b/i.test(what) && /append-only|preserved/i.test(what)) return /\b(?:0|no) (?:new )?facts\b/i.test(what) ? 'none' : 'spv';

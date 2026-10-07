@@ -229,7 +229,7 @@ async function main() {
   const staleTieKeys: string[] = [], gatedKeys: string[] = [];
   const leadPins: Array<{ key: string; vehicle: string; lead: { key: string; at: string } }> = [];
   const unpinned: string[] = [];
-  const overdueKeys: string[] = [];
+  const overdueKeys: string[] = [], mergedKeys: string[] = [];
   const today = new Date(new Date().toISOString().slice(0, 10));
   const madeAt = new Map<string, string>();
   const gateCount: Record<string, number> = {};
@@ -286,6 +286,10 @@ async function main() {
     // A step whose date has passed (W5, 7 Oct 2026: most steps were dated 28 Sep to 5 Oct): counted and listed, not a problem.
     { const due = (x as Strategy).made?.at ? stepDue((x as Strategy).next?.when, (x as Strategy).made.at) : null;
       if (due && due.getTime() < today.getTime()) overdueKeys.push(key); }
+    // Written before its finding took back facts an older finding held (enrich-merge-findings): listed, for the batches
+    // written from a refresh that missed them; the merge stales nothing on its own (correctionReach).
+    { const f = findings.get(key), at = (x as Strategy).made?.at;
+      if (f && at && (Array.isArray(f.researched.corrected) ? f.researched.corrected : []).some((c) => /enrich-merge-findings/.test(c.by ?? '') && Date.parse(c.at) > Date.parse(at))) mergedKeys.push(key); }
     if ((x as Strategy).next?.what && nextTooLong(x as Strategy)) long++;
     if ((x as Strategy).next?.what && nextOverLimit(x as Strategy)) over++;
     {
@@ -320,15 +324,15 @@ async function main() {
   // A lead with no strategy for that vehicle (W5, 7 Oct 2026): often a colleague with no candidate line at all. Nothing
   // can move, so the pin looked healthy while the firm's ask rested on a plan nobody wrote; it is re-pinned with the rest.
   const missingLeads = leadPins.filter((x) => !madeAt.has(`${x.vehicle}:${x.lead.key}`));
-  // `--stale-ties`, `--gated`, `--lead-moved`, `--unpinned` and `--overdue`, each with a file, write those keys,
+  // `--stale-ties`, `--gated`, `--lead-moved`, `--unpinned`, `--overdue` and `--merged`, each with a file, write those keys,
   // one a line, for a revision batch.
-  for (const [flag, keys] of [['--stale-ties', staleTieKeys], ['--gated', gatedKeys], ['--lead-moved', [...movedLeads, ...missingLeads].map((x) => x.key)], ['--unpinned', unpinned], ['--naming', namingKeys], ['--overdue', overdueKeys]] as const) {
+  for (const [flag, keys] of [['--stale-ties', staleTieKeys], ['--gated', gatedKeys], ['--lead-moved', [...movedLeads, ...missingLeads].map((x) => x.key)], ['--unpinned', unpinned], ['--naming', namingKeys], ['--overdue', overdueKeys], ['--merged', mergedKeys]] as const) {
     const at = process.argv.indexOf(flag);
     if (at > 0 && process.argv[at + 1]) await writeFile(process.argv[at + 1], keys.join('\n') + '\n');
   }
   // A lead carries its firm, so a colleague's newer finding makes the lead stale too (s24).
   const leadsBehind = new Set(leadPins.filter((x) => { const f = findings.get(x.key); const at = madeAt.get(`${x.vehicle}:${x.lead.key}`); return f && at && f.researched.at > at; }).map((x) => x.lead.key)).size;
-  if (sfiles.length) console.log(`${sfiles.length} strategies · ${sbad} with problems · ${stale} older than their LP's finding · ${overdueKeys.length} with a next step whose date has passed · ${long} with a next step the import cuts at 400 characters (${over} over v1.5's 300) · ${doubled} firms asked for money twice · ${leadMoved} firm-level strategies whose lead was rewritten since, ${missingLeads.length} whose lead has no strategy (${unpinned.length} firm-level asks pin no lead) · ${leadsBehind} leads older than a colleague's finding · ${namesOthers} naming an LP the files don't join to them (${staleTies} citing a W3 tie the files no longer carry) · ${tierMismatch} citing a tier W3's file doesn't give the pair · gates ${JSON.stringify(gateCount)} · lists ${JSON.stringify(lists)} · asks ${JSON.stringify(shapes)}`);
+  if (sfiles.length) console.log(`${sfiles.length} strategies · ${sbad} with problems · ${stale} older than their LP's finding · ${overdueKeys.length} with a next step whose date has passed · ${mergedKeys.length} written before their finding's merge · ${long} with a next step the import cuts at 400 characters (${over} over v1.5's 300) · ${doubled} firms asked for money twice · ${leadMoved} firm-level strategies whose lead was rewritten since, ${missingLeads.length} whose lead has no strategy (${unpinned.length} firm-level asks pin no lead) · ${leadsBehind} leads older than a colleague's finding · ${namesOthers} naming an LP the files don't join to them (${staleTies} citing a W3 tie the files no longer carry) · ${tierMismatch} citing a tier W3's file doesn't give the pair · gates ${JSON.stringify(gateCount)} · lists ${JSON.stringify(lists)} · asks ${JSON.stringify(shapes)}`);
   if (bad || sbad || pathBad) process.exitCode = 1;
 }
 main();
