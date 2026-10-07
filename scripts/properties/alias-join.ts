@@ -53,7 +53,7 @@ export async function aliasJoinProperties(check: Check) {
   const run = async () => {
     try {
       const result = await promisify(execFile)(process.execPath,
-        ['--import', import.meta.resolve('tsx'), resolve('scripts/enrich-check.ts'), '--gated', join(scratch, 'gated.txt'), '--naming', join(scratch, 'naming.txt')],
+        ['--import', import.meta.resolve('tsx'), resolve('scripts/enrich-check.ts'), '--gated', join(scratch, 'gated.txt'), '--naming', join(scratch, 'naming.txt'), '--lead-moved', join(scratch, 'lead-moved.txt')],
         { cwd: scratch, env: { ...process.env, DATA_PROFILE: 'demo', DATABASE_URL: '', TSX_TSCONFIG_PATH: resolve('tsconfig.json') } });
       return { stdout: result.stdout, code: 0 };
     } catch (error) {
@@ -109,6 +109,13 @@ export async function aliasJoinProperties(check: Check) {
       leads.stdout.includes('1 firm-level strategies whose lead was rewritten since')
       && leads.stdout.includes("1 leads older than a colleague's finding"),
       'A lead filed under its own explicit entity ID resolves even without an exported alias.');
+    // 7 Oct 2026: a lead with no strategy of its own (often no candidate line either) is listed for re-pinning, not healthy.
+    await write(`strategy/${peer}.json`, { ...colleague, made: { ...colleague.made, inputs: { ...colleague.made.inputs, lead: { key: 'invented-nobody', at: '2026-09-26' } } } });
+    const orphan = await run();
+    check('A firm-level strategy whose lead has no strategy is counted and listed for re-pinning',
+      leads.stdout.includes('0 whose lead has no strategy') && orphan.stdout.includes('1 whose lead has no strategy')
+      && (await readFile(join(scratch, 'lead-moved.txt'), 'utf8').catch(() => '')).trim() === peer,
+      orphan.stdout.split('\n').find((l) => l.includes('firm-level')) ?? 'no summary line');
     await write(`strategy/${peer}.json`, { ...colleague, ask: { vehicle: 'invented', shape: 'fund commitment' } });
     const money = await run();
     check('Money asks under aliases count against the canonical firm', money.stdout.includes('1 firms asked for money twice'),
