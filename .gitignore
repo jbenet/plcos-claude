@@ -21,3 +21,6 @@ data/*
 
 # The feedback journal (lib/feedback-inbox.ts): reports waiting to be filed, and the filed records.
 issues/inbox/
+
+# A stray lock file a session tool writes in the working directory
+memory:.lock
