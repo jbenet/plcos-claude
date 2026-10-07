@@ -16,3 +16,8 @@ W1 now reads an LP's existing finding first and carries its facts forward.
 650. A merge correction now reaches no strategy (`correctionReach`), and the checker lists the strategies written before
 their finding's merge with `--merged`, so the ones written from a refresh that missed the facts can be picked out and
 rewritten.
+
+**A fact-checked finding takes nothing from an unchecked one.** In the first run a value W1c had cut (a location
+narrowed to a region) came back from the LP's unchecked twin finding. A finding with a W1c correction now merges only
+facts from findings W1c also checked, and `--redo <raw before the merge>` rebuilds each fact-checked file the first run
+wrote, with a dated note.
