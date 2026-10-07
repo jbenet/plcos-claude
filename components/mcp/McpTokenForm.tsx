@@ -5,12 +5,8 @@ import { useRouter } from 'next/navigation';
 import { createMcpTokenAction, type MadeToken } from '@/app/settings/actions';
 import s from './mcp.module.css';
 
-/** Where each cloud sync token is kept on the Mac (docs/deploy/railway.md §6–§7), and what reads it. */
-const SYNC_USE: Record<string, { item: string; script: string }> = {
-  snapshot: { item: 'snapshot-token', script: 'bash scripts/cloud-pull.sh pull --to postgres://plcos@127.0.0.1:57434/plcos_copy' },
-  push: { item: 'push-token', script: 'bash scripts/cloud-push.sh <finished output file>' },
-  admin: { item: 'push-token', script: 'bash scripts/cloud-push.sh <finished output file>; bash scripts/cloud-vehicle.sh <vehicle.json>' },
-};
+/** The cloud sync presets (docs/deploy/railway.md §6–§7): no vehicle choice, and no connect command shown. */
+const SYNC_PRESETS = new Set(['snapshot', 'push', 'admin']);
 
 /**
  * Make a token, and show it once with the command that connects it (docs/26-mcp.md): Claude Code for an MCP
@@ -29,8 +25,8 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
   const [made, setMade] = useState<MadeToken | null>(null);
   const [busy, setBusy] = useState(false);
   const [preset, setPreset] = useState('read');
-  const keep = made?.ok ? SYNC_USE[preset] : undefined;
-  const command = keep ? `bash scripts/keychain-token.sh ${keep.item}`
+  const syncToken = SYNC_PRESETS.has(preset);
+  const command = syncToken ? ''
     : made?.ok && preset.startsWith('outreach') ? `curl -H "Authorization: Bearer ${made.secret}" ${endpoint.replace(/\/api\/mcp$/, '/api/outreach/vehicles')}`
     : made?.ok ? `claude mcp add --transport http --scope user capital-os ${endpoint} --header "Authorization: Bearer ${made.secret}"` : '';
   return (
@@ -74,7 +70,7 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
             <option value="365">in a year</option>
           </select>
         </label>
-        {vehicles.length > 1 && !SYNC_USE[preset] && (
+        {vehicles.length > 1 && !syncToken && (
           <fieldset className={s.row}>
             <legend>Vehicles</legend>
             {vehicles.map((v) => <label key={v.id}><input type="checkbox" name="vehicle" value={v.id} /> {v.name}</label>)}
@@ -88,11 +84,12 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
         <div className={s.secret} role="status">
           <p style={{ margin: '0 0 6px' }}><b>{made.label}</b> — copy it now; it is not shown again.</p>
           <code className={s.code}>{made.secret}</code>
-          <p style={{ margin: '10px 0 6px' }}>{keep ? 'Keep it in the Mac’s Keychain: ask Claude on the Mac to store it, or run this; a popup asks for the token, hidden as you paste:'
-            : preset.startsWith('outreach') ? 'Try it (in a terminal):' : 'Connect Claude Code (in a terminal):'}</p>
-          <code className={s.code}>{command}</code>
-          {keep && <p style={{ margin: '10px 0 0' }} className="muted">Then <span className="mono">{keep.script}</span> reads it from there.</p>}
-          <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => void navigator.clipboard?.writeText(command)}>Copy the command</button>
+          {syncToken && <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => void navigator.clipboard?.writeText(made.secret)}>Copy the token</button>}
+          {command && <>
+            <p style={{ margin: '10px 0 6px' }}>{preset.startsWith('outreach') ? 'Try it (in a terminal):' : 'Connect Claude Code (in a terminal):'}</p>
+            <code className={s.code}>{command}</code>
+            <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => void navigator.clipboard?.writeText(command)}>Copy the command</button>
+          </>}
         </div>
       )}
     </>
