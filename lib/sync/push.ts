@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { copyFile, link, mkdir, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, link, mkdir, readdir, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { config } from '@/config/deployment';
 import { isLiveServer } from '@/config/ports';
@@ -78,6 +78,13 @@ async function prospectsProblems(bundle: PushBundle, db: Db, caller: SyncCaller)
   return out;
 }
 
+/** Earlier versions of a finding the server held and set aside when a push or cloud run replaced it. */
+async function earlierVersions(enrich: string, key: string): Promise<Array<{ facts?: unknown[] }>> {
+  const runs = await readdir(join(enrich, 'inbox')).catch(() => [] as string[]);
+  const found = await Promise.all(runs.map((run) => readJson(join(enrich, 'inbox', run, 'replaced', 'raw', `${key}.json`))));
+  return found.filter((x): x is { facts?: unknown[] } => !!x && typeof x === 'object');
+}
+
 /** What the server holds that the push would contradict. */
 async function serverProblems(bundle: PushBundle, enrich: string): Promise<Rejection[]> {
   const out: Rejection[] = [];
@@ -89,8 +96,13 @@ async function serverProblems(bundle: PushBundle, enrich: string): Promise<Rejec
       const problems: string[] = [];
       for (const [r, row] of (f.content as Array<{ key: string }>).entries()) {
         const original = await readJson(join(enrich, 'raw', `${row.key}.json`));
-        if (original === undefined) { problems.push(`row ${r}: the server has no finding ${row.key} to review; push its W1 first`); continue; }
-        problems.push(...factReviewProblems(row, original as { facts?: unknown[] }).map((p) => `row ${r}: ${p} (against the server's finding)`));
+        if (original === undefined) { problems.push(`row ${r + 1}: the server has no finding ${row.key} to review; push its W1 first`); continue; }
+        const live = factReviewProblems(row, original as { facts?: unknown[] });
+        // A review grades a finding as it was before its W1c correction. If the corrected finding is already live
+        // (pushed earlier, 7 Oct 2026), the review is checked against a version the server set aside under
+        // inbox/<run>/replaced/; one it actually held is enough.
+        if (live.length && (await earlierVersions(enrich, row.key)).some((v) => !factReviewProblems(row, v).length)) continue;
+        problems.push(...live.map((p) => `row ${r + 1}: ${p} (against the server's finding)`));
       }
       if (problems.length) out.push({ path: f.path, problems });
       continue;

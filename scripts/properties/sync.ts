@@ -196,6 +196,18 @@ export async function syncProperties(check: Check, db: Db) {
       && w1c.status === 201 && w1c.body.replaced === 1 && JSON.parse(replacedCopy || '{}').researched?.corrected === undefined
       && reviewFile.trim().split('\n').length === 1 && queued.length === 2,
       `older ${older.status}, same date ${sameDate.status}, bad review ${wrongCount.status}, W1c ${w1c.status} replacing ${w1c.body.replaced}`);
+    // A review of a finding whose correction is already live is graded against the version the server set aside (7 Oct 2026).
+    const two = finding('sync-c', '2026-09-30'); two.facts = [two.facts[0]!, { ...two.facts[0]!, field: 'role' }];
+    const reviewC = (facts: number) => [{ key: 'sync-c', identity: 'holds', identityNote: '', facts: Array.from({ length: facts }, (_, i) => ({ i, grade: 'supported', note: 'invented' })),
+      counts: { supported: facts, partly: 0, notSupported: 0, someoneElse: 0, unavailable: 0 } }];
+    const cut = finding('sync-c', '2026-09-30', { researched: { at: '2026-09-30', by: 'props', workflow: 'W1', version: '1.50', corrected: [{ at: '2026-10-02', by: 'props', what: 'invented' }] } });
+    const w1C = await accept(push.secret, { workflow: 'W1', files: [{ path: 'raw/sync-c.json', content: two }] });
+    const firstC = await accept(push.secret, { workflow: 'W1c', files: [{ path: 'fact-review-92a.jsonl', content: reviewC(2) }, { path: 'raw/sync-c.json', content: cut }] });
+    const laterC = await accept(push.secret, { workflow: 'W1c', files: [{ path: 'fact-review-92b.jsonl', content: reviewC(2) }] });
+    const neverC = await accept(push.secret, { workflow: 'W1c', files: [{ path: 'fact-review-92c.jsonl', content: reviewC(3) }] });
+    check('SYNC push: a review of a finding already corrected on the server is checked against the version it set aside, and a count no version had is refused, by a 1-based row',
+      w1C.status === 201 && firstC.status === 201 && laterC.status === 201 && neverC.status === 422 && String(neverC.body.rejected?.[0]?.problems).includes('row 1:'),
+      `W1 ${w1C.status}, first review ${firstC.status}, later review ${laterC.status}, wrong count ${neverC.status}: ${String(neverC.body.rejected?.[0]?.problems).slice(0, 200)}`);
     const audits = await auditOf(push.token.tokenId);
     const calls = audits.filter((a) => a.action === 'mcp.call' && a.detail.tool === 'sync_push');
     const outcomes = calls.map((a) => a.detail.outcome);
