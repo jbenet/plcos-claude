@@ -119,8 +119,11 @@ export function checkBundle(input: unknown, maxFiles: number): { bundle: PushBun
 
 /** When a file was last written by a workflow: a finding's reading or latest correction, a strategy's writing or latest revision. */
 export function writtenAt(content: unknown): number | null {
-  const c = content as { researched?: { at?: string; corrected?: Array<{ at?: string }> }; made?: { at?: string; revised?: Array<{ at?: string }> } } | null;
-  const dates = [c?.researched?.at, ...(c?.researched?.corrected ?? []).map((x) => x?.at), c?.made?.at, ...(c?.made?.revised ?? []).map((x) => x?.at)]
+  const c = content as { researched?: { at?: string; corrected?: unknown }; made?: { at?: string; revised?: unknown } } | null;
+  // A log that is one entry, not a list, still dates the file (7 Oct 2026: a server copy whose log was not a list made
+  // every push touching it a 500).
+  const log = (x: unknown) => (Array.isArray(x) ? x : x && typeof x === 'object' ? [x] : []) as Array<{ at?: unknown } | null>;
+  const dates = [c?.researched?.at, ...log(c?.researched?.corrected).map((x) => x?.at), c?.made?.at, ...log(c?.made?.revised).map((x) => x?.at)]
     .map((d) => (typeof d === 'string' ? Date.parse(d) : NaN)).filter(Number.isFinite);
   return dates.length ? Math.max(...dates) : null;
 }

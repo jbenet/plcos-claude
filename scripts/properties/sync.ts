@@ -25,7 +25,7 @@ import { openPostgres } from '../../lib/db/postgres';
 import { config } from '../../config/deployment';
 import { readRuns } from '../../lib/workflows/ledger';
 import { syncGuard } from '../../lib/sync/auth';
-import { bundleHash } from '../../lib/sync/bundle';
+import { bundleHash, writtenAt } from '../../lib/sync/bundle';
 import { cutoverExclusions, filesToCarry } from '../../lib/sync/files';
 import { acceptPush } from '../../lib/sync/push';
 import { snapshotResponse } from '../../lib/sync/snapshot';
@@ -60,6 +60,13 @@ export async function syncProperties(check: Check, db: Db) {
   const { GET } = await import('../../app/api/sync/snapshot/route');
   const { POST } = await import('../../app/api/sync/push/route');
   const { POST: MCP } = await import('../../app/api/mcp/route');
+  {
+    // 7 Oct 2026: a server copy whose log was one entry, not a list, made every push touching it a 500.
+    const one = writtenAt({ made: { at: '2026-10-01', revised: { at: '2026-10-05' } } }), text = writtenAt({ made: { at: '2026-10-01', revised: 'invented' } });
+    const list = writtenAt({ researched: { at: '2026-10-01', corrected: [{ at: '2026-10-03' }] } });
+    check('SYNC push: a file is dated by its log whether the log is a list or one entry, and a log of the wrong kind dates nothing',
+      one === Date.parse('2026-10-05') && text === Date.parse('2026-10-01') && list === Date.parse('2026-10-03'), `one entry ${one}; text ${text}; list ${list}`);
+  }
   const base = 'http://localhost:3119';
   const get = (secret: string | null, query = '', headers: Record<string, string> = {}) =>
     GET(new Request(`${base}/api/sync/snapshot${query}`, { headers: { ...(secret ? { authorization: `Bearer ${secret}` } : {}), ...headers } }));

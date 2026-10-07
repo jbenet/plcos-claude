@@ -280,3 +280,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [The our-side tier counts only the team and our organizations; "Personal …" is a placeholder; overdue steps are counted](entries/pin-team-only.md)
 - [Lapsed parks look again by rule](entries/lapsed-parks.md)
 - [An intake rule's provenance note stales nothing](entries/rule-context.md)
+- [A push no longer fails on a file whose log is one entry](entries/push-log-shape.md)
