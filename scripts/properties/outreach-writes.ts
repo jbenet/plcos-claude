@@ -145,7 +145,7 @@ export async function outreachWriteProperties(check: Check, db: Db) {
 
   // ── contacts ──────────────────────────────────────────────────────────────────────────
   const personE = await entity('Invented Outreach Person', 'person');
-  await pursuit(personE, fund.id, 'selected');
+  const personP = await pursuit(personE, fund.id, 'selected');
   await db.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body)
     values ('affinity:props-outreach', 'Invented Affinity record', 'crm', 'affinity', current_date, 'weak', 'Invented', '') on conflict do nothing`);
   await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'old@invented-person.example', 'affinity:props-outreach', current_date, 'medium')`, [personE]);
@@ -160,4 +160,12 @@ export async function outreachWriteProperties(check: Check, db: Db) {
     c1.status === 200 && c1.json.data.kept?.[0]?.source === 'affinity' && c2.status === 200 && cOther.status === 403
     && affinityKept?.superseded === false && gmail.length === 2 && gmail.filter((c) => !c.superseded).length === 1 && gmail.every((c) => c.verified && c.value === 'new@invented-person.example'),
     `first ${c1.status}${c1.json?.error ? ` (${c1.json.error})` : ''} (kept ${JSON.stringify(c1.json?.data?.kept)}), again ${c2.status}, confirmed by someone else ${cOther.status}; Affinity's ${affinityKept?.superseded ? 'OVERWRITTEN' : 'kept'}; gmail claims ${gmail.length}, current ${gmail.filter((c) => !c.superseded).length}`);
+  // JuanMail holds pursuit ids (7 Oct 2026): the pursuit names the LP instead of the entity; one of the two, never both.
+  const byPursuit = await post('contacts', { pursuitId: personP, email: 'pursuit@invented-person.example', source: 'gmail', confirmedBy: 'juan' });
+  const bothIds = await post('contacts', { pursuitId: personP, entityId: personE, email: 'both@invented-person.example', source: 'gmail', confirmedBy: 'juan' });
+  const neither = await post('contacts', { email: 'neither@invented-person.example', source: 'gmail', confirmedBy: 'juan' });
+  const unknownPursuit = await post('contacts', { pursuitId: '00000000-0000-4000-8000-000000000000', email: 'none@invented-person.example', source: 'gmail', confirmedBy: 'juan' });
+  check('Outreach writes: /contacts takes a pursuitId in place of the entityId and records the address on that LP; both, neither or an unknown pursuit is refused',
+    byPursuit.status === 200 && byPursuit.json.data.entityId === personE && bothIds.status === 400 && neither.status === 400 && unknownPursuit.status === 404,
+    `pursuit ${byPursuit.status}${byPursuit.json?.error ? ` (${byPursuit.json.error})` : ''} → ${byPursuit.json?.data?.entityId === personE ? 'that LP' : 'ANOTHER'}; both ${bothIds.status}; neither ${neither.status}; unknown ${unknownPursuit.status}`);
 }

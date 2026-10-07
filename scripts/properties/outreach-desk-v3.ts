@@ -117,7 +117,7 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
 
     // ── top_connectors: first hop or deeper, reachableDirectly, firstHopOnly ─────────────────
     type Conn = { entityId: string; lps: number; asFirstHop: number; asDeeperHop: number; reachableDirectly: boolean; asksThisQuarter: number | null;
-      lastAsk: { on: string; replied: boolean | null; basis: string } | null; examplePursuitIds: string[] };
+      lastAsk: { on: string; replied: boolean | null; basis: string } | null; examplePursuitIds: string[]; intros?: import("../../lib/outreach/connectors").IntroHistory["intros"] };
     const listed = await rest(oneTok, 'connectors', { vehicle: V1.slug });
     const firstOnly = await rest(oneTok, 'connectors', { vehicle: V1.slug, firstHopOnly: '1' });
     const firstOnlyMcp = await mcp(oneMcp, 'top_connectors', { vehicle: V1.slug, firstHopOnly: true });
@@ -295,6 +295,12 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
       cA?.asksThisQuarter === 1 && cA.lastAsk?.on === lastOn && cA.lastAsk.replied === true && /trace/i.test(cA.lastAsk.basis)
       && cB?.asksThisQuarter === 0 && cB.lastAsk === null && find(targets.json?.data ? { connectors: [targets.json.data.connector] } : null, first)?.asksThisQuarter === 1,
       `first hop: ${cA?.asksThisQuarter} this quarter, last ${cA?.lastAsk?.on} (replied ${cA?.lastAsk?.replied}, ${cA?.lastAsk?.basis}); second: ${cB?.asksThisQuarter}, last ${JSON.stringify(cB?.lastAsk)}`);
+
+    // ── Intro outcomes per connector (JuanMail, 7 Oct 2026) ─────────────────────────────────
+    check('Outreach desk v3: a connector row says how many intro asks were made through them (made ones only, all time), which of those LPs are now Committed, and the last one (who, when, days to the first meeting since, or null)',
+      cA?.intros?.made === 2 && cA.intros.committed.length === 0 && cA.intros.last?.name === 'Invented V3 LP Near' && cA.intros.last.on === lastOn
+        && cA.intros.last.daysToMeeting === null && cA.intros.last.pursuitId === pNear && cB?.intros?.made === 0 && cB.intros.last === null,
+      `${JSON.stringify(cA?.intros)} / ${JSON.stringify(cB?.intros)}`);
 
     // ── One message, several LPs ───────────────────────────────────────────────────────────
     const rw = await token(juan, [OUTREACH_READ, OUTREACH_WRITE]);

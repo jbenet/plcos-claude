@@ -249,8 +249,10 @@ export async function requestTicket(ctx: DeskContext, raw: Record<string, unknow
 // ── POST /api/outreach/contacts ─────────────────────────────────────────────────────────
 
 export const contactInput = z.object({
-  entityId: uuid, email, source: z.literal('gmail'), confirmedBy: z.string().min(1).max(254), confirmedAt: isoTime.optional(), idempotencyKey: key.optional(),
-}).strict();
+  // The person or organisation, or the LP's pursuit (JuanMail, 7 Oct 2026: it holds pursuit ids): one of the two.
+  entityId: uuid.optional(), pursuitId: uuid.optional(),
+  email, source: z.literal('gmail'), confirmedBy: z.string().min(1).max(254), confirmedAt: isoTime.optional(), idempotencyKey: key.optional(),
+}).strict().refine((a) => !!a.entityId !== !!a.pursuitId, 'Give entityId or pursuitId, one of the two.');
 
 /** The vehicles an entity is on: its own pursuits, or an organisation's whose contact it is. */
 async function entityVehicles(entityId: string, q: Queryable): Promise<string[]> {
@@ -276,7 +278,12 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
       throw new OutreachRefused(403, 'confirmedBy is the token\'s owner: a desk confirms addresses only for the person it acts as.');
     }
     const db = await getDb();
-    const vehicles = await entityVehicles(a.entityId, db);
+    if (a.pursuitId) {
+      const p = await db.one<{ entity_id: string }>('select entity_id::text from strategy.active_pursuit where pursuit_id = $1::uuid', [a.pursuitId]);
+      if (!p) throw new OutreachRefused(404, 'No such pursuit on your vehicles.');
+      a.entityId = p.entity_id;
+    }
+    const vehicles = await entityVehicles(a.entityId!, db);
     if (!vehicles.some((v) => can(ctx.env.principal, 'mutate', { vehicle: v }))) throw new OutreachRefused(404, 'No such person or organisation on your vehicles.');
     const at = a.confirmedAt ? new Date(a.confirmedAt) : new Date();
     if (at.getTime() > Date.now() + 5 * 60_000) throw new OutreachRefused(400, 'confirmedAt is in the future.');
