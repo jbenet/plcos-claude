@@ -421,7 +421,9 @@ queue's checks, a restriction among them — and records an SPV's coordination c
   "coordination": { "choice": "send_separately", "followUpOn": "2026-10-18" }, "idempotencyKey": "…optional" }
 ```
 
-- The queue's checks run first; a blocking one refuses and opens nothing. With a material, the wrap check runs too
+- The queue's checks run first; a blocking one refuses and opens nothing, and so does one marked `agentOnly`. Today
+  that is only `wrap` when the matrix has no rule for the vehicle: shown to a person, never a hold for them (Juan,
+  7 Oct 2026: "Just remove these limitations, i did not ask for these limitations for human apps"). With a material, the wrap check runs too
   (`content.proposeDeskSend`), and its `content.send` row keeps "wrong-wrap sends = 0" counting it.
 - The ticket says exactly what it authorizes: one email from the owner's own mailbox, to these recipients, about this
   vehicle, once; it excludes any other recipient, a second send, other material, and statements about other
