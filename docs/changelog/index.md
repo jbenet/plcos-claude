@@ -262,3 +262,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Top connectors lists people, says why a score is 0, and plans faster](entries/outreach-connectors-people.md)
 - [The mail desk's reads stop scanning whole tables](entries/outreach-alias-ids.md)
 - [Every LP and its addresses in one light read](entries/outreach-lp-contacts.md)
+- [Routes say how good they are, and search works over REST](entries/outreach-route-quality.md)
