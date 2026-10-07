@@ -5,6 +5,8 @@
 #
 #   bash scripts/cloud-entity-type.sh list                       pipeline people named like an organisation we hold,
 #                                                                with any person evidence, to data/real/entity-types.tsv
+#   bash scripts/cloud-entity-type.sh show <id>                  one record by its pipeline or entity id (or its first 8+
+#                                                                characters), to data/real/entity-type-<id>.json
 #   bash scripts/cloud-entity-type.sh org <entity id> 'reason'   marks that record an organisation (local, reversible)
 #   bash scripts/cloud-entity-type.sh person <entity id> 'reason'
 #   bash scripts/cloud-entity-type.sh reverse <correction id> 'reason'
@@ -45,6 +47,13 @@ if (mode === "list") {
   fs.writeFileSync(out, ["entity\tname\tpipelines\tperson evidence\torganisations", ...rows].join("\n") + "\n");
   const bare = a.items.filter((c) => !c.evidence.length).length;
   console.log(`[cloud-entity-type] ${a.items.length} listed, ${bare} with no person evidence: ${out}`);
+} else if (mode === "show") {
+  const fs = require("fs"), path = require("path");
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  fs.writeFileSync(out, JSON.stringify(a.records, null, 2) + "\n");
+  console.log(`[cloud-entity-type] ${a.records.length} record(s): ${out}`);
+  for (const r of a.records) console.log([r.entityId, r.type, `${r.pursuits.length} pipeline(s)`, `${r.corrections.filter((c) => !c.reversedAt).length} active correction(s)`,
+    `${r.organizations.length} same-name organisation(s)`, `evidence: ${r.evidence.join(",") || "none"}`, r.mergedInto ? `merged into ${r.mergedInto}` : ""].join("\t"));
 } else if (mode === "reverse") console.log(`[cloud-entity-type] ${a.reversed ? "reversed" : "already reversed"}`);
 else console.log(`[cloud-entity-type] ${a.correctionId ? `corrected: ${a.correctionId}` : "already that type"}`);
 ' "$code" "$2" "${3:-}"
@@ -59,6 +68,7 @@ post() {
 
 case "${1:-}" in
   list) [ $# -eq 1 ] || usage; answer "$(call -w '\n%{http_code}' "$TO/api/sync/entity-type")" list "$OUT" ;;
+  show) [ $# -eq 2 ] && [[ "$2" =~ ^[0-9a-fA-F-]{8,36}$ ]] || usage; answer "$(call -w '\n%{http_code}' "$TO/api/sync/entity-type?id=$2")" show "data/real/entity-type-$2.json" ;;
   org|person) [ $# -eq 3 ] && [[ "$2" =~ $UUID ]] && [ -n "$3" ] || usage; post correct "$2" "$1" "$3" ;;
   reverse) [ $# -eq 3 ] && [[ "$2" =~ $UUID ]] && [ -n "$3" ] || usage; post reverse "$2" "" "$3" ;;
   *) usage ;;

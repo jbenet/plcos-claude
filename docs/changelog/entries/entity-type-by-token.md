@@ -10,3 +10,8 @@ on its own when no person evidence held it back. A person could not apply it, th
 - **By an Admin's token**: `GET /api/sync/entity-type` returns the same list; `POST` corrects a record (`correct`,
   with a reason and a stable request key) or reverses a correction. `scripts/cloud-entity-type.sh list | org |
   person | reverse` wraps it on the Mac and writes the list to `data/real/entity-types.tsv`, printing only counts.
+
+**Later the same day:** the list also catches a firm whose name differs only in punctuation or a legal form
+("Cedar Capital, LLC" and "Cedar Capital"), marked as a loose match. `GET /api/sync/entity-type?id=` (and
+`scripts/cloud-entity-type.sh show <id>`) looks up one record by its pipeline or entity id, or their first 8
+characters: its type, pipelines, source records, type corrections and same-name organisations.

@@ -5,9 +5,9 @@ import { withRoute } from '@/lib/authz/route';
  */
 export const dynamic = 'force-dynamic';
 
-export const GET = withRoute('app/api/sync/entity-type/route.ts#GET', async function(_request: Request, context: { caller: import('@/lib/sync/auth').SyncCaller }) {
+export const GET = withRoute('app/api/sync/entity-type/route.ts#GET', async function(request: Request, context: { caller: import('@/lib/sync/auth').SyncCaller }) {
   const { readEntityTypes } = await import('@/lib/sync/entity-type');
-  const { status, body } = await readEntityTypes(context.caller);
+  const { status, body } = await readEntityTypes(context.caller, undefined, request);
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 });
 

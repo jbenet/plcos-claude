@@ -2,7 +2,7 @@ import { config } from '@/config/deployment';
 import { isLiveServer } from '@/config/ports';
 import { getDb, type Db } from '@/lib/db';
 import { isEntityKey } from '@/lib/enrich/connection-check';
-import { pipelinePeopleNamedLikeOrgs } from '@/lib/enrich/entity-types';
+import { lookupEntityType, pipelinePeopleNamedLikeOrgs } from '@/lib/enrich/entity-types';
 import { correctEntityType, reverseEntityTypeCorrection } from '@/modules/identity/entity-type';
 import { auditSync, type SyncCaller } from './auth';
 import type { PushAnswer } from './push';
@@ -13,6 +13,8 @@ import type { PushAnswer } from './push';
  *
  *   GET                                                    → 200 { items: TypeCandidate[] } pipeline people named like
  *                                                            an organisation we hold, with any person evidence found
+ *   GET ?id=<pipeline or entity id, or its first 8+ chars>  → 200 { records: TypeLookup[] } that record's entity, type,
+ *                                                            pipelines, sources, corrections and same-name organisations
  *   POST { operation: 'correct', entityId, type, reason, requestKey } → 200 { correctionId } (null: already that type)
  *   POST { operation: 'reverse', correctionId, reason }    → 200 { reversed }
  *
@@ -21,7 +23,18 @@ import type { PushAnswer } from './push';
  */
 const refusedHere = () => config.data.profile === 'real' && (Boolean(config.data.copyTakenAt) || !isLiveServer());
 
-export async function readEntityTypes(caller: SyncCaller, db?: Db): Promise<PushAnswer> {
+export async function readEntityTypes(caller: SyncCaller, db?: Db, request?: Request): Promise<PushAnswer> {
+  const id = request ? new URL(request.url).searchParams.get('id') : null;
+  if (id !== null) {
+    try {
+      const records = await (db ?? await getDb()).transaction(tx => lookupEntityType(tx, id));
+      await auditSync(caller, 'identity', 'ok', { op: 'show', count: records.length });
+      return { status: 200, body: { ok: true, records } };
+    } catch (error) {
+      await auditSync(caller, 'identity', 'invalid', { op: 'show', reason: 'id' });
+      return { status: 400, body: { ok: false, error: error instanceof Error ? error.message : 'Lookup failed.' } };
+    }
+  }
   const items = await (db ?? await getDb()).transaction(tx => pipelinePeopleNamedLikeOrgs(tx));
   await auditSync(caller, 'identity', 'ok', { op: 'list', count: items.length });
   return { status: 200, body: { ok: true, items } };
