@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { config } from '@/config/deployment';
 import { pipelineData } from '@/lib/authz/read/pipeline';
 import { planRoutes } from '@/lib/authz/read/network';
-import { getDb } from '@/lib/db';
+import { getDb, type Db } from '@/lib/db';
 import { routeContacts } from '@/lib/mcp/reads';
 import type { AppUser, Vehicle } from '@/modules/platform';
 import type { RouteStrength } from '@/modules/network';
@@ -26,13 +26,14 @@ import { deskVehicle, OutreachRefused } from './reads';
  *     ask directly. Without it, someone the team reaches only through another person is listed, reachableDirectly: false.
  *   - asksThisQuarter and lastAsk: the intro asks recorded as made to that person (coordination.ask, the ask cap's own
  *     record), and a reply from the mail trace or the ask's outcome. Unrecorded asks are not counted (docs/27 §4b).
- *   - Planning stops at config.outreach.connectorsBudgetMs and says how many LPs it inspected (rule 7).
+ *   - An answer waits for planning up to config.outreach.connectorsBudgetMs and says how many LPs it inspected (rule 7);
+ *     the plan is kept per vehicle and principal until its inputs change (planOpen), and ifChanged skips a repeat answer.
  */
 
 const EXAMPLES = 3; // GUESS — enough for the desk to see who they reach, not a list to work from.
 const MAX_CONNECTORS = 100;
 
-export interface ConnectorArgs { vehicle: string; limit?: number; firstHopOnly?: boolean; entityId?: string; cursor?: string }
+export interface ConnectorArgs { vehicle: string; limit?: number; firstHopOnly?: boolean; entityId?: string; cursor?: string; ifChanged?: string }
 /** Over MCP the answer must fit the response limit: a target page is cut from its end and nextCursor follows. */
 export interface ConnectorFit { maxBytes?: number }
 
@@ -40,26 +41,83 @@ type PRow = Awaited<ReturnType<typeof pipelineData>>['rows'][number];
 interface Usable { score: number | null; band: RouteStrength | null; ids: string[]; names: string[]; hops: number }
 interface Planned { r: PRow; routes: Usable[] }
 
-/** Plan the routes to a vehicle's open LPs, highest priority first, within the time budget. */
+/**
+ * The revision every input of a plan follows: network.read_revision moves on any write to the tables routes and the
+ * pipeline read (pursuits, asks, restrictions, edges, entities…), network.route_revision on a graph rebuild, and the
+ * date for what is dated (ask caps, warmth). One row read, never a scan.
+ */
+async function planRevision(db: Db): Promise<string> {
+  const row = await db.one<{ revision: string }>(`select r.revision::text || ':' || rr.revision::text || ':' ||
+      rr.epoch::text || ':' || current_date::text as revision from network.read_revision r, network.route_revision rr
+    where r.singleton and rr.singleton`);
+  return row!.revision;
+}
+
+/**
+ * One vehicle's plan for one principal (licensed evidence is redacted per person) at one revision: planned once, in
+ * the background, LP by LP, highest priority first, and kept until anything it read changes (JuanMail, 7 Oct 2026:
+ * every call planned again and ran into the 15 s budget). A call waits for it up to the budget and answers with what
+ * is planned by then; the planning carries on, so the next call finds more, and once done, all of it at once. A job
+ * whose revision is superseded stops at its next LP.
+ */
+interface PlanJob { key: string; revision: string; asOf: string | undefined; open: PRow[]; planned: Planned[]; notCounted: number; done: Promise<void>; finished: boolean }
+// Per database, as the route cache is: a test's fresh database, or a restore, never meets another's plan.
+const jobsByDb = new WeakMap<Db, Map<string, PlanJob>>();
+// GUESS — vehicles × people asking; a principal's job is replaced, never added to, as revisions move.
+const MAX_JOBS = 32;
+
+function startPlan(jobs: Map<string, PlanJob>, user: AppUser, v: Vehicle, key: string, revision: string): PlanJob {
+  const job = { key, revision, asOf: undefined, open: [], planned: [], notCounted: 0, finished: false } as unknown as PlanJob;
+  job.done = (async () => {
+    const { rows, asOf } = await pipelineData(v.id);
+    job.asOf = asOf;
+    job.open = rows.filter((r) => r.vehicleId === v.id && r.status !== 'passed')
+      .sort((x, y) => (y.priority ?? -1) - (x.priority ?? -1) || (x.id < y.id ? -1 : 1));
+    for (const r of job.open) {
+      if (jobs.get(key) !== job) return;
+      const search = await planRoutes(user.handle, r.entityId, 3, v.kind, 'team', undefined, { vehicleId: v.id });
+      const routes = search?.routes ?? [];
+      const usable = routes.filter((x) => x.verdict === 'recommend');
+      job.notCounted += routes.length - usable.length;
+      job.planned.push({ r, routes: usable.map((x) => ({ score: x.score?.value ?? null, band: x.score?.band ?? null,
+        ids: x.connectorIds ?? [], names: x.connectorNames ?? [], hops: x.hops.length })) });
+    }
+    job.finished = true;
+  })();
+  // A failed plan is not kept: the next call plans again.
+  job.done.catch(() => { if (jobs.get(key) === job) jobs.delete(key); });
+  jobs.set(key, job);
+  while (jobs.size > MAX_JOBS) jobs.delete(jobs.keys().next().value!);
+  return job;
+}
+
+/** Plan the routes to a vehicle's open LPs, highest priority first: the kept plan, or as much as the time budget allows. */
 async function planOpen(user: AppUser, v: Vehicle) {
-  const { rows, asOf } = await pipelineData(v.id);
-  // Highest priority first, so a cut-off budget has inspected the LPs that matter most.
-  const open = rows.filter((r) => r.vehicleId === v.id && r.status !== 'passed')
-    .sort((x, y) => (y.priority ?? -1) - (x.priority ?? -1) || (x.id < y.id ? -1 : 1));
-  const started = Date.now();
-  const planned: Planned[] = [];
-  let notCounted = 0;
-  for (const r of open) {
-    if (Date.now() - started > config.outreach.connectorsBudgetMs) break;
-    const search = await planRoutes(user.handle, r.entityId, 3, v.kind, 'team', undefined, { vehicleId: v.id });
-    const routes = search?.routes ?? [];
-    const usable = routes.filter((x) => x.verdict === 'recommend');
-    notCounted += routes.length - usable.length;
-    planned.push({ r, routes: usable.map((x) => ({ score: x.score?.value ?? null, band: x.score?.band ?? null,
-      ids: x.connectorIds ?? [], names: x.connectorNames ?? [], hops: x.hops.length })) });
-  }
-  const complete = planned.length === open.length;
-  return { asOf, open, planned, notCounted, complete };
+  const db = await getDb();
+  let jobs = jobsByDb.get(db);
+  if (!jobs) { jobs = new Map(); jobsByDb.set(db, jobs); }
+  const key = JSON.stringify([v.id, user.handle]);
+  const revision = await planRevision(db);
+  let job = jobs.get(key);
+  if (!job || job.revision !== revision) job = startPlan(jobs, user, v, key, revision);
+  let timer: NodeJS.Timeout | undefined;
+  await Promise.race([job.done, new Promise<void>((done) => { timer = setTimeout(done, config.outreach.connectorsBudgetMs); })])
+    .finally(() => clearTimeout(timer));
+  // A copy: the job keeps planning after this answer is built.
+  const planned = job.planned.slice();
+  const complete = job.finished && planned.length === job.open.length;
+  return { asOf: job.asOf, open: job.open, planned, notCounted: job.notCounted, complete, revision };
+}
+
+/**
+ * The answer's version (docs/27 §4b): a hash of what it says. Pass it back as ifChanged and an answer that would say the
+ * same is replaced by { unchanged: true, version }. Only a complete plan has one: a partial one changes as planning goes on.
+ */
+const versionOf = (data: unknown) => createHash('sha256').update(JSON.stringify(data)).digest('base64url').slice(0, 16);
+function unchangedOr<T extends object>(complete: boolean, ifChanged: string | undefined, data: T): T & { version: string | null } | { unchanged: true; version: string } {
+  const version = complete ? versionOf(data) : null;
+  if (version && ifChanged === version) return { unchanged: true, version };
+  return { ...data, version };
 }
 
 function coverageOf(v: Vehicle, p: { open: PRow[]; planned: Planned[]; notCounted: number; complete: boolean }) {
@@ -69,7 +127,8 @@ function coverageOf(v: Vehicle, p: { open: PRow[]; planned: Planned[]; notCounte
     score: 'Scores are route scores, 0–100: a relative, uncalibrated estimate, never an investment probability.',
     hops: 'The first hop is the first person past the team member on a route — the one the team emails (askFirst). From the PL node, the first hop is reached through the PL network (rule 6).',
     asks: 'asksThisQuarter and lastAsk read the intro asks recorded as made to that person (the routes page\'s record of an ask, and an agent\'s INTRO_ASK linked by email), across every vehicle, this calendar quarter in UTC. An ask emailed without being recorded is not counted.',
-    inspected: p.complete ? `Every open LP (${p.open.length}).` : `${p.planned.length} of ${p.open.length} open LPs, highest priority first, before the time budget ran out. Routes are cached as they are planned, so asking again reaches further.`,
+    inspected: p.complete ? `Every open LP (${p.open.length}).` : `${p.planned.length} of ${p.open.length} open LPs, highest priority first, before the time budget ran out. Planning carries on after this answer, so asking again reaches further.`,
+    kept: 'The plan is kept until a pursuit, route, ask, restriction or entity changes (or the day does), so a repeat call is quick. version is a hash of this answer: pass it back as ifChanged to get { unchanged: true } when nothing it says has changed.',
     note: 'A connector who is not listed may still know them: no supported route in the material inspected is not proof that none exists (rule 7).',
   };
 }
@@ -176,12 +235,12 @@ export async function topConnectors(user: AppUser, a: ConnectorArgs, fit: Connec
   const [c, asks] = await Promise.all([routeContacts(user, v.id, shown), askHistory(shown.map((x) => x.entityId))]);
   return {
     asOf: p.asOf,
-    data: {
+    data: unchangedOr(p.complete, a.ifChanged, {
       vehicle: v.slug, firstHopOnly: firstOnly,
       connectors: shown.map((x) => ({ ...c.at(x), ...(asks.get(x.entityId) ?? { asksThisQuarter: 0, lastAsk: null }) })),
       total: ranked.length, lpsOpen: p.open.length, lpsInspected: p.planned.length, lpsReached: reached, complete: p.complete,
       addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
-    },
+    }),
     coverage: { ...coverageOf(v, p), ...(firstOnly ? { ranking: 'firstHopOnly: only routes on which the connector is the first hop past the team member count; anyone the team reaches only through another person is left out.' } : {}) },
   };
 }
@@ -231,7 +290,7 @@ async function connectorTargets(user: AppUser, a: ConnectorArgs & { entityId: st
   const who = c.at({ entityId, name: name ?? 'Unknown' });
   return {
     asOf: p.asOf,
-    data: {
+    data: unchangedOr(p.complete, a.ifChanged, {
       vehicle: v.slug, firstHopOnly: firstOnly,
       // The name comes from the routes: a connector on no route here is not named (an id is not a way to look anyone up).
       connector: { ...who, name, asFirstHop, asDeeperHop, reachableDirectly: asFirstHop > 0, ...(asks.get(entityId) ?? { asksThisQuarter: 0, lastAsk: null }) },
@@ -240,7 +299,7 @@ async function connectorTargets(user: AppUser, a: ConnectorArgs & { entityId: st
       lpsOpen: p.open.length, lpsInspected: p.planned.length, complete: p.complete,
       addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
       ...(rows.length ? {} : { empty: 'No recommended route through this person to an open LP on this vehicle in the material inspected. That is not proof that none exists (rule 7).' }),
-    },
+    }),
     coverage: {
       ...coverageOf(v, p),
       paging: `${config.outreach.defaultQueueRows} rows by default, at most ${config.outreach.maxQueueRows}; pass nextCursor as cursor for the next page (null at the end). total counts every LP they reach among those inspected.`,

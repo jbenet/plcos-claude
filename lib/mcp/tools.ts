@@ -144,6 +144,7 @@ export const TOOLS: readonly Tool[] = [
       firstHopOnly: z.boolean().optional().describe('Count only routes on which the connector is the first hop past the team member (default false).'),
       entityId: uuid.optional().describe('One connector: list the open LPs they reach on this vehicle instead.'),
       cursor: z.string().min(1).max(400).optional().describe('With entityId: the previous answer\'s nextCursor.'),
+      ifChanged: z.string().min(1).max(40).optional().describe('The previous answer\'s version: if this answer would say the same, it is { unchanged: true, version } instead.'),
     }).strict(),
     // Over MCP a target page must fit the response limit; it is cut from its end and nextCursor follows (docs/27 §4c).
     run: (env, a) => topConnectors(env.principal, a, env.via === 'mcp' ? { maxBytes: config.mcp.maxResponseBytes - 6000 } : {}),

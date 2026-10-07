@@ -258,3 +258,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [The fact check runs in the cloud, and Mac runs are recorded there](entries/cloud-w1c.md)
 - [New feedback wakes project dev](entries/feedback-signal.md)
 - [Slow outreach calls say where their time went](entries/outreach-timing.md)
+- [Top connectors answer at once when nothing changed](entries/outreach-connectors-kept.md)
