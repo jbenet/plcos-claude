@@ -71,6 +71,11 @@ export const norm = (s: string) => s.toLowerCase().replace(/[’'`]/g, '').repla
 
 /** Names so common that sharing them says nothing: not a tie at all. */
 const TOO_COMMON = new Set(['google', 'amazon', 'microsoft', 'meta', 'facebook', 'apple', 'mckinsey', 'goldman sachs', 'morgan stanley', 'jp morgan', 'jpmorgan', 'self employed', 'stealth', 'independent']);
+/**
+ * Not a firm but a placeholder for none (7 Oct 2026: individuals sourced on 27 Sep carry "Personal", which gave each
+ * about 28 "same firm" ties to unrelated LPs). Read on the normalized name, so "(individual) Jane" is "individual jane".
+ */
+const PLACEHOLDER_ORG = /^(?:personal|self|self employed|independent|individual|individual investor|private|private investor|angel|angel investor|retired|none|n a|na|unknown|tbd)$|^individual\b/;
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -415,7 +420,7 @@ function entityConnectionPaths(candidates: Candidate[], findings: Map<string, Fi
     const now = f && (f.identity.match === 'confirmed' || f.identity.match === 'probable') ? f.identity.canonical?.org : null;
     const moved = Boolean(now && c.org && !sameFirm(now, c.org));
     const o = moved ? norm(now!) : c.org ? norm(c.org) : null;
-    if (o && !TOO_COMMON.has(o)) keys.add(`org:${o}`);
+    if (o && !TOO_COMMON.has(o) && !PLACEHOLDER_ORG.test(o)) keys.add(`org:${o}`);
     if (!moved) for (const d of c.domains) if (!FREE.test(d) && !OURS.has(d)) keys.add(`domain:${d}`);
     for (const k of keys) byFirm.set(k, [...(byFirm.get(k) ?? []), c]);
   }
