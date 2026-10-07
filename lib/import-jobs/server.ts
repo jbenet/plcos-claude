@@ -9,9 +9,21 @@ import { createImportJob,failImportJob,IMPORT_FAILURE } from './store';
 import type { ImportJob,ImportKind } from './types';
 
 // Both handles and receipts survive Next module reloads. Workers belong to this process.
-const g=globalThis as typeof globalThis & {__importChildren?:Set<string>;__importProgress?:Map<string,ImportJob>};
+const g=globalThis as typeof globalThis & {__importChildren?:Set<string>;__importProgress?:Map<string,ImportJob>;__importFollowUps?:Map<string,{actor:string;input:Record<string,unknown>}>};
 const children=g.__importChildren??=new Set<string>();
 const progress=g.__importProgress??=new Map<string,ImportJob>();
+// An import asked for while one of its kind runs (a push mid-import, 7 Oct 2026): run once more after it, so the
+// new files are read. In memory: a restart loses it, and the restart's recovery or the next push queues anew.
+const followUps=g.__importFollowUps??=new Map<string,{actor:string;input:Record<string,unknown>}>();
+/** Queue `kind` again when its running job ends, here or after a restart's recovery; one pending run per kind. */
+export function importAfterRunning(kind:ImportKind,actor:string,input:Record<string,unknown>={}):void {followUps.set(kind,{actor,input});}
+async function runFollowUp(db:Db,id:string):Promise<void> {
+  const job=await db.one<Pick<ImportJob,'kind'>>('select kind from platform.import_job where id=$1',[id]);
+  const next=job&&followUps.get(job.kind);
+  if(!job||!next)return;
+  followUps.delete(job.kind);
+  await queueImportJob(db,job.kind as ImportKind,next.actor,next.input).catch(()=>{followUps.set(job.kind,next);});
+}
 function remember(job:ImportJob):void {
   progress.set(job.id,job);
   // Active work stays visible; retain at most thirty completed receipts between polls.
@@ -46,8 +58,8 @@ export function launchImportJob(db:Db,id:string,options?:{demoRoot?:string}):voi
   const stopped=(code:number|null)=>{
     if(didStop)return;didStop=true;
     dispose();children.delete(id);
-    if(code===0){void logStopped(db,id).catch(()=>{});return;}
-    void recordWorkerExit(db,id,'Worker exited before completion. Review committed results before retrying.').then(()=>logStopped(db,id)).catch(()=>{});
+    if(code===0){void logStopped(db,id).then(()=>runFollowUp(db,id)).catch(()=>{});return;}
+    void recordWorkerExit(db,id,'Worker exited before completion. Review committed results before retrying.').then(()=>logStopped(db,id)).then(()=>runFollowUp(db,id)).catch(()=>{});
   };
   try {
     if(db.kind==='pglite') {
@@ -97,6 +109,7 @@ export async function importJobStatus(db:Db):Promise<ImportJob[]> {
     if(job.status==='running'&&Date.now()-new Date(job.heartbeat_at??job.started_at??job.created_at).getTime()>60000) {
       if(db.kind==='postgres'&&config.db.url)await withImportLock(config.db.url,job.kind,()=>failImportJob(db,job.id,'Worker stopped without a completion receipt. Review committed results before retrying.'));
       else if(!children.has(job.id))await recordWorkerExit(db,job.id,'Worker stopped without a completion receipt. Review committed results before retrying.');
+      await runFollowUp(db,job.id);
     }
   }
   return jobs;
