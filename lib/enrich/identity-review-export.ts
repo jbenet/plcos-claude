@@ -9,6 +9,8 @@ export interface IdentityReviewMember {
   sources: Array<{ source: string; externalId: string }>;
   affiliations: Array<{ org: string; role: string }>;
   titles: string[]; personalUrls: string[];
+  /** Domains of the addresses on file (Affinity's person record, non-licensed research claims); never a local part. */
+  emailDomains: string[];
   pursuits: Array<{ vehicle: string; status: string }>;
   counts: { claims: number; paths: number; notes: number };
   createdBy: string[];
@@ -71,7 +73,7 @@ export async function exportIdentityReview(tx: Queryable): Promise<IdentityRevie
   const aliases = entities.map(e => e.id);
   const members = new Map(entities.filter(e => e.id === e.root).map(e => [e.id, {
     entityId: e.id, displayName: clean(e.name), entityType: e.type, sources: [], affiliations: [], titles: [],
-    personalUrls: [], pursuits: [], counts: { claims: 0, paths: 0, notes: 0 }, createdBy: [],
+    personalUrls: [], emailDomains: [], pursuits: [], counts: { claims: 0, paths: 0, notes: 0 }, createdBy: [],
   } as IdentityReviewMember]));
   const member = (id: string) => members.get(roots.get(id) ?? id);
   const sources = await tx.query<{ id: string; source: string; key: string; rule: string }>(`select entity_id::text id,
@@ -140,6 +142,23 @@ export async function exportIdentityReview(tx: Queryable): Promise<IdentityRevie
     if (['title', 'role', 'job_title'].includes(field) && clean(row.value)) m.titles.push(clean(row.value));
     if (['linkedin', 'personal_url', 'bio_url'].includes(field)) { const url = personalUrl(row.value); if (url) m.personalUrls.push(url); }
   }
+  // Email domains (7 Oct 2026): a 22 Sep Affinity person had nothing else to compare with a later import of the same
+  // name, so W13 left most such pairs unresolved. Domain only, from Affinity's own person record and from research claims
+  // not sourced from Dakota (its contact data never reaches an agent's input).
+  const domainOf = (value: unknown) => {
+    const m = typeof value === 'string' ? /^[^\s@]+@([a-z0-9.-]+\.[a-z]{2,})$/i.exec(value.trim()) : null;
+    return m ? m[1]!.toLowerCase() : null;
+  };
+  const affinityPeople = await tx.query<{ id: string; payload: { primaryEmailAddress?: unknown; emailAddresses?: unknown } }>(`select s.entity_id::text id,r.payload
+    from identity.source_record s join sources.raw_record r on r.source='affinity' and r.kind='person' and r.source_id=substr(s.source_id,8)
+    where s.source='affinity' and s.source_id like 'person:%' and s.entity_id=any($1::uuid[])`, [aliases]);
+  for (const row of affinityPeople) for (const e of [row.payload?.primaryEmailAddress, ...(Array.isArray(row.payload?.emailAddresses) ? row.payload.emailAddresses : [])]) {
+    const d = domainOf(e); if (d) member(row.id)!.emailDomains.push(d);
+  }
+  const emailClaims = await tx.query<{ id: string; value: string }>(`select c.entity_id::text id,c.value from research.claim c
+    left join research.source_doc d on d.doc_id=c.source
+    where c.entity_id=any($1::uuid[]) and c.field ~ '(^|\\.)email$' and c.source !~* '^dakota' and coalesce(d.origin,'') !~* 'dakota'`, [aliases]);
+  for (const row of emailClaims) { const d = domainOf(row.value); if (d) member(row.id)!.emailDomains.push(d); }
   const notes = await tx.query<{ id: string; n: number }>(`select entity_id::text id,count(*)::int n from research.note
     where entity_id=any($1::uuid[]) group by entity_id`, [aliases]);
   for (const row of notes) member(row.id)!.counts.notes += row.n;
@@ -176,7 +195,7 @@ export async function exportIdentityReview(tx: Queryable): Promise<IdentityRevie
   for (const p of pursuits) member(p.id)!.pursuits.push({ vehicle: clean(p.vehicle), status: clean(p.status) });
   for (const m of members.values()) {
     m.sources = unique(m.sources); m.affiliations = unique(m.affiliations); m.pursuits = unique(m.pursuits);
-    m.titles = unique(m.titles).sort(); m.personalUrls = unique(m.personalUrls).sort(); m.createdBy = unique(m.createdBy).sort();
+    m.titles = unique(m.titles).sort(); m.personalUrls = unique(m.personalUrls).sort(); m.emailDomains = unique(m.emailDomains).sort(); m.createdBy = unique(m.createdBy).sort();
   }
   const groups = new Map<string, IdentityReviewGroup>();
   for (const group of ambiguous) {

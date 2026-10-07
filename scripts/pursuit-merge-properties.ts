@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { withDb } from '../lib/db';
 import { importFindings } from '../lib/enrich/import';
 import { latestRun } from '../modules/sources';
-import { consolidatePursuits, pursuitReferences, reversePursuitMerge } from '../modules/strategy/merge';
+import { consolidatePursuits, consolidatePursuitsInTransaction, pursuitReferences, reversePursuitMerge } from '../modules/strategy/merge';
 import { auditFor } from '../modules/platform';
 import { getPursuit, statusCounts } from '../modules/strategy';
 import type { PursuitStatus } from '../modules/strategy/types';
@@ -139,6 +139,25 @@ export async function pursuitMergeProperties(check: Check, db: Db) {
     } finally {
       await rm(scratch,{recursive:true,force:true});
       if (importRunId !== null) await db.query('delete from sources.sync_run where id=$1',[importRunId]);
+    }
+
+    if (db.kind === 'postgres') {
+      // 7 Oct 2026: consolidation inside an import's long transaction must not hold the app's audit inserts.
+      await group([{status:'new'},{status:'selected'}]);
+      let appended = false, detail = 'not reached';
+      await db.transaction(async (tx) => {
+        await consolidatePursuitsInTransaction(tx, actor);
+        try {
+          await db.transaction(async (other) => {
+            await other.exec("set local lock_timeout = '2s'");
+            await other.query(`insert into platform.audit_log(actor_id,action,subject_type,detail) values($1,'props.audit_during_merge','props','{}'::jsonb)`, [actor]);
+            throw new Error('rollback');
+          });
+        } catch (e) { appended = (e as Error).message === 'rollback'; detail = (e as Error).message.slice(0, 120); }
+        throw new Error('rollback merge');
+      }).catch((e) => { if ((e as Error).message !== 'rollback merge') throw e; });
+      check('pursuit merge inside an open transaction leaves audit inserts elsewhere unblocked',
+        appended, appended ? 'Another connection appended an audit row while the merge transaction was open.' : detail);
     }
   } finally {
     await db.query('delete from governance.approval_ticket where subject_type=\'pursuit\' and subject_id=any($1::uuid[])',[pursuits]);

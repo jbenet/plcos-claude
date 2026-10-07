@@ -91,6 +91,12 @@ export async function identityReviewProperties(check: Check, db: Db) {
     const emailNames = [await entity('Email Name', 'person', 'w3_person'), await entity('Email Name', 'person', 'warehouse')];
     await db.query('update identity.entity set display_name=$2 where entity_id=any($1::uuid[])',
       [emailNames, 'invented.name@example.com']);
+    // Email domains (7 Oct 2026): Affinity's person record and research claims give domains; Dakota-sourced claims give none.
+    await db.query(`insert into sources.raw_record(source,kind,source_id,payload_hash,payload) values('affinity','person',$1,$2,$3::jsonb)`,
+      [`privacy-${tag}-a`, `invented-hash-${tag}`, JSON.stringify({ primaryEmailAddress: secretEmail, emailAddresses: [secretEmail, 'invented.other@affinity-domain.example'] })]);
+    await db.query("insert into research.source_doc(doc_id,title,kind,origin,as_of,strength,supports,body) values($1,'Invented licensed source','fixture','dakota','2026-09-27','weak','Invented data','Invented data')", [`dakota:invented-${tag}`]);
+    await db.query("insert into research.claim(entity_id,field,value,source,as_of,confidence) values($1,'email','invented.licensed@licensed-domain.example',$2,'2026-09-27','low')", [privacy[1], `dakota:invented-${tag}`]);
+    await db.query("insert into research.claim(entity_id,field,value,source,as_of,confidence) values($1,'public.email','invented.public@claim-domain.example',$2,'2026-09-27','medium')", [privacy[1], document]);
     const privateGroup = (await exported()).find(g => g.group === identityReviewGroupId(privacy));
     const member = privateGroup?.members.find(m => m.entityId === privacy[0]);
     const serialized = JSON.stringify(privateGroup);
@@ -103,6 +109,12 @@ export async function identityReviewProperties(check: Check, db: Db) {
       && !serialized.includes(secretEmail) && !serialized.includes(encodeURIComponent(secretEmail)) && !serialized.includes(secretPhone)
       && !serialized.includes(encodeURIComponent(secretPhone)) && !serialized.includes(numericUrl) && !serialized.includes('mailto:') && !serialized.includes('Private '),
       'Contact values and arbitrary note bodies never leave in the review set.');
+    const otherMember = privateGroup?.members.find(m => m.entityId === privacy[1]);
+    check('IDENTITY REVIEW gives email domains from Affinity\'s person record and research claims, never a local part or a Dakota-sourced address',
+      JSON.stringify(member?.emailDomains) === JSON.stringify(['affinity-domain.example', 'example.org'])
+      && JSON.stringify(otherMember?.emailDomains) === JSON.stringify(['claim-domain.example'])
+      && !serialized.includes('licensed-domain') && !serialized.includes('invented.other') && !serialized.includes('invented.public'),
+      `${JSON.stringify(member?.emailDomains)} / ${JSON.stringify(otherMember?.emailDomains)}`);
     check('IDENTITY REVIEW preserves long numeric source identifiers in every key format',
       opaqueKeys.every(key => member?.sources.some(source => source.externalId === key)),
       'Affinity company/person IDs, warehouse keys, finding keys, numeric IDs and UUIDs remain exact.');
@@ -267,7 +279,8 @@ export async function identityReviewProperties(check: Check, db: Db) {
     await db.query("delete from research.note where kind='identity_review_decision' and exists(select 1 from jsonb_array_elements_text(data->'decision'->'members') m(id) where m.id=any($1::text[]))", [ids]);
     await db.query('delete from research.note where entity_id=any($1::uuid[])', [ids]);
     await db.query('delete from research.claim where entity_id=any($1::uuid[])', [ids]);
-    await db.query('delete from research.source_doc where doc_id=$1', [document]);
+    await db.query('delete from research.source_doc where doc_id=any($1::text[])', [[document, `dakota:invented-${tag}`]]);
+    await db.query("delete from sources.raw_record where source='affinity' and kind='person' and source_id=$1", [`privacy-${tag}-a`]);
     await db.query('delete from identity.affiliation where person_entity=any($1::uuid[]) or org_entity=any($1::uuid[])', [ids]);
     await db.query('delete from identity.entity_type_correction where entity_id=any($1::uuid[])', [ids]);
     await db.query('delete from identity.match_assertion where merged_entity=any($1::uuid[]) or canonical_entity=any($1::uuid[]) or left_source_id=any($1::text[]) or right_source_id=any($1::text[])', [ids]);

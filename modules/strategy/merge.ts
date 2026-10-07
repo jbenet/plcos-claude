@@ -68,8 +68,12 @@ function redirectJson(value: unknown, losers: Set<string>, survivor: string): un
 }
 export async function lockMergeTables(tx: Queryable, refs: Reference[], extra: string[] = []) {
   // Match identity import's lock order. Locks cover inserts as well as rows already seen.
+  // Not platform.audit_log (7 Oct 2026): the findings import consolidates inside its one long transaction, so that
+  // lock held every audit insert in the app (sync pushes, MCP and outreach calls) until the import committed, and
+  // they hit the 20 s statement timeout. The audit rows this reads are a person's status changes, and every writer
+  // of one updates strategy.pursuit first (setStatus, the prospects import, LP units), which the lock below holds.
   await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
-  const names = [...new Set(['strategy.pursuit', 'strategy.pursuit_merge', 'platform.audit_log',
+  const names = [...new Set(['strategy.pursuit', 'strategy.pursuit_merge',
     'research.note', 'governance.approval_ticket', ...extra, ...refs.map(r => r.table)])].sort();
   await tx.exec(`lock table ${names.map(tableSql).join(',')} in share row exclusive mode`);
 }

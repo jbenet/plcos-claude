@@ -34,7 +34,7 @@ identities outside the current LP research statuses. One JSON object per group:
   members: [{
     entityId, displayName, entityType,
     sources: [{source, externalId}], affiliations: [{org, role}],
-    titles: [], personalUrls: [], pursuits: [{vehicle, status}],
+    titles: [], personalUrls: [], emailDomains: [], pursuits: [{vehicle, status}],
     counts: {claims, paths, notes}, createdBy: []
   }],
   reasons: []
@@ -44,6 +44,8 @@ identities outside the current LP research statuses. One JSON object per group:
 The source records, affiliations and counts include existing aliases of each canonical member.
 `createdBy` contains the source resolution rules on file, not an inferred author. Counts describe
 available records, not evidence strength. Empty fields mean unavailable in this export.
+`emailDomains` (7 Oct 2026) holds only the domains of addresses on Affinity's person record and on research
+claims not sourced from Dakota: a work domain matching an employer is corroboration, a free-mail domain is not.
 The export contains URL locators, never email/phone fields or note bodies; embedded contact
 strings have phone numbers omitted and email local-parts replaced with `…` (the domain remains,
 for example `…@example.com`). URL query/fragment tokens are removed. Source keys remain
