@@ -162,9 +162,17 @@ export function bestTiers(paths: Iterable<{ lp: string; tier: Tier; other: { typ
  * vehicle's: on 7 Oct a line added for SPV - Science marked every vehicle's strategy for the LP stale.
  * Without a vehicle, the newest note of any kind. Context is newest first.
  */
-export function contextAtFor(context: Array<{ at: string; vehicle?: string | null }> | null | undefined, vehicle?: string | null): string | null {
-  return (context ?? []).find((c) => !vehicle || !c.vehicle || c.vehicle === vehicle)?.at ?? null;
+export function contextAtFor(context: Array<{ at: string; vehicle?: string | null; byRule?: boolean }> | null | undefined, vehicle?: string | null): string | null {
+  return (context ?? []).find((c) => !c.byRule && (!vehicle || !c.vehicle || c.vehicle === vehicle))?.at ?? null;
 }
+
+/**
+ * A context note an intake rule wrote when it created the pursuit (prospects, investing organizations), as SQL over
+ * `research.note n`. It records where the LP came from, which the strategy already read from the same file, so it
+ * stales nothing (7 Oct 2026: every key in a Neurotech sourcing batch was stale only on such a note, written about
+ * 1.5 hours after its strategy). A person's context has no rule in its data.
+ */
+export const CONTEXT_BY_RULE = `(n.data ? 'rule' or n.data->>'source' = 'prospects')`;
 
 /**
  * Which strategies a correction to a finding can change (7 Oct 2026, counted on the Mac's 3,700 findings:

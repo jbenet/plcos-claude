@@ -294,7 +294,8 @@ corrected after `made.at` (an append-only SPV pass counts only for SPV strategie
 appended ties count for none, the best-tier pin covers them); when the close track or the best tier among its paths differs from its pin (the pin holds when it matches the
 best over every path or over the paths from our side, so a new tie between two LPs alone moves nothing);
 when the team's context is newer than it (a note written from another vehicle's pursuit counts only for
-that vehicle's strategy; a note about the LP as a whole counts for every one); for a firm-level strategy, when its lead has been rewritten
+that vehicle's strategy; a note about the LP as a whole counts for every one; the note an intake rule writes when
+it creates a pursuit counts for none); for a firm-level strategy, when its lead has been rewritten
 since `made.inputs.lead.at`; and, for a lead, when a colleague's finding is newer than it (a filing on
 one colleague's record can change the firm's ask). A re-pin still reads every claim against the current
 files: "no change" means no change a person acts on, after that read — never a bare update of

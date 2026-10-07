@@ -149,6 +149,11 @@ export async function strategyContextProperties(check: Check) {
     check('Team context written from one vehicle makes only that vehicle’s strategy stale; context about the LP as a whole makes every one stale',
       !otherVehicle && ownVehicle && wholeLp && unknownVehicle,
       `other vehicle: ${otherVehicle}; own vehicle: ${ownVehicle}; whole LP: ${wholeLp}; vehicle unresolved: ${unknownVehicle}`);
+    // 7 Oct 2026: the note an intake rule writes when it creates the pursuit stales nothing; a person's later note still does.
+    const ruleOnly = isStale(s, null, undefined, undefined, contextAtFor([{ at: '2026-10-07T09:00:00Z', vehicle: 'spv-science', byRule: true }], 'spv-science'));
+    const personAfter = isStale(s, null, undefined, undefined, contextAtFor([{ at: '2026-10-07T10:00:00Z', vehicle: null, byRule: true }, { at: '2026-10-07T09:00:00Z', vehicle: null }], 'spv-science'));
+    check('An intake rule’s provenance note stales no strategy; a person’s context behind it still does', !ruleOnly && personAfter,
+      `rule note alone: ${ruleOnly}; person's note behind a rule note: ${personAfter}`);
   }
 }
 

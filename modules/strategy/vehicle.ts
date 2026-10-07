@@ -1,7 +1,7 @@
 import { dakotaCapacities } from '@/lib/connectors/dakota/view';
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
-import { isStale, type Strategy } from '@/lib/enrich/strategy';
+import { CONTEXT_BY_RULE, isStale, type Strategy } from '@/lib/enrich/strategy';
 import { vehicleTotals, listExposures } from '@/modules/pipeline';
 import { touchpointSummaries } from '@/modules/meetings';
 import { strategyRouteSummaries, type RecordedRoute } from '@/modules/network';
@@ -75,8 +75,8 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
       where p.vehicle_id=$1 and a.action='pursuit.status_set' and a.at <= $2 order by a.at,a.id`, [vehicleId, now]),
     touchpointSummaries(pursuits, now), strategyRouteSummaries(ids, total.kind),
     db.query<{ entity_id: string; at: Date }>(`select identity.canonical_entity_id(entity_id) entity_id,max(created_at) at
-      from research.note where kind='context' and identity.canonical_entity_id(entity_id)=any($1::uuid[])
-        and coalesce(data->>'vehicleId', '') in ('', $2::text) group by 1`, [ids, vehicleId]),
+      from research.note n where kind='context' and identity.canonical_entity_id(entity_id)=any($1::uuid[])
+        and coalesce(data->>'vehicleId', '') in ('', $2::text) and not ${CONTEXT_BY_RULE} group by 1`, [ids, vehicleId]),
   ]);
   const dakota = await dakotaCapacities(db, ids);
   const transitions = history.flatMap(r => {
