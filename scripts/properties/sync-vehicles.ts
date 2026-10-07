@@ -1,6 +1,7 @@
 import { syncGuard } from '../../lib/sync/auth';
 import { SYNC_ADMIN, SYNC_PUSH } from '../../lib/sync/scopes';
 import { addVehicle } from '../../lib/sync/vehicles';
+import { jobState, queueJob } from '../../lib/sync/jobs';
 import { createMcpToken, type AppUser } from '../../modules/platform';
 import { freshDb, type Check } from './harness';
 
@@ -59,6 +60,14 @@ export async function syncVehiclesProperties(check: Check) {
   const demoted = !(await opens(bossToken.secret, 'push')) && !(await opens(bossToken.secret, 'snapshot'));
   check('The Admin token opens pull and push as well, a push token does not pull, and a demoted Admin\'s token opens nothing',
     adminOpens && pushNoSnapshot && before2 && demoted, `${adminOpens} ${pushNoSnapshot} ${before2} ${demoted}`);
+  // Jobs by token (lib/sync/jobs.ts): only an Admin token, only an export or a findings import; unknown jobs answer 404.
+  const jobsReq = (secret: string, body: unknown, method = 'POST', q = '') => new Request(`http://localhost:3119/api/sync/jobs${q}`, { method, headers: { authorization: `Bearer ${secret}` }, ...(method === 'POST' ? { body: JSON.stringify(body) } : {}) });
+  const jobsBy = async (secret: string, body: unknown) => { const g = await syncGuard(jobsReq(secret, body), 'jobs'); return 'response' in g ? g.response.status : (await queueJob(g.caller, jobsReq(secret, body), { db })).status; };
+  const jobPush = await jobsBy(pushOnly.secret, { kind: 'export' }), jobBad = await jobsBy(admin.secret, { kind: 'linear-rebuild' });
+  const g2 = await syncGuard(jobsReq(admin.secret, null, 'GET', '?job=11111111-2222-4333-8444-555555555555'), 'jobs');
+  const unknownJob = 'response' in g2 ? g2.response.status : (await jobState(g2.caller, jobsReq(admin.secret, null, 'GET', '?job=11111111-2222-4333-8444-555555555555'), { db })).status;
+  check('Jobs by token: a push token cannot queue, a kind other than export or findings is refused, an unknown job is 404',
+    jobPush === 403 && jobBad === 422 && unknownJob === 404, `${jobPush} ${jobBad} ${unknownJob}`);
   check('Vehicles by token: every call is audited as the token\'s',
     audit.length >= 6 && audit.every((a) => a.detail.via === 'sync') && audit.some((a) => a.detail.outcome === 'ok'), `${audit.length} audit rows`);
 }

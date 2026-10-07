@@ -395,6 +395,13 @@ and push up results".
   outreach desk, and nothing under it sends, decides a ticket or moves money. `scripts/cloud-vehicle.sh
   <vehicle.json>` sends it with the Keychain's `push-token`.
 
+- **`POST|GET /api/sync/jobs`** (7 Oct, `sync:admin`): queue a research export or a findings import, as the
+  buttons in Developer → Enrichment do, and read any job's state (counts only). `scripts/cloud-job.sh export`, then
+  `cloud-job.sh status <id>`; with a files snapshot the Mac then has the server's fresh `candidates.jsonl` for W5.
+  A findings push that meets a running import queues one more run after it; a push and a status check first
+  clear a job a restart stopped. A push that fails after it was checked says at which stage and what kind of
+  error, and a ledger that will not take its finish no longer fails a push whose files are in place.
+
 **Why this is not two-way sync.** Sync would merge two writable databases: conflict rules for every table,
 deletes, and rebuilt caches. Here there is one writer. Copies come down as read-only previews. Results go up
 as new input files, which the cloud validates and imports itself, exactly like a button press. Nothing on
