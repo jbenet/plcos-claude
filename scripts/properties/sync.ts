@@ -130,15 +130,18 @@ export async function syncProperties(check: Check, db: Db) {
   const bad = await post(push.secret, { workflow: 'W1', files: [
     { path: 'raw/sync-good.json', content: finding('sync-good', '2026-09-30') },
     { path: 'raw/sync-bad.json', content: noSource }, { path: 'raw/sync-dakota.json', content: dakotaSource },
+    // A key made from a prospect carries ":" and is pushed like any other; a dot never passes.
+    { path: 'raw/cloud-sourced:sync-colon.json', content: finding('cloud-sourced:sync-colon', '2026-09-30') }, { path: 'raw/sync.dot.json', content: finding('sync.dot', '2026-09-30') },
     { path: 'strategy/sync-strat.json', content: {} }, { path: '../escape.json', content: {} }] });
   const badBody = await bad.json() as { ok: boolean; rejected: Array<{ path: string; problems: string[] }> };
   const w5 = await (await post(push.secret, { workflow: 'W5', files: [{ path: 'strategy/sync-strat.json', content: strategyBad }] })).json() as typeof badBody;
   const by = (p: string) => badBody.rejected?.find((r) => r.path === p)?.problems ?? [];
   const inboxAfter = await readdir(join(demoEnrich, 'inbox')).catch(() => [] as string[]);
-  check('SYNC push: refused with every reason by file — the importer\'s validators and paths — and nothing written; a Dakota-sourced claim is validated like any other',
+  check('SYNC push: refused with every reason by file — the importer\'s validators and paths — and nothing written; a Dakota-sourced claim is validated like any other; a key may carry ":" but no dot',
     invalidJson.status === 400 && bad.status === 422 && badBody.ok === false && !by('raw/sync-good.json').length
     && by('raw/sync-bad.json').some((p) => p.includes('source URL'))
     && !by('raw/sync-dakota.json').length
+    && !by('raw/cloud-sourced:sync-colon.json').length && by('raw/sync.dot.json').length > 0
     && by('strategy/sync-strat.json').length > 0 && by('../escape.json').length > 0
     && w5.rejected?.some((r) => r.path === 'strategy/sync-strat.json' && r.problems.length > 0) === true
     && inboxBefore.length === inboxAfter.length

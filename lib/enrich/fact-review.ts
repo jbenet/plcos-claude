@@ -11,7 +11,7 @@ export function factReviewProblems(row: unknown, original: { facts?: unknown[] }
   const r = row as { key?: unknown; identity?: unknown; identityNote?: unknown; facts?: unknown; counts?: Record<string, unknown> } | null;
   if (!r || typeof r !== 'object' || Array.isArray(r)) return ['not an object'];
   const p: string[] = [];
-  if (typeof r.key !== 'string' || !/^[\w-]+$/.test(r.key)) p.push('no key');
+  if (typeof r.key !== 'string' || !/^[\w:-]+$/.test(r.key)) p.push('no key');
   if (!['holds', 'doubt', 'wrong'].includes(r.identity as string)) p.push('identity must be holds, doubt or wrong');
   if (typeof r.identityNote !== 'string') p.push('identityNote must be text');
   if (!original || !Array.isArray(original.facts)) { p.push('no finding to review'); return p; }

@@ -26,8 +26,9 @@ export interface PushBundle { workflow: PushWorkflow; files: PushFile[]; run?: P
 /** One reason a push was refused: the file it is about (null for the push as a whole) and its problems. */
 export interface Rejection { path: string | null; problems: string[] }
 
-export const RAW = /^raw\/([\w-]+)\.json$/;
-export const STRATEGY = /^strategy\/(?:([\w-]+)\/)?([\w-]+)\.json$/;
+/** A finding key is the file name, so no slash or dot; ":" is allowed, since keys from prospects carry it (6 Oct 2026: a Mac push refused for it). */
+export const RAW = /^raw\/([\w:-]+)\.json$/;
+export const STRATEGY = /^strategy\/(?:([\w-]+)\/)?([\w:-]+)\.json$/;
 export const REVIEW = /^fact-review-[\w-]+\.jsonl$/;
 /** A prospects file, by the name it is pushed with; the server writes it under a run-specific name (lib/sync/push.ts). */
 export const PROSPECTS = /^prospects\/([A-Za-z0-9][\w.-]{0,99})\.jsonl$/;

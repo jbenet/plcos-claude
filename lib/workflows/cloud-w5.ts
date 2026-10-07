@@ -33,7 +33,7 @@ import { WorkflowRefusal } from './refusal';
  */
 
 const sha = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
-const KEY = /^[\w-]+$/;
+const KEY = /^[\w:-]+$/; // an LP key; a prospect-made one may carry ":" (cloud-sourced:<name>--<org>)
 export const W5_COMMANDS = ['anthropic-messages'] as const;
 const TIERS = ['A', 'B', 'C', 'D'] as const;
 type Tier = (typeof TIERS)[number];
