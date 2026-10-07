@@ -28,7 +28,7 @@ import { candidateKey } from '../lib/enrich/candidate-key';
 import type { Candidate } from '../lib/enrich/candidates';
 import { norm } from '../lib/enrich/connect';
 import { pagesOnly, type Finding } from '../lib/enrich/schema';
-import { gates, isStale, nextOverLimit, versionBefore, type Strategy } from '../lib/enrich/strategy';
+import { contextAtFor, gates, isStale, nextOverLimit, versionBefore, type Strategy } from '../lib/enrich/strategy';
 import type { Path } from '../lib/enrich/connect';
 import type { Triage } from '../lib/enrich/triage';
 
@@ -79,6 +79,12 @@ async function main() {
   }
   if (unmapped) console.log(`${unmapped} findings not mapped to candidates; refresh Export the research set to update aliases.`);
   const strategies = await jsonDir<Strategy>(join(dir, 'strategy'));
+  // A top-level strategy names its vehicle by name or slug; team context is matched by slug.
+  const vehicles: Array<{ slug: string; name: string; kind?: string }> = JSON.parse(await readFile(join(dir, 'vehicles.json'), 'utf8').catch(() => '[]'));
+  const vehicleOf = (named: string | undefined) => {
+    const n = (named ?? '').trim().toLowerCase();
+    return vehicles.find((v) => v.slug.toLowerCase() === n || v.name.toLowerCase() === n) ?? null;
+  };
   // Keys already in a batch file for this mode and not yet done are left to that batch; once done
   // (a finding, a strategy), they are eligible again — for a search pass, or a stale strategy.
   const batched = new Set<string>();
@@ -152,7 +158,7 @@ async function main() {
     const engaged = ['discussing', 'committed'].includes(c.pursuits[0]?.status ?? '');
     const eligible = Boolean(resolved || engaged || triage.get(c.key)?.lane === 'warm now');
     if (only) return only.has(c.key) && Boolean(s || eligible);
-    if (s) return isStale(s, f, c.money, best.get(c.key) ?? null, c.context?.[0]?.at ?? null) || (revise && flagged(c));
+    if (s) return isStale(s, f, c.money, best.get(c.key) ?? null, contextAtFor(c.context, vehicleOf(s.ask?.vehicle)?.slug), vehicleOf(s.ask?.vehicle)?.kind ?? null) || (revise && flagged(c));
     // Discussing or committed: a strategy from our records even without a resolved finding — a
     // firm's lead can be one of them (v03's learning).
     return !revise && eligible;

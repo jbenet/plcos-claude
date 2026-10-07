@@ -122,6 +122,21 @@ export async function strategyContextProperties(check: Check) {
     check('A strategy written before the team’s newest context is due a re-think; one written after it, or with none, is not',
       newer && !older && !none, `context after it: ${newer}; context before it: ${older}; no context: ${none}`);
   }
+  {
+    // 7 Oct 2026: a note written from one vehicle's pursuit is that vehicle's. A line added for SPV -
+    // Science had marked the LP's Neurotech strategy stale too; a note about the LP as a whole still does.
+    const { contextAtFor, isStale } = await import('../../lib/enrich/strategy');
+    const s = { made: { at: '2026-10-06T10:00:00Z', by: 'claude', workflow: 'W5', version: '1.18' } } as never;
+    const spvOnly = [{ at: '2026-10-07T09:00:00Z', vehicle: 'spv-science' }, { at: '2026-10-01T09:00:00Z', vehicle: null }];
+    const general = [{ at: '2026-10-07T09:00:00Z', vehicle: null }];
+    const otherVehicle = isStale(s, null, undefined, undefined, contextAtFor(spvOnly, 'plc-neurotech-i'));
+    const ownVehicle = isStale(s, null, undefined, undefined, contextAtFor(spvOnly, 'spv-science'));
+    const wholeLp = isStale(s, null, undefined, undefined, contextAtFor(general, 'plc-neurotech-i'));
+    const unknownVehicle = isStale(s, null, undefined, undefined, contextAtFor(spvOnly, null));
+    check('Team context written from one vehicle makes only that vehicle’s strategy stale; context about the LP as a whole makes every one stale',
+      !otherVehicle && ownVehicle && wholeLp && unknownVehicle,
+      `other vehicle: ${otherVehicle}; own vehicle: ${ownVehicle}; whole LP: ${wholeLp}; vehicle unresolved: ${unknownVehicle}`);
+  }
 }
 
 export async function strategyRegressionProperties(check: Check) {
@@ -134,6 +149,27 @@ export async function strategyRegressionProperties(check: Check) {
     const after = isStale({ made }, { researched: { at: '2026-09-24T09:00:00Z', corrected: [{ at: '2026-09-24T13:00:00Z' }] } });
     check('A strategy written before a correction to its finding is stale; one written after it is not',
       after && !before, `correction before the strategy: ${before ? 'stale' : 'fresh'}; after it: ${after ? 'stale' : 'fresh'}`);
+  }
+  {
+    // 7 Oct 2026: append-only SPV passes and appended ties marked most strategies stale with nothing to rewrite.
+    const { isStale } = await import('../../lib/enrich/strategy');
+    const made = { at: '2026-10-06T12:00:00Z', by: 'claude', workflow: 'W5', version: '1.18', inputs: { finding: '2026-09-24T09:00:00Z' } } as never;
+    const after = (by: string, what: string) => ({ researched: { at: '2026-09-24T09:00:00Z', corrected: [{ at: '2026-10-07T01:00:00Z', by, what }] } });
+    const spvFacts = after('Invented worker, SPV round a-1', 'Append-only SPV appetite pass spv-a-1: 2 facts and 3 public queries; prior facts preserved.');
+    const spvNone = after('Invented worker, SPV round b-2', 'SPV-b-2 append-only review; 0 new facts; original facts/profile preserved.');
+    const ties = after('Invented worker, cold1-04', 'cold1-04 appended connector evidence, exact search queries and coverage; existing facts preserved.');
+    const w1c = after('claude (sub-agent), W1c', 'Append-only SPV note preserved, 2 facts moved to cautions.');
+    const results = {
+      spvOnFund: isStale({ made }, spvFacts, undefined, undefined, null, 'fund'),
+      spvOnSpv: isStale({ made }, spvFacts, undefined, undefined, null, 'spv'),
+      spvUnknownVehicle: isStale({ made }, spvFacts),
+      spvNoFacts: isStale({ made }, spvNone, undefined, undefined, null, 'spv'),
+      ties: isStale({ made }, ties, undefined, undefined, null, 'spv'),
+      w1cOnFund: isStale({ made }, w1c, undefined, undefined, null, 'fund'),
+    };
+    check('A correction stales only the strategies it bears on: SPV appends with facts the SPV ones, appends with no fact or only ties none, the W1c fact check all',
+      !results.spvOnFund && results.spvOnSpv && results.spvUnknownVehicle && !results.spvNoFacts && !results.ties && results.w1cOnFund,
+      JSON.stringify(results));
   }
 
   {

@@ -18,7 +18,7 @@ export async function syncTeamRoster(q: Queryable, roster: readonly TeamRosterNa
       `select u.id::text, u.name, e.entity_id::text, e.display_name entity_name
        from platform.app_user u left join identity.source_record s on s.source='app_user' and s.source_id=u.handle
        left join identity.entity e on e.entity_id=s.entity_id and e.entity_type='person' and e.retired_at is null
-       where u.handle=$1 and u.active for update of u`, [handle]);
+       where u.handle=$1 and u.active for no key update of u`, [handle]);
     if (!user || (user.name === name && (!user.entity_id || user.entity_name === name))) continue;
     await q.query('update platform.app_user set name=$2 where id=$1 and name is distinct from $2', [user.id, name]);
     if (user.entity_id) await q.query('update identity.entity set display_name=$2 where entity_id=$1 and display_name is distinct from $2', [user.entity_id, name]);
