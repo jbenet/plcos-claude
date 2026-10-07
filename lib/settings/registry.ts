@@ -10,6 +10,7 @@ import { MAILGUARD_ADDRESS_SETTING } from '@/lib/connectors/mailguard/setting';
 import { ANTHROPIC_SETTING } from '@/lib/workflows/setting';
 import { CLOUD_WORKFLOWS_SETTING } from '@/lib/workflows/cloud-setting';
 import { FEEDBACK_EXPORT_SETTING } from '@/app/api/feedback/export/setting';
+import { FEEDBACK_SIGNAL_TOKEN_SETTING, FEEDBACK_SIGNAL_URL_SETTING } from '@/lib/feedback-signal/setting';
 import { publicUrlValue, SettingError, type SettingDef } from './types';
 
 export const PUBLIC_URL_SETTING: SettingDef = {
@@ -85,6 +86,8 @@ export const SETTINGS: readonly SettingDef[] = [
   CLOUD_WORKFLOWS_SETTING,
   MAILGUARD_ADDRESS_SETTING,
   FEEDBACK_EXPORT_SETTING,
+  FEEDBACK_SIGNAL_URL_SETTING,
+  FEEDBACK_SIGNAL_TOKEN_SETTING,
 ];
 
 const BY_KEY = new Map(SETTINGS.map((s) => [s.key, s]));

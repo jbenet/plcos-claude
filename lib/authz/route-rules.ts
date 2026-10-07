@@ -9,6 +9,8 @@ export const routeRules = {
   'app/api/feedback/route.ts#POST': 'feedback',
   'app/api/feedback/route.ts#GET': 'feedback',
   'app/api/feedback/export/route.ts#GET': 'feedback',
+  // The feedback signal's read link (lib/feedback-signal): its own signature, not the cookie.
+  'app/api/feedback/signal/route.ts#GET': 'feedback',
   'app/api/identity/entity-type/route.ts#POST': 'admin',
   'app/api/identity/pursuit-merge/route.ts#POST': 'admin',
   'app/api/import-jobs/route.ts#GET': 'admin',

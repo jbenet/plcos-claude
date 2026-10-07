@@ -90,6 +90,7 @@ async function fileOne(entry: InboxEntry, opts: IngestOptions): Promise<{ id: st
 async function pass(opts: IngestOptions): Promise<IngestResult> {
   const root = opts.issuesRoot ?? defaultIssuesRoot();
   const result: IngestResult = { filed: 0, refused: 0, failed: 0, waiting: 0 };
+  const filedIssues: string[] = [];
   for (const id of await inboxIds(root)) {
     const entry = await readEntry(root, id);
     if (!entry) continue; // filed by a pass in another module instance a moment ago
@@ -97,6 +98,7 @@ async function pass(opts: IngestOptions): Promise<IngestResult> {
       const issue = await fileOne(entry, opts);
       await markFiled(root, entry, issue);
       result.filed += 1;
+      if (entry.kind === 'issue' && issue.id) filedIssues.push(issue.id);
     } catch (err) {
       if (err instanceof Refusal) {
         await markRefused(root, entry, err.message);
@@ -112,6 +114,11 @@ async function pass(opts: IngestOptions): Promise<IngestResult> {
     }
   }
   result.waiting = (await inboxIds(root)).length;
+  // Wake the feedback thread once the box is quiet (lib/feedback-signal); a test's own sink signals nothing.
+  if (!opts.fileIssue) {
+    const { signalAfterPass } = await import('@/lib/feedback-signal');
+    await signalAfterPass(root, filedIssues);
+  }
   return result;
 }
 
