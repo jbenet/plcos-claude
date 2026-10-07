@@ -275,3 +275,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [A person that is really a firm can be marked an organisation, in the app or by token](entries/entity-type-by-token.md)
 - [Bay Area towns and state codes count as the US for the counsel gate](entries/us-places.md)
 - [Connector rounds named by their author stale nothing; leads with no strategy get re-pinned](entries/lead-orphans.md)
+- [A placeholder organisation joins nobody as colleagues](entries/placeholder-orgs.md)
