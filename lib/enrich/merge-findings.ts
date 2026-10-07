@@ -28,7 +28,9 @@ export function mergeFindings(newest: Finding, older: Finding[], at: string, by:
   const haveConns = new Set((newest.connections ?? []).map(connKey));
   const facts = [...(newest.facts ?? [])], connections = [...(newest.connections ?? [])];
   const from: string[] = [];
-  if (revised(newest)) return { merged: newest, facts: 0, connections: 0 };
+  // A cut lives only in the words of the finding it was made on. When any of the LP's findings was revised, an older
+  // one may still carry what it cut, and another of them (a contact's) would take it back (7 Oct 2026). Leave the LP to W1.
+  if (revised(newest) || older.some(revised)) return { merged: newest, facts: 0, connections: 0 };
   for (const o of [...older].sort((a, b) => b.researched.at.localeCompare(a.researched.at))) {
     let took = false;
     for (const f of o.facts ?? []) if (!haveFacts.has(factKey(f))) { haveFacts.add(factKey(f)); facts.push(f); took = true; }
