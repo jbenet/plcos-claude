@@ -299,12 +299,18 @@ the most and best warm routes to a vehicle's open LPs.
 - **Rows:** the vehicle's open pursuits (not passed), on a vehicle the token's owner reads — the queue's rule; another
   vehicle is "no vehicle among yours" (404).
 - **No new scoring model.** For each LP it reads the routes `routes_to` reads (`planRoutes`, through the authorization
-  facade) and counts: a connector is anyone between the source and the LP (the route's `connectorIds`); each LP counts
+  facade) and counts: a connector is a person between the source and the LP (the route's `connectorIds` that are people;
+  since 7 Oct 2026 an organisation on a route, such as a shared employer or the fund itself, is never listed, and the first
+  person past it is the first hop); each LP counts
   once per connector; `bestScore` is the best route score through them (0–100: the route scorer's relative, uncalibrated
   estimate, never a probability) with its band. Only routes the planner recommends count; held and excluded ones — a
   restriction, a spent ask cap — never do (rule 8).
 - **Each connector:** `entityId`, `name`, `lps` (open LPs reached), `bestScore`, `bestBand`, up to three
   `examplePursuitIds` (their best first), `doNotApproach`, and `contact` under §4a's rule. Ranked by `lps`, then `bestScore`.
+- **Why a score is low** (7 Oct 2026). A route is never stronger than its weakest hop, so one hop that is affiliation only
+  (a shared firm or board, a firm's investment: warmth 0 of 5) makes a recommended route score 0. `bestWeakestHop` names
+  that hop on their best route: `{ warmth, kind, label, at }`, `at` being `from the team`, `between connectors`, `to the
+  LP` or `direct`. A connector's targets carry `weakestHop` the same way.
 - **First hop or deeper** (5 Oct 2026). `asFirstHop` counts the recommended routes on which they are the first hop past the
   team member — the person the team emails (§4a's `askFirst`) — and `asDeeperHop` the ones on which someone else must
   ask them first. `reachableDirectly` is `asFirstHop > 0`. Someone the team reaches only through another person is still
