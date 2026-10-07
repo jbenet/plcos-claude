@@ -283,3 +283,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [A push no longer fails on a file whose log is one entry](entries/push-log-shape.md)
 - [A thin refresh re-pins by rule](entries/repin-thin-refresh.md)
 - [A refresh adds to an LP's older finding](entries/merge-findings.md)
+- [A strategy stamped later than it was written is counted](entries/future-made.md)
