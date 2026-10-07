@@ -162,13 +162,14 @@ export async function strategyRegressionProperties(check: Check) {
     const spvFacts = after('Invented worker, SPV round a-1', 'Append-only SPV appetite pass spv-a-1: 2 facts and 3 public queries; prior facts preserved.');
     const spvNone = after('Invented worker, SPV round b-2', 'SPV-b-2 append-only review; 0 new facts; original facts/profile preserved.');
     const ties = after('Invented worker, cold1-04', 'cold1-04 appended connector evidence, exact search queries and coverage; existing facts preserved.');
+    const tiesByRound = after('Invented worker, cold1-07', 'Round seven: three sourced relationships recorded.');
     const w1c = after('claude (sub-agent), W1c', 'Append-only SPV note preserved, 2 facts moved to cautions.');
     const results = {
       spvOnFund: isStale({ made }, spvFacts, undefined, undefined, null, 'fund'),
       spvOnSpv: isStale({ made }, spvFacts, undefined, undefined, null, 'spv'),
       spvUnknownVehicle: isStale({ made }, spvFacts),
       spvNoFacts: isStale({ made }, spvNone, undefined, undefined, null, 'spv'),
-      ties: isStale({ made }, ties, undefined, undefined, null, 'spv'),
+      ties: isStale({ made }, ties, undefined, undefined, null, 'spv') || isStale({ made }, tiesByRound, undefined, undefined, null, 'fund'),
       w1cOnFund: isStale({ made }, w1c, undefined, undefined, null, 'fund'),
     };
     check('A correction stales only the strategies it bears on: SPV appends with facts the SPV ones, appends with no fact or only ties none, the W1c fact check all',
