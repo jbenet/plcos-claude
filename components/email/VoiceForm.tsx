@@ -27,7 +27,7 @@ export function VoiceForm({ style, samples, limits }: { style: string; samples: 
     <form className={s.voiceForm} onSubmit={(e) => { e.preventDefault(); void send(e.currentTarget, false); }}>
       <label>
         <span>How you write</span>
-        <textarea name="style" rows={4} maxLength={limits.styleChars} defaultValue={style} placeholder={STYLE_HINT} />
+        <textarea name="voiceStyle" rows={4} maxLength={limits.styleChars} defaultValue={style} placeholder={STYLE_HINT} />
       </label>
       {Array.from({ length: count }, (_, i) => (
         <label key={i}>

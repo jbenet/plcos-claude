@@ -2860,7 +2860,7 @@ const SHOTS: Record<string, Shot[]> = {
       prepare: async (page) => {
         await asUser(page);
         const card = page.locator('#voice');
-        await card.locator('textarea[name=style]').fill('Short and warm. First name, no “Dear”. One idea, then one question. I sign off “Best, Lior”. Never “circle back” or “excited to share”.');
+        await card.locator('textarea[name=voiceStyle]').fill('Short and warm. First name, no “Dear”. One idea, then one question. I sign off “Best, Lior”. Never “circle back” or “excited to share”.');
         const samples = card.locator('textarea[name=sample]');
         await samples.nth(0).fill('Hi Ana,\n\nThanks for Tuesday. You asked how we choose between two teams on one problem: the one with its own data. Happy to show you two examples.\n\nWould Thursday at 4 work?\n\nBest,\nLior');
         await samples.nth(1).fill('Hi Bo,\n\nQuick one: is the board still meeting on the 14th? If so, I will send the note the week before.\n\nBest,\nLior');

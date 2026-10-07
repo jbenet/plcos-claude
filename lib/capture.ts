@@ -208,6 +208,9 @@ async function renderNow(region?: Region): Promise<string | null> {
         // Not `instanceof`: the clone may belong to another window's constructors.
         if (node.nodeType !== Node.ELEMENT_NODE) return;
         const el = node as HTMLElement;
+        // A form with a field named "style" has that field as its .style (issues 0127–0128, real: the voice
+        // form on Preferences). Calling it threw here and the whole automatic capture came back empty.
+        if (typeof el.style?.getPropertyValue !== 'function') return;
         // No scrollbars: the clone drew ones the page didn't show — one across the foot of the
         // rail — and its scrolled panels are already drawn at their scroll.
         for (const prop of ['overflow', 'overflow-x', 'overflow-y']) {

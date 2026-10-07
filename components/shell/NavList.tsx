@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react';
 import Link from '@/components/ui/AppLink';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -21,6 +21,8 @@ export interface NavVehicle {
 }
 
 const STORE_KEY = 'capitalos.nav.collapsed';
+/** Where the rail was scrolled to, for this tab (issue 0133). */
+const SCROLL_KEY = 'capitalos.nav.scroll';
 
 /**
  * The left rail.
@@ -78,6 +80,26 @@ export function NavList({
     setHydrated(true);
   }, []);
 
+  /**
+   * The rail keeps its place (issue 0133): the scroll is remembered as it changes and put back on
+   * mount (a reload, or the rail drawn again) and after each navigation, in case anything moved it.
+   */
+  const scroller = useRef<HTMLDivElement>(null);
+  const scrollTop = useRef<number | null>(null);
+  const remember = () => {
+    const top = scroller.current?.scrollTop ?? 0;
+    scrollTop.current = top;
+    try { window.sessionStorage.setItem(SCROLL_KEY, String(Math.round(top))); } catch { /* blocked storage */ }
+  };
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    if (scrollTop.current === null) {
+      try { scrollTop.current = Number(window.sessionStorage.getItem(SCROLL_KEY)) || 0; } catch { scrollTop.current = 0; }
+    }
+    if (Math.abs(el.scrollTop - scrollTop.current) > 1) el.scrollTop = scrollTop.current;
+  }, [path, hydrated]);
+
   const toggle = (id: string) => {
     setCollapsed((prev) => {
       const next = { ...prev, [id]: !prev[id] };
@@ -111,17 +133,20 @@ export function NavList({
     });
   };
 
-  const Section = ({
-    section, badge, children,
-  }: {
-    section: NavSection;
+  /**
+   * Plain functions, not components (issue 0133): a component defined inside this one is a new
+   * type on every render, so each navigation threw away and rebuilt every section, closing the
+   * open WIP group and losing the rail's place.
+   */
+  const navSection = (
+    section: NavSection,
     /** Shown on the heading while the section is closed, so a count is never hidden. */
-    badge?: number;
-    children: React.ReactNode;
-  }) => {
+    badge: number | undefined,
+    children: React.ReactNode,
+  ) => {
     const isCollapsed = Boolean(collapsed[section.id]);
     return (
-      <div className="navsec">
+      <div className="navsec" key={section.id}>
         <button
           className="sec"
           onClick={() => toggle(section.id)}
@@ -145,10 +170,10 @@ export function NavList({
    * The grants rail is a vehicle, but it belongs to PL R&D rather than PL Capital — that
    * is where the work actually sits. The row behaves identically wherever it is drawn.
    */
-  const VehicleRow = ({ v }: { v: NavVehicle }) => {
+  const vehicleRow = (v: NavVehicle) => {
     const selected = current === v.slug;
     return (
-      <div>
+      <div key={v.slug}>
         <button
           className={`sub vehicle${selected ? ' on' : ''}`}
           onClick={() => selectVehicle(v.slug)}
@@ -183,8 +208,8 @@ export function NavList({
   const rndVehicles = vehicles.filter((v) => v.kind === 'grant_rail');
 
   return (
-    <div className="nav" data-hydrated={hydrated}>
-      <Section section={OVERVIEW_SECTION} badge={approvals}>
+    <div className="nav" data-hydrated={hydrated} ref={scroller} onScroll={remember}>
+      {navSection(OVERVIEW_SECTION, approvals, <>
         {OVERVIEW_SECTION.links.map((l) => (
           <Link key={l.href} className={`sub${on(l.href) ? ' on' : ''}`} href={l.href}>
             <span className="nm">{l.label}</span>
@@ -196,14 +221,14 @@ export function NavList({
             {(l.href === '/issues' || l.href === '/developer/issues') && <span className="ct">{issues}</span>}
           </Link>
         ))}
-      </Section>
+      </>)}
 
-      <Section section={capital}>
+      {navSection(capital, undefined, <>
         <Link className={`sub${on('/operations') ? ' on' : ''}`} href="/operations">
           <span className="nm">Operations</span>
         </Link>
 
-        {capitalVehicles.map((v) => <VehicleRow key={v.slug} v={v} />)}
+        {capitalVehicles.map(vehicleRow)}
 
         <button
           className={`sub vehicle${current === null ? ' on' : ''}`}
@@ -213,19 +238,17 @@ export function NavList({
           <span className="ct">{vehicles.length}</span>
         </button>
         {current === null && vehicleModules('fund', null)}
-      </Section>
+      </>)}
 
-      {STATIC_SECTIONS.map((section) => (
-        <Section key={section.id} section={section}>
+      {STATIC_SECTIONS.map((section) => navSection(section, undefined, <>
           {section.links.map((l) => (
             <Link key={l.href} className={`sub${on(l.href) ? ' on' : ''}`} href={l.href}>
               <span className="nm">{l.label}</span>
               {l.hint && <span className="ct">{l.hint}</span>}
             </Link>
           ))}
-          {section.id === 'rnd' && rndVehicles.map((v) => <VehicleRow key={v.slug} v={v} />)}
-        </Section>
-      ))}
+          {section.id === 'rnd' && rndVehicles.map(vehicleRow)}
+      </>))}
     </div>
   );
 }
