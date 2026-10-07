@@ -202,16 +202,42 @@ export interface ComparisonOptions {
 }
 
 /** Keep stable source indices through filters, folding and paging. Deep links always reveal their row. */
+/**
+ * Indirect routes a direct one already beats (feedback 0131–0132, 7 Oct 2026: weak chains through several people, from
+ * one teammate, shown beside much stronger direct routes from others). Each indirect route scoring below the best
+ * recommended direct route is folded beneath it, as an alternative: still one click away, and in the expanded view,
+ * never deleted. Display only; the routes, their verdicts and scores are unchanged. Returns index → the direct route's.
+ */
+export function dominatedFolds(routes: Route[]): Map<number, number> {
+  let best: { index: number; score: number } | null = null;
+  routes.forEach((route, index) => {
+    if (route.hops.length !== 1 || route.verdict !== 'recommend' || route.foldedUnder != null) return;
+    const r = routeReading(route);
+    if (!r.provisional && (!best || r.score > best.score)) best = { index, score: r.score };
+  });
+  const folds = new Map<number, number>();
+  const direct = best as { index: number; score: number } | null;
+  if (!direct) return folds;
+  routes.forEach((route, index) => {
+    if (route.hops.length < 2 || route.foldedUnder != null) return;
+    const r = routeReading(route);
+    if (r.provisional || r.score < direct.score) folds.set(index, direct.index);
+  });
+  return folds;
+}
+
 export function routeComparison(routes: Route[], options: ComparisonOptions) {
+  const folds = dominatedFolds(routes);
+  const foldOf = (route: Route, index: number) => route.foldedUnder ?? folds.get(index) ?? null;
   const filtered = routes.map((route, index) => ({ route, index }))
     .filter(({ route }) => !options.exclude || !route.hops.slice(0, -1).some((h) => h.toEntity === options.exclude))
     .filter(({ route }) => !options.minimumWarmth || options.lastWarmth(route) >= options.minimumWarmth);
   const eligibleIds = new Set(filtered.map((x) => x.index));
   const familyId = /^\d+$/.test(options.family ?? '') && routes[Number(options.family)]
-    ? routes[Number(options.family)]!.foldedUnder ?? Number(options.family) : null;
+    ? foldOf(routes[Number(options.family)]!, Number(options.family)) ?? Number(options.family) : null;
   const eligible = filtered.filter(({ route, index }) => familyId !== null
-    ? index === familyId || route.foldedUnder === familyId
-    : options.expanded === '1' || route.foldedUnder == null || !eligibleIds.has(route.foldedUnder) || String(index) === options.selected)
+    ? index === familyId || foldOf(route, index) === familyId
+    : options.expanded === '1' || foldOf(route, index) == null || !eligibleIds.has(foldOf(route, index)!) || String(index) === options.selected)
     .sort((a, b) => Number(routeReading(a.route).provisional) - Number(routeReading(b.route).provisional)
       || routeReading(b.route).score - routeReading(a.route).score
       || Number(b.route.verdict === 'recommend') - Number(a.route.verdict === 'recommend')
@@ -225,6 +251,9 @@ export function routeComparison(routes: Route[], options: ComparisonOptions) {
   const displayedRoutes = eligible.slice(pageNumber * 80, pageNumber * 80 + show);
   const selected = displayedRoutes.find((x) => String(x.index) === options.selected)?.index ?? displayedRoutes[0]?.index;
   const alternatives = new Map<number, typeof filtered>();
-  for (const entry of filtered) if (entry.route.foldedUnder != null) alternatives.set(entry.route.foldedUnder, [...(alternatives.get(entry.route.foldedUnder) ?? []), entry]);
+  for (const entry of filtered) {
+    const under = foldOf(entry.route, entry.index);
+    if (under != null) alternatives.set(under, [...(alternatives.get(under) ?? []), entry]);
+  }
   return { eligible, familyId, show, pageNumber, displayedRoutes, selected, alternatives };
 }
