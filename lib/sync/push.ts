@@ -246,10 +246,16 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
         const kind = prospects ? 'prospects' as const : 'findings' as const;
         const input = prospects ? { settled: published.map((p) => p.slice('prospects/'.length)) } : {};
         try {
+          // A job a restart stopped mid-run stays "running" until recovery reads it (7 Oct 2026: one sat 1.5 h after a
+          // deploy, and every push said an import was running). Recover first, so this push queues a live one.
+          if (!o.queue) await (await import('@/lib/import-jobs/server')).importJobStatus(db).catch(() => undefined);
           job = await (o.queue ?? (async (d, actor, k, i) => (await import('@/lib/import-jobs/server')).queueImportJob(d, k, actor, i)))(db, caller.user.id, kind, input);
           await db.query('update platform.sync_push set job_id = $2 where content_hash = $1', [hash, job.id]);
-          if (job.status === 'running') importNote = prospects ? 'A prospects import was already running; the file is in place and the next Add prospects reads it.'
-            : 'A findings import was already running and may not include these files; run Import findings again when it finishes.';
+          if (job.status === 'running' && !prospects) {
+            // The running import may have read its files already: run it once more when it ends.
+            if (!o.queue) (await import('@/lib/import-jobs/server')).importAfterRunning(kind, caller.user.id, input);
+            importNote = 'A findings import was already running; another runs when it finishes, so these files are included.';
+          } else if (job.status === 'running') importNote = 'A prospects import was already running; the file is in place and the next Add prospects reads it.';
         } catch (e) {
           importNote = `The files are in place but the import was not queued (${e instanceof Error ? e.message.slice(0, 120) : 'error'}); run ${prospects ? 'Add prospects' : 'Import findings'} from Developer → Enrichment.`;
         }
@@ -277,6 +283,8 @@ export async function pushStatus(caller: SyncCaller, request: Request, o: { db?:
   const started = Date.now(), id = new URL(request.url).searchParams.get('job') ?? '';
   if (!UUID.test(id)) return { status: 400, body: { ok: false, error: 'Give the import job id the push answered, as ?job=<id>.' } };
   const db = o.db ?? await getDb();
+  // Recovery first, so a job a restart stopped reads as stopped rather than running forever.
+  if (!o.db) await (await import('@/lib/import-jobs/server')).importJobStatus(db).catch(() => undefined);
   const row = await db.one<{ id: string; kind: string; status: string; phase: string; result: Record<string, unknown> | null; error: string | null;
     input: { settled?: unknown } | null; created_at: Date; finished_at: Date | null; workflow: string }>(
     `select j.id::text, j.kind::text, j.status, j.phase, j.result, j.error, j.input, j.created_at, j.finished_at, p.workflow
