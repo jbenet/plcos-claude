@@ -17,7 +17,7 @@ import { grantRefusal, heldScopes, SYNC_ENDPOINTS } from './scopes';
  * activity and audit_recent show sync calls beside the rest. A revoked, expired or inactive token is
  * `mcp.refused`, as on /api/mcp.
  */
-export type SyncScope = 'snapshot' | 'push' | 'vehicles' | 'jobs' | 'feedback';
+export type SyncScope = 'snapshot' | 'push' | 'vehicles' | 'jobs' | 'feedback' | 'identity';
 export interface SyncCaller { token: McpToken; user: AppUser }
 /** mcp.call's outcomes; a duplicate push is 'ok' with duplicate: true, a busy endpoint 'refused' with reason busy. */
 export type SyncOutcome = 'ok' | 'refused' | 'invalid' | 'error';

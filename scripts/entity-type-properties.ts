@@ -6,7 +6,10 @@ import { join } from 'node:path';
 import { withDb } from '../lib/db';
 import { correctEntityType, reverseEntityTypeCorrection } from '../modules/identity/entity-type';
 import { getEntity } from '../modules/identity/repo';
-import { correctPipelineEntityTypes, personEvidence } from '../lib/enrich/entity-types';
+import { correctPipelineEntityTypes, personEvidence, pipelinePeopleNamedLikeOrgs } from '../lib/enrich/entity-types';
+import { readEntityTypes, writeEntityType } from '../lib/sync/entity-type';
+import { SYNC_ADMIN } from '../lib/sync/scopes';
+import { createMcpToken, type AppUser } from '../modules/platform';
 import { exportResearchSet } from '../lib/enrich/candidates';
 import { connectionPersonKey, type Path } from '../lib/enrich/connect';
 import { connectionIdentityProblems } from '../lib/enrich/connection-check';
@@ -192,6 +195,32 @@ export async function entityTypeProperties(check: Check, db: Db) {
     check('ETYPE W3 follows a corrected canonical root despite its retained person-typed alias',
       aliasPaths.length === 1 && aliasPaths[0]?.other.key === root && aliasIdentity?.entityType === 'org' && await type(aliasId) === 'person',
       'A merge redirect supplies effective identity without changing or deleting the original source alias.');
+    // The review list and the token route (issue 0063): every pipeline person named like an organisation we hold,
+    // with the person evidence found; an Admin's token marks one an organisation and can reverse it.
+    const listedName = 'Type Fixture Listed Firm', listed = await entity(listedName), listedOrg = await entity(listedName, 'org');
+    const titled = 'Type Fixture Evidence title';
+    const list = await db.transaction(tx => pipelinePeopleNamedLikeOrgs(tx));
+    const row = list.find(c => c.entityId === listed), titledRow = list.find(c => c.name === titled);
+    check('ETYPE the review list names pipeline people sharing an organisation name, with their person evidence',
+      !!row && row.evidence.length === 0 && row.organizations.includes(listedOrg) && row.pursuits === 1
+        && !!titledRow && titledRow.evidence.includes('title') && !list.some(c => c.entityId === listedOrg),
+      'The list is read-only, includes held-back matches, and never lists an organisation.');
+    const sel = 'id::text, handle, name, initials, role, email, access::text, vehicles, approves';
+    const owner = (await db.one<AppUser>(`select ${sel} from platform.app_user where access='admin' and active order by handle limit 1`))!;
+    const minted = await createMcpToken(owner, { label: 'props entity type', tools: [SYNC_ADMIN], vehicles: null, callsPerDay: 100, days: 30 }, db);
+    const caller = { token: minted.token, user: owner } as unknown as import('../lib/sync/auth').SyncCaller;
+    const post = (body: unknown) => withDb(db, () => writeEntityType(caller, new Request('http://localhost/api/sync/entity-type', { method: 'POST', body: JSON.stringify(body) }), db));
+    const bad = await post({ operation: 'correct', entityId: listed, type: 'org', requestKey: `props:${listed}` });
+    const made = await post({ operation: 'correct', entityId: listed, type: 'org', reason: 'Invented: the firm, typed as a person', requestKey: `props:${listed}` });
+    const again = await post({ operation: 'correct', entityId: listed, type: 'org', reason: 'Invented retry', requestKey: `props:${listed}` });
+    const after = await withDb(db, () => readEntityTypes(caller, db));
+    const correctionId = made.body.correctionId as string;
+    const back = await post({ operation: 'reverse', correctionId, reason: 'Invented reversal' });
+    check('ETYPE an Admin token corrects a record to an organisation, idempotently, and reverses it',
+      bad.status === 400 && made.status === 200 && !!correctionId && again.status === 200
+        && !(after.body.items as Array<{ entityId: string }>).some(c => c.entityId === listed)
+        && back.status === 200 && back.body.reversed === true && await type(listed) === 'person',
+      'The token route records the same local correction the app does, by its owner, with a reason.');
   } finally {
     if (previousDir === undefined) delete process.env.ENRICH_DIR; else process.env.ENRICH_DIR = previousDir;
     await rm(scratch, { recursive: true, force: true });
