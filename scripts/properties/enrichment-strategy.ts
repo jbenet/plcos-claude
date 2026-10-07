@@ -93,6 +93,10 @@ export async function enrichmentStrategyProperties(check: Check) {
     const home = flagged('Marc answers his email, by 30 Sep.', 'Austin, Texas');
     const nowhere = flagged('Marc answers his email, by 30 Sep.', null);
     const territory = flagged('Marc answers his email, by 30 Sep.', 'San Juan, Puerto Rico') || flagged('Marc answers his email, by 30 Sep.', 'Boston, U.S.');
+    // 7 Oct 2026: a Bay Area town alone, or a city with its state's postal code, is the US.
+    const town = flagged('Marc answers his email, by 30 Sep.', 'Palo Alto') || flagged('Marc answers his email, by 30 Sep.', 'Woodside, CA')
+      || flagged('Marc answers his email, by 30 Sep.', 'Menlo Park');
+    const toronto = flagged('Marc answers his 1 Sep email with the first-close date, by 30 Sep.', 'Toronto, ON');
     // A finding's short place beside our record's full one: the record's "United States" wins.
     const shortPlace = gates(s('Marc answers his email, by 30 Sep.'), { contact, money: null, location: 'Palo Alto, California, United States' }, { identity: { canonical: { location: 'Palo Alto' } } }, null).includes('outside the US, no counsel gate');
     const advised = gates({ list: '2027', scores: { capacity: { band: '$1–5M', basis: '$900M of client assets under advice.' } } as never, route: null }, { contact, money: null }, { profile: { investorType: 'fo_staff', capacity: { band: '$1–5M', basis: '$900M of client assets under advice.' } } }, null).includes('capacity ahead of the evidence');
@@ -105,7 +109,7 @@ export async function enrichmentStrategyProperties(check: Check) {
     const parks = park('Check sent mail; if nothing went, park him until the search pass.') && !park('Check sent mail; if nothing went, park him until the search pass.', 'Mon 4 Jan 2027')
       && !park('Park him; look again on 4 Jan.') && !park('Answer her email with the first-close date.');
     check('Outside the US, a strategy names counsel; in the US, its territories, or placed nowhere it needn’t; assets under advice are clients’ money; a capacity fact is evidence; a park carries a date',
-      abroad && !withCounsel && !home && !nowhere && !territory && !shortPlace && advised && factBacked && parks,
+      abroad && !withCounsel && !home && !nowhere && !territory && !shortPlace && !town && toronto && advised && factBacked && parks,
       `abroad without counsel flagged: ${abroad}; with counsel flagged: ${withCounsel}; in the US flagged: ${home}; a territory or "U.S." flagged: ${territory}; placed nowhere flagged: ${nowhere}; a band on assets under advice flagged: ${advised}; a band on a capacity fact accepted: ${factBacked}; parks read right: ${parks}`);
   }
 }
