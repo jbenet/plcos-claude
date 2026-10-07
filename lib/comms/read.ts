@@ -16,25 +16,28 @@ type MessageRow = {
   via_name: string | null; entity_name: string;
 };
 
+// Each LP's aliases come first (identity.alias_pairs, by entity_merge_idx), so every join below is a plain
+// index probe: never identity.canonical_entity_id() on a table's every row (the queue's cost, 7 Oct 2026).
 const REACH = `
-  with lp as (select unnest($1::uuid[]) as entity_id),
+  with lp as (select x as entity_id, identity.canonical_entity_id(x) as canon from unnest($1::uuid[]) x),
+  lpa as (select lp.entity_id, pa.entity_id as alias from lp join identity.alias_pairs(array(select canon from lp)) pa on pa.canonical_id = lp.canon),
   reach as (
-    select lp.entity_id as for_entity, identity.canonical_entity_id(lp.entity_id) as entity_id, 'own' as how from lp
+    select lp.entity_id as for_entity, lp.canon as entity_id, 'own' as how from lp
     union
-    select lp.entity_id, identity.canonical_entity_id(a.org_entity), 'firm' from identity.affiliation a
-      join lp on identity.canonical_entity_id(lp.entity_id) = identity.canonical_entity_id(a.person_entity) where a.ended_on is null
+    select lpa.entity_id, identity.canonical_entity_id(a.org_entity), 'firm' from lpa
+      join identity.affiliation a on a.person_entity = lpa.alias where a.ended_on is null
     union
-    select lp.entity_id, identity.canonical_entity_id(c.person_entity), 'contact' from strategy.pursuit_contact c
-      join strategy.active_pursuit p on p.pursuit_id = c.pursuit_id
-      join lp on identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id(lp.entity_id)
+    select lpa.entity_id, identity.canonical_entity_id(c.person_entity), 'contact' from lpa
+      join strategy.active_pursuit p on p.entity_id = lpa.alias
+      join strategy.pursuit_contact c on c.pursuit_id = p.pursuit_id
   ),
   hits as (
     select r.for_entity, m.message_id,
            bool_or(r.how <> 'firm') own,
            min(case when r.how = 'contact' and r.entity_id <> identity.canonical_entity_id(r.for_entity) then r.entity_id::text end) contact_id,
            min(case when r.how = 'firm' then r.entity_id::text end) firm_id
-      from email.comms_message m cross join lateral unnest(m.entity_ids) x(id)
-      join reach r on r.entity_id = identity.canonical_entity_id(x.id)
+      from reach r join identity.alias_pairs(array(select entity_id from reach)) ra on ra.canonical_id = r.entity_id
+      join email.comms_message m on m.entity_ids @> array[ra.entity_id]
      group by r.for_entity, m.message_id
   )`;
 
@@ -97,7 +100,7 @@ export async function linksFor(entityIds: string[], q?: Queryable): Promise<Map<
            l.ticket_id::text, u.name linked_by, l.autonomous, l.linked_at
       from email.message_link l join strategy.pursuit p on p.pursuit_id = strategy.canonical_pursuit_id(l.pursuit_id)
       join platform.app_user u on u.id = l.linked_by
-     where identity.canonical_entity_id(p.entity_id) = any(select identity.canonical_entity_id(x) from unnest($1::uuid[]) x)
+     where p.entity_id = any(identity.alias_ids(array(select identity.canonical_entity_id(x) from unnest($1::uuid[]) x)))
      order by l.sent_at, l.message_id`, [entityIds]);
   const canon = new Map((await db.query<{ id: string; c: string }>('select x::text id, identity.canonical_entity_id(x)::text c from unnest($1::uuid[]) x', [entityIds])).map((r) => [r.c, r.id]));
   for (const r of rows) {

@@ -22,7 +22,10 @@ export function addressesReadable(user: Principal, vehicleId: string | null): bo
   return vehicleId ? can(user, 'read', { vehicle: vehicleId, fieldClass: 'R2' }) : can(user, 'read', { fieldClass: 'R2' });
 }
 
-/** Every current, non-licensed address claim per canonical entity, best first. Call only after addressesReadable. */
+/**
+ * Every current, non-licensed address claim per canonical entity, best first. Call only after addressesReadable.
+ * The ids' aliases are expanded first (identity.alias_ids), so the claim index answers, not a scan of every claim.
+ */
 export async function addressesFor(entityIds: string[]): Promise<Map<string, Address[]>> {
   const out = new Map<string, Address[]>();
   const ids = [...new Set(entityIds)];
@@ -30,7 +33,7 @@ export async function addressesFor(entityIds: string[]): Promise<Map<string, Add
   const rows = await (await getDb()).query<{ entity_id: string; value: string; source: string; origin: string | null; verified_at: Date | string | null; verified_by: string | null }>(`
     select identity.canonical_entity_id(c.entity_id)::text entity_id, c.value, c.source, d.origin, c.last_verified_at verified_at, u.name verified_by
       from research.claim c left join research.source_doc d on d.doc_id = c.source left join platform.app_user u on u.id = c.last_verified_by
-     where identity.canonical_entity_id(c.entity_id) = any($1::uuid[]) and c.superseded_by is null and c.field ~ '(^|\\.)email$'
+     where c.entity_id = any(identity.alias_ids($1::uuid[])) and c.superseded_by is null and c.field ~ '(^|\\.)email$'
        and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
      order by c.last_verified_at desc nulls last, c.as_of desc`, [ids]);
   for (const e of rows) {

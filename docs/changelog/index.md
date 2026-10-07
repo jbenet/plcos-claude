@@ -260,3 +260,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Slow outreach calls say where their time went](entries/outreach-timing.md)
 - [Top connectors answer at once when nothing changed](entries/outreach-connectors-kept.md)
 - [Top connectors lists people, says why a score is 0, and plans faster](entries/outreach-connectors-people.md)
+- [The mail desk's reads stop scanning whole tables](entries/outreach-alias-ids.md)
