@@ -47,9 +47,9 @@ async function main() {
     const by = 'rule (scripts/enrich-merge-findings.ts)';
     let out: ReturnType<typeof mergeFindings>;
     if (redo) {
-      // Only a revised (fact-checked or W1-revised) file a merge wrote: rebuilt from its copy before the merge, with a dated note either way.
+      // Only a file a merge wrote for an LP with a revised (fact-checked or W1-revised) finding: rebuilt from its copy before the merge, with a dated note either way.
       const mergedBefore = (newest!.f.researched.corrected ?? []).some((c) => /enrich-merge-findings/.test(c.by ?? ''));
-      if (!mergedBefore || !revised(newest!.f)) continue;
+      if (!mergedBefore || !group.some((g) => revised(g.f))) continue;
       const before = JSON.parse(await readFile(join(redo, newest!.file), 'utf8').catch(() => 'null')) as Finding | null;
       if (!before) { console.log(`  no copy before the merge for ${newest!.file}`); continue; }
       if (JSON.stringify(before) === JSON.stringify(newest!.f)) continue; // That merge didn't write it.

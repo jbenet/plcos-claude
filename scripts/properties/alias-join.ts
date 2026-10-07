@@ -176,10 +176,11 @@ export async function aliasJoinProperties(check: Check) {
     const by = (f: unknown, who: string) => ({ ...(f as object), researched: { ...(f as { researched: object }).researched, corrected: [{ at: '2026-10-07T10:00:00Z', by: who, what: 'dropped a holding' }] } }) as never;
     const w1qTarget = mergeFindings(by(newest, 'claude (sub-agent), W1q revision'), [older], '2026-10-07T12:00:00Z', 'props').facts;
     const mergedOnce = mergeFindings(by(newest, 'rule (scripts/enrich-merge-findings.ts)'), [older], '2026-10-07T12:00:00Z', 'props').facts;
-    check('An older finding\'s facts and connections the newest lacks are merged in, once, with a dated correction; the newest stays the record; a fact-checked or W1-revised finding takes nothing by rule; an earlier merge doesn\'t count as a revision',
+    const revisedSibling = mergeFindings(newest, [older, by(finding('firm', '2026-10-01T00:00:00Z', [fact('Advisor at Invented Labs')]), 'claude (sub-agent), W1c')], '2026-10-07T12:00:00Z', 'props').facts;
+    check('An older finding\'s facts and connections the newest lacks are merged in, once, with a dated correction; the newest stays the record; a fact-checked or W1-revised finding takes nothing by rule; an earlier merge doesn\'t count as a revision; an LP with any revised finding takes no merge',
       out.facts === 2 && out.connections === 1 && m.facts.length === 3 && m.researched.at === '2026-10-06T00:00:00Z'
       && m.researched.corrected.length === 1 && /merged 2 facts and 1 connection from the older finding alias-river/.test(m.researched.corrected[0]!.what)
-      && same.facts === 0 && same.merged === newest && cutTarget === 0 && checkedSource === 0 && w1qTarget === 0 && mergedOnce === 2,
+      && same.facts === 0 && same.merged === newest && cutTarget === 0 && checkedSource === 0 && w1qTarget === 0 && mergedOnce === 2 && revisedSibling === 0,
       `added ${out.facts} facts, ${out.connections} connections; ${m.facts.length} facts; correction ${m.researched.corrected?.[0]?.what}`);
   }
 }
