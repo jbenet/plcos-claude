@@ -89,9 +89,9 @@ export function checkBundle(input: unknown, maxFiles: number): { bundle: PushBun
         (f.content as unknown[]).forEach((row, r) => {
           // Grades are checked against the server's finding later; here, only what the row says of itself.
           const own = factReviewProblems(row, { facts: Array.isArray((row as { facts?: unknown[] })?.facts) ? (row as { facts: unknown[] }).facts : [] });
-          if (own.length) problems.push(...own.map((p) => `row ${r}: ${p}`));
+          if (own.length) problems.push(...own.map((p) => `row ${r + 1}: ${p}`));
           const key = (row as { key?: unknown })?.key;
-          if (typeof key === 'string') { if (keys.has(key)) problems.push(`row ${r}: key reviewed twice`); keys.add(key); }
+          if (typeof key === 'string') { if (keys.has(key)) problems.push(`row ${r + 1}: key reviewed twice`); keys.add(key); }
         });
       }
     }
