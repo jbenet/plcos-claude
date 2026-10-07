@@ -28,7 +28,7 @@ export const routeRules = {
   // The workflow ledger in the cloud (lib/sync/runs.ts): a Mac run's begin and finish, with a push token.
   'app/api/sync/runs/route.ts#POST': 'sync:push',
   // A vehicle added by an Admin's token (lib/sync/vehicles.ts), the Settings → Vehicles form's own checks.
-  'app/api/sync/vehicles/route.ts#POST': 'sync:vehicles',
+  'app/api/sync/vehicles/route.ts#POST': 'sync:admin',
   'app/api/session/route.ts#POST': 'session',
   // Google sign-in and first-run setup (docs/deploy/railway.md §3): nobody is signed in yet. Each handler
   // checks for itself (the signed state cookie, the setup code); a POST must come from this origin.
@@ -38,5 +38,5 @@ export const routeRules = {
   'app/setup/submit/route.ts#POST': 'public',
   'app/dev/shot/[...path]/route.ts#GET': 'admin',
   'app/issues/shot/[...path]/route.ts#GET': 'admin',
-} as const satisfies Record<string, Action | 'mcp' | 'outreach' | 'sync:snapshot' | 'sync:push' | 'sync:vehicles' | 'public'>;
+} as const satisfies Record<string, Action | 'mcp' | 'outreach' | 'sync:snapshot' | 'sync:push' | 'sync:admin' | 'public'>;
 export type RouteId = keyof typeof routeRules;

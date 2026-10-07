@@ -1,7 +1,7 @@
 import { getDb } from '@/lib/db';
 import { allowed } from '@/lib/mcp/tools';
 import { appendAudit, findMcpToken, type AppUser, type McpToken } from '@/modules/platform';
-import { grantRefusal, SYNC_ENDPOINTS } from './scopes';
+import { grantRefusal, heldScopes, SYNC_ENDPOINTS } from './scopes';
 
 /**
  * Who may use the cloud sync endpoints (docs/deploy/railway.md §6–§7; Juan, 4 Oct 2026, decision G: no
@@ -43,8 +43,9 @@ export async function syncGuard(request: Request, scope: SyncScope): Promise<{ c
     return { response: json(status, { ok: false, error }) };
   };
   const endpoint = SYNC_ENDPOINTS[scope];
-  if (!allowed({ tools: new Set(found.token.tools) }, endpoint as never)) return refuse(403, 'scope', `That token does not carry the ${endpoint.policy.scopes.join(', ')} scope.`);
-  if (grantRefusal(found.user, endpoint.policy.scopes)) return refuse(403, 'role', scope === 'push' ? 'A push token works only while its owner is a Team member or an Admin.' : `A ${scope} token works only while its owner is an Admin.`);
+  if (!allowed({ tools: heldScopes(found.token.tools) }, endpoint as never)) return refuse(403, 'scope', `That token does not carry the ${endpoint.policy.scopes.join(', ')} scope.`);
+  // The token's own scopes, not only the endpoint's: an Admin token whose owner is no longer an Admin opens nothing.
+  if (grantRefusal(found.user, [...endpoint.policy.scopes, ...found.token.tools])) return refuse(403, 'role', scope === 'push' ? 'A push token works only while its owner is a Team member or an Admin.' : `A ${scope} token works only while its owner is an Admin.`);
   return { caller: { token: found.token, user: found.user } };
 }
 

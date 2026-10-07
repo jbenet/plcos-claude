@@ -7,8 +7,8 @@
 #
 #   bash scripts/cloud-vehicle.sh [--to <app url>] <vehicle.json>
 #
-# The token needs the sync:vehicles scope, which only an Admin holds (Preferences → MCP access → "Push and
-# add vehicles"). A taken slug or name is refused, never updated.
+# The token needs the sync:admin scope, which only an Admin holds (Preferences → MCP access → "Admin").
+# A taken slug or name is refused, never updated.
 #
 # Secrets, never printed and never on a command line, as for scripts/cloud-push.sh:
 #   the token     Keychain item plcos-railway / push-token (CLOUD_PUSH_TOKEN for tests).
@@ -30,7 +30,7 @@ elif [[ "$TO" =~ ^http://(127\.0\.0\.1|localhost)(:[0-9]+)?$ ]]; then proto='=ht
 else die "--to must be https://<host> (http only on 127.0.0.1, for tests)"; fi
 if [ -n "${CLOUD_PUSH_TOKEN+set}" ]; then token="$CLOUD_PUSH_TOKEN"; else token="$(keychain push-token || true)"; fi
 [[ "$token" =~ ^plcos_mcp_[A-Za-z0-9_-]{30,80}$ ]] \
-  || die "no token: make one with \"Push and add vehicles\" in Preferences → MCP access and store it as Keychain item plcos-railway / push-token"
+  || die "no token: make an \"Admin\" token in Preferences → MCP access and store it as Keychain item plcos-railway / push-token"
 node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$1" 2>/dev/null || die "the file is not JSON"
 
 set +e

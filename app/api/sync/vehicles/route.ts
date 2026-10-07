@@ -2,7 +2,7 @@ import { revalidatePath } from 'next/cache';
 import { withRoute } from '@/lib/authz/route';
 /**
  * An Admin adds a vehicle by token (lib/sync/vehicles.ts; docs/deploy/railway.md §7), sent by
- * scripts/cloud-vehicle.sh with a sync:vehicles token. The same checks and audit as Settings → Vehicles.
+ * scripts/cloud-vehicle.sh with an Admin (sync:admin) token. The same checks and audit as Settings → Vehicles.
  */
 export const dynamic = 'force-dynamic';
 

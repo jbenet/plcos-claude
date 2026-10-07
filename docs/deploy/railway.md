@@ -386,9 +386,13 @@ and push up results".
   by token, so Claude can add one without anyone clicking through Settings → Vehicles. One JSON object (`name`,
   `slug`, `kind`, `exemption`, optional `phase`, `target`, `opens`, `closes`, `aliases`; 4 KB at most; an unknown
   field is 422) goes to `createVehicle`, the form's own writer, so its checks hold: Admin only, the exemption never
-  defaulted, a taken slug or name refused (409) and never updated, one `vehicle.created` audit row. It needs a third
-  scope, `sync:vehicles`, which only an Admin holds; Preferences offers it as "Push and add vehicles", a token
-  with `sync:push` and `sync:vehicles`. Nothing edits or removes a vehicle this way. `scripts/cloud-vehicle.sh
+  defaulted, a taken slug or name refused (409) and never updated, one `vehicle.created` audit row. It needs the
+  Admin scope, `sync:admin`. Nothing edits or removes a vehicle this way.
+- **The Admin scope, `sync:admin`** (7 Oct; Juan: "something w/ very broad perms"). Preferences offers it as
+  "Admin". Only an Admin holds it, and it opens everything above (pull, push, the cloud ledger, adding a vehicle)
+  plus each Admin task offered by token later, which takes this scope rather than one of its own. It is checked
+  against the owner's access on every use, so a former Admin's token opens nothing. It is not the MCP tools or the
+  outreach desk, and nothing under it sends, decides a ticket or moves money. `scripts/cloud-vehicle.sh
   <vehicle.json>` sends it with the Keychain's `push-token`.
 
 **Why this is not two-way sync.** Sync would merge two writable databases: conflict rules for every table,

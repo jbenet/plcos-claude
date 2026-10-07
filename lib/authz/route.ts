@@ -25,10 +25,10 @@ export function withRoute(name: RouteId, handler: (request: Request, context: an
   // (lib/sync/scopes.ts), checked with its owner's current access before the handler runs. No cookie; any
   // browser Origin is refused there.
   const sync = routeRules[name];
-  if (sync === 'sync:snapshot' || sync === 'sync:push' || sync === 'sync:vehicles') {
+  if (sync === 'sync:snapshot' || sync === 'sync:push' || sync === 'sync:admin') {
     return async (request: Request): Promise<Response> => {
       const { syncGuard } = await import('@/lib/sync/auth');
-      const guard = await syncGuard(request, sync === 'sync:snapshot' ? 'snapshot' : sync === 'sync:vehicles' ? 'vehicles' : 'push');
+      const guard = await syncGuard(request, sync === 'sync:snapshot' ? 'snapshot' : sync === 'sync:admin' ? 'vehicles' : 'push');
       if ('response' in guard) return guard.response;
       return handler(request, guard, guard.caller.user);
     };
@@ -38,7 +38,7 @@ export function withRoute(name: RouteId, handler: (request: Request, context: an
       const policy = routeRules[name];
       if (!policy) throw new AuthorizationError();
       try {
-        if (policy === 'mcp' || policy === 'outreach' || policy === 'sync:snapshot' || policy === 'sync:push' || policy === 'sync:vehicles') throw new AuthorizationError();
+        if (policy === 'mcp' || policy === 'outreach' || policy === 'sync:snapshot' || policy === 'sync:push' || policy === 'sync:admin') throw new AuthorizationError();
         if (policy === 'feedback' || policy === 'session' || policy === 'public') {
           // Session selection bootstraps identity; its handler validates the selected active user.
           // Feedback reporter identity is resolved only by the post-response ingester.

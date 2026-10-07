@@ -7,7 +7,7 @@ import { shortDate, ago } from '@/lib/time';
 import { listMcpTokens, listVehicles } from '@/modules/platform';
 import { config } from '@/config/deployment';
 import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
-import { grantRefusal, SYNC_PUSH, SYNC_VEHICLES, SYNC_SNAPSHOT } from '@/lib/sync/scopes';
+import { grantRefusal, SYNC_ADMIN, SYNC_PUSH, SYNC_SNAPSHOT } from '@/lib/sync/scopes';
 import { McpTokenForm } from './McpTokenForm';
 import s from './mcp.module.css';
 
@@ -42,14 +42,15 @@ export async function McpTokens() {
           Two more kinds move data between this server and the Mac (docs/deploy/railway.md §6–§7) and do nothing else: a
           {' '}<b>snapshot</b> token lets <span className="mono">scripts/cloud-pull.sh</span> copy the whole database down (Admins only), and a
           {' '}<b>push</b> token lets <span className="mono">scripts/cloud-push.sh</span> send finished research up, checked and imported like the
-          server&rsquo;s own. Neither opens an MCP tool, and every use is logged.
+          server&rsquo;s own. An Admin can make an <b>admin</b> token instead, which does both and every Admin task offered by
+          token, such as adding a vehicle. None opens an MCP tool, sends, decides a ticket or moves money, and every use is logged.
         </p>
         {user.access === 'viewer' ? (
           <p className="muted">Viewers do not make tokens yet.</p>
         ) : (
           <McpTokenForm endpoint={endpoint} vehicles={mine.map((v) => ({ id: v.id, name: v.name }))} draftTools={drafts}
             outreach={user.access === 'admin' && config.outreach.enabled} days={config.mcp.tokenDays}
-            sync={(['snapshot', 'push', 'push-vehicles'] as const).filter((x) => !grantRefusal(user, x === 'snapshot' ? [SYNC_SNAPSHOT] : x === 'push' ? [SYNC_PUSH] : [SYNC_PUSH, SYNC_VEHICLES]))} />
+            sync={(['snapshot', 'push', 'admin'] as const).filter((x) => !grantRefusal(user, x === 'snapshot' ? [SYNC_SNAPSHOT] : x === 'push' ? [SYNC_PUSH] : [SYNC_ADMIN]))} />
         )}
         {tokens.length > 0 && (
           <table className={s.tokens}>
