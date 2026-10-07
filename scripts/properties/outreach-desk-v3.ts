@@ -157,6 +157,26 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
       + `the second hop's: ${(deeper.json?.data?.rows ?? []).length} (${deeper.json?.data?.rows?.[0]?.position}), first-hop only ${deeperFirst.json?.data?.rows?.length}; paged ${seen.length} over ${pages}; MCP equal ${JSON.stringify(byMcp.data) === JSON.stringify(targets.json?.data)}; `
       + `another vehicle's GP: ${outside.status}, on theirs ${theirs.status}; another query's cursor ${foreign.status}`);
 
+    // ── Kept plans and ifChanged (7 Oct 2026) ───────────────────────────────────────────────
+    const kept = await rest(oneTok, 'connectors', { vehicle: V1.slug });
+    const version = kept.json?.data?.version as string | null | undefined;
+    const same = await rest(oneTok, 'connectors', { vehicle: V1.slug, ifChanged: version ?? 'none' });
+    const other = await rest(oneTok, 'connectors', { vehicle: V1.slug, ifChanged: 'not-this-one' });
+    const keptTargets = await rest(oneTok, 'connectors', { vehicle: V1.slug, entityId: first, limit: '500' });
+    const sameTargets = await rest(oneTok, 'connectors', { vehicle: V1.slug, entityId: first, limit: '500', ifChanged: keptTargets.json?.data?.version ?? 'none' });
+    // A write to a table the plan reads moves the revision: planned again, and an answer that says the same keeps its version.
+    await db.query(`update platform.vehicle set sort_order = sort_order where id = $1`, [V2.id]);
+    const replanned = await rest(oneTok, 'connectors', { vehicle: V1.slug, ifChanged: version ?? 'none' });
+    check('Outreach desk v3: a complete top_connectors answer carries a version; passed back as ifChanged, the same answer is { unchanged: true } (connectors and one connector\'s targets), another version gets the full answer, and after a write the plan is made again and still matches',
+      kept.status === 200 && kept.json.data.complete === true && typeof version === 'string' && version.length > 8
+      && same.status === 200 && same.json.data.unchanged === true && same.json.data.version === version && !('connectors' in same.json.data)
+      && other.status === 200 && other.json.data.version === version && Array.isArray(other.json.data.connectors)
+      && JSON.stringify({ ...other.json.data }) === JSON.stringify(kept.json.data)
+      && sameTargets.status === 200 && sameTargets.json.data.unchanged === true && !('rows' in sameTargets.json.data)
+      && replanned.status === 200 && replanned.json.data.unchanged === true,
+      `version ${version ?? 'NONE'}; same: ${same.status} ${JSON.stringify(same.json?.data)}; other: ${other.status} ${other.json?.data?.version === version ? 'same version' : 'DIFFERENT'}; `
+      + `targets: ${JSON.stringify(sameTargets.json?.data)}; after a write: ${JSON.stringify(replanned.json?.data)?.slice(0, 120)}`);
+
     // ── Ask history ───────────────────────────────────────────────────────────────────────
     const lastOn = thisQuarter.toISOString().slice(0, 10);
     check('Outreach desk v3: asksThisQuarter counts the intro asks made to that person this calendar quarter (not last quarter\'s, not one never made), and lastAsk says when and whether they replied, from the mail trace',
