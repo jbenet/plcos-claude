@@ -85,6 +85,7 @@ Every queue row returns three states apart, each with Capital OS's label, so jua
 | `top_connectors` with `entityId` | `GET /api/outreach/connectors?vehicle=…&entityId=…[&limit=…&cursor=…]` (§4c) | outreach:read |
 | `routes_to` | `GET /api/outreach/routes-to?entityId=…&vehicle=…` (§4a) | the tool's name in the token, as over MCP |
 | `routes_through` | `GET /api/outreach/routes-through?entityId=…[&vehicle=…]` (§4a) | the tool's name in the token, as over MCP |
+| `search` | `GET /api/outreach/search?query=…[&kind=person\|org&limit=…]` (§4a) | the tool's name in the token, as over MCP |
 | `audit_recent` | `GET /api/outreach/audit` | (any token) |
 
 Every REST answer is `{ about, op, tool, asOf, coverage, data }`, and `data` is exactly what the MCP tool answers in its
@@ -272,6 +273,22 @@ A Viewer's `routes_to` answer has the same routes with no `contact` keys, and
 (optionally `&vehicle=`, `&limit=`) run the MCP tools `routes_to` and `routes_through` through the same `runTool`: the same
 policy (a read; the token must list the tool, exactly as over MCP), envelope, budget and audit record, and the same
 `data` (a property compares them). `routes_through` still needs access to every vehicle.
+
+**Route quality (7 Oct 2026).** For juanmail's Intros page, `routes_to`'s routes (and `lp_summary`'s) also carry what the
+routes page shows in its comparison rows. Each is optional to a client and never changes which routes come back:
+
+- per route: **`score`**, the route score /100 (an integer), or null while the score is provisional (the page shows "—");
+  **`weakestTier`**, the worst hop's tier (A–D); **`reasons`**, the verdict's first three reasons, health-redacted;
+  **`askLoad`** `{ entityId, name, used, cap }`, the intro asks the introducer (who carries the ask on) has used this
+  quarter, null on a direct route; **`foldedUnder`**, the index in this answer's routes of the route this alternative is
+  folded beneath, or null when it is shown on its own.
+- per hop: **`warmth`** (0 to 5, in halves, the routes page's reading of the tie on its date), the edge **`kind`** (colleague,
+  coinvestor, family, …) and **`edgeYear`**, the year the tie is dated from.
+- Reasons can quote a restriction's instruction, which is R4: a token without R4 on the vehicle gets `reasons` only on
+  recommended routes, and null on the others. Score factors and edge evidence stay on the routes page.
+
+**REST search (7 Oct 2026).** `GET /api/outreach/search?query=…` (with `kind` and `limit` as over MCP) runs the MCP
+`search` tool through the same `runTool`: the token must list `search`, as over MCP, and `data` is the tool's answer.
 
 ## 4b. Top connectors (5 Oct 2026)
 

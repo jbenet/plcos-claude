@@ -142,6 +142,23 @@ export async function outreachDeskProperties(check: Check, db: Db) {
       JSON.stringify(toM.data) === JSON.stringify(to.json.data) && JSON.stringify(throughM.data) === JSON.stringify(tData) && to.json.tool === 'routes_to' && through.json.tool === 'routes_through',
       `routes_to equal: ${JSON.stringify(toM.data) === JSON.stringify(to.json.data)}; routes_through equal: ${JSON.stringify(throughM.data) === JSON.stringify(tData)}`);
 
+    // ── Route quality and REST search (7 Oct 2026, juanmail's Intros page) ─────────────────
+    type QRoute = Omit<Route, 'hops'> & { score: number | null; weakestTier: string | null; reasons: string[] | null; foldedUnder: number | null;
+      askLoad: { entityId: string | null; name: string; used: number; cap: number } | null; hops: Array<Hop & { warmth: number; kind: string; edgeYear: number | null }> };
+    const qRoutes = routes as unknown as QRoute[];
+    const viewerRoutes = (viewerTo.json?.data?.routes ?? []) as QRoute[];
+    const found = await rest(juanTok, 'search', { query: 'Invented Desk LP', limit: '10' });
+    const foundM = await mcp(juanMcp, 'search', { query: 'Invented Desk LP', limit: 10 });
+    check('Outreach desk: routes_to carries each route\'s score (or null while provisional), weakest tier, first reasons, ask load and fold, and each hop\'s warmth, kind and year; a reader without R4 gets reasons only on recommended routes; REST search answers what the MCP search tool answers',
+      qRoutes.length > 0 && qRoutes.every((r) => (r.score === null || (Number.isInteger(r.score) && r.score >= 0 && r.score <= 100))
+        && /^[A-D]$/.test(r.weakestTier ?? '') && Array.isArray(r.reasons) && r.reasons.length <= 3 && 'askLoad' in r && 'foldedUnder' in r
+        && r.hops.every((h) => typeof h.warmth === "number" && h.warmth >= 0 && h.warmth <= 5 && typeof h.kind === 'string' && (h.edgeYear === null || h.edgeYear > 1900))
+        && r.hops.reduce((w, h) => (h.tier > w ? h.tier : w), 'A') === r.weakestTier)
+      && viewerRoutes.every((r) => r.verdict === 'recommend' ? Array.isArray(r.reasons) : r.reasons === null)
+      && found.status === 200 && found.json.tool === 'search' && JSON.stringify(found.json.data) === JSON.stringify(foundM.data) && found.text.includes(lp1),
+      `${qRoutes.length} routes: ${JSON.stringify(qRoutes.map((r) => ({ s: r.score, w: r.weakestTier, n: r.reasons?.length, a: r.askLoad, f: r.foldedUnder, h: r.hops.map((h) => [h.warmth, h.kind, h.edgeYear]) }))).slice(0, 400)}; `
+      + `viewer reasons ${JSON.stringify(viewerRoutes.map((r) => [r.verdict, r.reasons === null ? null : r.reasons.length]))}; search ${found.status} (${found.json?.error ?? 'ok'}), equal ${JSON.stringify(found.json?.data) === JSON.stringify(foundM.data)}`);
+
     // ── includePassed ──────────────────────────────────────────────────────────────────
     type Row = { pursuitId: string; passed: boolean; bucket: string; status: { value: string }; closeTrack: Record<string, unknown> | null };
     const plain = await rest(oneTok, 'queue', { vehicle: V1.slug, limit: '500' });

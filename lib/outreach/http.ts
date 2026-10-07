@@ -27,6 +27,8 @@ const OPS: Record<string, { tool: string; method: 'GET' | 'POST'; rename?: Recor
   // Thin wrappers over the MCP route tools (docs/27 §4a): the same tool, its own scopes, the same answer.
   'routes-to': { tool: 'routes_to', method: 'GET', rename: { entityId: 'targetId' } },
   'routes-through': { tool: 'routes_through', method: 'GET', rename: { entityId: 'nodeId' } },
+  // The MCP search tool over REST (7 Oct 2026, juanmail's Intros page): find a person or organisation by name.
+  search: { tool: 'search', method: 'GET' },
   update: { tool: 'outreach_update', method: 'POST' },
   tickets: { tool: 'outreach_request_ticket', method: 'POST' },
   contacts: { tool: 'outreach_propose_contact', method: 'POST' },
