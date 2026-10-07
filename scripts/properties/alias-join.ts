@@ -84,6 +84,11 @@ export async function aliasJoinProperties(check: Check) {
     const canonical = await run();
     check('Canonical and alias strategies produce identical checker summaries', canonical.stdout === first.stdout,
       'Same inputs and same candidate checks regardless of filename.');
+    // 7 Oct 2026: a lead stamped about 45 minutes after it was written hid staleness.
+    await write(`strategy/${key}.json`, { ...strategy(key), made: { ...strategy(key).made, at: new Date(Date.now() + 86_400_000).toISOString() } });
+    const future = await run();
+    check('A strategy stamped later than it was written is counted', first.stdout.includes('0 stamped later than they were written')
+      && future.stdout.includes('1 stamped later than they were written'), 'A future made.at hides staleness and moves lead pins.');
     await rm(join(dir, `strategy/${key}.json`));
     await write('entity-keys.json', {});
     await write(`strategy/${alias}.json`, { ...s, candidateKey: key,
