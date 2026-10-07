@@ -30,7 +30,7 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
   const [busy, setBusy] = useState(false);
   const [preset, setPreset] = useState('read');
   const keep = made?.ok ? SYNC_USE[preset] : undefined;
-  const command = keep ? `security add-generic-password -s plcos-railway -a ${keep.item} -U -w`
+  const command = keep ? `bash scripts/keychain-token.sh ${keep.item}`
     : made?.ok && preset.startsWith('outreach') ? `curl -H "Authorization: Bearer ${made.secret}" ${endpoint.replace(/\/api\/mcp$/, '/api/outreach/vehicles')}`
     : made?.ok ? `claude mcp add --transport http --scope user capital-os ${endpoint} --header "Authorization: Bearer ${made.secret}"` : '';
   return (
@@ -88,7 +88,7 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
         <div className={s.secret} role="status">
           <p style={{ margin: '0 0 6px' }}><b>{made.label}</b> — copy it now; it is not shown again.</p>
           <code className={s.code}>{made.secret}</code>
-          <p style={{ margin: '10px 0 6px' }}>{keep ? 'Keep it in the Mac’s Keychain (in a terminal; it asks for the token, hidden as you paste):'
+          <p style={{ margin: '10px 0 6px' }}>{keep ? 'Keep it in the Mac’s Keychain: ask Claude on the Mac to store it, or run this; a popup asks for the token, hidden as you paste:'
             : preset.startsWith('outreach') ? 'Try it (in a terminal):' : 'Connect Claude Code (in a terminal):'}</p>
           <code className={s.code}>{command}</code>
           {keep && <p style={{ margin: '10px 0 0' }} className="muted">Then <span className="mono">{keep.script}</span> reads it from there.</p>}
