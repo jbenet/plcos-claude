@@ -284,3 +284,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [A thin refresh re-pins by rule](entries/repin-thin-refresh.md)
 - [A refresh adds to an LP's older finding](entries/merge-findings.md)
 - [A strategy stamped later than it was written is counted](entries/future-made.md)
+- [A findings import survives a deploy](entries/import-survives-deploy.md)

@@ -98,8 +98,16 @@ export async function importJobSnapshot(db:Db):Promise<ImportJob[]> {
   return jobs;
 }
 
-/** Server lifecycle recovery. Interrupted running work is never silently replayed. */
-export async function importJobStatus(db:Db):Promise<ImportJob[]> {
+/**
+ * A findings import reads every pushed file again from the start, as each push's import does, so one a restart
+ * stopped is queued again (7 Oct 2026: every deploy restarted the server mid-import, and no findings import had
+ * finished all day). Its receipt says so. Other kinds still wait for a person.
+ */
+const REPLAYED:readonly string[]=['findings'];
+export const stoppedReplayed=(kind:string)=>`Worker stopped without a completion receipt (the server restarted). A new ${kind} import was queued to read the files again.`;
+
+/** Server lifecycle recovery. Interrupted running work is not replayed, except the kinds in REPLAYED. */
+export async function importJobStatus(db:Db,o:{replayed?:readonly string[]}={}):Promise<ImportJob[]> {
   const mirrored=activeImportProgress();if(mirrored)return mirrored;
   const jobs=await importJobSnapshot(db);
   if(process.env.POSTGRES_REHEARSAL==='1')return jobs;
@@ -107,8 +115,12 @@ export async function importJobStatus(db:Db):Promise<ImportJob[]> {
     if(db.kind==='pglite')remember(job);
     if(job.status==='queued')launchImportJob(db,job.id);
     if(job.status==='running'&&Date.now()-new Date(job.heartbeat_at??job.started_at??job.created_at).getTime()>60000) {
-      if(db.kind==='postgres'&&config.db.url)await withImportLock(config.db.url,job.kind,()=>failImportJob(db,job.id,'Worker stopped without a completion receipt. Review committed results before retrying.'));
-      else if(!children.has(job.id))await recordWorkerExit(db,job.id,'Worker stopped without a completion receipt. Review committed results before retrying.');
+      const replay=(o.replayed??REPLAYED).includes(job.kind);
+      const error=replay?stoppedReplayed(job.kind):'Worker stopped without a completion receipt. Review committed results before retrying.';
+      let failed=false;
+      if(db.kind==='postgres'&&config.db.url)failed=(await withImportLock(config.db.url,job.kind,()=>failImportJob(db,job.id,error))).acquired;
+      else if(!children.has(job.id)){await recordWorkerExit(db,job.id,error);failed=true;}
+      if(failed&&replay&&!followUps.has(job.kind))followUps.set(job.kind,{actor:job.actor,input:job.input??{}});
       await runFollowUp(db,job.id);
     }
   }

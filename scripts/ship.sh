@@ -31,6 +31,15 @@ fi
 # rolled back in Railway (Deployments → an earlier one → Redeploy), which this prints.
 deploy() {
   local sha; sha=$(git rev-parse HEAD)
+  # A deploy restarts the server and stops its import workers (7 Oct 2026: no findings import finished all day).
+  # Wait while /api/health counts any; after that, the restart's recovery queues a stopped findings import again.
+  # GUESS: an hour covers a findings import with its network rebuild.
+  for i in $(seq 180); do
+    n=$(curl -s -m 15 "$CLOUD_URL/api/health" | sed -n 's/.*"importing":\([0-9]*\).*/\1/p')
+    [ -n "$n" ] || break
+    [ "$i" = 1 ] && echo "DEPLOY: waiting for $n running import(s) to finish first"
+    sleep 20
+  done
   git push -q origin master:deploy || { echo "DEPLOY: the push to deploy failed"; return 1; }
   # GUESS: a Railway build and start takes 4–8 min; 25 min covers a slow queue.
   for i in $(seq 75); do

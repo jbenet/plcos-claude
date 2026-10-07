@@ -1,7 +1,7 @@
 /** Invented rows only. A real child process proves that pages and jobs do not share a JS process. */
 import { spawn, spawnSync } from 'node:child_process';
 import { MessageChannel } from 'node:worker_threads';
-import { launchImportJob } from '../../lib/import-jobs/server';
+import { importJobStatus, launchImportJob, stoppedReplayed } from '../../lib/import-jobs/server';
 import { connectJobDb,hostJobDb } from '../../lib/db/job-bridge';
 import { randomUUID } from 'node:crypto';
 import { openTestDb } from './database';
@@ -138,6 +138,30 @@ export async function importJobProperties(check:Check) {
       await begun;closeHost();await outcome;
       const rows=await db.query<{value:number}>('select value from public.thread_atomic');
       check('IMPORT JOB disconnected transaction rolls back without undoing prior commits',rows.length===1&&rows[0]?.value===1,'A worker port loss releases the transaction and preserves only committed work.');
+      // 7 Oct 2026: every deploy restarted the server under the running findings import. A restart's recovery queues
+      // a replayed kind again (findings in production; pursuits here, which finishes fast on invented rows).
+      const stale=async(kind:'pursuits'|'duplicates')=>{
+        const j=await createImportJob(db,kind,actor);
+        await db.query("update platform.import_job set status='running',started_at=now()-interval '10 minutes',heartbeat_at=now()-interval '10 minutes' where id=$1",[j.id]);
+        return j;
+      };
+      const after=(kind:string,id:string)=>db.one<ImportJob>(`select * from platform.import_job where kind=$1 and id<>$2
+        and created_at>=(select created_at from platform.import_job where id=$2) order by created_at desc limit 1`,[kind,id]);
+      const cut=await stale('pursuits');
+      await importJobStatus(db,{replayed:['pursuits']});
+      const cutNow=await db.one<ImportJob>('select * from platform.import_job where id=$1',[cut.id]);
+      const again=await after('pursuits',cut.id);
+      const againDone=again?await wait(again.id):null;
+      check('IMPORT JOB a replayed kind a restart stopped is queued again, and its receipt says so',
+        cutNow?.status==='failed'&&cutNow.error===stoppedReplayed('pursuits')&&againDone?.status==='completed'&&againDone.actor===cut.actor,
+        `stopped ${cutNow?.status}; a new run ${againDone?.status??'none'}`);
+      const held=await stale('duplicates');
+      await importJobStatus(db);
+      const heldNow=await db.one<ImportJob>('select * from platform.import_job where id=$1',[held.id]);
+      const none=await after('duplicates',held.id);
+      check('IMPORT JOB any other kind a restart stopped waits for a person',
+        heldNow?.status==='failed'&&/^Worker stopped without a completion receipt\. Review/.test(heldNow.error??'')&&!none,
+        `stopped ${heldNow?.status}; a new run ${none?'queued':'none'}`);
       return;
     }
     const queuedTogether=await Promise.all([createImportJob(db,'pursuits',actor),createImportJob(db,'pursuits',actor)]);
