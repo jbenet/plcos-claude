@@ -19,6 +19,7 @@ export async function TypeCandidates() {
     <ul>{items.map(c => <li key={c.entityId} style={{ marginBottom: 6 }}>
       <Link href={`/orgs/${c.entityId}`}>{c.name}</Link>
       {' · '}{c.pursuits} {c.pursuits === 1 ? 'pipeline' : 'pipelines'}
+      {c.match === 'loose' ? ' · the names differ in punctuation or a legal form' : ''}
       {' · '}{c.evidence.length ? <>person evidence: {c.evidence.join(', ')}</> : 'no person evidence found'}
       {c.organizations.map((o, i) => <span key={o}> · <Link href={`/orgs/${o}`}>organisation{c.organizations.length > 1 ? ` ${i + 1}` : ''}</Link></span>)}
       {' '}<MarkAsOrg entityId={c.entityId} />

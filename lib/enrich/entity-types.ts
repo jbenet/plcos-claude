@@ -187,34 +187,90 @@ export async function storedPersonEvidence(tx: Queryable, ids: string[], finding
 
 export interface TypeCandidate {
   entityId: string; name: string;
-  /** Organisations recorded under the same normalised name. */
+  /** Organisations recorded under the same name, loosely compared (see looseOrgName). */
   organizations: string[];
+  /** 'exact' when the normalised names are equal; 'loose' when they differ only in punctuation or a legal form. */
+  match: 'exact' | 'loose';
   /** Person evidence found in our records (a title, an email, an affiliation…); empty means none was found. */
   evidence: string[];
   /** Pipelines the record is in. */
   pursuits: number;
 }
 
+const LEGAL = /\b(?:the|llc|inc|incorporated|ltd|limited|lp|llp|plc|gmbh|ag|sa|sarl|bv|nv|co|corp|corporation|company|holdings?|group)\b/gu;
+/** A firm's name with case, accents, punctuation and legal forms set aside: "Cedar Capital, LLC" is "cedar capital". */
+export const looseOrgName = (name: string) => normalizeIdentityName(name).replace(/&/g, ' and ').replace(/[.']/g, '').replace(/[^\p{L}\p{N}\s]/gu, ' ')
+  .replace(LEGAL, ' ').replace(/\s+/gu, ' ').trim();
+
 /**
- * Pipeline people whose normalised name is the name of an organisation we hold (issue 0063): the list a person
- * reviews before marking a record an organisation. Read-only. Unlike the import's automatic pass, this lists
- * every match, with the person evidence that would hold the automatic correction back.
+ * Pipeline people whose name is the name of an organisation we hold (issue 0063): the list a person reviews before
+ * marking a record an organisation. Read-only. Unlike the import's automatic pass, which needs an exact normalised
+ * match and no person evidence, this lists loose matches too (punctuation, a legal form), with the evidence found.
  */
 export async function pipelinePeopleNamedLikeOrgs(tx: Queryable): Promise<TypeCandidate[]> {
   const people = await tx.query<{ id: string; name: string; pursuits: number }>(`select e.entity_id::text id,e.display_name name,count(*)::int pursuits
     from strategy.active_pursuit p join identity.entity e on e.entity_id=identity.canonical_entity_id(p.entity_id)
     where e.entity_type='person' and e.retired_at is null group by e.entity_id,e.display_name`);
   if (!people.length) return [];
-  const organizations = new Map<string, string[]>();
+  const organizations = new Map<string, Array<{ id: string; exact: string }>>();
   for (const o of await tx.query<{ id: string; name: string }>(`select entity_id::text id,display_name name from identity.entity
     where entity_type='org' and retired_at is null and merged_into is null`)) {
-    const n = normalizeIdentityName(o.name);
-    if (n) organizations.set(n, [...(organizations.get(n) ?? []), o.id]);
+    const n = looseOrgName(o.name);
+    if (n) organizations.set(n, [...(organizations.get(n) ?? []), { id: o.id, exact: normalizeIdentityName(o.name) }]);
   }
-  const matches = people.filter(p => organizations.has(normalizeIdentityName(p.name)));
+  const matches = people.filter(p => { const n = looseOrgName(p.name); return !!n && organizations.has(n); });
   if (!matches.length) return [];
   const evidence = await storedPersonEvidence(tx, matches.map(p => p.id));
-  return matches.map(p => ({ entityId: p.id, name: p.name, organizations: organizations.get(normalizeIdentityName(p.name))!,
-    evidence: [...(evidence.get(p.id) ?? [])].sort(), pursuits: p.pursuits }))
-    .sort((a, b) => a.evidence.length - b.evidence.length || a.name.localeCompare(b.name));
+  return matches.map(p => {
+    const orgs = organizations.get(looseOrgName(p.name))!;
+    return { entityId: p.id, name: p.name, organizations: orgs.map(o => o.id),
+      match: orgs.some(o => o.exact === normalizeIdentityName(p.name)) ? 'exact' as const : 'loose' as const,
+      evidence: [...(evidence.get(p.id) ?? [])].sort(), pursuits: p.pursuits };
+  }).sort((a, b) => a.evidence.length - b.evidence.length || a.name.localeCompare(b.name));
+}
+
+export interface TypeLookup {
+  entityId: string; canonicalId: string; name: string; type: string; mergedInto: string | null; retired: boolean;
+  pursuits: Array<{ pursuitId: string; vehicle: string; status: string; active: boolean }>;
+  sources: Array<{ source: string; sourceId: string }>;
+  corrections: Array<{ correctionId: string; from: string; to: string; rule: string; at: string; reversedAt: string | null }>;
+  /** Organisations whose name loosely matches this record's. */
+  organizations: Array<{ entityId: string; name: string }>;
+  evidence: string[];
+}
+
+/**
+ * One record by a pipeline (pursuit) id or an entity id, whole or by an 8+ character prefix (issue 0063): its
+ * entity, canonical root, type, pipelines, source records, type corrections and any organisation sharing its name.
+ */
+export async function lookupEntityType(tx: Queryable, id: string): Promise<TypeLookup[]> {
+  const key = id.trim().toLowerCase();
+  if (!/^[0-9a-f-]{8,36}$/.test(key)) throw new Error('Give a pipeline or entity id, whole or its first 8 or more characters.');
+  const ids = (await tx.query<{ id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text id from (
+      select entity_id from strategy.pursuit where pursuit_id::text like $1||'%'
+      union select entity_id from identity.entity where entity_id::text like $1||'%') x limit 10`, [key])).map(r => r.id);
+  if (!ids.length) return [];
+  const out: TypeLookup[] = [];
+  const evidence = await storedPersonEvidence(tx, ids);
+  for (const root of ids) {
+    const e = (await tx.one<{ name: string; type: string; merged: string | null; retired: boolean }>(`select display_name name,entity_type::text type,
+      merged_into::text merged,retired_at is not null retired from identity.entity where entity_id=$1`, [root]))!;
+    const members = (await tx.query<{ id: string }>(`with recursive m as (select entity_id id from identity.entity where entity_id=$1
+      union all select e.entity_id from m join identity.entity e on e.merged_into=m.id) select id::text from m`, [root])).map(r => r.id);
+    const pursuits = await tx.query<{ pursuitId: string; vehicle: string; status: string; active: boolean }>(`select p.pursuit_id::text "pursuitId",
+      v.name vehicle,p.status::text status,exists(select 1 from strategy.active_pursuit a where a.pursuit_id=p.pursuit_id) active
+      from strategy.pursuit p join platform.vehicle v on v.id=p.vehicle_id where p.entity_id=any($1::uuid[]) order by v.name`, [members]);
+    const sources = await tx.query<{ source: string; sourceId: string }>(`select source,source_id "sourceId" from identity.source_record
+      where entity_id=any($1::uuid[]) order by source,source_id limit 20`, [members]);
+    const corrections = await tx.query<{ correctionId: string; from: string; to: string; rule: string; at: string; reversedAt: string | null }>(
+      `select correction_id::text "correctionId",original_type::text "from",corrected_type::text "to",rule,recorded_at::text at,reversed_at::text "reversedAt"
+       from identity.entity_type_correction where entity_id=any($1::uuid[]) order by recorded_at`, [members]);
+    const loose = looseOrgName(e.name);
+    const organizations = loose ? (await tx.query<{ entityId: string; name: string }>(`select entity_id::text "entityId",display_name name
+      from identity.entity where entity_type='org' and retired_at is null and merged_into is null and entity_id<>$1`, [root]))
+      .filter(o => looseOrgName(o.name) === loose) : [];
+    out.push({ entityId: root, canonicalId: root, name: e.name, type: e.type, mergedInto: e.merged, retired: e.retired,
+      pursuits, sources, corrections, organizations, evidence: [...(evidence.get(root) ?? [])].sort() });
+  }
+  return out;
 }

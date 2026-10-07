@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { withDb } from '../lib/db';
 import { correctEntityType, reverseEntityTypeCorrection } from '../modules/identity/entity-type';
 import { getEntity } from '../modules/identity/repo';
-import { correctPipelineEntityTypes, personEvidence, pipelinePeopleNamedLikeOrgs } from '../lib/enrich/entity-types';
+import { correctPipelineEntityTypes, lookupEntityType, looseOrgName, personEvidence, pipelinePeopleNamedLikeOrgs } from '../lib/enrich/entity-types';
 import { readEntityTypes, writeEntityType } from '../lib/sync/entity-type';
 import { SYNC_ADMIN } from '../lib/sync/scopes';
 import { createMcpToken, type AppUser } from '../modules/platform';
@@ -205,6 +205,16 @@ export async function entityTypeProperties(check: Check, db: Db) {
       !!row && row.evidence.length === 0 && row.organizations.includes(listedOrg) && row.pursuits === 1
         && !!titledRow && titledRow.evidence.includes('title') && !list.some(c => c.entityId === listedOrg),
       'The list is read-only, includes held-back matches, and never lists an organisation.');
+    const looseName = 'Type Fixture Loose Firm', loose = await entity(looseName), looseOrg = await entity('The Type Fixture Loose Firm, L.L.C.', 'org');
+    const looseList = await db.transaction(tx => pipelinePeopleNamedLikeOrgs(tx));
+    const pursuitId = (await db.one<{ id: string }>('select pursuit_id::text id from strategy.pursuit where entity_id=$1', [loose]))!.id;
+    const [byPursuit] = await db.transaction(tx => lookupEntityType(tx, pursuitId.slice(0, 8)));
+    const [byEntity] = await db.transaction(tx => lookupEntityType(tx, loose));
+    check('ETYPE the review list and a lookup by pipeline id see a firm whose name differs only in punctuation or a legal form',
+      looseOrgName('Cedar Capital, LLC') === looseOrgName('cedar capital') && looseList.some(c => c.entityId === loose && c.match === 'loose' && c.organizations.includes(looseOrg))
+        && byPursuit?.entityId === loose && byPursuit.type === 'person' && byPursuit.pursuits.some(p => p.pursuitId === pursuitId)
+        && byPursuit.organizations.some(o => o.entityId === looseOrg) && byEntity?.entityId === loose,
+      'A lookup takes a pipeline or entity id, or its first 8 characters, and shows type, pipelines and same-name organisations.');
     const sel = 'id::text, handle, name, initials, role, email, access::text, vehicles, approves';
     const owner = (await db.one<AppUser>(`select ${sel} from platform.app_user where access='admin' and active order by handle limit 1`))!;
     const minted = await createMcpToken(owner, { label: 'props entity type', tools: [SYNC_ADMIN], vehicles: null, callsPerDay: 100, days: 30 }, db);
