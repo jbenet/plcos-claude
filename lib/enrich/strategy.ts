@@ -119,16 +119,43 @@ export const nextOverLimit = (s: Pick<Strategy, 'next'>) => `${s.next.what} — 
 export const moneyKey = (m: { track: string; state: string; amount: number } | null | undefined) => (m ? `${m.track} ${m.state} ${m.amount}` : null);
 
 /**
+ * The newest team context that bears on a strategy for `vehicle` (a slug): a note about the LP as a
+ * whole, or one written from that vehicle. A note written from another vehicle's pursuit is that
+ * vehicle's: on 7 Oct a line added for SPV - Science marked every vehicle's strategy for the LP stale.
+ * Without a vehicle, the newest note of any kind. Context is newest first.
+ */
+export function contextAtFor(context: Array<{ at: string; vehicle?: string | null }> | null | undefined, vehicle?: string | null): string | null {
+  return (context ?? []).find((c) => !vehicle || !c.vehicle || c.vehicle === vehicle)?.at ?? null;
+}
+
+/**
+ * Which strategies a correction to a finding can change (7 Oct 2026, counted on the Mac's 3,700 findings:
+ * 2,466 correction entries, of which 1,209 were append-only SPV appetite passes, most adding no fact, and
+ * 321 appended connector evidence). An append-only SPV pass bears only on SPV strategies, and not even
+ * those when it added no fact; appended ties change W3's paths, which the best-path pin already watches.
+ * Anything else — the W1c fact check above all, which cuts and moves facts — bears on every strategy.
+ */
+export function correctionReach(c: { by?: string | null; what?: string | null }): 'none' | 'spv' | 'all' {
+  const by = c.by ?? '', what = c.what ?? '';
+  if (/\bW1c\b/.test(by)) return 'all';
+  if (/connector evidence|connection-only|sourced ties added/i.test(what)) return 'none';
+  if (/\bSPV\b/i.test(what) && /append-only|preserved/i.test(what)) return /\b(?:0|no) (?:new )?facts\b/i.test(what) ? 'none' : 'spv';
+  return 'all';
+}
+
+/**
  * Written before its LP's current finding — from records alone, or from an older finding — or,
  * when it pinned the close track (v1.5), before that changed.
  */
 export function isStale(
   s: Pick<Strategy, 'made'>,
-  finding: { researched: { at: string; corrected?: Array<{ at: string }> } } | null | undefined,
+  finding: { researched: { at: string; corrected?: Array<{ at: string; by?: string | null; what?: string | null }> } } | null | undefined,
   money?: { track: string; state: string; amount: number } | null,
   bestPath?: 'A' | 'B' | 'C' | 'D' | null,
   /** The team's newest context on this LP (issue 0016): a strategy written before it is due a re-think. */
   contextAt?: string | null,
+  /** The strategy's vehicle kind ('fund', 'spv', …); unknown counts an SPV-only correction (correctionReach). */
+  vehicleKind?: string | null,
 ): boolean {
   if (contextAt && s.made.at && Date.parse(contextAt) > Date.parse(s.made.at)) return true;
   const pinned = s.made.inputs;
@@ -140,7 +167,8 @@ export function isStale(
   // A correction made to the finding after the strategy was written — the fact check, a band sweep —
   // keeps `researched.at`, so the pin still matches while the strategy may repeat what was cut (W5
   // after the search pass).
-  if (s.made.at && (finding.researched.corrected ?? []).some((c) => Date.parse(c.at) > Date.parse(s.made.at))) return true;
+  if (s.made.at && (finding.researched.corrected ?? []).some((c) => Date.parse(c.at) > Date.parse(s.made.at)
+    && (correctionReach(c) === 'all' || (correctionReach(c) === 'spv' && (vehicleKind ?? 'spv') === 'spv')))) return true;
   if (pinned?.finding !== undefined) return pinned.finding !== finding.researched.at;
   return new Date(finding.researched.at).getTime() > new Date(s.made.at).getTime();
 }

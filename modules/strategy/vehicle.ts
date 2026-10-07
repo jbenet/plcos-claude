@@ -75,7 +75,8 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
       where p.vehicle_id=$1 and a.action='pursuit.status_set' and a.at <= $2 order by a.at,a.id`, [vehicleId, now]),
     touchpointSummaries(pursuits, now), strategyRouteSummaries(ids, total.kind),
     db.query<{ entity_id: string; at: Date }>(`select identity.canonical_entity_id(entity_id) entity_id,max(created_at) at
-      from research.note where kind='context' and identity.canonical_entity_id(entity_id)=any($1::uuid[]) group by 1`, [ids]),
+      from research.note where kind='context' and identity.canonical_entity_id(entity_id)=any($1::uuid[])
+        and coalesce(data->>'vehicleId', '') in ('', $2::text) group by 1`, [ids, vehicleId]),
   ]);
   const dakota = await dakotaCapacities(db, ids);
   const transitions = history.flatMap(r => {
@@ -102,7 +103,7 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
     const stale = Boolean(strategyAt && ((now.getTime() - strategyAt.getTime()) / DAY > rules.staleDays
       || (strategy?.made && isStale({ made: strategy.made }, profile?.data.researched?.at
         ? { researched: { ...profile.data.researched, at: profile.data.researched.at } } : null,
-        undefined, undefined, byContext.get(p.entityId))) || (profileAt && profileAt > strategyAt)));
+        undefined, undefined, byContext.get(p.entityId), total.kind)) || (profileAt && profileAt > strategyAt)));
     const routeStale = Boolean(route && (!route.current || (now.getTime() - route.at.getTime()) / DAY > rules.staleDays));
     const capacityBand = strategy?.scores?.capacity?.band ?? profile?.data.profile?.capacity?.band;
     const capacity = soft.length ? soft.reduce((n, x) => n + x.amount, 0) : capacityEstimate(capacityBand) ?? dakota.get(p.entityId)?.amount ?? null;

@@ -2,7 +2,7 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { readStrategyFiles } from './strategy-files';
 
-export type CheckVehicle = { slug: string; name: string };
+export type CheckVehicle = { slug: string; name: string; kind?: string };
 /** File-only checker uses the vehicle catalog exported from the database. */
 export async function checkedStrategyFiles(dir: string, vehicles: CheckVehicle[], refuse: (file: string, problems: string[]) => void) {
   const known = new Set(vehicles.map(v => v.slug));
