@@ -21,6 +21,17 @@ export async function identityRootProperties(check: Check, db: Db) {
       check('EXPORT bulk roots match canonical view across aliases, retired roots and cycles',
         JSON.stringify(actual)===JSON.stringify(expected) && actual.length===6,
         'Only terminal-root components are exported; cycles are excluded, and retired roots retain their aliases.');
+      // identity.alias_ids (7 Oct 2026): x is among alias_ids(R) exactly when canonical_entity_id(x) is in R, so the
+      // hot reads can ask a column's index for `col = any(alias_ids(R))` instead of calling canonical() on every row.
+      const asked = [ids[0]!, ids[4]!, ids[6]!, ids[1]!];
+      const viaAlias = (await tx.query<{id:string}>(`select x::text id from unnest(identity.alias_ids($1::uuid[])) x`,[asked])).map(r=>r.id).sort();
+      const viaCanonical = (await tx.query<{id:string}>(`select x::text id from unnest($2::uuid[]) x
+        where identity.canonical_entity_id(x) = any($1::uuid[])`,[asked,ids])).map(r=>r.id).sort();
+      const pairs = await tx.query<{c:string;e:string}>(`select canonical_id::text c, entity_id::text e from identity.alias_pairs($1::uuid[])`,[asked]);
+      check('IDENTITY alias_ids(R) holds exactly the ids whose canonical id is in R (aliases, a multi-hop alias, a retired root; not a cycle, not a non-root asked for), and alias_pairs names each one\'s root',
+        JSON.stringify(viaAlias)===JSON.stringify(viaCanonical) && viaAlias.length===6
+        && pairs.every(p=>(p.c===ids[0] && [0,1,2,3].map(i=>ids[i]).includes(p.e)) || (p.c===ids[4] && [4,5].map(i=>ids[i]).includes(p.e))),
+        `alias_ids ${viaAlias.length}, canonical ${viaCanonical.length}; pairs ${pairs.length}`);
       const endpoints = Array.from({length:4},()=>randomUUID()).sort();
       await tx.query(`insert into identity.entity(entity_id,entity_type,display_name)
         select id,'org','Invented queue fixture '||id::text from unnest($1::uuid[]) id`,[endpoints]);

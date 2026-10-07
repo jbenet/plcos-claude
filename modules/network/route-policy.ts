@@ -1,5 +1,6 @@
 import { getDb, type Db } from '@/lib/db';
 import { withSharedDb } from '@/lib/db/scheduling';
+import { memoizable } from '@/lib/db/read-memo';
 import { yieldRouteWork } from './path-search';
 
 export type OrganizationRouteSize = { members: number; headcount: number | null };
@@ -122,6 +123,13 @@ async function policyTopology(db: Db): Promise<PolicyTopology> {
   catch (error) { if (topologyCache.get(db)?.value === value) topologyCache.delete(db); throw error; }
 }
 
+// Shared by a long plan of many targets (lib/db/read-memo.ts): the same for every target on a vehicle.
+const BLOCKED_SQL = memoizable(`select entity_id::text as id from coordination.restriction
+        where scope = 'blanket' and (expires_at is null or expires_at > current_date)
+       union
+       select entity_id::text as id from strategy.pursuit
+        where vehicle_id = $1::uuid and status = 'passed' and status_reason = 'do_not_contact'`);
+
 /** No restriction text or private context leaves this policy reader. Restrictions and
  * public claims are read afresh; neither live safety nor size changes depend on a TTL. */
 export async function routePolicyFacts(ids: string[], vehicleId?: string): Promise<RoutePolicyFacts> {
@@ -154,14 +162,7 @@ export async function routePolicyFacts(ids: string[], vehicleId?: string): Promi
     for (const [id, members] of people) topology.members.set(id, members.size);
   }
   const [restrictions, claims] = await Promise.all([
-    db.query<{ id: string }>(
-      `select entity_id::text as id from coordination.restriction
-        where scope = 'blanket' and (expires_at is null or expires_at > current_date)
-       union
-       select entity_id::text as id from strategy.pursuit
-        where vehicle_id = $1::uuid and status = 'passed' and status_reason = 'do_not_contact'`,
-      [vehicleId ?? null],
-    ),
+    db.query<{ id: string }>(BLOCKED_SQL, [vehicleId ?? null]),
     orgIds.length ? db.query<{ id: string; value: string }>(
       `select c.entity_id::text as id, c.value from research.claim c
         join research.source_doc s on s.doc_id = c.source

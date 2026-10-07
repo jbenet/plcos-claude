@@ -8,7 +8,7 @@ import { redactHealth } from '@/lib/redact-health';
 import { SPV_STAGE_LABEL, spvRooms, workingDaysUntil, type SpvStage } from '@/modules/close';
 import { INSUFFICIENT_FOR_506C } from '@/modules/compliance';
 import { checkWrap, listAssets, type Audience, type PermittedUse } from '@/modules/content';
-import { READS, READ_LABEL, raiseWindows, summarize, type Touchpoint } from '@/modules/meetings';
+import { READS, READ_LABEL, isAutoReply, isEvent, raiseWindows, summarize, type Touchpoint } from '@/modules/meetings';
 import { tracePairs } from '@/lib/comms/read';
 import { SOURCE_LABEL, traceState, type Merged } from '@/lib/comms/trace';
 import { CLOSE_STATE_LABEL, closeStates, currentIndications, indicatedTotals, vehicleTotals, type CloseState } from '@/modules/pipeline';
@@ -138,27 +138,45 @@ async function changedSince(ids: string[], since: Date): Promise<Map<string, Dat
   if (!ids.length) return new Map();
   const rows = await (await getDb()).query<{ id: string; at: Date | string }>(`
     with p as (select p.pursuit_id, identity.canonical_entity_id(p.entity_id) e, p.vehicle_id v, p.status_set_at, p.opened_at
-                 from strategy.pursuit p where p.pursuit_id = any($1::uuid[]))
+                 from strategy.pursuit p where p.pursuit_id = any($1::uuid[])),
+         -- Every alias of these LPs, up front: each join below is then an index probe (7 Oct 2026).
+         pa as (select * from identity.alias_pairs(array(select e from p)))
     select id, max(at) at from (
       select p.pursuit_id::text id, greatest(p.status_set_at, p.opened_at) at from p
       union all select a.subject_id, a.at from platform.audit_log a where a.subject_type = 'pursuit' and a.at >= $2 and a.subject_id = any($1::text[])
-      union all select p.pursuit_id::text, m.created_at from p join meetings.meeting m on identity.canonical_entity_id(m.entity_id) = p.e
+      union all select p.pursuit_id::text, m.created_at from p join pa on pa.canonical_id = p.e join meetings.meeting m on m.entity_id = pa.entity_id
         and (m.vehicle_id is null or m.vehicle_id = p.v) where m.created_at >= $2
       union all select p.pursuit_id::text, s.created_at from p join strategy.suggestion s on s.pursuit_id = p.pursuit_id where s.created_at >= $2
-      union all select p.pursuit_id::text, greatest(x.opened_at, ce.recorded_at) from p join pipeline.exposure x
-        on identity.canonical_entity_id(x.entity_id) = p.e and x.vehicle_id = p.v left join pipeline.commitment_event ce on ce.exposure_id = x.exposure_id
+      union all select p.pursuit_id::text, greatest(x.opened_at, ce.recorded_at) from p join pa on pa.canonical_id = p.e join pipeline.exposure x
+        on x.entity_id = pa.entity_id and x.vehicle_id = p.v left join pipeline.commitment_event ce on ce.exposure_id = x.exposure_id
       union all select p.pursuit_id::text, greatest(i.recorded_at, i.superseded_at) from p join pipeline.indication i on i.pursuit_id = p.pursuit_id
-      union all select p.pursuit_id::text, greatest(s.invited_at, s.ioi_at, s.allocated_at, s.wired_at) from p join close.spv_seat s
-        on identity.canonical_entity_id(s.entity_id) = p.e and s.vehicle_id = p.v
-      union all select p.pursuit_id::text, r.recorded_at from p join coordination.restriction r on identity.canonical_entity_id(r.entity_id) = p.e
+      union all select p.pursuit_id::text, greatest(s.invited_at, s.ioi_at, s.allocated_at, s.wired_at) from p join pa on pa.canonical_id = p.e join close.spv_seat s
+        on s.entity_id = pa.entity_id and s.vehicle_id = p.v
+      union all select p.pursuit_id::text, r.recorded_at from p join pa on pa.canonical_id = p.e join coordination.restriction r on r.entity_id = pa.entity_id
       union all select p.pursuit_id::text, greatest(o.requested_at, o.recorded_at) from p join email.outreach_send o on o.pursuit_id = p.pursuit_id
-      union all select p.pursuit_id::text, c.updated_at from p join email.comms_message c on c.updated_at >= $2
-        and exists (select 1 from unnest(c.entity_ids) x where identity.canonical_entity_id(x) = p.e)
+      union all select p.pursuit_id::text, c.updated_at from p join pa on pa.canonical_id = p.e join email.comms_message c
+        on c.entity_ids @> array[pa.entity_id] and c.updated_at >= $2
       union all select p.pursuit_id::text, l.linked_at from p join email.message_link l on l.pursuit_id = p.pursuit_id where l.linked_at >= $2
-      union all select p.pursuit_id::text, c.created_at from p join research.claim c on identity.canonical_entity_id(c.entity_id) = p.e
+      union all select p.pursuit_id::text, c.created_at from p join pa on pa.canonical_id = p.e join research.claim c on c.entity_id = pa.entity_id
         where c.field ~ '(^|\\.)email$' and c.created_at >= $2
     ) t where at >= $2 group by id`, [ids, since]);
   return new Map(rows.map((r) => [r.id, new Date(r.at)]));
+}
+
+/**
+ * A reply is owed when their latest written message (an email or a message from them, not an automatic reply) came
+ * after anything of ours: our own message, or a meeting or call together. Before 7 Oct 2026 the queue used the LP
+ * page's "they spoke last", which counts a meeting as theirs, so every LP whose latest touch was a meeting read as
+ * owed a reply (JuanMail: 41 on Neurotech, far more than its mail shows).
+ */
+export function replyOwedFrom(touches: Touchpoint[], now = new Date()): { since: string } | null {
+  const held = touches.filter((t) => !t.viaOrganization && t.on && t.on.getTime() <= now.getTime() && t.channel !== 'research' && !isEvent(t));
+  const written = held.filter((t) => (t.channel === 'email' || t.channel === 'message') && t.direction === 'theirs' && !isAutoReply(t));
+  const theirs = written.reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null);
+  if (!theirs) return null;
+  const answered = held.some((t) => t.on! > theirs && (t.direction === 'ours'
+    || ((t.channel === 'meeting' || t.channel === 'call') && t.direction === 'both')));
+  return answered ? null : { since: day(theirs)! };
 }
 
 export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit = {}) {
@@ -194,7 +212,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
     entityIds.length ? db.query<{ entity_id: string; vehicle_id: string; name: string; status: PursuitStatus }>(`select identity.canonical_entity_id(p.entity_id)::text entity_id,
       p.vehicle_id::text, v.name, p.status::text status from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id
       where v.kind = 'fund' and v.phase <> 'historical' and p.closed_at is null and p.status::text = any($2::text[])
-        and identity.canonical_entity_id(p.entity_id) = any($1::uuid[])`, [entityIds, OPEN_FUND]) : Promise.resolve([]),
+        and p.entity_id = any(identity.alias_ids($1::uuid[]))`, [entityIds, OPEN_FUND]) : Promise.resolve([]),
   ]);
   const seatOf = new Map(seats.map((s) => [`${s.entity_id}:${s.vehicle_id}`, s]));
   // Whether the wrap matrix covers the vehicle at all (rule 11); each material is checked on its own below.
@@ -217,7 +235,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
     const close = closes.get(key(r)) ?? null;
     const seat = seatOf.get(key(r)) ?? null;
     const indicated = indications.get(key(r)) ?? null;
-    const replyOwed = s.lastFromThem && !s.awaitingSince ? { since: day(s.lastFromThem)! } : null;
+    const replyOwed = replyOwedFrom((traces.get(key(r)) ?? empty).touches);
     const funds = v.kind === 'spv' ? fundOpen.filter((f) => f.entity_id === r.entityId) : [];
     const restricted = r.doNotContact;
     // Held: a blocking check fails. The ask cap is advisory (config.guard.askLimit) and counted per page row.
@@ -262,15 +280,15 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
       order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [ids]),
     db.query<{ entity_id: string; vehicle_id: string; name: string; status: PursuitStatus }>(`select identity.canonical_entity_id(p.entity_id)::text entity_id,
       p.vehicle_id::text, v.name, p.status::text status from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id
-      where v.phase <> 'historical' and identity.canonical_entity_id(p.entity_id) = any($1::uuid[])`, [pageEntities]),
+      where v.phase <> 'historical' and p.entity_id = any(identity.alias_ids($1::uuid[]))`, [pageEntities]),
     db.query<{ entity_id: string; scope: string; channel: string | null; instruction: string }>(`select identity.canonical_entity_id(entity_id)::text entity_id,
       scope::text, channel, instruction from coordination.restriction
-      where identity.canonical_entity_id(entity_id) = any($1::uuid[]) and (expires_at is null or expires_at >= current_date)`, [pageEntities]),
+      where entity_id = any(identity.alias_ids($1::uuid[])) and (expires_at is null or expires_at >= current_date)`, [pageEntities]),
     db.query<{ entity_id: string; vehicle_id: string; status: string; method: string; expires_on: Date | string | null }>(`select
       identity.canonical_entity_id(entity_id)::text entity_id, vehicle_id::text, status::text, method::text, expires_on
-      from compliance.accreditation where identity.canonical_entity_id(entity_id) = any($1::uuid[])`, [pageEntities]),
+      from compliance.accreditation where entity_id = any(identity.alias_ids($1::uuid[]))`, [pageEntities]),
     db.query<{ entity_id: string; n: number }>(`select identity.canonical_entity_id(entity_id)::text entity_id, count(*)::int n
-      from coordination.ask where made_at is not null and made_at >= $2 and identity.canonical_entity_id(entity_id) = any($1::uuid[])
+      from coordination.ask where made_at is not null and made_at >= $2 and entity_id = any(identity.alias_ids($1::uuid[]))
       group by 1`, [pageEntities, quarterAgo]),
     listAssets(),
     Promise.all(vehicles.map(async (v) => [v.id, await lpContactsFor(page.filter((b) => b.r.vehicleId === v.id).map((b) => b.r.entityId), v.id, { excludeDakota: true })] as const)),
@@ -424,7 +442,72 @@ function queueCoverage(vehicles: Vehicle[], includePassed = false) {
   return {
     paging: `${config.outreach.defaultQueueRows} rows by default, at most ${config.outreach.maxQueueRows}; pass nextCursor as cursor for the next page (null at the end). total counts every row this query matches.`,
     corpus: `${includePassed ? 'LPs, open and passed (each passed row marked passed),' : 'Open LPs (not passed)'} on ${vehicles.map((v) => v.name).join(', ') || 'no vehicle'}, with the comms trace (Affinity's records and the Gmail messages juanmail reported, merged), close track, SPV seat, indication, restrictions, accreditation and asks this quarter.`,
-    buckets: 'reply_owed: they spoke last; money: committed, an indication, a close track not yet closed, or an SPV seat at IOI or allocated; invite: new, sourcing or selected; follow_up: the rest; held: a blocking check fails; passed (only with includePassed): the LP passed.',
+    buckets: 'reply_owed: their latest email or message (not an automatic reply) came after anything of ours, a message or a meeting together; money: committed, an indication, a close track not yet closed, or an SPV seat at IOI or allocated; invite: new, sourcing or selected; follow_up: the rest; held: a blocking check fails; passed (only with includePassed): the LP passed.',
     note: 'A reply in a mailbox juanmail does not read, and Affinity has not synced, is not seen. An address on file is not proof it is current. comms_trace gives one LP\'s whole timeline.',
   };
+}
+
+// ── GET /api/outreach/contacts ──────────────────────────────────────────────────────────
+
+export interface ContactsArgs {
+  vehicle: string; updatedSince?: string; includePassed?: boolean; offset?: number;
+  /** The previous answer's version: if this answer would say the same, it is { unchanged: true, version, cursor } instead. */
+  ifChanged?: string;
+}
+
+/**
+ * The light contacts read (docs/27 §4d, JuanMail 7 Oct 2026): for every LP on a vehicle (or "all") its pursuit, name,
+ * status and passed, and the addresses on file for it, in one page and nothing else. The mail client matches its mail to
+ * LPs with it without paying for the queue's checks, trace and strategy. Addresses are R2, as in the queue: a reader
+ * without words on the vehicle gets its rows with contacts empty and `withheld`. `version` hashes the rows (not the
+ * polling cursor), so ifChanged answers { unchanged: true } when nothing a row shows has moved.
+ */
+export async function outreachContacts(user: AppUser, a: ContactsArgs, fit: QueueFit = {}) {
+  const cursor = new Date().toISOString();
+  const since = a.updatedSince ? new Date(a.updatedSince) : null;
+  if (since && Number.isNaN(since.getTime())) throw new OutreachRefused(400, 'updatedSince is not a time.');
+  const vehicles = a.vehicle === 'all' ? await deskVehicles(user) : [await deskVehicle(user, a.vehicle)];
+  const all = (await Promise.all(vehicles.map(async (v) => (await pipelineData(v.id)).rows
+    .filter((r) => r.vehicleId === v.id && (a.includePassed || r.status !== 'passed')).map((r) => ({ r, v })))))
+    .flat().sort((x, y) => x.v.slug.localeCompare(y.v.slug) || x.r.name.localeCompare(y.r.name) || (x.r.id < y.r.id ? -1 : x.r.id > y.r.id ? 1 : 0));
+  const changed = since ? await changedSince(all.map((b) => b.r.id), since) : null;
+  const chosen = changed ? all.filter((b) => changed.has(b.r.id)) : all;
+  const readable = vehicles.filter((v) => words(user, v.id));
+  const entityIds = [...new Set(chosen.map((b) => b.r.entityId))];
+  const db = await getDb();
+  // r.entityId is already canonical (the pipeline facade resolves it), so the kind is a plain lookup.
+  const [kinds, orgContacts] = await Promise.all([
+    entityIds.length ? db.query<{ id: string; type: string }>(`select entity_id::text id, entity_type::text type from identity.entity where entity_id = any($1::uuid[])`, [entityIds]) : Promise.resolve([]),
+    Promise.all(readable.map(async (v) => [v.id, await lpContactsFor(chosen.filter((b) => b.v.id === v.id).map((b) => b.r.entityId), v.id, { excludeDakota: true })] as const)),
+  ]);
+  const kindOf = new Map(kinds.map((k) => [k.id, k.type === 'person' ? 'person' as const : 'org' as const]));
+  const contactsBy = new Map(orgContacts);
+  const people = [...new Set([...chosen.filter((b) => contactsBy.has(b.v.id)).map((b) => b.r.entityId), ...orgContacts.flatMap(([, m]) => [...m.values()].flat().map((c) => c.entityId))])];
+  const emails = await addressesFor(people);
+  const addressOf = (entityId: string) => (emails.get(entityId) ?? []).slice(0, 3);
+  const rows = chosen.map(({ r, v }) => {
+    const kind = kindOf.get(r.entityId) ?? 'org';
+    const w = contactsBy.has(v.id);
+    const contacts = !w ? [] : kind === 'person'
+      ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x }))
+      : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x })));
+    return {
+      pursuitId: r.id, vehicle: v.slug, entity: { id: r.entityId, name: r.name, kind },
+      status: { value: r.status, label: STATUS_LABEL[r.status] }, passed: r.status === 'passed', contacts,
+      ...(w ? {} : { withheld: 'Addresses are withheld at your access: they are words (R2) on this vehicle.' }),
+    };
+  });
+  const version = createHash('sha256').update(JSON.stringify(rows)).digest('base64url').slice(0, 16);
+  const coverage = {
+    corpus: `${a.includePassed ? 'LPs, open and passed,' : 'Open LPs (not passed)'} on ${vehicles.map((v) => v.name).join(', ') || 'no vehicle'}${since ? `, changed since ${since.toISOString()}` : ''}: pursuit, name, status and the addresses on file (gmail, affinity or research; never licensed).`,
+    note: 'One page: every matching LP. Over MCP an answer too large for the response limit is cut and nextOffset continues it. Pass version as ifChanged to hear { unchanged: true } when no row moved; pass cursor as updatedSince for only the rows that changed. outreach_queue has the rest.',
+  };
+  if (a.ifChanged && a.ifChanged === version) return { data: { unchanged: true as const, version, cursor }, coverage };
+  const offset = Math.min(a.offset ?? 0, rows.length);
+  let fitted = rows.slice(offset);
+  if (fit.maxBytes) {
+    while (fitted.length > 1 && Buffer.byteLength(JSON.stringify(fitted)) > fit.maxBytes) fitted = fitted.slice(0, fitted.length - Math.max(1, Math.floor(fitted.length / 10)));
+  }
+  const nextOffset = offset + fitted.length < rows.length ? offset + fitted.length : null;
+  return { data: { rows: fitted, total: rows.length, offset, nextOffset, version, cursor }, coverage };
 }

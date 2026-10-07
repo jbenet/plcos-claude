@@ -5,6 +5,7 @@ import { TooManyRows, type Db, type Queryable } from './index';
 import { lock } from './lock';
 import { prioritizeDb } from './scheduling';
 import { timeQuery } from './timing';
+import { memoRead } from './read-memo';
 
 interface WorkerError { name: string; message: string; count?: number; code?: string }
 function deserialize(error: WorkerError): Error {
@@ -62,8 +63,8 @@ export async function openPglite(dir: string): Promise<Db> {
   }
   function on(tx?: string): Queryable {
     return {
-      query: (sql, params = []) => timeQuery(sql, () => call('query', sql, params, tx)),
-      one: (sql, params = []) => timeQuery(sql, () => call('one', sql, params, tx)),
+      query: (sql, params = []) => tx ? timeQuery(sql, () => call('query', sql, params, tx)) : memoRead(sql, params, () => timeQuery(sql, () => call('query', sql, params, tx)), 'query'),
+      one: (sql, params = []) => tx ? timeQuery(sql, () => call('one', sql, params, tx)) : memoRead(sql, params, () => timeQuery(sql, () => call('one', sql, params, tx)), 'one'),
       exec: sql => call('exec', sql, [], tx),
     };
   }

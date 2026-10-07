@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from '@/components/ui/AppLink';
+import { SettingsLayout } from '@/components/settings/SettingsNav';
 import { Page } from '@/components/shell/Page';
 import { config } from '@/config/deployment';
 import { auth } from '@/lib/auth';
@@ -47,6 +48,7 @@ export default async function PeoplePage() {
         </>
       }
     >
+      <SettingsLayout current="people" admin>
       <div className="lbl">Settings</div>
       <h1>People</h1>
       <p className="sublede">Who can sign in, and what each person may see and do. The server&rsquo;s keys are in <Link href="/settings/connections">Connections</Link>.</p>
@@ -81,6 +83,7 @@ export default async function PeoplePage() {
           </table>
         </div>
       </div>
+      </SettingsLayout>
     </Page>
   );
 }

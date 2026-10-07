@@ -4,6 +4,16 @@
 .row > span,.row legend{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;width:70px;float:left;padding:0}
 .row input[name="label"]{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);flex:1 1 220px;min-width:0;max-width:360px}
 .row label{font-size:13px;display:inline-flex;gap:5px;align-items:center}
+/* A group of choices (issue 0129): the legend in the label column, the choices beside it, May one per line. */
+.set{display:block;border:0;margin:0;padding:0;min-width:0}
+.set legend{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;width:70px;float:left;padding:3px 0 0}
+.choices,.inline{margin-left:84px;min-width:0}
+.choices{display:grid;gap:6px}
+.inline{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
+.set label{font-size:13px;display:inline-flex;gap:6px;align-items:flex-start;line-height:1.35}
+.set input{margin:2px 0 0;flex:none}
+.row select{width:auto;max-width:100%}
+@media (max-width: 640px){.set legend{float:none;width:auto;margin-bottom:6px}.choices,.inline{margin-left:0}}
 .secret{border:1px solid color-mix(in srgb, var(--green) 40%, var(--line));background:color-mix(in srgb, var(--green) 6%, var(--surface));border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px}
 .code{display:block;font-family:var(--mono);font-size:11.5px;word-break:break-all;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;user-select:all}
 .tokens{width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 10px}
