@@ -4,11 +4,26 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { candidateKey } from '../../lib/enrich/candidate-key';
+import { candidateKey, exportAliases } from '../../lib/enrich/candidate-key';
 import type { Strategy } from '../../lib/enrich/strategy';
 import type { Check } from './harness';
 
 export async function aliasJoinProperties(check: Check) {
+  {
+    // 7 Oct 2026: LPs moved from a person to their organization kept the person's research under the person's keys.
+    const lps = [
+      { key: 'org-a', contacts: [{ key: 'person-a' }] },
+      { key: 'org-b', contacts: [{ key: 'person-shared' }] }, { key: 'org-c', contacts: [{ key: 'person-shared' }, { key: 'person-c' }] },
+      { key: 'person-c' },
+    ];
+    const out = Object.fromEntries(exportAliases([
+      ['slug-own', 'org-a'], ['slug-a', 'person-a'], ['slug-shared', 'person-shared'], ['slug-c', 'person-c'], ['slug-gone', 'nobody'],
+    ], lps));
+    check('EXPORT ALIASES a person\'s research files under the one LP they speak for; a shared contact or a candidate never moves',
+      out['slug-own'] === 'org-a' && out['slug-a'] === 'org-a' && out['person-a'] === 'org-a'
+      && !('slug-shared' in out) && !('person-shared' in out) && out['slug-c'] === 'person-c' && !('person-c' in out) && !('slug-gone' in out),
+      JSON.stringify(out));
+  }
   const key = '10000000-0000-4000-8000-000000000001';
   const peer = '10000000-0000-4000-8000-000000000002';
   const firm = '10000000-0000-4000-8000-000000000003';
