@@ -19,6 +19,8 @@ export interface Db extends Queryable {
   readonly kind: 'pglite' | 'postgres';
   transaction<T>(fn: (tx: Queryable) => Promise<T>): Promise<T>;
   close(): Promise<void>;
+  /** Postgres only: the connection pool right now (connections open, idle, and queries waiting for one). */
+  poolState?(): { total: number; idle: number; waiting: number };
 }
 
 /**

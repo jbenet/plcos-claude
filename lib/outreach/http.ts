@@ -1,5 +1,6 @@
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
+import { withQueryTimings } from '@/lib/db/timing';
 import { autonomousOf, correlationOf } from '@/lib/mcp/audit';
 import { envelopeFor } from '@/lib/mcp/envelope';
 import { DATA_NOTICE } from '@/lib/mcp/output';
@@ -73,7 +74,31 @@ function queryArgs(url: URL, rename: Record<string, string> = {}): Record<string
   return out;
 }
 
+/** GUESS: a call this slow gets a line in the server log, with where its time went. */
+export const SLOW_OUTREACH_MS = 1_000;
+
+/**
+ * Each outreach call that is slow or fails, as one line in the server log: the op, the status, the
+ * time, how many queries it ran and their time (which includes waiting for a connection), its slowest
+ * query, and the connection pool as it began and ended. No token, arguments, SQL or data. It tells a
+ * slow query from a pool that was full (JuanMail, 7 Oct 2026: /vehicles sometimes over 15 s).
+ */
 export async function serveOutreach(request: Request, op: string, method: 'GET' | 'POST'): Promise<Response> {
+  const start = performance.now();
+  const db = await getDb();
+  const poolAt = db.poolState?.();
+  let queries = 0, sqlMs = 0, slowest = 0;
+  const response = await withQueryTimings(({ milliseconds }) => { queries += 1; sqlMs += milliseconds; slowest = Math.max(slowest, milliseconds); },
+    () => serve(request, op, method));
+  const ms = Math.round(performance.now() - start);
+  if (ms >= SLOW_OUTREACH_MS || response.status >= 500) {
+    const pool = (p?: { total: number; idle: number; waiting: number }) => (p ? `${p.total - p.idle}/${p.total} busy, ${p.waiting} waiting` : 'n/a');
+    console.info(`[outreach] ${method} ${op.slice(0, 40).replace(/[^\w-]/g, '?')} ${response.status} ${ms}ms · ${queries} queries, ${Math.round(sqlMs)}ms in them, slowest ${Math.round(slowest)}ms · pool at start ${pool(poolAt)}, at end ${pool(db.poolState?.())}`);
+  }
+  return response;
+}
+
+async function serve(request: Request, op: string, method: 'GET' | 'POST'): Promise<Response> {
   const origin = corsOrigin(request);
   const cors = corsHeaders(origin || null);
   const fail = (status: number, error: string, extra: Record<string, string> = {}) => json(status, { error }, { ...cors, ...extra });

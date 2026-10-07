@@ -257,3 +257,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [The mail desk's third round: whom to ask first, a connector's targets, ask history, one message for several LPs](entries/outreach-desk-v3.md)
 - [The fact check runs in the cloud, and Mac runs are recorded there](entries/cloud-w1c.md)
 - [New feedback wakes project dev](entries/feedback-signal.md)
+- [Slow outreach calls say where their time went](entries/outreach-timing.md)
