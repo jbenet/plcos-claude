@@ -35,7 +35,7 @@ import { deskVehicle, OutreachRefused } from './reads';
 const EXAMPLES = 3; // GUESS — enough for the desk to see who they reach, not a list to work from.
 const MAX_CONNECTORS = 100;
 
-export interface ConnectorArgs { vehicle: string; limit?: number; firstHopOnly?: boolean; entityId?: string; cursor?: string; ifChanged?: string }
+export interface ConnectorArgs { vehicle: string; limit?: number; firstHopOnly?: boolean; entityId?: string; cursor?: string; ifChanged?: string; maxWaitMs?: number }
 /** Over MCP the answer must fit the response limit: a target page is cut from its end and nextCursor follows. */
 export interface ConnectorFit { maxBytes?: number }
 
@@ -141,7 +141,7 @@ function startPlan(db: Db, jobs: Map<string, PlanJob>, user: AppUser, v: Vehicle
 }
 
 /** Plan the routes to a vehicle's open LPs, highest priority first: the kept plan, or as much as the time budget allows. */
-async function planOpen(user: AppUser, v: Vehicle) {
+async function planOpen(user: AppUser, v: Vehicle, maxWaitMs?: number) {
   const db = await getDb();
   let jobs = jobsByDb.get(db);
   if (!jobs) { jobs = new Map(); jobsByDb.set(db, jobs); }
@@ -150,7 +150,7 @@ async function planOpen(user: AppUser, v: Vehicle) {
   let job = jobs.get(key);
   if (!job || job.revision !== revision) job = startPlan(db, jobs, user, v, key, revision);
   let timer: NodeJS.Timeout | undefined;
-  await Promise.race([job.done, new Promise<void>((done) => { timer = setTimeout(done, config.outreach.connectorsBudgetMs); })])
+  await Promise.race([job.done, new Promise<void>((done) => { timer = setTimeout(done, Math.min(maxWaitMs ?? Infinity, config.outreach.connectorsBudgetMs)); })])
     .finally(() => clearTimeout(timer));
   // A copy: the job keeps planning after this answer is built.
   const planned = job.planned.slice();
@@ -254,7 +254,7 @@ export async function topConnectors(user: AppUser, a: ConnectorArgs, fit: Connec
   if (a.cursor) throw new OutreachRefused(400, 'cursor pages one connector\'s targets: pass entityId with it.');
   if ((a.limit ?? 20) > MAX_CONNECTORS) throw new OutreachRefused(400, `At most ${MAX_CONNECTORS} connectors a call; a connector's own targets (entityId) page up to ${config.outreach.maxQueueRows}.`);
   const v = await deskVehicle(user, a.vehicle);
-  const p = await planOpen(user, v);
+  const p = await planOpen(user, v, a.maxWaitMs);
   const firstOnly = a.firstHopOnly === true;
   type Lp = { score: number | null; band: RouteStrength | null; weakestHop: WeakestHop | null };
   const by = new Map<string, { name: string; lps: Map<string, Lp>; firstLps: Map<string, Lp>; asFirstHop: number; asDeeperHop: number }>();
@@ -305,7 +305,7 @@ async function connectorTargets(user: AppUser, a: ConnectorArgs & { entityId: st
   const firstOnly = a.firstHopOnly === true;
   const q = queryKey(v, entityId, firstOnly);
   const start = a.cursor ? decodeCursor(q, a.cursor) : null;
-  const p = await planOpen(user, v);
+  const p = await planOpen(user, v, a.maxWaitMs);
   let name: string | null = null, asFirstHop = 0, asDeeperHop = 0;
   const rows = p.planned.flatMap(({ r, routes }) => {
     // The best recommended route through them to this LP (first-hop routes only, with firstHopOnly).

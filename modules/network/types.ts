@@ -113,6 +113,8 @@ export interface Route {
   viaContact?: { entityId: string; name: string; role: string };
   /** Presentation-only safety groups for unmerged possible identities. Evidence IDs stay intact. */
   identityGroups?: Record<string, string>;
+  /** Organisation nodes on this route. Display only: the map may draw near-identical organisation names as one node. */
+  organizationIds?: string[];
   /** Present on every planned route; optional only for legacy fixture callers. */
   score?: RouteScore;
   fromEntity?: string;

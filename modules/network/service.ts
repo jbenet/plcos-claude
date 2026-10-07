@@ -1,5 +1,5 @@
 import { lpContactsFor } from '@/modules/strategy/lp-contacts';
-import { routePolicyFacts, routeIdentityGroups } from './route-policy';
+import { routePolicyFacts, routeIdentityGroups, routeOrganizations } from './route-policy';
 import { emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
 import { cachedRoutes } from './cache';
 import { promotedBasisHashes, compactStructuralRoutes, overlayRoutes, routeCheckpoint, selectDisplayRoutes, sortRouteCandidates, type RouteSelectionOptions } from './route-overlay';
@@ -119,8 +119,8 @@ async function calculateRoutes(
   const [entities, edgeMap, loads] = await Promise.all([
     loadEntities(), edgesByIds(allEdgeIds), structuralOnly ? Promise.resolve([]) : connectorLoad(carrierIds),
   ]);
-  const [identityGroups, policy] = await Promise.all([routeIdentityGroups(nodeIds),
-    routePolicyFacts(nodeIds, vehicleId)]);
+  const [identityGroups, policy, organizations] = await Promise.all([routeIdentityGroups(nodeIds),
+    routePolicyFacts(nodeIds, vehicleId), routeOrganizations(nodeIds)]);
   const removedRoutes: NonNullable<RouteSearch['removedRoutes']> = [];
   const nameOf = new Map(entities.map((e) => [e.entityId, e.displayName]));
   const targetName = nameOf.get(targetId) ?? 'Unknown';
@@ -238,6 +238,7 @@ async function calculateRoutes(
     routes.push({
       ...(viaContact ? { viaContact } : {}),
       identityGroups: Object.fromEntries(p.nodes.map(id => [id, identityGroups.get(id) ?? id])),
+      organizationIds: p.nodes.filter(id => organizations.has(id)),
       fromEntity: p.source.entityId, fromName: p.source.name,
       hops, connectorNames, connectorIds, verdict, reasons, weakestTier, askLoad,
       influence: null,

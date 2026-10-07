@@ -48,10 +48,77 @@ export function provisionalRouteSummary(routes: Route[]): RouteSummary {
     basis: 'Provisional summary of available route scores. Unscored routes do not establish strength. Shared ties are not independent evidence.' };
 }
 
-export function routeNodeIds(route: Route): string[] {
+function recordNodeIds(route: Route): string[] {
   const first = route.hops[0];
   const source = route.fromEntity ?? (first ? (first.edge.toEntity === first.toEntity ? first.edge.fromEntity : first.edge.toEntity) : 'source');
-  return [source, ...route.hops.map((h) => h.toEntity)].map(id => route.identityGroups?.[id] ?? id);
+  return [source, ...route.hops.map((h) => h.toEntity)];
+}
+export function routeNodeIds(route: Route): string[] {
+  return recordNodeIds(route).map(id => route.identityGroups?.[id] ?? id);
+}
+
+const LEGAL_SUFFIX = /(incorporated|inc|llc|ltd|limited|gmbh|corp|corporation|company|co|plc|sa|ag|bv|lp|llp|holdings)$/;
+/** Lower-case letters and digits, without a trailing legal form: "Netho Labs, Inc." and "NethoLabs" read the same. */
+export function orgNameKey(name: string): string {
+  let key = name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/^the\s+/, '').replace(/[^\p{L}\p{N}]/gu, '');
+  for (let previous = ''; previous !== key && key.length > 4;) { previous = key; key = key.replace(LEGAL_SUFFIX, '') || previous; }
+  return key;
+}
+function withinOneEdit(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+// A short form drops one of these words: "Netho" for "Netho Labs". GUESS list from feedback 0123.
+const GENERIC_TAIL = /^(labs?|capital|ventures?|partners|group|fund|foundation|network|technologies|tech|management|investments?|ai|bio|research|global|vc)+$/;
+/** Near-identical organisation names: the same letters, one typo apart (6+ letters), or a short form of 4+ letters
+ * the other adds only generic words to. Thresholds are GUESSES from feedback 0123 (two spellings plus a short form). */
+export function nearIdenticalOrgNames(a: string, b: string): boolean {
+  const x = orgNameKey(a), y = orgNameKey(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return (short.length >= 4 && long.startsWith(short) && GENERIC_TAIL.test(long.slice(short.length))) || (short.length >= 6 && withinOneEdit(x, y));
+}
+
+/** Feedback 0123: draw near-identical organisation names as one map node. Display only: the routes returned are copies
+ * whose identityGroups point the matched organisations at one id, records stay unmerged, and `combined` names what
+ * each drawn node stands for so the node can say so. People are never combined by name here. */
+export function orgDisplayGroups(routes: Route[]): { routes: Route[]; combined: Map<string, { names: string[]; records: number }>; groupOf: Map<string, string> } {
+  const names = new Map<string, string>();
+  for (const route of routes) {
+    const ids = routeNodeIds(route), raw = recordNodeIds(route);
+    const labels = [route.fromName ?? route.hops[0]?.edge.fromName ?? '', ...route.hops.map((h) => h.toName)];
+    raw.forEach((id, i) => { if (route.organizationIds?.includes(id) && !names.has(ids[i]!)) names.set(ids[i]!, labels[i]!); });
+  }
+  const ids = [...names.keys()].sort(), parent = new Map(ids.map((id) => [id, id]));
+  const find = (id: string): string => { while (parent.get(id) !== id) id = parent.get(id)!; return id; };
+  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++)
+    if (nearIdenticalOrgNames(names.get(ids[i]!)!, names.get(ids[j]!)!)) {
+      const a = find(ids[i]!), b = find(ids[j]!);
+      if (a !== b) parent.set(a < b ? b : a, a < b ? a : b);
+    }
+  const groupOf = new Map<string, string>(), combined = new Map<string, { names: string[]; records: number }>();
+  for (const id of ids) {
+    const root = find(id);
+    if (root === id && ids.every((other) => other === id || find(other) !== id)) continue;
+    groupOf.set(id, root);
+    const entry = combined.get(root) ?? { names: [], records: 0 };
+    entry.records++;
+    if (!entry.names.includes(names.get(id)!)) entry.names.push(names.get(id)!);
+    combined.set(root, entry);
+  }
+  if (!groupOf.size) return { routes, combined, groupOf };
+  return { combined, groupOf, routes: routes.map((route) => {
+    const drawn = routeNodeIds(route);
+    return { ...route, identityGroups: { ...route.identityGroups,
+      ...Object.fromEntries(recordNodeIds(route).flatMap((id, i) => groupOf.has(drawn[i]!) ? [[id, groupOf.get(drawn[i]!)!]] : [])) } };
+  }) };
 }
 
 export interface RouteGraphArc {
@@ -202,16 +269,42 @@ export interface ComparisonOptions {
 }
 
 /** Keep stable source indices through filters, folding and paging. Deep links always reveal their row. */
+/**
+ * Indirect routes a direct one already beats (feedback 0131–0132, 7 Oct 2026: weak chains through several people, from
+ * one teammate, shown beside much stronger direct routes from others). Each indirect route scoring below the best
+ * recommended direct route is folded beneath it, as an alternative: still one click away, and in the expanded view,
+ * never deleted. Display only; the routes, their verdicts and scores are unchanged. Returns index → the direct route's.
+ */
+export function dominatedFolds(routes: Route[]): Map<number, number> {
+  let best: { index: number; score: number } | null = null;
+  routes.forEach((route, index) => {
+    if (route.hops.length !== 1 || route.verdict !== 'recommend' || route.foldedUnder != null) return;
+    const r = routeReading(route);
+    if (!r.provisional && (!best || r.score > best.score)) best = { index, score: r.score };
+  });
+  const folds = new Map<number, number>();
+  const direct = best as { index: number; score: number } | null;
+  if (!direct) return folds;
+  routes.forEach((route, index) => {
+    if (route.hops.length < 2 || route.foldedUnder != null) return;
+    const r = routeReading(route);
+    if (r.provisional || r.score < direct.score) folds.set(index, direct.index);
+  });
+  return folds;
+}
+
 export function routeComparison(routes: Route[], options: ComparisonOptions) {
+  const folds = dominatedFolds(routes);
+  const foldOf = (route: Route, index: number) => route.foldedUnder ?? folds.get(index) ?? null;
   const filtered = routes.map((route, index) => ({ route, index }))
     .filter(({ route }) => !options.exclude || !route.hops.slice(0, -1).some((h) => h.toEntity === options.exclude))
     .filter(({ route }) => !options.minimumWarmth || options.lastWarmth(route) >= options.minimumWarmth);
   const eligibleIds = new Set(filtered.map((x) => x.index));
   const familyId = /^\d+$/.test(options.family ?? '') && routes[Number(options.family)]
-    ? routes[Number(options.family)]!.foldedUnder ?? Number(options.family) : null;
+    ? foldOf(routes[Number(options.family)]!, Number(options.family)) ?? Number(options.family) : null;
   const eligible = filtered.filter(({ route, index }) => familyId !== null
-    ? index === familyId || route.foldedUnder === familyId
-    : options.expanded === '1' || route.foldedUnder == null || !eligibleIds.has(route.foldedUnder) || String(index) === options.selected)
+    ? index === familyId || foldOf(route, index) === familyId
+    : options.expanded === '1' || foldOf(route, index) == null || !eligibleIds.has(foldOf(route, index)!) || String(index) === options.selected)
     .sort((a, b) => Number(routeReading(a.route).provisional) - Number(routeReading(b.route).provisional)
       || routeReading(b.route).score - routeReading(a.route).score
       || Number(b.route.verdict === 'recommend') - Number(a.route.verdict === 'recommend')
@@ -225,6 +318,9 @@ export function routeComparison(routes: Route[], options: ComparisonOptions) {
   const displayedRoutes = eligible.slice(pageNumber * 80, pageNumber * 80 + show);
   const selected = displayedRoutes.find((x) => String(x.index) === options.selected)?.index ?? displayedRoutes[0]?.index;
   const alternatives = new Map<number, typeof filtered>();
-  for (const entry of filtered) if (entry.route.foldedUnder != null) alternatives.set(entry.route.foldedUnder, [...(alternatives.get(entry.route.foldedUnder) ?? []), entry]);
+  for (const entry of filtered) {
+    const under = foldOf(entry.route, entry.index);
+    if (under != null) alternatives.set(under, [...(alternatives.get(under) ?? []), entry]);
+  }
   return { eligible, familyId, show, pageNumber, displayedRoutes, selected, alternatives };
 }
