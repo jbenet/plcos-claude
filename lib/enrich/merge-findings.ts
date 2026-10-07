@@ -7,8 +7,9 @@ import type { Finding } from './schema';
  * finding stays the record; each fact and connection an older one held and it lacks is added, with its own source.
  * Nothing it says is changed. The merge is a dated correction (it stales no strategy: correctionReach).
  *
- * A finding the W1c fact check cut takes nothing from one it didn't check (7 Oct 2026: a location W1c had narrowed to a
- * region came back from the unchecked twin). A checked finding's facts survived the check, so they still merge anywhere.
+ * A finding the W1c fact check cut takes nothing by rule (7 Oct 2026: a location W1c had narrowed came back from the
+ * unchecked twin, then a "does SPVs" fact W1c had cut came back from a checked one). The correction log says what was
+ * cut only in words, so a checked finding is left for W1's revision pass, which reads both and carries forward by hand.
  */
 export const factChecked = (f: Finding) => (Array.isArray(f.researched.corrected) ? f.researched.corrected : []).some((c) => /\bW1c\b/.test(c.by ?? ''));
 
@@ -20,9 +21,8 @@ export function mergeFindings(newest: Finding, older: Finding[], at: string, by:
   const haveConns = new Set((newest.connections ?? []).map(connKey));
   const facts = [...(newest.facts ?? [])], connections = [...(newest.connections ?? [])];
   const from: string[] = [];
-  const checked = factChecked(newest);
+  if (factChecked(newest)) return { merged: newest, facts: 0, connections: 0 };
   for (const o of [...older].sort((a, b) => b.researched.at.localeCompare(a.researched.at))) {
-    if (checked && !factChecked(o)) continue;
     let took = false;
     for (const f of o.facts ?? []) if (!haveFacts.has(factKey(f))) { haveFacts.add(factKey(f)); facts.push(f); took = true; }
     for (const c of o.connections ?? []) if (!haveConns.has(connKey(c))) { haveConns.add(connKey(c)); connections.push(c); took = true; }
