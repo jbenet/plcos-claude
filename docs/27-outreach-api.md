@@ -81,10 +81,12 @@ Every queue row returns three states apart, each with Capital OS's label, so jua
 | `outreach_vehicles` | `GET /api/outreach/vehicles` | outreach:read |
 | `outreach_queue` | `GET /api/outreach/queue?vehicle=…` | outreach:read |
 | `comms_trace` | `GET /api/outreach/trace?pursuitId=…` | outreach:read |
+| `outreach_contacts` | `GET /api/outreach/contacts?vehicle=…[&updatedSince=…&ifChanged=…&includePassed=1]` (§4d) | outreach:read |
 | `top_connectors` | `GET /api/outreach/connectors?vehicle=…&limit=…[&firstHopOnly=1]` (§4b) | outreach:read |
 | `top_connectors` with `entityId` | `GET /api/outreach/connectors?vehicle=…&entityId=…[&limit=…&cursor=…]` (§4c) | outreach:read |
 | `routes_to` | `GET /api/outreach/routes-to?entityId=…&vehicle=…` (§4a) | the tool's name in the token, as over MCP |
 | `routes_through` | `GET /api/outreach/routes-through?entityId=…[&vehicle=…]` (§4a) | the tool's name in the token, as over MCP |
+| `search` | `GET /api/outreach/search?query=…[&kind=person\|org&limit=…]` (§4a) | the tool's name in the token, as over MCP |
 | `audit_recent` | `GET /api/outreach/audit` | (any token) |
 
 Every REST answer is `{ about, op, tool, asOf, coverage, data }`, and `data` is exactly what the MCP tool answers in its
@@ -273,6 +275,22 @@ A Viewer's `routes_to` answer has the same routes with no `contact` keys, and
 policy (a read; the token must list the tool, exactly as over MCP), envelope, budget and audit record, and the same
 `data` (a property compares them). `routes_through` still needs access to every vehicle.
 
+**Route quality (7 Oct 2026).** For juanmail's Intros page, `routes_to`'s routes (and `lp_summary`'s) also carry what the
+routes page shows in its comparison rows. Each is optional to a client and never changes which routes come back:
+
+- per route: **`score`**, the route score /100 (an integer), or null while the score is provisional (the page shows "—");
+  **`weakestTier`**, the worst hop's tier (A–D); **`reasons`**, the verdict's first three reasons, health-redacted;
+  **`askLoad`** `{ entityId, name, used, cap }`, the intro asks the introducer (who carries the ask on) has used this
+  quarter, null on a direct route; **`foldedUnder`**, the index in this answer's routes of the route this alternative is
+  folded beneath, or null when it is shown on its own.
+- per hop: **`warmth`** (0 to 5, in halves, the routes page's reading of the tie on its date), the edge **`kind`** (colleague,
+  coinvestor, family, …) and **`edgeYear`**, the year the tie is dated from.
+- Reasons can quote a restriction's instruction, which is R4: a token without R4 on the vehicle gets `reasons` only on
+  recommended routes, and null on the others. Score factors and edge evidence stay on the routes page.
+
+**REST search (7 Oct 2026).** `GET /api/outreach/search?query=…` (with `kind` and `limit` as over MCP) runs the MCP
+`search` tool through the same `runTool`: the token must list `search`, as over MCP, and `data` is the tool's answer.
+
 ## 4b. Top connectors (5 Oct 2026)
 
 `top_connectors` (MCP) and `GET /api/outreach/connectors?vehicle=<slug>&limit=<n>` (outreach:read): the people who sit on
@@ -281,12 +299,18 @@ the most and best warm routes to a vehicle's open LPs.
 - **Rows:** the vehicle's open pursuits (not passed), on a vehicle the token's owner reads — the queue's rule; another
   vehicle is "no vehicle among yours" (404).
 - **No new scoring model.** For each LP it reads the routes `routes_to` reads (`planRoutes`, through the authorization
-  facade) and counts: a connector is anyone between the source and the LP (the route's `connectorIds`); each LP counts
+  facade) and counts: a connector is a person between the source and the LP (the route's `connectorIds` that are people;
+  since 7 Oct 2026 an organisation on a route, such as a shared employer or the fund itself, is never listed, and the first
+  person past it is the first hop); each LP counts
   once per connector; `bestScore` is the best route score through them (0–100: the route scorer's relative, uncalibrated
   estimate, never a probability) with its band. Only routes the planner recommends count; held and excluded ones — a
   restriction, a spent ask cap — never do (rule 8).
 - **Each connector:** `entityId`, `name`, `lps` (open LPs reached), `bestScore`, `bestBand`, up to three
   `examplePursuitIds` (their best first), `doNotApproach`, and `contact` under §4a's rule. Ranked by `lps`, then `bestScore`.
+- **Why a score is low** (7 Oct 2026). A route is never stronger than its weakest hop, so one hop that is affiliation only
+  (a shared firm or board, a firm's investment: warmth 0 of 5) makes a recommended route score 0. `bestWeakestHop` names
+  that hop on their best route: `{ warmth, kind, label, at }`, `at` being `from the team`, `between connectors`, `to the
+  LP` or `direct`. A connector's targets carry `weakestHop` the same way.
 - **First hop or deeper** (5 Oct 2026). `asFirstHop` counts the recommended routes on which they are the first hop past the
   team member — the person the team emails (§4a's `askFirst`) — and `asDeeperHop` the ones on which someone else must
   ask them first. `reachableDirectly` is `asFirstHop > 0`. Someone the team reaches only through another person is still
@@ -372,6 +396,34 @@ GET /api/outreach/connectors?vehicle=spv-cortex&entityId=5e6f…&limit=2
 ```
 
 Over MCP: `{ "vehicle": "spv-cortex", "entityId": "5e6f…", "limit": 2, "cursor": "eyJ2Ijox…" }`.
+
+## 4d. Every LP and its addresses, light (7 Oct 2026)
+
+JuanMail matches its mail to LPs. The queue carries far more than that needs (checks, the trace, strategy, materials) and
+pages 25 rows at a time, so it asked for a read with only what matching takes, for every LP at once.
+
+`GET /api/outreach/contacts?vehicle=<slug or id, or all>` (MCP `outreach_contacts`) answers, for every open LP on the
+vehicle (or on every vehicle the token reads), in one page:
+
+```json
+{ "data": {
+    "rows": [
+      { "pursuitId": "0b6e…", "vehicle": "spv-cortex", "entity": { "id": "7f3a…", "name": "Invented Family Office", "kind": "org" },
+        "status": { "value": "selected", "label": "Selected" }, "passed": false,
+        "contacts": [{ "name": "Ravi Invented", "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-05", "confirmedBy": "Juan Benet" }] }],
+    "total": 1, "offset": 0, "nextOffset": null, "version": "Qk1x…", "cursor": "2026-10-07T08:10:00.000Z" } }
+```
+
+- `contacts` are the queue's, by the same reader (lib/outreach/addresses.ts): for a person, their own addresses; for an
+  organisation, its contacts' (from the pursuit and affiliations, never licensed). At most three per person, best first.
+  Addresses are R2: on a vehicle where the token does not read words, a row has `contacts: []` and `withheld`.
+- `includePassed=1` adds the LPs that passed, each `passed: true`. Without it they are left out, as in the queue.
+- `updatedSince=<the previous cursor>` keeps only the rows that changed since then, by the queue's own test (§4).
+- `version` hashes the rows (not `cursor`). `ifChanged=<version>` answers `{ "unchanged": true, "version", "cursor" }`
+  when no row would differ.
+- Order: vehicle slug, then name, then pursuit id. Over REST every row comes back. Over MCP an answer larger than the
+  response limit is cut from its end, and `offset=<nextOffset>` continues it; `version` is always the whole answer's.
+- `POST /api/outreach/contacts` is unchanged: it records an address confirmed in Gmail (`outreach_propose_contact`, §5).
 
 ## 5. Write
 

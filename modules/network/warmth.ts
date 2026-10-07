@@ -28,7 +28,7 @@ export interface Warmth {
   basis: string;
 }
 
-const LABEL: Record<WarmthKind, string> = {
+export const WARMTH_LABEL: Record<WarmthKind, string> = {
   proximity: 'Affiliation or proximity only', acquaintance: 'Acquaintance',
   repeated_contact: 'Repeated direct contact', worked_together: 'Worked together',
   joint_investment: 'Joint investment', cofounder: 'Co-founded together',
@@ -89,7 +89,7 @@ export function tieWarmth(kind: string, details?: TieDetails, at = new Date()): 
   const penalty = details?.basis ? 0 : c.agePenalty[recency];
   const score = Math.max(0, prior - penalty);
   return { version: c.version, evaluatedAt: at.toISOString(), kind: k, prior, score, recency,
-    basis: `${details?.basis === 'pl_affiliation' ? 'PL colleagues by affiliation policy' : details?.basis === 'pl_network' ? 'PL network tie by affiliation policy' : LABEL[k]}: prior ${prior}/5; ${recency === 'unknown' ? 'contact date unknown' : recency}, −${penalty}. Estimate — guess; not evidence confidence or intro consent.` };
+    basis: `${details?.basis === 'pl_affiliation' ? 'PL colleagues by affiliation policy' : details?.basis === 'pl_network' ? 'PL network tie by affiliation policy' : WARMTH_LABEL[k]}: prior ${prior}/5; ${recency === 'unknown' ? 'contact date unknown' : recency}, −${penalty}. Estimate — guess; not evidence confidence or intro consent.` };
 }
 
 /** Compatibility with already-imported W3 evidence. Only explicit personal investor/founder

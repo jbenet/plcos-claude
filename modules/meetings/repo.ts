@@ -171,8 +171,9 @@ const fromReach = (contact: string) => `
          m.source, m.source_ref, r.for_entity, m.about, m.about_vehicles, m.about_basis, m.about_by,
          m.group_size, ${contact} as via_contact
     from reach r
-    join meetings.meeting m on identity.canonical_entity_id(m.entity_id) = identity.canonical_entity_id(r.entity_id)
-    join identity.entity e on e.entity_id = identity.canonical_entity_id(m.entity_id)
+    join identity.alias_pairs(array(select identity.canonical_entity_id(entity_id) from reach)) ra on ra.canonical_id = identity.canonical_entity_id(r.entity_id)
+    join meetings.meeting m on m.entity_id = ra.entity_id
+    join identity.entity e on e.entity_id = ra.canonical_id
     left join platform.vehicle v on v.id = m.vehicle_id
     join platform.app_user u on u.id = m.owner_id
     left join platform.app_user rb on rb.id = m.read_by`;
@@ -183,18 +184,20 @@ const fromReach = (contact: string) => `
  * `for_entity` says which LP each row is being read for.
  */
 const TOUCH_SELECT = `
-  with lp as (select unnest($1::uuid[]) as entity_id),
+  with lp as (select x as entity_id, identity.canonical_entity_id(x) as canon from unnest($1::uuid[]) x),
+  -- Each LP's aliases first (identity.alias_pairs), so the joins below are index probes (7 Oct 2026).
+  lpa as (select lp.entity_id, pa.entity_id as alias from lp join identity.alias_pairs(array(select canon from lp)) pa on pa.canonical_id = lp.canon),
   reach as (
     select lp.entity_id as for_entity, lp.entity_id as entity_id, false as contact from lp
     union
-    select lp.entity_id, identity.canonical_entity_id(a.org_entity), false from identity.affiliation a join lp on identity.canonical_entity_id(lp.entity_id) = identity.canonical_entity_id(a.person_entity)
+    select lpa.entity_id, identity.canonical_entity_id(a.org_entity), false from lpa join identity.affiliation a on a.person_entity = lpa.alias
      where a.ended_on is null
     union
     -- An organisation's contacts speak for it (docs/23): a person re-pointed to their firm's
     -- pursuit brings their meetings with them, as they counted before the move.
-    select lp.entity_id, identity.canonical_entity_id(c.person_entity), true from strategy.pursuit_contact c
-      join strategy.active_pursuit p on p.pursuit_id = c.pursuit_id
-      join lp on identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id(lp.entity_id)
+    select lpa.entity_id, identity.canonical_entity_id(c.person_entity), true from lpa
+      join strategy.active_pursuit p on p.entity_id = lpa.alias
+      join strategy.pursuit_contact c on c.pursuit_id = p.pursuit_id
   )
   ${fromReach('r.contact')}`;
 
@@ -202,12 +205,12 @@ const TOUCH_SELECT = `
 const COLLEAGUE_SELECT = `
   with firm as (
     select a.org_entity from identity.affiliation a
-     where identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id($1::uuid) and a.ended_on is null
+     where a.person_entity = any(identity.alias_ids(array[identity.canonical_entity_id($1::uuid)])) and a.ended_on is null
      order by a.is_primary desc, a.as_of desc limit 1
   ),
   reach as (
     select distinct $1::uuid as for_entity, identity.canonical_entity_id(c.person_entity) as entity_id
-      from firm join identity.affiliation c on identity.canonical_entity_id(c.org_entity) = identity.canonical_entity_id(firm.org_entity)
+      from firm join identity.affiliation c on c.org_entity = any(identity.alias_ids(array[identity.canonical_entity_id(firm.org_entity)]))
      where identity.canonical_entity_id(c.person_entity) <> identity.canonical_entity_id($1::uuid) and c.ended_on is null
   )
   ${fromReach('false')}`;
@@ -273,7 +276,7 @@ export async function colleagueTouchpointsFor(entityId: string, vehicleId: strin
   );
   const org = (await db.one<{ name: string }>(
     `select o.display_name as name from identity.affiliation a join identity.entity o on o.entity_id = identity.canonical_entity_id(a.org_entity)
-      where identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id($1::uuid) and a.ended_on is null order by a.is_primary desc, a.as_of desc limit 1`, [entityId]))?.name ?? null;
+      where a.person_entity = any(identity.alias_ids(array[identity.canonical_entity_id($1::uuid)])) and a.ended_on is null order by a.is_primary desc, a.as_of desc limit 1`, [entityId]))?.name ?? null;
   const all = rows.map(r => toTouch(r, project)).map((t) => ({ ...t, viaOrganization: org ? `${t.entityName}, ${org}` : t.entityName })).sort((a, b) => when(b) - when(a));
   if (!vehicleId) return all;
   const w = (await raiseWindows()).get(vehicleId);

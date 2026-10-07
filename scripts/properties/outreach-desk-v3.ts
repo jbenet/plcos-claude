@@ -63,6 +63,12 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
   await edge(first, passedLp); await edge(first, otherLp);
   const pNear = await pursuit(near, V1.id, 'selected'), pDeep = await pursuit(deep, V1.id, 'discussing'), pDirect = await pursuit(direct, V1.id, 'new');
   const pPassed = await pursuit(passedLp, V1.id, 'passed'), pOther = await pursuit(otherLp, V2.id, 'selected');
+  // An organisation on routes (7 Oct 2026): the team and an LP share it, and through it the team reaches a person who
+  // knows another LP. It links people; it is never a connector, and the person past it is the first hop.
+  const firm = await entity('Invented V3 Shared Firm'), pastFirm = await entity('Invented V3 Past The Firm', 'person');
+  const viaFirm = await entity('Invented V3 LP Via Firm'), viaPerson = await entity('Invented V3 LP Via Firm Person');
+  await edge(juanE, firm); await edge(firm, viaFirm); await edge(firm, pastFirm); await edge(pastFirm, viaPerson);
+  await pursuit(viaFirm, V1.id, 'selected'); await pursuit(viaPerson, V1.id, 'selected');
 
   // Asks to the first hop: one made this quarter, one last quarter (answered), one proposed and never made; none to the second.
   const q0 = quarterStart(new Date());
@@ -127,6 +133,16 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
       `${listed.status}: first hop ${cA?.asFirstHop}/${cA?.asDeeperHop} (direct ${cA?.reachableDirectly}, ${cA?.lps} LPs); second ${cB?.asFirstHop}/${cB?.asDeeperHop} (direct ${cB?.reachableDirectly}); `
       + `firstHopOnly: ${firstOnly.status}, second ${fB ? 'LISTED' : 'left out'}, first ${fA?.lps} LPs; MCP equal ${JSON.stringify(firstOnlyMcp.data) === JSON.stringify(firstOnly.json?.data)}`);
 
+    const pf = find(listed.json?.data, pastFirm), pfFirst = find(firstOnly.json?.data, pastFirm);
+    check('Outreach desk v3: an organisation on a route (a shared firm, the fund itself) is never listed as a connector; the first person past it is the first hop; a connector says the hop that caps their best route',
+      listed.status === 200 && find(listed.json.data, firm) === undefined && find(firstOnly.json?.data, firm) === undefined
+      && pf?.lps === 1 && pf.asFirstHop === 1 && pf.reachableDirectly === true && pfFirst?.lps === 1
+      // The hop that caps their best route's score is said: here every hop is a colleague tie, worked together.
+      && (cA as any)?.bestWeakestHop?.kind === 'worked_together' && typeof (cA as any)?.bestWeakestHop?.warmth === 'number',
+      `firm listed: ${find(listed.json?.data, firm) ? 'YES' : 'no'} (first-hop only: ${find(firstOnly.json?.data, firm) ? 'YES' : 'no'}); `
+      + `the person past it: ${pf ? `${pf.lps} LP, first hop ${pf.asFirstHop}, direct ${pf.reachableDirectly}` : 'NOT LISTED'}, first-hop only ${pfFirst?.lps ?? 'not listed'}; `
+      + `weakest hop ${JSON.stringify((cA as any)?.bestWeakestHop)}`);
+
     // ── A connector's targets: complete, ordered, paged once, authorized ──────────────────────
     type Target = { pursuitId: string; score: number | null; position: string };
     const targets = await rest(oneTok, 'connectors', { vehicle: V1.slug, entityId: first, limit: '500' });
@@ -176,6 +192,98 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
       && replanned.status === 200 && replanned.json.data.unchanged === true,
       `version ${version ?? 'NONE'}; same: ${same.status} ${JSON.stringify(same.json?.data)}; other: ${other.status} ${other.json?.data?.version === version ? 'same version' : 'DIFFERENT'}; `
       + `targets: ${JSON.stringify(sameTargets.json?.data)}; after a write: ${JSON.stringify(replanned.json?.data)?.slice(0, 120)}`);
+
+    // ── Shared reads in a long plan, and the daily route warm-up (7 Oct 2026) ─────────────────────
+    const { withReadMemo } = await import('../../lib/db/read-memo');
+    const { dayDecision } = await import('../../lib/route-day-warm');
+    const { getDb } = await import('../../lib/db');
+    const live = await getDb();
+    const revisionSql = 'select revision::text from network.read_revision where singleton';
+    const inside = await withReadMemo(async () => {
+      const before = (await live.one<{ revision: string }>(revisionSql))!.revision;
+      await db.query(`update platform.vehicle set sort_order = sort_order where id = $1`, [V2.id]);
+      const after = (await live.one<{ revision: string }>(revisionSql))!.revision;
+      const other = await live.query<{ n: number }>('select count(*)::int n from platform.vehicle');
+      return { before, after, other: other.length };
+    });
+    const liveAfter = (await live.one<{ revision: string }>(revisionSql))!.revision;
+    check('Outreach desk v3: inside a long plan a revision read is shared (it reads as at the plan\'s start), outside it reads live; the route warm-up runs when the day changes, never at the first look',
+      inside.before === inside.after && liveAfter !== inside.before && inside.other === 1
+      && dayDecision(null, '2026-10-07') === 'record' && dayDecision('2026-10-07', '2026-10-07') === 'wait' && dayDecision('2026-10-07', '2026-10-08') === 'warm',
+      `inside: ${inside.before} then ${inside.after}; outside after the write: ${liveAfter}; day decisions ${dayDecision(null, 'd')}/${dayDecision('d', 'd')}/${dayDecision('d', 'e')}`);
+
+    // ── The light contacts read (7 Oct 2026) ───────────────────────────────────────────────
+    const personLp = await entity('Invented V3 LP Person', 'person');
+    const pPerson = await pursuit(personLp, V1.id, 'discussing');
+    await db.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body) values
+      ('props-desk-v3-research', 'Invented research note', 'fixture', 'public', current_date, 'weak', 'Invented', '') on conflict do nothing`);
+    await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'person@invented-v3.example', 'props-desk-v3-research', current_date, 'medium')`, [personLp]);
+    type CRow = { pursuitId: string; vehicle: string; entity: { id: string; name: string; kind: string }; status: { value: string; label: string }; passed: boolean; contacts: Array<{ email: string }> };
+    const light = await rest(oneTok, 'contacts', { vehicle: V1.slug });
+    const lRows = (light.json?.data?.rows ?? []) as CRow[];
+    const lIds = lRows.map((r) => r.pursuitId);
+    const withPassed = await rest(oneTok, 'contacts', { vehicle: V1.slug, includePassed: '1' });
+    const passedRow = ((withPassed.json?.data?.rows ?? []) as CRow[]).find((r) => r.pursuitId === pPassed);
+    const everyOne = await rest(oneTok, 'contacts', { vehicle: 'all' });
+    const lightMcp = await mcp(oneMcp, 'outreach_contacts', { vehicle: V1.slug });
+    const lVersion = light.json?.data?.version as string | undefined;
+    const lCursor = light.json?.data?.cursor as string | undefined;
+    const lSame = await rest(oneTok, 'contacts', { vehicle: V1.slug, ifChanged: lVersion ?? 'none' });
+    const lQuiet = await rest(oneTok, 'contacts', { vehicle: V1.slug, updatedSince: lCursor ?? '' });
+    await db.query(`update strategy.pursuit set status = 'discussing', status_set_at = now() where pursuit_id = $1`, [pDirect]);
+    const lMoved = await rest(oneTok, 'contacts', { vehicle: V1.slug, ifChanged: lVersion ?? 'none' });
+    const lSince = await rest(oneTok, 'contacts', { vehicle: V1.slug, updatedSince: lCursor ?? '' });
+    const lOutside = await rest(twoTok, 'contacts', { vehicle: V1.slug });
+    const proposeStill = await rest(oneTok, 'contacts', {}, { method: 'POST', body: {} });
+    const personRow = lRows.find((r) => r.pursuitId === pPerson);
+    check('Outreach desk v3: GET contacts answers every open LP on the vehicle in one page with only pursuit, name, kind, status (with its label), passed and the addresses on file; passed LPs only with includePassed; vehicle=all keeps to the vehicles the token reads; MCP says the same; ifChanged with the version is { unchanged: true }; after a status change the version moves and updatedSince keeps only that row; another vehicle\'s reader is refused; POST contacts still proposes an address',
+      light.status === 200 && [pNear, pDeep, pDirect, pPerson].every((p) => lIds.includes(p)) && !lIds.includes(pPassed) && !lIds.includes(pOther)
+      && light.json.data.total === lRows.length && light.json.data.nextOffset === null
+      && lRows.every((r) => Object.keys(r).sort().join() === 'contacts,entity,passed,pursuitId,status,vehicle' && r.passed === false && r.vehicle === V1.slug && typeof r.status.label === 'string')
+      && personRow?.entity.kind === 'person' && personRow.contacts.some((c) => c.email === 'person@invented-v3.example')
+      && passedRow?.passed === true && passedRow.status.value === 'passed'
+      && everyOne.status === 200 && ((everyOne.json.data.rows ?? []) as CRow[]).every((r) => r.vehicle === V1.slug)
+      && JSON.stringify(lightMcp.data?.rows) === JSON.stringify(lRows) && lightMcp.data?.version === lVersion
+      && typeof lVersion === 'string' && lSame.status === 200 && lSame.json.data.unchanged === true && lSame.json.data.version === lVersion && !('rows' in lSame.json.data)
+      && lQuiet.status === 200 && lQuiet.json.data.rows.length === 0
+      && lMoved.status === 200 && lMoved.json.data.version !== lVersion && Array.isArray(lMoved.json.data.rows)
+      && lSince.status === 200 && (lSince.json.data.rows as CRow[]).map((r) => r.pursuitId).join() === pDirect
+      && lOutside.status === 404 && !lOutside.text.includes(pNear) && proposeStill.status !== 405 && proposeStill.status !== 404,
+      `${light.status}: ${lRows.length} rows (passed in ${lIds.includes(pPassed)}), keys ${lRows[0] ? Object.keys(lRows[0]).sort().join() : 'none'}; person ${JSON.stringify(personRow?.contacts)}; with passed ${passedRow?.passed}; `
+      + `all: ${everyOne.status} ${((everyOne.json?.data?.rows ?? []) as CRow[]).map((r) => r.vehicle).filter((v, i, a) => a.indexOf(v) === i).join()}; MCP equal ${JSON.stringify(lightMcp.data?.rows) === JSON.stringify(lRows)}${lightMcp.error ? ` (${lightMcp.error.slice(0, 120)})` : ''}; `
+      + `same ${JSON.stringify(lSame.json?.data)}; quiet ${lQuiet.json?.data?.rows?.length}; moved ${lMoved.json?.data?.version === lVersion ? 'SAME VERSION' : 'new version'}; since ${(lSince.json?.data?.rows ?? []).length} rows; outside ${lOutside.status}; POST ${proposeStill.status}`);
+
+    // ── Affinity's own addresses (7 Oct 2026: contacts were empty on every queue row) ─────────────
+    const affLp = await entity('Invented V3 LP Affinity Person', 'person');
+    const pAff = await pursuit(affLp, V1.id, 'selected');
+    await db.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by) values ('affinity', 'person:990001', $1, 'props')`, [affLp]);
+    for (const [at, primary] of [['2026-09-01', 'old@invented-affinity.example'], ['2026-10-01', 'primary@invented-affinity.example']] as const) {
+      await db.query(`insert into sources.raw_record (source, kind, source_id, payload_hash, payload, fetched_at) values ('affinity', 'person', '990001', $1, $2::jsonb, $3)`,
+        [`props-v3-aff-${at}`, JSON.stringify({ id: 990001, type: 'external', firstName: 'Invented', primaryEmailAddress: primary, emailAddresses: [primary, 'second@invented-affinity.example', 'not an address'] }), at]);
+    }
+    await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'Second@invented-affinity.example', 'props-desk-v3-research', current_date, 'medium')`, [affLp]);
+    const affRow = ((await rest(oneTok, 'contacts', { vehicle: V1.slug })).json?.data?.rows ?? []).find((r: { pursuitId: string }) => r.pursuitId === pAff);
+    const affOutside = ((await rest(twoTok, 'queue', { vehicle: V2.slug })).text ?? '');
+    const affEmails = (affRow?.contacts ?? []).map((c: { email: string; source: string }) => `${c.email}:${c.source}`);
+    check('Outreach desk v3: an LP\'s addresses include the ones Affinity holds for the person (latest record, primary first, after any claim, the same address once, source affinity, unconfirmed); never a malformed one',
+      affEmails.join() === 'Second@invented-affinity.example:research,primary@invented-affinity.example:affinity'
+      && (affRow?.contacts ?? []).every((c: { confirmedAt: string | null }) => c.confirmedAt === null) && !affOutside.includes('invented-affinity'),
+      `${JSON.stringify(affEmails)}`);
+
+    // ── Reply owed: a written message from them, unanswered (7 Oct 2026) ────────────────────────
+    const { replyOwedFrom } = await import('../../lib/outreach/reads');
+    const tp = (on: string, channel: string, direction: string, extra: Record<string, unknown> = {}) => ({ on: new Date(on), channel, direction, groupSize: 2, ...extra }) as never;
+    const owedCases = {
+      meetingLast: replyOwedFrom([tp('2026-09-01', 'email', 'ours'), tp('2026-09-10', 'meeting', 'both')]),
+      theirEmail: replyOwedFrom([tp('2026-09-01', 'email', 'ours'), tp('2026-09-05', 'email', 'theirs')]),
+      answered: replyOwedFrom([tp('2026-09-05', 'email', 'theirs'), tp('2026-09-06', 'email', 'ours')]),
+      metAfter: replyOwedFrom([tp('2026-09-05', 'email', 'theirs'), tp('2026-09-07', 'call', 'both')]),
+      autoReply: replyOwedFrom([tp('2026-09-05', 'email', 'theirs', { aboutBasis: 'Automatic reply: out of office' })]),
+      firm: replyOwedFrom([tp('2026-09-05', 'email', 'theirs', { viaOrganization: 'Invented Firm' })]),
+    };
+    check('Outreach desk v3: a reply is owed when their latest email or message came after anything of ours (a message, or a meeting or call together); a meeting is never their unanswered message, nor an automatic reply or their firm\'s mail',
+      owedCases.meetingLast === null && owedCases.theirEmail?.since === '2026-09-05' && owedCases.answered === null && owedCases.metAfter === null
+      && owedCases.autoReply === null && owedCases.firm === null, JSON.stringify(owedCases));
 
     // ── Ask history ───────────────────────────────────────────────────────────────────────
     const lastOn = thisQuarter.toISOString().slice(0, 10);

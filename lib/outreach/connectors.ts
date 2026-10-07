@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { config } from '@/config/deployment';
 import { pipelineData } from '@/lib/authz/read/pipeline';
-import { planRoutes } from '@/lib/authz/read/network';
+import { planRoutes, warmthReader, WARMTH_LABEL } from '@/lib/authz/read/network';
 import { getDb, type Db } from '@/lib/db';
+import { withReadMemo } from '@/lib/db/read-memo';
 import { routeContacts } from '@/lib/mcp/reads';
 import type { AppUser, Vehicle } from '@/modules/platform';
-import type { RouteStrength } from '@/modules/network';
+import type { Route, RouteStrength, WarmthKind } from '@/modules/network';
 import { STATUS_LABEL, type PursuitStatus } from '@/modules/strategy';
 import { ADDRESSES_WITHHELD } from './addresses';
 import { deskVehicle, OutreachRefused } from './reads';
@@ -19,8 +20,9 @@ import { deskVehicle, OutreachRefused } from './reads';
  *   - Rows: the vehicle's open pursuits (not passed), on a vehicle the token's owner may read — the queue's rule.
  *   - A route counts only when its verdict is "recommend": held and excluded routes (a restriction, a spent ask cap)
  *     are never counted, so a restriction is never stripped to make a connector look useful (rule 8).
- *   - A connector is anyone between the source (the team, PL) and the LP: the route's connectorIds. The first of them
- *     is the first hop past the team member, the person the team emails (askFirst); the rest are deeper. Each LP counts
+ *   - A connector is a person between the source (the team, PL) and the LP: the route's connectorIds that are people.
+ *     An organisation on the route (a shared employer, the fund itself) links two people and is never listed. The first
+ *     person is the first hop past the team member, the person the team emails (askFirst); the rest are deeper. Each LP counts
  *     once per connector; the best route score (0–100, uncalibrated, never a probability) is the highest of theirs.
  *   - firstHopOnly: only the routes on which they are the first hop count, so the ranking is of people the team can
  *     ask directly. Without it, someone the team reaches only through another person is listed, reachableDirectly: false.
@@ -38,7 +40,14 @@ export interface ConnectorArgs { vehicle: string; limit?: number; firstHopOnly?:
 export interface ConnectorFit { maxBytes?: number }
 
 type PRow = Awaited<ReturnType<typeof pipelineData>>['rows'][number];
-interface Usable { score: number | null; band: RouteStrength | null; ids: string[]; names: string[]; hops: number }
+/**
+ * The hop that caps a route's score (warmth.ts scoreRoute: a route is never stronger than its weakest hop). A hop that is
+ * shared affiliation only — a firm, a board, a firm's investment — has warmth 0 of 5, so its route scores 0 while still
+ * recommended (JuanMail, 7 Oct 2026: "most introducers score 0 while reaching 2–11 LPs"). Said, so a 0 reads as "the
+ * evidence for this link is affiliation only", not as "no route".
+ */
+interface WeakestHop { warmth: number; kind: WarmthKind; label: string; at: 'from the team' | 'to the LP' | 'between connectors' | 'direct' }
+interface Usable { score: number | null; band: RouteStrength | null; ids: string[]; names: string[]; hops: number; weakestHop: WeakestHop | null }
 interface Planned { r: PRow; routes: Usable[] }
 
 /**
@@ -55,35 +64,75 @@ async function planRevision(db: Db): Promise<string> {
 
 /**
  * One vehicle's plan for one principal (licensed evidence is redacted per person) at one revision: planned once, in
- * the background, LP by LP, highest priority first, and kept until anything it read changes (JuanMail, 7 Oct 2026:
+ * the background, a few LPs at a time, highest priority first, and kept until anything it read changes (JuanMail, 7 Oct 2026:
  * every call planned again and ran into the 15 s budget). A call waits for it up to the budget and answers with what
  * is planned by then; the planning carries on, so the next call finds more, and once done, all of it at once. A job
- * whose revision is superseded stops at its next LP.
+ * whose revision is superseded stops at its next batch.
  */
 interface PlanJob { key: string; revision: string; asOf: string | undefined; open: PRow[]; planned: Planned[]; notCounted: number; done: Promise<void>; finished: boolean }
 // Per database, as the route cache is: a test's fresh database, or a restore, never meets another's plan.
 const jobsByDb = new WeakMap<Db, Map<string, PlanJob>>();
 // GUESS — vehicles × people asking; a principal's job is replaced, never added to, as revisions move.
 const MAX_JOBS = 32;
+// GUESS — LPs planned at once. Each LP's plan is a handful of small reads; a few at a time fills the gaps between them
+// without taking the pool (lib/db/postgres.ts) from the pages.
+const PLAN_CONCURRENCY = 4;
 
-function startPlan(jobs: Map<string, PlanJob>, user: AppUser, v: Vehicle, key: string, revision: string): PlanJob {
+/**
+ * Which of these entities are people (identity.entity's type, after any type correction). A connector is a person whose
+ * goodwill an ask spends: an organisation on a route (a shared employer, the fund itself) is how two people are linked,
+ * never someone to ask (JuanMail, 7 Oct 2026: "Amazon Web Services" and PLC Crypto were listed as introducers).
+ */
+async function peopleAmong(db: Db, ids: string[], known: Map<string, boolean>): Promise<void> {
+  const unknown = [...new Set(ids)].filter((id) => !known.has(id));
+  if (!unknown.length) return;
+  const rows = await db.query<{ id: string; person: boolean }>(`select e.entity_id::text id, e.entity_type = 'person' person
+    from identity.entity e where e.entity_id = any($1::uuid[])`, [unknown]);
+  for (const id of unknown) known.set(id, false);
+  for (const r of rows) known.set(r.id, r.person);
+}
+
+function weakestHop(route: Route, readWarmth: ReturnType<typeof warmthReader>): WeakestHop | null {
+  let weakest: { i: number; w: ReturnType<ReturnType<typeof warmthReader>> } | null = null;
+  route.hops.forEach((h, i) => { const w = readWarmth(h.edge); if (!weakest || w.score < weakest.w.score) weakest = { i, w }; });
+  if (!weakest) return null;
+  const { i, w } = weakest as { i: number; w: ReturnType<ReturnType<typeof warmthReader>> };
+  const n = route.hops.length;
+  return { warmth: w.score, kind: w.kind, label: WARMTH_LABEL[w.kind],
+    at: n === 1 ? 'direct' : i === 0 ? 'from the team' : i === n - 1 ? 'to the LP' : 'between connectors' };
+}
+
+function startPlan(db: Db, jobs: Map<string, PlanJob>, user: AppUser, v: Vehicle, key: string, revision: string): PlanJob {
   const job = { key, revision, asOf: undefined, open: [], planned: [], notCounted: 0, finished: false } as unknown as PlanJob;
-  job.done = (async () => {
+  // The job reads the cache revisions once (lib/db/read-memo.ts): it is replaced when the revision it started at moves.
+  job.done = withReadMemo(async () => {
     const { rows, asOf } = await pipelineData(v.id);
     job.asOf = asOf;
     job.open = rows.filter((r) => r.vehicleId === v.id && r.status !== 'passed')
       .sort((x, y) => (y.priority ?? -1) - (x.priority ?? -1) || (x.id < y.id ? -1 : 1));
-    for (const r of job.open) {
+    const person = new Map<string, boolean>(), readWarmth = warmthReader(new Date());
+    // A few LPs at a time, highest priority first; each batch lands in priority order, so a partial answer is still the
+    // most important LPs.
+    for (let i = 0; i < job.open.length; i += PLAN_CONCURRENCY) {
       if (jobs.get(key) !== job) return;
-      const search = await planRoutes(user.handle, r.entityId, 3, v.kind, 'team', undefined, { vehicleId: v.id });
-      const routes = search?.routes ?? [];
-      const usable = routes.filter((x) => x.verdict === 'recommend');
-      job.notCounted += routes.length - usable.length;
-      job.planned.push({ r, routes: usable.map((x) => ({ score: x.score?.value ?? null, band: x.score?.band ?? null,
-        ids: x.connectorIds ?? [], names: x.connectorNames ?? [], hops: x.hops.length })) });
+      const batch = job.open.slice(i, i + PLAN_CONCURRENCY);
+      const searches = await Promise.all(batch.map((r) => planRoutes(user.handle, r.entityId, 3, v.kind, 'team', undefined, { vehicleId: v.id })));
+      const usable = searches.map((search) => {
+        const routes = search?.routes ?? [];
+        const kept = routes.filter((x) => x.verdict === 'recommend');
+        job.notCounted += routes.length - kept.length;
+        return kept;
+      });
+      await peopleAmong(db, usable.flat().flatMap((x) => x.connectorIds ?? []), person);
+      batch.forEach((r, j) => job.planned.push({ r, routes: usable[j]!.map((x) => {
+        // Only the people on the route, in order: the first of them is the one the team asks.
+        const at = (x.connectorIds ?? []).flatMap((id, n) => person.get(id) ? [n] : []);
+        return { score: x.score?.value ?? null, band: x.score?.band ?? null, hops: x.hops.length,
+          ids: at.map((n) => x.connectorIds[n]!), names: at.map((n) => x.connectorNames?.[n] ?? 'Unknown'), weakestHop: weakestHop(x, readWarmth) };
+      }) }));
     }
     job.finished = true;
-  })();
+  });
   // A failed plan is not kept: the next call plans again.
   job.done.catch(() => { if (jobs.get(key) === job) jobs.delete(key); });
   jobs.set(key, job);
@@ -99,7 +148,7 @@ async function planOpen(user: AppUser, v: Vehicle) {
   const key = JSON.stringify([v.id, user.handle]);
   const revision = await planRevision(db);
   let job = jobs.get(key);
-  if (!job || job.revision !== revision) job = startPlan(jobs, user, v, key, revision);
+  if (!job || job.revision !== revision) job = startPlan(db, jobs, user, v, key, revision);
   let timer: NodeJS.Timeout | undefined;
   await Promise.race([job.done, new Promise<void>((done) => { timer = setTimeout(done, config.outreach.connectorsBudgetMs); })])
     .finally(() => clearTimeout(timer));
@@ -124,8 +173,8 @@ function coverageOf(v: Vehicle, p: { open: PRow[]; planned: Planned[]; notCounte
   return {
     corpus: `Warm-intro routes (the routes routes_to returns: the team and the PL network, up to three hops) to the open LPs on ${v.name}.`,
     counted: `Only routes the planner recommends; ${p.notCounted} held or excluded route${p.notCounted === 1 ? ' was' : 's were'} not counted (rule 8). Each LP counts once per connector.`,
-    score: 'Scores are route scores, 0–100: a relative, uncalibrated estimate, never an investment probability.',
-    hops: 'The first hop is the first person past the team member on a route — the one the team emails (askFirst). From the PL node, the first hop is reached through the PL network (rule 6).',
+    score: 'Scores are route scores, 0–100: a relative, uncalibrated estimate, never an investment probability. A route is never stronger than its weakest hop, so one hop that is affiliation only (a shared firm or board, a firm\'s investment: warmth 0 of 5) makes a recommended route score 0. weakestHop (bestWeakestHop on a connector, for their best route) names that hop\'s kind and where it sits.',
+    hops: 'The first hop is the first person past the team member on a route — the one the team emails (askFirst). From the PL node, the first hop is reached through the PL network (rule 6). Organisations on a route (a shared employer, a fund) link people and are not connectors.',
     asks: 'asksThisQuarter and lastAsk read the intro asks recorded as made to that person (the routes page\'s record of an ask, and an agent\'s INTRO_ASK linked by email), across every vehicle, this calendar quarter in UTC. An ask emailed without being recorded is not counted.',
     inspected: p.complete ? `Every open LP (${p.open.length}).` : `${p.planned.length} of ${p.open.length} open LPs, highest priority first, before the time budget ran out. Planning carries on after this answer, so asking again reaches further.`,
     kept: 'The plan is kept until a pursuit, route, ask, restriction or entity changes (or the day does), so a repeat call is quick. version is a hash of this answer: pass it back as ifChanged to get { unchanged: true } when nothing it says has changed.',
@@ -207,14 +256,14 @@ export async function topConnectors(user: AppUser, a: ConnectorArgs, fit: Connec
   const v = await deskVehicle(user, a.vehicle);
   const p = await planOpen(user, v);
   const firstOnly = a.firstHopOnly === true;
-  type Lp = { score: number | null; band: RouteStrength | null };
+  type Lp = { score: number | null; band: RouteStrength | null; weakestHop: WeakestHop | null };
   const by = new Map<string, { name: string; lps: Map<string, Lp>; firstLps: Map<string, Lp>; asFirstHop: number; asDeeperHop: number }>();
   const keep = (m: Map<string, Lp>, id: string, lp: Lp) => { const prior = m.get(id); if (!prior || (lp.score ?? -1) > (prior.score ?? -1)) m.set(id, lp); };
   let reached = 0;
   for (const { r, routes } of p.planned) {
     if (routes.some((x) => x.ids.length)) reached++;
     for (const route of routes) {
-      const lp = { score: route.score, band: route.band };
+      const lp = { score: route.score, band: route.band, weakestHop: route.weakestHop };
       route.ids.forEach((id, i) => {
         const c = by.get(id) ?? { name: route.names[i] ?? 'Unknown', lps: new Map(), firstLps: new Map(), asFirstHop: 0, asDeeperHop: 0 };
         if (i === 0) { c.asFirstHop++; keep(c.firstLps, r.id, lp); } else c.asDeeperHop++;
@@ -227,7 +276,7 @@ export async function topConnectors(user: AppUser, a: ConnectorArgs, fit: Connec
     const counted = firstOnly ? c.firstLps : c.lps;
     if (!counted.size) return [];
     const lps = [...counted.entries()].sort((x, y) => (y[1].score ?? -1) - (x[1].score ?? -1) || (x[0] < y[0] ? -1 : 1));
-    return [{ entityId, name: c.name, lps: lps.length, bestScore: lps[0]?.[1].score ?? null, bestBand: lps[0]?.[1].band ?? null,
+    return [{ entityId, name: c.name, lps: lps.length, bestScore: lps[0]?.[1].score ?? null, bestBand: lps[0]?.[1].band ?? null, bestWeakestHop: lps[0]?.[1].weakestHop ?? null,
       examplePursuitIds: lps.slice(0, EXAMPLES).map(([id]) => id),
       asFirstHop: c.asFirstHop, asDeeperHop: c.asDeeperHop, reachableDirectly: c.asFirstHop > 0 }];
   }).sort((x, y) => y.lps - x.lps || (y.bestScore ?? -1) - (x.bestScore ?? -1) || x.name.localeCompare(y.name) || (x.entityId < y.entityId ? -1 : 1));
@@ -275,7 +324,7 @@ async function connectorTargets(user: AppUser, a: ConnectorArgs & { entityId: st
     return [{
       pursuitId: r.id, entityId: r.entityId, name: r.name,
       status: { value: r.status, label: STATUS_LABEL[r.status as PursuitStatus] ?? r.status },
-      score: b.route.score, band: b.route.band, position: b.at === 0 ? 'first' as const : 'deeper' as const, hops: b.route.hops,
+      score: b.route.score, band: b.route.band, weakestHop: b.route.weakestHop, position: b.at === 0 ? 'first' as const : 'deeper' as const, hops: b.route.hops,
       introducer: b.route.ids.length ? { entityId: b.route.ids.at(-1)!, name: b.route.names.at(-1) ?? 'Unknown' } : null,
       routes: through,
     }];

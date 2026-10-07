@@ -3,7 +3,7 @@ import type { Envelope } from './envelope';
 import type { Answer } from './output';
 import * as reads from './reads';
 import * as writes from './writes';
-import { QUEUE_BUCKETS, outreachQueue, outreachVehicles } from '@/lib/outreach/reads';
+import { QUEUE_BUCKETS, outreachContacts, outreachQueue, outreachVehicles } from '@/lib/outreach/reads';
 import { topConnectors } from '@/lib/outreach/connectors';
 import { config } from '@/config/deployment';
 import { contactInput, contacts, requestTicket, ticketInput, update, updateInput } from '@/lib/outreach/writes';
@@ -135,6 +135,17 @@ export const TOOLS: readonly Tool[] = [
     }).strict(),
     // Over MCP the answer must fit the response limit; the queue cuts the page to fit and nextCursor follows (docs/27 §4).
     run: async (env, a) => outreachQueue(env.principal, a as never, env.via === 'mcp' ? { maxBytes: config.mcp.maxResponseBytes - 6000 } : {}),
+  }),
+  tool({
+    name: 'outreach_contacts', title: 'Outreach: LPs and their addresses', policy: OUT_READ,
+    description: 'Light and whole: every LP on a vehicle (or "all") with its pursuitId, name and kind, status (with its label), passed, and the addresses on file (name, email, source, confirmed), in one page. Addresses only where you read words (R2). Passed LPs only with includePassed. updatedSince keeps only the rows that changed (pass the previous cursor); ifChanged with the previous version answers { unchanged: true } when no row moved. Over MCP a large answer is cut and nextOffset continues it. outreach_queue has the checks, trace and strategy.',
+    input: z.object({
+      vehicle, offset,
+      includePassed: z.boolean().optional().describe('Also the LPs that passed, each marked passed (default false).'),
+      updatedSince: z.string().datetime({ offset: true }).optional().describe('Only rows changed since this time: pass the previous answer\'s cursor.'),
+      ifChanged: z.string().min(1).max(40).optional().describe('The previous answer\'s version: if this answer would say the same, it is { unchanged: true, version, cursor } instead.'),
+    }).strict(),
+    run: async (env, a) => outreachContacts(env.principal, a, env.via === 'mcp' ? { maxBytes: config.mcp.maxResponseBytes - 6000 } : {}),
   }),
   tool({
     name: 'top_connectors', title: 'Outreach: top connectors for a vehicle', policy: OUT_READ,
