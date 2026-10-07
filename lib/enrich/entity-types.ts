@@ -184,3 +184,37 @@ export async function storedPersonEvidence(tx: Queryable, ids: string[], finding
   for (const r of contacts) addEvidence(roots.get(r.id)!, r);
   return evidence;
 }
+
+export interface TypeCandidate {
+  entityId: string; name: string;
+  /** Organisations recorded under the same normalised name. */
+  organizations: string[];
+  /** Person evidence found in our records (a title, an email, an affiliation…); empty means none was found. */
+  evidence: string[];
+  /** Pipelines the record is in. */
+  pursuits: number;
+}
+
+/**
+ * Pipeline people whose normalised name is the name of an organisation we hold (issue 0063): the list a person
+ * reviews before marking a record an organisation. Read-only. Unlike the import's automatic pass, this lists
+ * every match, with the person evidence that would hold the automatic correction back.
+ */
+export async function pipelinePeopleNamedLikeOrgs(tx: Queryable): Promise<TypeCandidate[]> {
+  const people = await tx.query<{ id: string; name: string; pursuits: number }>(`select e.entity_id::text id,e.display_name name,count(*)::int pursuits
+    from strategy.active_pursuit p join identity.entity e on e.entity_id=identity.canonical_entity_id(p.entity_id)
+    where e.entity_type='person' and e.retired_at is null group by e.entity_id,e.display_name`);
+  if (!people.length) return [];
+  const organizations = new Map<string, string[]>();
+  for (const o of await tx.query<{ id: string; name: string }>(`select entity_id::text id,display_name name from identity.entity
+    where entity_type='org' and retired_at is null and merged_into is null`)) {
+    const n = normalizeIdentityName(o.name);
+    if (n) organizations.set(n, [...(organizations.get(n) ?? []), o.id]);
+  }
+  const matches = people.filter(p => organizations.has(normalizeIdentityName(p.name)));
+  if (!matches.length) return [];
+  const evidence = await storedPersonEvidence(tx, matches.map(p => p.id));
+  return matches.map(p => ({ entityId: p.id, name: p.name, organizations: organizations.get(normalizeIdentityName(p.name))!,
+    evidence: [...(evidence.get(p.id) ?? [])].sort(), pursuits: p.pursuits }))
+    .sort((a, b) => a.evidence.length - b.evidence.length || a.name.localeCompare(b.name));
+}

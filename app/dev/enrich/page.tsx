@@ -1,5 +1,7 @@
 import { join } from 'node:path';
 import { ImportDuplicates } from './ImportDuplicates';
+import { TypeCandidates } from './TypeCandidates';
+import { Suspense } from 'react';
 import { DakotaImport } from './DakotaImport';
 import { buildCache } from '@/lib/build-cache';
 import { PortfolioImport } from './PortfolioImport';
@@ -207,6 +209,7 @@ async function Enrichment({ searchParams }: { searchParams: Promise<{ exported?:
               && (duplicateRun?.status !== 'ok' || mergeRun.startedAt > duplicateRun.startedAt)
             ? mergeRun.detail as unknown as import('@/modules/strategy').PursuitMergeReport : duplicateRun?.status === 'ok' && (!imported || duplicateRun.startedAt > imported.startedAt)
               ? (duplicateRun.detail as unknown as import('@/lib/enrich/import-dupes').ImportDuplicateReport).pursuitMerges : last.pursuitMerges} />
+          <Suspense fallback={<p className="muted" style={{ marginTop: 12 }}>Looking for people named like an organisation…</p>}><TypeCandidates /></Suspense>
           <LpUnits last={lpRun ? `${lpRun.status === 'ok' ? '' : 'stopped · '}${lpRun.note ?? ''}` : null} decisions={lpDecisions}
             fileDecisions={lpRun?.detail?.fileDecisions as import('@/lib/enrich/lp-unit-decisions').LpUnitFileReport | undefined} />
           <SpvStance last={spvRun ? `${spvRun.status === 'ok' ? '' : 'stopped · '}${spvRun.note ?? ''}` : null} />
