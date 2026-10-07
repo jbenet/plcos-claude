@@ -11,7 +11,7 @@ import { mutationProfileAllowed } from '@/lib/mutation-policy';
 import { beginRun, finishRun } from '@/lib/workflows/ledger';
 import { describeImportError } from '@/lib/import-jobs/store';
 import { auditSync, type SyncCaller } from './auth';
-import { bundleHash, checkBundle, keyOf, PROSPECTS, REVIEW, writtenAt, type PushBundle, type Rejection } from './bundle';
+import { bundleHash, checkBundle, DECISIONS, keyOf, PROSPECTS, REVIEW, writtenAt, type PushBundle, type Rejection } from './bundle';
 
 /**
  * POST /api/sync/push (docs/deploy/railway.md §7; Juan, 4 Oct 2026, decision F: research runs in the cloud
@@ -27,6 +27,11 @@ import { bundleHash, checkBundle, keyOf, PROSPECTS, REVIEW, writtenAt, type Push
  *   6. followed by the normal findings import, queued as the token's owner.
  * A refused push writes nothing and answers every reason, by file. Only an accepted push touches disk.
  *
+ * A W13 push (7 Oct 2026: identity reviews had no way up since the move, while 92 LPs sat twice in one vehicle's
+ * list) carries proposals, never merges: its rows are appended to enrich/identity-decisions.jsonl, which the protocol
+ * keeps append-only, skipping a row already there, and nothing is imported. A person applies them with Developer →
+ * Enrichment → Merge duplicate identities, which checks each row against the identities then and refuses a stale one.
+ *
  * A prospects push (docs/prospects-import.md; 5 Oct 2026, so researched LPs for a vehicle made on the
  * cloud reach it from the Mac) differs in three places: every line is checked by the importer's own rules
  * and every vehicle slug against the server's vehicles — and, for a Team member, against the vehicles they
@@ -38,7 +43,7 @@ import { bundleHash, checkBundle, keyOf, PROSPECTS, REVIEW, writtenAt, type Push
  */
 
 const g = globalThis as typeof globalThis & { __syncPushBusy?: boolean };
-const PROTOCOLS: Record<PushBundle['workflow'], string> = { W1: 'docs/workflows/w1-profile.md', W1c: 'docs/workflows/w1c-fact-check.md', W5: 'docs/workflows/w5-strategy.md', prospects: 'docs/prospects-import.md' };
+const PROTOCOLS: Record<PushBundle['workflow'], string> = { W1: 'docs/workflows/w1-profile.md', W1c: 'docs/workflows/w1c-fact-check.md', W5: 'docs/workflows/w5-strategy.md', W13: 'docs/workflows/w13-identity-review.md', prospects: 'docs/prospects-import.md' };
 const sha = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -52,7 +57,7 @@ export function pushRefusal(): string | null {
   return null;
 }
 
-const text = (path: string, content: unknown) => PROSPECTS.test(path) ? String(content) : REVIEW.test(path) ? (content as unknown[]).map((r) => JSON.stringify(r)).join('\n') + '\n' : JSON.stringify(content, null, 2);
+const text = (path: string, content: unknown) => PROSPECTS.test(path) ? String(content) : REVIEW.test(path) || DECISIONS.test(path) ? (content as unknown[]).map((r) => JSON.stringify(r)).join('\n') + '\n' : JSON.stringify(content, null, 2);
 async function readJson(path: string): Promise<unknown | undefined> {
   try { return JSON.parse(await readFile(path, 'utf8')); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined; return null; }
 }
@@ -95,6 +100,7 @@ async function serverProblems(bundle: PushBundle, enrich: string): Promise<Rejec
   const out: Rejection[] = [];
   for (const f of bundle.files) {
     const target = join(enrich, f.path);
+    if (DECISIONS.test(f.path)) continue;
     if (REVIEW.test(f.path)) {
       const existing = await readFile(target, 'utf8').catch(() => null);
       if (existing !== null && existing !== text(f.path, f.content)) out.push({ path: f.path, problems: ['a review file of this name is on the server with other rows; name this round\'s file anew'] });
@@ -220,7 +226,7 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
     const published: string[] = [];
     const finish = (ok: boolean, reason: string | null) => finishRun(runId, {
       counts: { selected: bundle.files.length, written, valid: ok ? written : 0, failed: ok ? 0 : bundle.files.length - written, skipped: null },
-      checks: [{ name: 'importer validation', status: 'pass' }, { name: prospects ? 'vehicles known and permitted' : 'not older than the server', status: 'pass' }],
+      checks: [{ name: 'importer validation', status: 'pass' }, { name: prospects ? 'vehicles known and permitted' : bundle.workflow === 'W13' ? 'appended, never replaced' : 'not older than the server', status: 'pass' }],
       usage: { input: null, output: null, cacheRead: null, cacheWrite: null, cost: null, source: 'estimated', method: 'unavailable: pushed from another machine; its own run has the usage' },
       outcome: ok ? 'succeeded' : 'failed', reason }, ledger);
     let stage = 'inbox';
@@ -237,6 +243,18 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
         await placeNew(enrichReal, path, text(f.path, f.content), runId);
         published.push(path);
         written++;
+      }
+      else if (bundle.workflow === 'W13') {
+        // Append-only (docs/workflows/w13-identity-review.md): the rows not already in the server's file, after it.
+        const before = await readFile(join(enrichReal, 'identity-decisions.jsonl'), 'utf8').catch(() => '');
+        const have = new Set(before.split(/\r?\n/).filter((l) => l.trim()));
+        const rows = bundle.files.flatMap((f) => (f.content as unknown[]).map((r) => JSON.stringify(r))).filter((l) => !have.has(l) && have.add(l));
+        if (rows.length) {
+          await place(enrichReal, 'identity-decisions.jsonl', (before && !before.endsWith('\n') ? `${before}\n` : before) + rows.join('\n') + '\n', runId);
+          published.push('identity-decisions.jsonl');
+        }
+        written = bundle.files.length;
+        importNote = `${rows.length} proposal${rows.length === 1 ? '' : 's'} added to identity-decisions.jsonl${rows.length ? '' : ' (all were there already)'}; an Admin applies them with Developer → Enrichment → Merge duplicate identities.`;
       }
       else for (const f of bundle.files) {
         const target = join(enrichReal, f.path);
@@ -255,7 +273,7 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
         [hash, runId, caller.token.tokenId, caller.user.id, bundle.workflow, bundle.files.length]);
       // 6. The normal findings import (raw and strategy files); a review file is read by the quality page.
       // Prospects: the prospects import, naming the files written whole above so it reads them now.
-      const imports = prospects || bundle.files.some((f) => keyOf(f.path) !== null);
+      const imports = prospects || (bundle.workflow !== 'W13' && bundle.files.some((f) => keyOf(f.path) !== null));
       if (imports) {
         const kind = prospects ? 'prospects' as const : 'findings' as const;
         const input = prospects ? { settled: published.map((p) => p.slice('prospects/'.length)) } : {};

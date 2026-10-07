@@ -3,11 +3,12 @@
  * anything leaves it: the importer's validators (lib/sync/bundle.ts), the same
  * checks the server runs again.
  *
- *   node --import tsx scripts/cloud-push-bundle.ts [--check] [--workflow W1|W1c|W5|prospects] [--run <mac run id>]
+ *   node --import tsx scripts/cloud-push-bundle.ts [--check] [--workflow W1|W1c|W5|W13|prospects] [--run <mac run id>]
  *     [--source claude-code|chatgpt|script] [--agent <name>] [--model <id>] <file>...
  *
  * Each <file> is an output where its workflow wrote it — …/enrich/raw/<key>.json,
- * …/enrich/strategy/[<vehicle>/]<key>.json, …/enrich/fact-review-<NN><part>.jsonl — or one bundle
+ * …/enrich/strategy/[<vehicle>/]<key>.json, …/enrich/fact-review-<NN><part>.jsonl, W13's
+ * …/enrich/identity-decisions[-<name>].jsonl — or one bundle
  * ({ workflow, files }) made earlier. The workflow is read from the paths unless given. A prospects file
  * (docs/prospects-import.md) is a <name>.jsonl anywhere with --workflow prospects, or any file under
  * …/enrich/prospects/: it travels as its text, so the server's line numbers are the file's. Its rows are
@@ -17,7 +18,7 @@
  */
 import { readFile, realpath } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { checkBundle, PROSPECTS, RAW, REVIEW, STRATEGY, type PushBundle, type PushWorkflow } from '../lib/sync/bundle';
+import { checkBundle, DECISIONS, PROSPECTS, RAW, REVIEW, STRATEGY, type PushBundle, type PushWorkflow } from '../lib/sync/bundle';
 import { config } from '../config/deployment';
 
 async function main() {
@@ -51,15 +52,15 @@ async function main() {
       const at = real.lastIndexOf('/enrich/');
       if (at < 0) throw new Error(`${f}: not under an enrich/ folder; push files where their workflow wrote them`);
       const path = real.slice(at + '/enrich/'.length);
-      if (!RAW.test(path) && !STRATEGY.test(path) && !REVIEW.test(path)) throw new Error(`${f}: not a research output (raw/<key>.json, strategy/[<vehicle>/]<key>.json or fact-review-<NN>.jsonl)`);
+      if (!RAW.test(path) && !STRATEGY.test(path) && !REVIEW.test(path) && !DECISIONS.test(path)) throw new Error(`${f}: not a research output (raw/<key>.json, strategy/[<vehicle>/]<key>.json, fact-review-<NN>.jsonl or identity-decisions[-<name>].jsonl)`);
       const text = await readFile(real, 'utf8');
       let content: unknown;
-      try { content = REVIEW.test(path) ? text.split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)) : JSON.parse(text); }
+      try { content = REVIEW.test(path) || DECISIONS.test(path) ? text.split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)) : JSON.parse(text); }
       catch { throw new Error(`${f}: does not parse`); }
       out.push({ path, content });
     }
-    const kinds = new Set(out.map((f) => (REVIEW.test(f.path) ? 'review' : RAW.test(f.path) ? 'raw' : 'strategy')));
-    const inferred: PushWorkflow | null = kinds.has('review') ? (kinds.has('strategy') ? null : 'W1c') : kinds.size === 1 ? (kinds.has('raw') ? 'W1' : 'W5') : null;
+    const kinds = new Set(out.map((f) => (DECISIONS.test(f.path) ? 'decisions' : REVIEW.test(f.path) ? 'review' : RAW.test(f.path) ? 'raw' : 'strategy')));
+    const inferred: PushWorkflow | null = kinds.has('decisions') ? (kinds.size === 1 ? 'W13' : null) : kinds.has('review') ? (kinds.has('strategy') ? null : 'W1c') : kinds.size === 1 ? (kinds.has('raw') ? 'W1' : 'W5') : null;
     const workflow = (opt.workflow || inferred) as PushWorkflow | null;
     if (!workflow) throw new Error('these files mix workflows; push findings, reviews and strategies separately, or give --workflow');
     bundle = { workflow, files: out };

@@ -269,3 +269,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [One map node for an organisation split across records](entries/routes-org-names.md)
 - [Project dev reads the app's feedback with an Admin token](entries/feedback-by-token.md)
 - [Settings in sections, a rail that keeps its place, and a capture that works on Preferences](entries/settings-sections.md)
+- [Identity reviews reach the cloud: a W13 push](entries/w13-push.md)

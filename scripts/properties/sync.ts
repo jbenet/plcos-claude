@@ -217,6 +217,19 @@ export async function syncProperties(check: Check, db: Db) {
     check('SYNC push: a review of a finding already corrected on the server is checked against the version it set aside, and a count no version had is refused, by a 1-based row',
       w1C.status === 201 && firstC.status === 201 && laterC.status === 201 && neverC.status === 422 && String(neverC.body.rejected?.[0]?.problems).includes('row 1:'),
       `W1 ${w1C.status}, first review ${firstC.status}, later review ${laterC.status}, wrong count ${neverC.status}: ${String(neverC.body.rejected?.[0]?.problems).slice(0, 200)}`);
+    // W13 (7 Oct 2026): identity proposals are appended to the server's decisions file, never merged, never imported.
+    const decision = (group: string) => ({ group: group.repeat(64).slice(0, 64), decision: 'separate', decided_by: 'props',
+      evidence: [{ source: 'local:invented', as_of: '2026-10-07', quote: 'Invented comparison.' }] });
+    const importsBefore = queued.length;
+    const badW13 = await accept(push.secret, { workflow: 'W13', files: [{ path: 'identity-decisions-b1.jsonl', content: [{ ...decision('a'), decided_by: '' }] }] });
+    const w13a = await accept(push.secret, { workflow: 'W13', files: [{ path: 'identity-decisions-b1.jsonl', content: [decision('a'), decision('b')] }] });
+    const w13b = await accept(push.secret, { workflow: 'W13', files: [{ path: 'identity-decisions-b2.jsonl', content: [decision('b'), decision('c')] }] });
+    const decisionsFile = (await readFile(join(root, 'enrich', 'identity-decisions.jsonl'), 'utf8').catch(() => '')).trim().split('\n');
+    check('SYNC push: W13 identity proposals are checked by row, appended to identity-decisions.jsonl without repeating a row, and queue no import',
+      badW13.status === 422 && String(badW13.body.rejected?.[0]?.problems).includes('row 1: decided_by')
+      && w13a.status === 201 && w13b.status === 201 && w13b.body.import === null && String(w13b.body.note).includes('1 proposal added')
+      && decisionsFile.length === 3 && decisionsFile.map((l) => JSON.parse(l).group[0]).join('') === 'abc' && queued.length === importsBefore,
+      `bad ${badW13.status}, pushes ${w13a.status}/${w13b.status}, ${decisionsFile.length} rows, imports ${queued.length - importsBefore}`);
     const audits = await auditOf(push.token.tokenId);
     const calls = audits.filter((a) => a.action === 'mcp.call' && a.detail.tool === 'sync_push');
     const outcomes = calls.map((a) => a.detail.outcome);
