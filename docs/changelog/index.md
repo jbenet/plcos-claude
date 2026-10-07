@@ -281,3 +281,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Lapsed parks look again by rule](entries/lapsed-parks.md)
 - [An intake rule's provenance note stales nothing](entries/rule-context.md)
 - [A push no longer fails on a file whose log is one entry](entries/push-log-shape.md)
+- [A thin refresh re-pins by rule](entries/repin-thin-refresh.md)
