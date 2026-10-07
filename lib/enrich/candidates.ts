@@ -19,6 +19,7 @@ import { emailEntriesByPerson, replyOwedSince } from './reply-owed';
 import { makeTriageExport, writeTriageExport } from './triage-export';
 import { exportIdentityReview } from './identity-review-export';
 import { exportLpUnitReview } from './lp-unit-review-export';
+import { CONTEXT_BY_RULE } from './strategy';
 import type { ResearchExportStatus } from './export-status';
 
 /**
@@ -119,7 +120,9 @@ export interface Candidate extends ResearchIdentity {
    * time, so a strategy written before it is stale (isStale). `vehicle` is the slug of the vehicle the
    * note was written from, or null for a note about the LP as a whole (contextAtFor).
    */
-  context: Array<{ at: string; by: string | null; text: string; vehicle?: string | null }>;
+  context: Array<{ at: string; by: string | null; text: string; vehicle?: string | null;
+    /** Written by an intake rule when it created the pursuit (prospects, investing organizations): provenance, not news. */
+    byRule?: boolean }>;
   /**
    * Do-not-approach instructions on file (rule 8), list marks included: a blanket one rules them out
    * of any plan, one through a connector rules out that route. The instruction's words stay in the
@@ -208,8 +211,9 @@ async function researchSnapshot() {
     ...emailRecords.map(r => ({ ...r.payload as object, type: 'email' })),
   ], roster.map(t => ({ ...t, affinityEmail: init?.team.find(m => m.handle === t.handle)?.affinityEmail })), affinityUsers.map(r => r.payload));
   const readings = await readingsFor(ids);
-  const context = await db.query<{ entity_id: string; at: Date | string; by: string | null; body: string; vehicle: string | null }>(
-    `select identity.canonical_entity_id(n.entity_id)::text as entity_id, n.created_at as at, u.name as by, n.body, v.slug as vehicle
+  const context = await db.query<{ entity_id: string; at: Date | string; by: string | null; body: string; vehicle: string | null; by_rule: boolean }>(
+    `select identity.canonical_entity_id(n.entity_id)::text as entity_id, n.created_at as at, u.name as by, n.body, v.slug as vehicle,
+            ${CONTEXT_BY_RULE} as by_rule
        from research.note n left join platform.app_user u on u.id = n.author_id
        left join platform.vehicle v on v.id::text = n.data->>'vehicleId'
       where n.kind = 'context' and identity.canonical_entity_id(n.entity_id) = any($1::uuid[])
@@ -331,7 +335,7 @@ async function researchSnapshot() {
       restrictions: restrictions.filter((r) => r.entityId === ent.entity_id)
         .map((r) => ({ scope: r.scope, connector: r.connectorName, channel: r.channel })),
       context: context.filter((c) => c.entity_id === ent.entity_id)
-        .map((c) => ({ at: new Date(c.at).toISOString(), by: c.by, text: c.body, vehicle: c.vehicle })),
+        .map((c) => ({ at: new Date(c.at).toISOString(), by: c.by, text: c.body, vehicle: c.vehicle, ...(c.by_rule ? { byRule: true } : {}) })),
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
   const sentOn = new Map<string, number>();
