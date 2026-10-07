@@ -124,6 +124,8 @@ export function writtenAt(content: unknown): number | null {
   // every push touching it a 500).
   const log = (x: unknown) => (Array.isArray(x) ? x : x && typeof x === 'object' ? [x] : []) as Array<{ at?: unknown } | null>;
   const dates = [c?.researched?.at, ...log(c?.researched?.corrected).map((x) => x?.at), c?.made?.at, ...log(c?.made?.revised).map((x) => x?.at)]
-    .map((d) => (typeof d === 'string' ? Date.parse(d) : NaN)).filter(Number.isFinite);
+    // A date in the future is a bad stamp, not a later write (7 Oct 2026: 72 strategies stamped ahead of their writing
+    // kept their own fixes out as "older than the server's copy"); ten minutes' leeway for clocks.
+    .map((d) => (typeof d === 'string' ? Date.parse(d) : NaN)).filter((d) => Number.isFinite(d) && d <= Date.now() + 600_000);
   return dates.length ? Math.max(...dates) : null;
 }
