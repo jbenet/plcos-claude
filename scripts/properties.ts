@@ -73,6 +73,7 @@ async function main() {
   await step('triage-export', async () => (await import('./properties/triage-export')).triageExportProperties(check));
 
   await step('feedback-journal', async () => (await import('./properties/feedback-journal')).feedbackJournalProperties(check));
+  await step('feedback-signal', async () => (await import('./properties/feedback-signal')).feedbackSignalProperties(check));
   await step('findings-network', async () => (await import('./properties/findings-network')).findingsNetworkProperties(check));
   await step('findings-perf', async () => (await import('./properties/findings-perf')).findingsPerfProperties(check));
   await step('network-speed', async () => (await import('./properties/network-speed')).networkSpeedProperties(check));
