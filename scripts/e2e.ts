@@ -348,7 +348,7 @@ async function main() {
       // An invented key at the fake mailguard that could send: pasting it must be refused, and nothing kept.
       const { fakeMintKey } = await import('../lib/connectors/mailguard/fake');
       const sender = await fakeMintKey(`${DIR}.mailguard-fake`, { mailbox: 'e2e@example.test', grant: ['draft', 'read.metadata', 'send'] });
-      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      await page.goto(`${base}/settings?section=email`, { waitUntil: 'networkidle' });
       const card = page.locator('#email');
       await card.getByLabel('Your mailguard token').fill(sender);
       await card.getByRole('button', { name: 'Connect', exact: true }).click();
@@ -392,7 +392,7 @@ async function main() {
     const mcpLabel = `${MARK} agent`;
     const mcpSubject = `${MARK}: drafted over MCP`;
     await check('MCP: make a token in Preferences, read and draft with the SDK client, revoke it, and the next call fails', async () => {
-      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      await page.goto(`${base}/settings?section=agents`, { waitUntil: 'networkidle' });
       const card = page.locator('#mcp');
       await card.getByPlaceholder('Claude Code on the Mac').fill(mcpLabel);
       await card.locator('input[name=tools][value=draft]').check();
@@ -441,7 +441,7 @@ async function main() {
     const deskLabel = `${MARK} desk`;
     const deskKey = `e2e-desk-${Date.now().toString(36)}`;
     await check('Outreach API: make a desk token in Preferences; read vehicles and the queue, record an indicated amount and ask for an autonomous SEND approval over HTTP; the LP page shows it', async () => {
-      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      await page.goto(`${base}/settings?section=agents`, { waitUntil: 'networkidle' });
       const card = page.locator('#mcp');
       await card.getByPlaceholder('Claude Code on the Mac').fill(deskLabel);
       await card.locator('input[name=tools][value=outreach-write]').check();
@@ -484,14 +484,13 @@ async function main() {
     // snapshot at all (SYNC_DEMO_SNAPSHOT is unset). The push itself is covered by the properties, on a scratch root.
     const syncLabel = `${MARK} push`;
     await check('Cloud sync: make a push token in Preferences; it cannot take a snapshot and lists no MCP tool; revoked, it is refused', async () => {
-      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      await page.goto(`${base}/settings?section=agents`, { waitUntil: 'networkidle' });
       const card = page.locator('#mcp');
       await card.getByPlaceholder('Claude Code on the Mac').fill(syncLabel);
       await card.locator('input[name=tools][value=push]').check();
       await card.getByRole('button', { name: 'Make token' }).click();
       const secret = (await card.locator('code').first().innerText()).trim();
-      const keychain = (await card.locator('code').nth(1).innerText()).trim();
-      if (!secret.startsWith('plcos_mcp_') || !keychain.includes('plcos-railway -a push-token') || keychain.includes(secret)) throw new Error('no push token, or the Keychain line is wrong');
+      if (!secret.startsWith('plcos_mcp_') || await card.locator('code').count() !== 1) throw new Error('no push token, or more than the token was shown');
       const auth = { Authorization: `Bearer ${secret}` };
       const snapshot = await fetch(`${base}/api/sync/snapshot`, { headers: auth });
       const client = new Client({ name: 'e2e', version: '0' });
@@ -517,7 +516,7 @@ async function main() {
     const juanmail = `${MARK} juanmail`;
     const chain = `e2e-chain-${Date.now().toString(36)}`;
     await check('Outreach over MCP: a juanmail token reads the queue, records an update, asks for a SEND approval, is refused a send before approval, and reads its own calls back by correlation id', async () => {
-      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      await page.goto(`${base}/settings?section=agents`, { waitUntil: 'networkidle' });
       const card = page.locator('#mcp');
       await card.getByPlaceholder('Claude Code on the Mac').fill(juanmail);
       await card.locator('input[name=tools][value=outreach-write]').check();
@@ -560,7 +559,7 @@ async function main() {
     const comms = `${MARK} comms`;
     const ctxChain = `e2e-comms-${Date.now().toString(36)}`;
     await check('Comms trace: juanmail ingests Gmail metadata and links sends (a person\'s with no ticket, an agent\'s only with one, approved in a batch); the LP page shows the context panel and the merged timeline', async () => {
-      await page.goto(`${base}/settings`, { waitUntil: 'networkidle' });
+      await page.goto(`${base}/settings?section=agents`, { waitUntil: 'networkidle' });
       const card = page.locator('#mcp');
       await card.getByPlaceholder('Claude Code on the Mac').fill(comms);
       await card.locator('input[name=tools][value=outreach-write]').check();

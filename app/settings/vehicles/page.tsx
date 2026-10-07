@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from '@/components/ui/AppLink';
+import { SettingsLayout } from '@/components/settings/SettingsNav';
 import { Page } from '@/components/shell/Page';
 import { auth } from '@/lib/auth';
 import { can } from '@/lib/authz';
@@ -44,6 +45,7 @@ export default async function VehiclesPage() {
         </>
       }
     >
+      <SettingsLayout current="vehicles" admin>
       <div className="lbl">Settings</div>
       <h1>Vehicles</h1>
       <p className="sublede">The funds, SPVs and grant rail this raise runs. Who may see each one is in <Link href="/settings/people">People</Link>.</p>
@@ -78,6 +80,7 @@ export default async function VehiclesPage() {
           </table>
         </div>
       </div>
+      </SettingsLayout>
     </Page>
   );
 }

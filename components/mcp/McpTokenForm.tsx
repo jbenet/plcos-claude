@@ -5,15 +5,15 @@ import { useRouter } from 'next/navigation';
 import { createMcpTokenAction, type MadeToken } from '@/app/settings/actions';
 import s from './mcp.module.css';
 
-/** The cloud sync presets (docs/deploy/railway.md §6–§7): no vehicle choice, and no connect command shown. */
+/** The cloud sync presets (docs/deploy/railway.md §6–§7): no vehicle choice. */
 const SYNC_PRESETS = new Set(['snapshot', 'push', 'admin']);
 
 /**
- * Make a token, and show it once with the command that connects it (docs/26-mcp.md): Claude Code for an MCP
- * token, a curl for the outreach desk, or for a cloud sync token the Keychain item its script reads.
+ * Make a token, and show it once with a button that copies it (docs/26-mcp.md). Only the token: no terminal
+ * command to paste (issue 0126). The endpoint it goes with is printed at the foot of the card.
  */
-export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false, sync = [], days = 90 }: {
-  endpoint: string; vehicles: Array<{ id: string; name: string }>; draftTools: string[];
+export function McpTokenForm({ vehicles, draftTools, outreach = false, sync = [], days = 90 }: {
+  vehicles: Array<{ id: string; name: string }>; draftTools: string[];
   /** Offer the mail desk's outreach scope (docs/27): Admin only for now. */
   outreach?: boolean;
   /** The cloud sync scopes this person may hold (lib/sync/scopes.ts): snapshot for an Admin, push for a Team member or an Admin. */
@@ -24,11 +24,9 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
   const router = useRouter();
   const [made, setMade] = useState<MadeToken | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [preset, setPreset] = useState('read');
   const syncToken = SYNC_PRESETS.has(preset);
-  const command = syncToken ? ''
-    : made?.ok && preset.startsWith('outreach') ? `curl -H "Authorization: Bearer ${made.secret}" ${endpoint.replace(/\/api\/mcp$/, '/api/outreach/vehicles')}`
-    : made?.ok ? `claude mcp add --transport http --scope user capital-os ${endpoint} --header "Authorization: Bearer ${made.secret}"` : '';
   return (
     <>
       <form
@@ -38,8 +36,8 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
           setBusy(true);
           try {
             const r = await createMcpTokenAction(new FormData(e.currentTarget));
-            setMade(r);
-            if (r.ok) { (e.target as HTMLFormElement).reset(); router.refresh(); }
+            setMade(r); setCopied(false);
+            if (r.ok) { (e.target as HTMLFormElement).reset(); setPreset('read'); router.refresh(); }
           } finally { setBusy(false); }
         }}
       >
@@ -47,19 +45,21 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
           <span>Name</span>
           <input name="label" maxLength={80} placeholder="Claude Code on the Mac" required />
         </label>
-        <fieldset className={s.row}>
+        <fieldset className={s.set}>
           <legend>May</legend>
-          <label><input type="radio" name="tools" value="read" defaultChecked onChange={() => setPreset('read')} /> Read</label>
-          <label><input type="radio" name="tools" value="draft" onChange={() => setPreset('draft')} /> Read, and {draftTools.join(' and ')}</label>
-          {outreach && (
-            <>
-              <label><input type="radio" name="tools" value="outreach-read" onChange={() => setPreset('outreach-read')} /> Outreach desk: read the queue</label>
-              <label><input type="radio" name="tools" value="outreach-write" onChange={() => setPreset('outreach-write')} /> Outreach desk: read, record updates, ask for approvals, record sends</label>
-            </>
-          )}
-          {sync.includes('snapshot') && <label><input type="radio" name="tools" value="snapshot" onChange={() => setPreset('snapshot')} /> Snapshot: copy the whole database to the Mac (cloud-pull)</label>}
-          {sync.includes('push') && <label><input type="radio" name="tools" value="push" onChange={() => setPreset('push')} /> Push: send finished research up (cloud-push)</label>}
-          {sync.includes('admin') && <label><input type="radio" name="tools" value="admin" onChange={() => setPreset('admin')} /> Admin: everything an Admin may do by token, as you: pull, push, the ledger, add vehicles, and Admin endpoints to come. Never sends, decides a ticket or moves money</label>}
+          <div className={s.choices}>
+            <label><input type="radio" name="tools" value="read" defaultChecked onChange={() => setPreset('read')} /> Read</label>
+            <label><input type="radio" name="tools" value="draft" onChange={() => setPreset('draft')} /> Read, and {draftTools.join(' and ')}</label>
+            {outreach && (
+              <>
+                <label><input type="radio" name="tools" value="outreach-read" onChange={() => setPreset('outreach-read')} /> Outreach desk: read the queue</label>
+                <label><input type="radio" name="tools" value="outreach-write" onChange={() => setPreset('outreach-write')} /> Outreach desk: read, record updates, ask for approvals, record sends</label>
+              </>
+            )}
+            {sync.includes('snapshot') && <label><input type="radio" name="tools" value="snapshot" onChange={() => setPreset('snapshot')} /> Snapshot: copy the database to the Mac</label>}
+            {sync.includes('push') && <label><input type="radio" name="tools" value="push" onChange={() => setPreset('push')} /> Push: send finished research up</label>}
+            {sync.includes('admin') && <label><input type="radio" name="tools" value="admin" onChange={() => setPreset('admin')} /> Admin: pull, push, add vehicles and other Admin tasks</label>}
+          </div>
         </fieldset>
         <label className={s.row}>
           <span>Expires</span>
@@ -71,10 +71,12 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
           </select>
         </label>
         {vehicles.length > 1 && !syncToken && (
-          <fieldset className={s.row}>
+          <fieldset className={s.set}>
             <legend>Vehicles</legend>
-            {vehicles.map((v) => <label key={v.id}><input type="checkbox" name="vehicle" value={v.id} /> {v.name}</label>)}
-            <small className="muted">None ticked: all of yours.</small>
+            <div className={s.inline}>
+              {vehicles.map((v) => <label key={v.id}><input type="checkbox" name="vehicle" value={v.id} /> {v.name}</label>)}
+              <small className="muted">None ticked: all of yours.</small>
+            </div>
           </fieldset>
         )}
         <div><button className="btn p" type="submit" disabled={busy}>{busy ? 'Making…' : 'Make token'}</button></div>
@@ -84,12 +86,7 @@ export function McpTokenForm({ endpoint, vehicles, draftTools, outreach = false,
         <div className={s.secret} role="status">
           <p style={{ margin: '0 0 6px' }}><b>{made.label}</b> — copy it now; it is not shown again.</p>
           <code className={s.code}>{made.secret}</code>
-          {syncToken && <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => void navigator.clipboard?.writeText(made.secret)}>Copy the token</button>}
-          {command && <>
-            <p style={{ margin: '10px 0 6px' }}>{preset.startsWith('outreach') ? 'Try it (in a terminal):' : 'Connect Claude Code (in a terminal):'}</p>
-            <code className={s.code}>{command}</code>
-            <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => void navigator.clipboard?.writeText(command)}>Copy the command</button>
-          </>}
+          <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => { void navigator.clipboard?.writeText(made.secret).then(() => setCopied(true)); }}>{copied ? 'Copied' : 'Copy the token'}</button>
         </div>
       )}
     </>

@@ -33,22 +33,16 @@ export async function McpTokens() {
       </div>
       <div className="cbody">
         <p style={{ marginTop: 0 }}>
-          A token lets an agent — Claude Code, Claude Desktop — use this app as you, with your access or less. It can
-          read {READ_TOOLS.length} things (search, an LP&rsquo;s summary, routes, the pipeline, target lists, replies owed, issues,
-          the changelog) and, if you allow it, {drafts.join(' and ')}. It cannot send an email, approve or accept anything,
-          change a status or move money: those tools do not exist on the server. Every call is logged with the tool and the token.
+          A token lets an agent such as Claude Code use this app as you, with your access or less. It reads and, if you
+          allow it, drafts. It cannot send, approve, change a status or move money, and every call is logged.
         </p>
-        <p>
-          Two more kinds move data between this server and the Mac (docs/deploy/railway.md §6–§7) and do nothing else: a
-          {' '}<b>snapshot</b> token lets <span className="mono">scripts/cloud-pull.sh</span> copy the whole database down (Admins only), and a
-          {' '}<b>push</b> token lets <span className="mono">scripts/cloud-push.sh</span> send finished research up, checked and imported like the
-          server&rsquo;s own. An Admin can make an <b>admin</b> token instead, which does both and every Admin task offered by
-          token, such as adding a vehicle. None opens an MCP tool, sends, decides a ticket or moves money, and every use is logged.
+        <p className="muted" style={{ fontSize: 12.5 }}>
+          Snapshot, push and admin tokens move data between this server and the Mac for its scripts (docs/deploy/railway.md §6–§7).
         </p>
         {user.access === 'viewer' ? (
           <p className="muted">Viewers do not make tokens yet.</p>
         ) : (
-          <McpTokenForm endpoint={endpoint} vehicles={mine.map((v) => ({ id: v.id, name: v.name }))} draftTools={drafts}
+          <McpTokenForm vehicles={mine.map((v) => ({ id: v.id, name: v.name }))} draftTools={drafts}
             outreach={user.access === 'admin' && config.outreach.enabled} days={config.mcp.tokenDays}
             sync={(['snapshot', 'push', 'admin'] as const).filter((x) => !grantRefusal(user, x === 'snapshot' ? [SYNC_SNAPSHOT] : x === 'push' ? [SYNC_PUSH] : [SYNC_ADMIN]))} />
         )}
@@ -63,7 +57,7 @@ export async function McpTokens() {
                 return (
                   <tr key={t.tokenId} data-state={state}>
                     <td><b>{t.label}</b><br /><span className="mono muted" style={{ fontSize: 11 }}>{t.prefix}…</span></td>
-                    <td>{t.tools.includes(SYNC_SNAPSHOT) ? 'Snapshot (cloud-pull)' : t.tools.includes(SYNC_PUSH) ? 'Push research (cloud-push)'
+                    <td>{t.tools.includes(SYNC_ADMIN) ? 'Admin' : t.tools.includes(SYNC_SNAPSHOT) ? 'Snapshot (cloud-pull)' : t.tools.includes(SYNC_PUSH) ? 'Push research (cloud-push)'
                       : t.tools.includes(OUTREACH_WRITE) ? 'Outreach desk: read and write' : t.tools.includes(OUTREACH_READ) ? 'Outreach desk: read'
                       : t.tools.some((x) => !READ_TOOLS.includes(x)) ? 'Read and draft' : 'Read'}</td>
                     <td>{t.vehicles ? t.vehicles.map((v) => vname.get(v) ?? 'unknown').join(', ') : 'All of yours'}</td>

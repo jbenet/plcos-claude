@@ -2,6 +2,7 @@ import { relative } from 'node:path';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Link from '@/components/ui/AppLink';
+import { SettingsLayout } from '@/components/settings/SettingsNav';
 import { Page } from '@/components/shell/Page';
 import { config } from '@/config/deployment';
 import { deployedServer } from '@/config/sign-in';
@@ -66,6 +67,7 @@ export default async function ConnectionsPage() {
         </>
       }
     >
+      <SettingsLayout current="connections" admin>
       <div className="lbl">Settings</div>
       <h1>Connections</h1>
       <p className="sublede">
@@ -127,6 +129,7 @@ export default async function ConnectionsPage() {
         </div>
         <p className="cover"><b>Why these two stay out.</b> PLCOS_SECRET encrypts everything above, so a page cannot set it; the database connection is how this server finds the page at all. Keep a copy of PLCOS_SECRET in a password manager: without it a restored database&rsquo;s keys must be entered again.{rows.some((r) => r.updatedAt) ? ` Last change here ${ago(new Date(rows.map((r) => r.updatedAt ?? '').sort().pop()!))}.` : ''}</p>
       </div>
+      </SettingsLayout>
     </Page>
   );
 }

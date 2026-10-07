@@ -1,0 +1,16 @@
+/* Settings in sections (issue 0130): a sidebar of sections beside the one in view. */
+.layout{display:grid;grid-template-columns:184px minmax(0,1fr);gap:24px;align-items:start}
+.nav{position:sticky;top:16px;display:flex;flex-direction:column;gap:2px;padding-top:2px}
+.group{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:12px 0 4px;padding:0 10px}
+.group:first-child{margin-top:0}
+.item{display:block;padding:6px 10px;border-radius:6px;font-size:13px;color:var(--ink);text-decoration:none;line-height:1.3}
+.item:hover{background:color-mix(in srgb, var(--ink) 5%, transparent)}
+.item[aria-current="page"]{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);font-weight:500}
+.body{min-width:0}
+.body > :global(.card):first-child{margin-top:0}
+@media (max-width: 760px){
+  .layout{grid-template-columns:1fr;gap:12px}
+  .nav{position:static;flex-direction:row;flex-wrap:wrap;gap:4px}
+  .group{display:none}
+  .item{border:1px solid var(--line);padding:5px 10px}
+}

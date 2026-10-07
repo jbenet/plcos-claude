@@ -266,3 +266,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [LPs' addresses include the ones Affinity holds](entries/outreach-affinity-addresses.md)
 - [A reply is owed only for an unanswered message](entries/outreach-reply-owed.md)
 - [Project dev reads the app's feedback with an Admin token](entries/feedback-by-token.md)
+- [Settings in sections, a rail that keeps its place, and a capture that works on Preferences](entries/settings-sections.md)

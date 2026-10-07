@@ -60,7 +60,7 @@ export async function saveVoiceAction(formData: FormData): Promise<SavedVoice> {
   const wipe = formData.get('delete') === '1';
   try {
     const v = await saveVoice(user, {
-      style: wipe ? '' : String(formData.get('style') ?? ''),
+      style: wipe ? '' : String(formData.get('voiceStyle') ?? ''),
       samples: wipe ? [] : formData.getAll('sample').map(String),
     });
     revalidatePath('/settings');
