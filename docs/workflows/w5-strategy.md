@@ -297,7 +297,9 @@ when the team's context is newer than it (a note written from another vehicle's 
 that vehicle's strategy; a note about the LP as a whole counts for every one; the note an intake rule writes when
 it creates a pursuit counts for none); for a firm-level strategy, when its lead has been rewritten
 since `made.inputs.lead.at`; and, for a lead, when a colleague's finding is newer than it (a filing on
-one colleague's record can change the firm's ask). A re-pin still reads every claim against the current
+one colleague's record can change the firm's ask). A newer finding that adds no fact, investor type or capacity
+band to the one a strategy was written from, with no correction bearing on it, is re-pinned by rule
+(`scripts/enrich-repin.ts`, recorded in `made.revised`); anything else is rewritten. A re-pin still reads every claim against the current
 files: "no change" means no change a person acts on, after that read — never a bare update of
 `made.inputs`. Where a pursuit's counted contact changed, the strategy is re-read, not only re-pinned.
 

@@ -120,6 +120,19 @@ export async function enrichmentStrategyProperties(check: Check) {
       && !lapsed('Park him until the search pass.', 'Mon 4 Jan 2027') && !lapsed('Answer her email with the first-close date.', 'by Fri 3 Oct')
       && !lapsed('Park him; look again later.', 'when the fund closes');
     check('A lapsed park is a park whose look-again or step date has passed; a person\'s overdue step is not one', lapses, `lapsed parks read right: ${lapses}`);
+    // A re-pin to a newer finding (7 Oct 2026: 203 stale on thin refreshes) only when it adds nothing the strategy read.
+    const { repinBlockers } = await import('../../lib/enrich/strategy');
+    const fact = (value: string) => ({ field: 'role', value });
+    const pinnedF = { facts: [fact('Partner at Invented Capital'), fact('Board of Invented Bio')], profile: { investorType: 'vc_partner', capacity: { band: '$1–5M' } } };
+    const newerF = (over: object = {}) => ({ researched: { at: '2026-10-06T00:00:00Z' }, facts: [fact('partner at  Invented Capital')], profile: { investorType: 'vc_partner', capacity: { band: '$1–5M' } }, ...over });
+    const thin = repinBlockers({ made }, pinnedF, newerF()).length === 0;
+    const added = repinBlockers({ made }, pinnedF, newerF({ facts: [fact('Founded Invented Labs')] }));
+    const band = repinBlockers({ made }, pinnedF, newerF({ profile: { investorType: 'vc_partner', capacity: { band: '$5–25M' } } }));
+    const cut = repinBlockers({ made }, pinnedF, newerF({ researched: { at: '2026-10-06T00:00:00Z', corrected: [{ at: '2026-10-06T00:00:00Z', by: 'W1c', what: 'cut 2 facts' }] } }));
+    const tieOnly = repinBlockers({ made }, pinnedF, newerF({ researched: { at: '2026-10-06T00:00:00Z', corrected: [{ at: '2026-10-06T00:00:00Z', by: 'cold1-04', what: 'connector evidence' }] } })).length === 0;
+    check('A newer finding is re-pinned only when it adds no fact, type or band and no correction bears on the strategy',
+      thin && added.join() === '1 new fact' && band.join() === 'a different capacity band' && cut.join() === 'a correction since it was written' && tieOnly,
+      `thin ${thin}; added ${added.join()}; band ${band.join()}; cut ${cut.join()}; tie only ${tieOnly}`);
   }
 }
 

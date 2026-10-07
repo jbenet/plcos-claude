@@ -191,6 +191,29 @@ export function correctionReach(c: { by?: string | null; what?: string | null })
 }
 
 /**
+ * Why a newer finding can't simply be re-pinned (7 Oct 2026: 203 strategies were stale on a thin refresh of a finding
+ * they had read, most adding nothing): a fact, an investor type or a capacity band the pinned finding didn't carry, or a
+ * correction that bears on this strategy. Empty when the newer finding adds nothing the strategy hasn't read.
+ */
+export function repinBlockers(
+  s: Pick<Strategy, 'made'>,
+  pinned: { facts?: Array<{ field?: string; value?: string }>; profile?: { investorType?: string; capacity?: { band?: string } } },
+  newer: { researched: { at: string; corrected?: Array<{ at: string; by?: string | null; what?: string | null }> }; facts?: Array<{ field?: string; value?: string }>; profile?: { investorType?: string; capacity?: { band?: string } } },
+  vehicleKind?: string | null,
+): string[] {
+  const norm = (f: { field?: string; value?: string }) => `${f.field ?? ''}|${(f.value ?? '').toLowerCase().replace(/\s+/g, ' ').trim()}`;
+  const read = new Set((pinned.facts ?? []).map(norm));
+  const out: string[] = [];
+  const added = (newer.facts ?? []).filter((f) => !read.has(norm(f))).length;
+  if (added) out.push(`${added} new ${added === 1 ? 'fact' : 'facts'}`);
+  if ((newer.profile?.investorType ?? null) !== (pinned.profile?.investorType ?? null)) out.push('a different investor type');
+  if ((newer.profile?.capacity?.band ?? null) !== (pinned.profile?.capacity?.band ?? null)) out.push('a different capacity band');
+  if ((newer.researched.corrected ?? []).some((c) => Date.parse(c.at) > Date.parse(s.made.at)
+    && (correctionReach(c) === 'all' || (correctionReach(c) === 'spv' && (vehicleKind ?? 'spv') === 'spv')))) out.push('a correction since it was written');
+  return out;
+}
+
+/**
  * Written before its LP's current finding — from records alone, or from an older finding — or,
  * when it pinned the close track (v1.5), before that changed.
  */
