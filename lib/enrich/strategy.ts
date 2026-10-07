@@ -197,11 +197,12 @@ export function correctionReach(c: { by?: string | null; what?: string | null })
  */
 export function repinBlockers(
   s: Pick<Strategy, 'made'>,
-  pinned: { facts?: Array<{ field?: string; value?: string }>; profile?: { investorType?: string; capacity?: { band?: string } } },
-  newer: { researched: { at: string; corrected?: Array<{ at: string; by?: string | null; what?: string | null }> }; facts?: Array<{ field?: string; value?: string }>; profile?: { investorType?: string; capacity?: { band?: string } } },
+  pinned: { facts?: Array<{ field?: string; value?: unknown }>; profile?: { investorType?: string; capacity?: { band?: string } } },
+  newer: { researched: { at: string; corrected?: Array<{ at: string; by?: string | null; what?: string | null }> }; facts?: Array<{ field?: string; value?: unknown }>; profile?: { investorType?: string; capacity?: { band?: string } } },
   vehicleKind?: string | null,
 ): string[] {
-  const norm = (f: { field?: string; value?: string }) => `${f.field ?? ''}|${(f.value ?? '').toLowerCase().replace(/\s+/g, ' ').trim()}`;
+  // A fact's value is a string by the schema, but older files carry numbers and lists (7 Oct 2026: 2 lines crashed).
+  const norm = (f: { field?: string; value?: unknown }) => `${f.field ?? ''}|${(typeof f.value === 'string' ? f.value : JSON.stringify(f.value ?? '')).toLowerCase().replace(/\s+/g, ' ').trim()}`;
   const read = new Set((pinned.facts ?? []).map(norm));
   const out: string[] = [];
   const added = (newer.facts ?? []).filter((f) => !read.has(norm(f))).length;
