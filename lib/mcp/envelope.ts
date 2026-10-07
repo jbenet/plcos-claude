@@ -91,6 +91,15 @@ export async function admitCall(env: Envelope, tool: string, q: Queryable, now =
   return null;
 }
 
+/** The calls a token has left today, as counted by admitCall; null before its first call today on this server. */
+export function remainingToday(env: Envelope, now = Date.now()): number | null {
+  const w = windows.get(env.tokenId);
+  return w && w.day === today(now) ? Math.max(0, env.callsPerDay - w.dayCount) : null;
+}
+/** Whole seconds until the daily budget refills (midnight UTC). */
+export const secondsToMidnightUtc = (now = Date.now()) => Math.max(1, Math.ceil((Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate() + 1) - now) / 1000));
+export const DAILY_SPENT = /calls today is spent/;
+
 /** For the properties: forget the in-memory windows. */
 export function resetWindows() { windows.clear(); }
 
