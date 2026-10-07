@@ -402,6 +402,10 @@ and push up results".
   clear a job a restart stopped. A push that fails after it was checked says at which stage and what kind of
   error, and a ledger that will not take its finish no longer fails a push whose files are in place.
 
+- **`GET|POST /api/sync/feedback`** (7 Oct, `sync:admin`; Juan: "do it the same way other services (like JuanMail
+  and MailGuard are doing it)"): list the open feedback issues, read them with their screenshots, and set an
+  issue's status. `scripts/cloud-feedback.sh`; details in `docs/deploy/07-feedback-signal.md` §6.
+
 **Why this is not two-way sync.** Sync would merge two writable databases: conflict rules for every table,
 deletes, and rebuilt caches. Here there is one writer. Copies come down as read-only previews. Results go up
 as new input files, which the cloud validates and imports itself, exactly like a button press. Nothing on

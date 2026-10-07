@@ -86,7 +86,8 @@ export interface IssueSink {
   create(draft: IssueDraft): Promise<Issue & { repeat?: boolean }>;
   list(filter?: IssueFilter): Promise<Issue[]>;
   get(id: string): Promise<Issue | null>;
-  update(id: string, patch: Partial<Pick<Issue, 'status' | 'priority' | 'labels'>>): Promise<Issue>;
+  /** `note` is appended to the body as its own paragraph, e.g. the closing `**Done (N30).**` note. */
+  update(id: string, patch: Partial<Pick<Issue, 'status' | 'priority' | 'labels'>> & { note?: string }): Promise<Issue>;
 }
 
 export async function issues(): Promise<IssueSink> {

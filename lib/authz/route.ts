@@ -28,7 +28,7 @@ export function withRoute(name: RouteId, handler: (request: Request, context: an
   if (sync === 'sync:snapshot' || sync === 'sync:push' || sync === 'sync:admin') {
     return async (request: Request): Promise<Response> => {
       const { syncGuard } = await import('@/lib/sync/auth');
-      const guard = await syncGuard(request, sync === 'sync:snapshot' ? 'snapshot' : sync === 'sync:admin' ? (name.startsWith('app/api/sync/jobs/') ? 'jobs' : 'vehicles') : 'push');
+      const guard = await syncGuard(request, sync === 'sync:snapshot' ? 'snapshot' : sync === 'sync:admin' ? (name.startsWith('app/api/sync/jobs/') ? 'jobs' : name.startsWith('app/api/sync/feedback/') ? 'feedback' : 'vehicles') : 'push');
       if ('response' in guard) return guard.response;
       return handler(request, guard, guard.caller.user);
     };

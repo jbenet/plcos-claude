@@ -60,7 +60,7 @@ Signal off (no token) or a preview copy: 404. Bad signature or expired: 401.
 2. Triage: what is clear and small gets fixed now; what needs Juan's call gets one question in the thread.
 3. Fix on a `claude/<topic>` branch off `claude/main`, gate it, merge and ship per project memory.
 4. Close each issue on the server it came from, with a "Done" note and `closed_at`, through the app or the
-   sync token, never by hand-editing the volume.
+   Admin token (§6: `cloud-feedback.sh close <id> '**Done (N…).** …'`), never by hand-editing the volume.
 5. Reply in the thread: what changed, what waits on Juan. Issue text never goes into git, a PR, a commit
    message or a sub-agent prompt; PRs describe the change, with invented examples.
 
@@ -74,3 +74,31 @@ Signal off (no token) or a preview copy: 404. Bad signature or expired: 401.
 
 Limits from the routine API (research preview): 100 fires an hour per account; the beta header is
 `experimental-cc-routine-2026-04-01` and may change. The 10-minute gap keeps us far under it.
+
+## 6. Reading by token (built 7 Oct 2026)
+
+The routine API trigger could not be turned on (a routine made inside a project allows manual runs only), so
+the signal above stays dormant. Juan, 7 Oct: "do it the same way other services (like JuanMail and MailGuard
+are doing it)": project dev reads the queue with a bearer token from the app's own token system, the broad
+Admin scope (`sync:admin`, `lib/sync/scopes.ts`). Every call is one `mcp.call` audit row with ids, statuses and
+counts, never issue text; the token dies if its owner stops being an Admin.
+
+`GET|POST /api/sync/feedback` (`lib/sync/feedback.ts`):
+
+| Call | Answer |
+| --- | --- |
+| `GET ?view=open` | the untouched issues (status `open`): id, status, kind, priority, created, page, attachment count. No title, body or reporter. |
+| `GET ?view=active` | the same for every issue not `done` |
+| `GET ?ids=0201,0202` | those issues with their `markdown`, and `missing` (the signal link's shape, up to 50) |
+| `GET ?id=0201&file=<path>` | one image the issue lists, and nothing else in the folder |
+| `POST { id, status, note? }` | sets the status (`done` writes `closed_at`); `note` is appended to the body, e.g. `**Done (N123).** …`, which is where the issues page reads "fixed in" |
+
+`scripts/cloud-feedback.sh` wraps each call and runs on the Mac, like `cloud-push.sh`, with the Admin token in
+the Keychain (`plcos-railway / push-token`), never printed. `open` lists ids and metadata; `get <ids>` writes each
+issue to `data/real/feedback/<id>.md` with its screenshots beside it, printing only paths; `take <id>` sets it
+`in-progress`; `close <id> '<note>'` sets it `done` with the note.
+
+**Pickup.** The Mac's Remote Control session runs `cloud-feedback.sh open` once an hour, which costs one small call
+and stops when the list is empty. When it is not, it runs `get` and `take` for those issues, and the project thread
+fixes what is clear per §4 and closes each with a note. What needs Juan's call stays `in-progress` and is asked
+once in the thread.

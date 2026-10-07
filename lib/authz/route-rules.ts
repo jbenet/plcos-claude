@@ -34,6 +34,9 @@ export const routeRules = {
   // An Admin's token queues a research export or a findings import and reads any job's state (lib/sync/jobs.ts).
   'app/api/sync/jobs/route.ts#POST': 'sync:admin',
   'app/api/sync/jobs/route.ts#GET': 'sync:admin',
+  // An Admin's token reads the feedback queue and sets an issue's status (lib/sync/feedback.ts).
+  'app/api/sync/feedback/route.ts#GET': 'sync:admin',
+  'app/api/sync/feedback/route.ts#POST': 'sync:admin',
   'app/api/session/route.ts#POST': 'session',
   // Google sign-in and first-run setup (docs/deploy/railway.md §3): nobody is signed in yet. Each handler
   // checks for itself (the signed state cookie, the setup code); a POST must come from this origin.
