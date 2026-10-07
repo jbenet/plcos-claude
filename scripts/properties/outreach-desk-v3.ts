@@ -270,6 +270,21 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
       && (affRow?.contacts ?? []).every((c: { confirmedAt: string | null }) => c.confirmedAt === null) && !affOutside.includes('invented-affinity'),
       `${JSON.stringify(affEmails)}`);
 
+    // ── Reply owed: a written message from them, unanswered (7 Oct 2026) ────────────────────────
+    const { replyOwedFrom } = await import('../../lib/outreach/reads');
+    const tp = (on: string, channel: string, direction: string, extra: Record<string, unknown> = {}) => ({ on: new Date(on), channel, direction, groupSize: 2, ...extra }) as never;
+    const owedCases = {
+      meetingLast: replyOwedFrom([tp('2026-09-01', 'email', 'ours'), tp('2026-09-10', 'meeting', 'both')]),
+      theirEmail: replyOwedFrom([tp('2026-09-01', 'email', 'ours'), tp('2026-09-05', 'email', 'theirs')]),
+      answered: replyOwedFrom([tp('2026-09-05', 'email', 'theirs'), tp('2026-09-06', 'email', 'ours')]),
+      metAfter: replyOwedFrom([tp('2026-09-05', 'email', 'theirs'), tp('2026-09-07', 'call', 'both')]),
+      autoReply: replyOwedFrom([tp('2026-09-05', 'email', 'theirs', { aboutBasis: 'Automatic reply: out of office' })]),
+      firm: replyOwedFrom([tp('2026-09-05', 'email', 'theirs', { viaOrganization: 'Invented Firm' })]),
+    };
+    check('Outreach desk v3: a reply is owed when their latest email or message came after anything of ours (a message, or a meeting or call together); a meeting is never their unanswered message, nor an automatic reply or their firm\'s mail',
+      owedCases.meetingLast === null && owedCases.theirEmail?.since === '2026-09-05' && owedCases.answered === null && owedCases.metAfter === null
+      && owedCases.autoReply === null && owedCases.firm === null, JSON.stringify(owedCases));
+
     // ── Ask history ───────────────────────────────────────────────────────────────────────
     const lastOn = thisQuarter.toISOString().slice(0, 10);
     check('Outreach desk v3: asksThisQuarter counts the intro asks made to that person this calendar quarter (not last quarter\'s, not one never made), and lastAsk says when and whether they replied, from the mail trace',

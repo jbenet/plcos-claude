@@ -8,7 +8,7 @@ import { redactHealth } from '@/lib/redact-health';
 import { SPV_STAGE_LABEL, spvRooms, workingDaysUntil, type SpvStage } from '@/modules/close';
 import { INSUFFICIENT_FOR_506C } from '@/modules/compliance';
 import { checkWrap, listAssets, type Audience, type PermittedUse } from '@/modules/content';
-import { READS, READ_LABEL, raiseWindows, summarize, type Touchpoint } from '@/modules/meetings';
+import { READS, READ_LABEL, isAutoReply, isEvent, raiseWindows, summarize, type Touchpoint } from '@/modules/meetings';
 import { tracePairs } from '@/lib/comms/read';
 import { SOURCE_LABEL, traceState, type Merged } from '@/lib/comms/trace';
 import { CLOSE_STATE_LABEL, closeStates, currentIndications, indicatedTotals, vehicleTotals, type CloseState } from '@/modules/pipeline';
@@ -163,6 +163,22 @@ async function changedSince(ids: string[], since: Date): Promise<Map<string, Dat
   return new Map(rows.map((r) => [r.id, new Date(r.at)]));
 }
 
+/**
+ * A reply is owed when their latest written message (an email or a message from them, not an automatic reply) came
+ * after anything of ours: our own message, or a meeting or call together. Before 7 Oct 2026 the queue used the LP
+ * page's "they spoke last", which counts a meeting as theirs, so every LP whose latest touch was a meeting read as
+ * owed a reply (JuanMail: 41 on Neurotech, far more than its mail shows).
+ */
+export function replyOwedFrom(touches: Touchpoint[], now = new Date()): { since: string } | null {
+  const held = touches.filter((t) => !t.viaOrganization && t.on && t.on.getTime() <= now.getTime() && t.channel !== 'research' && !isEvent(t));
+  const written = held.filter((t) => (t.channel === 'email' || t.channel === 'message') && t.direction === 'theirs' && !isAutoReply(t));
+  const theirs = written.reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null);
+  if (!theirs) return null;
+  const answered = held.some((t) => t.on! > theirs && (t.direction === 'ours'
+    || ((t.channel === 'meeting' || t.channel === 'call') && t.direction === 'both')));
+  return answered ? null : { since: day(theirs)! };
+}
+
 export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit = {}) {
   // The next poll's updatedSince: taken before reading, so a change committed while this runs is seen next time.
   const cursor = new Date().toISOString();
@@ -219,7 +235,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
     const close = closes.get(key(r)) ?? null;
     const seat = seatOf.get(key(r)) ?? null;
     const indicated = indications.get(key(r)) ?? null;
-    const replyOwed = s.lastFromThem && !s.awaitingSince ? { since: day(s.lastFromThem)! } : null;
+    const replyOwed = replyOwedFrom((traces.get(key(r)) ?? empty).touches);
     const funds = v.kind === 'spv' ? fundOpen.filter((f) => f.entity_id === r.entityId) : [];
     const restricted = r.doNotContact;
     // Held: a blocking check fails. The ask cap is advisory (config.guard.askLimit) and counted per page row.
@@ -426,7 +442,7 @@ function queueCoverage(vehicles: Vehicle[], includePassed = false) {
   return {
     paging: `${config.outreach.defaultQueueRows} rows by default, at most ${config.outreach.maxQueueRows}; pass nextCursor as cursor for the next page (null at the end). total counts every row this query matches.`,
     corpus: `${includePassed ? 'LPs, open and passed (each passed row marked passed),' : 'Open LPs (not passed)'} on ${vehicles.map((v) => v.name).join(', ') || 'no vehicle'}, with the comms trace (Affinity's records and the Gmail messages juanmail reported, merged), close track, SPV seat, indication, restrictions, accreditation and asks this quarter.`,
-    buckets: 'reply_owed: they spoke last; money: committed, an indication, a close track not yet closed, or an SPV seat at IOI or allocated; invite: new, sourcing or selected; follow_up: the rest; held: a blocking check fails; passed (only with includePassed): the LP passed.',
+    buckets: 'reply_owed: their latest email or message (not an automatic reply) came after anything of ours, a message or a meeting together; money: committed, an indication, a close track not yet closed, or an SPV seat at IOI or allocated; invite: new, sourcing or selected; follow_up: the rest; held: a blocking check fails; passed (only with includePassed): the LP passed.',
     note: 'A reply in a mailbox juanmail does not read, and Affinity has not synced, is not seen. An address on file is not proof it is current. comms_trace gives one LP\'s whole timeline.',
   };
 }

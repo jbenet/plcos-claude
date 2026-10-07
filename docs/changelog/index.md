@@ -264,3 +264,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Every LP and its addresses in one light read](entries/outreach-lp-contacts.md)
 - [Routes say how good they are, and search works over REST](entries/outreach-route-quality.md)
 - [LPs' addresses include the ones Affinity holds](entries/outreach-affinity-addresses.md)
+- [A reply is owed only for an unanswered message](entries/outreach-reply-owed.md)
