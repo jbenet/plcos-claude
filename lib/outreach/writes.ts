@@ -161,9 +161,10 @@ export async function requestTicket(ctx: DeskContext, raw: Record<string, unknow
       } };
     }
     // The queue's own checks for this LP, now: a blocking one refuses before any ticket exists.
-    const blocking = row.checks.filter((c) => !c.ok && c.blocking);
+    // This path is autonomous only, so a check that binds agents alone (agentOnly) refuses here too.
+    const blocking = row.checks.filter((c) => !c.ok && (c.blocking || c.agentOnly));
     if (blocking.length) throw new OutreachRefused(409, `Refused, no ticket opened: ${blocking.map((c) => `${c.rule}: ${c.detail}`).join(' ')}`);
-    const advisories = row.checks.filter((c) => !c.ok && !c.blocking);
+    const advisories = row.checks.filter((c) => !c.ok && !c.blocking && !c.agentOnly);
     const fundFirst = advisories.find((c) => c.rule === 'fund_first');
     if (fundFirst && !a.coordination) {
       throw new OutreachRefused(409, `${fundFirst.detail} Say how (coordination.choice: ${FUND_FIRST_CHOICES.join(', ')}); it is recorded with a dated follow-up.`);

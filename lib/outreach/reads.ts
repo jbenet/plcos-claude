@@ -90,7 +90,8 @@ export type Bucket = 'reply_owed' | 'money' | 'invite' | 'follow_up' | 'held' | 
 /** The open buckets, in the queue's order. `passed` comes after them, and only with includePassed (docs/27 §4). */
 export const BUCKETS: Bucket[] = ['reply_owed', 'money', 'invite', 'follow_up', 'held'];
 export const QUEUE_BUCKETS: Bucket[] = [...BUCKETS, 'passed'];
-export interface Check { rule: 'restriction' | 'accreditation' | 'ask_count' | 'fund_first' | 'wrap'; ok: boolean; blocking: boolean; detail: string; choices?: string[] }
+/** `agentOnly`: refuses an autonomous agent's ticket, never holds a person (Juan, 7 Oct 2026). */
+export interface Check { rule: 'restriction' | 'accreditation' | 'ask_count' | 'fund_first' | 'wrap'; ok: boolean; blocking: boolean; agentOnly?: boolean; detail: string; choices?: string[] }
 
 /** The choices the desk offers when an SPV meets an open fund discussion (Juan, 4 Oct 2026). */
 export const FUND_FIRST_CHOICES = ['mention_both', 'send_separately', 'wait'] as const;
@@ -220,8 +221,10 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
     const funds = v.kind === 'spv' ? fundOpen.filter((f) => f.entity_id === r.entityId) : [];
     const restricted = r.doNotContact;
     // Held: a blocking check fails. The ask cap is advisory (config.guard.askLimit) and counted per page row.
+    // A missing wrap rule never holds a row for people (Juan, 7 Oct 2026: "Just remove these limitations, i did not
+    // ask for these limitations for human apps"); it still refuses an autonomous agent's ticket (agentOnly below).
     const fundBlocks = funds.length > 0 && config.guard.fundFirst === 'enforce';
-    const held = restricted || fundBlocks || wrapRuleFor.get(v.id) !== true;
+    const held = restricted || fundBlocks;
     const money = r.status === 'committed' || Boolean(indicated)
       || (close && close.state !== 'closed' && close.state !== 'withdrawn') || (seat && (seat.stage === 'ioi' || seat.stage === 'allocated'));
     // A passed LP is its own bucket, after the open ones; its checks still run, a restriction among them.
@@ -346,8 +349,10 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
         ...(funds.length ? { choices: [...FUND_FIRST_CHOICES] } : {}),
       }] : []),
       {
-        rule: 'wrap', ok: wrapRuleFor.get(v.id) === true, blocking: wrapRuleFor.get(v.id) !== true,
-        detail: wrapRuleFor.get(v.id) ? `${v.exemption} × ${instrumentOf(v)}: covered by the wrap matrix; each material says whether it may go.` : `No wrap rule covers ${v.exemption} × ${instrumentOf(v)}: nothing may be sent for this vehicle.`,
+        // Shown to people, never a hold for them; an autonomous agent is still refused (Juan, 7 Oct 2026).
+        rule: 'wrap', ok: wrapRuleFor.get(v.id) === true, blocking: false, agentOnly: wrapRuleFor.get(v.id) !== true,
+        detail: wrapRuleFor.get(v.id) ? `${v.exemption} × ${instrumentOf(v)}: covered by the wrap matrix; each material says whether it may go.`
+          : `No wrap rule on file for ${v.exemption} × ${instrumentOf(v)}, so materials for this vehicle are not checked against one. A person may send; an autonomous agent may not.`,
       },
     ];
     const held = checks.some((c) => !c.ok && c.blocking);
