@@ -4,6 +4,7 @@ import { pipelineData } from '@/lib/authz/read/pipeline';
 import { planRoutes, warmthReader, WARMTH_LABEL } from '@/lib/authz/read/network';
 import { getDb, type Db } from '@/lib/db';
 import { withReadMemo } from '@/lib/db/read-memo';
+import { withBackgroundDb } from '@/lib/db/scheduling';
 import { routeContacts } from '@/lib/mcp/reads';
 import type { AppUser, Vehicle } from '@/modules/platform';
 import type { Route, RouteStrength, WarmthKind } from '@/modules/network';
@@ -77,6 +78,18 @@ const MAX_JOBS = 32;
 // GUESS — LPs planned at once. Each LP's plan is a handful of small reads; a few at a time fills the gaps between them
 // without taking the pool (lib/db/postgres.ts) from the pages.
 const PLAN_CONCURRENCY = 4;
+// One background plan at a time in the process, at background database priority (pages' queries go first, as for
+// the route warm-up); the others queue for their turn. A cold plan is minutes of route
+// search: several at once (vehicles × principals, restarted as imports move the revision) took the server's CPU and
+// database from every page and push (JuanMail, 7 Oct 2026, 09:40Z: connectors 35 s, sync pushes cancelled).
+let planTurn: Promise<void> = Promise.resolve();
+async function inTurn<T>(run: () => Promise<T>): Promise<T> {
+  const previous = planTurn;
+  let release!: () => void;
+  planTurn = new Promise<void>((done) => { release = done; });
+  await previous;
+  try { return await run(); } finally { release(); }
+}
 
 /**
  * Which of these entities are people (identity.entity's type, after any type correction). A connector is a person whose
@@ -105,7 +118,9 @@ function weakestHop(route: Route, readWarmth: ReturnType<typeof warmthReader>): 
 function startPlan(db: Db, jobs: Map<string, PlanJob>, user: AppUser, v: Vehicle, key: string, revision: string): PlanJob {
   const job = { key, revision, asOf: undefined, open: [], planned: [], notCounted: 0, finished: false } as unknown as PlanJob;
   // The job reads the cache revisions once (lib/db/read-memo.ts): it is replaced when the revision it started at moves.
-  job.done = withReadMemo(async () => {
+  job.done = inTurn(() => withBackgroundDb(() => withReadMemo(async () => {
+    // Superseded while it queued: a newer job for this key has taken its place.
+    if (jobs.get(key) !== job) return;
     const { rows, asOf } = await pipelineData(v.id);
     job.asOf = asOf;
     job.open = rows.filter((r) => r.vehicleId === v.id && r.status !== 'passed')
@@ -115,6 +130,8 @@ function startPlan(db: Db, jobs: Map<string, PlanJob>, user: AppUser, v: Vehicle
     // most important LPs.
     for (let i = 0; i < job.open.length; i += PLAN_CONCURRENCY) {
       if (jobs.get(key) !== job) return;
+      // Let waiting requests run between batches: route search is CPU, and pages share this process.
+      await new Promise<void>((next) => setImmediate(next));
       const batch = job.open.slice(i, i + PLAN_CONCURRENCY);
       const searches = await Promise.all(batch.map((r) => planRoutes(user.handle, r.entityId, 3, v.kind, 'team', undefined, { vehicleId: v.id })));
       const usable = searches.map((search) => {
@@ -132,7 +149,7 @@ function startPlan(db: Db, jobs: Map<string, PlanJob>, user: AppUser, v: Vehicle
       }) }));
     }
     job.finished = true;
-  });
+  })));
   // A failed plan is not kept: the next call plans again.
   job.done.catch(() => { if (jobs.get(key) === job) jobs.delete(key); });
   jobs.set(key, job);
