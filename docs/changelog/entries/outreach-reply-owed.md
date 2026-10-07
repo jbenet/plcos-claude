@@ -6,3 +6,8 @@ as waiting on us.
 
 Now `replyOwed` and the `reply_owed` bucket mean their latest email or message (not an automatic reply, not their
 firm's mail) came after anything of ours: our own message, or a meeting or call together. The LP page is unchanged.
+
+**Later the same day:** a message to a list is not one we owe a reply to. The overnight review found a "recent inbound
+reply" that was a company announcement sent to a small list. Now a message whose Affinity interaction reaches three or
+more of our parties (firms, or people with none; GUESS), or that the rules read as a company's update to its investors,
+is left out.

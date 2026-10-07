@@ -168,10 +168,16 @@ async function changedSince(ids: string[], since: Date): Promise<Map<string, Dat
  * after anything of ours: our own message, or a meeting or call together. Before 7 Oct 2026 the queue used the LP
  * page's "they spoke last", which counts a meeting as theirs, so every LP whose latest touch was a meeting read as
  * owed a reply (JuanMail: 41 on Neurotech, far more than its mail shows).
+ * A message to a list is not written to us either: one whose Affinity interaction reaches BROADCAST_PARTIES or more of
+ * our parties (firms, or people with none), or that the rules read as a company's update to its investors (the overnight
+ * review found a "recent inbound reply" that was a company announcement sent to a small list).
  */
+// GUESS — a reply with a colleague and one introduction on copy is two parties; a list starts at three.
+const BROADCAST_PARTIES = 3;
+const isBroadcast = (t: Touchpoint) => (t.groupSize ?? 1) >= BROADCAST_PARTIES || /^a company's update to its investors/.test(t.aboutBasis ?? '');
 export function replyOwedFrom(touches: Touchpoint[], now = new Date()): { since: string } | null {
   const held = touches.filter((t) => !t.viaOrganization && t.on && t.on.getTime() <= now.getTime() && t.channel !== 'research' && !isEvent(t));
-  const written = held.filter((t) => (t.channel === 'email' || t.channel === 'message') && t.direction === 'theirs' && !isAutoReply(t));
+  const written = held.filter((t) => (t.channel === 'email' || t.channel === 'message') && t.direction === 'theirs' && !isAutoReply(t) && !isBroadcast(t));
   const theirs = written.reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null);
   if (!theirs) return null;
   const answered = held.some((t) => t.on! > theirs && (t.direction === 'ours'
