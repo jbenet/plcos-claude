@@ -143,7 +143,9 @@ export function fileIssueSink(dir: string): IssueSink {
     async update(id, patch): Promise<Issue> {
       const hit = await find(id);
       if (!hit) throw new Error(`No such issue: ${id}`);
-      const updated: ParsedIssue = { ...hit.issue, ...patch };
+      const { note, ...fields } = patch;
+      const updated: ParsedIssue = { ...hit.issue, ...fields };
+      if (note?.trim()) updated.body = `${hit.issue.body.trimEnd()}\n\n${note.trim()}`;
       if (patch.status && patch.status !== hit.issue.status) {
         updated.closedAt = patch.status === 'done' ? new Date().toISOString() : null;
       }
