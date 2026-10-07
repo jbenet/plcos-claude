@@ -195,6 +195,10 @@ async function boot(dir?: string): Promise<Db> {
       const { importJobStatus } = await import('../import-jobs/server');
       // Recover queued receipts at server boot; public GET progress polling is read-only.
       await importJobStatus(scheduled);
+      // A deploy starts this server while the old one still runs, so the job it stops still has a fresh heartbeat
+      // here. Look again once that heartbeat is a minute old, so a stopped findings import is queued again without
+      // waiting for the next push (7 Oct 2026). GUESS: 90 s clears the 60 s heartbeat limit.
+      setTimeout(() => { void importJobStatus(scheduled).catch(() => undefined); }, 90_000).unref();
     }
   }
   return scheduled;

@@ -15,3 +15,7 @@ re-point, the SPV stance and the research ties, which run last and take longest)
 Checks: `npx tsc --noEmit`, `npm run boundaries`, and the import-jobs properties on PGlite and Postgres, with two
 new cases: a replayed kind is queued again with that receipt, and any other kind waits. Two deploy-tooling cases cover
 the health count and the wait in ship.sh.
+
+**It re-queues promptly.** A deploy starts the new server while the old one still runs, so at boot the stopped job's
+heartbeat is still fresh and the recovery left it alone until the next push. The server now looks again 90 seconds
+after boot.
