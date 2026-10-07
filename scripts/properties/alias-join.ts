@@ -139,4 +139,21 @@ export async function aliasJoinProperties(check: Check) {
       && unknown.stdout.includes('strategy unmapped.json: unresolvable alias; no candidate in the research export'),
       'An unmapped file cannot silently escape the evidence gates.');
   } finally { await rm(scratch, { recursive: true, force: true }); }
+  {
+    // 7 Oct 2026: a refresh under the canonical key dropped the older alias finding's angel checks.
+    const { mergeFindings } = await import('../../lib/enrich/merge-findings');
+    const fact = (value: unknown, url = 'https://example.org/a') => ({ field: 'investments', value, source: { url, kind: 'news' }, confidence: 'high' }) as never;
+    const finding = (k: string, at: string, facts: never[], connections: never[] = []) => ({ key: k, name: 'Invented River', researched: { at, by: 'props', workflow: 'W1', version: '1.50' }, facts, connections }) as never;
+    const newest = finding(key, '2026-10-06T00:00:00Z', [fact('Advisor at Invented Labs')]);
+    const older = finding('alias-river', '2026-09-20T00:00:00Z', [fact('advisor at  Invented Labs'), fact('Angel check in Invented Bio, 2024'), fact(5, 'https://example.org/b')],
+      [{ to: 'Protocol Labs', kind: 'portfolio', basis: 'invented', tier: 'C' }] as never);
+    const out = mergeFindings(newest, [older], '2026-10-07T12:00:00Z', 'props');
+    const m = out.merged as unknown as { facts: Array<{ value: unknown }>; connections: unknown[]; researched: { at: string; corrected: Array<{ what: string }> } };
+    const same = mergeFindings(newest, [newest], '2026-10-07T12:00:00Z', 'props');
+    check('An older finding\'s facts and connections the newest lacks are merged in, once, with a dated correction; the newest stays the record',
+      out.facts === 2 && out.connections === 1 && m.facts.length === 3 && m.researched.at === '2026-10-06T00:00:00Z'
+      && m.researched.corrected.length === 1 && /merged 2 facts and 1 connection from the older finding alias-river/.test(m.researched.corrected[0]!.what)
+      && same.facts === 0 && same.merged === newest,
+      `added ${out.facts} facts, ${out.connections} connections; ${m.facts.length} facts; correction ${m.researched.corrected?.[0]?.what}`);
+  }
 }

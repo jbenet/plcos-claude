@@ -45,6 +45,12 @@ types, source kinds and capacity bands):
 `version` is the latest amendment, as a string. `detail` keys: `company`, `fund`, `legal_name`,
 `former_name`, `acquirer`, `as_of`, and a year, round or amount as written.
 
+**A new reading adds to the old one (7 Oct 2026).** When an LP already has a finding, under its key or an alias,
+read it first and carry forward every fact and connection the new reading doesn't contradict, with its own source;
+drop one only when a page now says otherwise, and say which in `coverage.note`. The 30 Sep–7 Oct refreshes replaced
+older findings instead, and lost the only evidence of some LPs' own money (angel checks, holdings), which flipped them
+from angel to operator. `scripts/enrich-merge-findings.ts` merges what those refreshes dropped, as a dated correction.
+
 SPV stance (27 Sep 2026): `spv_appetite` is `does`, `does-not` or `unknown`, with a quote for either of the
 first two; `spv_deals` is the least number of SPV or co-investment deals the source shows, a whole number,
 with a quote naming the deals where it can. The import maps both onto the LP's SPV stance, below a person's
