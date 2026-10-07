@@ -253,6 +253,23 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
       + `all: ${everyOne.status} ${((everyOne.json?.data?.rows ?? []) as CRow[]).map((r) => r.vehicle).filter((v, i, a) => a.indexOf(v) === i).join()}; MCP equal ${JSON.stringify(lightMcp.data?.rows) === JSON.stringify(lRows)}${lightMcp.error ? ` (${lightMcp.error.slice(0, 120)})` : ''}; `
       + `same ${JSON.stringify(lSame.json?.data)}; quiet ${lQuiet.json?.data?.rows?.length}; moved ${lMoved.json?.data?.version === lVersion ? 'SAME VERSION' : 'new version'}; since ${(lSince.json?.data?.rows ?? []).length} rows; outside ${lOutside.status}; POST ${proposeStill.status}`);
 
+    // ── Affinity's own addresses (7 Oct 2026: contacts were empty on every queue row) ─────────────
+    const affLp = await entity('Invented V3 LP Affinity Person', 'person');
+    const pAff = await pursuit(affLp, V1.id, 'selected');
+    await db.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by) values ('affinity', 'person:990001', $1, 'props')`, [affLp]);
+    for (const [at, primary] of [['2026-09-01', 'old@invented-affinity.example'], ['2026-10-01', 'primary@invented-affinity.example']] as const) {
+      await db.query(`insert into sources.raw_record (source, kind, source_id, payload_hash, payload, fetched_at) values ('affinity', 'person', '990001', $1, $2::jsonb, $3)`,
+        [`props-v3-aff-${at}`, JSON.stringify({ id: 990001, type: 'external', firstName: 'Invented', primaryEmailAddress: primary, emailAddresses: [primary, 'second@invented-affinity.example', 'not an address'] }), at]);
+    }
+    await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'Second@invented-affinity.example', 'props-desk-v3-research', current_date, 'medium')`, [affLp]);
+    const affRow = ((await rest(oneTok, 'contacts', { vehicle: V1.slug })).json?.data?.rows ?? []).find((r: { pursuitId: string }) => r.pursuitId === pAff);
+    const affOutside = ((await rest(twoTok, 'queue', { vehicle: V2.slug })).text ?? '');
+    const affEmails = (affRow?.contacts ?? []).map((c: { email: string; source: string }) => `${c.email}:${c.source}`);
+    check('Outreach desk v3: an LP\'s addresses include the ones Affinity holds for the person (latest record, primary first, after any claim, the same address once, source affinity, unconfirmed); never a malformed one',
+      affEmails.join() === 'Second@invented-affinity.example:research,primary@invented-affinity.example:affinity'
+      && (affRow?.contacts ?? []).every((c: { confirmedAt: string | null }) => c.confirmedAt === null) && !affOutside.includes('invented-affinity'),
+      `${JSON.stringify(affEmails)}`);
+
     // ── Ask history ───────────────────────────────────────────────────────────────────────
     const lastOn = thisQuarter.toISOString().slice(0, 10);
     check('Outreach desk v3: asksThisQuarter counts the intro asks made to that person this calendar quarter (not last quarter\'s, not one never made), and lastAsk says when and whether they replied, from the mail trace',
