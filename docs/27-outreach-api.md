@@ -450,7 +450,13 @@ vehicle (or on every vehicle the token reads), in one page:
 
 All need `outreach:write`. Over REST a refusal is `{ error }` with 400 (input), 403 (scope, access), 404 (not yours, or
 no such), 409 (a rule refused: nothing was written), 422 (the service refused) or 429 (rate); over MCP it is an error
-result with the same message and, since 5 Oct 2026, the same code in `_meta.status` (reads too):
+result with the same message and, since 5 Oct 2026, the same code in `_meta.status` (reads too).
+
+**Rate (7 Oct 2026).** Every REST answer, reads and writes, carries `X-RateLimit-Limit-Day` and
+`X-RateLimit-Remaining-Day`: the token's calls a day and what is left today (UTC); MCP and REST calls share it. A 429 is
+either the minute's limit (`Retry-After: 60`) or the day's: "This token's budget of N calls today is spent. It refills
+at midnight UTC." with `Retry-After` the seconds until midnight UTC. Each token has its own budget, so a second token
+for testing does not spend the first's.
 
 ```json
 { "isError": true, "content": [{ "type": "text", "text": "No vehicle \"spv-other\" among yours." }], "_meta": { "status": 404 } }

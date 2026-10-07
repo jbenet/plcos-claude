@@ -166,6 +166,18 @@ export async function outreachReadProperties(check: Check, db: Db) {
     && !pre.headers.get('access-control-allow-credentials') && allowed.status === 200 && allowed.headers.get('access-control-allow-origin') === 'https://desk.example',
     `evil: ${evil.status}, preflight ${evilPre.status}; same origin: ${same.status}; allowlisted preflight ${pre.status} → ${pre.headers.get('access-control-allow-origin')}, credentials ${pre.headers.get('access-control-allow-credentials') ?? 'none'}`);
 
+  // ── The daily budget, said on every answer (JuanMail, 7 Oct 2026) ─────────────────────────
+  const { createMcpToken } = await import('../../modules/platform');
+  const { OUTREACH_READ: READ } = await import('../../lib/outreach/scopes');
+  const small = (await createMcpToken(juan, { label: 'props outreach daily budget', tools: [READ], vehicles: null, callsPerDay: 2, days: 30 }, db)).secret;
+  const b1 = await call(small, 'vehicles'), b2 = await call(small, 'vehicles'), b3 = await call(small, 'vehicles');
+  const retry = Number(b3.headers.get('retry-after'));
+  check('Outreach API: every answer says the token\'s calls left today; the daily-budget 429 names the day and its Retry-After runs to midnight UTC (over a minute), not 60 s',
+    b1.status === 200 && b1.headers.get('x-ratelimit-limit-day') === '2' && b1.headers.get('x-ratelimit-remaining-day') === '1'
+      && b2.headers.get('x-ratelimit-remaining-day') === '0' && b3.status === 429 && /today/.test(b3.json?.error ?? '')
+      && b3.headers.get('x-ratelimit-remaining-day') === '0' && retry > 0 && retry <= 86_400 && (retry > 60 || new Date().getUTCHours() === 23),
+    `${b1.status} ${b1.headers.get('x-ratelimit-remaining-day')}, ${b2.status} ${b2.headers.get('x-ratelimit-remaining-day')}, ${b3.status} "${b3.json?.error}" Retry-After ${b3.headers.get('retry-after')}`);
+
   // ── Audit and the device ──────────────────────────────────────────────────────────────
   const audits = await db.query<{ op: string; outcome: string; via: string }>(`select detail->>'tool' op, detail->>'outcome' outcome, detail->>'via' via
     from platform.audit_log where action = 'mcp.call' and detail->>'via' = 'rest' and actor_id in ($1, $2, $3)`, [juan.id, gpFund.id, viewer.id]);
