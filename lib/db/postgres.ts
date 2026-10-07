@@ -81,5 +81,6 @@ export async function openPostgres(url: string, options: PostgresOptions = {}): 
       } finally { client.release(discard); }
     },
     async close() { await (closing ??= pool.end()); },
+    poolState: () => ({ total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount }),
   };
 }
