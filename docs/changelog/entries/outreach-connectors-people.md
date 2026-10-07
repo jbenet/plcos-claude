@@ -15,3 +15,7 @@ scored 0 while reaching 2–11 LPs, and the first call for a vehicle ran out of 
   5,418-LP vehicle (`scripts/connectors-perf.ts`). Cached routes are kept per day, so they all went cold at midnight;
   the server now runs the route warm-up when the day changes (`lib/route-day-warm.ts`, `ROUTE_WARM=0` turns it off).
   On invented data a plan with warm routes covers about 45 LPs a second against 15 cold.
+
+**Later the same day (09:40Z):** with imports moving the revision, several background plans ran at once, one per vehicle
+and caller, and took the server from pages and pushes (connectors 35 s, a sync push cancelled). Plans now run one at a
+time, at the route warm-up's background database priority, and give way to requests between batches.

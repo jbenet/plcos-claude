@@ -116,9 +116,10 @@ export interface Candidate extends ResearchIdentity {
   /**
    * Context or corrections from the team, newest first (issue 0016): their own words about this LP,
    * which the strategy workflow reads above the research and the notes' readings. `at` is the full
-   * time, so a strategy written before it is stale (isStale).
+   * time, so a strategy written before it is stale (isStale). `vehicle` is the slug of the vehicle the
+   * note was written from, or null for a note about the LP as a whole (contextAtFor).
    */
-  context: Array<{ at: string; by: string | null; text: string }>;
+  context: Array<{ at: string; by: string | null; text: string; vehicle?: string | null }>;
   /**
    * Do-not-approach instructions on file (rule 8), list marks included: a blanket one rules them out
    * of any plan, one through a connector rules out that route. The instruction's words stay in the
@@ -207,9 +208,10 @@ async function researchSnapshot() {
     ...emailRecords.map(r => ({ ...r.payload as object, type: 'email' })),
   ], roster.map(t => ({ ...t, affinityEmail: init?.team.find(m => m.handle === t.handle)?.affinityEmail })), affinityUsers.map(r => r.payload));
   const readings = await readingsFor(ids);
-  const context = await db.query<{ entity_id: string; at: Date | string; by: string | null; body: string }>(
-    `select identity.canonical_entity_id(n.entity_id)::text as entity_id, n.created_at as at, u.name as by, n.body
+  const context = await db.query<{ entity_id: string; at: Date | string; by: string | null; body: string; vehicle: string | null }>(
+    `select identity.canonical_entity_id(n.entity_id)::text as entity_id, n.created_at as at, u.name as by, n.body, v.slug as vehicle
        from research.note n left join platform.app_user u on u.id = n.author_id
+       left join platform.vehicle v on v.id::text = n.data->>'vehicleId'
       where n.kind = 'context' and identity.canonical_entity_id(n.entity_id) = any($1::uuid[])
       order by n.created_at desc`, [ids]);
   const restrictions = (await listRestrictions({ includeListMarks: true })).filter((r) => ids.includes(r.entityId));
@@ -329,7 +331,7 @@ async function researchSnapshot() {
       restrictions: restrictions.filter((r) => r.entityId === ent.entity_id)
         .map((r) => ({ scope: r.scope, connector: r.connectorName, channel: r.channel })),
       context: context.filter((c) => c.entity_id === ent.entity_id)
-        .map((c) => ({ at: new Date(c.at).toISOString(), by: c.by, text: c.body })),
+        .map((c) => ({ at: new Date(c.at).toISOString(), by: c.by, text: c.body, vehicle: c.vehicle })),
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
   const sentOn = new Map<string, number>();
@@ -392,7 +394,7 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   const team = await db.query<{ handle: string; name: string; role: string; style: string | null; samples: string[] | null }>(
     `select u.handle, u.name, u.role, v.style, v.samples from platform.app_user u left join email.voice v on v.user_id = u.id
       where u.active order by u.name`);
-  await writeFile(join(dir, 'vehicles.json'), JSON.stringify(await db.query('select slug, name from platform.vehicle')) + '\n', 'utf8');
+  await writeFile(join(dir, 'vehicles.json'), JSON.stringify(await db.query('select slug, name, kind::text as kind from platform.vehicle')) + '\n', 'utf8');
   await writeFile(join(dir, 'team.json'), JSON.stringify(team.map((u) => ({
     handle: u.handle, name: u.name, role: u.role,
   })), null, 1) + '\n', 'utf8');

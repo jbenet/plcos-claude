@@ -8,7 +8,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config/deployment';
 import { check, type Finding } from '../lib/enrich/schema';
-import { CAPACITY_EVIDENCE, gates, isStale, nextOverLimit, nextTooLong, type Strategy } from '../lib/enrich/strategy';
+import { CAPACITY_EVIDENCE, contextAtFor, gates, isStale, nextOverLimit, nextTooLong, type Strategy } from '../lib/enrich/strategy';
 import type { Path } from '../lib/enrich/connect';
 import { connectionIdentityProblems, readPathRecords, type LocatedRecord } from '../lib/enrich/connection-check';
 import { checkedStrategyFiles, nameMention, type CheckVehicle } from '../lib/enrich/strategy-check';
@@ -274,7 +274,7 @@ async function main() {
     const key = record.candidateKey;
     if (x.made?.at) madeAt.set(`${record.vehicle}:${key}`, x.made.at);
     const cand = candsByKey.get(key);
-    if ((x as Strategy).made && isStale(x as Strategy, findings.get(key), cand ? cand.money : undefined, best.get(key) ?? null, cand?.context?.[0]?.at ?? null)) stale++;
+    if ((x as Strategy).made && isStale(x as Strategy, findings.get(key), cand ? cand.money : undefined, best.get(key) ?? null, contextAtFor(cand?.context, record.vehicle), vehicles.find((v) => v.slug === record.vehicle)?.kind ?? null)) stale++;
     // A firm-level strategy repeats its lead's ask and dates (s13): stale once the lead is rewritten.
     const pin = (x as Strategy).made?.inputs?.lead;
     const lead = pin ? { ...pin, key: keyByFile.get(`${record.vehicle}:${pin.key}`) ?? resolveKey({ key: pin.key }) ?? pin.key } : null;

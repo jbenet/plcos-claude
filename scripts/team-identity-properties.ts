@@ -52,6 +52,25 @@ export async function teamIdentityProperties(check: Check, db: Db) {
       first === 1 && second === 0 && audit.length === 1 && audit[0]?.detail.previousName === 'Invented R.'
       && (await db.one<{ name: string }>('select name from platform.app_user where id=$1', [user]))?.name === roster[0]!.name,
       'Explicit handle; original display retained in audit; unchanged replay writes nothing.');
+    if (db.kind === 'postgres') {
+      // 7 Oct 2026: the network rebuild runs the roster inside its long transaction. A row lock on the
+      // account that conflicts with a foreign-key check held every insert naming that person (a push's
+      // record, an audit row) past its statement timeout.
+      let inserted = false, detail = 'not reached';
+      await db.transaction(async (tx) => {
+        await syncTeamRoster(tx, roster);
+        try {
+          await db.transaction(async (other) => {
+            await other.exec("set local lock_timeout = '2s'");
+            await other.query(`insert into platform.audit_log(actor_id,action,subject_type,detail) values($1,'props.audit_during_roster','props','{}'::jsonb)`, [user]);
+            throw new Error('rollback');
+          });
+        } catch (e) { inserted = (e as Error).message === 'rollback'; detail = (e as Error).message.slice(0, 120); }
+        throw new Error('rollback roster');
+      }).catch((e) => { if ((e as Error).message !== 'rollback roster') throw e; });
+      check('TEAMIDENT roster sync inside an open transaction leaves inserts naming the account unblocked',
+        inserted, inserted ? 'Another connection inserted a row referencing the account while the roster transaction was open.' : detail);
+    }
     // Restore a different spelling to prove the explicit source handle, not name equality, merges.
     await db.query("update identity.entity set display_name='Invented alternate spelling' where entity_id=$1", [staff]);
     const evidence = [{ source: 'warehouse', sourceId: source, teamReferences: [`app_user:${handle}`] }];
