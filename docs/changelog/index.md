@@ -276,3 +276,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Bay Area towns and state codes count as the US for the counsel gate](entries/us-places.md)
 - [Connector rounds named by their author stale nothing; leads with no strategy get re-pinned](entries/lead-orphans.md)
 - [A placeholder organisation joins nobody as colleagues](entries/placeholder-orgs.md)
+- [A tie between two LPs no longer moves a strategy's best-path pin; alias findings count in triage](entries/pin-our-side.md)

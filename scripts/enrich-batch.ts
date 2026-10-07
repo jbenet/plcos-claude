@@ -28,7 +28,7 @@ import { candidateKey } from '../lib/enrich/candidate-key';
 import type { Candidate } from '../lib/enrich/candidates';
 import { norm } from '../lib/enrich/connect';
 import { pagesOnly, type Finding } from '../lib/enrich/schema';
-import { contextAtFor, gates, isStale, nextOverLimit, versionBefore, type Strategy } from '../lib/enrich/strategy';
+import { bestTiers, contextAtFor, gates, isStale, nextOverLimit, versionBefore, type Strategy } from '../lib/enrich/strategy';
 import type { Path } from '../lib/enrich/connect';
 import type { Triage } from '../lib/enrich/triage';
 
@@ -132,11 +132,12 @@ async function main() {
   const rank = (c: Candidate) => (STATUS[c.pursuits[0]?.status ?? ''] ?? 9) * 10 + (LANE[triage.get(c.key)?.lane ?? ''] ?? 4);
 
   const best = new Map<string, 'A' | 'B' | 'C' | 'D'>();
-  for (const l of lines(await readFile(join(dir, 'connections.jsonl'), 'utf8').catch(() => ''))) {
-    const p = JSON.parse(l) as Path;
+  const paths = lines(await readFile(join(dir, 'connections.jsonl'), 'utf8').catch(() => '')).map((l) => JSON.parse(l) as Path);
+  for (const p of paths) {
     const cur = best.get(p.lp);
     if (!cur || p.tier < cur) best.set(p.lp, p.tier);
   }
+  const pinTiers = bestTiers(paths);
   const flagged = (c: Candidate) => {
     const s = strategies.get(c.key);
     return Boolean(s && (versionBefore(s.made.version, '1.3') || nextOverLimit(s) || gates(s, c, findings.get(c.key), best.get(c.key) ?? null).length));
@@ -158,7 +159,7 @@ async function main() {
     const engaged = ['discussing', 'committed'].includes(c.pursuits[0]?.status ?? '');
     const eligible = Boolean(resolved || engaged || triage.get(c.key)?.lane === 'warm now');
     if (only) return only.has(c.key) && Boolean(s || eligible);
-    if (s) return isStale(s, f, c.money, best.get(c.key) ?? null, contextAtFor(c.context, vehicleOf(s.ask?.vehicle)?.slug), vehicleOf(s.ask?.vehicle)?.kind ?? null) || (revise && flagged(c));
+    if (s) return isStale(s, f, c.money, pinTiers(c.key), contextAtFor(c.context, vehicleOf(s.ask?.vehicle)?.slug), vehicleOf(s.ask?.vehicle)?.kind ?? null) || (revise && flagged(c));
     // Discussing or committed: a strategy from our records even without a resolved finding — a
     // firm's lead can be one of them (v03's learning).
     return !revise && eligible;

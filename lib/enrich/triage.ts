@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { candidateKey } from './candidate-key';
 import type { Candidate } from './candidates';
 import type { Path } from './connect';
 import { pagesOnly, type Finding } from './schema';
@@ -57,9 +58,13 @@ export async function triage(dir: string, now = new Date(), input?: Candidate[])
   const findingByKey = new Map<string, Finding>();
   /** What each finding says about domains that don't work, kept to test against the domains on file. */
   const domainTalk = new Map<string, string>();
+  // A finding filed under an alias (an older key, a research name) counts for its candidate (7 Oct 2026: such LPs read
+  // researched: false).
+  const aliases: Record<string, string> = JSON.parse(await readFile(join(dir, 'entity-keys.json'), 'utf8').catch(() => '{}'));
   for (const f of (await readdir(join(dir, 'raw')).catch(() => [])).filter((x) => x.endsWith('.json')).sort()) {
     try {
-      const x = JSON.parse(await readFile(join(dir, 'raw', f), 'utf8')) as Finding;
+      const read = JSON.parse(await readFile(join(dir, 'raw', f), 'utf8')) as Finding;
+      const x = { ...read, key: candidateKey(read, candidates, aliases, read) ?? read.key };
       if (x.identity.match === 'confirmed' || x.identity.match === 'probable') findingByKey.set(x.key, x);
       // A work domain the research found dead (s15): our mailings there may have bounced.
       const said = [x.coverage?.note ?? '', ...(x.coverage?.notFound ?? []), ...(x.profile?.cautions ?? []), x.identity.basis].join(' ');
