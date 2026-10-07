@@ -1,6 +1,7 @@
 import { Pool, types, type QueryResult } from 'pg';
 import { TooManyRows, type Db, type Queryable } from './index';
 import { timeQuery } from './timing';
+import { memoRead } from './read-memo';
 
 export interface PostgresOptions {
   /** GUESS — 20 s foreground budget, matching the PGlite queue deadline. Workers use 0. */
@@ -47,9 +48,10 @@ export async function openPostgres(url: string, options: PostgresOptions = {}): 
   // Idle connection failures must not become unhandled EventEmitter errors. pg removes
   // the failed client; the next query reconnects. No SQL, parameters or URL in this log.
   pool.on('error', () => console.error('[db] idle Postgres connection lost'));
-  const on = (run: (sql: string, params: unknown[]) => Promise<QueryResult | QueryResult[]>): Queryable => {
+  const on = (run: (sql: string, params: unknown[]) => Promise<QueryResult | QueryResult[]>, inTransaction = false): Queryable => {
     const query = async <T>(sql: string, params: unknown[] = []): Promise<T[]> => {
-      const result = await timeQuery(sql, () => run(sql, params));
+      const read = () => timeQuery(sql, () => run(sql, params));
+      const result = await (inTransaction ? read() : memoRead(sql, params, read));
       // PGlite's no-parameter multi-statement query returns the last statement.
       return (Array.isArray(result) ? result.at(-1)?.rows ?? [] : result.rows) as T[];
     };
@@ -72,7 +74,7 @@ export async function openPostgres(url: string, options: PostgresOptions = {}): 
       let discard = false;
       try {
         await client.query('begin');
-        const result = await fn(on((sql, params) => client.query(sql, params)));
+        const result = await fn(on((sql, params) => client.query(sql, params), true));
         await client.query('commit');
         return result;
       } catch (error) {

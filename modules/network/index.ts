@@ -4,7 +4,7 @@ export type {
 export { CLUE_KINDS, TIER_MEANING, VERDICT_LABEL } from './types';
 export { edgeCoverage, entityForUser, enumeratePaths, enumeratePathsFromSources, listEdges, listEdgesForEntities, edgeCountsForEntities, listEdgeSummariesForEntities, tierCounts, routeSources } from './repo';
 export { planRoutes, selectTopRoutes, routeGraph, summarizeRoutes, summarizePipelineRoutes } from './service';
-export { edgeGrade, tieWarmth, tieDetailsProblems, edgeWarmth, routeWarmth, foldRoutes, warmthReader, scoreRoute, routeStrength, investmentTie } from './warmth';
+export { edgeGrade, tieWarmth, tieDetailsProblems, edgeWarmth, routeWarmth, foldRoutes, warmthReader, scoreRoute, routeStrength, investmentTie, WARMTH_LABEL } from './warmth';
 export type { TieDetails, Warmth, WarmthKind, RouteScoreContext } from './warmth';
 export { buildNetwork, reviewEdge, type BuildCounts } from './build';
 export type { Component, Influence, Standing, StandingDomain } from './influence';

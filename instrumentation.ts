@@ -6,6 +6,7 @@
  *   timer (lib/feedback-ingest.ts).
  * - The page warm-up opens the main pages at start and again after the data changes, so the first
  *   click after a write does not rebuild the shared page caches (lib/page-warm.ts).
+ * - The route warm-up runs again when the day changes, since cached routes are kept per day (lib/route-day-warm.ts).
  * All loaded lazily and never awaited, so a slow disk or a busy database cannot hold the start.
  */
 export async function register() {
@@ -17,6 +18,7 @@ export async function register() {
   void import('./lib/activity').then((m) => m.startActivity()).catch(() => undefined);
   void import('./lib/feedback-ingest').then((m) => m.startIngest()).catch(() => undefined);
   void import('./lib/page-warm').then((m) => m.startPageWarm()).catch(() => undefined);
+  void import('./lib/route-day-warm').then((m) => m.startRouteDayWarm()).catch(() => undefined);
   // The mailguard token from the Keychain is checked for drafts-only once at start (docs/25 §12); the log says which, never the token.
   void import('./lib/connectors/mailguard').then((m) => m.checkAtStart()).catch(() => console.error('[mailguard] Could not check the token at start.'));
   // A deployed server that is not set up yet prints its one-time /setup code (docs/deploy/railway.md §3).

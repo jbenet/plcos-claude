@@ -63,6 +63,12 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
   await edge(first, passedLp); await edge(first, otherLp);
   const pNear = await pursuit(near, V1.id, 'selected'), pDeep = await pursuit(deep, V1.id, 'discussing'), pDirect = await pursuit(direct, V1.id, 'new');
   const pPassed = await pursuit(passedLp, V1.id, 'passed'), pOther = await pursuit(otherLp, V2.id, 'selected');
+  // An organisation on routes (7 Oct 2026): the team and an LP share it, and through it the team reaches a person who
+  // knows another LP. It links people; it is never a connector, and the person past it is the first hop.
+  const firm = await entity('Invented V3 Shared Firm'), pastFirm = await entity('Invented V3 Past The Firm', 'person');
+  const viaFirm = await entity('Invented V3 LP Via Firm'), viaPerson = await entity('Invented V3 LP Via Firm Person');
+  await edge(juanE, firm); await edge(firm, viaFirm); await edge(firm, pastFirm); await edge(pastFirm, viaPerson);
+  await pursuit(viaFirm, V1.id, 'selected'); await pursuit(viaPerson, V1.id, 'selected');
 
   // Asks to the first hop: one made this quarter, one last quarter (answered), one proposed and never made; none to the second.
   const q0 = quarterStart(new Date());
@@ -127,6 +133,16 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
       `${listed.status}: first hop ${cA?.asFirstHop}/${cA?.asDeeperHop} (direct ${cA?.reachableDirectly}, ${cA?.lps} LPs); second ${cB?.asFirstHop}/${cB?.asDeeperHop} (direct ${cB?.reachableDirectly}); `
       + `firstHopOnly: ${firstOnly.status}, second ${fB ? 'LISTED' : 'left out'}, first ${fA?.lps} LPs; MCP equal ${JSON.stringify(firstOnlyMcp.data) === JSON.stringify(firstOnly.json?.data)}`);
 
+    const pf = find(listed.json?.data, pastFirm), pfFirst = find(firstOnly.json?.data, pastFirm);
+    check('Outreach desk v3: an organisation on a route (a shared firm, the fund itself) is never listed as a connector; the first person past it is the first hop; a connector says the hop that caps their best route',
+      listed.status === 200 && find(listed.json.data, firm) === undefined && find(firstOnly.json?.data, firm) === undefined
+      && pf?.lps === 1 && pf.asFirstHop === 1 && pf.reachableDirectly === true && pfFirst?.lps === 1
+      // The hop that caps their best route's score is said: here every hop is a colleague tie, worked together.
+      && (cA as any)?.bestWeakestHop?.kind === 'worked_together' && typeof (cA as any)?.bestWeakestHop?.warmth === 'number',
+      `firm listed: ${find(listed.json?.data, firm) ? 'YES' : 'no'} (first-hop only: ${find(firstOnly.json?.data, firm) ? 'YES' : 'no'}); `
+      + `the person past it: ${pf ? `${pf.lps} LP, first hop ${pf.asFirstHop}, direct ${pf.reachableDirectly}` : 'NOT LISTED'}, first-hop only ${pfFirst?.lps ?? 'not listed'}; `
+      + `weakest hop ${JSON.stringify((cA as any)?.bestWeakestHop)}`);
+
     // ── A connector's targets: complete, ordered, paged once, authorized ──────────────────────
     type Target = { pursuitId: string; score: number | null; position: string };
     const targets = await rest(oneTok, 'connectors', { vehicle: V1.slug, entityId: first, limit: '500' });
@@ -176,6 +192,25 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
       && replanned.status === 200 && replanned.json.data.unchanged === true,
       `version ${version ?? 'NONE'}; same: ${same.status} ${JSON.stringify(same.json?.data)}; other: ${other.status} ${other.json?.data?.version === version ? 'same version' : 'DIFFERENT'}; `
       + `targets: ${JSON.stringify(sameTargets.json?.data)}; after a write: ${JSON.stringify(replanned.json?.data)?.slice(0, 120)}`);
+
+    // ── Shared reads in a long plan, and the daily route warm-up (7 Oct 2026) ─────────────────────
+    const { withReadMemo } = await import('../../lib/db/read-memo');
+    const { dayDecision } = await import('../../lib/route-day-warm');
+    const { getDb } = await import('../../lib/db');
+    const live = await getDb();
+    const revisionSql = 'select revision::text from network.read_revision where singleton';
+    const inside = await withReadMemo(async () => {
+      const before = (await live.one<{ revision: string }>(revisionSql))!.revision;
+      await db.query(`update platform.vehicle set sort_order = sort_order where id = $1`, [V2.id]);
+      const after = (await live.one<{ revision: string }>(revisionSql))!.revision;
+      const other = await live.query<{ n: number }>('select count(*)::int n from platform.vehicle');
+      return { before, after, other: other.length };
+    });
+    const liveAfter = (await live.one<{ revision: string }>(revisionSql))!.revision;
+    check('Outreach desk v3: inside a long plan a revision read is shared (it reads as at the plan\'s start), outside it reads live; the route warm-up runs when the day changes, never at the first look',
+      inside.before === inside.after && liveAfter !== inside.before && inside.other === 1
+      && dayDecision(null, '2026-10-07') === 'record' && dayDecision('2026-10-07', '2026-10-07') === 'wait' && dayDecision('2026-10-07', '2026-10-08') === 'warm',
+      `inside: ${inside.before} then ${inside.after}; outside after the write: ${liveAfter}; day decisions ${dayDecision(null, 'd')}/${dayDecision('d', 'd')}/${dayDecision('d', 'e')}`);
 
     // ── Ask history ───────────────────────────────────────────────────────────────────────
     const lastOn = thisQuarter.toISOString().slice(0, 10);

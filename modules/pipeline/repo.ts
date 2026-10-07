@@ -1,4 +1,5 @@
 import { getDb, type Queryable } from '@/lib/db';
+import { memoizable } from '@/lib/db/read-memo';
 import type {
   CloseState, CloseTrack, CommitmentEvent, CommitmentStep, Exposure, Instrument, PoolCheck, Track, VehicleTotals,
 } from './types';
@@ -35,11 +36,14 @@ const toExposure = (r: Row): Exposure => ({
   source: r.source, sourceAsOf: r.source_as_of ? new Date(r.source_as_of) : null, claim: r.claim,
 });
 
+// Route overlays read every exposure per target; a long plan shares one read (lib/db/read-memo.ts).
+const ALL_EXPOSURES = memoizable(`${SELECT} order by v.sort_order, x.amount desc`);
+
 export async function listExposures(vehicleId?: string | null): Promise<Exposure[]> {
   const db = await getDb();
   const rows = vehicleId
     ? await db.query<Row>(`${SELECT} and x.vehicle_id = $1 order by x.amount desc`, [vehicleId])
-    : await db.query<Row>(`${SELECT} order by v.sort_order, x.amount desc`);
+    : await db.query<Row>(ALL_EXPOSURES);
   return rows.map(toExposure);
 }
 
