@@ -138,8 +138,8 @@ export function contextAtFor(context: Array<{ at: string; vehicle?: string | nul
 export function correctionReach(c: { by?: string | null; what?: string | null }): 'none' | 'spv' | 'all' {
   const by = c.by ?? '', what = c.what ?? '';
   if (/\bW1c\b/.test(by)) return 'all';
-  // Connector research names itself in its round as often as in its words: "cold1-04", "evening e-2 connection-only".
-  if (/connector evidence|connection-only|sourced ties added/i.test(what) || /\bcold\d+-\d+|connection-only/i.test(by)) return 'none';
+  // Connector research names itself in its round as often as in its words: "cold1-04", "cold1 batch 05", "evening e-2 connection-only".
+  if (/connector evidence|connection-only|sourced ties added/i.test(what) || /\bcold\d|connection-only/i.test(by)) return 'none';
   if (/\bSPV\b/i.test(what) && /append-only|preserved/i.test(what)) return /\b(?:0|no) (?:new )?facts\b/i.test(what) ? 'none' : 'spv';
   return 'all';
 }

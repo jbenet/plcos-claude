@@ -162,7 +162,7 @@ export async function strategyRegressionProperties(check: Check) {
     const spvFacts = after('Invented worker, SPV round a-1', 'Append-only SPV appetite pass spv-a-1: 2 facts and 3 public queries; prior facts preserved.');
     const spvNone = after('Invented worker, SPV round b-2', 'SPV-b-2 append-only review; 0 new facts; original facts/profile preserved.');
     const ties = after('Invented worker, cold1-04', 'cold1-04 appended connector evidence, exact search queries and coverage; existing facts preserved.');
-    const tiesByRound = after('Invented worker, cold1-07', 'Round seven: three sourced relationships recorded.');
+    const tiesByRound = after('Invented worker, cold1 batch 07', 'Round seven: three sourced relationships recorded.');
     const w1c = after('claude (sub-agent), W1c', 'Append-only SPV note preserved, 2 facts moved to cautions.');
     const results = {
       spvOnFund: isStale({ made }, spvFacts, undefined, undefined, null, 'fund'),
