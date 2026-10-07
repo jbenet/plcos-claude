@@ -219,6 +219,7 @@ export async function strategyRegressionProperties(check: Check) {
     const ties = after('Invented worker, cold1-04', 'cold1-04 appended connector evidence, exact search queries and coverage; existing facts preserved.');
     const tiesByRound = after('Invented worker, cold1 batch 07', 'Round seven: three sourced relationships recorded.');
     const w1c = after('claude (sub-agent), W1c', 'Append-only SPV note preserved, 2 facts moved to cautions.');
+    const merge = after('rule (scripts/enrich-merge-findings.ts)', 'merged 4 facts and 0 connections from the older finding alias-x (2026-09-20) that this one no longer carried');
     const results = {
       spvOnFund: isStale({ made }, spvFacts, undefined, undefined, null, 'fund'),
       spvOnSpv: isStale({ made }, spvFacts, undefined, undefined, null, 'spv'),
@@ -226,9 +227,10 @@ export async function strategyRegressionProperties(check: Check) {
       spvNoFacts: isStale({ made }, spvNone, undefined, undefined, null, 'spv'),
       ties: isStale({ made }, ties, undefined, undefined, null, 'spv') || isStale({ made }, tiesByRound, undefined, undefined, null, 'fund'),
       w1cOnFund: isStale({ made }, w1c, undefined, undefined, null, 'fund'),
+      merge: isStale({ made }, merge, undefined, undefined, null, 'fund'),
     };
-    check('A correction stales only the strategies it bears on: SPV appends with facts the SPV ones, appends with no fact or only ties none, the W1c fact check all',
-      !results.spvOnFund && results.spvOnSpv && results.spvUnknownVehicle && !results.spvNoFacts && !results.ties && results.w1cOnFund,
+    check('A correction stales only the strategies it bears on: SPV appends with facts the SPV ones, appends with no fact, only ties or a merge of older findings none, the W1c fact check all',
+      !results.spvOnFund && results.spvOnSpv && results.spvUnknownVehicle && !results.spvNoFacts && !results.ties && results.w1cOnFund && !results.merge,
       JSON.stringify(results));
   }
 

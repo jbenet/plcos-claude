@@ -10,3 +10,9 @@ import keeps claims from every finding file.
 newest lacks is added with its own source, recorded as a dated correction, and the profile is left for W5 to read
 against them. An older finding joins only by key or alias, never by name, and only as a confirmed or probable match.
 W1 now reads an LP's existing finding first and carries its facts forward.
+
+**The merge stales nothing on its own.** Its first run (274 LPs, 1,237 facts and 76 connections added) reopened about
+300 strategies written that morning, whose writers had the older findings in front of them, and stale went from 325 to
+650. A merge correction now reaches no strategy (`correctionReach`), and the checker lists the strategies written before
+their finding's merge with `--merged`, so the ones written from a refresh that missed the facts can be picked out and
+rewritten.
