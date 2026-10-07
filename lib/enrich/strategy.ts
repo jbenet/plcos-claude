@@ -218,15 +218,18 @@ export function hasCapacityEvidence(basis: string, today = new Date()): boolean 
  * before any fund material (W5 1.5). A place not stated is not "outside"; the US territories are in
  * (a reviser found Puerto Rico flagged as abroad), and so is "U.S." however it is spaced.
  */
-export const IN_US = /(?:^|[^a-z])u\.\s?s\.(?:\s?a\.?)?(?![a-z])|\b(united states|usa|puerto rico|guam|virgin islands|northern mariana islands|american samoa|alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawai['ʻ’]?i|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|district of columbia|san francisco|los angeles|boston|chicago|seattle|miami|austin|denver)\b/i;
-export const outsideUs = (where: string | null | undefined): boolean => Boolean(where?.trim()) && !IN_US.test(where ?? '');
+export const IN_US = /(?:^|[^a-z])u\.\s?s\.(?:\s?a\.?)?(?![a-z])|\b(united states|usa|puerto rico|guam|virgin islands|northern mariana islands|american samoa|alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawai['ʻ’]?i|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|district of columbia|san francisco|los angeles|boston|chicago|seattle|miami|austin|denver|silicon valley|bay area|palo alto|menlo park|mountain view|sunnyvale|cupertino|san jose|santa clara|san mateo|redwood city|woodside|atherton|portola valley|los altos|los gatos|saratoga|burlingame|hillsborough|berkeley|oakland|sausalito|mill valley|tiburon|belvedere|san diego|la jolla|santa monica|malibu|beverly hills|pasadena|irvine|nyc|manhattan|brooklyn|greenwich|houston|dallas|atlanta|philadelphia|pittsburgh|nashville|phoenix|scottsdale|salt lake city|minneapolis|detroit|baltimore|raleigh|durham|boulder|aspen|jackson hole|palm beach|new orleans)\b/i;
+/** "Palo Alto, CA": a state's postal code after a comma, upper case, for codes no other country's place is written with. */
+const US_STATE_CODE = /,\s*(?:CA|NY|MA|WA|TX|FL|IL|NJ|CT|NC|VA|MD|GA|PA|AZ|UT|MN|MI|OH|NV|DC|TN|WY)\b/;
+const inUs = (where: string) => IN_US.test(where) || US_STATE_CODE.test(where);
+export const outsideUs = (where: string | null | undefined): boolean => Boolean(where?.trim()) && !inUs(where ?? '');
 /**
  * Outside the US when some source places them and none places them in it (v13a1): a finding's short
  * "Palo Alto" beside our record's "Palo Alto, California, United States" is the US.
  */
 export const placedOutsideUs = (places: Array<string | null | undefined>): boolean => {
   const said = places.filter((p): p is string => Boolean(p?.trim()));
-  return said.length > 0 && !said.some((p) => IN_US.test(p));
+  return said.length > 0 && !said.some((p) => inUs(p));
 };
 
 /** A step that parks the LP with no date to look again (the critic's fourth round). */
