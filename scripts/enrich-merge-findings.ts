@@ -6,14 +6,14 @@
  *   DATA_PROFILE=real npx tsx scripts/enrich-merge-findings.ts [--dry] [--list <file>] [--redo <raw before the merge>]
  *
  * `--list` writes the merged keys, one per line, for the push and the W5 queue. `--redo` takes the raw folder as it was
- * before the first merge and restores each fact-checked file that merge wrote, with a dated note (7 Oct 2026: a value
- * W1c had cut came back through the merge).
+ * before a merge and restores each revised file (fact-checked or W1-revised) that merge wrote, with a dated note
+ * (7 Oct 2026: a value W1c had cut, then one a W1q revision had dropped, came back through the merge).
  */
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '../config/deployment';
 import { candidateKey } from '../lib/enrich/candidate-key';
-import { factChecked, mergeFindings } from '../lib/enrich/merge-findings';
+import { mergeFindings, revised } from '../lib/enrich/merge-findings';
 import { check, type Finding } from '../lib/enrich/schema';
 
 async function main() {
@@ -47,15 +47,16 @@ async function main() {
     const by = 'rule (scripts/enrich-merge-findings.ts)';
     let out: ReturnType<typeof mergeFindings>;
     if (redo) {
-      // Only a fact-checked file the first merge wrote: rebuilt from its copy before the merge, with a dated note either way.
+      // Only a revised (fact-checked or W1-revised) file a merge wrote: rebuilt from its copy before the merge, with a dated note either way.
       const mergedBefore = (newest!.f.researched.corrected ?? []).some((c) => /enrich-merge-findings/.test(c.by ?? ''));
-      if (!mergedBefore || !factChecked(newest!.f)) continue;
+      if (!mergedBefore || !revised(newest!.f)) continue;
       const before = JSON.parse(await readFile(join(redo, newest!.file), 'utf8').catch(() => 'null')) as Finding | null;
       if (!before) { console.log(`  no copy before the merge for ${newest!.file}`); continue; }
+      if (JSON.stringify(before) === JSON.stringify(newest!.f)) continue; // That merge didn't write it.
       const again = mergeFindings(before, older.map((o) => o.f), now, by);
       const merged = again.merged === before ? { ...before, researched: { ...before.researched, corrected: [...(before.researched.corrected ?? [])] } } : again.merged;
       merged.researched.corrected = [...(merged.researched.corrected ?? []), { at: now, by,
-        what: 'redone: a finding the W1c fact check cut takes no facts by rule; the merge into it is undone' }];
+        what: 'redone: a finding a fact check or a W1 revision corrected takes no facts by rule; the merge into it is undone' }];
       out = { merged, facts: again.facts, connections: again.connections };
     } else {
       out = mergeFindings(newest!.f, older.map((o) => o.f), now, by);
@@ -67,7 +68,7 @@ async function main() {
     lps++; facts += out.facts; connections += out.connections; merged.push(key);
   }
   if (listFile && !dry) await writeFile(listFile, merged.join('\n') + '\n');
-  console.log(`merge findings${redo ? ' (redo of fact-checked files)' : ''}: ${lps} LPs ${redo ? 'rewritten' : 'merged'}, ${facts} facts and ${connections} connections added${dry ? ' (dry run, nothing written)' : ''} · ${refused} refused by the validator · ${unreadable} files skipped (unreadable or invalid) · ${[...groups.values()].filter((g) => g.length > 1).length} LPs with more than one finding`);
+  console.log(`merge findings${redo ? ' (redo of revised files)' : ''}: ${lps} LPs ${redo ? 'rewritten' : 'merged'}, ${facts} facts and ${connections} connections added${dry ? ' (dry run, nothing written)' : ''} · ${refused} refused by the validator · ${unreadable} files skipped (unreadable or invalid) · ${[...groups.values()].filter((g) => g.length > 1).length} LPs with more than one finding`);
 }
 
 main();

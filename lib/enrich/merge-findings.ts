@@ -12,6 +12,13 @@ import type { Finding } from './schema';
  * cut only in words, so a checked finding is left for W1's revision pass, which reads both and carries forward by hand.
  */
 export const factChecked = (f: Finding) => (Array.isArray(f.researched.corrected) ? f.researched.corrected : []).some((c) => /\bW1c\b/.test(c.by ?? ''));
+/**
+ * A finding a person or a pass corrected after it was written, the W1c check or a W1 revision alike, takes nothing by
+ * rule (7 Oct 2026: a fact a W1q revision had dropped on purpose came back from an older finding). Its own corrections
+ * say what was cut only in words; the revision carried forward what it kept. Only this script's merges don't count.
+ */
+export const revised = (f: Finding) => (Array.isArray(f.researched.corrected) ? f.researched.corrected : [])
+  .some((c) => !/enrich-merge-findings/.test(c.by ?? ''));
 
 export function mergeFindings(newest: Finding, older: Finding[], at: string, by: string): { merged: Finding; facts: number; connections: number } {
   const text = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v ?? '')).toLowerCase().replace(/\s+/g, ' ').trim();
@@ -21,7 +28,7 @@ export function mergeFindings(newest: Finding, older: Finding[], at: string, by:
   const haveConns = new Set((newest.connections ?? []).map(connKey));
   const facts = [...(newest.facts ?? [])], connections = [...(newest.connections ?? [])];
   const from: string[] = [];
-  if (factChecked(newest)) return { merged: newest, facts: 0, connections: 0 };
+  if (revised(newest)) return { merged: newest, facts: 0, connections: 0 };
   for (const o of [...older].sort((a, b) => b.researched.at.localeCompare(a.researched.at))) {
     let took = false;
     for (const f of o.facts ?? []) if (!haveFacts.has(factKey(f))) { haveFacts.add(factKey(f)); facts.push(f); took = true; }
