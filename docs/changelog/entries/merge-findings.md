@@ -21,3 +21,8 @@ rewritten.
 narrowed to a region) came back from the LP's unchecked twin finding. A finding with a W1c correction now merges only
 facts from findings W1c also checked, and `--redo <raw before the merge>` rebuilds each fact-checked file the first run
 wrote, with a dated note.
+
+**A fact-checked finding takes nothing by rule.** After the redo, a "does SPVs" fact W1c had cut on the newer finding
+came back from a checked older one. The correction log says what W1c cut only in words, so a finding with a W1c
+correction is no longer merged into at all; W1's revision pass, which reads both, carries facts forward by hand.
+`--redo` restores each fact-checked file the merge wrote to its copy before the merge, with a dated note.

@@ -6,8 +6,8 @@
  *   DATA_PROFILE=real npx tsx scripts/enrich-merge-findings.ts [--dry] [--list <file>] [--redo <raw before the merge>]
  *
  * `--list` writes the merged keys, one per line, for the push and the W5 queue. `--redo` takes the raw folder as it was
- * before the first merge and redoes each fact-checked file that merge wrote, without the facts of unchecked findings
- * (7 Oct 2026: the first run let a value W1c had cut come back from its unchecked twin).
+ * before the first merge and restores each fact-checked file that merge wrote, with a dated note (7 Oct 2026: a value
+ * W1c had cut came back through the merge).
  */
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -55,7 +55,7 @@ async function main() {
       const again = mergeFindings(before, older.map((o) => o.f), now, by);
       const merged = again.merged === before ? { ...before, researched: { ...before.researched, corrected: [...(before.researched.corrected ?? [])] } } : again.merged;
       merged.researched.corrected = [...(merged.researched.corrected ?? []), { at: now, by,
-        what: 'redone: a finding the W1c fact check cut no longer takes facts from one it did not check' }];
+        what: 'redone: a finding the W1c fact check cut takes no facts by rule; the merge into it is undone' }];
       out = { merged, facts: again.facts, connections: again.connections };
     } else {
       out = mergeFindings(newest!.f, older.map((o) => o.f), now, by);
