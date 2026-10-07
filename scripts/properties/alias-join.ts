@@ -150,10 +150,13 @@ export async function aliasJoinProperties(check: Check) {
     const out = mergeFindings(newest, [older], '2026-10-07T12:00:00Z', 'props');
     const m = out.merged as unknown as { facts: Array<{ value: unknown }>; connections: unknown[]; researched: { at: string; corrected: Array<{ what: string }> } };
     const same = mergeFindings(newest, [newest], '2026-10-07T12:00:00Z', 'props');
-    check('An older finding\'s facts and connections the newest lacks are merged in, once, with a dated correction; the newest stays the record',
+    const w1c = (f: unknown) => ({ ...(f as object), researched: { ...(f as { researched: object }).researched, corrected: [{ at: '2026-10-05T00:00:00Z', by: 'claude (sub-agent), W1c', what: 'narrowed a location' }] } }) as never;
+    const cutTarget = mergeFindings(w1c(newest), [older], '2026-10-07T12:00:00Z', 'props').facts;
+    const checkedSource = mergeFindings(w1c(newest), [w1c(older)], '2026-10-07T12:00:00Z', 'props').facts;
+    check('An older finding\'s facts and connections the newest lacks are merged in, once, with a dated correction; the newest stays the record; a fact-checked finding takes nothing from an unchecked one',
       out.facts === 2 && out.connections === 1 && m.facts.length === 3 && m.researched.at === '2026-10-06T00:00:00Z'
       && m.researched.corrected.length === 1 && /merged 2 facts and 1 connection from the older finding alias-river/.test(m.researched.corrected[0]!.what)
-      && same.facts === 0 && same.merged === newest,
+      && same.facts === 0 && same.merged === newest && cutTarget === 0 && checkedSource === 2,
       `added ${out.facts} facts, ${out.connections} connections; ${m.facts.length} facts; correction ${m.researched.corrected?.[0]?.what}`);
   }
 }
