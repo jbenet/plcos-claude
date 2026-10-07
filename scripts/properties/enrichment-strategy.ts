@@ -155,6 +155,23 @@ export async function strategyRegressionProperties(check: Check) {
       after && !before, `correction before the strategy: ${before ? 'stale' : 'fresh'}; after it: ${after ? 'stale' : 'fresh'}`);
   }
   {
+    // 7 Oct 2026: a new C tie between two LPs moved the best path from none to C and staled strategies whose route
+    // nothing had changed. The pin holds when it matches the best over every path or over the paths from our side.
+    const { bestTiers, isStale } = await import('../../lib/enrich/strategy');
+    const pinned = (bestPath: 'A' | 'B' | 'C' | null) => ({ made: { at: '2026-10-06T12:00:00Z', by: 'claude', workflow: 'W5', version: '1.18', inputs: { finding: null, bestPath } } }) as never;
+    const lpOnly = bestTiers([{ lp: 'x', tier: 'C', other: { type: 'lp' } }]);
+    const fromTeam = bestTiers([{ lp: 'x', tier: 'C', other: { type: 'team' } }]);
+    const upgraded = bestTiers([{ lp: 'x', tier: 'C', other: { type: 'lp' } }, { lp: 'x', tier: 'B', other: { type: 'ours' } }]);
+    const r = {
+      noneThenLpTie: isStale(pinned(null), null, undefined, lpOnly('x')),
+      cFromLpTieStill: isStale(pinned('C'), null, undefined, lpOnly('x')),
+      noneThenTeamTie: isStale(pinned(null), null, undefined, fromTeam('x')),
+      cThenOursB: isStale(pinned('C'), null, undefined, upgraded('x')),
+    };
+    check('A best-path pin moves only when a tier from our side changes: a new tie between two LPs leaves it standing',
+      !r.noneThenLpTie && !r.cFromLpTieStill && r.noneThenTeamTie && r.cThenOursB, JSON.stringify(r));
+  }
+  {
     // 7 Oct 2026: append-only SPV passes and appended ties marked most strategies stale with nothing to rewrite.
     const { isStale } = await import('../../lib/enrich/strategy');
     const made = { at: '2026-10-06T12:00:00Z', by: 'claude', workflow: 'W5', version: '1.18', inputs: { finding: '2026-09-24T09:00:00Z' } } as never;

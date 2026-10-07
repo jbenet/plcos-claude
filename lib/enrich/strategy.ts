@@ -118,6 +118,20 @@ export const nextOverLimit = (s: Pick<Strategy, 'next'>) => `${s.next.what} — 
 /** The close track as a strategy pins it (W5 v1.5): "<track> <state> <amount>", or null. */
 export const moneyKey = (m: { track: string; state: string; amount: number } | null | undefined) => (m ? `${m.track} ${m.state} ${m.amount}` : null);
 
+type Tier = 'A' | 'B' | 'C' | 'D';
+/**
+ * The best tier per LP over every path, and over the paths that start from our side (the team, our organizations,
+ * our backers), for the best-path pin (isStale). A path to another LP is proximity between two LPs.
+ */
+export function bestTiers(paths: Iterable<{ lp: string; tier: Tier; other: { type: string } }>): (lp: string) => Array<Tier | null> {
+  const all = new Map<string, Tier>(), ours = new Map<string, Tier>();
+  for (const p of paths) {
+    if (!all.has(p.lp) || p.tier < all.get(p.lp)!) all.set(p.lp, p.tier);
+    if (p.other.type !== 'lp' && (!ours.has(p.lp) || p.tier < ours.get(p.lp)!)) ours.set(p.lp, p.tier);
+  }
+  return (lp) => [all.get(lp) ?? null, ours.get(lp) ?? null];
+}
+
 /**
  * The newest team context that bears on a strategy for `vehicle` (a slug): a note about the LP as a
  * whole, or one written from that vehicle. A note written from another vehicle's pursuit is that
@@ -152,7 +166,12 @@ export function isStale(
   s: Pick<Strategy, 'made'>,
   finding: { researched: { at: string; corrected?: Array<{ at: string; by?: string | null; what?: string | null }> } } | null | undefined,
   money?: { track: string; state: string; amount: number } | null,
-  bestPath?: 'A' | 'B' | 'C' | 'D' | null,
+  /**
+   * The best tier on file, or the tiers the pin may match (bestPaths): over every path, and over the paths that start
+   * from our side. 7 Oct 2026: a new C between two LPs (same employer, co-investors) moved "none" to C and staled
+   * strategies whose route nothing had changed; a pin matching either still holds.
+   */
+  bestPath?: 'A' | 'B' | 'C' | 'D' | null | Array<'A' | 'B' | 'C' | 'D' | null>,
   /** The team's newest context on this LP (issue 0016): a strategy written before it is due a re-think. */
   contextAt?: string | null,
   /** The strategy's vehicle kind ('fund', 'spv', …); unknown counts an SPV-only correction (correctionReach). */
@@ -163,7 +182,7 @@ export function isStale(
   if (pinned && 'money' in pinned && money !== undefined && (pinned.money ?? null) !== moneyKey(money)) return true;
   // The best path on file when it was written (v1.5, v01's learning): a route resting on a path W3
   // no longer finds needs rewriting.
-  if (pinned && 'bestPath' in pinned && bestPath !== undefined && (pinned.bestPath ?? null) !== bestPath) return true;
+  if (pinned && 'bestPath' in pinned && bestPath !== undefined && ![bestPath].flat().includes(pinned.bestPath ?? null)) return true;
   if (!finding) return false;
   // A correction made to the finding after the strategy was written — the fact check, a band sweep —
   // keeps `researched.at`, so the pin still matches while the strategy may repeat what was cut (W5

@@ -288,7 +288,8 @@ not a good email", when the angle was pasted into a draft).
 
 A strategy is stale, and is written again, when its finding is newer than `made.inputs.finding` or was
 corrected after `made.at` (an append-only SPV pass counts only for SPV strategies and only when it added facts;
-appended ties count for none, the best-tier pin covers them); when the close track or the best tier among its paths differs from its pin;
+appended ties count for none, the best-tier pin covers them); when the close track or the best tier among its paths differs from its pin (the pin holds when it matches the
+best over every path or over the paths from our side, so a new tie between two LPs alone moves nothing);
 when the team's context is newer than it (a note written from another vehicle's pursuit counts only for
 that vehicle's strategy; a note about the LP as a whole counts for every one); for a firm-level strategy, when its lead has been rewritten
 since `made.inputs.lead.at`; and, for a lead, when a colleague's finding is newer than it (a filing on

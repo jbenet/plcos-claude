@@ -52,4 +52,21 @@ export async function triageAccuracyProperties(check: Check) {
       && !problems.some(p => p.file === 'beta/lp.json'),
       'Legacy display name resolves to folder slug; same LP in another vehicle remains valid; empty unknown folder, mismatched vehicle and malformed nested files are refused.');
   } finally { await rm(dir, { recursive: true, force: true }); }
+  // 7 Oct 2026: an LP whose finding is filed under an alias read "researched: false" in triage.
+  const aliasDir = await mkdtemp(join(tmpdir(), 'triage-alias-'));
+  try {
+    const { triage } = await import('../../lib/enrich/triage');
+    const key = '44444444-4444-4444-8444-444444444444';
+    await mkdir(join(aliasDir, 'raw'));
+    await writeFile(join(aliasDir, 'entity-keys.json'), JSON.stringify({ 'invented-old-key': key }));
+    await writeFile(join(aliasDir, 'raw', 'invented-old-key.json'), JSON.stringify({ key: 'invented-old-key', name: 'Invented Quill',
+      identity: { match: 'confirmed', basis: 'Invented fixture' }, facts: [], researched: { at: '2026-10-01T00:00:00Z', method: 'search' } }));
+    const candidate = { key, name: 'Invented Quill', type: 'person', org: null, role: null, location: null, domains: [], enriched: {},
+      pursuits: [{ vehicle: 'invented', status: 'selected' }], notes: [], context: [], money: null, restrictions: [],
+      contact: { since: null, earlier: { meetings: 0, first: null, last: null }, meetings: 0, lastTouch: null, lastFromThem: null,
+        awaitingSince: null, read: null, lastTouchChannel: null, groupMeetings: 0, meetingDates: [], recent: [], outreachShared: 0 } };
+    const rows = await triage(aliasDir, new Date('2026-10-07T00:00:00Z'), [candidate as never]);
+    check('TRIAGE a finding filed under an alias counts as research for its candidate',
+      rows.length === 1 && rows[0]!.researched === true, JSON.stringify(rows.map((r) => ({ key: r.key, researched: r.researched }))));
+  } finally { await rm(aliasDir, { recursive: true, force: true }); }
 }
