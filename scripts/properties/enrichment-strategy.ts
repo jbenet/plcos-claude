@@ -155,6 +155,15 @@ export async function strategyRegressionProperties(check: Check) {
       after && !before, `correction before the strategy: ${before ? 'stale' : 'fresh'}; after it: ${after ? 'stale' : 'fresh'}`);
   }
   {
+    // 7 Oct 2026: a step whose date had passed counted as fresh; the checker now counts and lists them.
+    const { stepDue } = await import('../../lib/enrich/strategy');
+    const d = (when: string, made = '2026-09-27T10:00:00Z') => stepDue(when, made)?.toISOString().slice(0, 10) ?? null;
+    const r = { short: d('by Fri 3 Oct'), year: d('Mon 6 Oct 2026'), iso: d('2026-10-06'), us: d('Oct 6, 2026'), nextYear: d('Mon 4 Jan', '2026-12-20T00:00:00Z'), none: d('after the first close') };
+    check('A next step’s date is read from its words, with the year it was written in unless that falls well before the writing',
+      r.short === '2026-10-03' && r.year === '2026-10-06' && r.iso === '2026-10-06' && r.us === '2026-10-06' && r.nextYear === '2027-01-04' && r.none === null,
+      JSON.stringify(r));
+  }
+  {
     // 7 Oct 2026: a new C tie between two LPs moved the best path from none to C and staled strategies whose route
     // nothing had changed. The pin holds when it matches the best over every path or over the paths from our side.
     const { bestTiers, isStale } = await import('../../lib/enrich/strategy');
@@ -167,9 +176,10 @@ export async function strategyRegressionProperties(check: Check) {
       cFromLpTieStill: isStale(pinned('C'), null, undefined, lpOnly('x')),
       noneThenTeamTie: isStale(pinned(null), null, undefined, fromTeam('x')),
       cThenOursB: isStale(pinned('C'), null, undefined, upgraded('x')),
+      noneThenUnresolvedPerson: isStale(pinned(null), null, undefined, bestTiers([{ lp: 'x', tier: 'C', other: { type: 'backer' } }])('x')),
     };
     check('A best-path pin moves only when a tier from our side changes: a new tie between two LPs leaves it standing',
-      !r.noneThenLpTie && !r.cFromLpTieStill && r.noneThenTeamTie && r.cThenOursB, JSON.stringify(r));
+      !r.noneThenLpTie && !r.cFromLpTieStill && r.noneThenTeamTie && r.cThenOursB && !r.noneThenUnresolvedPerson, JSON.stringify(r));
   }
   {
     // 7 Oct 2026: append-only SPV passes and appended ties marked most strategies stale with nothing to rewrite.

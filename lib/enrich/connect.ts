@@ -73,9 +73,10 @@ export const norm = (s: string) => s.toLowerCase().replace(/[’'`]/g, '').repla
 const TOO_COMMON = new Set(['google', 'amazon', 'microsoft', 'meta', 'facebook', 'apple', 'mckinsey', 'goldman sachs', 'morgan stanley', 'jp morgan', 'jpmorgan', 'self employed', 'stealth', 'independent']);
 /**
  * Not a firm but a placeholder for none (7 Oct 2026: individuals sourced on 27 Sep carry "Personal", which gave each
- * about 28 "same firm" ties to unrelated LPs). Read on the normalized name, so "(individual) Jane" is "individual jane".
+ * about 28 "same firm" ties to unrelated LPs; "Personal investing" and "Personal capital / …" too). Read on the normalized
+ * name, so "(individual) Jane" is "individual jane".
  */
-const PLACEHOLDER_ORG = /^(?:personal|self|self employed|independent|individual|individual investor|private|private investor|angel|angel investor|retired|none|n a|na|unknown|tbd)$|^individual\b/;
+const PLACEHOLDER_ORG = /^personal\b|^(?:self|self employed|independent|individual|individual investor|private|private investor|angel|angel investor|retired|none|n a|na|unknown|tbd)$|^individual\b/;
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

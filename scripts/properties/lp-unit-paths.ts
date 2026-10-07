@@ -28,7 +28,7 @@ export function lpUnitPathProperties(check: Check) {
     // 7 Oct 2026: individuals sourced with the placeholder organisation "Personal" were each "same firm" with every other.
     const solo = (n: number, org: string) => ({ ...person(`3333333${n}-3333-4333-8333-333333333333`, `Invented Solo ${n}`), org });
     const sameFirm = (cs: Candidate[]) => run(cs).paths.filter(p => p.kind === 'same_firm').length;
-    const placeholders = sameFirm([solo(1, 'Personal'), solo(2, 'Personal'), solo(3, '(Individual) Investor'), solo(4, '(individual) investor'), solo(5, 'Self')]);
+    const placeholders = sameFirm([solo(1, 'Personal'), solo(2, 'Personal'), solo(3, '(Individual) Investor'), solo(4, '(individual) investor'), solo(5, 'Self'), solo(8, 'Personal investing'), solo(9, 'Personal Capital / angel')]);
     const realFirm = sameFirm([solo(6, 'Invented Lantern Partners'), solo(7, 'Invented Lantern Partners')]);
     check('W3: a placeholder organisation ("Personal", "(Individual)", "Self") joins nobody as colleagues; a real one still does',
       placeholders === 0 && realFirm === 2, `placeholder same-firm paths ${placeholders}; real firm ${realFirm}`);
