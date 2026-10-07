@@ -75,7 +75,7 @@ function queryArgs(url: URL, rename: Record<string, string> = {}): Record<string
   const out: Record<string, unknown> = {};
   for (const [k0, v] of url.searchParams) {
     const k = Object.hasOwn(rename, k0) ? rename[k0]! : k0;
-    out[k] = /^(limit|offset)$/.test(k) && /^\d+$/.test(v) ? Number(v)
+    out[k] = /^(limit|offset|maxWaitMs)$/.test(k) && /^\d+$/.test(v) ? Number(v)
       : /^(includePassed|firstHopOnly)$/.test(k) && /^(1|true|0|false)$/.test(v) ? v === '1' || v === 'true' : v;
   }
   return out;

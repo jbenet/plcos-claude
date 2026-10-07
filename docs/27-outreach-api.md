@@ -329,7 +329,9 @@ the most and best warm routes to a vehicle's open LPs.
   same number the cap and the queue's `ask_count` check use — not a count of every email.
 - **Coverage (rule 7):** `lpsOpen`, `lpsInspected`, `lpsReached`, `complete`. An answer waits for planning up to
   `config.outreach.connectorsBudgetMs` (15 s, GUESS), highest-priority LPs first, and says how far it got; planning carries
-  on after it, so asking again reaches further. `limit` defaults to 20, at most 100.
+  on after it, so asking again reaches further. `maxWaitMs` (0–15000, 7 Oct 2026) waits less: a foreground look answers
+  in that time with what is planned so far (`complete: false`), and planning still carries on. `limit` defaults to 20,
+  at most 100.
 - **Kept, and `ifChanged` (7 Oct 2026):** a vehicle's plan is kept per principal until anything it read changes (a
   pursuit, route, ask, restriction, entity: `network.read_revision`, `network.route_revision`) or the day does, so a
   repeat call takes well under a second once planned. A complete answer carries `version`, a hash of what it says (null
