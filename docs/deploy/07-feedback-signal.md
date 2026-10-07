@@ -60,7 +60,7 @@ Signal off (no token) or a preview copy: 404. Bad signature or expired: 401.
 2. Triage: what is clear and small gets fixed now; what needs Juan's call gets one question in the thread.
 3. Fix on a `claude/<topic>` branch off `claude/main`, gate it, merge and ship per project memory.
 4. Close each issue on the server it came from, with a "Done" note and `closed_at`, through the app or the
-   Admin token (§6: `cloud-feedback.sh status <id> done '**Done (N…).** …'`), never by hand-editing the volume.
+   Admin token (§6: `cloud-feedback.sh close <id> '**Done (N…).** …'`), never by hand-editing the volume.
 5. Reply in the thread: what changed, what waits on Juan. Issue text never goes into git, a PR, a commit
    message or a sub-agent prompt; PRs describe the change, with invented examples.
 
@@ -93,10 +93,12 @@ counts, never issue text; the token dies if its owner stops being an Admin.
 | `GET ?id=0201&file=<path>` | one image the issue lists, and nothing else in the folder |
 | `POST { id, status, note? }` | sets the status (`done` writes `closed_at`); `note` is appended to the body, e.g. `**Done (N123).** …`, which is where the issues page reads "fixed in" |
 
-`scripts/cloud-feedback.sh` wraps each call. The cloud environment carries the token as `PLCOS_ADMIN_TOKEN`
-(an Admin mints it in Preferences → MCP access → "Admin"); the Mac uses its Keychain `push-token`.
+`scripts/cloud-feedback.sh` wraps each call and runs on the Mac, like `cloud-push.sh`, with the Admin token in
+the Keychain (`plcos-railway / push-token`), never printed. `open` lists ids and metadata; `get <ids>` writes each
+issue to `data/real/feedback/<id>.md` with its screenshots beside it, printing only paths; `take <id>` sets it
+`in-progress`; `close <id> '<note>'` sets it `done` with the note.
 
-**Pickup.** One `GET ?view=open` an hour, which costs one small call and stops when the list is empty. When it
-is not, the thread reads those issues by id, sets each it takes to `in-progress` (so the next check does not
-pick it up again), fixes what is clear per §4, and closes it with a note. What needs Juan's call is set to
-`triaged` and asked once in the thread.
+**Pickup.** The Mac's Remote Control session runs `cloud-feedback.sh open` once an hour, which costs one small call
+and stops when the list is empty. When it is not, it runs `get` and `take` for those issues, and the project thread
+fixes what is clear per §4 and closes each with a note. What needs Juan's call stays `in-progress` and is asked
+once in the thread.
