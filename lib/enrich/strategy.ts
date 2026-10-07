@@ -110,6 +110,28 @@ export function versionBefore(v: number | string | null | undefined, than: strin
   return a1 < a2 || (a1 === a2 && b1 < b2);
 }
 
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+/**
+ * The date a next step is due, read from its free-text `when` ("by Fri 3 Oct", "Mon 6 Oct 2026", "2026-10-06"), or
+ * null when it names none. A date with no year takes the year it was written in, or the next when that would put it
+ * more than two months before the writing.
+ */
+export function stepDue(when: string | null | undefined, madeAt: string): Date | null {
+  const text = when ?? '';
+  const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(text);
+  if (iso) return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
+  const m = /\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:,?\s+(\d{4}))?/i.exec(text)
+    ?? /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?/i.exec(text);
+  if (!m) return null;
+  const [day, month] = /^\d/.test(m[1]!) ? [Number(m[1]), m[2]!] : [Number(m[2]), m[1]!];
+  const made = new Date(madeAt);
+  if (Number.isNaN(made.getTime())) return null;
+  const at = (y: number) => new Date(Date.UTC(y, MONTHS.indexOf(month.slice(0, 3).toLowerCase()), day));
+  if (m[3]) return at(Number(m[3]));
+  const same = at(made.getUTCFullYear());
+  return made.getTime() - same.getTime() > 61 * 86_400_000 ? at(made.getUTCFullYear() + 1) : same;
+}
+
 /** The import keeps what, who and when together in 400 characters (W5 v1.3); longer is cut, not refused. */
 export const nextTooLong = (s: Pick<Strategy, 'next'>) => `${s.next.what} — ${s.next.who}, ${s.next.when ?? ''}`.length > 400;
 /** W5 v1.5: one person, one action, a date — under 300 characters with who and when. */
@@ -120,14 +142,16 @@ export const moneyKey = (m: { track: string; state: string; amount: number } | n
 
 type Tier = 'A' | 'B' | 'C' | 'D';
 /**
- * The best tier per LP over every path, and over the paths that start from our side (the team, our organizations,
- * our backers), for the best-path pin (isStale). A path to another LP is proximity between two LPs.
+ * The best tier per LP over every path, and over the paths that start from our side (the team, our organizations),
+ * for the best-path pin (isStale). A path to another LP is proximity between two LPs. "backer" is left out too: W3
+ * gives that type to any person a finding names who resolves to nobody of ours (7 Oct 2026: an uncontacted prospect
+ * set an our-side C), as well as to the firms that backed us, which an LP working there is only near.
  */
 export function bestTiers(paths: Iterable<{ lp: string; tier: Tier; other: { type: string } }>): (lp: string) => Array<Tier | null> {
   const all = new Map<string, Tier>(), ours = new Map<string, Tier>();
   for (const p of paths) {
     if (!all.has(p.lp) || p.tier < all.get(p.lp)!) all.set(p.lp, p.tier);
-    if (p.other.type !== 'lp' && (!ours.has(p.lp) || p.tier < ours.get(p.lp)!)) ours.set(p.lp, p.tier);
+    if ((p.other.type === 'team' || p.other.type === 'ours') && (!ours.has(p.lp) || p.tier < ours.get(p.lp)!)) ours.set(p.lp, p.tier);
   }
   return (lp) => [all.get(lp) ?? null, ours.get(lp) ?? null];
 }
