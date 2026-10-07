@@ -129,10 +129,11 @@ export async function enrichmentStrategyProperties(check: Check) {
     const added = repinBlockers({ made }, pinnedF, newerF({ facts: [fact('Founded Invented Labs')] }));
     const band = repinBlockers({ made }, pinnedF, newerF({ profile: { investorType: 'vc_partner', capacity: { band: '$5–25M' } } }));
     const cut = repinBlockers({ made }, pinnedF, newerF({ researched: { at: '2026-10-06T00:00:00Z', corrected: [{ at: '2026-10-06T00:00:00Z', by: 'W1c', what: 'cut 2 facts' }] } }));
+    const oddValue = repinBlockers({ made }, { facts: [{ field: 'capacity', value: 5 as never }] }, { researched: { at: '2026-10-06T00:00:00Z' }, facts: [{ field: 'capacity', value: 5 as never }] }).length === 0;
     const tieOnly = repinBlockers({ made }, pinnedF, newerF({ researched: { at: '2026-10-06T00:00:00Z', corrected: [{ at: '2026-10-06T00:00:00Z', by: 'cold1-04', what: 'connector evidence' }] } })).length === 0;
     check('A newer finding is re-pinned only when it adds no fact, type or band and no correction bears on the strategy',
-      thin && added.join() === '1 new fact' && band.join() === 'a different capacity band' && cut.join() === 'a correction since it was written' && tieOnly,
-      `thin ${thin}; added ${added.join()}; band ${band.join()}; cut ${cut.join()}; tie only ${tieOnly}`);
+      thin && added.join() === '1 new fact' && band.join() === 'a different capacity band' && cut.join() === 'a correction since it was written' && tieOnly && oddValue,
+      `thin ${thin}; added ${added.join()}; band ${band.join()}; cut ${cut.join()}; tie only ${tieOnly}; a number value read ${oddValue}`);
   }
 }
 
