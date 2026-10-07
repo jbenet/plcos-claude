@@ -79,6 +79,10 @@ async function prospectsProblems(bundle: PushBundle, db: Db, caller: SyncCaller)
   return out;
 }
 
+/** Whether a finding carries a W1c correction (researched.corrected, by "… W1c"), which may have cut facts. */
+const cutByW1c = (finding: unknown) => ((finding as { researched?: { corrected?: Array<{ by?: unknown }> } })?.researched?.corrected ?? [])
+  .some((c) => typeof c?.by === 'string' && /\bW1c\b/.test(c.by));
+
 /** Earlier versions of a finding the server held and set aside when a push or cloud run replaced it. */
 async function earlierVersions(enrich: string, key: string): Promise<Array<{ facts?: unknown[] }>> {
   const runs = await readdir(join(enrich, 'inbox')).catch(() => [] as string[]);
@@ -103,6 +107,12 @@ async function serverProblems(bundle: PushBundle, enrich: string): Promise<Rejec
         // (pushed earlier, 7 Oct 2026), the review is checked against a version the server set aside under
         // inbox/<run>/replaced/; one it actually held is enough.
         if (live.length && (await earlierVersions(enrich, row.key)).some((v) => !factReviewProblems(row, v).length)) continue;
+        // A finding pushed already corrected has no set-aside version (7 Oct 2026). Its W1c correction log says facts
+        // were cut but not how many, so a review grading more facts than it now has passes when that is its only fault.
+        if (live.length === 1 && cutByW1c(original) && /^grades (\d+) facts; the finding has (\d+)$/.test(live[0]!)) {
+          const [, graded, has] = /^grades (\d+) facts; the finding has (\d+)$/.exec(live[0]!)!;
+          if (Number(graded) > Number(has)) continue;
+        }
         problems.push(...live.map((p) => `row ${r + 1}: ${p} (against the server's finding)`));
       }
       if (problems.length) out.push({ path: f.path, problems });

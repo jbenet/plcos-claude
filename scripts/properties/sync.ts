@@ -205,6 +205,15 @@ export async function syncProperties(check: Check, db: Db) {
     const firstC = await accept(push.secret, { workflow: 'W1c', files: [{ path: 'fact-review-92a.jsonl', content: reviewC(2) }, { path: 'raw/sync-c.json', content: cut }] });
     const laterC = await accept(push.secret, { workflow: 'W1c', files: [{ path: 'fact-review-92b.jsonl', content: reviewC(2) }] });
     const neverC = await accept(push.secret, { workflow: 'W1c', files: [{ path: 'fact-review-92c.jsonl', content: reviewC(3) }] });
+    // Pushed already corrected, with no set-aside version: more grades than facts pass only after a W1c correction.
+    const cutD = finding('sync-d', '2026-09-30', { researched: { at: '2026-09-30', by: 'props', workflow: 'W1', version: '1.50', corrected: [{ at: '2026-10-02', by: 'claude (sub-agent), W1c', what: 'invented cut' }] } });
+    const plainE = finding('sync-e', '2026-09-30');
+    await accept(push.secret, { workflow: 'W1', files: [{ path: 'raw/sync-d.json', content: cutD }, { path: 'raw/sync-e.json', content: plainE }] });
+    const reviewOf = (key: string, n: number) => reviewC(n).map((r) => ({ ...r, key }));
+    const cutOk = await accept(push.secret, { workflow: 'W1c', files: [{ path: 'fact-review-93a.jsonl', content: reviewOf('sync-d', 2) }] });
+    const plainNo = await accept(push.secret, { workflow: 'W1c', files: [{ path: 'fact-review-93b.jsonl', content: reviewOf('sync-e', 2) }] });
+    check('SYNC push: a review grading more facts than a finding pushed already W1c-corrected passes; without a W1c correction it is refused',
+      cutOk.status === 201 && plainNo.status === 422, `${cutOk.status} ${plainNo.status}`);
     check('SYNC push: a review of a finding already corrected on the server is checked against the version it set aside, and a count no version had is refused, by a 1-based row',
       w1C.status === 201 && firstC.status === 201 && laterC.status === 201 && neverC.status === 422 && String(neverC.body.rejected?.[0]?.problems).includes('row 1:'),
       `W1 ${w1C.status}, first review ${firstC.status}, later review ${laterC.status}, wrong count ${neverC.status}: ${String(neverC.body.rejected?.[0]?.problems).slice(0, 200)}`);
