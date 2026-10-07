@@ -278,3 +278,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [A placeholder organisation joins nobody as colleagues](entries/placeholder-orgs.md)
 - [A tie between two LPs no longer moves a strategy's best-path pin; alias findings count in triage](entries/pin-our-side.md)
 - [The our-side tier counts only the team and our organizations; "Personal …" is a placeholder; overdue steps are counted](entries/pin-team-only.md)
+- [Lapsed parks look again by rule](entries/lapsed-parks.md)

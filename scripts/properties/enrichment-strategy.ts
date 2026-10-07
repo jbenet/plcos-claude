@@ -111,6 +111,15 @@ export async function enrichmentStrategyProperties(check: Check) {
     check('Outside the US, a strategy names counsel; in the US, its territories, or placed nowhere it needn’t; assets under advice are clients’ money; a capacity fact is evidence; a park carries a date',
       abroad && !withCounsel && !home && !nowhere && !territory && !shortPlace && !town && toronto && advised && factBacked && parks,
       `abroad without counsel flagged: ${abroad}; with counsel flagged: ${withCounsel}; in the US flagged: ${home}; a territory or "U.S." flagged: ${territory}; placed nowhere flagged: ${nowhere}; a band on assets under advice flagged: ${advised}; a band on a capacity fact accepted: ${factBacked}; parks read right: ${parks}`);
+    // A lapsed park (7 Oct 2026: 1,502 steps overdue): a park whose look-again, or step date, has passed — not a step a person owes.
+    const { lapsedPark } = await import('../../lib/enrich/strategy');
+    const made = { at: '2026-09-28T10:00:00Z', by: 'claude', workflow: 'W5' as const, version: '1.10' };
+    const today = new Date('2026-10-07');
+    const lapsed = (what: string, when: string, lookAgain?: string) => lapsedPark({ next: { what, who: 'Juan', when, lookAgain }, made }, today);
+    const lapses = lapsed('Park him until the search pass.', 'by Fri 3 Oct') && lapsed('Waits for the fund to close.', 'Mon 6 Jan 2027', 'Fri 3 Oct')
+      && !lapsed('Park him until the search pass.', 'Mon 4 Jan 2027') && !lapsed('Answer her email with the first-close date.', 'by Fri 3 Oct')
+      && !lapsed('Park him; look again later.', 'when the fund closes');
+    check('A lapsed park is a park whose look-again or step date has passed; a person\'s overdue step is not one', lapses, `lapsed parks read right: ${lapses}`);
   }
 }
 

@@ -277,12 +277,23 @@ export const placedOutsideUs = (places: Array<string | null | undefined>): boole
 };
 
 /** A step that parks the LP with no date to look again (the critic's fourth round). */
+/** A park as a word, or worded without it: "waits for the search pass", "hold until the fund closes". */
+const PARK = /\bpark(?:ed)?\b(?!\s+(?:page|domain|site|website))|\bwait(?:s|ing)?\s+(?:for|until)\b|\bhold(?:s|ing)?\s+(?:until|till)\b/i;
+export const parks = (what: string | null | undefined) => PARK.test(what ?? '');
+
+/** A park whose own date has passed: its look-again, or its step's date when it has no look-again. */
+export function lapsedPark(s: Pick<Strategy, 'next' | 'made'>, today: Date): boolean {
+  if (!parks(s.next?.what)) return false;
+  const due = stepDue(s.next.lookAgain ?? s.next.when, s.made.at);
+  return !!due && due.getTime() < today.getTime();
+}
+
 export function parksWithoutDate(s: { next?: { what: string; lookAgain?: string | null } }): boolean {
   const what = s.next?.what ?? '';
   // "park" or "parked" as a word — not "a parked page" (a dead domain, W1 1.25) nor "Parker" (W5 after
   // the search pass: a domain note in a next step read as a park with no date).
   // …and a park worded without the word: "waits for the search pass", "hold until the fund closes".
-  const at = what.search(/\bpark(?:ed)?\b(?!\s+(?:page|domain|site|website))|\bwait(?:s|ing)?\s+(?:for|until)\b|\bhold(?:s|ing)?\s+(?:until|till)\b/i);
+  const at = what.search(PARK);
   if (at < 0 || s.next?.lookAgain) return false;
   // The park's own date: introduced by "to", "until", "till" or "look again" — not any date later in
   // the sentence (W5 after the search pass: "park until the search pass; the Form D was filed 3 Jun

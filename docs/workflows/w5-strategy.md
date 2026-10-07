@@ -251,6 +251,9 @@ its `made.at`. `made.revised` lists each change made by rule after writing, with
   event made possible. `scripts/enrich-look-again.ts` sets a missing date by rule — the 2027 list on 4
   Jan 2027, "not now" on 5 Apr 2027, guesses for a person to change — in `made.revised`, without moving
   `made.at`, so a colleague's pin stays valid.
+  `--lapsed` re-dates a park whose look-again (or, without one, its step date) has passed, to the same
+  rule dates and in the same way; `--skip <file>` leaves the stale list alone, since those LPs have
+  something new and are rewritten instead. A step that is not a park stays overdue: a person owes it.
 
 ## The first message (1.11)
 
