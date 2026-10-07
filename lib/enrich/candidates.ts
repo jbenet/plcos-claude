@@ -1,4 +1,5 @@
 import { importEntityKeys } from './entity-keys';
+import { exportAliases } from './candidate-key';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -391,8 +392,7 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   // personal address (Juan, 24 Sep: nothing that identifies us goes into a request).
   const db = await getDb();
   // Use the importer's ambiguity and canonical-identity rules; batch cutting stays file-only.
-  const candidateKeys = new Set(set.map(c => c.key));
-  const aliases = [...await importEntityKeys(db)].filter(([, key]) => candidateKeys.has(key));
+  const aliases = exportAliases(await importEntityKeys(db), set);
   await writeFile(join(dir, 'entity-keys.json'), JSON.stringify(Object.fromEntries(aliases)) + '\n', 'utf8');
   // The voice rides on the same query, so the export's query count stays bounded (triage-export property).
   const team = await db.query<{ handle: string; name: string; role: string; style: string | null; samples: string[] | null }>(
