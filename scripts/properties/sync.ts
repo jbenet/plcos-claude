@@ -64,8 +64,9 @@ export async function syncProperties(check: Check, db: Db) {
     // 7 Oct 2026: a server copy whose log was one entry, not a list, made every push touching it a 500.
     const one = writtenAt({ made: { at: '2026-10-01', revised: { at: '2026-10-05' } } }), text = writtenAt({ made: { at: '2026-10-01', revised: 'invented' } });
     const list = writtenAt({ researched: { at: '2026-10-01', corrected: [{ at: '2026-10-03' }] } });
-    check('SYNC push: a file is dated by its log whether the log is a list or one entry, and a log of the wrong kind dates nothing',
-      one === Date.parse('2026-10-05') && text === Date.parse('2026-10-01') && list === Date.parse('2026-10-03'), `one entry ${one}; text ${text}; list ${list}`);
+    const ahead = writtenAt({ made: { at: new Date(Date.now() + 86_400_000).toISOString(), revised: [{ at: '2026-10-05' }] } });
+    check('SYNC push: a file is dated by its log whether the log is a list or one entry, a log of the wrong kind dates nothing, and a date in the future counts for nothing',
+      one === Date.parse('2026-10-05') && text === Date.parse('2026-10-01') && list === Date.parse('2026-10-03') && ahead === Date.parse('2026-10-05'), `one entry ${one}; text ${text}; list ${list}; ahead ${ahead}`);
   }
   const base = 'http://localhost:3119';
   const get = (secret: string | null, query = '', headers: Record<string, string> = {}) =>
