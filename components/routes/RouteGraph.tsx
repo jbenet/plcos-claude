@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Route } from '@/modules/network/client';
 import { VERDICT_LABEL } from '@/modules/network/client';
 import { Pager, usePage } from '@/components/floor/Paging';
-import { routeGraphArcLabels, routeGraphArcs, routeGraphLayout, routeReading } from './route-display';
+import { orgDisplayGroups, routeGraphArcLabels, routeGraphArcs, routeGraphLayout, routeReading } from './route-display';
 
 /** Shared entity nodes; every drawn route has an adjacent keyboard-accessible disclosure. */
-export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: allSelected, routeIds: allRouteIds, portfolioFounders = {}, pageSize = 8, anchors: allAnchors, label, centerOn }: {
+export function RouteGraph({ routes: recordRoutes, fromName, targetName, selected: allSelected, routeIds: allRouteIds, portfolioFounders = {}, pageSize = 8, anchors: allAnchors, label, centerOn }: {
   routes: Route[]; fromName: string; targetName: string; selected: number; routeIds?: number[]; portfolioFounders?: Record<string, string[]>;
   /** Routes drawn per page; the "through" map draws routes in and ties out together. */
   pageSize?: number;
@@ -18,6 +18,8 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
   /** Entity the map scrolls to first, when it is wider than its box. */
   centerOn?: string;
 }) {
+  // Near-identical organisation names share one node (feedback 0123); records and routes stay as they are.
+  const { routes: allRoutes, combined, groupOf } = useMemo(() => orgDisplayGroups(recordRoutes), [recordRoutes]);
   const paging = usePage(allRoutes.map((route, index) => ({ route, index })), pageSize, Math.floor(allSelected / pageSize));
   useEffect(() => { paging.setPage(Math.floor(allSelected / pageSize)); }, [allSelected, paging.setPage, pageSize]);
   const routes = paging.rows.map(x => x.route);
@@ -43,7 +45,7 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
   const arcs = routeGraphArcs(routes);
   const labels = routeGraphArcLabels(arcs, nodes, height);
   const positions = new Map(nodes.map((n) => [n.id, n]));
-  const centerX = centerOn ? positions.get(centerOn)?.x : undefined;
+  const centerX = centerOn ? positions.get(groupOf.get(centerOn) ?? centerOn)?.x : undefined;
   useEffect(() => {
     const box = scrollRef.current;
     if (box && centerX !== undefined) box.scrollLeft = Math.max(0, centerX - box.clientWidth / 2);
@@ -56,7 +58,7 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
     onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt({ x: e.clientX - r.left, y: e.clientY - r.top, w: r.width }); }} onKeyDown={(e) => { if (e.key === 'Escape') setHovered(null); }}>
     <Pager {...paging} setPage={page => { paging.setPage(page); setHovered(null); }} label="routes in map; full comparison below" />
     <div className="route-map-scroll" ref={scrollRef}>
-      <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-label={`${label ?? `Routes to ${targetName}`}. One node per entity and one scored arc per directed relationship. Possible matching identity records share a node; source records remain separate. Full details in the comparison list.`}>
+      <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-label={`${label ?? `Routes to ${targetName}`}. One node per entity and one scored arc per directed relationship. Possible matching identity records, and organisations with near-identical names, share a node; source records remain separate. Full details in the comparison list.`}>
         <defs><marker id={arrowId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="context-stroke" /></marker></defs>
         {arcs.map((arc) => {
           const ri = arc.routeIndices.includes(selected) ? selected : arc.routeIndices[0]!;
@@ -84,9 +86,10 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
           </a>;
         })}
         {nodes.map((n) => <g key={n.id} data-entity={n.id} data-layer={n.depth} pointerEvents="none">
-          <title>{`${n.name}${portfolioFounders[n.id]?.length ? ` · PLC portfolio founder: ${portfolioFounders[n.id]!.join(', ')}` : ''}`}</title>
+          <title>{`${n.name}${combined.get(n.id) ? ` · one node for ${combined.get(n.id)!.records} organisation records with near-identical names: ${combined.get(n.id)!.names.join(', ')}. The records are not merged.` : ''}${portfolioFounders[n.id]?.length ? ` · PLC portfolio founder: ${portfolioFounders[n.id]!.join(', ')}` : ''}`}</title>
           <circle cx={n.x} cy={n.y} r={portfolioFounders[n.id]?.length ? 7 : 5} fill="var(--surface)" stroke={portfolioFounders[n.id]?.length ? 'var(--green)' : 'var(--ink)'} strokeWidth={2} />
           <text x={n.x} y={n.y - 13} textAnchor="middle" fill="var(--ink)" fontSize="11" fontFamily="var(--sans)" paintOrder="stroke" stroke="var(--surface)" strokeWidth={4}>{n.name}</text>
+          {combined.get(n.id) && !portfolioFounders[n.id]?.length ? <text x={n.x} y={n.y + 22} textAnchor="middle" fill="var(--muted)" fontSize="10" fontFamily="var(--sans)" paintOrder="stroke" stroke="var(--surface)" strokeWidth={4}>{`combines ${combined.get(n.id)!.records} records`}</text> : null}
           {portfolioFounders[n.id]?.length ? <text x={n.x} y={n.y + 22} textAnchor="middle" fill="var(--green)" fontSize="10" fontFamily="var(--sans)" paintOrder="stroke" stroke="var(--surface)" strokeWidth={4}>PLC portfolio founder</text> : null}
         </g>)}
       </svg>
@@ -100,6 +103,6 @@ export function RouteGraph({ routes: allRoutes, fromName, targetName, selected: 
       {activeReading.factors.slice(0, 3).map((f, i) => <p key={i}>{f.label}: {f.value} · {f.basis}</p>)}
       <small>Activate the arc to open a route and its evidence in the list. Escape dismisses this card.</small>
     </div>}
-    <p className="route-map-key">Possible matching records share one node; identities remain unmerged. Hop score /5 first, grade second · one arrow per relationship · thicker = stronger tie · dashed = all routes held or unavailable. Hover or focus an arc for details.</p>
+    <p className="route-map-key">Possible matching records and near-identical organisation names share one node; identities remain unmerged. Hop score /5 first, grade second · one arrow per relationship · thicker = stronger tie · dashed = all routes held or unavailable. Hover or focus an arc for details.</p>
   </div>;
 }

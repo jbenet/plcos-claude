@@ -1,4 +1,4 @@
-import { routePolicyFacts, routeIdentityGroups } from './route-policy';
+import { routePolicyFacts, routeIdentityGroups, routeOrganizations } from './route-policy';
 import { emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
 import { createHash } from 'node:crypto';
 import { config } from '@/config/deployment';
@@ -157,10 +157,10 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
     overlays.set(structural, memo);
   }
   const { carriers, edges: scoreEdges } = memo;
-  const [restrictions, loads, exposures, coverage, sources, policy, identityGroups] = await Promise.all([
+  const [restrictions, loads, exposures, coverage, sources, policy, identityGroups, organizations] = await Promise.all([
     restrictionsFor(search.targetId), connectorLoad(carriers), listExposures(null), edgeCoverage(), listSyncSources(),
     routePolicyFacts([search.targetId, ...structural.nodes.map(n => n.entityId)], selection.vehicleId),
-    routeIdentityGroups(structural.nodes.map(n => n.entityId)),
+    routeIdentityGroups(structural.nodes.map(n => n.entityId)), routeOrganizations(structural.nodes.map(n => n.entityId)),
   ]);
   const contactRestrictions = new Map(await Promise.all([...new Set(structural.candidates.flatMap(c => c.viaContact ? [c.viaContact.entityId] : []))]
     .map(async id => [id, await restrictionsFor(id)] as const)));
@@ -242,6 +242,7 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
   for (const [id, edge] of loaded) fullEdges.set(id, edge);
   for (const route of selected) {
     route.identityGroups = Object.fromEntries([route.fromEntity!, ...route.hops.map(h => h.toEntity)].map(id => [id, identityGroups.get(id) ?? id]));
+    route.organizationIds = [route.fromEntity!, ...route.hops.map(h => h.toEntity)].filter(id => organizations.has(id));
     route.hops = route.hops.map((h) => {
       const edge = fullEdges.get(h.edge.edgeId);
       if (!edge) throw new Error('Route evidence changed while applying live guards; retry with the current network build.');

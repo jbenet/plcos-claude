@@ -194,3 +194,11 @@ export async function routeIdentityGroups(ids: string[]): Promise<Map<string, st
     return [id, topology.group.get(canonical) ?? canonical];
   }));
 }
+
+/** The route's organisation nodes, for display only: the map shows near-identical organisation names as one node
+ * (feedback 0123). Never used to merge records, group policy or deduplicate routes. */
+export async function routeOrganizations(ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const topology = await policyTopology(await getDb());
+  return new Set(ids.filter((id) => topology.organizations.has(topology.canonical.get(id) ?? id)));
+}
