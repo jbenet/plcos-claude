@@ -31,6 +31,9 @@ export const routeRules = {
   'app/api/sync/runs/route.ts#POST': 'sync:push',
   // A vehicle added by an Admin's token (lib/sync/vehicles.ts), the Settings → Vehicles form's own checks.
   'app/api/sync/vehicles/route.ts#POST': 'sync:admin',
+  // An Admin's token queues a research export or a findings import and reads any job's state (lib/sync/jobs.ts).
+  'app/api/sync/jobs/route.ts#POST': 'sync:admin',
+  'app/api/sync/jobs/route.ts#GET': 'sync:admin',
   'app/api/session/route.ts#POST': 'session',
   // Google sign-in and first-run setup (docs/deploy/railway.md §3): nobody is signed in yet. Each handler
   // checks for itself (the signed state cookie, the setup code); a POST must come from this origin.

@@ -9,6 +9,7 @@ import { parseProspectFile, prospectFileProblems, pushedProspectsName } from '@/
 import { can } from '@/lib/authz';
 import { mutationProfileAllowed } from '@/lib/mutation-policy';
 import { beginRun, finishRun } from '@/lib/workflows/ledger';
+import { describeImportError } from '@/lib/import-jobs/store';
 import { auditSync, type SyncCaller } from './auth';
 import { bundleHash, checkBundle, keyOf, PROSPECTS, REVIEW, writtenAt, type PushBundle, type Rejection } from './bundle';
 
@@ -212,6 +213,7 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
       checks: [{ name: 'importer validation', status: 'pass' }, { name: prospects ? 'vehicles known and permitted' : 'not older than the server', status: 'pass' }],
       usage: { input: null, output: null, cacheRead: null, cacheWrite: null, cost: null, source: 'estimated', method: 'unavailable: pushed from another machine; its own run has the usage' },
       outcome: ok ? 'succeeded' : 'failed', reason }, ledger);
+    let stage = 'inbox';
     try {
       // 4. As received, first: the inbox is the record of what came, whatever happens next.
       const inbox = `inbox/${runId}`;
@@ -219,6 +221,7 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
         token: caller.token.prefix, by: caller.user.handle, at: new Date().toISOString(), parentRunId: bundle.run?.id ?? null }, null, 2), runId);
       for (const f of bundle.files) await place(enrichReal, `${inbox}/${f.path}`, text(f.path, f.content), runId);
       // 5. Published where the workflow writes, keeping what it replaces. A prospects file is new, by run.
+      stage = 'publish';
       if (prospects) for (const f of bundle.files) {
         const path = `prospects/${pushedProspectsName(runId, PROSPECTS.exec(f.path)![1]!)}`;
         await placeNew(enrichReal, path, text(f.path, f.content), runId);
@@ -237,6 +240,7 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
         published.push(f.path);
         written++;
       }
+      stage = 'record';
       await db.query(`insert into platform.sync_push (content_hash, run_id, token_id, user_id, workflow, files) values ($1, $2, $3, $4, $5, $6)`,
         [hash, runId, caller.token.tokenId, caller.user.id, bundle.workflow, bundle.files.length]);
       // 6. The normal findings import (raw and strategy files); a review file is read by the quality page.
@@ -260,14 +264,25 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
           importNote = `The files are in place but the import was not queued (${e instanceof Error ? e.message.slice(0, 120) : 'error'}); run ${prospects ? 'Add prospects' : 'Import findings'} from Developer → Enrichment.`;
         }
       }
-      await finish(true, null);
+      stage = 'ledger finish';
+      // The files are published and the import queued: a ledger that will not take the finish (another writer's
+      // line, an operator's review) is noted, not a failed push (7 Oct 2026: pushes answered 500 "nothing was
+      // imported" though their files were in place).
+      const ledgerNote = await finish(true, null).then(() => null, (e) => {
+        console.error(`[sync] push ${runId.slice(0, 8)} could not record its finish: ${describeImportError(e)}`);
+        return 'The files are in place and the import is queued, but the workflow ledger did not record this push\'s finish; an Admin looks at the ledger.';
+      });
+      if (ledgerNote) importNote = importNote ? `${importNote} ${ledgerNote}` : ledgerNote;
       return answer(201, 'ok', { runId, contentHash: hash, files: bundle.files.map((f) => f.path), ...(prospects ? { published } : {}), replaced,
         import: job ? { jobId: job.id, status: job.status } : null, ...(importNote ? { note: importNote } : {}) },
       { ...shape, hash, runId, replaced, jobId: job?.id ?? null });
     } catch (e) {
-      console.error('[sync] push failed after its run began:', e instanceof Error ? e.message.slice(0, 200) : 'error');
-      await finish(false, 'Writing the pushed files failed; see enrich/inbox for what arrived.').catch(() => undefined);
-      return answer(500, 'error', { error: 'The push failed on the server after it was checked; nothing was imported. Its run is recorded as failed.', runId }, { ...shape, hash, runId, written });
+      // Where and what kind, never a message: a driver or file error can quote content (lib/import-jobs/store.ts).
+      const cause = describeImportError(e);
+      console.error(`[sync] push ${runId.slice(0, 8)} failed at ${stage}: ${cause}`);
+      await finish(false, `Failed at ${stage}; see enrich/inbox for what arrived.`).catch(() => undefined);
+      return answer(500, 'error', { error: `The push failed on the server at ${stage} (${cause}), after it was checked. ${written ? `${written} of ${bundle.files.length} files were published` : 'No file was published'}; its run is recorded as failed.`, runId, stage, written },
+        { ...shape, hash, runId, written, stage });
     }
   } finally {
     g.__syncPushBusy = false;
