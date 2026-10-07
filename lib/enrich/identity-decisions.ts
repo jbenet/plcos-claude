@@ -37,6 +37,11 @@ export async function readIdentityDecisions(dir: string): Promise<IdentityDecisi
   });
 }
 
+/** What is wrong with one proposed decision, judged by its own fields (a push checks this before the server keeps it); empty when valid. */
+export function identityDecisionProblems(value: unknown): string[] {
+  try { validate(value); return []; } catch (e) { return [(e as Error).message]; }
+}
+
 function validate(value: unknown): IdentityDecision {
   if (!object(value)) fail('Decision must be an object');
   const v = value as Record<string, unknown>;

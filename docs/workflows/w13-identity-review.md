@@ -18,6 +18,9 @@ Real inputs and outputs stay under the authorized shared real root, never in git
 issues, remote sub-agent prompts or a final reply. Build/evaluate this protocol with invented
 demo fixtures. No external writes, sign-ins, paid services, contact brokers, forms or posts.
 Decisions are local proposals; a human runs **Merge duplicate identities** to apply them.
+Since the move to Railway (7 Oct 2026), a Mac run pushes its decision file up with
+`bash scripts/cloud-push.sh …/enrich/identity-decisions-<batch>.jsonl`; the server appends the rows to its own
+`enrich/identity-decisions.jsonl` and applies nothing.
 
 ## Export format
 

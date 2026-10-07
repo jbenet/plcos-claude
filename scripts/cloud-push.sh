@@ -2,12 +2,14 @@
 # Send one finished research output from the Mac up to the cloud app (docs/deploy/railway.md §7;
 # Juan, 4 Oct 2026, decision F: research runs in the cloud and on the Mac, and the Mac pushes results up).
 #
-#   bash scripts/cloud-push.sh [--to <app url>] [--workflow W1|W1c|W5] [--run <ledger run id>] <file>...
+#   bash scripts/cloud-push.sh [--to <app url>] [--workflow W1|W1c|W5|W13] [--run <ledger run id>] <file>...
 #   bash scripts/cloud-push.sh [--to <app url>] prospects <file.jsonl>...
 #   bash scripts/cloud-push.sh [--to <app url>] status <import job id>
 #
 # <file> is a W1 finding (…/enrich/raw/<key>.json), a W5 strategy (…/enrich/strategy/[<vehicle>/]<key>.json),
-# or a W1c review (…/enrich/fact-review-<NN><part>.jsonl) with the findings it corrected — one workflow's
+# a W1c review (…/enrich/fact-review-<NN><part>.jsonl) with the findings it corrected, or W13 identity
+# proposals (…/enrich/identity-decisions[-<name>].jsonl; the server appends them to its own file, and an Admin
+# applies them with Merge duplicate identities) — one workflow's
 # output per push; the workflow is read from the paths. --run names the Mac's ledger run, which the cloud
 # records as the push's parent.
 #

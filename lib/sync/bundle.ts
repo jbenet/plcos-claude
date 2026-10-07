@@ -3,23 +3,24 @@ import { check } from '@/lib/enrich/schema';
 import { checkStrategy } from '@/lib/enrich/strategy';
 import { factReviewProblems } from '@/lib/enrich/fact-review';
 import { prospectFileProblems } from '@/lib/enrich/prospect-rows';
+import { identityDecisionProblems } from '@/lib/enrich/identity-decisions';
 
 /**
  * A push (docs/deploy/railway.md §7, decision F): one finished W1, W1c or W5 output, as the files the
  * workflow wrote, with their paths relative to enrich/ — the same shape the API workflow returns
  * (lib/workflows/api.ts) — or researched prospects (docs/prospects-import.md, 5 Oct 2026):
  *
- *   { "workflow": "W1" | "W1c" | "W5" | "prospects",
+ *   { "workflow": "W1" | "W1c" | "W5" | "W13" | "prospects",
  *     "files": [{ "path": "raw/<key>.json" | "strategy/[<vehicle>/]<key>.json" | "fact-review-<NN><part>.jsonl"
- *                       | "prospects/<name>.jsonl", "content": … }],
+ *                       | "identity-decisions[-<name>].jsonl" | "prospects/<name>.jsonl", "content": … }],
  *     "run": { "id": "<the Mac's ledger run id>", "source": "claude-code", "agent": "…", "model": "…" } }   (optional)
  *
- * A review file's content is its rows, as a list; a prospects file's is its text, as written, so its line
+ * A review file's and a W13 decisions file's content is its rows, as a list; a prospects file's is its text, as written, so its line
  * numbers are the file's. These checks need no server state, so the Mac runs
  * them before sending (scripts/cloud-push.sh) and the server runs them again. A claim sourced from Dakota
  * is validated like any other: the cloud is our system, as PL's warehouse is (Juan, 4 Oct 2026).
  */
-export type PushWorkflow = 'W1' | 'W1c' | 'W5' | 'prospects';
+export type PushWorkflow = 'W1' | 'W1c' | 'W5' | 'W13' | 'prospects';
 export interface PushFile { path: string; content: unknown }
 export interface PushRun { id?: string; source?: string; agent?: string; model?: string | null; protocol?: { version?: string | null; hash?: string } }
 export interface PushBundle { workflow: PushWorkflow; files: PushFile[]; run?: PushRun }
@@ -30,11 +31,13 @@ export interface Rejection { path: string | null; problems: string[] }
 export const RAW = /^raw\/([\w:-]+)\.json$/;
 export const STRATEGY = /^strategy\/(?:([\w-]+)\/)?([\w:-]+)\.json$/;
 export const REVIEW = /^fact-review-[\w-]+\.jsonl$/;
+/** W13 identity proposals (docs/workflows/w13-identity-review.md), appended on the server to enrich/identity-decisions.jsonl. */
+export const DECISIONS = /^identity-decisions(?:-[\w-]+)?\.jsonl$/;
 /** A prospects file, by the name it is pushed with; the server writes it under a run-specific name (lib/sync/push.ts). */
 export const PROSPECTS = /^prospects\/([A-Za-z0-9][\w.-]{0,99})\.jsonl$/;
 
 /** The key a file is about, or null for a review file. */
-export const keyOf = (path: string) => RAW.exec(path)?.[1] ?? STRATEGY.exec(path)?.[2] ?? null;
+export const keyOf = (path: string): string | null => RAW.exec(path)?.[1] ?? STRATEGY.exec(path)?.[2] ?? null;
 
 const stable = (v: unknown): string => JSON.stringify(v, (_k, value: unknown) =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -50,7 +53,7 @@ export function checkBundle(input: unknown, maxFiles: number): { bundle: PushBun
   const whole = (problem: string) => ({ bundle: null, rejections: [{ path: null, problems: [problem] }] });
   const b = input as Partial<PushBundle> | null;
   if (!b || typeof b !== 'object' || Array.isArray(b)) return whole('the push is not a JSON object');
-  if (!['W1', 'W1c', 'W5', 'prospects'].includes(b.workflow as string)) return whole('workflow must be W1, W1c, W5 or prospects');
+  if (!['W1', 'W1c', 'W5', 'W13', 'prospects'].includes(b.workflow as string)) return whole('workflow must be W1, W1c, W5, W13 or prospects');
   if (!Array.isArray(b.files) || !b.files.length) return whole('files must be a non-empty list');
   if (b.files.length > maxFiles) return whole(`more than ${maxFiles} files; push the batch in parts`);
   if (b.run !== undefined && (!b.run || typeof b.run !== 'object' || Array.isArray(b.run))) return whole('run must be an object');
@@ -63,9 +66,10 @@ export function checkBundle(input: unknown, maxFiles: number): { bundle: PushBun
     if (!f || typeof f !== 'object' || !path) { rejections.push({ path: `files[${i}]`, problems: ['needs a path and a content'] }); return; }
     if (paths.has(path)) problems.push('the same path twice');
     paths.add(path);
-    const raw = RAW.exec(path), strategy = STRATEGY.exec(path), review = REVIEW.test(path), prospects = PROSPECTS.exec(path);
-    const allowed = b.workflow === 'prospects' ? Boolean(prospects) : b.workflow === 'W1' ? Boolean(raw) : b.workflow === 'W5' ? Boolean(strategy) : Boolean(raw) || review;
+    const raw = RAW.exec(path), strategy = STRATEGY.exec(path), review = REVIEW.test(path), prospects = PROSPECTS.exec(path), decisions = DECISIONS.test(path);
+    const allowed = b.workflow === 'prospects' ? Boolean(prospects) : b.workflow === 'W13' ? decisions : b.workflow === 'W1' ? Boolean(raw) : b.workflow === 'W5' ? Boolean(strategy) : Boolean(raw) || review;
     if (!allowed) problems.push(b.workflow === 'prospects' ? 'a prospects push holds prospects/<name>.jsonl files only (letters, digits, dot, dash, underscore)'
+      : b.workflow === 'W13' ? 'a W13 push holds identity-decisions[-<name>].jsonl files only'
       : b.workflow === 'W1' ? 'a W1 push holds raw/<key>.json files only'
       : b.workflow === 'W5' ? 'a W5 push holds strategy/[<vehicle>/]<key>.json files only'
         : 'a W1c push holds one fact-review-<NN><part>.jsonl and its corrected raw/<key>.json files');
@@ -77,6 +81,11 @@ export function checkBundle(input: unknown, maxFiles: number): { bundle: PushBun
         problems.push(...lines.map((p) => `line ${p.line}: ${p.reason}`));
         if (!rows && !lines.length) problems.push('the file holds no prospect rows');
       }
+    } else if (decisions) {
+      // Each proposal's own fields (lib/enrich/identity-decisions.ts); whether its group is still current is
+      // decided when a person runs Merge duplicate identities, which refuses a stale or unknown group by line.
+      if (!Array.isArray(f.content) || !f.content.length) problems.push('a decisions file is a non-empty list of rows');
+      else (f.content as unknown[]).forEach((row, r) => problems.push(...identityDecisionProblems(row).map((p) => `row ${r + 1}: ${p}`)));
     } else if (raw) { rawKeys.push(raw[1]!); problems.push(...check(f.content, raw[1])); }
     else if (strategy) {
       problems.push(...checkStrategy(f.content, strategy[2]));
