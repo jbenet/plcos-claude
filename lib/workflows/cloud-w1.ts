@@ -33,7 +33,7 @@ import { WorkflowRefusal } from './refusal';
  */
 
 const sha = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
-const KEY = /^[\w-]+$/;
+const KEY = /^[\w:-]+$/; // an LP key; a prospect-made one may carry ":" (cloud-sourced:<name>--<org>)
 export const W1_COMMANDS = ['web-search', 'fetch-page', 'anthropic-messages'] as const;
 const BATCH_FIELDS = ['key', 'name', 'type', 'org', 'role', 'location', 'domains'] as const;
 const ENRICHED_FIELDS = ['title', 'location', 'links'] as const;

@@ -38,7 +38,7 @@ import { WorkflowRefusal } from './refusal';
 
 const sha = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 const REVIEW_NAME = /^fact-review-\d{2}[a-z]\.jsonl$/;
-const KEY = /^[\w-]+$/;
+const KEY = /^[\w:-]+$/; // an LP key; a prospect-made one may carry ":" (cloud-sourced:<name>--<org>)
 export const W1C_COMMANDS = ['fetch-cited-page', 'anthropic-messages'] as const;
 
 export interface ModelRequest { model: string; system: string; user: string; maxTokens: number }
