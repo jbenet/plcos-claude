@@ -11,6 +11,8 @@ import type { Route, RouteStrength, WarmthKind } from '@/modules/network';
 import { STATUS_LABEL, type PursuitStatus } from '@/modules/strategy';
 import { ADDRESSES_WITHHELD } from './addresses';
 import { deskVehicle, OutreachRefused } from './reads';
+import { can } from '@/lib/authz';
+import { listVehicles } from '@/modules/platform';
 
 /**
  * top_connectors (MCP) and GET /api/outreach/connectors (docs/27 §4b–§4c): the people who sit on the most and best warm
@@ -209,6 +211,61 @@ export interface AskHistory {
   lastAsk: { on: string; replied: boolean | null; basis: string } | null;
 }
 
+/** What a connector's introductions came to (JuanMail, 7 Oct 2026). */
+export interface IntroHistory {
+  intros: {
+    /** Intro asks made through them, on the vehicles you can read, all time. */
+    made: number;
+    /** Of those, the LPs whose pursuit on that vehicle is now Committed (a pipeline status, not hard money: rule 1). */
+    committed: Array<{ pursuitId: string; name: string; vehicle: string }>;
+    last: { pursuitId: string | null; entityId: string; name: string; vehicle: string; on: string; daysToMeeting: number | null } | null;
+  };
+}
+
+/**
+ * The intro asks made through each person (coordination.ask with them as the connector and a made_at), on the vehicles
+ * the principal can read: how many, which LPs went on to Committed on that vehicle, and the last one, with the days from
+ * the ask to the first meeting or call held with that LP after it (null when none is on file). Only recorded asks count:
+ * an introduction Affinity notes in a list field is not read here (rule 7).
+ */
+export async function introHistory(user: AppUser, entityIds: string[]): Promise<Map<string, IntroHistory>> {
+  const out = new Map<string, IntroHistory>();
+  const ids = [...new Set(entityIds)];
+  for (const id of ids) out.set(id, { intros: { made: 0, committed: [], last: null } });
+  const vehicles = (await listVehicles()).filter((v) => can(user, 'read', { vehicle: v.id }));
+  if (!ids.length || !vehicles.length) return out;
+  const db = await getDb();
+  const rows = await db.query<{ connector: string; entity_id: string; name: string; vehicle: string; made_at: Date | string;
+    pursuit_id: string | null; status: string | null; met_on: Date | string | null }>(`
+    select identity.canonical_entity_id(a.connector_id)::text connector, identity.canonical_entity_id(a.entity_id)::text entity_id,
+           e.display_name name, v.name vehicle, a.made_at, p.pursuit_id::text, p.status::text status,
+           (select min(m.held_on) from meetings.meeting m
+             where identity.canonical_entity_id(m.entity_id) = identity.canonical_entity_id(a.entity_id)
+               and m.channel in ('meeting', 'call') and m.held_on >= a.made_at::date) met_on
+      from coordination.ask a
+      join platform.vehicle v on v.id = a.vehicle_id
+      join identity.entity e on e.entity_id = identity.canonical_entity_id(a.entity_id)
+      left join strategy.active_pursuit p on p.vehicle_id = a.vehicle_id
+        and identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id(a.entity_id)
+     where a.connector_id is not null and a.made_at is not null and a.vehicle_id = any($2::uuid[])
+       and identity.canonical_entity_id(a.connector_id) = any($1::uuid[])
+     order by a.made_at desc, a.ask_id`, [ids, vehicles.map((v) => v.id)]);
+  for (const r of rows) {
+    const h = out.get(r.connector);
+    if (!h) continue;
+    h.intros.made++;
+    if (r.status === 'committed' && r.pursuit_id && !h.intros.committed.some((c) => c.pursuitId === r.pursuit_id)) {
+      h.intros.committed.push({ pursuitId: r.pursuit_id, name: r.name, vehicle: r.vehicle });
+    }
+    if (!h.intros.last) {
+      const on = new Date(r.made_at), met = r.met_on ? new Date(r.met_on) : null;
+      h.intros.last = { pursuitId: r.pursuit_id, entityId: r.entity_id, name: r.name, vehicle: r.vehicle, on: on.toISOString().slice(0, 10),
+        daysToMeeting: met ? Math.max(0, Math.round((met.getTime() - Date.UTC(on.getUTCFullYear(), on.getUTCMonth(), on.getUTCDate())) / 86_400_000)) : null };
+    }
+  }
+  return out;
+}
+
 /**
  * The intro asks made to each person (docs/27 §4b): coordination.ask rows with them as the connector and a made_at —
  * the record the ask cap reads (config.guard.asksPerConnectorPerQuarter). Whether they replied to the last one: the
@@ -298,12 +355,12 @@ export async function topConnectors(user: AppUser, a: ConnectorArgs, fit: Connec
       asFirstHop: c.asFirstHop, asDeeperHop: c.asDeeperHop, reachableDirectly: c.asFirstHop > 0 }];
   }).sort((x, y) => y.lps - x.lps || (y.bestScore ?? -1) - (x.bestScore ?? -1) || x.name.localeCompare(y.name) || (x.entityId < y.entityId ? -1 : 1));
   const shown = ranked.slice(0, a.limit ?? 20);
-  const [c, asks] = await Promise.all([routeContacts(user, v.id, shown), askHistory(shown.map((x) => x.entityId))]);
+  const [c, asks, intros] = await Promise.all([routeContacts(user, v.id, shown), askHistory(shown.map((x) => x.entityId)), introHistory(user, shown.map((x) => x.entityId))]);
   return {
     asOf: p.asOf,
     data: unchangedOr(p.complete, a.ifChanged, {
       vehicle: v.slug, firstHopOnly: firstOnly,
-      connectors: shown.map((x) => ({ ...c.at(x), ...(asks.get(x.entityId) ?? { asksThisQuarter: 0, lastAsk: null }) })),
+      connectors: shown.map((x) => ({ ...c.at(x), ...(asks.get(x.entityId) ?? { asksThisQuarter: 0, lastAsk: null }), ...intros.get(x.entityId)! })),
       total: ranked.length, lpsOpen: p.open.length, lpsInspected: p.planned.length, lpsReached: reached, complete: p.complete,
       addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
     }),
@@ -352,14 +409,14 @@ async function connectorTargets(user: AppUser, a: ConnectorArgs & { entityId: st
   let fitted = page;
   if (fit.maxBytes) while (fitted.length > 1 && Buffer.byteLength(JSON.stringify(fitted)) > fit.maxBytes) fitted = fitted.slice(0, -1);
   const nextCursor = fitted.length && offset + fitted.length < rows.length ? encodeCursor(q, rows[offset + fitted.length - 1]!.pursuitId, offset + fitted.length) : null;
-  const [c, asks] = await Promise.all([routeContacts(user, v.id, [{ entityId, name: name ?? 'Unknown' }]), askHistory([entityId])]);
+  const [c, asks, intros] = await Promise.all([routeContacts(user, v.id, [{ entityId, name: name ?? 'Unknown' }]), askHistory([entityId]), introHistory(user, [entityId])]);
   const who = c.at({ entityId, name: name ?? 'Unknown' });
   return {
     asOf: p.asOf,
     data: unchangedOr(p.complete, a.ifChanged, {
       vehicle: v.slug, firstHopOnly: firstOnly,
       // The name comes from the routes: a connector on no route here is not named (an id is not a way to look anyone up).
-      connector: { ...who, name, asFirstHop, asDeeperHop, reachableDirectly: asFirstHop > 0, ...(asks.get(entityId) ?? { asksThisQuarter: 0, lastAsk: null }) },
+      connector: { ...who, name, asFirstHop, asDeeperHop, reachableDirectly: asFirstHop > 0, ...(asks.get(entityId) ?? { asksThisQuarter: 0, lastAsk: null }), ...intros.get(entityId)! },
       rows: fitted, total: rows.length, offset, limit, nextCursor,
       ...(fitted.length < page.length ? { heldBack: `${page.length - fitted.length} row${page.length - fitted.length === 1 ? '' : 's'} held back to fit the answer's size limit; nextCursor continues from here.` } : {}),
       lpsOpen: p.open.length, lpsInspected: p.planned.length, complete: p.complete,

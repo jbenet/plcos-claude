@@ -149,7 +149,7 @@ export const TOOLS: readonly Tool[] = [
   }),
   tool({
     name: 'top_connectors', title: 'Outreach: top connectors for a vehicle', policy: OUT_READ,
-    description: `The people who sit on the most and best warm routes to a vehicle\'s open LPs: for each, entityId, name, how many open LPs they reach, the best route score through them, a few example pursuitIds, how many routes have them as the first hop past the team (asFirstHop, the person the team emails) versus deeper (asDeeperHop), reachableDirectly, the intro asks made to them this quarter (asksThisQuarter) and the last one (lastAsk), whether a restriction is on file, and (where readable) their best address. firstHopOnly ranks first-hop appearances only. With entityId: that one connector\'s targets instead — every open LP on the vehicle they reach, with the route score, best first, paged by cursor/nextCursor (${config.outreach.defaultQueueRows} rows by default, at most ${config.outreach.maxQueueRows}). Built from the same routes as routes_to; only recommended routes count.`,
+    description: `The people who sit on the most and best warm routes to a vehicle\'s open LPs: for each, entityId, name, how many open LPs they reach, the best route score through them, a few example pursuitIds, how many routes have them as the first hop past the team (asFirstHop, the person the team emails) versus deeper (asDeeperHop), reachableDirectly, the intro asks made to them this quarter (asksThisQuarter) and the last one (lastAsk), whether a restriction is on file, and (where readable) their best address, and intros: the intro asks made through them on your vehicles (made), the ones whose LP is now Committed (committed: pursuitId, name, vehicle), and the last (last: pursuitId, entityId, name, vehicle, on, daysToMeeting). firstHopOnly ranks first-hop appearances only. With entityId: that one connector\'s targets instead — every open LP on the vehicle they reach, with the route score, best first, paged by cursor/nextCursor (${config.outreach.defaultQueueRows} rows by default, at most ${config.outreach.maxQueueRows}). Built from the same routes as routes_to; only recommended routes count.`,
     input: z.object({
       vehicle, limit: limit(config.outreach.maxQueueRows, 20).describe('Connectors: at most 100 (default 20). With entityId, targets: at most 500 (default 25).'),
       firstHopOnly: z.boolean().optional().describe('Count only routes on which the connector is the first hop past the team member (default false).'),
@@ -176,7 +176,7 @@ export const TOOLS: readonly Tool[] = [
   }),
   tool({
     name: 'outreach_propose_contact', title: 'Outreach: an address confirmed in Gmail', policy: { risk: 'propose', scopes: [OUTREACH_WRITE], ticket: 'none', approval: true },
-    description: 'Record an email address the person confirmed from their Gmail, with its source and date. Another source\'s address (Affinity, research) is kept, never overwritten; the answer says what was kept.',
+    description: 'Record an email address the person confirmed from their Gmail, with its source and date, on an LP named by entityId or by pursuitId (one of the two). Another source\'s address (Affinity, research) is kept, never overwritten; the answer says what was kept.',
     input: contactInput,
     run: (env, a) => contacts({ env }, a),
   }),

@@ -19,3 +19,7 @@ scored 0 while reaching 2–11 LPs, and the first call for a vehicle ran out of 
 **Later the same day (09:40Z):** with imports moving the revision, several background plans ran at once, one per vehicle
 and caller, and took the server from pages and pushes (connectors 35 s, a sync push cancelled). Plans now run one at a
 time, at the route warm-up's background database priority, and give way to requests between batches.
+
+**Evening:** each connector row carries `intros` — the intro asks made through them, which of those LPs are now
+Committed, and the last one with the days to a first meeting — and `POST /contacts` takes a `pursuitId` in place of the
+`entityId` (JuanMail).

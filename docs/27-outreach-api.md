@@ -327,6 +327,12 @@ the most and best warm routes to a vehicle's open LPs.
   see:** an intro ask a person emails without recording it (juanmail linking it to the LP, with no INTRO_ASK ticket, records
   a message, not an ask), and a reply in a mailbox juanmail does not read. So `asksThisQuarter` is the recorded count — the
   same number the cap and the queue's `ask_count` check use — not a count of every email.
+- **`intros` (7 Oct 2026):** what the asks through them came to, on the vehicles the token's owner reads, all time.
+  `made`: the intro asks made through them (a `made_at`, the same record as above). `committed`: those LPs whose
+  pursuit on that vehicle is now Committed, as `{ pursuitId, name, vehicle }` — a pipeline status, not hard money
+  (rule 1). `last`: the latest ask, `{ pursuitId, entityId, name, vehicle, on, daysToMeeting }`, where `daysToMeeting` is
+  the days from the ask to the first meeting or call held with that LP since, or null when none is on file. Only
+  recorded asks count: an introduction Affinity notes in a list field ("Source of introduction") is not read yet.
 - **Coverage (rule 7):** `lpsOpen`, `lpsInspected`, `lpsReached`, `complete`. An answer waits for planning up to
   `config.outreach.connectorsBudgetMs` (15 s, GUESS), highest-priority LPs first, and says how far it got; planning carries
   on after it, so asking again reaches further. `maxWaitMs` (0–15000, 7 Oct 2026) waits less: a foreground look answers
@@ -347,7 +353,9 @@ GET /api/outreach/connectors?vehicle=spv-cortex&limit=2
       { "entityId": "5e6f…", "name": "Ravi Invented", "lps": 6, "bestScore": 71.5, "bestBand": "strong",
         "examplePursuitIds": ["0b6e…", "4c1d…", "9a0f…"], "asFirstHop": 7, "asDeeperHop": 1, "reachableDirectly": true,
         "doNotApproach": false, "contact": { "email": "ravi@invented.example", "source": "gmail", "confirmedAt": "2026-10-03" },
-        "asksThisQuarter": 1, "lastAsk": { "on": "2026-10-02", "replied": true, "basis": "the mail trace: a message from them after the ask" } },
+        "asksThisQuarter": 1, "lastAsk": { "on": "2026-10-02", "replied": true, "basis": "the mail trace: a message from them after the ask" },
+        "intros": { "made": 3, "committed": [{ "pursuitId": "7d1e…", "name": "Invented Family Office", "vehicle": "PLC Neurotech I" }],
+          "last": { "pursuitId": "0b6e…", "entityId": "a1b2…", "name": "Invented Endowment", "vehicle": "SPV Cortex", "on": "2026-10-02", "daysToMeeting": null } } },
       { "entityId": "8a9b…", "name": "Mei Invented", "lps": 4, "bestScore": 58, "bestBand": "warm",
         "examplePursuitIds": ["c3d4…", "e5f6…", "0718…"], "asFirstHop": 0, "asDeeperHop": 5, "reachableDirectly": false,
         "doNotApproach": false, "contact": null, "asksThisQuarter": 0, "lastAsk": null }] },
@@ -425,7 +433,9 @@ vehicle (or on every vehicle the token reads), in one page:
   when no row would differ.
 - Order: vehicle slug, then name, then pursuit id. Over REST every row comes back. Over MCP an answer larger than the
   response limit is cut from its end, and `offset=<nextOffset>` continues it; `version` is always the whole answer's.
-- `POST /api/outreach/contacts` is unchanged: it records an address confirmed in Gmail (`outreach_propose_contact`, §5).
+- `POST /api/outreach/contacts` records an address confirmed in Gmail (`outreach_propose_contact`, §5): `{ entityId | pursuitId, email,
+  source: "gmail", confirmedBy, confirmedAt?, idempotencyKey? }`. `pursuitId` (7 Oct 2026) names the LP by its pursuit;
+  give one of the two.
 
 ## 5. Write
 
