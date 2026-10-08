@@ -1,4 +1,4 @@
-import { createVehicle, VehicleRefused, type NewVehicle } from '@/modules/platform';
+import { createVehicle, setRaiseWindow, VehicleRefused, type NewVehicle } from '@/modules/platform';
 import type { Queryable } from '@/lib/db';
 import { auditSync, type SyncCaller } from './auth';
 import { pushRefusal, type PushAnswer } from './push';
@@ -9,9 +9,14 @@ import { pushRefusal, type PushAnswer } from './push';
  * Settings → Vehicles. The same writer as that form (createVehicle in modules/platform/vehicles.ts) and so
  * the same rules: Admin only, every field checked, the exemption never defaulted, a taken slug or name
  * refused and never updated, one `vehicle.created` audit row. A sync:admin token, which only an Admin
- * holds; nothing here edits or removes a vehicle. Every call is one `mcp.call` audit row too.
+ * holds. Every call is one `mcp.call` audit row too.
  *
  *   { "name", "slug", "kind", "exemption", "phase"?, "target"?, "opens"?, "closes"?, "aliases"? } → 201 { slug, name }
+ *
+ * PATCH /api/sync/vehicles moves an existing vehicle's raise window and nothing else (setRaiseWindow; Juan,
+ * 8 Oct 2026: "move date to Oct 9"). Every field is sent: a missing one clears that part of the window.
+ *
+ *   { "slug", "opens", "closes", "note"? } → 200 { slug, name, opens, closes, note }
  */
 
 const MAX_BYTES = 4 * 1024;
@@ -48,5 +53,34 @@ export async function addVehicle(caller: SyncCaller, request: Request, o: Vehicl
   } catch (e) {
     if (e instanceof VehicleRefused) return answer(409, 'refused', { error: e.message }, { reason: 'refused' });
     return answer(500, 'error', { error: 'The vehicle was not added.' }, { reason: 'error' });
+  }
+}
+
+const WINDOW_FIELDS = ['slug', 'opens', 'closes', 'note'] as const;
+
+export async function moveRaiseWindow(caller: SyncCaller, request: Request, o: VehiclesOptions = {}): Promise<PushAnswer> {
+  const started = Date.now();
+  const answer = async (status: number, outcome: 'ok' | 'refused' | 'invalid' | 'error', body: Record<string, unknown>, detail: Record<string, unknown> = {}) => {
+    await auditSync(caller, 'vehicles', outcome, { ms: Date.now() - started, op: 'raise_window', ...detail });
+    return { status, body: { ok: status < 300, ...body } };
+  };
+  const refusal = pushRefusal();
+  if (refusal) return answer(403, 'refused', { error: refusal }, { reason: 'profile' });
+  const raw = await request.text();
+  if (Buffer.byteLength(raw, 'utf8') > MAX_BYTES) return answer(413, 'invalid', { error: `A raise window is at most ${MAX_BYTES} bytes.` }, { reason: 'size' });
+  let input: unknown;
+  try { input = JSON.parse(raw); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return answer(422, 'invalid', { error: 'Send one raise window as a JSON object.' }, { reason: 'shape' });
+  const extra = Object.keys(input).filter((k) => !(WINDOW_FIELDS as readonly string[]).includes(k));
+  if (extra.length) return answer(422, 'invalid', { error: `Unknown fields: ${extra.slice(0, 5).join(', ')}. A raise window takes ${WINDOW_FIELDS.join(', ')}.` }, { reason: 'fields' });
+  const v = input as Record<string, unknown>;
+  const str = (x: unknown) => (typeof x === 'string' ? x : null);
+  if (!str(v.slug)) return answer(422, 'invalid', { error: 'Name the vehicle by its slug.' }, { reason: 'slug' });
+  try {
+    const row = await setRaiseWindow(caller.user, str(v.slug)!, { opens: str(v.opens), closes: str(v.closes), note: str(v.note) }, o.db);
+    return answer(200, 'ok', row, { slug: row.slug });
+  } catch (e) {
+    if (e instanceof VehicleRefused) return answer(409, 'refused', { error: e.message }, { reason: 'refused' });
+    return answer(500, 'error', { error: 'The raise window was not changed.' }, { reason: 'error' });
   }
 }

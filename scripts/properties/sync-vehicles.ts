@@ -1,8 +1,8 @@
 import { syncGuard } from '../../lib/sync/auth';
 import { SYNC_ADMIN, SYNC_PUSH } from '../../lib/sync/scopes';
-import { addVehicle } from '../../lib/sync/vehicles';
+import { addVehicle, moveRaiseWindow } from '../../lib/sync/vehicles';
 import { jobState, queueJob } from '../../lib/sync/jobs';
-import { createMcpToken, type AppUser } from '../../modules/platform';
+import { createMcpToken, writeVehicle, type AppUser } from '../../modules/platform';
 import { freshDb, type Check } from './harness';
 
 /**
@@ -47,6 +47,34 @@ export async function syncVehiclesProperties(check: Check) {
     made.status === 201 && made.body.slug === 'spv-invented-props' && again.status === 409 && sameName.status === 409 && (await count()) === 1
     && row?.kind === 'spv' && row.exemption === '506(c)' && row.phase === 'active' && created?.n === 1,
     `${made.status} ${again.status} ${sameName.status}`);
+  // PATCH moves an existing vehicle's raise window only, and an init reload or Affinity translation then leaves it alone.
+  const patch = async (secret: string, body: unknown) => {
+    const req = () => new Request('http://localhost:3119/api/sync/vehicles', { method: 'PATCH', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const guard = await syncGuard(req(), 'vehicles');
+    if ('response' in guard) return { status: guard.response.status, body: await guard.response.json() as Record<string, any> };
+    return moveRaiseWindow(guard.caller, req(), { db }) as Promise<{ status: number; body: Record<string, any> }>;
+  };
+  const windowOf = async () => (await db.one<{ opens: string | null; closes: string | null; note: string | null; kind: string }>(
+    "select raise_opens_on::text opens, raise_closes_on::text closes, raise_window_note note, kind::text from platform.vehicle where slug = 'spv-invented-props'"))!;
+  const patchPush = await patch(pushOnly.secret, { slug: 'spv-invented-props', closes: '2026-10-09' });
+  const patchBackwards = await patch(admin.secret, { slug: 'spv-invented-props', opens: '2026-10-10', closes: '2026-10-09' });
+  const patchMissing = await patch(admin.secret, { slug: 'spv-invented-nothing', closes: '2026-10-09' });
+  const patchExtra = await patch(admin.secret, { slug: 'spv-invented-props', kind: 'fund', closes: '2026-10-09' });
+  const untouched = await windowOf();
+  const moved = await patch(admin.secret, { slug: 'spv-invented-props', opens: '2026-08-01', closes: '2026-10-09', note: 'Invented note' });
+  await writeVehicle(db, { slug: 'spv-invented-props', name: 'SPV - Invented Props', kind: 'spv', exemption: '506(c)', phase: 'active', target: null,
+    raise: { opens: null, closes: '2026-09-30', note: null }, aliases: ['Invented Props', 'Renamed'] }, 99, 'update');
+  const after = await windowOf();
+  const aliases = (await db.one<{ aliases: string[] }>("select aliases from platform.vehicle where slug = 'spv-invented-props'"))!.aliases;
+  const moveAudit = await db.one<{ n: number }>("select count(*)::int n from platform.audit_log where action = 'vehicle.raise_window' and detail->>'slug' = 'spv-invented-props'");
+  check('Raise window by token: a push token, a backwards window, an unknown slug and other fields are refused with nothing changed',
+    patchPush.status === 403 && patchBackwards.status === 409 && patchMissing.status === 409 && patchExtra.status === 422
+    && untouched.closes === null && untouched.kind === 'spv',
+    `${patchPush.status} ${patchBackwards.status} ${patchMissing.status} ${patchExtra.status}; closes ${untouched.closes}`);
+  check('Raise window by token: an Admin moves the window, audited, and an init reload keeps it while still updating the rest',
+    moved.status === 200 && moved.body.closes === '2026-10-09' && after.opens === '2026-08-01' && after.closes === '2026-10-09'
+    && after.note === 'Invented note' && aliases.includes('Renamed') && moveAudit?.n === 1,
+    `${moved.status} ${after.opens} ${after.closes} ${aliases.join('|')} ${moveAudit?.n}`);
   const opens = async (secret: string, scope: 'snapshot' | 'push') => !('response' in await syncGuard(new Request('http://localhost:3119/api/sync/x', { headers: { authorization: `Bearer ${secret}` } }), scope));
   const adminOpens = await opens(admin.secret, 'snapshot') && await opens(admin.secret, 'push');
   const pushNoSnapshot = !(await opens(pushOnly.secret, 'snapshot'));

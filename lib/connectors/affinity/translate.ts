@@ -15,6 +15,7 @@ import { translateTags } from './event-tags';
 import type { PursuitStatus } from '@/modules/strategy';
 import { participantIndex, affinityIdentityEvidence, type PersonIdentity, type Participant } from './participants';
 import { resolveEntity } from '@/modules/identity/create';
+import { RAISE_SET_IN_APP } from '@/modules/platform';
 
 /**
  * Translation (N47, docs/16 §4): the landed copy, read through the mapping, into the tool's
@@ -132,10 +133,15 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
       );
       const users = new Map((await tx.query<{ id: string; handle: string }>(`select id, handle from platform.app_user`)).map((u) => [u.handle, u.id]));
       // Each vehicle's raise window and aliases, from the init file (N59): what a touchpoint is
-      // counted against. The real profile also loads them at boot; the demo's vehicles are seeded.
+      // counted against. The real profile also loads them at boot; the demo's vehicles are seeded. A window
+      // an Admin moved in the app stays (RAISE_SET_IN_APP, modules/platform/vehicles.ts).
       for (const v of init.vehicles) {
         await tx.query(
-          `update platform.vehicle set raise_opens_on = $2, raise_closes_on = $3, raise_window_note = $4, aliases = $5 where slug = $1`,
+          `update platform.vehicle set aliases = $5,
+             raise_opens_on = case when ${RAISE_SET_IN_APP} then raise_opens_on else $2 end,
+             raise_closes_on = case when ${RAISE_SET_IN_APP} then raise_closes_on else $3 end,
+             raise_window_note = case when ${RAISE_SET_IN_APP} then raise_window_note else $4 end
+           where slug = $1`,
           [v.slug, v.raise.opens, v.raise.closes, v.raise.note, v.aliases],
         );
       }

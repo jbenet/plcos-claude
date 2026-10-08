@@ -83,3 +83,23 @@ export function checkNewVehicle(input: NewVehicle): { vehicle: VehicleRowInput |
   if (problems.length) return { vehicle: null, problems };
   return { vehicle: { slug, name, kind, exemption, phase, target, raise: { opens, closes, note: null }, aliases }, problems };
 }
+
+/**
+ * A raise window an Admin sets on an existing vehicle (setRaiseWindow): each date YYYY-MM-DD or blank, the
+ * close not before the open, a short note. The init file's own check is lib/real/init.ts.
+ */
+export function checkRaiseWindow(input: { opens?: string | null; closes?: string | null; note?: string | null }):
+  { window: { opens: string | null; closes: string | null; note: string | null } | null; problems: string[] } {
+  const problems: string[] = [];
+  const date = (d: string | null | undefined, which: string) => {
+    const v = (d ?? '').trim();
+    if (!v) return null;
+    if (!DATE.test(v) || !Number.isFinite(Date.parse(`${v}T00:00:00Z`))) { problems.push(`The raise ${which} date must be YYYY-MM-DD, or blank.`); return null; }
+    return v;
+  };
+  const opens = date(input.opens, 'opens'), closes = date(input.closes, 'closes');
+  if (opens && closes && closes < opens) problems.push('The raise closes before it opens.');
+  const note = (input.note ?? '').replace(/\s+/g, ' ').trim() || null;
+  if (note && note.length > 200) problems.push('The note is at most 200 characters.');
+  return problems.length ? { window: null, problems } : { window: { opens, closes, note }, problems };
+}

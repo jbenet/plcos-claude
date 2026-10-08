@@ -392,7 +392,10 @@ and push up results".
   `slug`, `kind`, `exemption`, optional `phase`, `target`, `opens`, `closes`, `aliases`; 4 KB at most; an unknown
   field is 422) goes to `createVehicle`, the form's own writer, so its checks hold: Admin only, the exemption never
   defaulted, a taken slug or name refused (409) and never updated, one `vehicle.created` audit row. It needs the
-  Admin scope, `sync:admin`. Nothing edits or removes a vehicle this way.
+  Admin scope, `sync:admin`. Nothing removes a vehicle this way.
+- **`PATCH /api/sync/vehicles`** (8 Oct; Juan: "move date to Oct 9"). An Admin moves an existing vehicle's raise
+  window, `{ slug, opens, closes, note }` (`scripts/cloud-vehicle.sh --window`), and nothing else about it. One
+  `vehicle.raise_window` audit row; from then on an init reload and the Affinity translation leave that window alone.
 - **The Admin scope, `sync:admin`** (7 Oct; Juan: "something w/ very broad perms"). Preferences offers it as
   "Admin". Only an Admin holds it, and it opens everything above (pull, push, the cloud ledger, adding a vehicle)
   plus each Admin task offered by token later, which takes this scope rather than one of its own. It is checked
