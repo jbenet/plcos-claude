@@ -10,8 +10,11 @@ export async function lpContactsFor(
   if (!entityIds.length) return result;
   const rows = await (await getDb()).query<{ org: string; person: string; name: string; role: string | null }>(`
     with wanted as (
+      -- Most ids are already canonical: only a merged one walks its chain (8 Oct 2026; the network's
+      -- contact signature asks this of every organisation, ~25,000 calls on the live data).
       select distinct e.entity_id from unnest($1::uuid[]) x(id)
-        join identity.entity e on e.entity_id=identity.canonical_entity_id(x.id)
+        join identity.entity s on s.entity_id=x.id
+        join identity.entity e on e.entity_id=case when s.merged_into is null then s.entity_id else identity.canonical_entity_id(s.entity_id) end
        where e.entity_type <> 'person'
     ),
     -- Every alias of the wanted units first, so the joins below are index probes (7 Oct 2026).

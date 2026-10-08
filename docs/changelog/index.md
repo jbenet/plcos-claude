@@ -307,3 +307,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Repeated identity proposals, and a clear "busy" while a merge runs](entries/repeat-proposals-and-busy-identity.md)
 - [Timeline notes in one short line](entries/tight-notes.md)
 - [Meetings from the calendar, read only](entries/calendar-read-only.md)
+- [Pages stay fast while imports run; the LP and vehicle status pages much quicker](entries/faster-pages-during-imports.md)

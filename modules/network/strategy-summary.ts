@@ -12,8 +12,7 @@ export interface RecordedRoute {
 export async function strategyRouteSummaries(ids: string[], kind: string): Promise<Map<string, RecordedRoute>> {
   if (!ids.length) return new Map();
   const db = await getDb();
-  const contacts = await lpContactsFor(ids);
-  const version = await revisionFor(db);
+  const [contacts, version] = await Promise.all([lpContactsFor(ids), revisionFor(db)]);
   const all = [...new Set([...ids, ...[...contacts.values()].flatMap(cs => cs.map(c => c.entityId))])];
   const rows = await db.query<{
     target_id: string; computed_at: Date; routes: Route[]; current: boolean;

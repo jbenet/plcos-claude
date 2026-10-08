@@ -5,7 +5,7 @@ export {
   IMPLIED, IMPLIED_LABEL, PASSED_BY_CHOICES, PASSED_BY_LABEL, REASONS, RUNGS, RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_BACKED_BY,
   STATUS_LABEL, impliedRung, rungIndex, statusNeedsEvidence,
 } from './types';
-export { getPursuit, getPursuits, visualizationPursuits, pursuitCount, type VisualizationPursuit, listPursuits, pursuitFor, statusCounts } from './repo';
+export { getPursuit, getPursuits, visualizationPursuits, pursuitCount, type VisualizationPursuit, listPursuits, pursuitFor, statusCounts, pipelineEntityIds } from './repo';
 export { LadderRefused, ON_RECORD_NOTE, ON_RECORD_RUNGS, recordAdvance, recordClimb, recordClimbOnRecord, requestAdvance, retractOnRecord, retractedRefs, setNextStep, setStatus, setStatuses, StatusRefused, type StatusMove, type ClimbRung } from './service';
 export { insertUpdate, insertUpdates, recordApplied, recordAppliedMany, updatesFor, type PursuitUpdate, type UpdateApplied } from './updates';
 export { decideSuggestion, openSuggestions, SuggestionRefused, suggestionsFor, strategyPursuitsFor, type Suggestion } from './suggestions';
