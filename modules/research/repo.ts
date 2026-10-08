@@ -57,7 +57,7 @@ const CLAIM_SELECT = `
 export async function claimsFor(entityId: string): Promise<Claim[]> {
   const db = await getDb();
   const rows = await db.query<ClaimRow>(
-    `${CLAIM_SELECT} where identity.canonical_entity_id(c.entity_id) = identity.canonical_entity_id($1::uuid) and c.superseded_by is null order by c.field`,
+    `${CLAIM_SELECT} where c.entity_id = any(identity.alias_ids(array[identity.canonical_entity_id($1::uuid)])) and c.superseded_by is null order by c.field`,
     [entityId],
   );
   return rows.map(toClaim);
