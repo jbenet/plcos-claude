@@ -273,6 +273,9 @@ h2{font-family:var(--display)}
 .fact:last-child{border-bottom:0}
 .fact span:first-child{color:var(--muted)}
 .fact span:last-child{text-align:right;font-weight:500}
+/* A ticket's detail (issue 0136): long values sit beside their label, not across the card. */
+.factsl .fact{display:grid;grid-template-columns:minmax(110px,32%) 1fr;gap:14px}
+.factsl .fact span:last-child{text-align:left}
 
 .scope{margin:15px 0;padding:12px 13px;border:1px solid var(--line);border-radius:8px;background:#FBF9F4}
 .scope p{margin:6px 0 0;font-size:12.5px;line-height:1.5}

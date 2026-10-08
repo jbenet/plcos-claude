@@ -196,7 +196,7 @@ async function Approvals({
               <h2>This approval authorizes</h2>
               <span className="lbl">a specific bounded action</span>
             </div>
-            <div className="cbody">
+            <div className="cbody factsl">
               <p>{selected.scope.authorizes}</p>
               <div className="lbl" style={{ marginTop: 14, marginBottom: 6 }}>
                 It does not authorize
