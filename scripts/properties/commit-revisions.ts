@@ -1,0 +1,86 @@
+import type { Check } from './harness';
+import { openTestDb } from './database';
+import { migrate } from '../../lib/db/migrate';
+
+/**
+ * Revisions move at commit (network 016, performance pass, 8 Oct 2026). A long writer used to hold
+ * the one revision row until it committed, so every other write to ~30 tables waited for it: an LP
+ * moved to Selected waited for a research import. Invented rows only.
+ */
+export async function commitRevisionProperties(check: Check) {
+  const db = await openTestDb();
+  try {
+    await migrate(db);
+    const rev = async () => (await db.one<{ read: string; route: string; edge: string }>(`select r.revision::text read, rr.revision::text route,
+      e.revision::text edge from network.read_revision r, network.route_revision rr, network.edge_revision e`))!;
+    const user = (await db.one<{ id: string }>(`insert into platform.app_user (handle, name, initials, role, email, access)
+      values ('rev-fixture', 'Invented Reviser', 'IR', 'Invented', 'rev-fixture@example.invalid', 'admin') returning id::text`))!.id;
+    const vehicle = (await db.one<{ id: string }>(`insert into platform.vehicle (slug, name, kind, exemption) values ('rev-fixture', 'Invented Fund', 'fund', '506(c)') returning id::text`))!.id;
+    const [person, org] = (await db.query<{ id: string }>(`insert into identity.entity (entity_type, display_name)
+      values ('person', 'Invented Person'), ('org', 'Invented Org') returning entity_id::text id`)).map(r => r.id);
+    const pursuit = (await db.one<{ id: string }>(`insert into strategy.pursuit (entity_id, vehicle_id, owner_id) values ($1, $2, $3) returning pursuit_id::text id`,
+      [org, vehicle, user]))!.id;
+
+    // Inside a transaction the revision has not moved yet; at commit it has, and only once.
+    const before = await rev();
+    let inside = '';
+    await db.transaction(async tx => {
+      await tx.query(`update strategy.pursuit set status = 'sourcing' where pursuit_id = $1`, [pursuit]);
+      await tx.query(`update strategy.pursuit set status = 'selected' where pursuit_id = $1`, [pursuit]);
+      inside = (await tx.one<{ r: string }>('select revision::text r from network.read_revision'))!.r;
+    });
+    const after = await rev();
+    check('REVISIONS move at commit, once per transaction', inside === before.read && after.read !== before.read
+      && BigInt(after.read) > BigInt(before.read) && after.route === before.route,
+      `before ${before.read}, inside ${inside}, after ${after.read}; route ${before.route} → ${after.route}`);
+    check('REVISIONS leave no pending marks after commit',
+      (await db.one<{ n: number }>('select count(*)::int n from network.revision_bump'))!.n === 0, 'network.revision_bump is empty');
+
+    // An identity change moves the route revision, and the entity it changed carries the new value.
+    await db.query(`insert into identity.affiliation (person_entity, org_entity, kind, role, source, as_of, certainty)
+      values ($1, $2, 'staff', 'Invented', 'fixture', now(), 'inferred')`, [person, org]);
+    const routed = await rev();
+    const changed = await db.query<{ revision: string }>(`select revision::text from network.route_changed_entity where entity_id = any($1::uuid[])`, [[person, org]]);
+    check('REVISIONS stamp changed entities with the committed route revision', BigInt(routed.route) > BigInt(after.route)
+      && changed.length === 2 && changed.every(c => c.revision === routed.route), `route ${routed.route}; entities ${changed.map(c => c.revision).join(', ')}`);
+
+    // A rolled-back write moves nothing.
+    try {
+      await db.transaction(async tx => {
+        await tx.query(`update strategy.pursuit set status = 'new' where pursuit_id = $1`, [pursuit]);
+        throw new Error('Invented rollback');
+      });
+    } catch { /* expected */ }
+    check('REVISIONS do not move for a rolled-back write', (await rev()).read === routed.read, 'same read revision');
+
+    if (db.kind === 'postgres' && process.env.DATABASE_URL) {
+      // Two connections: a long writer to research notes and identities, and a status change meanwhile.
+      const { openPostgres } = await import('../../lib/db/postgres');
+      const other = await openPostgres(process.env.DATABASE_URL.replace(/\/[^/]+$/, '') + '/' + (await db.one<{ d: string }>('select current_database() d'))!.d, { max: 2 });
+      try {
+        let release!: () => void;
+        const hold = new Promise<void>(resolve => { release = resolve; });
+        let started!: () => void;
+        const begun = new Promise<void>(resolve => { started = resolve; });
+        const long = other.transaction(async tx => {
+          await tx.query(`insert into research.note (entity_id, kind, body, data) values ($1, 'context', 'Invented note', '{}')`, [org]);
+          await tx.query(`update identity.entity set display_name = 'Invented Org 2' where entity_id = $1`, [org]);
+          started();
+          await hold;
+        });
+        await begun;
+        const t = performance.now();
+        await db.query(`update strategy.pursuit set status = 'connecting' where pursuit_id = $1`, [pursuit]);
+        const waited = performance.now() - t;
+        const during = await rev();
+        release();
+        await long;
+        const end = await rev();
+        const stamped = await db.one<{ revision: string }>(`select revision::text from network.route_changed_entity where entity_id = $1`, [org]);
+        check('REVISIONS let a status change through while another transaction writes notes and identities',
+          waited < 1000 && BigInt(end.read) > BigInt(during.read) && stamped?.revision === end.route && BigInt(end.route) > BigInt(during.route),
+          `waited ${waited.toFixed(0)} ms; read ${during.read} → ${end.read}; org stamped ${stamped?.revision}, route ${end.route}`);
+      } finally { await other.close(); }
+    }
+  } finally { await db.close(); }
+}

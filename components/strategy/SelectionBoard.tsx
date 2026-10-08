@@ -44,8 +44,12 @@ interface Props {
   asOf: string;
 }
 
-export function SelectionBoard({ rows, statuses, rungNames, initialFilters, showVehicle, asOf }: Props) {
+export function SelectionBoard({ rows: given, statuses, rungNames, initialFilters, showVehicle, asOf }: Props) {
   const router = useRouter();
+  // Move to Selected (issue 0104): the ticked LPs when some are ticked, otherwise the one in focus.
+  // The list shows a move at once, ahead of the server (useMove).
+  const mv = useMove('selection', given);
+  const rows = mv.rows;
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'selection' });
   const { enabled, setEnabled, counts, active, shown, sort, picked, pick, pickedRows, now } = view;
   const [limit, setLimit] = useState(PAGE);
@@ -118,17 +122,14 @@ export function SelectionBoard({ rows, statuses, rungNames, initialFilters, show
   const visibleIds = visible.map((r) => r.id);
   const allTicked = visibleIds.length > 0 && visibleIds.every((id) => picked.has(id));
 
-  // Move to Selected (issue 0104): the ticked LPs when some are ticked, otherwise the one in focus.
   // Moving the one in focus hands the focus to the next LP, so s, s, s works down the list.
-  const mv = useMove();
   const ticked = pickedRows.length > 0;
   const targets = ticked ? pickedRows : focus ? [focus] : [];
   const moveNow = async () => {
     const i = focus ? ranked.indexOf(focus) : -1;
     const going = new Set(targets.filter((r) => r.status !== 'selected').map((r) => r.id));
     const next = ticked ? null : ranked.slice(i + 1).find((r) => !going.has(r.id)) ?? ranked.slice(0, Math.max(0, i)).reverse().find((r) => !going.has(r.id));
-    const done = await mv.move(targets);
-    if (!done) return;
+    if (!mv.move(targets)) return;
     if (ticked) view.clearPicked();
     else if (next) reveal(next);
   };
