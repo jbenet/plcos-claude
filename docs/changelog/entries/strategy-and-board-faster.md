@@ -25,3 +25,7 @@ invented copy, merged records included: same rows.
   reading them all again. Same rows.
 - **The stats page** finds each firm's people through the firm's aliases (0.43 s → 0.03 s for that step; same stats
   for every vehicle and for Neurotech).
+- **A status move no longer recomputes the network's contact signature.** It was rebuilt over every organisation
+  (about 25,000 on the invented copy, about 0.25 s) after every person's write, and every plan waited for it. It now
+  checks first whether anything it reads changed: records, aliases and affiliations (the route revision) and pursuit
+  contacts with their pursuits (a fingerprint). A list rebuild after a move: about 0.5 s → 0.42 s.
