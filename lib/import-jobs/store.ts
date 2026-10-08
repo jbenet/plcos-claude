@@ -99,5 +99,11 @@ export async function executeImportJob(db: Db, id: string,
     // parameters. The receipt says where and what kind (describeImportError); the server logs it.
     const refused = job.kind === 'workflow' && (error instanceof WorkflowRefusal || (error instanceof Error && error.message === 'Workflow refused: ANTHROPIC_API_KEY is not set.'));
     await failImportJob(db,id,refused ? (error as Error).message : importFailureText(current,error,Date.now()-phaseAt,Date.now()-startedAt));
-  } finally { clearInterval(heartbeat); }
+  } finally {
+    clearInterval(heartbeat);
+    // The job's writes were background (network 017): its end is a person's change, so the next page
+    // view rebuilds with all of it rather than answering from a build made while it ran. Not awaited:
+    // the job is finished, and a restart's recovery waits while one still counts as running.
+    void db.query(`select network.bump_at_commit('read')`).catch(() => {});
+  }
 }

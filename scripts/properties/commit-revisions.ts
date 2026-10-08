@@ -53,6 +53,21 @@ export async function commitRevisionProperties(check: Check) {
     } catch { /* expected */ }
     check('REVISIONS do not move for a rolled-back write', (await rev()).read === routed.read, 'same read revision');
 
+    // An import worker's write (its session sets plcos.background, network 017) moves the revision, not
+    // the foreground; a person's write moves both.
+    const fg = async () => (await db.one<{ r: string; f: string }>('select revision::text r, foreground::text f from network.read_revision'))!;
+    const start = await fg();
+    await db.transaction(async tx => {
+      await tx.query(`select set_config('plcos.background', 'on', true)`);
+      await tx.query(`insert into research.note (entity_id, kind, body, data) values ($1, 'context', 'Invented import note', '{}')`, [org]);
+    });
+    const background = await fg();
+    await db.query(`insert into research.note (entity_id, kind, body, data) values ($1, 'context', 'Invented person note', '{}')`, [org]);
+    const personal = await fg();
+    check('REVISIONS tell an import worker\'s writes from a person\'s', background.r !== start.r && background.f === start.f
+      && personal.r !== background.r && personal.f === personal.r,
+      `start ${start.r}/${start.f}, import ${background.r}/${background.f}, person ${personal.r}/${personal.f}`);
+
     if (db.kind === 'postgres' && process.env.DATABASE_URL) {
       // Two connections: a long writer to research notes and identities, and a status change meanwhile.
       const { openPostgres } = await import('../../lib/db/postgres');

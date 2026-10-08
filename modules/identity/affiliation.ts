@@ -89,14 +89,16 @@ export async function listAffiliations(): Promise<Affiliation[]> {
 /** Everyone who acts for this organisation. Former roles included, and labelled. */
 export async function peopleAt(orgId: string): Promise<Affiliation[]> {
   const db = await getDb();
-  return (await db.query<Row>(`${SELECT} where o.entity_id = identity.canonical_entity_id($1::uuid)`, [orgId]))
+  // The organisation's aliases first, so the affiliation index answers (8 Oct 2026; a scan of every
+  // affiliation was ~0.4 s per LP page on the live scale).
+  return (await db.query<Row>(`${SELECT} where a.org_entity = any(identity.alias_ids(array[identity.canonical_entity_id($1::uuid)]))`, [orgId]))
     .map(toAffiliation).sort(order);
 }
 
 /** Every organisation this person acts for. More than one is normal, not an error. */
 export async function orgsFor(personId: string): Promise<Affiliation[]> {
   const db = await getDb();
-  return (await db.query<Row>(`${SELECT} where p.entity_id = identity.canonical_entity_id($1::uuid)`, [personId]))
+  return (await db.query<Row>(`${SELECT} where a.person_entity = any(identity.alias_ids(array[identity.canonical_entity_id($1::uuid)]))`, [personId]))
     .map(toAffiliation).sort((a, b) =>
       Number(b.current) - Number(a.current)
       || Number(b.isPrimary) - Number(a.isPrimary)

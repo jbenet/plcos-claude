@@ -38,14 +38,16 @@ export async function lpHeadings(rows: Array<{ pursuitId: string; entityId: stri
   const pursuitIds = rows.map((r) => r.pursuitId);
   const [affiliations, types, units] = await Promise.all([
     db.query<{ entity_id: string; org: string; org_id: string }>(
-      `select distinct on (identity.canonical_entity_id(a.person_entity)) identity.canonical_entity_id(a.person_entity)::text as entity_id, o.display_name as org, o.entity_id::text as org_id
-         from identity.affiliation a join identity.entity o on o.entity_id = identity.canonical_entity_id(a.org_entity)
-        where identity.canonical_entity_id(a.person_entity) = any($1::uuid[]) and a.ended_on is null
-        order by identity.canonical_entity_id(a.person_entity), a.is_primary desc, a.as_of desc`, [entityIds]),
+      `select distinct on (p.canonical_id) p.canonical_id::text as entity_id, o.display_name as org, o.entity_id::text as org_id
+         from identity.alias_pairs($1::uuid[]) p join identity.affiliation a on a.person_entity = p.entity_id
+         join identity.entity o on o.entity_id = identity.canonical_entity_id(a.org_entity)
+        where a.ended_on is null
+        order by p.canonical_id, a.is_primary desc, a.as_of desc`, [entityIds]),
     db.query<{ entity_id: string; t: string | null }>(
-      `select distinct on (identity.canonical_entity_id(entity_id)) identity.canonical_entity_id(entity_id)::text as entity_id, data->'profile'->>'investorType' as t
-         from research.note where kind = 'public_profile' and identity.canonical_entity_id(entity_id) = any($1::uuid[])
-        order by identity.canonical_entity_id(entity_id), created_at desc`, [entityIds]),
+      `select distinct on (p.canonical_id) p.canonical_id::text as entity_id, n.data->'profile'->>'investorType' as t
+         from identity.alias_pairs($1::uuid[]) p join research.note n on n.entity_id = p.entity_id
+        where n.kind = 'public_profile'
+        order by p.canonical_id, n.created_at desc`, [entityIds]),
     db.query<{ pursuit_id: string; unit: string | null }>(
       `select distinct on (s.pursuit_id) s.pursuit_id::text, s.data->'ask'->>'unit' as unit
          from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id)
@@ -71,11 +73,12 @@ export async function relatedLpHeadings(entityId: string, vehicleId: string): Pr
   const db = await getDb();
   return db.query<{name:string;pursuitId:string}>(`with related as (
     select identity.canonical_entity_id(a.org_entity) id from identity.affiliation a
-      where identity.canonical_entity_id(a.person_entity)=identity.canonical_entity_id($1::uuid) and a.ended_on is null
+      where a.person_entity = any(identity.alias_ids(array[identity.canonical_entity_id($1::uuid)])) and a.ended_on is null
     union select identity.canonical_entity_id(a.person_entity) id from identity.affiliation a
-      where identity.canonical_entity_id(a.org_entity)=identity.canonical_entity_id($1::uuid) and a.ended_on is null
+      where a.org_entity = any(identity.alias_ids(array[identity.canonical_entity_id($1::uuid)])) and a.ended_on is null
   ) select distinct e.display_name name,p.pursuit_id::text "pursuitId" from related r
     join identity.entity e on e.entity_id=r.id
-    join strategy.active_pursuit p on identity.canonical_entity_id(p.entity_id)=r.id
+    join identity.alias_pairs(array(select id from related)) ra on ra.canonical_id=r.id
+    join strategy.active_pursuit p on p.entity_id=ra.entity_id
     where p.vehicle_id=$2 order by name,"pursuitId"`,[entityId,vehicleId]);
 }

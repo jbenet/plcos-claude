@@ -52,21 +52,22 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
   const total = totals.find(t => t.vehicleId === vehicleId);
   if (!total) return null;
   const ids = [...new Set(pursuits.map(p => p.entityId))];
-  const [suggestions, profiles, claims, restrictions, owners, history, touches, routes, contexts] = await Promise.all([
+  const [suggestions, profiles, claims, restrictions, owners, history, touches, routes, contexts, dakota] = await Promise.all([
     db.query<SuggestionRow>(`select distinct on (s.pursuit_id) s.pursuit_id, s.suggestion_id, s.data, s.body, s.made_at, s.made_by, s.status
       from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id) join platform.vehicle v on v.id=p.vehicle_id
       where p.vehicle_id=$1 and s.status in ('proposed','accepted')
         and (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))
       order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [vehicleId]),
-    db.query<ProfileRow>(`select distinct on (identity.canonical_entity_id(entity_id)) identity.canonical_entity_id(entity_id) entity_id,
-      note_id, created_at as at, data from research.note where kind='public_profile'
-      and identity.canonical_entity_id(entity_id)=any($1::uuid[])
-      order by identity.canonical_entity_id(entity_id),created_at desc,note_id`, [ids]),
-    db.query<{ entity_id: string; n: string }>(`select identity.canonical_entity_id(entity_id) entity_id,count(*)::text n
-      from research.claim where superseded_by is null and identity.canonical_entity_id(entity_id)=any($1::uuid[]) group by 1`, [ids]),
-    db.query<{ entity_id: string; instruction: string; scope: string; at: Date }>(`select identity.canonical_entity_id(entity_id) entity_id,
-      instruction,scope::text,recorded_at as at from coordination.restriction
-      where identity.canonical_entity_id(entity_id)=any($1::uuid[]) and (expires_at is null or expires_at > $2::date)`, [ids, now]),
+    // Each LP's aliases first (identity.alias_pairs), so these are index probes rather than a
+    // canonical_entity_id() call on every row of the table (performance pass, 8 Oct 2026).
+    db.query<ProfileRow>(`select distinct on (a.canonical_id) a.canonical_id entity_id, n.note_id, n.created_at as at, n.data
+      from identity.alias_pairs($1::uuid[]) a join research.note n on n.entity_id=a.entity_id where n.kind='public_profile'
+      order by a.canonical_id,n.created_at desc,n.note_id`, [ids]),
+    db.query<{ entity_id: string; n: string }>(`select a.canonical_id entity_id,count(*)::text n
+      from identity.alias_pairs($1::uuid[]) a join research.claim c on c.entity_id=a.entity_id where c.superseded_by is null group by 1`, [ids]),
+    db.query<{ entity_id: string; instruction: string; scope: string; at: Date }>(`select a.canonical_id entity_id,
+      r.instruction,r.scope::text,r.recorded_at as at from identity.alias_pairs($1::uuid[]) a join coordination.restriction r on r.entity_id=a.entity_id
+      where r.expires_at is null or r.expires_at > $2::date`, [ids, now]),
     db.query<{ pursuit_id: string; active: boolean }>(`select p.pursuit_id,u.active from strategy.active_pursuit p join platform.app_user u on u.id=p.owner_id where p.vehicle_id=$1`, [vehicleId]),
     db.query<{ subject_id: string; at: Date; detail: Record<string, unknown> }>(`select p.pursuit_id::text as subject_id,a.at,a.detail from platform.audit_log a
       join strategy.active_pursuit p on p.pursuit_id = case when a.subject_type='pursuit'
@@ -74,11 +75,11 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
         then strategy.canonical_pursuit_id(a.subject_id::uuid) end
       where p.vehicle_id=$1 and a.action='pursuit.status_set' and a.at <= $2 order by a.at,a.id`, [vehicleId, now]),
     touchpointSummaries(pursuits, now), strategyRouteSummaries(ids, total.kind),
-    db.query<{ entity_id: string; at: Date }>(`select identity.canonical_entity_id(entity_id) entity_id,max(created_at) at
-      from research.note n where kind='context' and identity.canonical_entity_id(entity_id)=any($1::uuid[])
-        and coalesce(data->>'vehicleId', '') in ('', $2::text) and not ${CONTEXT_BY_RULE} group by 1`, [ids, vehicleId]),
+    db.query<{ entity_id: string; at: Date }>(`select a.canonical_id entity_id,max(n.created_at) at
+      from identity.alias_pairs($1::uuid[]) a join research.note n on n.entity_id=a.entity_id where n.kind='context'
+        and coalesce(n.data->>'vehicleId', '') in ('', $2::text) and not ${CONTEXT_BY_RULE} group by 1`, [ids, vehicleId]),
+    dakotaCapacities(db, ids),
   ]);
-  const dakota = await dakotaCapacities(db, ids);
   const transitions = history.flatMap(r => {
     const from = statusId(r.detail.fromId ?? r.detail.from), to = statusId(r.detail.toId ?? r.detail.to);
     return from && to && from !== to ? [{ pursuitId: r.subject_id, from, to, at: new Date(r.at) }] : [];
@@ -88,6 +89,10 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
   const byClaims = new Map(claims.map(s => [s.entity_id, Number(s.n)]));
   const byContext = new Map(contexts.map(s => [s.entity_id, new Date(s.at).toISOString()]));
   const byOwner = new Map(owners.map(s => [s.pursuit_id, s.active]));
+  // Grouped once, not filtered per pursuit (quadratic in the vehicle's size).
+  const limitsOf = new Map<string, typeof restrictions>(), exposuresOf = new Map<string, typeof exposures>();
+  for (const r of restrictions) limitsOf.set(r.entity_id, [...(limitsOf.get(r.entity_id) ?? []), r]);
+  for (const x of exposures) exposuresOf.set(x.entityId, [...(exposuresOf.get(x.entityId) ?? []), x]);
   const since = new Date(now); since.setUTCHours(0, 0, 0, 0); since.setUTCDate(since.getUTCDate() - (since.getUTCDay() + 6) % 7);
   const rows = pursuits.map(p => {
     const suggestion = bySuggestion.get(p.pursuitId) ?? null;
@@ -95,9 +100,9 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
     const profile = byProfile.get(p.entityId) ?? null;
     const route: RecordedRoute | null = routes.get(p.entityId) ?? null;
     const touch = touches.get(`${p.entityId}:${vehicleId}`);
-    const limits = restrictions.filter(r => r.entity_id === p.entityId);
-    const soft = exposures.filter(x => x.entityId === p.entityId && x.track === 'soft');
-    const hard = exposures.filter(x => x.entityId === p.entityId && x.track === 'hard');
+    const limits = limitsOf.get(p.entityId) ?? [];
+    const soft = (exposuresOf.get(p.entityId) ?? []).filter(x => x.track === 'soft');
+    const hard = (exposuresOf.get(p.entityId) ?? []).filter(x => x.track === 'hard');
     const profileAt = profile?.data.researched?.at ? new Date(profile.data.researched.at) : profile?.at ? new Date(profile.at) : null;
     const strategyAt = suggestion ? new Date(suggestion.made_at) : null;
     const stale = Boolean(strategyAt && ((now.getTime() - strategyAt.getTime()) / DAY > rules.staleDays

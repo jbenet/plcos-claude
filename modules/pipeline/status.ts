@@ -33,33 +33,43 @@ export async function vehicleCloseStatus(vehicleId: string | null, requestedPage
     pursuit_id: string | null; owner_name: string | null; next_step: string | null;
     next_step_on: Date | string | null; headline: string | null; status_reason: string | null;
     source: string | null; source_as_of: Date | string | null; stage_said: string | null;
-  }>(`${candidates}
-    select c.*, e.display_name as entity_name, v.name as vehicle_name, v.slug as vehicle_slug,
+  }>(`${candidates},
+    -- The page first, then each row's pursuit through its aliases: the pursuit lookup used to run
+    -- for every candidate, a canonical_entity_id() call per pursuit each time (performance pass,
+    -- 8 Oct 2026: 2.7 s for the vehicle status page on an invented copy at the live scale).
+    shown as (
+      select c.entity_id, c.vehicle_id, e.display_name as entity_name, v.name as vehicle_name, v.slug as vehicle_slug, v.sort_order
+        from candidates c join identity.entity e on e.entity_id = c.entity_id
+        join platform.vehicle v on v.id = c.vehicle_id
+       order by v.sort_order, e.display_name, c.entity_id
+       limit $2 offset $3
+    )
+    select c.entity_id, c.vehicle_id, c.entity_name, c.vehicle_name, c.vehicle_slug,
            p.pursuit_id, coalesce(p.owner_said, u.name) as owner_name, p.next_step, p.next_step_on,
            p.headline, p.status_reason, p.source, p.source_as_of, p.stage_said
-      from candidates c join identity.entity e on e.entity_id = c.entity_id
-      join platform.vehicle v on v.id = c.vehicle_id
+      from shown c
       left join lateral (
-        select p.* from strategy.active_pursuit p
-         where identity.canonical_entity_id(p.entity_id) = c.entity_id and p.vehicle_id = c.vehicle_id
+        select p.* from identity.alias_pairs(array[c.entity_id]) a
+          join strategy.active_pursuit p on p.entity_id = a.entity_id
+         where p.vehicle_id = c.vehicle_id
          order by (p.closed_at is null) desc, (p.entity_id = c.entity_id) desc, p.opened_at, p.pursuit_id limit 1
       ) p on true
       left join platform.app_user u on u.id = p.owner_id
-     order by v.sort_order, e.display_name, c.entity_id
-     limit $2 offset $3`, [vehicleId, CLOSE_PAGE_SIZE, (page - 1) * CLOSE_PAGE_SIZE]);
+     order by c.sort_order, c.entity_name, c.entity_id`, [vehicleId, CLOSE_PAGE_SIZE, (page - 1) * CLOSE_PAGE_SIZE]);
   if (!rows.length) return { total, page, rows: [] };
   const ids = [...new Set(rows.map(r => r.entity_id))];
   const [tracks, questions, notes, conditions] = await Promise.all([
     closeTracksForPairs(rows),
     db.query<{ entity_id: string; vehicle_id: string; question_id: string; question: string; status: string; due_on: Date | string | null }>(
-      `select identity.canonical_entity_id(entity_id) as entity_id, vehicle_id, question_id, question, status, due_on
-         from meetings.diligence_question where identity.canonical_entity_id(entity_id) = any($1::uuid[])
-          and status in ('open', 'blocked') and ($2::uuid is null or vehicle_id = $2)
-        order by due_on nulls last, question_id`, [ids, vehicleId]),
+      `select a.canonical_id as entity_id, q.vehicle_id, q.question_id, q.question, q.status, q.due_on
+         from identity.alias_pairs($1::uuid[]) a join meetings.diligence_question q on q.entity_id = a.entity_id
+        where q.status in ('open', 'blocked') and ($2::uuid is null or q.vehicle_id = $2)
+        order by q.due_on nulls last, q.question_id`, [ids, vehicleId]),
     db.query<{ entity_id: string; body: string; created_at: Date | string }>(
-      `select distinct on (identity.canonical_entity_id(entity_id)) identity.canonical_entity_id(entity_id) as entity_id, body, created_at
-         from research.note where identity.canonical_entity_id(entity_id) = any($1::uuid[]) and kind = 'context'
-        order by identity.canonical_entity_id(entity_id), created_at desc, note_id`, [ids]),
+      `select distinct on (a.canonical_id) a.canonical_id as entity_id, n.body, n.created_at
+         from identity.alias_pairs($1::uuid[]) a join research.note n on n.entity_id = a.entity_id
+        where n.kind = 'context'
+        order by a.canonical_id, n.created_at desc, n.note_id`, [ids]),
     db.query<{ entity_id: string | null; vehicle_id: string; label: string; detail: string | null; due_on: Date | string | null; owner_name: string | null }>(
       `select identity.canonical_entity_id(k.entity_id) as entity_id, c.vehicle_id, k.label, k.detail, k.due_on, u.name as owner_name
          from close.condition k join close.cycle c on c.cycle_id = k.cycle_id

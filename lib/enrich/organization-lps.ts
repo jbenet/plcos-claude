@@ -129,7 +129,10 @@ export async function addOrganizationLps(db: Db, findings: Finding[], actorId: s
   warehouse: WarehouseGraph = {people:[],ties:[],matches:[]}): Promise<OrganizationLpCounts> {
   const proposed = [...findings.flatMap(findingOrganizations), ...warehouseOrganizations(warehouse)];
   return db.transaction(async tx => {
-    await tx.exec('lock table identity.entity, identity.source_record, identity.affiliation, strategy.pursuit in share row exclusive mode');
+    // Not strategy.pursuit (performance pass, 8 Oct 2026): this transaction runs the whole findings list,
+    // and that lock made every status change wait for it. Pursuits are only inserted here, and
+    // pursuit_entity_id_vehicle_id_key with "on conflict do nothing" already stops a duplicate.
+    await tx.exec('lock table identity.entity, identity.source_record, identity.affiliation in share row exclusive mode');
     proposed.push(...await affiliationEvidence(tx));
     const counts:OrganizationLpCounts = {candidates:proposed.length,added:0,existing:0,ambiguous:0,affiliations:0,ties:0};
     // Resolve the small LP universe once; never re-walk every pursuit for each finding.

@@ -394,21 +394,24 @@ export async function directContact(entityIds: string[]): Promise<Map<string, Di
   if (!entityIds.length) return out;
   const db = await getDb();
   const rows = await db.query<{ for_entity: string; held_on: Date | string; met: boolean; via: string | null }>(
-    `with t as (select unnest($1::uuid[]) as entity_id),
+    `with t as (select x as entity_id, identity.canonical_entity_id(x) as canon from unnest($1::uuid[]) x),
      reach as (
-       select t.entity_id as for_entity, t.entity_id as entity_id from t
+       select t.entity_id as for_entity, t.canon as for_canon, t.canon as entity_id from t
        union
-       select t.entity_id, identity.canonical_entity_id(a.person_entity) from identity.affiliation a join t on identity.canonical_entity_id(t.entity_id) = identity.canonical_entity_id(a.org_entity)
+       select t.entity_id, t.canon, identity.canonical_entity_id(a.person_entity)
+         from t join identity.alias_pairs(array(select canon from t)) oa on oa.canonical_id = t.canon
+         join identity.affiliation a on a.org_entity = oa.entity_id
         where a.ended_on is null
      )
      select distinct on (r.for_entity) r.for_entity::text, m.held_on, m.channel in ('meeting', 'call') as met,
-            case when identity.canonical_entity_id(m.entity_id) = identity.canonical_entity_id(r.for_entity) then null else e.display_name end as via
+            case when r.entity_id = r.for_canon then null else e.display_name end as via
        from reach r
-       join meetings.meeting m on identity.canonical_entity_id(m.entity_id) = identity.canonical_entity_id(r.entity_id)
-       join identity.entity e on e.entity_id = identity.canonical_entity_id(m.entity_id)
+       join identity.alias_pairs(array(select distinct entity_id from reach)) ma on ma.canonical_id = r.entity_id
+       join meetings.meeting m on m.entity_id = ma.entity_id
+       join identity.entity e on e.entity_id = r.entity_id
       where m.held_on is not null and m.held_on <= current_date
         and (m.channel in ('meeting', 'call') or m.direction in ('theirs', 'both'))
-      order by r.for_entity, m.held_on desc, (identity.canonical_entity_id(m.entity_id) = identity.canonical_entity_id(r.for_entity)) desc`,
+      order by r.for_entity, m.held_on desc, (r.entity_id = r.for_canon) desc`,
     [entityIds],
   );
   for (const r of rows) out.set(r.for_entity, { on: new Date(r.held_on), how: r.met ? 'met' : 'heard', via: r.via });

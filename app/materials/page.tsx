@@ -7,6 +7,7 @@ import { AssetLinkForm } from '@/components/content/AssetLinkForm';
 import { shortDate } from '@/lib/time';
 import { listEntities } from '@/lib/authz/read/identity';
 import { listVehicles } from '@/modules/platform';
+import { pipelineEntityIds } from '@/modules/strategy';
 import {
   AUDIENCE_LABEL, listAssets, listSends, listWrapRules, USE_LABEL, wrongWrapSends,
 } from '@/modules/content';
@@ -22,7 +23,9 @@ const SEND_FLAG: Record<string, string> = {
 async function Materials() {
   const selection = await vehicleSelection();
   const [assets, rules, sends, entities, vehicles, wrongWrap] = await Promise.all([
-    listAssets(), listWrapRules(), listSends(), listEntities(), listVehicles(), wrongWrapSends(),
+    // The LPs on a pipeline, not every person and organization on file: the whole list was a
+    // 115,000-option menu on the invented copy at the live scale, 19 MB of page (8 Oct 2026).
+    listAssets(), listWrapRules(), listSends(), pipelineEntityIds().then((ids) => listEntities(ids)), listVehicles(), wrongWrapSends(),
   ]);
   const sendable = assets.filter((a) => a.parentId !== null);
   const refused = sends.filter((s) => s.status === 'refused');

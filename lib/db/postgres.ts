@@ -43,6 +43,9 @@ export async function openPostgres(url: string, options: PostgresOptions = {}): 
     statement_timeout: options.statementTimeoutMs ?? (worker ? 0 : 20_000),
     idle_in_transaction_session_timeout: worker ? 1_800_000 : 60_000,
     application_name: 'plcos',
+    // An import worker's writes are background (network 017): pages may answer from their last build
+    // while it writes, and rebuild behind. Everyone else's writes rebuild before the next page answers.
+    ...(worker ? { options: '-c plcos.background=on' } : {}),
     types: parsers,
   });
   // Idle connection failures must not become unhandled EventEmitter errors. pg removes

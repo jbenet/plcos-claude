@@ -65,11 +65,14 @@ async function touched(db: Db, targetId: string, since: string, search: RouteSea
   const sources = new Set(search?.structural
     ? search.structural.candidates.map((c) => search.structural!.nodes[c.nodes[0]!]!.entityId)
     : search?.routes.map((r) => r.fromEntity) ?? []);
-  let after = '';
+  // Keyset on the uuid itself, so each batch starts where the last ended in the primary key; the
+  // text comparison it replaced re-read every earlier entity on each batch (performance pass, 8 Oct
+  // 2026). A uuid sorts as its lower-case text does, so the batches are the same.
+  let after = '00000000-0000-0000-0000-000000000000';
   while (true) {
     const rows = await db.query<{ id: string; canonical_id: string }>(`select entity_id::text as id,
         identity.canonical_entity_id(entity_id)::text as canonical_id from network.route_changed_entity
-      where revision > $1::bigint and entity_id::text > $2 order by entity_id limit 256`, [since, after]);
+      where revision > $1::bigint and entity_id > $2::uuid order by entity_id limit 256`, [since, after]);
     if (!rows.length) return false;
     const ids = rows.map((r) => r.canonical_id);
     if (ids.some((id) => sources.has(id))) return true;
@@ -189,14 +192,19 @@ export async function precomputeRoutes(at?: Date): Promise<PrecomputeCounts> {
   if (existing) return existing;
   const work = withDb(db, async () => {
     const start = performance.now(), version = await revisionFor(db);
-    const targets = await db.query<{ target_id: string; kind: string }>(`with roots as materialized (select * from identity.entity_resolution),
-    pursuits as materialized (
-      select r.canonical_id entity_id, p.vehicle_id, p.closed_at from strategy.active_pursuit p
-      left join roots r on r.entity_id = p.entity_id
+    const targets = await db.query<{ target_id: string; kind: string }>(`
+    -- Only a merged record walks its chain; resolving every entity first took most of a second at
+    -- the live scale on every warm-up (performance pass, 8 Oct 2026).
+    with pursuits as materialized (
+      select case when e.merged_into is null then e.entity_id else identity.canonical_entity_id(e.entity_id) end entity_id,
+             p.vehicle_id, p.closed_at
+        from strategy.active_pursuit p left join identity.entity e on e.entity_id = p.entity_id
     ), affiliations as materialized (
-      select person.canonical_id person_entity, org.canonical_id org_entity from identity.affiliation a
-      left join roots person on person.entity_id = a.person_entity
-      left join roots org on org.entity_id = a.org_entity where a.ended_on is null
+      select case when person.merged_into is null then person.entity_id else identity.canonical_entity_id(person.entity_id) end person_entity,
+             case when org.merged_into is null then org.entity_id else identity.canonical_entity_id(org.entity_id) end org_entity
+        from identity.affiliation a
+        left join identity.entity person on person.entity_id = a.person_entity
+        left join identity.entity org on org.entity_id = a.org_entity where a.ended_on is null
     ), targets as (
       select p.entity_id as entity_id, v.kind::text as kind, 0 as priority from pursuits p
         join platform.vehicle v on v.id = p.vehicle_id where p.closed_at is null and v.phase = 'active'
