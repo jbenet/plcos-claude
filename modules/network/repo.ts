@@ -262,12 +262,17 @@ export async function sourceEdges(sourceIds: string[], entityIds: string[]): Pro
 
 /** A changed endpoint can affect a three-hop route only within two hops of its target.
  * Called only for pending topology changes: ordinary persistent-cache hits need no graph load. */
+const changedSets = new WeakMap<object, WeakMap<string[], Set<string>>>();
 export async function routeTouchesChanges(targetId: string, changedIds: string[]): Promise<boolean> {
   if (!changedIds.length) return false;
   const graph = await graphSnapshot(await getDb());
   const canonical = (id: string) => graph.canonicalIds?.get(id) ?? id;
   targetId = canonical(targetId);
-  const changed = new Set(changedIds.map(canonical));
+  // One set per graph and list: the warm-up passes the same changed list for every target (cache.ts).
+  let sets = changedSets.get(graph);
+  if (!sets) { sets = new WeakMap(); changedSets.set(graph, sets); }
+  let changed = sets.get(changedIds);
+  if (!changed) { changed = new Set(changedIds.map(canonical)); sets.set(changedIds, changed); }
   if (changed.has(targetId)) return true;
   let checked = 0, slice = performance.now();
   const first = graph.adjacency.get(targetId) ?? [];

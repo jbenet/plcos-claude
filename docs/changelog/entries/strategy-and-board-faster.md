@@ -29,3 +29,10 @@ invented copy, merged records included: same rows.
   (about 25,000 on the invented copy, about 0.25 s) after every person's write, and every plan waited for it. It now
   checks first whether anything it reads changed: records, aliases and affiliations (the route revision) and pursuit
   contacts with their pursuits (a fingerprint). A list rebuild after a move: about 0.5 s → 0.42 s.
+- **The route warm-up after a large import: over an hour → about 2 minutes.** For each stored route search, it checked
+  whether anything near the target had changed by re-reading the changed records 256 at a time and the target's
+  contacts again for every batch. With about 8,000 targets and 12,600 changed records, that slowed to about one target
+  a second (the live Affinity translate sat in "Building relationship ties" for over an hour). The changed records
+  are now read once per pair of revisions and shared by every target. On the invented copy: the whole warm-up,
+  7,982 targets, in 111 s; the old code had done 753 in a minute and was slowing. The same searches were kept and
+  recomputed for those 753.
