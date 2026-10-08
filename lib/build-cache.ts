@@ -80,17 +80,20 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
     }
     return value;
   };
-  return async (...args: string[]): Promise<T> => {
+  const answer = async (args: string[], recentMs: number | null): Promise<T> => {
     const db = await getDb();
     const { revision, foreground } = await readRevisions(db);
     let state = databases.get(db);
     if (!state) { state = { revision, entries: new Map(), latest: new Map(), behind: new Set() }; databases.set(db, state); }
     if (state.revision !== revision) { state.revision = revision; state.entries = new Map(); }
     const key = JSON.stringify(args), prior = state.entries.get(key);
-    if (prior) return prior;
     const last = state.latest.get(key);
-    if (last && last.foreground === foreground && Date.now() - last.started < BACKGROUND_STALE_MS) {
-      if (!state.behind.has(key)) {
+    // A recent read does not wait for a build already running in front; it starts none of its own then.
+    if (prior && !(recentMs !== null && last && Date.now() - last.started < recentMs)) return prior;
+    const quick = last && (last.foreground === foreground ? Date.now() - last.started < BACKGROUND_STALE_MS
+      : recentMs !== null && Date.now() - last.started < recentMs);
+    if (last && quick) {
+      if (!prior && !state.behind.has(key)) {
         state.behind.add(key);
         const s = state;
         void run(db, s, key, args, revision, foreground, true).catch(() => {}).finally(() => s.behind.delete(key));
@@ -99,4 +102,12 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
     }
     return run(db, state, key, args, revision, foreground);
   };
+  /** The current build, as above. */
+  const get = (...args: string[]) => answer(args, null);
+  /**
+   * For a read that may lag a person's own last change by one view: the newest build if it began within
+   * `ms`, whatever has been written since, with a rebuild behind it; otherwise as `get`.
+   */
+  get.recent = (ms: number, ...args: string[]) => answer(args, ms);
+  return get;
 }

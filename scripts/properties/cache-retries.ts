@@ -78,6 +78,26 @@ export async function cacheRetryProperties(check: Check) {
     const fresh = await withDb(fixture.db, () => read());
     check("page cache rebuilds before answering after a person's change", fresh === 'build 3' && loads === 3, `answer ${fresh}; loads ${loads}`);
   }
+  {
+    // A recent read (score detail): after a person's change it answers the last build if young enough,
+    // without waiting for a rebuild already running, and a plain read still rebuilds first.
+    const fixture = revisionFixture();
+    let loads = 0, release!: () => void;
+    let gate: Promise<void> = Promise.resolve();
+    const read = buildCache(async () => { loads++; await gate; return `build ${loads}`; });
+    await withDb(fixture.db, () => read());
+    fixture.commit();
+    gate = new Promise(resolve => { release = resolve; });
+    const front = withDb(fixture.db, () => read());
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const recent = await withDb(fixture.db, () => read.recent(60_000));
+    release();
+    const fresh = await front;
+    const old = await withDb(fixture.db, () => read.recent(0));
+    check("page cache: a recent read answers the last build after a person's change and starts no second rebuild",
+      recent === 'build 1' && fresh === 'build 2' && loads === 2 && old === 'build 2',
+      `recent ${recent}, plain ${fresh}, too old ${old}; loads ${loads}`);
+  }
   const fixture = revisionFixture();
   let attempts = 0;
   const read = buildCache(async () => { attempts++; return 'stable'; });

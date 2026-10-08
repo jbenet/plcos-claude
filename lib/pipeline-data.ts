@@ -261,13 +261,19 @@ export interface ScoreDetail {
   risks: string[];
 }
 
+const DETAIL_RECENT_MS = 60_000; // GUESS: see scoreDetail.
+
 /**
  * Why one LP scores what it does, read when someone opens it on the selection page (issue 0089):
  * the fit assessment's graded dimensions where one exists, otherwise the proposed strategy's four
  * readings, each with the sentence it rests on. Read-only; null when the pursuit is not in the vehicle.
  */
 export async function scoreDetail(vehicleId: string, pursuitId: string): Promise<ScoreDetail | null> {
-  const [plan, assessments] = await Promise.all([strategyFor(vehicleId), assessmentsFor(vehicleId)]);
+  // The detail opens beside the list, most often on the next LP right after a move to Selected. That
+  // move is a person's write, so the plans would rebuild first (0.7 s on the invented copy at the live
+  // scale) though nothing about this LP changed: a build from the last minute answers, and the next one
+  // runs behind it (performance pass, 8 Oct 2026). The minute is a guess.
+  const [plan, assessments] = await Promise.all([strategyFor.recent(DETAIL_RECENT_MS, vehicleId), assessmentsFor.recent(DETAIL_RECENT_MS, vehicleId)]);
   const row = plan?.rows.find((r) => r.pursuit.pursuitId === pursuitId);
   if (!row) return null;
   const a = assessments.find((x) => x.entityId === row.pursuit.entityId && x.vehicleId === vehicleId);
