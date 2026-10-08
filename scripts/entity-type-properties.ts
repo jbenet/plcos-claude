@@ -245,6 +245,12 @@ export async function entityTypeProperties(check: Check, db: Db) {
         && groups.every(g => /^[0-9a-f]{64}$/.test(g.group) && g.members.length > 1 && !!g.reason)
         && (await db.one<{ n: string }>('select count(*)::text n from identity.entity where merged_into is not null'))!.n === typesBefore!.n,
       `find: ${found.status}, ${(found.body.entities as unknown[] | undefined)?.length ?? 0} records; two letters: ${short.status}; review: ${reviewed.status}, ${groups?.length ?? 0} groups`);
+    const counted = await get('tickets=open');
+    const total = Number((await db.one<{ n: string }>('select count(*)::text n from governance.approval_ticket where decision is null'))!.n);
+    const rows = counted.body.tickets as Array<{ kind: string; requester: string; state: string; count: number }>;
+    check('ETYPE an Admin token counts undecided approval tickets by kind, requester and state, with no subjects',
+      counted.status === 200 && rows.reduce((n, t) => n + t.count, 0) === total && rows.every(t => Object.keys(t).sort().join() === 'count,kind,requester,state'),
+      `${rows.length} rows, ${rows.reduce((n, t) => n + t.count, 0)} of ${total} undecided tickets`);
   } finally {
     if (previousDir === undefined) delete process.env.ENRICH_DIR; else process.env.ENRICH_DIR = previousDir;
     await rm(scratch, { recursive: true, force: true });

@@ -12,3 +12,6 @@ short biography ("Former X / Y", "Personal investing (formerly X)", "X (General 
   '<name>'` on the Mac. The review read runs the pass in a transaction it rolls back, so it changes nothing.
 
 The existing duplicates are merged by a W13 run and the duplicates job, on that review.
+
+Later the same morning: `?tickets=open` (`cloud-entity-type.sh tickets`) counts undecided approval tickets by kind,
+requester and state, with no subjects, so the Mac can confirm Reconciliation's proposals cleared (issue 0137).

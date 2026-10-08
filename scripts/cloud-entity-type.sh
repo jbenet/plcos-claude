@@ -11,6 +11,8 @@
 #                                                                type, to data/real/entity-find.json (issue 0138)
 #   bash scripts/cloud-entity-type.sh review '<name>'            the duplicate groups held back for review by that name,
 #                                                                with W13 group ids and reasons, to data/real/identity-review-find.json
+#   bash scripts/cloud-entity-type.sh tickets                    undecided approval tickets counted by kind, requester and
+#                                                                state; counts only (issue 0137)
 #   bash scripts/cloud-entity-type.sh org <entity id> 'reason'   marks that record an organisation (local, reversible)
 #   bash scripts/cloud-entity-type.sh person <entity id> 'reason'
 #   bash scripts/cloud-entity-type.sh reverse <correction id> 'reason'
@@ -66,6 +68,9 @@ if (mode === "list") {
   console.log(`[cloud-entity-type] ${list.length} ${mode === "find" ? "record(s)" : "group(s)"}: ${out}`);
   if (mode === "find") for (const e of list) console.log([e.entityId, e.type, e.roles.join(",") || "no role", `${e.pursuits} pipeline(s)`].join("\t"));
   else for (const g of list) console.log([g.group.slice(0, 12), `${g.members.length} members`, g.members.map((m) => m.type).join(","), g.reason].join("\t"));
+} else if (mode === "tickets") {
+  for (const t of a.tickets) console.log([t.kind, t.requester, t.state, t.count].join("\t"));
+  console.log(`[cloud-entity-type] ${a.tickets.reduce((n, t) => n + t.count, 0)} undecided ticket(s)`);
 } else if (mode === "reverse") console.log(`[cloud-entity-type] ${a.reversed ? "reversed" : "already reversed"}`);
 else console.log(`[cloud-entity-type] ${a.correctionId ? `corrected: ${a.correctionId}` : "already that type"}`);
 ' "$code" "$2" "${3:-}"
@@ -81,6 +86,7 @@ post() {
 case "${1:-}" in
   list) [ $# -eq 1 ] || usage; answer "$(call -w '\n%{http_code}' "$TO/api/sync/entity-type")" list "$OUT" ;;
   show) [ $# -eq 2 ] && [[ "$2" =~ ^[0-9a-fA-F-]{8,36}$ ]] || usage; answer "$(call -w '\n%{http_code}' "$TO/api/sync/entity-type?id=$2")" show "data/real/entity-type-$2.json" ;;
+  tickets) [ $# -eq 1 ] || usage; answer "$(call -w '\n%{http_code}' "$TO/api/sync/entity-type?tickets=open")" tickets ;;
   find|review) [ $# -eq 2 ] && [ -n "$2" ] || usage
     q="$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$2")"
     answer "$(call --max-time 300 -w '\n%{http_code}' "$TO/api/sync/entity-type?$1=$q")" "$1" "data/real/$([ "$1" = find ] && echo entity-find || echo identity-review-find).json" ;;

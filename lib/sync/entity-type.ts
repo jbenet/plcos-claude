@@ -21,6 +21,8 @@ import type { PushAnswer } from './push';
  *   GET ?review=<name>                                     → 200 { groups: ReviewGroup[] } the duplicate groups Merge
  *                                                            duplicate identities would hold back for review, by name:
  *                                                            the W13 group id, members, types, roles and reasons
+ *   GET ?tickets=open                                      → 200 { tickets: TicketCount[] } undecided approval tickets
+ *                                                            counted by kind, requester and state; no subjects or names
  *   POST { operation: 'correct', entityId, type, reason, requestKey } → 200 { correctionId } (null: already that type)
  *   POST { operation: 'reverse', correctionId, reason }    → 200 { reversed }
  *
@@ -32,6 +34,11 @@ const refusedHere = () => config.data.profile === 'real' && (Boolean(config.data
 export async function readEntityTypes(caller: SyncCaller, db?: Db, request?: Request): Promise<PushAnswer> {
   const params = request ? new URL(request.url).searchParams : null;
   const find = params?.get('find') ?? null, review = params?.get('review') ?? null;
+  if (params?.get('tickets') === 'open') {
+    const tickets = await openTicketCounts(db ?? await getDb());
+    await auditSync(caller, 'identity', 'ok', { op: 'tickets', count: tickets.length });
+    return { status: 200, body: { ok: true, tickets } };
+  }
   if (find !== null || review !== null) {
     const q = (find ?? review ?? '').trim().slice(0, 120);
     if (q.replace(/[^\p{L}\p{N}]/gu, '').length < 3) {
@@ -138,4 +145,15 @@ export async function identityReviewByName(db: Db, q: string): Promise<ReviewGro
     group: identityReviewGroupId(g.entityIds), name: g.name, reason: g.reason,
     members: g.entityIds.map((id) => ({ entityId: id, name: facts.get(id)?.name ?? '', type: facts.get(id)?.type ?? 'unknown', roles: roles.get(id) ?? [] })),
   }));
+}
+
+/** Undecided approval tickets, counted (issue 0137): a system actor by its handle, everyone else as "person". */
+export interface TicketCount { kind: string; requester: string; state: 'open' | 'expired'; count: number }
+
+export async function openTicketCounts(db: Db): Promise<TicketCount[]> {
+  return db.query<TicketCount>(
+    `select t.kind::text kind, case when u.active then 'person' else u.handle end requester,
+            case when coalesce(t.expires_at < now(), false) then 'expired' else 'open' end state, count(*)::int count
+       from governance.approval_ticket t join platform.app_user u on u.id = t.requested_by
+      where t.decision is null group by 1, 2, 3 order by 1, 2, 3`);
 }
