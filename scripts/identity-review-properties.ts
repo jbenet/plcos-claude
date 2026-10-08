@@ -267,6 +267,31 @@ export async function identityReviewProperties(check: Check, db: Db) {
       && conflicts.decisions!.refused.length === 2 && conflicts.decisions!.refused.every(r => r.reason.includes('Conflicting')) && beforeConflict === await snapshot(),
       'A merge and a separation for the same group cannot silently race by file order.');
 
+    // Issue 0138: the import's own different-external-ID separation is cleared by a full attestation; a person's is not.
+    const trio = async (suffix: string) => [await entity(suffix, 'org', 'affinity', `org:${suffix.toLowerCase()}-${tag}-a`),
+      await entity(suffix, 'org', 'affinity', `org:${suffix.toLowerCase()}-${tag}-b`), await entity(suffix, 'org')];
+    const attest = (suffix: string) => ({ evidence: [{ ...evidence[0], quote: `Both company records give the same website and founding year.\nSame real organization: affinity:org:${suffix.toLowerCase()}-${tag}-a = affinity:org:${suffix.toLowerCase()}-${tag}-b` }] });
+    const accel = await trio('Accel');
+    const autoPass = await run();
+    const autoGroup = autoPass.ambiguous.find(g => g.entityIds.includes(accel[0]!));
+    const autoSeparation = await db.one<{ id: string }>(`select assertion_id::text id from identity.match_assertion where kind='not_same_as'
+      and rule='identity:v1:different_external_id' and undone_at is null and merged_entity=any($1::uuid[]) and canonical_entity=any($1::uuid[])`, [accel]);
+    const autoMerge = autoGroup ? await run([decision(autoGroup.entityIds, 'merge', { survivor: accel[0], ...attest('Accel') })]) : null;
+    const cleared = autoSeparation ? await db.one<{ undone: boolean; reason: string | null }>('select undone_at is not null undone, undo_reason reason from identity.match_assertion where assertion_id=$1', [autoSeparation.id]) : null;
+    const roots = await Promise.all(accel.map(root));
+    check('IDENTITY REVIEW an attested merge clears the import\'s own different-ID separation and records why (0138)',
+      !!autoGroup && !!autoSeparation && autoMerge?.decisions!.applied === 1 && roots.every(r => r === accel[0]) && !!cleared?.undone && /0138/.test(cleared.reason ?? ''),
+      `group ${autoGroup?.entityIds.length ?? 0} members; separation ${autoSeparation ? 'found' : 'missing'}; applied ${autoMerge?.decisions!.applied}; refused ${JSON.stringify(autoMerge?.decisions!.refused)}; cleared ${cleared?.undone}`);
+    const manual = await trio('Manual');
+    await db.query(`insert into identity.match_assertion(kind,left_source,left_source_id,right_source,right_source_id,merged_entity,canonical_entity,rule,signals,note)
+      values('not_same_as','affinity',$1,'affinity',$2,$3,$4,'manual:fixture','{}'::jsonb,'Invented reviewer: different firms')`,
+      [`org:manual-${tag}-a`, `org:manual-${tag}-b`, manual[0], manual[1]]);
+    const manualGroup = (await run()).ambiguous.find(g => g.entityIds.includes(manual[2]!));
+    const manualMerge = manualGroup ? await run([decision(manualGroup.entityIds, 'merge', { survivor: manualGroup.entityIds.includes(manual[0]!) ? manual[0] : manual[2], ...attest('Manual') })]) : null;
+    check('IDENTITY REVIEW an attestation never clears a separation a person recorded',
+      (!manualGroup || (manualMerge?.decisions!.applied === 0 && manualMerge.decisions!.refused.length === 1)) && await root(manual[0]!) !== await root(manual[1]!),
+      `group ${manualGroup?.entityIds.length ?? 'none'}; refused ${JSON.stringify(manualMerge?.decisions!.refused)}`);
+
     const stale = await pair('Stale'), outsider = await entity('Unrelated');
     const beforeInvalid = await snapshot();
     const invalidInputs = [decision(stale, 'merge', { survivor: outsider }), decision(stale, 'merge', { members: [...stale, outsider] }), decision(stale, 'merge', { group: identityReviewGroupId([...stale, randomUUID()]) })];
