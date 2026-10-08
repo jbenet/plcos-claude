@@ -160,6 +160,15 @@ export async function getPursuit(pursuitId: string, q?: Queryable): Promise<Purs
   return assemble(row, events.get(pursuitId) ?? []);
 }
 
+/** Several pursuits in two queries, for a bulk change (issue 0139); a missing or merged one is left out. */
+export async function getPursuits(pursuitIds: string[], q?: Queryable): Promise<Map<string, Pursuit>> {
+  if (!pursuitIds.length) return new Map();
+  const db = q ?? (await getDb());
+  const rows = await db.query<PursuitRow>(`${PURSUIT_SELECT} where p.pursuit_id = any($1::uuid[])`, [pursuitIds]);
+  const events = await eventsFor(rows.map((r) => r.pursuit_id), q);
+  return new Map(rows.map((r) => [r.pursuit_id, assemble(r, events.get(r.pursuit_id) ?? [])]));
+}
+
 export async function pursuitFor(entityId: string, vehicleId: string): Promise<Pursuit | null> {
   const db = await getDb();
   const row = await db.one<PursuitRow>(

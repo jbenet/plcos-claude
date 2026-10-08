@@ -297,3 +297,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Reconciliation records "LP opted in" and "Meeting held" itself](entries/reconcile-records-itself.md)
 - [Duplicate organizations: affiliation text, and a lookup for the Mac](entries/dedupe-lookup.md)
 - [A push can retire a strategy file](entries/retire-strategy.md)
+- [Bulk moves in a fixed handful of statements](entries/fast-bulk-moves.md)

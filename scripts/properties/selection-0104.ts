@@ -98,6 +98,16 @@ export async function selection0104Properties(check: Check, db: Db) {
       check('0104 a bulk move is all or nothing, and each row is audited once with its own update',
         untouched && ok.written === 3 && await updates() === beforeU + 3 && await logs() === beforeL + 6 && each.every(Boolean),
         'One stale row leaves all three untouched; the fresh request writes one update, one status_set and one bulk_action per row.');
+
+      // 4. Issue 0139: the statements a move makes do not grow with its rows (a round trip per row to the
+      // live database made a move of eleven take ten seconds).
+      const { withQueryTimings } = await import('../../lib/db/timing');
+      const statements = async (input: BulkInput) => { let n = 0; await withQueryTimings(() => { n++; }, () => applyBulk(actor.id, input, vehicle)); return n; };
+      const one = await statements({ ...move, key: `sel-0139-${randomUUID()}`, status: 'connecting', rows: [await row(trio[0]!)] });
+      const three = await statements({ ...move, key: `sel-0139-${randomUUID()}`, status: 'discussing', rows: await Promise.all(trio.map(row)) });
+      const allMoved = (await Promise.all(trio.map(status))).every((s) => s.status === 'discussing');
+      check('0139 a bulk move makes the same number of statements for one row as for three',
+        one > 0 && one === three && allMoved, `one row: ${one} statements; three rows: ${three}; all three Discussing: ${allMoved}.`);
     } finally {
       await db.query('delete from strategy.pursuit_update where pursuit_id=any($1::uuid[])', [ids]);
       await db.query('delete from strategy.pursuit where pursuit_id=any($1::uuid[])', [ids]);
