@@ -65,11 +65,14 @@ async function touched(db: Db, targetId: string, since: string, search: RouteSea
   const sources = new Set(search?.structural
     ? search.structural.candidates.map((c) => search.structural!.nodes[c.nodes[0]!]!.entityId)
     : search?.routes.map((r) => r.fromEntity) ?? []);
-  let after = '';
+  // Keyset on the uuid itself, so each batch starts where the last ended in the primary key; the
+  // text comparison it replaced re-read every earlier entity on each batch (performance pass, 8 Oct
+  // 2026). A uuid sorts as its lower-case text does, so the batches are the same.
+  let after = '00000000-0000-0000-0000-000000000000';
   while (true) {
     const rows = await db.query<{ id: string; canonical_id: string }>(`select entity_id::text as id,
         identity.canonical_entity_id(entity_id)::text as canonical_id from network.route_changed_entity
-      where revision > $1::bigint and entity_id::text > $2 order by entity_id limit 256`, [since, after]);
+      where revision > $1::bigint and entity_id > $2::uuid order by entity_id limit 256`, [since, after]);
     if (!rows.length) return false;
     const ids = rows.map((r) => r.canonical_id);
     if (ids.some((id) => sources.has(id))) return true;

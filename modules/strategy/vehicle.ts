@@ -52,7 +52,7 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
   const total = totals.find(t => t.vehicleId === vehicleId);
   if (!total) return null;
   const ids = [...new Set(pursuits.map(p => p.entityId))];
-  const [suggestions, profiles, claims, restrictions, owners, history, touches, routes, contexts] = await Promise.all([
+  const [suggestions, profiles, claims, restrictions, owners, history, touches, routes, contexts, dakota] = await Promise.all([
     db.query<SuggestionRow>(`select distinct on (s.pursuit_id) s.pursuit_id, s.suggestion_id, s.data, s.body, s.made_at, s.made_by, s.status
       from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id) join platform.vehicle v on v.id=p.vehicle_id
       where p.vehicle_id=$1 and s.status in ('proposed','accepted')
@@ -78,8 +78,8 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
     db.query<{ entity_id: string; at: Date }>(`select a.canonical_id entity_id,max(n.created_at) at
       from identity.alias_pairs($1::uuid[]) a join research.note n on n.entity_id=a.entity_id where n.kind='context'
         and coalesce(n.data->>'vehicleId', '') in ('', $2::text) and not ${CONTEXT_BY_RULE} group by 1`, [ids, vehicleId]),
+    dakotaCapacities(db, ids),
   ]);
-  const dakota = await dakotaCapacities(db, ids);
   const transitions = history.flatMap(r => {
     const from = statusId(r.detail.fromId ?? r.detail.from), to = statusId(r.detail.toId ?? r.detail.to);
     return from && to && from !== to ? [{ pursuitId: r.subject_id, from, to, at: new Date(r.at) }] : [];
@@ -89,6 +89,10 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
   const byClaims = new Map(claims.map(s => [s.entity_id, Number(s.n)]));
   const byContext = new Map(contexts.map(s => [s.entity_id, new Date(s.at).toISOString()]));
   const byOwner = new Map(owners.map(s => [s.pursuit_id, s.active]));
+  // Grouped once, not filtered per pursuit (quadratic in the vehicle's size).
+  const limitsOf = new Map<string, typeof restrictions>(), exposuresOf = new Map<string, typeof exposures>();
+  for (const r of restrictions) limitsOf.set(r.entity_id, [...(limitsOf.get(r.entity_id) ?? []), r]);
+  for (const x of exposures) exposuresOf.set(x.entityId, [...(exposuresOf.get(x.entityId) ?? []), x]);
   const since = new Date(now); since.setUTCHours(0, 0, 0, 0); since.setUTCDate(since.getUTCDate() - (since.getUTCDay() + 6) % 7);
   const rows = pursuits.map(p => {
     const suggestion = bySuggestion.get(p.pursuitId) ?? null;
@@ -96,9 +100,9 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
     const profile = byProfile.get(p.entityId) ?? null;
     const route: RecordedRoute | null = routes.get(p.entityId) ?? null;
     const touch = touches.get(`${p.entityId}:${vehicleId}`);
-    const limits = restrictions.filter(r => r.entity_id === p.entityId);
-    const soft = exposures.filter(x => x.entityId === p.entityId && x.track === 'soft');
-    const hard = exposures.filter(x => x.entityId === p.entityId && x.track === 'hard');
+    const limits = limitsOf.get(p.entityId) ?? [];
+    const soft = (exposuresOf.get(p.entityId) ?? []).filter(x => x.track === 'soft');
+    const hard = (exposuresOf.get(p.entityId) ?? []).filter(x => x.track === 'hard');
     const profileAt = profile?.data.researched?.at ? new Date(profile.data.researched.at) : profile?.at ? new Date(profile.at) : null;
     const strategyAt = suggestion ? new Date(suggestion.made_at) : null;
     const stale = Boolean(strategyAt && ((now.getTime() - strategyAt.getTime()) / DAY > rules.staleDays

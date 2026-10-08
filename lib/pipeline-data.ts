@@ -45,30 +45,32 @@ function flags(all: string[]) {
 const strategyFor = buildCache(async (vehicleId: string) => vehicleStrategy(vehicleId));
 /** Both tables start from pursuits, never the sparse manual-factor table. */
 export const pipelineData = buildCache(async (vehicleId: string) => {
-  const vehicles = await listVehicles();
+  const [vehicles, all] = await Promise.all([listVehicles(), listPursuits(vehicleId || null)]);
   const history = new Set(vehicles.filter(v => v.phase === 'historical').map(v => v.id));
-  const all = await listPursuits(vehicleId || null);
   const pursuits = all.filter(p => vehicleId || !history.has(p.vehicleId));
-  const [assessments, plans] = await Promise.all([
+  // Plans, people and touchpoints each need only the pursuits: they load side by side, and the plans
+  // (the slowest, through each vehicle's strategy) are awaited last (performance pass, 8 Oct 2026).
+  const planned = Promise.all([
     listAssessments(vehicleId || null),
     Promise.all([...new Set(pursuits.map(p => p.vehicleId))].map(id => strategyFor(id))),
   ]);
-  const strategies = new Map(plans.flatMap(plan => plan?.rows.map(r => [r.pursuit.pursuitId, r] as const) ?? []));
-  const fit = new Map(assessments.map(a => [`${a.entityId}:${a.vehicleId}`, a]));
-  const scoreFor = (p: Pursuit) => {
-    const a = fit.get(`${p.entityId}:${p.vehicleId}`);
-    const strategy = strategies.get(p.pursuitId);
-    const suggestion = strategy?.suggestion;
-    if (a?.dimensions.length) return { score: Math.round(a.weightedFit * 100), kind: 'Fit assessment', at: iso(a.updatedAt) };
-    return { score: provisionalScore(suggestion?.data.scores), kind: strategy?.stale ? 'Provisional · stale' : 'Provisional', at: iso(suggestion ? new Date(suggestion.made_at) : null) };
-  };
+  planned.catch(() => undefined); // awaited below; a failure there, not an unhandled rejection here
   const pairs = pursuits.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
   const entityIds = [...new Set(pursuits.map((p) => p.entityId))];
+  const db = await getDb();
+  const touched = (async () => {
+    const touchesBy = await touchpointsByPair(pairs);
+    const [sums, closes, restricted, readings, spv] = await Promise.all([
+      touchpointSummaries(pairs, new Date(), touchesBy), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
+      spvMarks(db, entityIds),
+    ]);
+    return { touchesBy, sums, closes, restricted, readings, spv };
+  })();
+  touched.catch(() => undefined);
   const entities = await listEntities(entityIds);
   const organisations = new Set(entities.filter(e => e.entityType !== 'person').map(e => e.entityId));
   // The LP is the committing unit (docs/23): an organisation's row names its people — its contacts on
   // this pursuit first, then everyone acting for it now — and a person's row names their firms.
-  const db = await getDb();
   const orgPursuits = pursuits.filter(p => organisations.has(p.entityId)).map(p => p.pursuitId);
   const personIds = entityIds.filter(id => !organisations.has(id));
   const [people, contacts, affiliations] = await Promise.all([
@@ -114,16 +116,22 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   }
   const firmsFor = (p: Pursuit): PipelineRow['firms'] =>
     (firmsOf.get(p.entityId) ?? []).map(f => ({ ...f, lpRow: lpRow.get(`${f.id}:${p.vehicleId}`) ?? null }));
-  const touchesBy = await touchpointsByPair(pairs);
-  const [sums, closes, restricted, readings, spv] = await Promise.all([
-    touchpointSummaries(pairs, new Date(), touchesBy), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
-    spvMarks(db, entityIds),
-  ]);
   const spvKind = new Set(vehicles.filter(v => v.kind === 'spv').map(v => v.id));
   // Strategic value (issue 0120): each vehicle's field and, for an SPV, its company; then the records.
   const scopes = new Map(vehicles.map(v => [v.id, strategicScope(v, config.strategic.domains)]));
   const inView = [...new Set(pursuits.map(p => p.vehicleId))].map(id => scopes.get(id)!);
-  const strategicOn = await strategicRecords(db, entityIds, inView.flatMap(x => [...x.terms, ...(x.company ? [x.company] : [])]));
+  const [strategicOn, { touchesBy, sums, closes, restricted, readings, spv }, [assessments, plans]] = await Promise.all([
+    strategicRecords(db, entityIds, inView.flatMap(x => [...x.terms, ...(x.company ? [x.company] : [])])), touched, planned,
+  ]);
+  const strategies = new Map(plans.flatMap(plan => plan?.rows.map(r => [r.pursuit.pursuitId, r] as const) ?? []));
+  const fit = new Map(assessments.map(a => [`${a.entityId}:${a.vehicleId}`, a]));
+  const scoreFor = (p: Pursuit) => {
+    const a = fit.get(`${p.entityId}:${p.vehicleId}`);
+    const strategy = strategies.get(p.pursuitId);
+    const suggestion = strategy?.suggestion;
+    if (a?.dimensions.length) return { score: Math.round(a.weightedFit * 100), kind: 'Fit assessment', at: iso(a.updatedAt) };
+    return { score: provisionalScore(suggestion?.data.scores), kind: strategy?.stale ? 'Provisional · stale' : 'Provisional', at: iso(suggestion ? new Date(suggestion.made_at) : null) };
+  };
   const readsOf = new Map<string, NoteReading[]>();
   for (const r of readings) readsOf.set(r.entityId, [...(readsOf.get(r.entityId) ?? []), r]);
   const sum = (p: Pursuit) => sums.get(`${p.entityId}:${p.vehicleId}`)!;
