@@ -68,6 +68,24 @@ export async function commitRevisionProperties(check: Check) {
       && personal.r !== background.r && personal.f === personal.r,
       `start ${start.r}/${start.f}, import ${background.r}/${background.f}, person ${personal.r}/${personal.f}`);
 
+    // The route generation's contact signature skips its recompute while its inputs are unchanged
+    // (modules/network/cache.ts): a status move keeps it; a new pursuit contact or affiliation moves it.
+    const { revisionFor } = await import('../../modules/network/cache');
+    const { withDb } = await import('../../lib/db');
+    const generation = async () => (await withDb(db, () => revisionFor(db))).generation.split(':')[3];
+    const g0 = await generation();
+    await db.query(`update strategy.pursuit set status = 'discussing' where pursuit_id = $1`, [pursuit]);
+    const g1 = await generation();
+    await db.query(`insert into strategy.pursuit_contact (pursuit_id, person_entity, role, origin_pursuit_id, source)
+      values ($1, $2, 'Invented contact', $1, 'us')`, [pursuit, person]);
+    const g2 = await generation();
+    await db.query(`delete from strategy.pursuit_contact where pursuit_id = $1`, [pursuit]);
+    const g3 = await generation();
+    await db.query(`update identity.affiliation set role = 'Invented partner', kind = 'principal', is_primary = true where person_entity = $1 and org_entity = $2`, [person, org]);
+    const g4 = await generation();
+    check('REVISIONS keep the contact signature through a status move and move it for a contact or affiliation',
+      g0 === g1 && g2 !== g1 && g3 === g0 && g4 !== g3, `${g0} → move ${g1} → contact ${g2} → removed ${g3} → affiliation ${g4}`);
+
     if (db.kind === 'postgres' && process.env.DATABASE_URL) {
       // Two connections: a long writer to research notes and identities, and a status change meanwhile.
       const { openPostgres } = await import('../../lib/db/postgres');

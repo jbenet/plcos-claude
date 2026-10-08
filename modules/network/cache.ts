@@ -30,9 +30,23 @@ async function sourceSignature(db: Db, revision: string): Promise<string> {
 }
 // Membership changes are read revisions, not graph edits. Hash the actual resolver output
 // so money/notes invalidations do not discard otherwise valid structural searches.
+// The resolver reads records, aliases and affiliations, whose every change moves the route revision
+// (network 006/016), and pursuit contacts with their pursuits, fingerprinted here. While both are
+// unchanged the signature is too, so a status move or a note no longer recomputes it over every
+// organisation (about 0.25 s on the invented copy; performance pass, 8 Oct 2026).
+const contactInputs = new WeakMap<Db, { key: string; value: string }>();
 const contactSignature = buildCache(async () => {
-  const rows = await (await getDb()).query<{ id: string }>(`select entity_id::text id from identity.entity where entity_type <> 'person' and merged_into is null order by entity_id`);
-  return createHash('sha256').update(JSON.stringify([...(await lpContactsFor(rows.map(r => r.id))).entries()])).digest('hex').slice(0, 16);
+  const db = await getDb();
+  const { key } = (await db.one<{ key: string }>(`select (select revision::text from network.route_revision where singleton) || ':' || (
+      select count(*)::text || ':' || coalesce(sum(hashtext(concat_ws('|', c.pursuit_id, c.person_entity, c.role, c.source,
+        p.entity_id, p.vehicle_id, p.merged_into)))::text, '0')
+      from strategy.pursuit_contact c join strategy.pursuit p using (pursuit_id)) as key`))!;
+  const prior = contactInputs.get(db);
+  if (prior?.key === key) return prior.value;
+  const rows = await db.query<{ id: string }>(`select entity_id::text id from identity.entity where entity_type <> 'person' and merged_into is null order by entity_id`);
+  const value = createHash('sha256').update(JSON.stringify([...(await lpContactsFor(rows.map(r => r.id))).entries()])).digest('hex').slice(0, 16);
+  contactInputs.set(db, { key, value });
+  return value;
 });
 export async function revisionFor(db: Db) {
   const row = (await db.one<{ revision: string; epoch: string; day: string }>(
