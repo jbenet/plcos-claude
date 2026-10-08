@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Queue a research export or a findings import on the cloud app, or read a job's state (lib/sync/jobs.ts),
+# Queue a research export, a findings import or Merge duplicate identities on the cloud app, or read a job's state (lib/sync/jobs.ts),
 # with an Admin token, as the buttons in Developer → Enrichment would. Counts only, never a name.
 #
-#   bash scripts/cloud-job.sh [--to <app url>] export|findings      prints the job id
+#   bash scripts/cloud-job.sh [--to <app url>] export|findings|duplicates   prints the job id
 #   bash scripts/cloud-job.sh [--to <app url>] status <job id>
 #
 # Secrets, never printed and never on a command line, as for scripts/cloud-push.sh:
@@ -17,7 +17,7 @@ TO=""
 [ "${1:-}" = "--to" ] && { TO="${2:-}"; shift 2; }
 cmd="${1:-}"
 case "$cmd" in
-  export|findings) [ $# -eq 1 ] || usage ;;
+  export|findings|duplicates) [ $# -eq 1 ] || usage ;;
   status) [ $# -eq 2 ] && [[ "$2" =~ ^[0-9a-fA-F-]{36}$ ]] || usage ;;
   *) usage ;;
 esac
