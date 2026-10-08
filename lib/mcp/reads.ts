@@ -16,6 +16,7 @@ import { suggestionsFor } from '@/modules/strategy';
 import { listVehicles, type AppUser, type Vehicle } from '@/modules/platform';
 import type { RouteSearch } from '@/modules/network';
 import { ADDRESSES_WITHHELD, bestAddresses } from '@/lib/outreach/addresses';
+import { strategyBrief, type Strategy } from '@/lib/enrich/strategy';
 import type { Answer } from './output';
 
 /**
@@ -160,7 +161,7 @@ export async function lpSummary(user: AppUser, a: { pursuitId: string; routes?: 
   ]);
   // The latest strategy that was not dismissed; a licensed (Dakota) one only for an Admin.
   const s = suggestions.find((x) => x.status !== 'dismissed' && (licensed || x.data?.source !== 'dakota'));
-  const sd = (s?.data ?? {}) as { angle?: string; ask?: { shape?: string }; list?: string; confidence?: string; next?: { what?: string }; risks?: string[] };
+  const sd = (s?.data ?? {}) as Partial<Strategy>;
   const routes = a.routes === false ? null
     : await routeAnswer(user, p.vehicleId, await planRoutes(user.handle, p.entityId, 3, vehicle.kind, 'team', undefined, { vehicleId: p.vehicleId }), MAX_ROUTES);
   return {
@@ -176,7 +177,8 @@ export async function lpSummary(user: AppUser, a: { pursuitId: string; routes?: 
         waitingOnThemSince: day(touch.awaitingSince), nextMeeting: day(touch.nextMeeting), records: touch.total,
       },
       strategy: !w ? null : s ? {
-        madeBy: s.madeBy, madeAt: day(s.madeAt), status: s.status, list: sd.list ?? null, angle: sd.angle ?? null,
+        // 0141 (Juan: "far too wordy"): the strategy as short bullets first; the fields after, for a client that needs one.
+        brief: strategyBrief(sd), madeBy: s.madeBy, madeAt: day(s.madeAt), status: s.status, list: sd.list ?? null, angle: sd.angle ?? null,
         askShape: sd.ask?.shape ?? null, confidence: sd.confidence ?? null, next: sd.next?.what ?? null, risks: sd.risks ?? [], text: s.body,
       } : 'No strategy on file.',
       // Rule 1: hard and soft are listed apart and never summed.

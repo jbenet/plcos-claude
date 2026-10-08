@@ -23,7 +23,7 @@ You run workflow W5 in /Users/jbenet/git/plc-os/plcos-claude-live, the live fold
 
 For each key in your batch, read its strategy (data/real/enrich/strategy/<key>.json), its line in
 candidates.jsonl, its finding (raw/<key>.json) and its paths (connections.jsonl), and write the
-strategy as the caller's pass asks. `made.version` is a string ("1.10"). Finish with
+strategy as the caller's pass asks. `made.version` is a string ("1.12"). Write tightly, to W5 "Tight (1.12)": a one-sentence angle, short risks. Finish with
 `DATA_PROFILE=real npx tsx scripts/enrich-check.ts` and fix what it reports for your keys.
 
 Firm rules: no web; write only the strategy files of your batch; no git; your reply carries counts
