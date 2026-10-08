@@ -268,7 +268,7 @@ export async function networkVariations(check: Check) {
     {
       name: 'the connector reaches the cap',
       describe: 'Record one more ask through Umeadi this quarter.',
-      expect: 'The tier-A route drops from Recommend to Hold on goodwill, not on evidence.',
+      expect: 'The tier-A route stays Recommend and is flagged a busy introducer (Juan, 8 Oct 2026, feedback 0124: "flag only").',
       perturb: async (d, ids) => {
         const u = await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'");
         const v = await d.one<{ id: string }>("select id from platform.vehicle where slug = 'rails'");
@@ -282,8 +282,9 @@ export async function networkVariations(check: Check) {
       assert: (r) => {
         const path = r!.routes.find((x) => x.connectorNames.includes('Orla Umeadi'));
         return {
-          ok: path?.verdict === 'hold',
-          detail: `Umeadi route is ${path?.verdict ?? 'missing'}`,
+          ok: path?.verdict === 'recommend' && path.askLoad?.busy === true && path.reasons.some((x) => /busy introducer.*Nothing is held/.test(x))
+            && !!(r?.topRoutes ?? []).some((x) => x.connectorNames.includes("Orla Umeadi")),
+          detail: `Umeadi route is ${path?.verdict ?? 'missing'}, busy ${path?.askLoad?.busy}, in top routes ${(r?.topRoutes ?? []).some((x) => x.connectorNames.includes('Orla Umeadi'))}`,
         };
       },
     },

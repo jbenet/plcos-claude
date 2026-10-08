@@ -330,6 +330,9 @@ the most and best warm routes to a vehicle's open LPs.
   see:** an intro ask a person emails without recording it (juanmail linking it to the LP, with no INTRO_ASK ticket, records
   a message, not an ask), and a reply in a mailbox juanmail does not read. So `asksThisQuarter` is the recorded count — the
   same number the cap and the queue's `ask_count` check use — not a count of every email.
+- **`busy` (8 Oct 2026, feedback 0124):** `true` when `asksThisQuarter` is at or past `asksPerConnectorPerQuarter`
+  (3, a GUESS). A flag only (Juan: "flag only"): the connector is still listed and ranked as before, and a route through
+  them stays Recommend with a "busy introducer" warning. Weigh it before asking them again.
 - **`intros` (7 Oct 2026):** what the asks through them came to, on the vehicles the token's owner reads, all time.
   `made`: the intro asks made through them (a `made_at`, the same record as above). `committed`: those LPs whose
   pursuit on that vehicle is now Committed, as `{ pursuitId, name, vehicle }` — a pipeline status, not hard money
