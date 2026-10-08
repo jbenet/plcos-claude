@@ -181,6 +181,28 @@ export async function prospectsProperties(check: Check, db: Db) {
     && await n('select count(*)::text n from identity.affiliation where person_entity = $1', [bornNoOrg?.id]) === 0,
     `Added ${newResult.added}; sourced person mappings and optional organization checked.`);
 
+  // Issue 0138: an organization field that reads as a short biography names its organizations.
+  {
+    const { affiliationParts } = await import('../lib/enrich/affiliation-text');
+    const bio = 'Former Invented 0138 Accelerator / Invented 0138 Works (former CEO)';
+    const bioRow = prospect('invented-0138:bio', 'Invented 0138 Harbor', { org: bio });
+    const bioResult = await addProspects(db, actor, files(bioRow));
+    const bioPerson = await sourcePerson(bioRow.personKey);
+    const rows = bioPerson ? await db.query<{ org: string; role: string; former: boolean; primary: boolean }>(
+      `select o.display_name org, a.role, a.ended_on is not null former, a.is_primary primary from identity.affiliation a
+        join identity.entity o on o.entity_id = a.org_entity where a.person_entity = $1 order by o.display_name`, [bioPerson.id]) : [];
+    const whole = await n('select count(*)::text n from identity.entity where display_name = $1', [bio]);
+    const kept = ['Invented 0138 Ventures', 'Invented 0138 (UK)', 'Invented 0138 Works (Invented 0138 Accelerator)']
+      .every(x => JSON.stringify(affiliationParts(x)) === JSON.stringify([{ org: x, role: null, former: false }]));
+    const personal = affiliationParts('Personal investing (formerly Invented 0138 Accelerator)');
+    check('PROSPECTS 0138 an organization field like "Former X / Y" records affiliations with X and Y, not an organization named after it',
+      bioResult.added === 1 && whole === 0 && rows.length === 2 && rows.every(r => r.former) && rows.some(r => r.role === 'CEO')
+        && !rows.some(r => r.primary) && kept
+        && personal.length === 1 && personal[0]!.org === 'Invented 0138 Accelerator' && personal[0]!.former,
+      `${rows.length} affiliations (${rows.map(r => `${r.former ? 'former' : 'current'}${r.role !== 'not recorded' ? ` ${r.role}` : ''}`).join(', ')}); ` +
+        `an organization named after the whole field: ${whole}; plain names kept whole: ${kept}; "Personal investing (formerly X)": ${JSON.stringify(personal.map(p => [p.former ? 'former' : 'current']))}`);
+  }
+
   const stableBefore = await snapshot();
   const bornPursuitBefore = JSON.stringify(await db.query('select * from strategy.pursuit where entity_id = $1 order by pursuit_id', [born?.id]));
   const bornNotesBefore = JSON.stringify(await db.query("select * from research.note where entity_id = $1 and kind <> 'identity_creation' order by note_id", [born?.id]));

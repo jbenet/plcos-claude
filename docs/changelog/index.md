@@ -293,3 +293,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Investments relevant to the vehicle, on the LP page](entries/vehicle-investments.md)
 - [A ticket's detail reads across, not apart](entries/ticket-detail-aligned.md)
 - [Reconciliation records "LP opted in" and "Meeting held" itself](entries/reconcile-records-itself.md)
+- [Duplicate organizations: affiliation text, and a lookup for the Mac](entries/dedupe-lookup.md)

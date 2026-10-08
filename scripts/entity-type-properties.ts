@@ -231,6 +231,20 @@ export async function entityTypeProperties(check: Check, db: Db) {
         && !(after.body.items as Array<{ entityId: string }>).some(c => c.entityId === listed)
         && back.status === 200 && back.body.reversed === true && await type(listed) === 'person',
       'The token route records the same local correction the app does, by its owner, with a reason.');
+    // Issue 0138: an Admin finds records and held-back duplicate groups by name, without pulling the database.
+    const get = (q: string) => withDb(db, () => readEntityTypes(caller, db, new Request(`http://localhost/api/sync/entity-type?${q}`)));
+    const found = await get(`find=${encodeURIComponent('fixture listed')}`);
+    const short = await get('find=ab');
+    const reviewed = await get(`review=${encodeURIComponent('Type Fixture')}`);
+    const typesBefore = await db.one<{ n: string }>('select count(*)::text n from identity.entity where merged_into is not null');
+    const groups = reviewed.body.groups as Array<{ group: string; members: Array<{ entityId: string; type: string }>; reason: string }> | undefined;
+    check('ETYPE an Admin token finds records of any type by name, and the duplicate groups held back for review, changing nothing',
+      found.status === 200 && (found.body.entities as Array<{ entityId: string; type: string }>).some(e => e.entityId === listed && e.type === 'person')
+        && (found.body.entities as Array<{ entityId: string; type: string }>).some(e => e.entityId === listedOrg && e.type === 'org')
+        && short.status === 400 && reviewed.status === 200 && Array.isArray(groups)
+        && groups.every(g => /^[0-9a-f]{64}$/.test(g.group) && g.members.length > 1 && !!g.reason)
+        && (await db.one<{ n: string }>('select count(*)::text n from identity.entity where merged_into is not null'))!.n === typesBefore!.n,
+      `find: ${found.status}, ${(found.body.entities as unknown[] | undefined)?.length ?? 0} records; two letters: ${short.status}; review: ${reviewed.status}, ${groups?.length ?? 0} groups`);
   } finally {
     if (previousDir === undefined) delete process.env.ENRICH_DIR; else process.env.ENRICH_DIR = previousDir;
     await rm(scratch, { recursive: true, force: true });
