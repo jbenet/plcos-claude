@@ -7,6 +7,10 @@
 #                                                                with any person evidence, to data/real/entity-types.tsv
 #   bash scripts/cloud-entity-type.sh show <id>                  one record by its pipeline or entity id (or its first 8+
 #                                                                characters), to data/real/entity-type-<id>.json
+#   bash scripts/cloud-entity-type.sh find '<name>'              every current record whose name holds those words, any
+#                                                                type, to data/real/entity-find.json (issue 0138)
+#   bash scripts/cloud-entity-type.sh review '<name>'            the duplicate groups held back for review by that name,
+#                                                                with W13 group ids and reasons, to data/real/identity-review-find.json
 #   bash scripts/cloud-entity-type.sh org <entity id> 'reason'   marks that record an organisation (local, reversible)
 #   bash scripts/cloud-entity-type.sh person <entity id> 'reason'
 #   bash scripts/cloud-entity-type.sh reverse <correction id> 'reason'
@@ -54,6 +58,14 @@ if (mode === "list") {
   console.log(`[cloud-entity-type] ${a.records.length} record(s): ${out}`);
   for (const r of a.records) console.log([r.entityId, r.type, `${r.pursuits.length} pipeline(s)`, `${r.corrections.filter((c) => !c.reversedAt).length} active correction(s)`,
     `${r.organizations.length} same-name organisation(s)`, `evidence: ${r.evidence.join(",") || "none"}`, r.mergedInto ? `merged into ${r.mergedInto}` : ""].join("\t"));
+} else if (mode === "find" || mode === "review") {
+  const fs = require("fs"), path = require("path");
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  const list = mode === "find" ? a.entities : a.groups;
+  fs.writeFileSync(out, JSON.stringify(list, null, 2) + "\n");
+  console.log(`[cloud-entity-type] ${list.length} ${mode === "find" ? "record(s)" : "group(s)"}: ${out}`);
+  if (mode === "find") for (const e of list) console.log([e.entityId, e.type, e.roles.join(",") || "no role", `${e.pursuits} pipeline(s)`].join("\t"));
+  else for (const g of list) console.log([g.group.slice(0, 12), `${g.members.length} members`, g.members.map((m) => m.type).join(","), g.reason].join("\t"));
 } else if (mode === "reverse") console.log(`[cloud-entity-type] ${a.reversed ? "reversed" : "already reversed"}`);
 else console.log(`[cloud-entity-type] ${a.correctionId ? `corrected: ${a.correctionId}` : "already that type"}`);
 ' "$code" "$2" "${3:-}"
@@ -69,6 +81,9 @@ post() {
 case "${1:-}" in
   list) [ $# -eq 1 ] || usage; answer "$(call -w '\n%{http_code}' "$TO/api/sync/entity-type")" list "$OUT" ;;
   show) [ $# -eq 2 ] && [[ "$2" =~ ^[0-9a-fA-F-]{8,36}$ ]] || usage; answer "$(call -w '\n%{http_code}' "$TO/api/sync/entity-type?id=$2")" show "data/real/entity-type-$2.json" ;;
+  find|review) [ $# -eq 2 ] && [ -n "$2" ] || usage
+    q="$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$2")"
+    answer "$(call --max-time 300 -w '\n%{http_code}' "$TO/api/sync/entity-type?$1=$q")" "$1" "data/real/$([ "$1" = find ] && echo entity-find || echo identity-review-find).json" ;;
   org|person) [ $# -eq 3 ] && [[ "$2" =~ $UUID ]] && [ -n "$3" ] || usage; post correct "$2" "$1" "$3" ;;
   reverse) [ $# -eq 3 ] && [[ "$2" =~ $UUID ]] && [ -n "$3" ] || usage; post reverse "$2" "" "$3" ;;
   *) usage ;;

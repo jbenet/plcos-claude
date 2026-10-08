@@ -7,6 +7,7 @@ import type { Db, Queryable } from '@/lib/db';
 import { enrichDir } from './candidates';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
 import { STATUS_LABEL, type PursuitStatus } from '@/modules/strategy';
+import { affiliationParts } from './affiliation-text';
 import { parseProspectFile, type Prospect, type ProspectFile, type ProspectProblem } from './prospect-rows';
 
 export { parseProspectFile, prospectFileProblems, prospectProblems, type Prospect, type ProspectFile, type ProspectProblem } from './prospect-rows';
@@ -64,14 +65,17 @@ const current = (e: Identity) => !e.merged && !e.retired;
 
 /** Record the supplied organization as a claimed affiliation, never a decision-making role. */
 async function affiliateProspect(tx: Queryable, personId: string, p: Prospect) {
-  if (!p.org) return;
-  const key = normalized(p.org);
-  const orgId = (await resolveEntity(tx,{type:'org',name:p.org,source:'prospect_org',sourceId:key})).id;
-  await tx.query(`insert into identity.affiliation
-    (person_entity, org_entity, kind, role, is_primary, source, as_of, certainty, note)
-    values ($1, $2, 'contact', 'not recorded', true, $3, current_date, 'claimed',
-      'From the sourced prospect row; role and decision-making capacity not established.')`,
-    [personId, orgId, `prospect:${prospectPersonKey(p)}`]);
+  // A field like "Former X / Y" names organizations; it is not one (issue 0138).
+  let primary = true;
+  for (const part of affiliationParts(p.org)) {
+    const orgId = (await resolveEntity(tx,{type:'org',name:part.org,source:'prospect_org',sourceId:normalized(part.org)})).id;
+    await tx.query(`insert into identity.affiliation
+      (person_entity, org_entity, kind, role, ended_on, is_primary, source, as_of, certainty, note)
+      values ($1, $2, 'contact', $3, $4, $5, $6, current_date, 'claimed', $7)`,
+      [personId, orgId, part.role ?? 'not recorded', part.former ? new Date() : null, primary && !part.former, `prospect:${prospectPersonKey(p)}`,
+        `From the sourced prospect row${part.org !== p.org ? `, read from "${p.org}"` : ''}; role and decision-making capacity not established.${part.former ? ' Former; the end date is the import date, not when it ended.' : ''}`]);
+    if (!part.former) primary = false;
+  }
 }
 
 /** Stable keys follow canonical identity. Unknown keys get their own reversible source node; names alone never identify a person. */
