@@ -94,8 +94,10 @@ export async function syncVehiclesProperties(check: Check) {
   const jobPush = await jobsBy(pushOnly.secret, { kind: 'export' }), jobBad = await jobsBy(admin.secret, { kind: 'linear-rebuild' });
   const g2 = await syncGuard(jobsReq(admin.secret, null, 'GET', '?job=11111111-2222-4333-8444-555555555555'), 'jobs');
   const unknownJob = 'response' in g2 ? g2.response.status : (await jobState(g2.caller, jobsReq(admin.secret, null, 'GET', '?job=11111111-2222-4333-8444-555555555555'), { db })).status;
-  check('Jobs by token: a push token cannot queue, a kind other than export, findings or duplicates is refused, an unknown job is 404',
-    jobPush === 403 && jobBad === 422 && unknownJob === 404, `${jobPush} ${jobBad} ${unknownJob}`);
+  // An Affinity read needs one of the buttons' operations; nothing here reaches Affinity.
+  const affNone = await jobsBy(admin.secret, { kind: 'affinity' }), affBad = await jobsBy(admin.secret, { kind: 'affinity', operation: 'write' });
+  check('Jobs by token: a push token cannot queue, an unknown kind or an Affinity job without a known operation is refused, an unknown job is 404',
+    jobPush === 403 && jobBad === 422 && affNone === 422 && affBad === 422 && unknownJob === 404, `${jobPush} ${jobBad} ${affNone} ${affBad} ${unknownJob}`);
   check('Vehicles by token: every call is audited as the token\'s',
     audit.length >= 6 && audit.every((a) => a.detail.via === 'sync') && audit.some((a) => a.detail.outcome === 'ok'), `${audit.length} audit rows`);
 }

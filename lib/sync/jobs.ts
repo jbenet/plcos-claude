@@ -11,10 +11,17 @@ import { pushRefusal, type PushAnswer } from './push';
  * you do it"; the button is Admin-only, as this token is). Counts only, never a name; the job's own checks and audit
  * are the button's.
  *
+ * Also an Affinity read (8 Oct 2026, Juan: "update statuses from affinity -- sent a bunch of emails"): the Developer →
+ * Affinity buttons' slice (list entries and their statuses), history (emails and other interactions), notes and
+ * meetings, each with its default request cap and delta read, and translate (the local mapping, then reconciliation).
+ * Affinity stays read-only; no cap override is accepted.
+ *
  *   POST { "kind": "export" | "findings" | "duplicates" }   → 202 { job: { id, kind, status } }
+ *   POST { "kind": "affinity", "operation": "slice" | "history" | "notes" | "meetings" | "translate" }
  *   GET  ?job=<id>                          → 200 { job: { id, kind, status, phase, error, counts, … } }
  */
-const KINDS: readonly ImportKind[] = ['export', 'findings', 'duplicates'];
+const KINDS: readonly ImportKind[] = ['export', 'findings', 'duplicates', 'affinity'];
+const AFFINITY_OPERATIONS = ['slice', 'history', 'notes', 'meetings', 'translate'] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function queueJob(caller: SyncCaller, request: Request, o: { db?: Db } = {}): Promise<PushAnswer> {
@@ -25,18 +32,20 @@ export async function queueJob(caller: SyncCaller, request: Request, o: { db?: D
   };
   const refusal = pushRefusal();
   if (refusal) return answer(403, 'refused', { error: refusal }, { reason: 'profile' });
-  let input: { kind?: unknown };
+  let input: { kind?: unknown; operation?: unknown };
   try { input = JSON.parse((await request.text()).slice(0, 1024)); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
   const kind = KINDS.find((k) => k === input?.kind);
   if (!kind) return answer(422, 'invalid', { error: `kind must be ${KINDS.join(' or ')}.` }, { reason: 'kind' });
+  const operation = kind === 'affinity' ? AFFINITY_OPERATIONS.find((x) => x === input.operation) : undefined;
+  if (kind === 'affinity' && !operation) return answer(422, 'invalid', { error: `an affinity job needs an operation: ${AFFINITY_OPERATIONS.join(', ')}.` }, { kind, reason: 'operation' });
   const db = o.db ?? await getDb();
   try {
     const server = await import('@/lib/import-jobs/server');
     // Recovery first, so a job a restart stopped does not block this one (lib/sync/push.ts does the same).
     await server.importJobStatus(db).catch(() => undefined);
-    const job = await server.queueImportJob(db, kind, caller.user.id);
+    const job = await server.queueImportJob(db, kind, caller.user.id, operation ? { operation, options: {} } : {});
     if (job.status === 'running' && kind === 'findings') server.importAfterRunning(kind, caller.user.id);
-    return answer(202, 'ok', { job: { id: job.id, kind, status: job.status } }, { kind, jobId: job.id });
+    return answer(202, 'ok', { job: { id: job.id, kind, status: job.status } }, { kind, ...(operation ? { operation } : {}), jobId: job.id });
   } catch (e) {
     return answer(409, 'refused', { error: e instanceof Error ? e.message.slice(0, 200) : 'The job was not queued.' }, { kind, reason: 'queue' });
   }
