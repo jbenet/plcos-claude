@@ -2,7 +2,7 @@ import { config } from '@/config/deployment';
 import { KEY_FORMAT, parseBase } from './allowlist';
 import { DraftOnlyViolation, httpsTransport, MailguardError, mailguardClient, type MailguardClient, type MailguardRequestLog, type MailguardTransport } from './client';
 import { FAKE_BASE, fakeTransport } from './fake';
-import { domainOf, draftOnlyVerdict, type RefusalCode } from './scope';
+import { domainOf, draftOnlyVerdict, type CalendarAccess, type RefusalCode } from './scope';
 import { databaseStore, fileStore, keychainStore, memoryStore, type TokenStore } from './tokens';
 import { deployedServer } from '@/config/sign-in';
 import { settingValue } from '@/lib/settings/store';
@@ -60,7 +60,7 @@ export type KeySource = 'pasted' | 'keychain';
 
 /** What a check found. Never holds the key. */
 export type Inspection =
-  | { ok: true; mailbox: string; tool: string; capabilities: string[]; canThread: boolean; extras: string[]; source: KeySource; at: number }
+  | { ok: true; mailbox: string; tool: string; capabilities: string[]; canThread: boolean; extras: string[]; calendar: CalendarAccess; source: KeySource; at: number }
   | { ok: false; code: RefusalCode | MailguardError['kind'] | 'violation' | 'format'; reason: string; mailbox: string | null; tool: string | null; capabilities: string[]; source: KeySource; at: number };
 
 /** The person's key: one they pasted, else the Keychain item's if it is theirs. */
@@ -180,5 +180,6 @@ export async function checkKeychainKey(): Promise<{ ok: boolean; code: string | 
 export { ALLOWED, MUST_REFUSE, KEY_FORMAT } from './allowlist';
 export type { MailguardClient, MailguardRequestLog, DraftFields, DraftRef } from './client';
 export { DraftOnlyViolation, MailguardError } from './client';
-export { CAN_SEND, domainOf } from './scope';
+export { CAN_SEND, CAN_NOTIFY, domainOf } from './scope';
+export type { CalendarAccess } from './scope';
 export { fakeMintKey, readFake, FAKE_DOMAIN } from './fake';

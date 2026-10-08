@@ -427,7 +427,7 @@ async function Meetings({ searchParams }: { searchParams: Promise<{ e?: string; 
                       <div className={s.touch} key={t.touchpointId}>
                         <span className="mono">{shortDate(t.on!)} · {CHANNEL_LABEL[t.channel]}</span>
                         <p className={s.clamp}>{t.summary ?? 'No summary recorded.'}</p>
-                        <small>{t.ownerName}{t.viaOrganization ? ` · with ${t.viaOrganization}` : ''}{t.source !== 'us' ? ` · ${t.source === 'affinity' ? 'Affinity' : t.source}` : ''}</small>
+                        <small>{t.ownerName}{t.viaOrganization ? ` · with ${t.viaOrganization}` : ''}{t.source !== 'us' ? ` · ${t.source === 'affinity' ? 'Affinity' : t.source === 'calendar' ? 'Calendar' : t.source}` : ''}</small>
                       </div>
                     ))}
                     {past.length === 0 && <div className="cbody"><p className="muted">No dated contact on file.</p></div>}

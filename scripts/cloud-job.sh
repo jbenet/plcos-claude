@@ -2,7 +2,7 @@
 # Queue a research export, a findings import or Merge duplicate identities on the cloud app, or read a job's state (lib/sync/jobs.ts),
 # with an Admin token, as the buttons in Developer → Enrichment would. Counts only, never a name.
 #
-#   bash scripts/cloud-job.sh [--to <app url>] export|findings|duplicates   prints the job id
+#   bash scripts/cloud-job.sh [--to <app url>] export|findings|duplicates|calendar   prints the job id
 #   bash scripts/cloud-job.sh [--to <app url>] affinity slice|history|notes|meetings|translate   prints the job id
 #   bash scripts/cloud-job.sh [--to <app url>] status <job id>
 #
@@ -20,7 +20,7 @@ TO=""
 [ "${1:-}" = "--to" ] && { TO="${2:-}"; shift 2; }
 cmd="${1:-}"
 case "$cmd" in
-  export|findings|duplicates) [ $# -eq 1 ] || usage ;;
+  export|findings|duplicates|calendar) [ $# -eq 1 ] || usage ;;
   affinity) [ $# -eq 2 ] && [[ "$2" =~ ^(slice|history|notes|meetings|translate)$ ]] || usage ;;
   status) [ $# -eq 2 ] && [[ "$2" =~ ^[0-9a-fA-F-]{36}$ ]] || usage ;;
   *) usage ;;

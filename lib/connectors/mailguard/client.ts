@@ -1,13 +1,16 @@
 import { allowedRequest, KEY_FORMAT } from './allowlist';
 
 /**
- * The mailguard client: drafts, and the ids a follow-up needs (docs/25 §12). There is no send here, by
- * design, and the guard under it refuses one if a later change tried.
+ * The mailguard client: drafts, the ids a follow-up needs (docs/25 §12), and the calendar, read only (issue
+ * 0021). There is no send, no calendar write and no answer to an invitation here, by design, and the guard
+ * under it refuses one if a later change tried.
  *
  *   whoami()                 GET  /api/v1/me                      which mailbox, what the key may do
  *   createDraft(fields)      POST /api/v1/drafts                  a new draft in the person's Drafts
  *   updateDraft(id, fields)  PUT  /api/v1/drafts/:id              replace one this key made; null when gone
  *   thread(threadId)         GET  /api/v1/threads/:id?format=metadata   ids and labels, never bodies
+ *   calendars()              GET  /api/v1/calendars                the calendars the person can see
+ *   events(cal, range)       GET  /api/v1/calendars/:cal/events?timeMin=&timeMax=   one page of meetings
  *
  * Logged per request: the action's name, the status and the time. Never a body, the key, an address
  * or a subject. Error messages carry mailguard's own words (which never quote the key), cut short.
@@ -77,6 +80,16 @@ export interface DraftFields {
 export interface DraftRef { draftId: string; messageId: string; threadId: string }
 export interface ThreadMessage { id: string; threadId: string; labels: string[]; date: string }
 
+export interface CalendarRef { id: string; name: string; primary: boolean; accessRole: string }
+export interface CalendarPerson { email: string; displayName?: string; responseStatus?: string; self?: boolean; organizer?: boolean; resource?: boolean }
+/** An event as mailguard presents it, narrowed to what is read here. `description` only with calendar.read.details. */
+export interface CalendarEvent {
+  id: string; calendarId: string; status: string; summary: string; description: string | null;
+  start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string };
+  iCalUID: string | null; recurringEventId: string | null;
+  organizer: { email: string; self?: boolean } | null; attendees: CalendarPerson[];
+}
+
 export interface MailguardClient {
   whoami(): Promise<unknown>;
   createDraft(fields: DraftFields): Promise<DraftRef>;
@@ -84,6 +97,9 @@ export interface MailguardClient {
   updateDraft(draftId: string, fields: DraftFields): Promise<DraftRef | null>;
   /** Null when the thread is gone or hidden from this key. */
   thread(threadId: string): Promise<ThreadMessage[] | null>;
+  calendars(): Promise<CalendarRef[]>;
+  /** One page of a calendar's events in [timeMin, timeMax), single occurrences; null when the calendar is out of reach. */
+  events(calendarId: string, range: { timeMin: string; timeMax: string; pageToken?: string | null; max?: number }): Promise<{ events: CalendarEvent[]; nextPageToken: string | null } | null>;
 }
 
 export interface ClientOptions {
@@ -170,6 +186,17 @@ export function mailguardClient(opts: ClientOptions): MailguardClient {
     return encodeURIComponent(s);
   };
 
+  const str = (x: unknown) => (typeof x === 'string' ? x : null);
+  const when = (x: unknown) => {
+    const o = (x && typeof x === 'object' ? x : {}) as { dateTime?: unknown; date?: unknown };
+    return { ...(typeof o.dateTime === 'string' ? { dateTime: o.dateTime } : {}), ...(typeof o.date === 'string' ? { date: o.date } : {}) };
+  };
+  const person = (x: unknown): CalendarPerson | null => {
+    const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
+    if (typeof o.email !== 'string') return null;
+    return { email: o.email.trim().toLowerCase(), displayName: str(o.displayName) ?? undefined, responseStatus: str(o.responseStatus) ?? undefined, self: o.self === true, organizer: o.organizer === true, resource: o.resource === true };
+  };
+
   return {
     async whoami() {
       const r = await call('whoami', 'GET', '/api/v1/me', [], undefined, true);
@@ -194,6 +221,36 @@ export function mailguardClient(opts: ClientOptions): MailguardClient {
         const x = m as { id?: unknown; threadId?: unknown; labels?: unknown; date?: unknown };
         return typeof x.id === 'string' ? [{ id: x.id, threadId: String(x.threadId ?? threadId), labels: Array.isArray(x.labels) ? x.labels.map(String) : [], date: String(x.date ?? '') }] : [];
       });
+    },
+    async calendars() {
+      const r = await call('calendar.calendars', 'GET', '/api/v1/calendars', [], undefined, true);
+      const cals = (r.json as { calendars?: unknown } | null)?.calendars;
+      if (r.status === 404 || !Array.isArray(cals)) throw new MailguardError(r.status === 404 ? 404 : 502, 'bad_answer', `${PLAIN.bad_answer}: no calendars — is this mailguard v0.9 or later?`);
+      return cals.flatMap((c): CalendarRef[] => {
+        const x = c as Record<string, unknown>;
+        return typeof x.id === 'string' ? [{ id: x.id, name: str(x.name) ?? x.id, primary: x.primary === true, accessRole: str(x.accessRole) ?? 'reader' }] : [];
+      });
+    },
+    async events(calendarId, range) {
+      if (!/^[^/\s]{1,512}$/.test(calendarId)) throw new DraftOnlyViolation('a calendar id that is not one');
+      const q: Array<[string, string]> = [['timeMin', range.timeMin], ['timeMax', range.timeMax], ['max', String(range.max ?? 250)]];
+      if (range.pageToken) q.push(['pageToken', range.pageToken]);
+      const r = await call('calendar.events.list', 'GET', `/api/v1/calendars/${encodeURIComponent(calendarId)}/events`, q, undefined, true);
+      if (r.status === 404) return null;
+      const j = (r.json ?? {}) as { events?: unknown; nextPageToken?: unknown };
+      if (!Array.isArray(j.events)) throw new MailguardError(502, 'bad_answer', `${PLAIN.bad_answer}: no events.`);
+      const events = j.events.flatMap((e): CalendarEvent[] => {
+        const x = (e && typeof e === 'object' ? e : {}) as Record<string, unknown>;
+        if (typeof x.id !== 'string') return [];
+        const org = person(x.organizer);
+        return [{
+          id: x.id, calendarId, status: str(x.status) ?? 'confirmed', summary: str(x.summary) ?? '', description: str(x.description),
+          start: when(x.start), end: when(x.end), iCalUID: str(x.iCalUID), recurringEventId: str(x.recurringEventId),
+          organizer: org ? { email: org.email, self: org.self } : null,
+          attendees: Array.isArray(x.attendees) ? x.attendees.map(person).filter((p): p is CalendarPerson => p !== null) : [],
+        }];
+      });
+      return { events, nextPageToken: str(j.nextPageToken) };
     },
   };
 }
