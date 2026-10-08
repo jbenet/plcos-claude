@@ -49,5 +49,5 @@ printf '%s' "$reply" | node -e '
 const code = Number(process.argv[1]);
 let a; try { a = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { console.error(`[cloud-job] the server answered ${code} with no readable reason`); process.exit(1); }
 if (!a.ok) { console.error(`[cloud-job] REFUSED (${code}): ${a.error || "no reason given"}`); process.exit(1); }
-const j = a.job; if (process.argv[2] === "status") console.log(`[cloud-job] ${j.kind} ${j.status}: ${j.phase}${j.error ? ` (${j.error})` : ""} ${JSON.stringify(j.counts || {})}`); else console.log(j.id);
+const j = a.job; if (process.argv[2] === "status") console.log(`[cloud-job] ${j.kind} ${j.status}: ${j.phase}${j.error ? ` (${j.error})` : ""} ${JSON.stringify(j.counts || {})}${j.decisions ? ` decisions ${JSON.stringify(j.decisions)}` : ""}`); else console.log(j.id);
 ' "$code" "$cmd"
