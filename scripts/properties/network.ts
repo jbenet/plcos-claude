@@ -36,10 +36,12 @@ export async function routeInputCacheProperties({ check, db }: SeedContext) {
     release();
     const [a, b] = await Promise.all([first, second]);
     const warm = await picker();
-    check('CACHE concurrent picker requests discard a generation crossed by a database update',
-      coalesced && loads === 2 && a === b && warm === a
-        && a.before === 'Picker generation after import' && a.after === a.before,
-      'Two waiting requests share the refreshed result; neither receives the mixed old/new load.');
+    // 8 Oct 2026 (performance pass): a load the data changed under is answered once, as an uncached
+    // page would be, and never kept; the next request loads the new generation.
+    check('CACHE concurrent picker requests share one load, and a generation crossed by a database update is not kept',
+      coalesced && a === b && a.before === 'Picker generation before import'
+        && warm !== a && loads === 2 && warm.before === 'Picker generation after import' && warm.after === warm.before,
+      `Both waiting requests share the one load; the next request reloads (loads ${loads}).`);
 
     let attempts = 0;
     const retry = buildCache(async () => {
