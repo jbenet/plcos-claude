@@ -5,9 +5,9 @@ export {
   IMPLIED, IMPLIED_LABEL, PASSED_BY_CHOICES, PASSED_BY_LABEL, REASONS, RUNGS, RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_BACKED_BY,
   STATUS_LABEL, impliedRung, rungIndex, statusNeedsEvidence,
 } from './types';
-export { getPursuit, visualizationPursuits, pursuitCount, type VisualizationPursuit, listPursuits, pursuitFor, statusCounts } from './repo';
-export { LadderRefused, ON_RECORD_NOTE, ON_RECORD_RUNGS, recordAdvance, recordClimb, recordClimbOnRecord, requestAdvance, retractOnRecord, retractedRefs, setNextStep, setStatus, StatusRefused, type ClimbRung } from './service';
-export { insertUpdate, recordApplied, updatesFor, type PursuitUpdate, type UpdateApplied } from './updates';
+export { getPursuit, getPursuits, visualizationPursuits, pursuitCount, type VisualizationPursuit, listPursuits, pursuitFor, statusCounts } from './repo';
+export { LadderRefused, ON_RECORD_NOTE, ON_RECORD_RUNGS, recordAdvance, recordClimb, recordClimbOnRecord, requestAdvance, retractOnRecord, retractedRefs, setNextStep, setStatus, setStatuses, StatusRefused, type StatusMove, type ClimbRung } from './service';
+export { insertUpdate, insertUpdates, recordApplied, recordAppliedMany, updatesFor, type PursuitUpdate, type UpdateApplied } from './updates';
 export { decideSuggestion, openSuggestions, SuggestionRefused, suggestionsFor, strategyPursuitsFor, type Suggestion } from './suggestions';
 export { READER, amountRange, dateIn, readUpdate, type TouchChannel, type UpdateSuggestion } from './reader';
 export { vehicleStrategy, capacityEstimate, actionScore, conversionFor, statusId, type VehicleStrategy, type StrategyAction, type Transition } from './vehicle';

@@ -65,6 +65,39 @@ export async function recordApplied(q: Queryable, updateId: string, applied: Upd
   );
 }
 
+/**
+ * insertUpdate for many pursuits in one statement (issue 0139: a move of eleven LPs made a round trip
+ * per row to a remote database). Returns only the updates it created: a key already used is left as
+ * it was, as insertUpdate leaves it.
+ */
+export async function insertUpdates(
+  q: Queryable, createdBy: string, rows: Array<{ pursuitId: string; body: string; idempotencyKey: string }>,
+): Promise<Map<string, string>> {
+  if (!rows.length) return new Map();
+  const made = await q.query<{ update_id: string; pursuit_id: string }>(
+    `insert into strategy.pursuit_update (pursuit_id, body, suggested, created_by, idempotency_key)
+     select x.pursuit_id, x.body, '{}'::jsonb, $1, x.key
+       from jsonb_to_recordset($2::jsonb) as x(pursuit_id uuid, body text, key text)
+     on conflict (idempotency_key) do nothing
+     returning update_id::text, pursuit_id::text`,
+    [createdBy, JSON.stringify(rows.map((r) => ({ pursuit_id: r.pursuitId, body: r.body, key: r.idempotencyKey })))],
+  );
+  return new Map(made.map((r) => [r.pursuit_id, r.update_id]));
+}
+
+/** recordApplied for many updates in one statement. */
+export async function recordAppliedMany(q: Queryable, rows: Array<{ updateId: string; applied: UpdateApplied }>): Promise<void> {
+  if (!rows.length) return;
+  await q.query(
+    `update strategy.pursuit_update u
+        set applied = x.applied, status_from = x.status_from::strategy.pursuit_status, status_to = x.status_to::strategy.pursuit_status
+       from jsonb_to_recordset($1::jsonb) as x(update_id uuid, applied jsonb, status_from text, status_to text)
+      where u.update_id = x.update_id`,
+    [JSON.stringify(rows.map((r) => ({ update_id: r.updateId, applied: r.applied,
+      status_from: r.applied.status?.from ?? null, status_to: r.applied.status?.to ?? null })))],
+  );
+}
+
 export async function updatesFor(pursuitId: string): Promise<PursuitUpdate[]> {
   const db = await getDb();
   const rows = await db.query<{

@@ -288,6 +288,21 @@ export interface StatusChange {
   nextStepOn?: Date | null;
 }
 
+/** What setStatus and setStatuses refuse, before either writes anything. */
+function checkStatus(change: { status: PursuitStatus; passedBy?: PassedBy | null; reason?: string | null }) {
+  if (!STATUSES.some((s) => s.id === change.status)) throw new StatusRefused(`"${change.status}" is not a status this tool has.`);
+  const passed = change.status === 'passed';
+  if (passed && !change.passedBy) {
+    throw new StatusRefused(`Say who ended it: ${Object.values(PASSED_BY_LABEL).join(', ').toLowerCase()}. They are different endings, and only one of them can be reopened by asking again.`);
+  }
+  if (change.passedBy && !(change.passedBy in PASSED_BY_LABEL)) throw new StatusRefused(`"${change.passedBy}" is not who can end a pursuit.`);
+  const reason = change.reason?.trim() || null;
+  if (passed && reason && !(REASONS as readonly string[]).includes(reason)) {
+    throw new StatusRefused(`A pass reason is one of: ${REASONS.join(', ')}.`);
+  }
+  return { passed, reason };
+}
+
 /**
  * Set where our effort is with an LP (N50, docs/17). Any status to any status: a process that
  * goes backwards is recorded as going backwards, and the audit log keeps the history.
@@ -303,16 +318,7 @@ export interface StatusChange {
 export async function setStatus(
   actorId: string, pursuitId: string, change: StatusChange, opts: { q?: Queryable; updateId?: string } = {},
 ): Promise<void> {
-  if (!STATUSES.some((s) => s.id === change.status)) throw new StatusRefused(`"${change.status}" is not a status this tool has.`);
-  const passed = change.status === 'passed';
-  if (passed && !change.passedBy) {
-    throw new StatusRefused(`Say who ended it: ${Object.values(PASSED_BY_LABEL).join(', ').toLowerCase()}. They are different endings, and only one of them can be reopened by asking again.`);
-  }
-  if (change.passedBy && !(change.passedBy in PASSED_BY_LABEL)) throw new StatusRefused(`"${change.passedBy}" is not who can end a pursuit.`);
-  const reason = change.reason?.trim() || null;
-  if (passed && reason && !(REASONS as readonly string[]).includes(reason)) {
-    throw new StatusRefused(`A pass reason is one of: ${REASONS.join(', ')}.`);
-  }
+  const { passed, reason } = checkStatus(change);
   const nextStep = change.nextStep?.trim() || null;
   if (change.nextStepOn && !nextStep) throw new StatusRefused('A date needs a next step to be the date of.');
 
@@ -351,6 +357,62 @@ export async function setStatus(
   if (opts.q) return 'transaction' in opts.q ? (opts.q as Db).transaction(write) : write(opts.q);
   const db = await getDb();
   await db.transaction(write);
+}
+
+/** One pursuit's part of a bulk status change: its next step stays as it is. */
+export interface StatusMove { pursuitId: string; status: PursuitStatus; passedBy?: PassedBy | null; reason?: string | null; updateId?: string }
+
+/**
+ * setStatus for many pursuits at once (issue 0139), inside the caller's transaction, in a fixed
+ * number of statements whatever the count: moving eleven LPs made about a hundred round trips to the
+ * live database and took ten seconds. Same refusals, same write, same audit row per pursuit as
+ * setStatus; the next step and its date are left as they are, which is what a bulk move always did.
+ * The caller locks the pursuits' rows first (applyBulk, undoBulk), so the statuses it read are current.
+ */
+export async function setStatuses(actorId: string, moves: StatusMove[], q: Queryable): Promise<void> {
+  if (!moves.length) return;
+  const checked = moves.map((m) => ({ ...m, ...checkStatus(m) }));
+  await q.exec('lock table strategy.pursuit in row exclusive mode');
+  const rows = await q.query<{ pursuit_id: string; entity_name: string; vehicle_name: string; status: PursuitStatus; next_step: string | null; historical: boolean }>(
+    `select p.pursuit_id::text, e.display_name as entity_name, v.name as vehicle_name, p.status::text as status, p.next_step,
+            v.phase = 'historical' as historical
+       from strategy.active_pursuit p
+       join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
+       join platform.vehicle v on v.id = p.vehicle_id
+      where p.pursuit_id = any($1::uuid[])`,
+    [checked.map((m) => m.pursuitId)],
+  );
+  const now = new Map(rows.map((r) => [r.pursuit_id, r]));
+  const missing = checked.find((m) => !now.has(m.pursuitId));
+  if (missing) throw new Error(`No pursuit ${missing.pursuitId}`);
+  await q.query(
+    `update strategy.pursuit p set
+       status = x.status::strategy.pursuit_status, passed_by = x.passed_by, status_reason = x.reason,
+       status_source = 'us', status_set_at = now(), status_set_by = $1,
+       closed_at = case when x.status = 'passed' then coalesce(p.closed_at, now())
+                        when x.historical then p.closed_at else null end,
+       close_reason = case when x.status = 'passed' then coalesce(x.reason, 'passed')
+                           when x.historical then p.close_reason else null end
+      from jsonb_to_recordset($2::jsonb) as x(pursuit_id uuid, status text, passed_by text, reason text, historical boolean)
+     where p.pursuit_id = x.pursuit_id`,
+    [actorId, JSON.stringify(checked.map((m) => ({ pursuit_id: m.pursuitId, status: m.status,
+      passed_by: m.passed ? m.passedBy : null, reason: m.reason, historical: now.get(m.pursuitId)!.historical })))],
+  );
+  await q.query(
+    `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
+     select $1, 'pursuit.status_set', 'pursuit', x.subject_id, x.detail
+       from jsonb_to_recordset($2::jsonb) as x(subject_id text, detail jsonb, n int) order by x.n`,
+    [actorId, JSON.stringify(checked.map((m, n) => {
+      const p = now.get(m.pursuitId)!;
+      return { n, subject_id: m.pursuitId, detail: {
+        entity: p.entity_name, vehicle: p.vehicle_name,
+        from: STATUS_LABEL[p.status], to: STATUS_LABEL[m.status],
+        fromId: p.status, toId: m.status,
+        ...(m.passed ? { passedBy: m.passedBy } : {}), ...(m.reason ? { reason: m.reason } : {}), ...(p.next_step ? { nextStep: p.next_step } : {}),
+        ...(m.updateId ? { updateId: m.updateId } : {}),
+      } };
+    }))],
+  );
 }
 
 /**

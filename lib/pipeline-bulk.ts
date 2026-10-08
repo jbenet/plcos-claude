@@ -1,6 +1,6 @@
 import { getDb, type Queryable } from '@/lib/db';
 import {
-  getPursuit, insertUpdate, recordApplied, setStatus, REASONS, STATUS_LABEL,
+  getPursuits, insertUpdates, recordAppliedMany, setStatuses, REASONS, STATUS_LABEL,
   type PassedBy, type PursuitStatus, type UpdateApplied,
 } from '@/modules/strategy';
 import { logTouchpoint, type Channel, type Direction } from '@/modules/meetings';
@@ -32,6 +32,21 @@ async function actorName(q: Queryable, actorId: string) {
   return (await q.one<{ name: string }>('select name from platform.app_user where id = $1', [actorId]))?.name ?? 'an unknown user';
 }
 
+/** Lock the pursuits' rows, in a fixed order, then read them: a concurrent change to the same rows waits. */
+async function lockAndRead(q: Queryable, ids: string[]) {
+  await q.query(`select 1 from strategy.pursuit where pursuit_id = any($1::uuid[]) order by pursuit_id for update`, [ids]);
+  return getPursuits(ids, q);
+}
+
+/** The bulk audit rows, one per pursuit, in one statement. */
+async function bulkAudit(q: Queryable, actorId: string, rows: Array<{ pursuitId: string; detail: Record<string, unknown> }>) {
+  if (!rows.length) return;
+  await q.query(`insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
+    select $1, 'pursuit.bulk_action', 'pursuit', x.subject_id, x.detail
+      from jsonb_to_recordset($2::jsonb) as x(subject_id text, detail jsonb, n int) order by x.n`,
+    [actorId, JSON.stringify(rows.map((r, n) => ({ n, subject_id: r.pursuitId, detail: r.detail })))]);
+}
+
 /**
  * One transaction and stable per-pursuit keys. No external execution or acceptance.
  *
@@ -58,44 +73,52 @@ export async function applyBulk(actorId: string, input: BulkInput, vehicleId: st
   const db = await getDb();
   const touched: string[] = [];
   const receipt = await db.transaction(async tx => {
-    let written = 0;
     const rule = input.action === 'status' && !note ? `set on ${PLACE_LABEL[input.place ?? 'pipeline'] ?? 'Pipeline'} by ${await actorName(tx, actorId)}` : null;
+    // A fixed number of statements however many rows (issue 0139): a round trip per row to the live
+    // database made a move of eleven take ten seconds. The rows are locked first, so a second request
+    // for the same rows (a retry after a timeout) waits for this one and then sees what it wrote.
+    const found = await lockAndRead(tx, rows.map(r => r.id));
     for (const row of rows) {
-      const p = await getPursuit(row.id, tx);
+      const p = found.get(row.id);
       if (!p || p.vehicleId !== row.vehicleId || (vehicleId && p.vehicleId !== vehicleId)) throw new Error('A selected pursuit is outside this vehicle. Reload the table.');
-      const workflow = ['research','connections','strategy'].includes(input.action);
-      const body = workflow ? `Workflow request: ${input.action}. Awaiting review; not scheduled or running.\n${note}`
-        : rule ? `Status set to ${STATUS_LABEL[input.status!]}, ${rule}.` : note;
-      const update = await insertUpdate(tx, { pursuitId: p.pursuitId, body, createdBy: actorId,
-        idempotencyKey: keyFor(actorId, input.key, p.pursuitId), suggested: {} });
-      if (!update.created) continue;
-      if (input.action === 'status' && p.status !== row.status) throw new Error(`${p.entityName} is ${STATUS_LABEL[p.status]} now, not ${STATUS_LABEL[row.status]} as this page showed. Reload and review before retrying. Nothing in this batch was changed.`);
-      const applied: UpdateApplied = {};
-      if (input.action === 'status') {
-        await setStatus(actorId, p.pursuitId, { status: input.status!,
-          passedBy: input.status === 'passed' ? input.passedBy : null,
-          reason: input.status === 'passed' ? input.passReason : note || rule, nextStep: p.nextStep, nextStepOn: p.nextStepOn }, { q: tx, updateId: update.updateId });
-        applied.status = { from: p.status, to: input.status!, was: { passedBy: p.passedBy, reason: p.statusReason } };
-      } else if (input.action === 'touch') {
+    }
+    const workflow = ['research','connections','strategy'].includes(input.action);
+    const bodyFor = () => workflow ? `Workflow request: ${input.action}. Awaiting review; not scheduled or running.\n${note}`
+      : rule ? `Status set to ${STATUS_LABEL[input.status!]}, ${rule}.` : note;
+    const made = await insertUpdates(tx, actorId, rows.map(r => ({ pursuitId: r.id, body: bodyFor(), idempotencyKey: keyFor(actorId, input.key, r.id) })));
+    const todo = rows.filter(r => made.has(r.id)).map(r => ({ row: r, p: found.get(r.id)!, updateId: made.get(r.id)! }));
+    if (input.action === 'status') {
+      const moved = todo.find(t => t.p.status !== t.row.status);
+      if (moved) throw new Error(`${moved.p.entityName} is ${STATUS_LABEL[moved.p.status]} now, not ${STATUS_LABEL[moved.row.status]} as this page showed. Reload and review before retrying. Nothing in this batch was changed.`);
+    }
+    const applied = new Map<string, UpdateApplied>(todo.map(t => [t.row.id, {}]));
+    if (input.action === 'status') {
+      await setStatuses(actorId, todo.map(t => ({ pursuitId: t.p.pursuitId, status: input.status!,
+        passedBy: input.status === 'passed' ? input.passedBy : null,
+        reason: input.status === 'passed' ? input.passReason : note || rule, updateId: t.updateId })), tx);
+      for (const t of todo) applied.get(t.row.id)!.status = { from: t.p.status, to: input.status!, was: { passedBy: t.p.passedBy, reason: t.p.statusReason } };
+    } else if (input.action === 'touch') {
+      if (todo.length) {
         if (!input.on || !/^\d{4}-\d\d-\d\d$/.test(input.on)) throw new Error('Choose the date of the touchpoint.');
         const on = new Date(`${input.on}T12:00:00Z`);
         if (!Number.isFinite(on.getTime()) || on.toISOString().slice(0,10) !== input.on) throw new Error('Invalid touchpoint date.');
-        applied.touchpointId = await logTouchpoint(actorId, { entityId: p.entityId, vehicleId: p.vehicleId, pursuitId: p.pursuitId,
-          channel: input.channel!, direction: input.direction ?? null, on, summary: note, read: null }, { q: tx, updateId: update.updateId });
-        touched.push(p.pursuitId);
-      } else {
-        await tx.query(`insert into research.note (entity_id, author_id, kind, body, data) values ($1,$2,$3,$4,$5)`,
-          [p.entityId, actorId, workflow ? 'workflow_request' : 'context', body,
-            JSON.stringify({ pursuitId: p.pursuitId, vehicleId: p.vehicleId, updateId: update.updateId,
-              ...(workflow ? { workflow: input.action, status: 'requested', execution: 'not_started' } : {}) })]);
+        for (const { p, updateId } of todo) {
+          applied.get(p.pursuitId)!.touchpointId = await logTouchpoint(actorId, { entityId: p.entityId, vehicleId: p.vehicleId, pursuitId: p.pursuitId,
+            channel: input.channel!, direction: input.direction ?? null, on, summary: note, read: null }, { q: tx, updateId });
+          touched.push(p.pursuitId);
+        }
       }
-      await recordApplied(tx, update.updateId, applied);
-      await tx.query(`insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
-        values ($1,'pursuit.bulk_action','pursuit',$2,$3)`, [actorId,p.pursuitId,JSON.stringify({ action: input.action, updateId: update.updateId,
-          ...(rule ? { rule } : { reason: note }), ...(input.place ? { place: input.place } : {}), applied })]);
-      written++;
+    } else if (todo.length) {
+      await tx.query(`insert into research.note (entity_id, author_id, kind, body, data)
+        select x.entity_id, $1, $2, $3, x.data from jsonb_to_recordset($4::jsonb) as x(entity_id uuid, data jsonb, n int) order by x.n`,
+        [actorId, workflow ? 'workflow_request' : 'context', bodyFor(),
+          JSON.stringify(todo.map(({ p, updateId }, n) => ({ n, entity_id: p.entityId, data: { pursuitId: p.pursuitId, vehicleId: p.vehicleId, updateId,
+            ...(workflow ? { workflow: input.action, status: 'requested', execution: 'not_started' } : {}) } })))]);
     }
-    return { written, alreadySaved: rows.length - written };
+    await recordAppliedMany(tx, todo.map(t => ({ updateId: t.updateId, applied: applied.get(t.row.id)! })));
+    await bulkAudit(tx, actorId, todo.map(t => ({ pursuitId: t.p.pursuitId, detail: { action: input.action, updateId: t.updateId,
+      ...(rule ? { rule } : { reason: note }), ...(input.place ? { place: input.place } : {}), applied: applied.get(t.row.id)! } })));
+    return { written: todo.length, alreadySaved: rows.length - todo.length };
   });
   let proposals = 0, reconciliationPending = 0;
   // A recorded touchpoint may support a draft STAGE ticket. Never accepts a rung.
@@ -123,28 +146,28 @@ export async function undoBulk(actorId: string, input: { of: string; place?: Bul
         order by created_at`, [actorId, prefix]);
     if (!moves.length) throw new Error('Nothing to undo: no status change of yours was found for that request.');
     const rule = `undone on ${PLACE_LABEL[input.place ?? 'pipeline'] ?? 'Pipeline'} by ${await actorName(tx, actorId)}`;
-    let written = 0;
+    const found = await lockAndRead(tx, moves.map(m => m.pursuit_id));
     for (const move of moves) {
-      const was = move.applied.status!;
-      const p = await getPursuit(move.pursuit_id, tx);
+      const p = found.get(move.pursuit_id);
       if (!p || (vehicleId && p.vehicleId !== vehicleId)) throw new Error('A pursuit in that change is outside this vehicle. Nothing was undone.');
-      const update = await insertUpdate(tx, { pursuitId: p.pursuitId, body: `Status back to ${STATUS_LABEL[was.from]}, ${rule}.`,
-        createdBy: actorId, idempotencyKey: undoKeyFor(actorId, input.of, p.pursuitId), suggested: {} });
-      if (!update.created) continue;
-      if (p.status !== was.to) throw new Error(`${p.entityName} is ${STATUS_LABEL[p.status]} now, so the move to ${STATUS_LABEL[was.to]} cannot be undone here. Nothing was undone.`);
+    }
+    const made = await insertUpdates(tx, actorId, moves.map(m => ({ pursuitId: m.pursuit_id,
+      body: `Status back to ${STATUS_LABEL[m.applied.status!.from]}, ${rule}.`, idempotencyKey: undoKeyFor(actorId, input.of, m.pursuit_id) })));
+    const todo = moves.filter(m => made.has(m.pursuit_id)).map(m => ({ was: m.applied.status!, p: found.get(m.pursuit_id)!, updateId: made.get(m.pursuit_id)! }));
+    const moved = todo.find(t => t.p.status !== t.was.to);
+    if (moved) throw new Error(`${moved.p.entityName} is ${STATUS_LABEL[moved.p.status]} now, so the move to ${STATUS_LABEL[moved.was.to]} cannot be undone here. Nothing was undone.`);
+    await setStatuses(actorId, todo.map(({ was, p, updateId }) => {
       const passed = was.from === 'passed';
       const reason = was.was?.reason ?? null;
-      await setStatus(actorId, p.pursuitId, { status: was.from,
-        passedBy: passed ? was.was?.passedBy ?? null : null,
-        reason: passed ? (reason && (REASONS as readonly string[]).includes(reason) ? reason : null) : reason ?? rule,
-        nextStep: p.nextStep, nextStepOn: p.nextStepOn }, { q: tx, updateId: update.updateId });
-      const applied: UpdateApplied = { status: { from: p.status, to: was.from, was: { passedBy: p.passedBy, reason: p.statusReason } }, undoes: input.of };
-      await recordApplied(tx, update.updateId, applied);
-      await tx.query(`insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
-        values ($1,'pursuit.bulk_action','pursuit',$2,$3)`, [actorId, p.pursuitId, JSON.stringify({ action: 'undo', updateId: update.updateId,
-          undoes: input.of, rule, ...(input.place ? { place: input.place } : {}), applied })]);
-      written++;
-    }
+      return { pursuitId: p.pursuitId, status: was.from, passedBy: passed ? was.was?.passedBy ?? null : null,
+        reason: passed ? (reason && (REASONS as readonly string[]).includes(reason) ? reason : null) : reason ?? rule, updateId };
+    }), tx);
+    const applied = todo.map(({ was, p, updateId }) => ({ p, updateId,
+      applied: { status: { from: p.status, to: was.from, was: { passedBy: p.passedBy, reason: p.statusReason } }, undoes: input.of } as UpdateApplied }));
+    await recordAppliedMany(tx, applied);
+    await bulkAudit(tx, actorId, applied.map(({ p, updateId, applied }) => ({ pursuitId: p.pursuitId, detail: { action: 'undo', updateId,
+      undoes: input.of, rule, ...(input.place ? { place: input.place } : {}), applied } })));
+    const written = todo.length;
     return { written, alreadySaved: moves.length - written };
   });
 }
