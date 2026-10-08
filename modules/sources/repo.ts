@@ -43,6 +43,23 @@ export async function requestsThisMonth(source: string): Promise<number> {
   return Number(row?.n ?? 0);
 }
 
+/**
+ * Requests sent per UTC day and endpoint template, newest day first: the count a provider bills, for
+ * watching a daily budget (Affinity, 8 Oct 2026). Templates only: no ids, paths or query strings.
+ */
+export async function dailyRequests(source: string, days: number): Promise<Array<{ day: string; endpoint: string; n: number }>> {
+  const db = await getDb();
+  const rows = await db.query<{ day: string; endpoint: string; n: string }>(
+    `select to_char(at at time zone 'utc', 'YYYY-MM-DD') as day, endpoint, count(*)::text as n
+       from sources.request_log
+      where source = $1 and outcome in ('sent', 'rate_limited')
+        and at >= (date_trunc('day', now() at time zone 'utc') - make_interval(days => $2)) at time zone 'utc'
+      group by 1, 2 order by 1 desc, 3 desc`,
+    [source, Math.max(0, days - 1)],
+  );
+  return rows.map((r) => ({ day: r.day, endpoint: r.endpoint, n: Number(r.n) }));
+}
+
 export async function recordConnectionTest(
   t: Omit<ConnectionTest, 'id' | 'at' | 'testedByName'> & { testedBy: string | null },
 ): Promise<void> {

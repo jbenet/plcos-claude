@@ -37,6 +37,24 @@ export async function affinitySliceProperties(ctx: AffinityContext) {
     `second run: ${again?.records} seen, ${again?.newRecords} new`,
   );
 
+  // Relationship strengths rotate (8 Oct 2026, under 300 Affinity calls a day): a person already read waits for
+  // their day, a new person is read at once, and the rotation covers everyone once per cycle.
+  const day = 86_400_000;
+  const want = new Set([30, 31, 45, 61]);
+  const due = (now: number) => [...sl.relationshipsDue(want, new Set([30, 31, 61]), 30, now)].sort();
+  const cover = new Set<number>();
+  for (let d = 0; d < 30; d++) for (const id of sl.relationshipsDue(want, want, 30, d * day)) cover.add(id);
+  const againDetail = again?.detail as { relationshipsFor?: number; relationshipsDue?: number } | null;
+  const read = await adb.query<{ id: string }>(`select distinct source_id as id from sources.raw_record where source = 'affinity' and kind = 'relationship'`);
+  const today = Math.floor(Date.now() / day) % 30;
+  const dueAgain = read.filter((r) => Number(r.id) % 30 === today).length;
+  check(
+    'A slice reads relationships only for new people and the day\'s share of the rest',
+    JSON.stringify(due(0)) === JSON.stringify([30, 45]) && JSON.stringify(due(day)) === JSON.stringify([31, 45, 61])
+      && cover.size === want.size && read.length === againDetail?.relationshipsFor && againDetail?.relationshipsDue === dueAgain,
+    `day 0: ${due(0).join(', ')}; day 1: ${due(day).join(', ')}; covered in 30 days: ${cover.size}/${want.size}; second run read ${againDetail?.relationshipsDue} of ${againDetail?.relationshipsFor}, ${dueAgain} due today`,
+  );
+
   await affinityNotesProperties(ctx);
   await (await import('./affinity-history')).affinityHistoryProperties(ctx);
 

@@ -313,3 +313,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Travel and Events on the Calendar](entries/calendar-travel-events.md)
 - [A W13 merge can name two records instead of a review group](entries/pair-merge-without-group.md)
 - [A refused merge names every missing attestation at once](entries/attestation-refusal-lists-all.md)
+- [Fewer Affinity requests a day](entries/affinity-call-budget.md)
