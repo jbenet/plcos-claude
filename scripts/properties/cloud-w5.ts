@@ -64,7 +64,7 @@ export async function cloudW5Properties(check: Check) {
     const keptA = JSON.parse(await readFile(join(dir, 'inbox', result.runId, 'replaced', 'strategy', 'lp-a.json'), 'utf8'));
     const exists = (p: string) => readFile(join(dir, p), 'utf8').then(() => true, () => false);
     check('Cloud W5 writes made and its pins itself: today, the cloud, the protocol version, the finding, the close track, the best tier and the lead\'s date from its file',
-      a.made.by === 'claude (cloud)' && a.made.at === '2026-10-06' && a.made.version === '1.10' && a.made.revised === undefined
+      a.made.by === 'claude (cloud)' && a.made.at === '2026-10-06' && a.made.version === '1.12' && a.made.revised === undefined
       && a.made.inputs.finding === '2026-09-30' && a.made.inputs.money === 'close signed 1000000' && a.made.inputs.bestPath === 'B'
       && a2.ask.vehicle === v2!.slug && a2.made.inputs.bestPath === 'B'
       && c.made.inputs.finding === null && c.made.inputs.money === null && c.made.inputs.bestPath === null && c.made.inputs.lead?.key === 'lp-a' && c.made.inputs.lead.at === '2026-09-01',

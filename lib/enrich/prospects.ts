@@ -207,7 +207,8 @@ export async function addProspects(db: Db, actorId: string, files: ProspectFile[
     for (const r of winners.values()) {
       const { p, entityId } = r;
       const key = `${entityId}:${p.vehicle}`;
-      const body = `Added by rule on Juan's instruction (26 Sep): ${p.reason}; capacity ${p.capacity.band} (${p.capacity.guess ? 'guess' : 'not marked as a guess'})`;
+      // Short (issue 0141, Juan: "write much more tightly, more signal"): the rule is in the note's data, not its words.
+      const body = `${p.reason.trim().replace(/[.;]\s*$/, '')}. Capacity ${p.capacity.band}${p.capacity.guess ? ' (guess)' : ''}.`;
       const reason = `${RULE}: ${p.reason.trim()}`;
       const existing = await tx.query<{ id: string; status: PursuitStatus; source: string; status_source: string; entity: string; vehicle: string; historical: boolean }>(
         `select p.pursuit_id::text id, p.status::text, p.source, p.status_source,

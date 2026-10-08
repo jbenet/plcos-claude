@@ -303,6 +303,15 @@ export async function identityReviewProperties(check: Check, db: Db) {
       !!mixedGroup && both?.decisions!.applied === 2 && both.decisions!.refused.length === 0 && await kind(mixed[0]!) === 'org' && await root(mixed[2]!) === mixed[1],
       `group ${mixedGroup?.entityIds.length ?? 'none'}; applied ${both?.decisions!.applied}; refused ${JSON.stringify(both?.decisions!.refused)}`);
 
+    // Issue 0138: the same merge pushed twice with other evidence applies once; the copy is superseded, not a conflict.
+    const twice = await pair('Pushed Twice');
+    const copies = await run([decision(twice), { ...decision(twice, 'merge', { decided_by: 'second-invented-reviewer' }), line: 2 }]);
+    const copiesAgain = await run([decision(twice), { ...decision(twice, 'merge', { decided_by: 'second-invented-reviewer' }), line: 2 }]);
+    check('IDENTITY REVIEW the same decision pushed twice applies once and the copy is superseded (0138)',
+      copies.decisions!.applied === 1 && copies.decisions!.refused.length === 0 && copies.decisions!.superseded.some(x => x.line === 2 && x.byLine === 1)
+        && await root(twice[1]!) === twice[0] && copiesAgain.decisions!.applied === 0 && copiesAgain.decisions!.refused.length === 0,
+      `first run ${JSON.stringify(copies.decisions)}; second run applied ${copiesAgain.decisions!.applied}, refused ${copiesAgain.decisions!.refused.length}`);
+
     const stale = await pair('Stale'), outsider = await entity('Unrelated');
     const beforeInvalid = await snapshot();
     const invalidInputs = [decision(stale, 'merge', { survivor: outsider }), decision(stale, 'merge', { members: [...stale, outsider] }), decision(stale, 'merge', { group: identityReviewGroupId([...stale, randomUUID()]) })];
