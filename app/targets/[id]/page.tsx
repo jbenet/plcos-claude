@@ -40,6 +40,7 @@ import { laterFacts, shownRead } from '@/lib/reads';
 import { onFile } from '@/lib/reconcile';
 import { ConnectionFeedback } from '@/components/routes/ConnectionFeedback';
 import { PublicProfile } from '@/components/entity/PublicProfile';
+import { VehicleInvestments } from '@/components/entity/VehicleInvestments';
 import { SuggestedStrategy } from '@/components/strategy/SuggestedStrategy';
 import { AddContext } from '@/components/strategy/AddContext';
 import { OrgPeople, WarmIntroBox } from '@/components/strategy/LpSideCards';
@@ -71,7 +72,8 @@ async function TargetWorkspace({ params, searchParams }: {
   const [user, vehicles, [entity]] = await Promise.all([(async () => (await auth()).currentUser())(), listVehicles(), listEntities([pursuit.entityId])]);
   // The routes page's own search — team scope, three hops, this vehicle — so the warm intro box
   // and the page it opens agree (issue 0093).
-  const vehicleKind = vehicles.find((v) => v.id === pursuit.vehicleId)?.kind ?? 'fund';
+  const thisVehicle = vehicles.find((v) => v.id === pursuit.vehicleId);
+  const vehicleKind = thisVehicle?.kind ?? 'fund';
   const [claims, notes, restrictions, routes, signals, affinityNotes, tracks, calendar, readings, logged, updates, statusLog] = await Promise.all([
     claimsFor(pursuit.entityId),
     notesFor(pursuit.entityId),
@@ -449,6 +451,7 @@ async function TargetWorkspace({ params, searchParams }: {
           {strategyPursuits.map((p) => <SuggestedStrategy key={p.pursuitId} pursuitId={p.pursuitId} vehicleName={p.vehicleName} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />)}
           <DakotaClaims entityId={pursuit.entityId} />
           <PublicProfile entityId={pursuit.entityId} />
+          {thisVehicle && <VehicleInvestments entityId={pursuit.entityId} vehicle={thisVehicle} />}
           <ConnectionFeedback key={pursuit.entityId} lp={pursuit.entityId} />
 
           <div className="card">

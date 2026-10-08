@@ -290,3 +290,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Search on Everyone and in every top bar](entries/search.md)
 - [The Admin token merges duplicate identities; the connector cap only advises](entries/rulings-1008.md)
 - [An Admin moves a vehicle's raise window on the server](entries/raise-window.md)
+- [Investments relevant to the vehicle, on the LP page](entries/vehicle-investments.md)
