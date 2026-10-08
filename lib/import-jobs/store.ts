@@ -102,7 +102,8 @@ export async function executeImportJob(db: Db, id: string,
   } finally {
     clearInterval(heartbeat);
     // The job's writes were background (network 017): its end is a person's change, so the next page
-    // view rebuilds with all of it rather than answering from a build made while it ran.
-    await db.query(`select network.bump_at_commit('read')`).catch(() => {});
+    // view rebuilds with all of it rather than answering from a build made while it ran. Not awaited:
+    // the job is finished, and a restart's recovery waits while one still counts as running.
+    void db.query(`select network.bump_at_commit('read')`).catch(() => {});
   }
 }
