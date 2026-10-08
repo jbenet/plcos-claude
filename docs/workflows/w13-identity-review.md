@@ -17,7 +17,10 @@ Do not open the database, raw connector replicas, other batches or contact expor
 Real inputs and outputs stay under the authorized shared real root, never in git, screenshots,
 issues, remote sub-agent prompts or a final reply. Build/evaluate this protocol with invented
 demo fixtures. No external writes, sign-ins, paid services, contact brokers, forms or posts.
-Decisions are local proposals; a human runs **Merge duplicate identities** to apply them.
+Decisions are local proposals until **Merge duplicate identities** applies them. Claude runs that job itself with
+an Admin token (`POST /api/sync/jobs {"kind":"duplicates"}`, `scripts/cloud-job.sh`): asked who should run the
+proposals, Juan answered on 8 Oct 2026 "ideally you do it / figure it out". To find the groups and records for a
+name without pulling the database, use `bash scripts/cloud-entity-type.sh review '<name>'` and `find '<name>'`.
 Since the move to Railway (7 Oct 2026), a Mac run pushes its decision file up with
 `bash scripts/cloud-push.sh …/enrich/identity-decisions-<batch>.jsonl`; the server appends the rows to its own
 `enrich/identity-decisions.jsonl` and applies nothing.
