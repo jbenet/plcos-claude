@@ -74,27 +74,38 @@ interface Entry { search: RouteSearch | null; generation: string; revision: stri
 const memory = new WeakMap<Db, Map<string, Entry>>();
 const pending = new WeakMap<Db, Map<string, Promise<RouteSearch | null>>>();
 
-async function touched(db: Db, targetId: string, since: string, search: RouteSearch | null): Promise<boolean> {
+// Every record changed after a stored search was made, up to the current revision: one read, shared by
+// every target stored at that revision. A warm-up re-read them 256 at a time for each of thousands of
+// targets, with the target's contacts again per batch: after a large import that is hours (8 Oct 2026).
+// Committed stamps are at most the route revision, and a commit after it fails the caller's check.
+const changedSets = new WeakMap<Db, Map<string, Promise<string[]>>>();
+function changedSince(db: Db, since: string, upto: string): Promise<string[]> {
+  let sets = changedSets.get(db);
+  if (!sets) { sets = new Map(); changedSets.set(db, sets); }
+  const key = `${since}:${upto}`;
+  let set = sets.get(key);
+  if (!set) {
+    if (sets.size >= 8) sets.delete(sets.keys().next().value!);
+    set = db.query<{ canonical_id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text as canonical_id
+        from network.route_changed_entity where revision > $1::bigint and revision <= $2::bigint`, [since, upto])
+      .then(rows => rows.map(r => r.canonical_id).filter(Boolean));
+    set.catch(() => { if (sets!.get(key) === set) sets!.delete(key); });
+    sets.set(key, set);
+  }
+  return set;
+}
+
+async function touched(db: Db, targetId: string, since: string, upto: string, search: RouteSearch | null): Promise<boolean> {
   // Source display names affect route labels even when the source is three hops away.
   const sources = new Set(search?.structural
     ? search.structural.candidates.map((c) => search.structural!.nodes[c.nodes[0]!]!.entityId)
     : search?.routes.map((r) => r.fromEntity) ?? []);
-  // Keyset on the uuid itself, so each batch starts where the last ended in the primary key; the
-  // text comparison it replaced re-read every earlier entity on each batch (performance pass, 8 Oct
-  // 2026). A uuid sorts as its lower-case text does, so the batches are the same.
-  let after = '00000000-0000-0000-0000-000000000000';
-  while (true) {
-    const rows = await db.query<{ id: string; canonical_id: string }>(`select entity_id::text as id,
-        identity.canonical_entity_id(entity_id)::text as canonical_id from network.route_changed_entity
-      where revision > $1::bigint and entity_id > $2::uuid order by entity_id limit 256`, [since, after]);
-    if (!rows.length) return false;
-    const ids = rows.map((r) => r.canonical_id);
-    if (ids.some((id) => sources.has(id))) return true;
-    const contacts = (await lpContactsFor([targetId])).get(targetId) ?? [];
-    for (const endpoint of [targetId, ...contacts.map(c => c.entityId)]) if (await routeTouchesChanges(endpoint, ids)) return true;
-    after = rows.at(-1)!.id;
-    await pause(1);
-  }
+  const ids = await changedSince(db, since, upto);
+  if (!ids.length) return false;
+  if (sources.size && ids.some((id) => sources.has(id))) return true;
+  const contacts = (await lpContactsFor([targetId])).get(targetId) ?? [];
+  for (const endpoint of [targetId, ...contacts.map(c => c.entityId)]) if (await routeTouchesChanges(endpoint, ids)) return true;
+  return false;
 }
 
 /** Only structural graph state is cached. service applies authoritative guards and
@@ -134,7 +145,7 @@ async function readCachedRoutes(targetId: string, kind: string, live: () => Prom
       if (row) entry = { search: decode(row.search), generation: version.generation,
         revision: row.input_revision, bytes: row.search.length * 2 };
     }
-    if (entry && entry.revision !== version.revision && await touched(db, targetId, entry.revision, entry.search)) entry = undefined;
+    if (entry && entry.revision !== version.revision && await touched(db, targetId, entry.revision, version.revision, entry.search)) entry = undefined;
     const search = entry ? entry.search : await live();
     const now = await revisionFor(db);
     if (now.generation !== version.generation || now.revision !== version.revision) throw new RevisionChanged();
