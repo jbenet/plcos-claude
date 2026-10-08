@@ -119,7 +119,13 @@ export async function findEntitiesByName(db: Db, q: string): Promise<FoundEntity
 }
 
 /** A group Merge duplicate identities holds back, as W13 names it. */
-export interface ReviewGroup { group: string; name: string; reason: string; members: Array<{ entityId: string; name: string; type: string; roles: string[] }> }
+export interface ReviewGroup {
+  group: string; name: string; reason: string;
+  members: Array<{ entityId: string; name: string; type: string; roles: string[]; sources: Array<{ source: string; key: string }> }>;
+  /** What holds the group apart (issue 0138): each separation or reversed merge between two of its members, and the local type corrections. */
+  separations: Array<{ assertionId: string; kind: string; rule: string | null; undone: boolean; by: string | null; at: string; note: string | null; undoReason: string | null }>;
+  corrections: Array<{ entityId: string; rule: string; original: string; reversed: boolean }>;
+}
 
 /**
  * The groups the duplicates pass would hold back for review whose name holds the words (issue 0138), worked out
@@ -141,10 +147,33 @@ export async function identityReviewByName(db: Db, q: string): Promise<ReviewGro
   const facts = new Map((await db.query<{ id: string; name: string; type: string }>(
     `select entity_id::text id, display_name name, entity_type::text type from identity.entity where entity_id = any($1::uuid[])`, [ids])).map((r) => [r.id, r]));
   const roles = new Map((await relationshipRoles(ids)).map((r) => [r.entityId, r.roles as string[]]));
-  return hits.map((g) => ({
-    group: identityReviewGroupId(g.entityIds), name: g.name, reason: g.reason,
-    members: g.entityIds.map((id) => ({ entityId: id, name: facts.get(id)?.name ?? '', type: facts.get(id)?.type ?? 'unknown', roles: roles.get(id) ?? [] })),
-  }));
+  const sources = await db.query<{ root: string; source: string; key: string }>(
+    `select identity.canonical_entity_id(entity_id)::text root, source, source_id key from identity.source_record
+      where identity.canonical_entity_id(entity_id) = any($1::uuid[]) order by source, source_id`, [ids]);
+  const assertions = await db.query<{ id: string; kind: string; rule: string | null; undone: boolean; by: string | null; at: string; note: string | null; undo: string | null; a: string | null; b: string | null }>(
+    `select m.assertion_id::text id, m.kind::text kind, m.rule, m.undone_at is not null undone, u.handle by, m.asserted_at::text at, m.note, m.undo_reason undo,
+            coalesce(identity.canonical_entity_id(m.merged_entity), identity.canonical_entity_id(l.entity_id))::text a,
+            coalesce(identity.canonical_entity_id(m.canonical_entity), identity.canonical_entity_id(r.entity_id))::text b
+       from identity.match_assertion m left join platform.app_user u on u.id = m.asserted_by
+       left join identity.source_record l on l.source = m.left_source and l.source_id = m.left_source_id
+       left join identity.source_record r on r.source = m.right_source and r.source_id = m.right_source_id
+      where (m.kind = 'not_same_as' and m.undone_at is null) or (m.kind = 'same_as' and m.undone_at is not null)`);
+  const corrections = await db.query<{ id: string; rule: string; original: string; reversed: boolean }>(
+    `select identity.canonical_entity_id(entity_id)::text id, rule, original_type::text original, reversed_at is not null reversed
+       from identity.entity_type_correction where identity.canonical_entity_id(entity_id) = any($1::uuid[])`, [ids]);
+  return hits.map((g) => {
+    const inGroup = new Set(g.entityIds);
+    return {
+      group: identityReviewGroupId(g.entityIds), name: g.name, reason: g.reason,
+      members: g.entityIds.map((id) => ({
+        entityId: id, name: facts.get(id)?.name ?? '', type: facts.get(id)?.type ?? 'unknown', roles: roles.get(id) ?? [],
+        sources: sources.filter((x) => x.root === id).map((x) => ({ source: x.source, key: x.key })),
+      })),
+      separations: assertions.filter((x) => x.a && x.b && x.a !== x.b && inGroup.has(x.a) && inGroup.has(x.b))
+        .map((x) => ({ assertionId: x.id, kind: x.kind, rule: x.rule, undone: x.undone, by: x.by, at: x.at, note: x.note, undoReason: x.undo })),
+      corrections: corrections.filter((c) => inGroup.has(c.id)).map((c) => ({ entityId: c.id, rule: c.rule, original: c.original, reversed: c.reversed })),
+    };
+  });
 }
 
 /** Undecided approval tickets, counted (issue 0137): a system actor by its handle, everyone else as "person". */

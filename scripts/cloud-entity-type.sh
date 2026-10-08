@@ -67,7 +67,9 @@ if (mode === "list") {
   fs.writeFileSync(out, JSON.stringify(list, null, 2) + "\n");
   console.log(`[cloud-entity-type] ${list.length} ${mode === "find" ? "record(s)" : "group(s)"}: ${out}`);
   if (mode === "find") for (const e of list) console.log([e.entityId, e.type, e.roles.join(",") || "no role", `${e.pursuits} pipeline(s)`].join("\t"));
-  else for (const g of list) console.log([g.group.slice(0, 12), `${g.members.length} members`, g.members.map((m) => m.type).join(","), g.reason].join("\t"));
+  else for (const g of list) console.log([g.group.slice(0, 12), `${g.members.length} members`, g.members.map((m) => m.type).join(","), g.reason,
+    `${g.separations.length} separation(s): ${g.separations.map((x) => `${x.assertionId} ${x.kind}${x.undone ? " (merge undone)" : ""} ${x.rule || ""} by ${x.by || "?"}`).join("; ") || "none"}`,
+    `${g.corrections.filter((c) => !c.reversed).length} type correction(s)`].join("\t"));
 } else if (mode === "tickets") {
   for (const t of a.tickets) console.log([t.kind, t.requester, t.state, t.count].join("\t"));
   console.log(`[cloud-entity-type] ${a.tickets.reduce((n, t) => n + t.count, 0)} undecided ticket(s)`);
