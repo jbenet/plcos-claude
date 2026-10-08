@@ -304,3 +304,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [A retype and a merge for one group apply together](entries/retype-then-merge.md)
 - [Strategies written tightly, and read as bullets](entries/tight-strategies.md)
 - [Status moves no longer wait for imports or for the whole list](entries/faster-status-moves.md)
+- [Pages stay fast while imports run, and the LP page is ten times quicker](entries/faster-pages-during-imports.md)
