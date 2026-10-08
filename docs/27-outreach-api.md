@@ -137,13 +137,16 @@ take it as `targetId` (routes_to) and `nodeId` (routes_through).
       { "rule": "ask_count", "ok": false, "blocking": false, "detail": "2 asks made to them this quarter…; the cap is 1, advisory." },
       { "rule": "fund_first", "ok": false, "blocking": false, "detail": "An open fund discussion: PLC Neurotech I (Discussing)…", "choices": ["mention_both", "send_separately", "wait"] },
       { "rule": "wrap", "ok": true, "blocking": false, "detail": "506(c) × spv: covered by the wrap matrix…" }],
-    "materials": [{ "assetId": "…", "title": "Cortex one-pager (LP memo)", "permittedUse": "accredited_only", "allowed": true }],
+    "materials": [{ "assetId": "…", "title": "Cortex one-pager (LP memo)", "permittedUse": "accredited_only", "allowed": true, "link": "https://docsend.com/view/…" }],
     "bucket": "reply_owed", "updatedAt": "2026-10-04T18:02:11Z" }],
   "total": 12, "offset": 0, "limit": 25, "nextCursor": null,
   "counts": { "reply_owed": 2, "money": 3, "invite": 5, "follow_up": 1, "held": 1 },
   "cursor": "2026-10-04T18:05:00Z", "redacted": "1 sentence with a health detail redacted." } }
 ```
 
+- **A material's link (8 Oct 2026).** Each material carries `link`: the DocSend or file link a person pasted for it on
+  the materials page, or `null`. Capital OS stores it as written (https only) and never opens it or calls DocSend; offer
+  it in a draft when `allowed` is true.
 - **How many rows (5 Oct 2026).** 25 by default (`config.outreach.defaultQueueRows`, GUESS), the same over REST and MCP,
   and every answer says which in `limit`. Ask for up to 500 (`maxQueueRows`, GUESS); more is refused (400). `total` counts
   every row the query matches, before paging (cheap: the rows are read for the buckets anyway).

@@ -312,7 +312,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
       const k = `${v.id}:${x.assetId}`;
       if (!rules.has(k)) rules.set(k, await checkWrap({ exemption: v.exemption, instrument: instrumentOf(v), audience: x.audience as Audience, permittedUse: x.permittedUse as PermittedUse }));
       const w = rules.get(k)!;
-      return { assetId: x.assetId, title: x.title, permittedUse: x.permittedUse, allowed: w.allowed && x.status === 'approved' && x.flags.length === 0 };
+      return { assetId: x.assetId, title: x.title, permittedUse: x.permittedUse, allowed: w.allowed && x.status === 'approved' && x.flags.length === 0, link: x.link };
     }));
   };
   const materialsByVehicle = new Map(await Promise.all(vehicles.map(async (v) => [v.id, await materialsFor(v)] as const)));

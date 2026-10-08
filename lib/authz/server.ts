@@ -95,6 +95,12 @@ export async function authorizeAction(user: Principal & { id: string }, name: Ac
     case 'vehicleSlug': vehicle = await byVehicle(value(input, 'vehicleSlug'), true); break;
     case 'move': vehicle = await rows('select vehicle_id::text from strategy.move_vehicle where move_id = $1 and vehicle_id = $2', [value(input, 'id'), id(value(input, 'vehicleId'))]); break;
     case 'contentSend': vehicle = await rows('select vehicle_id::text from content.send where send_id = $1', [id(value(input, 'sendId'))]); break;
+    case 'contentAsset': {
+      const a = await q.one<{ vehicle_id: string | null }>('select vehicle_id::text from content.asset where asset_id = $1', [id(value(input, 'assetId'))]);
+      if (!a) throw new AuthorizationError();
+      vehicle = a.vehicle_id ? [a.vehicle_id] : null;
+      break;
+    }
     case 'conflict': vehicle = await rows(`select a.vehicle_id::text from coordination.conflict_case c
       join coordination.ask a on a.ask_id in (c.claimant_a, c.claimant_b) where c.case_id = $1`, [id(value(input, 'caseId'))]); break;
     // A person's own connection (docs/25): no vehicle; a viewer was refused above.

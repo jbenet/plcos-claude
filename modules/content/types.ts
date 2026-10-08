@@ -43,6 +43,8 @@ export interface Asset {
   body: string;
   status: AssetStatus;
   approvedAt: Date | null;
+  /** A link a person pasted for it (a DocSend or file link), https only. Capital OS never opens it. */
+  link: string | null;
   /** Claims this asset rests on. */
   claims: Array<{ claimId: string; field: string; value: string; source: string; entityName: string }>;
   /** Open refresh flags — a claim underneath it changed. */
