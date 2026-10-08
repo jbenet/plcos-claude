@@ -50,12 +50,15 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
   // affiliation it is and who are not on it only as a board member, adviser or investor (a family-office
   // principal on a company's board does not make the company a family office).
   const orgPeople = await db.query<{ org: string; person: string; speaks: boolean }>(
-    `select identity.canonical_entity_id(a.org_entity)::text org, identity.canonical_entity_id(a.person_entity)::text person,
+    // The firms' aliases first (identity.alias_pairs; the row ids are canonical): index probes, not a
+    // merged-identity lookup on every affiliation (performance pass, 8 Oct 2026; 0.43 s -> 0.03 s).
+    `with oa as (select * from identity.alias_pairs($1::uuid[])),
+     spoken as (select distinct oa.canonical_id org, identity.canonical_entity_id(c.person_entity) person
+       from oa join strategy.active_pursuit p on p.entity_id=oa.entity_id join strategy.pursuit_contact c using(pursuit_id))
+     select oa.canonical_id::text org, identity.canonical_entity_id(a.person_entity)::text person,
        bool_or((a.is_primary and coalesce(a.role,'') !~* '(board|advis|investor|limited partner|member)')
-         or exists(select 1 from strategy.pursuit_contact c join strategy.active_pursuit p using(pursuit_id)
-           where identity.canonical_entity_id(p.entity_id)=identity.canonical_entity_id(a.org_entity)
-             and identity.canonical_entity_id(c.person_entity)=identity.canonical_entity_id(a.person_entity))) speaks
-     from identity.affiliation a where identity.canonical_entity_id(a.org_entity)=any($1::uuid[]) and a.ended_on is null
+         or exists(select 1 from spoken k where k.org=oa.canonical_id and k.person=identity.canonical_entity_id(a.person_entity))) speaks
+     from oa join identity.affiliation a on a.org_entity=oa.entity_id where a.ended_on is null
      group by 1,2`, [orgIds]);
   const people = [...new Set(orgPeople.map((p) => p.person))];
   const firmIds = [...new Set(rows.filter((r) => !r.isOrg && r.orgId).map((r) => r.orgId!))];

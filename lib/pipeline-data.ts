@@ -14,7 +14,7 @@ import {
   IMPLIED_LABEL, PASSED_BY_LABEL, RUNGS, RUNG_LABEL,
   impliedRung, isPseudoOrg, listPursuits, rungIndex, type Pursuit,
 } from '@/modules/strategy';
-import { READ_LABEL, touchpointSummaries, touchpointsByPair, type TouchpointSummary } from '@/modules/meetings';
+import { READ_LABEL, touchpointSummaries, type TouchpointSummary } from '@/modules/meetings';
 import { CLOSE_STATE_LABEL, closeStates } from '@/modules/pipeline';
 import { blanketRestricted } from '@/modules/coordination';
 import { readingsFor, type NoteReading } from '@/lib/connectors/affinity/readings';
@@ -60,7 +60,8 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   const entityIds = [...new Set(pursuits.map((p) => p.entityId))];
   const db = await getDb();
   const touched = (async () => {
-    const touchesBy = vehicleId ? await touchesOn(vehicleId) : await touchpointsByPair(pairs);
+    // Each vehicle's touchpoints are cached with its plan; every vehicle's list merges them (keys never collide).
+    const touchesBy = new Map((await Promise.all([...new Set(pursuits.map(p => p.vehicleId))].map(id => touchesOn(id)))).flatMap(m => [...m]));
     const [sums, closes, restricted, readings, spv] = await Promise.all([
       touchpointSummaries(pairs, new Date(), touchesBy), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
       spvMarks(db, entityIds),
