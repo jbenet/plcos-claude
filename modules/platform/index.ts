@@ -17,7 +17,7 @@ export {
   upsertSettingRow, type SettingRow,
 } from './settings';
 export { addPerson, listPeople, PeopleRefused, setPersonActive, updateAddresses, updatePerson, type Access, type NewPerson, type Person } from './people';
-export { createVehicle, VehicleRefused, writeVehicle } from './vehicles';
+export { createVehicle, setRaiseWindow, VehicleRefused, writeVehicle, RAISE_SET_IN_APP } from './vehicles';
 export {
   checkNewVehicle, EXEMPTIONS, slugFromName, slugProblem, VEHICLE_KINDS, VEHICLE_PHASES, type Exemption, type NewVehicle, type VehicleRowInput,
 } from './client';

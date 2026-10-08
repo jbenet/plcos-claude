@@ -31,6 +31,8 @@ export const routeRules = {
   'app/api/sync/runs/route.ts#POST': 'sync:push',
   // A vehicle added by an Admin's token (lib/sync/vehicles.ts), the Settings → Vehicles form's own checks.
   'app/api/sync/vehicles/route.ts#POST': 'sync:admin',
+  // An Admin's token moves a vehicle's raise window (setRaiseWindow); nothing else about a vehicle changes.
+  'app/api/sync/vehicles/route.ts#PATCH': 'sync:admin',
   // An Admin's token queues a research export or a findings import and reads any job's state (lib/sync/jobs.ts).
   'app/api/sync/jobs/route.ts#POST': 'sync:admin',
   'app/api/sync/jobs/route.ts#GET': 'sync:admin',

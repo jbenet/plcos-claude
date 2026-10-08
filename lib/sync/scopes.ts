@@ -32,7 +32,8 @@ export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles' | 'jobs' | 
   push: { name: 'sync_push', route: 'POST /api/sync/push', grant: ['admin', 'team'],
     policy: { risk: 'write-guarded', scopes: [SYNC_PUSH], ticket: 'none', approval: false } },
   // Adds a vehicle through the same createVehicle the Settings → Vehicles form calls, so its checks hold: Admin only.
-  vehicles: { name: 'vehicle_create', route: 'POST /api/sync/vehicles', grant: ['admin'],
+  // PATCH moves an existing vehicle's raise window (setRaiseWindow), nothing else.
+  vehicles: { name: 'vehicle_create', route: 'POST|PATCH /api/sync/vehicles', grant: ['admin'],
     policy: { risk: 'write-guarded', scopes: [SYNC_ADMIN], ticket: 'none', approval: false } },
   // Queues the jobs Developer → Enrichment's buttons queue (research export, findings import, Merge duplicate identities), as the token's owner.
   jobs: { name: 'import_job', route: 'POST|GET /api/sync/jobs', grant: ['admin'],

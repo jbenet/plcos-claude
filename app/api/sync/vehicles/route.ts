@@ -12,3 +12,11 @@ export const POST = withRoute('app/api/sync/vehicles/route.ts#POST', async funct
   if (status === 201) revalidatePath('/', 'layout');
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 });
+
+/** An Admin moves an existing vehicle's raise window by token (lib/sync/vehicles.ts, moveRaiseWindow). */
+export const PATCH = withRoute('app/api/sync/vehicles/route.ts#PATCH', async function(request: Request, context: { caller: import('@/lib/sync/auth').SyncCaller }) {
+  const { moveRaiseWindow } = await import('@/lib/sync/vehicles');
+  const { status, body } = await moveRaiseWindow(context.caller, request);
+  if (status === 200) revalidatePath('/', 'layout');
+  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
+});
