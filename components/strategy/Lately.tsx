@@ -1,5 +1,6 @@
 import Link from '@/components/ui/AppLink';
-import { summarize, touchpointsByPair } from '@/modules/meetings';
+import { summarize } from '@/modules/meetings';
+import { touchesOn } from '@/modules/strategy';
 import { auditSince } from '@/modules/platform';
 import { STATUSES, type Pursuit, type PursuitStatus } from '@/lib/authz/read/strategy';
 
@@ -32,7 +33,9 @@ export async function Lately({ pursuits, vehicleName }: { pursuits: Pursuit[]; v
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const ids = new Set(pursuits.map((p) => p.pursuitId));
   const [touches, log] = await Promise.all([
-    touchpointsByPair(pursuits.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }))),
+    // Each vehicle's touchpoints are cached with its plan (modules/strategy/vehicle.ts); keys never collide.
+    Promise.all([...new Set(pursuits.map((p) => p.vehicleId))].map((id) => touchesOn(id)))
+      .then((maps) => new Map(maps.flatMap((m) => [...m]))),
     auditSince(['pursuit.status_set', 'pursuit.update_added'], new Date(since)),
   ]);
 
