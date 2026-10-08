@@ -3,7 +3,10 @@
 # with an Admin token, as the buttons in Developer → Enrichment would. Counts only, never a name.
 #
 #   bash scripts/cloud-job.sh [--to <app url>] export|findings|duplicates   prints the job id
+#   bash scripts/cloud-job.sh [--to <app url>] affinity slice|history|notes|meetings|translate   prints the job id
 #   bash scripts/cloud-job.sh [--to <app url>] status <job id>
+#
+# For fresh Affinity statuses and emails: slice, then history, then translate, each after the last completes.
 #
 # Secrets, never printed and never on a command line, as for scripts/cloud-push.sh:
 #   the token     Keychain item plcos-railway / push-token (CLOUD_PUSH_TOKEN for tests), an Admin token.
@@ -18,6 +21,7 @@ TO=""
 cmd="${1:-}"
 case "$cmd" in
   export|findings|duplicates) [ $# -eq 1 ] || usage ;;
+  affinity) [ $# -eq 2 ] && [[ "$2" =~ ^(slice|history|notes|meetings|translate)$ ]] || usage ;;
   status) [ $# -eq 2 ] && [[ "$2" =~ ^[0-9a-fA-F-]{36}$ ]] || usage ;;
   *) usage ;;
 esac
@@ -37,7 +41,8 @@ if [ "$cmd" = status ]; then
   answer="$(curl -sS --proto "$proto" --connect-timeout 20 --max-time 60 \
     -K <(printf 'header = "Authorization: Bearer %s"\n' "$token") -w '\n%{http_code}' "$TO/api/sync/jobs?job=$2")"
 else
-  answer="$(printf '{"kind":"%s"}' "$cmd" | curl -sS --proto "$proto" --connect-timeout 20 --max-time 60 \
+  if [ "$cmd" = affinity ]; then body="$(printf '{"kind":"affinity","operation":"%s"}' "$2")"; else body="$(printf '{"kind":"%s"}' "$cmd")"; fi
+  answer="$(printf '%s' "$body" | curl -sS --proto "$proto" --connect-timeout 20 --max-time 60 \
     -K <(printf 'header = "Authorization: Bearer %s"\nheader = "Content-Type: application/json"\n' "$token") \
     --data-binary @- -w '\n%{http_code}' "$TO/api/sync/jobs")"
 fi
