@@ -287,3 +287,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [A findings import survives a deploy](entries/import-survives-deploy.md)
 - [A person's older research files under the organization they speak for](entries/contact-aliases.md)
 - [A revised finding takes nothing from the merge](entries/merge-revised.md)
+- [Search on Everyone and in every top bar](entries/search.md)

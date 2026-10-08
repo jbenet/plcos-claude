@@ -60,12 +60,18 @@ const map = (r: Row): RelationshipRow => {
   return { entityId:r.entity_id, name:r.name, entityType:r.entity_type, roles, hard, soft,
     vehicles:r.vehicles ?? [], connectorAsks:Number(r.connector_asks), rung:r.rung, status:r.status };
 };
+/** A name filter for ILIKE: the words in order, anything between them (issue 0134). Null for no filter. */
+export function namePattern(q?: string | null): string | null {
+  const words = (q ?? '').trim().split(/\s+/).filter(Boolean).slice(0, 8).map((w) => w.replace(/[\\%_]/g, (c) => `\\${c}`));
+  return words.length ? `%${words.join('%')}%` : null;
+}
+
 /** All list reads have a SQL limit; detail callers pass just the requested identity. */
-export async function relationshipRoles(ids?: string[], group: RelationshipGroup = 'all', offset = 0): Promise<RelationshipRow[]> {
+export async function relationshipRoles(ids?: string[], group: RelationshipGroup = 'all', offset = 0, q?: string | null): Promise<RelationshipRow[]> {
   if (ids?.length === 0) return [];
   const db = await getDb();
   const rows = await db.query<Row>(`${FACTS}, shown as materialized (
-    select * from base where ${ids ? 'entity_id = any($1::uuid[])' : `not is_team and ${filters[group]} and $1::uuid[] is null`}
+    select * from base where ${ids ? 'entity_id = any($1::uuid[]) and $3::text is null' : `not is_team and ${filters[group]} and $1::uuid[] is null and ($3::text is null or name ilike $3)`}
     order by hard desc, name, entity_id limit ${RELATIONSHIP_PAGE_SIZE} offset $2
   ), pursuits as materialized (
     select p.*, identity.canonical_entity_id(p.entity_id) canonical_id from strategy.active_pursuit p
@@ -74,9 +80,17 @@ export async function relationshipRoles(ids?: string[], group: RelationshipGroup
       where p.canonical_id = s.entity_id order by l.occurred_at desc limit 1) rung,
     (select p.status::text from pursuits p where p.canonical_id = s.entity_id
       order by (p.status = 'passed'), p.status desc limit 1) status
-  from shown s order by hard desc, name, entity_id`, [ids ?? null, Math.max(0, Math.floor(offset))]);
+  from shown s order by hard desc, name, entity_id`, [ids ?? null, Math.max(0, Math.floor(offset)), ids ? null : namePattern(q)]);
   return rows.map(map);
 }
+/** How many records in a group match a name filter (issue 0134). */
+export async function relationshipMatchCount(group: RelationshipGroup, q: string): Promise<number> {
+  const pattern = namePattern(q);
+  if (!pattern) return 0;
+  const db = await getDb();
+  return (await db.one<{ n: number }>(`${FACTS} select count(*)::int n from base where not is_team and ${filters[group]} and name ilike $1`, [pattern]))!.n;
+}
+
 export async function relationshipCounts() {
   const db = await getDb();
   return (await db.one<Record<RelationshipGroup | RelationshipRole, number>>(`${FACTS}

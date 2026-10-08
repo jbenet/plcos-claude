@@ -1,5 +1,5 @@
 import { coalescePage } from '@/lib/page-render';
-import { relationshipCounts, RELATIONSHIP_PAGE_SIZE, type RelationshipGroup } from '@/modules/identity/roles';
+import { relationshipCounts, relationshipMatchCount, RELATIONSHIP_PAGE_SIZE, type RelationshipGroup } from '@/modules/identity/roles';
 import Link from '@/components/ui/AppLink';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -74,22 +74,26 @@ async function Orgs({
   params, searchParams,
 }: {
   params: Promise<{ group: string }>;
-  searchParams: Promise<{ e?: string; page?: string }>;
+  searchParams: Promise<{ e?: string; page?: string; q?: string }>;
 }) {
   const { group } = await params;
-  const { e, page } = await searchParams;
+  const { e, page, q: rawQ } = await searchParams;
+  const q = (rawQ ?? '').trim().slice(0, 120);
   const pageNumber = Math.max(0, Math.min(100000, Number.parseInt(page ?? '0', 10) || 0));
   const spec = GROUPS[group];
   if (!spec) notFound();
 
   const [rows, fit, counts] = await Promise.all([
-    relationshipRoles(undefined, group as RelationshipGroup, pageNumber * RELATIONSHIP_PAGE_SIZE),
+    relationshipRoles(undefined, group as RelationshipGroup, pageNumber * RELATIONSHIP_PAGE_SIZE, q || null),
     listAssessments(null), relationshipCounts(),
   ]);
+  // A search counts its own matches (issue 0134); the inspector keeps the whole group's counts.
+  const matched = q ? await relationshipMatchCount(group as RelationshipGroup, q) : null;
+  const more = (n: number) => `/orgs/g/${group}?${new URLSearchParams({ ...(q ? { q } : {}), page: String(n) })}`;
   const affiliations = await affiliationsFor(rows.map(r => r.entityId));
   const tally = (role: RelationshipRole) => counts[role];
   const peopleCount = counts.people, firmCount = counts.firms;
-  const total = counts[group as RelationshipGroup];
+  const total = matched ?? counts[group as RelationshipGroup];
 
   return (
     <Page
@@ -130,15 +134,22 @@ async function Orgs({
 
       <div className="sorter" style={{ paddingBottom: 14 }}>
         {ORDER.map((g) => (
-          <Link key={g} className={g === group ? 'on' : ''} href={`/orgs/g/${g}`}>
+          <Link key={g} className={g === group ? 'on' : ''} href={`/orgs/g/${g}${q ? `?q=${encodeURIComponent(q)}` : ''}`}>
             {GROUPS[g]!.title}
           </Link>
         ))}
       </div>
 
-      <p className="cover">{pageNumber === 0 ? `Showing the first ${RELATIONSHIP_PAGE_SIZE}` : `Showing ${pageNumber * RELATIONSHIP_PAGE_SIZE + 1}–${pageNumber * RELATIONSHIP_PAGE_SIZE + rows.length}`} of {total} records, ordered by hard money then name.
-        {pageNumber > 0 && <> · <Link href={`/orgs/g/${group}?page=${pageNumber - 1}`}>Previous</Link></>}
-        {(pageNumber + 1) * RELATIONSHIP_PAGE_SIZE < total && <> · <Link href={`/orgs/g/${group}?page=${pageNumber + 1}`}>Next {RELATIONSHIP_PAGE_SIZE}</Link></>}
+      {/* Search by name, on the server (issue 0134): the list runs to tens of thousands of records. */}
+      <form className="listsearch" role="search" action={`/orgs/g/${group}`} method="get">
+        <input type="search" name="q" defaultValue={q} placeholder={`Search ${spec.title.toLowerCase()} by name`} aria-label={`Search ${spec.title} by name`} />
+        <button className="btn" type="submit">Search</button>
+        {q && <Link href={`/orgs/g/${group}`}>Clear</Link>}
+      </form>
+
+      <p className="cover">{q ? <>{total} {total === 1 ? 'record matches' : 'records match'} &ldquo;{q}&rdquo;. </> : null}{total <= RELATIONSHIP_PAGE_SIZE ? 'Showing all of them' : pageNumber === 0 ? `Showing the first ${RELATIONSHIP_PAGE_SIZE} of ${total} records` : `Showing ${pageNumber * RELATIONSHIP_PAGE_SIZE + 1}–${pageNumber * RELATIONSHIP_PAGE_SIZE + rows.length} of ${total} records`}, ordered by hard money then name.
+        {pageNumber > 0 && <> · <Link href={more(pageNumber - 1)}>Previous</Link></>}
+        {(pageNumber + 1) * RELATIONSHIP_PAGE_SIZE < total && <> · <Link href={more(pageNumber + 1)}>Next {RELATIONSHIP_PAGE_SIZE}</Link></>}
         {affiliations.length === 2000 && <> · Showing the first 2,000 affiliations for these records.</>}
       </p>
       <div className="card">
@@ -151,12 +162,13 @@ async function Orgs({
             <div className="empty">
               <span className="stat unavailable">
                 <i />
-                Nobody yet
+                {q ? 'No match' : 'Nobody yet'}
               </span>
-              <h3>Nobody in the universe qualifies for this group.</h3>
+              <h3>{q ? <>No name in {spec.title.toLowerCase()} contains &ldquo;{q}&rdquo;.</> : 'Nobody in the universe qualifies for this group.'}</h3>
               <p>
-                That is a statement about what has been recorded, not about who exists. Roles are
-                derived, so this list fills as things actually happen.
+                {q ? <>The search covers the names on our records only, in this group. Try fewer words, or <Link href={`/orgs/g/all?q=${encodeURIComponent(q)}`}>search everyone</Link>. Not on our records is not the same as not existing.</>
+                  : <>That is a statement about what has been recorded, not about who exists. Roles are
+                derived, so this list fills as things actually happen.</>}
               </p>
             </div>
           </div>
@@ -178,7 +190,7 @@ async function Orgs({
                 return (
                   <tr key={r.entityId} className={e === r.entityId ? 'sel' : undefined}>
                     <td>
-                      <EntityLink id={r.entityId} name={r.name} />
+                      <EntityLink id={r.entityId} name={r.name} keep={{ q: q || undefined, page: pageNumber ? String(pageNumber) : undefined }} />
                       <div className="muted" style={{ fontSize: 11.5 }}>
                         {r.entityType}
                         {r.vehicles.length > 0 ? ` · ${r.vehicles.join(', ')}` : ''}

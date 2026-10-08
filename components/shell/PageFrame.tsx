@@ -2,9 +2,10 @@
 
 import Link from '@/components/ui/AppLink';
 import { usePathname } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { PANE_QUERY } from '@/lib/viewport';
 import { useMedia, useModalSheet } from './useSheet';
+import { TopSearch } from './TopSearch';
 import s from './Shell.module.css';
 
 const STORE_KEY = 'capitalos.rightpane';
@@ -102,6 +103,7 @@ export function PageFrame({
           ))}
           <b>{last?.label}</b>
         </div>
+        <Suspense fallback={null}><TopSearch /></Suspense>
         <div className="sync" title={syncTitle}>
           <Link href="/dev/data" className={`profile p-${profile}`} title={PROFILE[profile].title}>
             {PROFILE[profile].label}
