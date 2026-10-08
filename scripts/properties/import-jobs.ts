@@ -1,7 +1,7 @@
 /** Invented rows only. A real child process proves that pages and jobs do not share a JS process. */
 import { spawn, spawnSync } from 'node:child_process';
 import { MessageChannel } from 'node:worker_threads';
-import { importJobStatus, launchImportJob, stoppedReplayed } from '../../lib/import-jobs/server';
+import { activeImportProgress, importJobStatus, launchImportJob, stoppedReplayed } from '../../lib/import-jobs/server';
 import { connectJobDb,hostJobDb } from '../../lib/db/job-bridge';
 import { randomUUID } from 'node:crypto';
 import { openTestDb } from './database';
@@ -156,6 +156,9 @@ export async function importJobProperties(check:Check) {
         cutNow?.status==='failed'&&cutNow.error===stoppedReplayed('pursuits')&&againDone?.status==='completed'&&againDone.actor===cut.actor,
         `stopped ${cutNow?.status}; a new run ${againDone?.status??'none'}`);
       const held=await stale('duplicates');
+      // A restart has no worker left: the pursuits run's thread may still be exiting after its receipt
+      // (its end bumps the read revision first), and while it lives recovery answers from its mirror.
+      for(let i=0;i<200&&activeImportProgress();i++)await new Promise(resolve=>setTimeout(resolve,25));
       await importJobStatus(db);
       const heldNow=await db.one<ImportJob>('select * from platform.import_job where id=$1',[held.id]);
       const none=await after('duplicates',held.id);

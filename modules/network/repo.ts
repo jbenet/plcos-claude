@@ -333,9 +333,12 @@ export async function edgesTouching(id: string, limit = 2000): Promise<{ edges: 
 
 export async function edgeCountsForEntities(ids: string[]): Promise<Map<string, number>> {
   if (!ids.length) return new Map();
-  const rows = await (await getDb()).query<{ id: string; n: number }>(`with recursive wanted(id,root) as (
-    select identity.canonical_entity_id(id), identity.canonical_entity_id(id) from unnest($1::uuid[]) id
-    union select e.entity_id,w.root from identity.entity e join wanted w on e.merged_into = w.id
+  // Each root's aliases through identity.alias_pairs; only a merged id walks its chain (performance pass, 8 Oct 2026).
+  const rows = await (await getDb()).query<{ id: string; n: number }>(`with roots as (
+    select distinct case when e.merged_into is null then e.entity_id else identity.canonical_entity_id(x) end root
+      from unnest($1::uuid[]) x left join identity.entity e on e.entity_id = x
+  ), wanted(id,root) as materialized (
+    select p.entity_id, p.canonical_id from identity.alias_pairs(array(select root from roots)) p
   ), endpoints as (
     select w.root id,e.edge_id from wanted w cross join lateral (select edge_id from network.edge where from_entity = w.id offset 0) e
     union select w.root,e.edge_id from wanted w cross join lateral (select edge_id from network.edge where to_entity = w.id offset 0) e

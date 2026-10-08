@@ -4,7 +4,7 @@ import { listEntities } from '@/modules/identity';
 import { buildCache } from '@/lib/build-cache';
 import { listVehicles } from '@/modules/platform';
 import { listAssessments } from '@/modules/fit';
-import { capacityEstimate, spvMarks, strategicMark, strategicRecords, strategicScope, vehicleStrategy, pursuitsOn, touchesOn, type StrategicGrade } from '@/modules/strategy';
+import { capacityEstimate, spvMarks, strategicMark, strategicRecords, strategicScope, strategyOf, pursuitsOn, touchesOn, type StrategicGrade } from '@/modules/strategy';
 import { config } from '@/config/deployment';
 import { provisionalParts, provisionalScore } from '@/lib/strategy-score';
 import type { Strategy } from '@/lib/enrich/strategy';
@@ -42,7 +42,7 @@ function flags(all: string[]) {
   return { risks: all.slice(0, FLAGS_SENT).map((f) => (f.length > FLAG_CHARS ? `${f.slice(0, FLAG_CHARS - 1).trimEnd()}…` : f)), riskCount: all.length };
 }
 
-const strategyFor = buildCache(async (vehicleId: string) => vehicleStrategy(vehicleId));
+const strategyFor = strategyOf;
 /** Both tables start from pursuits, never the sparse manual-factor table. */
 export const pipelineData = buildCache(async (vehicleId: string) => {
   // One vehicle's pursuits and touchpoints are shared with its plan (pursuitsOn, touchesOn): one read each.

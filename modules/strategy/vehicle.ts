@@ -174,3 +174,7 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
 }
 export type VehicleStrategy = NonNullable<Awaited<ReturnType<typeof vehicleStrategy>>>;
 export type StrategyAction = VehicleStrategy['rows'][number];
+
+/** A vehicle's plan, built once per revision for the list and the strategy page (performance pass,
+ * 8 Oct 2026); `now` is the build's. Immutable to callers. */
+export const strategyOf = buildCache((vehicleId: string) => vehicleStrategy(vehicleId));

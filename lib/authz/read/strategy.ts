@@ -3,7 +3,8 @@ import * as raw from '@/modules/strategy';
 import { licensedAccess, redactSpv, spvRowMark } from './r3';
 export * from '@/modules/strategy';
 export async function vehicleStrategy(...args: Parameters<typeof raw.vehicleStrategy>) {
-  const [user, data] = await Promise.all([currentUser(), raw.vehicleStrategy(...args)]);
+  // Without an explicit `now`, the cached build the list shares (modules/strategy/vehicle.ts).
+  const [user, data] = await Promise.all([currentUser(), args.length === 1 || args[1] === undefined ? raw.strategyOf(args[0]) : raw.vehicleStrategy(...args)]);
   if (!data || licensedAccess(user)) return data;
   return { ...data, rows: data.rows.map(row => row.usingDakota
     ? { ...row, pursuit: pursuitForDisplay(user, row.pursuit), capacity: null, capacityBand: undefined, capacityBasis: 'Licensed capacity restricted.', score: null }
