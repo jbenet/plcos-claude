@@ -194,19 +194,22 @@ export async function applyIdentityDecisions(tx: Queryable, by: string, report: 
           if (between.length > deterministic.length) fail('Prior separation or reversed merge requires a fresh manual identity resolution');
           const external = new Map<string, Set<string>>();
           for (const s of sources) if (!internalSource(s.source)) external.set(s.source, (external.get(s.source) ?? new Set()).add(s.key));
-          for (const [source, keys] of external) if (keys.size > 1) {
+          // Every source's missing pairs are named at once, so one fixed push can supply them all.
+          const missing: string[] = [], unattested = new Set<string>();
+          const conflicting = [...external].filter(([, keys]) => keys.size > 1);
+          if (conflicting.length && !d.evidence.some(e => e.quote.split(/\r?\n/).some(line => line.trim() && !/^Same real (person|organization):/.test(line.trim()))))
+            fail(`Different external IDs from ${conflicting.map(([source]) => source).join(', ')}: an attestation also needs a supporting identity excerpt, not only the duplicate declaration`);
+          for (const [source, keys] of conflicting) {
             // Explicit, inspectable attestation for EVERY pair; a generic bio cannot waive this guard.
-            if (!d.evidence.some(e => e.quote.split(/\r?\n/).some(line => line.trim() && !/^Same real (person|organization):/.test(line.trim()))))
-              fail(`Different external IDs from ${source}: an attestation also needs a supporting identity excerpt, not only the duplicate declaration`);
             const refs = [...keys].sort().map(k => `${source}:${k}`);
             const kind = members.find(m => m.id === survivor)!.type === 'person' ? 'person' : 'organization';
             for (let i = 0; i < refs.length; i++) for (let j = i + 1; j < refs.length; j++) {
               const markers = [`Same real ${kind}: ${refs[i]} = ${refs[j]}`, `Same real ${kind}: ${refs[j]} = ${refs[i]}`];
-              if (!d.evidence.some(e => e.quote.split(/\r?\n/).some(line => markers.includes(line.trim()))))
-                fail(`Different external IDs from ${source}: evidence must explicitly attest each pair as the same real ${kind}`);
+              if (!d.evidence.some(e => e.quote.split(/\r?\n/).some(line => markers.includes(line.trim())))) { missing.push(markers[0]!); unattested.add(source); }
             }
             rule = source === 'affinity' || rule === 'decision:affinity-duplicate' ? 'decision:affinity-duplicate' : 'identity:v1:decision:source-duplicate';
           }
+          if (missing.length) fail(`Different external IDs from ${[...unattested].join(', ')}: evidence must explicitly attest each pair as the same real entity; missing lines: ${missing.join(' | ')}`);
           if (deterministic.length) {
             // Each one's own pair must be among those just attested: both IDs from one source, both in the group.
             const attested = (c: { ls: string; lk: string; rs: string; rk: string }) => c.ls === c.rs && c.lk !== c.rk

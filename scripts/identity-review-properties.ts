@@ -322,6 +322,17 @@ export async function identityReviewProperties(check: Check, db: Db) {
         && notMerge.decisions!.applied === 0 && notMerge.decisions!.refused.length === 1,
       `merge refused ${JSON.stringify(keptMerge.decisions!.refused)}; separate refused ${notMerge.decisions!.refused.length}`);
 
+    // Issue 0138 follow-up: one refusal names every source's missing pair, so one fixed push supplies them all.
+    const twoSources = [await entity('TwoSources', 'org', 'affinity', `org:twosources-${tag}-a`), await entity('TwoSources', 'org', 'affinity', `org:twosources-${tag}-b`)];
+    await db.query("insert into identity.source_record(source,source_id,entity_id,resolved_by) values('warehouse',$1,$2,'fixture'),('warehouse',$3,$4,'fixture')",
+      [`org:twosources-${tag}-c`, twoSources[0], `org:twosources-${tag}-d`, twoSources[1]]);
+    const bothMissing = await run([groupless(twoSources, { evidence: [{ ...evidence[0], quote: 'Both company records give the same website and founding year.' }] })]);
+    const why = bothMissing.decisions!.refused[0]?.reason ?? '';
+    check('IDENTITY REVIEW a refused merge names every source\'s missing attestation line at once (0138)',
+      bothMissing.decisions!.applied === 0 && bothMissing.decisions!.refused.length === 1
+        && why.includes(`Same real organization: affinity:org:twosources-${tag}-a = affinity:org:twosources-${tag}-b`)
+        && why.includes(`Same real organization: warehouse:org:twosources-${tag}-c = warehouse:org:twosources-${tag}-d`), why);
+
     // Issue 0138: a retype and a merge for one group, in one file, both apply (they were refused as conflicting).
     const mixed = [await entity('Mixed', 'person', 'warehouse', `mixed-${tag}-w`), await entity('Mixed', 'org', 'affinity', `org:mixed-${tag}-a`), await entity('Mixed', 'org', 'affinity', `org:mixed-${tag}-b`)];
     const mixedGroup = (await run()).ambiguous.find(g => g.entityIds.includes(mixed[1]!));
