@@ -37,15 +37,15 @@ async function sourceSignature(db: Db, revision: string): Promise<string> {
 const contactInputs = new WeakMap<Db, { key: string; value: string }>();
 const contactSignature = buildCache(async () => {
   const db = await getDb();
-  const { key } = (await db.one<{ key: string }>(`select (select revision::text from network.route_revision where singleton) || ':' || (
+  const key = (await db.one<{ key: string }>(`select (select revision::text from network.route_revision where singleton) || ':' || (
       select count(*)::text || ':' || coalesce(sum(hashtext(concat_ws('|', c.pursuit_id, c.person_entity, c.role, c.source,
         p.entity_id, p.vehicle_id, p.merged_into)))::text, '0')
-      from strategy.pursuit_contact c join strategy.pursuit p using (pursuit_id)) as key`))!;
+      from strategy.pursuit_contact c join strategy.pursuit p using (pursuit_id)) as key`))?.key;
   const prior = contactInputs.get(db);
-  if (prior?.key === key) return prior.value;
+  if (prior && key && prior.key === key) return prior.value;
   const rows = await db.query<{ id: string }>(`select entity_id::text id from identity.entity where entity_type <> 'person' and merged_into is null order by entity_id`);
   const value = createHash('sha256').update(JSON.stringify([...(await lpContactsFor(rows.map(r => r.id))).entries()])).digest('hex').slice(0, 16);
-  contactInputs.set(db, { key, value });
+  if (key) contactInputs.set(db, { key, value });
   return value;
 });
 export async function revisionFor(db: Db) {
