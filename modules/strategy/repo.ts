@@ -83,6 +83,12 @@ async function eventsFor(ids: string[], q?: Queryable): Promise<Map<string, Ladd
   return out;
 }
 
+/** Everyone with a pursuit on any vehicle: the people and organizations a material can go to. */
+export async function pipelineEntityIds(): Promise<string[]> {
+  const db = await getDb();
+  return (await db.query<{ id: string }>('select distinct entity_id::text as id from strategy.active_pursuit')).map((r) => r.id);
+}
+
 export async function listPursuits(vehicleId?: string | null, opts: { status?: PursuitStatus } = {}): Promise<Pursuit[]> {
   const db = await getDb();
   const where: string[] = [];
