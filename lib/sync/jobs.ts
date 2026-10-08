@@ -52,6 +52,8 @@ export async function jobState(caller: SyncCaller, request: Request, o: { db?: D
   await auditSync(caller, 'jobs', row ? 'ok' : 'invalid', { op: 'status', jobId: id, reason: row ? undefined : 'unknown-job' });
   if (!row) return { status: 404, body: { ok: false, error: 'No job has that id.' } };
   const counts = Object.fromEntries(Object.entries(row.result ?? {}).filter(([, v]) => typeof v === 'number'));
+  // Merge duplicate identities also says which proposals applied and why any were refused (ids, line numbers, reasons).
+  const decisions = row.result && typeof row.result.decisions === 'object' ? row.result.decisions : undefined;
   return { status: 200, body: { ok: true, job: { id: row.id, kind: row.kind, status: row.status, phase: row.phase, error: row.error,
-    createdAt: new Date(row.created_at).toISOString(), finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null, counts } } };
+    createdAt: new Date(row.created_at).toISOString(), finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null, counts, ...(decisions ? { decisions } : {}) } } };
 }

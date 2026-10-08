@@ -124,7 +124,10 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
           : await (await import('@/modules/strategy')).consolidatePursuits(db,actor);
         await finishRun(run,{status:'ok',requests:0,records:result.merged,newRecords:0,
           note:`${result.merged} merged, ${result.ambiguous.length} ambiguous`,detail:{...result}});
-        return {merged:result.merged,ambiguous:result.ambiguous.length};
+        // Which proposals applied and why any did not, so a token's caller (cloud-job.sh) can tell without the Developer page.
+        const d=(result as {decisions?:import('@/lib/enrich/identity-decisions').IdentityDecisionReport}).decisions;
+        return {merged:result.merged,ambiguous:result.ambiguous.length,
+          ...(d?{decisions:{applied:d.applied,skipped:d.skipped,refused:d.refused.slice(0,50),superseded:d.superseded.length,separations:d.separations.length}}:{})};
       } catch {
         await finishRun(run,{status:'failed',requests:0,records:0,newRecords:0,note:'Import stopped; review committed results before retrying.'});
         throw new Error('Import stopped.');
