@@ -10,7 +10,7 @@ export { LadderRefused, ON_RECORD_NOTE, ON_RECORD_RUNGS, recordAdvance, recordCl
 export { insertUpdate, insertUpdates, recordApplied, recordAppliedMany, updatesFor, type PursuitUpdate, type UpdateApplied } from './updates';
 export { decideSuggestion, openSuggestions, SuggestionRefused, suggestionsFor, strategyPursuitsFor, type Suggestion } from './suggestions';
 export { READER, amountRange, dateIn, readUpdate, type TouchChannel, type UpdateSuggestion } from './reader';
-export { vehicleStrategy, capacityEstimate, actionScore, conversionFor, statusId, type VehicleStrategy, type StrategyAction, type Transition } from './vehicle';
+export { vehicleStrategy, pursuitsOn, touchesOn, capacityEstimate, actionScore, conversionFor, statusId, type VehicleStrategy, type StrategyAction, type Transition } from './vehicle';
 export { consolidatePursuits, consolidatePursuitsInTransaction, reversePursuitMerge, pursuitReferences, type PursuitMergeReport } from './merge';
 export { repointPursuits, repointPursuitsInTransaction, reverseLpRepoint, decideLpUnitByPerson, recentLpRepoints, type LpUnitReport, type LpUnitDecisionRow } from './lp-units';
 export { LP_RULE, isPseudoOrg, decideLpUnit, combineStatus, type LpDecision, type LpFacts, type Firm as LpFirm, type Evidence as LpEvidence } from './lp-unit-rules';

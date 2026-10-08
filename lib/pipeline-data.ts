@@ -4,7 +4,7 @@ import { listEntities } from '@/modules/identity';
 import { buildCache } from '@/lib/build-cache';
 import { listVehicles } from '@/modules/platform';
 import { listAssessments } from '@/modules/fit';
-import { capacityEstimate, spvMarks, strategicMark, strategicRecords, strategicScope, vehicleStrategy, type StrategicGrade } from '@/modules/strategy';
+import { capacityEstimate, spvMarks, strategicMark, strategicRecords, strategicScope, vehicleStrategy, pursuitsOn, touchesOn, type StrategicGrade } from '@/modules/strategy';
 import { config } from '@/config/deployment';
 import { provisionalParts, provisionalScore } from '@/lib/strategy-score';
 import type { Strategy } from '@/lib/enrich/strategy';
@@ -45,7 +45,8 @@ function flags(all: string[]) {
 const strategyFor = buildCache(async (vehicleId: string) => vehicleStrategy(vehicleId));
 /** Both tables start from pursuits, never the sparse manual-factor table. */
 export const pipelineData = buildCache(async (vehicleId: string) => {
-  const [vehicles, all] = await Promise.all([listVehicles(), listPursuits(vehicleId || null)]);
+  // One vehicle's pursuits and touchpoints are shared with its plan (pursuitsOn, touchesOn): one read each.
+  const [vehicles, all] = await Promise.all([listVehicles(), vehicleId ? pursuitsOn(vehicleId) : listPursuits(null)]);
   const history = new Set(vehicles.filter(v => v.phase === 'historical').map(v => v.id));
   const pursuits = all.filter(p => vehicleId || !history.has(p.vehicleId));
   // Plans, people and touchpoints each need only the pursuits: they load side by side, and the plans
@@ -59,7 +60,7 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   const entityIds = [...new Set(pursuits.map((p) => p.entityId))];
   const db = await getDb();
   const touched = (async () => {
-    const touchesBy = await touchpointsByPair(pairs);
+    const touchesBy = vehicleId ? await touchesOn(vehicleId) : await touchpointsByPair(pairs);
     const [sums, closes, restricted, readings, spv] = await Promise.all([
       touchpointSummaries(pairs, new Date(), touchesBy), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
       spvMarks(db, entityIds),
