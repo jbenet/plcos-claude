@@ -41,6 +41,21 @@ export async function enrichmentStrategyProperties(check: Check) {
     check('A strategy’s version compares as major and minor: “1.10” is after 1.9', right, `1.10 before 1.3: ${versionBefore('1.10', '1.3')}; 1.9 before 1.10: ${versionBefore(1.9, '1.10')}`);
   }
 
+  // W5 1.12 (0141, "far too wordy"): long fields are counted, not refused, and a client gets short bullets.
+  {
+    const { wordyParts, strategyBrief, checkStrategy } = await import('../../lib/enrich/strategy');
+    const long = 'An invented angle that runs on and on, clause after clause, restating the route and the ask and the history of every touch we ever had with them before the point.';
+    const tight = { angle: 'Backed two invented neuro companies; wrote about closed-loop devices.', route: { via: 'Invented Connector', tier: 'A' as const, why: 'Co-investors twice.' },
+      next: { what: 'Ask Invented Connector for an intro', who: 'Invented Owner', when: '2026-10-12' }, risks: ['Raising a fund of their own'], openQuestions: [] };
+    const brief = strategyBrief({ ...tight, ask: { vehicle: 'spv-invented', shape: 'SPV', range: null } });
+    const wordy = wordyParts({ ...tight, angle: long, risks: ['a', 'b', 'c', 'd'] });
+    const refused = checkStrategy({ key: 'k', fit: { x: { verdict: 'good', why: 'w' } }, scores: { capacity: { band: 'unknown', basis: 'b' }, affinity: { level: 'low', basis: 'b' }, propensity: { level: 'low', basis: 'b' }, timeToDecision: { band: 'unknown', basis: 'b' } },
+      angle: long, next: tight.next, ask: { vehicle: 'spv-invented', shape: 'SPV' }, list: '2027', route: null, risks: [], openQuestions: [] }, 'k').length;
+    check('A wordy strategy is counted, not refused, and reads as short bullets (W5 1.12)',
+      wordyParts(tight).length === 0 && wordy.join() === 'angle,risks' && refused === 0 && brief.length === 5 && brief[0] === 'Ask: SPV' && brief[1] === 'Route: Invented Connector (A)',
+      `tight: ${wordyParts(tight).join() || 'none'}; wordy: ${wordy.join()}; problems: ${refused}; brief: ${brief.length}`);
+  }
+
   // "This year" rests on the pursuit's own contact (W5 1.10): a recent catch-up about something
   // else keeps the relationship warm, not the raise.
   {

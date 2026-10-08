@@ -302,3 +302,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [An attested merge clears the import's own "different ID" separation](entries/attested-merge-clears-id-separation.md)
 - [The Admin token reads Affinity](entries/affinity-by-token.md)
 - [A retype and a merge for one group apply together](entries/retype-then-merge.md)
+- [Strategies written tightly, and read as bullets](entries/tight-strategies.md)

@@ -1,5 +1,5 @@
 # W5 — Strategy for an LP: fit, scores, angle, route, next step and ask, as a proposal for a person
-The rules in force, amendments 1.1–1.10 folded in; `docs/19-enrichment-workflows.md` keeps the design and the history.
+The rules in force, amendments 1.1–1.12 folded in; `docs/19-enrichment-workflows.md` keeps the design and the history.
 
 ## Read set for a batch
 
@@ -51,7 +51,7 @@ read the companion strategies when coordinating overlapping asks.
 The shape:
 
     key, name
-    made    { at, by: "claude (sub-agent)", workflow: "W5", version: "1.10",
+    made    { at, by: "claude (sub-agent)", workflow: "W5", version: "1.12",
               inputs: { finding, money, bestPath, lead? }, revised?: [{ at, by, rule }] }
     fit     { <vehicle>: { verdict: strong | good | possible | weak | unknown, why,
                            gates: [{ gate, answer: yes | no | unknown, basis }] } }
@@ -255,6 +255,24 @@ its `made.at`. `made.revised` lists each change made by rule after writing, with
   rule dates and in the same way; `--skip <file>` leaves the stale list alone, since those LPs have
   something new and are rewritten instead. A step that is not a park stays overdue: a person owes it.
 
+## Tight (1.12)
+
+Juan, 8 Oct 2026, reading a strategy through an MCP client: "far too wordy ... write much more tightly, more
+signal"; "could be crisper, maybe bulleted". A person reads the angle, the route, the next step and the risks
+in a few seconds; the analysis lives in the bases and the fit, which nobody reads first.
+
+- **`angle`:** one sentence, 25 words at most — why they'd care, in their record's terms. No route, no
+  history of touches, no ask: each has its own field.
+- **`route.why`:** 15 words at most. **`next.what`:** 200 characters at most, one action.
+- **`risks` and `openQuestions`:** three each at most, each a clause of 15 words at most. The one that
+  matters most first: it is the one a reader sees.
+- **No field repeats another.** A fact appears once, in the field it belongs to.
+- The bases and `fit.why` stay as short as the evidence allows; a quote belongs in the finding, not here.
+
+The checker counts strategies over these caps and lists them with `--wordy <file>`, for a tightening pass;
+it refuses nothing. MCP clients get the strategy first as short bullets (`brief`: the ask, the route, why,
+the next step, the first risk), built from these fields.
+
 ## The first message (1.11)
 
 The email itself, as `firstMessage`, separate from the analysis. Its substance follows
@@ -333,7 +351,7 @@ characters, with their firms; `--keys <file>` takes the LPs listed, with theirs.
 for three hours (a guess). Rewriting a lead unpins its colleagues in other batches, so one re-pin step
 runs after all batches finish, and a firm's out-of-batch leads and colleagues get a revision of their
 own, not only a re-pin. The checker's lists feed the next batch — `--lead-moved`, `--unpinned`,
-`--gated`, `--stale-ties`, `--naming`, each followed by a file to write the keys to.
+`--gated`, `--stale-ties`, `--naming`, `--wordy`, each followed by a file to write the keys to.
 
 ## The check
 
