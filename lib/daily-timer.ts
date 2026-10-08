@@ -17,7 +17,8 @@ export async function runDailyJobs(db: Db, at: string, now = new Date(), queue =
   if (last && new Date(last.created_at).toISOString().slice(0, 10) >= now.toISOString().slice(0, 10)) return;
   const actor = await db.one<{ id: string }>("select id from platform.app_user where handle='reconciliation'");
   if (!actor) throw new Error('Missing system actor.');
-  for (const kind of ['affinity', 'linear', 'spv-stance'] as const) {
+  // The calendar after Affinity, so a meeting Affinity already has stays Affinity's (lib/calendar-sync.ts).
+  for (const kind of ['affinity', 'linear', 'spv-stance', 'calendar'] as const) {
     if (lockLost()) throw new Error('Daily lock lost.');
     let job = await queue(db, kind, actor.id, {
       schedule: 'daily', ...(kind === 'affinity' ? { operation: 'slice', options: {} } : {}),

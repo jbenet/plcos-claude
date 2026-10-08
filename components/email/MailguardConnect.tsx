@@ -1,4 +1,5 @@
-import { demoMailguardAction, forgetMailguardAction } from '@/app/email/actions';
+import { demoMailguardAction, forgetMailguardAction, readCalendarsAction } from '@/app/email/actions';
+import { getDb } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import { mailStatus } from '@/modules/email';
@@ -19,6 +20,20 @@ const SAYS: Record<string, string> = {
   'organize.spam': 'mark spam',
   'organize.trash': 'move mail to the trash',
   'labels.manage': 'create, rename and delete labels',
+  'calendar.freebusy': 'see when you are busy',
+  'calendar.read': 'read your meetings: times and guests',
+  'calendar.read.details': 'read meeting descriptions',
+  'calendar.write.staged': 'propose calendar changes for you to approve',
+  'calendar.write': 'add events to your calendar',
+  'calendar.edit': 'change and delete events',
+};
+
+/** What the calendar line says (issue 0021): read only, or why not. */
+const CALENDAR: Record<string, string> = {
+  unsupported: 'not read: this mailguard has no calendar yet (it arrives in mailguard v0.9).',
+  off: 'not read: mailguard’s policy does not include the calendar.',
+  reconnect: 'not read yet: choose “Add calendar” in mailguard’s Settings and reconnect Google once.',
+  no_read: 'not read: give this tool calendar.read in mailguard to see your meetings next to LPs.',
 };
 
 /**
@@ -35,6 +50,9 @@ export async function MailguardConnect() {
   const mine = rt.mode === 'off' ? null : await keyFor(rt, user.handle).catch(() => null);
   const kept = rt.mode !== 'off' && rt.store.kind === 'database' ? 'kept encrypted in the app' : 'kept in the Keychain';
   const where = g.mode === 'fake' ? 'the demo’s fake mailguard' : g.mode === 'mailguard' ? 'mailguard' : 'off';
+  const lastRead = g.calendar?.state === 'ok'
+    ? await (await getDb()).one<{ at: Date | string; status: string; note: string | null }>(`select coalesce(finished_at, started_at) at, status, note from sources.sync_run where source = 'calendar' order by id desc limit 1`).catch(() => null)
+    : null;
   return (
     <div className="card" id="email">
       <div className="chead">
@@ -49,6 +67,12 @@ export async function MailguardConnect() {
             <div className="fact"><span>Mailbox</span><span>{g.mailbox}</span></div>
             <div className="fact"><span>Token</span><span>{mine ? <span className="mono">{maskSecret(mine.key)}</span> : null} tool “{g.tool}” · {g.source === 'keychain' ? 'from the Keychain item plcos-claude / mailguard-token' : `pasted here, ${kept}`}</span></div>
             <div className="fact"><span>May</span><span>{g.capabilities.map((c) => SAYS[c] ?? c).join('; ')}. It cannot send: mailguard refuses sends for this token, and this tool has no send in it.</span></div>
+            <div className="fact"><span>Calendar</span><span>{g.calendar?.state === 'ok'
+              ? <>read only: your meetings appear next to the LPs they were with{g.calendar.details ? '' : ' (no descriptions: calendar.read.details adds them, to tell which raise a meeting was about)'}. Nothing is written to your calendar and no invitation is answered. {lastRead ? `Last read ${shortDate(new Date(lastRead.at))}${lastRead.status === 'running' ? ', reading now' : lastRead.status === 'failed' ? ', which stopped' : ''}.` : 'Not read yet.'} Read daily.</>
+              : <span style={{ color: 'var(--amber)' }}>{CALENDAR[g.calendar?.state ?? 'unsupported']}</span>}</span></div>
+            {g.calendar?.state === 'ok' && (
+              <form action={readCalendarsAction} style={{ marginTop: 4 }}><button className="btn" type="submit">Read calendars now</button></form>
+            )}
             {!g.canThread && <div className="fact"><span>Follow-ups</span><span style={{ color: 'var(--amber)' }}>start new threads: give the tool read.metadata in mailguard to reply in the thread.</span></div>}
             {g.extras.length > 0 && <div className="fact"><span>More than needed</span><span style={{ color: 'var(--amber)' }}>{g.extras.join(', ')} — drafting needs only draft and read.metadata. Narrow the tool in mailguard.</span></div>}
             <div className="fact"><span>Checked</span><span>{g.checkedAt ? shortDate(new Date(g.checkedAt)) : '—'} · again before every move, and daily</span></div>
@@ -87,7 +111,8 @@ export async function MailguardConnect() {
             <p style={{ marginTop: 0 }}>
               Drafts written here go into your own Gmail Drafts through mailguard, where you review and send them yourself.
               In mailguard, create a tool whose policy grants <b>draft</b> and <b>read.metadata</b> (for follow-ups in their
-              thread) and nothing else, and paste its token here. A token that can send is refused and not kept.
+              thread), and <b>calendar.read</b> if your meetings should appear next to LPs, and paste its token here. A token
+              that can send, invite people or answer invitations is refused and not kept.
             </p>
             <PasteToken />
             {g.mode === 'fake' && (

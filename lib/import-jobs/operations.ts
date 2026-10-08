@@ -155,6 +155,11 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
       const { syncLinear } = await import('@/lib/connectors/linear/sync');
       return {...await syncLinear(db,actor,{full:job.input.full===true,progress})};
     }
+    case 'calendar': {
+      // Read-only: calendars and events through each person's mailguard key (lib/calendar-sync.ts), then reconciliation.
+      const { syncCalendars } = await import('@/lib/calendar-sync');
+      return {...await syncCalendars(db,actor,{progress})};
+    }
     case 'linear-rebuild': {
       const { rebuildLinear } = await import('@/lib/connectors/linear/sync');
       return {...await rebuildLinear(db,actor,{progress})};

@@ -19,7 +19,7 @@ import type { Db } from '../../lib/db';
 import { ALLOWED, MUST_REFUSE, allowedRequest, parseBase } from '../../lib/connectors/mailguard/allowlist';
 import { DraftOnlyViolation, guarded, mailguardClient, type MailguardTransport } from '../../lib/connectors/mailguard/client';
 import { FAKE_BASE, FAKE_DOMAIN, fakeMintKey, fakeReceive, fakeRevoke, fakeSendInGmail, fakeSetGrant, fakeTransport, readFake } from '../../lib/connectors/mailguard/fake';
-import { CAN_SEND, KNOWN_CAPABILITIES, draftOnlyVerdict } from '../../lib/connectors/mailguard/scope';
+import { CAN_SEND, KNOWN_CAPABILITIES, NOTIFYING, draftOnlyVerdict } from '../../lib/connectors/mailguard/scope';
 import { memoryStore } from '../../lib/connectors/mailguard/tokens';
 import { connection, type MailguardRuntime } from '../../lib/connectors/mailguard';
 import { EMAIL_MARKS, EMAIL_NODES, normalizeDoc, renderHtml, renderText, textToDoc, type DocNode } from '../../lib/email/doc';
@@ -136,9 +136,16 @@ export async function emailProperties(check: Check, db: Db) {
         if (ok && /send/.test(p)) sendAllowed++;
       }
       const bases = ['https://mail.example.com', 'http://localhost:3999', 'http://mail.example.com', 'https://mail.example.com/api', 'not a url', ''].map((b) => parseBase(b) instanceof URL);
-      check('Email: 3,000 random mailguard requests are allowed exactly when they are one of the four draft, thread-header and whoami shapes; none that sends; mailguard’s address must be https (or this machine)',
-        agree === N && sendAllowed === 0 && ALLOWED.length === 4 && bases.join() === 'true,true,false,false,false,false',
-        `${agree}/${N} agree; ${sendAllowed} send paths allowed; ${ALLOWED.length} allowlist entries; addresses ${bases.join(',')}`);
+      // The calendar reads (issue 0021): calendars, and one calendar's events in a range — read only, never a search.
+      const t = 'timeMin=2026-01-01T00:00:00Z&timeMax=2026-02-01T00:00:00.000Z';
+      const calOk = [`/api/v1/calendars`, `/api/v1/calendars/primary/events?${t}`, `/api/v1/calendars/team%40group.calendar.google.com/events?${t}&max=250&pageToken=abc_-=`]
+        .every((p) => 'endpoint' in allowedRequest('GET', new URL(p, FAKE_BASE), FAKE_BASE));
+      const calNo = [`/api/v1/calendars/primary/events?${t}&max=251`, `/api/v1/calendars/primary/events?timeMin=yesterday&timeMax=2026-02-01T00:00:00Z`,
+        `/api/v1/calendars/primary/events?${t}&timeMin=2020-01-01T00:00:00Z`, `/api/v1/calendars/primary/events?${t}&iCalUID=x`, `/api/v1/calendars/primary/events/e1?${t}`]
+        .every((p) => 'refused' in allowedRequest('GET', new URL(p, FAKE_BASE), FAKE_BASE));
+      check('Email: 3,000 random mailguard requests are allowed exactly when they are one of the four draft, thread-header and whoami shapes; none that sends; the calendar is read only, in a range; mailguard’s address must be https (or this machine)',
+        agree === N && sendAllowed === 0 && ALLOWED.length === 6 && calOk && calNo && bases.join() === 'true,true,false,false,false,false',
+        `${agree}/${N} agree; ${sendAllowed} send paths allowed; ${ALLOWED.length} allowlist entries; calendar reads ${calOk}, refused ${calNo}; addresses ${bases.join(',')}`);
     }
 
     // ── 2. MIME ───────────────────────────────────────────────────────────────────────────
@@ -331,9 +338,17 @@ export async function emailProperties(check: Check, db: Db) {
         ['capabilities not a list', { ...whoami(['draft']), capabilities: 'draft' }, 'malformed'],
         ['no mailbox', { ...whoami(['draft']), mailbox: 'nobody' }, 'malformed'],
         ['nothing', null, 'malformed'],
+        ['drafts and the calendar, read', whoami(['draft', 'calendar.freebusy', 'calendar.read']), 'ok'],
+        ['the calendar can invite', whoami(['draft', 'calendar.read', 'calendar.invite']), 'can_notify'],
+        ['the calendar can answer invitations', whoami(['draft', 'calendar.read', 'calendar.respond']), 'can_notify'],
+        ['its own policy grants calendar.*, the system stops invites', whoami(['draft', 'calendar.read'], ['draft', 'calendar.*']), 'can_notify'],
+        ['mailguard says it can notify others', { ...whoami(['draft', 'calendar.read']), can_notify_others: true }, 'can_notify'],
       ];
       const wrong = cases.filter(([, a, want]) => code(a) !== want).map(([name, a]) => `${name}: ${code(a)}`);
       const sendText = v(whoami(['draft', 'send']));
+      const cal = (said: unknown, caps: string[]) => { const x = v({ ...whoami(['draft', ...caps]), ...(said === undefined ? {} : { calendar: said }) }); return x.ok ? `${x.calendar.state}${x.calendar.details ? '+details' : ''}` : x.code; };
+      const calStates = [cal(undefined, ['calendar.read']), cal('off', ['calendar.read']), cal('reconnect', ['calendar.read']), cal('ok', []), cal('ok', ['calendar.read']), cal('ok', ['calendar.read', 'calendar.read.details'])].join();
+      if (calStates !== 'unsupported,off,reconnect,no_read,ok,ok+details') wrong.push(`calendar states ${calStates}`);
       // Random answers: accepted exactly when draft is in, send is out, everything is known and the tool's own grant names neither send nor *.
       const r = rng(31);
       const pool = [...KNOWN_CAPABILITIES, 'forward', 'send.later', 'read.*'];
@@ -342,12 +357,13 @@ export async function emailProperties(check: Check, db: Db) {
         const caps = pool.filter(() => r() < 0.25);
         const grant = r() < 0.15 ? ['*'] : caps.filter((c) => r() < 0.9);
         const want = caps.includes('draft') && !caps.includes('send') && caps.every((c) => (KNOWN_CAPABILITIES as readonly string[]).includes(c))
+          && !caps.some((c) => NOTIFYING.includes(c)) && !grant.some((g) => NOTIFYING.includes(g))
           && !grant.includes('*') && !grant.includes('send') && grant.every((g) => (KNOWN_CAPABILITIES as readonly string[]).includes(g) || g === 'read.*');
         const got = v(whoami(caps, grant));
         if (got.ok === want) agree++;
-        if (got.ok && (caps.includes('send') || grant.includes('send') || grant.includes('*'))) sendAccepted++;
+        if (got.ok && (caps.includes('send') || grant.includes('send') || grant.includes('*') || [...caps, ...grant].some((c) => NOTIFYING.includes(c)))) sendAccepted++;
       }
-      check('Email: a mailguard key is drafts-only only when its own whoami says so — send, an own grant of send or *, anything unknown, no draft, an expired policy or a malformed answer are refused; 1,000 random answers agree and none that can send passes',
+      check('Email: a mailguard key is drafts-only only when its own whoami says so — send, a calendar invite or answer, an own grant of send, calendar.* or *, anything unknown, no draft, an expired policy or a malformed answer are refused; the calendar is read only with calendar.read on a connected calendar; 1,000 random answers agree and none that can send or notify passes',
         wrong.length === 0 && !sendText.ok && sendText.reason === CAN_SEND && agree === 1000 && sendAccepted === 0,
         wrong.join('; ') || `${agree}/1000 agree; ${sendAccepted} send-capable accepted; refusal: ${sendText.ok ? '' : sendText.reason}`);
     }

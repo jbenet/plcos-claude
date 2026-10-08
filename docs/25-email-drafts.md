@@ -288,3 +288,26 @@ existed), and keeping it would keep a `gmail.compose` grant — which can send �
 3. Restart `npm run dev:real`. The log says whether the Keychain key is drafts-only; Preferences → Email shows
    the mailbox and **Test the connection**.
 4. Others: create a tool in mailguard with the same grant and paste its key in Preferences → Email.
+
+## 13. The calendar, read only (8 Oct 2026, issue 0021)
+
+Juan approved reading people's calendars, read only, so meetings appear next to LPs ("1 - yes", 8 Oct 2026).
+What Capital OS asked of mailguard is in the shared `mailguard/calendar-requirements.md`; mailguard's calendar
+arrives in its v0.9 (DESIGN §5.8, §6.1).
+
+- **Same key.** The person's mailguard key, with `calendar.read` added to its tool (`calendar.read.details` adds
+  descriptions, which help tag a meeting to a vehicle). Preferences → Email says whether the calendar is read, and
+  why not: mailguard without a calendar, its policy leaving the calendar off, or Google to reconnect.
+- **Nothing written, nobody emailed.** The allowlist (`lib/connectors/mailguard/allowlist.ts`) has two calendar
+  routes, both GET: the calendars, and one calendar's events in a time range (never a search). Event writes,
+  answers, free/busy and the Outbox are refused before they leave. A key holding `calendar.invite` or
+  `calendar.respond`, whose own policy grants `calendar.*`, or for which mailguard says `can_notify_others`, is
+  refused outright (`scope.ts`), drafting included.
+- **What is kept** (`lib/calendar-sync.ts`): each occurrence from about 18 months back to 90 days ahead, seen in
+  anyone's calendar, becomes one touchpoint (source `calendar`) per LP whose address is on it, and their current
+  firm: the date, who on the team was there, and what it is about. No title, description or outside guest's name,
+  as with Affinity's. A meeting Affinity already has for that LP that day stays Affinity's. Cancelled meetings
+  go; meetings gone from every calendar go only after a read of every connected calendar. Reconciliation then
+  reads them.
+- **When.** Daily, after Affinity's read; and "Read calendars now" in Preferences → Email, or `cloud-job.sh`'s
+  `calendar` job.

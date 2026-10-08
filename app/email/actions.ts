@@ -133,3 +133,13 @@ export async function demoMailguardAction(formData: FormData): Promise<void> {
   await connectDemoMailguard(user);
   revalidatePath('/settings');
 }
+
+/** Read calendars now (issue 0021): queue the read-only calendar job. It writes meetings next to LPs, never to a calendar. */
+export async function readCalendarsAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/email/actions.ts#readCalendarsAction', formData);
+  const { getDb } = await import('@/lib/db');
+  const { queueImportJob } = await import('@/lib/import-jobs/server');
+  // A read already queued or running answers for this one too.
+  await queueImportJob(await getDb(), 'calendar', user.id).catch(() => undefined);
+  revalidatePath('/settings');
+}
