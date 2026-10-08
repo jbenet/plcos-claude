@@ -5,7 +5,8 @@ import { finishRun, startRun } from '@/modules/sources';
 import { CHANNEL_LABEL, isEvent, touchpointsByPair, type Touchpoint } from '@/modules/meetings';
 import { STEP_LABEL, closeStates, type CloseTrack, type CommitmentEvent } from '@/modules/pipeline';
 import {
-  RUNGS, RUNG_LABEL, getPursuit, listPursuits, rungIndex, type ClimbRung, type LadderRung, type Pursuit,
+  LadderRefused, ON_RECORD_RUNGS, RUNGS, RUNG_LABEL, getPursuit, listPursuits, recordClimbOnRecord, retractedRefs, rungIndex,
+  type ClimbRung, type LadderRung, type Pursuit,
 } from '@/modules/strategy';
 
 /**
@@ -18,12 +19,16 @@ import {
  *
  * So after each translation this lays the records side by side for every pursuit: what the
  * ladder has accepted, what records in this system support, and what Affinity's word claims.
- * Where the records are ahead of the ladder, it proposes the climb — one STAGE ticket per
- * pursuit, requested by the system's own actor, listing every rung and the record behind it —
- * and a person approves it, one at a time or in a batch.
+ * Where the records are ahead of the ladder, it records the conversation rungs itself — the
+ * connector's, "LP opted in" and "Meeting held", each on the meeting, call, reply or event behind it
+ * (issue 0137, Juan, 8 Oct 2026: "i dont think we need this "decisions / approval" thing for these
+ * things", "system should be able to figure it out"). Each says it was recorded this way, and a
+ * person can take it back. Above them — a number, a countersignature, a wire — it proposes the climb
+ * as one STAGE ticket per pursuit, and a person approves it.
  *
- * What it never does: write a rung, set a status, change a read, count an Affinity field or a
- * note as evidence, or approve anything. Its proposals are data for a person.
+ * What it never does: write a rung without a record behind it, climb for a portfolio company or our
+ * own team, set a status, change a read, count an Affinity field or a note as evidence, or approve
+ * anything.
  */
 
 /** The record behind one rung, in the form the ladder stores it. */
@@ -134,6 +139,10 @@ export function onFile(pursuit: Pursuit, touches: Touchpoint[], tracks: CloseTra
 
 export interface ReconcileCounts {
   pursuits: number;
+  /** Pursuits whose conversation rungs it recorded itself, on the records on file (issue 0137). */
+  recorded: number;
+  /** Not an LP — a portfolio company of ours, or our own team: nothing recorded or proposed. */
+  notLp: number;
   /** New proposals opened this run. */
   proposed: number;
   /** A STAGE ticket was already open for the pursuit: a person's, or an earlier proposal. */
@@ -246,14 +255,30 @@ export async function reconcile(runBy: string | null = null): Promise<ReconcileC
     const counts = await propose();
     await finishRun(run, {
       status: 'ok', requests: 0, records: counts.pursuits, newRecords: counts.proposed,
-      note: `${counts.proposed} new ladder ${counts.proposed === 1 ? 'proposal' : 'proposals'} · ${counts.alreadyOpen} already open · ${counts.inStep} in step${counts.withdrawn ? ` · ${counts.withdrawn} withdrawn` : ''}${counts.rejectedBefore ? ` · ${counts.rejectedBefore} rejected before` : ''}${counts.renewed ? ` · ${counts.renewed} renewed` : ''}`,
-      detail: { ...counts },
+      note: `${counts.recorded} recorded from the records on file · ${counts.proposed} new ladder ${counts.proposed === 1 ? 'proposal' : 'proposals'} · ${counts.alreadyOpen} already open · ${counts.inStep} in step${counts.notLp ? ` · ${counts.notLp} not an LP` : ''}${counts.withdrawn ? ` · ${counts.withdrawn} withdrawn` : ''}${counts.rejectedBefore ? ` · ${counts.rejectedBefore} rejected before` : ''}${counts.renewed ? ` · ${counts.renewed} renewed` : ''}`,
+      detail: { ...counts, rules: RECONCILE_RULES },
     });
     return counts;
   } catch (err) {
     await finishRun(run, { status: 'failed', requests: 0, records: 0, newRecords: 0, note: err instanceof Error ? err.message : 'unknown error' });
     throw err;
   }
+}
+
+/**
+ * What the rules are: a change to what Reconciliation does with the records bumps this, and the
+ * server reads every LP again at its next start (issue 0137: its open proposals for the conversation
+ * rungs are applied or withdrawn without waiting for the next Affinity translation).
+ */
+export const RECONCILE_RULES = '0137';
+
+/** At start: run once when the last run was under other rules. Never throws; a failure is in its run receipt. */
+export async function reconcileIfRulesChanged(): Promise<void> {
+  const db = await getDb();
+  const last = await db.one<{ rules: string | null }>(
+    `select detail->>'rules' as rules from sources.sync_run where source = 'reconcile' and status = 'ok' order by id desc limit 1`);
+  if (last?.rules === RECONCILE_RULES) return;
+  await reconcile(null).catch((err) => console.error(`[reconcile] at start: ${err instanceof Error ? err.message : 'unknown error'}`));
 }
 
 /**
@@ -265,7 +290,7 @@ export async function reconcilePursuit(pursuitId: string): Promise<ReconcileCoun
 }
 
 async function propose(only?: string): Promise<ReconcileCounts> {
-  const counts: ReconcileCounts = { pursuits: 0, proposed: 0, alreadyOpen: 0, rejectedBefore: 0, renewed: 0, withdrawn: 0, inStep: 0, skipped: 0 };
+  const counts: ReconcileCounts = { pursuits: 0, recorded: 0, notLp: 0, proposed: 0, alreadyOpen: 0, rejectedBefore: 0, renewed: 0, withdrawn: 0, inStep: 0, skipped: 0 };
   const db = await getDb();
   const actor = await systemActor();
   const pursuits = only ? [await getPursuit(only)].filter((p): p is Pursuit => Boolean(p)) : await listPursuits(null);
@@ -304,20 +329,72 @@ async function propose(only?: string): Promise<ReconcileCounts> {
       counts.withdrawn++;
     }
   }
-  for (const p of live) {
+  // Not an LP (issue 0137): a portfolio company of ours, or someone on our team, is not climbing toward a commitment.
+  const notLp = new Set((await db.query<{ id: string }>(
+    `select identity.canonical_entity_id(company_entity)::text id from network.portfolio
+      union select identity.canonical_entity_id(entity_id)::text from identity.source_record where source = 'app_user'`,
+  )).map((r) => r.id));
+  const retracted = await retractedRefs(db, only);
+  const recorded = 'Recorded by Reconciliation from the records on file, without an approval (issue 0137, Juan, 8 Oct 2026).';
+  for (const live0 of live) {
+    let p = live0;
     const k = `${p.entityId}:${p.vehicleId}`;
     const track = closes.get(k);
-    const f = onFile(p, touches.get(k) ?? [], track ? [track] : []);
+    const touched = touches.get(k) ?? [];
+    const tracked = track ? [track] : [];
+    if (notLp.has(p.entityId)) {
+      const mineOpen = open.get(p.pursuitId);
+      if (mineOpen?.mine) {
+        await db.transaction((tx) => withdraw(tx, mineOpen.id, 'Not an LP: a portfolio company of ours or our own team. Not proposed (issue 0137).'));
+        counts.withdrawn++;
+      }
+      counts.notLp++;
+      continue;
+    }
+    // The conversation rungs on the records behind them, recorded here and now. A record a person took back is not used again.
+    let f = onFile(p, touched, tracked);
+    const own: ClimbRung[] = [];
+    let blocked = false;
+    for (const r of f.climb) {
+      if (!ON_RECORD_RUNGS.includes(r.rung)) break;
+      if (retracted.has(`${p.pursuitId}|${r.ref}`)) { blocked = true; break; }
+      own.push({ rung: r.rung, evidenceKind: r.kind, evidenceRef: r.ref, evidenceNote: r.note, occurredAt: r.on.toISOString() });
+    }
+    if (own.length) {
+      try {
+        await recordClimbOnRecord(actor, { pursuitId: p.pursuitId, from: p.rung ?? null, rungs: own });
+      } catch (err) {
+        // The ladder moved under it (a person recorded a rung meanwhile): read again next time.
+        if (err instanceof LadderRefused) { counts.inStep++; continue; }
+        throw err;
+      }
+      counts.recorded++;
+      const mineOpen = open.get(p.pursuitId);
+      if (mineOpen?.mine) {
+        await db.transaction((tx) => withdraw(tx, mineOpen.id, recorded));
+        counts.withdrawn++;
+        open.delete(p.pursuitId);
+      }
+      p = { ...p, rung: own[own.length - 1]!.rung };
+      f = onFile(p, touched, tracked);
+    }
     const existing = open.get(p.pursuitId);
+    if (blocked) {
+      // What is left rests on a record a person took back: dropped, not asked.
+      if (existing?.mine) { await db.transaction((tx) => withdraw(tx, existing.id, 'Rests on a record a person took back; not proposed.')); counts.withdrawn++; }
+      counts.inStep++;
+      continue;
+    }
     if (existing?.mine && existing.key !== f.key && !(f.climb.length && existing.expired)) {
       await db.transaction((tx) => withdraw(tx, existing.id, changed));
       counts.withdrawn++;
       open.delete(p.pursuitId);
     }
-    if (!f.climb.length) { counts.inStep++; continue; }
+    if (!f.climb.length) { if (!own.length) counts.inStep++; continue; }
     if (rejected.has(f.key)) { counts.rejectedBefore++; continue; }
     const still = open.get(p.pursuitId);
     if (still && !(still.mine && still.expired)) { counts.alreadyOpen++; continue; }
+    const target = p;
     await db.transaction(async (tx) => {
       if (still) {
         // Its own proposal ran out undecided. Withdrawing it approves nothing; it is asked again.
@@ -325,10 +402,10 @@ async function propose(only?: string): Promise<ReconcileCounts> {
         counts.renewed++;
       }
       await openTicket(actor, {
-        kind: 'STAGE', subjectType: 'pursuit', subjectId: p.pursuitId,
-        subjectLabel: `Advance ${p.entityName} to ${RUNG_LABEL[f.to!]} — on file`,
-        scope: climbScope(p, f),
-        vehicleId: p.vehicleId,
+        kind: 'STAGE', subjectType: 'pursuit', subjectId: target.pursuitId,
+        subjectLabel: `Advance ${target.entityName} to ${RUNG_LABEL[f.to!]} — on file`,
+        scope: climbScope(target, f),
+        vehicleId: target.vehicleId,
         expiresInDays: 30,
       }, tx);
     });

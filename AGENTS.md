@@ -80,7 +80,11 @@ The [full domain rules](docs/agent-rules/domain.md) define the evidence and exce
    ticket to draft or send, and sees the outreach context instead; restrictions still show in red and still refuse
    an agent. *Juan, 5 Oct 2026:* "this seems like complexity overkill ... equip senders with clear visual info so
    they can make the best decision there, but not create super complex approval flows ... if this was for automated
-   agents only, ok, but not for humans (we're slow)". Details in [Domain rules](docs/agent-rules/domain.md), rule 3.
+   agents only, ok, but not for humans (we're slow)". One exception for STAGE: Reconciliation records the
+   conversation rungs (connector, LP opted in, Meeting held) itself, on a meeting, call, reply or event on file,
+   never for a portfolio company or our team, marked as such and undoable; above them it still asks.
+   *Juan, 8 Oct 2026:* "i dont think we need this "decisions / approval" thing for these things"; "system should be
+   able to figure it out". Details in [Domain rules](docs/agent-rules/domain.md), rule 3.
 4. Agent success, task acceptance, investor approval, legal close and cash receipt are separate states.
 5. Coordinate vehicle overlaps; record collisions and a dated follow-up for the loser.
 6. Model A–D ties as uncertainty, never gate information on a person. PL affiliation is strong evidence.

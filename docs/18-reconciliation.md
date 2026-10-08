@@ -123,7 +123,13 @@ After each translation (`translateAction`), `lib/reconcile.ts`:
 
 1. Computes the on-file layer for every pursuit that isn't passed and isn't on a vehicle kept
    for its history.
-2. Where records are ahead of the ladder, **opens one STAGE ticket per pursuit**, requested by
+2. **Since 8 Oct 2026 (issue 0137)** it first records the conversation rungs itself — the
+   connector's, LP opted in and Meeting held — on the meeting, call, reply or event behind each,
+   without a ticket (`recordClimbOnRecord`), and withdraws its own open proposal for them. Each
+   rung's note says so; the LP's timeline offers **take back**, which removes it (and what it
+   recorded above it) and keeps that record from being used again. It records and proposes nothing
+   for a portfolio company of ours or our own team. What follows applies to the rungs above.
+   Where records are ahead of the ladder, **opens one STAGE ticket per pursuit**, requested by
    the system's own actor, "Reconciliation" (platform migration 003, inactive, so nobody can act
    as it). Its scope lists every rung it would record and the record behind each. That is a
    specific bounded action, not a bundle.

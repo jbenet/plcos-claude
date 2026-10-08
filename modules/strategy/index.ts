@@ -6,7 +6,7 @@ export {
   STATUS_LABEL, impliedRung, rungIndex, statusNeedsEvidence,
 } from './types';
 export { getPursuit, visualizationPursuits, pursuitCount, type VisualizationPursuit, listPursuits, pursuitFor, statusCounts } from './repo';
-export { LadderRefused, recordAdvance, recordClimb, requestAdvance, setNextStep, setStatus, StatusRefused, type ClimbRung } from './service';
+export { LadderRefused, ON_RECORD_NOTE, ON_RECORD_RUNGS, recordAdvance, recordClimb, recordClimbOnRecord, requestAdvance, retractOnRecord, retractedRefs, setNextStep, setStatus, StatusRefused, type ClimbRung } from './service';
 export { insertUpdate, recordApplied, updatesFor, type PursuitUpdate, type UpdateApplied } from './updates';
 export { decideSuggestion, openSuggestions, SuggestionRefused, suggestionsFor, strategyPursuitsFor, type Suggestion } from './suggestions';
 export { READER, amountRange, dateIn, readUpdate, type TouchChannel, type UpdateSuggestion } from './reader';

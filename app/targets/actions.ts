@@ -12,6 +12,23 @@ import {
 import { logTouchpoint, TouchpointRefused, type Channel, type Direction, type Read } from '@/modules/meetings';
 import { CloseRefused, recordClosing, recordSignature, recordWire, reviseSoft, withdraw } from '@/modules/pipeline';
 
+/**
+ * Take back a rung Reconciliation recorded on its own (issue 0137), with the rungs it recorded above
+ * it. The record behind it is not used again for this LP.
+ */
+export async function retractRungAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/targets/actions.ts#retractRungAction', formData);
+  const pursuitId = String(formData.get('pursuitId'));
+  const { retractOnRecord } = await import('@/modules/strategy');
+  try {
+    await retractOnRecord(user.id, { pursuitId, rung: String(formData.get('rung')) as LadderRung });
+  } catch (err) {
+    if (!(err instanceof LadderRefused)) throw err;
+  }
+  revalidatePath(`/targets/${pursuitId}`);
+  revalidatePath('/targets');
+}
+
 export async function requestLadderAdvance(
   formData: FormData,
 ): Promise<{ error?: string; ticketId?: string }> {
@@ -65,7 +82,7 @@ export async function setPursuitStatus(formData: FormData): Promise<{ error?: st
  * touchpoint the words describe, a next step. Written together (lib/updates.ts); it waits for
  * the server's answer, since a status and a meeting are records. Nothing is sent.
  */
-export async function addUpdateAction(formData: FormData): Promise<{ error?: string; ok?: boolean; created?: boolean; proposed?: boolean }> {
+export async function addUpdateAction(formData: FormData): Promise<{ error?: string; ok?: boolean; created?: boolean; proposed?: boolean; recorded?: boolean }> {
   const authorizedUser = await requireAction('app/targets/actions.ts#addUpdateAction', formData);
   const { addUpdate } = await import('@/lib/updates');
   const user = authorizedUser;
@@ -93,7 +110,7 @@ export async function addUpdateAction(formData: FormData): Promise<{ error?: str
     revalidatePath('/targets');
     revalidatePath(`/targets/${pursuitId}`);
     if (r.proposed) revalidatePath('/approvals');
-    return { ok: true, created: r.created, proposed: r.proposed };
+    return { ok: true, created: r.created, proposed: r.proposed, recorded: r.recorded };
   } catch (err) {
     if (err instanceof StatusRefused || err instanceof TouchpointRefused) return { error: err.message };
     return { error: err instanceof Error ? err.message : 'Unknown error' };

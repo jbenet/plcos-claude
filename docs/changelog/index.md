@@ -292,3 +292,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [An Admin moves a vehicle's raise window on the server](entries/raise-window.md)
 - [Investments relevant to the vehicle, on the LP page](entries/vehicle-investments.md)
 - [A ticket's detail reads across, not apart](entries/ticket-detail-aligned.md)
+- [Reconciliation records "LP opted in" and "Meeting held" itself](entries/reconcile-records-itself.md)

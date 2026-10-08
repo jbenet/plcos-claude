@@ -30,7 +30,7 @@ export function UpdateBox({ pursuitId, status, today, glyph }: { pursuitId: stri
   const [body, setBody] = useState('');
   const [key, setKey] = useState(newKey);
   const [pending, setPending] = useState(false);
-  const [result, setResult] = useState<{ error?: string; ok?: boolean; proposed?: boolean } | null>(null);
+  const [result, setResult] = useState<{ error?: string; ok?: boolean; proposed?: boolean; recorded?: boolean } | null>(null);
   // What the person set by hand; undefined means "follow the words".
   const [pick, setPick] = useState<{
     status?: string; passedBy?: string; reason?: string;
@@ -184,7 +184,7 @@ export function UpdateBox({ pursuitId, status, today, glyph }: { pursuitId: stri
             )}
             {touch && !ahead && (channel === 'meeting' || channel === 'call') && (
               <p className="muted" style={{ fontSize: 11.5, margin: '6px 0 0' }}>
-                {a(CHANNEL_WORD[channel]).replace(/^a/, 'A')} logged is a record: if the ladder is behind it, the rung it supports is proposed for approval — never recorded from here.
+                {a(CHANNEL_WORD[channel]).replace(/^a/, 'A')} logged is a record: if the ladder is behind it, Reconciliation records the conversation rung it supports, and proposes anything above that for approval.
               </p>
             )}
             <p className="willdo"><b>Saving will</b> {will.join('; ')}.</p>
@@ -193,7 +193,7 @@ export function UpdateBox({ pursuitId, status, today, glyph }: { pursuitId: stri
         {result?.error && <div className="warn" style={{ fontSize: 12.5, marginTop: 8 }}>{result.error}</div>}
         {result?.ok && (
           <div className="stat ready" style={{ marginTop: 8 }}>
-            <i />Saved{result.proposed ? ' — the ladder rung it supports is waiting on Approvals' : ''}
+            <i />Saved{result.recorded ? ' — the ladder now shows the rung it supports' : ''}{result.proposed ? ' — a rung above it is waiting on Approvals' : ''}
           </div>
         )}
         {body.trim() && (

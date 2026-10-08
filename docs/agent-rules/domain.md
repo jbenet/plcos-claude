@@ -34,7 +34,8 @@ Reconciliation (N57, `docs/18-reconciliation.md`) keeps the ladder in step with 
 after each translation it proposes the climb that records on file support (a meeting on the
 calendar, a reply from them, a signature recorded here), as one STAGE ticket per LP listing each
 rung and its record, requested by the system's inactive "Reconciliation" actor. A person
-approves; claims and notes are never used as records. Since N81, a record counts for a vehicle
+approves; claims and notes are never used as records. Since 8 Oct 2026 (issue 0137, rule 3) it records the
+conversation rungs itself and proposes only what lies above them. Since N81, a record counts for a vehicle
 only when it is tagged with that vehicle — it names it, or Claude (W12, `event-tags.jsonc`) or a
 person on the LP's timeline tagged it — and falls inside its raise window; a person's tag counts
 whatever the date. A record about a raise that names no vehicle is "vehicle unclear" and counts for
@@ -73,6 +74,24 @@ halts. if this was for automated agents only, ok, but not for humans (we're slow
   ordinary outreach (checked 5 Oct 2026): STAGE is the ladder, which no send moves (the status needs no ticket),
   and MONEY and ALLOCATION_EXCEPTION are the close track. Restrictions (rule 8), the grants gate (rule 12) and the
   wrap check (rule 11) are not tickets and hold for everyone.
+
+*Juan, 8 Oct 2026 — Reconciliation's conversation rungs need no approval.* On 17 open STAGE proposals, each
+"obvious from email context (dont need an explicit approval), or ... clearly incorrect": "i dont think we need this
+"decisions / approval" thing for these things"; "system should be able to figure it out". Confirmed on a decision
+card the same morning. So, precisely (`lib/reconcile.ts`, `recordClimbOnRecord` in `modules/strategy/service.ts`):
+
+- **Reconciliation records the conversation rungs without a ticket**: the connector's (not applicable, in direct
+  contact), LP opted in and Meeting held, each on the record behind it — a meeting or call with them, a reply from
+  them, our event they came to — under the same rules of what counts for a raise (N59, N81). Only its inactive
+  system actor may, only those rungs, only on those kinds of record; the ladder must not have moved.
+- **It says so and can be undone**: each rung's note ends "recorded by Reconciliation from the records on file,
+  no approval asked", the LP's timeline shows it as recorded rather than confirmed, and **take back** removes it
+  and what it recorded above it; that record is not used again for the LP.
+- **Never for a non-LP**: a portfolio company of ours (`network.portfolio`) or our own team gets nothing recorded
+  or proposed, and its open proposal is withdrawn.
+- **Unchanged**: above Meeting held — a number, a countersignature, a wire — Reconciliation still proposes a STAGE
+  ticket and a person approves. A person's own ladder advance, MONEY and ALLOCATION_EXCEPTION still need tickets
+  from everyone. Its earlier open proposals are applied or withdrawn on its next run.
 
 *Juan, 5 Oct 2026 — the email trail is the record.* "as much as possible we should record all this stuff from
 events directly in email and let email be the state. we may need to record info happened outside of email but that

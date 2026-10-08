@@ -6,12 +6,12 @@ import {
 import type { ShownRead } from '@/lib/reads';
 import type { NoteView } from '@/lib/connectors/affinity/notes';
 import { WHAT_LABEL, type What } from '@/lib/connectors/affinity/readings';
-import { decideReadingAction } from '@/app/targets/actions';
+import { decideReadingAction, retractRungAction } from '@/app/targets/actions';
 import { interactionRef, noteRef } from '@/lib/connectors/affinity/event-tags';
 import { Glyph, type GlyphName } from '@/components/ui/Glyph';
 import { refOf, type RungRecord } from '@/lib/reconcile';
 import {
-  RUNG_LABEL, STATUS_LABEL, rungIndex, type LadderEvent, type LadderRung, type PursuitStatus, type PursuitUpdate,
+  ON_RECORD_NOTE, RUNG_LABEL, STATUS_LABEL, rungIndex, type LadderEvent, type LadderRung, type PursuitStatus, type PursuitUpdate,
 } from '@/lib/authz/read/strategy';
 import { EntryBox } from './EntryBox';
 import { TIMELINE_PAGE, TimelineRows, type TimelineOption, type TimelineRow } from './TimelineRows';
@@ -152,12 +152,24 @@ function Thread({ summary, by, text, health }: { summary: string | null; by: str
   );
 }
 
+/** A rung Reconciliation recorded on its own (issue 0137): it says so, and a person can take it back. */
+const onItsOwn = (e: LadderEvent) => !e.ticketId && e.evidenceNote.includes(ON_RECORD_NOTE);
+function TakeBack({ e, pursuitId }: { e: LadderEvent; pursuitId: string }) {
+  return (
+    <form action={retractRungAction} style={{ display: 'inline' }}>
+      <input type="hidden" name="pursuitId" value={pursuitId} />
+      <input type="hidden" name="rung" value={e.rung} />
+      <button type="submit" className="linkbtn" title="Recorded by Reconciliation from the records on file. Taking it back removes it, and the rungs it recorded above it; this record is not used again.">take back</button>
+    </form>
+  );
+}
+
 /**
  * What a row changed on the ladder (N61, issue 0006): the rungs it is the record for, confirmed —
  * in green, with who confirmed them and when — or on record and waiting for a person to confirm.
  * Folded into the row that is their evidence, so the state is seen changing where it changed.
  */
-function RungState({ rungs, waiting, proposalId }: { rungs: LadderEvent[]; waiting: LadderRung[]; proposalId?: string | null }) {
+function RungState({ rungs, waiting, proposalId, pursuitId }: { rungs: LadderEvent[]; waiting: LadderRung[]; proposalId?: string | null; pursuitId: string }) {
   if (!rungs.length && !waiting.length) return null;
   const groups = new Map<string, LadderEvent[]>();
   for (const r of rungs) {
@@ -171,7 +183,8 @@ function RungState({ rungs, waiting, proposalId }: { rungs: LadderEvent[]; waiti
           <Glyph name="rung" title="On the ladder" tone="good" />
           <span>
             On the ladder: {rs.map((r) => `${RUNG_LABEL[r.rung]}${r.evidenceKind === 'not_applicable' ? ' (not applicable: in direct contact)' : ''}`).join(', ')}
-            <span className="muted"> — confirmed {k.split('|')[0]} by {k.split('|')[1]}</span>
+            <span className="muted"> — {rs.some(onItsOwn) ? 'recorded from the records on file' : 'confirmed'} {k.split('|')[0]} by {k.split('|')[1]}</span>
+            {rs.filter(onItsOwn).slice(0, 1).map((r) => <span key={r.eventId}> · <TakeBack e={r} pursuitId={pursuitId} /></span>)}
           </span>
         </span>
       ))}
@@ -261,7 +274,7 @@ function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate,
         )}
         {c?.text && <div className="p2" style={{ marginTop: 3 }}>{who}</div>}
         {t.read && <span className="flag f-mute" style={{ marginTop: 4, display: 'inline-block' }}>{READ_LABEL[t.read]}{t.readByName ? ` — ${t.readByName}` : ''}</span>}
-        <RungState rungs={rungs} waiting={waiting} proposalId={proposalId} />
+        <RungState rungs={rungs} waiting={waiting} proposalId={proposalId} pursuitId={tagging.pursuitId} />
         {ref && (
           <TagControl
             tagRef={ref} now={nowSaid(about, why)} general={about.kind === 'none'} pursuitId={tagging.pursuitId} what={CHANNEL_LABEL[t.channel].toLowerCase()}
@@ -340,12 +353,12 @@ function StatusRow({ s, vehicle }: { s: StatusEvent; vehicle: TagVehicle }) {
 }
 
 /** A rung whose record isn't a row on this timeline — a signature, a wire (N61). */
-function RungRow({ e, vehicle }: { e: LadderEvent; vehicle: TagVehicle }) {
+function RungRow({ e, vehicle, pursuitId }: { e: LadderEvent; vehicle: TagVehicle; pursuitId: string }) {
   return (
     <div className="tl-row">
       <Glyph name="rung" title="On the ladder" tone="good" />
       <div className="anote">
-        <div className="p2"><AboutChips a={own(vehicle)} why="On this pursuit" /> {shortDate(e.occurredAt)} · <b className="whatword">On the ladder</b> · confirmed {shortDate(e.recordedAt)} by {e.recordedByName}</div>
+        <div className="p2"><AboutChips a={own(vehicle)} why="On this pursuit" /> {shortDate(e.occurredAt)} · <b className="whatword">On the ladder</b> · {onItsOwn(e) ? 'recorded from the records on file' : 'confirmed'} {shortDate(e.recordedAt)} by {e.recordedByName}{onItsOwn(e) && <> · <TakeBack e={e} pursuitId={pursuitId} /></>}</div>
         <div className="t">
           <b>{RUNG_LABEL[e.rung]}</b>{e.evidenceKind === 'not_applicable' ? ' — not applicable' : ''}
           <span className="muted"> · {e.evidenceNote}</span>
@@ -576,7 +589,7 @@ export function Timeline(props: {
       case 'note': return <NoteRow key={x.key} n={x.n} about={a} tagging={tagging} />;
       case 'update': return <UpdateRow key={x.key} u={x.u} vehicle={vehicle} />;
       case 'status': return <StatusRow key={x.key} s={x.s} vehicle={vehicle} />;
-      case 'rung': return <RungRow key={x.key} e={x.e} vehicle={vehicle} />;
+      case 'rung': return <RungRow key={x.key} e={x.e} vehicle={vehicle} pursuitId={tagging.pursuitId} />;
     }
   };
   const rows: TimelineRow[] = items.map((x) => {
