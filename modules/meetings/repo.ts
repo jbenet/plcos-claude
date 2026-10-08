@@ -171,7 +171,8 @@ const fromReach = (contact: string) => `
          m.source, m.source_ref, r.for_entity, m.about, m.about_vehicles, m.about_basis, m.about_by,
          m.group_size, ${contact} as via_contact
     from reach r
-    join identity.alias_pairs(array(select identity.canonical_entity_id(entity_id) from reach)) ra on ra.canonical_id = identity.canonical_entity_id(r.entity_id)
+    -- Every reach.entity_id is already canonical (both callers resolve it), so no lookup per row here.
+    join identity.alias_pairs(array(select entity_id from reach)) ra on ra.canonical_id = r.entity_id
     join meetings.meeting m on m.entity_id = ra.entity_id
     join identity.entity e on e.entity_id = ra.canonical_id
     left join platform.vehicle v on v.id = m.vehicle_id
@@ -184,11 +185,13 @@ const fromReach = (contact: string) => `
  * `for_entity` says which LP each row is being read for.
  */
 const TOUCH_SELECT = `
-  with lp as (select x as entity_id, identity.canonical_entity_id(x) as canon from unnest($1::uuid[]) x),
+  -- Only a merged record walks its chain (performance pass, 8 Oct 2026).
+  with lp as (select x as entity_id, case when e.entity_id is not null and e.merged_into is null then x else identity.canonical_entity_id(x) end as canon
+    from unnest($1::uuid[]) x left join identity.entity e on e.entity_id = x),
   -- Each LP's aliases first (identity.alias_pairs), so the joins below are index probes (7 Oct 2026).
   lpa as (select lp.entity_id, pa.entity_id as alias from lp join identity.alias_pairs(array(select canon from lp)) pa on pa.canonical_id = lp.canon),
   reach as (
-    select lp.entity_id as for_entity, lp.entity_id as entity_id, false as contact from lp
+    select lp.entity_id as for_entity, lp.canon as entity_id, false as contact from lp
     union
     select lpa.entity_id, identity.canonical_entity_id(a.org_entity), false from lpa join identity.affiliation a on a.person_entity = lpa.alias
      where a.ended_on is null
