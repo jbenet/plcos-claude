@@ -110,14 +110,17 @@ An export previews the deterministic pass and rolls back its writes: it does not
   physical line number; neighboring valid decisions can apply. Each line applies atomically.
 - Unknown/stale groups, retired/noncanonical members, outsiders, account identities, mixed-type
   merges and conflicting proposals for one group are refused. Existing active separations or
-  reversed merges cannot be overridden by a merge proposal.
+  reversed merges cannot be overridden by a merge proposal, except the import's own
+  `different_external_id` ones, which a full attestation clears (below).
 
 ### Legacy same-source different-ID exception
 
 The deterministic pass now records distinct Affinity, warehouse, Dakota and network_finding
-IDs as `different_external_id` separations before review. Those pairs leave the ambiguous
-queue and **cannot** be overridden by the attestation below. This format remains relevant
-to legacy decisions and other source namespaces; a recorded separation always wins.
+IDs as `different_external_id` separations before review. A pair alone leaves the ambiguous
+queue. When such a pair is still in a group (other members link them), a merge with the
+attestation below clears that separation: it is marked undone with the decision named, and
+the merge applies (issue 0138, 8 Oct 2026). Only this rule's separations are cleared. A
+separation a person or a review recorded, and a reversed merge, still refuse the merge.
 
 For every pair of different external IDs from each source across the complete selected
 components (aliases included), provide supporting identity evidence and an explicit local

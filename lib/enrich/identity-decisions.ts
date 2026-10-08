@@ -159,13 +159,18 @@ export async function applyIdentityDecisions(tx: Queryable, by: string, report: 
           if (new Set(ids.map(id => members.find(m => m.id === id)!.type)).size > 1) fail('Retype mixed identities before merging');
           if (violatesSeparationGroup(ids, await readSeparationGroups(tx)))
             fail('Prior group separation requires a fresh manual identity resolution');
-          const constraints = await tx.query<{ a: string | null; b: string | null; ls: string; lk: string; rs: string; rk: string }>(`select
-            merged_entity::text a,canonical_entity::text b,left_source ls,left_source_id lk,right_source rs,right_source_id rk
+          const constraints = await tx.query<{ id: string; kind: string; rule: string; a: string | null; b: string | null; ls: string; lk: string; rs: string; rk: string }>(`select
+            assertion_id::text id,kind::text kind,rule,merged_entity::text a,canonical_entity::text b,left_source ls,left_source_id lk,right_source rs,right_source_id rk
             from identity.match_assertion where (kind='not_same_as' and undone_at is null) or (kind='same_as' and undone_at is not null)`);
           const rootOf = (id: string | null, source: string, key: string) => members.find(m => m.id === id)?.root
             ?? members.find(m => m.id === sources.find(s => s.source === source && s.key === key)?.id)?.root;
-          if (constraints.some(c => { const a = rootOf(c.a,c.ls,c.lk), b = rootOf(c.b,c.rs,c.rk); return a && b && a !== b && ids.includes(a) && ids.includes(b); }))
-            fail('Prior separation or reversed merge requires a fresh manual identity resolution');
+          const between = constraints.filter(c => { const a = rootOf(c.a,c.ls,c.lk), b = rootOf(c.b,c.rs,c.rk); return a && b && a !== b && ids.includes(a) && ids.includes(b); });
+          // Issue 0138: the import's own "different external IDs" separation is no person's decision, only the
+          // rule that two upstream records were not assumed to be one. The attestation below, every pair
+          // stated as the same real organization or person with a supporting excerpt, clears it. A separation
+          // a person or a review recorded, or a reversed merge, still refuses.
+          const deterministic = between.filter(c => c.kind === 'not_same_as' && c.rule === 'identity:v1:different_external_id');
+          if (between.length > deterministic.length) fail('Prior separation or reversed merge requires a fresh manual identity resolution');
           const external = new Map<string, Set<string>>();
           for (const s of sources) if (!internalSource(s.source)) external.set(s.source, (external.get(s.source) ?? new Set()).add(s.key));
           for (const [source, keys] of external) if (keys.size > 1) {
@@ -180,6 +185,14 @@ export async function applyIdentityDecisions(tx: Queryable, by: string, report: 
                 fail(`Different external IDs from ${source}: evidence must explicitly attest each pair as the same real ${kind}`);
             }
             rule = source === 'affinity' || rule === 'decision:affinity-duplicate' ? 'decision:affinity-duplicate' : 'identity:v1:decision:source-duplicate';
+          }
+          if (deterministic.length) {
+            // Each one's own pair must be among those just attested: both IDs from one source, both in the group.
+            const attested = (c: { ls: string; lk: string; rs: string; rk: string }) => c.ls === c.rs && c.lk !== c.rk
+              && (external.get(c.ls)?.size ?? 0) > 1 && external.get(c.ls)!.has(c.lk) && external.get(c.ls)!.has(c.rk);
+            if (!deterministic.every(attested)) fail('Prior separation or reversed merge requires a fresh manual identity resolution');
+            await tx.query(`update identity.match_assertion set undone_at=now(),undo_reason=$2 where assertion_id=any($1::bigint[]) and undone_at is null`,
+              [deterministic.map(c => c.id), `${by}: identity review ${key}; each pair attested as the same real entity (issue 0138)`]);
           }
         }
         const pairs = d.decision === 'merge' ? ids.filter(id => id !== survivor).map(id => [id, survivor] as const)
