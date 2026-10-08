@@ -14,8 +14,9 @@ import {
  * the words saved rather than from the browser, and kept beside what was applied.
  *
  * Afterwards, if a touchpoint was logged, reconciliation reads this LP again (docs/18): a
- * meeting logged is a record, and the climb it supports is proposed as a STAGE ticket for a
- * person to approve. An update never records a rung or an amount itself.
+ * meeting logged is a record. The conversation rungs it supports are recorded by Reconciliation
+ * (issue 0137); a climb above them is proposed as a STAGE ticket for a person to approve. An update
+ * never records a rung or an amount itself.
  */
 export interface UpdateInput {
   pursuitId: string;
@@ -40,6 +41,8 @@ export interface UpdateResult {
   applied: UpdateApplied;
   /** Reconciliation opened a ladder proposal from the touchpoint this update logged. */
   proposed: boolean;
+  /** Reconciliation recorded the conversation rungs the touchpoint supports (issue 0137). */
+  recorded: boolean;
 }
 
 /** A status's reason is a line, not the whole update: its first sentence or two, cut short. */
@@ -129,10 +132,12 @@ export async function addUpdate(actorId: string, input: UpdateInput): Promise<Up
     return { updateId, created, applied };
   });
 
-  // A touchpoint that happened is a record the ladder may be behind: propose, never record.
-  let proposed = false;
+  // A touchpoint that happened is a record the ladder may be behind: Reconciliation reads it.
+  let proposed = false, recorded = false;
   if (done.created && done.applied.touchpointId && !done.applied.touch?.ahead) {
-    proposed = (await reconcilePursuit(input.pursuitId)).proposed > 0;
+    const r = await reconcilePursuit(input.pursuitId);
+    proposed = r.proposed > 0;
+    recorded = r.recorded > 0;
   }
-  return { ...done, proposed };
+  return { ...done, proposed, recorded };
 }

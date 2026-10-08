@@ -146,42 +146,129 @@ export async function recordClimb(
     await requireApprovedTicket(tx, {
       kind: 'STAGE', subjectType: 'pursuit', subjectId: args.pursuitId, ticketId: args.ticketId,
     });
-    const pursuit = await getPursuit(args.pursuitId, tx);
-    if (!pursuit) throw new Error(`No pursuit ${args.pursuitId}`);
-    if ((pursuit.rung ?? null) !== (args.from ?? null)) {
-      throw new LadderRefused(
-        'skipped',
-        `The ladder moved since this was proposed: ${pursuit.entityName} is at ` +
-        `${pursuit.rung ? RUNG_LABEL[pursuit.rung] : 'nothing on file'}; nothing was recorded.`,
-      );
+    await climb(tx, actorId, args, 'ladder.climbed');
+  });
+}
+
+/**
+ * The conversation rungs, which Reconciliation records itself from the records on file (issue 0137).
+ * Juan, 8 Oct 2026: "i dont think we need this "decisions / approval" thing for these things" and
+ * "system should be able to figure it out". Above them a number, a countersignature or a wire is
+ * involved, and those keep their STAGE ticket.
+ */
+export const ON_RECORD_RUNGS: readonly LadderRung[] = ['connector_willing', 'target_opted_in', 'meeting_held'];
+const ON_RECORD_KINDS = new Set(['calendar', 'meeting', 'email', 'not_applicable']);
+/** The only actor that records without a ticket: the system's own, which no person can switch to. */
+const ON_RECORD_ACTOR = 'reconciliation';
+export const ON_RECORD_NOTE = 'recorded by Reconciliation from the records on file, no approval asked';
+
+/**
+ * Record a climb with no STAGE ticket (issue 0137). Only Reconciliation, only the conversation rungs,
+ * and only on a meeting, a call, a reply or our event on file: the same checks as an approved climb,
+ * with the ticket replaced by those limits. Each rung says it was recorded this way, and a person can
+ * take it back (`retractOnRecord`), after which the same record is not used again.
+ */
+export async function recordClimbOnRecord(
+  actorId: string,
+  args: { pursuitId: string; from: LadderRung | null; rungs: ClimbRung[] },
+): Promise<void> {
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    await tx.exec('lock table strategy.pursuit in row exclusive mode');
+    const actor = await tx.one<{ handle: string; active: boolean }>(`select handle, active from platform.app_user where id = $1`, [actorId]);
+    if (!actor || actor.handle !== ON_RECORD_ACTOR || actor.active) {
+      throw new LadderRefused('no_evidence', 'Only Reconciliation records a rung without a STAGE ticket; nothing was recorded.');
     }
-    let at = rungIndex(pursuit.rung);
     for (const r of args.rungs) {
-      if (rungIndex(r.rung) !== at + 1) {
-        throw new LadderRefused('skipped', `${RUNG_LABEL[r.rung]} is not the next rung; nothing was recorded.`);
+      if (!ON_RECORD_RUNGS.includes(r.rung) || !ON_RECORD_KINDS.has(r.evidenceKind)) {
+        throw new LadderRefused('no_evidence', `${RUNG_LABEL[r.rung]} on a ${r.evidenceKind} needs a STAGE ticket; nothing was recorded.`);
       }
-      if (!r.evidenceRef.trim() || !r.evidenceNote.trim()) {
-        throw new LadderRefused('no_evidence', `${RUNG_LABEL[r.rung]} requires: ${RUNG_REQUIRES[r.rung]}`);
-      }
-      at++;
     }
-    for (const r of args.rungs) {
-      await tx.query(
-        `insert into strategy.ladder_event
-           (pursuit_id, rung, evidence_kind, evidence_ref, evidence_note, ticket_id, recorded_by, occurred_at)
-         values ($1,$2::strategy.ladder_rung,$3,$4,$5,$6,$7,$8)`,
-        [args.pursuitId, r.rung, r.evidenceKind, r.evidenceRef, r.evidenceNote, args.ticketId, actorId, new Date(r.occurredAt)],
-      );
+    await climb(tx, actorId, {
+      ...args, ticketId: null,
+      rungs: args.rungs.map((r) => ({ ...r, evidenceNote: `${r.evidenceNote} · ${ON_RECORD_NOTE}` })),
+    }, 'ladder.recorded_on_file');
+  });
+}
+
+/**
+ * Take back a rung Reconciliation recorded without a ticket, and the rungs above it, when they were
+ * recorded the same way (issue 0137). A rung above it that a person approved stays, so this refuses.
+ */
+export async function retractOnRecord(actorId: string, args: { pursuitId: string; rung: LadderRung; note?: string | null }): Promise<number> {
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    await tx.exec('lock table strategy.pursuit in row exclusive mode');
+    const rows = await tx.query<{ event_id: string; rung: LadderRung; ticket_id: string | null; handle: string; evidence_ref: string }>(
+      `select l.event_id::text, l.rung, l.ticket_id::text, u.handle, l.evidence_ref
+         from strategy.ladder_event l join platform.app_user u on u.id = l.recorded_by
+        where l.pursuit_id = $1`, [args.pursuitId]);
+    const from = rungIndex(args.rung);
+    const gone = rows.filter((r) => rungIndex(r.rung) >= from);
+    if (!gone.some((r) => r.rung === args.rung)) throw new LadderRefused('skipped', `${RUNG_LABEL[args.rung]} is not on file; nothing was taken back.`);
+    const kept = gone.find((r) => r.ticket_id || r.handle !== ON_RECORD_ACTOR);
+    if (kept) {
+      throw new LadderRefused('skipped', `${RUNG_LABEL[kept.rung]} was recorded by a person or on an approval and sits on it; nothing was taken back.`);
     }
+    await tx.query(`delete from strategy.ladder_event where event_id = any($1::uuid[])`, [gone.map((r) => r.event_id)]);
     await tx.query(
       `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
-       values ($1, 'ladder.climbed', 'pursuit', $2, $3)`,
-      [actorId, args.pursuitId, JSON.stringify({
-        entity: pursuit.entityName, vehicle: pursuit.vehicleName, from: args.from,
-        rungs: args.rungs.map((r) => `${r.rung}:${r.evidenceKind}:${r.evidenceRef}`),
-      })],
+       values ($1, 'ladder.retracted', 'pursuit', $2, $3)`,
+      [actorId, args.pursuitId, JSON.stringify({ rungs: gone.map((r) => r.rung), refs: gone.map((r) => r.evidence_ref), note: args.note ?? null })],
     );
+    return gone.length;
   });
+}
+
+/** The records a person took back from Reconciliation's own climbs: never used again for that LP. */
+export async function retractedRefs(q: Queryable, pursuitId?: string): Promise<Set<string>> {
+  const rows = await q.query<{ k: string }>(
+    `select subject_id::text || '|' || ref as k from platform.audit_log, jsonb_array_elements_text(detail->'refs') ref
+      where action = 'ladder.retracted' and ($1::text is null or subject_id::text = $1::text)`, [pursuitId ?? null]);
+  return new Set(rows.map((r) => r.k));
+}
+
+async function climb(
+  tx: Queryable,
+  actorId: string,
+  args: { pursuitId: string; ticketId: string | null; from: LadderRung | null; rungs: ClimbRung[] },
+  action: string,
+): Promise<void> {
+  const pursuit = await getPursuit(args.pursuitId, tx);
+  if (!pursuit) throw new Error(`No pursuit ${args.pursuitId}`);
+  if ((pursuit.rung ?? null) !== (args.from ?? null)) {
+    throw new LadderRefused(
+      'skipped',
+      `The ladder moved since this was proposed: ${pursuit.entityName} is at ` +
+      `${pursuit.rung ? RUNG_LABEL[pursuit.rung] : 'nothing on file'}; nothing was recorded.`,
+    );
+  }
+  let at = rungIndex(pursuit.rung);
+  for (const r of args.rungs) {
+    if (rungIndex(r.rung) !== at + 1) {
+      throw new LadderRefused('skipped', `${RUNG_LABEL[r.rung]} is not the next rung; nothing was recorded.`);
+    }
+    if (!r.evidenceRef.trim() || !r.evidenceNote.trim()) {
+      throw new LadderRefused('no_evidence', `${RUNG_LABEL[r.rung]} requires: ${RUNG_REQUIRES[r.rung]}`);
+    }
+    at++;
+  }
+  for (const r of args.rungs) {
+    await tx.query(
+      `insert into strategy.ladder_event
+         (pursuit_id, rung, evidence_kind, evidence_ref, evidence_note, ticket_id, recorded_by, occurred_at)
+       values ($1,$2::strategy.ladder_rung,$3,$4,$5,$6,$7,$8)`,
+      [args.pursuitId, r.rung, r.evidenceKind, r.evidenceRef, r.evidenceNote, args.ticketId, actorId, new Date(r.occurredAt)],
+    );
+  }
+  await tx.query(
+    `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
+     values ($1, $2, 'pursuit', $3, $4)`,
+    [actorId, action, args.pursuitId, JSON.stringify({
+      entity: pursuit.entityName, vehicle: pursuit.vehicleName, from: args.from,
+      rungs: args.rungs.map((r) => `${r.rung}:${r.evidenceKind}:${r.evidenceRef}`),
+    })],
+  );
 }
 
 export class StatusRefused extends Error {

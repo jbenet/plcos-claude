@@ -59,9 +59,12 @@ export async function updateProperties(ctx: AffinityContext & { n: (sql: string,
                 and not exists (select 1 from strategy.ladder_event l where l.pursuit_id = p.pursuit_id
                                    and l.rung not in ('connector_willing', 'target_opted_in'))
                 and not exists (select 1 from governance.approval_ticket t where t.subject_id = p.pursuit_id and t.kind = 'STAGE' and t.decision is null)
+                and not exists (select 1 from network.portfolio f where identity.canonical_entity_id(f.company_entity) = identity.canonical_entity_id(p.entity_id))
+                and not exists (select 1 from identity.source_record r where r.source = 'app_user' and identity.canonical_entity_id(r.entity_id) = identity.canonical_entity_id(p.entity_id))
               order by p.opened_at limit 1`);
   if (!target) throw new Error('No pursuit below Meeting held without an open STAGE ticket, for the update property');
   const rungs0 = await n(`select count(*)::text as n from strategy.ladder_event`);
+  const lastEvent = (await adb.one<{ at: string | null }>(`select max(created_at)::text at from strategy.ladder_event`))?.at ?? '1970-01-01';
   const empty = await attempt(() => up.addUpdate(juan, { pursuitId: target!.pursuit_id, body: '   ', idempotencyKey: 'k-empty' }));
   const yesterday = new Date(Date.now() - 86_400_000);
   const input = {
@@ -79,15 +82,18 @@ export async function updateProperties(ctx: AffinityContext & { n: (sql: string,
   const rungs1 = await n(`select count(*)::text as n from strategy.ladder_event`);
   const sysId = await (await import('../../lib/reconcile')).systemActor();
   const asked = await n(`select count(*)::text as n from governance.approval_ticket where subject_id = $1 and kind = 'STAGE' and decision is null and requested_by = $2`, [target!.pursuit_id, sysId]);
+  // Issue 0137: the rungs it supports are recorded by Reconciliation, marked as such; none by the person's update.
+  const byOthers = await n(`select count(*)::text as n from strategy.ladder_event where pursuit_id = $1 and created_at > $4::timestamptz and (recorded_by <> $2 or ticket_id is not null or evidence_note not like $3)`, [target!.pursuit_id, sysId, `%${st.ON_RECORD_NOTE}`, lastEvent]);
+  const held = await n(`select count(*)::text as n from strategy.ladder_event where pursuit_id = $1 and rung = 'meeting_held'`, [target!.pursuit_id]);
   const stored = (await st.updatesFor(target!.pursuit_id))[0];
   check(
-    'An update writes its status, touchpoint and next step together, once per form, and never a rung; a meeting it logs is proposed for the ladder',
+    'An update writes its status, touchpoint and next step together, once per form, and never a rung; Reconciliation records the meeting it logs on the ladder',
     empty instanceof st.StatusRefused && saved.created && !twice.created && twice.updateId === saved.updateId && rows === 1 && logged === 1 &&
       after?.status === 'discussing' && after.status_source === 'us' && after.status_reason === 'Met them yesterday; they want the deck.' &&
-      after.next_step === 'Send the deck' && tied === 1 && rungs1 === rungs0 && saved.proposed && asked === 1 &&
+      after.next_step === 'Send the deck' && tied === 1 && rungs1 > rungs0 && byOthers === 0 && held === 1 && saved.recorded && !saved.proposed && asked === 0 &&
       stored?.applied.status?.from === target!.status && stored.applied.touchpointId !== undefined && stored.suggested.reader === `rules-${st.READER.version}`,
     `empty refused: ${empty instanceof st.StatusRefused}; saved ${saved.created}, again ${twice.created ? 'SAVED TWICE' : 'found the first'}; ${rows} update, ${logged} meeting logged; ` +
       `status ${target!.status} → ${after?.status} (${after?.status_source}), why "${after?.status_reason}", next "${after?.next_step}"; audit tied to the update: ${tied}; ` +
-      `rungs ${rungs0} → ${rungs1}; ladder proposal from the system: ${asked}; reader pinned: ${stored?.suggested.reader}`,
+      `rungs ${rungs0} → ${rungs1} (Meeting held: ${held}; by anyone but Reconciliation on its own: ${byOthers}); ladder proposal from the system: ${asked}; reader pinned: ${stored?.suggested.reader}`,
   );
 }

@@ -5,48 +5,65 @@ export async function reconciliationProperties(ctx: AffinityContext & { n: (sql:
   const { check, adb, attempt } = ctx;
   const { n, nadia, juanId, tr, file } = ctx;
   const rc = await import('../../lib/reconcile');
-  const gv = await import('../../modules/governance');
-  const ap = await import('../../app/approvals/apply');
   const sg = await import('../../modules/strategy');
   const pf = await import('../../modules/platform');
   const sys = await rc.systemActor();
   const canBecome = await pf.getUserByHandle('reconciliation');
+  // Issue 0137 (Juan, 8 Oct 2026): the conversation rungs are recorded by Reconciliation itself, on the record behind
+  // each, never for a portfolio company of ours; above them it still proposes, and a person can take a rung back.
+  const portfolioCo = await adb.one<{ pursuit_id: string; entity_id: string; vehicle_id: string }>(
+    `select p.pursuit_id::text, p.entity_id::text, p.vehicle_id::text from strategy.pursuit p join platform.vehicle v on v.id = p.vehicle_id
+      where v.phase <> 'historical' and p.pursuit_id <> $1 and not exists (select 1 from strategy.ladder_event l where l.pursuit_id = p.pursuit_id)
+      order by p.opened_at limit 1`, [nadia!.pursuit_id]);
+  if (portfolioCo) {
+    await adb.query(`insert into network.portfolio (portfolio_id, vehicle_id, company_entity, company_name, source, input_hash)
+      values ('invented-0137', $1, $2, 'Invented portfolio company', '{"invented": true}'::jsonb, 'invented')`, [portfolioCo.vehicle_id, portfolioCo.entity_id]);
+  }
   const ladder0 = await n(`select count(*)::text as n from strategy.ladder_event`);
   const first = await rc.reconcile(null);
   const ladder1 = await n(`select count(*)::text as n from strategy.ladder_event`);
-  const proposals = await adb.query<{ id: string; subject_id: string; requested_by: string; scope: { apply: { args: { rungs: Array<{ rung: string; evidenceRef: string }> } } } }>(
-    `select id::text, subject_id::text, requested_by::text, scope from governance.approval_ticket
-              where kind = 'STAGE' and decision is null and scope->'apply'->>'command' = 'strategy.recordClimb'`);
-  // Every "Meeting held" it proposes rests on a meeting that happened, with this LP themselves.
+  const mineNew = await adb.query<{ pursuit_id: string; rung: string; evidence_ref: string; evidence_kind: string; ticket_id: string | null; recorded_by: string; evidence_note: string }>(
+    `select pursuit_id::text, rung::text, evidence_ref, evidence_kind, ticket_id::text, recorded_by::text, evidence_note from strategy.ladder_event where recorded_by = $1`, [sys]);
+  // Every "Meeting held" it records rests on a meeting that happened, with this LP themselves.
   const heldFor = async (pursuitId: string) => n(
     `select count(*)::text as n from meetings.meeting t join strategy.pursuit p on p.entity_id = t.entity_id
               where p.pursuit_id = $1 and t.channel in ('meeting', 'call') and t.held_on <= current_date`, [pursuitId]);
   let unbacked = 0;
-  for (const pr of proposals) {
-    const rungs = pr.scope.apply.args.rungs;
-    if (pr.requested_by !== sys || rungs.some((r) => !/^(affinity:|us:|touchpoint:|commitment_event:)/.test(r.evidenceRef))) unbacked++;
-    if (rungs.some((r) => r.rung === 'meeting_held') && (await heldFor(pr.subject_id)) === 0) unbacked++;
+  for (const r of mineNew) {
+    if (r.ticket_id || !/^(affinity:|us:|touchpoint:)/.test(r.evidence_ref) || !sg.ON_RECORD_RUNGS.includes(r.rung as never)
+      || !r.evidence_note.endsWith(sg.ON_RECORD_NOTE)) unbacked++;
+    if (r.rung === 'meeting_held' && (await heldFor(r.pursuit_id)) === 0) unbacked++;
   }
+  const portfolioRungs = portfolioCo ? await n(`select count(*)::text as n from strategy.ladder_event where pursuit_id = $1`, [portfolioCo.pursuit_id]) : 0;
+  const proposals = await adb.query<{ scope: { apply: { args: { rungs: Array<{ rung: string }> } } } }>(
+    `select scope from governance.approval_ticket
+              where kind = 'STAGE' and decision is null and scope->'apply'->>'command' = 'strategy.recordClimb'`);
+  const proposedLow = proposals.filter((pr) => pr.scope.apply.args.rungs.some((r) => sg.ON_RECORD_RUNGS.includes(r.rung as never))).length;
   const second = await rc.reconcile(null);
-  const mine = proposals.find((pr) => pr.subject_id === nadia!.pursuit_id);
-  if (mine) {
-    await gv.decideTicket(juanId, mine.id, 'approve', null);
-    await ap.applyApprovedTicket(juanId, (await gv.getTicket(mine.id))!);
-  }
   const climbed = await sg.getPursuit(nadia!.pursuit_id);
-  const replay = mine ? await attempt(async () => ap.applyApprovedTicket(juanId, (await gv.getTicket(mine.id))!)) : null;
-  const other = proposals.find((pr) => pr.subject_id !== nadia!.pursuit_id);
-  if (other) await gv.decideTicket(juanId, other.id, 'reject', null);
+  // Only Reconciliation, only those rungs: a person's call, or a rung above them, is refused.
+  const asPerson = await attempt(() => sg.recordClimbOnRecord(juanId, { pursuitId: nadia!.pursuit_id, from: climbed?.rung ?? null, rungs: [] }));
+  const above = await attempt(() => sg.recordClimbOnRecord(sys, { pursuitId: nadia!.pursuit_id, from: climbed?.rung ?? null, rungs: [{
+    rung: 'indication_given', evidenceKind: 'commitment', evidenceRef: 'commitment_event:invented', evidenceNote: 'Invented', occurredAt: new Date().toISOString() }] }));
+  const ticketless = await attempt(() => sg.recordClimb(juanId, { pursuitId: nadia!.pursuit_id, ticketId: null, from: climbed?.rung ?? null, rungs: [] }));
+  // Taken back: gone, and not recorded again from the same records.
+  const tookBack = await sg.retractOnRecord(juanId, { pursuitId: nadia!.pursuit_id, rung: 'connector_willing' });
   const third = await rc.reconcile(null);
+  const afterBack = await sg.getPursuit(nadia!.pursuit_id);
+  const reasked = await n(`select count(*)::text as n from governance.approval_ticket where subject_id = $1 and kind = 'STAGE' and decision is null`, [nadia!.pursuit_id]);
+  if (portfolioCo) await adb.query(`delete from network.portfolio where portfolio_id = 'invented-0137'`);
   check(
-    'Reconciliation proposes only what records support, as the system, one ticket per LP; a person approves, and a rejection holds',
-    proposals.length > 0 && first.proposed === proposals.length && unbacked === 0 && ladder0 === ladder1 &&
-      second.proposed === 0 && canBecome === null && climbed?.rung === 'meeting_held' &&
+    'Reconciliation records the conversation rungs itself, only on records, as the system; never for a portfolio company; a person can take one back and it stays back',
+    first.recorded > 0 && ladder1 > ladder0 && mineNew.length === ladder1 - ladder0 && unbacked === 0 && proposedLow === 0 &&
+      second.recorded === 0 && second.proposed === 0 && canBecome === null && climbed?.rung === 'meeting_held' &&
       climbed.events.some((e) => e.rung === 'connector_willing' && e.evidenceKind === 'not_applicable') &&
-      replay instanceof sg.LadderRefused && (!other || (third.rejectedBefore >= 1 && third.proposed === 0)),
-    `${first.proposed} proposed (${unbacked} without a record behind them), ladder ${ladder0} → ${ladder1} before any approval; again: ${second.proposed} new, ${second.alreadyOpen} already open; ` +
-      `the system actor can be switched to: ${canBecome ? 'YES' : 'no'}; approved Nadia's → ${climbed?.rung} (${climbed?.events.map((e) => `${e.rung}:${e.evidenceKind}`).join(', ')}); applied twice: ${replay ? 'refused' : 'RECORDED AGAIN'}; ` +
-      `after a rejection, proposed again: ${third.proposed} (${third.rejectedBefore} held back)`,
+      asPerson instanceof sg.LadderRefused && above instanceof sg.LadderRefused && ticketless instanceof Error &&
+      (!portfolioCo || (portfolioRungs === 0 && first.notLp >= 1)) &&
+      tookBack >= 3 && afterBack?.rung === null && third.recorded === 0 && reasked === 0,
+    `${first.recorded} recorded (${mineNew.length} rungs, ${unbacked} without a record behind them or unmarked), ladder ${ladder0} → ${ladder1}; ${proposedLow} conversation-rung proposals; ` +
+      `again: ${second.recorded} recorded, ${second.proposed} proposed; the system actor can be switched to: ${canBecome ? 'YES' : 'no'}; Nadia → ${climbed?.rung} (${climbed?.events.map((e) => `${e.rung}:${e.evidenceKind}`).join(', ')}); ` +
+      `as a person: ${asPerson instanceof sg.LadderRefused ? 'refused' : 'RECORDED'}; above Meeting held: ${above instanceof sg.LadderRefused ? 'refused' : 'RECORDED'}; a ticketless approval path: ${ticketless instanceof Error ? 'refused' : 'RECORDED'}; ` +
+      `portfolio company: ${portfolioCo ? `${portfolioRungs} rungs, ${first.notLp} not an LP` : 'no fixture'}; taken back: ${tookBack} rungs, then ${afterBack?.rung ?? 'nothing on file'}, recorded again ${third.recorded}, asked ${reasked}`,
   );
 
   // What a touchpoint is about (N59): the raise only when it says so, and only inside the
