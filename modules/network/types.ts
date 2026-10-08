@@ -130,7 +130,9 @@ export interface Route {
   reasons: string[];
   /** The weakest tier along the path — a route is only as good as its worst hop. */
   weakestTier: EvidenceTier;
-  askLoad: { connector: string; used: number; cap: number } | null;
+  /** busy: the connector has been asked at or past the cap this quarter. A warning only (Juan, 8 Oct 2026, feedback 0124:
+   * "flag only"): the route stays Recommend unless config.guard.askLimit is 'enforce', which holds it. */
+  askLoad: { connector: string; used: number; cap: number; busy?: boolean } | null;
   /**
    * How much weight this route carries, once it has passed the safety rules above.
    *

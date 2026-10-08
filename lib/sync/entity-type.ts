@@ -51,9 +51,16 @@ export async function readEntityTypes(caller: SyncCaller, db?: Db, request?: Req
       await auditSync(caller, 'identity', 'ok', { op: 'find', count: entities.length });
       return { status: 200, body: { ok: true, entities } };
     }
-    const groups = await identityReviewByName(handle, q);
-    await auditSync(caller, 'identity', 'ok', { op: 'review', count: groups.length });
-    return { status: 200, body: { ok: true, groups } };
+    try {
+      const groups = await identityReviewByName(handle, q);
+      await auditSync(caller, 'identity', 'ok', { op: 'review', count: groups.length });
+      return { status: 200, body: { ok: true, groups } };
+    } catch (error) {
+      // Say what failed rather than a bare 500 (issue 0138); the message is the code's or Postgres's, never a record.
+      const code = (error as { code?: string }).code;
+      await auditSync(caller, 'identity', 'error', { op: 'review', reason: 'failed' });
+      return { status: 500, body: { ok: false, error: `Review failed: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown error'}${code ? ` (SQLSTATE ${code})` : ''}` } };
+    }
   }
   const id = params?.get('id') ?? null;
   if (id !== null) {

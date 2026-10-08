@@ -101,15 +101,17 @@ export async function cacheOverlayProperties(check: Check, db: Db) {
       select $1, $2, $3, 'made', $4, 'Invented pressure', now(), 'email' from generate_series(1, $5::int)`,
     [target, carrier, vehicle, user, config.guard.asksPerConnectorPerQuarter]);
     const held = await same();
-    check('CACHE2 live connector pressure holds usable paths and keeps restricted paths excluded',
-      held.ok && held.actual.routes.some((r) => r.verdict === 'hold') && held.actual.routes.every((r) => r.verdict !== 'recommend'),
+    // Feedback 0124 (Juan, 8 Oct 2026: "flag only"): pressure flags the introducer busy and holds nothing.
+    check('CACHE2 live connector pressure flags usable paths busy, holds none, and keeps restricted paths excluded',
+      held.ok && held.actual.routes.some((r) => r.verdict === 'recommend' && r.askLoad?.busy === true)
+        && held.actual.routes.every((r) => r.verdict !== 'hold' && (r.verdict === 'excluded' || r.askLoad?.busy === true)),
       'Verdicts, folds and distinct usable-chain counts agree with the full live-search oracle after new asks.');
 
     check('CACHE2 full candidate counts survive compaction, presentation filters and live guards',
       first.actual.candidateCounts?.total === prefixes && first.actual.candidateCounts.unavailable === 0
         && tooCool.routes.length === 0 && isDeepStrictEqual(tooCool.candidateCounts, first.actual.candidateCounts)
         && guarded.actual.candidateCounts?.total === prefixes && guarded.actual.candidateCounts.unavailable === 1
-        && held.actual.candidateCounts?.total === prefixes && held.actual.candidateCounts.unavailable === prefixes,
+        && held.actual.candidateCounts?.total === prefixes && held.actual.candidateCounts.unavailable === 1,
       'Recorded paths count every inspected candidate, and held/unavailable totals refresh from all candidates before visible-route selection.');
 
     const boundary = new Date('2026-09-01T00:00:00Z');
