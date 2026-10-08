@@ -27,6 +27,9 @@ meetings), on a production build.
   batch ended. The route warm-up resolves only merged records when it lists its targets (0.86 s → 0.1 s, same targets).
 - **Materials: the "To" menu lists the LPs on a pipeline,** not every person and organization on file (115,000
   options and 19 MB of page on the invented copy; now under 1 MB).
+- **The next LP's score detail after a move: 0.7 s → 0.05 s.** A move to Selected is a person's change, so the
+  detail of the LP shown next waited for the plans to rebuild, though nothing about that LP had changed. The detail
+  now answers from a build begun in the last minute (a guess) and the rebuild runs behind it.
 - **An organization-LP import no longer blocks status moves.** It locked the pursuits table against all updates
   while it ran; it only inserts pursuits, and the table's unique key already stops duplicates, so that lock is gone.
 
