@@ -11,7 +11,7 @@ import { mutationProfileAllowed } from '@/lib/mutation-policy';
 import { beginRun, finishRun } from '@/lib/workflows/ledger';
 import { describeImportError } from '@/lib/import-jobs/store';
 import { auditSync, type SyncCaller } from './auth';
-import { bundleHash, checkBundle, DECISIONS, keyOf, PROSPECTS, REVIEW, writtenAt, type PushBundle, type Rejection } from './bundle';
+import { bundleHash, checkBundle, DECISIONS, isRetire, keyOf, PROSPECTS, REVIEW, writtenAt, type PushBundle, type Rejection } from './bundle';
 
 /**
  * POST /api/sync/push (docs/deploy/railway.md §7; Juan, 4 Oct 2026, decision F: research runs in the cloud
@@ -23,7 +23,8 @@ import { bundleHash, checkBundle, DECISIONS, keyOf, PROSPECTS, REVIEW, writtenAt
  *   2. idempotent by content hash: the same push again answers the first run and writes nothing;
  *   3. recorded as a workflow-ledger run (operation "push", its Mac run as parent when given);
  *   4. kept as received under enrich/inbox/<run>/, with any file it replaces under replaced/;
- *   5. published into enrich/raw, enrich/strategy or enrich/ as the workflow would have written it;
+ *   5. published into enrich/raw, enrich/strategy or enrich/ as the workflow would have written it (a W5 retire file,
+ *      `{ "retire": true, "reason" }`, removes the strategy file at its path instead, keeping it under replaced/);
  *   6. followed by the normal findings import, queued as the token's owner.
  * A refused push writes nothing and answers every reason, by file. Only an accepted push touches disk.
  *
@@ -125,6 +126,10 @@ async function serverProblems(bundle: PushBundle, enrich: string): Promise<Rejec
       continue;
     }
     const existing = await readJson(target);
+    if (isRetire(f.content)) {
+      if (existing === undefined) out.push({ path: f.path, problems: ['the server has no file at this path to retire'] });
+      continue;
+    }
     if (existing === undefined) continue;
     if (existing === null) { out.push({ path: f.path, problems: ['the server\'s copy does not parse; an Admin looks at it first'] }); continue; }
     if (JSON.stringify(existing) === JSON.stringify(f.content)) continue;
@@ -259,6 +264,18 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
       else for (const f of bundle.files) {
         const target = join(enrichReal, f.path);
         const before = await readFile(target, 'utf8').catch(() => null);
+        if (isRetire(f.content)) {
+          // Removed, never lost: the file goes to this push's replaced/ first.
+          if (before !== null) {
+            await mkdir(dirname(join(enrichReal, inbox, 'replaced', f.path)), { recursive: true });
+            await copyFile(target, join(enrichReal, inbox, 'replaced', f.path));
+            await unlink(target);
+            replaced++;
+          }
+          published.push(f.path);
+          written++;
+          continue;
+        }
         if (before !== null && before !== text(f.path, f.content)) {
           await mkdir(dirname(join(enrichReal, inbox, 'replaced', f.path)), { recursive: true });
           await copyFile(target, join(enrichReal, inbox, 'replaced', f.path));

@@ -387,6 +387,10 @@ and push up results".
   (append-only, a row already there is skipped). No import is queued: an Admin applies them with Merge duplicate
   identities, which judges each row against the identities then.
 
+- **Retiring a strategy file** (8 Oct). A W5 push file whose content is `{ "retire": true, "reason": "…" }` removes
+  the server's strategy file at that path, keeping it under the push's `inbox/<run>/replaced/`, and queues the import. A path
+  with no file, a missing reason or any other field is refused. Use it for a second file on one LP and vehicle (the
+  import refuses both) and for orphan files.
 - **`POST /api/sync/vehicles`** (6 Oct; Juan: "i really want you to be able to do this"). An Admin adds a vehicle
   by token, so Claude can add one without anyone clicking through Settings → Vehicles. One JSON object (`name`,
   `slug`, `kind`, `exemption`, optional `phase`, `target`, `opens`, `closes`, `aliases`; 4 KB at most; an unknown

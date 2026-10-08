@@ -36,6 +36,14 @@ export const DECISIONS = /^identity-decisions(?:-[\w-]+)?\.jsonl$/;
 /** A prospects file, by the name it is pushed with; the server writes it under a run-specific name (lib/sync/push.ts). */
 export const PROSPECTS = /^prospects\/([A-Za-z0-9][\w.-]{0,99})\.jsonl$/;
 
+/**
+ * A W5 file whose content is `{ "retire": true, "reason": "…" }` removes the server's strategy file at that path
+ * (8 Oct 2026: a push could replace a file but not remove one, so 21 LPs kept two files for one vehicle, which the
+ * import refuses both of, and 74 orphan files stayed). The removed file is kept under the push's inbox, replaced/.
+ */
+export const isRetire = (c: unknown): c is { retire: true; reason: string } =>
+  !!c && typeof c === 'object' && !Array.isArray(c) && (c as { retire?: unknown }).retire === true;
+
 /** The key a file is about, or null for a review file. */
 export const keyOf = (path: string): string | null => RAW.exec(path)?.[1] ?? STRATEGY.exec(path)?.[2] ?? null;
 
@@ -87,7 +95,11 @@ export function checkBundle(input: unknown, maxFiles: number): { bundle: PushBun
       if (!Array.isArray(f.content) || !f.content.length) problems.push('a decisions file is a non-empty list of rows');
       else (f.content as unknown[]).forEach((row, r) => problems.push(...identityDecisionProblems(row).map((p) => `row ${r + 1}: ${p}`)));
     } else if (raw) { rawKeys.push(raw[1]!); problems.push(...check(f.content, raw[1])); }
-    else if (strategy) {
+    else if (strategy && isRetire(f.content)) {
+      const c = f.content as Record<string, unknown>;
+      if (Object.keys(c).some((k) => k !== 'retire' && k !== 'reason')) problems.push('a retire file holds only "retire": true and "reason"');
+      if (typeof c.reason !== 'string' || !c.reason.trim() || c.reason.length > 300) problems.push('a retire file says why, in "reason" (up to 300 characters)');
+    } else if (strategy) {
       problems.push(...checkStrategy(f.content, strategy[2]));
       if (strategy[1] && (f.content as { ask?: { vehicle?: unknown } } | null)?.ask?.vehicle !== strategy[1]) problems.push('ask.vehicle does not match its folder');
     } else if (review) {
