@@ -300,3 +300,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Bulk moves in a fixed handful of statements](entries/fast-bulk-moves.md)
 - [An attested merge clears the import's own "different ID" separation](entries/attested-merge-clears-id-separation.md)
 - [The Admin token reads Affinity](entries/affinity-by-token.md)
+- [A retype and a merge for one group apply together](entries/retype-then-merge.md)

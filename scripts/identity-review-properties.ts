@@ -292,6 +292,17 @@ export async function identityReviewProperties(check: Check, db: Db) {
       (!manualGroup || (manualMerge?.decisions!.applied === 0 && manualMerge.decisions!.refused.length === 1)) && await root(manual[0]!) !== await root(manual[1]!),
       `group ${manualGroup?.entityIds.length ?? 'none'}; refused ${JSON.stringify(manualMerge?.decisions!.refused)}`);
 
+    // Issue 0138: a retype and a merge for one group, in one file, both apply (they were refused as conflicting).
+    const mixed = [await entity('Mixed', 'person', 'warehouse', `mixed-${tag}-w`), await entity('Mixed', 'org', 'affinity', `org:mixed-${tag}-a`), await entity('Mixed', 'org', 'affinity', `org:mixed-${tag}-b`)];
+    const mixedGroup = (await run()).ambiguous.find(g => g.entityIds.includes(mixed[1]!));
+    const both = mixedGroup ? await run([
+      { line: 1, value: { group: identityReviewGroupId(mixedGroup.entityIds), decision: 'retype', members: [mixed[0]], newType: 'org', evidence, decided_by: 'invented-fixture-reviewer' } },
+      { line: 2, value: { group: identityReviewGroupId(mixedGroup.entityIds), decision: 'merge', members: [mixed[1], mixed[2]], survivor: mixed[1], ...attest('Mixed'), decided_by: 'invented-fixture-reviewer' } },
+    ]) : null;
+    check('IDENTITY REVIEW a retype and a merge for one group in one file both apply, in order (0138)',
+      !!mixedGroup && both?.decisions!.applied === 2 && both.decisions!.refused.length === 0 && await kind(mixed[0]!) === 'org' && await root(mixed[2]!) === mixed[1],
+      `group ${mixedGroup?.entityIds.length ?? 'none'}; applied ${both?.decisions!.applied}; refused ${JSON.stringify(both?.decisions!.refused)}`);
+
     const stale = await pair('Stale'), outsider = await entity('Unrelated');
     const beforeInvalid = await snapshot();
     const invalidInputs = [decision(stale, 'merge', { survivor: outsider }), decision(stale, 'merge', { members: [...stale, outsider] }), decision(stale, 'merge', { group: identityReviewGroupId([...stale, randomUUID()]) })];

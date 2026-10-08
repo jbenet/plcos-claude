@@ -127,7 +127,10 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
         // Which proposals applied and why any did not, so a token's caller (cloud-job.sh) can tell without the Developer page.
         const d=(result as {decisions?:import('@/lib/enrich/identity-decisions').IdentityDecisionReport}).decisions;
         return {merged:result.merged,ambiguous:result.ambiguous.length,
-          ...(d?{decisions:{applied:d.applied,skipped:d.skipped,refused:d.refused.slice(0,50),superseded:d.superseded.length,separations:d.separations.length}}:{})};
+          // The newest lines first (issue 0138: the first 50 were all old lines, and a new proposal's refusal was cut off).
+          ...(d?{decisions:{applied:d.applied,skipped:d.skipped,refusedCount:d.refused.length,
+            refused:[...d.refused].sort((a,b)=>b.line-a.line).slice(0,50),superseded:d.superseded.length,
+            supersededLines:[...d.superseded].sort((a,b)=>b.line-a.line).slice(0,50),separations:d.separations.length}}:{})};
       } catch {
         await finishRun(run,{status:'failed',requests:0,records:0,newRecords:0,note:'Import stopped; review committed results before retrying.'});
         throw new Error('Import stopped.');
