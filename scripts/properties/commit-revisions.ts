@@ -95,6 +95,20 @@ export async function commitRevisionProperties(check: Check) {
         check('REVISIONS let a status change through while another transaction writes notes and identities',
           waited < 1000 && BigInt(end.read) > BigInt(during.read) && stamped?.revision === end.route && BigInt(end.route) > BigInt(during.route),
           `waited ${waited.toFixed(0)} ms; read ${during.read} → ${end.read}; org stamped ${stamped?.revision}, route ${end.route}`);
+
+        // A committed stamp can equal a later transaction's id; that commit must not restamp it (network 018).
+        const other2 = await db.one<{ id: string }>(`insert into identity.entity (entity_type, display_name) values ('org', 'Invented Org 3') returning entity_id id`);
+        let id!: string;
+        await db.transaction(async tx => {
+          id = (await tx.one<{ t: string }>('select txid_current()::text t'))!.t;
+          await other.query(`update network.route_changed_entity set revision = $2 where entity_id = $1`, [other2!.id, id]);
+          // Move the route revision past this id, as other commits do, so this commit's stamp differs from it.
+          await other.query(`update network.route_revision set revision = revision + 1000 where singleton`);
+          await tx.query(`update identity.entity set display_name = 'Invented Org 4' where entity_id = $1`, [org]);
+        });
+        const kept = await db.one<{ revision: string }>(`select revision::text from network.route_changed_entity where entity_id = $1`, [other2!.id]);
+        check('REVISIONS restamp only the committing transaction\'s own changed entities',
+          kept?.revision === id, `entity stamped ${id} before; after another commit ${kept?.revision}`);
       } finally { await other.close(); }
     }
   } finally { await db.close(); }

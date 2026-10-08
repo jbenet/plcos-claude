@@ -308,4 +308,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Timeline notes in one short line](entries/tight-notes.md)
 - [Meetings from the calendar, read only](entries/calendar-read-only.md)
 - [Pages stay fast while imports run; the LP and vehicle status pages much quicker](entries/faster-pages-during-imports.md)
+- [Writes no longer deadlock on the route change log; the list and the plan share one read](entries/route-marks-and-shared-reads.md)
 - [Travel and Events on the Calendar](entries/calendar-travel-events.md)

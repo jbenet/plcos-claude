@@ -98,6 +98,21 @@ export async function cacheRetryProperties(check: Check) {
       recent === 'build 1' && fresh === 'build 2' && loads === 2 && old === 'build 2',
       `recent ${recent}, plain ${fresh}, too old ${old}; loads ${loads}`);
   }
+  {
+    // A rebuild behind an answer reads its inputs from other caches current, not their last builds.
+    const fixture = revisionFixture();
+    let inner = 0;
+    const input = buildCache(async () => `input ${++inner}`);
+    const page = buildCache(async () => `page from ${await input()}`);
+    const first = await withDb(fixture.db, () => page());
+    fixture.background();
+    const quick = await withDb(fixture.db, () => page());
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const rebuilt = await withDb(fixture.db, () => page());
+    check('page cache: a rebuild behind an answer reads its inputs current, not their earlier builds',
+      first === 'page from input 1' && quick === first && rebuilt === 'page from input 2',
+      `first ${first}, quick ${quick}, rebuilt ${rebuilt}`);
+  }
   const fixture = revisionFixture();
   let attempts = 0;
   const read = buildCache(async () => { attempts++; return 'stable'; });

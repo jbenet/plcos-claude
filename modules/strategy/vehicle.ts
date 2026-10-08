@@ -3,9 +3,16 @@ import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { CONTEXT_BY_RULE, isStale, type Strategy } from '@/lib/enrich/strategy';
 import { vehicleTotals, listExposures } from '@/modules/pipeline';
-import { touchpointSummaries } from '@/modules/meetings';
+import { touchpointSummaries, touchpointsByPair } from '@/modules/meetings';
+import { buildCache } from '@/lib/build-cache';
 import { strategyRouteSummaries, type RecordedRoute } from '@/modules/network';
 import { listPursuits } from './repo';
+
+/** One vehicle's pursuits and their touchpoints, read once per revision for both the list and the
+ * vehicle's plan, which each read them in full (performance pass, 8 Oct 2026). Immutable to callers. */
+export const pursuitsOn = buildCache((vehicleId: string) => listPursuits(vehicleId));
+export const touchesOn = buildCache(async (vehicleId: string) =>
+  touchpointsByPair((await pursuitsOn(vehicleId)).map((p) => ({ entityId: p.entityId, vehicleId }))));
 import { STATUSES, type PursuitStatus } from './types';
 
 const rules = config.strategyRanking;
@@ -48,7 +55,7 @@ interface ProfileRow { entity_id: string; note_id: string; at: Date; data: { res
  * No fit rows are required, and no global edge total is used as vehicle coverage. */
 export async function vehicleStrategy(vehicleId: string, now = new Date()) {
   const db = await getDb();
-  const [pursuits, totals, exposures] = await Promise.all([listPursuits(vehicleId), vehicleTotals(), listExposures(vehicleId)]);
+  const [pursuits, totals, exposures] = await Promise.all([pursuitsOn(vehicleId), vehicleTotals(), listExposures(vehicleId)]);
   const total = totals.find(t => t.vehicleId === vehicleId);
   if (!total) return null;
   const ids = [...new Set(pursuits.map(p => p.entityId))];
@@ -74,7 +81,7 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
         and a.subject_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         then strategy.canonical_pursuit_id(a.subject_id::uuid) end
       where p.vehicle_id=$1 and a.action='pursuit.status_set' and a.at <= $2 order by a.at,a.id`, [vehicleId, now]),
-    touchpointSummaries(pursuits, now), strategyRouteSummaries(ids, total.kind),
+    touchesOn(vehicleId).then((t) => touchpointSummaries(pursuits, now, t)), strategyRouteSummaries(ids, total.kind),
     db.query<{ entity_id: string; at: Date }>(`select a.canonical_id entity_id,max(n.created_at) at
       from identity.alias_pairs($1::uuid[]) a join research.note n on n.entity_id=a.entity_id where n.kind='context'
         and coalesce(n.data->>'vehicleId', '') in ('', $2::text) and not ${CONTEXT_BY_RULE} group by 1`, [ids, vehicleId]),

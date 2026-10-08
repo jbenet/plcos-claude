@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getDb, type Db } from '@/lib/db';
 import { withSharedDb } from '@/lib/db/scheduling';
 
@@ -18,6 +19,10 @@ async function readRevisions(db: Db): Promise<{ revision: string; foreground: st
 // answer starts a rebuild behind it, so in practice a build is as old as one rebuild; this bounds the
 // case where rebuilds keep failing.
 export const BACKGROUND_STALE_MS = 10 * 60_000;
+
+/** Set while a build runs: an input it reads from another cache is current, never an earlier build,
+ * or a rebuild behind an answer would keep the older inputs under the new revision. */
+const building = new AsyncLocalStorage<true>();
 
 interface Built<T> { value: T; foreground: string; started: number }
 interface State<T> {
@@ -63,7 +68,7 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
     // Shared with whoever asks next, so it never runs at maintenance priority (withSharedDb).
     const value: Promise<T> = withSharedDb(() => Promise.resolve().then(async () => {
       try {
-        const result = await load(...args);
+        const result = await building.run(true, () => load(...args));
         keep(state, key, { value: result, foreground, started });
         const holds = (await readRevision(db)) === revision && state.revision === revision;
         if (behind && holds && !state.entries.has(key)) state.entries.set(key, Promise.resolve(result));
@@ -87,7 +92,7 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
     if (!state) { state = { revision, entries: new Map(), latest: new Map(), behind: new Set() }; databases.set(db, state); }
     if (state.revision !== revision) { state.revision = revision; state.entries = new Map(); }
     const key = JSON.stringify(args), prior = state.entries.get(key);
-    const last = state.latest.get(key);
+    const last = building.getStore() ? undefined : state.latest.get(key);
     // A recent read does not wait for a build already running in front; it starts none of its own then.
     if (prior && !(recentMs !== null && last && Date.now() - last.started < recentMs)) return prior;
     const quick = last && (last.foreground === foreground ? Date.now() - last.started < BACKGROUND_STALE_MS
