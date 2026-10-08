@@ -311,3 +311,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Writes no longer deadlock on the route change log; the list and the plan share one read](entries/route-marks-and-shared-reads.md)
 - [The strategy page, the visualizations board and touchpoints, faster](entries/strategy-and-board-faster.md)
 - [Travel and Events on the Calendar](entries/calendar-travel-events.md)
+- [A W13 merge can name two records instead of a review group](entries/pair-merge-without-group.md)

@@ -88,7 +88,7 @@ An export previews the deterministic pass and rolls back its writes: it does not
 
 ```text
 {
-  group: exported SHA-256,
+  group: exported SHA-256 (a merge naming its members may leave it out; see below),
   decision: "merge" | "separate" | "retype",
   survivor?: canonical member UUID,
   members?: [canonical member UUIDs],
@@ -121,6 +121,14 @@ queue. When such a pair is still in a group (other members link them), a merge w
 attestation below clears that separation: it is marked undone with the decision named, and
 the merge applies (issue 0138, 8 Oct 2026). Only this rule's separations are cleared. A
 separation a person or a review recorded, and a reversed merge, still refuse the merge.
+
+A pair alone forms no group, so it has no exported hash. To merge such a pair, leave `group`
+out and name both records in `members` (full canonical UUIDs); every merge guard and the
+attestation below still apply. Only a merge may leave out `group`. For example (invented):
+
+```text
+{"decision":"merge","members":["<uuid A>","<uuid B>"],"survivor":"<uuid B>","evidence":[{"source":"https://example.org/about","as_of":"2026-10-08","quote":"<public excerpt>\nSame real organization: warehouse:<key A> = warehouse:<key B>"}],"decided_by":"<reviewer>"}
+```
 
 For every pair of different external IDs from each source across the complete selected
 components (aliases included), provide supporting identity evidence and an explicit local

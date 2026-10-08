@@ -11,6 +11,8 @@ export interface IdentityDecisionInput { line: number; value?: unknown; error?: 
 export interface IdentityDecision {
   group: string; decision: 'merge' | 'separate' | 'retype'; survivor?: string; members?: string[];
   newType?: 'person' | 'org'; evidence: Array<{ source: string; as_of: string; quote: string }>; decided_by: string;
+  /** A merge that left out the group and names its records instead (issue 0138). */
+  byMembers?: true;
 }
 export interface IdentityDecisionReport {
   applied: number; skipped: number;
@@ -44,8 +46,12 @@ export function identityDecisionProblems(value: unknown): string[] {
 
 function validate(value: unknown): IdentityDecision {
   if (!object(value)) fail('Decision must be an object');
-  const v = value as Record<string, unknown>;
-  if (typeof v.group !== 'string' || !/^[0-9a-f]{64}$/.test(v.group)) fail('group must be the exported SHA-256 group ID');
+  const v = { ...(value as Record<string, unknown>) };
+  // A merge of named records needs no review group (issue 0138: two records the import itself keeps apart, as
+  // different external IDs, never form one): its group is its members' own hash. Every merge guard still applies.
+  const byMembers = v.group === undefined && v.decision === 'merge' && Array.isArray(v.members) && v.members.length > 1 && v.members.every(uuid);
+  if (byMembers) v.group = identityReviewGroupId(v.members as string[]);
+  if (typeof v.group !== 'string' || !/^[0-9a-f]{64}$/.test(v.group)) fail('group must be the exported SHA-256 group ID (or, for a merge, leave it out and name the members)');
   if (typeof v.decision !== 'string' || !['merge', 'separate', 'retype'].includes(v.decision)) fail('decision must be merge, separate or retype');
   if (!nonempty(v.decided_by)) fail('decided_by is required');
   if (!Array.isArray(v.evidence) || !v.evidence.length || !v.evidence.every(e => object(e)
@@ -65,7 +71,7 @@ function validate(value: unknown): IdentityDecision {
     ...(v.members ? { members: [...v.members as string[]].sort() } : {}),
     ...(v.newType ? { newType: v.newType as 'person' | 'org' } : {}),
     evidence: (v.evidence as IdentityDecision['evidence']).map(e => ({ source: e.source.trim(), as_of: e.as_of, quote: e.quote.trim() })),
-    decided_by: (v.decided_by as string).trim() };
+    decided_by: (v.decided_by as string).trim(), ...(byMembers ? { byMembers: true as const } : {}) };
 }
 
 /** Separation is a full-group assertion: changing the member set requires a fresh review. */
@@ -139,7 +145,8 @@ export async function applyIdentityDecisions(tx: Queryable, by: string, report: 
     await tx.exec('savepoint identity_decision');
     try {
       if (variants.get(lane(d))!.size > 1) fail('Conflicting decisions for this group; keep one proposal per group');
-      const group = report.ambiguous.find(g => identityReviewGroupId(g.entityIds) === d.group);
+      const group = report.ambiguous.find(g => identityReviewGroupId(g.entityIds) === d.group)
+        ?? (d.byMembers && d.members ? { entityIds: d.members } : undefined);
       if (!group) fail('Group is stale, already settled, or absent from the current ambiguous pass; export again');
       const groupIds = group!.entityIds;
       const ids = d.members ?? groupIds;

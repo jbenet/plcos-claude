@@ -292,6 +292,36 @@ export async function identityReviewProperties(check: Check, db: Db) {
       (!manualGroup || (manualMerge?.decisions!.applied === 0 && manualMerge.decisions!.refused.length === 1)) && await root(manual[0]!) !== await root(manual[1]!),
       `group ${manualGroup?.entityIds.length ?? 'none'}; refused ${JSON.stringify(manualMerge?.decisions!.refused)}`);
 
+    // Issue 0138: two records the import keeps apart by their different keys form no review group; a merge naming them,
+    // with no group hash, applies on a full attestation and clears only that deterministic separation.
+    const keyed = async (suffix: string) => [await entity(suffix, 'org', 'warehouse', `org:${suffix.toLowerCase()}-${tag}-a`), await entity(suffix, 'org', 'warehouse', `org:${suffix.toLowerCase()}-${tag}-b`)];
+    const attestKeyed = (suffix: string) => ({ evidence: [{ ...evidence[0], quote: `Both company records give the same website and founding year.\nSame real organization: warehouse:org:${suffix.toLowerCase()}-${tag}-a = warehouse:org:${suffix.toLowerCase()}-${tag}-b` }] });
+    const groupless = (members: string[], extra: Record<string, unknown> = {}): IdentityDecisionInput => {
+      const input = decision(members, 'merge', extra), { group: _, ...value } = input.value as Record<string, unknown>;
+      return { ...input, value };
+    };
+    const lone = await keyed('PairOnly');
+    const lonePass = await run();
+    const loneSeparation = await db.one<{ id: string }>(`select assertion_id::text id from identity.match_assertion where kind='not_same_as'
+      and rule='identity:v1:different_external_id' and undone_at is null and merged_entity=any($1::uuid[]) and canonical_entity=any($1::uuid[])`, [lone]);
+    const unattested = await run([groupless(lone)]);
+    const loneMerge = await run([groupless(lone, attestKeyed('PairOnly'))]);
+    const loneCleared = loneSeparation ? await db.one<{ undone: boolean }>('select undone_at is not null undone from identity.match_assertion where assertion_id=$1', [loneSeparation.id]) : null;
+    check('IDENTITY REVIEW a merge naming two records with no group hash applies on a full attestation and clears the import\'s separation (0138)',
+      !lonePass.ambiguous.some(g => g.entityIds.includes(lone[0]!)) && !!loneSeparation && unattested.decisions!.applied === 0 && unattested.decisions!.refused.length === 1
+        && loneMerge.decisions!.applied === 1 && await root(lone[1]!) === lone[0] && !!loneCleared?.undone,
+      `separation ${loneSeparation ? 'found' : 'missing'}; unattested refused ${unattested.decisions!.refused.length}; applied ${loneMerge.decisions!.applied}; refused ${JSON.stringify(loneMerge.decisions!.refused)}`);
+    const keptApart = await keyed('PairKept');
+    await db.query(`insert into identity.match_assertion(kind,left_source,left_source_id,right_source,right_source_id,merged_entity,canonical_entity,rule,signals,note)
+      values('not_same_as','warehouse',$1,'warehouse',$2,$3,$4,'manual:fixture','{}'::jsonb,'Invented reviewer: different firms')`,
+      [`org:pairkept-${tag}-a`, `org:pairkept-${tag}-b`, keptApart[0], keptApart[1]]);
+    const keptMerge = await run([groupless(keptApart, attestKeyed('PairKept'))]);
+    const notMerge = await run([groupless(keptApart, { decision: 'separate' })]);
+    check('IDENTITY REVIEW a group-less merge still refuses a separation a person recorded, and only a merge may leave out the group',
+      keptMerge.decisions!.applied === 0 && keptMerge.decisions!.refused.length === 1 && await root(keptApart[1]!) === keptApart[1]
+        && notMerge.decisions!.applied === 0 && notMerge.decisions!.refused.length === 1,
+      `merge refused ${JSON.stringify(keptMerge.decisions!.refused)}; separate refused ${notMerge.decisions!.refused.length}`);
+
     // Issue 0138: a retype and a merge for one group, in one file, both apply (they were refused as conflicting).
     const mixed = [await entity('Mixed', 'person', 'warehouse', `mixed-${tag}-w`), await entity('Mixed', 'org', 'affinity', `org:mixed-${tag}-a`), await entity('Mixed', 'org', 'affinity', `org:mixed-${tag}-b`)];
     const mixedGroup = (await run()).ambiguous.find(g => g.entityIds.includes(mixed[1]!));
