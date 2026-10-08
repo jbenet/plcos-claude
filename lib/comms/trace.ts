@@ -17,9 +17,9 @@ import { isAutoReply, summarize, type Direction, type Touchpoint, type Touchpoin
  * This file is pure: no database, the same input in any order gives the same output (a property).
  */
 
-export type TraceSource = 'affinity' | 'gmail' | 'plcos' | 'linear';
+export type TraceSource = 'affinity' | 'gmail' | 'plcos' | 'linear' | 'calendar';
 export const SOURCE_LABEL: Record<TraceSource, string> = {
-  affinity: 'Affinity', gmail: 'Gmail, via juanmail', plcos: 'PLC OS', linear: 'Linear',
+  affinity: 'Affinity', gmail: 'Gmail, via juanmail', plcos: 'PLC OS', linear: 'Linear', calendar: 'Google Calendar, via mailguard',
 };
 export type Confidence = 'exact' | 'high' | 'medium' | 'low';
 
@@ -98,7 +98,7 @@ export interface Merged {
 }
 
 export const sourceOf = (t: Pick<Touchpoint, 'source' | 'sourceRef'>): TraceSource =>
-  t.source === 'gmail' ? 'gmail' : t.source === 'us' ? 'plcos' : t.source === 'linear' ? 'linear' : 'affinity';
+  t.source === 'gmail' ? 'gmail' : t.source === 'us' ? 'plcos' : t.source === 'linear' ? 'linear' : t.source === 'calendar' ? 'calendar' : 'affinity';
 
 const DAY = 86_400_000;
 const dayOf = (d: Date) => d.toISOString().slice(0, 10);

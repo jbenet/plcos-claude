@@ -54,6 +54,11 @@ export const actionRules = {
   'app/email/actions.ts#testMailguardAction': { action: 'mutate', scope: 'self' },
   'app/email/actions.ts#forgetMailguardAction': { action: 'mutate', scope: 'self' },
   'app/email/actions.ts#demoMailguardAction': { action: 'mutate', scope: 'self' },
+  // Read calendars now (issue 0021): queues the read-only calendar job, which reads every connected person's own calendars.
+  'app/email/actions.ts#readCalendarsAction': { action: 'mutate', scope: 'self' },
+  // Your own calendar addresses (issue 0021), for the Travel and Events lanes. Read only at the calendar.
+  'app/settings/calendar-actions.ts#addCalendarFeedAction': { action: 'mutate', scope: 'self' },
+  'app/settings/calendar-actions.ts#removeCalendarFeedAction': { action: 'mutate', scope: 'self' },
   // MCP tokens (docs/26): a person's own; the service revokes only the caller's.
   // Settings → Connections (docs/deploy/railway.md §3): Admin only; a refusal is audit-logged.
   'app/settings/connections/actions.ts#saveSettingAction': { action: 'admin', scope: 'global' },

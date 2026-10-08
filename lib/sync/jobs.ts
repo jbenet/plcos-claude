@@ -16,11 +16,13 @@ import { pushRefusal, type PushAnswer } from './push';
  * meetings, each with its default request cap and delta read, and translate (the local mapping, then reconciliation).
  * Affinity stays read-only; no cap override is accepted.
  *
- *   POST { "kind": "export" | "findings" | "duplicates" }   → 202 { job: { id, kind, status } }
+ * And a calendar read (issue 0021, Juan 8 Oct 2026: read only): every connected person's calendars through mailguard.
+ *
+ *   POST { "kind": "export" | "findings" | "duplicates" | "calendar" }   → 202 { job: { id, kind, status } }
  *   POST { "kind": "affinity", "operation": "slice" | "history" | "notes" | "meetings" | "translate" }
  *   GET  ?job=<id>                          → 200 { job: { id, kind, status, phase, error, counts, … } }
  */
-const KINDS: readonly ImportKind[] = ['export', 'findings', 'duplicates', 'affinity'];
+const KINDS: readonly ImportKind[] = ['export', 'findings', 'duplicates', 'affinity', 'calendar'];
 const AFFINITY_OPERATIONS = ['slice', 'history', 'notes', 'meetings', 'translate'] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

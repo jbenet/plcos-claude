@@ -9,7 +9,7 @@ import { elide, outline, type OutlineRow } from '@/lib/email/mime-parse';
 import { newThread, replyTo, type ThreadHeaders } from '@/lib/email/threading';
 import {
   checkedClient, connection, connectKey, fakeMintKey, FAKE_DOMAIN, forgetKey, isTransient, KeyRefused, MailguardError, mailguardRuntime, NotConnected,
-  type DraftFields, type Inspection, type MailguardClient, type MailguardRuntime,
+  type CalendarAccess, type DraftFields, type Inspection, type MailguardClient, type MailguardRuntime,
 } from '@/lib/connectors/mailguard';
 import { appendAudit, listVehicles } from '@/modules/platform';
 import { getEntity } from '@/modules/identity';
@@ -424,15 +424,18 @@ export interface MailStatus {
   code: string | null;
   /** The check failed because mailguard did not answer, not because of the key. */
   transient: boolean;
+  /** Whether this key reads the person's calendar (issue 0021), when the key passed. */
+  calendar: CalendarAccess | null;
 }
 
-const off = (mode: MailStatus['mode'], why: string | null): MailStatus => ({ mode, why, connected: false, ok: false, mailbox: null, tool: null, capabilities: [], extras: [], canThread: false, source: null, checkedAt: null, reason: null, code: null, transient: false });
+const off = (mode: MailStatus['mode'], why: string | null): MailStatus => ({ mode, why, connected: false, ok: false, mailbox: null, tool: null, capabilities: [], extras: [], canThread: false, source: null, checkedAt: null, reason: null, code: null, transient: false, calendar: null });
 
 function statusOf(mode: 'mailguard' | 'fake', i: Inspection | null): MailStatus {
   if (!i) return off(mode, null);
   return {
     mode, why: null, connected: true, ok: i.ok, mailbox: i.mailbox, tool: i.tool, capabilities: i.capabilities, extras: i.ok ? i.extras : [],
     canThread: i.ok && i.canThread, source: i.source, checkedAt: new Date(i.at).toISOString(), reason: i.ok ? null : i.reason, code: i.ok ? null : i.code, transient: !i.ok && isTransient(i.code),
+    calendar: i.ok ? i.calendar : null,
   };
 }
 
@@ -511,7 +514,7 @@ export async function forgetMailguard(actor: Actor, runtime?: MailguardRuntime):
 export async function connectDemoMailguard(actor: Actor, runtime?: MailguardRuntime): Promise<MailStatus> {
   const rt = runtime ?? mailguardRuntime();
   if (rt.mode !== 'fake' || !rt.fakeDir) throw new DraftRefused('Demo tokens exist only on the demo, with its fake mailguard.');
-  const key = await fakeMintKey(rt.fakeDir, { mailbox: `${actor.handle}@${FAKE_DOMAIN}` });
+  const key = await fakeMintKey(rt.fakeDir, { mailbox: `${actor.handle}@${FAKE_DOMAIN}`, grant: ['draft', 'read.metadata', 'calendar.read'] });
   return connectMailguard(actor, key, rt);
 }
 

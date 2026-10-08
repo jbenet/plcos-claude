@@ -60,6 +60,8 @@ async function main() {
   await step('sync-feedback', async () => (await import('./properties/sync-feedback')).syncFeedbackProperties(check));
   await step('cloud-w1', async () => (await import('./properties/cloud-w1')).cloudW1Properties(check));
   await step('cloud-w5', async () => (await import('./properties/cloud-w5')).cloudW5Properties(check));
+  await step('calendar', async () => (await import('./properties/calendar')).calendarProperties(check));
+  await step('calendar-feeds', async () => (await import('./properties/calendar-feeds')).calendarFeedProperties(check));
   await step('cloud-sourcing', async () => (await import('./properties/cloud-sourcing')).cloudSourcingProperties(check));
   await step('daily-timer', async () => (await import('./properties/daily-timer')).dailyTimerProperties(check));
   await step('cache-retries', async () => (await import('./properties/cache-retries')).cacheRetryProperties(check));

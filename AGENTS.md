@@ -136,6 +136,13 @@ Half of what went wrong in the alternate designs was building the wrong layer fi
   (decided 2 Oct 2026, `docs/25-email-drafts.md`): drafts go into each person's own Gmail to
   send themselves. Since 3 Oct 2026 only through mailguard (docs/25 §12): only
   `lib/connectors/mailguard/` talks to it, it cannot send, and it refuses a key that can.
+  Google Calendar, **read only**, through the same mailguard key (decided 8 Oct 2026, issue 0021,
+  `docs/25-email-drafts.md` §13): meetings land next to LPs; no event is written or answered, and a key
+  holding `calendar.invite` or `calendar.respond` is refused.
+  Calendars, **read only**, by each calendar's private iCal (ICS) address (decided 8 Oct 2026, issue 0021;
+  Juan: "1 - yes" to "may PLC OS read people's calendars, read-only?"): the Calendar page's Travel and Events
+  lanes. Only `lib/connectors/ics/` fetches one, only https to named calendar services; nothing is written back.
+  Addresses are pasted per person in Preferences and kept encrypted (`docs/25-email-drafts.md` §14).
 - **No auth integration.** Local user switcher only. LabOS comes later.
 - **No graph database.** Recursive CTEs in Postgres handle two- and three-hop enumeration
   at this scale.

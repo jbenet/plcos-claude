@@ -288,3 +288,45 @@ existed), and keeping it would keep a `gmail.compose` grant — which can send �
 3. Restart `npm run dev:real`. The log says whether the Keychain key is drafts-only; Preferences → Email shows
    the mailbox and **Test the connection**.
 4. Others: create a tool in mailguard with the same grant and paste its key in Preferences → Email.
+
+## 13. The calendar, read only (8 Oct 2026, issue 0021)
+
+Juan approved reading people's calendars, read only, so meetings appear next to LPs ("1 - yes", 8 Oct 2026).
+What Capital OS asked of mailguard is in the shared `mailguard/calendar-requirements.md`; mailguard's calendar
+arrives in its v0.9 (DESIGN §5.8, §6.1).
+
+- **Same key.** The person's mailguard key, with `calendar.read` added to its tool (`calendar.read.details` adds
+  descriptions, which help tag a meeting to a vehicle). Preferences → Email says whether the calendar is read, and
+  why not: mailguard without a calendar, its policy leaving the calendar off, or Google to reconnect.
+- **Nothing written, nobody emailed.** The allowlist (`lib/connectors/mailguard/allowlist.ts`) has two calendar
+  routes, both GET: the calendars, and one calendar's events in a time range (never a search). Event writes,
+  answers, free/busy and the Outbox are refused before they leave. A key holding `calendar.invite` or
+  `calendar.respond`, whose own policy grants `calendar.*`, or for which mailguard says `can_notify_others`, is
+  refused outright (`scope.ts`), drafting included.
+- **What is kept** (`lib/calendar-sync.ts`): each occurrence from about 18 months back to 90 days ahead, seen in
+  anyone's calendar, becomes one touchpoint (source `calendar`) per LP whose address is on it, and their current
+  firm: the date, who on the team was there, and what it is about. No title, description or outside guest's name,
+  as with Affinity's. A meeting Affinity already has for that LP that day stays Affinity's. Cancelled meetings
+  go; meetings gone from every calendar go only after a read of every connected calendar. Reconciliation then
+  reads them.
+- **When.** Daily, after Affinity's read; and "Read calendars now" in Preferences → Email, or `cloud-job.sh`'s
+  `calendar` job.
+## 14. Travel and Events from calendar addresses (8 Oct 2026, issue 0021)
+
+Juan asked for the team's travel and the events they attend on the Calendar page, read from their Google
+Calendars, and approved reading calendars read only ("1 - yes", 8 Oct 2026). This needs no Google sign-in, no
+mailguard and no Mac: each calendar's private iCal address is a read-only feed.
+
+- **Pasting.** Preferences → Email → Calendars: a person pastes a calendar's private address (Google Calendar:
+  Settings → the calendar → "Secret address in iCal format") and picks its lane, Travel or Events. The address
+  is kept encrypted in `platform.person_secret` (purpose `calendar-ics`), like the mailguard key, and shown back
+  only as its service and last four characters. It is never logged and never in an error.
+- **Fetching** (`lib/connectors/ics/`, the only code that fetches one): one GET, https only, to Google Calendar,
+  TripIt, Outlook or iCloud (a GUESS list; add a service by name when needed), no redirects, 8 s and 5 MB at most.
+  Nothing is ever sent to a calendar. Each address is read at most hourly, when the Calendar page opens; a
+  failed read keeps the last good copy for a day and says so. Nothing is stored but that copy, in memory.
+- **What shows** (`lib/calendar-feeds.ts`): on the all-vehicles Calendar only, a quarter back and half a year
+  ahead, each event as a mark with its title, place and whose calendar it came from. An event on two people's
+  calendars is one mark with both. Cancelled events are left out. Simple repeats are expanded; a richer rule
+  shows its first occurrence and says so. Until someone adds an address, the page says where to paste one.
+- **Demo and previews** never fetch one.

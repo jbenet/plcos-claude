@@ -57,7 +57,7 @@ export const refOf = (t: Touchpoint) => (t.sourceRef ? `${t.source}:${t.sourceRe
 
 function said(t: Touchpoint): string {
   const who = t.attendees.length ? `, with ${t.attendees.join(', ')}` : '';
-  const from = t.source === 'us' ? 'logged here' : t.source === 'affinity' ? 'from Affinity' : `from ${t.source}`;
+  const from = t.source === 'us' ? 'logged here' : t.source === 'affinity' ? 'from Affinity' : t.source === 'calendar' ? 'from the calendar' : `from ${t.source}`;
   // Why it counts for this raise (N59): the rule that read it, so a correction finds the others.
   const why = t.source !== 'us' && t.aboutBasis ? `; about the raise: ${t.aboutBasis}` : '';
   return `${CHANNEL_LABEL[t.channel]} on ${t.on ? shortDate(t.on) : 'an unknown date'}${who} (${from}${why})`;

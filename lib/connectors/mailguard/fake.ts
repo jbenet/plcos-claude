@@ -12,24 +12,37 @@ import { KNOWN_CAPABILITIES } from './scope';
  *
  * It imitates mailguard's REST surface as read on 3 Oct 2026 (src/lib/rest.ts, actions.ts, gate.ts):
  * effective capabilities are the system grant ∩ the tool's; a key sees only drafts it made; a reply
- * takes the original's thread and headers; errors are `{error, layer, rule, requestId}`.
+ * takes the original's thread and headers; errors are `{error, layer, rule, requestId}`. The calendar is
+ * mailguard v0.9's (DESIGN §5.8, §6.1, read 8 Oct 2026): calendars, events in a range as single occurrences, and
+ * the write and answer routes, which answer and are recorded as the send routes are.
  */
 
 export const FAKE_BASE = new URL('https://mailguard.fake.example.test');
 export const FAKE_DOMAIN = 'fake-gmail.example.test';
 
-interface FakeKey { mailbox: string; tool: string; grant: string[]; systemGrant: string[]; revoked: boolean; expiresAt?: string; drafts: string[] }
+interface FakeKey { mailbox: string; tool: string; grant: string[]; systemGrant: string[]; revoked: boolean; expiresAt?: string; drafts: string[]; calendar?: 'ok' | 'off' | 'reconnect'; notifyFlag?: boolean }
+/** An event as mailguard presents it (presentEvent), with what the properties need. */
+export interface FakeEvent {
+  id: string; status: 'confirmed' | 'tentative' | 'cancelled'; summary: string; description?: string;
+  start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string };
+  iCalUID: string; recurringEventId?: string;
+  organizer: { email: string; self?: boolean };
+  attendees: Array<{ email: string; displayName?: string; responseStatus?: string; self?: boolean; organizer?: boolean; resource?: boolean }>;
+}
+export interface FakeCalendar { id: string; name: string; primary: boolean; accessRole: string; events: FakeEvent[] }
 export interface FakeMessage {
   threadId: string; labels: string[]; messageIdHeader: string; subject: string;
   to: string[]; cc: string[]; bcc: string[]; text: string; html: string | null;
   attachments: Array<{ filename: string; mimeType: string; bytes: number }>;
   inReplyTo: string | null; references: string | null;
 }
-interface Mailbox { drafts: Record<string, string>; messages: Record<string, FakeMessage>; threads: Record<string, string[]> }
+interface Mailbox { drafts: Record<string, string>; messages: Record<string, FakeMessage>; threads: Record<string, string[]>; calendars?: FakeCalendar[] }
 export interface FakeState {
   keys: Record<string, FakeKey>;
   mailboxes: Record<string, Mailbox>;
   sendAttempts: Array<{ at: string; path: string }>;
+  /** Calendar writes and answers that reached the fake: each would have changed a calendar or emailed someone. */
+  calendarWrites?: Array<{ at: string; method: string; path: string }>;
   /** Every request that reached the fake, by action, for the properties. */
   calls: Record<string, number>;
 }
@@ -63,14 +76,17 @@ const id = (n = 8) => randomBytes(n).toString('hex');
 const json = (status: number, body: unknown): MailguardResponse => ({ status, headers: { get: () => null }, text: async () => JSON.stringify(body) });
 const refuse = (status: number, error: string, layer?: string, rule?: string) => json(status, { error, ...(layer ? { layer } : {}), ...(rule ? { rule } : {}), requestId: `fake-${id(4)}` });
 
-const grants = (list: string[], cap: string) => list.includes('*') || list.includes(cap) || (/^(read|organize)\./.test(cap) && list.includes(`${cap.split('.')[0]}.*`));
+/** Reads nest in mailguard: calendar.read.details implies calendar.read, which implies calendar.freebusy. */
+const IMPLIED: Record<string, string[]> = { 'calendar.read': ['calendar.read.details'], 'calendar.freebusy': ['calendar.read', 'calendar.read.details'] };
+const grants = (list: string[], cap: string) => list.includes('*') || list.includes(cap) || (/^(read|organize|calendar)\./.test(cap) && list.includes(`${cap.split('.')[0]}.*`))
+  || (IMPLIED[cap] ?? []).some((c) => list.includes(c));
 const effective = (k: FakeKey) => KNOWN_CAPABILITIES.filter((c) => grants(k.systemGrant, c) && grants(k.grant, c));
 
 /** Make an invented key for a mailbox, with a grant. The default is the drafts-only one we accept. */
-export async function fakeMintKey(dir: string, o: { mailbox: string; tool?: string; grant?: string[]; systemGrant?: string[]; expiresAt?: string }): Promise<string> {
+export async function fakeMintKey(dir: string, o: { mailbox: string; tool?: string; grant?: string[]; systemGrant?: string[]; expiresAt?: string; calendar?: 'ok' | 'off' | 'reconnect' }): Promise<string> {
   const key = `mg_${alnum(12)}_${alnum(40)}`;
   await withState(dir, (s) => {
-    s.keys[key] = { mailbox: o.mailbox.toLowerCase(), tool: o.tool ?? 'PLC Raise Tools (demo)', grant: o.grant ?? ['draft', 'read.metadata'], systemGrant: o.systemGrant ?? ['*'], revoked: false, drafts: [], ...(o.expiresAt ? { expiresAt: o.expiresAt } : {}) };
+    s.keys[key] = { mailbox: o.mailbox.toLowerCase(), tool: o.tool ?? 'PLC Raise Tools (demo)', grant: o.grant ?? ['draft', 'read.metadata'], systemGrant: o.systemGrant ?? ['*'], revoked: false, drafts: [], ...(o.expiresAt ? { expiresAt: o.expiresAt } : {}), ...(o.calendar ? { calendar: o.calendar } : {}) };
     s.mailboxes[o.mailbox.toLowerCase()] ??= { drafts: {}, messages: {}, threads: {} };
   });
   return key;
@@ -79,6 +95,22 @@ export async function fakeMintKey(dir: string, o: { mailbox: string; tool?: stri
 /** Change a key's grant at "mailguard", as a person editing the tool's policy would. */
 export async function fakeSetGrant(dir: string, key: string, grant: string[]): Promise<void> {
   await withState(dir, (s) => { if (s.keys[key]) s.keys[key]!.grant = grant; });
+}
+
+/** The person's calendar connection at "mailguard": connected, off, or waiting for them to reconnect. */
+export async function fakeSetCalendar(dir: string, key: string, state: 'ok' | 'off' | 'reconnect', notifyFlag?: boolean): Promise<void> {
+  await withState(dir, (s) => { if (s.keys[key]) { s.keys[key]!.calendar = state; if (notifyFlag !== undefined) s.keys[key]!.notifyFlag = notifyFlag; } });
+}
+
+/** Put a calendar in a mailbox, or events in one, as Google would hold them. */
+export async function fakeCalendar(dir: string, mailbox: string, cal: { id: string; name?: string; primary?: boolean; accessRole?: string }, events: FakeEvent[] = []): Promise<void> {
+  await withState(dir, (s) => {
+    const box = (s.mailboxes[mailbox.toLowerCase()] ??= { drafts: {}, messages: {}, threads: {} });
+    const cals = (box.calendars ??= []);
+    let c = cals.find((x) => x.id === cal.id);
+    if (!c) cals.push(c = { id: cal.id, name: cal.name ?? cal.id, primary: cal.primary ?? cals.length === 0, accessRole: cal.accessRole ?? 'owner', events: [] });
+    for (const e of events) { c.events = c.events.filter((x) => x.id !== e.id); c.events.push(e); }
+  });
 }
 
 export async function fakeRevoke(dir: string, key: string): Promise<void> {
@@ -111,10 +143,48 @@ export function fakeTransport(dir: string, opts: { now?: () => number } = {}): M
       s.sendAttempts.push({ at: new Date(now()).toISOString(), path: p });
       return json(200, { id: id(), threadId: id(), labels: ['SENT'] });
     }
+    // The calendar's write and answer routes answer too, so only the guard in front can be what stops one.
+    if (/^\/api\/v1\/calendars\/[^/]+\/events(\/[^/]+(\/respond)?)?$/.test(p) && init.method !== 'GET') {
+      count('calendar.write');
+      (s.calendarWrites ??= []).push({ at: new Date(now()).toISOString(), method: init.method, path: p });
+      return json(200, { id: id(), status: 'confirmed' });
+    }
+    const calendarReady = () => {
+      if ((k.calendar ?? 'ok') !== 'ok') return refuse(503, 'calendar_not_connected');
+      if (!may('calendar.freebusy')) return refuse(403, 'Denied by tool policy (grant): the calendar is not allowed', 'tool', 'grant');
+      return null;
+    };
+    if (init.method === 'GET' && p === '/api/v1/calendars') {
+      count('calendar.calendars');
+      const no = calendarReady();
+      if (no) return no;
+      return json(200, { calendars: (box.calendars ?? []).map((c) => ({ id: c.id, name: c.name, primary: c.primary, accessRole: c.accessRole, timeZone: 'UTC' })) });
+    }
+    const evCal = /^\/api\/v1\/calendars\/([^/]+)\/events$/.exec(p)?.[1];
+    if (evCal && init.method === 'GET') {
+      count('calendar.events.list');
+      const no = calendarReady();
+      if (no) return no;
+      if (!may('calendar.read')) return refuse(403, 'Denied by tool policy (grant): calendar.read is not allowed', 'tool', 'grant');
+      const cal = (box.calendars ?? []).find((c) => c.id === decodeURIComponent(evCal) || (evCal === 'primary' && c.primary));
+      if (!cal) return refuse(404, 'Calendar not found');
+      const from = Date.parse(url.searchParams.get('timeMin') ?? ''), to = Date.parse(url.searchParams.get('timeMax') ?? '');
+      if (!Number.isFinite(from) || !Number.isFinite(to)) return refuse(400, 'timeMin and timeMax are required');
+      const startOf = (e: FakeEvent) => Date.parse(e.start.dateTime ?? `${e.start.date}T00:00:00Z`);
+      const endOf = (e: FakeEvent) => Date.parse(e.end.dateTime ?? `${e.end.date}T00:00:00Z`);
+      const all = cal.events.filter((e) => endOf(e) > from && startOf(e) < to).sort((a, b) => startOf(a) - startOf(b));
+      const max = Number(url.searchParams.get('max') ?? 50), at = Number(url.searchParams.get('pageToken') ?? 0);
+      const page = all.slice(at, at + max);
+      const details = may('calendar.read.details');
+      return json(200, {
+        events: page.map((e) => ({ ...e, calendarId: cal.id, description: details ? e.description : undefined })),
+        nextPageToken: at + max < all.length ? String(at + max) : null,
+      });
+    }
     if (init.method === 'GET' && p === '/api/v1/me') {
       count('whoami');
       return json(200, {
-        tool: k.tool, mailbox: k.mailbox, capabilities: expired ? [] : caps,
+        tool: k.tool, mailbox: k.mailbox, capabilities: expired ? [] : caps, calendar: k.calendar ?? 'ok', ...(k.notifyFlag !== undefined ? { can_notify_others: k.notifyFlag } : {}),
         layers: [{ layer: 'system', policy: { grant: k.systemGrant } }, { layer: 'tool', policy: { grant: k.grant, ...(k.expiresAt ? { expiresAt: k.expiresAt } : {}) } }],
       });
     }
