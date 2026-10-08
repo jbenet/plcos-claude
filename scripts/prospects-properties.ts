@@ -62,8 +62,8 @@ export async function prospectsProperties(check: Check, db: Db) {
     "select body, kind, data from research.note where entity_id = any($1::uuid[]) and kind <> 'identity_creation'", [[direct, warehouse, w3]]);
   check('PROSPECTS keyed entity, warehouse and W3 imports create once, with traceable capacity notes',
     first.added === 3 && first.existing === 0 && first.ambiguous === 0 && second.added === 0 && second.existing === 3 && notes.length === 3
-    && notes.every(note => note.kind === 'context' && note.body.startsWith("Added by rule on Juan's instruction (26 Sep):")
-      && note.body.includes('capacity $500K–$1M (guess)') && typeof note.data.inputHash === 'string' && !!note.data.pursuitId),
+    && notes.every(note => note.kind === 'context' && !/Added by rule|instruction/.test(note.body) && note.data.rule === 'juan-prospects-2026-09-26'
+      && note.body.includes('Capacity $500K–$1M (guess)') && typeof note.data.inputHash === 'string' && !!note.data.pursuitId),
     `First added ${first.added}; repeated added ${second.added}, existing ${second.existing}; ${notes.length} context notes.`);
 
   const raceId = await makePerson('Invented Prospect Concurrent');
@@ -367,7 +367,7 @@ export async function prospectsProperties(check: Check, db: Db) {
       && created.find(p => p.entityId === direct)?.status === 'new' && created.find(p => p.entityId === warehouse)?.status === 'sourcing'
       && exported.some(c => c.key === direct && c.pursuits.some(p => p.status === 'new'))
       && exported.some(c => c.key === warehouse && c.pursuits.some(p => p.status === 'sourcing'))
-      && exported.some(c => c.key === direct && c.context.some(note => note.text.startsWith("Added by rule on Juan's instruction"))),
+      && exported.some(c => c.key === direct && c.context.some(note => note.text.includes('Capacity '))),
       `${created.length} normal pursuits; LP readable ${lp !== null}; new/sourcing and their notes checked in W0 data.`);
     check('PROSPECTS2 newly created people and their organization are included in the next W0 export',
       exported.some(c => c.key === born?.id && c.name === unseen.name && c.org === newOrg && c.pursuits.some(p => p.status === 'sourcing'))

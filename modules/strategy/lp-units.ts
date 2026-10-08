@@ -310,7 +310,7 @@ async function move(tx: Queryable, refs: Reference[], c: Candidate, firm: Firm, 
   }
   await absorbPursuits(tx, changes, refs, orgId, [person], actorId, LP_RULE, 'losers', (row, owner) =>
     `Re-pointed to ${firm.name} as the LP (docs/23): ${c.person_name} is a contact here${firm.role ? ` (${firm.role})` : ''}. `
-    + `Their pursuit ${row.pursuit_id}: owner ${owner}${row.owner_said ? ` (${row.owner_said})` : ''}, status ${row.status}. ${row.headline ?? ''}`
+    + `Their pursuit: ${row.status}, ${owner}${row.owner_said ? ` (${row.owner_said})` : ''}. ${row.headline ?? ''}`
     + `${row.next_step ? ` Next step: ${row.next_step}${row.next_step_on ? ` (${row.next_step_on})` : ''}.` : ''}`);
   const contact = (await tx.one<{ row: Row }>(`insert into strategy.pursuit_contact(pursuit_id,person_entity,role,origin_pursuit_id,source,created_by)
     values($1,$2,$3,$4,$5,$6) returning to_jsonb(pursuit_contact) row`, [orgId, c.person, firm.role, c.id, LP_RULE, by === 'person' ? actorId : null]))!.row;

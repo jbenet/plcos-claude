@@ -16,7 +16,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { config } from '../../config/deployment';
 import { actAs } from '../../lib/auth/acting';
 import { currentUser } from '../../lib/auth';
-import { DATA_NOTICE, render } from '../../lib/mcp/output';
+import { DATA_NOTICE, oneLine, render } from '../../lib/mcp/output';
 import { auditArgs, narrowedPrincipal, resetWindows } from '../../lib/mcp/envelope';
 import { READ_TOOLS, TOOLS, TOOL_NAMES } from '../../lib/mcp/tools';
 import { createMcpToken, revokeMcpToken, type AppUser } from '../../modules/platform';
@@ -41,6 +41,14 @@ const FORBIDDEN_CALLS = ['moveDraft', 'discardDraft', 'decideTicket', 'decide(',
 const RISKS = ['read', 'propose', 'write-guarded', 'send-adjacent'];
 
 export async function mcpProperties(check: Check, db: Db) {
+  // Issue 0141: a timeline row is one short line, without rule preambles or raw ids.
+  const lines = [oneLine("Added by rule on Juan's instruction (26 Sep): Backs neurotech funds; capacity $1M–$5M (guess)"),
+    oneLine('Merged pursuit 3f1af527-ac4c-43a6-bb32-01430e9b5a7e. Owner: Invented Owner. Status: new.'),
+    oneLine('juan-prospects-2026-09-26: an invented reason'), oneLine('First line.\nSecond line.'), oneLine('word '.repeat(80))];
+  check('MCP: a timeline note reads as one short line, with no rule preamble, raw id or second line (0141)',
+    lines[0] === 'Backs neurotech funds; capacity $1M–$5M (guess)' && lines[1] === 'Merged a duplicate pursuit. Owner: Invented Owner. Status: new.'
+      && lines[2] === 'an invented reason' && lines[3] === 'First line.' && lines[4]!.length <= 141 && lines[4]!.endsWith('…'),
+    JSON.stringify(lines.slice(0, 4)));
   resetWindows();
   const { POST } = await import('../../app/api/mcp/route');
   const url = 'http://localhost:3119/api/mcp';

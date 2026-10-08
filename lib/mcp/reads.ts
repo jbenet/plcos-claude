@@ -17,7 +17,7 @@ import { listVehicles, type AppUser, type Vehicle } from '@/modules/platform';
 import type { RouteSearch } from '@/modules/network';
 import { ADDRESSES_WITHHELD, bestAddresses } from '@/lib/outreach/addresses';
 import { strategyBrief, type Strategy } from '@/lib/enrich/strategy';
-import type { Answer } from './output';
+import { oneLine, type Answer } from './output';
 
 /**
  * The MCP read tools (docs/26-mcp.md). Each answer is an explicit, allowlisted projection — the
@@ -171,7 +171,7 @@ export async function lpSummary(user: AppUser, a: { pursuitId: string; routes?: 
       owner: p.ownerSaid ?? p.ownerName, status: p.status, statusSetAt: day(p.statusSetAt),
       evidenceRung: p.rung ? RUNG_LABEL[p.rung] : 'Nothing on file',
       source: p.source === 'us' ? 'set here' : `read from ${p.source}${p.sourceAsOf ? `, as of ${day(p.sourceAsOf)}` : ''}`,
-      ...(w ? { headline: p.headline, statusReason: p.statusReason, nextStep: p.nextStep, nextStepOn: day(p.nextStepOn) } : { words: 'Withheld: your access does not include the words on this vehicle.' }),
+      ...(w ? { headline: p.headline, statusReason: oneLine(p.statusReason), nextStep: p.nextStep, nextStepOn: day(p.nextStepOn) } : { words: 'Withheld: your access does not include the words on this vehicle.' }),
       contact: touch && {
         meetingsHeld: touch.meetingDates.length, lastTouch: day(touch.lastTouch), lastFromThem: day(touch.lastFromThem),
         waitingOnThemSince: day(touch.awaitingSince), nextMeeting: day(touch.nextMeeting), records: touch.total,
