@@ -311,3 +311,22 @@ arrives in its v0.9 (DESIGN §5.8, §6.1).
   reads them.
 - **When.** Daily, after Affinity's read; and "Read calendars now" in Preferences → Email, or `cloud-job.sh`'s
   `calendar` job.
+## 14. Travel and Events from calendar addresses (8 Oct 2026, issue 0021)
+
+Juan asked for the team's travel and the events they attend on the Calendar page, read from their Google
+Calendars, and approved reading calendars read only ("1 - yes", 8 Oct 2026). This needs no Google sign-in, no
+mailguard and no Mac: each calendar's private iCal address is a read-only feed.
+
+- **Pasting.** Preferences → Email → Calendars: a person pastes a calendar's private address (Google Calendar:
+  Settings → the calendar → "Secret address in iCal format") and picks its lane, Travel or Events. The address
+  is kept encrypted in `platform.person_secret` (purpose `calendar-ics`), like the mailguard key, and shown back
+  only as its service and last four characters. It is never logged and never in an error.
+- **Fetching** (`lib/connectors/ics/`, the only code that fetches one): one GET, https only, to Google Calendar,
+  TripIt, Outlook or iCloud (a GUESS list; add a service by name when needed), no redirects, 8 s and 5 MB at most.
+  Nothing is ever sent to a calendar. Each address is read at most hourly, when the Calendar page opens; a
+  failed read keeps the last good copy for a day and says so. Nothing is stored but that copy, in memory.
+- **What shows** (`lib/calendar-feeds.ts`): on the all-vehicles Calendar only, a quarter back and half a year
+  ahead, each event as a mark with its title, place and whose calendar it came from. An event on two people's
+  calendars is one mark with both. Cancelled events are left out. Simple repeats are expanded; a richer rule
+  shows its first occurrence and says so. Until someone adds an address, the page says where to paste one.
+- **Demo and previews** never fetch one.

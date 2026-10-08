@@ -13,7 +13,9 @@ import windowLook from './window.module.css';
 
 export const dynamic = 'force-dynamic';
 
-const LANES: Lane[] = ['close', 'spv', 'outreach', 'meetings', 'deadlines', 'grants', 'sprint'];
+const LANES: Lane[] = ['close', 'spv', 'outreach', 'meetings', 'deadlines', 'grants', 'travel', 'events', 'sprint'];
+/** GUESS: the Travel and Events lanes read a quarter back and half a year ahead; the chart shows 16 weeks of it. */
+const FEED_DAYS = { back: 90, forward: 183 };
 
 const WEEKS_BACK = 3;
 const WEEKS_FORWARD = 13;
@@ -31,7 +33,11 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
   if (slug !== 'all' && !vehicle) notFound();
 
   const now = new Date();
-  const marks = await timeline(vehicle?.name ?? null, now);
+  // Travel and Events (issue 0021): the team's calendars, on the all-vehicles calendar only — a trip is nobody's raise.
+  const feeds = vehicle ? null : await (await import('@/lib/calendar-feeds')).feedMarks(now, {
+    from: new Date(now.getTime() - FEED_DAYS.back * 86_400_000), to: new Date(now.getTime() + FEED_DAYS.forward * 86_400_000),
+  });
+  const marks = [...await timeline(vehicle?.name ?? null, now), ...(feeds?.marks ?? [])].sort((a, b) => a.from.getTime() - b.from.getTime());
   // The list and the numbers read the same rows (issue 0020). A detail that only repeats the
   // standing ("Held.", "Scheduled…") isn't printed: the standing column says it.
   const REPEATS_STANDING = /^(Held\.$|Held; counted for this raise|Scheduled\. An intention, not a fact\.$)/;
@@ -99,6 +105,17 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
         Calendar · {vehicle ? vehicle.name : 'all vehicles'}
       </div>
       <h1>What is happening, and when</h1>
+      {feeds && feeds.feeds === 0 && (
+        <p className="note" style={{ marginTop: 6 }}>
+          <b>Travel and Events</b> come from the team’s own calendars: paste calendar addresses in{' '}
+          <a href="/settings?section=email#calendars">Preferences</a>. Read only; nothing is written back.
+        </p>
+      )}
+      {feeds && feeds.problems.length > 0 && (
+        <p className="note" style={{ marginTop: 6, color: 'var(--amber)' }}>
+          {feeds.problems.map((p) => `${p.person}’s ${p.lane} calendar: ${p.why}`).join(' ')}
+        </p>
+      )}
       <p className="sublede">
         {WEEKS_BACK} weeks back and {WEEKS_FORWARD} forward as weekly counts, then every dated thing, newest first,
         with who on our team and which LP. Everything is read from the record that owns it — this page keeps

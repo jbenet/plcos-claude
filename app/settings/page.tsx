@@ -6,6 +6,7 @@ import { ThemePicker } from '@/components/shell/ThemePicker';
 import { auth } from '@/lib/auth';
 import { THEMES } from '@/lib/theme';
 import { MailguardConnect } from '@/components/email/MailguardConnect';
+import { CalendarFeeds } from '@/components/calendar/CalendarFeeds';
 import { McpTokens } from '@/components/mcp/McpTokens';
 import { VoiceCard } from '@/components/email/VoiceCard';
 import { SettingsLayout, settingsSection } from '@/components/settings/SettingsNav';
@@ -95,6 +96,9 @@ async function Preferences({ searchParams }: { searchParams: Promise<{ section?:
         {section === 'email' && <>
           {/* Your mailguard token, for moving drafts into your Gmail (docs/25 §12). Not taste: it is audited and lives server-side. */}
           <MailguardConnect />
+
+          {/* Your calendars' private addresses, for the Calendar page's Travel and Events lanes (issue 0021). Read only. */}
+          <CalendarFeeds />
 
           {/* How you write, for drafts written for you (docs/email-guidelines.md §Voice). Server-side: drafters read it. */}
           <VoiceCard />
