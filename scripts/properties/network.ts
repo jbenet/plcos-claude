@@ -22,14 +22,19 @@ export async function routeInputCacheProperties({ check, db }: SeedContext) {
   const entered = new Promise<void>((resolve) => { enter = resolve; });
   const blocked = new Promise<void>((resolve) => { release = resolve; });
   let loads = 0;
+  // Long enough for a waiting caller's one revision read to return.
+  const settled = () => new Promise<void>((resolve) => setTimeout(resolve, 200));
   const picker = buildCache(async () => {
     const attempt = ++loads, before = await name();
     if (attempt === 1) { enter(); await blocked; }
     return { before, after: await name() };
   });
   try {
+    // On Postgres the second caller's revision read runs on another connection, so it can land after
+    // the update below and rightly start its own load. Both callers are in before the data changes.
     const first = picker(), second = picker();
     await entered;
+    await settled();
     const coalesced = loads === 1;
     await db.query('update identity.entity set display_name = $2 where entity_id = $1',
       [entityId, 'Picker generation after import']);
@@ -43,13 +48,18 @@ export async function routeInputCacheProperties({ check, db }: SeedContext) {
         && warm !== a && loads === 2 && warm.before === 'Picker generation after import' && warm.after === warm.before,
       `Both waiting requests share the one load; the next request reloads (loads ${loads}).`);
 
-    let attempts = 0;
+    let attempts = 0, fail!: () => void;
+    const failing = new Promise<void>((resolve) => { fail = resolve; });
     const retry = buildCache(async () => {
       const attempt = ++attempts, result = await name();
-      if (attempt === 1) throw new Error('Invented picker read failure');
+      if (attempt === 1) { await failing; throw new Error('Invented picker read failure'); }
       return result;
     });
-    const failed = await Promise.allSettled([retry(), retry()]);
+    // Both callers join before the load fails, as above.
+    const callers = [retry(), retry()];
+    await settled();
+    fail();
+    const failed = await Promise.allSettled(callers);
     const recovered = await retry();
     check('CACHE a failed shared picker load is retried, then reused after success',
       failed.every((r) => r.status === 'rejected') && recovered === 'Picker generation after import'
