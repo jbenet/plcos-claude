@@ -84,8 +84,31 @@ function builtFrom(): string | null {
  * workers this server started are running it counts them (`importing`), so a deploy can wait rather than restart
  * the server under them (7 Oct 2026). A count only, read from lib/import-jobs/server.ts's handle set.
  */
-export function healthRoute() {
+export function healthRoute(): Response;
+export function healthRoute(request: Request): Response | Promise<Response>;
+export function healthRoute(request?: Request): Response | Promise<Response> {
+  // ?affinity=1: the Affinity requests this server sent per day and endpoint, the last 14 days. Counts and
+  // endpoint templates only, to watch the key's daily budget (Juan, 8 Oct 2026: under 300 a day). The plain
+  // check stays synchronous and never touches the database.
+  if (request && new URL(request.url).searchParams.get('affinity') === '1') return affinityUsage();
   const commit = builtFrom();
   const importing = (globalThis as { __importChildren?: Set<string> }).__importChildren?.size ?? 0;
   return Response.json({ ok: true, ...(commit ? { commit } : {}), ...(importing ? { importing } : {}) });
+}
+
+async function affinityUsage(): Promise<Response> {
+  try {
+    const { dailyRequests } = await import('@/modules/sources');
+    const rows = await dailyRequests('affinity', 14);
+    const days = new Map<string, { day: string; total: number; byEndpoint: Record<string, number> }>();
+    for (const r of rows) {
+      const d = days.get(r.day) ?? { day: r.day, total: 0, byEndpoint: {} };
+      d.total += r.n;
+      d.byEndpoint[r.endpoint] = r.n;
+      days.set(r.day, d);
+    }
+    return Response.json({ affinity: [...days.values()] }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch {
+    return Response.json({ error: 'Affinity usage is unavailable.' }, { status: 503 });
+  }
 }

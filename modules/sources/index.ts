@@ -7,5 +7,5 @@ export type {
 } from './types';
 export {
   finishRun, landRaw, latestConnectionTest, latestRaw, latestRun, logRequest, progressRun,
-  rawCounts, recentRequests, recordConnectionTest, requestsThisMonth, startRun,
+  dailyRequests, rawCounts, recentRequests, recordConnectionTest, requestsThisMonth, startRun,
 } from './repo';

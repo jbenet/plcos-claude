@@ -1,4 +1,5 @@
 import { config } from '@/config/deployment';
+import { getDb } from '@/lib/db';
 import { finishRun, landRaw, latestRun, progressRun, startRun, type SyncRun } from '@/modules/sources';
 import { AffinityError, AffinityRefused, type Query } from './client';
 import { discovered, initForMatching, type AffinityList } from './discover';
@@ -70,6 +71,8 @@ export interface SliceOptions {
   approvedUpTo?: number;
   /** Entries only: relationship strengths wait for another run. */
   skipRelationships?: boolean;
+  /** Every person's relationships, not just today's share of the rotation. */
+  allRelationships?: boolean;
   /** For the property harness. */
   ceiling?: number;
   overrides?: Parameters<typeof affinity>[0];
@@ -123,10 +126,14 @@ export async function runSlice(runBy: string | null, opts: SliceOptions = {}): P
     }
     detail.entries = perList;
 
-    // Phase 2, estimated first: one request per person for their relationships.
-    const estimate = wantRelationships.size;
+    // Phase 2, estimated first: one request per person for their relationships, but only for the
+    // people due today (relationshipsDue): new people at once, everyone else once per rotation.
+    const due = opts.allRelationships ? wantRelationships
+      : relationshipsDue(wantRelationships, await peopleWithRelationships(), config.affinity.relationshipRefreshDays);
+    const estimate = due.size;
     detail.estimate = estimate;
     detail.relationshipsFor = wantRelationships.size;
+    detail.relationshipsDue = due.size;
     const entryCount = Object.values(perList).reduce((a, b) => a + b, 0);
     const summary = `${entryCount} entries on ${targets.length} lists`;
     const allowed = opts.approvedUpTo ?? ceiling;
@@ -138,7 +145,7 @@ export async function runSlice(runBy: string | null, opts: SliceOptions = {}): P
     }
 
     let relationships = 0;
-    for (const personId of wantRelationships) {
+    for (const personId of due) {
       try {
         // The first page is the strongest hundred; routing never needs the hundred-and-first.
         const page = await client.get<{ data?: unknown[] }>(`/v2/persons/${personId}/relationships`, { limit: 100 });
@@ -156,6 +163,24 @@ export async function runSlice(runBy: string | null, opts: SliceOptions = {}): P
     await finish('failed', err instanceof Error ? err.message : 'unknown error');
   }
   return latestRun(SOURCE, 'slice');
+}
+
+/**
+ * Whose relationships to read this run. A relationship set is an interaction score per team member, which moves
+ * slowly, and it feeds only the inventory page; reading all of them every day was most of this tool's Affinity
+ * requests (Juan, 8 Oct 2026: bring the key under 300 calls a day). So a person never read before is read now, and
+ * everyone else on the day their id falls on, once every `days` days.
+ */
+export function relationshipsDue(want: ReadonlySet<number>, have: ReadonlySet<number>, days: number, now = Date.now()): Set<number> {
+  const today = Math.floor(now / 86_400_000) % Math.max(1, days);
+  return new Set([...want].filter((id) => !have.has(id) || id % Math.max(1, days) === today));
+}
+
+async function peopleWithRelationships(): Promise<Set<number>> {
+  const db = await getDb();
+  const rows = await db.query<{ id: string }>(
+    `select distinct source_id as id from sources.raw_record where source = $1 and kind = 'relationship'`, [SOURCE]);
+  return new Set(rows.map((r) => Number(r.id)));
 }
 
 type G = typeof globalThis & { __affinitySlice?: Promise<unknown> | null };

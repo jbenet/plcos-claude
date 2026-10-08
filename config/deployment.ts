@@ -133,6 +133,11 @@ export const config = {
      * fake Affinity is tiny, so its ceiling is too — otherwise the hold would never be seen.
      */
     sliceCeiling: PROFILE === 'demo' ? 10 : 3000, // GUESS (the real one)
+    /**
+     * Each person's relationship strengths are read again once in this many days; a new person is read at once.
+     * Reading every one daily cost about a request per person per day (Juan, 8 Oct 2026: under 300 a day).
+     */
+    relationshipRefreshDays: 30, // GUESS
   },
   /**
    * Linear, read-only (Juan, 27 Sep 2026; docs/24-linear.md). The client sends GraphQL queries
@@ -573,6 +578,11 @@ export const GUESSED_CONSTANTS: ReadonlyArray<{ path: string; value: number; why
     path: 'affinity.sliceCeiling',
     value: config.affinity.sliceCeiling,
     why: 'Requests one slice may spend on notes and relationships without someone approving the estimate first. A round number under this tool’s monthly share.',
+  },
+  {
+    path: 'affinity.relationshipRefreshDays',
+    value: config.affinity.relationshipRefreshDays,
+    why: 'How often a person’s Affinity relationship strengths are read again. They move slowly and feed only the inventory page. My judgement.',
   },
   {
     path: 'affinity.maxPerMinute',
