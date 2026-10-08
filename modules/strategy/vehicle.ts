@@ -58,15 +58,16 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
       where p.vehicle_id=$1 and s.status in ('proposed','accepted')
         and (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))
       order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [vehicleId]),
-    db.query<ProfileRow>(`select distinct on (identity.canonical_entity_id(entity_id)) identity.canonical_entity_id(entity_id) entity_id,
-      note_id, created_at as at, data from research.note where kind='public_profile'
-      and identity.canonical_entity_id(entity_id)=any($1::uuid[])
-      order by identity.canonical_entity_id(entity_id),created_at desc,note_id`, [ids]),
-    db.query<{ entity_id: string; n: string }>(`select identity.canonical_entity_id(entity_id) entity_id,count(*)::text n
-      from research.claim where superseded_by is null and identity.canonical_entity_id(entity_id)=any($1::uuid[]) group by 1`, [ids]),
-    db.query<{ entity_id: string; instruction: string; scope: string; at: Date }>(`select identity.canonical_entity_id(entity_id) entity_id,
-      instruction,scope::text,recorded_at as at from coordination.restriction
-      where identity.canonical_entity_id(entity_id)=any($1::uuid[]) and (expires_at is null or expires_at > $2::date)`, [ids, now]),
+    // Each LP's aliases first (identity.alias_pairs), so these are index probes rather than a
+    // canonical_entity_id() call on every row of the table (performance pass, 8 Oct 2026).
+    db.query<ProfileRow>(`select distinct on (a.canonical_id) a.canonical_id entity_id, n.note_id, n.created_at as at, n.data
+      from identity.alias_pairs($1::uuid[]) a join research.note n on n.entity_id=a.entity_id where n.kind='public_profile'
+      order by a.canonical_id,n.created_at desc,n.note_id`, [ids]),
+    db.query<{ entity_id: string; n: string }>(`select a.canonical_id entity_id,count(*)::text n
+      from identity.alias_pairs($1::uuid[]) a join research.claim c on c.entity_id=a.entity_id where c.superseded_by is null group by 1`, [ids]),
+    db.query<{ entity_id: string; instruction: string; scope: string; at: Date }>(`select a.canonical_id entity_id,
+      r.instruction,r.scope::text,r.recorded_at as at from identity.alias_pairs($1::uuid[]) a join coordination.restriction r on r.entity_id=a.entity_id
+      where r.expires_at is null or r.expires_at > $2::date`, [ids, now]),
     db.query<{ pursuit_id: string; active: boolean }>(`select p.pursuit_id,u.active from strategy.active_pursuit p join platform.app_user u on u.id=p.owner_id where p.vehicle_id=$1`, [vehicleId]),
     db.query<{ subject_id: string; at: Date; detail: Record<string, unknown> }>(`select p.pursuit_id::text as subject_id,a.at,a.detail from platform.audit_log a
       join strategy.active_pursuit p on p.pursuit_id = case when a.subject_type='pursuit'
@@ -74,9 +75,9 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
         then strategy.canonical_pursuit_id(a.subject_id::uuid) end
       where p.vehicle_id=$1 and a.action='pursuit.status_set' and a.at <= $2 order by a.at,a.id`, [vehicleId, now]),
     touchpointSummaries(pursuits, now), strategyRouteSummaries(ids, total.kind),
-    db.query<{ entity_id: string; at: Date }>(`select identity.canonical_entity_id(entity_id) entity_id,max(created_at) at
-      from research.note n where kind='context' and identity.canonical_entity_id(entity_id)=any($1::uuid[])
-        and coalesce(data->>'vehicleId', '') in ('', $2::text) and not ${CONTEXT_BY_RULE} group by 1`, [ids, vehicleId]),
+    db.query<{ entity_id: string; at: Date }>(`select a.canonical_id entity_id,max(n.created_at) at
+      from identity.alias_pairs($1::uuid[]) a join research.note n on n.entity_id=a.entity_id where n.kind='context'
+        and coalesce(n.data->>'vehicleId', '') in ('', $2::text) and not ${CONTEXT_BY_RULE} group by 1`, [ids, vehicleId]),
   ]);
   const dakota = await dakotaCapacities(db, ids);
   const transitions = history.flatMap(r => {

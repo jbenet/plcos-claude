@@ -6,20 +6,21 @@ import { cachedRoutes } from '../../modules/network/cache';
 
 /** Simulate commits by a different process between reads, without touching a database. */
 function revisionFixture() {
-  let revision = 0;
+  let revision = 0, foreground = 0;
   const db: Db = {
     kind: 'postgres',
     query: async () => [],
     one: async <T>(sql: string, params?: unknown[]) => {
       if (sql.includes('identity.canonical_entity_id')) return { id: params![0] } as T;
       if (sql.includes('from network.route_cache')) return null;
-      return { revision: String(revision), epoch: '0', day: '2026-09-27' } as T;
+      return { revision: String(revision), foreground: String(foreground), epoch: '0', day: '2026-09-27' } as T;
     },
     exec: async () => {},
     transaction: async fn => fn(db),
     close: async () => {},
   };
-  return { db, commit: () => { revision++; } };
+  // A person's commit moves both; an import worker's (network 017) only the revision.
+  return { db, commit: () => { revision++; foreground = revision; }, background: () => { revision++; } };
 }
 
 export async function cacheRetryProperties(check: Check) {
@@ -54,6 +55,28 @@ export async function cacheRetryProperties(check: Check) {
     const third = await withDb(fixture.db, () => read());
     check('page cache keeps no load the data changed under, and keeps the next stable one',
       second === 'load 2' && third === 'load 2' && attempts === 2, `answers=${second}, ${third}; loads=${attempts}`);
+  }
+  {
+    // While only an import has written, a page answers with its last build and rebuilds behind it.
+    const fixture = revisionFixture();
+    let loads = 0, release!: () => void;
+    let gate: Promise<void> = Promise.resolve();
+    const read = buildCache(async () => { loads++; await gate; return `build ${loads}`; });
+    const first = await withDb(fixture.db, () => read());
+    fixture.background();
+    gate = new Promise(resolve => { release = resolve; });
+    const quick = await withDb(fixture.db, () => read());
+    const again = await withDb(fixture.db, () => read());
+    check('page cache answers from its last build while only an import has written, and rebuilds once behind it',
+      first === 'build 1' && quick === 'build 1' && again === 'build 1' && loads === 2, `answers ${first}, ${quick}, ${again}; loads ${loads}`);
+    release();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const rebuilt = await withDb(fixture.db, () => read());
+    check('page cache serves the rebuild once it is done', rebuilt === 'build 2' && loads === 2, `answer ${rebuilt}; loads ${loads}`);
+    fixture.commit();
+    gate = Promise.resolve();
+    const fresh = await withDb(fixture.db, () => read());
+    check("page cache rebuilds before answering after a person's change", fresh === 'build 3' && loads === 3, `answer ${fresh}; loads ${loads}`);
   }
   const fixture = revisionFixture();
   let attempts = 0;

@@ -73,27 +73,36 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   const personIds = entityIds.filter(id => !organisations.has(id));
   const [people, contacts, affiliations] = await Promise.all([
     db.query<{ org_id: string; id: string; name: string; role: string }>(
-      `select distinct identity.canonical_entity_id(a.org_entity)::text as org_id,
+      // Aliases first (identity.alias_pairs): index probes, not canonical_entity_id() on every affiliation.
+      `select distinct o.canonical_id::text as org_id,
         e.entity_id::text as id, e.display_name as name, coalesce(a.role, '') as role
-        from identity.affiliation a join identity.entity e on e.entity_id=identity.canonical_entity_id(a.person_entity)
-        where identity.canonical_entity_id(a.org_entity)=any($1::uuid[]) and a.ended_on is null
+        from identity.alias_pairs($1::uuid[]) o join identity.affiliation a on a.org_entity=o.entity_id
+        join identity.entity e on e.entity_id=identity.canonical_entity_id(a.person_entity)
+        where a.ended_on is null
         order by name`, [[...organisations]]),
     db.query<{ pursuit_id: string; id: string; name: string; role: string }>(
       `select c.pursuit_id::text, e.entity_id::text id, e.display_name name, coalesce(c.role, '') role
          from strategy.pursuit_contact c join identity.entity e on e.entity_id=identity.canonical_entity_id(c.person_entity)
         where c.pursuit_id=any($1::uuid[]) order by c.created_at, name`, [orgPursuits]),
     db.query<{ person: string; id: string; name: string; role: string | null }>(
-      `select identity.canonical_entity_id(a.person_entity)::text person, o.entity_id::text id, o.display_name name, a.role
-         from identity.affiliation a join identity.entity o on o.entity_id=identity.canonical_entity_id(a.org_entity)
-        where identity.canonical_entity_id(a.person_entity)=any($1::uuid[]) and a.ended_on is null
-          and o.entity_type<>'person' and o.retired_at is null
+      `select p.canonical_id::text person, o.entity_id::text id, o.display_name name, a.role
+         from identity.alias_pairs($1::uuid[]) p join identity.affiliation a on a.person_entity=p.entity_id
+         join identity.entity o on o.entity_id=identity.canonical_entity_id(a.org_entity)
+        where a.ended_on is null and o.entity_type<>'person' and o.retired_at is null
         order by 1, a.is_primary desc, a.as_of desc nulls last`, [personIds]),
   ]);
   const lpRow = new Map(pursuits.map(p => [`${p.entityId}:${p.vehicleId}`, p.pursuitId]));
+  // Grouped once: a scan of every contact and affiliation per row was quadratic in the vehicle's size.
+  const group = <T,>(rows: T[], key: (row: T) => string) => {
+    const out = new Map<string, T[]>();
+    for (const row of rows) { const k = key(row); const list = out.get(k); if (list) list.push(row); else out.set(k, [row]); }
+    return out;
+  };
+  const contactsOf = group(contacts, (c) => c.pursuit_id), peopleOf = group(people, (a) => a.org_id);
   const peopleFor = (p: Pursuit): PipelineRow['people'] => {
     const out = new Map<string, PipelineRow['people'][number]>();
-    for (const c of contacts) if (c.pursuit_id === p.pursuitId && !out.has(c.id)) out.set(c.id, { id: c.id, name: c.name, role: c.role, contact: true, individual: lpRow.get(`${c.id}:${p.vehicleId}`) ?? null });
-    for (const a of people) if (a.org_id === p.entityId && !out.has(a.id)) out.set(a.id, { id: a.id, name: a.name, role: a.role, contact: false, individual: lpRow.get(`${a.id}:${p.vehicleId}`) ?? null });
+    for (const c of contactsOf.get(p.pursuitId) ?? []) if (!out.has(c.id)) out.set(c.id, { id: c.id, name: c.name, role: c.role, contact: true, individual: lpRow.get(`${c.id}:${p.vehicleId}`) ?? null });
+    for (const a of peopleOf.get(p.entityId) ?? []) if (!out.has(a.id)) out.set(a.id, { id: a.id, name: a.name, role: a.role, contact: false, individual: lpRow.get(`${a.id}:${p.vehicleId}`) ?? null });
     return [...out.values()];
   };
   const firmsOf = new Map<string, Array<{ id: string; name: string; role: string | null }>>();
