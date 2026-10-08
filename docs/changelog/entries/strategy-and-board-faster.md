@@ -15,3 +15,13 @@ scale, on a production build.
 
 Checks: tsc, the properties on PGlite and Postgres. Each rewritten query was compared with the old one on the
 invented copy, merged records included: same rows.
+
+## Later the same day
+
+- **After a move, the plan rebuilds sooner.** The route summaries waited for the network's contact signature, which
+  every write rebuilds, before reading the stored searches; they now read both side by side and decide afterwards
+  which searches are current. A cold plan build, about 0.4 s → 0.32 s; same summaries.
+- **The every-vehicle list** reads each vehicle's touchpoints from the cache the vehicle's own list fills, instead of
+  reading them all again. Same rows.
+- **The stats page** finds each firm's people through the firm's aliases (0.43 s → 0.03 s for that step; same stats
+  for every vehicle and for Neurotech).
