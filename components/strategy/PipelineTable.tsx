@@ -37,8 +37,11 @@ interface Props {
   asOf: string;
 }
 
-export function PipelineTable({ rows, statuses, rungNames, initialStatus, initialFilters, showVehicle, asOf }: Props) {
+export function PipelineTable({ rows: given, statuses, rungNames, initialStatus, initialFilters, showVehicle, asOf }: Props) {
   const router = useRouter();
+  // Move to Selected and Set status show at once, ahead of the server (useMove).
+  const mv = useMove('pipeline', given);
+  const rows = mv.rows;
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'pipeline', initialStatus });
   const { enabled, setEnabled, counts, active, shown, sort, sortBy, picked, pick, pickedRows, now } = view;
   const [limit, setLimit] = useState(PAGE);
@@ -88,15 +91,13 @@ export function PipelineTable({ rows, statuses, rungNames, initialStatus, initia
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending, ranked]);
   // Move to Selected applies to New and Sourcing: the ticked ones, else the one in focus.
-  const mv = useMove('pipeline');
   const movable = (r: PipelineRow) => r.status === 'new' || r.status === 'sourcing';
   const moveNow = async () => {
     const targets = (pickedRows.length ? pickedRows : focus ? [focus] : []).filter(movable);
     if (!targets.length) return;
     const i = focus ? ranked.indexOf(focus) : -1, going = new Set(targets.map((r) => r.id));
     const next = pickedRows.length ? null : ranked.slice(i + 1).find((r) => !going.has(r.id)) ?? null;
-    const done = await mv.move(targets);
-    if (!done) return;
+    if (!mv.move(targets)) return;
     if (pickedRows.length) view.clearPicked(); else if (next && one) reveal(next);
   };
   const keys = useRef({ focus, picked, moveNow, step: cursor.step, undo: mv.undo });
