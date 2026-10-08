@@ -1,5 +1,5 @@
 import { routePolicyFacts, routeIdentityGroups, routeOrganizations } from './route-policy';
-import { emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
+import { busyReason, emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
 import { createHash } from 'node:crypto';
 import { config } from '@/config/deployment';
 import { setImmediate } from 'node:timers/promises';
@@ -206,12 +206,12 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
         continue;
       }
       const hops = candidate.edges.map((e, i) => ({ edge: scoreEdges[e]!, toEntity: nodes[i + 1]!.entityId, toName: nodes[i + 1]!.name }));
-      const askLoad = carrier ? { connector: nodes.at(-2)!.name, used: loadOf.get(carrier) ?? 0, cap } : null;
+      const askLoad = carrier ? { connector: nodes.at(-2)!.name, used: loadOf.get(carrier) ?? 0, cap, busy: (loadOf.get(carrier) ?? 0) >= cap } : null;
       const contactBlocked = (contactRestrictions.get(candidate.viaContact?.entityId ?? '') ?? []).some(r => r.scope === 'blanket' || (r.connectorId && [nodes[0]!.entityId, ...connectorIds].includes(r.connectorId)));
       const excluded = blanket || contactBlocked || policy.blocked.has(search.targetId) || [nodes[0]!.entityId, ...connectorIds, ...(candidate.viaContact ? [candidate.viaContact.entityId] : [])].some((id) => restricted.has(id));
       if (!excluded) for (const edgeIndex of candidate.edges) usableEdges.add(edgeIndex);
       const route: Route = { ...(candidate.viaContact ? { viaContact: candidate.viaContact } : {}), identityGroups: Object.fromEntries(nodes.map(n => [n.entityId, identityGroups.get(n.entityId) ?? n.entityId])), fromEntity: nodes[0]!.entityId, fromName: nodes[0]!.name, hops, connectorIds,
-        connectorNames: nodes.slice(1, -1).map((n) => n.name), verdict: excluded ? 'excluded' : askLoad && askLoad.used >= cap ? 'hold' : 'recommend',
+        connectorNames: nodes.slice(1, -1).map((n) => n.name), verdict: excluded ? 'excluded' : askLoad?.busy && config.guard.askLimit === 'enforce' ? 'hold' : 'recommend',
         reasons: [], askLoad, influence: null,
         weakestTier: hops.reduce<Edge['tier']>((tier, h) => tiers[h.edge.tier] > tiers[tier] ? h.edge.tier : tier, 'A') };
       // Factors are reconstructed only for visible routes; candidate ranking needs numbers.
@@ -266,13 +266,12 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
         + (clue[h.edge.kind] ?? 'Weak relationship evidence; interaction is not established.')
         + ' Routes with uncertainty; confidence discounts the investment-route score.');
     }
-    if (route.verdict === 'hold' && route.askLoad) route.reasons.push(`${route.askLoad.connector} has used ${route.askLoad.used} of ${cap} asks this quarter. `
-      + 'The cap is on the connector because goodwill is the resource you cannot buy back.');
+    if (route.askLoad?.busy && route.verdict !== 'excluded') route.reasons.push(busyReason(route.askLoad.connector, route.askLoad.used, cap, route.verdict === 'hold'));
     if (route.verdict === 'recommend') {
       const reviewed = route.hops.filter((h) => h.edge.reviewedByName).length;
       route.reasons.push(`Every hop is tier ${route.weakestTier} or better${route.weakestTier <= 'B' ? ', with a documented or policy-based tie' : '; the route carries weaker evidence'}`
         + (reviewed > 0 ? ` and ${reviewed} hop${reviewed === 1 ? '' : 's'} confirmed by a person.` : '.')
-        + (route.askLoad && route.askLoad.used > 0 ? ` ${route.askLoad.connector} has goodwill left: ${cap - route.askLoad.used} of ${cap} asks unused this quarter.` : ''));
+        + (route.askLoad && route.askLoad.used > 0 && !route.askLoad.busy ? ` ${route.askLoad.connector} has goodwill left: ${cap - route.askLoad.used} of ${cap} asks unused this quarter.` : ''));
     }
   }
   const { structural: _internal, ...publicSearch } = search;

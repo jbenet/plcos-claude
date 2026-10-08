@@ -296,6 +296,21 @@ export async function outreachDeskV3Properties(check: Check, db: Db) {
       && cB?.asksThisQuarter === 0 && cB.lastAsk === null && find(targets.json?.data ? { connectors: [targets.json.data.connector] } : null, first)?.asksThisQuarter === 1,
       `first hop: ${cA?.asksThisQuarter} this quarter, last ${cA?.lastAsk?.on} (replied ${cA?.lastAsk?.replied}, ${cA?.lastAsk?.basis}); second: ${cB?.asksThisQuarter}, last ${JSON.stringify(cB?.lastAsk)}`);
 
+    // ── Busy introducer: a flag, never a hold (Juan, 8 Oct 2026, feedback 0124: "flag only") ──────────
+    {
+      const { askHistory } = await import('../../lib/outreach/connectors');
+      const { config } = await import('../../config/deployment');
+      // A connector and target of their own, so no other check's counts move.
+      const busyOne = await entity('Invented V3 Busy Introducer', 'person'), busyTarget = await entity('Invented V3 Busy Target');
+      const before = (await askHistory([busyOne])).get(busyOne);
+      for (let i = 0; i < config.guard.asksPerConnectorPerQuarter; i++) await db.query(`insert into coordination.ask (entity_id, connector_id, vehicle_id, status, owner_id, purpose, made_at)
+        values ($1, $2, $3, 'made', $4, 'Invented busy ask', $5)`, [busyTarget, busyOne, V1.id, juan.id, thisQuarter]);
+      const after = (await askHistory([busyOne])).get(busyOne);
+      check('Outreach desk v3: a connector asked at or past the per-quarter guide is flagged busy, and only flagged',
+        before?.busy === false && after?.busy === true && after.asksThisQuarter === config.guard.asksPerConnectorPerQuarter,
+        `before ${before?.asksThisQuarter} busy ${before?.busy}; after ${after?.asksThisQuarter} busy ${after?.busy}`);
+    }
+
     // ── Intro outcomes per connector (JuanMail, 7 Oct 2026) ─────────────────────────────────
     check('Outreach desk v3: a connector row says how many intro asks were made through them (made ones only, all time), which of those LPs are now Committed, and the last one (who, when, days to the first meeting since, or null)',
       cA?.intros?.made === 2 && cA.intros.committed.length === 0 && cA.intros.last?.name === 'Invented V3 LP Near' && cA.intros.last.on === lastOn
