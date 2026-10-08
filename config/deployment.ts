@@ -185,8 +185,8 @@ export const config = {
    */
   mcp: {
     enabled: true as boolean,
-    callsPerMinute: 60, // GUESS — a chatty agent session; a loop over every LP trips it.
-    defaultCallsPerDay: 2000, // GUESS — a working day of agent reads, per token.
+    callsPerMinute: 60, // Unused since 8 Oct 2026 (Juan: no token limits until a need is found); kept for when one is wanted.
+    defaultCallsPerDay: 2000, // Stored on each new token; not enforced since 8 Oct 2026.
     maxCallsPerDay: 20000, // GUESS — the most a person may grant one token.
     tokenDays: 90, // GUESS — a quarter, then make a new one.
     maxRequestBytes: 256 * 1024, // GUESS — a draft's text is ~20 KB; nothing needs more.

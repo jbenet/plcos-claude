@@ -1,5 +1,6 @@
 import { getDb, type Queryable } from '@/lib/db';
 import { PERSON, openTicket, requireApprovedTicket, ticketNeeded, type Acting } from '@/modules/governance';
+import { appendAudit } from '@/modules/platform';
 import { getAsset, listWrapRules } from './repo';
 import { USE_RANK, type Audience, type WrapCheck } from './types';
 
@@ -262,5 +263,30 @@ export async function invalidateForClaim(claimId: string, reason: string): Promi
       );
     }
     return all.size;
+  });
+}
+
+/**
+ * Set or clear the link a person pasted for a material (Juan, 8 Oct 2026): a DocSend or file link the
+ * mail desk offers next to it. Stored as text only; Capital OS never calls DocSend or opens the link.
+ * An empty value clears it. Anything but a plain https URL is refused.
+ */
+export async function setAssetLink(actorId: string, assetId: string, raw: string | null): Promise<{ link: string | null }> {
+  const text = (raw ?? '').trim();
+  let link: string | null = null;
+  if (text) {
+    let url: URL;
+    try { url = new URL(text); } catch { throw new Error('That is not a link. Paste a full https:// address.'); }
+    if (url.protocol !== 'https:' || /\s/.test(text) || text.length > 2000) throw new Error('Only an https:// link of up to 2,000 characters can be stored.');
+    link = text;
+  }
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    const row = await tx.one<{ link: string | null }>('select link from content.asset where asset_id = $1 for update', [assetId]);
+    if (!row) throw new Error('No such material.');
+    if (row.link === link) return { link };
+    await tx.query('update content.asset set link = $2 where asset_id = $1', [assetId, link]);
+    await appendAudit({ actorId, action: 'content.asset_link_set', subjectType: 'content_asset', subjectId: assetId, detail: { had: row.link !== null, has: link !== null } }, tx);
+    return { link };
   });
 }

@@ -5,13 +5,13 @@ type AssetRow = {
   asset_id: string; title: string; parent_id: string | null; audience: Audience | null;
   vehicle_id: string | null; vehicle_name: string | null; version: number;
   owner_name: string; permitted_use: PermittedUse; summary: string; body: string;
-  status: AssetStatus; approved_at: Date | string | null;
+  status: AssetStatus; approved_at: Date | string | null; link: string | null;
 };
 
 const ASSET_SELECT = `
   select a.asset_id, a.title, a.parent_id, a.audience, a.vehicle_id, v.name as vehicle_name,
          a.version, u.name as owner_name, a.permitted_use, a.summary, a.body, a.status,
-         a.approved_at
+         a.approved_at, a.link
     from content.asset a
     join platform.app_user u on u.id = a.owner_id
     left join platform.vehicle v on v.id = a.vehicle_id`;
@@ -43,6 +43,7 @@ async function decorate(rows: AssetRow[], q?: Queryable): Promise<Asset[]> {
     ownerName: r.owner_name, permittedUse: r.permitted_use, summary: r.summary,
     body: r.body, status: r.status,
     approvedAt: r.approved_at ? new Date(r.approved_at) : null,
+    link: r.link,
     claims: claims.filter((c) => c.asset_id === r.asset_id).map((c) => ({
       claimId: c.claim_id, field: c.field, value: c.value, source: c.source, entityName: c.entity_name,
     })),

@@ -1,5 +1,5 @@
 import type { Action } from './index';
-export type ScopeRule = 'context' | 'touch' | 'spvEntity' | 'signal' | 'global' | 'pursuit' | 'pursuitArg' | 'score' | 'bulk' | 'undo' | 'exposure' | 'suggestion' | 'play' | 'vehicleArg' | 'vehicle' | 'vehicleSlug' | 'move' | 'conflict' | 'tickets' | 'emailNew' | 'emailDraft' | 'self' | 'contentSend';
+export type ScopeRule = 'context' | 'touch' | 'spvEntity' | 'signal' | 'global' | 'pursuit' | 'pursuitArg' | 'score' | 'bulk' | 'undo' | 'exposure' | 'suggestion' | 'play' | 'vehicleArg' | 'vehicle' | 'vehicleSlug' | 'move' | 'conflict' | 'tickets' | 'emailNew' | 'emailDraft' | 'self' | 'contentSend' | 'contentAsset';
 /** Closed manifest: a new action needs an explicit policy AND a first-statement wrapper. */
 export const actionRules = {
   'app/dev/linear/actions.ts#rebuildLinearAction': { action: 'admin', scope: 'global' },
@@ -75,6 +75,8 @@ export const actionRules = {
   'app/materials/actions.ts#proposeSend': { action: 'mutate', scope: 'vehicle' },
   // A person marks a cleared material sent (Juan, 5 Oct 2026: no SEND ticket for a person); its vehicle from the stored send.
   'app/materials/actions.ts#markSentAction': { action: 'mutate', scope: 'contentSend' },
+  // A material's link (8 Oct 2026): its vehicle's members; a material for every vehicle needs all-vehicle access.
+  'app/materials/actions.ts#setLinkAction': { action: 'mutate', scope: 'contentAsset' },
   'app/orgs/enrichment/select.ts#choose': { action: 'admin', scope: 'global' },
   'app/plays/actions.ts#assign': { action: 'mutate', scope: 'play' },
   'app/plays/actions.ts#propose': { action: 'mutate', scope: 'vehicleArg' },

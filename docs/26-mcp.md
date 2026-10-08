@@ -159,7 +159,7 @@ docs/agent-rules/domain.md.
 ## 4. Safety
 
 - **Work envelope** (AGENTS.md, Agent rules). The token row is the envelope: scope = the owner's vehicles narrowed by
-  the token's; allowed commands = its tools and scopes; budget = calls a minute and a day; deadline = its expiry;
+  the token's; allowed commands = its tools and scopes; budget = none since 8 Oct 2026 (calls are not limited); deadline = its expiry;
   escalation owner = its owner. Every call is checked before the tool runs (`lib/mcp/envelope.ts`, `allowed()` in
   `lib/mcp/tools.ts`) and refused with the reason when outside it.
 - **One audit record per call** (Juan, 4 Oct 2026: "we will need to make sure all the actions are logged for audits,

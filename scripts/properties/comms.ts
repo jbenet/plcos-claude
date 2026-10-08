@@ -197,5 +197,20 @@ export async function commsProperties(check: Check, db: Db) {
     r?.ok === false && r.blocking === true && /not by email/i.test(r.detail) && q.data.rows[0].bucket === 'held'
     && vRestriction?.ok === false && !/not by email/i.test(vRestriction.detail) && /restriction is on file/i.test(vRestriction.detail),
     `GP: ${JSON.stringify(r)?.slice(0, 100)}; viewer: ${JSON.stringify(vRestriction)?.slice(0, 100)}`);
+
+  // ── A material's pasted link rides the queue (8 Oct 2026) ───────────────────────────────
+  const { setAssetLink } = await import('../../modules/content');
+  const mat = (q.data?.rows?.[0]?.materials ?? [])[0] as { assetId: string; link: string | null } | undefined;
+  const docsend = 'https://docsend.example/view/invented-props';
+  if (mat) await setAssetLink(juan.id, mat.assetId, docsend);
+  const withLink = await call(reader, 'outreach_queue', { vehicle: fund.slug, pursuitId: barredP });
+  const linked = (withLink.data?.rows?.[0]?.materials ?? []).find((m: { assetId: string }) => m.assetId === mat?.assetId);
+  const refusedLinks = await Promise.all(['http://docsend.example/x', 'javascript:alert(1)', 'docsend.example/x']
+    .map((l) => setAssetLink(juan.id, mat?.assetId ?? '', l).then(() => 'STORED', (e: Error) => e.message)));
+  if (mat) await setAssetLink(juan.id, mat.assetId, '');
+  const cleared = (await call(reader, 'outreach_queue', { vehicle: fund.slug, pursuitId: barredP })).data?.rows?.[0]?.materials?.find((m: { assetId: string }) => m.assetId === mat?.assetId);
+  check('A material\'s link: a pasted https link comes back as `link` on that material in the queue, anything but https is refused, and clearing it gives null',
+    !!mat && mat.link === null && linked?.link === docsend && refusedLinks.every((r) => r !== 'STORED') && cleared?.link === null,
+    `material ${mat ? 'found' : 'MISSING'}; before ${mat?.link}; after ${linked?.link}; refused ${refusedLinks.map((r) => r.slice(0, 30)).join(' | ')}; cleared ${cleared?.link}`);
   for (const c of [writer, reader]) await c.close();
 }

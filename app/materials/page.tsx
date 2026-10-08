@@ -3,6 +3,7 @@ import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { SendGate } from '@/components/content/SendGate';
+import { AssetLinkForm } from '@/components/content/AssetLinkForm';
 import { shortDate } from '@/lib/time';
 import { listEntities } from '@/lib/authz/read/identity';
 import { listVehicles } from '@/modules/platform';
@@ -89,6 +90,38 @@ async function Materials() {
           vehicles={vehicles.map((v) => ({ id: v.id, label: `${v.name} · ${v.exemption}` }))}
           instruments={INSTRUMENTS.map((i) => ({ id: i, label: i.replace('_', ' ') }))}
         />
+      </div>
+
+      <div className="card">
+        <div className="chead">
+          <h2>Links</h2>
+          <span className="lbl">a DocSend or file link per material</span>
+        </div>
+        <table className="list">
+          <thead>
+            <tr>
+              <th>Material</th>
+              <th style={{ width: 420 }}>Link</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sendable.map((a) => (
+              <tr key={a.assetId}>
+                <td>
+                  <b>{a.title}</b>
+                  <div className="muted" style={{ fontSize: 11.5 }}>
+                    {a.audience ? AUDIENCE_LABEL[a.audience] : ''} · {a.vehicleName ?? 'every vehicle'} · {a.status}
+                  </div>
+                </td>
+                <td><AssetLinkForm assetId={a.assetId} link={a.link} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="cover">
+          The mail desk gets this link next to the material, so it can offer it in a draft. It is stored as
+          written; nothing here opens it or talks to DocSend.
+        </p>
       </div>
 
       <div className="card">

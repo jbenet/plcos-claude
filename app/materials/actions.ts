@@ -2,7 +2,7 @@
 import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
-import { recordSend, requestSend } from '@/modules/content';
+import { recordSend, requestSend, setAssetLink } from '@/modules/content';
 
 export async function proposeSend(
   formData: FormData,
@@ -34,4 +34,16 @@ export async function markSentAction(formData: FormData): Promise<{ error?: stri
   }
   revalidatePath('/materials');
   return { sent: true };
+}
+
+/** Paste or clear a material's link (a DocSend or file link). Stored only; nothing here opens it. */
+export async function setLinkAction(formData: FormData): Promise<{ error?: string; link?: string | null }> {
+  const user = await requireAction('app/materials/actions.ts#setLinkAction', formData);
+  try {
+    const { link } = await setAssetLink(user.id, String(formData.get('assetId')), String(formData.get('link') ?? ''));
+    revalidatePath('/materials');
+    return { link };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
 }
