@@ -8,6 +8,7 @@ import { aboutRaise } from '@/lib/connectors/affinity/about';
 import { notesAbout } from '@/lib/connectors/affinity/notes';
 import { getDb, type Queryable } from '@/lib/db';
 import { requireMutationProfile } from '@/lib/mutation-policy';
+import { oneLine } from '@/lib/mcp/output';
 import { redactHealth } from '@/lib/redact-health';
 import { markSendSent } from '@/modules/content';
 import { recordAskEmailed } from '@/modules/coordination';
@@ -360,12 +361,12 @@ export async function commsTrace(ctx: Ctx, raw: Record<string, unknown>) {
     });
   }
   for (const u of updates) {
-    items.push({ at: u.createdAt.toISOString(), source: 'plcos', sourceLabel: 'PLC OS update', kind: 'note', direction: null, subject: clean(u.body.slice(0, 300)),
+    items.push({ at: u.createdAt.toISOString(), source: 'plcos', sourceLabel: 'PLC OS update', kind: 'note', direction: null, subject: oneLine(clean(u.body)),
       team: [u.createdByName], about: [p.slug], counts: true, sameAs: [], ref: `update:${u.updateId}` });
   }
   for (const n of notes.filter((x) => x.kind === 'context')) {
     items.push({ at: new Date(n.createdAt).toISOString(), source: 'plcos', sourceLabel: 'PLC OS note', kind: 'note', direction: null,
-      subject: clean(n.body.slice(0, 300)), team: n.author ? [n.author] : [], about: 'general', counts: false, sameAs: [], ref: `note:${n.noteId}` });
+      subject: oneLine(clean(n.body)), team: n.author ? [n.author] : [], about: 'general', counts: false, sameAs: [], ref: `note:${n.noteId}` });
   }
   for (const n of affinityNotes) {
     // A note that mentions health lends only a summary read with it redacted (N56), never its text.

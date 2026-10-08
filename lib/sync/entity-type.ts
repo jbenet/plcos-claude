@@ -3,7 +3,7 @@ import { isLiveServer } from '@/config/ports';
 import { getDb, type Db } from '@/lib/db';
 import { isEntityKey } from '@/lib/enrich/connection-check';
 import { lookupEntityType, pipelinePeopleNamedLikeOrgs } from '@/lib/enrich/entity-types';
-import { correctEntityType, reverseEntityTypeCorrection } from '@/modules/identity/entity-type';
+import { recordEntityTypeCorrection, reverseEntityTypeCorrection } from '@/modules/identity/entity-type';
 import { namePattern, relationshipRoles } from '@/modules/identity/roles';
 import { auditSync, type SyncCaller } from './auth';
 import type { PushAnswer } from './push';
@@ -57,6 +57,10 @@ export async function readEntityTypes(caller: SyncCaller, db?: Db, request?: Req
       return { status: 200, body: { ok: true, groups } };
     } catch (error) {
       // Say what failed rather than a bare 500 (issue 0138); the message is the code's or Postgres's, never a record.
+      if (lockBusy(error)) {
+        await auditSync(caller, 'identity', 'refused', { op: 'review', reason: 'busy' });
+        return { status: 409, body: { ok: false, error: BUSY } };
+      }
       const code = (error as { code?: string }).code;
       await auditSync(caller, 'identity', 'error', { op: 'review', reason: 'failed' });
       return { status: 500, body: { ok: false, error: `Review failed: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown error'}${code ? ` (SQLSTATE ${code})` : ''}` } };
@@ -99,14 +103,28 @@ export async function writeEntityType(caller: SyncCaller, request: Request, db?:
       || typeof input.requestKey !== 'string' || !input.requestKey.trim()) {
       return fail(400, 'input', 'Give operation "correct" with entityId, type (person or org), reason and a stable requestKey, or operation "reverse" with correctionId and reason.');
     }
-    const correctionId = await correctEntityType(handle, { entityId: input.entityId as string, type: input.type as 'person' | 'org',
-      by: caller.user.id, reason, rule: 'human:entity-type', requestKey: input.requestKey.trim() });
+    const requestKey = (input.requestKey as string).trim();
+    const correctionId = await handle.transaction(async (tx) => {
+      await tx.exec(`set local lock_timeout = '${LOCK_WAIT}'`);
+      return recordEntityTypeCorrection(tx, { entityId: input.entityId as string, type: input.type as 'person' | 'org',
+        by: caller.user.id, reason, rule: 'human:entity-type', requestKey });
+    });
     await auditSync(caller, 'identity', 'ok', { op: 'correct', entityId: input.entityId, type: input.type, correctionId });
     return { status: 200, body: { ok: true, correctionId } };
   } catch (error) {
+    if (lockBusy(error)) return fail(409, 'busy', BUSY);
     return fail(409, 'refused', error instanceof Error ? error.message : 'Entity type correction failed.');
   }
 }
+
+/**
+ * Merge duplicate identities (and an import) hold the identity tables for their whole run, minutes on the
+ * live server. A retype or a review read waiting behind one ran into the 20-second statement timeout and came
+ * back as "statement timeout" or a bare 500 (issue 0138). It now stops waiting early and says why.
+ */
+const LOCK_WAIT = '5s'; // GUESS: long enough for a normal write's lock, short of the 20 s statement timeout.
+const BUSY = 'Merge duplicate identities or an import is running and holds the identity records. Nothing was changed; try again when it has finished (cloud-job.sh status).';
+const lockBusy = (error: unknown) => ['55P03', '57014'].includes((error as { code?: string } | null)?.code ?? '');
 
 /** One current record found by name (issue 0138): enough to retype or name it in a W13 decision. */
 export interface FoundEntity { entityId: string; name: string; type: string; roles: string[]; pursuits: number; sources: string[] }
@@ -145,6 +163,7 @@ export async function identityReviewByName(db: Db, q: string): Promise<ReviewGro
   const rollback = new Error('review preview');
   let ambiguous: Array<{ name: string; entityIds: string[]; reason: string }> = [];
   await db.transaction(async (tx) => {
+    await tx.exec(`set local lock_timeout = '${LOCK_WAIT}'`);
     const actor = await tx.one<{ id: string }>(`select id::text from platform.app_user where handle = 'reconciliation'`);
     ambiguous = (await mergeImportDuplicatesInTransaction(tx, actor?.id ?? 'review', [], [], { reviewOnly: true })).ambiguous;
     throw rollback;

@@ -191,7 +191,8 @@ export async function consolidatePursuitsInTransaction(tx: Queryable, actorId: s
     const changes: Change[] = [];
     const originals = await tx.query<{ row: Row }>('select to_jsonb(p) row from strategy.pursuit p where pursuit_id=any($1::uuid[]) order by pursuit_id', [group.map(p => p.id)]);
     const tickets = await absorbPursuits(tx, changes, refs, survivor.id, originals.map(r => r.row), actorId, RULE, 'all',
-      (row, owner) => `Merged pursuit ${row.pursuit_id}. Owner: ${owner}${row.owner_said ? ` (${row.owner_said})` : ''}. Status: ${row.status}. ${row.headline ?? ''}${row.next_step ? ` Next step: ${row.next_step}${row.next_step_on ? ` (${row.next_step_on})` : ''}.` : ''}`);
+      // No raw id in the words (issue 0141); the merge record keeps it. Status, owner and next step say what was folded in.
+      (row, owner) => `Merged a duplicate pursuit: ${row.status}, ${owner}${row.owner_said ? ` (${row.owner_said})` : ''}.${row.next_step ? ` Next: ${row.next_step}${row.next_step_on ? ` (${row.next_step_on})` : ''}.` : ''}${row.headline ? ` ${row.headline}` : ''}`);
     const merge = (await tx.one<{ id: string }>(`insert into strategy.pursuit_merge(survivor_id,loser_ids,rule,actor_id,changes)
       values($1,$2,$3,$4,$5::jsonb) returning id::text`, [survivor.id,losers,RULE,actorId,JSON.stringify(changes)]))!;
     await tx.query(`insert into platform.audit_log(actor_id,action,subject_type,subject_id,detail)

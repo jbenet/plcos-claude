@@ -11,6 +11,23 @@ export const DATA_NOTICE =
 
 const MAX_STRING = 4000; // GUESS — a long strategy is ~3 KB; past this the app is the place to read it.
 
+/**
+ * One short line for a timeline row (issue 0141, Juan: "write much more tightly, more signal"). Drops the
+ * rule preambles older notes carry ("Added by rule on Juan's instruction (26 Sep):", a rule id before the
+ * reason), raw ids, and everything after the first line; cut at a word near `max`.
+ */
+const PREAMBLES = /^(?:Added by rule on [^:]{0,60}:|[a-z][a-z0-9-]*-\d{4}-\d\d-\d\d:|rule:[a-z0-9-]+:)\s*/i;
+const UUID = /\s*\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+export function oneLine(text: string | null | undefined, max = 140): string | null {
+  if (!text) return text ?? null;
+  let line = text.split(/\r?\n/).find((l) => l.trim())?.trim() ?? '';
+  line = line.replace(PREAMBLES, '').replace(/^Merged pursuit\b/, 'Merged a duplicate pursuit').replace(UUID, '')
+    .replace(/\s+([.,:;])/g, '$1').replace(/\s{2,}/g, ' ').trim();
+  if (line.length <= max) return line;
+  const cut = line.slice(0, max);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), max - 20)).replace(/[\s,;:.]+$/, '')}…`;
+}
+
 export interface Answer { data: unknown; coverage?: Record<string, unknown>; asOf?: string; link?: string | null }
 
 /** Cut long strings, then shorten the longest lists until the answer fits the response limit. */

@@ -112,18 +112,28 @@ export async function applyIdentityDecisions(tx: Queryable, by: string, report: 
     });
     if (later) superseded.set(input, later.input.line);
   }
+  // The same decision pushed twice, with other evidence or reviewer (issue 0138: two Mac sessions each
+  // pushed the retype and the merge). They do not conflict; each is tried in file order until one applies,
+  // and the rest are then superseded by it.
+  // Read once, before any decision changes the groups.
+  const outcomes = new Map(parsed.flatMap(({ decision: d }) => d ? [[d, JSON.stringify([d.group, d.decision, [...(d.members ?? groupMembers(d) ?? [])].sort(),
+    d.decision === 'merge' ? d.survivor ?? null : null, d.decision === 'retype' ? d.newType ?? null : null])] as const] : []));
+  const outcome = (d: IdentityDecision) => outcomes.get(d)!;
+  const appliedOutcome = new Map<string, number>();
+  for (const { input, decision: d } of parsed) if (d && applied.has(fingerprint(d)) && !appliedOutcome.has(outcome(d))) appliedOutcome.set(outcome(d), input.line);
   // A retype and a merge for one group do not conflict: the retype comes first in the file and makes the
   // members one type, then the merge applies (issue 0138). A merge and a separation do, as do two retypes.
   const lane = (d: IdentityDecision) => `${d.group}:${d.decision === 'retype' ? 'retype' : 'outcome'}`;
   const variants = new Map<string, Set<string>>();
   for (const { input, decision: d } of parsed) if (d && !applied.has(fingerprint(d)) && !superseded.has(input))
-    variants.set(lane(d), (variants.get(lane(d)) ?? new Set()).add(fingerprint(d)));
+    variants.set(lane(d), (variants.get(lane(d)) ?? new Set()).add(outcome(d)));
   for (const { input, decision: d } of parsed) {
     if (!d) continue;
     const key = fingerprint(d);
     if (applied.has(key)) { result.skipped++; continue; }
     const byLine = superseded.get(input);
-    if (byLine !== undefined) { result.superseded.push({ line: input.line, group: d.group, byLine }); continue; }
+    const sameAs = byLine ?? appliedOutcome.get(outcome(d));
+    if (sameAs !== undefined) { result.superseded.push({ line: input.line, group: d.group, byLine: sameAs }); continue; }
     const delta: Pick<ImportDuplicateReport, 'merged' | 'merges' | 'corrected'> = { merged: 0, merges: [], corrected: [] };
     const separations: IdentityDecisionReport['separations'] = [];
     await tx.exec('savepoint identity_decision');
@@ -218,6 +228,7 @@ export async function applyIdentityDecisions(tx: Queryable, by: string, report: 
         [JSON.stringify({ key, decision: d, applied_by: by, merges: delta.merges, corrected: delta.corrected, separations })]);
       await tx.exec('release savepoint identity_decision');
       applied.add(key);
+      if (!appliedOutcome.has(outcome(d))) appliedOutcome.set(outcome(d), input.line);
       report.merged += delta.merged; report.merges.push(...delta.merges); report.corrected.push(...delta.corrected);
       result.separations.push(...separations); result.applied++;
       if (d.decision === 'separate' || (d.decision === 'merge' && ids.length === groupIds.length))
