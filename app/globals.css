@@ -2010,6 +2010,8 @@ a.vstat:hover{border-color:var(--accent-line);background:var(--accent-wash)}
 .lane-spv{--lc:#7A5C3E}
 .lane-deadlines{--lc:#8A6410}
 .lane-grants{--lc:#A1467A}
+.lane-travel{--lc:#2E7D74}
+.lane-events{--lc:#B4532A}
 .lane-sprint{--lc:#9A958A}
 .calstat-tiles{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .calstat-tiles>div{border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-width:92px;background:var(--surface)}

@@ -7,7 +7,7 @@ import type { GlyphName } from '@/components/ui/Glyph';
  * browser. Colour is never the only signal: every lane also has its icon and its name.
  */
 export type Lane =
-  | 'close' | 'spv' | 'outreach' | 'meetings' | 'deadlines' | 'sprint' | 'grants';
+  | 'close' | 'spv' | 'outreach' | 'meetings' | 'deadlines' | 'sprint' | 'grants' | 'travel' | 'events';
 
 export const LANE_LABEL: Record<Lane, string> = {
   sprint: 'Sprints & dead weeks',
@@ -17,6 +17,8 @@ export const LANE_LABEL: Record<Lane, string> = {
   meetings: 'Meetings',
   deadlines: 'Expiries & due dates',
   grants: 'Grants rail',
+  travel: 'Travel',
+  events: 'Events',
 };
 
 export const LANE_MEANS: Record<Lane, string> = {
@@ -27,17 +29,19 @@ export const LANE_MEANS: Record<Lane, string> = {
   meetings: 'Scheduled and held. A held meeting is a fact; a scheduled one is an intention.',
   deadlines: 'Things that expire: tickets, accreditation letters, answers, diligence questions.',
   grants: 'Funder invitations. Outreach is blocked until one exists, so the date is the gate.',
+  travel: 'Where the team is going, from the calendars each person added in Preferences → Calendars.',
+  events: 'Conferences and gatherings the team is attending, from the calendars each person added in Preferences → Calendars.',
 };
 
 export interface LaneLook { label: string; means: string; glyph: GlyphName }
 
 const GLYPH: Record<Lane, GlyphName> = {
-  meetings: 'calendar', outreach: 'chat', close: 'coin', spv: 'folder', deadlines: 'ticket', grants: 'note', sprint: 'status',
+  meetings: 'calendar', outreach: 'chat', close: 'coin', spv: 'folder', deadlines: 'ticket', grants: 'note', sprint: 'status', travel: 'arrow', events: 'calendar-next',
 };
 
 /** Keyed by lane, in the order the chips and the chart's key list them. */
 export const LANE_LOOK: Record<Lane, LaneLook> = Object.fromEntries(
-  (['meetings', 'outreach', 'close', 'spv', 'deadlines', 'grants', 'sprint'] as Lane[])
+  (['meetings', 'outreach', 'close', 'spv', 'deadlines', 'grants', 'travel', 'events', 'sprint'] as Lane[])
     .map((l) => [l, { label: LANE_LABEL[l], means: LANE_MEANS[l], glyph: GLYPH[l] }]),
 ) as Record<Lane, LaneLook>;
 
