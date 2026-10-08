@@ -204,10 +204,10 @@ export async function mcpProperties(check: Check, db: Db) {
   const rate = await connect(await token(gpAll, READ_TOOLS));
   const fast = [await call(rate, 'changelog', { limit: 1 }), await call(rate, 'changelog', { limit: 1 }), await call(rate, 'changelog', { limit: 1 })];
   (config.mcp as { callsPerMinute: number }).callsPerMinute = perMinute;
-  check('MCP: a token\'s daily budget and the per-minute rate refuse calls past them',
-    !spent[0]!.isError && !spent[1]!.isError && spent[2]!.isError === true && text(spent[2]!).includes('budget')
-    && !fast[1]!.isError && fast[2]!.isError === true && text(fast[2]!).includes('in a minute'),
-    'third call over a budget of two refused; third call over two a minute refused');
+  // Juan, 8 Oct 2026: "remove token limits for PLCOS -- re-implement them only after we find a need for them".
+  check('MCP: calls are not limited: a token\'s stored daily figure and the per-minute setting refuse nothing',
+    spent.every((r) => !r.isError) && fast.every((r) => !r.isError),
+    `three calls on a token whose calls_per_day is 2: ${spent.map((r) => (r.isError ? 'refused' : 'ok')).join(', ')}; three at a per-minute setting of 2: ${fast.map((r) => (r.isError ? 'refused' : 'ok')).join(', ')}`);
 
   // ── Marked as data, kept small; acting as the token's owner ────────────────────────────
   const big = render('pipeline', { data: { rows: Array.from({ length: 5000 }, (_, i) => ({ i, note: 'x'.repeat(200) })), long: 'y'.repeat(9000) } }, 20_000);

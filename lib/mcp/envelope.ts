@@ -64,44 +64,19 @@ export function envelopeFor(token: McpToken, owner: AppUser): Envelope {
   };
 }
 
-// ── Rate and budget ─────────────────────────────────────────────────────────────────────
-// In memory, one server process (docs/deploy/rev3: one machine). A day's count is read back from
-// the audit log the first time a token is seen after a restart, so restarting does not refill it. A token's
-// outreach calls (docs/27) count against the same budget as its MCP calls.
+// ── Rate ─────────────────────────────────────────────────────────────────────────────
+// No call limits (Juan, 8 Oct 2026: "remove token limits for PLCOS -- re-implement them only after we find a need for
+// them"). A token is checked for its tools and its expiry; config.mcp.callsPerMinute and a token's calls_per_day are
+// kept, unused, for when a limit is wanted again. Every call is still audited.
 
-interface Window { minute: number[]; day: string; dayCount: number }
-const windows = new Map<string, Window>();
-const today = (now: number) => new Date(now).toISOString().slice(0, 10);
-
-export async function admitCall(env: Envelope, tool: string, q: Queryable, now = Date.now(), permitted = env.tools.has(tool)): Promise<string | null> {
+export async function admitCall(env: Envelope, tool: string, _q: Queryable, now = Date.now(), permitted = env.tools.has(tool)): Promise<string | null> {
   if (!permitted) return `"${tool}" is not in this token's envelope. Allowed: ${[...env.tools].sort().join(', ') || 'nothing'}.`;
   if (env.expiresAt.getTime() <= now) return 'This token has expired. Make a new one in Preferences.';
-  let w = windows.get(env.tokenId);
-  if (!w || w.day !== today(now)) {
-    const row = await q.one<{ n: string }>(`select count(*)::text n from platform.audit_log
-      where action in ('mcp.call', 'outreach.call') and subject_id = $1 and at >= $2::date and detail->>'outcome' <> 'rate_limited'`, [env.tokenId, today(now)]);
-    w = { minute: [], day: today(now), dayCount: Number(row?.n ?? 0) };
-    windows.set(env.tokenId, w);
-  }
-  w.minute = w.minute.filter((t) => now - t < 60_000);
-  if (w.minute.length >= config.mcp.callsPerMinute) return `More than ${config.mcp.callsPerMinute} calls in a minute. Wait and try again.`;
-  if (w.dayCount >= env.callsPerDay) return `This token's budget of ${env.callsPerDay} calls today is spent. It refills at midnight UTC.`;
-  w.minute.push(now);
-  w.dayCount++;
   return null;
 }
 
-/** The calls a token has left today, as counted by admitCall; null before its first call today on this server. */
-export function remainingToday(env: Envelope, now = Date.now()): number | null {
-  const w = windows.get(env.tokenId);
-  return w && w.day === today(now) ? Math.max(0, env.callsPerDay - w.dayCount) : null;
-}
-/** Whole seconds until the daily budget refills (midnight UTC). */
-export const secondsToMidnightUtc = (now = Date.now()) => Math.max(1, Math.ceil((Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate() + 1) - now) / 1000));
-export const DAILY_SPENT = /calls today is spent/;
-
 /** For the properties: forget the in-memory windows. */
-export function resetWindows() { windows.clear(); }
+export function resetWindows() { /* no windows: calls are not limited */ }
 
 // ── What the audit entry keeps ──────────────────────────────────────────────────────────
 

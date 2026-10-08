@@ -2,7 +2,7 @@ import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { withQueryTimings } from '@/lib/db/timing';
 import { autonomousOf, correlationOf } from '@/lib/mcp/audit';
-import { DAILY_SPENT, envelopeFor, remainingToday, secondsToMidnightUtc } from '@/lib/mcp/envelope';
+import { envelopeFor } from '@/lib/mcp/envelope';
 import { DATA_NOTICE } from '@/lib/mcp/output';
 import { runTool } from '@/lib/mcp/server';
 import { appendAudit, findMcpToken } from '@/modules/platform';
@@ -55,7 +55,7 @@ export function corsOrigin(request: Request): string | null | false {
 }
 
 function corsHeaders(origin: string | null): Record<string, string> {
-  return origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Access-Control-Expose-Headers': 'Retry-After, X-RateLimit-Limit-Day, X-RateLimit-Remaining-Day' } : { Vary: 'Origin' };
+  return origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Access-Control-Expose-Headers': 'Retry-After' } : { Vary: 'Origin' };
 }
 
 export function preflight(request: Request): Response {
@@ -141,12 +141,6 @@ async function serve(request: Request, op: string, method: 'GET' | 'POST'): Prom
     if (!args || typeof args !== 'object' || Array.isArray(args)) return fail(400, 'The body is a JSON object.');
   }
   const r = await runTool(env, spec.tool, args, meta);
-  // What the token has left today, on every answer (JuanMail, 7 Oct 2026); the daily 429 says when it refills.
-  const left = remainingToday(env);
-  const budget: Record<string, string> = left === null ? {} : { 'X-RateLimit-Limit-Day': String(env.callsPerDay), 'X-RateLimit-Remaining-Day': String(left) };
-  if (!r.ok) {
-    const daily = r.status === 429 && DAILY_SPENT.test(r.message);
-    return fail(r.status, r.message, { ...budget, ...(r.status === 429 ? { 'Retry-After': daily ? String(secondsToMidnightUtc()) : '60' } : {}) });
-  }
-  return json(200, { about: DATA_NOTICE, op, tool: spec.tool, asOf: r.answer.asOf ?? new Date().toISOString(), coverage: r.answer.coverage ?? null, data: r.answer.data }, { ...cors, ...budget });
+  if (!r.ok) return fail(r.status, r.message);
+  return json(200, { about: DATA_NOTICE, op, tool: spec.tool, asOf: r.answer.asOf ?? new Date().toISOString(), coverage: r.answer.coverage ?? null, data: r.answer.data }, cors);
 }
