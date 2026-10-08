@@ -34,7 +34,7 @@ export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles' | 'jobs' | 
   // Adds a vehicle through the same createVehicle the Settings → Vehicles form calls, so its checks hold: Admin only.
   vehicles: { name: 'vehicle_create', route: 'POST /api/sync/vehicles', grant: ['admin'],
     policy: { risk: 'write-guarded', scopes: [SYNC_ADMIN], ticket: 'none', approval: false } },
-  // Queues the jobs Developer → Enrichment's buttons queue (research export, findings import), as the token's owner.
+  // Queues the jobs Developer → Enrichment's buttons queue (research export, findings import, Merge duplicate identities), as the token's owner.
   jobs: { name: 'import_job', route: 'POST|GET /api/sync/jobs', grant: ['admin'],
     policy: { risk: 'write-guarded', scopes: [SYNC_ADMIN], ticket: 'none', approval: false } },
   // The app's feedback queue (lib/sync/feedback.ts): read the issues and their screenshots, set an issue's status.

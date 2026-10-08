@@ -68,7 +68,9 @@ export async function evaluateGuards(
   if (args.connectorId) {
     const viaConnector = await asksViaConnectorSince(args.connectorId, since, q);
     if (viaConnector.length >= config.guard.asksPerConnectorPerQuarter) {
-      blocks.push({
+      // Advisory since 8 Oct 2026, like the relationship cap (Juan: "i'd remove it unless necessary"): the count is
+      // shown beside the blocks and refuses nothing unless config.guard.askLimit is 'enforce'.
+      const load: GuardBlock = {
         rule: 'connector_load',
         message:
           `${viaConnector[0]?.connectorName ?? 'This connector'} has been asked ` +
@@ -77,7 +79,9 @@ export async function evaluateGuards(
           'Connector goodwill is the scarcer resource and the one you cannot buy back. ' +
           'The cap is a guess in config/deployment.ts and should move once real data exists.',
         opensCase: false,
-      });
+      };
+      if (config.guard.askLimit === 'enforce') blocks.push(load);
+      else { load.advisory = true; advisories.push(load); }
     }
   }
 

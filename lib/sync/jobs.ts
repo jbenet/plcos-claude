@@ -6,13 +6,15 @@ import { pushRefusal, type PushAnswer } from './push';
 /**
  * POST|GET /api/sync/jobs: an Admin's token (sync:admin) queues the jobs Developer → Enrichment's buttons queue,
  * as the token's owner, and reads any job's state (7 Oct 2026: the Mac needed a fresh research export from the
- * cloud to write SPV Science strategies, and nobody to click the button). Only these kinds: a research export
- * and a findings import. Counts only, never a name; the job's own checks and audit are the button's.
+ * cloud to write SPV Science strategies, and nobody to click the button). Only these kinds: a research export,
+ * a findings import, and Merge duplicate identities (8 Oct 2026, Juan: the W13 proposals are Claude's to apply, "ideally
+ * you do it"; the button is Admin-only, as this token is). Counts only, never a name; the job's own checks and audit
+ * are the button's.
  *
- *   POST { "kind": "export" | "findings" }   → 202 { job: { id, kind, status } }
+ *   POST { "kind": "export" | "findings" | "duplicates" }   → 202 { job: { id, kind, status } }
  *   GET  ?job=<id>                          → 200 { job: { id, kind, status, phase, error, counts, … } }
  */
-const KINDS: readonly ImportKind[] = ['export', 'findings'];
+const KINDS: readonly ImportKind[] = ['export', 'findings', 'duplicates'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function queueJob(caller: SyncCaller, request: Request, o: { db?: Db } = {}): Promise<PushAnswer> {

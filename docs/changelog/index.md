@@ -288,3 +288,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [A person's older research files under the organization they speak for](entries/contact-aliases.md)
 - [A revised finding takes nothing from the merge](entries/merge-revised.md)
 - [Search on Everyone and in every top bar](entries/search.md)
+- [The Admin token merges duplicate identities; the connector cap only advises](entries/rulings-1008.md)
