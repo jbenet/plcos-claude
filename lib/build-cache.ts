@@ -1,9 +1,5 @@
 import { getDb, type Db } from '@/lib/db';
-import { DbBusyError, withSharedDb } from '@/lib/db/scheduling';
-
-class RevisionChanged extends Error {}
-// GUESS — two retries tolerate brief imports without an unbounded page rebuild loop.
-const REVISION_RETRIES = 2;
+import { withSharedDb } from '@/lib/db/scheduling';
 
 /** One revision read, never a scan of the graph or picker tables. Writes invalidate at
  * transaction commit; midnight refreshes date-sensitive picker inputs. Guards are read live. */
@@ -13,11 +9,19 @@ export async function readRevision(db: Db): Promise<string> {
   return row!.revision;
 }
 
-/** Bounded per-database memo for page inputs. Rejections are evicted; concurrent
- * requests share the work. Callers must treat returned values as immutable. */
+/**
+ * Bounded per-database memo for page inputs. Rejections are evicted; concurrent requests share the
+ * work. Callers must treat returned values as immutable.
+ *
+ * A load the data changed under is answered but not kept (performance pass, 8 Oct 2026). It read
+ * nothing older than the revision it started at, which is what an uncached page shows; keeping it
+ * under that revision would be wrong, so the next request loads again. Before, such a load was thrown
+ * away and run again, up to three times, then failed as "busy": while an import committed every few
+ * seconds, a pipeline that takes seconds to build cost three builds and then an error page.
+ */
 export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 16) {
   const databases = new WeakMap<Db, { revision: string; entries: Map<string, Promise<T>> }>();
-  const readOnce = async (...args: string[]): Promise<T> => {
+  return async (...args: string[]): Promise<T> => {
     const db = await getDb(), revision = await readRevision(db);
     let state = databases.get(db);
     if (state?.revision !== revision) {
@@ -30,8 +34,8 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
     const value: Promise<T> = withSharedDb(() => Promise.resolve().then(async () => {
       try {
         const result = await load(...args);
-        // Concurrent callers share this validated promise, never the unvalidated load.
-        if (await readRevision(db) !== revision) throw new RevisionChanged();
+        // Concurrent callers share this answer either way; only a load at one revision is kept.
+        if (await readRevision(db) !== revision && state.entries.get(key) === value) state.entries.delete(key);
         return result;
       } catch (error) {
         if (state.entries.get(key) === value) state.entries.delete(key);
@@ -41,15 +45,5 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
     state.entries.set(key, value);
     if (state.entries.size > limit) state.entries.delete(state.entries.keys().next().value!);
     return value;
-  };
-  return async (...args: string[]): Promise<T> => {
-    // Retry outside shared attempts: joining another caller must not extend our budget.
-    for (let attempt = 0; ; attempt++) {
-      try { return await readOnce(...args); }
-      catch (error) {
-        if (!(error instanceof RevisionChanged)) throw error;
-        if (attempt >= REVISION_RETRIES) throw new DbBusyError();
-      }
-    }
   };
 }
