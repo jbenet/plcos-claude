@@ -208,6 +208,9 @@ export function quarterStart(now: Date): Date {
 
 export interface AskHistory {
   asksThisQuarter: number;
+  /** Already asked for many intros this quarter (at or past config.guard.asksPerConnectorPerQuarter). A flag only (Juan,
+   * 8 Oct 2026, feedback 0124: "flag only"): nothing is held or hidden because of it. */
+  busy: boolean;
   lastAsk: { on: string; replied: boolean | null; basis: string } | null;
 }
 
@@ -290,7 +293,7 @@ export async function askHistory(entityIds: string[], now = new Date()): Promise
     select distinct identity.canonical_entity_id(x.id)::text id, m.direction, m.sent_at, m.message_id
       from email.comms_message m cross join lateral unnest(m.entity_ids) x(id)
      where identity.canonical_entity_id(x.id) = any($1::uuid[]) and m.sent_at >= $2`, [asks.map((a) => a.id), since]) : [];
-  for (const id of ids) out.set(id, { asksThisQuarter: 0, lastAsk: null });
+  for (const id of ids) out.set(id, { asksThisQuarter: 0, busy: false, lastAsk: null });
   for (const a of asks) {
     const at = new Date(a.made_at);
     const theirs = mail.filter((m) => m.id === a.id && m.direction === 'theirs' && new Date(m.sent_at) > at);
@@ -302,7 +305,7 @@ export async function askHistory(entityIds: string[], now = new Date()): Promise
           : theirs.length ? { replied: true, basis: 'the mail trace: a message from them after the ask' }
             : ours.length ? { replied: false, basis: 'the mail trace: our message to them, nothing from them since' }
               : { replied: null, basis: 'Not known: no outcome is recorded on the ask, and the mail trace holds no message with them since.' };
-    out.set(a.id, { asksThisQuarter: a.n, lastAsk: { on: at.toISOString().slice(0, 10), ...replied } });
+    out.set(a.id, { asksThisQuarter: a.n, busy: a.n >= config.guard.asksPerConnectorPerQuarter, lastAsk: { on: at.toISOString().slice(0, 10), ...replied } });
   }
   return out;
 }
@@ -360,7 +363,7 @@ export async function topConnectors(user: AppUser, a: ConnectorArgs, fit: Connec
     asOf: p.asOf,
     data: unchangedOr(p.complete, a.ifChanged, {
       vehicle: v.slug, firstHopOnly: firstOnly,
-      connectors: shown.map((x) => ({ ...c.at(x), ...(asks.get(x.entityId) ?? { asksThisQuarter: 0, lastAsk: null }), ...intros.get(x.entityId)! })),
+      connectors: shown.map((x) => ({ ...c.at(x), ...(asks.get(x.entityId) ?? { asksThisQuarter: 0, busy: false, lastAsk: null }), ...intros.get(x.entityId)! })),
       total: ranked.length, lpsOpen: p.open.length, lpsInspected: p.planned.length, lpsReached: reached, complete: p.complete,
       addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
     }),
@@ -416,7 +419,7 @@ async function connectorTargets(user: AppUser, a: ConnectorArgs & { entityId: st
     data: unchangedOr(p.complete, a.ifChanged, {
       vehicle: v.slug, firstHopOnly: firstOnly,
       // The name comes from the routes: a connector on no route here is not named (an id is not a way to look anyone up).
-      connector: { ...who, name, asFirstHop, asDeeperHop, reachableDirectly: asFirstHop > 0, ...(asks.get(entityId) ?? { asksThisQuarter: 0, lastAsk: null }), ...intros.get(entityId)! },
+      connector: { ...who, name, asFirstHop, asDeeperHop, reachableDirectly: asFirstHop > 0, ...(asks.get(entityId) ?? { asksThisQuarter: 0, busy: false, lastAsk: null }), ...intros.get(entityId)! },
       rows: fitted, total: rows.length, offset, limit, nextCursor,
       ...(fitted.length < page.length ? { heldBack: `${page.length - fitted.length} row${page.length - fitted.length === 1 ? '' : 's'} held back to fit the answer's size limit; nextCursor continues from here.` } : {}),
       lpsOpen: p.open.length, lpsInspected: p.planned.length, complete: p.complete,

@@ -137,6 +137,35 @@ export const nextTooLong = (s: Pick<Strategy, 'next'>) => `${s.next.what} — ${
 /** W5 v1.5: one person, one action, a date — under 300 characters with who and when. */
 export const nextOverLimit = (s: Pick<Strategy, 'next'>) => `${s.next.what} — ${s.next.who}, ${s.next.when ?? ''}`.length > 300;
 
+/**
+ * W5 1.12 (Juan, 8 Oct 2026, feedback 0141: "far too wordy ... write much more tightly, more signal"): the
+ * fields a reader sees, held to a few short lines. Advisory: the checker counts and lists them, nothing is refused.
+ */
+export const TIGHT = { angle: 25, routeWhy: 15, next: 200, item: 15, items: 3 } as const; // GUESS: caps from the 0141 example.
+export function wordyParts(s: Partial<Pick<Strategy, 'angle' | 'route' | 'next' | 'risks' | 'openQuestions'>>): string[] {
+  const out: string[] = [];
+  if (s.angle && wordCount(s.angle) > TIGHT.angle) out.push('angle');
+  if (s.route?.why && wordCount(s.route.why) > TIGHT.routeWhy) out.push('route');
+  if (s.next?.what && s.next.what.length > TIGHT.next) out.push('next');
+  for (const k of ['risks', 'openQuestions'] as const) {
+    const xs = s[k] ?? [];
+    if (xs.length > TIGHT.items || xs.some((x) => wordCount(x) > TIGHT.item)) out.push(k);
+  }
+  return out;
+}
+
+/** The strategy as four short bullets — the ask, the route, why, the next step — and its first risk (0141). */
+export function strategyBrief(s: Partial<Pick<Strategy, 'angle' | 'route' | 'next' | 'risks' | 'ask'>>): string[] {
+  const ask = s.ask && s.ask.shape !== 'none yet' ? [s.ask.shape, s.ask.range].filter(Boolean).join(', ') : null;
+  return [
+    ask && `Ask: ${ask}`,
+    s.route ? `Route: ${s.route.via} (${s.route.tier})` : 'Route: none on file',
+    s.angle && `Why: ${s.angle}`,
+    s.next?.what && `Next: ${s.next.what}${s.next.who ? `, ${s.next.who}` : ''}${s.next.when ? `, ${s.next.when}` : ''}`,
+    s.risks?.[0] && `Risk: ${s.risks[0]}`,
+  ].filter((x): x is string => Boolean(x));
+}
+
 /** The close track as a strategy pins it (W5 v1.5): "<track> <state> <amount>", or null. */
 export const moneyKey = (m: { track: string; state: string; amount: number } | null | undefined) => (m ? `${m.track} ${m.state} ${m.amount}` : null);
 

@@ -21,3 +21,9 @@ export function organizationPenalty(score: RouteScore, route: Pick<Route, 'conne
     edgeIds: route.hops.map(h => h.edge.edgeId),
   }] };
 }
+
+/** The busy-introducer warning (feedback 0124): shown, and refusing nothing unless the ask limit is enforced. */
+export function busyReason(connector: string, used: number, cap: number, held: boolean): string {
+  return `${connector} is a busy introducer: asked ${used} time${used === 1 ? '' : 's'} this quarter, at or past the guide of ${cap}. ` +
+    (held ? 'The route is held because the ask limit is enforced.' : 'Nothing is held; weigh it before asking again.');
+}

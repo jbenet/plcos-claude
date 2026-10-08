@@ -104,16 +104,20 @@ export async function applyIdentityDecisions(tx: Queryable, by: string, report: 
     const members = groupMembers(d);
     if (!members) continue;
     const later = parsed.find(p => {
-      if (!p.decision || p.input.line <= input.line) return false;
+      // Only a later proposal of the same kind supersedes (issue 0138: a merge swallowed the retype before it).
+      if (!p.decision || p.input.line <= input.line || p.decision.decision !== d.decision) return false;
       const next = groupMembers(p.decision);
       return next && next.length > members.length && members.every(id => next.includes(id))
         && (d.members ?? members).every(id => (p.decision!.members ?? next).includes(id));
     });
     if (later) superseded.set(input, later.input.line);
   }
+  // A retype and a merge for one group do not conflict: the retype comes first in the file and makes the
+  // members one type, then the merge applies (issue 0138). A merge and a separation do, as do two retypes.
+  const lane = (d: IdentityDecision) => `${d.group}:${d.decision === 'retype' ? 'retype' : 'outcome'}`;
   const variants = new Map<string, Set<string>>();
   for (const { input, decision: d } of parsed) if (d && !applied.has(fingerprint(d)) && !superseded.has(input))
-    variants.set(d.group, (variants.get(d.group) ?? new Set()).add(fingerprint(d)));
+    variants.set(lane(d), (variants.get(lane(d)) ?? new Set()).add(fingerprint(d)));
   for (const { input, decision: d } of parsed) {
     if (!d) continue;
     const key = fingerprint(d);
@@ -124,7 +128,7 @@ export async function applyIdentityDecisions(tx: Queryable, by: string, report: 
     const separations: IdentityDecisionReport['separations'] = [];
     await tx.exec('savepoint identity_decision');
     try {
-      if (variants.get(d.group)!.size > 1) fail('Conflicting decisions for this group; keep one proposal per group');
+      if (variants.get(lane(d))!.size > 1) fail('Conflicting decisions for this group; keep one proposal per group');
       const group = report.ambiguous.find(g => identityReviewGroupId(g.entityIds) === d.group);
       if (!group) fail('Group is stale, already settled, or absent from the current ambiguous pass; export again');
       const groupIds = group!.entityIds;

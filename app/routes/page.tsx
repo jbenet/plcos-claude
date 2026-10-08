@@ -484,6 +484,9 @@ async function Routes({
                       {route.askLoad.used} of {route.askLoad.cap} asks
                       <br />
                       used this quarter
+                      {route.askLoad.busy && (
+                        <div><span className="flag f-ev" title="Asked at or past the guide this quarter. A warning only: nothing is held.">busy introducer</span></div>
+                      )}
                     </>
                   ) : (
                     'direct'

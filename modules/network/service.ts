@@ -1,6 +1,6 @@
 import { lpContactsFor } from '@/modules/strategy/lp-contacts';
 import { routePolicyFacts, routeIdentityGroups, routeOrganizations } from './route-policy';
-import { emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
+import { busyReason, emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
 import { cachedRoutes } from './cache';
 import { promotedBasisHashes, compactStructuralRoutes, overlayRoutes, routeCheckpoint, selectDisplayRoutes, sortRouteCandidates, type RouteSelectionOptions } from './route-overlay';
 import { setImmediate } from 'node:timers/promises';
@@ -214,14 +214,14 @@ async function calculateRoutes(
           connector: nameOf.get(lastConnector) ?? 'Unknown',
           used: loadOf.get(lastConnector) ?? 0,
           cap,
+          busy: (loadOf.get(lastConnector) ?? 0) >= cap,
         }
       : null;
-    if (askLoad && askLoad.used >= cap && verdict === 'recommend') {
-      verdict = 'hold';
-      reasons.push(
-        `${askLoad.connector} has used ${askLoad.used} of ${cap} asks this quarter. ` +
-        'The cap is on the connector because goodwill is the resource you cannot buy back.',
-      );
+    // Feedback 0124 (Juan, 8 Oct 2026: "flag only"): a busy introducer is a warning; the route is held only when
+    // config.guard.askLimit is 'enforce'.
+    if (askLoad?.busy && verdict === 'recommend') {
+      if (config.guard.askLimit === 'enforce') verdict = 'hold';
+      reasons.push(busyReason(askLoad.connector, askLoad.used, cap, verdict === 'hold'));
     }
 
     if (verdict === 'recommend') {
@@ -229,7 +229,7 @@ async function calculateRoutes(
       reasons.push(
         `Every hop is tier ${weakestTier} or better${weakestTier <= 'B' ? ', with a documented or policy-based tie' : '; the route carries weaker evidence'}` +
         (reviewed > 0 ? ` and ${reviewed} hop${reviewed === 1 ? '' : 's'} confirmed by a person.` : '.') +
-        (askLoad && askLoad.used > 0
+        (askLoad && askLoad.used > 0 && !askLoad.busy
           ? ` ${askLoad.connector} has goodwill left: ${cap - askLoad.used} of ${cap} asks unused this quarter.`
           : ''),
       );
