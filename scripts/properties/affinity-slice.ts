@@ -46,8 +46,10 @@ export async function affinitySliceProperties(ctx: AffinityContext) {
   for (let d = 0; d < 30; d++) for (const id of sl.relationshipsDue(want, want, 30, d * day)) cover.add(id);
   const againDetail = again?.detail as { relationshipsFor?: number; relationshipsDue?: number } | null;
   const read = await adb.query<{ id: string }>(`select distinct source_id as id from sources.raw_record where source = 'affinity' and kind = 'relationship'`);
-  const today = Math.floor(Date.now() / day) % 30;
-  const dueAgain = read.filter((r) => Number(r.id) % 30 === today).length;
+  const { config } = await import('../../config/deployment');
+  const cycle = config.affinity.relationshipRefreshDays;
+  const today = Math.floor(Date.now() / day) % cycle;
+  const dueAgain = read.filter((r) => Number(r.id) % cycle === today).length;
   check(
     'A slice reads relationships only for new people and the day\'s share of the rest',
     JSON.stringify(due(0)) === JSON.stringify([30, 45]) && JSON.stringify(due(day)) === JSON.stringify([31, 45, 61])
