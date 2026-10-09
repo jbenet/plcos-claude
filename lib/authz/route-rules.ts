@@ -20,6 +20,7 @@ export const routeRules = {
   // authorized as the token's owner, through the UI's own rules. OPTIONS answers CORS preflight only.
   'app/api/outreach/[op]/route.ts#GET': 'outreach',
   'app/api/outreach/[op]/route.ts#POST': 'outreach',
+  'app/api/outreach/[op]/route.ts#DELETE': 'outreach',
   'app/api/outreach/[op]/route.ts#OPTIONS': 'outreach',
   'app/api/profile/route.ts#GET': 'admin',
   // Cloud pull and push (docs/deploy/railway.md §6–§7): a bearer token of the endpoint's own scope, not the cookie.

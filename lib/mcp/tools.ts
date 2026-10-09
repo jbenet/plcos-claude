@@ -9,6 +9,7 @@ import { config } from '@/config/deployment';
 import { contactInput, contacts, requestTicket, ticketInput, update, updateInput } from '@/lib/outreach/writes';
 import { commsTrace, ingest, ingestInput, link, linkInput, recordSendAlias, sentInput, traceInput } from '@/lib/outreach/comms';
 import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
+import { addLp, addLpInput, undoAddLp, undoAddLpInput, UNDO_HOURS } from '@/lib/outreach/lps';
 import { auditRecent } from './audit';
 import { insights, insightsInput, playbook, recordSignals, signalsFor, signalsInput, signalsReadInput } from '@/lib/outreach/signals';
 
@@ -206,6 +207,19 @@ export const TOOLS: readonly Tool[] = [
     description: 'The playbook for the mail desk, as markdown: which signals to read from a PLC OS thread and how, which call each maps to (outreach_record_signals, outreach_propose_contact, outreach_update), what a person must click, what costs model calls and what does not.',
     input: z.object({}).strict(),
     run: async () => playbook(),
+  }),
+  // Operating PLC OS from mail (Juan, 9 Oct 2026): the desk adds an LP it pitched by email. docs/27 §5.
+  tool({
+    name: 'outreach_add_lp', title: 'Outreach: add an LP from mail', policy: { risk: 'write-guarded', scopes: [OUTREACH_WRITE], ticket: 'none', approval: false },
+    description: `Add a person you pitched by email about a vehicle as an LP on it, with the mail as the evidence (Gmail ids, Message-IDs, one sentence; never a body). Matched first, never duplicated: a person whose address is on record is that person; otherwise by name, with the address's domain and the firm as evidence. When the name could be several people here it refuses (409) and names them; nothing is written. Already on the vehicle: nothing changes (created.pursuit false). A person's call sets the status (selected, connecting or discussing; default connecting) and may record an indicated amount. Marked autonomous it still adds, but the status is the system's (a person's later choice wins), the address is unconfirmed, and indicated is refused (400). Never a ladder rung. Once per idempotencyKey; undo within ${UNDO_HOURS} hours with outreach_undo_add_lp.`,
+    input: addLpInput,
+    run: (env, a) => addLp({ env }, a),
+  }),
+  tool({
+    name: 'outreach_undo_add_lp', title: 'Outreach: undo an LP added from mail', policy: { risk: 'write-guarded', scopes: [OUTREACH_WRITE], ticket: 'none', approval: false },
+    description: `Take back an LP outreach_add_lp added: only one it created, by your own token's owner, within ${UNDO_HOURS} hours, and only while nothing else has happened on it (no update, status change, touchpoint, link, ticket or merge). Removes the pursuit, the address and the evidence it recorded, and retires the person if that call created them and nothing else refers to them. Otherwise 409 with why.`,
+    input: undoAddLpInput,
+    run: (env, a) => undoAddLp({ env }, a),
   }),
   // The comms trace (Juan, 5 Oct 2026: "let email be the state"). docs/27 §5–§6.
   tool({

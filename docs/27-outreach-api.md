@@ -9,7 +9,8 @@ queue's explicit limit and cursor paging and the close track's dates (§4), `_me
 the live server" sentence (§5) — merged on 5 Oct 2026 (`648e03b`) and is live on `deploy` at `0b3715e`. **Built on
 `claude/outreach-desk-v3`, 5 Oct 2026, not merged yet:** its third round — `askFirst` on every route (§4a); first-hop and
 deeper counts, `reachableDirectly`, `firstHopOnly` and ask history on `top_connectors` (§4b); one connector's targets
-(§4c); one message linked to several LPs (§5); and the close track's `signedCount` (§4).
+(§4c); one message linked to several LPs (§5); and the close track's `signedCount` (§4). **Built on `claude/plcos-add-lp-from-mail`, 9 Oct
+2026, not merged yet:** the desk adds an LP from mail, and undoes one (`outreach_add_lp`, `outreach_undo_add_lp`, §5).
 
 **juanmail** is Juan's mail desk: an Outreach tab for the SPV war room now, a module of his mail client later. It runs
 its own server, and all syncing between Capital OS and juanmail happens from there. It reads Capital OS and writes back
@@ -452,6 +453,8 @@ vehicle (or on every vehicle the token reads), in one page:
 | `outreach_propose_contact` | `POST /api/outreach/contacts` | propose |
 | `outreach_link_message` | `POST /api/outreach/link` | send-adjacent; an autonomous send needs an approved ticket (`agent-only`) |
 | `comms_ingest` | `POST /api/outreach/comms` | send-adjacent; metadata only, no ticket |
+| `outreach_add_lp` | `POST /api/outreach/lps` | write-guarded; no ticket — an autonomous call gets the system's status (9 Oct 2026) |
+| `outreach_undo_add_lp` | `DELETE /api/outreach/lps?pursuitId=…` | write-guarded; only an add of its own, within 24 hours, while nothing has happened |
 | `outreach_record_send` (deprecated) | `POST /api/outreach/sent` | the old arguments, run as `outreach_link_message`; removed next release |
 
 All need `outreach:write`. Over REST a refusal is `{ error }` with 400 (input), 403 (scope, access), 404 (not yours, or
@@ -603,6 +606,100 @@ supports, as for Affinity's (docs/29 §4). Answers `{ new, already, unmatched, m
 (`GET /api/outreach/playbook`), contact details on `outreach_propose_contact` and `outreach_contacts?details=1`, and
 Reconciliation after `comms_ingest`: docs/29-mail-actions.md.
 
+**`outreach_add_lp`** — add an LP from mail (9 Oct 2026). Juan, who owns both systems, asked for JuanMail to operate
+PLC OS from mail: when he has pitched someone about a vehicle by email and they are not an LP here, the desk adds them —
+with one click (a person's call), or on its own when the evidence is clear (an autonomous call). Part of the Raise
+section; risk `write-guarded`, `outreach:write`, no ticket.
+
+```json
+POST /api/outreach/lps
+{ "vehicle": "spv-invented",
+  "person": { "name": "Kenji Invented", "nameAsWritten": "発明 健二", "email": "kenji@invented-capital.example", "firm": "Invented Capital" },
+  "status": "connecting",
+  "indicated": { "low": 350000, "high": 500000, "on": "2026-10-04" },
+  "evidence": { "gmailMessageIds": ["19e2…"], "messageIds": ["<CAF…@mail.gmail.com>"],
+                "words": "Juan pitched the SPV Oct 2; they replied Oct 4 considering ¥50M." },
+  "idempotencyKey": "juanmail-addlp-2026-10-04-kenji" }
+→ { "data": { "entityId": "…", "pursuitId": "…", "created": { "entity": true, "pursuit": true }, "status": "connecting",
+              "autonomous": false, "next": "Added to Invented SPV. Open it at /spv-invented/pipeline/…. Undo within 24 hours, …" } }
+```
+
+`nameAsWritten` and `firm` are optional; `status` is `selected`, `connecting` or `discussing` (default `connecting`);
+`indicated` is optional (`high` and `on` too); `gmailMessageIds` 1–20, `messageIds` up to 20 (brackets optional);
+`words` one sentence, at most 300 characters, never the body; `idempotencyKey` 8–100 of `[\w.:-]`.
+
+- **Matched first, never duplicated.** A person whose address on record is this one (case aside) is that person: a
+  current email claim that is not licensed, or an address Affinity holds for them — the same rule as the contacts the
+  queue shows (`lib/outreach/addresses.ts`). Otherwise `resolveEntity` (`modules/identity/create.ts`, the only entrance
+  for creating a person) decides on the name, with the address's domain and the firm as evidence, as every other source
+  does: a name here with that domain or firm on record is that person; a new name is a new person (source `mail_desk`,
+  `email:<address>`). When it cannot pick one person safely — the name is someone's here and nothing in the mail picks
+  them, or two people here have that address — the call is refused, **409, naming the candidates, and nothing is
+  written** (no person, no possible match): "Not added: "Kenji Invented" could be one of 2 people already here (Kenji
+  Invented; Kenji Invented), and the mail (the address's domain, the firm) does not say which. Nothing was written.
+  Record the address on the right person (outreach_propose_contact) or add them in Capital OS, then call again."
+- **Already on the vehicle: nothing changes.** Their pursuit (any status, passed included; the canonical person, not a
+  merged one) comes back with `created: { entity: false, pursuit: false }` and its status; not even the address is
+  recorded.
+- **Otherwise the pursuit**, as the prospect and organisation imports make one, with `source` `mail_desk` and the first
+  Gmail id as its `source_ref`, owned by the token's owner. The address becomes a research claim exactly as
+  `outreach_propose_contact` records one (source `gmail:<owner>`; an existing current one from that mailbox is kept, not
+  repeated).
+- **A person's call** (no `X-Autonomous` / `_meta.autonomous`): the status is a person's (`status_source` `us`, set by the
+  token's owner, its reason the evidence sentence), as asked; the address is confirmed by the owner (`high`); an
+  indicated amount goes through the update box's own service (`lib/updates.ts`, as `outreach_update`), as an update whose
+  words are the evidence sentence — all in **one transaction**.
+- **An autonomous call** (JuanMail on its own): allowed — a status is a plan, not a ladder rung, and needs no ticket
+  (domain rules 2–3; Juan, 8 Oct 2026: "system should be able to figure it out"). But the status is the system's
+  (`status_source` `rule`, set by the inactive Mail desk actor), so a person's later choice wins and no import treats it
+  as a person's; the address is unconfirmed (`medium`, no `last_verified_by`); and `indicated` is refused, **400**: "Not
+  added: an amount is a person's to record. Called autonomously (no person clicked), leave out indicated; a person adds it
+  with outreach_update." The pursuit's reason starts "Added by the mail desk on its own, from mail:", and the LP page
+  says so where it says who set the status ("set by the mail desk on its own …, from mail — nobody has set one here yet").
+- **The mail is the record** (rule 9): a `context` note on the person — what the LP's timeline shows — whose body is the
+  sentence and whose data keeps the Gmail ids, Message-IDs, `nameAsWritten`, `firm`, the token, `as_of`, `confidence`
+  (`high` for a person, `medium` autonomous) and `last_verified_by` (the owner, or none). No body. One audit entry,
+  `outreach.lp_added`, with the ids, the counts and what undo needs (what it created, and how many rows referred to the
+  pursuit and the person when it finished) — never the words.
+- **Once per `idempotencyKey`**: the same key again answers the first answer (`replayed: true`), and writes nothing.
+- **Refusals**: 400 (input; `indicated` when autonomous), 403 (no `outreach:write`; `NOT_LIVE_REFUSAL` on a server that
+  is not the live one, before even the key is reserved), 404 (`No vehicle "…" among yours.` — not one of the token's
+  active fund or SPV vehicles; or one it may not change), 409 (ambiguous person, above; two people with that address;
+  "this person already has a pursuit on … (added a moment ago, or merged into another)"; or a retry while the first call
+  with that key is still running), 422 (the update box refused the amount).
+
+**`outreach_undo_add_lp`** — take one back: `DELETE /api/outreach/lps?pursuitId=…`, or the MCP tool with `{ "pursuitId" }`.
+
+```json
+→ { "data": { "pursuitId": "…", "entityId": "…", "undone": true, "removed": { "pursuit": true, "entity": true },
+              "next": "Undone: the pursuit is gone and the person it added is retired." } }
+```
+
+Only a pursuit `outreach_add_lp` created (else **404**, "No LP added through the mail desk with that pursuitId on your
+vehicles."), on the token's vehicles, through the same person's token, within 24 hours, and only while nothing else has
+happened on it. Each refusal is **409** and says why: "…added through another person's token, and only they can undo
+it", "…added <time>, more than 24 hours ago", "…undone already", "…the amount it recorded moved an SPV seat to IOI", or
+"Not undone: something has happened on this LP since it was added (an update, a status change, …). Change it in Capital OS
+instead." — any audit entry about the pursuit after the add's own transaction (a status change by anyone, an update, a
+link), a change to its status or owner, an approval ticket about it, a merge, or any new row that points at it (an
+update, a touchpoint, a linked or ingested message, a send ticket, a draft, a strategy): the add records how many rows of
+each table pointed at the pursuit, by every foreign key, and undo counts again. Undo deletes, in one transaction, the
+amount and update it recorded, the pursuit, the evidence note and the address claim; and when the add created the
+person and nothing else refers to them now (counted the same way), deletes the `mail_desk` source record and its
+creation note and **retires** the person (`retired_at`; never deleted, so the audit still names them). A person who was
+already here is kept. Audited as `outreach.lp_undone`. A server that is not the live one refuses it like any write.
+
+**Adjusted from the request, and why.** The REST op is `/lps` (as asked). The undo is a `DELETE` on the same op — the
+first in this API — and runs `outreach_undo_add_lp`, so MCP and REST stay one tool each. "Name collisions land in
+possible_match exactly as other sources do" and "refuse with 409, no write" pull apart: the resolver makes a new person
+and a possible match only where it cannot decide, so the desk refuses there and writes nothing, the match included; a
+person who adds them in the app gets the possible match as usual. A match by address uses the same rule as the contacts
+on the queue, so a licensed (Dakota) address never matches. The firm is evidence for matching and kept in the note; no
+affiliation is recorded from it (a claimed affiliation from one email is a research question, and it would make undo
+reach further). The pursuit is removed by undo, not archived: nothing else refers to it by then, and an archived row
+would hold the person's slot on the vehicle (one pursuit per person and vehicle). No migration: the audit entry carries
+what undo needs.
+
 ## 6. Audit, and the later web client
 
 Every call — MCP or REST — is one `mcp.call` record (docs/26 §4): the user, the token and its name (client
@@ -709,6 +806,17 @@ part is `lib/redact-health.ts`, applied to every text field the queue returns. N
    about, approved as one action.
 
 ## 11. Tests
+
+Since 9 Oct 2026, adding an LP from mail (`scripts/properties/outreach-add-lp.ts`, through the real REST handler, on
+invented data): both tools are write-guarded behind `outreach:write`; a new person is added with a person's status, the
+amount through the update box, the address confirmed and the mail kept as ids, and the audit holds no words; a read
+token is refused; the same key replays the first answer and writes nothing; a person whose address is on record is
+matched whatever the name, and one already on the vehicle changes nothing; the resolver matches a name by the address's
+domain; a name shared with two people here is refused (409) with both named, writing nothing, not even a possible match;
+an autonomous call adds with the system's status (not a person's), an unconfirmed address, and is refused an amount
+(400); undo removes the pursuit, its address and evidence and retires the person it created, a second undo is refused,
+and the same address can be added again as a new person; undo is refused (409) after an update, and 404 for a pursuit it
+did not create; a server that is not the live one refuses add and undo with `NOT_LIVE_REFUSAL` and reserves no key.
 
 Since 5 Oct 2026, the desk's third round (`scripts/properties/outreach-desk-v3.ts`, through the real REST and MCP handlers,
 on two invented vehicles and the fund): `askFirst` is the first hop past the team member on 1-, 2- and 3-hop routes, with

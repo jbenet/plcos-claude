@@ -30,7 +30,8 @@ export async function outreachClient(): Promise<Call> {
     Object.assign(headers, init.headers ?? {});
     const request = new Request(url, { method: init.method ?? 'GET', headers, body: init.body === undefined ? undefined : JSON.stringify(init.body) });
     const ctx = { params: Promise.resolve({ op }) };
-    const res = init.method === 'OPTIONS' ? await route.OPTIONS(request, ctx) : init.method === 'POST' ? await route.POST(request, ctx) : await route.GET(request, ctx);
+    const res = init.method === 'OPTIONS' ? await route.OPTIONS(request, ctx) : init.method === 'POST' ? await route.POST(request, ctx)
+      : init.method === 'DELETE' ? await route.DELETE(request, ctx) : await route.GET(request, ctx);
     const text = await res.text();
     let json: any = null;
     try { json = JSON.parse(text); } catch { /* not JSON */ }

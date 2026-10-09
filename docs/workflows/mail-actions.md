@@ -88,6 +88,16 @@ Thu 15 Oct 2026; an API key bills separately, but keep it small).
    follow up on the date). Show each with its `why`. When Juan accepts one, send its `update` to `outreach_update`
    unchanged: its `idempotencyKey` makes a double click harmless. Juan may edit the words or the date first.
 
+5. **Someone Juan pitched who is not an LP here — `outreach_add_lp`** (`POST /api/outreach/lps`, docs/27 §5). When
+   Juan's own message pitches a vehicle to someone, and `outreach_contacts` has no LP with their address on that vehicle,
+   add them: `vehicle`, `person` (`name`, `email`, and `firm` and `nameAsWritten` when the mail shows them), `evidence`
+   (the Gmail and Message-IDs, one sentence of what the mail shows, never the body) and a key made from the message.
+   With Juan's click it is his call: the status he picks and, if they named one, the amount. With no click, only when the
+   evidence is clear (his message pitched that vehicle by name to that address, and they are not on it), mark it
+   autonomous: it is added with the system's status, which his choice later replaces, and no amount. A 409 means the
+   name could be someone already here: show Juan the names and let him pick; never retry with another spelling. Undo a
+   wrong add within a day with `DELETE /api/outreach/lps?pursuitId=…`.
+
 ## What strategy gets
 
 - Per LP: `outreach_signals?pursuitId=…` in the client's LP view. PLC OS's strategy pass (W5) reads the same
@@ -99,4 +109,5 @@ Thu 15 Oct 2026; an API key bills separately, but keep it small).
 ## What it never does
 
 Sends mail, approves or decides anything, records money or a soft commitment on the close track, sets a status
-without Juan's click, or sends a message body to PLC OS.
+without Juan's click (an LP it adds on its own carries the system's status, which Juan's replaces), or sends a message
+body to PLC OS.

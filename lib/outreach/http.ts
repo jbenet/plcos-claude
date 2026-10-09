@@ -21,8 +21,10 @@ import { appendAudit, findMcpToken } from '@/modules/platform';
 /**
  * `rename`: a query parameter the REST op names differently from the tool's argument (routes take entityId).
  * `get`: the tool a GET of a POST op runs instead (/contacts: POST proposes an address, GET reads every LP's).
+ * `del`: the tool a DELETE of a POST op runs, with its arguments in the query string (/lps: POST adds, DELETE undoes).
  */
-type Op = { tool: string; method: 'GET' | 'POST'; rename?: Record<string, string>; get?: { tool: string } };
+type Method = 'GET' | 'POST' | 'DELETE';
+type Op = { tool: string; method: Method; rename?: Record<string, string>; get?: { tool: string }; del?: { tool: string } };
 const OPS: Record<string, Op> = {
   vehicles: { tool: 'outreach_vehicles', method: 'GET' },
   queue: { tool: 'outreach_queue', method: 'GET' },
@@ -45,6 +47,8 @@ const OPS: Record<string, Op> = {
   signals: { tool: 'outreach_record_signals', method: 'POST', get: { tool: 'outreach_signals' } },
   insights: { tool: 'outreach_insights', method: 'GET' },
   playbook: { tool: 'outreach_playbook', method: 'GET' },
+  // An LP added from mail (docs/27 §5); DELETE ?pursuitId= undoes one this op added, within a day.
+  lps: { tool: 'outreach_add_lp', method: 'POST', del: { tool: 'outreach_undo_add_lp' } },
   trace: { tool: 'comms_trace', method: 'GET' },
   audit: { tool: 'audit_recent', method: 'GET' },
 };
@@ -66,7 +70,7 @@ export function preflight(request: Request): Response {
   const origin = corsOrigin(request);
   if (!origin) return new Response(null, { status: 403, headers: { Vary: 'Origin' } });
   return new Response(null, { status: 204, headers: {
-    ...corsHeaders(origin), 'Access-Control-Allow-Methods': 'GET, POST',
+    ...corsHeaders(origin), 'Access-Control-Allow-Methods': 'GET, POST, DELETE',
     'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Correlation-Id, X-Autonomous', 'Access-Control-Max-Age': '600',
   } });
 }
@@ -94,7 +98,7 @@ export const SLOW_OUTREACH_MS = 1_000;
  * query, and the connection pool as it began and ended. No token, arguments, SQL or data. It tells a
  * slow query from a pool that was full (JuanMail, 7 Oct 2026: /vehicles sometimes over 15 s).
  */
-export async function serveOutreach(request: Request, op: string, method: 'GET' | 'POST'): Promise<Response> {
+export async function serveOutreach(request: Request, op: string, method: Method): Promise<Response> {
   const start = performance.now();
   const db = await getDb();
   const poolAt = db.poolState?.();
@@ -109,7 +113,7 @@ export async function serveOutreach(request: Request, op: string, method: 'GET' 
   return response;
 }
 
-async function serve(request: Request, op: string, method: 'GET' | 'POST'): Promise<Response> {
+async function serve(request: Request, op: string, method: Method): Promise<Response> {
   const origin = corsOrigin(request);
   const cors = corsHeaders(origin || null);
   const fail = (status: number, error: string, extra: Record<string, string> = {}) => json(status, { error }, { ...cors, ...extra });
@@ -130,16 +134,17 @@ async function serve(request: Request, op: string, method: 'GET' | 'POST'): Prom
   const meta = { via: 'rest' as const, correlationId: correlationOf(request.headers.get('x-correlation-id')), origin: origin || null,
     autonomous: autonomousOf(request.headers.get('x-autonomous')) };
   const entry = Object.hasOwn(OPS, op) ? OPS[op]! : null;
-  const spec: Op | null = entry?.get && method === 'GET' ? { tool: entry.get.tool, method: 'GET' } : entry;
+  const spec: Op | null = entry?.get && method === 'GET' ? { tool: entry.get.tool, method: 'GET' }
+    : entry?.del && method === 'DELETE' ? { tool: entry.del.tool, method: 'DELETE' } : entry;
   // An unknown op or the wrong method is still a call: logged under its own name, refused.
   if (!spec || spec.method !== method) {
     const r = await runTool(env, `rest:${op.slice(0, 40)}`, {}, meta);
-    const allow = spec?.get ? `GET, ${spec.method}` : spec?.method ?? '';
+    const allow = [spec?.get ? 'GET' : null, spec?.method, spec?.del ? 'DELETE' : null].filter(Boolean).join(', ');
     const msg = !spec ? `No operation "${op.slice(0, 40)}".` : `${op} takes ${allow}.`;
     return r.ok ? fail(500, 'Unexpected.') : fail(spec ? 405 : 404, msg, spec ? { Allow: allow } : {});
   }
   let args: Record<string, unknown>;
-  if (method === 'GET') args = queryArgs(new URL(request.url), spec.rename);
+  if (method === 'GET' || method === 'DELETE') args = queryArgs(new URL(request.url), spec.rename);
   else {
     try { args = (await request.json()) as Record<string, unknown>; } catch { return fail(400, 'The body is not JSON.'); }
     if (!args || typeof args !== 'object' || Array.isArray(args)) return fail(400, 'The body is a JSON object.');

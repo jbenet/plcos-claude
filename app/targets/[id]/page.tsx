@@ -312,7 +312,9 @@ async function TargetWorkspace({ params, searchParams }: {
               <span className="muted" style={{ fontSize: 12 }}>
                 {p.statusSource === 'us'
                   ? p.statusSetAt ? `set here ${shortDate(p.statusSetAt)}${p.statusSetByName ? ` by ${p.statusSetByName}` : ''}` : 'set here'
-                  : `read from Affinity${p.sourceAsOf ? ` ${shortDate(p.sourceAsOf)}` : ''} — nobody has set one here yet`}
+                  : p.source === 'mail_desk'
+                    ? `set by the mail desk on its own${p.statusSetAt ? ` ${shortDate(p.statusSetAt)}` : ''}, from mail — nobody has set one here yet`
+                    : `read from Affinity${p.sourceAsOf ? ` ${shortDate(p.sourceAsOf)}` : ''} — nobody has set one here yet`}
               </span>
             </div>
             <div className="said">
@@ -320,6 +322,8 @@ async function TargetWorkspace({ params, searchParams }: {
               <b>Why:</b>{' '}
               {p.statusSource === 'us'
                 ? <>{p.statusSetByName ?? 'someone'} set it here{p.statusSetAt ? ` on ${shortDate(p.statusSetAt)}` : ''}{p.statusReason ? <>: &ldquo;{p.statusReason.replace(/_/g, ' ').replace(/[.!?…]+$/, '')}&rdquo;</> : ', with no reason given'}.</>
+                : p.source === 'mail_desk'
+                  ? <>the mail desk added this LP on its own, from mail{p.statusReason ? <>: &ldquo;{p.statusReason.replace(/^Added by the mail desk on its own, from mail: /, '').replace(/[.!?…]+$/, '')}&rdquo;</> : ''}. Setting a status here replaces its choice.</>
                 : p.stageSaid
                   ? <>its status in Affinity reads &ldquo;{p.stageSaid}&rdquo;, which the mapping reads as {STATUS_LABEL[p.status]}{p.status === 'passed' && p.passedBy ? ` (${PASSED_BY_LABEL[p.passedBy].toLowerCase()})` : ''}. Someone on the team set it in Affinity; when, and why, Affinity doesn&rsquo;t say.</>
                   : <>nobody has set one: this is where every LP starts.</>}

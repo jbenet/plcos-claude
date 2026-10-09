@@ -55,7 +55,7 @@ async function deskPursuit(ctx: DeskContext, pursuitId: string, q: Queryable) {
 }
 
 /** A request key, used once: a retry gets the first answer back. Reserved before the work, filled after. */
-async function once<T>(ctx: DeskContext, op: string, requestKey: string | undefined, work: () => Promise<T>): Promise<T | { data: unknown; replayed: true }> {
+export async function once<T>(ctx: DeskContext, op: string, requestKey: string | undefined, work: () => Promise<T>): Promise<T | { data: unknown; replayed: true }> {
   if (!requestKey) return work();
   const db = await getDb();
   const k = `desk:${ctx.env.owner.id}:${op}:${requestKey}`;
@@ -75,7 +75,7 @@ async function once<T>(ctx: DeskContext, op: string, requestKey: string | undefi
   }
 }
 
-const deskActor = async (q: Queryable) => (await q.one<{ id: string }>(`select id::text from platform.app_user where handle = 'mail-desk'`))?.id
+export const deskActor = async (q: Queryable) => (await q.one<{ id: string }>(`select id::text from platform.app_user where handle = 'mail-desk'`))?.id
   ?? (() => { throw new Error('The Mail desk actor is missing (platform 015).'); })();
 
 // ── POST /api/outreach/update ───────────────────────────────────────────────────────────
