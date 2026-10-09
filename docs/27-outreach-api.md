@@ -594,8 +594,14 @@ Metadata only, never a body. Each message is matched to the people (and their cu
 belong to — email claims on record, never licensed ones — and to the LP juanmail names, if it names one; a message
 with nobody on record is not kept (`unmatched`). What it is about is read from its subject and addresses by the
 Affinity rule (N59); named with a pursuit, it counts for that vehicle. **Idempotent by Message-ID** (case and brackets
-aside), so two mailboxes reporting one message make one row. **Writes nothing else**: no touchpoint, status, rung,
-update or ticket. Answers `{ new, already, unmatched, messages }`.
+aside), so two mailboxes reporting one message make one row. **Writes nothing else**: no touchpoint, status, update or
+ticket. Since 9 Oct 2026 a new reply from an LP is a reply on file: Reconciliation records the conversation rungs it
+supports, as for Affinity's (docs/29 §4). Answers `{ new, already, unmatched, messages, reconciled }`.
+
+**Mail actions (9 Oct 2026).** `outreach_record_signals` (`POST /api/outreach/signals`), `outreach_signals`
+(`GET /api/outreach/signals`), `outreach_insights` (`GET /api/outreach/insights`), `outreach_playbook`
+(`GET /api/outreach/playbook`), contact details on `outreach_propose_contact` and `outreach_contacts?details=1`, and
+Reconciliation after `comms_ingest`: docs/29-mail-actions.md.
 
 ## 6. Audit, and the later web client
 

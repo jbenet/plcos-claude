@@ -3,7 +3,7 @@ import { config } from '@/config/deployment';
 import { can } from '@/lib/authz';
 import { pipelineData } from '@/lib/authz/read/pipeline';
 import { getDb } from '@/lib/db';
-import { addressesFor } from './addresses';
+import { addressesFor, detailsFor } from './addresses';
 import { redactHealth } from '@/lib/redact-health';
 import { SPV_STAGE_LABEL, spvRooms, workingDaysUntil, type SpvStage } from '@/modules/close';
 import { INSUFFICIENT_FOR_506C } from '@/modules/compliance';
@@ -457,6 +457,8 @@ function queueCoverage(vehicles: Vehicle[], includePassed = false) {
 
 export interface ContactsArgs {
   vehicle: string; updatedSince?: string; includePassed?: boolean; offset?: number;
+  /** Also each person's phone, title, firm, postal address and LinkedIn page on file (docs/29). */
+  details?: boolean;
   /** The previous answer's version: if this answer would say the same, it is { unchanged: true, version, cursor } instead. */
   ifChanged?: string;
 }
@@ -489,14 +491,15 @@ export async function outreachContacts(user: AppUser, a: ContactsArgs, fit: Queu
   const kindOf = new Map(kinds.map((k) => [k.id, k.type === 'person' ? 'person' as const : 'org' as const]));
   const contactsBy = new Map(orgContacts);
   const people = [...new Set([...chosen.filter((b) => contactsBy.has(b.v.id)).map((b) => b.r.entityId), ...orgContacts.flatMap(([, m]) => [...m.values()].flat().map((c) => c.entityId))])];
-  const emails = await addressesFor(people);
+  const [emails, details] = await Promise.all([addressesFor(people), a.details ? detailsFor(people) : Promise.resolve(null)]);
   const addressOf = (entityId: string) => (emails.get(entityId) ?? []).slice(0, 3);
+  const detailOf = (entityId: string) => (details ? { details: details.get(entityId) ?? {} } : {});
   const rows = chosen.map(({ r, v }) => {
     const kind = kindOf.get(r.entityId) ?? 'org';
     const w = contactsBy.has(v.id);
     const contacts = !w ? [] : kind === 'person'
-      ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x }))
-      : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x })));
+      ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x, ...detailOf(r.entityId) }))
+      : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x, ...detailOf(c.entityId) })));
     return {
       pursuitId: r.id, vehicle: v.slug, entity: { id: r.entityId, name: r.name, kind },
       status: { value: r.status, label: STATUS_LABEL[r.status] }, passed: r.status === 'passed', contacts,

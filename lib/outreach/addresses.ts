@@ -77,3 +77,35 @@ export async function bestAddresses(user: Principal, vehicleId: string | null, e
 
 /** The note an answer carries when addresses were withheld. */
 export const ADDRESSES_WITHHELD = 'Addresses are withheld at your access: they are words (R2) on this vehicle.';
+
+/** A phone, title, firm, postal address or LinkedIn page on file: the newest reading per field, with its source. */
+export interface Detail { value: string; source: 'gmail' | 'gmail-signature' | 'affinity' | 'research'; asOf: string; confirmed: boolean }
+export const DETAIL_FIELDS = { phone: 'phone', title: 'title', organization: 'organization', postalAddress: 'postal_address', linkedin: 'linkedin' } as const;
+export type Details = Partial<Record<keyof typeof DETAIL_FIELDS, Detail>>;
+
+/**
+ * Each entity's newest contact details (docs/29): phone, title, organization, postal address, LinkedIn, from any
+ * non-licensed source, newest reading first per field. Call only after addressesReadable, as for addresses.
+ */
+export async function detailsFor(entityIds: string[]): Promise<Map<string, Details>> {
+  const out = new Map<string, Details>();
+  const ids = [...new Set(entityIds)];
+  if (!ids.length) return out;
+  const rows = await (await getDb()).query<{ entity_id: string; field: string; value: string; source: string; origin: string | null; as_of: Date | string; verified: boolean }>(`
+    select distinct on (identity.canonical_entity_id(c.entity_id), c.field) identity.canonical_entity_id(c.entity_id)::text entity_id, c.field, c.value,
+           c.source, d.origin, c.as_of, c.last_verified_by is not null verified
+      from research.claim c left join research.source_doc d on d.doc_id = c.source
+     where c.entity_id = any(identity.alias_ids($1::uuid[])) and c.superseded_by is null
+       and c.field = any($2::text[]) and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
+     order by identity.canonical_entity_id(c.entity_id), c.field, c.as_of desc, c.created_at desc`, [ids, Object.values(DETAIL_FIELDS)]);
+  const key = Object.fromEntries(Object.entries(DETAIL_FIELDS).map(([k, v]) => [v, k])) as Record<string, keyof typeof DETAIL_FIELDS>;
+  for (const r of rows) {
+    const d = out.get(r.entity_id) ?? {};
+    d[key[r.field]!] = {
+      value: r.value, asOf: new Date(r.as_of).toISOString().slice(0, 10), confirmed: r.verified,
+      source: /^gmail-signature/i.test(r.source) ? 'gmail-signature' : /gmail/i.test(r.source) || /gmail/i.test(r.origin ?? '') ? 'gmail' : /affinity/i.test(r.source) || /affinity/i.test(r.origin ?? '') ? 'affinity' : 'research',
+    };
+    out.set(r.entity_id, d);
+  }
+  return out;
+}

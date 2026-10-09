@@ -10,6 +10,7 @@ import { contactInput, contacts, requestTicket, ticketInput, update, updateInput
 import { commsTrace, ingest, ingestInput, link, linkInput, recordSendAlias, sentInput, traceInput } from '@/lib/outreach/comms';
 import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
 import { auditRecent } from './audit';
+import { insights, insightsInput, playbook, recordSignals, signalsFor, signalsInput, signalsReadInput } from '@/lib/outreach/signals';
 
 /**
  * The MCP tool registry (docs/26-mcp.md): the only tools the server has. Putting a tool name in a
@@ -144,6 +145,7 @@ export const TOOLS: readonly Tool[] = [
       includePassed: z.boolean().optional().describe('Also the LPs that passed, each marked passed (default false).'),
       updatedSince: z.string().datetime({ offset: true }).optional().describe('Only rows changed since this time: pass the previous answer\'s cursor.'),
       ifChanged: z.string().min(1).max(40).optional().describe('The previous answer\'s version: if this answer would say the same, it is { unchanged: true, version, cursor } instead.'),
+      details: z.boolean().optional().describe('Also each person\'s phone, title, organization, postal address and LinkedIn page on file, newest reading per field with its source (default false).'),
     }).strict(),
     run: async (env, a) => outreachContacts(env.principal, a, env.via === 'mcp' ? { maxBytes: config.mcp.maxResponseBytes - 6000 } : {}),
   }),
@@ -176,9 +178,34 @@ export const TOOLS: readonly Tool[] = [
   }),
   tool({
     name: 'outreach_propose_contact', title: 'Outreach: an address confirmed in Gmail', policy: { risk: 'propose', scopes: [OUTREACH_WRITE], ticket: 'none', approval: true },
-    description: 'Record an email address the person confirmed from their Gmail, with its source and date, on an LP named by entityId or by pursuitId (one of the two). Another source\'s address (Affinity, research) is kept, never overwritten; the answer says what was kept.',
+    description: 'Record how to reach a person or firm, named by entityId or by pursuitId (one of the two): an email address, and/or phone, title, organization, postalAddress, linkedin. source gmail: the person confirmed it (give confirmedBy, the token\'s owner). source gmail-signature: read from the signature or text of a message they sent, not confirmed (seenOn: that message\'s date; messageId). Kept as dated claims with their source; a newer reading from the same source supersedes the older (for an address, only the same address). Another source\'s value (Affinity, research) is kept, never overwritten; the answer says what was kept.',
     input: contactInput,
     run: (env, a) => contacts({ env }, a),
+  }),
+  // What the mail says about the people in it (Juan, 9 Oct 2026). docs/29-mail-actions.md.
+  tool({
+    name: 'outreach_record_signals', title: 'Outreach: what a message says', policy: { risk: 'propose', scopes: [OUTREACH_WRITE], ticket: 'none', approval: true },
+    description: 'After reading one message: short signals about each person or firm in it, by their role in this thread (lp, connector, other; role, not identity) — interest, a soft commitment or indicated amount, a question, an objection, a decline, timing, a request for materials or a meeting, a referral, an offer to introduce — each with your summary (not the body), an optional short quote and a reusable topic. Kept beside the LP, idempotent by message, person, kind and LP; dismiss removes a wrong reading. Answers suggestions: outreach_update payloads (a status forward, an indicated amount, a next step) for the person to accept as they are. Applies none of them; moves no status, rung, money or ticket.',
+    input: signalsInput,
+    run: (env, a) => recordSignals({ env }, a),
+  }),
+  tool({
+    name: 'outreach_signals', title: 'Outreach: one LP\'s signals from mail', policy: OUT_READ,
+    description: 'The signals read from mail for one LP (pursuitId: theirs and their people\'s on it) or one person or firm (entityId), newest first: kind, role, topic, summary, quote, amount, the message and who read it. Words only where your access reads them (R2), amounts where it reads amounts (R1).',
+    input: signalsReadInput,
+    run: (env, a) => signalsFor(env.principal, a),
+  }),
+  tool({
+    name: 'outreach_insights', title: 'Outreach: what the mail says, per vehicle', policy: OUT_READ,
+    description: 'A vehicle\'s signals from mail summed for strategy: by kind, by topic within each kind (what LPs keep asking and objecting to), by role and by month, with the latest examples, and the amounts LPs named in mail (an indication, never soft or hard). sinceDays (default 90), role, examples.',
+    input: insightsInput,
+    run: (env, a) => insights(env.principal, a),
+  }),
+  tool({
+    name: 'outreach_playbook', title: 'Outreach: the mail playbook', policy: OUT_READ,
+    description: 'The playbook for the mail desk, as markdown: which signals to read from a PLC OS thread and how, which call each maps to (outreach_record_signals, outreach_propose_contact, outreach_update), what a person must click, what costs model calls and what does not.',
+    input: z.object({}).strict(),
+    run: async () => playbook(),
   }),
   // The comms trace (Juan, 5 Oct 2026: "let email be the state"). docs/27 §5–§6.
   tool({

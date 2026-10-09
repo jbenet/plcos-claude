@@ -125,6 +125,12 @@ export interface Candidate extends ResearchIdentity {
     /** Written by an intake rule when it created the pursuit (prospects, investing organizations): provenance, not news. */
     byRule?: boolean }>;
   /**
+   * What the mail says (docs/29): the desk's readings of their messages — interest, soft commitments, questions,
+   * objections, timing — newest first, by their role in each thread. Readings, not records: weigh them as such.
+   */
+  mail?: Array<{ on: string; role: string; kind: string; topic: string | null; summary: string; quote: string | null;
+    amount: { low: number; high: number } | null; vehicle: string | null; direction: string }>;
+  /**
    * Do-not-approach instructions on file (rule 8), list marks included: a blanket one rules them out
    * of any plan, one through a connector rules out that route. The instruction's words stay in the
    * app; the plan needs only its shape.
@@ -220,6 +226,13 @@ async function researchSnapshot() {
       where n.kind = 'context' and identity.canonical_entity_id(n.entity_id) = any($1::uuid[])
       order by n.created_at desc`, [ids]);
   const restrictions = (await listRestrictions({ includeListMarks: true })).filter((r) => ids.includes(r.entityId));
+  const mail = await db.query<{ entity_id: string; sent_at: Date | string; role: string; kind: string; topic: string | null; summary: string;
+    quote: string | null; amount_low: string | null; amount_high: string | null; vehicle: string | null; direction: string }>(
+    `select coalesce(identity.canonical_entity_id(p.entity_id), s.entity_id)::text entity_id, s.sent_at, s.role, s.kind, s.topic, s.summary, s.quote,
+            s.amount_low, s.amount_high, v.slug vehicle, s.direction
+       from email.mail_signal s left join strategy.pursuit p on p.pursuit_id = s.pursuit_id left join platform.vehicle v on v.id = p.vehicle_id
+      where s.dismissed_at is null and (s.entity_id = any($1::uuid[]) or identity.canonical_entity_id(p.entity_id) = any($1::uuid[]))
+      order by s.sent_at desc`, [ids]);
   const pairs = all.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
   const [everything, tracks, windowMap, tags] = await Promise.all([
     touchpointsByEntity(ids), closeStates(pairs), raiseWindows(), noteTags(readings.map((r) => r.noteId)),
@@ -335,6 +348,10 @@ async function researchSnapshot() {
         .map((r) => ({ on: r.on.toISOString().slice(0, 10), summary: r.summary, read: r.read, about: noteWords(tags.get(r.noteId), r.on, windows) })),
       restrictions: restrictions.filter((r) => r.entityId === ent.entity_id)
         .map((r) => ({ scope: r.scope, connector: r.connectorName, channel: r.channel })),
+      mail: mail.filter((m) => m.entity_id === ent.entity_id).slice(0, 12).map((m) => ({
+        on: new Date(m.sent_at).toISOString().slice(0, 10), role: m.role, kind: m.kind, topic: m.topic, summary: m.summary, quote: m.quote,
+        amount: m.amount_low != null ? { low: Number(m.amount_low), high: Number(m.amount_high ?? m.amount_low) } : null, vehicle: m.vehicle, direction: m.direction,
+      })),
       context: context.filter((c) => c.entity_id === ent.entity_id)
         .map((c) => ({ at: new Date(c.at).toISOString(), by: c.by, text: c.body, vehicle: c.vehicle, ...(c.by_rule ? { byRule: true } : {}) })),
     };

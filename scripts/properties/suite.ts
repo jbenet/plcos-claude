@@ -100,6 +100,8 @@ export async function runProperties(check: Check) {
   await step('outreach-mcp.outreachMcpProperties', async () => (await import('./outreach-mcp')).outreachMcpProperties(check, db));
   // The comms trace and who needs a ticket (5 Oct 2026, docs/27 §5–§7).
   await step('comms.commsProperties', async () => (await import('./comms')).commsProperties(check, db));
+  // Mail actions (9 Oct 2026, docs/29): signals, suggestions, contact details, Gmail replies on file.
+  await step('mail-actions.mailActionProperties', async () => (await import('./mail-actions')).mailActionProperties(check, db));
   // The desk's second round (5 Oct 2026, docs/27 §4–§4b): hop ids and addresses, top connectors, REST routes, passed LPs, paging.
   await step('outreach-desk.outreachDeskProperties', async () => (await import('./outreach-desk')).outreachDeskProperties(check, db));
   // The desk's third round (5 Oct 2026, docs/27 §4a–§4c, §5): askFirst, first-hop connectors and their targets, ask history,

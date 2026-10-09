@@ -27,7 +27,8 @@ For each key in the batch, `data/real/enrich/batches/<batch>.txt`:
   what came before; `lastTouchChannel`; `groupMeetings`; `meetingDates`; `recent`, the last eight
   touches; `outreachShared`), each touch and note with what it is `about` and who from our side was on
   it; `money`, the close track; `notes`, our notes' readings; `context`, the team's own words, newest
-  first; `restrictions`;
+  first; `mail`, the mail desk's readings of their messages (interest, soft commitments, questions,
+  objections, timing; by their role in each thread, docs/29); `restrictions`;
 - its paths in `connections.jsonl`, re-read just before writing each firm (it is regenerated as findings
   land); its line in `triage.jsonl`; its strategy and its colleagues', with their `made.revised`;
 - our side: `us/team.json`, `us/voice.json` (each sender's own style notes and sample emails), `us/network.json`,
@@ -117,7 +118,9 @@ its `made.at`. `made.revised` lists each change made by rule after writing, with
 ## Reading the records
 
 - **The team's context comes first.** It outranks the research and the notes' readings; where it
-  contradicts a finding, follow the team and say so. Then the triage line: its first step and reasons
+  contradicts a finding, follow the team and say so. The `mail` readings rank with the notes' readings:
+  what they asked or objected to shapes the next step, and an amount they named is an indication, never soft
+  money. Then the triage line: its first step and reasons
   come before any plan.
 - **Say only what the record says.** A stage is a claim, and so is a source's "signed". Owning a pursuit
   is neither having been in the meeting nor a channel: the way in needs its own record. Before calling

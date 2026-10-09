@@ -2,7 +2,8 @@ import { getDb, type Queryable } from '@/lib/db';
 import { shortDate } from '@/lib/time';
 import { openTicket } from '@/modules/governance';
 import { finishRun, startRun } from '@/modules/sources';
-import { CHANNEL_LABEL, isEvent, touchpointsByPair, type Touchpoint } from '@/modules/meetings';
+import { CHANNEL_LABEL, isAutoReply, isEvent, type Touchpoint } from '@/modules/meetings';
+import { sentByThem, tracePairs } from '@/lib/comms/read';
 import { STEP_LABEL, closeStates, type CloseTrack, type CommitmentEvent } from '@/modules/pipeline';
 import {
   LadderRefused, ON_RECORD_RUNGS, RUNGS, RUNG_LABEL, getPursuit, listPursuits, recordClimbOnRecord, retractedRefs, rungIndex,
@@ -115,6 +116,23 @@ export function recordsOnFile(touches: Touchpoint[], tracks: CloseTrack[], now =
   if (counter) out.commitment_accepted = event(counter, 'commitment_accepted', 'countersignature', 'Countersigned');
   const wire = ours.find((e) => e.step === 'wired');
   if (wire) out.cash_received = event(wire, 'cash_received', 'wire', 'Wired');
+  return out;
+}
+
+/**
+ * Each pursuit's touchpoints with the mail juanmail reported merged in (Juan, 9 Oct 2026; docs/29): a reply in
+ * Gmail is a reply on file, as one Affinity logged is, once it is about this raise (N59) and the LP (or a contact
+ * on their pursuit, or someone acting for their firm) sent it. A message Affinity also has is one record, not two.
+ */
+async function touchesWithMail(pairs: Array<{ entityId: string; vehicleId: string }>): Promise<Map<string, Touchpoint[]>> {
+  const [merged, theirs] = await Promise.all([tracePairs(pairs), sentByThem([...new Set(pairs.map((p) => p.entityId))])]);
+  const out = new Map<string, Touchpoint[]>();
+  for (const p of pairs) {
+    const key = `${p.entityId}:${p.vehicleId}`;
+    const m = merged.get(key);
+    out.set(key, (m?.touches ?? []).filter((t) => t.source !== 'gmail' || t.direction !== 'theirs'
+      || (!isAutoReply({ direction: t.direction, aboutBasis: t.summary }) && theirs.has(`${p.entityId}|${m?.messageOf.get(t.touchpointId)?.messageId ?? (t.sourceRef ?? '').replace(/^gmail:/, '')}`))));
+  }
   return out;
 }
 
@@ -299,7 +317,7 @@ async function propose(only?: string): Promise<ReconcileCounts> {
   const live = pursuits.filter((p) => !p.historical);
   counts.skipped = pursuits.length - live.length;
   const pairs = live.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
-  const [touches, closes] = await Promise.all([touchpointsByPair(pairs), closeStates(pairs)]);
+  const [touches, closes] = await Promise.all([touchesWithMail(pairs), closeStates(pairs)]);
 
   const open = new Map((await db.query<{ subject_id: string; id: string; mine: boolean; expired: boolean; key: string | null }>(
     `select subject_id::text, id::text, requested_by = $1 and scope->'apply'->>'command' = $2 as mine,

@@ -248,14 +248,33 @@ export async function requestTicket(ctx: DeskContext, raw: Record<string, unknow
 
 // ── POST /api/outreach/contacts ─────────────────────────────────────────────────────────
 
+// Besides an address, the rest of how to reach them (Juan, 9 Oct 2026: "get people's latest contact info, addresses,
+// etc."): read by the desk from a signature or the thread. `gmail`: the person confirmed it (high confidence);
+// `gmail-signature`: read from their own message's signature and not confirmed (medium), dated by that message.
+export const CONTACT_FIELDS = ['phone', 'title', 'organization', 'postalAddress', 'linkedin'] as const;
+const CLAIM_FIELD: Record<(typeof CONTACT_FIELDS)[number], string> = {
+  phone: 'phone', title: 'title', organization: 'organization', postalAddress: 'postal_address', linkedin: 'linkedin',
+};
+const line = (max: number) => z.string().trim().min(1).max(max).refine((s) => !/[<>]/.test(s), 'no angle brackets');
 export const contactInput = z.object({
   // The person or organisation, or the LP's pursuit (JuanMail, 7 Oct 2026: it holds pursuit ids): one of the two.
   entityId: uuid.optional(), pursuitId: uuid.optional(),
-  email, source: z.literal('gmail'), confirmedBy: z.string().min(1).max(254), confirmedAt: isoTime.optional(), idempotencyKey: key.optional(),
-}).strict().refine((a) => !!a.entityId !== !!a.pursuitId, 'Give entityId or pursuitId, one of the two.');
+  email: email.optional(),
+  phone: z.string().trim().min(5).max(40).regex(/^[+()\d][\d\s().+/-]*(\s*(x|ext\.?)\s*\d{1,6})?$/i, 'not a phone number').optional(),
+  title: line(160).optional(), organization: line(200).optional(), postalAddress: line(400).optional(),
+  linkedin: z.string().trim().max(300).regex(/^https:\/\/([a-z]{2,3}\.)?linkedin\.com\/(in|company)\/[^\s?#]+\/?$/i, 'a https://linkedin.com/in/… or /company/… address').optional(),
+  source: z.enum(['gmail', 'gmail-signature']),
+  confirmedBy: z.string().min(1).max(254).optional(), confirmedAt: isoTime.optional(),
+  seenOn: isoDay.optional().describe('The date of the message it was read from (gmail-signature): the claim is as of then.'),
+  messageId: z.string().min(3).max(400).optional().describe('The message it was read from, kept with the claim.'),
+  idempotencyKey: key.optional(),
+}).strict()
+  .refine((a) => !!a.entityId !== !!a.pursuitId, 'Give entityId or pursuitId, one of the two.')
+  .refine((a) => a.email || CONTACT_FIELDS.some((f) => a[f]), 'Give at least one of email, phone, title, organization, postalAddress, linkedin.')
+  .refine((a) => a.source !== 'gmail' || !!a.confirmedBy, 'source gmail is a confirmed address: give confirmedBy (the token\'s owner). Read from a signature and not confirmed: source gmail-signature.');
 
 /** The vehicles an entity is on: its own pursuits, or an organisation's whose contact it is. */
-async function entityVehicles(entityId: string, q: Queryable): Promise<string[]> {
+export async function entityVehicles(entityId: string, q: Queryable): Promise<string[]> {
   return (await q.query<{ v: string }>(`
     select p.vehicle_id::text v from strategy.active_pursuit p where identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id($1::uuid)
     union select p.vehicle_id::text from strategy.pursuit_contact c join strategy.active_pursuit p using (pursuit_id)
@@ -270,12 +289,15 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
   return once(ctx, 'contacts', a.idempotencyKey, async () => {
     requireMutationProfile();
     const owner = ctx.env.owner;
-    // Juan picks the address in the wave review; the confirmation is the token owner's own, never someone else's.
-    // Any of the owner's addresses (login, default-to, alias) names them.
-    const { addressesOf } = await import('@/modules/platform');
-    const mine = [owner.handle, owner.email.toLowerCase(), ...(await addressesOf(owner.id)).map((x) => x.address.toLowerCase())];
-    if (!mine.includes(a.confirmedBy.trim().toLowerCase())) {
-      throw new OutreachRefused(403, 'confirmedBy is the token\'s owner: a desk confirms addresses only for the person it acts as.');
+    const confirmed = a.source === 'gmail';
+    if (a.confirmedBy) {
+      // Juan picks the address in the wave review; the confirmation is the token owner's own, never someone else's.
+      // Any of the owner's addresses (login, default-to, alias) names them.
+      const { addressesOf } = await import('@/modules/platform');
+      const mine = [owner.handle, owner.email.toLowerCase(), ...(await addressesOf(owner.id)).map((x) => x.address.toLowerCase())];
+      if (!mine.includes(a.confirmedBy.trim().toLowerCase())) {
+        throw new OutreachRefused(403, 'confirmedBy is the token\'s owner: a desk confirms addresses only for the person it acts as.');
+      }
     }
     const db = await getDb();
     if (a.pursuitId) {
@@ -284,36 +306,64 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
       a.entityId = p.entity_id;
     }
     const vehicles = await entityVehicles(a.entityId!, db);
-    if (!vehicles.some((v) => can(ctx.env.principal, 'mutate', { vehicle: v }))) throw new OutreachRefused(404, 'No such person or organisation on your vehicles.');
+    const mayChange = vehicles.length ? vehicles.some((v) => can(ctx.env.principal, 'mutate', { vehicle: v })) : can(ctx.env.principal, 'mutate', {});
+    if (!mayChange) throw new OutreachRefused(404, 'No such person or organisation on your vehicles.');
     const at = a.confirmedAt ? new Date(a.confirmedAt) : new Date();
     if (at.getTime() > Date.now() + 5 * 60_000) throw new OutreachRefused(400, 'confirmedAt is in the future.');
+    const asOf = !confirmed && a.seenOn ? a.seenOn : at.toISOString().slice(0, 10);
+    if (asOf > new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)) throw new OutreachRefused(400, 'seenOn is in the future.');
     return db.transaction(async (tx) => {
       const entity = (await tx.one<{ id: string }>('select identity.canonical_entity_id($1::uuid)::text id', [a.entityId]))!.id;
-      const doc = `gmail:${owner.handle}`;
+      const doc = confirmed ? `gmail:${owner.handle}` : `gmail-signature:${owner.handle}`;
       await tx.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body)
-        values ($1, $2, 'mailbox', 'gmail', current_date, 'moderate', $3, '') on conflict (doc_id) do nothing`,
-      [doc, `${owner.name}'s Gmail, through the mail desk`, 'An email address seen in correspondence in this mailbox and confirmed by its owner. Not proof the address is current.']);
-      const existing = await tx.query<{ claim_id: string; value: string; source: string; origin: string | null }>(`select c.claim_id::text, c.value, c.source, d.origin
-        from research.claim c left join research.source_doc d on d.doc_id = c.source
-        where identity.canonical_entity_id(c.entity_id) = $1::uuid and c.superseded_by is null and c.field ~ '(^|\\.)email$'`, [entity]);
-      const claim = (await tx.one<{ id: string }>(`insert into research.claim (entity_id, field, value, source, as_of, confidence, last_verified_by, last_verified_at)
-        values ($1, 'email', $2, $3, $4::date, 'high', $5, $6) returning claim_id::text id`,
-      [entity, a.email, doc, at.toISOString().slice(0, 10), owner.id, at]))!.id;
-      // The same address from this mailbox before: superseded by the new confirmation, so the history stays.
-      const mine = existing.filter((e) => e.source === doc && e.value.trim().toLowerCase() === a.email);
-      for (const e of mine) await tx.query('update research.claim set superseded_by = $2 where claim_id = $1', [e.claim_id, claim]);
-      // Another source's address is never overwritten: kept, and the disagreement said back (and logged, without the addresses).
-      const others = existing.filter((e) => e.source !== doc);
-      const disagree = others.filter((e) => e.value.trim().toLowerCase() !== a.email);
-      const agree = others.filter((e) => e.value.trim().toLowerCase() === a.email);
+        values ($1, $2, 'mailbox', 'gmail', current_date, $3, $4, '') on conflict (doc_id) do nothing`,
+      confirmed
+        ? [doc, `${owner.name}'s Gmail, through the mail desk`, 'moderate', 'An email address seen in correspondence in this mailbox and confirmed by its owner. Not proof the address is current.']
+        : [doc, `Signatures in ${owner.name}'s Gmail, read by the mail desk`, 'weak', 'Contact details read from the signature or text of a message the person sent to this mailbox, dated by that message; not confirmed by a person. Not proof they are current.']);
+      const claims: Array<{ field: string; value: string; claimId: string; superseded: number; kept: number }> = [];
       const sourceOf = (e: { source: string; origin: string | null }) => (/affinity/i.test(e.source) || /affinity/i.test(e.origin ?? '') ? 'affinity' : /dakota/i.test(e.source) || /dakota/i.test(e.origin ?? '') ? 'licensed' : 'research');
-      await appendAudit({ actorId: owner.id, action: 'contact.confirmed', subjectType: 'entity', subjectId: entity,
-        detail: { source: 'gmail', claimId: claim, tokenId: ctx.env.tokenId, superseded: mine.length, agrees: agree.length, disagrees: disagree.length } }, tx);
+      let emailAnswer: Record<string, unknown> = {};
+      const put = async (field: string, value: string, pattern: string, sameValueOnly: boolean) => {
+        const existing = await tx.query<{ claim_id: string; value: string; source: string; origin: string | null }>(`select c.claim_id::text, c.value, c.source, d.origin
+          from research.claim c left join research.source_doc d on d.doc_id = c.source
+          where identity.canonical_entity_id(c.entity_id) = $1::uuid and c.superseded_by is null and c.field ~ $2`, [entity, pattern]);
+        const claim = (await tx.one<{ id: string }>(`insert into research.claim (entity_id, field, value, source, as_of, confidence, last_verified_by, last_verified_at)
+          values ($1, $2, $3, $4, $5::date, $6, $7, $8) returning claim_id::text id`,
+        [entity, field, value, doc, asOf, confirmed ? 'high' : 'medium', confirmed ? owner.id : null, confirmed ? at : null]))!.id;
+        // This mailbox's earlier reading is superseded: for an address, only the same address (a person has several);
+        // for a phone, title, firm, postal address or LinkedIn page, any earlier one (the latest is the current one).
+        const same = (v: string) => v.trim().toLowerCase() === value.trim().toLowerCase();
+        const mine = existing.filter((e) => e.source === doc && (!sameValueOnly || same(e.value)));
+        for (const e of mine) await tx.query('update research.claim set superseded_by = $2 where claim_id = $1', [e.claim_id, claim]);
+        // Another source's value is never overwritten: kept, and the disagreement said back (and logged, without the values).
+        const others = existing.filter((e) => e.source !== doc);
+        const disagree = others.filter((e) => !same(e.value));
+        claims.push({ field, value, claimId: claim, superseded: mine.length, kept: disagree.length });
+        return { claim, others, disagree, agree: others.filter((e) => same(e.value)), mine };
+      };
+      if (a.email) {
+        const r = await put('email', a.email, '(^|\\.)email$', true);
+        await appendAudit({ actorId: owner.id, action: 'contact.confirmed', subjectType: 'entity', subjectId: entity,
+          detail: { source: a.source, claimId: r.claim, tokenId: ctx.env.tokenId, superseded: r.mine.length, agrees: r.agree.length, disagrees: r.disagree.length } }, tx);
+        emailAnswer = {
+          claimId: r.claim, email: a.email,
+          kept: r.disagree.filter((e) => sourceOf(e) !== 'licensed').map((e) => ({ email: e.value, source: sourceOf(e) })),
+          keptLicensed: r.disagree.filter((e) => sourceOf(e) === 'licensed').length,
+        };
+      }
+      for (const f of CONTACT_FIELDS) {
+        const v = a[f];
+        if (!v) continue;
+        const r = await put(CLAIM_FIELD[f], v.trim(), `^${CLAIM_FIELD[f]}$`, false);
+        await appendAudit({ actorId: owner.id, action: 'contact.detail', subjectType: 'entity', subjectId: entity,
+          detail: { source: a.source, field: CLAIM_FIELD[f], claimId: r.claim, tokenId: ctx.env.tokenId, superseded: r.mine.length, disagrees: r.disagree.length, message: a.messageId ? true : false } }, tx);
+      }
+      const kept = claims.reduce((n, c) => n + c.kept, 0);
       return { data: {
-        claimId: claim, entityId: entity, email: a.email, source: 'gmail', confirmedBy: owner.handle, confirmedAt: at.toISOString(),
-        kept: disagree.filter((e) => sourceOf(e) !== 'licensed').map((e) => ({ email: e.value, source: sourceOf(e) })),
-        keptLicensed: disagree.filter((e) => sourceOf(e) === 'licensed').length,
-        note: disagree.length ? 'Other addresses on file were kept, not overwritten: both are on record, each with its source and date.' : null,
+        entityId: entity, source: a.source, confirmed,
+        confirmedBy: confirmed ? owner.handle : null, confirmedAt: confirmed ? at.toISOString() : null, asOf,
+        ...emailAnswer, claims,
+        note: kept ? 'Other values on file were kept, not overwritten: each is on record with its source and date.' : null,
       } };
     });
   });
