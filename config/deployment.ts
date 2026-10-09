@@ -137,7 +137,7 @@ export const config = {
      * Each person's relationship strengths are read again once in this many days; a new person is read at once.
      * Reading every one daily cost about a request per person per day (Juan, 8 Oct 2026: under 300 a day).
      */
-    relationshipRefreshDays: 30, // GUESS
+    relationshipRefreshDays: 90, // GUESS: 8 Oct read ~4,200 people; a ninetieth is ~47 requests a day
   },
   /**
    * Linear, read-only (Juan, 27 Sep 2026; docs/24-linear.md). The client sends GraphQL queries
