@@ -30,11 +30,11 @@ export function StatusIcon({ type, name, size = 14 }: { type: StateType | Projec
     case 'paused':
       return <svg {...common}><title>{label}</title><circle cx="7" cy="7" r="5.6" fill="none" stroke="var(--amber)" strokeWidth="1.5" /><rect x="5" y="4.6" width="1.3" height="4.8" rx=".4" fill="var(--amber)" /><rect x="7.7" y="4.6" width="1.3" height="4.8" rx=".4" fill="var(--amber)" /></svg>;
     case 'completed':
-      return <svg {...common}><title>{label}</title><circle cx="7" cy="7" r="6.3" fill="var(--purple)" /><path d="M4.4 7.2 L6.2 9 L9.7 5.3" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+      return <svg {...common}><title>{label}</title><circle cx="7" cy="7" r="6.3" fill="var(--purple)" /><path d="M4.4 7.2 L6.2 9 L9.7 5.3" fill="none" stroke="var(--on-meaning)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
     case 'canceled': case 'duplicate':
-      return <svg {...common}><title>{label}</title><circle cx="7" cy="7" r="6.3" fill="var(--muted)" opacity=".75" /><path d="M4.9 4.9 L9.1 9.1 M9.1 4.9 L4.9 9.1" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" /></svg>;
+      return <svg {...common}><title>{label}</title><circle cx="7" cy="7" r="6.3" fill="var(--muted)" opacity=".75" /><path d="M4.9 4.9 L9.1 9.1 M9.1 4.9 L4.9 9.1" stroke="var(--on-meaning)" strokeWidth="1.5" strokeLinecap="round" /></svg>;
     case 'triage':
-      return <svg {...common}><title>{label}</title><circle cx="7" cy="7" r="6.3" fill="var(--clay)" /><path d="M4 5.6 H9.4 L8 4.2 M10 8.4 H4.6 L6 9.8" fill="none" stroke="#fff" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+      return <svg {...common}><title>{label}</title><circle cx="7" cy="7" r="6.3" fill="var(--clay)" /><path d="M4 5.6 H9.4 L8 4.2 M10 8.4 H4.6 L6 9.8" fill="none" stroke="var(--on-meaning)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>;
     default:
       return <svg {...common}><title>{label}</title><circle cx="7" cy="7" r="5.6" fill="none" stroke="var(--muted)" strokeWidth="1.2" strokeDasharray="0.6 2" /></svg>;
   }
@@ -49,7 +49,7 @@ export function PriorityIcon({ priority, size = 14 }: { priority: number; size?:
     return <svg {...common}><title>{label}</title>{[1.5, 5.75, 10].map((x) => <rect key={x} x={x} y="6.4" width="2.6" height="1.3" rx=".5" fill="var(--muted)" opacity=".75" />)}</svg>;
   }
   if (p === 1) {
-    return <svg {...common}><title>{label}</title><rect x=".8" y=".8" width="12.4" height="12.4" rx="3" fill="var(--clay)" /><rect x="6.2" y="3.3" width="1.6" height="4.9" rx=".7" fill="#fff" /><rect x="6.2" y="9.3" width="1.6" height="1.6" rx=".7" fill="#fff" /></svg>;
+    return <svg {...common}><title>{label}</title><rect x=".8" y=".8" width="12.4" height="12.4" rx="3" fill="var(--clay)" /><rect x="6.2" y="3.3" width="1.6" height="4.9" rx=".7" fill="var(--on-meaning)" /><rect x="6.2" y="9.3" width="1.6" height="1.6" rx=".7" fill="var(--on-meaning)" /></svg>;
   }
   const filled = 5 - p; // high 3, medium 2, low 1
   return (

@@ -14,7 +14,7 @@ export const OUTCOME_FLAG: Record<FoldedRun['outcome'], string> = {
 };
 const TONE: Record<FoldedRun['outcome'], string> = {
   succeeded: 'var(--green)', partial: 'var(--amber)', failed: 'var(--clay)', refused: 'var(--clay)',
-  cancelled: '#B9B3A6', unavailable: '#B9B3A6', unknown: '#D6D1C4',
+  cancelled: 'var(--dim)', unavailable: 'var(--dim)', unknown: 'var(--line-strong)',
 };
 
 export function Outcome({ outcome }: { outcome: FoldedRun['outcome'] }) {
