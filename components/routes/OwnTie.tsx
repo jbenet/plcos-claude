@@ -10,13 +10,13 @@ export function OwnTie({ targetId, targetName, ties }: { targetId: string; targe
   return <AuthorizedControl action="mutate">
     <div className="cbody own-tie">
       <h3>Your own tie to {targetName}</h3>
-      {ties.map((t) => <p key={t.edgeId}>
+      {ties.map((t) => <div key={t.edgeId} className="bad-terms-row">
         <b>{t.note}</b> <span className="muted">· grade {t.tier} · recorded {t.at.toISOString().slice(0, 10)} </span>
         <form action={removeOwnTieAction} style={{ display: 'inline' }}>
           <input type="hidden" name="edgeId" value={t.edgeId} /><input type="hidden" name="target" value={targetId} />
           <button className="btn">Remove</button>
         </form>
-      </p>)}
+      </div>)}
       <form action={recordOwnTieAction} className="bad-terms-form">
         <input type="hidden" name="target" value={targetId} />
         <label>How you know them <select name="kind" defaultValue="worked_together">

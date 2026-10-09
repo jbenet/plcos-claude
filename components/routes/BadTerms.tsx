@@ -37,11 +37,11 @@ export function BadTermsList({ marks }: { marks: BadTermsMark[] }) {
   return <details className="card route-aux" open>
     <summary>On bad terms · {marks.length}</summary>
     <div className="cbody">
-      {marks.map((m) => <p key={m.markId}>
+      {marks.map((m) => <div key={m.markId} className="bad-terms-row">
         <b>{m.aName}</b> and <b>{m.bName}</b>
         <span className="muted"> · marked by {m.byName}, {m.at.toISOString().slice(0, 10)}{m.note ? ` · ${m.note}` : ''} </span>
         <UndoBadTerms markId={m.markId} label="Undo" />
-      </p>)}
+      </div>)}
       <p className="muted" style={{ fontSize: 12 }}>Routes that ask one of these people about the other are excluded.</p>
     </div>
   </details>;

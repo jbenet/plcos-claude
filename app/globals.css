@@ -2421,3 +2421,4 @@ body:has(.shortcuts-dialog[open]) .feedbackkey{display:inline}
 .bad-terms-form p{flex-basis:100%;margin:0}
 .own-tie h3{font-size:13px;margin:0 0 6px}
 .own-tie{border-bottom:1px solid var(--hair)}
+.bad-terms-row{margin:0 0 8px}

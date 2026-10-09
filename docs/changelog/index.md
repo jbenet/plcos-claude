@@ -315,3 +315,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [A refused merge names every missing attestation at once](entries/attestation-refusal-lists-all.md)
 - [Fewer Affinity requests a day](entries/affinity-call-budget.md)
 - [Dark mode: light, dark or follow the system](entries/dark-mode.md)
+- [Routes: two people on bad terms, and your own ties](entries/bad-terms-and-own-ties.md)
