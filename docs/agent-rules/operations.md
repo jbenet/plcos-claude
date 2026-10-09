@@ -47,8 +47,8 @@ most builder slots sat idle most of the time. Measured causes:
 - **Launches were reactive,** one after a notification, with no queue of next runs ready.
 
 Rules:
-1. **Keep every slot busy.** Overnight, run 6+ ChatGPT runs (b1–b6, build) and 2–4 Claude
-   sub-agents at once. Keep a ready queue of briefs, at least the next three, so a finished run is
+1. **Keep every slot busy.** Overnight, run 6+ ChatGPT runs (b1–b6, build) at once. Claude
+   sub-agents run only within the batch budget below. Keep a ready queue of briefs, at least the next three, so a finished run is
    replaced within minutes. An empty slot is a defect to report in the summary.
 2. **Heartbeat, not watch loops.** Every wait gets a timeout. A 10–15 minute heartbeat checks every
    run, relaunches finished slots, and imports. The 30-minute summary is a hard timer, and a missed
@@ -66,6 +66,35 @@ Rules:
    - the tactic yield per round, with the next round's tactic chosen from it.
 6. **Quality still gates live:** tsc, boundaries and props before every merge, and a self-graded
    sample on every research round. Speed comes from parallel work, not from skipping checks.
+
+## Batch budget (Juan, 9 Oct 2026)
+
+The night of 7–8 Oct used close to half of Juan's weekly Claude limit: 393 runs, about 216M input
+tokens, 98% of them cache reads and only about 230K output. W5 wrote 2,616 strategies for 998 LPs,
+and 122 LPs were rewritten 7 or more times. Juan: "We have to change the workflows or something."
+The cost is re-reading context, so the rules cut turns × context, not output.
+
+1. **Bulk batches go to ChatGPT (Astra) first.** It runs on Juan's ChatGPT plan, not the Claude
+   limit (`docs/codex-headless.md`). Claude sub-agents take a batch only when ChatGPT can't: it's at
+   capacity, or a family failed its spot-check there.
+2. **No Claude in the watch loop.** A queue runner script launches, checks and records ChatGPT runs.
+   A Claude launcher runs one batch family per fresh session. Workers reply with one line of counts,
+   and the launcher reads the ledger, not the outputs. It never runs a whole night in one thread.
+3. **Scripts for mechanical passes.** Re-dating plans after a close date moves, reformatting to a
+   new strategy version, statuses from sent emails, and anything a checker can fix are scripts. A
+   model handles only the keys a script can't decide.
+4. **One write per LP per change.** A W5 pass takes keys from the checker's stale lists
+   (`--unpinned`, `--lead-moved`, `--stale-ties`, `--gated`) or `--keys` of LPs whose inputs
+   changed, and runs `scripts/enrich-repin.ts` first. Never pass a whole vehicle list. A format
+   amendment applies at an LP's next real rewrite, not as its own pass. Two passes over the same
+   firm on the same day need a reason in the run's `reason`.
+5. **Small batches, fresh contexts.** W1 takes 3–5 LPs per worker, W5 5–8 and W1c up to 10. Never
+   15 or more: each later LP re-reads every earlier one's pages and records.
+6. **A budget per night.** Before each launch, run `DATA_PROFILE=real npx tsx scripts/workflow-spend.ts`.
+   It exits 2 once a day's Claude share passes 15% of the week (`--cap`). Stop launching Claude
+   batches then, and stop a family whose cost per LP runs 2× the plan.
+7. **Fix partials at the source.** When a worker skips keys, fix the selection before relaunching.
+   Don't re-run the batch.
 
 ## Working notes
 
