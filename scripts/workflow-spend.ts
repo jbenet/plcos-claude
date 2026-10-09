@@ -1,11 +1,11 @@
 /**
  * Read-only spend report from the shared workflow ledger (docs/agent-rules/operations.md, "Batch budget").
  *
- *   DATA_PROFILE=real npx tsx scripts/workflow-spend.ts [--days N] [--cap PERCENT] [--strict]
+ *   DATA_PROFILE=real npx tsx scripts/workflow-spend.ts [--days N] [--cap PERCENT]
  *
  * Prints, per UTC day, the Claude-plan share of the week and the biggest batch families, then how many times
- * each W5 key was written in the window. A day over --cap (default 15) is flagged as a warning; with --strict it
- * also exits 2. The cap is advisory until Juan confirms it as a stop (9 Oct 2026). Prints counts only, never keys
+ * each W5 key was written in the window. Exits 2 when any day's Claude share is over --cap (default 15), so a
+ * launcher stops before starting more (Juan confirmed the hard stop, 9 Oct 2026). Prints counts only, never keys
  * or names.
  */
 import { readFile } from 'node:fs/promises';
@@ -22,7 +22,7 @@ function arg(name: string, fallback: number): number {
 }
 
 async function main() {
-  const days = arg('--days', 2), cap = arg('--cap', 15), strict = process.argv.includes('--strict');
+  const days = arg('--days', 2), cap = arg('--cap', 15);
   const until = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
   const since = new Date(Date.now() - (days - 1) * 864e5).toISOString().slice(0, 10);
   const root = await realRoot(), ledger = await readRuns();
@@ -33,7 +33,7 @@ async function main() {
   for (const day of [...new Set(rows.map(r => r.day))]) {
     const s = share.get(day) ?? 0;
     over ||= s > cap;
-    console.log(`${day}  Claude ${s.toFixed(1)}% of the week${s > cap ? `  over the ${cap}% cap (warning)` : ''}`);
+    console.log(`${day}  Claude ${s.toFixed(1)}% of the week${s > cap ? `  OVER the ${cap}% cap: stop launching Claude batches` : ''}`);
     for (const r of rows.filter(x => x.day === day).slice(0, 12)) {
       const per = r.keys ? Math.round(r.weighted / r.keys / 1e3) : 0;
       console.log(`  ${r.source.padEnd(11)} ${r.workflow.padEnd(5)} ${r.family.padEnd(24)} runs ${String(r.runs).padStart(3)}`
@@ -54,7 +54,7 @@ async function main() {
     const h = [...rewrites(lists)].sort((a, b) => a[0] - b[0]);
     console.log(`W5 writes per key: ${h.map(([n, c]) => `${n}×: ${c}`).join(', ')}`);
   }
-  if (over && strict) process.exitCode = 2;
+  if (over) process.exitCode = 2;
 }
 main().catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : 'Spend report failed.');

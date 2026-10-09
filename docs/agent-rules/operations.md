@@ -91,9 +91,8 @@ The cost is re-reading context, so the rules cut turns × context, not output.
 5. **Small batches, fresh contexts.** W1 takes 3–5 LPs per worker, W5 5–8 and W1c up to 10. Never
    15 or more: each later LP re-reads every earlier one's pages and records.
 6. **A budget per night.** Before each launch, run `DATA_PROFILE=real npx tsx scripts/workflow-spend.ts`.
-   It warns once a day's Claude share passes 15% of the week (`--cap`), and also exits 2 with `--strict`.
-   For now this is a warning, not a stop. Juan hasn't confirmed a hard cap, and his rule is that no
-   new blocking rule lands without his OK. Report the overrun in the run summary, and watch any
+   It exits 2 once a day's Claude share passes 15% of the week (`--cap`). Stop launching Claude batches
+   then (Juan confirmed this hard stop on 9 Oct 2026). ChatGPT runs don't count against it. Also stop a
    family whose cost per LP runs 2× the plan.
 7. **Fix partials at the source.** When a worker skips keys, fix the selection before relaunching.
    Don't re-run the batch.
