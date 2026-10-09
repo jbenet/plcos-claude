@@ -1,5 +1,5 @@
 import { routePolicyFacts, routeIdentityGroups, routeOrganizations } from './route-policy';
-import { busyReason, emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
+import { badTermsOn, badTermsReason, busyReason, emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
 import { createHash } from 'node:crypto';
 import { config } from '@/config/deployment';
 import { setImmediate } from 'node:timers/promises';
@@ -182,7 +182,7 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
   // Exact derived warmth facts, rather than a time bucket: monthsAgo preserves the
   // time of day, so a dated contact can age immediately after midnight on a boundary.
   const signature = selection.preferred ? null : JSON.stringify([
-    Boolean(blanket), [...contactRestrictions], [...restricted].sort(), [...policy.blocked].sort(), [...policy.organizations], selection.vehicleId, config.routePolicy, carriers.map((id) => [id, loadOf.get(id) ?? 0, roles.get(id)]),
+    Boolean(blanket), [...contactRestrictions], [...restricted].sort(), [...policy.blocked].sort(), [...policy.organizations], [...(policy.badTerms?.keys() ?? [])].sort(), selection.vehicleId, config.routePolicy, carriers.map((id) => [id, loadOf.get(id) ?? 0, roles.get(id)]),
     cap, config.routeScoring, config.routeWarmth, selection.exclude ?? null, selection.minimumWarmth ?? 0,
     scoreEdges.map((edge) => { const w = readWarmth(edge); return [w.kind, w.prior, w.score, w.recency]; }),
   ]);
@@ -208,11 +208,14 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
       const hops = candidate.edges.map((e, i) => ({ edge: scoreEdges[e]!, toEntity: nodes[i + 1]!.entityId, toName: nodes[i + 1]!.name }));
       const askLoad = carrier ? { connector: nodes.at(-2)!.name, used: loadOf.get(carrier) ?? 0, cap, busy: (loadOf.get(carrier) ?? 0) >= cap } : null;
       const contactBlocked = (contactRestrictions.get(candidate.viaContact?.entityId ?? '') ?? []).some(r => r.scope === 'blanket' || (r.connectorId && [nodes[0]!.entityId, ...connectorIds].includes(r.connectorId)));
-      const excluded = blanket || contactBlocked || policy.blocked.has(search.targetId) || [nodes[0]!.entityId, ...connectorIds, ...(candidate.viaContact ? [candidate.viaContact.entityId] : [])].some((id) => restricted.has(id));
+      const restrictedRoute = blanket || contactBlocked || policy.blocked.has(search.targetId) || [nodes[0]!.entityId, ...connectorIds, ...(candidate.viaContact ? [candidate.viaContact.entityId] : [])].some((id) => restricted.has(id));
+      // Issue 0143: never ask someone about a person they are on bad terms with.
+      const mark = restrictedRoute ? undefined : badTermsOn(policy, [...nodes.map((n) => n.entityId), search.targetId, ...(candidate.viaContact ? [candidate.viaContact.entityId] : [])]);
+      const excluded = restrictedRoute || Boolean(mark);
       if (!excluded) for (const edgeIndex of candidate.edges) usableEdges.add(edgeIndex);
       const route: Route = { ...(candidate.viaContact ? { viaContact: candidate.viaContact } : {}), identityGroups: Object.fromEntries(nodes.map(n => [n.entityId, identityGroups.get(n.entityId) ?? n.entityId])), fromEntity: nodes[0]!.entityId, fromName: nodes[0]!.name, hops, connectorIds,
         connectorNames: nodes.slice(1, -1).map((n) => n.name), verdict: excluded ? 'excluded' : askLoad?.busy && config.guard.askLimit === 'enforce' ? 'hold' : 'recommend',
-        reasons: [], askLoad, influence: null,
+        reasons: [], askLoad, influence: null, ...(mark ? { badTerms: { markId: mark.markId } } : {}),
         weakestTier: hops.reduce<Edge['tier']>((tier, h) => tiers[h.edge.tier] > tiers[tier] ? h.edge.tier : tier, 'A') };
       // Factors are reconstructed only for visible routes; candidate ranking needs numbers.
       const baseScore = scoreRoute(route, at, roles.get(carrier ?? ''), readWarmth);
@@ -260,6 +263,10 @@ export async function overlayRoutes(search: RouteSearch, vehicleKind: string, at
       const hit = [route.fromEntity!, ...route.connectorIds, ...(route.viaContact ? [route.viaContact.entityId] : [])].find((id) => restricted.has(id));
       if (hit) route.reasons.push(`${restrictions.find((r) => r.connectorId === hit)?.instruction ?? 'A restriction applies to this route.'} `
         + 'This path is excluded, and finding a different connector toward the same approach does not satisfy the instruction.');
+      else if (route.badTerms) {
+        const mark = [...(policy.badTerms?.values() ?? [])].find((m) => m.markId === route.badTerms!.markId);
+        if (mark) route.reasons.push(badTermsReason(mark));
+      }
     }
     for (const h of route.hops.filter((h) => h.edge.tier === 'C' || h.edge.tier === 'D')) {
       route.reasons.push(`${route.hops.indexOf(h) === 0 ? route.fromName : route.hops[route.hops.indexOf(h) - 1]!.toName} → ${h.toName}: tier ${h.edge.tier}. `

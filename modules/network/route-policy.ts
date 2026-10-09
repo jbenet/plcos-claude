@@ -4,7 +4,11 @@ import { memoizable } from '@/lib/db/read-memo';
 import { yieldRouteWork } from './path-search';
 
 export type OrganizationRouteSize = { members: number; headcount: number | null };
-export type RoutePolicyFacts = { blocked: Set<string>; organizations: Map<string, OrganizationRouteSize> };
+/** A pair marked on bad terms (issue 0143), keyed by each person's identity group so aliases match. */
+export type BadTermsFact = { markId: string; pair: string; aName: string; bName: string; note: string | null; byName: string; at: string };
+export type RoutePolicyFacts = { blocked: Set<string>; organizations: Map<string, OrganizationRouteSize>;
+  /** Pairs on bad terms, by `groupA|groupB` (sorted), and the group of each requested ID. */
+  badTerms?: Map<string, BadTermsFact>; groupOf?: Map<string, string> };
 
 /** Accept only a count or a bounded range, not narrative numbers, dates or percentages.
  * A range uses its upper bound because overstating the usefulness of a large hub is worse
@@ -133,7 +137,7 @@ const BLOCKED_SQL = memoizable(`select entity_id::text as id from coordination.r
 /** No restriction text or private context leaves this policy reader. Restrictions and
  * public claims are read afresh; neither live safety nor size changes depend on a TTL. */
 export async function routePolicyFacts(ids: string[], vehicleId?: string): Promise<RoutePolicyFacts> {
-  if (!ids.length) return { blocked: new Set(), organizations: new Map() };
+  if (!ids.length) return { blocked: new Set(), organizations: new Map(), badTerms: new Map(), groupOf: new Map() };
   const db = await getDb(), topology = await policyTopology(db);
   const canonical = (id: string) => topology.canonical.get(id) ?? id;
   const wanted = [...new Set(ids.map(canonical))];
@@ -161,7 +165,7 @@ export async function routePolicyFacts(ids: string[], vehicleId?: string): Promi
     }
     for (const [id, members] of people) topology.members.set(id, members.size);
   }
-  const [restrictions, claims] = await Promise.all([
+  const [restrictions, claims, marks] = await Promise.all([
     db.query<{ id: string }>(BLOCKED_SQL, [vehicleId ?? null]),
     orgIds.length ? db.query<{ id: string; value: string }>(
       `select c.entity_id::text as id, c.value from research.claim c
@@ -172,7 +176,19 @@ export async function routePolicyFacts(ids: string[], vehicleId?: string): Promi
           and nullif(trim(c.source), '') is not null and c.as_of is not null
           and c.confidence is not null and c.last_verified_by is not null`, [orgAliases],
     ) : Promise.resolve([] as Array<{ id: string; value: string }>),
+    db.query<{ id: string; a: string; b: string; a_name: string; b_name: string; note: string | null; by_name: string; at: string }>(
+      `select m.mark_id::text id, m.a_entity::text a, m.b_entity::text b, ea.display_name a_name, eb.display_name b_name, m.note,
+              u.name by_name, to_char(m.recorded_at, 'YYYY-MM-DD') at
+         from network.bad_terms m join identity.entity ea on ea.entity_id = m.a_entity join identity.entity eb on eb.entity_id = m.b_entity
+         join platform.app_user u on u.id = m.recorded_by where m.undone_at is null`),
   ]);
+  const groupKey = (id: string) => topology.group.get(canonical(id)) ?? canonical(id);
+  const badTerms = new Map<string, BadTermsFact>();
+  for (const m of marks) {
+    const pair = [groupKey(m.a), groupKey(m.b)].sort().join('|');
+    if (!badTerms.has(pair)) badTerms.set(pair, { markId: m.id, pair, aName: m.a_name, bName: m.b_name, note: m.note, byName: m.by_name, at: m.at });
+  }
+  const groupOf = new Map(ids.map((id) => [id, groupKey(id)]));
   const prohibited = new Set(restrictions.map(({ id }) => topology.group.get(canonical(id)) ?? canonical(id)));
   const blocked = new Set<string>();
   for (const id of [...wanted, ...ids]) if (prohibited.has(topology.group.get(canonical(id)) ?? canonical(id))) blocked.add(id);
@@ -181,7 +197,7 @@ export async function routePolicyFacts(ids: string[], vehicleId?: string): Promi
     const count = parsePublicHeadcount(claim.value), size = organizations.get(canonical(claim.id));
     if (count !== null && size) size.headcount = Math.max(size.headcount ?? 0, count);
   }
-  return { blocked, organizations };
+  return { blocked, organizations, badTerms, groupOf };
 }
 
 /** Routing may reject a repeated uncertain identity without merging records or adding an

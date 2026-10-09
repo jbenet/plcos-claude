@@ -1,6 +1,6 @@
 import { lpContactsFor } from '@/modules/strategy/lp-contacts';
 import { routePolicyFacts, routeIdentityGroups, routeOrganizations } from './route-policy';
-import { busyReason, emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
+import { badTermsOn, badTermsReason, busyReason, emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
 import { cachedRoutes } from './cache';
 import { promotedBasisHashes, compactStructuralRoutes, overlayRoutes, routeCheckpoint, selectDisplayRoutes, sortRouteCandidates, type RouteSelectionOptions } from './route-overlay';
 import { setImmediate } from 'node:timers/promises';
@@ -200,6 +200,10 @@ async function calculateRoutes(
       }
     }
 
+    // Issue 0143: never ask someone about a person they are on bad terms with.
+    const mark = verdict === 'excluded' || structuralOnly ? undefined : badTermsOn(policy, [...p.nodes, targetId, ...(viaContact ? [viaContact.entityId] : [])]);
+    if (mark) { verdict = 'excluded'; reasons.push(badTermsReason(mark)); }
+
     // Tiers describe uncertainty, never a human information gate (rule 6).
     for (const h of hops.filter((h) => h.edge.tier === 'C' || h.edge.tier === 'D')) {
       reasons.push(`${hops.indexOf(h) === 0 ? p.source.name : hops[hops.indexOf(h) - 1]!.toName} → ${h.toName}: tier ${h.edge.tier}. ` +
@@ -241,6 +245,7 @@ async function calculateRoutes(
       organizationIds: p.nodes.filter(id => organizations.has(id)),
       fromEntity: p.source.entityId, fromName: p.source.name,
       hops, connectorNames, connectorIds, verdict, reasons, weakestTier, askLoad,
+      ...(mark ? { badTerms: { markId: mark.markId } } : {}),
       influence: null,
     });
   }

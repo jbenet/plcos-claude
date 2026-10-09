@@ -2345,3 +2345,12 @@ body:has(.shortcuts-dialog[open]) .feedbackkey{display:inline}
 @media (max-width: 760px){.topsearch{display:none}}
 /* A button that reads as a link, inside a line of text (issue 0137: "take back"). */
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--accent,inherit);text-decoration:underline;cursor:pointer}
+/* Issue 0143: marking two people on a route as on bad terms. */
+.bad-terms{margin-top:8px;font-size:12px}
+.bad-terms>summary{cursor:pointer;color:var(--muted)}
+.bad-terms-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:6px}
+.bad-terms-form label{display:flex;flex-direction:column;gap:2px}
+.bad-terms-form select,.bad-terms-form input{font:inherit;padding:4px 6px;border:1px solid var(--hair);border-radius:4px;background:var(--surface);color:var(--ink)}
+.bad-terms-form p{flex-basis:100%;margin:0}
+.own-tie h3{font-size:13px;margin:0 0 6px}
+.own-tie{border-bottom:1px solid var(--hair)}

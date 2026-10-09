@@ -343,8 +343,10 @@ function entityConnectionPaths(candidates: Candidate[], findings: Map<string, Fi
         const o = norm(r.org);
         if (!o || TOO_COMMON.has(o)) continue;
         if (orgs.some((x) => norm(x) === o) || (jobs && r.org.length > 4 && affirms(jobs, r.org))) {
-          // Going through an accelerator is being in a batch, not working there (s08): D, as alumni.
-          const accelerator = /y combinator|\byc\b|techstars|500 startups|on deck|entrepreneur first|antler|accelerator/i.test(r.org);
+          // Going through an accelerator is being in a batch, not working there (s08): D, as alumni. A team member who
+          // worked there (a partner, say; issue 0144) shares an employer like any other: C.
+          const accelerator = /y combinator|\byc\b|techstars|500 startups|on deck|entrepreneur first|antler|accelerator/i.test(r.org)
+            && !/\b(partner|director|employee|staff|principal|associate|head|manager|chief|president)\b/i.test(r.role ?? '');
           add(accelerator
             ? { lp: c.key, other: { type: 'team', name: t.name, handle: t.handle }, kind: 'alumni', tier: 'D', basis: `Both went through ${r.org}, in different batches most likely`, source: null }
             : { lp: c.key, other: { type: 'team', name: t.name, handle: t.handle }, kind: 'colleague', tier: 'C', tie: { kind: 'proximity' }, basis: `Both have worked at ${r.org}; collaboration and dates are not recorded`, source: r.source ?? null });

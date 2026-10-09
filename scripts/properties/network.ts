@@ -256,6 +256,40 @@ export async function networkVariations(check: Check) {
       }),
     },
     {
+      name: 'two people marked on bad terms',
+      describe: 'Mark Umeadi and Quaresma on bad terms (issue 0143).',
+      expect: 'Every route asking Umeadi about Quaresma is excluded with the reason; other routes stay Recommend.',
+      perturb: async (d, ids) => {
+        const u = await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'");
+        const { markBadTerms } = await import('../../modules/network');
+        await markBadTerms(u!.id, ids('Solveig Quaresma'), ids('Orla Umeadi'), 'Invented: they fell out');
+      },
+      assert: (r) => {
+        const through = r!.routes.filter((x) => x.connectorNames.includes('Orla Umeadi'));
+        const others = r!.routes.filter((x) => !x.connectorNames.includes('Orla Umeadi'));
+        return {
+          ok: through.length > 0 && through.every((x) => x.verdict === 'excluded' && !!x.badTerms && x.reasons.some((s) => /on bad terms/.test(s)))
+            && others.some((x) => x.verdict === 'recommend') && !(r?.topRoutes ?? []).some((x) => x.connectorNames.includes('Orla Umeadi')),
+          detail: `${through.filter((x) => x.verdict === 'excluded').length} of ${through.length} Umeadi routes excluded; ${others.filter((x) => x.verdict === 'recommend').length} others recommend`,
+        };
+      },
+    },
+    {
+      name: 'a team member records their own tie',
+      describe: 'Juan records that he worked with Quaresma (issue 0144).',
+      expect: 'A direct, reviewed tier-B route from Juan appears and is recommended.',
+      perturb: async (d, ids) => {
+        const u = await d.one<{ id: string }>("select id::text id from platform.app_user where handle = 'juan'");
+        const { recordOwnTie } = await import('../../modules/network');
+        await recordOwnTie({ id: u!.id, handle: 'juan' }, ids('Solveig Quaresma'), 'worked_together', 'Invented: former partners', null);
+      },
+      assert: (r) => {
+        const direct = r!.routes.find((x) => x.hops.length === 1 && x.hops[0]!.edge.evidence.some((e) => (e as { derived?: string }).derived === 'stated'));
+        return { ok: direct?.verdict === 'recommend' && direct.weakestTier === 'B' && !!direct.hops[0]!.edge.reviewedByName,
+          detail: `stated route ${direct ? `${direct.verdict}, tier ${direct.weakestTier}` : 'missing'}` };
+      },
+    },
+    {
       name: 'a human reviews the tier-D edge',
       describe: 'Mark Barrowcliff → Quaresma as confirmed by a person.',
       expect:
@@ -323,7 +357,7 @@ export async function networkVariations(check: Check) {
     const selected = live?.routes.filter((r) => r.foldedUnder == null).map((r) => ({ ...r, foldedUnder: null }));
     const expected = live && selected ? { ...live, routes: selected,
       topRoutes: selected.filter((r) => r.verdict === 'recommend'), graph: routeGraph(selected, live.targetId, true) } : null;
-    const dynamic = v.name === 'add a blanket do-not-contact' || v.name === 'the connector reaches the cap';
+    const dynamic = v.name === 'add a blanket do-not-contact' || v.name === 'the connector reaches the cap' || v.name === 'two people marked on bad terms';
     const rewrote = String(before?.computed_at) !== String(after?.computed_at);
     check(`CACHE2 applies changes between builds — ${v.name}`,
       (dynamic ? !rewrote : true) && sameSnapshot(cached, expected) && v.assert(cached).ok,
