@@ -22,8 +22,8 @@
 .next:global(.list) .num { width: 30px; text-align: right; color: var(--muted); font-family: var(--mono); padding-right: 4px; }
 .next tbody tr:hover td { background: var(--accent-wash); }
 .next :global(.tag) { white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; vertical-align: 1px; }
-.tagLp { color: var(--purple); border-color: #DCD5EE; background: #F6F4FB; }
-.tagMove { color: var(--ink); border-color: #D6D1C4; background: #F4F2EC; }
+.tagLp { color: var(--purple); border-color: var(--purple-line); background: var(--purple-bg); }
+.tagMove { color: var(--ink); border-color: var(--line-strong); background: var(--wash-2); }
 /* The option takes the remaining width: its title, then one line of what it means. The full text
    is on the LP or the move. */
 .what { width: 100%; max-width: 0; min-width: 220px; }

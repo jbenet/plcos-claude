@@ -133,6 +133,8 @@ export interface Route {
   /** busy: the connector has been asked at or past the cap this quarter. A warning only (Juan, 8 Oct 2026, feedback 0124:
    * "flag only"): the route stays Recommend unless config.guard.askLimit is 'enforce', which holds it. */
   askLoad: { connector: string; used: number; cap: number; busy?: boolean } | null;
+  /** Issue 0143: excluded because two people on it are marked on bad terms; the mark to undo. */
+  badTerms?: { markId: string };
   /**
    * How much weight this route carries, once it has passed the safety rules above.
    *

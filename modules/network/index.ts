@@ -18,3 +18,4 @@ export { strategyRouteSummaries, type RecordedRoute } from './strategy-summary';
 export { throughNode, throughGaps, weakerTier, rankOnward, bestRouteTo, edgeSourceClasses, evidenceSourceClass, SOURCE_CLASSES, SOURCE_MEANS, THIN_TEAM_EDGES } from './through';
 export type { ThroughView, OnwardTie, ThroughGaps, SourceClass, LpFlag, GapWarning } from './through';
 export { edgesTouching } from './repo';
+export { listBadTerms, markBadTerms, undoBadTerms, ownTies, recordOwnTie, OWN_TIE_KINDS, type BadTermsMark, type OwnTie, type OwnTieKind } from './bad-terms';

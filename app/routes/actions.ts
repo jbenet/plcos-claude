@@ -65,6 +65,41 @@ export async function reviewEdgeAction(formData: FormData): Promise<void> {
   revalidatePath('/routes');
 }
 
+/** Issue 0143: two people on bad terms. Every route that would ask one of them about the other is excluded. */
+export async function markBadTermsAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/routes/actions.ts#markBadTermsAction', formData);
+  const { markBadTerms } = await import('@/modules/network');
+  await markBadTerms(user.id, String(formData.get('a')), String(formData.get('b')), String(formData.get('note') ?? '').trim().slice(0, 500) || null);
+  revalidatePath('/routes');
+}
+
+export async function undoBadTermsAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/routes/actions.ts#undoBadTermsAction', formData);
+  const { undoBadTerms } = await import('@/modules/network');
+  await undoBadTerms(user.id, String(formData.get('markId')));
+  revalidatePath('/routes');
+}
+
+/** Issue 0144: the signed-in team member's own tie to someone, which the graph cannot derive from a shared organisation. */
+export async function recordOwnTieAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/routes/actions.ts#recordOwnTieAction', formData);
+  const { recordOwnTie } = await import('@/modules/network');
+  const last = String(formData.get('last') ?? '').trim();
+  await recordOwnTie(user, String(formData.get('target')), String(formData.get('kind')) as never,
+    String(formData.get('note') ?? '').trim().slice(0, 300) || null, /^\d{4}-\d{2}-\d{2}$/.test(last) ? last : null);
+  revalidatePath('/routes');
+}
+
+export async function removeOwnTieAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/routes/actions.ts#removeOwnTieAction', formData);
+  const { ownTies, reviewEdge } = await import('@/modules/network');
+  const edgeId = String(formData.get('edgeId'));
+  // Only your own stated tie, never someone else's edge.
+  if (!(await ownTies(user.handle, String(formData.get('target')))).some((t) => t.edgeId === edgeId)) throw new Error('Not your recorded tie.');
+  await reviewEdge(user.id, edgeId, 'decline', 'Removed by the person who recorded it');
+  revalidatePath('/routes');
+}
+
 /** Link the team to the graph and build its ties from our records and the research (N82). */
 export async function buildNetworkAction(formData: FormData): Promise<void> {
   const authorizedUser = await requireAction('app/routes/actions.ts#buildNetworkAction', formData);

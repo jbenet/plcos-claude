@@ -1,6 +1,7 @@
 import { config } from '@/config/deployment';
 import { routeStrength } from './warmth';
 import type { Route, RouteRuleCounts, RouteScore } from './types';
+import type { RoutePolicyFacts, BadTermsFact } from './route-policy';
 
 export const emptyRuleCounts = (): RouteRuleCounts => ({ inspected: 0, sourcePrefixes: 0, duplicates: 0,
   repeatedPeople: 0, plFallbacks: 0, restricted: 0, largeOrganizations: 0, organizationPenalties: 0 });
@@ -26,4 +27,20 @@ export function organizationPenalty(score: RouteScore, route: Pick<Route, 'conne
 export function busyReason(connector: string, used: number, cap: number, held: boolean): string {
   return `${connector} is a busy introducer: asked ${used} time${used === 1 ? '' : 's'} this quarter, at or past the guide of ${cap}. ` +
     (held ? 'The route is held because the ask limit is enforced.' : 'Nothing is held; weigh it before asking again.');
+}
+
+/** Issue 0143: the first marked pair among everyone on a route (us, each introducer, the contact and the target). */
+export function badTermsOn(policy: RoutePolicyFacts, ids: string[]): BadTermsFact | undefined {
+  if (!policy.badTerms?.size) return undefined;
+  const groups = [...new Set(ids.map((id) => policy.groupOf?.get(id) ?? id))];
+  for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length; j++) {
+    const hit = policy.badTerms.get([groups[i], groups[j]].sort().join('|'));
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+export function badTermsReason(mark: BadTermsFact): string {
+  return `${mark.aName} and ${mark.bName} are on bad terms, marked by ${mark.byName} on ${mark.at}${mark.note ? ` ("${mark.note}")` : ''}. `
+    + 'A route that asks one of them about the other is excluded; undo the mark if it no longer holds.';
 }

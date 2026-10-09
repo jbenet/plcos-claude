@@ -37,7 +37,7 @@
 .barWrap .mark[data-tone="busy"] .dot { border-color: var(--ink); }
 .barWrap .mark[data-tone="ok"] .dot { border-color: var(--muted); color: var(--muted); }
 .barWrap .mark[data-tone="look"] .dot { border-color: var(--amber); color: var(--amber); }
-.barWrap .mark[data-tone="unsafe"] .dot { background: var(--amber); color: #fff; }
+.barWrap .mark[data-tone="unsafe"] .dot { background: var(--amber); color: var(--on-meaning); }
 
 .live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -48,7 +48,7 @@
   width: 320px; max-width: calc(100vw - 16px); max-height: min(520px, calc(100dvh - var(--at-bottom, 80px) - 16px));
   overflow-y: auto; overscroll-behavior: contain;
   background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 11px;
-  padding: 10px 14px 12px; box-shadow: 0 18px 44px rgba(26, 25, 23, .22); outline: none;
+  padding: 10px 14px 12px; box-shadow: 0 18px 44px rgb(var(--shade) / .22); outline: none;
 }
 .head { display: flex; align-items: center; justify-content: space-between; }
 .x { width: 30px; height: 30px; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }

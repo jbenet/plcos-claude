@@ -14,15 +14,15 @@
 .cell {
   all: unset; box-sizing: border-box; display: block; width: 100%; height: 28px; border-radius: 5px; text-align: center;
   font-family: var(--mono); font-size: 11.5px; line-height: 28px; cursor: pointer; color: var(--ink);
-  background: color-mix(in srgb, var(--lc) calc(var(--a, .2) * 100%), var(--surface));
+  background: color-mix(in srgb, var(--lc) calc(var(--a, .2) * var(--lane-weight)), var(--surface));
 }
-.dark { color: #fff; }
+.dark { color: var(--on-lane); }
 .zero { background: var(--hair); color: var(--muted); cursor: default; }
 .cell:focus-visible { outline: 2px solid var(--accent-halo); outline-offset: 1px; }
 .cell[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: 1px; }
 td.now .cell { box-shadow: inset 0 0 0 1.5px var(--ink); }
 .legend { margin: 8px 0 10px; font-size: 11.5px; color: var(--muted); line-height: 1.5; max-width: 96ch; }
-.detail { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #FBF9F4; }
+.detail { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--wash); }
 .detailHead { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 13px; }
 .detailList { list-style: none; margin: 6px 0 0; padding: 0; }
 .detailList li { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 2px 10px; padding: 6px 0; border-top: 1px solid var(--hair); font-size: 12.5px; }
