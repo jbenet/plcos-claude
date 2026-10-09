@@ -23,13 +23,14 @@ export const GROUPS: Array<{ id: Group; label: string; long: string; sources: Ac
 export const groupOf = (s: ActivitySource): Exclude<Group, 'all'> => (s === 'fetch' || s === 'sec' ? 'search' : s);
 
 /** One hue per source group, the same on every chart. Not the meaning colours (clay, green, amber
- *  as states): a source is not a status. Labels always sit beside them; colour is never alone. */
+ *  as states): a source is not a status. Labels always sit beside them; colour is never alone.
+ *  CSS custom properties (app/globals.css), so each hue has a lighter step in dark mode. */
 export const GROUP_TONE: Record<Exclude<Group, 'all'>, string> = {
-  affinity: '#2F6F8F', warehouse: '#5F4B9E', dakota: '#9A7420', linear: '#34466E', intake: '#6B8A3A',
-  search: '#2E8A87', agents: '#9A4F7E',
+  affinity: 'var(--tone-affinity)', warehouse: 'var(--tone-warehouse)', dakota: 'var(--tone-dakota)',
+  linear: 'var(--tone-linear)', intake: 'var(--tone-intake)', search: 'var(--tone-search)', agents: 'var(--tone-agents)',
 };
-const SEGMENT_TONES = ['#2F6F8F', '#2E8A87', '#9A7420', '#5F4B9E', '#9A4F7E'];
-const OTHER_TONE = '#A8A294';
+const SEGMENT_TONES = ['var(--tone-affinity)', 'var(--tone-search)', 'var(--tone-dakota)', 'var(--tone-warehouse)', 'var(--tone-agents)'];
+const OTHER_TONE = 'var(--tone-other)';
 /** At most this many bars stack in one source; the rest fold into "Other". A guess at legibility. */
 export const MAX_SERIES = 5;
 

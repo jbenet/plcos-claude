@@ -3,7 +3,7 @@
 .move { margin: 2px 0 10px; }
 .moveBtn {
   display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 36px;
-  font: 600 13px/1.2 var(--sans); background: var(--ink); color: #fff; border: 1px solid var(--ink); border-radius: 6px;
+  font: 600 13px/1.2 var(--sans); background: var(--ink); color: var(--on-ink); border: 1px solid var(--ink); border-radius: 6px;
   padding: 7px 12px; cursor: pointer; position: relative; -webkit-tap-highlight-color: transparent;
 }
 .moveBtn:hover:not(:disabled) { background: var(--rail-hover); }
@@ -25,7 +25,7 @@
   border: 1px solid currentColor; opacity: .7;
 }
 
-.moveErr { font-size: 12px; line-height: 1.5; margin: 8px 0 0; padding: 7px 9px; border-radius: 6px; background: #FCF6F2; border: 1px solid #E4D3C6; color: var(--clay); }
+.moveErr { font-size: 12px; line-height: 1.5; margin: 8px 0 0; padding: 7px 9px; border-radius: 6px; background: var(--clay-bg); border: 1px solid var(--clay-line); color: var(--clay); }
 
 /* The inline copy, under the LP in focus, when the list is too narrow for the side panel. */
 .inline > section { margin: 0 0 12px; }
@@ -33,17 +33,17 @@
 .toast {
   position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 60;
   display: flex; align-items: center; gap: 12px; max-width: min(560px, calc(100vw - 24px));
-  background: var(--ink); color: #fff; border-radius: 10px; padding: 9px 9px 9px 16px;
-  box-shadow: 0 8px 28px rgba(26, 25, 23, .22); font-size: 13px; line-height: 1.4;
+  background: var(--ink); color: var(--on-ink); border-radius: 10px; padding: 9px 9px 9px 16px;
+  box-shadow: 0 8px 28px rgb(var(--shade) / .22); font-size: 13px; line-height: 1.4;
 }
-.toastBad { background: #FCF6F2; color: var(--clay); border: 1px solid #E4D3C6; }
+.toastBad { background: var(--clay-bg); color: var(--clay); border: 1px solid var(--clay-line); }
 .toastText { min-width: 0; overflow-wrap: anywhere; }
 .toastText b { font-weight: 600; }
 .toastUndo {
   display: inline-flex; align-items: center; gap: 7px; flex: none; font: 600 13px/1 var(--sans);
-  background: none; color: #fff; border: 1px solid rgba(255, 255, 255, .45); border-radius: 7px; padding: 8px 12px; cursor: pointer;
+  background: none; color: var(--on-ink); border: 1px solid color-mix(in srgb, var(--on-ink) 45%, transparent); border-radius: 7px; padding: 8px 12px; cursor: pointer;
 }
-.toastUndo:hover { background: rgba(255, 255, 255, .1); }
+.toastUndo:hover { background: color-mix(in srgb, var(--on-ink) 10%, transparent); }
 .toastUndo:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
 .toastClose { flex: none; background: none; border: 0; color: inherit; opacity: .65; font-size: 18px; line-height: 1; padding: 4px 6px; cursor: pointer; }
 .toastClose:hover { opacity: 1; }

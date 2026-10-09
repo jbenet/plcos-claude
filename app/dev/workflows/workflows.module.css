@@ -28,7 +28,7 @@
 .table { table-layout: auto; }
 .table thead th { white-space: nowrap; }
 .table td { vertical-align: top; }
-.group td { background: #FAF8F3; padding-top: 7px; padding-bottom: 7px; }
+.group td { background: var(--wash); padding-top: 7px; padding-bottom: 7px; }
 .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 th.num { text-align: right; }
 .sub { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.35; font-family: var(--sans); }
@@ -59,7 +59,7 @@ th.num { text-align: right; }
 .vrow { padding: 11px 15px; border-bottom: 1px solid var(--hair); }
 .vrow:last-child { border-bottom: 0; }
 .versions { list-style: none; margin: 7px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.versions li { display: inline-flex; flex-direction: column; gap: 1px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: #FBF9F4; max-width: 100%; }
+.versions li { display: inline-flex; flex-direction: column; gap: 1px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--wash); max-width: 100%; }
 .versions li:last-child { border-color: var(--accent-line); background: var(--accent-soft); }
 .vmeta { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
 .commits { list-style: none; margin: 0; padding: 0; }
