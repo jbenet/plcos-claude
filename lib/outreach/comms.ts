@@ -74,6 +74,17 @@ async function entitiesOf(addresses: string[], q: Queryable): Promise<string[]> 
   return [...new Set([...people, ...firms])].sort();
 }
 
+/** Reconcile the LPs a batch of new received messages is about: their active pursuits, each once. */
+async function reconcileAfterMail(messageIds: string[], q: Queryable): Promise<number> {
+  const pursuits = (await q.query<{ id: string }>(`select distinct p.pursuit_id::text id
+      from email.comms_message m cross join lateral unnest(m.entity_ids) x(id)
+      join strategy.active_pursuit p on p.entity_id = any(identity.alias_ids(array[identity.canonical_entity_id(x.id)]))
+     where m.message_id = any($1::text[]) and m.direction = 'theirs'`, [messageIds])).map((r) => r.id);
+  const { reconcilePursuit } = await import('@/lib/reconcile');
+  for (const id of pursuits) await reconcilePursuit(id);
+  return pursuits.length;
+}
+
 // ── comms_ingest ─────────────────────────────────────────────────────────────────────────
 
 const message = z.object({
@@ -125,11 +136,15 @@ export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
     out.push({ messageId: key, status: r?.fresh ? 'new' : 'already' });
   }
   const n = (s: string) => out.filter((x) => x.status === s).length;
+  // A new reply from an LP is a reply on file: Reconciliation records the conversation rungs it supports, as it
+  // does after Affinity's (Juan, 8 Oct 2026, issue 0137; 9 Oct 2026, docs/29). Only those LPs, here and now.
+  const fresh = out.filter((x) => x.status === 'new').map((x) => x.messageId);
+  const reconciled = fresh.length ? await reconcileAfterMail(fresh, db) : 0;
   await appendAudit({ actorId: owner.id, action: 'comms.ingested', subjectType: 'mcp_token', subjectId: ctx.env.tokenId,
-    detail: { messages: a.messages.length, new: n('new'), already: n('already'), unmatched: n('unmatched') } }, db);
+    detail: { messages: a.messages.length, new: n('new'), already: n('already'), unmatched: n('unmatched'), reconciled } }, db);
   return { data: {
-    new: n('new'), already: n('already'), unmatched: n('unmatched'), messages: out,
-    note: 'Metadata only. Nothing else was written: no touchpoint, status, rung or ticket. The LP page and the queue read these with Affinity\'s records, one row per message. A message with nobody on record is not kept.',
+    new: n('new'), already: n('already'), unmatched: n('unmatched'), messages: out, reconciled,
+    note: 'Metadata only: no touchpoint, status or ticket is written. A new reply from an LP is a reply on file, so Reconciliation records the conversation rungs it supports (LP opted in), undoable on the LP\'s timeline; reconciled counts the LPs it looked at. The LP page and the queue read these with Affinity\'s records, one row per message. A message with nobody on record is not kept.',
   } };
 }
 

@@ -41,6 +41,10 @@ const OPS: Record<string, Op> = {
   // Deprecated for one release (5 Oct 2026): /sent runs the old name, an alias of outreach_link_message.
   sent: { tool: 'outreach_record_send', method: 'POST' },
   comms: { tool: 'comms_ingest', method: 'POST' },
+  // What the mail says (docs/29): POST records a message's signals, GET reads one LP's.
+  signals: { tool: 'outreach_record_signals', method: 'POST', get: { tool: 'outreach_signals' } },
+  insights: { tool: 'outreach_insights', method: 'GET' },
+  playbook: { tool: 'outreach_playbook', method: 'GET' },
   trace: { tool: 'comms_trace', method: 'GET' },
   audit: { tool: 'audit_recent', method: 'GET' },
 };
@@ -75,8 +79,8 @@ function queryArgs(url: URL, rename: Record<string, string> = {}): Record<string
   const out: Record<string, unknown> = {};
   for (const [k0, v] of url.searchParams) {
     const k = Object.hasOwn(rename, k0) ? rename[k0]! : k0;
-    out[k] = /^(limit|offset|maxWaitMs)$/.test(k) && /^\d+$/.test(v) ? Number(v)
-      : /^(includePassed|firstHopOnly)$/.test(k) && /^(1|true|0|false)$/.test(v) ? v === '1' || v === 'true' : v;
+    out[k] = /^(limit|offset|maxWaitMs|sinceDays|examples)$/.test(k) && /^\d+$/.test(v) ? Number(v)
+      : /^(includePassed|firstHopOnly|details)$/.test(k) && /^(1|true|0|false)$/.test(v) ? v === '1' || v === 'true' : v;
   }
   return out;
 }

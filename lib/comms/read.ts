@@ -89,6 +89,30 @@ export async function commsFor(entityIds: string[], q?: Queryable): Promise<Map<
   return out;
 }
 
+/**
+ * The received messages each LP sent themselves (Juan, 9 Oct 2026; docs/29): the sender's address is an email
+ * claim of the LP, of a contact on their pursuit, or of a person who acts for the LP's firm now — not someone else
+ * on a thread they were copied on. Keyed `${entityId}|${messageId}`. Reconciliation counts only these as a reply.
+ */
+export async function sentByThem(entityIds: string[], q?: Queryable): Promise<Set<string>> {
+  if (!entityIds.length) return new Set();
+  const db = q ?? await getDb();
+  const rows = await db.query<{ for_entity: string; message_id: string }>(`${REACH},
+    senders as (
+      select h.for_entity, m.message_id, identity.canonical_entity_id(c.entity_id) sender
+        from hits h join email.comms_message m on m.message_id = h.message_id and m.direction = 'theirs'
+        join research.claim c on c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(trim(c.value)) = lower(m.from_addr)
+    )
+    select distinct s.for_entity::text, s.message_id from senders s
+      join lp on lp.entity_id = s.for_entity
+     where s.sender = lp.canon
+        or exists (select 1 from strategy.active_pursuit p join strategy.pursuit_contact pc on pc.pursuit_id = p.pursuit_id
+                    where identity.canonical_entity_id(p.entity_id) = lp.canon and identity.canonical_entity_id(pc.person_entity) = s.sender)
+        or exists (select 1 from identity.affiliation a where a.ended_on is null
+                    and identity.canonical_entity_id(a.person_entity) = s.sender and identity.canonical_entity_id(a.org_entity) = lp.canon)`, [entityIds]);
+  return new Set(rows.map((r) => `${r.for_entity}|${r.message_id}`));
+}
+
 /** juanmail's links for these pursuits' LPs, on every pursuit of theirs. */
 export async function linksFor(entityIds: string[], q?: Queryable): Promise<Map<string, CommsLink[]>> {
   const out = new Map<string, CommsLink[]>();

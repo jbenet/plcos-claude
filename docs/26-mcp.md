@@ -112,11 +112,15 @@ form's writer (railway.md §7a). It sends nothing, decides no ticket and moves n
 | `create_email_draft` | propose | — | — | A first message or an intro ask, saved in the app for its owner; not moved to Gmail, not sent |
 | `file_feedback` | propose | — | — | An issue, journaled like the feedback box, optionally about a logged call (`callId`); only the live app files |
 | `outreach_request_ticket` | propose | outreach:write | opens | For an autonomous call only: a SEND (one email, named recipients) or INTRO_ASK ticket for a person to approve; never approves it. A person's call opens nothing and gets the checks |
-| `outreach_propose_contact` | propose | outreach:write | — | An address the person confirmed from Gmail, kept beside Affinity's, never over it |
+| `outreach_propose_contact` | propose | outreach:write | — | An address the person confirmed from Gmail, or a phone, title, firm, postal address or LinkedIn page read from a signature (unconfirmed, medium); kept beside Affinity's, never over it (docs/29 §5) |
 | `outreach_update` | write-guarded | outreach:write | — | The LP page's update box: words and the boxes the person ticked — status, touchpoint, next step, indicated amount |
 | `outreach_link_message` | send-adjacent | outreach:write | agent-only | A message the desk sent or read, linked to one LP (or to several with `pursuitIds`, all or none, each authorized) by its ids and metadata, once; creates no outreach state; an autonomous send needs an approved ticket, which it marks used, and names one LP only |
 | `outreach_record_send` | send-adjacent | outreach:write | agent-only | Deprecated (5 Oct 2026): the old arguments, run as `outreach_link_message`; removed next release |
-| `comms_ingest` | send-adjacent | outreach:write | — | Message metadata the desk sees in Gmail, sent and received: idempotent by Message-ID, writes nothing else |
+| `comms_ingest` | send-adjacent | outreach:write | — | Message metadata the desk sees in Gmail, sent and received: idempotent by Message-ID; a new reply from an LP has Reconciliation record the conversation rungs it supports (docs/29 §4) |
+| `outreach_record_signals` | propose | outreach:write | — | What one message says about each person in it, by role (interest, amounts, questions, objections, timing…): readings kept beside the LP, answered with `outreach_update` payloads for a person to accept; applies none (docs/29) |
+| `outreach_signals` | read | outreach:read | — | One LP's or entity's readings from mail, newest first (R2 words, R1 amounts) |
+| `outreach_insights` | read | outreach:read | — | A vehicle's readings summed by kind, topic, role and month, with examples, for strategy |
+| `outreach_playbook` | read | outreach:read | — | The desk's mail playbook (docs/workflows/mail-actions.md) as markdown |
 
 A scoped GP's token reads only their vehicles. `search` leaves out LPs found only elsewhere and counts them; an LP
 it does show names the other vehicles it is on, with owner and no status, as the pages do (rule 5). Every list
