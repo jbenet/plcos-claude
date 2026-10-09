@@ -16,6 +16,10 @@ Rules moved from AGENTS.md. Read this file when its scope applies; all rules sti
   Rail: `#1A1917` with `#EFEBE2` text. That is the clay theme. **The default theme is green**
   since 24 Sep 2026 (issue 0010): the same meaning colours, with a green accent, ground and rail
   (`lib/theme.ts`, `app/globals.css`); clay stays one click away in Settings.
+  **Light or dark is a separate mode** since 9 Oct 2026 (issue 0142): light, dark or system (the
+  default), applied before first paint as `data-mode="dark"`; each theme has a dark, where the meaning
+  colours become lighter steps of the same hues at WCAG AA on the dark ground. Never write a light-only
+  hex in a component: use or add a token in `app/globals.css` with a dark value too.
 - **Type:** Fraunces (display), IBM Plex Sans (body), IBM Plex Mono (labels, data).
 - **Status vocabulary is plain language**, never a numeric confidence rendered as fact:
   "Agent working", "Ready for review", "Waiting on counterpart", "Needs evidence",

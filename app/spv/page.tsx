@@ -158,7 +158,7 @@ async function SpvWarRoom() {
                             title={SPV_STAGE_LABEL[stage]}
                             style={{
                               flex: 1, height: 6, borderRadius: 3,
-                              background: at ? 'var(--green)' : s.stage === 'passed' ? '#EDEAE2' : '#EDEAE2',
+                              background: at ? 'var(--green)' : 'var(--track)',
                             }}
                           />
                         );

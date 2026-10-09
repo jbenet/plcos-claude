@@ -29,7 +29,9 @@ import { RouteFilters } from '@/components/routes/RouteFilters';
 import { routeReading, routeSummaryFor } from '@/components/routes/route-display';
 import { ThroughMap, ThroughSections } from '@/components/routes/ThroughSections';
 import type { TargetRow } from '@/components/routes/TargetPicker';
-import { routeSources, throughNode } from '@/lib/authz/read/network';
+import { routeSources, throughNode, listBadTerms, ownTies } from '@/lib/authz/read/network';
+import { OwnTie } from '@/components/routes/OwnTie';
+import { BadTermsList, MarkBadTerms, UndoBadTerms } from '@/components/routes/BadTerms';
 import { searchEntities } from '@/lib/authz/read/identity';
 
 export const dynamic = 'force-dynamic';
@@ -161,9 +163,11 @@ async function Routes({
       : affiliations.filter((a) => a.current && a.orgId === targetId)
     ).map((a) => [a.personId, a.orgName]),
   );
-  const [pathsNote, nearbyContact] = await Promise.all([
+  const [pathsNote, nearbyContact, badTerms, myTies] = await Promise.all([
     targetId ? notesFor(targetId, 'connection_candidates', 1).then((n) => n[0] ?? null) : Promise.resolve(null),
     directContact([...nearbyPeople.keys()]),
+    targetId ? listBadTerms([targetId]) : Promise.resolve([]),
+    targetId ? ownTies(user.handle, targetId) : Promise.resolve([]),
   ]);
   const promotedBases = promotedRouteBases(search?.routes ?? [], search?.promotedBasisHashes);
   const candidates = (((pathsNote?.data ?? {}) as { paths?: CandidatePath[] }).paths ?? [])
@@ -505,6 +509,10 @@ async function Routes({
                     <table className="inflt"><tbody>{routeReading(route).factors.map((f, index) => <tr key={index}><th scope="row">{f.label} <span className="mono">{f.value}</span></th><td className="iwhy">{f.basis}</td></tr>)}</tbody></table>
                     {route.influence && <p className="theask"><b>The ask to make.</b> {route.influence.theAsk}</p>}
                   </div>}
+                  {route.badTerms ? <UndoBadTerms markId={route.badTerms.markId} /> : <MarkBadTerms
+                    people={[{ id: route.fromEntity ?? '', name: route.fromName ?? search.fromName }, ...route.hops.map((h) => ({ id: h.toEntity, name: h.toName })),
+                      ...(route.viaContact ? [{ id: route.viaContact.entityId, name: route.viaContact.name }] : []), { id: search.targetId, name: search.targetName }].filter((p) => p.id)}
+                    a={route.connectorIds.at(-1)} b={search.targetId} />}
                   {(route.verdict === 'recommend' || route.verdict === 'hold') && (
                     (() => {
                       const carrier = route.connectorIds[route.connectorIds.length - 1] ?? null;
@@ -572,7 +580,8 @@ async function Routes({
           moreHref={(n) => `${routeHref({ tshow: String(n), r: undefined })}#through-onward`} />
       </>}
 
-      {targetId && <details className="card route-aux"><summary>Connection feedback</summary><ConnectionFeedback key={targetId} lp={targetId} /></details>}
+      <BadTermsList marks={badTerms} />
+      {targetId && <details className="card route-aux"><summary>Connection feedback</summary>{targetName && <OwnTie targetId={targetId} targetName={targetName} ties={myTies} />}<ConnectionFeedback key={targetId} lp={targetId} /></details>}
 
       {candidates.length > 0 && (
         <details className="card nearcard route-aux">

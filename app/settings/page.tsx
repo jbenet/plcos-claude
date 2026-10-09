@@ -2,7 +2,7 @@ import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { PrefsReset } from '@/components/shell/PrefsReset';
-import { ThemePicker } from '@/components/shell/ThemePicker';
+import { ModePicker, ThemePicker } from '@/components/shell/ThemePicker';
 import { auth } from '@/lib/auth';
 import { THEMES } from '@/lib/theme';
 import { MailguardConnect } from '@/components/email/MailguardConnect';
@@ -34,6 +34,7 @@ async function Preferences({ searchParams }: { searchParams: Promise<{ section?:
           <div className="ihead">{user.name}</div>
           <div className="imeta">{user.role}</div>
 
+          <div className="kv"><span>Light or dark</span><span>light, dark or system</span></div>
           <div className="kv"><span>Theme</span><span>{THEMES.length} available</span></div>
           <div className="kv"><span>Stored in</span><span className="mono" style={{ fontSize: 11 }}>localStorage</span></div>
           <div className="kv"><span>Reaches the server</span><span>no</span></div>
@@ -68,6 +69,21 @@ async function Preferences({ searchParams }: { searchParams: Promise<{ section?:
         {section === 'appearance' && <>
           <div className="card">
             <div className="chead">
+              <h2>Light or dark</h2>
+              <span className="lbl">applies immediately · remembered on this device</span>
+            </div>
+            <div className="cbody">
+              <ModePicker />
+            </div>
+            <p className="cover">
+              <b>System follows this device.</b> If your computer or phone switches to dark in the evening,
+              this page switches with it. Light and Dark stay put. Either theme below comes in both; in dark,
+              clay, green, amber and purple are brighter steps of the same colours and keep their meanings.
+            </p>
+          </div>
+
+          <div className="card">
+            <div className="chead">
               <h2>Theme</h2>
               <span className="lbl">applies immediately · remembered on this device</span>
             </div>
@@ -86,7 +102,7 @@ async function Preferences({ searchParams }: { searchParams: Promise<{ section?:
           <div className="card">
             <div className="chead">
               <h2>Layout</h2>
-              <span className="lbl">three preferences, all listed</span>
+              <span className="lbl">four preferences, all listed</span>
             </div>
             <div className="cbody">
               <PrefsReset />

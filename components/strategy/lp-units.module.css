@@ -46,8 +46,8 @@
   font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
   vertical-align: 1px; white-space: nowrap;
 }
-.tag.personal { border-color: #BFD9CB; color: var(--green); background: #F3F9F6; }
-.tag.review { border-color: #E6D6AE; color: var(--amber); background: #FBF7EC; }
+.tag.personal { border-color: var(--green-line); color: var(--green); background: var(--green-bg); }
+.tag.review { border-color: var(--amber-line); color: var(--amber); background: var(--amber-bg); }
 .jump {
   all: unset; cursor: pointer; margin-left: 5px; font-size: 11px; color: var(--ink); white-space: nowrap;
   border-bottom: 1px dotted var(--muted); line-height: 1.2;

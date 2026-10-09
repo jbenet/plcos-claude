@@ -87,6 +87,12 @@ export const actionRules = {
   'app/plays/actions.ts#propose': { action: 'mutate', scope: 'vehicleArg' },
   'app/routes/actions.ts#proposeFromRoute': { action: 'mutate', scope: 'vehicleSlug' },
   'app/routes/actions.ts#reviewEdgeAction': { action: 'mutate', scope: 'global' },
+  // Issue 0143: mark two people on bad terms, or undo it; any route asking one about the other is then excluded.
+  'app/routes/actions.ts#markBadTermsAction': { action: 'mutate', scope: 'global' },
+  'app/routes/actions.ts#undoBadTermsAction': { action: 'mutate', scope: 'global' },
+  // Issue 0144: a team member's own tie, recorded and removed by that member only.
+  'app/routes/actions.ts#recordOwnTieAction': { action: 'mutate', scope: 'global' },
+  'app/routes/actions.ts#removeOwnTieAction': { action: 'mutate', scope: 'global' },
   'app/routes/actions.ts#buildNetworkAction': { action: 'admin', scope: 'global' },
   'app/selection/actions.ts#scoreDetailAction': { action: 'read', scope: 'score' },
   'app/selection/actions.ts#saveWeights': { action: 'admin', scope: 'global' },

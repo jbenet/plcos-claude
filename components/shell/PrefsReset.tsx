@@ -14,6 +14,7 @@ export function PrefsReset() {
       window.localStorage.removeItem('capitalos.nav.collapsed');
       window.localStorage.removeItem('capitalos.rightpane');
       window.localStorage.removeItem('capitalos.theme');
+      window.localStorage.removeItem('capitalos.mode');
     } catch {
       /* blocked storage — nothing was stored either */
     }
@@ -35,8 +36,12 @@ export function PrefsReset() {
         <span>Theme</span>
         <span className="mono" style={{ fontSize: 11 }}>capitalos.theme</span>
       </div>
+      <div className="fact">
+        <span>Light, dark or system</span>
+        <span className="mono" style={{ fontSize: 11 }}>capitalos.mode</span>
+      </div>
       <button className="btn" onClick={clear} style={{ marginTop: 12 }} disabled={done}>
-        {done ? 'Reset' : 'Reset all three to defaults'}
+        {done ? 'Reset' : 'Reset all four to defaults'}
       </button>
       <p className="note" style={{ marginTop: 10 }}>
         Stored in this browser only. They never reach the server, never reach another device, and

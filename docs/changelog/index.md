@@ -314,4 +314,7 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [A W13 merge can name two records instead of a review group](entries/pair-merge-without-group.md)
 - [A refused merge names every missing attestation at once](entries/attestation-refusal-lists-all.md)
 - [Fewer Affinity requests a day](entries/affinity-call-budget.md)
+- [Dark mode: light, dark or follow the system](entries/dark-mode.md)
+- [Routes: two people on bad terms, and your own ties](entries/bad-terms-and-own-ties.md)
+- [Leaner batch workflows, and a spend report](entries/workflow-batch-budget.md)
 - [What the mail says](entries/mail-actions.md)

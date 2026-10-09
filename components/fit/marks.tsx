@@ -63,7 +63,7 @@ export function Meter({ value }: { value: number }) {
       <i
         style={{
           width: `${Math.round(value * 100)}%`,
-          background: value >= 0.7 ? 'var(--green)' : value >= 0.45 ? 'var(--amber)' : '#B8B2A6',
+          background: value >= 0.7 ? 'var(--green)' : value >= 0.45 ? 'var(--amber)' : 'var(--dim)',
         }}
       />
     </span>

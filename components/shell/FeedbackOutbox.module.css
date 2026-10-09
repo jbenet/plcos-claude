@@ -48,7 +48,7 @@
   width: 360px; max-height: min(560px, calc(100dvh - var(--at-bottom, 150px) - 16px)); overflow-y: auto; overscroll-behavior: contain;
   background: var(--surface); color: var(--ink);
   border: 1px solid var(--line); border-radius: 11px; padding: 12px 14px 14px;
-  box-shadow: 0 18px 44px rgba(26, 25, 23, .22);
+  box-shadow: 0 18px 44px rgb(var(--shade) / .22);
   outline: none;
 }
 .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

@@ -36,6 +36,7 @@ What each flag does:
 - **`-s workspace-write`** is the sandbox: the worker can write inside `-C` and the `--add-dir` folders, and nowhere else.
 - **The four `--add-dir` git paths** let it commit on branches under `codex/*`. Without them, commits fail because a worktree's git data lives in the main repo's `.git`.
 - **`--add-dir <data folder>`** grants each extra folder it must read or write, e.g. a research data folder.
+- **`--skip-git-repo-check`** is required when `-C` is a plain folder rather than a git repo or worktree. Without it Codex exits at once with "Not inside a trusted directory", and the capacity fallback does not retry (9 Oct 2026).
 - **`-c sandbox_workspace_write.network_access=true -c tools.web_search=true`** turns on web access and search, for research tasks. Leave both off for code tasks.
 - **`-o $S/$n-last.md`** writes the worker's final message there. A non-empty file means the task is done.
 - **`- < brief.md`** reads the brief from stdin.

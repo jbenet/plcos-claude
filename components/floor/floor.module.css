@@ -30,7 +30,7 @@ button.bar:hover .barname, button.bar:focus-visible .barname { text-decoration: 
   border-radius: 999px; padding: 3px 10px; cursor: pointer; min-height: 28px;
 }
 .chip b { font-family: var(--mono); font-weight: 500; margin-left: 4px; }
-.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--rail-ink, #EFEBE2); }
+.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--on-ink, #fff); }
 .dark .chip { background: #211F1D; border-color: var(--fl-line); color: var(--fl-text); }
 .dark .chip[aria-pressed="true"] { background: var(--fl-text); color: var(--fl-bg); border-color: var(--fl-text); }
 
@@ -46,7 +46,7 @@ button.bar:hover .barname, button.bar:focus-visible .barname { text-decoration: 
 .lmix { display: flex; height: 5px; gap: 1px; border-radius: 2px; overflow: hidden; margin: 2px 0 3px; background: var(--hair, #EDEAE2); }
 .lmix i { display: block; background: var(--ink); min-width: 2px; }
 .lmixw { display: block; font-family: var(--mono); font-size: 9.5px; color: var(--muted); margin-bottom: 8px; }
-.lsrest { background: repeating-linear-gradient(135deg, #5E5A52 0 3px, #4E4A43 3px 6px) !important; }
+.lsrest { background: repeating-linear-gradient(135deg, var(--muted) 0 3px, color-mix(in srgb, var(--muted) 80%, var(--ink)) 3px 6px) !important; }
 .lunsizedn {
   font: inherit; font-size: 10px; font-family: var(--mono); border: 0; background: none; padding: 1px 0;
   color: var(--ink); cursor: pointer; text-align: left; width: 100%;
@@ -148,7 +148,7 @@ button.bar:hover .barname, button.bar:focus-visible .barname { text-decoration: 
 .dark :global(.vizpager .btn:disabled) { opacity: .4; }
 /* A light panel inside a dark view speaks the light dialect again. */
 .dark .lightpanel .chip { background: var(--surface, #fff); border-color: var(--line); color: var(--ink); }
-.dark .lightpanel .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--rail-ink, #EFEBE2); }
+.dark .lightpanel .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--on-ink, #fff); }
 .dark .lightpanel :global(.vizpager .btn) { background: var(--surface, #fff); color: var(--ink); border-color: var(--line); }
 .strip :global(.stripzones .today) { overflow: visible; }
 /* Several vehicles in one track: a figure per vehicle, a labelled group per vehicle, no sum. */

@@ -18,7 +18,7 @@
 .pickPanel {
   position: absolute; left: 10px; right: 10px; top: calc(100% - 2px); z-index: 20; max-height: min(66vh, 600px);
   display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
-  box-shadow: 0 10px 28px rgba(26, 25, 23, .13); overflow: hidden;
+  box-shadow: 0 10px 28px rgb(var(--shade) / .13); overflow: hidden;
 }
 .pickBody {
   flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain;
@@ -26,7 +26,7 @@
 }
 .pickFoot {
   flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 14px;
-  background: #FBF9F4; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted);
+  background: var(--wash); border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted);
 }
 .fs { border: 0; margin: 0; padding: 0 0 8px; min-width: 0; }
 .fs legend { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--label); padding: 6px 0 4px; }
@@ -86,9 +86,9 @@
 .track { height: 8px; border-radius: 2px; background: var(--hair); overflow: hidden; }
 .track i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
 .gap .slabel { color: var(--muted); }
-.gap .track i { background: repeating-linear-gradient(135deg, #B8B2A6, #B8B2A6 3px, #D9D4C9 3px, #D9D4C9 6px); }
+.gap .track i { background: repeating-linear-gradient(135deg, var(--dim), var(--dim) 3px, var(--track) 3px, var(--track) 6px); }
 .zero { color: var(--muted); }
-.zero .num { color: #B8B2A6; }
+.zero .num { color: var(--dim); }
 .num { font-family: var(--mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
 .share { font-family: var(--mono); font-size: 10.5px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .cash { font-family: var(--mono); font-size: 10.5px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
