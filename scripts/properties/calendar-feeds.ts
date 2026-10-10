@@ -1,12 +1,21 @@
-import { addFeed, feedMarks, forgetFeedCache, myFeeds, removeFeed, FeedRefused } from '../../lib/calendar-feeds';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { addFeed, entryKey, forgetFeedCache, laneMarks, myFeeds, relabelEntry, removeFeed, setColours, FeedRefused } from '../../lib/calendar-feeds';
+import { classify, type ClassifiableEntry } from '../../lib/calendar-classify';
+import { FAKE_BASE, fakeCalendar, fakeMintKey, fakeTransport, readFake, type FakeEvent } from '../../lib/connectors/mailguard/fake';
+import { memoryStore } from '../../lib/connectors/mailguard/tokens';
+import type { MailguardRuntime } from '../../lib/connectors/mailguard';
 import { checkAddress, maskAddress, type IcsFetch } from '../../lib/connectors/ics/fetch';
 import { icsTime, parseIcs } from '../../lib/connectors/ics/parse';
 import { freshDb, type Check } from './harness';
 
 /**
- * The Calendar page's Travel and Events lanes (issue 0021), on invented calendars: no network. The reader gets
+ * The Calendar page's Travel and Events lanes (issue 0021), on invented calendars: no network. Each entry is sorted
+ * by what it is (relabel, then [tag], then colour, then wording or link, then days with a place); the reader gets
  * zones, all-day spans, repeats and moved occurrences right; only https calendar services are fetched; addresses
- * are kept per person, encrypted, and shown back masked; a shared event is one mark with everyone on it.
+ * are kept per person, encrypted, and shown back masked; a shared entry is one mark with everyone on it; the
+ * calendars are read through mailguard with GET only.
  */
 const CAL = (events: string) => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Invented//EN\r\n${events}END:VCALENDAR\r\n`;
 const EV = (lines: string[]) => `BEGIN:VEVENT\r\n${lines.join('\r\n')}\r\nEND:VEVENT\r\n`;
@@ -42,46 +51,112 @@ export async function calendarFeedProperties(check: Check) {
     ok.every((a) => 'url' in checkAddress(a)) && no.every((a) => 'why' in checkAddress(a)) && maskAddress(ok[0]!) === 'Google Calendar ••••.ics',
     JSON.stringify([...ok, ...no].map((a) => ['url' in checkAddress(a), a.slice(0, 30)])));
 
+  const E = (o: Partial<ClassifiableEntry>): ClassifiableEntry => ({ title: 'Invented', start: new Date('2026-10-20T00:00:00Z'), end: new Date('2026-10-21T00:00:00Z'), allDay: true, ...o });
+  const twoDays = { end: new Date('2026-10-22T00:00:00Z') };
+  const sorted = [
+    classify(E({ title: 'Neuro Summit', location: 'Lisbon', ...twoDays })).label === 'events',
+    classify(E({ title: 'Keynote talk' })).label === 'events',
+    classify(E({ title: 'Demo night', description: 'Join at https://lu.ma/abc' })).label === 'events',
+    classify(E({ title: 'Demo night', location: 'https://www.eventbrite.com/e/123' })).label === 'events',
+    classify(E({ title: 'Demo night', description: 'https://example.org/register?x=1' })).label === 'events',
+    classify(E({ title: 'Lisbon', location: 'Lisbon, Portugal', ...twoDays })).label === 'travel',
+    classify(E({ title: 'Offsite', ...twoDays })).label === 'meeting',
+    classify(E({ title: 'Lunch', location: 'Cafe' })).label === 'meeting',
+    classify(E({ title: 'Lunch', start: new Date('2026-10-20T12:00:00Z'), end: new Date('2026-10-20T13:00:00Z'), allDay: false, location: 'Cafe' })).label === 'meeting',
+    // An all-day entry ends at the next midnight: one day is not two.
+    classify(E({ title: 'Day trip', location: 'Boston' })).label === 'meeting',
+    classify(E({ title: 'Dinner [travel]' })).label === 'travel',
+    classify(E({ title: 'Neuro Summit [Travel]' })).label === 'travel',
+    classify(E({ title: 'Board [event]' })).label === 'events',
+    classify(E({ title: 'Lunch', colorId: '5' }), { travel: null, events: '5' }).label === 'events',
+    classify(E({ title: 'Neuro Summit', colorId: '7' }), { travel: '7', events: null }).label === 'travel',
+    classify(E({ title: 'Lunch [event]', colorId: '7' }), { travel: '7', events: null }).label === 'events',
+    classify(E({ title: 'Neuro Summit [event]' }), undefined, 'meeting').label === 'meeting',
+  ];
+  check('Calendar entries: an event by its conference, summit or talk wording or its Luma, Eventbrite or registration link; a trip by two or more days with a place; else a meeting; relabel, then [tag], then colour, override',
+    sorted.every(Boolean), JSON.stringify(sorted.map((x, i) => x ? null : i).filter((x) => x !== null)));
+
   const db = await freshDb();
   forgetFeedCache();
-  const user = async (h: string) => (await db.one<{ id: string; name: string }>('select id::text, name from platform.app_user where handle = $1', [h]))!;
-  const [juan, mara] = [await user('juan'), await user('mara')];
-  const empty = await feedMarks(new Date('2026-10-08T12:00:00Z'), window, { users: [juan, mara], transport: async () => { throw new Error('no fetch expected'); } });
-  const a = 'https://calendar.google.com/calendar/ical/juan-travel/private-aaaa/basic.ics';
-  const b = 'https://calendar.google.com/calendar/ical/mara-events/private-bbbb/basic.ics';
-  await addFeed(juan.id, 'travel', a);
-  await addFeed(mara.id, 'events', b);
-  let refused = 0;
-  for (const bad of [() => addFeed(juan.id, 'travel', a), () => addFeed(juan.id, 'travel', 'https://example.org/x.ics'), () => addFeed(juan.id, 'other' as 'travel', a)]) {
-    try { await bad(); } catch (e) { if (e instanceof FeedRefused) refused++; }
-  }
-  const stored = await db.query<{ value: string }>(`select value from platform.person_secret where purpose = 'calendar-ics'`);
-  const fetched: string[] = [];
-  const transport: IcsFetch = async (url) => {
-    fetched.push(url.pathname);
-    const shared = EV(['UID:summit', 'SUMMARY:Shared summit', 'DTSTART;VALUE=DATE:20261020', 'DTEND;VALUE=DATE:20261022']);
-    return { status: 200, text: async () => (url.pathname.includes('juan') ? CAL(EV(['UID:t1', 'SUMMARY:Flight to Boston', 'DTSTART:20261014T120000Z', 'DTEND:20261014T150000Z']) + shared) : CAL(shared)) };
-  };
   const now = new Date('2026-10-08T12:00:00Z');
-  const got = await feedMarks(now, window, { users: [juan, mara], transport });
-  const travel = got.marks.filter((m) => m.lane === 'travel'), events = got.marks.filter((m) => m.lane === 'events');
-  const summit = got.marks.filter((m) => m.label === 'Shared summit');
-  const mine = await myFeeds(juan.id);
-  check('Calendar feeds: each person’s addresses are kept encrypted and shown back masked; a duplicate, another service or another lane is refused; with none, nothing is fetched',
-    empty.feeds === 0 && empty.marks.length === 0 && refused === 3 && stored.length === 2 && stored.every((s) => !s.value.includes('calendar.google.com'))
-      && mine.length === 1 && mine[0]!.masked === 'Google Calendar ••••.ics' && !JSON.stringify(mine).includes('private-aaaa'),
-    JSON.stringify({ empty: empty.feeds, refused, stored: stored.length, mine }));
-  check('Calendar feeds: trips land in Travel and events in Events with whose calendar they came from; a span keeps its last day; read once an hour, not once a page',
-    travel.length === 2 && events.length === 1 && travel.find((m) => m.label === 'Flight to Boston')?.team?.join() === juan.name
-      && summit.length === 2 && summit.every((m) => m.kind === 'span' && m.from.toISOString().slice(0, 10) === '2026-10-20' && m.to.toISOString().slice(0, 10) === '2026-10-21')
-      && got.problems.length === 0 && (await feedMarks(now, window, { users: [juan, mara], transport })).marks.length === 3 && fetched.length === 2,
-    JSON.stringify({ marks: got.marks.map((m) => [m.lane, m.label, m.team, m.from.toISOString().slice(0, 10), m.to.toISOString().slice(0, 10)]), fetched: fetched.length, problems: got.problems }));
+  const people = async (h: string) => (await db.one<{ id: string; name: string; email: string; handle: string }>('select id::text, name, email, handle from platform.app_user where handle = $1', [h]))!;
+  const [j, m] = [await people('juan'), await people('mara')];
+  const dir = await mkdtemp(join(tmpdir(), 'plcos-lanes-'));
+  try {
+    const store = memoryStore();
+    const rt: MailguardRuntime = { mode: 'fake', base: FAKE_BASE, transport: fakeTransport(dir), store, envKey: null, fakeDir: dir };
+    const nobody = await laneMarks(now, window, { users: [j, m], runtime: rt, transport: async () => { throw new Error('no fetch expected'); } });
 
-  forgetFeedCache();
-  const failing = await feedMarks(now, window, { users: [juan, mara], transport: async () => ({ status: 404, text: async () => '' }) });
-  await removeFeed(mara.id, 0);
-  check('Calendar feeds: an address that stopped working is said by person and lane, without the address; removing one forgets it',
-    failing.marks.length === 0 && failing.problems.length === 2 && failing.problems.every((p) => /no longer serves/.test(p.why) && !/private-/.test(p.why))
-      && (await myFeeds(mara.id)).length === 0,
-    JSON.stringify(failing.problems));
+    const a = 'https://calendar.google.com/calendar/ical/mara-trips/private-aaaa/basic.ics';
+    await addFeed(m.id, a);
+    let refused = 0;
+    for (const bad of [() => addFeed(m.id, a), () => addFeed(m.id, 'https://example.org/x.ics')]) {
+      try { await bad(); } catch (e) { if (e instanceof FeedRefused) refused++; }
+    }
+    const stored = await db.query<{ value: string }>(`select value from platform.person_secret where purpose = 'calendar-ics'`);
+    const mine = await myFeeds(m.id);
+    check('Calendar feeds: a pasted address is kept encrypted and shown back masked; a duplicate or another service is refused; with no calendars, nothing is read',
+      nobody.sources === 0 && nobody.marks.length === 0 && nobody.problems.length === 0 && refused === 2 && stored.length === 1 && !stored[0]!.value.includes('calendar.google.com')
+        && mine.length === 1 && mine[0]!.masked === 'Google Calendar ••••.ics' && !JSON.stringify(mine).includes('private-aaaa'),
+      JSON.stringify({ nobody, refused, stored: stored.length, mine }));
+
+    // Juan's main calendar, read through mailguard with calendar.read and its details; Mara's key cannot read calendars.
+    const fev = (id: string, o: Partial<FakeEvent>): FakeEvent => ({ id, status: 'confirmed', summary: 'Invented', start: { date: '2026-10-20' }, end: { date: '2026-10-22' },
+      iCalUID: `${id}@invented`, organizer: { email: j.email }, attendees: [], ...o } as FakeEvent);
+    await fakeMintKey(dir, { mailbox: j.email, grant: ['draft', 'calendar.read', 'calendar.read.details'] }).then((k) => store.put('juan', k));
+    await fakeMintKey(dir, { mailbox: m.email, grant: ['draft', 'read.metadata'] }).then((k) => store.put('mara', k));
+    await fakeCalendar(dir, j.email, { id: 'primary', name: 'Juan', primary: true }, [
+      fev('meet', { summary: 'A meeting', start: { dateTime: '2026-10-15T15:00:00Z' }, end: { dateTime: '2026-10-15T16:00:00Z' }, location: 'Office' }),
+      fev('summit', { summary: 'Shared summit' }),
+      fev('trip', { summary: 'Lisbon', location: 'Lisbon, Portugal', start: { date: '2026-11-02' }, end: { date: '2026-11-05' } }),
+      fev('demo', { summary: 'Demo night', description: 'Tickets: https://lu.ma/invented', start: { dateTime: '2026-10-28T01:00:00Z' }, end: { dateTime: '2026-10-28T03:00:00Z' } }),
+      fev('dinner', { summary: 'Dinner [travel]', start: { dateTime: '2026-10-16T01:00:00Z' }, end: { dateTime: '2026-10-16T03:00:00Z' } }),
+      fev('banana', { summary: 'Offsite', colorId: '5', start: { date: '2026-10-25' }, end: { date: '2026-10-26' } }),
+      fev('gone', { summary: 'Cancelled summit', status: 'cancelled' }),
+    ]);
+    await fakeCalendar(dir, j.email, { id: 'busy@group.calendar.google.com', name: 'Someone’s busy times', primary: false, accessRole: 'freeBusyReader' }, [fev('busy', { summary: 'Hidden summit' })]);
+    await setColours(j.id, { travel: null, events: '5' });
+    let sameColour = false;
+    try { await setColours(j.id, { travel: '5', events: '5' }); } catch (e) { sameColour = e instanceof FeedRefused; }
+    // Mara's pasted address holds the same summit (same iCal UID) and a two-day stay with a place.
+    let reads = 0;
+    const transport: IcsFetch = async () => { reads++; return { status: 200, text: async () => CAL(
+      EV(['UID:summit@invented', 'SUMMARY:Shared summit', 'DTSTART;VALUE=DATE:20261020', 'DTEND;VALUE=DATE:20261022'])
+      + EV(['UID:stay', 'SUMMARY:Boston', 'LOCATION:Boston', 'DTSTART;VALUE=DATE:20261012', 'DTEND;VALUE=DATE:20261014'])) }; };
+    const got = await laneMarks(now, window, { users: [j, m], runtime: rt, transport });
+    const lane = (label: string) => got.marks.filter((x) => x.label === label).map((x) => `${x.lane}:${(x.team ?? []).join('+')}`).join();
+    const fake = await readFake(dir);
+    const listCalls = fake.calls['calendar.events.list'] ?? 0;
+    check('Calendar lanes: every calendar a person’s mailguard key reads is sorted; a trip shows its destination; an entry in two people’s calendars is one mark with both names; meetings, cancelled and free/busy entries are not shown',
+      lane('Shared summit') === `events:${[j.name, m.name].sort().join('+')}` && lane('Lisbon') === `travel:${j.name}` && got.marks.find((x) => x.label === 'Lisbon')?.detail === 'Lisbon, Portugal'
+        && lane('Demo night') === `events:${j.name}` && lane('Dinner') === `travel:${j.name}` && lane('Offsite') === `events:${j.name}` && lane('Boston') === `travel:${m.name}`
+        && lane('A meeting') === '' && lane('Cancelled summit') === '' && lane('Hidden summit') === '' && sameColour
+        && got.marks.find((x) => x.label === 'Lisbon')?.kind === 'span' && got.marks.find((x) => x.label === 'Lisbon')?.to.toISOString().slice(0, 10) === '2026-11-04',
+      JSON.stringify(got.marks.map((x) => [x.lane, x.label, x.team, x.entry.by])));
+    check('Calendar lanes: read through mailguard with GET only, nothing written or answered; without calendar.read the reason is said in words, as the Email card does, and no key is asked for',
+      !(fake.calendarWrites ?? []).length && !fake.sendAttempts.length && Object.keys(fake.calls).every((c) => ['whoami', 'calendar.calendars', 'calendar.events.list'].includes(c))
+        && got.problems.length === 1 && got.problems[0]!.person === m.name && /calendar\.read/.test(got.problems[0]!.why) && !/mg_/.test(got.problems[0]!.why) && got.sources === 2,
+      JSON.stringify({ calls: fake.calls, problems: got.problems, sources: got.sources }));
+
+    // Relabel: the latest click wins, for every occurrence, and takes effect without a new read.
+    const lisbon = got.marks.find((x) => x.label === 'Lisbon')!.entry.key;
+    await relabelEntry(j.id, lisbon, 'events');
+    await relabelEntry(m.id, lisbon, 'meeting');
+    await relabelEntry(j.id, entryKey('meet@invented'), 'travel');
+    let badKey = false;
+    try { await relabelEntry(j.id, 'not-a-key', 'travel'); } catch (e) { badKey = e instanceof FeedRefused; }
+    const after = await laneMarks(now, window, { users: [j, m], runtime: rt, transport });
+    const notes = await db.query<{ body: string; data: unknown }>(`select body, data from research.note where kind = 'calendar_label'`);
+    check('Calendar lanes: a relabel clicked on the Calendar page is remembered, the latest wins, and keeps no title or place; entries are read once an hour, not once a page',
+      !after.marks.some((x) => x.label === 'Lisbon') && after.marks.find((x) => x.label === 'A meeting')?.lane === 'travel' && after.marks.find((x) => x.label === 'A meeting')?.entry.by === 'relabelled here'
+        && badKey && notes.length === 3 && !JSON.stringify(notes).match(/Lisbon|meeting@|A meeting/) && ((await readFake(dir)).calls['calendar.events.list'] ?? 0) === listCalls && reads === 1,
+      JSON.stringify({ marks: after.marks.map((x) => [x.lane, x.label]), notes, reads }));
+
+    forgetFeedCache();
+    const failing = await laneMarks(now, window, { users: [m], runtime: rt, transport: async () => ({ status: 404, text: async () => '' }) });
+    await removeFeed(m.id, 0);
+    check('Calendar feeds: an address that stopped working is said by person, without the address; removing one forgets it',
+      failing.marks.length === 0 && failing.problems.some((p) => /no longer serves/.test(p.why) && !/private-/.test(p.why)) && (await myFeeds(m.id)).length === 0,
+      JSON.stringify(failing.problems));
+  } finally { await rm(dir, { recursive: true, force: true }); }
 }

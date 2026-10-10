@@ -34,7 +34,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
 
   const now = new Date();
   // Travel and Events (issue 0021): the team's calendars, on the all-vehicles calendar only — a trip is nobody's raise.
-  const feeds = vehicle ? null : await (await import('@/lib/calendar-feeds')).feedMarks(now, {
+  const feeds = vehicle ? null : await (await import('@/lib/calendar-feeds')).laneMarks(now, {
     from: new Date(now.getTime() - FEED_DAYS.back * 86_400_000), to: new Date(now.getTime() + FEED_DAYS.forward * 86_400_000),
   });
   const marks = [...await timeline(vehicle?.name ?? null, now), ...(feeds?.marks ?? [])].sort((a, b) => a.from.getTime() - b.from.getTime());
@@ -47,6 +47,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
     from: m.from.toISOString(),
     to: m.kind === 'span' && m.to.getTime() !== m.from.getTime() ? m.to.toISOString() : null,
     vehicle: m.vehicleName, standing: m.alert ? 'pressing' : m.past ? 'done' : 'ahead', href: m.href,
+    ...('entry' in m && m.entry ? { entry: m.entry as DatedRow['entry'] } : {}),
   }));
   const vehicleNames = [...new Set(marks.map((m) => m.vehicleName).filter((v): v is string => Boolean(v)))].sort();
 
@@ -105,15 +106,16 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
         Calendar · {vehicle ? vehicle.name : 'all vehicles'}
       </div>
       <h1>What is happening, and when</h1>
-      {feeds && feeds.feeds === 0 && (
+      {feeds && feeds.sources === 0 && (
         <p className="note" style={{ marginTop: 6 }}>
-          <b>Travel and Events</b> come from the team’s own calendars: paste calendar addresses in{' '}
-          <a href="/settings?section=email#calendars">Preferences</a>. Read only; nothing is written back.
+          <b>Travel and Events</b> come from the team’s own calendars, read through each person’s mailguard token in{' '}
+          <a href="/settings?section=email#calendars">Preferences</a>: an entry over two or more days with a place is a trip,
+          and a conference, summit or talk is an event. Read only; nothing is written back.
         </p>
       )}
       {feeds && feeds.problems.length > 0 && (
         <p className="note" style={{ marginTop: 6, color: 'var(--amber)' }}>
-          {feeds.problems.map((p) => `${p.person}’s ${p.lane} calendar: ${p.why}`).join(' ')}
+          {feeds.problems.map((p) => `${p.person}’s calendar: ${p.why}`).join(' ')}
         </p>
       )}
       <p className="sublede">

@@ -85,6 +85,8 @@ export interface CalendarPerson { email: string; displayName?: string; responseS
 /** An event as mailguard presents it, narrowed to what is read here. `description` only with calendar.read.details. */
 export interface CalendarEvent {
   id: string; calendarId: string; status: string; summary: string; description: string | null;
+  /** The entry's place, and its Google colour ("1"–"11"), when mailguard passes them on. */
+  location: string | null; colorId: string | null;
   start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string };
   iCalUID: string | null; recurringEventId: string | null;
   organizer: { email: string; self?: boolean } | null; attendees: CalendarPerson[];
@@ -245,6 +247,7 @@ export function mailguardClient(opts: ClientOptions): MailguardClient {
         const org = person(x.organizer);
         return [{
           id: x.id, calendarId, status: str(x.status) ?? 'confirmed', summary: str(x.summary) ?? '', description: str(x.description),
+          location: str(x.location), colorId: str(x.colorId),
           start: when(x.start), end: when(x.end), iCalUID: str(x.iCalUID), recurringEventId: str(x.recurringEventId),
           organizer: org ? { email: org.email, self: org.self } : null,
           attendees: Array.isArray(x.attendees) ? x.attendees.map(person).filter((p): p is CalendarPerson => p !== null) : [],

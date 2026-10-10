@@ -311,14 +311,14 @@ arrives in its v0.9 (DESIGN §5.8, §6.1).
   reads them.
 - **When.** Daily, after Affinity's read; and "Read calendars now" in Preferences → Email, or `cloud-job.sh`'s
   `calendar` job.
-## 14. Travel and Events from calendar addresses (8 Oct 2026, issue 0021)
+## 14. Travel and Events from the team's calendars (8 Oct 2026, issue 0021)
 
 Juan asked for the team's travel and the events they attend on the Calendar page, read from their Google
-Calendars, and approved reading calendars read only ("1 - yes", 8 Oct 2026). This needs no Google sign-in, no
-mailguard and no Mac: each calendar's private iCal address is a read-only feed.
+Calendars, and approved reading calendars read only ("1 - yes", 8 Oct 2026). Since 10 Oct they are read through each
+person's mailguard token (§14.1); a calendar's private iCal address remains an optional, read-only extra source.
 
 - **Pasting.** Preferences → Email → Calendars: a person pastes a calendar's private address (Google Calendar:
-  Settings → the calendar → "Secret address in iCal format") and picks its lane, Travel or Events. The address
+  Settings → the calendar → "Secret address in iCal format"). Its entries are sorted as §14.1 says. The address
   is kept encrypted in `platform.person_secret` (purpose `calendar-ics`), like the mailguard key, and shown back
   only as its service and last four characters. It is never logged and never in an error.
 - **Fetching** (`lib/connectors/ics/`, the only code that fetches one): one GET, https only, to Google Calendar,
@@ -330,3 +330,36 @@ mailguard and no Mac: each calendar's private iCal address is a read-only feed.
   calendars is one mark with both. Cancelled events are left out. Simple repeats are expanded; a richer rule
   shows its first occurrence and says so. Until someone adds an address, the page says where to paste one.
 - **Demo and previews** never fetch one.
+
+### 14.1 Sorting the entries in each person's calendar (10 Oct 2026)
+
+Juan corrected the design the same day: people keep trips and events as entries in one calendar, usually their main
+one, so a calendar is not assigned to a lane. Every entry is sorted by what it is (`lib/calendar-classify.ts`).
+
+- **Reading** (`lib/calendar-feeds.ts`, `laneMarks`): every calendar each person's mailguard token reads (busy-time
+  only ones left out), with the same client and the same GET-only reads as §13, after a fresh check of the key, so
+  the allowlist and the scope guard are unchanged. Each person is read at most hourly; a failed read keeps the last
+  copy for a day and says so. Cancelled entries are left out. A pasted address (above) is an optional extra source,
+  such as TripIt, and its entries are sorted the same way; the lane picked when pasting is no longer read.
+- **The convention**, in this order:
+  1. a relabel clicked under the entry on the Calendar page (Travel, Event or Meeting), remembered for every
+     occurrence of it as a `research.note` of kind `calendar_label` holding only a hash of its iCal UID and the
+     label, never its title or place; the latest click wins;
+  2. `[travel]` or `[event]` in the entry's title;
+  3. the entry's Google colour, when its owner picked one colour for Travel and one for Events in Preferences
+     (kept per person, purpose `calendar-colours`);
+  4. **Event**: conference, summit or talk wording (a GUESS list with their kin: keynote, symposium, expo, meetup,
+     hackathon, panel, workshop, festival), or a Luma, Eventbrite or registration link in the place or the
+     description. The description is only passed with `calendar.read.details`.
+     **Travel**: an entry over two or more days with a place, that is not an Event; the place is the destination.
+     **Meeting**: everything else. Meetings are not marks here; they stay touchpoints on the LP (§13).
+  Parsing flights and hotels, Gmail's event types and guessing a city were considered and dropped.
+- **What shows**: as above, each Travel or Event entry as a mark with its title (the tag taken out), place and whose
+  calendar it came from; one mark per occurrence (iCal UID and start), so an entry in two people's calendars, or in
+  Google and a pasted address, is one mark with both names. Under each one the page says why it is there and offers
+  the relabel.
+- **When it cannot read**: a key without `calendar.read`, a mailguard older than v0.9 or a calendar not yet added in
+  mailguard is said in words on the Calendar page per person, as the Email card says it (`CALENDAR_NOT_READ`).
+  A person with no token is simply not read. Nobody is asked for a key.
+- **Depends on mailguard** passing each event's `location` and `colorId` through `calendar.events.list`; without them
+  Travel needs a tag, a colour or a relabel, and the colour override does nothing.

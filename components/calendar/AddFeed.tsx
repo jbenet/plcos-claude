@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { addCalendarFeedAction, type FeedResult } from '@/app/settings/calendar-actions';
 
-/** Paste a calendar's private address, for the Travel or the Events lane. */
+/** Paste a calendar's private address; its entries are sorted like your Google calendar's. */
 export function AddFeed() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -23,10 +23,6 @@ export function AddFeed() {
         } finally { setBusy(false); }
       }}
     >
-      <select name="lane" aria-label="Which lane" defaultValue="travel">
-        <option value="travel">Travel</option>
-        <option value="events">Events</option>
-      </select>
       <input name="address" type="password" autoComplete="off" spellCheck={false} placeholder="https://calendar.google.com/calendar/ical/…/private-…/basic.ics"
         aria-label="The calendar's private address" required style={{ flex: '1 1 280px' }} />
       <button className="btn p" type="submit" disabled={busy}>{busy ? 'Adding…' : 'Add'}</button>
