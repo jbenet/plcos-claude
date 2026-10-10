@@ -18,9 +18,9 @@ juanmail reads the mail; PLC OS keeps what it learned and decides nothing on its
   OS gets a summary and at most a short quote.
 - **PLC OS keeps, suggests, sums.** Deterministic, no model call here: the readings beside the LP, suggestions as ready
   `outreach_update` payloads, sums per vehicle for strategy, and the rungs a reply supports.
-- **Juan clicks.** A status, an indicated amount or a next step changes only when he accepts the suggestion (the update
-  box's rule since 4 Oct 2026, docs/27 §5). The rungs are the exception he made on 8 Oct: Reconciliation records the
-  conversation rungs on a reply on file (§4).
+- **Juan clicks.** An indicated amount or a next step changes only when he accepts the suggestion (the update box's
+  rule since 4 Oct 2026, docs/27 §5). Two exceptions he made: Reconciliation records the conversation rungs on a reply
+  on file (8 Oct), and moves the status forward to Connecting or Discussing on the records (9 Oct, §4a).
 
 ## 2. Signals — `outreach_record_signals`, `outreach_signals`
 
@@ -67,6 +67,22 @@ Reconciliation for the LPs its new received messages are about, at once, and ans
 (`reconciled`). It records only what Juan allowed on 8 Oct (connector, LP opted in, Meeting held), marked as
 Reconciliation's and undoable on the timeline; above them it still asks.
 
+### 4a. Status forward on the records — "Auto, with undo"
+
+Juan, 9 Oct 2026, chose "Auto, with undo", and kept it ("Both") beside a one-click status picker in Raise's right panel,
+for the vehicle the page is under. `statusFromRecords` in `lib/reconcile.ts`, on each Reconciliation pass (so at once
+after `comms_ingest`):
+
+- our email or message moves an LP from New, Sourcing or Selected to **Connecting**;
+- a reply from them (as §4 reads it), or a meeting or call with them (not our event), moves them to **Discussing**;
+- forward only, never from or to Committed or Passed, never for a portfolio company or our team or on a firm's record;
+- only records on or after `config.reconcile.statusFromRecordsSince` (9 Oct 2026; null turns it off), so LPs do not
+  move on their history, and only records newer than the status's last setting: a person who sets it back undoes the
+  move until something new happens.
+
+The status says it was Reconciliation (`status_set_by`) and why ("Reconciliation: a reply from them, 9 Oct"), with a
+`pursuit.status_set` audit row like any other.
+
 ## 5. Contact details — `outreach_propose_contact`, `outreach_contacts?details=1`
 
 Besides an address: `phone`, `title`, `organization`, `postalAddress`, `linkedin`. `source: "gmail-signature"` is read from
@@ -91,8 +107,5 @@ sends, auto-replies or notices, and no backfill until Juan asks (his Claude limi
 
 ## 8. Open
 
-1. **Status from mail on its own** (asked 9 Oct): whether Reconciliation may also move status forward from the trace
-   (our email → Connecting, their reply or a meeting → Discussing), undoable, as it records rungs. Until Juan says so, a
-   status moves only on his click.
-2. **The LP page** shows the readings only through `outreach_signals` and the W5 strategy for now; a "From mail" panel on
+1. **The LP page** shows the readings only through `outreach_signals` and the W5 strategy for now; a "From mail" panel on
    the LP page is a later step if Juan wants it there too.

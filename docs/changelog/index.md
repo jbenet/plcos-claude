@@ -318,3 +318,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Routes: two people on bad terms, and your own ties](entries/bad-terms-and-own-ties.md)
 - [Leaner batch workflows, and a spend report](entries/workflow-batch-budget.md)
 - [What the mail says](entries/mail-actions.md)
+- [Status moves with the mail](entries/status-from-mail.md)

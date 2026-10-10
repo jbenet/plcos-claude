@@ -7,7 +7,9 @@
  *   - outreach_signals and outreach_insights read them back, by vehicle access, summed by topic;
  *   - outreach_propose_contact keeps a signature's phone and title as medium-confidence claims, the newest reading
  *     superseding this mailbox's older one, another source's value kept; a "gmail" source needs confirmedBy;
- *   - a Gmail reply from the LP records "LP opted in" through Reconciliation; a reply from someone else on the thread does not.
+ *   - a Gmail reply from the LP records "LP opted in" through Reconciliation; a reply from someone else on the thread does not;
+ *   - statusFromRecords (Juan, 9 Oct 2026, "Auto, with undo"): our email moves to Connecting, their reply or a meeting to
+ *     Discussing, forward only, never past a person's later setting; the reply above moves its LP, and setting it back holds.
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -162,6 +164,41 @@ export async function mailActionProperties(check: Check, db: Db) {
   check('A Gmail reply from the LP is a reply on file: comms_ingest has Reconciliation record "LP opted in" on it, by Reconciliation, citing the message; a message from someone else that only copied an LP records nothing for that LP',
     !ing.error && ing.data.reconciled >= 2 && /target_opted_in/.test(rungsAfter[0] ?? '') && rungsAfter[1] === rungsBefore[1] && /mail-2@invented-mail\.example/.test(ladder?.ref ?? ''),
     `ingest ${JSON.stringify(ing.data ?? ing.error)?.slice(0, 120)}; rungs before ${rungsBefore.join(',')} after ${rungsAfter.join(',')}; ladder ${JSON.stringify(ladder)}`);
+
+  // ── Status forward on the records, undoable ───────────────────────────────────────────
+  const { statusFromRecords, reconcilePursuit } = await import('../../lib/reconcile');
+  const t = (channel: string, direction: string, on: string, extra: Record<string, unknown> = {}) =>
+    ({ touchpointId: on, channel, direction, on: new Date(on), viaOrganization: null, attendees: [], aboutBasis: null, summary: null, groupSize: 2, ...extra }) as never;
+  const at = new Date('2026-10-12T00:00:00Z');
+  const sf = (status: string, touches: never[], setAt: string | null = null, since: string | null = '2026-10-09') =>
+    statusFromRecords({ status: status as never, statusSetAt: setAt ? new Date(setAt) : null }, touches, at, since)?.to ?? null;
+  const pure = {
+    oursFromSelected: sf('selected', [t('email', 'ours', '2026-10-10')]),
+    oursFromConnecting: sf('connecting', [t('email', 'ours', '2026-10-10')]),
+    replyFromNew: sf('new', [t('email', 'theirs', '2026-10-10')]),
+    meeting: sf('connecting', [t('meeting', 'both', '2026-10-10')]),
+    event: sf('connecting', [t('meeting', 'both', '2026-10-10', { channel: 'event', groupSize: 30 })]),
+    fromDiscussing: sf('discussing', [t('email', 'theirs', '2026-10-10')]),
+    fromCommitted: sf('committed', [t('email', 'theirs', '2026-10-10')]),
+    fromPassed: sf('passed', [t('email', 'theirs', '2026-10-10')]),
+    history: sf('connecting', [t('email', 'theirs', '2026-09-01')]),
+    future: sf('connecting', [t('email', 'theirs', '2026-10-20')]),
+    afterPerson: sf('connecting', [t('email', 'theirs', '2026-10-10')], '2026-10-11'),
+    viaFirm: sf('connecting', [t('email', 'theirs', '2026-10-10', { viaOrganization: 'Invented Firm' })]),
+    off: sf('connecting', [t('email', 'theirs', '2026-10-10')], null, null),
+  };
+  const statusOf = async (id: string) => (await db.one<{ status: string }>(`select status::text status from strategy.pursuit where pursuit_id = $1`, [id]))?.status;
+  const movedBy = await db.one<{ handle: string; reason: string | null }>(`select u.handle, p.status_reason reason from strategy.pursuit p join platform.app_user u on u.id = p.status_set_by where p.pursuit_id = $1`, [p2]);
+  const [s2, s3] = [await statusOf(p2), await statusOf(p3)];
+  const { setStatus } = await import('../../modules/strategy');
+  await setStatus(juan.id, p2, { status: 'connecting' });
+  await reconcilePursuit(p2);
+  const held = await statusOf(p2);
+  check('Status on the records (Juan, 9 Oct 2026, "Auto, with undo"): our email moves to Connecting, their reply or a meeting with them to Discussing; never backward, never from or to Committed or Passed, not on an event, a firm\'s record, history before the start date, the future, or a record older than a person\'s own setting; off when unset. The LP\'s Gmail reply moved them, by Reconciliation, saying why; setting it back holds',
+    pure.oursFromSelected === 'connecting' && pure.oursFromConnecting === null && pure.replyFromNew === 'discussing' && pure.meeting === 'discussing'
+    && [pure.event, pure.fromDiscussing, pure.fromCommitted, pure.fromPassed, pure.history, pure.future, pure.afterPerson, pure.viaFirm, pure.off].every((x) => x === null)
+    && s2 === 'discussing' && s3 === 'connecting' && movedBy?.handle === 'reconciliation' && /^Reconciliation: a reply from them/.test(movedBy.reason ?? '') && held === 'connecting',
+    `pure ${JSON.stringify(pure)}; after ingest p2 ${s2} (${JSON.stringify(movedBy)}), p3 ${s3}; after a person set it back and reconcile: ${held}`);
 
   for (const c of [writer, reader, spvReader]) await c.close();
 }
