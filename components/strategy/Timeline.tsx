@@ -7,6 +7,8 @@ import type { ShownRead } from '@/lib/reads';
 import type { NoteView } from '@/lib/connectors/affinity/notes';
 import { WHAT_LABEL, type What } from '@/lib/connectors/affinity/readings';
 import { decideReadingAction, retractRungAction } from '@/app/targets/actions';
+import { unmatchCalendarMeetingAction } from '@/app/settings/calendar-actions';
+import { MATCHED_BY_NAME } from '@/lib/calendar-match';
 import { interactionRef, noteRef } from '@/lib/connectors/affinity/event-tags';
 import { Glyph, type GlyphName } from '@/components/ui/Glyph';
 import { refOf, type RungRecord } from '@/lib/reconcile';
@@ -273,6 +275,13 @@ function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate,
           <div className="t"><span className="muted">{t.summary ?? who}</span></div>
         )}
         {c?.text && <div className="p2" style={{ marginTop: 3 }}>{who}</div>}
+        {t.source === 'calendar' && t.summary === MATCHED_BY_NAME && t.sourceRef && (
+          <form action={unmatchCalendarMeetingAction} style={{ marginTop: 4 }}>
+            <input type="hidden" name="ref" value={t.sourceRef} />
+            <span className="muted" style={{ fontSize: 12 }}>{who} · </span>
+            <button className="btn" type="submit" style={{ padding: '1px 7px', fontSize: 11 }} title="Remove this meeting from this LP; the calendar read will not match it again">Not this LP</button>
+          </form>
+        )}
         {t.read && <span className="flag f-mute" style={{ marginTop: 4, display: 'inline-block' }}>{READ_LABEL[t.read]}{t.readByName ? ` — ${t.readByName}` : ''}</span>}
         <RungState rungs={rungs} waiting={waiting} proposalId={proposalId} pursuitId={tagging.pursuitId} />
         {ref && (

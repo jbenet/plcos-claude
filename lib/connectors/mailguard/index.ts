@@ -180,6 +180,6 @@ export async function checkKeychainKey(): Promise<{ ok: boolean; code: string | 
 export { ALLOWED, MUST_REFUSE, KEY_FORMAT } from './allowlist';
 export type { MailguardClient, MailguardRequestLog, DraftFields, DraftRef } from './client';
 export { DraftOnlyViolation, MailguardError } from './client';
-export { CAN_SEND, CAN_NOTIFY, domainOf } from './scope';
+export { CAN_SEND, CAN_NOTIFY, CALENDAR_NOT_READ, domainOf } from './scope';
 export type { CalendarAccess } from './scope';
 export { fakeMintKey, readFake, FAKE_DOMAIN } from './fake';

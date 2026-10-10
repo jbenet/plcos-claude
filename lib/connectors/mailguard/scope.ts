@@ -94,3 +94,11 @@ function calendarAccess(said: unknown, capabilities: string[]): CalendarAccess {
 
 /** The mailbox's domain, for logs and reports: never the address. */
 export const domainOf = (mailbox: string | null) => (mailbox?.split('@')[1] ?? 'unknown');
+
+/** What a calendar line says when mailguard's calendar cannot be read (issue 0021), in words. */
+export const CALENDAR_NOT_READ: Record<Exclude<CalendarAccess['state'], 'ok'>, string> = {
+  unsupported: 'not read: this mailguard has no calendar yet (it arrives in mailguard v0.9).',
+  off: 'not read: mailguard’s policy does not include the calendar.',
+  reconnect: 'not read yet: choose “Add calendar” in mailguard’s Settings and reconnect Google once.',
+  no_read: 'not read: give this tool calendar.read in mailguard to see your meetings next to LPs.',
+};

@@ -1,7 +1,8 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { syncCalendars, type CalendarSyncResult } from '../../lib/calendar-sync';
+import { syncCalendars, unmatchCalendarMeeting, type CalendarSyncResult } from '../../lib/calendar-sync';
+import { MATCHED_BY_NAME } from '../../lib/calendar-match';
 import { FAKE_BASE, fakeCalendar, fakeMintKey, fakeSetCalendar, readFake, type FakeEvent } from '../../lib/connectors/mailguard/fake';
 import { fakeTransport } from '../../lib/connectors/mailguard/fake';
 import { memoryStore } from '../../lib/connectors/mailguard/tokens';
@@ -10,8 +11,9 @@ import { freshDb, type Check } from './harness';
 
 /**
  * Read-only calendars (issue 0021) on the fake mailguard and invented people only: no network, no real key.
- * Meetings land next to the LPs on them, once per LP however many calendars hold them, with no title, description
- * or outside name copied; Affinity's meeting wins; cancelled and vanished meetings go; a key that can invite or
+ * Only LP meetings count: matched by a guest's address or firm domain, else by an LP's name in the entry (marked,
+ * undoable); internal-only, guest-less and unmatched outside meetings leave nothing. They land once per LP however
+ * many calendars hold them, with no title, description or outside name copied; Affinity's meeting wins; cancelled and vanished meetings go; a key that can invite or
  * answer is refused; nothing is ever written to a calendar.
  */
 export async function calendarProperties(check: Check) {
@@ -27,6 +29,10 @@ export async function calendarProperties(check: Check) {
     await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'lena@invented-cal.example', 'props:calendar', current_date, 'medium'),
       ($2, 'email', 'otto@invented-cal.example', 'props:calendar', current_date, 'medium')`, [lena, otto]);
     await db.query(`insert into identity.affiliation (person_entity, org_entity, kind, role, source, as_of, certainty) values ($1, $2, 'staff', 'Invented', 'fixture', now(), 'inferred')`, [lena, firm]);
+    // LPs: Lena's firm and Otto are pursued; Vela is a firm known only by its email domain.
+    const vela = await entity('org', 'Invented Vela Partners');
+    await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email_domain', 'vela-invented.example', 'props:calendar', current_date, 'medium')`, [vela]);
+    await db.query(`insert into strategy.pursuit (entity_id, vehicle_id, owner_id) select e, (select id from platform.vehicle order by slug limit 1), $2::uuid from unnest($1::uuid[]) e`, [[firm, otto, vela], juan.id]);
 
     const now = new Date('2026-10-08T12:00:00Z');
     const ev = (id: string, start: string, guests: string[], o: Partial<FakeEvent> = {}): FakeEvent => ({
@@ -37,7 +43,7 @@ export async function calendarProperties(check: Check) {
     const past = ev('past1', '2026-09-01T15:00:00Z', [juan.email, mara.email, 'lena@invented-cal.example', 'room@resource.calendar.google.com']);
     const future = ev('next1', '2026-11-02T15:00:00Z', [juan.email, 'lena@invented-cal.example']);
     const internal = ev('team1', '2026-09-02T15:00:00Z', [juan.email, mara.email]);
-    const stranger = ev('nobody1', '2026-09-03T15:00:00Z', [juan.email, 'unknown@invented-cal.example']);
+    const stranger = ev('nobody1', '2026-09-03T15:00:00Z', [juan.email, 'unknown@stranger-invented.example']);
     const withAffinity = ev('aff1', '2026-09-04T15:00:00Z', [juan.email, 'otto@invented-cal.example']);
     const old = ev('old1', '2024-01-01T15:00:00Z', [juan.email, 'lena@invented-cal.example']);
     await db.query(`insert into meetings.meeting (entity_id, channel, direction, held_on, owner_id, attendees, source, source_ref) values ($1, 'meeting', 'both', '2026-09-04', $2, '{}', 'affinity', 'interaction:meeting:9:props')`, [otto, juan.id]);
@@ -106,6 +112,35 @@ export async function calendarProperties(check: Check) {
       JSON.stringify({ skipped: refused.skipped, calls, writes: (fake.calendarWrites ?? []).length }));
     const run = await db.one<{ status: string; note: string }>(`select status, note from sources.sync_run where source = 'calendar' order by id desc limit 1`);
     check('Calendar: each read is a run receipt in counts, never a name or address', run?.status === 'ok' && !/invented|example\.com|Lena|Otto/i.test(run.note), run?.note ?? 'no run');
+
+    // Only LP meetings (Juan, 10 Oct 2026). Ines's key is put right so only Juan's and Mara's calendars are read.
+    await store.delete('ines'); await store.delete('sam');
+    const lp = [
+      ev('dom1', '2026-09-10T15:00:00Z', [juan.email, 'new.partner@vela-invented.example'], { summary: 'Catch-up' }),
+      ev('name1', '2026-09-11T15:00:00Z', [juan.email, 'someone@elsewhere-invented.example'], { summary: 'Intro: Invented Vela Partners' }),
+      ev('internal2', '2026-09-12T15:00:00Z', [juan.email, mara.email, 'colleague@protocol.ai'], { summary: 'Prep for Invented Vela Partners' }),
+      ev('personal1', '2026-09-13T15:00:00Z', [], { summary: 'Dinner with Invented Vela Partners' }),
+      ev('vendor1', '2026-09-14T15:00:00Z', [juan.email, 'sales@vendor-invented.example'], { summary: 'Software demo' }),
+      ev('noteam1', '2026-09-15T15:00:00Z', ['lena@invented-cal.example', 'otto@invented-cal.example'], { organizer: { email: 'lena@invented-cal.example' } }),
+    ];
+    await fakeCalendar(dir, juan.email, { id: 'primary' }, lp);
+    const lpRead = await sync();
+    const lpRows = await db.query<{ ref: string; entity: string; day: string; summary: string | null }>(
+      `select source_ref ref, entity_id::text entity, held_on::text "day", summary from meetings.meeting where source = 'calendar' and held_on between '2026-09-10' and '2026-09-15' order by held_on`);
+    const at = (d: string) => lpRows.filter((x) => x.day === d);
+    check('Calendar: only LP meetings count: a guest at an LP firm’s email domain is that firm’s; internal-only, guest-less, no-team and unmatched outside meetings leave nothing, whatever their title says',
+      at('2026-09-10').length === 1 && at('2026-09-10')[0]!.entity === vela && at('2026-09-10')[0]!.summary === null
+        && !at('2026-09-12').length && !at('2026-09-13').length && !at('2026-09-14').length && !at('2026-09-15').length,
+      JSON.stringify({ matched: lpRead.matched, byName: lpRead.byName, rows: lpRows.map((x) => [x.day, x.entity === vela ? 'vela' : x.entity, x.summary ? 'by name' : '']) }));
+    const named = at('2026-09-11');
+    check('Calendar: with an outside guest no LP matched, an LP named in the entry makes it theirs, marked as matched by name with lower confidence',
+      named.length === 1 && named[0]!.entity === vela && named[0]!.summary === MATCHED_BY_NAME && lpRead.byName === 1 && !/Intro|elsewhere/.test(JSON.stringify(lpRows)),
+      JSON.stringify(named));
+    const undone = await unmatchCalendarMeeting(db, juan.id, named[0]?.ref ?? '');
+    const reread = await sync();
+    const after = await db.query<{ n: number }>(`select count(*)::int n from meetings.meeting where source = 'calendar' and held_on = '2026-09-11'`);
+    check('Calendar: “Not this LP” undoes a name match, and the next read does not make it again',
+      undone && after[0]?.n === 0 && reread.added === 0, JSON.stringify({ undone, after: after[0]?.n, added: reread.added }));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

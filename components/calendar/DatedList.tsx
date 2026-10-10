@@ -7,6 +7,7 @@ import { Glyph } from '@/components/ui/Glyph';
 import { LANE_LOOK, orderDatedRows, type DatedRow, type LaneLook } from '@/lib/lanes';
 import s from './DatedList.module.css';
 import { formatDate } from '@/lib/time';
+import { Relabel } from './Relabel';
 
 /**
  * Every dated thing, filtered as you type (issues 0020, 0072): a search over what, who, LP and
@@ -169,6 +170,7 @@ export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: stri
                           {r.href ? <Link href={r.href}>{what(r)}</Link> : <span>{what(r)}</span>}
                         </span>
                         {r.detail && <div className="ddetail">{r.detail}</div>}
+                        {r.entry && <Relabel entry={r.entry} />}
                         {(r.lp || r.team?.length) && (
                           <div className={s.inlineMeta}>{[r.lp, r.team?.length ? `with ${r.team.join(', ')}` : null].filter(Boolean).join(' · ')}</div>
                         )}

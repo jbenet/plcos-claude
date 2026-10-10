@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import { mailStatus } from '@/modules/email';
-import { keyFor, mailguardRuntime } from '@/lib/connectors/mailguard';
+import { CALENDAR_NOT_READ, keyFor, mailguardRuntime } from '@/lib/connectors/mailguard';
 import { maskSecret } from '@/lib/settings/store';
 import { PasteToken, TestConnection } from './MailguardForms';
 
@@ -29,12 +29,7 @@ const SAYS: Record<string, string> = {
 };
 
 /** What the calendar line says (issue 0021): read only, or why not. */
-const CALENDAR: Record<string, string> = {
-  unsupported: 'not read: this mailguard has no calendar yet (it arrives in mailguard v0.9).',
-  off: 'not read: mailguard’s policy does not include the calendar.',
-  reconnect: 'not read yet: choose “Add calendar” in mailguard’s Settings and reconnect Google once.',
-  no_read: 'not read: give this tool calendar.read in mailguard to see your meetings next to LPs.',
-};
+const CALENDAR: Record<string, string> = CALENDAR_NOT_READ;
 
 /**
  * Preferences → Email (docs/25 §12): the person's mailguard token, which puts drafts written here into

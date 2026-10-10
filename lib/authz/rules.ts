@@ -59,6 +59,11 @@ export const actionRules = {
   // Your own calendar addresses (issue 0021), for the Travel and Events lanes. Read only at the calendar.
   'app/settings/calendar-actions.ts#addCalendarFeedAction': { action: 'mutate', scope: 'self' },
   'app/settings/calendar-actions.ts#removeCalendarFeedAction': { action: 'mutate', scope: 'self' },
+  'app/settings/calendar-actions.ts#setCalendarColoursAction': { action: 'mutate', scope: 'self' },
+  // What a calendar entry is (Travel, Event or Meeting), clicked on the Calendar page: one label the whole team sees.
+  'app/settings/calendar-actions.ts#relabelCalendarEntryAction': { action: 'mutate', scope: 'global' },
+  // "Not this LP" on a calendar meeting matched to an LP (by name): removed, and never matched again.
+  'app/settings/calendar-actions.ts#unmatchCalendarMeetingAction': { action: 'mutate', scope: 'global' },
   // MCP tokens (docs/26): a person's own; the service revokes only the caller's.
   // Settings → Connections (docs/deploy/railway.md §3): Admin only; a refusal is audit-logged.
   'app/settings/connections/actions.ts#saveSettingAction': { action: 'admin', scope: 'global' },
