@@ -18,7 +18,9 @@ Thu 15 Oct 2026; an API key bills separately, but keep it small).
 
 1. **Report the metadata** — `comms_ingest` (`POST /api/outreach/comms`), as today. Free. If the message is a reply
    from the LP, PLC OS records the conversation rungs it supports (LP opted in) on its own: Reconciliation, as for
-   Affinity's replies, undoable on the LP's timeline. Nothing for the desk to do.
+   Affinity's replies, undoable on the LP's timeline. It also moves the status forward on its own (Juan, 9 Oct 2026):
+   our email to Connecting, their reply or a meeting to Discussing, never to Committed or Passed (docs/29 §4a). So
+   read the pursuit's status again after `comms_ingest` before showing it. Nothing else for the desk to do.
 
 2. **Read the contact details — rules first, no model.** From the sender's signature block (the lines after the
    sign-off, or after `--`): phone, title, firm, postal address, LinkedIn URL. Only from a message the person sent,
@@ -83,10 +85,18 @@ Thu 15 Oct 2026; an API key bills separately, but keep it small).
    else. Recording the same message again replaces its readings; `dismiss` takes `signalId`s Juan marks wrong.
 
 4. **Offer the suggestions — Juan clicks.** The answer's `suggestions` are ready `outreach_update` payloads: a status
-   forward (to Discussing on their engaging, to Passed on their decline; never backward, never to Committed), an
+   forward (to Discussing on their engaging, to Passed on their decline; never backward, never to Committed; one
+   Reconciliation already made is not suggested again once the status is read fresh), an
    indicated amount when it differs from the one on file, a next step (answer the question, send the materials,
    follow up on the date). Show each with its `why`. When Juan accepts one, send its `update` to `outreach_update`
    unchanged: its `idempotencyKey` makes a double click harmless. Juan may edit the words or the date first.
+
+## The status picker
+
+Juan, 9–10 Oct 2026: Raise makes the status easy to set by hand, in the right panel — one picker, for the pursuit on the
+vehicle the page is under (one per vehicle only when the page spans several), with the LP's info for that vehicle.
+`outreach_update` with `{ pursuitId, status: { to, passedBy?, reason? }, idempotencyKey }`; a person's click needs no
+ticket. It also undoes a move Reconciliation made: a status a person set is not moved again until something new happens.
 
 ## What strategy gets
 
@@ -99,4 +109,4 @@ Thu 15 Oct 2026; an API key bills separately, but keep it small).
 ## What it never does
 
 Sends mail, approves or decides anything, records money or a soft commitment on the close track, sets a status
-without Juan's click, or sends a message body to PLC OS.
+without a person's click (Reconciliation's own moves are PLC OS's, not the desk's), or sends a message body to PLC OS.

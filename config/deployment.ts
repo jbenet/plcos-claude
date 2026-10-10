@@ -278,6 +278,15 @@ export const config = {
     /** How long top_connectors plans routes before it answers with what it inspected (rule 7). GUESS. */
     connectorsBudgetMs: 15_000,
   },
+  /**
+   * Reconciliation (lib/reconcile.ts). Juan, 9 Oct 2026, chose "Auto, with undo" (and kept it beside Raise's status
+   * picker): the records on file move a status forward on their own — our email to Connecting, their reply or a
+   * meeting to Discussing — never to Committed or Passed, and never over a person's setting made after the record.
+   * Only records dated on or after this day count, so LPs do not move on their history. Null turns it off.
+   */
+  reconcile: {
+    statusFromRecordsSince: '2026-10-09' as string | null,
+  },
   warehouse: {
     enabled: false,
     canonMode: 'inProcess' as CanonMode,
