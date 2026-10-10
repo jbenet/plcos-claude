@@ -25,7 +25,7 @@ export const SYNC_SCOPES = [SYNC_SNAPSHOT, SYNC_PUSH, SYNC_ADMIN] as const;
 export type SyncScopeName = (typeof SYNC_SCOPES)[number];
 
 export interface Endpoint { name: string; route: string; policy: Policy; grant: readonly ('admin' | 'team' | 'viewer')[] }
-export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles' | 'jobs' | 'feedback' | 'identity', Endpoint> = {
+export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles' | 'jobs' | 'feedback' | 'identity' | 'astra', Endpoint> = {
   snapshot: { name: 'sync_snapshot', route: 'GET /api/sync/snapshot', grant: ['admin'],
     policy: { risk: 'read', scopes: [SYNC_SNAPSHOT], ticket: 'none', approval: false } },
   // It writes research files the normal import then maps, through the importer's own validators: guarded writes.
@@ -43,6 +43,9 @@ export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles' | 'jobs' | 
     policy: { risk: 'write-guarded', scopes: [SYNC_ADMIN], ticket: 'none', approval: false } },
   // A record's local type (lib/sync/entity-type.ts, issue 0063): list people named like an organisation, correct or reverse.
   identity: { name: 'entity_type', route: 'GET|POST /api/sync/entity-type', grant: ['admin'],
+    policy: { risk: 'write-guarded', scopes: [SYNC_ADMIN], ticket: 'none', approval: false } },
+  // The Mac's Astra runner (lib/sync/astra.ts, docs/30): polls for the runs a person queued on Developer → Astra and reports counts.
+  astra: { name: 'astra_runner', route: 'POST /api/sync/astra', grant: ['admin'],
     policy: { risk: 'write-guarded', scopes: [SYNC_ADMIN], ticket: 'none', approval: false } },
 };
 

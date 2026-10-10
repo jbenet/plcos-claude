@@ -34,6 +34,8 @@ export const routeRules = {
   // An Admin's token moves a vehicle's raise window (setRaiseWindow); nothing else about a vehicle changes.
   'app/api/sync/vehicles/route.ts#PATCH': 'sync:admin',
   // An Admin's token queues a research export or a findings import and reads any job's state (lib/sync/jobs.ts).
+  // The Mac's Astra runner polls for queued runs and reports counts (lib/sync/astra.ts).
+  'app/api/sync/astra/route.ts#POST': 'sync:admin',
   'app/api/sync/jobs/route.ts#POST': 'sync:admin',
   'app/api/sync/jobs/route.ts#GET': 'sync:admin',
   // An Admin's token reads the feedback queue and sets an issue's status (lib/sync/feedback.ts).

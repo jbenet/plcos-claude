@@ -29,6 +29,10 @@ export const actionRules = {
   'app/dev/enrich/actions.ts#runCloudProfileAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#runCloudStrategyAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#runCloudSourcingAction': { action: 'admin', scope: 'global' },
+  // Developer → Astra (docs/30): queue, cancel and schedule the Mac runner's Astra runs.
+  'app/dev/astra/actions.ts#queueAstraAction': { action: 'admin', scope: 'global' },
+  'app/dev/astra/actions.ts#cancelAstraAction': { action: 'admin', scope: 'global' },
+  'app/dev/astra/actions.ts#astraSettingsAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#exportResearchSetAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#importFindingsAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#sourceBulkAction': { action: 'admin', scope: 'global' },

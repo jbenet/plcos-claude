@@ -14,6 +14,8 @@
  *        lane with no strategy. Within a firm, the colleague with the most contact comes first, so
  *        the lead conversation's strategy is written before the others read it.
  *        With `--keys <file>` (N81): listed LPs with strategies or eligible for new ones, one key a line, firms whole.
+ *        With `--max <n>` (docs/30, the Astra runner): write only the first n batches, so the rest stay
+ *        free for the next cut.
  *        With `--revise` (W5 v1.5): strategies written before version 1.3, or that the critic's
  *        gates flag, or with a next step over 300 characters — and every colleague at their firm,
  *        so a firm is rewritten together.
@@ -49,7 +51,10 @@ async function main() {
   // `--keys <file>`: listed LPs eligible for new/revised strategies, plus their firms' strategies.
   const keysAt = process.argv.indexOf('--keys');
   const keysFile = keysAt >= 0 ? process.argv[keysAt + 1] : null;
-  const [mode, prefix, sizeArg] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !(keysAt >= 0 && all[i - 1] === '--keys'));
+  const maxAt = process.argv.indexOf('--max');
+  const max = maxAt >= 0 ? Number(process.argv[maxAt + 1]) : Infinity;
+  if (!(max >= 1)) { console.error('--max takes a positive number.'); process.exit(2); }
+  const [mode, prefix, sizeArg] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !['--keys', '--max'].includes(all[i - 1]!));
   const withSearch = process.argv.includes('--search');
   const revise = process.argv.includes('--revise') || Boolean(keysFile);
   const only = keysFile ? new Set((await readFile(keysFile, 'utf8')).split('\n').map((k) => k.trim()).filter(Boolean)) : null;
@@ -195,6 +200,7 @@ async function main() {
     cur.push(...firm);
   }
   if (cur.length) batches.push(cur);
+  batches.splice(max);
 
   await mkdir(join(dir, 'batches'), { recursive: true });
   const existing = (await readdir(join(dir, 'batches'))).filter((f) => f.startsWith(prefix)).length;
