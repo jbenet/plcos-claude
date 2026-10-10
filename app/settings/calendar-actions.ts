@@ -57,3 +57,12 @@ export async function relabelCalendarEntryAction(formData: FormData): Promise<Fe
   revalidatePath('/[vehicle]/calendar', 'page');
   return { ok: true, message: 'Relabelled.' };
 }
+
+/** "Not this LP": undo a calendar meeting matched to an LP, for good. */
+export async function unmatchCalendarMeetingAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/settings/calendar-actions.ts#unmatchCalendarMeetingAction', formData);
+  const { unmatchCalendarMeeting } = await import('@/lib/calendar-sync');
+  const { getDb } = await import('@/lib/db');
+  await unmatchCalendarMeeting(await getDb(), user.id, String(formData.get('ref') ?? ''));
+  revalidatePath('/targets/[id]', 'page');
+}

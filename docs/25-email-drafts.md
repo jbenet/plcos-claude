@@ -304,11 +304,24 @@ arrives in its v0.9 (DESIGN §5.8, §6.1).
   `calendar.respond`, whose own policy grants `calendar.*`, or for which mailguard says `can_notify_others`, is
   refused outright (`scope.ts`), drafting included.
 - **What is kept** (`lib/calendar-sync.ts`): each occurrence from about 18 months back to 90 days ahead, seen in
-  anyone's calendar, becomes one touchpoint (source `calendar`) per LP whose address is on it, and their current
-  firm: the date, who on the team was there, and what it is about. No title, description or outside guest's name,
+  anyone's calendar, that is an LP meeting becomes one touchpoint (source `calendar`) per LP on it: the date, who on
+  the team was there, and what it is about. No title, description or outside guest's name,
   as with Affinity's. A meeting Affinity already has for that LP that day stays Affinity's. Cancelled meetings
   go; meetings gone from every calendar go only after a read of every connected calendar. Reconciliation then
   reads them.
+- **Only LP meetings** (Juan, 10 Oct 2026). An LP is anyone or any firm with a pursuit, an exposure or a capital
+  pool, and a pursuit's contacts for it; never a portfolio company of ours or our team. An occurrence with no
+  guests besides its holder, with every guest on the team's domains, the fundraising domains or Protocol Labs'
+  (a GUESS list), or with nobody of ours on it, is never one, whatever its title says. Otherwise:
+  1. an outside guest whose address is an LP's, or a pursued firm's person's, makes it theirs (the person and the
+     LP firm);
+  2. else an outside guest at an email domain we hold for an LP firm (the firm's own email-domain or email claims,
+     or its current people's emails; never a personal mail service) makes it that firm's;
+  3. only when neither found anything, an LP's or firm's name in the title or description (firms of 4 or more
+     letters, people by two words or more, a GUESS) makes it theirs, marked "Matched by name … Lower confidence."
+     with a **Not this LP** button on the LP's timeline. Undoing removes it and keeps a `research.note` of kind
+     `calendar_unmatch` with only its reference, so no later read makes it again.
+  Any other outside guest (a portfolio company, a vendor, a recruiter) leaves nothing.
 - **When.** Daily, after Affinity's read; and "Read calendars now" in Preferences → Email, or `cloud-job.sh`'s
   `calendar` job.
 ## 14. Travel and Events from the team's calendars (8 Oct 2026, issue 0021)
